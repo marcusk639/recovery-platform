@@ -481,11 +481,19 @@ describe("promoteGuestsToAdmin — authorization guard (C2)", () => {
       new HttpsError("permission-denied", "Not authorized"),
     );
     const guests = [{ userId: "target-uid", houseId: "house-1" }];
+    const request = { uid: "attacker-uid", token: {} };
     await expect(
-      call(promoteGuestsToAdmin, guests, { uid: "attacker-uid", token: {} }),
+      call(promoteGuestsToAdmin, guests, request),
     ).rejects.toMatchObject({ code: "permission-denied" });
     expect(mockGetGuestsAsUsers).not.toHaveBeenCalled();
     expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+    expect(mockAssertCanGrantClaimForHouses).toHaveBeenCalledWith(
+      expect.objectContaining({
+        houseIds: ["house-1"],
+        targetUid: request.uid,
+        callableName: "promoteGuestsToAdmin",
+      }),
+    );
   });
 });
 
@@ -521,15 +529,19 @@ describe("removePrivilegesForGuests — authorization guard (C3)", () => {
       new HttpsError("permission-denied", "Not authorized"),
     );
     const guests = [{ userId: "target-uid", houseId: "house-1" }];
+    const request = { uid: "attacker-uid", token: {} };
     await expect(
-      call(
-        removePrivilegesForGuests,
-        { guests, role: "guest" },
-        { uid: "attacker-uid", token: {} },
-      ),
+      call(removePrivilegesForGuests, { guests, role: "guest" }, request),
     ).rejects.toMatchObject({ code: "permission-denied" });
     expect(mockGetGuestsAsUsers).not.toHaveBeenCalled();
     expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+    expect(mockAssertCanGrantClaimForHouses).toHaveBeenCalledWith(
+      expect.objectContaining({
+        houseIds: ["house-1"],
+        targetUid: request.uid,
+        callableName: "removePrivilegesForGuests",
+      }),
+    );
   });
 });
 
@@ -601,6 +613,20 @@ describe("givePotentialSuperAdminPrivilege — escalation guard (C4)", () => {
         givePotentialSuperAdminPrivilege,
         {},
         { uid: "u1", token: { superAdmin: { "house-1": true } } },
+      ),
+    ).rejects.toMatchObject({ code: "permission-denied" });
+    expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+  });
+
+  it("DENY stale token — user has no token claims but live record has admin claims", async () => {
+    mockAuthGetUser.mockResolvedValue({
+      customClaims: { admin: { "house-1": true } },
+    });
+    await expect(
+      call(
+        givePotentialSuperAdminPrivilege,
+        {},
+        { uid: "u1", token: {} }, // stale token: no claims visible here
       ),
     ).rejects.toMatchObject({ code: "permission-denied" });
     expect(mockSetCustomUserClaims).not.toHaveBeenCalled();

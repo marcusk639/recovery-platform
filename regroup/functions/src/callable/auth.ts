@@ -202,7 +202,7 @@ export const promoteGuestsToAdmin = onCall(async (request) => {
   await assertCanGrantClaimForHouses({
     callerUid: request.auth.uid,
     callerToken: request.auth.token,
-    targetUid: data[0].userId,
+    targetUid: request.auth.uid,
     houseIds,
     callableName: "promoteGuestsToAdmin",
   });
@@ -233,7 +233,7 @@ export const removePrivilegesForGuests = onCall(async (request) => {
   await assertCanGrantClaimForHouses({
     callerUid: request.auth.uid,
     callerToken: request.auth.token,
-    targetUid: data.guests[0].userId,
+    targetUid: request.auth.uid,
     houseIds,
     callableName: "removePrivilegesForGuests",
   });
@@ -264,23 +264,39 @@ export const verifyUserEmail = onCall(async (request) => {
 export const givePotentialSuperAdminPrivilege = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
 
+  // Check 1: token-based (fast, catches most cases)
   const token = request.auth.token as Record<string, unknown>;
-  const hasExistingAdmin =
+  const tokenHasAdmin =
     token.admin && Object.keys(token.admin as object).length > 0;
-  const hasExistingSuperAdmin =
+  const tokenHasSuperAdmin =
     token.superAdmin && Object.keys(token.superAdmin as object).length > 0;
 
-  if (hasExistingAdmin || hasExistingSuperAdmin) {
+  if (tokenHasAdmin || tokenHasSuperAdmin) {
     throw new HttpsError(
       "permission-denied",
       "givePotentialSuperAdminPrivilege is only available to users with no existing house claims",
     );
   }
 
+  // Check 2: live record (catches stale tokens whose claims were revoked within
+  // the last hour but whose JWT is still valid)
   const user = await auth().getUser(request.auth.uid);
-  const current = (user.customClaims ?? {}) as Record<string, unknown>;
+  const liveClaims = (user.customClaims ?? {}) as Record<string, unknown>;
+  const liveHasAdmin =
+    liveClaims.admin && Object.keys(liveClaims.admin as object).length > 0;
+  const liveHasSuperAdmin =
+    liveClaims.superAdmin &&
+    Object.keys(liveClaims.superAdmin as object).length > 0;
+
+  if (liveHasAdmin || liveHasSuperAdmin) {
+    throw new HttpsError(
+      "permission-denied",
+      "givePotentialSuperAdminPrivilege is only available to users with no existing house claims",
+    );
+  }
+
   return auth().setCustomUserClaims(request.auth.uid, {
-    ...current,
+    ...liveClaims,
     potentialSuperAdmin: true,
   });
 });
