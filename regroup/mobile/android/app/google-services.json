@@ -1,0 +1,83 @@
+{
+  "project_info": {
+    "project_number": "155667333239",
+    "firebase_url": "https://phoenix-cleanhouse.firebaseio.com",
+    "project_id": "phoenix-cleanhouse",
+    "storage_bucket": "phoenix-cleanhouse.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:155667333239:android:198eaf7ab742e2aa1a0672",
+        "android_client_info": {
+          "package_name": "com.rats.dev"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "155667333239-ufanibrthbobar7h8ec305u4aq29he30.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAnRfWMBt_xPaFdX0JstXIgs7tq6siY1V0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "155667333239-ufanibrthbobar7h8ec305u4aq29he30.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "155667333239-a4qmqn7lb0e4nsvgcp77784qndl4rq8b.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.rats.dev"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:155667333239:android:cbb00e82bb68223b1a0672",
+        "android_client_info": {
+          "package_name": "com.regroup.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "155667333239-ufanibrthbobar7h8ec305u4aq29he30.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAnRfWMBt_xPaFdX0JstXIgs7tq6siY1V0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "155667333239-ufanibrthbobar7h8ec305u4aq29he30.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "155667333239-a4qmqn7lb0e4nsvgcp77784qndl4rq8b.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.rats.dev"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,128 @@
+<header *ngIf="show" class="navbar navbar-sticky navbar-expand-lg navbar-dark navbar-collapse">
+  <div class="container position-relative">
+    <div class="p-2 mt-1" *ngIf="fromApp" (click)="back()">
+      <span class="fas fa-arrow-left fa-2x text-white"></span>
+    </div>
+    <div class="row">
+      <a class="navbar-brand" [href]="!fromApp ? 'index.html' : null">
+        <img width="65" height="65" class="navbar-brand-regular" [src]="logoFilePath" alt="brand-logo" />
+        <img width="65" height="65" class="navbar-brand-sticky" [src]="logoFilePath" alt="sticky brand-logo" />
+      </a>
+    </div>
+
+    <button
+      (click)="toggleDrawer()"
+      *ngIf="!fromApp"
+      class="navbar-toggler d-lg-none"
+      type="button"
+      data-toggle="navbarToggler"
+      aria-label="Toggle navigation"
+    >
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <div class="navbar-inner">
+      <!--  Mobile Menu Toggler -->
+      <button (click)="toggleDrawer(true)" class="navbar-toggler d-lg-none" type="button" data-toggle="navbarToggler" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <nav>
+        <ul class="navbar-nav" id="navbar-nav">
+          <li class="nav-item">
+            <a class="nav-link scroll" routerLink="">Home</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link scroll" [queryParams]="params('features')" routerLink="">Features</a>
+          </li>
+          <li class="nav-item dropdown">
+            <a
+              class="nav-link dropdown-toggle"
+              href="javascript:;"
+              id="navbarDropdownMenuLink"
+              data-toggle="dropdown"
+              aria-haspopup="true"
+              aria-expanded="false"
+            >
+              Account
+            </a>
+            <ul class="dropdown-menu" aria-labelledby="navbarDropdownMenuLink">
+              <li *ngIf="!user">
+                <a class="dropdown-item" [routerLink]="['/login']">Login</a>
+              </li>
+              <li *ngIf="!user">
+                <a class="dropdown-item" [routerLink]="['/signup']">Signup</a>
+              </li>
+              <li *ngIf="user">
+                <a class="dropdown-item" [routerLink]="['/my-account']">My Account</a>
+              </li>
+              <li *ngIf="user">
+                <a class="dropdown-item" routerLink="" (click)="logout()">Logout</a>
+              </li>
+              <!-- <li>
+                                <a class="dropdown-item" href="/reset">Reset Password</a>
+                            </li> -->
+              <!-- <li class="dropdown-submenu"><a class="dropdown-item dropdown-toggle"
+                                    href="javascript:;">Inner Pages<span
+                                        class="badge badge-pill badge-warning ml-2">New</span></a>
+                                <ul class="dropdown-menu">
+                                    <li>
+                                        <a class="dropdown-item" href="/pricing">Pricing</a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" href="/download">Download</a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" href="/subscribe">Newsletter</a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" href="/thank-you">Thank you</a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" href="/coming-soon">Coming Soon</a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" href="/error">404</a>
+                                    </li>
+                                </ul>
+                            </li> -->
+              <!-- <li class="dropdown-submenu"><a class="dropdown-item dropdown-toggle"
+                                    href="javascript:;">Accounts<span
+                                        class="badge badge-pill badge-warning ml-2">New</span></a>
+                                <ul class="dropdown-menu">
+                                    <li>
+                                        <a class="dropdown-item" href="/login">Login</a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" href="/signup">Signup</a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" href="/reset">Reset Password</a>
+                                    </li>
+                                </ul>
+                            </li> -->
+              <!-- <li>
+                                <a class="dropdown-item" href="/pricing">Pricing</a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="/faq">FAQ</a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="/contact">Contact</a>
+                            </li> -->
+              <!-- <li>
+                                <a class="dropdown-item disabled" href="#">More Coming Soon</a>
+                            </li> -->
+            </ul>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link scroll" [routerLink]="['/pricing']">Pricing</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link scroll" [routerLink]="['/contact']">Contact</a>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </div>
+</header>
+<router-outlet></router-outlet>

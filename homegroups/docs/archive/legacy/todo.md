@@ -1,0 +1,22 @@
+- notifications
+  - notify me personally when admin access is requested
+  - messages
+  - celebrations
+  - reminders (like when a member has to chair a meeting)
+- Group invites
+- Clean up landing page / onboarding ux
+- treasury - coffees, birthday, rent, literature, chips, etc
+- service positions - treasurer, gsr, secretary, chair, literature, coffee person
+  - upload reports
+  - term ending reminders (notify admins/members when position term is ending)
+- celebrations - birthdays, etc
+- key tracker
+- meeting chair tracker (possibly notify member)
+- volunteer opportunities
+- task tracker (pick up cake, bring books)
+- group feed
+- references to guides on running groups
+- offer a way to change payment methods for groups (such as when admins are turned over)
+- prevent chat access by anyone not in group
+
+  keytool -list -v -keystore your_release_keystore.jks -alias marcusk639 -storepass 159753 -keypass 159753

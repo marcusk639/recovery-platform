@@ -1,0 +1,323 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth.uid != null;
+    }
+    
+    function hasHouseRole() {
+      return signedIn() && request.auth.token != null;
+    }
+    
+    function roleExists(role) {
+      return request.auth.token[role] != null;
+    }
+    
+    function isHouseAdmin(houseId) {
+      return houseId in request.auth.token.admin;
+    }
+    
+    function isHouseSuperAdmin(houseId) {
+      return hasHouseRole() && houseId in request.auth.token.superAdmin
+    }
+    
+    function isHouseGuest(houseId) {
+      return hasHouseRole() && houseId in request.auth.token.guest;
+    }
+    
+    function isPotentialSuperAdmin() {
+      return signedIn() && request.auth.token.potentialSuperAdmin == true;
+    }
+    
+    function getRoleFromClaim(role) {
+      return request.auth.token[role];
+    }
+    
+    function hasAdminRoleInHouse(houseIds) {
+      return signedIn() && 'admin' in request.auth.token && request.auth.token.admin.keys().hasAny(houseIds);
+    }
+
+    function hasSuperAdminRoleInHouse(houseIds) {
+      return hasHouseRole() && 'superAdmin' in request.auth.token && request.auth.token.superAdmin.keys().hasAny(houseIds);
+    }
+
+    function hasGuestRoleInHouse(houseIds) {
+      return hasHouseRole() && 'guest' in request.auth.token && request.auth.token.guest.keys().hasAny(houseIds);
+    }
+    
+    function isGuest(houseIds) {
+      return hasGuestRoleInHouse(houseIds);
+    }
+    
+    function isAdmin(houseIds) {
+      return hasAdminRoleInHouse(houseIds) || hasSuperAdminRoleInHouse(houseIds);
+    }
+    
+    function isSameUser(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+    
+    function isGuestOrAdmin(houseIds) {
+    	return isGuest(houseIds) || isAdmin(houseIds);
+    }
+
+    function houseOxfordActive(houseId) {
+      let h = get(/databases/$(database)/documents/houses/$(houseId)).data;
+      return h.oxfordEnabled == true &&
+        (h.subscriptionStatus == 'active' || h.subscriptionStatus == 'trialing');
+    }
+
+  // match /{document=**} {
+    //   allow read, write: if signedIn();
+    // }
+    match /contact/{contactId} {
+      // Public contact form: anyone (including unauthenticated) can submit.
+      // Only signed-in users can read/manage submissions.
+      allow create: if true;
+      allow read, update, delete: if signedIn();
+    }
+
+    match /subscriptions/{subscriptionId} {
+      // House subscription records: admin of the relevant house only.
+      // Cloud Functions use the Admin SDK and bypass these rules entirely.
+      allow read: if isAdmin([resource.data.houseId]);
+      allow create, update: if isAdmin([request.resource.data.houseId]);
+      allow delete: if isAdmin([resource.data.houseId]);
+    }
+
+    match /beta-users/{docId} {
+      // Beta signup form: anyone (including unauthenticated) can submit.
+      // Only signed-in users can read/manage entries.
+      allow create: if true;
+      allow read, update, delete: if signedIn();
+    }
+    
+    match /admins/{adminId} {
+      allow read: if signedIn(); // need to adjust house search to not query admins (data needs to be aggregated on the house documents)
+      // allow create: if isAdmin(request.resource.data.houseIds);
+      allow create: if isAdmin(request.resource.data.houseIds);
+      allow update: if isAdmin(request.resource.data.houseIds);
+      allow delete: if isAdmin(request.resource.data.houseIds);
+      // allow create: if signedIn();
+    }
+    
+    match /guests/{guestId} {
+      allow read: if isGuest([resource.data.houseId]) || isAdmin([resource.data.houseId]); // need to adjust house search to not query guests (data needs to be aggregated on the house documents)
+
+      // Create is unrestricted between self and admin (no diff to compare).
+      allow create: if isSameUser(request.resource.data.userId) || isAdmin([request.resource.data.houseId]);
+
+      // Update has two distinct branches:
+      //
+      //  Admin branch — full write authority on any field within the house.
+      //
+      //  Self branch — guest editing their own profile is restricted to a
+      //    whitelist of personal fields. Financial fields (rentOwed,
+      //    choreFees), advancement fields (phase, step, status), privilege
+      //    fields (isAdmin, roles), and intake/discharge fields all stay
+      //    admin-only. The optimistic-lock counter `version` is allowed so
+      //    `guestService.updateGuest`'s transaction can increment it on
+      //    self-writes.
+      //
+      // See .full-review/02-security-performance.md [S1] for the threat model.
+      allow update: if
+        isAdmin([request.resource.data.houseId]) ||
+        (isSameUser(request.resource.data.userId) &&
+         request.resource.data.userId == resource.data.userId &&
+         request.resource.data.houseId == resource.data.houseId &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+           'displayName', 'firstName', 'lastName',
+           'email', 'avatar', 'phoneNumber',
+           'sobrietyDate', 'drugOfChoice',
+           'emergencyContactName', 'emergencyContactPhone', 'emergencyContactRelation',
+           'autoPayEnabled',
+           'version', 'updatedAt', 'updatedBy'
+         ]));
+
+      allow delete: if isSameUser(resource.data.userId) || isAdmin([resource.data.houseId]);
+    }
+    
+    match /guest-reports/{reportId} {
+      allow read, write: if isGuestOrAdmin([resource.data.houseId]);
+    }
+    
+    match /guest-weeks/{weekId} {
+      allow read, write: if isSameUser(resource.data.userId) || isAdmin([resource.data.houseId]);
+    }
+    
+    match /bugs/{bugId} {
+    	allow read, write: if signedIn();
+    }
+    
+    match /houses/{houseId} {
+      allow read: if signedIn();
+      allow create: if isAdmin([houseId]);
+      allow delete: if isHouseAdmin(request.resource.data.id);
+      // Admins can update anything; guests cannot modify sensitive fields
+      allow update: if isAdmin([houseId]) ||
+        (isGuest([houseId]) && !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['stripeAccountId', 'stripeStatus', 'monthlyRent', 'weeklyRent', 'adminIds', 'ownerId']));
+      
+      match /chat/{chatId} {
+        allow read, write: if isGuest([houseId]) || isAdmin([houseId]);
+      }
+
+      // Oxford House: officer roster — read open to members; writes require active Oxford subscription
+      match /officers/{officerId} {
+        allow read: if isGuestOrAdmin([houseId]);
+        allow create, update, delete: if isAdmin([houseId]) && houseOxfordActive(houseId);
+      }
+
+      // Oxford House: business meeting records — read open; writes require active Oxford subscription
+      match /business-meetings/{meetingId} {
+        allow read: if isGuestOrAdmin([houseId]);
+        allow create, update: if isGuestOrAdmin([houseId]) && houseOxfordActive(houseId);
+        allow delete: if isAdmin([houseId]);
+      }
+
+      // Oxford House: governance votes — read open; creates and casts require active Oxford subscription
+      match /votes/{voteId} {
+        allow read: if isGuestOrAdmin([houseId]);
+        allow create: if isAdmin([houseId]) && houseOxfordActive(houseId);
+        allow update: if isGuestOrAdmin([houseId]) && houseOxfordActive(houseId);
+        allow delete: if false;
+      }
+
+      // Financial records — permanent audit trail, all members can read
+      match /financial-records/{recordId} {
+        allow read: if signedIn() && (
+          isAdmin([houseId]) || isHouseGuest(houseId)
+        );
+        allow create: if signedIn() && isAdmin([houseId]);
+        allow update: if signedIn() && isAdmin([houseId]);
+        allow delete: if false;
+      }
+
+      // Payment methods: sensitive Stripe data — admin of house OR the guest themselves can read.
+      // Uses get() to look up the parent guest's Auth UID since Firestore doc IDs may differ from Auth UIDs.
+      // Client writes are denied; Cloud Functions use the Admin SDK (bypasses rules) for all writes.
+      match /guests/{guestId}/paymentMethods/{pmId} {
+        allow read: if isAdmin([houseId]) ||
+          (isGuest([houseId]) && get(/databases/$(database)/documents/guests/$(guestId)).data.userId == request.auth.uid);
+        allow write: if false;
+      }
+
+      // Resident applications: applicant creates own; admin reads + updates status
+      match /applications/{appId} {
+        allow create: if signedIn() && request.resource.data.applicantUid == request.auth.uid;
+        allow read: if signedIn() && (resource.data.applicantUid == request.auth.uid || isAdmin([houseId]));
+        allow update: if isAdmin([houseId]);
+        allow delete: if false;
+      }
+    }
+    
+    // Payments: only admins can read all house payments; guests read their own.
+    // Manual payment recording restricted to admins.
+    // Cloud Functions handle Stripe-originated writes via Admin SDK.
+    match /payments/{paymentId} {
+      allow read: if isAdmin([resource.data.houseId]) ||
+        (isGuest([resource.data.houseId]) && isSameUser(resource.data.guestUserId));
+      allow create: if isAdmin([request.resource.data.houseId]);
+      allow update, delete: if false; // Only Cloud Functions should modify payments
+    }
+
+    match /complaints/{complaintId} {
+    	allow read, write: if isGuestOrAdmin([resource.data.houseId]);
+    }
+    
+    match /issues/{issueId} {
+    	allow create: if signedIn() || isGuest([resource.data.houseId]) || isAdmin([resource.data.houseId]);
+    	allow update: if isGuest([request.resource.data.houseId]) || isAdmin([request.resource.data.houseId]);
+      allow read: if isGuest([resource.data.houseId]) || isAdmin([resource.data.houseId]);
+      allow delete: if isAdmin([resource.data.houseId]);
+    }
+    
+    match /disputes/{disputeId} {
+    	allow read: if isGuest([resource.data.houseId]) || isAdmin([resource.data.houseId]);
+      allow write: if isGuestOrAdmin([request.resource.data.houseId])
+    }
+    
+    match /users/{userId} {
+      allow read, write: if isSameUser(userId);
+    }
+    
+    match /notifications/{notificationId} {
+      // Users can only read/write their own notifications.
+      allow read, write: if isSameUser(resource.data.userId);
+      allow create: if isSameUser(request.resource.data.userId);
+    }
+    
+    match /feedback/{feedbackId} {
+    	allow read, write: if signedIn();
+    }
+    
+    match /meetings/{meetingId} {
+      // Guests can read and log attendance; only admins can delete.
+      allow read: if isGuestOrAdmin([resource.data.houseId]);
+      allow create, update: if isGuestOrAdmin([request.resource.data.houseId]);
+      allow delete: if isAdmin([resource.data.houseId]);
+    }
+    
+    match /guest-archive/{guestId} {
+      allow read: if isGuestOrAdmin([resource.data.houseId]);
+      allow write: if isGuestOrAdmin([request.resource.data.houseId]);
+    }
+
+    match /activities/{activityId} {
+      allow read: if isGuest([resource.data.houseId]) || isAdmin([resource.data.houseId]);
+      allow create: if isSameUser(request.resource.data.loggedBy) || isAdmin([request.resource.data.houseId]);
+      allow update: if isSameUser(resource.data.loggedBy) || isAdmin([resource.data.houseId]);
+      allow delete: if isAdmin([resource.data.houseId]);
+    }
+
+    match /week-summaries/{summaryId} {
+      allow read: if isGuest([resource.data.houseId]) || isAdmin([resource.data.houseId]);
+      allow write: if isAdmin([request.resource.data.houseId]);
+    }
+    
+    match /direct-messages/{messageId}/chat/{chatId} {
+      allow read: if isSameUser(resource.data.recipientId) || isSameUser(resource.data.senderId);
+      allow create: if request.auth.uid == request.resource.data.senderId;
+      allow update, delete: if isSameUser(resource.data.senderId);
+    }
+
+    match /webhookEvents/{eventId} {
+      // Written exclusively by Cloud Functions via the Admin SDK. Deny all client access.
+      allow read, write: if false;
+    }
+
+    match /invitations/{token} {
+      // All access goes through createInvitation / peekInvitation /
+      // redeemInvitation callables. The admin SDK bypasses rules, so
+      // clients are denied entirely.
+      allow read, write: if false;
+    }
+
+    // Oxford House: Equal Expense Share tracker — top-level collection, scoped by houseId field
+    match /ees-records/{eesId} {
+      allow read: if isGuestOrAdmin([resource.data.houseId]);
+      allow create: if isAdmin([request.resource.data.houseId]);
+      allow update: if isAdmin([resource.data.houseId]);
+      allow delete: if isAdmin([resource.data.houseId]);
+    }
+
+    // Drug test records — immutable audit trail
+    match /drug-tests/{testId} {
+      allow read: if signedIn() && (
+        isAdmin([resource.data.houseId]) ||
+        isSameUser(resource.data.observedBy)
+      );
+      allow create: if signedIn() && isAdmin([request.resource.data.houseId]);
+      allow update, delete: if false;
+    }
+
+    match /documents/{docId} {
+      // Only house admins and super-admins can read or write documents.
+      // Residents (guests) have zero access.
+      allow read: if signedIn() && isAdmin([resource.data.houseId]);
+      allow create: if signedIn() && isAdmin([request.resource.data.houseId]);
+      allow delete: if signedIn() && isAdmin([resource.data.houseId]);
+      allow update: if false;
+    }
+  }
+}

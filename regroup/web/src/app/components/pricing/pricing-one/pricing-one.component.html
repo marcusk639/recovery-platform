@@ -1,0 +1,73 @@
+<section id="pricing" class="section price-plan-area bg-gray overflow-hidden ptb_100">
+  <div class="container">
+    <div class="row justify-content-center">
+      <div class="col-12 col-md-10 col-lg-7">
+        <!-- Section Heading -->
+        <div class="section-heading text-center">
+          <h2>Manage Your Homes With {{ appName }}</h2>
+          <p class="d-none d-sm-block mt-4">
+            Using {{ appName }}'s comprehensive accountability system, the residents in your homes can easily help each
+            other stay on track in their
+            recovery while the app securely manages the home's data, allowing you to focus on the success of the home as
+            a whole.
+          </p>
+          <p class="d-block d-sm-none mt-4">
+            Using {{ appName }}'s comprehensive accountability system, the residents in your homes can easily help each
+            other stay on track in their
+            recovery while the app securely manages the home's data, allowing you to focus on the success of the home as
+            a whole.
+          </p>
+        </div>
+      </div>
+    </div>
+    <div class="row justify-content-center">
+      <div class="col-12 col-sm-10 col-lg-8">
+        <div class="row price-plan-wrapper d-flex justify-content-center">
+          <div class="col-12 col-md-6">
+            <!-- Single Price Plan -->
+            <div class="single-price-plan text-center p-5 wow fadeInLeft" data-aos-duration="2s" data-wow-delay="0.4s">
+              <!-- Plan Thumb -->
+              <div class="plan-thumb">
+                <img class="avatar-lg" [src]="logoFilePath" alt="" />
+              </div>
+              <!-- Plan Title -->
+              <div class="plan-title my-2 my-sm-3">
+                <h3 class="text-uppercase">Full Access</h3>
+              </div>
+              <!-- Plan Price -->
+              <div class="plan-price pb-2 pb-sm-3">
+                <h3 class="color-primary"><small class="fw-7">$</small>10 / Home</h3>
+              </div>
+              <div class="row justify-content-center">
+                <!-- <div style="left: 7rem;" class="position-absolute">
+                                    <p class="plan-price color-primary fw-6" style="font-size:1.25rem">+</p>
+                                </div> -->
+                <div class="plan-price pb-2 pb-sm-3">
+                  <h3 class="color-primary"><small class="fw-7 pl-3">$</small>1 / Resident</h3>
+                </div>
+
+                <div></div>
+              </div>
+              <!-- Plan Description -->
+              <div class="plan-description">
+                <ul class="plan-features">
+                  <li class="border-top py-3">Easily Monitor Homes</li>
+                  <li class="border-top py-3">Keep Residents Accountable</li>
+                  <li class="border-top py-3">Securely Store House Data</li>
+                  <li class="border-top py-3">Stay Connected To Residents</li>
+                  <li class="border-top border-bottom py-3">24/7 Technical Support</li>
+                </ul>
+              </div>
+              <div class="plan-button">
+                <a [routerLink]="['/signup']" class="btn mt-4">Start Free Trial</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="row justify-content-center pt-5">
+      <p class="text-body pt-4 fw-5">Questions about pricing? <a href="https://regroup-app.com/contact">Contact Us</a></p>
+    </div>
+  </div>
+</section>

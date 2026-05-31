@@ -1,0 +1,19 @@
+# Compiled JavaScript files
+lib/**/*.js
+lib/**/*.js.map
+
+# TypeScript v1 declaration files
+typings/
+
+# Node.js dependency directory
+node_modules/
+
+scripts/recovery-connect.json
+
+# Env files — covers .env, .env.local, .env.<projectId>, etc.
+# Keep .env.example tracked as a template if you create one.
+.env
+.env.*
+!.env.example
+
+firebase-debug.log

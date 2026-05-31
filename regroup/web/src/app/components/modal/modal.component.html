@@ -1,0 +1,22 @@
+<div class="modal fade" id="modal" tabindex="-1" role="dialog" aria-labelledby="modalLabel" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalLabel">{{ title }}</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <ng-container [ngClass]="{ hidden: loading }" *ngTemplateOutlet="modalTemplate"></ng-container>
+        <div class="d-flex align-items-center justify-content-center" *ngIf="loading">
+          <span><i [class]="'fas fa-spinner fa-3x fa-spin'"></i></span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button [disabled]="loading || disable" type="button" class="btn btn-secondary" data-dismiss="modal">{{ cancelTxt }}</button>
+        <button [disabled]="loading || disable" type="button" class="btn btn-primary" (click)="onConfirm()">{{ confirmTxt }}</button>
+      </div>
+    </div>
+  </div>
+</div>

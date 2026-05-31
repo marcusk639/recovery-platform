@@ -1,0 +1,15 @@
+.error-message {
+  color: #D8000C;
+  font-size: 10px;
+  text-align: left;
+  padding-top: -2rem;
+}
+
+span.alert.alert-danger {
+  padding: .375rem .75rem;
+  margin-bottom: 0;
+}
+
+input.ng-invalid.ng-touched {
+  /* border: #D8000C solid 1pt; */
+}

@@ -1,0 +1,110 @@
+<div class="contact-page">
+  <div class="main">
+    <app-scrollup></app-scrollup>
+    <app-header-two></app-header-two>
+    <app-breadcrumb-contact></app-breadcrumb-contact>
+    <section id="contact" class="contact-area bg-gray ptb_100">
+      <div class="container">
+        <div *ngIf="initializing" class="d-flex align-items-center justify-content-center">
+          <span><i [class]="'fas fa-spinner fa-3x fa-spin'"></i></span>
+        </div>
+        <div *ngIf="!initializing" class="row">
+          <div class="col-12">
+            <div *ngIf="success" class="alert alert-success" role="alert">
+              {{ successMessage || 'Success!' }}
+            </div>
+            <div *ngIf="error" class="alert alert-danger" role="alert">
+              Something went wrong
+            </div>
+            <!-- Section Heading -->
+            <div class="section-heading">
+              <span class="d-inline-block rounded-pill shadow-sm fw-5 px-4 py-2 mb-3">
+                <i class="far fa-lightbulb text-primary mr-1"></i>
+                <span class="text-primary">Account</span>
+                Info
+              </span>
+              <h2>My Account</h2>
+              <!-- Begin account info container -->
+              <div class="d-block mt-5 px-3 col-12">
+                <!-- Personal section -->
+                <div class="row d-flex">
+                  <div class="row-no-padding col-4">
+                    <h3>Personal</h3>
+                  </div>
+                  <div class="row d-flex mb-5 col-8">
+                    <!-- Contact info -->
+                    <div>
+                      <span class="d-block sub-header">Contact Information</span>
+                      <span class="d-block text">{{ user.email }}</span>
+                      <span class="d-block text">{{ user.phoneNumber }}</span>
+                      <a href="" class="button" data-toggle="modal" data-target="#modal"
+                        (click)="showModal('contact')">Edit</a>
+                    </div>
+                    <!-- End contact info-->
+                  </div>
+                </div>
+                <!-- End Personal section -->
+                <!-- Billing section -->
+                <div class="row d-flex">
+                  <div class="row-no-padding col-4">
+                    <h3>Billing</h3>
+                  </div>
+                  <div class="row d-flex mb-5 col-8">
+                    <div>
+                      <span class="d-block sub-header">Subscription &amp; Payment</span>
+                      <span class="d-block text">Manage your payment method, view invoices, and update your subscription.</span>
+                      <button class="button mt-3" (click)="openBillingPortal()" [disabled]="portalLoading">
+                        {{ portalLoading ? 'Redirecting...' : 'Manage Billing →' }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <!-- End Billing section -->
+                <!-- Privacy section -->
+                <div class="row d-flex">
+                  <div class="row-no-padding col-4">
+                    <h3>Privacy</h3>
+                  </div>
+                  <div class="row d-flex justify-content-between mb-5 col-8 flex-nowrap">
+                    <!-- Description -->
+                    <div>
+                      <span class="d-block sub-header">Personal Information</span>
+                      <span class="d-block text"
+                        [innerHTML]="'You may download your data or delete your account at any time.'"></span>
+                      <span class="d-block text"
+                        [innerHTML]="'We are committed to protecting the privacy and security of your personal information.'"></span>
+                      <div class="d-flex justify-content-between row col-12 mt-3">
+                        <span class="d-block text"
+                        [innerHTML]="'To download your data, send us an email at admin@regroup-app.com.'"></span>
+                        <!-- <button href="#" class="button mb-3" (click)="showModal('download')">Download my data</button> -->
+                        <!-- <a href="javascript:void(0);" class="button" (click)="showModal('download')">Download my data</a> -->
+                      </div>
+                    </div>
+                    <!-- End description -->
+                  </div>
+                </div>
+                <!-- End Privacy section -->
+              </div>
+              <!-- End account info container -->
+              <!-- <p class="d-none d-sm-block mt-4">Contact us with any questions, feedback, or suggestions you may have.</p>
+              <p class="d-block d-sm-none mt-4">Contact us with any questions, feedback, or suggestions you may have.</p> -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <!-- <section class="section map-area">
+          <iframe
+              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2485.596666220624!2d-0.16124461362595294!3d51.46556134684942!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x487605a25375dfb7%3A0xe0d9fa09dcf932a8!2s15%20Theatre%20St%2C%20Battersea%2C%20London%20SW11%205ND%2C%20UK!5e0!3m2!1sen!2sbd!4v1567427969685!5m2!1sen!2sbd"
+              width="100" height="100" style="border:0;" allowfullscreen=""></iframe>
+      </section> -->
+    <app-footer-one></app-footer-one>
+  </div>
+</div>
+<ng-template #contact>
+  <form *ngIf="!loading" [formGroup]="formGroups.contact" id="contact-form">
+    <mek-field [formGroup]="formGroups.contact" formControlName="phoneNumber" name="phoneNumber" type="tel"
+      required="true" placeholder="Phone Number">
+    </mek-field>
+  </form>
+</ng-template>

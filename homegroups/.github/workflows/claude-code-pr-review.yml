@@ -1,0 +1,134 @@
+name: Claude Code PR Review
+
+# DISABLED 2026-05-26: auto-triggers removed; runnable manually only via Actions tab or `gh workflow run`.
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to review'
+        required: true
+        type: number
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write  # Required for OIDC token
+
+jobs:
+  review:
+    name: Review with Claude Code
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Only run on PRs or when /review comment is made or manually triggered
+    if: |
+      github.event_name == 'pull_request' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       contains(github.event.comment.body, '/review'))
+
+    steps:
+      - name: Get PR number
+        id: pr
+        run: |
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            echo "number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "number=${{ github.event.inputs.pr_number }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" == "issue_comment" ]; then
+            echo "number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Get PR details
+        id: pr-details
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = ${{ steps.pr.outputs.number }};
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+
+            core.setOutput('head_sha', pr.head.sha);
+            core.setOutput('base_ref', pr.base.ref);
+            core.setOutput('head_ref', pr.head.ref);
+
+      - name: Checkout PR code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ steps.pr-details.outputs.head_sha }}
+
+      - name: Fetch base branch
+        run: |
+          git fetch origin ${{ steps.pr-details.outputs.base_ref }}
+
+      - name: Load product context
+        id: context
+        run: |
+          # Load the product-specific review context
+          if [ -f .github/PR_REVIEW_CONTEXT.md ]; then
+            echo "context-file=.github/PR_REVIEW_CONTEXT.md" >> $GITHUB_OUTPUT
+            echo "Product context file found"
+          else
+            echo "WARNING: PR_REVIEW_CONTEXT.md not found"
+          fi
+
+      - name: Review PR with Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          show_full_output: true  # Enable debug output
+          prompt: Review this PR for code quality, security issues, and adherence to the patterns documented in .github/PR_REVIEW_CONTEXT.md. Provide structured feedback with specific file:line references.
+
+      - name: Check for blocking issues
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = ${{ steps.pr.outputs.number }};
+
+            // Get the review comment
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            });
+
+            const claudeComment = comments.data.find(comment =>
+              comment.user.type === 'Bot' &&
+              (comment.body.includes('Claude Code') || comment.body.includes('🔍 Code Review'))
+            );
+
+            if (claudeComment) {
+              const body = claudeComment.body;
+              const bodyLower = body.toLowerCase();
+
+              // Check for explicit clean-review signals
+              const isCleanReview =
+                bodyLower.includes('no critical issues found') ||
+                bodyLower.includes('no critical issues.') ||
+                /no\s+security\s+(issues?|concerns?|vulnerabilities?)/i.test(body) ||
+                /no\s+privacy\s+violations?/i.test(body);
+
+              // Look for actual issue indicators (section headings, labeled items)
+              // rather than bare keywords that appear in any context
+              const hasCriticalIssues = !isCleanReview && (
+                /\bcritical\s+(issue|bug|vulnerability|problem)/i.test(body) ||
+                /\bsecurity\s+(issue|vulnerability|flaw|risk|hole)/i.test(body) ||
+                /\bprivacy\s+violation/i.test(body)
+              );
+
+              const hasWarningIssues = !isCleanReview &&
+                body.includes('⚠️') && /issues?\s+found/i.test(body);
+
+              if (hasCriticalIssues) {
+                core.setFailed('Critical issues found in PR review. Please address before merging.');
+              } else if (hasWarningIssues) {
+                core.warning('Claude Code found issues in this PR. Please review the feedback.');
+              }
+            }

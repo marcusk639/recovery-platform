@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "421876308052",
+    "project_id": "recovery-connect-cad4b",
+    "storage_bucket": "recovery-connect-cad4b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:421876308052:android:b843257c5d1441fef535c1",
+        "android_client_info": {
+          "package_name": "com.recoveryconnect"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "421876308052-svrffku08omm18n0bhbs7ivc9jo7ftpi.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.recoveryconnect",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "421876308052-s558o9vfqjcj5faj1gfogo2sock2enpd.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBuFKlYO0BhGINQ13MUMd-WrlswWb3A2zw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "421876308052-s558o9vfqjcj5faj1gfogo2sock2enpd.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "421876308052-fnmhdvrf5ujk9vca86g26sun1d91l0te.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.homegroups"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

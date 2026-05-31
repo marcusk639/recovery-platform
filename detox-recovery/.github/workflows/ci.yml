@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    name: Lint, test, build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm run test -- --no-coverage --ci
+
+      - name: Build
+        run: npm run build
+        env:
+          # Stripe public URLs — required by lib/products-data.ts and lib/services-data.ts
+          # at build time; placeholders prevent "?? #" fallbacks from triggering warnings.
+          NEXT_PUBLIC_STRIPE_SUPPORT_CALL_URL: "https://buy.stripe.com/placeholder"
+          NEXT_PUBLIC_LEMONSQUEEZY_FAMILY_GUIDE_URL: "https://nextsteprecovery.lemonsqueezy.com/buy/placeholder"
+          NEXT_PUBLIC_LEMONSQUEEZY_APPOINTMENT_PREP_URL: "https://nextsteprecovery.lemonsqueezy.com/buy/placeholder"
+          NEXT_PUBLIC_LEMONSQUEEZY_SAFETY_CHECKLIST_URL: "https://nextsteprecovery.lemonsqueezy.com/buy/placeholder"
+          NEXT_PUBLIC_LEMONSQUEEZY_TREATMENT_COMPARISON_URL: "https://nextsteprecovery.lemonsqueezy.com/buy/placeholder"
+          NEXT_PUBLIC_LEMONSQUEEZY_RELAPSE_PREVENTION_URL: "https://nextsteprecovery.lemonsqueezy.com/buy/placeholder"
+          NEXT_PUBLIC_STRIPE_DONATION_URL: "https://buy.stripe.com/placeholder"
+          NEXT_PUBLIC_CALENDLY_FIT_CHECK_URL: "https://calendly.com/placeholder"
+          NEXT_PUBLIC_CALENDLY_SUPPORT_CALL_URL: "https://calendly.com/placeholder"

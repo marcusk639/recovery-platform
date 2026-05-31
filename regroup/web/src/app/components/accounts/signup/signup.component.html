@@ -1,0 +1,119 @@
+<div class="accounts inner-pages">
+  <div class="main">
+    <app-header-two></app-header-two>
+    <section id="home" [ngClass]="{ 'align-items-center': !fromApp }"
+      class="section welcome-area bg-overlay d-flex h-100vh">
+      <!-- section welcome-area bg-overlay d-flex align-items-center h-100vh -->
+      <div class="container">
+        <div class="row align-items-center justify-content-center">
+          <!-- Welcome Intro Start -->
+          <div *ngIf="!fromApp && !isMobile" class="col-12 col-lg-7 pt-5 mt-5 mt-md-0">
+            <div class="welcome-intro">
+              <h1 class="text-white">Create an account!</h1>
+              <p class="text-white my-4">Create your account to get started managing your houses!</p>
+            </div>
+          </div>
+          <div [ngClass]="{ dummy: !fromApp }"></div>
+          <div *ngIf="!signUpStarted" class="col-12 col-md-8 col-lg-5">
+            <!-- Contact Box -->
+            <div class="contact-box bg-white text-center rounded p-4 p-sm-5 mt-5 mt-lg-0 shadow-lg">
+              <!-- Contact Form -->
+              <form *ngIf="!loading" [formGroup]="formGroup" id="contact-form">
+                <div class="contact-top">
+                  <h3 class="contact-title">Sign Up</h3>
+                  <h5 class="text-secondary fw-3 py-3">Enter your name, email address, and password so we can get you
+                    started.</h5>
+                </div>
+                <div class="row">
+                  <div class="col-12">
+                    <mek-field [formGroup]="formGroup" formControlName="fullName" [iconStyle]="'fa-user-alt'"
+                      name="fullName" type="text" required="true" placeholder="Full Name">
+                    </mek-field>
+                    <mek-field [formGroup]="formGroup" formControlName="email" [customError]="error"
+                      [iconStyle]="'fa-envelope-open'" name="email" type="email" required="true" placeholder="Email">
+                    </mek-field>
+                    <mek-field [formGroup]="formGroup" formControlName="password" [iconStyle]="'fa-unlock-alt'"
+                      name="password" type="password" required="true" placeholder="Password">
+                    </mek-field>
+                    <div class="form-group form-check">
+                      <!-- <input type="checkbox" class="form-check-input" id="exampleCheck1"> -->
+                      <label class="form-check-label contact-bottom" for="exampleCheck1"><span
+                          class="d-inline-block mt-3">By signing up, you accept our <a
+                            [routerLink]="['/terms']">Terms</a> &amp;
+                          <a [routerLink]="['/privacy-policy']">Privacy Policy</a></span></label>
+                    </div>
+                  </div>
+                  <!-- <div *ngIf="error" class="error-message">{{error}}</div> -->
+                  <div class="col-12">
+                    <button [disabled]="!valid" class="btn btn-bordered w-100 mt-3" type="submit"
+                      (keyup.enter)="onSubmit()" (click)="onSubmit()">
+                      Next
+                    </button>
+                  </div>
+                  <div *ngIf="!fromApp" class="col-12">
+                    <span class="d-block pt-2 mt-4 border-top">Already have an account? <a
+                        [routerLink]="['/login']">Sign In</a></span>
+                  </div>
+                </div>
+              </form>
+              <div *ngIf="loading">
+                <span><i [class]="'fas fa-spinner fa-3x fa-spin'"></i></span>
+              </div>
+              <p class="form-message"></p>
+            </div>
+          </div>
+          <div *ngIf="signUpStarted && !billingCompleted" class="col-12 col-md-8 col-lg-5">
+            <div class="contact-box bg-white text-center rounded p-4 p-sm-5 mt-5 mt-lg-0 shadow-lg">
+              <div>
+                <div *ngIf="!loading" class="contact-top">
+                  <h3 class="contact-title">Billing</h3>
+                  <h5 class="text-secondary fw-3 py-3">Please enter your billing information</h5>
+                </div>
+                <div *ngIf="loading" class="contact-top">
+                  <h3 class="contact-title">Processing...</h3>
+                  <h5 class="text-secondary fw-3 py-3">Please wait while we set up your account...</h5>
+                </div>
+                <billing-info [initialSubscription]="true" [loading]="loading" [setLoading]="setLoading"
+                  [setBillingCompleted]="setBillingCompleted" [user]="user">
+                </billing-info>
+                <div *ngIf="loading">
+                  <span><i [class]="'fas fa-spinner fa-3x fa-spin'"></i></span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div *ngIf="signUpStarted && billingCompleted" class="col-12 col-md-8 col-lg-5">
+            <div class="contact-box bg-white text-center rounded p-4 p-sm-5 mt-5 mt-lg-0 shadow-lg">
+              <div>
+                <div *ngIf="!loading" class="contact-top">
+                  <h3 class="contact-title">Success!</h3>
+                  <h5 class="text-secondary fw-3 py-3">Your subscription has been set up. Download the app and start
+                    managing your homes!</h5>
+                </div>
+                <div *ngIf="loading">
+                  <span><i [class]="'fas fa-spinner fa-3x fa-spin'"></i></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Shape Bottom -->
+      <div class="shape-bottom">
+        <svg viewBox="0 0 1920 310" version="1.1" xmlns="http://www.w3.org/2000/svg"
+          xmlns:xlink="http://www.w3.org/1999/xlink" class="svg replaced-svg">
+          <title>Regroup</title>
+          <desc>Created with Sketch</desc>
+          <defs></defs>
+          <g id="CleanHouse-Landing-Page" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+            <g id="CleanHouse-v1.0" transform="translate(0.000000, -554.000000)" fill="#FFFFFF">
+              <path
+                d="M-3,551 C186.257589,757.321118 319.044414,856.322454 395.360475,848.004007 C509.834566,835.526337 561.525143,796.329212 637.731734,765.961549 C713.938325,735.593886 816.980646,681.910577 1035.72208,733.065469 C1254.46351,784.220361 1511.54925,678.92359 1539.40808,662.398665 C1567.2669,645.87374 1660.9143,591.478574 1773.19378,597.641868 C1848.04677,601.75073 1901.75645,588.357675 1934.32284,557.462704 L1934.32284,863.183395 L-3,863.183395"
+                id="CleanHouse-v1.0"></path>
+            </g>
+          </g>
+        </svg>
+      </div>
+    </section>
+  </div>
+</div>

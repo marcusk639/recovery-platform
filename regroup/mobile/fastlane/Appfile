@@ -1,0 +1,8 @@
+# iOS
+app_identifier("com.rats.dev")
+apple_id("marcusk639@gmail.com")
+team_id("D8K3FS4HAX")
+
+# Android
+json_key_file("fastlane/google-play-key.json")  # Service account key — gitignored
+package_name("com.regroup.app")

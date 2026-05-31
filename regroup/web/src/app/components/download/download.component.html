@@ -1,0 +1,29 @@
+<section class="section download-area overlay-dark ptb_100">
+  <div class="container">
+    <div class="row justify-content-center">
+      <div class="col-12 col-md-10 col-lg-8">
+        <!-- Download Text -->
+        <div class="download-text text-center">
+          <h2 class="text-white">{{ appName }} is available for all devices</h2>
+          <p class="text-white my-3 d-none d-sm-block">
+            {{ appName }} is a cross-platform application, available for all devices including iPhone, iPad, and all Android devices.
+          </p>
+          <p class="text-white my-3 d-block d-sm-none">
+            {{ appName }} is a cross-platform application, available for all devices including iPhone, iPad, and all Android devices.
+          </p>
+          <!-- Store Buttons -->
+          <div class="button-group store-buttons d-flex justify-content-center">
+            <span (click)="openGooglePlay()" class="d-inline-block" tabindex="0" data-toggle="tooltip" title="Available now!">
+              <img src="assets/img/google-play.png" alt="" />
+            </span>
+            <span (click)="openAppStore()" class="d-inline-block" tabindex="0" data-toggle="tooltip" title="Available now!">
+              <img src="assets/img/app-store.png" alt="" />
+            </span>
+          </div>
+          <!-- <span class="d-inline-block text-white fw-3 font-italic mt-3">* Available on iPhone, iPad and all
+                        Android devices</span> -->
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

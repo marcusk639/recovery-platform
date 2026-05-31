@@ -1,0 +1,46 @@
+{
+  "accounts": [
+    {
+      "id": "guest-a",
+      "email": "test-guest-a@rats-e2e.com",
+      "password": "TestPassword123!",
+      "firstName": "Test",
+      "lastName": "GuestA",
+      "role": "guest",
+      "houseId": "test-house-123",
+      "phone": "555-0001"
+    },
+    {
+      "id": "guest-b",
+      "email": "test-guest-b@rats-e2e.com",
+      "password": "TestPassword123!",
+      "firstName": "Test",
+      "lastName": "GuestB",
+      "role": "guest",
+      "houseId": "test-house-123",
+      "phone": "555-0002"
+    },
+    {
+      "id": "manager",
+      "email": "test-manager@rats-e2e.com",
+      "password": "TestPassword123!",
+      "firstName": "Test",
+      "lastName": "Manager",
+      "role": "admin",
+      "houseId": "test-house-123",
+      "phone": "555-0100"
+    },
+    {
+      "id": "multi-house-user",
+      "email": "test-multi-house@rats-e2e.com",
+      "password": "TestPassword123!",
+      "firstName": "Multi",
+      "lastName": "House",
+      "roles": {
+        "test-house-a": "admin",
+        "test-house-b": "guest"
+      },
+      "phone": "555-0200"
+    }
+  ]
+}

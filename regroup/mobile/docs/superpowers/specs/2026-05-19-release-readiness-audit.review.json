@@ -1,0 +1,184 @@
+{
+  "verdict": "CHANGES_REQUESTED",
+  "summary": "11 blocking issues, 13 warnings, 1 info. Reality review passed (all 12 claims verified). Architecture, Quality, and Systems reviewers found significant gaps.",
+  "plan_file": "docs/superpowers/specs/2026-05-19-release-readiness-audit.md",
+  "reviewed_at": "2026-05-19",
+  "blocking_issues": [
+    {
+      "id": "B1",
+      "source": "architecture",
+      "issue": "BFG Repo Cleaner history rewrite has no rollback strategy — no pre-rewrite backup branch, no team communication plan, no CI cache invalidation steps documented.",
+      "priority_score": 12,
+      "resolution": "Create pre-bfg-backup branch; communicate force-push 24h in advance; store key rotation timeline in secure wiki."
+    },
+    {
+      "id": "B2",
+      "source": "architecture",
+      "issue": "Deleting Firebase Auth accounts and Firestore test house documents from production with no backup strategy. Associated subcollections and relationships could be orphaned.",
+      "priority_score": 12,
+      "resolution": "Run firebase auth:export and gcloud firestore export before deletion; store in quarantine bucket with 30-day lifecycle."
+    },
+    {
+      "id": "B3",
+      "source": "architecture",
+      "issue": "No kill switch or feature flag for the subscription paywall. A gate logic bug would lock out ALL users simultaneously with no fast recovery path.",
+      "priority_score": 15,
+      "resolution": "Add global paywall/enabled flag in Firestore; gate all paywall checks on this flag; grant ops team write access for emergency disable in <5 minutes."
+    },
+    {
+      "id": "B4",
+      "source": "architecture",
+      "issue": "HIPAA surface audit flagged but deferred to post-launch. Operating without BAAs (Firebase, Stripe, Sentry) for PHI could trigger OCR enforcement.",
+      "priority_score": 15,
+      "resolution": "Engage HIPAA-specialized attorney before soft launch. Do not launch until written legal opinion is obtained."
+    },
+    {
+      "id": "B5",
+      "source": "quality",
+      "issue": "FCM token refresh cycle is untested and likely unimplemented. Tokens expire; long-lived sessions will silently stop receiving notifications after ~90 days.",
+      "priority_score": 12,
+      "resolution": "Implement and test FCM token refresh: token expiry → request new token → update Firestore user doc → verify listeners receive updated token."
+    },
+    {
+      "id": "B6",
+      "source": "quality",
+      "issue": "Detox E2E config does not pass IS_E2E_TEST=1 launch arg. firebase-emulator.ts gates on this flag — without it, all E2E tests run against production Firebase.",
+      "priority_score": 15,
+      "resolution": "Add IS_E2E_TEST=1 to Detox launch args in .detoxrc.js before running any E2E tests."
+    },
+    {
+      "id": "B7",
+      "source": "quality",
+      "issue": "Stripe's `unpaid` subscription status is not handled in the plan. It is a valid Stripe state (distinct from past_due and canceled) and not in the status enum.",
+      "priority_score": 12,
+      "resolution": "Add unpaid to all status switch statements in subscription.ts, useSubscriptionGate, and webhook handlers. Treat as subscription_required."
+    },
+    {
+      "id": "B8",
+      "source": "quality",
+      "issue": "Webhook → House doc update has no cross-repo E2E test. The seam between regroup-functions and rats-v2 is invisible to unit tests in either repo.",
+      "priority_score": 10,
+      "resolution": "Write an integration test that fires a simulated Stripe webhook against the emulator and asserts house.subscriptionStatus is updated in Firestore."
+    },
+    {
+      "id": "B9",
+      "source": "systems",
+      "issue": "createOperatorSubscription Cloud Function sets status: 'active' immediately without waiting for Stripe webhook confirmation. If Stripe creates the subscription as trialing, Firestore says active — a contradiction.",
+      "priority_score": 12,
+      "resolution": "Do not set status in createOperatorSubscription; use intermediate pending status until webhook confirms. UI shows pending state."
+    },
+    {
+      "id": "B10",
+      "source": "systems",
+      "issue": "Multi-house batch update in webhook is not atomic. If a write to one house fails mid-batch, some houses get canceled status and others retain active — guests in un-updated houses retain access indefinitely.",
+      "priority_score": 12,
+      "resolution": "Wrap multi-house updates in a Firestore transaction. On failure, roll back all writes and enqueue for explicit retry."
+    },
+    {
+      "id": "B11",
+      "source": "systems",
+      "issue": "AI rate limiting proposed as client-side (10 calls/house/day). Client-side limits can be bypassed by clearing app data or using multiple accounts, causing unbounded Anthropic API spend.",
+      "priority_score": 10,
+      "resolution": "Enforce rate limiting server-side in Cloud Function using houses/{houseId}/aiUsage rolling counter. Return HTTP 429 when exceeded. Client-side limit is cosmetic only."
+    }
+  ],
+  "warnings": [
+    {
+      "id": "W1",
+      "source": "architecture",
+      "issue": "Legacy plan_* Stripe IDs referenced in codebase. Switching to new price_* IDs could break subscription lookups for existing test subscribers.",
+      "resolution": "Grep for plan_ references; document migration path in webhook logic; test webhook against both formats."
+    },
+    {
+      "id": "W2",
+      "source": "architecture",
+      "issue": "House.subscriptionStatus defaults to 'active' in the entity — fail-open behavior means unsigned-up houses have full access until webhook fires.",
+      "resolution": "Set Firestore default to 'canceled'; add webhook retry logic and dead-letter handling."
+    },
+    {
+      "id": "W3",
+      "source": "architecture",
+      "issue": "Firestore batch limited to 500 ops. Operators with 500+ houses would hit the limit and silently leave some houses un-updated.",
+      "resolution": "Implement pagination in webhook for large batches; add Sentry alert when batch size approaches 450."
+    },
+    {
+      "id": "W4",
+      "source": "architecture",
+      "issue": "Oxford Firestore rules deployed atomically — a bad rule locks all Oxford operations immediately with no staged rollout.",
+      "resolution": "Test rules in staging; deploy with 10% → 50% → 100% staged rollout using house ID hash."
+    },
+    {
+      "id": "W5",
+      "source": "quality",
+      "issue": "Subscription paywall test strategy lacks concrete file paths and test names. Plan says 'unit + integration + E2E' without specifying locations.",
+      "resolution": "Add explicit test file locations to the subscription paywall spec."
+    },
+    {
+      "id": "W6",
+      "source": "quality",
+      "issue": "Cross-repo webhook integration has no test. Webhook (regroup-functions) and house doc update (rats-v2) are verified in isolation but never together.",
+      "resolution": "Write cross-repo integration test against Firebase Emulator that fires webhook and asserts Firestore state."
+    },
+    {
+      "id": "W7",
+      "source": "quality",
+      "issue": "Sentry observability for gate logic not instrumented. DataContext swallows errors instead of propagating them; no test verifies gate failure paths trigger Sentry.",
+      "resolution": "Add logException() to gate failure paths; add test asserting Sentry.captureException is called when Firestore is unavailable during gate check."
+    },
+    {
+      "id": "W8",
+      "source": "quality",
+      "issue": "CONTRADICTION: Plan recommends deleting E2E test accounts (Domain 4.2) but also recommends providing test credentials for App Review (Domain 1.1). These conflict.",
+      "resolution": "Maintain a dedicated App Review account set separate from E2E test accounts. Document credentials in password manager."
+    },
+    {
+      "id": "W9",
+      "source": "quality",
+      "issue": "Edge case: operator with 0 houses can hold a subscription with no billable unit; edge case: guest with no house assigned hits gate with undefined houseId.",
+      "resolution": "Add guard in useSubscriptionGate for undefined house; show 'contact support' screen for guest with no house."
+    },
+    {
+      "id": "W10",
+      "source": "systems",
+      "issue": "Webhook idempotency not addressed. Duplicate delivery of customer.subscription.deleted overwrites guestGraceEndsAt with a later timestamp, effectively extending the grace period.",
+      "resolution": "Store Stripe event.id in Firestore; skip processing if event.id already exists."
+    },
+    {
+      "id": "W11",
+      "source": "systems",
+      "issue": "Web→mobile race: manual refresh and webhook can race. If webhook timestamp is older than manual refresh, the older (stale) value wins.",
+      "resolution": "Include lastUpdatedAt on all subscription state updates; client only accepts updates with lastUpdatedAt > existing."
+    },
+    {
+      "id": "W12",
+      "source": "systems",
+      "issue": "operatorUid lookup (Open Question #1) unresolved. If query returns 0 results, webhook fails silently and house subscription status is never updated.",
+      "resolution": "Store userId in Stripe metadata at subscription creation; implement DLQ for failed lookups."
+    },
+    {
+      "id": "W13",
+      "source": "systems",
+      "issue": "React Query cache invalidation on AppState fires before currentUser loads on cold start, producing ['house', undefined] — a no-op that leaves stale data.",
+      "resolution": "Defer cache invalidation until after useUser() returns loaded state."
+    }
+  ],
+  "info": [
+    {
+      "id": "I1",
+      "source": "systems",
+      "issue": "Guest grace period compared against client clock. Device with wrong clock could lock guests out early or grant extra time.",
+      "resolution": "Move time-based access gates to server-side enforcement (Cloud Function or Firestore Rules). Client shows badge only."
+    }
+  ],
+  "reality_review": {
+    "status": "PASS",
+    "blocking": 0,
+    "notes": "All 12 claims verified against codebase. useOxfordGate, offlineQueue, shareReceipt, subscriptionIsActive, House.subscriptionStatus, key factories, Detox device name, and max retry count all match plan descriptions exactly."
+  },
+  "reviewer_summaries": {
+    "reality": { "status": "PASS", "blocking": 0, "warnings": 0 },
+    "architecture": { "status": "ISSUES_FOUND", "blocking": 4, "warnings": 4 },
+    "quality": { "status": "ISSUES_FOUND", "blocking": 4, "warnings": 5 },
+    "systems": { "status": "ISSUES_FOUND", "blocking": 3, "warnings": 4 }
+  }
+}

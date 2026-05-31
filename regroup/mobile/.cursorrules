@@ -1,0 +1,18 @@
+
+const reactNativeExpoBestPractices = [
+"Use functional components with hooks",
+"Implement proper navigation using React Navigation",
+"Implement proper error handling and crash reporting",
+];
+
+// Additional instructions
+
+const additionalInstructions = `
+1. Use TypeScript for type safety
+2. Implement proper styling using StyleSheet
+4. Implement proper offline support
+5. Use a service pattern for making network calls and interfacing with Firebase
+6. service calls should typically be made in a redux thunk
+7. Use nearby files as examples for code style
+`;
+

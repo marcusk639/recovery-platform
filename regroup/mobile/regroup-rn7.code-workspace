@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"name": "regroup-functions",
+			"path": "../regroup-functions"
+		},
+		{
+			"name": "regroup-web",
+			"path": "../regroup-web"
+		}
+	],
+	"settings": {}
+}

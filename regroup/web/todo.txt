@@ -1,0 +1,8 @@
+Fix SSR issues:
+Slow direct route access (pricing)
+Timeout on direct route access (signup)
+spacing issues on mobile
+
+Android app:
+TextInput focus issue on house setup address autocomplete
+TOO_MANY_REGISTRATIONS?

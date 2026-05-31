@@ -1,0 +1,32 @@
+<div [ngClass]="{ hidden: loading }" class="form-group">
+  <form novalidate (ngSubmit)="buy()" [formGroup]="stripeTest">
+    <div class="input-group">
+      <input class="form-control" type="text" formControlName="name" placeholder="Cardholder Name" />
+    </div>
+
+    <div class="col-12">
+      <div class="row">
+        <div class="cursor" id="card-number"></div>
+
+        <div id="card-expiration"></div>
+
+        <div id="card-cvc"></div>
+      </div>
+      <div class="text-danger" id="card-errors"></div>
+      <div class="text-danger" id="cvc-errors"></div>
+      <div class="text-danger" id="exp-errors"></div>
+    </div>
+    <div *ngIf="showSubmit" class="col-12">
+      <button type="button" class="btn btn-bordered w-100 mt-3" (keyup.enter)="buy()" (click)="buy()">Submit</button>
+    </div>
+  </form>
+</div>
+
+<!-- <div class="form-group">
+  <div class="input-group">
+    <div *ngIf="iconStyle" class="input-group-prepend">
+      <span class="input-group-text"><i [class]="'fas ' + iconStyle"></i></span>
+    </div>
+    <input [type]="type" class="form-control" [name]="name" [placeholder]="placeholder" required="required">
+  </div>
+</div> -->

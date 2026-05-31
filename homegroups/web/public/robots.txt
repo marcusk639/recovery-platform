@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+# Sitemap will be generated once groups are indexed (see P-3 in PRE_LAUNCH_CHECKLIST.md)

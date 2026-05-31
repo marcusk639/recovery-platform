@@ -1,0 +1,271 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`ImageHeader snapshot matches for vacancy=false 1`] = `
+<View
+  style={
+    [
+      {
+        "backgroundColor": "#ffffff",
+        "padding": 15.714285714285714,
+        "width": "100%",
+      },
+      {
+        "height": 333.5,
+        "justifyContent": "center",
+        "padding": 0,
+      },
+    ]
+  }
+>
+  <Image
+    resizeMode="cover"
+    source={
+      {
+        "uri": "http://example.com/image.png",
+      }
+    }
+    style={
+      {
+        "height": "100%",
+        "position": "absolute",
+        "width": "100%",
+      }
+    }
+  />
+  <View
+    style={
+      [
+        {
+          "flexDirection": "row",
+        },
+        {
+          "flex": 1,
+        },
+      ]
+    }
+  >
+    <View
+      accessibilityState={
+        {
+          "busy": undefined,
+          "checked": undefined,
+          "disabled": undefined,
+          "expanded": undefined,
+          "selected": undefined,
+        }
+      }
+      accessibilityValue={
+        {
+          "max": undefined,
+          "min": undefined,
+          "now": undefined,
+          "text": undefined,
+        }
+      }
+      accessible={true}
+      collapsable={false}
+      focusable={true}
+      onClick={[Function]}
+      onResponderGrant={[Function]}
+      onResponderMove={[Function]}
+      onResponderRelease={[Function]}
+      onResponderTerminate={[Function]}
+      onResponderTerminationRequest={[Function]}
+      onStartShouldSetResponder={[Function]}
+      style={
+        {
+          "opacity": 1,
+        }
+      }
+    >
+      <FontAwesome5Icon
+        name="arrow-left"
+        size={31.428571428571427}
+        solid={true}
+        style={
+          [
+            {
+              "fontSize": 22,
+            },
+            {
+              "color": "#ffffff",
+              "margin": 23.57142857142857,
+            },
+            {
+              "fontSize": 31.428571428571427,
+            },
+          ]
+        }
+      />
+    </View>
+  </View>
+  <View
+    style={
+      {
+        "alignItems": "center",
+        "backgroundColor": "#bb0000",
+        "borderRadius": 10,
+        "justifyContent": "center",
+        "margin": 15.714285714285714,
+        "paddingVertical": 3.142857142857143,
+        "width": 157.14285714285714,
+      }
+    }
+  >
+    <Text
+      style={
+        [
+          {
+            "color": "black",
+            "fontFamily": "Quicksand-Medium",
+          },
+          {
+            "fontFamily": "Quicksand-Medium",
+          },
+          {
+            "color": "#ffffff",
+            "fontFamily": "Quicksand-Bold",
+          },
+        ]
+      }
+    >
+      NO VACANCY
+    </Text>
+  </View>
+</View>
+`;
+
+exports[`ImageHeader snapshot matches for vacancy=true 1`] = `
+<View
+  style={
+    [
+      {
+        "backgroundColor": "#ffffff",
+        "padding": 15.714285714285714,
+        "width": "100%",
+      },
+      {
+        "height": 333.5,
+        "justifyContent": "center",
+        "padding": 0,
+      },
+    ]
+  }
+>
+  <Image
+    resizeMode="cover"
+    source={
+      {
+        "uri": "http://example.com/image.png",
+      }
+    }
+    style={
+      {
+        "height": "100%",
+        "position": "absolute",
+        "width": "100%",
+      }
+    }
+  />
+  <View
+    style={
+      [
+        {
+          "flexDirection": "row",
+        },
+        {
+          "flex": 1,
+        },
+      ]
+    }
+  >
+    <View
+      accessibilityState={
+        {
+          "busy": undefined,
+          "checked": undefined,
+          "disabled": undefined,
+          "expanded": undefined,
+          "selected": undefined,
+        }
+      }
+      accessibilityValue={
+        {
+          "max": undefined,
+          "min": undefined,
+          "now": undefined,
+          "text": undefined,
+        }
+      }
+      accessible={true}
+      collapsable={false}
+      focusable={true}
+      onClick={[Function]}
+      onResponderGrant={[Function]}
+      onResponderMove={[Function]}
+      onResponderRelease={[Function]}
+      onResponderTerminate={[Function]}
+      onResponderTerminationRequest={[Function]}
+      onStartShouldSetResponder={[Function]}
+      style={
+        {
+          "opacity": 1,
+        }
+      }
+    >
+      <FontAwesome5Icon
+        name="arrow-left"
+        size={31.428571428571427}
+        solid={true}
+        style={
+          [
+            {
+              "fontSize": 22,
+            },
+            {
+              "color": "#ffffff",
+              "margin": 23.57142857142857,
+            },
+            {
+              "fontSize": 31.428571428571427,
+            },
+          ]
+        }
+      />
+    </View>
+  </View>
+  <View
+    style={
+      {
+        "alignItems": "center",
+        "backgroundColor": "#009A39",
+        "borderRadius": 10,
+        "justifyContent": "center",
+        "margin": 15.714285714285714,
+        "paddingVertical": 3.142857142857143,
+        "width": 125.71428571428571,
+      }
+    }
+  >
+    <Text
+      style={
+        [
+          {
+            "color": "black",
+            "fontFamily": "Quicksand-Medium",
+          },
+          {
+            "fontFamily": "Quicksand-Medium",
+          },
+          {
+            "color": "#ffffff",
+            "fontFamily": "Quicksand-Bold",
+          },
+        ]
+      }
+    >
+      VACANCY
+    </Text>
+  </View>
+</View>
+`;

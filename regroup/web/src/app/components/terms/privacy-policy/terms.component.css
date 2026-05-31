@@ -1,0 +1,46 @@
+::ng-deep .legal-doc {
+  max-width: 800px;
+  margin: 0 auto;
+  font-family: Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.7;
+  color: #333;
+}
+
+::ng-deep .legal-doc h1 {
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+
+::ng-deep .legal-doc h2 {
+  font-size: 20px;
+  margin-top: 32px;
+  margin-bottom: 8px;
+}
+
+::ng-deep .legal-doc h3 {
+  font-size: 16px;
+  margin-top: 24px;
+}
+
+::ng-deep .legal-doc p {
+  margin-bottom: 12px;
+}
+
+::ng-deep .legal-doc ul,
+::ng-deep .legal-doc ol {
+  padding-left: 24px;
+  margin-bottom: 12px;
+}
+
+::ng-deep .legal-doc li {
+  margin-bottom: 6px;
+}
+
+::ng-deep .legal-doc strong {
+  font-weight: 600;
+}
+
+::ng-deep .legal-doc a {
+  color: #4a90e2;
+}

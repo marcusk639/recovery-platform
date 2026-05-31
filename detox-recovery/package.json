@@ -1,0 +1,51 @@
+{
+  "name": "detox-recovery",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=20.0.0 <23.0.0"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "setup:env": "bash scripts/setup-env.sh",
+    "typecheck": "tsc --noEmit",
+    "verify:services": "bash scripts/verify-services.sh"
+  },
+  "dependencies": {
+    "next": "15.5.18",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "resend": "^6.12.3"
+  },
+  "optionalDependencies": {
+    "@emnapi/core": "1.10.0",
+    "@emnapi/runtime": "1.10.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@jest/globals": "^29.7.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/jest": "^29.5.14",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "autoprefixer": "^10.5.0",
+    "eslint": "^9",
+    "eslint-config-next": "15.5.18",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "prettier": "^3.8.3",
+    "tailwindcss": "^3.4.19",
+    "ts-jest": "^29.4.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5"
+  }
+}

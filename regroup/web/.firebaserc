@@ -1,0 +1,14 @@
+{
+  "targets": {
+    "rats-dev": {
+      "hosting": {
+        "sapp": [
+          "rats-dev"
+        ]
+      }
+    }
+  },
+  "projects": {
+    "default": "phoenix-cleanhouse"
+  }
+}

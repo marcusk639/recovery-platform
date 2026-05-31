@@ -1,0 +1,83 @@
+<div class="height-emulator d-none d-lg-block"></div>
+<footer class="footer-area footer-fixed">
+  <!-- Footer Top -->
+  <div class="footer-top ptb_100">
+    <div class="container">
+      <div class="row">
+        <div class="col-12 col-sm-6 col-lg-3">
+          <!-- Footer Items -->
+          <div class="footer-items">
+            <!-- Logo -->
+            <a class="navbar-brand" href="#">
+              <img class="logo" height="65" width="65" src="assets/img/logo-blue.png" alt="" />
+            </a>
+            <!-- <p class="mt-2 mb-3">C.</p> -->
+            <!-- Social Icons -->
+          </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-3">
+          <!-- Footer Items -->
+          <div class="footer-items">
+            <!-- Footer Title -->
+            <h3 class="footer-title mb-2">Useful Links</h3>
+            <ul>
+              <li class="py-2"><a (click)="scroll()" [routerLink]="['/']">Home</a></li>
+              <!-- <li class="py-2"><a href="#">About Us</a></li>B -->
+              <li class="py-2"><a [routerLink]="['/pricing']">Pricing</a></li>
+              <!-- <li class="py-2"><a href="#">Blog</a></li> -->
+              <li class="py-2"><a [routerLink]="['/contact']">Contact</a></li>
+            </ul>
+          </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-3">
+          <!-- Footer Items -->
+          <div class="footer-items">
+            <!-- Footer Title -->
+            <h3 class="footer-title mb-2">Product Help</h3>
+            <ul>
+              <!-- <li class="py-2"><a href="#">FAQ</a></li> -->
+              <li class="py-2"><a [routerLink]="['/privacy-policy']">Privacy Policy</a></li>
+              <!-- <li class="py-2"><a href="#">Support</a></li> -->
+              <li class="py-2"><a [routerLink]="['/terms']">Terms &amp; Conditions</a></li>
+              <li class="py-2"><a [routerLink]="['/contact']">Contact</a></li>
+            </ul>
+          </div>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-3">
+          <!-- Footer Items -->
+          <div class="footer-items">
+            <!-- Footer Title -->
+            <h3 class="footer-title mb-2">Download</h3>
+            <!-- Store Buttons -->
+            <div class="button-group store-buttons store-black d-flex flex-wrap">
+              <span (click)="openGooglePlay()" class="d-inline-block" tabindex="0" data-toggle="tooltip" title="Available now!">
+                <img src="assets/img/google-play-black.png" alt="" />
+              </span>
+              <span (click)="openAppStore()" class="d-inline-block" tabindex="0" data-toggle="tooltip" data-placement="bottom"
+                title="Available now!">
+                <img src="assets/img/app-store-black.png" alt="" />
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Footer Bottom -->
+  <div class="footer-bottom">
+    <div class="container">
+      <div class="row">
+        <div class="col-12">
+          <!-- Copyright Area -->
+          <div
+            class="copyright-area d-flex flex-wrap justify-content-center justify-content-sm-between text-center py-4">
+            <!-- Copyright Left -->
+            <div class="copyright-left">&copy; Copyrights 2020 Regroup LLC All rights reserved.</div>
+            <!-- Copyright Right -->
+            <!-- <div class="copyright-right">Made with <i class="fas fa-heart"></i> By <a href="#">Theme Land</a></div> -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</footer>

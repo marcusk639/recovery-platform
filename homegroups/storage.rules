@@ -1,0 +1,64 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ============================================================
+    // HELPER FUNCTIONS
+    // Uses custom JWT claims mirroring firestore.rules pattern
+    // ============================================================
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && request.auth.token.superAdmin == true;
+    }
+
+    // Check if the authenticated user is an admin of the given group
+    // using custom JWT claims set by onMemberWrite trigger.
+    function isGroupAdmin(groupId) {
+      return isSignedIn() && (
+        isSuperAdmin() ||
+        (request.auth.token.adminGroups != null &&
+          groupId in request.auth.token.adminGroups)
+      );
+    }
+
+    // ============================================================
+    // GROUP RESOURCE UPLOADS
+    // Only group admins may upload; all authenticated users may read.
+    // Max file size: 10 MB per upload.
+    // ============================================================
+    match /groups/{groupId}/resources/{fileName} {
+      // Any authenticated group member can download resources.
+      allow read: if isSignedIn();
+
+      // Only group admins (via custom JWT claims) may upload or overwrite.
+      // Size guard prevents excessively large uploads.
+      allow write: if isGroupAdmin(groupId)
+        && request.resource.size < 10 * 1024 * 1024;
+
+      // Deletes are handled by the deleteGroupResource Cloud Function,
+      // which runs with admin SDK and bypasses these rules. Deny direct
+      // client-side deletes to ensure soft-delete metadata is always written.
+      allow delete: if false;
+    }
+
+    // ============================================================
+    // USER PROFILE PHOTOS
+    // Users may upload their own photo only.
+    // ============================================================
+    match /users/{userId}/profile/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.size < 5 * 1024 * 1024;
+    }
+
+    // Deny all other paths by default.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

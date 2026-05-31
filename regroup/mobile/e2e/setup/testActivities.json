@@ -1,0 +1,111 @@
+{
+  "activities": [
+    {
+      "id": "test-activity-123",
+      "residentId": "guest-a",
+      "houseId": "test-house-123",
+      "type": "chore_completed",
+      "metadata": {
+        "choreName": "Kitchen Cleaning",
+        "choreId": "test-chore-kitchen"
+      },
+      "verified": false,
+      "underDispute": 0,
+      "date": "2026-02-12",
+      "createdDate": "2026-02-12T10:00:00Z"
+    },
+    {
+      "id": "test-activity-456",
+      "residentId": "guest-b",
+      "houseId": "test-house-123",
+      "type": "hours_worked",
+      "metadata": {
+        "jobName": "Construction",
+        "hoursWorked": 8
+      },
+      "verified": false,
+      "underDispute": 0,
+      "date": "2026-02-12",
+      "createdDate": "2026-02-12T11:00:00Z"
+    },
+    {
+      "id": "test-activity-own-123",
+      "residentId": "guest-a",
+      "houseId": "test-house-123",
+      "type": "meeting_attended",
+      "metadata": {
+        "meetingName": "NA Meeting Downtown"
+      },
+      "verified": false,
+      "underDispute": 0,
+      "date": "2026-02-12",
+      "createdDate": "2026-02-12T12:00:00Z"
+    },
+    {
+      "id": "test-unverified-activity-123",
+      "residentId": "guest-a",
+      "houseId": "test-house-123",
+      "type": "chore_completed",
+      "metadata": {
+        "choreName": "Bathroom Cleaning"
+      },
+      "verified": false,
+      "underDispute": 0,
+      "date": "2026-02-12",
+      "createdDate": "2026-02-12T13:00:00Z"
+    },
+    {
+      "id": "test-unverified-activity-456",
+      "residentId": "guest-b",
+      "houseId": "test-house-123",
+      "type": "meeting_attended",
+      "metadata": {
+        "meetingName": "AA Meeting Uptown"
+      },
+      "verified": false,
+      "underDispute": 0,
+      "date": "2026-02-12",
+      "createdDate": "2026-02-12T14:00:00Z"
+    },
+    {
+      "id": "test-unverified-activity-1",
+      "residentId": "guest-a",
+      "houseId": "test-house-123",
+      "type": "chore_completed",
+      "metadata": {
+        "choreName": "Trash Duty"
+      },
+      "verified": false,
+      "underDispute": 0,
+      "date": "2026-02-12",
+      "createdDate": "2026-02-12T15:00:00Z"
+    },
+    {
+      "id": "test-unverified-activity-2",
+      "residentId": "guest-b",
+      "houseId": "test-house-123",
+      "type": "supporter_met",
+      "metadata": {
+        "supporterName": "John Doe"
+      },
+      "verified": false,
+      "underDispute": 0,
+      "date": "2026-02-12",
+      "createdDate": "2026-02-12T16:00:00Z"
+    },
+    {
+      "id": "test-unverified-activity-3",
+      "residentId": "guest-a",
+      "houseId": "test-house-123",
+      "type": "hours_worked",
+      "metadata": {
+        "jobName": "Retail",
+        "hoursWorked": 6
+      },
+      "verified": false,
+      "underDispute": 0,
+      "date": "2026-02-12",
+      "createdDate": "2026-02-12T17:00:00Z"
+    }
+  ]
+}

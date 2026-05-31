@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "detox": {
+      "command": "npx",
+      "args": ["detox-mcp"],
+      "env": {
+        "DETOX_PROJECT_PATH": "/Users/marcusklein/dev/rats"
+      }
+    }
+  }
+}

@@ -1,0 +1,937 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ============================================
+    // HELPER FUNCTIONS - Zero Document Reads
+    // Uses custom claims stored in auth token
+    // ============================================
+
+    // Basic auth check
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Check if user is the document owner
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Check if user is a platform super admin (from custom claims)
+    function isSuperAdmin() {
+      return isSignedIn() && request.auth.token.superAdmin == true;
+    }
+
+    // Check if user is a member of the group (from custom claims)
+    function isGroupMemberClaims(groupId) {
+      return isSignedIn() && (
+      isSuperAdmin() ||
+      (request.auth.token.memberGroups != null && groupId in request.auth.token.memberGroups)
+      );
+    }
+
+    // Check if user is an admin of the group (from custom claims)
+    function isGroupAdminClaims(groupId) {
+      return isSignedIn() && (
+      isSuperAdmin() ||
+      (request.auth.token.adminGroups != null && groupId in request.auth.token.adminGroups)
+      );
+    }
+
+    // Check if user is a treasurer of the group (from custom claims)
+    function isGroupTreasurerClaims(groupId) {
+      return isSignedIn() && (
+      isSuperAdmin() ||
+      (request.auth.token.treasurerGroups != null && groupId in request.auth.token.treasurerGroups)
+      );
+    }
+
+    // Fallback: Check membership via document read (1 read)
+    // Used when custom claims might be stale or memberGroups is empty
+    function isGroupMemberFallback(groupId) {
+      return isSignedIn() && 
+      exists(/databases/$(database)/documents/members/$(groupId + '_' + request.auth.uid));
+    }
+
+    // Fallback: Check admin via document read (1 read)
+    function isGroupAdminFallback(groupId) {
+      let memberDoc = get(/databases/$(database)/documents/members/$(groupId + '_' + request.auth.uid));
+      return isSignedIn() && memberDoc.data != null && memberDoc.data.isAdmin == true;
+    }
+
+    // Fallback: Check treasurer via document read (1 read)
+    function isGroupTreasurerFallback(groupId) {
+      let memberDoc = get(/databases/$(database)/documents/members/$(groupId + '_' + request.auth.uid));
+      return isSignedIn() && memberDoc.data != null && memberDoc.data.isTreasurer == true;
+    }
+
+    // Combined functions that try claims first, then fallback to document read
+    // This handles stale claims and empty memberGroups scenarios
+    function isGroupMember(groupId) {
+      return isGroupMemberClaims(groupId) || isGroupMemberFallback(groupId);
+    }
+
+    function isGroupAdmin(groupId) {
+      return isGroupAdminClaims(groupId) || isGroupAdminFallback(groupId);
+    }
+
+    function isGroupTreasurer(groupId) {
+      return isGroupTreasurerClaims(groupId) || isGroupTreasurerFallback(groupId);
+    }
+
+    // Check if user is either admin or treasurer
+    function isGroupAdminOrTreasurer(groupId) {
+      return isGroupAdmin(groupId) || isGroupTreasurer(groupId);
+    }
+
+    // Validate that user update does not touch privileged fields
+    function isValidUserUpdate() {
+      let affected = request.resource.data.diff(resource.data).affectedKeys();
+      return !affected.hasAny(['superAdmin', 'role', 'isAdmin', 'isTreasurer']);
+    }
+
+    // Rate limiting placeholder — true rate limiting requires Cloud Functions.
+    // Firestore rules cannot track write rates across requests; this function
+    // exists as a safety-net hook so the pattern is in place for future
+    // Cloud-Function-backed enforcement if needed.
+    function notSpamming() {
+      return true;
+    }
+
+    // ============================================
+    // USERS COLLECTION
+    // ============================================
+    match /users/{userId} {
+      // Users can read their own document, super admins can read all
+      allow read: if isOwner(userId) || isSuperAdmin();
+
+      // Users can only create their own document
+      allow create: if isOwner(userId);
+
+      // Users can update their own document but cannot escalate privileges
+      allow update: if isOwner(userId) && isValidUserUpdate();
+
+      // Users should not be deleted (deactivation pattern instead)
+      allow delete: if false;
+
+      // Gratitude Journal subcollection — private to the user
+      match /gratitudeEntries/{date} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+
+    // ============================================
+    // GROUPS COLLECTION
+    // ============================================
+    match /groups/{groupId} {
+      // Authenticated users can read any group (for discovery, search, GroupOverview, etc.)
+      // Unauthenticated users can only read groups that have opted into the public directory.
+      allow read: if request.auth != null
+                  || (resource.data.isPublic == true);
+
+      // Only super admins can create groups (via Cloud Functions for claimed groups)
+      allow create: if isSuperAdmin();
+
+      // Group admins can update group settings
+      allow update: if isGroupAdmin(groupId);
+
+      // Groups should not be deleted
+      allow delete: if false;
+
+      // Upgrade requests subcollection (rate-limit tracking for "Ask Admin to Upgrade")
+      match /upgradeRequests/{requestUserId} {
+        // Admins can read upgrade requests for their group
+        allow read: if isGroupAdmin(groupId);
+        // Members write their own rate-limit doc (Cloud Function also writes server-side)
+        allow write: if isSignedIn() && request.auth.uid == requestUserId
+                     && isGroupMember(groupId);
+      }
+
+      // Service Positions subcollection
+      match /servicePositions/{positionId} {
+        allow read: if isGroupMember(groupId);
+        allow create, update: if isGroupAdmin(groupId);
+        allow delete: if isGroupAdmin(groupId);
+      }
+
+      // Treasurer Handoffs subcollection
+      match /treasurerHandoffs/{handoffId} {
+        // Group members can read handoff history for audit
+        allow read: if isGroupMember(groupId);
+
+        // Only current treasurer can initiate a handoff
+        allow create: if isSignedIn() && 
+        request.resource.data.previousTreasurerId == request.auth.uid &&
+        isGroupTreasurer(groupId);
+
+        // Updates based on status transitions
+        allow update: if isSignedIn() && (
+        // New treasurer can accept/reject when pending
+        (resource.data.status == 'pending' 
+          && resource.data.newTreasurerId == request.auth.uid
+          && request.resource.data.status in ['accepted', 'rejected'])
+          ||
+        // Previous treasurer can complete when accepted
+        (resource.data.status == 'accepted'
+          && resource.data.previousTreasurerId == request.auth.uid
+          && request.resource.data.status == 'completed')
+          ||
+        // Previous treasurer can cancel when pending or accepted
+        (resource.data.status in ['pending', 'accepted']
+          && resource.data.previousTreasurerId == request.auth.uid
+          && request.resource.data.status == 'cancelled')
+        );
+
+        // Handoffs should not be deleted (audit trail)
+        allow delete: if false;
+      }
+
+      // Sponsorship Requests subcollection
+      match /sponsorshipRequests/{requestId} {
+        allow read: if isGroupMember(groupId);
+
+        // Members can create requests (for themselves)
+        allow create: if isGroupMember(groupId) && 
+        request.resource.data.sponseeId == request.auth.uid;
+
+        // Sponsor can update status to accept/reject
+        allow update: if isSignedIn() && (
+        resource.data.sponsorId == request.auth.uid ||
+        isGroupAdmin(groupId)
+        );
+
+        allow delete: if isGroupAdmin(groupId);
+      }
+
+      // Events subcollection
+      match /events/{eventId} {
+        allow read: if isGroupMember(groupId);
+        allow create: if isGroupAdmin(groupId);
+        allow update, delete: if isGroupAdmin(groupId);
+      }
+
+      // Literature subcollection
+      match /literature/{literatureId} {
+        allow read: if isGroupMember(groupId);
+        allow create, update, delete: if isGroupAdminOrTreasurer(groupId);
+      }
+
+      // Donations subcollection (Stripe one-time donations)
+      match /donations/{donationId} {
+        // Donor can read their own donation; admins/treasurers for reporting
+        allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid ||
+        isGroupAdminOrTreasurer(groupId)
+        );
+
+        // Only Cloud Functions create (via Admin SDK)
+        allow create: if false;
+
+        // Only admins/treasurers can update donation records — donors cannot
+        // mutate financial fields (amount, status, type) directly
+        allow update: if isSignedIn() && isGroupAdminOrTreasurer(groupId);
+
+        allow delete: if false;
+      }
+    }
+
+    // ============================================
+    // MEMBERS COLLECTION (Top-level)
+    // Document ID format: {groupId}_{userId}
+    // ============================================
+    match /members/{memberId} {
+      // Members can read other members in their groups
+      allow read: if isSignedIn() && (
+      isSuperAdmin() ||
+      isGroupMember(resource.data.groupId)
+      );
+
+      // Users can join groups (create their own membership)
+      // Doc ID must match pattern, userId must be caller, and the group must exist.
+      // Privileged fields locked: only Cloud Functions (Admin SDK) or super admins
+      // can set admin/treasurer on creation.
+      allow create: if isSignedIn() && 
+      request.resource.data.userId == request.auth.uid &&
+      memberId == request.resource.data.groupId + '_' + request.auth.uid &&
+      exists(/databases/$(database)/documents/groups/$(request.resource.data.groupId)) &&
+      (
+        (request.resource.data.isAdmin == false && request.resource.data.isTreasurer == false)
+        || isSuperAdmin()
+      );
+
+      // Members can update their own profile fields
+      // Admins can update roles and admin status
+      allow update: if isSignedIn() && (
+      // User updating their own non-privileged fields
+      (resource.data.userId == request.auth.uid && 
+      !('isAdmin' in request.resource.data.diff(resource.data).affectedKeys()) &&
+      !('isTreasurer' in request.resource.data.diff(resource.data).affectedKeys()) &&
+      !('roles' in request.resource.data.diff(resource.data).affectedKeys()))
+        ||
+      // Group admin updating any member
+      isGroupAdmin(resource.data.groupId)
+      );
+
+      // Members can leave (delete their membership), admins can remove members
+      allow delete: if isSignedIn() && (
+      resource.data.userId == request.auth.uid ||
+      isGroupAdmin(resource.data.groupId)
+      );
+    }
+
+    // ============================================
+    // MEETINGS COLLECTION
+    // ============================================
+    match /meetings/{meetingId} {
+      // Anyone can read meetings (for discovery)
+      allow read: if true;
+
+      // Group admins can create meetings for their group
+      allow create: if isSignedIn() && isGroupAdmin(request.resource.data.groupId);
+
+      // Group admins can update meetings
+      allow update: if isSignedIn() && isGroupAdmin(resource.data.groupId);
+
+      // Group admins can delete meetings
+      allow delete: if isSignedIn() && isGroupAdmin(resource.data.groupId);
+    }
+
+    // ============================================
+    // MEETING INSTANCES COLLECTION
+    // ============================================
+    match /meetingInstances/{instanceId} {
+      // Anyone can read meeting instances
+      allow read: if true;
+
+      // Group admins can create/update/delete instances
+      allow create: if isSignedIn() && isGroupAdmin(request.resource.data.groupId);
+      allow update: if isSignedIn() && isGroupAdmin(resource.data.groupId);
+      allow delete: if isSignedIn() && isGroupAdmin(resource.data.groupId);
+    }
+
+    // ============================================
+    // ANNOUNCEMENTS COLLECTION
+    // ============================================
+    match /announcements/{announcementId} {
+      // Group members can read announcements
+      allow read: if isGroupMember(resource.data.groupId);
+
+      // Group admins can create announcements
+      allow create: if isGroupAdmin(request.resource.data.groupId);
+
+      // Group admins can update announcements
+      // Group members can update only readBy and readCount (read tracking)
+      allow update: if isGroupAdmin(resource.data.groupId) ||
+        (isGroupMember(resource.data.groupId) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy', 'readCount']) &&
+          request.auth.uid in request.resource.data.readBy);
+
+      // Group admins can delete announcements
+      allow delete: if isGroupAdmin(resource.data.groupId);
+    }
+
+    // ============================================
+    // TRANSACTIONS COLLECTION (Treasury)
+    // ============================================
+    match /transactions/{transactionId} {
+      // Group members can read transactions
+      allow read: if isGroupMember(resource.data.groupId);
+
+      // Treasurers and admins can create transactions with valid data
+      allow create: if isGroupAdminOrTreasurer(request.resource.data.groupId) &&
+        request.resource.data.keys().hasAll(['type', 'amount', 'description', 'category', 'groupId', 'createdBy', 'createdAt']) &&
+        request.resource.data.amount > 0 &&
+        request.resource.data.type in ['income', 'expense'] &&
+        request.resource.data.createdBy == request.auth.uid;
+
+      // Treasurers and admins can update, but cannot change immutable audit fields
+      allow update: if isGroupAdminOrTreasurer(resource.data.groupId) &&
+        request.resource.data.groupId == resource.data.groupId &&
+        request.resource.data.createdBy == resource.data.createdBy &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.amount > 0 &&
+        request.resource.data.type in ['income', 'expense'];
+
+      // Treasurers and admins can delete transactions.
+      // Treasury stats are updated by the onTransactionWrite Cloud Function
+      // trigger (server-side, Admin SDK) so the balance is always consistent
+      // regardless of whether the delete succeeds or fails on the client.
+      allow delete: if isGroupAdminOrTreasurer(resource.data.groupId);
+    }
+
+    // ============================================
+    // TREASURY OVERVIEWS COLLECTION
+    // ============================================
+    match /treasury_overviews/{overviewId} {
+      // Group members can read treasury overview
+      allow read: if isGroupMember(resource.data.groupId);
+
+      // Treasury overview documents are maintained by the onTransactionWrite
+      // Cloud Function trigger (Admin SDK) and the scheduledRecurringTransactions
+      // function.  Client-side writes are blocked to prevent balance corruption.
+      // Exception: treasurers and admins may update the prudentReserve field
+      // (and availableFunds derived from it) via TreasuryModel.updatePrudentReserve.
+      allow create: if false;
+      allow update: if isGroupAdminOrTreasurer(resource.data.groupId) &&
+        // Only prudentReserve and availableFunds may be changed client-side.
+        // Balance, monthlyIncome, monthlyExpenses and lastUpdated are owned by
+        // the Cloud Function trigger and must not be touched from the client.
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['prudentReserve', 'availableFunds', 'lastUpdated']);
+      allow delete: if false;
+    }
+
+    // ============================================
+    // RECURRING TRANSACTIONS COLLECTION
+    // ============================================
+    match /recurring_transactions/{recurringId} {
+      // Group members can read recurring transactions for their group
+      allow read: if isSignedIn() && isGroupMember(resource.data.groupId);
+
+      // Only admins or treasurers can create recurring transactions
+      allow create: if isSignedIn() &&
+        isGroupAdminOrTreasurer(request.resource.data.groupId) &&
+        request.resource.data.keys().hasAll(['type', 'amount', 'description', 'category', 'groupId', 'frequency', 'nextDate', 'isActive', 'createdBy']) &&
+        request.resource.data.amount > 0 &&
+        request.resource.data.type in ['income', 'expense'] &&
+        request.resource.data.createdBy == request.auth.uid;
+
+      // Only admins or treasurers can update (toggle active, advance nextDate)
+      allow update: if isSignedIn() &&
+        isGroupAdminOrTreasurer(resource.data.groupId) &&
+        request.resource.data.groupId == resource.data.groupId;
+
+      // Only admins or treasurers can delete
+      allow delete: if isSignedIn() && isGroupAdminOrTreasurer(resource.data.groupId);
+    }
+
+    // ============================================
+    // DIRECT MESSAGE THREADS
+    // ============================================
+    match /direct_message_threads/{threadId} {
+      // Users can read threads they participate in
+      allow read: if isSignedIn() && 
+      request.auth.uid in resource.data.participants;
+
+      // Users can create threads where they are a participant
+      allow create: if isSignedIn() && 
+      request.auth.uid in request.resource.data.participants &&
+      request.resource.data.participants.size() == 2;
+
+      // Participants can update (e.g., lastMessage, unreadCounts) but cannot change participants
+      allow update: if isSignedIn() &&
+      request.auth.uid in resource.data.participants &&
+      request.resource.data.participants == resource.data.participants;
+
+      // Don't allow deletion
+      allow delete: if false;
+
+      // Messages subcollection
+      match /messages/{messageId} {
+        // Participants can read all messages
+        allow read: if isSignedIn() && 
+        request.auth.uid in get(/databases/$(database)/documents/direct_message_threads/$(threadId)).data.participants;
+
+        // Only sender can create messages
+        allow create: if notSpamming() &&
+        isSignedIn() &&
+        request.resource.data.senderId == request.auth.uid &&
+        request.auth.uid in get(/databases/$(database)/documents/direct_message_threads/$(threadId)).data.participants;
+
+        // Sender can update (for reactions), non-sender can only update read
+        allow update: if isSignedIn() && (
+        request.auth.uid == resource.data.senderId ||
+        (request.auth.uid in get(/databases/$(database)/documents/direct_message_threads/$(threadId)).data.participants
+         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']))
+        );
+
+        // Only sender can delete
+        allow delete: if isSignedIn() && 
+        request.auth.uid == resource.data.senderId;
+      }
+    }
+
+    // ============================================
+    // GROUP CHATS
+    // ============================================
+    match /group_chats/{groupId} {
+      // Group members can read chat metadata
+      allow read: if isGroupMember(groupId);
+
+      // Group members can create chat documents
+      allow create: if isGroupMember(groupId);
+
+      // Members can only update their own readStatus, typing indicators, and shared fields
+      allow update: if isGroupMember(groupId) && (
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['readStatus', 'updatedAt', 'lastMessageAt', 'lastMessage', 'participantCount', 'typing'])
+      );
+
+      allow delete: if false;
+
+      // Messages subcollection
+      match /messages/{messageId} {
+        // Group members can read messages
+        allow read: if isGroupMember(groupId);
+
+        // Group members can create messages (must be sender, must match groupId)
+        allow create: if notSpamming() &&
+        isGroupMember(groupId) &&
+        request.resource.data.senderId == request.auth.uid &&
+        request.resource.data.groupId == groupId;
+
+        // Sender can update (reactions, edits), members can update read status
+        allow update: if isGroupMember(groupId) && (
+        resource.data.senderId == request.auth.uid ||
+        // Only allow updating readBy field for non-senders
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy'])
+        );
+
+        // Only sender or admin can delete
+        allow delete: if isSignedIn() && (
+        resource.data.senderId == request.auth.uid ||
+        isGroupAdmin(groupId)
+        );
+      }
+    }
+
+    // ============================================
+    // NOTIFICATIONS COLLECTION
+    // ============================================
+    match /notifications/{notificationId} {
+      // Users can read their own notifications
+      allow read: if isOwner(resource.data.userId);
+
+      // Cloud Functions create notifications
+      allow create: if false;
+
+      // Users can update (mark as read) their own notifications
+      allow update: if isOwner(resource.data.userId);
+
+      // Users can delete their own notifications
+      allow delete: if isOwner(resource.data.userId);
+    }
+
+    // ============================================
+    // BUSINESS MEETINGS
+    // ============================================
+    match /business_meetings/{meetingId} {
+      allow read: if isGroupMember(resource.data.groupId);
+      allow create: if isGroupAdmin(request.resource.data.groupId);
+      allow update: if isGroupAdmin(resource.data.groupId);
+      allow delete: if isGroupAdmin(resource.data.groupId);
+
+      // Agenda subcollection
+      match /agenda/{agendaId} {
+        allow read: if isGroupMember(get(/databases/$(database)/documents/business_meetings/$(meetingId)).data.groupId);
+        allow create, update, delete: if isGroupAdmin(
+        get(/databases/$(database)/documents/business_meetings/$(meetingId)).data.groupId
+        );
+      }
+
+      // Decisions subcollection
+      match /decisions/{decisionId} {
+        allow read: if isGroupMember(get(/databases/$(database)/documents/business_meetings/$(meetingId)).data.groupId);
+        allow create, update, delete: if isGroupAdmin(
+        get(/databases/$(database)/documents/business_meetings/$(meetingId)).data.groupId
+        );
+      }
+    }
+
+    // ============================================
+    // REPORTS (Content Moderation)
+    // ============================================
+    match /reports/{reportId} {
+      // Admins and super admins can read reports for their groups
+      allow read: if isSuperAdmin() || 
+      (isSignedIn() && isGroupAdmin(resource.data.groupId));
+
+      // Group members can create reports
+      allow create: if isSignedIn() && 
+      isGroupMember(request.resource.data.groupId) &&
+      request.resource.data.reporterId == request.auth.uid;
+
+      // Only admins can update reports (review, action)
+      allow update: if isSuperAdmin() || isGroupAdmin(resource.data.groupId);
+
+      // Reports should not be deleted
+      allow delete: if false;
+    }
+
+    // ============================================
+    // USER BANS
+    // ============================================
+    match /user_bans/{banId} {
+      // Only super admins can read all bans
+      // Group admins can read bans for their groups
+      allow read: if isSuperAdmin() || 
+      (resource.data.groupId != null && isGroupAdmin(resource.data.groupId));
+
+      // Only super admins can create platform-wide bans
+      // Group admins can create group-specific bans
+      allow create: if isSuperAdmin() || 
+      (request.resource.data.groupId != null && isGroupAdmin(request.resource.data.groupId));
+
+      // Only super admins can update bans
+      allow update: if isSuperAdmin() || 
+      (resource.data.groupId != null && isGroupAdmin(resource.data.groupId));
+
+      // Bans should not be deleted (revocation instead)
+      allow delete: if false;
+    }
+
+    // ============================================
+    // ADMIN REMOVAL REQUESTS
+    // ============================================
+    match /admin_removal_requests/{requestId} {
+      allow read: if request.auth != null
+        && isGroupMember(resource.data.groupId);
+      allow create, delete: if false;
+      allow update: if request.auth != null
+        && request.auth.uid == resource.data.targetAdminId
+        && resource.data.status == 'pending'
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['adminResponse', 'adminRespondedAt']);
+
+      match /votes/{userId} {
+        allow read: if request.auth != null
+          && isGroupMember(get(/databases/$(database)/documents/admin_removal_requests/$(requestId)).data.groupId);
+        allow write: if false;
+      }
+    }
+
+    // ============================================
+    // SPONSORSHIPS (Top-level)
+    // ============================================
+    match /sponsorships/{sponsorshipId} {
+      // Participants can read their sponsorships
+      allow read: if isSignedIn() && (
+      resource.data.sponsorId == request.auth.uid ||
+      resource.data.sponseeId == request.auth.uid ||
+      isSuperAdmin()
+      );
+
+      // Members can create sponsorships (usually via Cloud Function)
+      allow create: if isSignedIn() && (
+      request.resource.data.sponsorId == request.auth.uid ||
+      request.resource.data.sponseeId == request.auth.uid
+      );
+
+      // Participants can update (e.g., status changes)
+      allow update: if isSignedIn() && (
+      resource.data.sponsorId == request.auth.uid ||
+      resource.data.sponseeId == request.auth.uid
+      );
+
+      // Don't delete sponsorships (use status instead)
+      allow delete: if false;
+    }
+
+    // ============================================
+    // GROUP INVITES
+    // ============================================
+    match /groupInvites/{inviteId} {
+      // Anyone authenticated can read invite codes (for validation)
+      allow read: if isSignedIn();
+
+      // Writes should only happen through Cloud Functions
+      allow create, update, delete: if false;
+    }
+
+    // ============================================
+    // FINANCIAL REPORTS COLLECTION
+    // ============================================
+    match /financial_reports/{reportId} {
+      // Group members can read reports for their group
+      allow read: if isGroupMember(resource.data.groupId);
+
+      // Treasurers and admins can create reports
+      allow create: if isGroupAdminOrTreasurer(request.resource.data.groupId);
+
+      // Treasurers and admins can update (e.g., approval workflow)
+      allow update: if isGroupAdminOrTreasurer(resource.data.groupId);
+
+      // Reports should not be deleted (audit trail)
+      allow delete: if false;
+    }
+
+    // ============================================
+    // LITERATURE (Global catalog)
+    // ============================================
+    match /literature/{literatureId} {
+      // Anyone can read literature catalog
+      allow read: if true;
+
+      // Only super admins can manage global literature
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    // ============================================
+    // REFERRAL CODES COLLECTION
+    // ============================================
+    match /referral_codes/{code} {
+      // Anyone authenticated can read a referral code (for validation / lookup)
+      allow read: if isSignedIn();
+
+      // Only Cloud Functions (Admin SDK) should create/update/delete referral codes
+      allow create, update, delete: if false;
+    }
+
+    // ============================================
+    // REFERRALS COLLECTION
+    // ============================================
+    match /referrals/{referralId} {
+      // Referrer can read their own referral records
+      allow read: if isSignedIn() && (
+        resource.data.referrerId == request.auth.uid ||
+        resource.data.referredUserId == request.auth.uid ||
+        isSuperAdmin()
+      );
+
+      // Cloud Functions handle all writes to referrals
+      allow create, update, delete: if false;
+    }
+
+    // ============================================
+    // PARTNERSHIP LEADS
+    // ============================================
+    match /partnershipLeads/{leadId} {
+      // Leads are only written by the submitPartnershipLead callable, which
+      // runs with admin credentials and bypasses security rules. Reads are
+      // handled via the Firebase console for now (no client-side viewer).
+      allow read: if false;
+      allow write: if false;
+    }
+
+    // ============================================
+    // V4.1: GROUP CONSCIENCE VOTES
+    // ============================================
+    match /group_conscience_votes/{voteId} {
+      allow read: if isGroupMember(resource.data.groupId);
+      allow create, update, delete: if false; // CF only
+    }
+
+    // ============================================
+    // V4.1: GROUP BYLAWS
+    // ============================================
+    match /group_bylaws/{groupId} {
+      allow read: if isGroupMember(groupId);
+      allow create, update: if false;  // CF only (saveBylawDraft, ratifyBylaws)
+      allow delete: if false;
+
+      match /versions/{versionNumber} {
+        allow read: if isGroupMember(groupId);
+        allow write: if false;  // CF only
+      }
+    }
+
+    // ============================================
+    // V4.1: OFFICER ELECTIONS
+    // ============================================
+    match /group_elections/{electionId} {
+      allow read: if isGroupMember(resource.data.groupId);
+      allow create: if false;    // CF only (openElection)
+      allow update: if false;    // CF only (nominateForElection, castElectionVote, closeElection)
+      allow delete: if false;
+    }
+
+    // ============================================
+    // V4.1: MEETING MINUTES (subcollection of business_meetings)
+    // ============================================
+    match /business_meetings/{meetingId}/minutes/{docId} {
+      allow read: if isGroupMember(resource.data.groupId);
+      allow write: if false;    // CF only (saveMeetingMinutes, approveMeetingMinutes)
+    }
+
+    // ============================================
+    // V4.1: INTERGROUP REPORTS
+    // ============================================
+    match /intergroup_reports/{reportId} {
+      allow read: if isGroupMember(resource.data.groupId);
+      allow write: if false;    // CF only (generateIntergroupReport)
+    }
+
+    // ============================================
+    // V4.4: INTERGROUPS
+    // ============================================
+    match /intergroups/{intergroupId} {
+      allow read: if request.auth != null
+        && (request.auth.uid in resource.data.adminUids
+            || isIntergroupMember(intergroupId));
+      allow create: if false;  // Only via Cloud Functions (Admin SDK)
+      allow update, delete: if false;         // Only via Cloud Functions
+    }
+
+    match /intergroups/{intergroupId}/members/{userId} {
+      allow read: if isIntergroupAdmin(intergroupId);
+      allow write: if false;  // Only via Cloud Functions
+    }
+
+    match /intergroups/{intergroupId}/announcements/{announcementId} {
+      allow read: if isIntergroupAdmin(intergroupId);
+      allow write: if false;  // Only via Cloud Functions
+    }
+
+    match /intergroups/{intergroupId}/facilityStats/{docId} {
+      allow read: if isIntergroupAdmin(intergroupId);
+      allow write: if false;  // Only via Cloud Functions
+    }
+
+    match /intergroups/{intergroupId}/complianceReports/{reportId} {
+      allow read: if isIntergroupAdmin(intergroupId);
+      allow write: if false;
+    }
+
+    function isIntergroupAdmin(intergroupId) {
+      return request.auth != null
+        && request.auth.uid in get(/databases/$(database)/documents/intergroups/$(intergroupId)).data.adminUids;
+    }
+
+    function isIntergroupMember(intergroupId) {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/intergroups/$(intergroupId)/members/$(request.auth.uid));
+    }
+
+    // ============================================
+    // V4.4: BRANDING
+    // ============================================
+    match /branding/{brandingId} {
+      // Any authenticated user can read approved branding (needed at app startup)
+      allow read: if request.auth != null && resource.data.status == 'approved';
+      // Intergroup admins can read their own pending/rejected submissions
+      allow read: if isIntergroupAdmin(resource.data.intergroupId);
+      allow write: if false;  // Only via Cloud Functions
+    }
+
+    // ============================================
+    // V4.4: SSO DOMAIN INDEX (CF-only access)
+    // ============================================
+    match /sso_domain_index/{domain} {
+      allow read: if false;   // Only readable by Cloud Functions (admin SDK)
+      allow write: if false;
+    }
+
+    // ============================================
+    // V4.4: SSO JOIN LOG
+    // ============================================
+    match /sso_join_log/{intergroupId}/events/{eventId} {
+      allow read: if isIntergroupAdmin(intergroupId);
+      allow write: if false;  // Only via Cloud Functions
+    }
+
+    // ============================================
+    // V4.4: GROUP BACKUPS
+    // ============================================
+    match /groups/{groupId}/backups/{period} {
+      allow read: if isGroupAdmin(groupId);
+      allow write: if false;  // Only via scheduled Cloud Function
+    }
+
+    // ============================================
+    // V4.4: GROUP EXPORTS (rate-limit tracking)
+    // ============================================
+    match /exports/{groupId}/{exportId} {
+      allow read: if isGroupAdmin(groupId);
+      allow write: if false;  // Only via Cloud Functions
+    }
+
+    match /exports/{groupId}/exports/{exportId} {
+      allow read: if isGroupAdmin(groupId);
+      allow write: if false;  // Only via Cloud Functions
+    }
+
+    // ============================================
+    // V4.4: ADMIN NOTIFICATIONS (platform-level)
+    // ============================================
+    match /admin_notifications/{notificationId} {
+      allow read: if isSuperAdmin();
+      allow write: if false;  // Only via Cloud Functions
+    }
+
+    // ============================================
+    // V4.2 CONTENT & RESOURCES RULES
+    // ============================================
+
+    // Daily Reflections (global, read-only by authenticated users)
+    match /daily_reflections/{reflectionId} {
+      // Any authenticated user can read approved reflections
+      allow read: if isSignedIn();
+      // Only Cloud Functions (Admin SDK) write reflections
+      allow create, update, delete: if false;
+    }
+
+    // Group Daily Thoughts (per-group)
+    match /groups/{groupId}/dailyThoughts/{date} {
+      // Group members can read daily thoughts
+      allow read: if isGroupMember(groupId);
+      // Only Cloud Functions write daily thoughts (via postGroupDailyThought CF)
+      allow create, update, delete: if false;
+    }
+
+    // Literature Index (global catalog)
+    match /literature_index/{itemId} {
+      // Authenticated users can read approved literature
+      allow read: if isSignedIn() && (resource.data.isApproved == true || isSuperAdmin());
+      // Only Cloud Functions write (contributeLiterature CF, admin approval)
+      allow create, update, delete: if false;
+    }
+
+    // Group Literature Bookmarks (per-group)
+    match /groups/{groupId}/literatureBookmarks/{literatureId} {
+      // Group members can read bookmarks
+      allow read: if isGroupMember(groupId);
+      // Only Cloud Functions write (bookmarkLiteratureForGroup CF)
+      allow create, update, delete: if false;
+    }
+
+    // Meeting Topics (global catalog)
+    match /meeting_topics/{topicId} {
+      // Authenticated users can read approved topics
+      allow read: if isSignedIn() && (resource.data.isApproved == true || isSuperAdmin());
+      // Only Cloud Functions write (contributeMeetingTopic CF, admin approval)
+      allow create, update, delete: if false;
+    }
+
+    // Group Topic Favorites (per-group)
+    match /groups/{groupId}/topicFavorites/{topicId} {
+      // Group members can read topic favorites
+      allow read: if isGroupMember(groupId);
+      // Only Cloud Functions write (favoriteGroupTopic CF)
+      allow create, update, delete: if false;
+    }
+
+    // Group Resources (per-group)
+    match /groups/{groupId}/resources/{resourceId} {
+      // Group members can read active resources
+      allow read: if isGroupMember(groupId) && (
+        resource.data.isActive == true || isGroupAdmin(groupId)
+      );
+      // External links may be created directly by admins; uploads go through CF
+      allow create: if isGroupAdmin(groupId) &&
+        request.resource.data.source == 'external_link' &&
+        request.resource.data.groupId == groupId &&
+        request.resource.data.uploadedBy == request.auth.uid &&
+        request.resource.data.isActive == true;
+      // Only Cloud Functions update/delete (deleteGroupResource CF for soft-delete)
+      allow update, delete: if false;
+    }
+
+    // ============================================
+    // TRIAL RATE LIMIT (server-side only)
+    // Written exclusively by createGroupSubscription callable (Admin SDK).
+    // No client reads or writes are permitted.
+    // ============================================
+    match /userTrialHistory/{userId} {
+      allow read, write: if false;
+    }
+
+    // ============================================
+    // CATCH-ALL DENY RULE
+    // Any collection not explicitly defined is denied
+    // ============================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

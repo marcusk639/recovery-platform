@@ -1,0 +1,24 @@
+{
+  "timestamp": "2025-12-25T20:51:42.773Z",
+  "dryRun": false,
+  "duration": "1.67s",
+  "stats": {
+    "groupsWithMembers": 23,
+    "membersProcessed": 30,
+    "membersUpdated": 30,
+    "membersWithMalformedIds": 0,
+    "usersProcessed": 12,
+    "claimsUpdated": 4,
+    "claimsExceededLimit": 0,
+    "errors": [
+      "Error syncing claims for user ZiQGmqkCJYa0pXl9leKedar3Eno1: Error: There is no user record corresponding to the provided identifier.",
+      "Error syncing claims for user VkIApNXMxkTsx1nHELBH_XkhuCExtMKW9PZwkggVmSp2aRMH3: Error: There is no user record corresponding to the provided identifier.",
+      "Error syncing claims for user sponsee1: Error: There is no user record corresponding to the provided identifier.",
+      "Error syncing claims for user sponsor2: Error: There is no user record corresponding to the provided identifier.",
+      "Error syncing claims for user sponsor1: Error: There is no user record corresponding to the provided identifier.",
+      "Error syncing claims for user sponsee2: Error: There is no user record corresponding to the provided identifier.",
+      "Error syncing claims for user sponsor3: Error: There is no user record corresponding to the provided identifier.",
+      "Error syncing claims for user sponsee3: Error: There is no user record corresponding to the provided identifier."
+    ]
+  }
+}

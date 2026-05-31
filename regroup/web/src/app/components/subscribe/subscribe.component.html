@@ -1,0 +1,23 @@
+<section class="section subscribe-area ptb_100">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-12 col-md-10 col-lg-7">
+                <div class="subscribe-content text-center">
+                    <h2>Subscribe to get updates</h2>
+                    <p class="my-4">Subscribe to receive {{appName}} news, updates, and promotions.</p>
+                    <!-- Subscribe Form -->
+                    <div *ngIf="showMessage" class="alert alert-success" role="alert">
+                        Subscription successful!
+                    </div>
+                    <form [formGroup]="formGroup" class="subscribe-form">
+                        <div class="form-group">
+                            <mek-field [formGroup]="formGroup" formControlName="email" name="email" type="email"
+                                required="true" placeholder="Enter your email"></mek-field>
+                        </div>
+                        <button (click)="submit()" [disabled]="!valid" class="btn btn-lg btn-block">Subscribe</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>

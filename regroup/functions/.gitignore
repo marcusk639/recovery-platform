@@ -1,0 +1,21 @@
+## Compiled JavaScript files
+**/*.js
+**/*.js.map
+
+# Typescript v1 declaration files
+typings/
+
+node_modules/
+
+# Service account credentials — never commit
+service-key.json
+*service-key*.json
+
+# Environment variables — never commit (contains live Stripe keys)
+.env
+.env.local
+.env.*.local
+.env.bak*
+
+# Firebase emulator local secret overrides — never commit
+.secret.local

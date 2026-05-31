@@ -1,0 +1,139 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // =========================================================================
+    // Helper Functions
+    // =========================================================================
+
+    function isAuthenticated() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isHouseAdmin(houseId) {
+      return isAuthenticated()
+        && (
+          (request.auth.token.admin != null && houseId in request.auth.token.admin)
+          || (request.auth.token.superAdmin != null && houseId in request.auth.token.superAdmin)
+        );
+    }
+
+    function isHouseMember(houseId) {
+      return isAuthenticated()
+        && (
+          (request.auth.token.guest != null && houseId in request.auth.token.guest)
+          || isHouseAdmin(houseId)
+        );
+    }
+
+    // Write helpers: allow delete (no request.resource) OR valid upload.
+    // Firebase Storage `write` covers create, update, AND delete. Delete ops
+    // have no request.resource so content-type/size checks must not apply.
+    function isValidImageWrite(maxSizeBytes) {
+      return (request.resource == null)
+        || (request.resource.contentType.matches('image/.*')
+            && request.resource.size <= maxSizeBytes);
+    }
+
+    function isValidPdfWrite(maxSizeBytes) {
+      return (request.resource == null)
+        || (request.resource.contentType == 'application/pdf'
+            && request.resource.size <= maxSizeBytes);
+    }
+
+    function isValidSizedWrite(maxSizeBytes) {
+      return (request.resource == null)
+        || request.resource.size <= maxSizeBytes;
+    }
+
+    // =========================================================================
+    // 1. User Avatars: users/{userId}/avatar
+    //    Read:  any authenticated user (avatars shown in house/contact views)
+    //    Write: only the owning user; images only; max 5 MB
+    // =========================================================================
+    match /users/{userId}/avatar {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId)
+                   && isValidImageWrite(5 * 1024 * 1024);
+    }
+
+    // =========================================================================
+    // 2. House Photos: houses/{houseId}/photo
+    //    Read:  any authenticated user
+    //    Write: admin/superAdmin of that house; images only; max 10 MB
+    // =========================================================================
+    match /houses/{houseId}/photo {
+      allow read: if isAuthenticated();
+      allow write: if isHouseAdmin(houseId)
+                   && isValidImageWrite(10 * 1024 * 1024);
+    }
+
+    // =========================================================================
+    // 3. House Logos: houses/{houseId}/logo/{fileName}
+    //    Read:  any authenticated user
+    //    Write: admin/superAdmin of that house; images only; max 5 MB
+    // =========================================================================
+    match /houses/{houseId}/logo/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isHouseAdmin(houseId)
+                   && isValidImageWrite(5 * 1024 * 1024);
+    }
+
+    // =========================================================================
+    // 4. Guest Avatars: houses/{houseId}/guests/{guestId}/avatar/{fileName}
+    //    Read:  any authenticated user
+    //    Write: admin/superAdmin of that house; images only; max 5 MB
+    // =========================================================================
+    match /houses/{houseId}/guests/{guestId}/avatar/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isHouseAdmin(houseId)
+                   && isValidImageWrite(5 * 1024 * 1024);
+    }
+
+    // =========================================================================
+    // 5. Chore Photos: houses/{houseId}/{week}/{day}/chores/{guestId}/{fileName}
+    //    Read:  house members (guests + admins of that house)
+    //    Write: house members; images only; max 10 MB
+    // =========================================================================
+    match /houses/{houseId}/{week}/{day}/chores/{guestId}/{fileName} {
+      allow read: if isHouseMember(houseId);
+      allow write: if isHouseMember(houseId)
+                   && isValidImageWrite(10 * 1024 * 1024);
+    }
+
+    // =========================================================================
+    // 6. PDF Reports: reports/{houseId}/{reportPath=**}
+    //    Read:  house members (guests + admins)
+    //    Write: admin/superAdmin only; PDFs only; max 20 MB
+    // =========================================================================
+    match /reports/{houseId}/{reportPath=**} {
+      allow read: if isHouseMember(houseId);
+      allow write: if isHouseAdmin(houseId)
+                   && isValidPdfWrite(20 * 1024 * 1024);
+    }
+
+    // =========================================================================
+    // 7. Temporary Uploads: temp/{userId}/{tempPath=**}
+    //    Read:  only the owning user
+    //    Write: only the owning user; any content type; max 10 MB
+    // =========================================================================
+    match /temp/{userId}/{tempPath=**} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId)
+                   && isValidSizedWrite(10 * 1024 * 1024);
+    }
+
+    // =========================================================================
+    // CATCH-ALL DENY
+    // Any path not matched above is denied. Firebase denies by default but
+    // we make it explicit for auditability.
+    // =========================================================================
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

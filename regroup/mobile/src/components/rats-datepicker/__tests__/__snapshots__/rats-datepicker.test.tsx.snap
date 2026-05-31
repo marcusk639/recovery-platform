@@ -1,0 +1,69 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`RatsDatePicker snapshot matches 1`] = `
+<View>
+  <RNDatePicker
+    date={2024-03-20T17:00:00.000Z}
+    modal={true}
+    mode="date"
+    onCancel={[Function]}
+    onConfirm={[Function]}
+    open={false}
+  />
+  <View
+    accessibilityState={
+      {
+        "busy": undefined,
+        "checked": undefined,
+        "disabled": undefined,
+        "expanded": undefined,
+        "selected": undefined,
+      }
+    }
+    accessibilityValue={
+      {
+        "max": undefined,
+        "min": undefined,
+        "now": undefined,
+        "text": undefined,
+      }
+    }
+    accessible={true}
+    collapsable={false}
+    focusable={true}
+    onClick={[Function]}
+    onResponderGrant={[Function]}
+    onResponderMove={[Function]}
+    onResponderRelease={[Function]}
+    onResponderTerminate={[Function]}
+    onResponderTerminationRequest={[Function]}
+    onStartShouldSetResponder={[Function]}
+    style={
+      {
+        "opacity": 1,
+      }
+    }
+  >
+    <View
+      pointerEvents="none"
+    >
+      <TextInput
+        testID="rats-text-input"
+        value="2024-03-20"
+      />
+    </View>
+  </View>
+</View>
+`;
+
+exports[`RatsTimePicker snapshot matches when visible 1`] = `
+<View>
+  <DateTimePicker
+    display="default"
+    is24Hour={false}
+    mode="time"
+    onChange={[MockFunction]}
+    value={2024-01-01T18:00:00.000Z}
+  />
+</View>
+`;

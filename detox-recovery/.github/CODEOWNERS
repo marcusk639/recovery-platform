@@ -1,0 +1,19 @@
+# CODEOWNERS — changes to these paths require review from listed owners.
+# Syntax: <pattern> <owner> [<owner> ...]
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Deployment and infrastructure — any change here ships to production
+apphosting.yaml                     @marcuspersonal
+firebase.json                       @marcuspersonal
+.github/workflows/                  @marcuspersonal
+.github/CODEOWNERS                  @marcuspersonal
+
+# Security-sensitive server code and config
+next.config.ts                      @marcuspersonal
+app/api/                            @marcuspersonal
+lib/abuse-protection.ts             @marcuspersonal
+middleware.ts                       @marcuspersonal
+
+# Clinical-safety guardrails — copy changes here affect what the site promises/disclaims
+lib/scope-of-practice.ts            @marcuspersonal
+lib/referral-conditions.ts          @marcuspersonal

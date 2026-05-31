@@ -1,0 +1,127 @@
+runConfig:
+  cpu: 1
+  memoryMiB: 512
+  concurrency: 80
+  minInstances: 0
+  maxInstances: 10
+
+env:
+  # ---------------------------------------------------------------------------
+  # Stripe payment links (public — safe to commit)
+  # ---------------------------------------------------------------------------
+  - variable: NEXT_PUBLIC_STRIPE_SUPPORT_CALL_URL
+    value: "https://buy.stripe.com/14AeVffF2gmCeFI6wi3Nm00"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_LEMONSQUEEZY_FAMILY_GUIDE_URL
+    value: "https://nextsteprecovery.lemonsqueezy.com/buy/placeholder"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_LEMONSQUEEZY_APPOINTMENT_PREP_URL
+    value: "https://nextsteprecovery.lemonsqueezy.com/buy/placeholder"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_LEMONSQUEEZY_SAFETY_CHECKLIST_URL
+    value: "https://nextsteprecovery.lemonsqueezy.com/buy/placeholder"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_LEMONSQUEEZY_TREATMENT_COMPARISON_URL
+    value: "https://nextsteprecovery.lemonsqueezy.com/buy/placeholder"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_LEMONSQUEEZY_RELAPSE_PREVENTION_URL
+    value: "https://nextsteprecovery.lemonsqueezy.com/buy/placeholder"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_STRIPE_DONATION_URL
+    value: "https://buy.stripe.com/eVq6oJ50odaqcxAf2O3Nm06"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  # ---------------------------------------------------------------------------
+  # Calendly booking links (public — fill in after creating event types)
+  # ---------------------------------------------------------------------------
+  - variable: NEXT_PUBLIC_CALENDLY_FIT_CHECK_URL
+    value: "https://calendly.com/admin-regroup-app/free-10-minute-fit-check"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_CALENDLY_SUPPORT_CALL_URL
+    value: "https://calendly.com/admin-regroup-app/30-minute-withdrawal-support-call"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  # ---------------------------------------------------------------------------
+  # Resend — contact form delivery (server-only)
+  # Fill RESEND_TO_EMAIL below; store RESEND_API_KEY as a secret (see below)
+  # ---------------------------------------------------------------------------
+  - variable: RESEND_TO_EMAIL
+    value: "admin@regroup-app.com"
+    availability:
+      - RUNTIME
+  - variable: RESEND_FROM_EMAIL
+    value: "Withdrawal Support <admin@regroup-app.com>"
+    availability:
+      - RUNTIME
+  - variable: RESEND_API_KEY
+    secret: resend-api-key
+  - variable: MAILERLITE_API_KEY
+    secret: mailerlite-api-key
+
+  - variable: MAILERLITE_GROUP_ID_NEWSLETTER
+    value: "188194958278133227"
+    availability:
+      - RUNTIME
+
+  - variable: MAILERLITE_GROUP_ID_LEAD_MAGNET_UNSAFE
+    value: "188194958591657681"
+    availability:
+      - RUNTIME
+
+  - variable: MAILERLITE_GROUP_ID_LEAD_MAGNET_FAMILY
+    value: "188194958890501182"
+    availability:
+      - RUNTIME
+
+  - variable: MAILERLITE_GROUP_ID_B2B
+    value: "188194959207171446"
+    availability:
+      - RUNTIME
+  # ---------------------------------------------------------------------------
+  # recovery-shared-api — partner referral relay (optional)
+  # Set SHARED_API_URL to the Cloud Run URL once the service is deployed.
+  # Store INTERNAL_API_KEY as a Firebase secret (never commit the value here).
+  # ---------------------------------------------------------------------------
+  # - variable: SHARED_API_URL
+  #   value: "https://recovery-shared-api-XXXX-uc.a.run.app"
+  #   availability:
+  #     - RUNTIME
+  # - variable: INTERNAL_API_KEY
+  #   secret: internal-api-key
+  #   availability:
+  #     - RUNTIME
+
+  # ---------------------------------------------------------------------------
+  # Secrets setup (run once after firebase login):
+  #
+  #   npx firebase-tools apphosting:secrets:set resend-api-key
+  #   npx firebase-tools apphosting:secrets:set mailerlite-api-key
+  #   npx firebase-tools apphosting:secrets:set internal-api-key  # when shared API is ready
+  #
+  # These store values in Firebase Secret Manager — never committed to git.
+  # ---------------------------------------------------------------------------

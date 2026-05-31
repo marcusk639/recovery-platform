@@ -1,0 +1,10 @@
+.error-message {
+  color: #D8000C;
+  font-size: 12px;
+  text-align: center;
+  padding-top: -2rem;
+}
+
+.dummy {
+  height: 1rem;
+}

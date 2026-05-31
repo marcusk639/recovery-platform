@@ -1,0 +1,50 @@
+# gcloud / Firebase App Hosting upload exclusions.
+# Defense-in-depth alongside firebase.json `apphosting.ignore`.
+# These dirs should never reach the Cloud Build container.
+
+.git
+.gitignore
+
+# build artifacts (must not pollute Cloud Build with darwin-arm64 binaries)
+node_modules
+.next
+.swc
+coverage
+out
+build
+
+# editor / OS
+.DS_Store
+*.swp
+.idea
+.vscode
+
+# secrets
+.env
+.env.*
+!.env.example
+
+# local tooling state (Claude Code, code review, agent caches)
+.claude
+.full-review
+.remember
+.serena
+
+# repo metadata not needed at runtime
+.github
+docs
+prompts
+scripts
+__tests__
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+
+# logs
+firebase-debug.log
+firebase-debug.*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*

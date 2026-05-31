@@ -1,0 +1,20 @@
+Regroup is the all-in-one management platform for sober living house operators and residents.
+
+FOR HOUSE OPERATORS:
+• Manage residents and track sobriety milestones
+• Record and monitor rent payments
+• Track meeting attendance and house accountability
+• Oxford House governance — officers, business meetings, voting, and EES tracking
+• Discharge residents and import guest lists from CSV
+• Export payment history and compliance reports
+
+FOR RESIDENTS:
+• Submit rent payments from your phone
+• View your payment history and receipts
+• Track your sobriety date and accountability milestones
+• Apply to join a sober living house
+
+Regroup was built by people in recovery, for people in recovery. We understand that running a sober living house is about more than paperwork — it's about helping people build a new life.
+
+Privacy Policy: https://regroup-app.com/privacy-policy
+Terms of Service: https://regroup-app.com/terms

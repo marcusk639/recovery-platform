@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.recoveryconnect",
+      "sha256_cert_fingerprints": [
+        "6A:81:A9:73:25:2C:62:2E:F2:8B:9A:1E:29:44:64:22:78:5B:D8:CC:94:6E:3D:C4:24:C6:99:E8:B8:07:AF:DB"
+      ]
+    }
+  }
+]

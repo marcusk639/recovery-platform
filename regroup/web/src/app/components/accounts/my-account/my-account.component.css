@@ -1,0 +1,20 @@
+.text {
+  color: black;
+}
+
+.section-header {
+}
+
+.sub-header {
+  font-size: medium;
+  font-weight: bold;
+}
+
+.button {
+  color: #0094c6;
+}
+
+.row-no-padding {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}

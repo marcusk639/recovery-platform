@@ -1,0 +1,226 @@
+name: Unit Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # STRICT — these jobs block merges via branch protection.
+  # ---------------------------------------------------------------------------
+
+  test:
+    name: Jest Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # P2-CI-5: Coverage with a conservative ratchet. Increase the
+      # threshold each time landing code that raises global line coverage.
+      # See docs/superpowers/specs/2026-05-23-current-roadmap.md §P2-CI-5.
+      - name: Run unit tests with coverage
+        run: npx jest --coverage --forceExit --passWithNoTests --coverageThreshold='{"global":{"lines":30}}'
+        env:
+          CI: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jest-results
+          path: |
+            jest-results.json
+          retention-days: 7
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jest-coverage
+          path: coverage/
+          retention-days: 7
+
+  migration-guardrails:
+    name: Migration Guardrails (P1-LINT)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    # Why this job is strict and the full-lint job below is advisory:
+    # `no-restricted-syntax` enforces the M1/M2/M3 migrations and is already
+    # passing on the current tree (0 errors after the 2026-05-25 cleanup).
+    # The full lint baseline has thousands of pre-existing Prettier and TS
+    # warnings that will be cleaned up incrementally — flagging migration
+    # regressions here gives us the guardrail without the flag-day cleanup.
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # We can't easily run JUST no-restricted-syntax via eslint flags because
+      # the @react-native preset's other rules (Prettier, etc.) fire on the same
+      # invocation. Instead, run full lint and filter for migration violations.
+      # This is intentional and matches what `npx eslint` returns locally:
+      # 0 migration violations as of 2026-05-25.
+      - name: ESLint — fail only on migration rule violations
+        run: |
+          OUTPUT=$(npx eslint 'src/**/*.{ts,tsx}' --format=unix --quiet 2>&1 || true)
+          VIOLATIONS=$(echo "$OUTPUT" | grep "no-restricted-syntax" || true)
+          if [ -n "$VIOLATIONS" ]; then
+            echo "::error::Migration guardrails violated. Findings:"
+            echo "$VIOLATIONS"
+            exit 1
+          fi
+          echo "✓ No migration rule violations."
+
+  security-rules:
+    name: Firestore + Storage Security Rules (P2-CI-4)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # Why this job is strict:
+    # `npm run test:rules` exercises firebase/firestore.rules and firebase/storage.rules
+    # against the Firebase emulator via @firebase/rules-unit-testing. The suite is
+    # passing locally as of 2026-05-26 and rules regressions are high-impact
+    # (data-exposure / privilege-escalation risk), so we block merges on failure.
+    #
+    # The suite is excluded from `npm test` via jest.config.js testPathIgnorePatterns
+    # because it needs a live emulator. We boot one here via `firebase emulators:exec`
+    # which auto-starts/stops it around the test command. Java is required (JVM
+    # emulator runtime). Emulator ports come from firebase/firebase.json
+    # (firestore 8080, storage 9199) — same ports the test files hard-code.
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Setup Java (for Firebase Emulator)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      # firebase.json lives in firebase/ (not repo root). `emulators:exec` resolves
+      # rules/ports relative to its config, so we run from that dir. The test command
+      # runs from repo root via `npm --prefix`. Project ID uses the `demo-` prefix
+      # so the emulator does not require GCP credentials; test files override the
+      # project ID per-suite via initializeTestEnvironment.
+      - name: Run security rules tests against Firebase emulator
+        working-directory: firebase
+        run: firebase emulators:exec --only firestore,storage --project demo-test "npm --prefix .. run test:rules"
+        env:
+          CI: true
+
+      - name: Upload firebase debug logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: firebase-emulator-logs
+          path: |
+            firebase/firebase-debug.log
+            firebase/firestore-debug.log
+            firebase/storage-debug.log
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # ADVISORY — these jobs surface known baselines but do NOT block merges.
+  # Flip `continue-on-error` to `false` once each baseline is cleaned up.
+  # ---------------------------------------------------------------------------
+
+  lint:
+    name: Full Lint (advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true # TODO: remove once full lint passes (baseline 2026-05-25 = 3641 errors)
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run npm run lint
+        run: npm run lint
+
+  typecheck:
+    name: TypeScript Check (advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true # TODO: remove once tsc passes (baseline 2026-05-25 = 141 errors)
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tsc --noEmit
+        run: npx tsc --noEmit
+
+  audit:
+    name: npm audit critical (advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true # TODO: remove once 2 known criticals are addressed (npm audit fix)
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: npm audit critical
+        run: npm audit --audit-level=critical

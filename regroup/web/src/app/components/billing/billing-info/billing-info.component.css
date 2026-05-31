@@ -1,0 +1,47 @@
+.StripeElement {
+  font-size: 15px;
+  height: 50px;
+  border: none;
+  width: 100%;
+  outline: none;
+  padding: 15px;
+  padding-top: 0.1rem;
+  text-align: center;
+  padding-top: 1.1rem;
+  padding-bottom: 1.2rem;
+  /* font: 400 11px system-ui; */
+  /* border-radius: 8px; */
+  /* -webkit-box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1); */
+  display: block;
+  -webkit-box-shadow: 0 5px 10px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 5px 10px rgba(0, 0, 0, 0.1);
+  margin: 1rem 0;
+}
+
+.StripeElement--focus {
+  box-shadow: rgba(50, 50, 93, 0.109804) 0px 4px 6px, rgba(0, 0, 0, 0.0784314) 0px 1px 3px;
+  -webkit-transition: all 150ms ease;
+  transition: all 150ms ease;
+}
+
+.ExpirationElement {
+  width: 50%;
+  margin-top: 0;
+}
+
+.CvcElement {
+  width: 50%;
+  margin-top: 0;
+}
+
+.hidden {
+  display: none;
+}
+
+.cursor:hover {
+  cursor: text;
+}
+
+.error {
+}

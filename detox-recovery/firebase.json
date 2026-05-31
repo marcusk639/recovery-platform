@@ -1,0 +1,31 @@
+{
+  "apphosting": {
+    "backendId": "nextstep-recovery",
+    "rootDir": "/",
+    "ignore": [
+      "node_modules",
+      ".git",
+      "firebase-debug.log",
+      "firebase-debug.*.log",
+      ".next",
+      ".swc",
+      "coverage",
+      ".full-review",
+      ".remember",
+      ".serena",
+      ".claude",
+      ".github",
+      "__tests__",
+      "scripts",
+      "prompts",
+      "docs",
+      "*.test.ts",
+      "*.test.tsx",
+      ".env",
+      ".env.*",
+      "!.env.example",
+      "README.md",
+      "CLAUDE.md"
+    ]
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "noImplicitReturns": true,
+    "noUnusedLocals": false,
+    "noEmitOnError": true,
+    "noEmit": false,
+    "outDir": "lib",
+    "sourceMap": true,
+    "strict": false,
+    "target": "es2017",
+    "typeRoots": ["node_modules/@types"],
+    "strictNullChecks": false,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true
+  },
+  "linterOptions": {
+    "exclude": ["bin"]
+  },
+  "compileOnSave": true,
+  "include": ["src"],
+  "exclude": ["src/__tests__", "src/tests", "node_modules"]
+}

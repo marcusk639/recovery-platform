@@ -1,0 +1,18 @@
+{
+  "name": "rats-migration-scripts",
+  "version": "1.0.0",
+  "description": "Database migration scripts for RATS app",
+  "scripts": {
+    "migrate:dry-run": "ts-node run-migration.ts dry-run",
+    "migrate:execute": "ts-node run-migration.ts execute",
+    "migrate:validate": "ts-node run-migration.ts validate",
+    "full:dry-run": "ts-node migrate-full.ts dry-run",
+    "full:execute": "ts-node migrate-full.ts execute",
+    "full:validate": "ts-node migrate-full.ts validate"
+  },
+  "dependencies": {
+    "firebase-admin": "11.11.1",
+    "marked": "^4.3.0",
+    "ts-node": "^10.9.1"
+  }
+}

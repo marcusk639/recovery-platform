@@ -1,0 +1,121 @@
+# ──────────────────────────────────────────────
+# recovery-platform monorepo — combined .gitignore
+# (merged from recovery-shared-api, RecoveryConnect, regroup-rn7,
+#  regroup-functions, regroup-web, detox-recovery)
+# ──────────────────────────────────────────────
+
+# ── Dependencies ──────────────────────────────
+node_modules/
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# ── Build outputs ─────────────────────────────
+dist/
+build/
+/out/
+/.next/
+/coverage
+*.tsbuildinfo
+next-env.d.ts
+*.jsbundle
+
+# ── Environment / Secrets ─────────────────────
+.env
+.env.local
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.local
+service-account.json
+*.json.key
+*.pem
+
+# ── Firebase ──────────────────────────────────
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+.firebase/
+
+# ── TypeScript compiled output ────────────────
+**/*.js.map
+
+# ── iOS / Xcode ───────────────────────────────
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata
+*.xccheckout
+*.moved-aside
+DerivedData
+*.hmap
+*.ipa
+*.xcuserstate
+ios/.xcode.env.local
+/ios/Pods/
+/vendor/bundle/
+
+# ── Android ───────────────────────────────────
+.idea
+.gradle
+local.properties
+*.iml
+*.hprof
+.cxx/
+*.keystore
+!debug.keystore
+
+# ── Fastlane ──────────────────────────────────
+**/fastlane/report.xml
+**/fastlane/Preview.html
+**/fastlane/screenshots
+**/fastlane/test_output
+fastlane/google-play-key.json
+fastlane/app-store-connect-key.p8
+
+# ── Ruby / CocoaPods ──────────────────────────
+/vendor/bundle/
+
+# ── Metro (React Native) ──────────────────────
+.metro-health-check*
+
+# ── Vercel ────────────────────────────────────
+.vercel
+
+# ── OS ────────────────────────────────────────
+.DS_Store
+
+# ── Logs ──────────────────────────────────────
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+**/*.log
+scripts/logs/
+
+# ── Claude Code worktrees ─────────────────────
+.worktrees/
+
+# ── Per-repo tooling artifacts (excluded from monorepo commits) ──
+.serena/
+.remember/
+.audit/
+.full-review/
+.deploy-cache/
+**/.claude/worktrees/
+**/.claude/settings.local.json
+
+# ── Misc ──────────────────────────────────────
+ts-error-inventory.txt
+scripts/recovery-connect.json
+scripts/logs/

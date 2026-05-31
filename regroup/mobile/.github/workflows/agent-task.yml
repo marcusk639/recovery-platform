@@ -1,0 +1,74 @@
+# GitHub Actions Workflow for AI Agent Task Runner
+# Copy this file to .github/workflows/agent-task.yml in both target repositories:
+# - marcusk639/regroup-rn7
+# - marcusk639/RecoveryConnect
+
+name: AI Agent Task Runner
+
+# DISABLED 2026-05-26: repository_dispatch trigger removed; runnable manually only.
+on:
+  workflow_dispatch:
+
+jobs:
+  run-agent-task:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install dependencies
+        run: npm ci || npm install
+      
+      - name: Report run started
+        run: |
+          curl -X POST "${{ github.event.client_payload.backendWebhookUrl }}/started" \
+            -H "Content-Type: application/json" \
+            -H "X-Webhook-Secret: ${{ secrets.WEBHOOK_SECRET }}" \
+            -d '{
+              "runId": "${{ github.event.client_payload.runId }}",
+              "githubRunUrl": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }'
+      
+      - name: Download agent runner
+        run: |
+          # v0: Clone private repo using PAT
+          # Production: Will use `npx @ai-pm/agent-runner` from npm
+          git clone https://${{ secrets.AI_PM_PAT }}@github.com/marcusk639/ai-pm.git /tmp/ai-pm
+          cd /tmp/ai-pm/agent-runner
+          npm install
+          npm run build
+      
+      - name: Run Agent
+        env:
+          TASK_PAYLOAD: ${{ toJson(github.event.client_payload) }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+        run: |
+          cd /tmp/ai-pm/agent-runner
+          node dist/runner.js
+      
+      - name: Handle failure
+        if: failure()
+        run: |
+          curl -X POST "${{ github.event.client_payload.backendWebhookUrl }}" \
+            -H "Content-Type: application/json" \
+            -H "X-Webhook-Secret: ${{ secrets.WEBHOOK_SECRET }}" \
+            -d '{
+              "runId": "${{ github.event.client_payload.runId }}",
+              "status": "failed",
+              "summary": "GitHub Actions workflow failed",
+              "githubRunUrl": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }'
+

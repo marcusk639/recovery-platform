@@ -1,0 +1,7 @@
+{
+  "name": "rats",
+  "displayName": "rats",
+  "androidStatusBar": {
+    "backgroundColor": "#000000"
+  }
+}

@@ -1,0 +1,13 @@
+//
+// Prefix header for all source files of the 'RecoveryConnect' target
+//
+// This file ensures stdio.h is included before other headers to fix C++20 FILE type issues
+// For C++ files, we include <cstdio> instead to use the C++ standard library version
+//
+
+#ifdef __cplusplus
+#include <cstdio>
+#else
+#include <stdio.h>
+#endif
+

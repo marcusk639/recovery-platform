@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "detox": {
+      "command": "npx",
+      "args": ["detox-mcp"],
+      "env": {
+        "DETOX_PROJECT_PATH": "/Users/marcusklein/dev/RecoveryConnect/mobile"
+      }
+    },
+    "firebase": {
+      "command": "/Users/marcusklein/.nvm/versions/node/v20.19.5/bin/node",
+      "args": [
+        "/usr/local/lib/node_modules/firebase-tools/lib/bin/firebase.js",
+        "mcp",
+        "--dir",
+        "/Users/marcusklein/dev/RecoveryConnect"
+      ]
+    }
+  },
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"]
+    }
+  }
+}

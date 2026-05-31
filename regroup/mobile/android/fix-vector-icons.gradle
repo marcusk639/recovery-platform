@@ -1,0 +1,9 @@
+// Fix dependency issue between linting and vector icons tasks
+project.afterEvaluate {
+    def copyVectorIcons = tasks.findByName('copyReactNativeVectorIconFonts')
+    if (copyVectorIcons != null) {
+        tasks.findAll { task -> task.name.startsWith('lintVitalAnalyze') }.each { lintTask ->
+            lintTask.dependsOn(copyVectorIcons)
+        }
+    }
+}

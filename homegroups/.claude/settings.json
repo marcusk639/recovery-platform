@@ -1,0 +1,51 @@
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$TOOL_INPUT\" | grep -qE '\\.(env|env\\.[a-z]+)\"'; then echo 'BLOCKED: .env file edits are not allowed — manage secrets outside the repo' >&2; exit 2; fi",
+            "timeout": 5000
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$TOOL_INPUT\" | grep -qE '(package-lock\\.json|pnpm-lock\\.yaml|yarn\\.lock)\"'; then echo 'BLOCKED: Lock file edits are not allowed — use the package manager instead' >&2; exit 2; fi",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "FILE=$(echo \"$TOOL_INPUT\" | grep -oE '\"file_path\":\\s*\"[^\"]+\"' | grep -oE '/[^\"]+'); if echo \"$FILE\" | grep -qE '\\.(ts|tsx|js|jsx|json|css|scss|md)$'; then if echo \"$FILE\" | grep -q '/mobile/'; then cd /Users/marcusklein/dev/RecoveryConnect/mobile && npx prettier --write \"$FILE\" 2>/dev/null; elif echo \"$FILE\" | grep -q '/functions/'; then cd /Users/marcusklein/dev/RecoveryConnect/functions && npx prettier --write \"$FILE\" 2>/dev/null; fi; fi",
+            "timeout": 10000
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "FILE=$(echo \"$TOOL_INPUT\" | grep -oE '\"file_path\":\\s*\"[^\"]+\"' | grep -oE '/[^\"]+'); if echo \"$FILE\" | grep -q 'functions/src/'; then cd /Users/marcusklein/dev/RecoveryConnect/functions && npx tsc --noEmit 2>&1 | head -20; fi",
+            "timeout": 30000
+          }
+        ]
+      }
+    ]
+  }
+}

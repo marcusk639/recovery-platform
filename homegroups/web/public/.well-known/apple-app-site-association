@@ -1,0 +1,17 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "D8K3FS4HAX.org.recoveryconnect",
+        "paths": [
+          "/groups/*",
+          "/meetings/*",
+          "/profile",
+          "/app/*",
+          "/join/*"
+        ]
+      }
+    ]
+  }
+}

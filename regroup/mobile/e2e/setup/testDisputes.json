@@ -1,0 +1,43 @@
+{
+  "disputes": [
+    {
+      "id": "test-dispute-123",
+      "activityId": "test-activity-123",
+      "guestId": "guest-a",
+      "houseId": "test-house-123",
+      "type": "chore_completed",
+      "message": "This chore was not completed properly. The kitchen was still dirty.",
+      "status": "pending",
+      "createdDate": "2026-02-12",
+      "createdAt": "2026-02-12T10:30:00Z",
+      "updatedAt": "2026-02-12T10:30:00Z"
+    },
+    {
+      "id": "test-dispute-456",
+      "activityId": "test-activity-456",
+      "guestId": "guest-b",
+      "houseId": "test-house-123",
+      "type": "hours_worked",
+      "message": "Work hours seem inflated. Only worked 6 hours, not 8.",
+      "status": "pending",
+      "createdDate": "2026-02-12",
+      "createdAt": "2026-02-12T11:30:00Z",
+      "updatedAt": "2026-02-12T11:30:00Z"
+    },
+    {
+      "id": "test-dispute-rejected-123",
+      "activityId": "test-activity-own-123",
+      "guestId": "guest-a",
+      "houseId": "test-house-123",
+      "type": "meeting_attended",
+      "message": "No signature in meeting logbook.",
+      "status": "rejected",
+      "createdDate": "2026-02-12",
+      "createdAt": "2026-02-12T12:30:00Z",
+      "updatedAt": "2026-02-12T18:00:00Z",
+      "resolvedDate": "2026-02-12T18:00:00Z",
+      "resolvedBy": "manager",
+      "resolutionMessage": "Activity was completed properly. Meeting attendance confirmed by chair."
+    }
+  ]
+}

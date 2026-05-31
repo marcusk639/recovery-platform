@@ -1,0 +1,6 @@
+{
+  "projects": {
+    "default": "phoenix-cleanhouse",
+    "dev": "phoenix-cleanhouse"
+  }
+}

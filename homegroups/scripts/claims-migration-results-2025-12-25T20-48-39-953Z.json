@@ -1,0 +1,15 @@
+{
+  "timestamp": "2025-12-25T20:48:39.954Z",
+  "dryRun": true,
+  "duration": "1.33s",
+  "stats": {
+    "groupsWithMembers": 23,
+    "membersProcessed": 30,
+    "membersUpdated": 30,
+    "membersWithMalformedIds": 0,
+    "usersProcessed": 12,
+    "claimsUpdated": 12,
+    "claimsExceededLimit": 0,
+    "errors": []
+  }
+}

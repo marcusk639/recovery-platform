@@ -1,0 +1,47 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+    ext {
+        buildToolsVersion = "34.0.0"
+        minSdkVersion = 34
+        compileSdkVersion = 34
+        targetSdkVersion = 34
+        androidXCore = "1.6.0"
+        googlePlayServicesVersion = "21.0.1"
+        kotlinVersion = "1.8.10"
+
+        // We use NDK 23 which has both M1 support and is the side-by-side NDK version from AGP.
+        ndkVersion = "23.1.7779620"
+    }
+    repositories {
+        google()
+        mavenCentral()
+        jcenter()
+    }
+    dependencies {
+        classpath("com.android.tools.build:gradle")
+        classpath("com.facebook.react:react-native-gradle-plugin")
+        classpath 'com.google.gms:google-services:4.3.15'
+        classpath 'com.google.firebase:firebase-crashlytics-gradle:2.5.2'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion"
+        // classpath "org.jetbrains.kotlin:kotlin-scripting-common:1.7.22" 
+        // classpath "org.jetbrains.kotlin:kotlin-scripting-jvm:1.7.22"
+        // classpath "org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable:1.7.22"
+    }
+}
+
+allprojects {
+    repositories {
+        maven { url 'https://jitpack.io' }
+		maven { url "https://maven.google.com" }
+        jcenter()
+    }
+
+    configurations.all {
+        resolutionStrategy {
+            // Force androidx.activity to use version 1.7.0 or higher for react-native-image-picker
+            force 'androidx.activity:activity:1.7.0'
+            force 'androidx.activity:activity-ktx:1.7.0'
+        }
+    }
+}

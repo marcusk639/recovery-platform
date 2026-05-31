@@ -1,0 +1,76 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`NavBar snapshot matches 1`] = `
+<View
+  style={
+    [
+      {
+        "alignItems": "center",
+        "alignSelf": "stretch",
+        "backgroundColor": "black",
+        "flexDirection": "row",
+        "height": "8%",
+      },
+      {},
+    ]
+  }
+>
+  <FontAwesome5Icon
+    accessibilityState={
+      {
+        "busy": undefined,
+        "checked": undefined,
+        "disabled": undefined,
+        "expanded": undefined,
+        "selected": undefined,
+      }
+    }
+    accessible={true}
+    focusable={true}
+    name="bars"
+    onClick={[Function]}
+    onResponderGrant={[Function]}
+    onResponderMove={[Function]}
+    onResponderRelease={[Function]}
+    onResponderTerminate={[Function]}
+    onResponderTerminationRequest={[Function]}
+    onStartShouldSetResponder={[Function]}
+    size={31.428571428571427}
+    style={
+      {
+        "color": "#ffffff",
+        "paddingLeft": 15.714285714285714,
+        "paddingRight": 31.428571428571427,
+      }
+    }
+  />
+  <Text
+    style={
+      [
+        {
+          "color": "black",
+          "fontFamily": "Quicksand-Medium",
+        },
+        {
+          "fontFamily": "Quicksand-Medium",
+        },
+        {
+          "color": "#ffffff",
+          "fontFamily": "Quicksand-Bold",
+          "fontSize": 33,
+          "marginLeft": null,
+        },
+      ]
+    }
+  >
+    Home
+  </Text>
+  <View
+    style={
+      {
+        "marginLeft": "auto",
+      }
+    }
+  />
+</View>
+`;
