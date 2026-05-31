@@ -75,7 +75,7 @@ export const addGuestAuthorization = onCall(async (request) => {
         guest.userId,
         [guest.houseId],
         "admin",
-        false
+        false,
       );
       await auth().setCustomUserClaims(guest.userId, userClaims);
     }
@@ -92,13 +92,13 @@ export const addAdminAuthorization = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
   const adminInput = parseInput(
     adminAuthSchema,
-    request.data
+    request.data,
   ) as unknown as Admin;
   logger.info(
     "Adding claim for admin and houses",
     adminInput,
     adminInput.superAdmin,
-    adminInput.houseIds
+    adminInput.houseIds,
   );
 
   // ── Authorization guard ────────────────────────────────────────────────────
@@ -120,7 +120,7 @@ export const addAdminAuthorization = onCall(async (request) => {
   if (requestedHouses.length === 0) {
     throw new HttpsError(
       "invalid-argument",
-      "addAdminAuthorization requires at least one houseId or superAdmin entry"
+      "addAdminAuthorization requires at least one houseId or superAdmin entry",
     );
   }
 
@@ -139,7 +139,7 @@ export const addAdminAuthorization = onCall(async (request) => {
         adminInput.userId,
         adminInput.superAdmin,
         "superAdmin",
-        false
+        false,
       ),
     ]);
     logger.info("Creating claims", userClaims, superAdminClaims);
@@ -163,6 +163,20 @@ export const deleteAdminAuthorization = onCall(async (request) => {
     superAdminHouseIds: string[];
   };
   const { admin, adminHouseIds, superAdminHouseIds } = data;
+  const allHouseIds = [...(adminHouseIds ?? []), ...(superAdminHouseIds ?? [])];
+  if (allHouseIds.length === 0) {
+    throw new HttpsError(
+      "invalid-argument",
+      "deleteAdminAuthorization requires at least one houseId",
+    );
+  }
+  await assertCanGrantClaimForHouses({
+    callerUid: request.auth.uid,
+    callerToken: request.auth.token,
+    targetUid: admin.userId,
+    houseIds: allHouseIds,
+    callableName: "deleteAdminAuthorization",
+  });
   if (adminHouseIds?.length) {
     const userClaims = await deleteClaim(admin.userId, adminHouseIds, "admin");
     await auth().setCustomUserClaims(admin.userId, { ...userClaims });
@@ -171,7 +185,7 @@ export const deleteAdminAuthorization = onCall(async (request) => {
     const superAdminClaims = await deleteClaim(
       admin.userId,
       superAdminHouseIds,
-      "superAdmin"
+      "superAdmin",
     );
     await auth().setCustomUserClaims(admin.userId, { ...superAdminClaims });
   }
@@ -181,8 +195,17 @@ export const promoteGuestsToAdmin = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
   const data = parseInput(
     z.array(guestMinSchema),
-    request.data
+    request.data,
   ) as unknown as Guest[];
+  const houseIds = [...new Set(data.map((g) => g.houseId))];
+  if (houseIds.length === 0) return "success";
+  await assertCanGrantClaimForHouses({
+    callerUid: request.auth.uid,
+    callerToken: request.auth.token,
+    targetUid: data[0].userId,
+    houseIds,
+    callableName: "promoteGuestsToAdmin",
+  });
   const users = await getGuestsAsUsers(data);
   await Promise.all(
     users.map(async (user) => {
@@ -191,10 +214,10 @@ export const promoteGuestsToAdmin = onCall(async (request) => {
         user.uid,
         [guest.houseId],
         "admin",
-        false
+        false,
       );
       return auth().setCustomUserClaims(user.uid, claims);
-    })
+    }),
   );
   return "success";
 });
@@ -205,6 +228,15 @@ export const removePrivilegesForGuests = onCall(async (request) => {
     guests: Guest[];
     role: Role;
   };
+  const houseIds = [...new Set(data.guests.map((g) => g.houseId))];
+  if (houseIds.length === 0) return "success";
+  await assertCanGrantClaimForHouses({
+    callerUid: request.auth.uid,
+    callerToken: request.auth.token,
+    targetUid: data.guests[0].userId,
+    houseIds,
+    callableName: "removePrivilegesForGuests",
+  });
   const users = await getGuestsAsUsers(data.guests);
   await Promise.all(
     users.map(async (user) => {
@@ -213,10 +245,10 @@ export const removePrivilegesForGuests = onCall(async (request) => {
         user.uid,
         [guest.houseId],
         data.role,
-        false
+        false,
       );
       return auth().setCustomUserClaims(user.uid, claims);
-    })
+    }),
   );
   return "success";
 });
@@ -231,6 +263,20 @@ export const verifyUserEmail = onCall(async (request) => {
 
 export const givePotentialSuperAdminPrivilege = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+
+  const token = request.auth.token as Record<string, unknown>;
+  const hasExistingAdmin =
+    token.admin && Object.keys(token.admin as object).length > 0;
+  const hasExistingSuperAdmin =
+    token.superAdmin && Object.keys(token.superAdmin as object).length > 0;
+
+  if (hasExistingAdmin || hasExistingSuperAdmin) {
+    throw new HttpsError(
+      "permission-denied",
+      "givePotentialSuperAdminPrivilege is only available to users with no existing house claims",
+    );
+  }
+
   const user = await auth().getUser(request.auth.uid);
   const current = (user.customClaims ?? {}) as Record<string, unknown>;
   return auth().setCustomUserClaims(request.auth.uid, {
