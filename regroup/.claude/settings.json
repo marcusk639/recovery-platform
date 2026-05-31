@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -c \"import sys,json; d=json.load(sys.stdin); p=d.get('file_path',''); sys.exit(0 if 'functions/src' in p and p.endswith('.ts') else 1)\" && cd /Users/marcuspersonal/dev/regroup-functions/functions && npx tsc --noEmit 2>&1 | head -40"
+            "command": "python3 -c \"\nimport sys, json, subprocess, os\nd = json.load(sys.stdin)\np = d.get('file_path', '')\nif 'functions/src' not in p or not p.endswith('.ts'):\n    sys.exit(1)\nfn_dir = p[:p.index('functions/src') + len('functions')]\nresult = subprocess.run(['npx', 'tsc', '--noEmit'], cwd=fn_dir, capture_output=True, text=True)\nprint((result.stdout + result.stderr)[-2000:])\nsys.exit(result.returncode)\n\""
           }
         ]
       }
