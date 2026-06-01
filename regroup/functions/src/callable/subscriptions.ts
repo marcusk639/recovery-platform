@@ -3,7 +3,12 @@ import { logger } from "firebase-functions";
 import * as admin from "firebase-admin";
 import isNil from "lodash/isNil";
 import { z } from "zod";
-import { STRIPE_SECRET_KEY, SENDGRID_API_KEY } from "../config";
+import {
+  STRIPE_SECRET_KEY,
+  SENDGRID_API_KEY,
+  SUBSCRIPTION_TIERS,
+  HouseType,
+} from "../config";
 import { User } from "../entities/User";
 import {
   InviteEmailPayload,
@@ -78,6 +83,8 @@ const createOperatorSubscriptionSchema = z.object({
     subscriptionMetadata: subscriptionMetadataMinSchema,
   }),
   paymentMethod: z.string().min(1),
+  houseType: z.enum(["traditional", "oxford"] as const),
+  tier: z.string().min(1),
 });
 
 const reactivateOperatorSubscriptionSchema = z.object({
@@ -149,10 +156,50 @@ export const createOperatorSubscription = onCall(
     const data = parseInput(
       createOperatorSubscriptionSchema,
       request.data,
-    ) as unknown as { user: User; paymentMethod: string };
+    ) as unknown as {
+      user: User;
+      paymentMethod: string;
+      houseType: string;
+      tier: string;
+    };
     if (data.user.id !== request.auth.uid)
       throw new HttpsError("permission-denied", "User ID mismatch");
-    logger.info("Creating subscription for user", { userId: data.user.id });
+
+    // Resolve the tier config from SUBSCRIPTION_TIERS.
+    const tierMap = SUBSCRIPTION_TIERS[data.houseType as HouseType];
+    const tierConfig = (
+      tierMap as unknown as Record<
+        string,
+        {
+          priceEnvVar: string;
+          maxResidents: number | null;
+          maxProperties: number | null;
+          label: string;
+        }
+      >
+    )[data.tier];
+
+    if (!tierConfig) {
+      throw new HttpsError(
+        "invalid-argument",
+        `Unknown tier "${data.tier}" for houseType "${data.houseType}"`,
+      );
+    }
+
+    const priceId = process.env[tierConfig.priceEnvVar];
+    if (!priceId) {
+      throw new HttpsError(
+        "internal",
+        `Price ID not configured for env var: ${tierConfig.priceEnvVar}`,
+      );
+    }
+
+    logger.info("Creating subscription for user", {
+      userId: data.user.id,
+      houseType: data.houseType,
+      tier: data.tier,
+      priceEnvVar: tierConfig.priceEnvVar,
+    });
     const firestoreUser = await getUser(data.user.id);
     const oxfordEnabled =
       firestoreUser?.subscriptionMetadata?.oxfordEnabled ?? false;
@@ -179,6 +226,10 @@ export const createOperatorSubscription = onCall(
         ...metadata,
         status: resolvedStatus,
         lastUpdatedAt: new Date().toISOString(),
+        houseType: data.houseType,
+        tier: data.tier,
+        maxResidents: tierConfig.maxResidents,
+        maxProperties: tierConfig.maxProperties,
       },
     });
     await sendEmail({

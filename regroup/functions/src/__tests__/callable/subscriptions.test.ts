@@ -1,13 +1,24 @@
 // src/__tests__/callable/subscriptions.test.ts
 
-jest.mock("firebase-functions/v2/https", () => {
-  const actual = jest.requireActual("firebase-functions/v2/https");
-  return {
-    ...actual,
-    onCall: (_optsOrHandler: any, handler?: Function) =>
-      typeof _optsOrHandler === "function" ? _optsOrHandler : handler,
-  };
-});
+// Full manual mock — do NOT use jest.requireActual for firebase-functions/v2/https
+// because that module pulls in native crypto bindings (buffer-equal-constant-time)
+// that crash in Node test environments.
+class HttpsError extends Error {
+  code: string;
+  details?: unknown;
+  constructor(code: string, message: string, details?: unknown) {
+    super(message);
+    this.code = code;
+    this.details = details;
+    this.name = "HttpsError";
+  }
+}
+
+jest.mock("firebase-functions/v2/https", () => ({
+  onCall: (_optsOrHandler: any, handler?: Function) =>
+    typeof _optsOrHandler === "function" ? _optsOrHandler : handler,
+  HttpsError,
+}));
 
 jest.mock("firebase-functions", () => ({
   logger: { info: jest.fn(), error: jest.fn(), warn: jest.fn() },
@@ -87,7 +98,7 @@ jest.mock("firebase-admin", () => ({
         arrayUnion: jest.fn((v: any) => v),
         arrayRemove: jest.fn((v: any) => v),
       },
-    }
+    },
   ),
 }));
 
@@ -159,6 +170,13 @@ const fakeUserWith5Houses = {
 beforeEach(() => jest.clearAllMocks());
 
 describe("createOperatorSubscription", () => {
+  beforeEach(() => {
+    process.env.STRIPE_PRICE_TRAD_PROFESSIONAL = "price_test_pro_existing";
+  });
+  afterEach(() => {
+    delete process.env.STRIPE_PRICE_TRAD_PROFESSIONAL;
+  });
+
   it("initializes customer with email and payment method", async () => {
     const fakeMeta = {
       customerId: "cus_new",
@@ -174,13 +192,15 @@ describe("createOperatorSubscription", () => {
     await call(createOperatorSubscription, {
       user: fakeUser,
       paymentMethod: "pm_test",
+      houseType: "traditional",
+      tier: "professional",
     });
 
     expect(mockInitializeCustomer).toHaveBeenCalledWith(
       fakeUser.email,
       "pm_test",
       false,
-      fakeUser.id
+      fakeUser.id,
     );
   });
 
@@ -209,13 +229,15 @@ describe("createOperatorSubscription", () => {
     await call(createOperatorSubscription, {
       user: fakeUser,
       paymentMethod: "pm_oxford",
+      houseType: "traditional",
+      tier: "professional",
     });
 
     expect(mockInitializeCustomer).toHaveBeenCalledWith(
       fakeUser.email,
       "pm_oxford",
       true,
-      fakeUser.id
+      fakeUser.id,
     );
   });
 
@@ -237,6 +259,8 @@ describe("createOperatorSubscription", () => {
     await call(createOperatorSubscription, {
       user: fakeUser,
       paymentMethod: "pm_test",
+      houseType: "traditional",
+      tier: "professional",
     });
 
     expect(mockUpdateUser).toHaveBeenCalledWith(
@@ -246,7 +270,7 @@ describe("createOperatorSubscription", () => {
           status: "trialing", // from Stripe, not hardcoded 'active'
           lastUpdatedAt: expect.any(String),
         }),
-      })
+      }),
     );
   });
 
@@ -265,6 +289,8 @@ describe("createOperatorSubscription", () => {
     const result = await call(createOperatorSubscription, {
       user: fakeUser,
       paymentMethod: "pm_test",
+      houseType: "traditional",
+      tier: "professional",
     });
 
     expect(result).toMatchObject({
@@ -302,7 +328,7 @@ describe("cancelUserSubscription", () => {
       fakeUser.id,
       expect.objectContaining({
         subscriptionMetadata: expect.objectContaining({ status: "cancelling" }),
-      })
+      }),
     );
   });
 
@@ -329,7 +355,7 @@ describe("cancelUserSubscription", () => {
       call(cancelUserSubscription, {
         user: fakeUser,
         subscriptionId: "sub_other",
-      })
+      }),
     ).rejects.toMatchObject({ code: "permission-denied" });
   });
 });
@@ -340,7 +366,7 @@ describe("updateSubscriptionGuests", () => {
     mockGetSubscriptionItem.mockResolvedValue({ quantity: 2 });
     mockUpdateSubscriptionItem.mockResolvedValue({});
     mockUpdateSubscriptionMetadata.mockReturnValue(
-      fakeUser.subscriptionMetadata
+      fakeUser.subscriptionMetadata,
     );
     mockUpdateUser.mockResolvedValue(undefined);
 
@@ -358,7 +384,7 @@ describe("updateSubscriptionGuests", () => {
     mockGetSubscriptionItem.mockResolvedValue({ quantity: 2 });
     mockUpdateSubscriptionItem.mockResolvedValue({});
     mockUpdateSubscriptionMetadata.mockReturnValue(
-      fakeUser.subscriptionMetadata
+      fakeUser.subscriptionMetadata,
     );
     mockUpdateUser.mockResolvedValue(undefined);
 
@@ -371,7 +397,7 @@ describe("updateSubscriptionGuests", () => {
     expect(mockUpdateSubscriptionItem).toHaveBeenCalledWith(
       "si_guest",
       "guest",
-      3
+      3,
     );
   });
 
@@ -380,7 +406,7 @@ describe("updateSubscriptionGuests", () => {
     mockGetSubscriptionItem.mockResolvedValue({ quantity: 2 });
     mockUpdateSubscriptionItem.mockResolvedValue({});
     mockUpdateSubscriptionMetadata.mockReturnValue(
-      fakeUser.subscriptionMetadata
+      fakeUser.subscriptionMetadata,
     );
     mockUpdateUser.mockResolvedValue(undefined);
 
@@ -393,7 +419,7 @@ describe("updateSubscriptionGuests", () => {
     expect(mockUpdateSubscriptionItem).toHaveBeenCalledWith(
       "si_guest",
       "guest",
-      1
+      1,
     );
   });
 
@@ -427,7 +453,7 @@ describe("createOperatorSubscription — input validation", () => {
           subscriptionMetadata: { status: "active" },
         },
         paymentMethod: "pm_123",
-      })
+      }),
     ).rejects.toMatchObject({ code: "invalid-argument" });
   });
 
@@ -438,7 +464,7 @@ describe("createOperatorSubscription — input validation", () => {
           email: "test@test.com",
           subscriptionMetadata: { status: "active" },
         },
-      })
+      }),
     ).rejects.toMatchObject({ code: "invalid-argument" });
   });
 });
@@ -471,7 +497,7 @@ describe("reactivateOperatorSubscription", () => {
     expect(mockReactivateSubscription).toHaveBeenCalledWith(
       oxfordFirestoreUser.subscriptionMetadata.customerId,
       expect.objectContaining({ oxfordEnabled: true }),
-      fakeUser.id
+      fakeUser.id,
     );
     expect(result.subscriptionMetadata).toMatchObject({
       subscriptionId: "sub_reactivated",
@@ -492,7 +518,7 @@ describe("reactivateOperatorSubscription — input validation", () => {
             customerId: "cus_1",
           },
         },
-      })
+      }),
     ).rejects.toMatchObject({ code: "invalid-argument" });
   });
 
@@ -503,7 +529,7 @@ describe("reactivateOperatorSubscription — input validation", () => {
           id: "u1",
           subscriptionMetadata: { status: "active", customerId: "cus_1" },
         },
-      })
+      }),
     ).rejects.toMatchObject({ code: "invalid-argument" });
   });
 
@@ -514,7 +540,7 @@ describe("reactivateOperatorSubscription — input validation", () => {
           id: "u1",
           subscriptionMetadata: { status: "active", subscriptionId: "sub_1" },
         },
-      })
+      }),
     ).rejects.toMatchObject({ code: "invalid-argument" });
   });
 });
@@ -524,7 +550,7 @@ describe("cancelUserSubscription — input validation", () => {
     await expect(
       callFn(cancelUserSubscription, {
         user: { subscriptionMetadata: { status: "active" } },
-      })
+      }),
     ).rejects.toMatchObject({ code: "invalid-argument" });
   });
 });
@@ -536,7 +562,7 @@ describe("updateSubscriptionGuests — input validation", () => {
         ownerUserId: "u1",
         houseIds: ["h1"],
         action: "invalid",
-      })
+      }),
     ).rejects.toMatchObject({ code: "invalid-argument" });
   });
 
@@ -545,7 +571,7 @@ describe("updateSubscriptionGuests — input validation", () => {
       callFn(updateSubscriptionGuests, {
         houseIds: ["h1"],
         action: "add",
-      })
+      }),
     ).rejects.toMatchObject({ code: "invalid-argument" });
   });
 });
@@ -557,7 +583,7 @@ describe("updateSubscriptionHouses — input validation", () => {
         ownerUserId: "u1",
         action: "delete",
         houseIds: ["h1"],
-      })
+      }),
     ).rejects.toMatchObject({ code: "invalid-argument" });
   });
 });
@@ -565,7 +591,7 @@ describe("updateSubscriptionHouses — input validation", () => {
 describe("sendInviteEmails — input validation", () => {
   it("throws invalid-argument when payload is not an array", async () => {
     await expect(
-      callFn(sendInviteEmails, { email: "not-an-array" })
+      callFn(sendInviteEmails, { email: "not-an-array" }),
     ).rejects.toMatchObject({ code: "invalid-argument" });
   });
 
@@ -577,7 +603,7 @@ describe("sendInviteEmails — input validation", () => {
           dynamicLink: "https://example.com",
           type: "guest",
         },
-      ])
+      ]),
     ).rejects.toMatchObject({ code: "invalid-argument" });
   });
 });
@@ -589,7 +615,7 @@ describe("sendConfirmationEmail — input validation", () => {
         email: "not-an-email",
         dynamicLink: "https://example.com",
         name: "Alice",
-      })
+      }),
     ).rejects.toMatchObject({ code: "invalid-argument" });
   });
 
@@ -598,7 +624,7 @@ describe("sendConfirmationEmail — input validation", () => {
       callFn(sendConfirmationEmail, {
         email: "test@test.com",
         name: "Alice",
-      })
+      }),
     ).rejects.toMatchObject({ code: "invalid-argument" });
   });
 });
@@ -609,7 +635,7 @@ describe("applyBundleDiscount callable", () => {
     await call(applyBundleDiscount, { userId: "user-1" });
     expect(mockApplyBundleDiscountToSubscription).toHaveBeenCalledWith(
       "sub_fake",
-      3
+      3,
     );
   });
 
@@ -618,7 +644,7 @@ describe("applyBundleDiscount callable", () => {
     await call(applyBundleDiscount, { userId: "user-1" });
     expect(mockApplyBundleDiscountToSubscription).toHaveBeenCalledWith(
       "sub_fake",
-      5
+      5,
     );
   });
 
@@ -627,7 +653,7 @@ describe("applyBundleDiscount callable", () => {
     await call(applyBundleDiscount, { userId: "user-1" });
     expect(mockApplyBundleDiscountToSubscription).toHaveBeenCalledWith(
       "sub_fake",
-      2
+      2,
     );
   });
 
@@ -646,7 +672,7 @@ describe("applyBundleDiscount callable", () => {
 
   it("throws unauthenticated when no auth", async () => {
     await expect(
-      call(applyBundleDiscount, { userId: "user-1" }, null as any)
+      call(applyBundleDiscount, { userId: "user-1" }, null as any),
     ).rejects.toMatchObject({ code: "unauthenticated" });
   });
 
@@ -657,6 +683,94 @@ describe("applyBundleDiscount callable", () => {
   });
 });
 
+describe("createSubscription — tier routing", () => {
+  const fakeMetaBase = {
+    customerId: "cus_tier",
+    subscriptionId: "sub_tier",
+    houses: {},
+    items: { houseItemId: "", guestItemId: "" },
+    currentPeriodEnd: Date.now() + 1000000,
+  };
+
+  beforeEach(() => {
+    process.env.STRIPE_PRICE_TRAD_PROFESSIONAL = "price_test_pro_123";
+    mockGetUser.mockResolvedValue(fakeUser);
+    mockInitializeCustomer.mockResolvedValue(fakeMetaBase);
+    mockUpdateUser.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    delete process.env.STRIPE_PRICE_TRAD_PROFESSIONAL;
+    delete process.env.STRIPE_PRICE_TRAD_STARTER;
+  });
+
+  it("resolves priceId and persists tier metadata for a valid traditional/professional tier", async () => {
+    await call(createOperatorSubscription, {
+      user: fakeUser,
+      paymentMethod: "pm_test",
+      houseType: "traditional",
+      tier: "professional",
+    });
+
+    expect(mockUpdateUser).toHaveBeenCalledWith(
+      fakeUser.id,
+      expect.objectContaining({
+        subscriptionMetadata: expect.objectContaining({
+          houseType: "traditional",
+          tier: "professional",
+          maxResidents: 20,
+          maxProperties: 3,
+        }),
+      }),
+    );
+  });
+
+  it("throws invalid-argument for an unrecognized tier string", async () => {
+    await expect(
+      call(createOperatorSubscription, {
+        user: fakeUser,
+        paymentMethod: "pm_test",
+        houseType: "traditional",
+        tier: "nonexistent",
+      }),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+  });
+
+  it("throws internal when the env var for the tier is not set", async () => {
+    delete process.env.STRIPE_PRICE_TRAD_STARTER;
+
+    await expect(
+      call(createOperatorSubscription, {
+        user: fakeUser,
+        paymentMethod: "pm_test",
+        houseType: "traditional",
+        tier: "starter",
+      }),
+    ).rejects.toMatchObject({ code: "internal" });
+  });
+
+  it("throws invalid-argument when houseType is not traditional or oxford", async () => {
+    await expect(
+      call(createOperatorSubscription, {
+        user: fakeUser,
+        paymentMethod: "pm_test",
+        houseType: "unknown",
+        tier: "starter",
+      }),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+  });
+
+  it("throws invalid-argument when tier is missing", async () => {
+    await expect(
+      call(createOperatorSubscription, {
+        user: fakeUser,
+        paymentMethod: "pm_test",
+        houseType: "traditional",
+      }),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+  });
+});
+
 describe("updateSubscriptionHouses — bundle discount integration", () => {
   it("calls applyBundleDiscountToSubscription after adding a house", async () => {
     mockGetUser.mockResolvedValue(fakeUserWith2Houses);
@@ -664,7 +778,7 @@ describe("updateSubscriptionHouses — bundle discount integration", () => {
     mockGetSubscriptionItem.mockResolvedValue({ quantity: 2 });
     mockUpdateSubscriptionItem.mockResolvedValue({});
     mockUpdateSubscriptionMetadata.mockReturnValue(
-      fakeUserWith2Houses.subscriptionMetadata
+      fakeUserWith2Houses.subscriptionMetadata,
     );
     mockUpdateUser.mockResolvedValue(undefined);
 
@@ -675,7 +789,7 @@ describe("updateSubscriptionHouses — bundle discount integration", () => {
     });
     expect(mockApplyBundleDiscountToSubscription).toHaveBeenCalledWith(
       "sub_fake",
-      expect.any(Number)
+      expect.any(Number),
     );
   });
 
@@ -687,11 +801,11 @@ describe("updateSubscriptionHouses — bundle discount integration", () => {
     mockGetSubscriptionItem.mockResolvedValue({ quantity: 3 });
     mockUpdateSubscriptionItem.mockResolvedValue({});
     mockUpdateSubscriptionMetadata.mockReturnValue(
-      fakeUserWith3Houses.subscriptionMetadata
+      fakeUserWith3Houses.subscriptionMetadata,
     );
     mockUpdateUser.mockResolvedValue(undefined);
     mockApplyBundleDiscountToSubscription.mockRejectedValueOnce(
-      new Error("Stripe error")
+      new Error("Stripe error"),
     );
 
     await expect(
@@ -699,7 +813,7 @@ describe("updateSubscriptionHouses — bundle discount integration", () => {
         ownerUserId: "user-1",
         action: "remove",
         houseIds: ["house-3"],
-      })
+      }),
     ).resolves.not.toThrow();
   });
 });

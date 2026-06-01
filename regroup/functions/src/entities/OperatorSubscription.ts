@@ -19,4 +19,10 @@ export default class OperatorSubscription {
 
   // W11: always record when subscription state was last written
   lastUpdatedAt?: string;
+
+  // Tier-based pricing fields (Task 13)
+  houseType?: string;
+  tier?: string;
+  maxResidents?: number | null;
+  maxProperties?: number | null;
 }
