@@ -48,7 +48,7 @@ Full structure: `docs/superpowers/specs/2026-06-01-doc-organizer-recovery-design
 
 **Run time:** ~30 seconds. Always runs first in both full and `--check` modes.
 
-1. Run: `find . -path "*/docs/*.md" -not -path "*node_modules*" -not -path "*/.claude/*"`
+1. Run: `find . -name "*.md" -path "*/docs/*" -not -path "*node_modules*" -not -path "*/.claude/*"`
 2. For each doc, determine:
    - `product`: which product owns it (ecosystem / homegroups / regroup / detox-recovery / recovery-api)
    - `inferredCategory`: product | technical | monetization | operations | roadmap | plans | archive | unknown
@@ -99,7 +99,8 @@ After agents complete, merge all proposals into:
 
 **STOP. Present proposal to user. Wait for explicit approval before Phase 3.**
 
-Approval = "approved", "yes", "looks good", or user edits proposal then confirms.
+Show the user the path to the proposal file and ask: "Review the proposal at [path] and reply with 'approved' to proceed, or describe changes needed."
+Approval = "approved", "yes", "looks good", or user edits proposal file then confirms.
 Corrections = return to Phase 2 for revised proposal.
 
 ---
