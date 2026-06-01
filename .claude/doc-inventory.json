@@ -1,0 +1,1906 @@
+[
+  {
+    "path": "./detox-recovery/docs/api.md",
+    "product": "detox-recovery",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "detox-recovery/docs/technical/api.md"
+  },
+  {
+    "path": "./detox-recovery/docs/architecture.md",
+    "product": "detox-recovery",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "detox-recovery/docs/technical/architecture.md"
+  },
+  {
+    "path": "./detox-recovery/docs/business-case-2026-05-24.md",
+    "product": "ecosystem",
+    "inferredCategory": "product",
+    "scope": "ecosystem",
+    "stalenessSignals": [],
+    "targetPath": "docs/ecosystem/business-case-2026-05-24.md"
+  },
+  {
+    "path": "./detox-recovery/docs/delivery-gaps.md",
+    "product": "detox-recovery",
+    "inferredCategory": "product",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "detox-recovery/docs/product/delivery-gaps.md"
+  },
+  {
+    "path": "./detox-recovery/docs/deployment.md",
+    "product": "detox-recovery",
+    "inferredCategory": "operations",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "detox-recovery/docs/operations/deployment.md"
+  },
+  {
+    "path": "./detox-recovery/docs/discovery-strategy.md",
+    "product": "detox-recovery",
+    "inferredCategory": "product",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "detox-recovery/docs/product/discovery-strategy.md"
+  },
+  {
+    "path": "./detox-recovery/docs/environment.md",
+    "product": "detox-recovery",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "detox-recovery/docs/technical/environment.md"
+  },
+  {
+    "path": "./detox-recovery/docs/features.md",
+    "product": "detox-recovery",
+    "inferredCategory": "product",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "detox-recovery/docs/product/requirements.md"
+  },
+  {
+    "path": "./detox-recovery/docs/financial-model-master-2026-05-24.md",
+    "product": "detox-recovery",
+    "inferredCategory": "monetization",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "detox-recovery/docs/monetization/financial-model-master-2026-05-24.md"
+  },
+  {
+    "path": "./detox-recovery/docs/financial-model.md",
+    "product": "detox-recovery",
+    "inferredCategory": "monetization",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "detox-recovery/docs/monetization/financial-model.md"
+  },
+  {
+    "path": "./detox-recovery/docs/financial-projections-2026-05-24.md",
+    "product": "detox-recovery",
+    "inferredCategory": "monetization",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "detox-recovery/docs/monetization/financial-projections-2026-05-24.md"
+  },
+  {
+    "path": "./detox-recovery/docs/lead-magnets/01-unsafe-withdrawal.md",
+    "product": "detox-recovery",
+    "inferredCategory": "operations",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "detox-recovery/docs/operations/lead-magnets/01-unsafe-withdrawal.md"
+  },
+  {
+    "path": "./detox-recovery/docs/lead-magnets/02-helping-someone-in-withdrawal.md",
+    "product": "detox-recovery",
+    "inferredCategory": "operations",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "detox-recovery/docs/operations/lead-magnets/02-helping-someone-in-withdrawal.md"
+  },
+  {
+    "path": "./detox-recovery/docs/lead-magnets/03-detox-programs-lose-trust.md",
+    "product": "detox-recovery",
+    "inferredCategory": "operations",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "detox-recovery/docs/operations/lead-magnets/03-detox-programs-lose-trust.md"
+  },
+  {
+    "path": "./detox-recovery/docs/manual-tasks/2026-05-21-external-service-setup.md",
+    "product": "detox-recovery",
+    "inferredCategory": "operations",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "detox-recovery/docs/operations/manual-tasks/2026-05-21-external-service-setup.md"
+  },
+  {
+    "path": "./detox-recovery/docs/manual-tasks/2026-05-23-lemon-squeezy-migration.md",
+    "product": "detox-recovery",
+    "inferredCategory": "operations",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "detox-recovery/docs/operations/manual-tasks/2026-05-23-lemon-squeezy-migration.md"
+  },
+  {
+    "path": "./detox-recovery/docs/manual-tasks/2026-05-23-mailerlite-automation-setup.md",
+    "product": "detox-recovery",
+    "inferredCategory": "operations",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "detox-recovery/docs/operations/manual-tasks/2026-05-23-mailerlite-automation-setup.md"
+  },
+  {
+    "path": "./detox-recovery/docs/market-opportunity-analysis-2026-05-24.md",
+    "product": "ecosystem",
+    "inferredCategory": "product",
+    "scope": "ecosystem",
+    "stalenessSignals": [],
+    "targetPath": "docs/ecosystem/market-opportunity-analysis-2026-05-24.md"
+  },
+  {
+    "path": "./detox-recovery/docs/monetization.md",
+    "product": "detox-recovery",
+    "inferredCategory": "monetization",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "detox-recovery/docs/monetization/model.md"
+  },
+  {
+    "path": "./detox-recovery/docs/pdf-delivery.md",
+    "product": "detox-recovery",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "detox-recovery/docs/technical/pdf-delivery.md"
+  },
+  {
+    "path": "./detox-recovery/docs/products/01-family-survival-guide.md",
+    "product": "detox-recovery",
+    "inferredCategory": "product",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "detox-recovery/docs/product/products/01-family-survival-guide.md"
+  },
+  {
+    "path": "./detox-recovery/docs/products/02-appointment-prep-worksheet.md",
+    "product": "detox-recovery",
+    "inferredCategory": "product",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "detox-recovery/docs/product/products/02-appointment-prep-worksheet.md"
+  },
+  {
+    "path": "./detox-recovery/docs/products/03-withdrawal-safety-checklist.md",
+    "product": "detox-recovery",
+    "inferredCategory": "product",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "detox-recovery/docs/product/products/03-withdrawal-safety-checklist.md"
+  },
+  {
+    "path": "./detox-recovery/docs/products/04-treatment-comparison-worksheet.md",
+    "product": "detox-recovery",
+    "inferredCategory": "product",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "detox-recovery/docs/product/products/04-treatment-comparison-worksheet.md"
+  },
+  {
+    "path": "./detox-recovery/docs/products/05-relapse-prevention-plan.md",
+    "product": "detox-recovery",
+    "inferredCategory": "product",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "detox-recovery/docs/product/products/05-relapse-prevention-plan.md"
+  },
+  {
+    "path": "./detox-recovery/docs/roadmap-2026-05-24.md",
+    "product": "detox-recovery",
+    "inferredCategory": "roadmap",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "detox-recovery/docs/roadmap/roadmap-2026-05-24.md"
+  },
+  {
+    "path": "./docs/INDEX.md",
+    "product": "ecosystem",
+    "inferredCategory": "product",
+    "scope": "ecosystem",
+    "stalenessSignals": [],
+    "targetPath": "docs/INDEX.md"
+  },
+  {
+    "path": "./homegroups/docs/00-DOCUMENTATION-INDEX.md",
+    "product": "homegroups",
+    "inferredCategory": "product",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "homegroups/docs/product/00-documentation-index.md"
+  },
+  {
+    "path": "./homegroups/docs/01-rats-sober-living.md",
+    "product": "ecosystem",
+    "inferredCategory": "product",
+    "scope": "ecosystem",
+    "stalenessSignals": [],
+    "targetPath": "docs/ecosystem/01-rats-sober-living.md"
+  },
+  {
+    "path": "./homegroups/docs/02-recoveryconnect-homegroups.md",
+    "product": "ecosystem",
+    "inferredCategory": "product",
+    "scope": "ecosystem",
+    "stalenessSignals": [],
+    "targetPath": "docs/ecosystem/02-recoveryconnect-homegroups.md"
+  },
+  {
+    "path": "./homegroups/docs/03-integration-treatment-centers.md",
+    "product": "ecosystem",
+    "inferredCategory": "product",
+    "scope": "ecosystem",
+    "stalenessSignals": [],
+    "targetPath": "docs/ecosystem/03-integration-treatment-centers.md"
+  },
+  {
+    "path": "./homegroups/docs/ARCHITECTURE.md",
+    "product": "homegroups",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "homegroups/docs/technical/architecture.md"
+  },
+  {
+    "path": "./homegroups/docs/AUDIT_WAVE_FOLLOWUPS.md",
+    "product": "homegroups",
+    "inferredCategory": "roadmap",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "homegroups/docs/roadmap/audit-wave-followups.md"
+  },
+  {
+    "path": "./homegroups/docs/BILLING_AND_PAYMENTS.md",
+    "product": "homegroups",
+    "inferredCategory": "monetization",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "homegroups/docs/monetization/billing-and-payments.md"
+  },
+  {
+    "path": "./homegroups/docs/BUSINESS_MODEL.md",
+    "product": "homegroups",
+    "inferredCategory": "monetization",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "homegroups/docs/monetization/business-model.md"
+  },
+  {
+    "path": "./homegroups/docs/DEVELOPMENT.md",
+    "product": "homegroups",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "homegroups/docs/technical/development.md"
+  },
+  {
+    "path": "./homegroups/docs/LAUNCH_BLOCKERS.md",
+    "product": "homegroups",
+    "inferredCategory": "operations",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "homegroups/docs/operations/launch-blockers.md"
+  },
+  {
+    "path": "./homegroups/docs/MARKET_INTELLIGENCE.md",
+    "product": "homegroups",
+    "inferredCategory": "monetization",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "homegroups/docs/monetization/market-intelligence.md"
+  },
+  {
+    "path": "./homegroups/docs/MESSAGING_ENGINEERING.md",
+    "product": "homegroups",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "homegroups/docs/technical/messaging-engineering.md"
+  },
+  {
+    "path": "./homegroups/docs/PRE_LAUNCH_CHECKLIST.md",
+    "product": "homegroups",
+    "inferredCategory": "operations",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "homegroups/docs/operations/pre-launch-checklist.md"
+  },
+  {
+    "path": "./homegroups/docs/PRODUCT_REQUIREMENTS.md",
+    "product": "homegroups",
+    "inferredCategory": "product",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "homegroups/docs/product/product-requirements.md"
+  },
+  {
+    "path": "./homegroups/docs/QUICK-REFERENCE.md",
+    "product": "homegroups",
+    "inferredCategory": "product",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "homegroups/docs/QUICK-REFERENCE.md"
+  },
+  {
+    "path": "./homegroups/docs/README.md",
+    "product": "homegroups",
+    "inferredCategory": "product",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "homegroups/docs/README.md"
+  },
+  {
+    "path": "./homegroups/docs/REVENUE_OPPORTUNITIES.md",
+    "product": "homegroups",
+    "inferredCategory": "monetization",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "homegroups/docs/monetization/revenue-opportunities.md"
+  },
+  {
+    "path": "./homegroups/docs/ROADMAP.md",
+    "product": "homegroups",
+    "inferredCategory": "roadmap",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "homegroups/docs/roadmap/roadmap.md"
+  },
+  {
+    "path": "./homegroups/docs/SECURITY_AUDIT.md",
+    "product": "homegroups",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "homegroups/docs/technical/security-audit.md"
+  },
+  {
+    "path": "./homegroups/docs/SECURITY_RULES.md",
+    "product": "homegroups",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "homegroups/docs/technical/security-rules.md"
+  },
+  {
+    "path": "./homegroups/docs/SECURITY_RULES_QUICKREF.md",
+    "product": "homegroups",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "homegroups/docs/technical/security-rules-quickref.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/README.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./homegroups/docs/archive/README.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/analysis-2026-02/DOCS-CLEANUP-2026-02-26.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/archive/analysis-2026-02/DOCS-CLEANUP-2026-02-26.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/analysis-2026-02/MEETING_ATTENDANCE_PLAN.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./homegroups/docs/archive/analysis-2026-02/MEETING_ATTENDANCE_PLAN.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/analysis-2026-02/PRICING_MODEL.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./homegroups/docs/archive/analysis-2026-02/PRICING_MODEL.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/analysis-2026-02/STRATEGIC_ASSESSMENT_2026_02.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./homegroups/docs/archive/analysis-2026-02/STRATEGIC_ASSESSMENT_2026_02.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/analysis-2026-02/analysis-code-review-2026-02-23.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/archive/analysis-2026-02/analysis-code-review-2026-02-23.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/analysis-2026-02/analysis-knowledge-synthesis-2026-02-23.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/archive/analysis-2026-02/analysis-knowledge-synthesis-2026-02-23.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/analysis-2026-02/analysis-mobile-review-2026-02-26.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/archive/analysis-2026-02/analysis-mobile-review-2026-02-26.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/analysis-2026-02/analysis-monetization-2026-02-23.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/archive/analysis-2026-02/analysis-monetization-2026-02-23.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/analysis-2026-02/analysis-product-manager-2026-02-23.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/archive/analysis-2026-02/analysis-product-manager-2026-02-23.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/analysis-2026-02/analysis-product-strategy-2026-02-23-launch.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/archive/analysis-2026-02/analysis-product-strategy-2026-02-23-launch.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/analysis-2026-02/analysis-product-strategy-2026-02-23.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/archive/analysis-2026-02/analysis-product-strategy-2026-02-23.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/analysis/CHAT_FEATURES_ANALYSIS.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./homegroups/docs/archive/analysis/CHAT_FEATURES_ANALYSIS.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/analysis/DIRECT_MESSAGING_REVIEW.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./homegroups/docs/archive/analysis/DIRECT_MESSAGING_REVIEW.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/analysis/PRERELEASE_ANALYSIS.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./homegroups/docs/archive/analysis/PRERELEASE_ANALYSIS.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/analysis/PRICING_MIGRATION_SUMMARY.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./homegroups/docs/archive/analysis/PRICING_MIGRATION_SUMMARY.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/legacy/llm-context.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./homegroups/docs/archive/legacy/llm-context.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/legacy/prerelease.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./homegroups/docs/archive/legacy/prerelease.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/legacy/todo.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./homegroups/docs/archive/legacy/todo.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/plans-2026-02/2026-02-04-mvp-p0-onboarding-value-prop.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/archive/plans-2026-02/2026-02-04-mvp-p0-onboarding-value-prop.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/plans-2026-02/2026-02-04-mvp-p0-security-audit.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/archive/plans-2026-02/2026-02-04-mvp-p0-security-audit.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/plans-2026-02/2026-02-04-mvp-p0-transaction-editing.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/archive/plans-2026-02/2026-02-04-mvp-p0-transaction-editing.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/plans-2026-02/2026-02-04-mvp-p1-fixes.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/archive/plans-2026-02/2026-02-04-mvp-p1-fixes.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/plans-2026-02/2026-02-04-v1-admin-dashboard.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/archive/plans-2026-02/2026-02-04-v1-admin-dashboard.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/plans-2026-02/2026-02-04-v1-announcement-read-tracking.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/archive/plans-2026-02/2026-02-04-v1-announcement-read-tracking.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/plans-2026-02/2026-02-04-v1-service-position-reminders.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/archive/plans-2026-02/2026-02-04-v1-service-position-reminders.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/plans-2026-02/2026-02-04-v1-trial-optimization.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/archive/plans-2026-02/2026-02-04-v1-trial-optimization.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/plans-2026-02/2026-02-22-v1-admin-removal-voting.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/archive/plans-2026-02/2026-02-22-v1-admin-removal-voting.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/plans-2026-02/2026-02-22-v1-scheduled-announcements.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/archive/plans-2026-02/2026-02-22-v1-scheduled-announcements.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/plans-2026-02/2026-02-22-v2-implementation.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/archive/plans-2026-02/2026-02-22-v2-implementation.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/plans-2026-02/2026-02-22-v3-implementation.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/archive/plans-2026-02/2026-02-22-v3-implementation.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/plans-2026-02/2026-02-22-v4-advanced-governance.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/archive/plans-2026-02/2026-02-22-v4-advanced-governance.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/plans-2026-02/2026-02-22-v4-analytics-insights.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/archive/plans-2026-02/2026-02-22-v4-analytics-insights.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/plans-2026-02/2026-02-22-v4-content-resources.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/archive/plans-2026-02/2026-02-22-v4-content-resources.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/plans-2026-02/2026-02-22-v4-enterprise.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/archive/plans-2026-02/2026-02-22-v4-enterprise.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/priorities/groups.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./homegroups/docs/archive/priorities/groups.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/priorities/priorities.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./homegroups/docs/archive/priorities/priorities.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/priorities/priorities2.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./homegroups/docs/archive/priorities/priorities2.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/reviews-2026-02/review-functions.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./homegroups/docs/archive/reviews-2026-02/review-functions.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/reviews-2026-02/review-mobile.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./homegroups/docs/archive/reviews-2026-02/review-mobile.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/reviews-2026-02/review-payments-security.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./homegroups/docs/archive/reviews-2026-02/review-payments-security.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/specifications/FEATURE_GAPS_ANALYSIS.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./homegroups/docs/archive/specifications/FEATURE_GAPS_ANALYSIS.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/specifications/mvp-reqs.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./homegroups/docs/archive/specifications/mvp-reqs.md"
+  },
+  {
+    "path": "./homegroups/docs/archive/specifications/spec.md",
+    "product": "homegroups",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./homegroups/docs/archive/specifications/spec.md"
+  },
+  {
+    "path": "./homegroups/docs/deep-linking.md",
+    "product": "homegroups",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "homegroups/docs/technical/deep-linking.md"
+  },
+  {
+    "path": "./homegroups/docs/financial-projections-2026-04-15.md",
+    "product": "homegroups",
+    "inferredCategory": "monetization",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "homegroups/docs/monetization/financial-projections-2026-04-15.md"
+  },
+  {
+    "path": "./homegroups/docs/plans/2026-02-04-mvp-p0-group-chat-unread.md",
+    "product": "homegroups",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/plans/2026-02-04-mvp-p0-group-chat-unread.md"
+  },
+  {
+    "path": "./homegroups/docs/plans/2026-02-04-v2-summary.md",
+    "product": "homegroups",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/plans/2026-02-04-v2-summary.md"
+  },
+  {
+    "path": "./homegroups/docs/plans/2026-02-04-v3-summary.md",
+    "product": "homegroups",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/plans/2026-02-04-v3-summary.md"
+  },
+  {
+    "path": "./homegroups/docs/plans/2026-02-13-documentation-cleanup-design.md",
+    "product": "homegroups",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/plans/2026-02-13-documentation-cleanup-design.md"
+  },
+  {
+    "path": "./homegroups/docs/plans/2026-02-13-documentation-cleanup-implementation.md",
+    "product": "homegroups",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/plans/2026-02-13-documentation-cleanup-implementation.md"
+  },
+  {
+    "path": "./homegroups/docs/plans/2026-02-13-e2e-tests-design.md",
+    "product": "homegroups",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/plans/2026-02-13-e2e-tests-design.md"
+  },
+  {
+    "path": "./homegroups/docs/plans/2026-02-13-e2e-tests.md",
+    "product": "homegroups",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/plans/2026-02-13-e2e-tests.md"
+  },
+  {
+    "path": "./homegroups/docs/plans/2026-02-23-node22-firebase-upgrade.md",
+    "product": "homegroups",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/plans/2026-02-23-node22-firebase-upgrade.md"
+  },
+  {
+    "path": "./homegroups/docs/plans/2026-02-23-v4-code-review.md",
+    "product": "homegroups",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/plans/2026-02-23-v4-code-review.md"
+  },
+  {
+    "path": "./homegroups/docs/plans/2026-02-26-reduce-feature-bloat.md",
+    "product": "homegroups",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/plans/2026-02-26-reduce-feature-bloat.md"
+  },
+  {
+    "path": "./homegroups/docs/plans/2026-02-27-hide-v4-features-e2e-tests.md",
+    "product": "homegroups",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./homegroups/docs/plans/2026-02-27-hide-v4-features-e2e-tests.md"
+  },
+  {
+    "path": "./homegroups/docs/plans/2026-04-13-recovery-ecosystem-12-month-plan.md",
+    "product": "ecosystem",
+    "inferredCategory": "plans",
+    "scope": "ecosystem",
+    "stalenessSignals": [],
+    "targetPath": "./homegroups/docs/plans/2026-04-13-recovery-ecosystem-12-month-plan.md"
+  },
+  {
+    "path": "./homegroups/docs/plans/README.md",
+    "product": "homegroups",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./homegroups/docs/plans/README.md"
+  },
+  {
+    "path": "./homegroups/docs/push-notifications-treasury-features.md",
+    "product": "homegroups",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "homegroups/docs/technical/push-notifications-treasury-features.md"
+  },
+  {
+    "path": "./regroup/functions/docs/plans/2026-02-23-meetings-refactor-design.md",
+    "product": "regroup",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./regroup/functions/docs/plans/2026-02-23-meetings-refactor-design.md"
+  },
+  {
+    "path": "./regroup/functions/docs/plans/2026-02-23-meetings-refactor-plan.md",
+    "product": "regroup",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./regroup/functions/docs/plans/2026-02-23-meetings-refactor-plan.md"
+  },
+  {
+    "path": "./regroup/functions/docs/plans/2026-02-23-unit-test-suites-design.md",
+    "product": "regroup",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./regroup/functions/docs/plans/2026-02-23-unit-test-suites-design.md"
+  },
+  {
+    "path": "./regroup/functions/docs/plans/2026-02-23-unit-test-suites.md",
+    "product": "regroup",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./regroup/functions/docs/plans/2026-02-23-unit-test-suites.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/ACTIVITY_SYSTEM_TEST_PLAN.md",
+    "product": "regroup",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/technical/activity-system-test-plan.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/ARCHITECTURE.md",
+    "product": "regroup",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/technical/architecture.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/CORE_REQUIREMENTS.md",
+    "product": "regroup",
+    "inferredCategory": "product",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/product/core-requirements.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/DOCUMENTATION_REVIEW_PHASE3.md",
+    "product": "regroup",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/DOCUMENTATION_REVIEW_PHASE3.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/ECOSYSTEM_ROADMAP_2026.md",
+    "product": "ecosystem",
+    "inferredCategory": "roadmap",
+    "scope": "ecosystem",
+    "stalenessSignals": [],
+    "targetPath": "docs/strategy/roadmap.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/FEATURE_PRIORITY_ROADMAP.md",
+    "product": "regroup",
+    "inferredCategory": "roadmap",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/roadmap/feature-priority-roadmap.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/FIRESTORE_DATA_MODEL.md",
+    "product": "regroup",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/technical/mobile/firestore-data-model.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/FULL_PLATFORM_REQUIREMENTS-summary.md",
+    "product": "regroup",
+    "inferredCategory": "product",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/product/full-platform-requirements-summary.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/FULL_PLATFORM_REQUIREMENTS.md",
+    "product": "regroup",
+    "inferredCategory": "product",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/product/full-platform-requirements.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/GAP_ANALYSIS_PRODUCTION_READINESS.md",
+    "product": "regroup",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/technical/gap-analysis-production-readiness.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/PERFORMANCE_SCALABILITY_ANALYSIS.md",
+    "product": "regroup",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/technical/performance-scalability-analysis.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/PRICING_STRATEGY_OPTIONS-summary.md",
+    "product": "regroup",
+    "inferredCategory": "monetization",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/monetization/model.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/PRICING_STRATEGY_OPTIONS.md",
+    "product": "regroup",
+    "inferredCategory": "monetization",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/monetization/pricing-strategy-options.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/PRIVACY_POLICY.md",
+    "product": "regroup",
+    "inferredCategory": "operations",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/operations/privacy-policy.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/PRODUCT_STRATEGY_ASSESSMENT.md",
+    "product": "regroup",
+    "inferredCategory": "product",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/product/product-strategy-assessment.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/README.md",
+    "product": "regroup",
+    "inferredCategory": "product",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/mobile/docs/README.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/STRATEGIC_PLATFORM_ASSESSMENT_2026.md",
+    "product": "regroup",
+    "inferredCategory": "product",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/product/decisions.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/TERMS_OF_SERVICE.md",
+    "product": "regroup",
+    "inferredCategory": "operations",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/operations/terms-of-service.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/2026-02-18-clean-port-architecture-design.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./regroup/mobile/docs/archive/2026-02-18-clean-port-architecture-design.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/2026-02-18-v2-clean-port-implementation.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./regroup/mobile/docs/archive/2026-02-18-v2-clean-port-implementation.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/2026-02-19-full-migration-design.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./regroup/mobile/docs/archive/2026-02-19-full-migration-design.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/2026-02-19-full-migration-plan.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./regroup/mobile/docs/archive/2026-02-19-full-migration-plan.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/2026-02-21-comprehensive-test-suite.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./regroup/mobile/docs/archive/2026-02-21-comprehensive-test-suite.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/2026-02-21-test-suite-design.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./regroup/mobile/docs/archive/2026-02-21-test-suite-design.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/2026-02-22-navigation-migration-completion-design.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./regroup/mobile/docs/archive/2026-02-22-navigation-migration-completion-design.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/2026-02-22-navigation-migration-completion.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./regroup/mobile/docs/archive/2026-02-22-navigation-migration-completion.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/2026-02-22-remaining-work-execution.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./regroup/mobile/docs/archive/2026-02-22-remaining-work-execution.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/ACTIVITY_SYSTEM_MIGRATION.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/ACTIVITY_SYSTEM_MIGRATION.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/CLOUD_FUNCTIONS_REVIEW.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/CLOUD_FUNCTIONS_REVIEW.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/CODEBASE_ANALYSIS_REWRITE_VS_REFACTOR.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/CODEBASE_ANALYSIS_REWRITE_VS_REFACTOR.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/CODE_REVIEW_FINDINGS.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/CODE_REVIEW_FINDINGS.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/CODE_REVIEW_PROGRESS_UPDATE.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/CODE_REVIEW_PROGRESS_UPDATE.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/CODE_REVIEW_SESSION_SUMMARY.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/CODE_REVIEW_SESSION_SUMMARY.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/COMPREHENSIVE_CODEBASE_REVIEW.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/COMPREHENSIVE_CODEBASE_REVIEW.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/CURRENT_APP_STATE.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/CURRENT_APP_STATE.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/DEAD_CODE_CLEANUP_SUMMARY.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/DEAD_CODE_CLEANUP_SUMMARY.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/DOCUMENTATION_ARCHITECTURE_REVIEW.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/DOCUMENTATION_ARCHITECTURE_REVIEW.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/DOCUMENTATION_CONSOLIDATION_SUMMARY.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/DOCUMENTATION_CONSOLIDATION_SUMMARY.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/E2E_PHASE_5_STATUS.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/E2E_PHASE_5_STATUS.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/EXECUTION_PLAN.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/EXECUTION_PLAN.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/FIRESTORE_INDEXES.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/FIRESTORE_INDEXES.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/FIRESTORE_INDEX_ANALYSIS.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/FIRESTORE_INDEX_ANALYSIS.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/GOAL_ACHIEVED.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/GOAL_ACHIEVED.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/IMPLEMENTATION_PLAN.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/IMPLEMENTATION_PLAN.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/MIGRATION_DOCUMENTATION.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/MIGRATION_DOCUMENTATION.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/MIGRATION_EXECUTIVE_SUMMARY.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/MIGRATION_EXECUTIVE_SUMMARY.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/MIGRATION_MESSAGE_SERVICE.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/MIGRATION_MESSAGE_SERVICE.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/MIGRATION_PHASE_1.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/MIGRATION_PHASE_1.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/MIGRATION_PLAN_DETAILED.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/MIGRATION_PLAN_DETAILED.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/MIGRATION_PROGRESS.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/MIGRATION_PROGRESS.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/MIGRATION_QUICKSTART_SUPPORTER.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/MIGRATION_QUICKSTART_SUPPORTER.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/MIGRATION_STATUS.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/MIGRATION_STATUS.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/MIGRATION_STATUS_FINAL.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/MIGRATION_STATUS_FINAL.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/NEW_ARCHITECTURE_STRATEGY.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/NEW_ARCHITECTURE_STRATEGY.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/ONBOARDING_UX_OPTIMIZATION.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/ONBOARDING_UX_OPTIMIZATION.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/OVERNIGHT_WORK_SUMMARY.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/OVERNIGHT_WORK_SUMMARY.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/PHASE_0_COMPLETE.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/PHASE_0_COMPLETE.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/PHASE_1.1_COMPLETE.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/PHASE_1.1_COMPLETE.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/PHASE_1.2_COMPLETE.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/PHASE_1.2_COMPLETE.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/PRODUCTION_READINESS_REPORT.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/PRODUCTION_READINESS_REPORT.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/README.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/README.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/REDUX_MIGRATION_COMPLETE.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/REDUX_MIGRATION_COMPLETE.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/REDUX_MIGRATION_GUIDE.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/REDUX_MIGRATION_GUIDE.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/REDUX_REFACTORING_TODO.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/REDUX_REFACTORING_TODO.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/REFACTORING_PROGRESS.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/REFACTORING_PROGRESS.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/REMAINING_WORK_PLAN.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/REMAINING_WORK_PLAN.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/ROOT_CODE_REVIEW_FINDINGS.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/ROOT_CODE_REVIEW_FINDINGS.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/SCREEN_MIGRATION_PROGRESS.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/SCREEN_MIGRATION_PROGRESS.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/SESSION_FINAL_SUMMARY.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/SESSION_FINAL_SUMMARY.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/SINGLE_VS_DUAL_APP_ANALYSIS.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/SINGLE_VS_DUAL_APP_ANALYSIS.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/TESTING_COMPLETE_GUIDE.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/TESTING_COMPLETE_GUIDE.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/TEST_COMPLETION_SUMMARY.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/TEST_COMPLETION_SUMMARY.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/TEST_ID_COVERAGE.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/TEST_ID_COVERAGE.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/TEST_PROGRESS_REPORT.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/TEST_PROGRESS_REPORT.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/UI_ARCHITECTURE_ANALYSIS.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/UI_ARCHITECTURE_ANALYSIS.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/cursor_review_rats_sober_living_app_cod.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/cursor_review_rats_sober_living_app_cod.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/functions-session.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/functions-session.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/archive/phase-5-e2e-tests-implementation.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/archive/phase-5-e2e-tests-implementation.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/e2e/E2E_CRITICAL_PATHS_STATUS.md",
+    "product": "regroup",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/technical/mobile/e2e/E2E_CRITICAL_PATHS_STATUS.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/e2e/E2E_FINAL_STATUS.md",
+    "product": "regroup",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/technical/mobile/e2e/E2E_FINAL_STATUS.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/e2e/E2E_FIRST_RUN_ISSUES.md",
+    "product": "regroup",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/technical/mobile/e2e/E2E_FIRST_RUN_ISSUES.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/e2e/E2E_IMPLEMENTATION_SUMMARY.md",
+    "product": "regroup",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/technical/mobile/e2e/E2E_IMPLEMENTATION_SUMMARY.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/e2e/E2E_REVIEW_FINDINGS.md",
+    "product": "regroup",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/technical/mobile/e2e/E2E_REVIEW_FINDINGS.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/e2e/E2E_SESSION_SUMMARY.md",
+    "product": "regroup",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/technical/mobile/e2e/E2E_SESSION_SUMMARY.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/e2e/E2E_SOLUTION_COMPLETE.md",
+    "product": "regroup",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/technical/mobile/e2e/E2E_SOLUTION_COMPLETE.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/e2e/E2E_TESTING_BLOCKERS.md",
+    "product": "regroup",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/technical/mobile/e2e/E2E_TESTING_BLOCKERS.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/e2e/E2E_TESTING_GUIDE.md",
+    "product": "regroup",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/technical/mobile/e2e/E2E_TESTING_GUIDE.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/e2e/E2E_TESTING_STATUS.md",
+    "product": "regroup",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/technical/mobile/e2e/E2E_TESTING_STATUS.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/e2e/E2E_TEST_ANALYSIS.md",
+    "product": "regroup",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/technical/mobile/e2e/E2E_TEST_ANALYSIS.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/e2e/E2E_TEST_COVERAGE_REPORT.md",
+    "product": "regroup",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/technical/mobile/e2e/E2E_TEST_COVERAGE_REPORT.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/e2e/E2E_TEST_PLANS.md",
+    "product": "regroup",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/technical/mobile/e2e/E2E_TEST_PLANS.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/e2e/E2E_UNCOVERED_FEATURES.md",
+    "product": "regroup",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/technical/mobile/e2e/E2E_UNCOVERED_FEATURES.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/e2e/E2E_XCODE_ISSUE.md",
+    "product": "regroup",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/technical/mobile/e2e/E2E_XCODE_ISSUE.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/manual-tasks/2026-05-21-app-store-launch-checklist.md",
+    "product": "regroup",
+    "inferredCategory": "operations",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/operations/manual-tasks/2026-05-21-app-store-launch-checklist.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/patterns/2026-05-27-wizard-ux-conventions.md",
+    "product": "regroup",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/technical/mobile/patterns/2026-05-27-wizard-ux-conventions.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/plans/2026-02-23-gtm-action-plan.md",
+    "product": "regroup",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./regroup/mobile/docs/plans/2026-02-23-gtm-action-plan.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/plans/2026-02-23-sprint-1-stability.md",
+    "product": "regroup",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./regroup/mobile/docs/plans/2026-02-23-sprint-1-stability.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/plans/2026-02-23-sprint-2-code-quality.md",
+    "product": "regroup",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./regroup/mobile/docs/plans/2026-02-23-sprint-2-code-quality.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/plans/2026-02-23-sprint-3-revenue.md",
+    "product": "regroup",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./regroup/mobile/docs/plans/2026-02-23-sprint-3-revenue.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/plans/2026-02-23-sprint-4-architecture.md",
+    "product": "regroup",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./regroup/mobile/docs/plans/2026-02-23-sprint-4-architecture.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/plans/2026-02-23-sprint-5-oxford-acquisition-design.md",
+    "product": "regroup",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./regroup/mobile/docs/plans/2026-02-23-sprint-5-oxford-acquisition-design.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/plans/2026-02-23-sprint-5-oxford-acquisition.md",
+    "product": "regroup",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./regroup/mobile/docs/plans/2026-02-23-sprint-5-oxford-acquisition.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/plans/2026-02-27-mcp-servers-design.md",
+    "product": "regroup",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./regroup/mobile/docs/plans/2026-02-27-mcp-servers-design.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/plans/2026-02-27-mcp-servers.md",
+    "product": "regroup",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./regroup/mobile/docs/plans/2026-02-27-mcp-servers.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/plans/2026-02-27-production-readiness-design.md",
+    "product": "regroup",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./regroup/mobile/docs/plans/2026-02-27-production-readiness-design.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/plans/2026-02-27-week0-foundation-plan.md",
+    "product": "regroup",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./regroup/mobile/docs/plans/2026-02-27-week0-foundation-plan.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/plans/2026-02-28-week1-parallel-tracks-plan.md",
+    "product": "regroup",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": ["dated-plan-90d+"],
+    "targetPath": "./regroup/mobile/docs/plans/2026-02-28-week1-parallel-tracks-plan.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/plans/ACTIVE_PLAN.md",
+    "product": "regroup",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/plans/ACTIVE_PLAN.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/prompt-answers/docs-to-roadmap-05-24-2026-v2.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/prompt-answers/docs-to-roadmap-05-24-2026-v2.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/prompt-answers/docs-to-roadmap-05-24-2026.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/prompt-answers/docs-to-roadmap-05-24-2026.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/prompt-answers/docs-to-roadmap-05-25-2026-rats.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/prompt-answers/docs-to-roadmap-05-25-2026-rats.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/recovery-ecosystem-market-brief.md",
+    "product": "ecosystem",
+    "inferredCategory": "product",
+    "scope": "ecosystem",
+    "stalenessSignals": [],
+    "targetPath": "docs/strategy/market-opportunity.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/type-fixes/BATCH_12_SUMMARY.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/type-fixes/BATCH_12_SUMMARY.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/type-fixes/BATCH_13_PLAN.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/type-fixes/BATCH_13_PLAN.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/type-fixes/BATCH_13_SUMMARY.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/type-fixes/BATCH_13_SUMMARY.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/type-fixes/BATCH_14_SUMMARY.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/type-fixes/BATCH_14_SUMMARY.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/type-fixes/BATCH_15C_SUMMARY.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/type-fixes/BATCH_15C_SUMMARY.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/type-fixes/BATCH_15_SUMMARY.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/type-fixes/BATCH_15_SUMMARY.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/type-fixes/BATCH_18_SUMMARY.md",
+    "product": "regroup",
+    "inferredCategory": "archive",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./regroup/mobile/docs/type-fixes/BATCH_18_SUMMARY.md"
+  },
+  {
+    "path": "./regroup/mobile/docs/ux-improvements/2026-05-25-oxford-ux-consistency.md",
+    "product": "regroup",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/technical/mobile/ux-improvements/2026-05-25-oxford-ux-consistency.md"
+  },
+  {
+    "path": "./regroup/web/docs/claude-automations.md",
+    "product": "regroup",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/technical/web/claude-automations.md"
+  },
+  {
+    "path": "./regroup/web/docs/iterative-review-2026-05-26.md",
+    "product": "regroup",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "regroup/docs/technical/web/iterative-review-2026-05-26.md"
+  },
+  {
+    "path": "./recovery-api/docs/superpowers/plans/2026-05-31-firebase-migration.md",
+    "product": "recovery-api",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./recovery-api/docs/superpowers/plans/2026-05-31-firebase-migration.md"
+  },
+  {
+    "path": "./recovery-api/docs/superpowers/plans/2026-05-31-regroup-functions-integration.md",
+    "product": "recovery-api",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./recovery-api/docs/superpowers/plans/2026-05-31-regroup-functions-integration.md"
+  },
+  {
+    "path": "./recovery-api/docs/superpowers/plans/2026-05-31-regroup-mobile-services.md",
+    "product": "recovery-api",
+    "inferredCategory": "plans",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./recovery-api/docs/superpowers/plans/2026-05-31-regroup-mobile-services.md"
+  },
+  {
+    "path": "./recovery-api/docs/superpowers/specs/2026-05-31-recovery-platform-cloud-functions-design.md",
+    "product": "recovery-api",
+    "inferredCategory": "technical",
+    "scope": "product-specific",
+    "stalenessSignals": [],
+    "targetPath": "./recovery-api/docs/superpowers/specs/2026-05-31-recovery-platform-cloud-functions-design.md"
+  }
+]
