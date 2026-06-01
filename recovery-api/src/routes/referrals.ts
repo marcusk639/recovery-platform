@@ -11,8 +11,15 @@ const TARGET_APPS = [
   "homegroups",
 ] as const;
 
+const SOURCE_APPS = [
+  "detox-recovery",
+  "homegroups",
+  "phoenix-cleanhouse",
+] as const;
+
 const CreateReferralSchema = z.object({
   toApp: z.enum(TARGET_APPS),
+  fromApp: z.enum(SOURCE_APPS),
   clientName: z.string().min(1).max(100),
   clientEmail: z.string().email(),
   condition: z.string().max(200).optional(),
@@ -24,11 +31,10 @@ referrals.post("/", zValidator("json", CreateReferralSchema), async (c) => {
   const body = c.req.valid("json");
 
   const ref = await db.collection("referrals").add({
-    fromApp: "detox-recovery",
     referredBy: uid,
     status: "pending",
     createdAt: new Date(),
-    ...body,
+    ...body, // includes validated fromApp and toApp from request body
   });
 
   return c.json({ id: ref.id, status: "pending" }, 201);

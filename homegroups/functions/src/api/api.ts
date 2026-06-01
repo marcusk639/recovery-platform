@@ -6,8 +6,13 @@ import { GeocodeResponse, Location } from "../entities/GeocodeResponse";
  * NEW MEETING GUIDE API: https://api.meetingguide.org/app/v2/request?latitude=30.267153&longitude=-97.743057
  * OLD URL: https://meetingguide.org/v2/near?latitude=30.267153&longitude=-97.743057
  */
-// Google maps api info
-const API_KEY = "AIzaSyCKXu_eJrW6QBamTNPyCOQy_lVO2xhwl9Q";
+// Google maps api info — provisioned via Firebase Secret Manager (GOOGLE_MAPS_API_KEY)
+// ⚠️ MANUAL STEP REQUIRED: rotate the old key (ending ...l9Q) in Google Cloud Console
+//   then store the new key: firebase functions:secrets:set GOOGLE_MAPS_API_KEY
+const API_KEY = process.env.GOOGLE_MAPS_API_KEY;
+if (!API_KEY) {
+  throw new Error("GOOGLE_MAPS_API_KEY environment variable is not set");
+}
 const timezoneUrl = (lat: number, lng: number, _time: number) =>
   `https://maps.googleapis.com/maps/api/timezone/json?location=${lat},${lng}&timestamp=${_time}&key=${API_KEY}`;
 const REVERSE_GEOCODE = (lat: number, lng: number) =>
@@ -42,7 +47,7 @@ export const getAAMeetings = async (lat: number, lng: number) => {
 
 export const reverseGeocode = async (
   lat: number,
-  lng: number
+  lng: number,
 ): Promise<GeocodeResponse> => {
   const location = await Axios.get<GeocodeResponse>(REVERSE_GEOCODE(lat, lng));
   return location.data;
@@ -50,7 +55,7 @@ export const reverseGeocode = async (
 
 export const geocode = async (street: string, city: string, state: string) => {
   const location = await Axios.get<GeocodeResponse>(
-    GEOCODE(street, city, state)
+    GEOCODE(street, city, state),
   );
   return location.data;
 };
@@ -67,7 +72,7 @@ export const partialGeocode = async (query: string) => {
 export const getNAMeetings = async (
   location: Location,
   distance: number,
-  day?: string
+  day?: string,
 ): Promise<Meeting[]> => {
   return getNaMeetings(location.lat, location.lng, distance, day);
 };
@@ -85,7 +90,7 @@ export const getTimezone = async (lat: number, lng: number, _time?: number) => {
 
 export const getCelebrateRecoveryMeetings = async (
   lat: number,
-  lng: number
+  lng: number,
 ) => {
   // sourced from https://locator.crgroups.info/
   const url = `https://locator.crgroups.info/index.php?option=com_storelocator&view=map&format=raw&searchall=0&Itemid=110&lat=${lat}&lng=${lng}&radius=25&catid=2&tagid=-1&featstate=0&name_search=`;
