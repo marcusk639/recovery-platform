@@ -9,7 +9,7 @@ interface OverdueGuestFields {
   houseId: string;
   firstName: string;
   lastName: string;
-  balance: number;
+  rentOwed: number;
 }
 
 /**
@@ -23,9 +23,9 @@ export async function runOverdueRentCheck(): Promise<void> {
   const cutoffISO = cutoff.toISOString().split("T")[0]; // YYYY-MM-DD
 
   // Firestore disallows range inequality filters on two different fields in
-  // a single query, so filter by balance server-side and apply the date
+  // a single query, so filter by rentOwed server-side and apply the date
   // threshold client-side.
-  const overdueSnapshot = await guestCollection.where("balance", ">", 0).get();
+  const overdueSnapshot = await guestCollection.where("rentOwed", ">", 0).get();
 
   const overdueDocs = overdueSnapshot.docs.filter((doc) => {
     const data = doc.data() as { rentDueDate?: string };
@@ -40,13 +40,13 @@ export async function runOverdueRentCheck(): Promise<void> {
   }
 
   // Group overdue guests by houseId
-  const byHouse: Record<string, { name: string; balance: number }[]> = {};
+  const byHouse: Record<string, { name: string; rentOwed: number }[]> = {};
   overdueDocs.forEach((doc) => {
     const data = doc.data() as OverdueGuestFields;
     if (!byHouse[data.houseId]) byHouse[data.houseId] = [];
     byHouse[data.houseId].push({
       name: `${data.firstName} ${data.lastName}`,
-      balance: data.balance,
+      rentOwed: data.rentOwed,
     });
   });
 
@@ -55,9 +55,7 @@ export async function runOverdueRentCheck(): Promise<void> {
     const count = guests.length;
     const body =
       count === 1
-        ? `${guests[0].name} has rent overdue ($${guests[0].balance.toFixed(
-            2
-          )})`
+        ? `${guests[0].name} has rent overdue ($${(guests[0].rentOwed / 100).toFixed(2)})`
         : `${count} residents have overdue rent`;
     return sendFcmToHouseAdmins(houseId, "Rent Overdue", body);
   });
@@ -74,5 +72,5 @@ export const overdueRentNotification = onSchedule(
   async (_event) => {
     logger.info("overdueRentNotification: starting daily check");
     await runOverdueRentCheck();
-  }
+  },
 );

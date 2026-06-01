@@ -24,7 +24,7 @@ interface AutoPayGuest {
   houseId: string;
   stripeCustomerId: string;
   defaultPaymentMethodId: string;
-  balance: number;
+  rentOwed: number;
   stripeConnectId?: string;
 }
 
@@ -38,11 +38,11 @@ export async function runRentCollection(): Promise<void> {
 
   const snapshot = await guestCollection
     .where("autoPayEnabled", "==", true)
-    .where("balance", ">", 0)
+    .where("rentOwed", ">", 0)
     .get();
 
   if (snapshot.empty) {
-    logger.info("scheduledRentCollection: no auto-pay guests with balance");
+    logger.info("scheduledRentCollection: no auto-pay guests with rent owed");
     return;
   }
 
@@ -62,7 +62,7 @@ export async function runRentCollection(): Promise<void> {
         return;
       }
 
-      const amountCents = Math.round(guest.balance * 100);
+      const amountCents = guest.rentOwed; // already integer cents
       const idempotencyKey = `auto-rent-${guest.id}-${today}`;
 
       const intent = await stripe.paymentIntents.create(

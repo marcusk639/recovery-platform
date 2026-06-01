@@ -36,7 +36,7 @@ interface GuestDoc {
   userId: string;
   firstName: string;
   lastName: string;
-  balance?: number;
+  rentOwed?: number;
   email?: string;
 }
 
@@ -311,6 +311,8 @@ async function handlePaymentIntentSucceeded(
 
   const db = admin.firestore();
   const amountDollars = paymentIntent.amount / 100;
+  // paymentIntent.amount is already in cents (Stripe always uses cents)
+  const amountCents = paymentIntent.amount;
 
   // 1. Write / update payment document
   await upsertPaymentDoc(paymentIntent.id, {
@@ -324,7 +326,7 @@ async function handlePaymentIntentSucceeded(
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
-  // 2. Decrement guest balance
+  // 2. Atomically decrement guest rentOwed (integer cents) — eliminates read-modify-write race
   const guestRef = db.collection("guests").doc(guestId);
   const guestSnap = await guestRef.get();
 
@@ -332,9 +334,10 @@ async function handlePaymentIntentSucceeded(
     logger.warn("payment_intent.succeeded: guest not found", { guestId });
   } else {
     const guestData = guestSnap.data() as GuestDoc;
-    const currentBalance = guestData.balance ?? 0;
-    const newBalance = Math.max(0, currentBalance - amountDollars);
-    await guestRef.update({ balance: newBalance });
+
+    await guestRef.update({
+      rentOwed: admin.firestore.FieldValue.increment(-amountCents),
+    });
 
     // 3. Notify the guest
     await sendFcmToUser(
