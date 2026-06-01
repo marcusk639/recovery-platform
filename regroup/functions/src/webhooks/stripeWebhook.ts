@@ -241,13 +241,12 @@ async function updateHouseSubscriptionStatus(
     return;
   }
 
-  const now = new Date().toISOString();
   const batch = db.batch();
 
   for (const doc of docMap.values()) {
     const update: Record<string, unknown> = {
       subscriptionStatus: status,
-      updatedAt: now,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
     if (guestGraceEndsAt !== undefined) {
       update.guestGraceEndsAt = guestGraceEndsAt;
@@ -305,14 +304,13 @@ async function handlePaymentIntentSucceeded(
       status: "succeeded",
       houseId: houseId ?? null,
       guestId: guestId ?? null,
-      updatedAt: new Date().toISOString(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     return;
   }
 
   const db = admin.firestore();
   const amountDollars = paymentIntent.amount / 100;
-  const now = new Date().toISOString();
 
   // 1. Write / update payment document
   await upsertPaymentDoc(paymentIntent.id, {
@@ -322,8 +320,8 @@ async function handlePaymentIntentSucceeded(
     amount: amountDollars,
     currency: paymentIntent.currency,
     status: "succeeded",
-    createdAt: now,
-    updatedAt: now,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
   // 2. Decrement guest balance
@@ -387,7 +385,6 @@ async function handlePaymentIntentFailed(
   const failureCode = lastError?.code ?? "unknown";
   const failureMessage = lastError?.message ?? "Payment failed";
   const amountDollars = paymentIntent.amount / 100;
-  const now = new Date().toISOString();
 
   logger.error("payment_intent.payment_failed", {
     paymentIntentId: paymentIntent.id,
@@ -407,7 +404,7 @@ async function handlePaymentIntentFailed(
     status: "failed",
     failureCode,
     failureMessage,
-    updatedAt: now,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
   if (!guestId || !houseId) {
@@ -508,13 +505,13 @@ async function handleDisputeCreated(
   // Mark payment document as disputed
   if (paymentIntentId) {
     const db = admin.firestore();
-    await db
-      .collection("payments")
-      .doc(paymentIntentId)
-      .set(
-        { disputed: true, updatedAt: new Date().toISOString() },
-        { merge: true },
-      );
+    await db.collection("payments").doc(paymentIntentId).set(
+      {
+        disputed: true,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
   }
 
   // Notify house admins if we know which house this belongs to
@@ -578,8 +575,8 @@ async function handleInvoicePaymentSucceeded(
   await subSnap.docs[0].ref.update({
     status: "active",
     currentPeriodEnd,
-    updatedAt: new Date().toISOString(),
-    lastUpdatedAt: new Date().toISOString(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
   logger.info("Subscription renewal succeeded", {
@@ -650,8 +647,8 @@ async function handleInvoicePaymentFailed(
 
   await subSnap.docs[0].ref.update({
     status: newStatus,
-    updatedAt: new Date().toISOString(),
-    lastUpdatedAt: new Date().toISOString(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
   const subData = subSnap.docs[0].data() as SubscriptionDoc;
@@ -720,8 +717,8 @@ async function handleSubscriptionDeleted(
   await subSnap.docs[0].ref.update({
     status: "canceled",
     canceledAt,
-    updatedAt: new Date().toISOString(),
-    lastUpdatedAt: new Date().toISOString(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
   const subData = subSnap.docs[0].data() as SubscriptionDoc;
@@ -791,8 +788,8 @@ async function handleSubscriptionUpdated(
     currentPeriodEnd,
     planId,
     guestCount: isNaN(guestCount) ? previousData.guestCount : guestCount,
-    updatedAt: new Date().toISOString(),
-    lastUpdatedAt: new Date().toISOString(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
   // Notify admin if subscription transitioned to past_due
@@ -862,7 +859,7 @@ async function handleAccountUpdated(account: Stripe.Account): Promise<void> {
     stripeChargesEnabled: chargesEnabled,
     stripePayoutsEnabled: payoutsEnabled,
     stripeRequirements: requirements,
-    updatedAt: new Date().toISOString(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
   // Notify if account went from active to restricted
@@ -928,7 +925,7 @@ async function checkAndMarkEventProcessed(
     txn.set(eventRef, {
       eventId,
       type: eventType,
-      processedAt: new Date().toISOString(),
+      processedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     return false; // not yet processed
   });
@@ -1114,7 +1111,7 @@ async function handleAccountDeauthorized(accountId: string): Promise<void> {
       stripeStatus: "disconnected" as HouseDoc["stripeStatus"],
       stripeChargesEnabled: false,
       stripePayoutsEnabled: false,
-      updatedAt: new Date().toISOString(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
   logger.info(
