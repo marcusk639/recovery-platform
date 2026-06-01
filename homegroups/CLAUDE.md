@@ -51,7 +51,7 @@ functions/src/
   callable/      # Client-invoked Cloud Functions (90 total)
   triggers/
     auth/        # Auth event triggers (onUserCreated)
-    firestore/   # Firestore document write triggers (16 active + 1 commented out: onGroupAdminUpdate)
+    firestore/   # Firestore document write triggers (17 active + 2 commented out: onGroupAdminUpdate, onGroupCreateFetchMeetings)
     pubsub/      # Pub/Sub scheduled functions (14 cron jobs)
     scheduled/   # Legacy scheduled functions (scheduledAnnouncementPublisher)
   http/          # HTTP-only functions (not callable): stripeWebhook + stripeConnectWebhook (same file), getMeetingAttendance
@@ -138,7 +138,7 @@ Each subproject documents its own architecture in its CLAUDE.md (see [Subproject
 - **firebase**: Firebase CLI tools (emulators, deploy, auth, Firestore)
 - **context7**: Live documentation lookup for project dependencies
 
-> ⚠️ **Known issues with `.mcp.json`**: (1) The file is currently malformed JSON — `context7` is nested outside the `mcpServers` object with an extra closing brace, so strict parsers reject it. (2) The `detox` and `firebase` entries hard-code an absolute path with a specific username. Both need fixing before MCP works reliably across machines.
+> ⚠️ **Known issue with `.mcp.json`**: The `detox` and `firebase` entries hard-code an absolute path (`/Users/marcusklein/dev/RecoveryConnect/`) that won't exist on other machines. Update the path to match your local checkout before using these MCP servers.
 
 ### Skills (`.claude/skills/`)
 

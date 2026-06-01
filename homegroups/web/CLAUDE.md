@@ -8,11 +8,12 @@ This directory contains the React web app for RecoveryConnect (Homegroups). Load
 npm start                             # Dev server on port 3000
 npm run build                         # Production build (output: web/build/)
 firebase deploy --only hosting        # Deploy to Firebase Hosting (run from repo root)
+# No automated test suite — verify changes manually via npm start
 ```
 
 ## Architecture
 
-- `src/pages/` — 20 React web pages
+- `src/pages/` — 20 React web pages organized by domain: auth, account, facility dashboard, marketing/landing
 - `src/components/` — shared UI components
 - `src/lib/` — `deepLinks.js` (exports `WEB_ORIGIN`)
 

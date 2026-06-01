@@ -10,7 +10,7 @@ The recovery platform serves individuals and organizations in the addiction reco
 
 | Directory         | Marketed Name                            | Stack                                                         | Firebase Project         | Target User                                 |
 | ----------------- | ---------------------------------------- | ------------------------------------------------------------- | ------------------------ | ------------------------------------------- |
-| `recovery-api/`   | (internal service)                       | Hono.js on Cloud Run                                          | n/a (service accounts)   | Cross-app API layer                         |
+| `recovery-api/`   | (internal service)                       | Firebase Functions v2 (TypeScript)                            | `recovery-platform`      | Cross-app API layer                         |
 | `homegroups/`     | RecoveryConnect                          | React Native (TypeScript) + Firebase + Redux Toolkit + Stripe | `recovery-connect-cad4b` | 12-step group admins and members            |
 | `regroup/`        | RATS (Regroup Addiction Tracking System) | React Native 0.72 + Firebase Cloud Functions + Angular web    | `phoenix-cleanhouse`     | Sober living house operators and residents  |
 | `detox-recovery/` | NextStep Recovery                        | Next.js 15                                                    | `nextstep-recovery`      | Individuals/families seeking detox guidance |
@@ -29,14 +29,15 @@ Each product has its own CLAUDE.md with product-specific context:
 
 **Current state:** All four products are independent. Each has its own Firebase project, its own Auth instance, and its own Firestore database. There is no cross-product data access.
 
-**recovery-api current endpoints:**
+**recovery-api callable functions (Phase 1 — service-key auth):**
 
-- `POST /api/referrals` — create a cross-app referral
-- `GET /api/referrals` — list referrals
-- `GET /api/users/me` — fetch authenticated user profile
-- `PUT /api/users/me` — update authenticated user profile
+- `createReferral` — create a cross-app referral
+- `getReferrals` — list referrals submitted by the calling service on behalf of a user
+- `getReferral` — fetch a single referral by ID (ownership enforced)
+- `getUserProfile` — fetch a user profile by UID
+- `updateUserProfile` — update a user profile
 
-**Auth model:** Firebase JWT for end-user requests; `X-Service-Key` header for service-to-service requests.
+**Auth model (Phase 1):** `X-Service-Key` header + `X-App-Id` + `X-User-Uid` for service-to-service requests. Phase 2 will add Firebase custom token auth (`request.auth` with `appId` claim). See `recovery-api/CLAUDE.md` for full auth details.
 
 **Intended future state:** recovery-api becomes the integration bus. Products that need to refer users to other products (e.g., homegroups referring a member to a sober living house) do so via `POST /api/referrals` rather than direct Firestore cross-queries. Cross-app user identity reconciliation will route through recovery-api.
 
