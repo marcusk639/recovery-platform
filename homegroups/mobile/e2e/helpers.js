@@ -1,5 +1,4 @@
-const TEST_EMAIL = 'marcusk639@gmail.com';
-const TEST_PASSWORD = 'sublime1qaz!QAZ';
+const { TEST_EMAIL, TEST_PASSWORD } = require('./env');
 
 const helpers = {
   async login() {

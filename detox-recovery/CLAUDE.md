@@ -113,7 +113,7 @@ Mirrors source structure: `__tests__/components/`, `__tests__/api/`, `__tests__/
 
 ### Disabled integrations
 
-`app/api/contact/route.ts` has referral firing logic for `recovery-shared-api` (triggers on "Sober Living / Housing" and "12-Step / Homegroup Support" contact interests). It is intentionally disabled — env vars are commented out in `apphosting.yaml` pending partner agreement negotiation. Do not activate without explicit instruction.
+`app/api/contact/route.ts` has referral firing logic for `recovery-api` (triggers on "Sober Living / Housing" and "12-Step / Homegroup Support" contact interests). It is intentionally disabled — env vars are commented out in `apphosting.yaml` pending partner agreement negotiation. Do not activate without explicit instruction.
 
 The referral is dispatched via `Promise.allSettled([sendEmailPromise, referralPromise])` — both run in parallel, both are awaited, and referral rejection is logged but does not fail the user response. **Do not refactor this to `void fireReferral(...)`.** Firebase App Hosting (Cloud Run) throttles background CPU after the handler returns, so a fire-and-forget POST may be cut mid-handshake. There is no `waitUntil()` equivalent here. See `docs/architecture.md` "Referral Routing" for the full rationale.
 

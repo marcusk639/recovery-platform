@@ -1,7 +1,5 @@
 const helpers = require('../../helpers');
-
-const TEST_EMAIL = 'marcusk639@gmail.com';
-const TEST_PASSWORD = 'sublime1qaz!QAZ';
+const { TEST_EMAIL, TEST_PASSWORD } = require('../../env');
 
 // Navigate from app start to the login screen
 async function goToLogin() {

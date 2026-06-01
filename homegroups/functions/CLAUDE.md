@@ -20,7 +20,7 @@ npm run deploy:list               # List functions that would be deployed
 Two function categories live under `src/`:
 
 - **Callable** (`src/callable/`, 90 total): invoked directly by mobile and web clients via `firebase.functions().httpsCallable(name)`.
-- **Triggers** (`src/triggers/`): event-driven — Firestore document writes (`firestore/`, 18 triggers), auth events (`auth/onUserCreated.ts`), Pub/Sub scheduled crons (`pubsub/`, 14 jobs), and one legacy `scheduled/scheduledAnnouncementPublisher.ts`.
+- **Triggers** (`src/triggers/`): event-driven — Firestore document writes (`firestore/`, 17 active + 2 commented out: onGroupAdminUpdate, onGroupCreateFetchMeetings), auth events (`auth/onUserCreated.ts`), Pub/Sub scheduled crons (`pubsub/`, 14 jobs), and one legacy `scheduled/scheduledAnnouncementPublisher.ts`.
 
 HTTP-only functions live in `src/http/` and are NOT callables:
 

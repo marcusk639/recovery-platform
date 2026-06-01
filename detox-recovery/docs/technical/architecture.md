@@ -20,13 +20,13 @@ Browser
   │     /thank-you → app/thank-you/page.tsx (?type=call → call confirmation; default → product confirmation)
   │
   └── API routes (server-only, Node.js runtime)
-        POST /api/contact   → Resend (email) + recovery-shared-api (referral)
+        POST /api/contact   → Resend (email) + recovery-api (referral)
         POST /api/subscribe → MailerLite (subscriber groups)
 
 External services (outbound from server only):
   Resend              — contact form email delivery
   MailerLite          — newsletter + lead magnet subscriber lists
-  recovery-shared-api — partner referral relay (optional)
+  recovery-api — partner referral relay (optional)
 
 External services (browser → direct, no server involved):
   Stripe Payment Links — checkout for paid products + donations
@@ -92,7 +92,7 @@ app/contact/page.tsx
 
 ### POST /api/contact
 
-Server-only. Validates name/email/message, sanitizes all fields, sends an email via Resend, and optionally fires a referral to the recovery-shared-api when the interest matches a known partner.
+Server-only. Validates name/email/message, sanitizes all fields, sends an email via Resend, and optionally fires a referral to the recovery-api when the interest matches a known partner.
 
 Input sanitization:
 
@@ -118,7 +118,7 @@ Graceful degradation: returns `{ success: true }` without subscribing if `MAILER
 
 ## Referral Routing
 
-When a contact form submission has `interest === "Sober Living / Housing"` or `"12-Step / Homegroup Support"`, the server dispatches a referral to `recovery-shared-api`. The integration is currently env-gated and inactive in production — `SHARED_API_URL` and `INTERNAL_API_KEY` are intentionally unset (see commented block in `apphosting.yaml`). The code path is exercised only when both env vars are present.
+When a contact form submission has `interest === "Sober Living / Housing"` or `"12-Step / Homegroup Support"`, the server dispatches a referral to `recovery-api`. The integration is currently env-gated and inactive in production — `SHARED_API_URL` and `INTERNAL_API_KEY` are intentionally unset (see commented block in `apphosting.yaml`). The code path is exercised only when both env vars are present.
 
 **Dispatch pattern: `Promise.allSettled` (not `void`).**
 
