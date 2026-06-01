@@ -31,9 +31,7 @@ const AA_API = (lat: number, lng: number) =>
 import { AAMeetingResponse } from "../entities/AAMeetingResponse";
 import { getNaMeetings } from "./firestore";
 import { Meeting } from "../entities/Meeting";
-// stripe emergency backup code
-// ifto-swwb-ttpi-fjcn-yvxv
-// 'https://maps.googleapis.com/maps/api/geocode/json?address=Holy Cross Church,105 Montrose Avenue,Lafayette, LA 70503-3819,Directions: Behind Asbury Methodist Church on Johnston Street&key=AIzaSyBQ85gSGYC2W2f8OSBIbcDaOG8BkLDwamw'
+// Example: 'https://maps.googleapis.com/maps/api/geocode/json?address=...&key=<GOOGLE_MAPS_API_KEY>'
 
 export const getAreaMeetings = async (areaApi: string) => {
   const meetings = await Axios.get<MeetingLocation[]>(areaApi);
