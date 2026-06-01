@@ -10,6 +10,16 @@
             "timeout": 45000
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r '.tool_input.file_path // empty'); if echo \"$FILE\" | grep -qE '\\.(ts|js|json|md)$' && echo \"$FILE\" | grep -q '/recovery-api/'; then cd /Users/marcus/dev/recovery-platform/recovery-api && npx prettier --write \"$FILE\" 2>/dev/null && echo \"[prettier] Formatted $FILE\"; fi",
+            "timeout": 15000
+          }
+        ]
       }
     ]
   }
