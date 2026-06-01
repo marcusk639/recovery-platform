@@ -5,7 +5,8 @@
  *
  * Access at runtime via process.env.RECOVERY_PLATFORM_API_KEY
  */
-import { defineSecret, setGlobalOptions } from "firebase-functions/v2";
+import { defineSecret } from "firebase-functions/params";
+import { setGlobalOptions } from "firebase-functions/v2";
 
 export const RECOVERY_PLATFORM_API_KEY = defineSecret(
   "RECOVERY_PLATFORM_API_KEY",
