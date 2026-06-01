@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "firebase": {
+      "command": "/opt/homebrew/bin/firebase",
+      "args": [
+        "mcp",
+        "--dir",
+        "/Users/marcus/dev/recovery-platform/recovery-api"
+      ]
+    },
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"]
+    }
+  }
+}
