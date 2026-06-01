@@ -1,0 +1,27 @@
+{
+  "doc-organizer-recovery": {
+    "type": "domain",
+    "enforcement": "suggest",
+    "priority": "high",
+    "promptTriggers": {
+      "keywords": [
+        "doc-organizer-recovery",
+        "organize docs",
+        "reorganize docs",
+        "doc health check",
+        "docs audit",
+        "doc drift",
+        "stale docs",
+        "docs structure",
+        "recovery platform docs",
+        "docs index",
+        "documentation structure"
+      ],
+      "intentPatterns": [
+        "(organize|reorganize|restructure|audit|clean\\s*up).*docs",
+        "docs.*(organize|structure|health|stale|drift|audit)",
+        "(check|scan|review).*documentation"
+      ]
+    }
+  }
+}
