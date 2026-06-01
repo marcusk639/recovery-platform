@@ -1,0 +1,30 @@
+appId: com.rats.dev
+---
+# Critical flow: operator logs in and views house dashboard
+# Run: maestro test e2e-maestro/regroup/login-and-view-dashboard.yaml
+# Requires: iOS Simulator running with the RATS app installed
+
+- launchApp:
+    clearState: true
+
+- assertVisible: "Sign In"
+- tapOn: "Sign In"
+- tapOn:
+    id: "email-input"
+- inputText: "operator@example.com"
+- tapOn:
+    id: "password-input"
+- inputText: "TestPassword123!"
+- tapOn: "Log In"
+
+- assertVisible: "My Houses"
+
+- tapOn:
+    index: 0 # first house in list
+- assertVisible: "Residents"
+- assertVisible: "Activities"
+
+- tapOn: "Residents"
+- tapOn:
+    index: 0 # first resident
+- assertVisible: "Phase"

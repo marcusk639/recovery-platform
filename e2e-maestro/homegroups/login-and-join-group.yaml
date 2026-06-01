@@ -1,0 +1,31 @@
+appId: org.recoveryconnect
+---
+# Critical flow: user logs in and requests to join a homegroup
+# Run: maestro test e2e-maestro/homegroups/login-and-join-group.yaml
+# Requires: iOS Simulator running with the RecoveryConnect app installed
+
+- launchApp:
+    clearState: true
+
+- assertVisible: "Sign In"
+- tapOn: "Sign In"
+- tapOn:
+    id: "email-input"
+- inputText: "test@example.com"
+- tapOn:
+    id: "password-input"
+- inputText: "TestPassword123!"
+- tapOn: "Log In"
+
+- assertVisible: "My Groups"
+
+- tapOn: "Find a Group"
+- assertVisible: "Search"
+- inputText: "Test Homegroup"
+- tapOn:
+    index: 0
+- assertVisible: "Request to Join"
+- tapOn: "Request to Join"
+- assertVisible:
+    text: "Request Sent"
+    optional: true
