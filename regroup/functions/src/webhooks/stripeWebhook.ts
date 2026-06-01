@@ -1,5 +1,8 @@
 import * as admin from "firebase-admin";
 import Stripe from "stripe";
+import { createStripeClient } from "../util/stripe";
+
+const stripe = createStripeClient();
 import { onRequest } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import {
@@ -78,7 +81,7 @@ function getSubscriptionIdFromInvoice(invoice: Stripe.Invoice): string | null {
 async function sendFcmToUser(
   userId: string,
   title: string,
-  body: string
+  body: string,
 ): Promise<void> {
   try {
     const db = admin.firestore();
@@ -95,7 +98,7 @@ async function sendFcmToUser(
         .send({ token, notification: { title, body } })
         .catch((err: Error) => {
           logger.warn("FCM send failed for token", { token, err: err.message });
-        })
+        }),
     );
     await Promise.all(sendPromises);
   } catch (err) {
@@ -112,7 +115,7 @@ async function sendFcmToUser(
 // ---------------------------------------------------------------------------
 
 async function findHouseByStripeAccountId(
-  accountId: string
+  accountId: string,
 ): Promise<{ id: string; data: HouseDoc } | null> {
   try {
     const db = admin.firestore();
@@ -144,7 +147,7 @@ async function findHouseByStripeAccountId(
 // ---------------------------------------------------------------------------
 
 async function resolveOperatorUid(
-  subscription: Stripe.Subscription
+  subscription: Stripe.Subscription,
 ): Promise<string | null> {
   // Fast path: userId stored in Stripe metadata by createOperatorSubscription (W12)
   const uidFromMeta = subscription.metadata?.userId;
@@ -211,7 +214,7 @@ type HouseSubscriptionStatus =
 async function updateHouseSubscriptionStatus(
   operatorUid: string,
   status: HouseSubscriptionStatus,
-  guestGraceEndsAt?: string | admin.firestore.FieldValue
+  guestGraceEndsAt?: string | admin.firestore.FieldValue,
 ): Promise<void> {
   const db = admin.firestore();
 
@@ -251,7 +254,7 @@ async function updateHouseSubscriptionStatus(
     }
     batch.update(
       doc.ref,
-      update as FirebaseFirestore.UpdateData<FirebaseFirestore.DocumentData>
+      update as FirebaseFirestore.UpdateData<FirebaseFirestore.DocumentData>,
     );
   }
 
@@ -271,7 +274,7 @@ async function updateHouseSubscriptionStatus(
 
 async function upsertPaymentDoc(
   paymentIntentId: string,
-  fields: Record<string, unknown>
+  fields: Record<string, unknown>,
 ): Promise<void> {
   const db = admin.firestore();
   await db
@@ -285,7 +288,7 @@ async function upsertPaymentDoc(
 // ---------------------------------------------------------------------------
 
 async function handlePaymentIntentSucceeded(
-  paymentIntent: Stripe.PaymentIntent
+  paymentIntent: Stripe.PaymentIntent,
 ): Promise<void> {
   const { guestId, houseId } = paymentIntent.metadata ?? {};
 
@@ -339,7 +342,7 @@ async function handlePaymentIntentSucceeded(
     await sendFcmToUser(
       guestData.userId,
       "Payment Received",
-      `Your payment of $${amountDollars.toFixed(2)} was received.`
+      `Your payment of $${amountDollars.toFixed(2)} was received.`,
     );
 
     // 4. Notify house admins
@@ -347,7 +350,7 @@ async function handlePaymentIntentSucceeded(
     await sendFcmToHouseAdmins(
       houseId,
       "Rent Payment Received",
-      `Resident ${guestName} paid $${amountDollars.toFixed(2)} rent.`
+      `Resident ${guestName} paid $${amountDollars.toFixed(2)} rent.`,
     );
 
     // 5. Send email receipt to guest (non-fatal)
@@ -364,7 +367,7 @@ async function handlePaymentIntentSucceeded(
       } catch (emailError) {
         logger.warn(
           "handlePaymentIntentSucceeded: email send failed (non-fatal)",
-          { emailError }
+          { emailError },
         );
       }
     }
@@ -376,7 +379,7 @@ async function handlePaymentIntentSucceeded(
 // ---------------------------------------------------------------------------
 
 async function handlePaymentIntentFailed(
-  paymentIntent: Stripe.PaymentIntent
+  paymentIntent: Stripe.PaymentIntent,
 ): Promise<void> {
   const { guestId, houseId } = paymentIntent.metadata ?? {};
 
@@ -410,7 +413,7 @@ async function handlePaymentIntentFailed(
   if (!guestId || !houseId) {
     logger.warn(
       "payment_intent.payment_failed: missing metadata, skipping notifications",
-      { paymentIntentId: paymentIntent.id }
+      { paymentIntentId: paymentIntent.id },
     );
     return;
   }
@@ -432,23 +435,23 @@ async function handlePaymentIntentFailed(
     case "card_declined": {
       const declineReason = lastError?.decline_code ?? "unknown reason";
       userMessage = `Your payment of $${amountDollars.toFixed(
-        2
+        2,
       )} was declined (${declineReason}). Please update your payment method.`;
       break;
     }
     case "insufficient_funds":
       userMessage = `Your payment of $${amountDollars.toFixed(
-        2
+        2,
       )} failed due to insufficient funds. Consider paying via ACH bank transfer.`;
       break;
     case "authentication_required":
       userMessage = `Your payment of $${amountDollars.toFixed(
-        2
+        2,
       )} requires additional authentication. Please re-authenticate your card.`;
       break;
     default:
       userMessage = `Your payment of $${amountDollars.toFixed(
-        2
+        2,
       )} failed: ${failureMessage}`;
   }
 
@@ -460,8 +463,8 @@ async function handlePaymentIntentFailed(
     houseId,
     "Payment Failed",
     `Payment of $${amountDollars.toFixed(
-      2
-    )} from ${guestName} failed (${failureCode}).`
+      2,
+    )} from ${guestName} failed (${failureCode}).`,
   );
 }
 
@@ -471,7 +474,7 @@ async function handlePaymentIntentFailed(
 
 async function handleDisputeCreated(
   dispute: Stripe.Dispute,
-  stripeClient: Stripe
+  stripeClient: Stripe,
 ): Promise<void> {
   const chargeId =
     typeof dispute.charge === "string" ? dispute.charge : dispute.charge?.id;
@@ -510,7 +513,7 @@ async function handleDisputeCreated(
       .doc(paymentIntentId)
       .set(
         { disputed: true, updatedAt: new Date().toISOString() },
-        { merge: true }
+        { merge: true },
       );
   }
 
@@ -521,12 +524,12 @@ async function handleDisputeCreated(
       "Payment Dispute Filed",
       `A payment dispute has been filed for a charge of $${(
         dispute.amount / 100
-      ).toFixed(2)}. Please respond promptly.`
+      ).toFixed(2)}. Please respond promptly.`,
     );
   } else {
     logger.warn(
       "charge.dispute.created: could not determine houseId for notification",
-      { disputeId: dispute.id }
+      { disputeId: dispute.id },
     );
   }
 }
@@ -540,7 +543,7 @@ async function handleDisputeCreated(
 
 async function handleInvoicePaymentSucceeded(
   invoice: Stripe.Invoice,
-  stripeClient: Stripe
+  stripeClient: Stripe,
 ): Promise<void> {
   const stripeSubscriptionId = getSubscriptionIdFromInvoice(invoice);
 
@@ -586,26 +589,25 @@ async function handleInvoicePaymentSucceeded(
 
   // B10: propagate active status to all operator houses; clear grace period
   try {
-    const subscription = await stripeClient.subscriptions.retrieve(
-      stripeSubscriptionId
-    );
+    const subscription =
+      await stripeClient.subscriptions.retrieve(stripeSubscriptionId);
     const operatorUid = await resolveOperatorUid(subscription);
     if (operatorUid) {
       await updateHouseSubscriptionStatus(
         operatorUid,
         "active",
-        admin.firestore.FieldValue.delete()
+        admin.firestore.FieldValue.delete(),
       );
     } else {
       logger.warn(
         "invoice.payment_succeeded: could not resolve operator uid for house update",
-        { stripeSubscriptionId }
+        { stripeSubscriptionId },
       );
     }
   } catch (err) {
     logger.error(
       "invoice.payment_succeeded: failed to update house subscription status",
-      { stripeSubscriptionId, err: (err as Error).message }
+      { stripeSubscriptionId, err: (err as Error).message },
     );
   }
 }
@@ -615,7 +617,7 @@ async function handleInvoicePaymentSucceeded(
 // ---------------------------------------------------------------------------
 
 async function handleInvoicePaymentFailed(
-  invoice: Stripe.Invoice
+  invoice: Stripe.Invoice,
 ): Promise<void> {
   const stripeSubscriptionId = getSubscriptionIdFromInvoice(invoice);
 
@@ -666,26 +668,26 @@ async function handleInvoicePaymentFailed(
   await sendFcmToHouseAdmins(
     subData.houseId,
     "Subscription Payment Failed",
-    notifBody
+    notifBody,
   );
 
   // B10: propagate past_due / unpaid status to all operator houses;
   // set guestGraceEndsAt to 48 hours from now to give guests time to resolve.
   if (subData.userId) {
     const graceEndsAt = new Date(
-      Date.now() + 48 * 60 * 60 * 1000
+      Date.now() + 48 * 60 * 60 * 1000,
     ).toISOString();
     await updateHouseSubscriptionStatus(
       subData.userId,
       newStatus as HouseSubscriptionStatus,
-      graceEndsAt
+      graceEndsAt,
     );
   } else {
     logger.warn(
       "invoice.payment_failed: userId missing from subscription doc, skipping house update",
       {
         stripeSubscriptionId,
-      }
+      },
     );
   }
 }
@@ -695,7 +697,7 @@ async function handleInvoicePaymentFailed(
 // ---------------------------------------------------------------------------
 
 async function handleSubscriptionDeleted(
-  subscription: Stripe.Subscription
+  subscription: Stripe.Subscription,
 ): Promise<void> {
   const db = admin.firestore();
   const subSnap = await db
@@ -727,7 +729,7 @@ async function handleSubscriptionDeleted(
   await sendFcmToHouseAdmins(
     subData.houseId,
     "Subscription Canceled",
-    `Your RATS subscription has been canceled as of ${canceledAt}. Contact support to reactivate.`
+    `Your RATS subscription has been canceled as of ${canceledAt}. Contact support to reactivate.`,
   );
 
   // B10: propagate canceled status to all operator houses.
@@ -737,7 +739,7 @@ async function handleSubscriptionDeleted(
   } else {
     logger.warn(
       "customer.subscription.deleted: could not resolve operator uid for house update",
-      { stripeSubscriptionId: subscription.id }
+      { stripeSubscriptionId: subscription.id },
     );
   }
 }
@@ -751,7 +753,7 @@ async function handleSubscriptionDeleted(
 // ---------------------------------------------------------------------------
 
 async function handleSubscriptionUpdated(
-  subscription: Stripe.Subscription
+  subscription: Stripe.Subscription,
 ): Promise<void> {
   const db = admin.firestore();
   const subSnap = await db
@@ -775,13 +777,13 @@ async function handleSubscriptionUpdated(
   // billing_cycle_anchor is the best available date reference in the new API
   // for when the next billing cycle starts.
   const currentPeriodEnd = new Date(
-    subscription.billing_cycle_anchor * 1000
+    subscription.billing_cycle_anchor * 1000,
   ).toISOString();
   const planId = subscription.items.data[0]?.price?.id ?? previousData.planId;
   const guestCount = parseInt(
     (subscription.metadata?.guestCount as string | undefined) ??
       String(previousData.guestCount),
-    10
+    10,
   );
 
   await doc.ref.update({
@@ -798,7 +800,7 @@ async function handleSubscriptionUpdated(
     await sendFcmToHouseAdmins(
       previousData.houseId,
       "Subscription Past Due",
-      "Your RATS subscription is now past due. Please update your payment method to avoid service interruption."
+      "Your RATS subscription is now past due. Please update your payment method to avoid service interruption.",
     );
   }
 
@@ -807,12 +809,12 @@ async function handleSubscriptionUpdated(
   if (operatorUid) {
     await updateHouseSubscriptionStatus(
       operatorUid,
-      newStatus as HouseSubscriptionStatus
+      newStatus as HouseSubscriptionStatus,
     );
   } else {
     logger.warn(
       "customer.subscription.updated: could not resolve operator uid for house update",
-      { stripeSubscriptionId: subscription.id }
+      { stripeSubscriptionId: subscription.id },
     );
   }
 }
@@ -868,7 +870,7 @@ async function handleAccountUpdated(account: Stripe.Account): Promise<void> {
     await sendFcmToHouseAdmins(
       house.id,
       "Stripe Account Restricted",
-      "Your Stripe account has been restricted. Please complete the required verification steps to restore payment processing."
+      "Your Stripe account has been restricted. Please complete the required verification steps to restore payment processing.",
     );
   }
 }
@@ -879,7 +881,7 @@ async function handleAccountUpdated(account: Stripe.Account): Promise<void> {
 
 async function handlePayoutFailed(
   payout: Stripe.Payout,
-  accountId: string | undefined
+  accountId: string | undefined,
 ): Promise<void> {
   // accountId comes from event.account (the connected account)
   if (!accountId) {
@@ -901,8 +903,8 @@ async function handlePayoutFailed(
     house.id,
     "Payout Failed",
     `A payout of $${amountDollars.toFixed(
-      2
-    )} to your bank account failed: ${reason}. Please check your Stripe dashboard.`
+      2,
+    )} to your bank account failed: ${reason}. Please check your Stripe dashboard.`,
   );
 }
 
@@ -913,7 +915,7 @@ async function handlePayoutFailed(
 
 async function checkAndMarkEventProcessed(
   eventId: string,
-  eventType: string
+  eventType: string,
 ): Promise<boolean> {
   const db = admin.firestore();
   const eventRef = db.collection("webhookEvents").doc(eventId);
@@ -944,13 +946,6 @@ export const stripeWebhook = onRequest(
       res.status(405).send("Method Not Allowed");
       return;
     }
-
-    // -------------------------------------------------------------------------
-    // 1. Stripe client — constructed per-request so secrets are available
-    // -------------------------------------------------------------------------
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-      apiVersion: "2026-01-28.clover" as any,
-    });
 
     const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
@@ -1015,20 +1010,20 @@ export const stripeWebhook = onRequest(
         // --- Payment events (Stripe Connect) ---
         case "payment_intent.succeeded":
           await handlePaymentIntentSucceeded(
-            event.data.object as Stripe.PaymentIntent
+            event.data.object as Stripe.PaymentIntent,
           );
           break;
 
         case "payment_intent.payment_failed":
           await handlePaymentIntentFailed(
-            event.data.object as Stripe.PaymentIntent
+            event.data.object as Stripe.PaymentIntent,
           );
           break;
 
         case "charge.dispute.created":
           await handleDisputeCreated(
             event.data.object as Stripe.Dispute,
-            stripe
+            stripe,
           );
           break;
 
@@ -1036,7 +1031,7 @@ export const stripeWebhook = onRequest(
         case "invoice.payment_succeeded":
           await handleInvoicePaymentSucceeded(
             event.data.object as Stripe.Invoice,
-            stripe
+            stripe,
           );
           break;
 
@@ -1046,13 +1041,13 @@ export const stripeWebhook = onRequest(
 
         case "customer.subscription.deleted":
           await handleSubscriptionDeleted(
-            event.data.object as Stripe.Subscription
+            event.data.object as Stripe.Subscription,
           );
           break;
 
         case "customer.subscription.updated":
           await handleSubscriptionUpdated(
-            event.data.object as Stripe.Subscription
+            event.data.object as Stripe.Subscription,
           );
           break;
 
@@ -1064,7 +1059,7 @@ export const stripeWebhook = onRequest(
         case "payout.failed":
           await handlePayoutFailed(
             event.data.object as Stripe.Payout,
-            event.account ?? undefined
+            event.account ?? undefined,
           );
           break;
 
@@ -1086,7 +1081,7 @@ export const stripeWebhook = onRequest(
     }
 
     res.status(200).send({ received: true });
-  }
+  },
 );
 
 // ---------------------------------------------------------------------------
@@ -1106,7 +1101,7 @@ async function handleAccountDeauthorized(accountId: string): Promise<void> {
   if (!house) {
     logger.warn(
       "account.application.deauthorized: no house found for account",
-      { accountId }
+      { accountId },
     );
     return;
   }
@@ -1127,7 +1122,7 @@ async function handleAccountDeauthorized(accountId: string): Promise<void> {
     {
       accountId,
       houseId: house.id,
-    }
+    },
   );
 }
 
@@ -1139,14 +1134,10 @@ export const handleStripeConnectWebhook = onRequest(
       return;
     }
 
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-      apiVersion: "2026-01-28.clover" as any,
-    });
-
     const sig = req.headers["stripe-signature"];
     if (!sig) {
       logger.warn(
-        "handleStripeConnectWebhook: missing stripe-signature header"
+        "handleStripeConnectWebhook: missing stripe-signature header",
       );
       res.status(400).send("Webhook Error: Missing stripe-signature header");
       return;
@@ -1157,7 +1148,7 @@ export const handleStripeConnectWebhook = onRequest(
       event = stripe.webhooks.constructEvent(
         req.rawBody,
         sig,
-        process.env.STRIPE_CONNECT_WEBHOOK_SECRET!
+        process.env.STRIPE_CONNECT_WEBHOOK_SECRET!,
       );
     } catch (err) {
       logger.warn("handleStripeConnectWebhook: signature verification failed", {
@@ -1189,7 +1180,7 @@ export const handleStripeConnectWebhook = onRequest(
             "handleStripeConnectWebhook: unhandled Connect event type (ignored)",
             {
               type: event.type,
-            }
+            },
           );
       }
     } catch (err) {
@@ -1202,5 +1193,5 @@ export const handleStripeConnectWebhook = onRequest(
     }
 
     res.status(200).send({ received: true });
-  }
+  },
 );

@@ -21,6 +21,9 @@ import { logger } from "firebase-functions";
 import { STRIPE_SECRET_KEY } from "../config";
 import * as admin from "firebase-admin";
 import Stripe from "stripe";
+import { createStripeClient } from "../util/stripe";
+
+const stripe = createStripeClient();
 
 // ---------------------------------------------------------------------------
 // stripeConnectReauth
@@ -41,10 +44,6 @@ export const stripeConnectReauth = onRequest(
       res.status(400).send("Missing stripeAccountId parameter.");
       return;
     }
-
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-      apiVersion: "2026-01-28.clover" as any,
-    });
 
     // Build the return and refresh URLs from this same function so they
     // remain consistent regardless of which environment is deployed.
@@ -69,9 +68,11 @@ export const stripeConnectReauth = onRequest(
         stripeAccountId,
         err: (err as Error).message,
       });
-      res.status(500).send("Failed to generate a new onboarding link. Please try again.");
+      res
+        .status(500)
+        .send("Failed to generate a new onboarding link. Please try again.");
     }
-  }
+  },
 );
 
 // ---------------------------------------------------------------------------
@@ -99,14 +100,10 @@ export const stripeConnectReturn = onRequest(
         .send(
           "<html><body><h2>Stripe setup complete.</h2>" +
             "<p>You can close this window and return to the app.</p>" +
-            "</body></html>"
+            "</body></html>",
         );
       return;
     }
-
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-      apiVersion: "2026-01-28.clover" as any,
-    });
 
     try {
       // Eagerly sync the account status so the app reflects it immediately
@@ -164,7 +161,7 @@ export const stripeConnectReturn = onRequest(
       .send(
         "<html><body><h2>Stripe setup complete.</h2>" +
           "<p>You can close this window and return to the app.</p>" +
-          "</body></html>"
+          "</body></html>",
       );
-  }
+  },
 );
