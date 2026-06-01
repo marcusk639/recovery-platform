@@ -4,8 +4,12 @@
       "command": "npx",
       "args": ["detox-mcp"],
       "env": {
-        "DETOX_PROJECT_PATH": "/Users/marcusklein/dev/rats"
+        "DETOX_PROJECT_PATH": "/Users/marcus/dev/recovery-platform/regroup/mobile"
       }
+    },
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"]
     }
   }
 }
