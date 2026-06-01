@@ -33,3 +33,51 @@ export const RATS_API_KEY = defineSecret("RATS_API_KEY");
 // Set in Firebase Secret Manager: firebase functions:secrets:set GOOGLE_MAPS_API_KEY
 // Restrict to specific APIs + IPs in Google Cloud Console.
 export const GOOGLE_MAPS_API_KEY = defineSecret("GOOGLE_MAPS_API_KEY");
+
+export const SUBSCRIPTION_TIERS = {
+  traditional: {
+    starter: {
+      priceEnvVar: "STRIPE_PRICE_TRAD_STARTER",
+      maxResidents: 10,
+      maxProperties: 1,
+      label: "Traditional Starter",
+    },
+    professional: {
+      priceEnvVar: "STRIPE_PRICE_TRAD_PROFESSIONAL",
+      maxResidents: 20,
+      maxProperties: 3,
+      label: "Traditional Professional",
+    },
+    enterprise: {
+      priceEnvVar: "STRIPE_PRICE_TRAD_ENTERPRISE",
+      maxResidents: null,
+      maxProperties: null,
+      label: "Traditional Enterprise",
+    },
+  },
+  oxford: {
+    standard: {
+      priceEnvVar: "STRIPE_PRICE_OXFORD_STANDARD",
+      maxResidents: 15,
+      maxProperties: 1,
+      label: "Oxford Standard",
+    },
+    plus: {
+      priceEnvVar: "STRIPE_PRICE_OXFORD_PLUS",
+      maxResidents: 25,
+      maxProperties: 1,
+      label: "Oxford Plus",
+    },
+    network: {
+      priceEnvVar: "STRIPE_PRICE_OXFORD_NETWORK",
+      maxResidents: null,
+      maxProperties: null,
+      label: "Oxford Network",
+    },
+  },
+} as const;
+
+export type HouseType = keyof typeof SUBSCRIPTION_TIERS;
+export type TraditionalTier = keyof typeof SUBSCRIPTION_TIERS.traditional;
+export type OxfordTier = keyof typeof SUBSCRIPTION_TIERS.oxford;
+export type TierKey = TraditionalTier | OxfordTier;
