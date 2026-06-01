@@ -93,7 +93,7 @@ service cloud.firestore {
     }
     
     match /admins/{adminId} {
-      allow read: if signedIn(); // need to adjust house search to not query admins (data needs to be aggregated on the house documents)
+      allow read: if isAdmin(resource.data.houseIds) || isSameUser(adminId);
       // allow create: if isAdmin(request.resource.data.houseIds);
       allow create: if isAdmin(request.resource.data.houseIds);
       allow update: if isAdmin(request.resource.data.houseIds);
@@ -150,7 +150,7 @@ service cloud.firestore {
     }
     
     match /houses/{houseId} {
-      allow read: if signedIn();
+      allow read: if isGuestOrAdmin([houseId]);
       allow create: if isAdmin([houseId]);
       allow delete: if isHouseAdmin(request.resource.data.id);
       // Admins can update anything; guests cannot modify sensitive fields
