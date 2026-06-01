@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r '.tool_input.file_path // empty'); if echo \"$FILE\" | grep -q '/recovery-api/src/'; then echo \"[tsc] Type-checking recovery-api...\"; cd /Users/marcus/dev/recovery-platform/recovery-api && npm run typecheck 2>&1 | tail -30; fi",
+            "timeout": 45000
+          }
+        ]
+      }
+    ]
+  }
+}
