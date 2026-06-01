@@ -1,40 +1,48 @@
-import { createMiddleware } from "hono/factory";
-import { auth } from "../lib/firebase.js";
+import { CallableRequest, HttpsError } from 'firebase-functions/v2/https';
 
-type AuthVariables = {
+export interface ServiceAuthContext {
+  appId: 'homegroups' | 'sober-living';
   uid: string;
   email: string;
-};
-
-declare module "hono" {
-  interface ContextVariableMap extends AuthVariables {}
 }
 
-const SERVICE_KEY = process.env.INTERNAL_API_KEY;
+const VALID_APP_IDS: ReadonlySet<string> = new Set(['homegroups', 'sober-living']);
 
-export const requireAuth = createMiddleware(async (c, next) => {
-  // Server-to-server: internal services pass X-Service-Key instead of a user token
-  const serviceKey = c.req.header("X-Service-Key");
-  if (SERVICE_KEY && serviceKey === SERVICE_KEY) {
-    c.set("uid", "system");
-    c.set("email", "system@internal");
-    await next();
-    return;
+/**
+ * Phase 1: Verify X-Service-Key + extract X-App-Id / X-User-Uid / X-User-Email.
+ * Phase 2 fallback: use request.auth token claims (appId, email).
+ */
+export function requireServiceAuth(request: CallableRequest): ServiceAuthContext {
+  const headers = request.rawRequest.headers;
+  const serviceKey = headers['x-service-key'] as string | undefined;
+  const apiKey = process.env.RECOVERY_PLATFORM_API_KEY;
+
+  if (apiKey && serviceKey === apiKey) {
+    const appId = headers['x-app-id'] as string | undefined;
+    const uid = headers['x-user-uid'] as string | undefined;
+    const email = (headers['x-user-email'] as string | undefined) ?? '';
+
+    if (!appId || !VALID_APP_IDS.has(appId)) {
+      throw new HttpsError('unauthenticated', 'X-App-Id must be homegroups or sober-living');
+    }
+    if (!uid) {
+      throw new HttpsError('unauthenticated', 'Missing X-User-Uid header');
+    }
+    return { appId: appId as ServiceAuthContext['appId'], uid, email };
   }
 
-  const header = c.req.header("Authorization");
-  const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
-
-  if (!token) {
-    return c.json({ error: "Unauthorized" }, 401);
+  // Phase 2: Firebase custom token flow
+  if (request.auth) {
+    const appId = request.auth.token['appId'] as string | undefined;
+    if (!appId || !VALID_APP_IDS.has(appId)) {
+      throw new HttpsError('unauthenticated', 'Missing or invalid appId claim');
+    }
+    return {
+      appId: appId as ServiceAuthContext['appId'],
+      uid: request.auth.uid,
+      email: (request.auth.token.email as string | undefined) ?? '',
+    };
   }
 
-  try {
-    const decoded = await auth.verifyIdToken(token);
-    c.set("uid", decoded.uid);
-    c.set("email", decoded.email ?? "");
-    await next();
-  } catch {
-    return c.json({ error: "Invalid token" }, 401);
-  }
-});
+  throw new HttpsError('unauthenticated', 'Unauthorized');
+}
