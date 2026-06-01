@@ -136,6 +136,40 @@
         { "fieldPath": "testDate", "order": "ASCENDING" }
       ]
     }
+    ,
+    {
+      "collectionGroup": "guests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "autoPayEnabled", "order": "ASCENDING" },
+        { "fieldPath": "balance", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "guests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "houseId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "officers",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "isActive", "order": "ASCENDING" },
+        { "fieldPath": "termEndDate", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "ees-records",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "houseId", "order": "ASCENDING" },
+        { "fieldPath": "weekStart", "order": "ASCENDING" },
+        { "fieldPath": "paid", "order": "ASCENDING" }
+      ]
+    }
   ],
   "fieldOverrides": []
 }
