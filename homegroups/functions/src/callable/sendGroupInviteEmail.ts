@@ -120,11 +120,7 @@ export const sendGroupInviteEmail = onCall(
         emailSentAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
-      logger.info("Invite email sent", {
-        inviteeEmail,
-        groupId,
-        inviterUid,
-      });
+      logger.info("Invite email sent", { groupId, inviterUid });
       return { success: true };
     } catch (error) {
       if (error instanceof HttpsError) {

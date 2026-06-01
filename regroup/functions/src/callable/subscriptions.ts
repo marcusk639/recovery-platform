@@ -35,7 +35,7 @@ const safeUrlSchema = z
   .refine(
     (url) =>
       !/^javascript:/i.test(url) && /^[a-z][a-z0-9+\-.]*:\/\//i.test(url),
-    { message: "URL scheme not allowed" }
+    { message: "URL scheme not allowed" },
   );
 
 const ALLOWED_PORTAL_RETURN_ORIGINS = [
@@ -56,7 +56,7 @@ const safeReturnUrlSchema = z
         return false;
       }
     },
-    { message: "returnUrl must use an allowed origin" }
+    { message: "returnUrl must use an allowed origin" },
   );
 
 const subscriptionMetadataMinSchema = z.object({
@@ -129,7 +129,7 @@ const inviteEmailSchema = z.array(
     }),
     dynamicLink: safeUrlSchema,
     type: z.enum(["guest", "admin", "superAdmin", "supporter"]),
-  })
+  }),
 );
 
 const sendConfirmationEmailSchema = z.object({
@@ -148,7 +148,7 @@ export const createOperatorSubscription = onCall(
       throw new HttpsError("unauthenticated", "Login required");
     const data = parseInput(
       createOperatorSubscriptionSchema,
-      request.data
+      request.data,
     ) as unknown as { user: User; paymentMethod: string };
     if (data.user.id !== request.auth.uid)
       throw new HttpsError("permission-denied", "User ID mismatch");
@@ -164,7 +164,7 @@ export const createOperatorSubscription = onCall(
       data.user.email,
       data.paymentMethod,
       oxfordEnabled,
-      data.user.id
+      data.user.id,
     );
     logger.info("Subscription created", {
       subscriptionId: metadata.subscriptionId,
@@ -188,7 +188,7 @@ export const createOperatorSubscription = onCall(
       subject: "New user subscription",
     });
     return { ...data.user, subscriptionMetadata: metadata } as User;
-  }
+  },
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -201,7 +201,7 @@ export const reactivateOperatorSubscription = onCall(
       throw new HttpsError("unauthenticated", "Login required");
     const data = parseInput(
       reactivateOperatorSubscriptionSchema,
-      request.data
+      request.data,
     ) as unknown as { user: User };
     if (data.user.id !== request.auth.uid)
       throw new HttpsError("permission-denied", "User ID mismatch");
@@ -219,14 +219,14 @@ export const reactivateOperatorSubscription = onCall(
       const freshMetadata = await reactivateSubscription(
         storedMetadata.customerId,
         storedMetadata,
-        data.user.id
+        data.user.id,
       );
       subscriptionMetadata = { ...freshMetadata, status: "active" };
     }
     logger.info("Subscription reactivated");
     await updateUser(data.user.id!, { subscriptionMetadata });
     return { ...data.user, subscriptionMetadata };
-  }
+  },
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -239,7 +239,7 @@ export const cancelUserSubscription = onCall(
       throw new HttpsError("unauthenticated", "Login required");
     const data = parseInput(
       cancelUserSubscriptionSchema,
-      request.data
+      request.data,
     ) as unknown as { user: User; subscriptionId: string };
     if (data.user.id !== request.auth.uid)
       throw new HttpsError("permission-denied", "User ID mismatch");
@@ -250,7 +250,7 @@ export const cancelUserSubscription = onCall(
     )
       throw new HttpsError(
         "permission-denied",
-        "Subscription does not belong to caller"
+        "Subscription does not belong to caller",
       );
     await cancelSubscription(data.subscriptionId);
     const subscriptionMetadata = {
@@ -259,7 +259,7 @@ export const cancelUserSubscription = onCall(
     };
     await updateUser(request.auth.uid, { subscriptionMetadata });
     return { ...data.user, subscriptionMetadata } as User;
-  }
+  },
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -279,26 +279,26 @@ export const updateSubscriptionGuests = onCall(
       throw new HttpsError("unauthenticated", "Login required");
     const data = parseInput(
       updateSubscriptionGuestsSchema,
-      request.data
+      request.data,
     ) as SubParams;
     if (data.ownerUserId !== request.auth.uid)
       throw new HttpsError("permission-denied", "User ID mismatch");
     logger.info("Updating user subscription. User", data.ownerUserId);
     const { ownerUserId, action, houseIds } = data;
     const user = await getUser(ownerUserId);
-    logger.info("User retrieved", user);
+    logger.info("User retrieved", { userId: ownerUserId });
 
     // Check if user has subscription metadata
     if (!user.subscriptionMetadata || !user.subscriptionMetadata.items) {
       logger.warn(
-        "User has no subscription metadata, skipping subscription update"
+        "User has no subscription metadata, skipping subscription update",
       );
       return;
     }
 
     try {
       let item = await getSubscriptionItem(
-        user.subscriptionMetadata.items.guestItemId
+        user.subscriptionMetadata.items.guestItemId,
       );
       logger.info(
         "Subscription item retrieved",
@@ -306,28 +306,28 @@ export const updateSubscriptionGuests = onCall(
         "quantity",
         item.quantity,
         "house id",
-        houseIds
+        houseIds,
       );
       const newQuantity =
         action === "add" ? item.quantity! + 1 : item.quantity! - 1;
       if (newQuantity < 0) {
         throw new HttpsError(
           "invalid-argument",
-          "Cannot remove guest: quantity would go below zero"
+          "Cannot remove guest: quantity would go below zero",
         );
       }
       // Update Stripe first — if it fails, Firestore is not touched.
       await updateSubscriptionItem(
         user.subscriptionMetadata.items.guestItemId,
         "guest",
-        newQuantity
+        newQuantity,
       );
       await updateUser(user.id!, {
         subscriptionMetadata: updateSubscriptionMetadata(
           user,
           houseIds[0],
           action,
-          null as unknown as string[]
+          null as unknown as string[],
         ),
       });
       logger.info("Subscription updated", item.quantity);
@@ -345,7 +345,7 @@ export const updateSubscriptionGuests = onCall(
             user,
             houseIds[0],
             action,
-            null as unknown as string[]
+            null as unknown as string[],
           ),
         });
         logger.info("Updated user metadata without Stripe subscription");
@@ -355,7 +355,7 @@ export const updateSubscriptionGuests = onCall(
         throw new Error("Failed to update subscription and metadata");
       }
     }
-  }
+  },
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -368,7 +368,7 @@ export const updateSubscriptionHouses = onCall(
       throw new HttpsError("unauthenticated", "Login required");
     const data = parseInput(
       updateSubscriptionHousesSchema,
-      request.data
+      request.data,
     ) as SubParams;
     if (data.ownerUserId !== request.auth.uid)
       throw new HttpsError("permission-denied", "User ID mismatch");
@@ -380,14 +380,14 @@ export const updateSubscriptionHouses = onCall(
 
     if (!user.subscriptionMetadata || !user.subscriptionMetadata.items) {
       logger.warn(
-        "User has no subscription metadata, skipping subscription update"
+        "User has no subscription metadata, skipping subscription update",
       );
       return;
     }
 
     if (action === "add") {
       const houseItem = await getSubscriptionItem(
-        user.subscriptionMetadata.items.houseItemId
+        user.subscriptionMetadata.items.houseItemId,
       );
       logger.info("House item quantity", houseItem.quantity);
       const subscriptionMetadata = updateSubscriptionMetadata(
@@ -395,13 +395,13 @@ export const updateSubscriptionHouses = onCall(
         null as unknown as string,
         "add",
         houseIds,
-        true
+        true,
       );
       // Stripe first — Firestore only written on success.
       await updateSubscriptionItem(
         user.subscriptionMetadata.items.houseItemId,
         "house",
-        houseItem.quantity! + amount
+        houseItem.quantity! + amount,
       );
       await updateUser(user.id!, { subscriptionMetadata });
       logger.info("House added to subscription", { houseIds });
@@ -426,19 +426,19 @@ export const updateSubscriptionHouses = onCall(
         houseId,
         action,
         null as unknown as string[],
-        true
+        true,
       );
       // Run both Stripe updates first, then commit to Firestore.
       const [newHouseItem, newGuestItem] = await Promise.all([
         updateSubscriptionItem(
           user.subscriptionMetadata.items.houseItemId,
           "house",
-          Math.max(0, houseItem.quantity! - 1)
+          Math.max(0, houseItem.quantity! - 1),
         ),
         updateSubscriptionItem(
           user.subscriptionMetadata.items.guestItemId,
           "guest",
-          newGuestQty
+          newGuestQty,
         ),
       ]);
       await updateUser(user.id!, { subscriptionMetadata });
@@ -452,12 +452,12 @@ export const updateSubscriptionHouses = onCall(
     // Apply or remove the bundle discount based on the new house count.
     if (user.subscriptionMetadata?.subscriptionId) {
       const houseCount = Object.keys(
-        user.subscriptionMetadata.houses ?? {}
+        user.subscriptionMetadata.houses ?? {},
       ).length;
       try {
         await applyBundleDiscountToSubscription(
           user.subscriptionMetadata.subscriptionId,
-          houseCount
+          houseCount,
         );
         logger.info("Bundle discount applied", {
           ownerUserId,
@@ -471,7 +471,7 @@ export const updateSubscriptionHouses = onCall(
     }
 
     return user;
-  }
+  },
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -495,7 +495,7 @@ export const applyBundleDiscount = onCall(
       return;
     }
     const houseCount = Object.keys(
-      user.subscriptionMetadata.houses ?? {}
+      user.subscriptionMetadata.houses ?? {},
     ).length;
     logger.info("applyBundleDiscount", {
       userId: data.userId,
@@ -504,9 +504,9 @@ export const applyBundleDiscount = onCall(
     });
     await applyBundleDiscountToSubscription(
       user.subscriptionMetadata.subscriptionId,
-      houseCount
+      houseCount,
     );
-  }
+  },
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -520,7 +520,7 @@ export const createBillingPortalSession = onCall(
 
     const { returnUrl } = parseInput(
       createBillingPortalSessionSchema,
-      request.data
+      request.data,
     ) as { returnUrl: string };
 
     const user = await getUser(request.auth.uid);
@@ -528,7 +528,7 @@ export const createBillingPortalSession = onCall(
     if (!customerId) {
       throw new HttpsError(
         "not-found",
-        "No billing account found for this user"
+        "No billing account found for this user",
       );
     }
 
@@ -539,7 +539,7 @@ export const createBillingPortalSession = onCall(
     });
 
     return { url: session.url };
-  }
+  },
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -552,7 +552,7 @@ export const sendInviteEmails = onCall(
       throw new HttpsError("unauthenticated", "Login required");
     const data = parseInput(
       inviteEmailSchema,
-      request.data
+      request.data,
     ) as InviteEmailPayload[];
     const ALLOWED_LINK_PREFIXES = [
       "regroup-app://",
@@ -578,7 +578,7 @@ export const sendInviteEmails = onCall(
           toEmail: emailPayload.email.to,
           inviteLink: emailPayload.dynamicLink,
           role: emailPayload.type,
-        })
+        }),
       );
     });
     try {
@@ -587,7 +587,7 @@ export const sendInviteEmails = onCall(
     } catch (err) {
       logger.info("ERROR!", JSON.stringify(err));
     }
-  }
+  },
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -600,7 +600,7 @@ export const sendConfirmationEmail = onCall(
       throw new HttpsError("unauthenticated", "Login required");
     const data = parseInput(
       sendConfirmationEmailSchema,
-      request.data
+      request.data,
     ) as EmailConfirmationPayload;
     const { email, dynamicLink, name } = data;
     const html = [
@@ -632,5 +632,5 @@ export const sendConfirmationEmail = onCall(
       text: `Hi ${name}, confirm your email by visiting: ${dynamicLink}`,
       html,
     });
-  }
+  },
 );

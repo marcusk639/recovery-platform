@@ -51,7 +51,10 @@ const verifyEmailSchema = z.object({ userId: z.string().min(1) });
 export const addGuestAuthorization = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
   const guest = parseInput(guestAuthSchema, request.data) as unknown as Guest;
-  logger.info("Adding authorization for guest", guest);
+  logger.info("Adding authorization for guest", {
+    userId: guest.userId,
+    houseId: guest.houseId,
+  });
 
   // ── Authorization guard ────────────────────────────────────────────────────
   // A caller may only grant guest claims for a house when:
@@ -94,12 +97,11 @@ export const addAdminAuthorization = onCall(async (request) => {
     adminAuthSchema,
     request.data,
   ) as unknown as Admin;
-  logger.info(
-    "Adding claim for admin and houses",
-    adminInput,
-    adminInput.superAdmin,
-    adminInput.houseIds,
-  );
+  logger.info("Adding claim for admin and houses", {
+    userId: adminInput.userId,
+    houseIds: adminInput.houseIds,
+    superAdmin: adminInput.superAdmin,
+  });
 
   // ── Authorization guard ────────────────────────────────────────────────────
   // A caller may only grant admin claims for a house when:

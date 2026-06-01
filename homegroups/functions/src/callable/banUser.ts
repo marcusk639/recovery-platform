@@ -132,7 +132,6 @@ export const banUser = onCall(
       logger.info(`User ${data.userId} banned by ${callerId}`, {
         banId: banRef.id,
         groupId: data.groupId || "platform-wide",
-        reason: data.reason,
         durationDays: data.durationDays || "permanent",
       });
 

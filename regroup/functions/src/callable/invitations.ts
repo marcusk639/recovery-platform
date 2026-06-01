@@ -104,7 +104,7 @@ export const createInvitation = onCall(async (request) => {
     });
     throw new HttpsError(
       "permission-denied",
-      "Only the house owner or an existing admin can send invitations"
+      "Only the house owner or an existing admin can send invitations",
     );
   }
 
@@ -200,14 +200,10 @@ export const redeemInvitation = onCall(async (request) => {
   assertInvitationUsable(inv);
 
   if (inv.invitedEmail.toLowerCase() !== callerEmail) {
-    logger.warn("redeemInvitation: email mismatch", {
-      callerUid,
-      invitedEmail: inv.invitedEmail,
-      callerEmail,
-    });
+    logger.warn("redeemInvitation: email mismatch", { callerUid });
     throw new HttpsError(
       "permission-denied",
-      "Invitation was issued to a different email address"
+      "Invitation was issued to a different email address",
     );
   }
 
