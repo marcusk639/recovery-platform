@@ -73,8 +73,15 @@ Find the target skill's `SKILL.md` and read it. Skills live in places like
 and (in some environments) `/mnt/skills/`. Use the available-skills list in your
 context to confirm the canonical name, then locate and read the file.
 
-From its `SKILL.md`, extract the **contract** — the things that determine
-whether a prompt gets good output:
+If the target skill has **no `SKILL.md` on disk** (some skills are registered
+with only a name + description and no readable file), don't get stuck — its
+entry in the available-skills list *is* its contract. The description states its
+purpose, triggering, and often its expected inputs and output shape; treat that
+as authoritative and extract what you can from it. Note in your rationale that
+you worked from the description rather than a full skill file.
+
+From the `SKILL.md` (or the description, when that's all there is), extract the
+**contract** — the things that determine whether a prompt gets good output:
 
 - **Purpose**: what it actually does (and does *not* do).
 - **Triggering**: what phrasing/signals it keys on. If the engineered prompt
