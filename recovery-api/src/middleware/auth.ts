@@ -1,12 +1,19 @@
 import { CallableRequest, HttpsError } from 'firebase-functions/v2/https';
 
 export interface ServiceAuthContext {
-  appId: 'homegroups' | 'sober-living';
+  appId: 'homegroups' | 'sober-living' | 'phoenix-cleanhouse';
   uid: string;
   email: string;
 }
 
-const VALID_APP_IDS: ReadonlySet<string> = new Set(['homegroups', 'sober-living']);
+// 'sober-living' is a legacy alias for the regroup/RATS product.
+// 'phoenix-cleanhouse' is the canonical Firebase project ID for regroup/RATS
+// and the toApp value used in cross-product referrals (see CLAUDE.md).
+const VALID_APP_IDS: ReadonlySet<string> = new Set([
+  'homegroups',
+  'sober-living',
+  'phoenix-cleanhouse',
+]);
 
 /**
  * Phase 1: Verify X-Service-Key + extract X-App-Id / X-User-Uid / X-User-Email.
@@ -23,7 +30,10 @@ export function requireServiceAuth(request: CallableRequest): ServiceAuthContext
     const email = (headers['x-user-email'] as string | undefined) ?? '';
 
     if (!appId || !VALID_APP_IDS.has(appId)) {
-      throw new HttpsError('unauthenticated', 'X-App-Id must be homegroups or sober-living');
+      throw new HttpsError(
+        'unauthenticated',
+        'X-App-Id must be homegroups, sober-living, or phoenix-cleanhouse',
+      );
     }
     if (!uid) {
       throw new HttpsError('unauthenticated', 'Missing X-User-Uid header');

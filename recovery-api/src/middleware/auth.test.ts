@@ -54,6 +54,20 @@ describe('requireServiceAuth', () => {
     );
   });
 
+  it('accepts phoenix-cleanhouse as a valid appId (regroup/RATS canonical project ID)', () => {
+    const req = makeRequest({
+      'x-service-key': 'test-key',
+      'x-app-id': 'phoenix-cleanhouse',
+      'x-user-uid': 'uid789',
+      'x-user-email': 'regroup@test.com',
+    });
+    expect(requireServiceAuth(req)).toEqual({
+      appId: 'phoenix-cleanhouse',
+      uid: 'uid789',
+      email: 'regroup@test.com',
+    });
+  });
+
   it('throws unauthenticated when uid is missing', () => {
     const req = makeRequest({
       'x-service-key': 'test-key',
