@@ -1,0 +1,36 @@
+{
+  "skill_name": "engineer-prompt-for-skill",
+  "notes": "Test prompts for the meta-skill that engineers a raw prompt for a specific target skill. Each prompt supplies BOTH a raw prompt to engineer AND a target skill to engineer it for. Assertions focus on: (a) the output is target-aware, (b) the original intent/spirit is preserved, (c) the deliverable is a paste-ready engineered prompt, (d) graceful handling when no prompt-engineering skill is installed.",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I've got this rough prompt: 'look into whether we should move the regroup mobile app off redux toolkit and onto zustand'. Can you tune it up so it works really well with the deep-research skill? I want a genuinely useful research report out of it.",
+      "expected_output": "A paste-ready engineered prompt shaped for deep-research (scoped, multi-source, answerable question with an explicit deliverable/recommendation), plus a short rationale tying changes to deep-research's contract, plus an intent-preservation note confirming it's still an open-ended Redux->Zustand decision for the mobile app (verdict not pre-decided). Should name deep-research as the target and offer to run it.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Engineer this for the code-review skill: 'check my changes are alright'. The diff I care about is the unstaged changes in homegroups/mobile/src/screens/MeetingDetail.tsx.",
+      "expected_output": "An engineered prompt that gives code-review the concrete scope it expects (the specific file/diff), states a clear quality bar, and matches code-review's triggering vocabulary. Intent preserved: still a correctness/quality check of the user's changes, nothing broadened beyond their changes. Should not fabricate details not given.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Here's a prompt I want to use with the deep-research skill — can you optimize it? 'is creatine safe'. Keep it casual, I just want a quick reliable answer, not a dissertation.",
+      "expected_output": "Demonstrates proportionality/spirit preservation: the engineered prompt makes the question answerable and sourced WITHOUT inflating a quick gut-check into an exhaustive audit. Intent-preservation note should explicitly call out that the casual, quick scope was kept.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Can you make this prompt better for the init skill? Prompt: 'document the recovery-api service'.",
+      "expected_output": "Reads the target skill (init) to learn it documents a codebase into CLAUDE.md, then shapes the prompt to that contract (scope to recovery-api). Handles the case where no dedicated prompt-engineering skill is installed by falling back to references/prompt-engineering-fallback.md and SAYING SO in the rationale. Intent preserved: still documenting recovery-api.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "optimize this prompt pls",
+      "expected_output": "Recognizes that the target skill is missing (and arguably the prompt too) and asks which skill the prompt is meant to be run through before proceeding, rather than guessing. Does not produce a generic 'improved prompt' with no target.",
+      "files": []
+    }
+  ]
+}
