@@ -15,7 +15,7 @@
     "copy:hosting": "cp -r ./dist/sapp/* ./public && rm ./public/index.html",
     "build:functions": "npm run --prefix functions build",
     "deploy": "firebase deploy",
-    "build:deploy": "ng build --prod && cd functions && npm run build && cd .. && npm run deploy"
+    "build:deploy": "export NODE_OPTIONS=--openssl-legacy-provider; ng build --prod && cd functions && npm run build && cd .. && npm run deploy"
   },
   "private": true,
   "dependencies": {
