@@ -3,7 +3,6 @@ import { logger } from "firebase-functions";
 import { z } from "zod";
 import { RATS_API_KEY } from "../config";
 import { parseInput } from "../validation";
-import exa from "exa-
 // RecoveryConnect endpoint — override via RC_MEETING_ATTENDANCE_URL env var
 // for staging/local testing without changing code.
 const RC_URL =
