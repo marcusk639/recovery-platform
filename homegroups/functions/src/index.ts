@@ -20,6 +20,7 @@ const STRIPE_CONNECT_WEBHOOK_SECRET = defineSecret(
 );
 const SENDGRID_API_KEY = defineSecret("SENDGRID_API_KEY");
 const RATS_API_KEY = defineSecret("RATS_API_KEY");
+const GOOGLE_MAPS_API_KEY = defineSecret("GOOGLE_MAPS_API_KEY");
 
 setGlobalOptions({
   secrets: [
@@ -28,6 +29,7 @@ setGlobalOptions({
     STRIPE_CONNECT_WEBHOOK_SECRET,
     SENDGRID_API_KEY,
     RATS_API_KEY,
+    GOOGLE_MAPS_API_KEY,
   ],
 });
 
@@ -35,6 +37,11 @@ import "./utils/firebase";
 
 // --- Callable Functions --- (Exported for client SDKs to call)
 export { findMeetings } from "./callable/findMeetings";
+export {
+  reverseGeocodeLocation,
+  placesAutocomplete,
+  placeDetails,
+} from "./callable/locationServices";
 export { generateGroupInvite } from "./callable/generateGroupInvite";
 export { sendGroupInviteEmail } from "./callable/sendGroupInviteEmail";
 export { joinGroupByInviteCode } from "./callable/joinGroupByInviteCode";
