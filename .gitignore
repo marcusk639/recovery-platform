@@ -115,6 +115,7 @@ scripts/logs/
 **/.claude/worktrees/
 **/.claude/settings.local.json
 **/.claude/*.local.md
+**/.claude/sessions/
 
 # ── Misc ──────────────────────────────────────
 ts-error-inventory.txt

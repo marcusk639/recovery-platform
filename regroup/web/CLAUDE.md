@@ -1,6 +1,6 @@
-# CLAUDE.md
+# Web App (Angular)
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This directory contains the Angular web app for Regroup (RATS). Loaded by Claude Code automatically when working inside `web/`. See `../CLAUDE.md` for project-wide rules.
 
 ## Project Overview
 
@@ -76,7 +76,7 @@ This repo's `functions/src/index.ts` defines exactly two functions:
 - **`universal`**: HTTP function serving the Angular Universal SSR app
 - **`warmWebsite`**: Pub/Sub cron (every minute) that pings the web server to prevent cold starts
 
-All **callable** functions consumed by `CloudFunctionService` (`src/app/services/functions/cloud-function.service.ts`) are implemented in a **separate repo: `regroup-functions`** (deployed to the same `phoenix-cleanhouse` Firebase project). Callables wrapped in this repo's service: `sendConfirmationEmail`, `verifyUserEmail`, `createOperatorSubscription`, `getPaymentMethod`, `updatePaymentInfo`, `cancelUserSubscription`, `reactivateOperatorSubscription`, `createBillingPortalSession`. Modifications to callable logic belong in `regroup-functions`, not here.
+All **callable** functions consumed by `CloudFunctionService` (`src/app/services/functions/cloud-function.service.ts`) are implemented in the sibling `../functions/` directory within the monorepo (deployed to the same `phoenix-cleanhouse` Firebase project). Callables wrapped in this repo's service: `sendConfirmationEmail`, `verifyUserEmail`, `createOperatorSubscription`, `getPaymentMethod`, `updatePaymentInfo`, `cancelUserSubscription`, `reactivateOperatorSubscription`, `createBillingPortalSession`. Modifications to callable logic belong in `../functions/` (see `../functions/CLAUDE.md`), not here. The former standalone `regroup-functions` repo has been merged into the monorepo and archived at `regroup/_legacy/regroup-functions` — do not edit the archived copy.
 
 ### Data Layer
 
