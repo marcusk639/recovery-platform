@@ -13,7 +13,8 @@ export const app = admin.app();
 export const ratsFirestore = admin.firestore();
 export const guestCollection = ratsFirestore.collection("guests");
 export const weeksCollection = ratsFirestore.collection("guest-weeks");
-export const weekSummariesCollection = ratsFirestore.collection("week-summaries");
+export const weekSummariesCollection =
+  ratsFirestore.collection("week-summaries");
 export const userCollection = ratsFirestore.collection("users");
 export const houseCollection = ratsFirestore.collection("houses");
 export const notificationCollection = ratsFirestore.collection("notifications");
@@ -22,6 +23,41 @@ export const reportCollection = ratsFirestore.collection("guest-reports");
 export const adminCollection = ratsFirestore.collection("admins");
 export const stripeEventCollection = ratsFirestore.collection("stripeEvents");
 export const contactCollection = ratsFirestore.collection("contact");
+export const subscriptionCollection = ratsFirestore.collection("subscriptions");
+
+/**
+ * Shape of a document in the `subscriptions` collection. Read by the Stripe
+ * webhook handlers (`customer.subscription.updated/deleted`, `invoice.*`) which
+ * look a doc up by `stripeSubscriptionId`. Seeded synchronously at purchase time
+ * by `createOperatorSubscription` so those handlers resolve the sub instead of
+ * early-returning "subscription not found".
+ *
+ * `houseId`/`guestCount` are not known at operator-subscribe time (an operator
+ * subscription is not tied to a single house, and guests are added later), so
+ * they are seeded empty/zero and updated as the operator provisions houses.
+ */
+export interface SubscriptionDoc {
+  houseId: string;
+  stripeCustomerId: string;
+  stripeSubscriptionId: string;
+  status: "active" | "past_due" | "canceled" | "unpaid" | "trialing";
+  currentPeriodEnd: string;
+  planId: string;
+  guestCount: number;
+  /** Operator Firebase UID (also embedded in Stripe subscription metadata). */
+  userId?: string;
+}
+
+/**
+ * Idempotently writes a `subscriptions` doc keyed by the Stripe subscription ID
+ * (which is also what the webhook readers query on). Merge-writes so a later
+ * webhook event never clobbers fields it doesn't own.
+ */
+export async function upsertSubscriptionDoc(doc: SubscriptionDoc) {
+  await subscriptionCollection
+    .doc(doc.stripeSubscriptionId)
+    .set(doc, { merge: true });
+}
 
 export const createHouseId = () => houseCollection.doc().id;
 export const createAdminId = () => adminCollection.doc().id;
@@ -44,7 +80,7 @@ export function saveStripeEvent(event: Stripe.Event) {
  */
 export async function getHouses(
   attribute: string,
-  value: string
+  value: string,
 ): Promise<{ [id: string]: House }> {
   const result = await houseCollection.where(attribute, "==", value).get();
   return shapeHouses(result.docs);
@@ -58,7 +94,7 @@ export async function getAllHouses() {
 export async function getNearbyHouses(
   lat: number,
   lng: number,
-  distanceInMiles: number
+  distanceInMiles: number,
 ) {
   const range = getGeohashRange(lat, lng, distanceInMiles);
   const result = await houseCollection
@@ -75,7 +111,7 @@ export async function getHouse(houseId: string) {
 export async function getHousesByAttributes(
   attributes: string[],
   operator: FirebaseFirestore.WhereFilterOp,
-  values: string[]
+  values: string[],
 ) {
   let query = houseCollection.where(attributes[0], "==", values[0]);
   const slicedValues = values.slice(1);
@@ -83,7 +119,7 @@ export async function getHousesByAttributes(
     .slice(1)
     .forEach(
       (attribute, index, atts) =>
-        (query = query.where(attribute, operator, slicedValues[index]))
+        (query = query.where(attribute, operator, slicedValues[index])),
     );
   const result = await query.get();
   return shapeHouses(result.docs);
@@ -98,7 +134,7 @@ export async function getUserBySubscription(subscriptionId: string) {
 
 export async function updateHouseStatuses(
   superAdminId: string,
-  status: string
+  status: string,
 ) {
   const result = await houseCollection
     .where("superAdminIds", "array-contains", superAdminId)
@@ -112,7 +148,7 @@ export async function updateHouseStatuses(
 
 export async function updateUserSubscriptionStatus(
   subscriptionId: string,
-  status: string
+  status: string,
 ) {
   const user = await getUserBySubscription(subscriptionId);
   const subscriptionMetadata: Partial<User> = {
@@ -128,7 +164,7 @@ export async function updateUserSubscriptionStatus(
 export async function updateUserPeriodEnd(
   endDate: number,
   subscriptionId: string,
-  cancel: boolean = false
+  cancel: boolean = false,
 ) {
   const user = await getUserBySubscription(subscriptionId);
   const subscriptionMetadata: Partial<User> = {
@@ -179,14 +215,14 @@ export function updateDispute(
   guest: Partial<Guest>,
   notifications: Notification[],
   transaction: FirebaseFirestore.Transaction,
-  resolvedDispute?: Dispute
+  resolvedDispute?: Dispute,
 ) {
   transaction.update(houseCollection.doc(house.id!), house);
   transaction.update(guestCollection.doc(guest.id!), guest);
   if (resolvedDispute) {
     transaction.create(
       ratsFirestore.collection("disputes").doc(resolvedDispute.id),
-      resolvedDispute
+      resolvedDispute,
     );
   }
   notifications.forEach((notification) => {
@@ -208,13 +244,13 @@ export async function getNaMeetings(
   lat: number,
   lng: number,
   distance: number,
-  day?: string
+  day?: string,
 ) {
   const queries = getQueriesForDocumentsAround(
     ratsFirestore.collection("na-meetings"),
     { lat, lon: lng },
     10,
-    day
+    day,
   );
   const results = queries.map((q) => q.get());
   const meetings: FirebaseFirestore.DocumentData[] = [];

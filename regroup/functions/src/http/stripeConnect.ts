@@ -12,7 +12,7 @@
  * NOTE: onboardStripeConnectUser was the legacy web-based standard-account
  * onboarding endpoint. It has been removed — see FUNCTION_AUDIT.md. The
  * replacement callable function `connectStripeAccount` (in
- * src/api/connectStripeAccount.ts) handles Express-account onboarding for
+ * src/callable/payments.ts) handles Express-account onboarding for
  * the React Native app.
  */
 

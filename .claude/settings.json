@@ -20,6 +20,27 @@
             "timeout": 15000
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-/Users/marcus/dev/recovery-platform}/.claude/hooks/secret-scan.sh\"",
+            "timeout": 10000
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-/Users/marcus/dev/recovery-platform}/.claude/hooks/swarm-notify.sh\"",
+            "timeout": 10000
+          }
+        ]
       }
     ]
   }

@@ -6,11 +6,9 @@ import {
   View,
   Text,
   StyleSheet,
-  TextInput,
   TouchableOpacity,
   ActivityIndicator,
   Platform,
-  Dimensions,
   Alert,
 } from 'react-native';
 import Geolocation from '@react-native-community/geolocation';
@@ -18,11 +16,21 @@ import MapView, {Marker, PROVIDER_GOOGLE} from 'react-native-maps';
 import {GooglePlacesAutocomplete} from 'react-native-google-places-autocomplete';
 import {PERMISSIONS, request, RESULTS} from 'react-native-permissions';
 import theme from '../../theme';
-import {GOOGLE_MAPS_API_KEY} from '@env';
+import {functions} from '../../services/firebase/config';
 
-if (!GOOGLE_MAPS_API_KEY) {
-  console.warn('GOOGLE_MAPS_API_KEY is not set in .env — maps will not work');
-}
+// Google Maps web-service calls are proxied server-side so no web-services key
+// ships in the app bundle:
+//   - Reverse geocoding (current location + map-pin drag) -> reverseGeocodeLocation callable.
+//   - Places autocomplete + details -> the GooglePlacesAutocomplete library below,
+//     pointed at the googlePlacesProxy HTTP function via requestUrl. The real key
+//     is injected by that function from Cloud Secret Manager.
+//
+// The map render uses PROVIDER_GOOGLE, which reads a SEPARATE native key from
+// AndroidManifest.xml / iOS AppDelegate. That key is unavoidably embedded in the
+// binary and must be locked down via Google Cloud Console application + API
+// restrictions.
+const PLACES_PROXY_URL =
+  'https://us-central1-recovery-connect-cad4b.cloudfunctions.net/googlePlacesProxy';
 
 export interface LocationProps {
   address: string;
@@ -73,12 +81,12 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
     if (initialLocation && initialAddress) {
       setLocation(initialLocation);
       setAddress(initialAddress);
-      placesRef.current.setAddressText(initialAddress);
+      placesRef.current?.setAddressText(initialAddress);
       setShowMap(true);
     } else if (initialAddress) {
       // If we have an address but no coordinates, still show the address
       setAddress(initialAddress);
-      placesRef.current.setAddressText(initialAddress);
+      placesRef.current?.setAddressText(initialAddress);
       if (!showMap) {
         // If we don't have coordinates, we'll hide the map but still show the address text
         console.log('Showing address without map:', initialAddress);
@@ -130,16 +138,17 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
         setLocation({latitude, longitude});
         setShowMap(true);
 
-        // Reverse geocode to get address
+        // Reverse geocode to get address (proxied via Cloud Function)
         try {
-          const response = await fetch(
-            `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_MAPS_API_KEY}`,
-          );
-          const data = await response.json();
+          const response = await functions.httpsCallable(
+            'reverseGeocodeLocation',
+          )({latitude, longitude});
+          const data = response.data as {results?: any[]};
 
           if (data.results && data.results.length > 0) {
             const fullAddress = data.results[0].formatted_address;
             setAddress(fullAddress);
+            placesRef.current?.setAddressText(fullAddress);
 
             // Try to extract place name from results
             const addressComponents = data.results[0].address_components;
@@ -193,16 +202,18 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
 
     setLocation({latitude, longitude});
 
-    // Reverse geocode to get address
+    // Reverse geocode to get address (proxied via Cloud Function)
     try {
-      const response = await fetch(
-        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_MAPS_API_KEY}`,
-      );
-      const data = await response.json();
+      const response = await functions.httpsCallable('reverseGeocodeLocation')({
+        latitude,
+        longitude,
+      });
+      const data = response.data as {results?: any[]};
 
       if (data.results && data.results.length > 0) {
         const fullAddress = data.results[0].formatted_address;
         setAddress(fullAddress);
+        placesRef.current?.setAddressText(fullAddress);
 
         // Try to extract place name from results as before
         const addressComponents = data.results[0].address_components;
@@ -277,13 +288,20 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
     <View style={styles.container}>
       <Text style={styles.label}>{label}</Text>
 
-      {/* Google Places Autocomplete */}
+      {/* Google Places Autocomplete — requests proxied through googlePlacesProxy
+          so the real Maps key never ships in the bundle. */}
       <GooglePlacesAutocomplete
         ref={placesRef}
         placeholder="Search for a location"
         onPress={handlePlaceSelect}
+        requestUrl={{
+          useOnPlatform: 'all',
+          url: PLACES_PROXY_URL,
+        }}
         query={{
-          key: GOOGLE_MAPS_API_KEY,
+          // Placeholder only — googlePlacesProxy strips this and injects the
+          // real key from Cloud Secret Manager.
+          key: 'proxied',
           language: 'en',
           types: 'address',
         }}

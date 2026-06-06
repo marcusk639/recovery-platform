@@ -30,7 +30,12 @@ import {
   applyBundleDiscountToSubscription,
 } from "../api/stripe";
 import { createStripeClient } from "../util/stripe";
-import { getUser, updateUser } from "../api/firestore";
+import {
+  getUser,
+  updateUser,
+  upsertSubscriptionDoc,
+  type SubscriptionDoc,
+} from "../api/firestore";
 import { parseInput } from "../validation";
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
@@ -231,6 +236,24 @@ export const createOperatorSubscription = onCall(
         maxResidents: tierConfig.maxResidents,
         maxProperties: tierConfig.maxProperties,
       },
+    });
+
+    // Seed the `subscriptions` collection so the Stripe webhook handlers
+    // (customer.subscription.updated/deleted, invoice.*) can resolve this sub by
+    // stripeSubscriptionId. Without this the collection has no writer and those
+    // handlers early-return. houseId/guestCount aren't known at operator-subscribe
+    // time, so they're seeded empty/zero and filled in as houses are provisioned.
+    await upsertSubscriptionDoc({
+      houseId: "",
+      stripeCustomerId: metadata.customerId,
+      stripeSubscriptionId: metadata.subscriptionId,
+      status: resolvedStatus as SubscriptionDoc["status"],
+      currentPeriodEnd: metadata.currentPeriodEnd
+        ? new Date(metadata.currentPeriodEnd).toISOString()
+        : "",
+      planId: priceId,
+      guestCount: 0,
+      userId: data.user.id,
     });
     await sendEmail({
       to: "admin@regroup-app.com",

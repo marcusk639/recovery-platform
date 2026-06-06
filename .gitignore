@@ -114,6 +114,7 @@ scripts/logs/
 .deploy-cache/
 **/.claude/worktrees/
 **/.claude/settings.local.json
+**/.claude/*.local.md
 
 # ── Misc ──────────────────────────────────────
 ts-error-inventory.txt
