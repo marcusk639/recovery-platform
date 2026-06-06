@@ -9,18 +9,25 @@ import { GeocodeResponse, Location } from "../entities/GeocodeResponse";
 // Google maps api info — provisioned via Firebase Secret Manager (GOOGLE_MAPS_API_KEY)
 // ⚠️ MANUAL STEP REQUIRED: rotate the old key (ending ...l9Q) in Google Cloud Console
 //   then store the new key: firebase functions:secrets:set GOOGLE_MAPS_API_KEY
-const API_KEY = process.env.GOOGLE_MAPS_API_KEY;
-if (!API_KEY) {
-  throw new Error("GOOGLE_MAPS_API_KEY environment variable is not set");
-}
+// Read the key lazily at call time, NOT at module load. Firebase's deploy-time
+// source-analysis phase imports this module locally without injecting Secret
+// Manager secrets, so a top-level read/throw here crashes analysis of the whole
+// codebase. At runtime in the deployed container the secret IS injected.
+const getApiKey = (): string => {
+  const key = process.env.GOOGLE_MAPS_API_KEY;
+  if (!key) {
+    throw new Error("GOOGLE_MAPS_API_KEY environment variable is not set");
+  }
+  return key;
+};
 const timezoneUrl = (lat: number, lng: number, _time: number) =>
-  `https://maps.googleapis.com/maps/api/timezone/json?location=${lat},${lng}&timestamp=${_time}&key=${API_KEY}`;
+  `https://maps.googleapis.com/maps/api/timezone/json?location=${lat},${lng}&timestamp=${_time}&key=${getApiKey()}`;
 const REVERSE_GEOCODE = (lat: number, lng: number) =>
-  `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}+&key=${API_KEY}`;
+  `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}+&key=${getApiKey()}`;
 const GEOCODE = (street: string, city: string, state: string) =>
-  `https://maps.googleapis.com/maps/api/geocode/json?address=${street},+${city},+${state}&key=${API_KEY}`;
+  `https://maps.googleapis.com/maps/api/geocode/json?address=${street},+${city},+${state}&key=${getApiKey()}`;
 const PARTIAL_GEOCODE = (query: string) =>
-  `https://maps.googleapis.com/maps/api/geocode/json?address=${query}&key=${API_KEY}`;
+  `https://maps.googleapis.com/maps/api/geocode/json?address=${query}&key=${getApiKey()}`;
 // const NA_API = (address: AddressLocation) =>
 //   `https://www.na.org/meetingsearch/text-results.php?country=USA&state=${address.state}&city=${address.city}&zip=${address.zipCode}
 //   &street=${address.streetNumber + ' ' + address.streetName}&within=10&day=0&lang&orderby=distance`;
