@@ -73,11 +73,13 @@ jest.mock("../../api/stripe", () => ({
 const mockGetUser = jest.fn();
 const mockUpdateUser = jest.fn();
 const mockGetHousesByAttributes = jest.fn();
+const mockUpsertSubscriptionDoc = jest.fn();
 
 jest.mock("../../api/firestore", () => ({
   getUser: mockGetUser,
   updateUser: mockUpdateUser,
   getHousesByAttributes: mockGetHousesByAttributes,
+  upsertSubscriptionDoc: mockUpsertSubscriptionDoc,
   app: {},
 }));
 
@@ -297,6 +299,43 @@ describe("createOperatorSubscription", () => {
       id: fakeUser.id,
       subscriptionMetadata: fakeMeta,
     });
+  });
+
+  it("seeds a subscriptions collection doc so webhook handlers can find the sub", async () => {
+    // The subscriptions collection is read by 5 webhook paths but otherwise
+    // written by nothing; seeding it here is what makes subscription.updated /
+    // .deleted / invoice.* handlers resolve the sub instead of early-returning.
+    const periodEnd = Date.now() + 1000000;
+    const fakeMeta = {
+      customerId: "cus_new",
+      subscriptionId: "sub_new",
+      houses: {},
+      items: { houseItemId: "", guestItemId: "" },
+      currentPeriodEnd: periodEnd,
+      status: "active",
+    };
+    mockGetUser.mockResolvedValue(fakeUser);
+    mockInitializeCustomer.mockResolvedValue(fakeMeta);
+    mockUpdateUser.mockResolvedValue(undefined);
+
+    await call(createOperatorSubscription, {
+      user: fakeUser,
+      paymentMethod: "pm_test",
+      houseType: "traditional",
+      tier: "professional",
+    });
+
+    expect(mockUpsertSubscriptionDoc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stripeSubscriptionId: "sub_new",
+        stripeCustomerId: "cus_new",
+        status: "active",
+        planId: "price_test_pro_existing",
+        userId: fakeUser.id,
+        currentPeriodEnd: new Date(periodEnd).toISOString(),
+        guestCount: 0,
+      }),
+    );
   });
 });
 

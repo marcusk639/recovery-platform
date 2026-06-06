@@ -13,6 +13,7 @@ import {
 } from "../config";
 import { sendFcmToHouseAdmins } from "../util/notifications";
 import { sendEmail, regroupEmail } from "../util/email";
+import type { SubscriptionDoc } from "../api/firestore";
 
 // ---------------------------------------------------------------------------
 // Firestore data-model types
@@ -40,17 +41,8 @@ interface GuestDoc {
   email?: string;
 }
 
-interface SubscriptionDoc {
-  houseId: string;
-  stripeCustomerId: string;
-  stripeSubscriptionId: string;
-  status: "active" | "past_due" | "canceled" | "unpaid" | "trialing";
-  currentPeriodEnd: string;
-  planId: string;
-  guestCount: number;
-  /** W12: operator Firebase UID, written by createOperatorSubscription via Stripe metadata */
-  userId?: string;
-}
+// SubscriptionDoc is the shared shape of a `subscriptions` collection doc,
+// defined in ../api/firestore (and seeded there by createOperatorSubscription).
 
 interface UserDoc {
   fcmTokens?: string[];

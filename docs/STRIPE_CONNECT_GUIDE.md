@@ -98,7 +98,7 @@ collection.
 
 ### 3.1 Onboarding flow (code reality)
 
-`functions/src/callable/payments.ts` (~`:356-476`):
+`functions/src/callable/payments.ts` → **`connectStripeAccount`** (~`:360-484`):
 
 1. Load the house; read existing `house.stripeAccountId`.
 2. If absent, create an Express account (`:410-411`), then persist the new ID inside a
@@ -121,8 +121,8 @@ collection.
 - `transfer_data.destination = house.stripeAccountId`, `application_fee_amount` = 2% (`:163-164`).
 
 **Reading a house's payments** acts _as_ the connected account via the `stripeAccount`
-request option: `stripe.paymentIntents.list({...}, { stripeAccount: house.stripeAccountId })`
-(`listPayments` `:206`, `listHousePayments` `:257`).
+request option: `stripe.charges.list({...}, { stripeAccount: house.stripeAccountId })`
+(`listPayments` `:204`, `listHousePayments` `:255`). _(Lists charges, not PaymentIntents.)_
 
 **Scheduled rent collection** (`scheduled/scheduledRentCollection.ts:79-80`): same
 destination-charge shape, `transfer_data.destination = guest.stripeConnectId`, 2% fee.
@@ -139,6 +139,21 @@ destination-charge shape, `transfer_data.destination = guest.stripeConnectId`, 2
 - `findHouseByStripeAccountId` queries `houses where stripeAccountId == accountId`
   (`:117-124`).
 
+> **Known Gap (subscription billing, not Connect onboarding):** the `subscriptions`
+> Firestore collection is **read** by five webhook paths (`resolveOperatorUid`
+> fallback `:160`, `invoice.payment_succeeded` `:559`, `invoice.payment_failed`
+> `:633`, `customer.subscription.deleted` `:704`, `customer.subscription.updated`
+> `:760`) but **written by nothing** — there is no `customer.subscription.created`
+> handler and `createOperatorSubscription` only writes `users/{uid}.subscriptionMetadata`.
+> Consequence: webhook-driven status changes (past-due FCM alerts, renewal period
+> updates, house status propagation on `subscription.updated`) never fire; only the
+> synchronous purchase-time path works. The Stripe subscription carries only
+> `metadata.userId` (`api/stripe.ts:103,139`) — **not** `houseId` or `guestCount` —
+> so a `.created` handler cannot fully populate `SubscriptionDoc` (`houseId`,
+> `guestCount`) from the event alone. Closing this requires a design decision on how
+> the `subscriptions` collection gets seeded. _Note: this is subscription billing,
+> separate from the Connect destination-charge flow, which works correctly._
+
 ### 3.4 Setup checklist (regroup)
 
 - [ ] **Unblock the build first** — functions currently must compile cleanly; verify
@@ -150,7 +165,14 @@ destination-charge shape, `transfer_data.destination = guest.stripeConnectId`, 2
 - [ ] Register the webhook endpoint and subscribe to `account.updated`,
       `account.application.deauthorized`, `payment_intent.succeeded`,
       `payment_intent.payment_failed`, `charge.dispute.created`, `payout.failed`,
-      and the `invoice.*` / `customer.subscription.*` events (`:1011-1059`).
+      `invoice.payment_succeeded`, `invoice.payment_failed`,
+      `customer.subscription.updated`, and `customer.subscription.deleted`
+      (`:1011-1059`). These are the events the handler currently switches on.
+      ⚠️ **`customer.subscription.created` is NOT handled** — and nothing else
+      writes the `subscriptions` collection, so the `subscription.updated` /
+      `subscription.deleted` / `invoice.*` handlers (which look a sub doc up by
+      `stripeSubscriptionId`) currently early-return "subscription not found". See
+      the Known Gap note in §3.3.
 - [ ] Verify a house only becomes chargeable after `account.updated` flips
       `stripeStatus = "active"` — the `createPaymentIntent` guard depends on it.
 - [ ] Test the full cycle on a Connect test account: onboard → `account.updated` →
@@ -249,13 +271,13 @@ destination-charge shape, `transfer_data.destination = guest.stripeConnectId`, 2
 
 ## 5. Quick reference — file map
 
-| Concern                      | homegroups                                       | regroup                                         |
-| ---------------------------- | ------------------------------------------------ | ----------------------------------------------- |
-| Onboard / AccountLink        | `callable/createStripeAccountLink.ts`            | `callable/payments.ts` (~356-476)               |
-| Reauth expired link          | (return/refresh page → callable)                 | `http/stripeConnect.ts` (`stripeConnectReauth`) |
-| Take payment (dest. charge)  | `callable/createStripePaymentIntent.ts:96-104`   | `callable/payments.ts:118-164`                  |
-| Scheduled collection         | —                                                | `scheduled/scheduledRentCollection.ts:79-80`    |
-| Read connected-acct payments | `callable/getStripeAccount*`                     | `payments.ts:206,257` (`{ stripeAccount }`)     |
-| Connect webhook              | `http/stripeWebhook.ts` (`stripeConnectWebhook`) | `webhooks/stripeWebhook.ts:823,1095`            |
-| Account-status field         | `groups.stripeConnectAccountId`                  | `houses.stripeAccountId` + `stripeStatus`       |
-| Disconnect                   | —                                                | `util/stripe.ts` (idempotent)                   |
+| Concern                      | homegroups                                       | regroup                                                    |
+| ---------------------------- | ------------------------------------------------ | ---------------------------------------------------------- |
+| Onboard / AccountLink        | `callable/createStripeAccountLink.ts`            | `callable/payments.ts` → `connectStripeAccount` (~360-484) |
+| Reauth expired link          | (return/refresh page → callable)                 | `http/stripeConnect.ts` (`stripeConnectReauth`)            |
+| Take payment (dest. charge)  | `callable/createStripePaymentIntent.ts:96-104`   | `callable/payments.ts:118-164`                             |
+| Scheduled collection         | —                                                | `scheduled/scheduledRentCollection.ts:79-80`               |
+| Read connected-acct payments | `callable/getStripeAccount*`                     | `payments.ts:206,257` (`{ stripeAccount }`)                |
+| Connect webhook              | `http/stripeWebhook.ts` (`stripeConnectWebhook`) | `webhooks/stripeWebhook.ts:823,1095`                       |
+| Account-status field         | `groups.stripeConnectAccountId`                  | `houses.stripeAccountId` + `stripeStatus`                  |
+| Disconnect                   | —                                                | `util/stripe.ts` (idempotent)                              |
