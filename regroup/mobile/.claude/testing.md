@@ -31,7 +31,29 @@ npm run test:integration
 
 Emulator must use `127.0.0.1` (not `localhost`) — see `src/config/firebase-emulator.ts`.
 
-## E2E Tests (Detox)
+## E2E Tests — Maestro (evaluating) + Detox (existing)
+
+See [docs/e2e/MAESTRO_GUIDE.md](../docs/e2e/MAESTRO_GUIDE.md) for the full Maestro setup, Claude Code MCP integration, and the autonomous pipeline (`/mobile-e2e pipeline`).
+
+### Maestro (preferred for new flows)
+
+```bash
+# Install CLI (Java 17+ required)
+curl -Ls "https://get.maestro.mobile.dev" | bash
+
+# Register MCP server with Claude Code
+claude mcp add maestro -- maestro mcp
+
+# Run a flow
+maestro test .maestro/flows/auth/01-login.yaml
+
+# Full autonomous pipeline (analyze codebase → generate YAML → run → report)
+/mobile-e2e pipeline
+```
+
+Flows live in `.maestro/flows/`. Reports written to `docs/e2e/reports/`.
+
+## E2E Tests — Detox (existing)
 
 Device: iOS simulator `iPhone 15-Detox`. The global setup aborts if emulators aren't reachable — never run E2E against production Firebase.
 
