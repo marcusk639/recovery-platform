@@ -1,0 +1,22 @@
+---
+# Copy this file to `multi-agent-swarm.local.md` (drop the .example) in the
+# agent's worktree and fill in the fields. The .local.md copy is gitignored.
+# Frontmatter = routing/identity metadata. Body = the agent's task brief.
+enabled: true
+agent_name: example-agent
+task_number: "1.0"
+pr_number: ""
+coordinator_session: team-leader
+dependencies: []
+additional_instructions: ""
+---
+
+# Task: <short title>
+
+Describe the concrete work this agent owns. This body is the agent's brief —
+the Stop hook (.claude/hooks/swarm-notify.sh) reads only the frontmatter above.
+
+**Success criteria:**
+- ...
+- Tests passing
+- PR opened and CI green
