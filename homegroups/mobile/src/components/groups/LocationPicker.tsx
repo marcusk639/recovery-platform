@@ -6,38 +6,31 @@ import {
   View,
   Text,
   StyleSheet,
-  TextInput,
   TouchableOpacity,
   ActivityIndicator,
   Platform,
-  FlatList,
-  Keyboard,
   Alert,
 } from 'react-native';
 import Geolocation from '@react-native-community/geolocation';
 import MapView, {Marker, PROVIDER_GOOGLE} from 'react-native-maps';
+import {GooglePlacesAutocomplete} from 'react-native-google-places-autocomplete';
 import {PERMISSIONS, request, RESULTS} from 'react-native-permissions';
 import theme from '../../theme';
 import {functions} from '../../services/firebase/config';
 
-// Google Maps web-service calls (geocoding, places autocomplete, place details)
-// are proxied through Cloud Functions so no Maps web-services key ships in the
-// app bundle. See functions/src/callable/locationServices.ts.
+// Google Maps web-service calls are proxied server-side so no web-services key
+// ships in the app bundle:
+//   - Reverse geocoding (current location + map-pin drag) -> reverseGeocodeLocation callable.
+//   - Places autocomplete + details -> the GooglePlacesAutocomplete library below,
+//     pointed at the googlePlacesProxy HTTP function via requestUrl. The real key
+//     is injected by that function from Cloud Secret Manager.
 //
-// The map render below uses PROVIDER_GOOGLE, which reads a SEPARATE native key
-// from AndroidManifest.xml / iOS AppDelegate. That key is unavoidably embedded
-// in the binary and must be locked down via Google Cloud Console application +
-// API restrictions.
-
-interface PlacePrediction {
-  description: string;
-  place_id: string;
-}
-
-// Opaque session token groups autocomplete keystrokes + the details lookup into
-// a single billable Google session. Regenerated after each completed selection.
-const newSessionToken = (): string =>
-  `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+// The map render uses PROVIDER_GOOGLE, which reads a SEPARATE native key from
+// AndroidManifest.xml / iOS AppDelegate. That key is unavoidably embedded in the
+// binary and must be locked down via Google Cloud Console application + API
+// restrictions.
+const PLACES_PROXY_URL =
+  'https://us-central1-recovery-connect-cad4b.cloudfunctions.net/googlePlacesProxy';
 
 export interface LocationProps {
   address: string;
@@ -80,116 +73,26 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
   const [showMap, setShowMap] = useState<boolean>(false);
   const [permissionDenied, setPermissionDenied] = useState<boolean>(false);
 
-  // Autocomplete state (replaces react-native-google-places-autocomplete).
-  const [searchText, setSearchText] = useState<string>(initialAddress);
-  const [predictions, setPredictions] = useState<PlacePrediction[]>([]);
-  const [searchingPlaces, setSearchingPlaces] = useState<boolean>(false);
-
   const mapRef = useRef<MapView | null>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const sessionTokenRef = useRef<string>(newSessionToken());
+  const placesRef = useRef<any>(null);
 
   useEffect(() => {
     // Initialize with initial values if provided
     if (initialLocation && initialAddress) {
       setLocation(initialLocation);
       setAddress(initialAddress);
-      setSearchText(initialAddress);
+      placesRef.current?.setAddressText(initialAddress);
       setShowMap(true);
     } else if (initialAddress) {
-      // If we have an address but no coordinates, still show the address text
+      // If we have an address but no coordinates, still show the address
       setAddress(initialAddress);
-      setSearchText(initialAddress);
+      placesRef.current?.setAddressText(initialAddress);
+      if (!showMap) {
+        // If we don't have coordinates, we'll hide the map but still show the address text
+        console.log('Showing address without map:', initialAddress);
+      }
     }
   }, [initialLocation, initialAddress]);
-
-  // Cancel any pending autocomplete debounce on unmount.
-  useEffect(() => {
-    return () => {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-      }
-    };
-  }, []);
-
-  // --- Places autocomplete (proxied via Cloud Function) ---
-  const fetchPredictions = async (input: string) => {
-    if (input.trim().length < 2) {
-      setPredictions([]);
-      return;
-    }
-    try {
-      setSearchingPlaces(true);
-      const response = await functions.httpsCallable('placesAutocomplete')({
-        input,
-        sessionToken: sessionTokenRef.current,
-      });
-      const data = response.data as {predictions?: PlacePrediction[]};
-      setPredictions(data.predictions ?? []);
-    } catch (err) {
-      console.error('Places autocomplete error:', err);
-      setPredictions([]);
-    } finally {
-      setSearchingPlaces(false);
-    }
-  };
-
-  const handleSearchTextChange = (text: string) => {
-    setSearchText(text);
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
-    debounceRef.current = setTimeout(() => fetchPredictions(text), 300);
-  };
-
-  const handlePredictionSelect = async (prediction: PlacePrediction) => {
-    Keyboard.dismiss();
-    setPredictions([]);
-    setSearchText(prediction.description);
-    try {
-      setLoading(true);
-      const response = await functions.httpsCallable('placeDetails')({
-        placeId: prediction.place_id,
-        sessionToken: sessionTokenRef.current,
-      });
-      // A details lookup ends the billing session — start a fresh token.
-      sessionTokenRef.current = newSessionToken();
-
-      const details = (response.data as {result?: any}).result;
-      if (!details || !details.geometry) {
-        return;
-      }
-      const {geometry, formatted_address, name} = details;
-      const lat = geometry.location.lat;
-      const lng = geometry.location.lng;
-
-      setLocation({latitude: lat, longitude: lng});
-      setAddress(formatted_address);
-      setPlaceName(name || '');
-      setShowMap(true);
-
-      if (mapRef.current) {
-        mapRef.current.animateToRegion({
-          latitude: lat,
-          longitude: lng,
-          latitudeDelta: 0.005,
-          longitudeDelta: 0.005,
-        });
-      }
-
-      onLocationSelect({
-        address: formatted_address,
-        latitude: lat,
-        longitude: lng,
-        placeName: name || undefined,
-      });
-    } catch (err) {
-      console.error('Place details error:', err);
-      Alert.alert('Location Error', 'Unable to load that location.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Request location permission
   const requestLocationPermission = async () => {
@@ -245,7 +148,7 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
           if (data.results && data.results.length > 0) {
             const fullAddress = data.results[0].formatted_address;
             setAddress(fullAddress);
-            setSearchText(fullAddress);
+            placesRef.current?.setAddressText(fullAddress);
 
             // Try to extract place name from results
             const addressComponents = data.results[0].address_components;
@@ -310,7 +213,7 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
       if (data.results && data.results.length > 0) {
         const fullAddress = data.results[0].formatted_address;
         setAddress(fullAddress);
-        setSearchText(fullAddress);
+        placesRef.current?.setAddressText(fullAddress);
 
         // Try to extract place name from results as before
         const addressComponents = data.results[0].address_components;
@@ -348,46 +251,98 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
     }
   };
 
+  // Handle place selection from autocomplete
+  const handlePlaceSelect = (data: any, details: any = null) => {
+    if (details) {
+      const {geometry, formatted_address, name} = details;
+
+      setLocation({
+        latitude: geometry.location.lat,
+        longitude: geometry.location.lng,
+      });
+      setAddress(formatted_address);
+      setPlaceName(name);
+      setShowMap(true);
+
+      // Animate map to new location
+      if (mapRef.current) {
+        mapRef.current.animateToRegion({
+          latitude: geometry.location.lat,
+          longitude: geometry.location.lng,
+          latitudeDelta: 0.005,
+          longitudeDelta: 0.005,
+        });
+      }
+
+      // Pass location back to parent
+      onLocationSelect({
+        address: formatted_address,
+        latitude: geometry.location.lat,
+        longitude: geometry.location.lng,
+        placeName: name,
+      });
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.label}>{label}</Text>
 
-      {/* Address autocomplete (proxied via Cloud Function) */}
-      <View style={styles.autocompleteContainer}>
-        <TextInput
-          style={styles.autocompleteInput}
-          placeholder="Search for a location"
-          placeholderTextColor="#757575"
-          value={searchText}
-          onChangeText={handleSearchTextChange}
-          autoCorrect={false}
-        />
-        {searchingPlaces && (
-          <ActivityIndicator
-            size="small"
-            color="#2196F3"
-            style={styles.searchSpinner}
-          />
-        )}
-        {predictions.length > 0 && (
-          <View style={styles.autocompleteList}>
-            <FlatList
-              keyboardShouldPersistTaps="handled"
-              data={predictions}
-              keyExtractor={item => item.place_id}
-              renderItem={({item}) => (
-                <TouchableOpacity
-                  style={styles.autocompleteRow}
-                  onPress={() => handlePredictionSelect(item)}>
-                  <Text style={styles.autocompleteDescription}>
-                    {item.description}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            />
-          </View>
-        )}
-      </View>
+      {/* Google Places Autocomplete — requests proxied through googlePlacesProxy
+          so the real Maps key never ships in the bundle. */}
+      <GooglePlacesAutocomplete
+        ref={placesRef}
+        placeholder="Search for a location"
+        onPress={handlePlaceSelect}
+        requestUrl={{
+          useOnPlatform: 'all',
+          url: PLACES_PROXY_URL,
+        }}
+        query={{
+          // Placeholder only — googlePlacesProxy strips this and injects the
+          // real key from Cloud Secret Manager.
+          key: 'proxied',
+          language: 'en',
+          types: 'address',
+        }}
+        fetchDetails={true}
+        onFail={error => console.error('Places API Error:', error)}
+        styles={{
+          container: {
+            ...styles.autocompleteContainer,
+            position: 'relative',
+            zIndex: 1,
+          },
+          textInput: styles.autocompleteInput,
+          listView: {
+            ...styles.autocompleteList,
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            zIndex: 2,
+          },
+          row: {
+            ...styles.autocompleteRow,
+            padding: 10,
+            height: 44,
+          },
+          description: {
+            ...styles.autocompleteDescription,
+            fontSize: 14,
+          },
+          predefinedPlacesDescription: {
+            color: '#1976D2',
+          },
+        }}
+        textInputProps={{
+          placeholderTextColor: '#757575',
+        }}
+        debounce={300}
+        enablePoweredByContainer={false}
+        listViewDisplayed={true}
+        minLength={2}
+      />
 
       {/* Current Location Button */}
       <View style={styles.locationButtonContainer}>
@@ -477,22 +432,10 @@ const styles = StyleSheet.create({
     color: '#212121',
   },
   autocompleteList: {
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    right: 0,
-    maxHeight: 220,
     borderWidth: 1,
     borderColor: '#E0E0E0',
-    borderBottomLeftRadius: 8,
-    borderBottomRightRadius: 8,
     backgroundColor: '#FFFFFF',
-    zIndex: 2,
-  },
-  searchSpinner: {
-    position: 'absolute',
-    right: 12,
-    top: 15,
+    marginHorizontal: 0,
   },
   locationButtonContainer: {
     marginTop: 12,
@@ -550,14 +493,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   autocompleteRow: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E0E0E0',
+    // Add appropriate styles for the row
   },
   autocompleteDescription: {
-    fontSize: 14,
-    color: '#212121',
+    // Add appropriate styles for the description
   },
 });
 

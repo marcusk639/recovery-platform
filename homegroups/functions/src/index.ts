@@ -16,7 +16,7 @@ import { defineSecret } from "firebase-functions/params";
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
 const STRIPE_CONNECT_WEBHOOK_SECRET = defineSecret(
-  "STRIPE_CONNECT_WEBHOOK_SECRET"
+  "STRIPE_CONNECT_WEBHOOK_SECRET",
 );
 const SENDGRID_API_KEY = defineSecret("SENDGRID_API_KEY");
 const RATS_API_KEY = defineSecret("RATS_API_KEY");
@@ -37,11 +37,7 @@ import "./utils/firebase";
 
 // --- Callable Functions --- (Exported for client SDKs to call)
 export { findMeetings } from "./callable/findMeetings";
-export {
-  reverseGeocodeLocation,
-  placesAutocomplete,
-  placeDetails,
-} from "./callable/locationServices";
+export { reverseGeocodeLocation } from "./callable/locationServices";
 export { generateGroupInvite } from "./callable/generateGroupInvite";
 export { sendGroupInviteEmail } from "./callable/sendGroupInviteEmail";
 export { joinGroupByInviteCode } from "./callable/joinGroupByInviteCode";
@@ -133,6 +129,7 @@ export { getTreasuryTrends } from "./callable/getTreasuryTrends";
 // --- HTTP Request Functions --- (Exported as endpoints)
 export { stripeWebhook, stripeConnectWebhook } from "./http/stripeWebhook";
 export { getMeetingAttendance } from "./http/getMeetingAttendance";
+export { googlePlacesProxy } from "./http/googlePlacesProxy";
 
 // --- Firestore Trigger Functions --- (Exported for background triggers)
 export {
