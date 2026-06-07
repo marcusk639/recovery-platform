@@ -9,7 +9,7 @@
     "uninstall": "rm -rf node_modules",
     "pod:install": "cd ios && pod install && cd ..",
     "fresh-install": "rm -rf $TMPDIR/react-* && watchman watch-del-all && rm -rf ios/build/ModuleCache/* && rm -rf node_modules/ && npm cache clean --force && npm install",
-    "clean:install": "cd ../scripts && npm run clean-install",
+    "clean:install": "cd ../scripts && ./clean-install.sh",
     "clean:ios": "rm -rf ~/Library/Developer/Xcode/DerivedData/*",
     "postinstall": "patch-package && npx react-native-asset && (if [ \"$(uname)\" = \"Darwin\" ]; then cd ios && pod install; fi)",
     "test": "jest",
