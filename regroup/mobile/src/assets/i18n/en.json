@@ -1,7 +1,7 @@
 {
   "en": {
     "translation": {
-      "manager.welcome": "Welcome to RATS",
+      "manager.welcome": "Welcome to Regroup",
       "new.chore": "Pick your new chore:",
       "checkin.failed": "Failed to check in",
       "adding.meeting": "Adding meeting...",
@@ -106,8 +106,8 @@
       "create.new.account": "Create New Account",
       "reenter.code": "Re-Enter Code",
       "get.started": "Let's Get Started",
-      "terms.of.service": "I agree to the RATS Terms of Service.\nPlease also read the Privacy Policy.",
-      "keep.updated": "Keep me updated about RATS services, news, and promotions.",
+      "terms.of.service": "I agree to the Regroup Terms of Service.\nPlease also read the Privacy Policy.",
+      "keep.updated": "Keep me updated about Regroup services, news, and promotions.",
       "next": "Next",
       "house.chat": "House Chat",
       "send": "Send",

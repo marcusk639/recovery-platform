@@ -169,7 +169,7 @@ export class MeetingMinutesReportService {
         ${minutes.announcements ? `<div class="section"><div class="section-title">Announcements</div><p style="font-size:14px;">${minutes.announcements.replace(/</g, '&lt;')}</p></div>` : ''}
 
         <div class="footer">
-          <p>${isApproved ? 'Approved by group conscience' : 'Draft minutes'} &bull; RecoveryConnect</p>
+          <p>${isApproved ? 'Approved by group conscience' : 'Draft minutes'} &bull; Homegroups</p>
           <p>Generated: ${format(new Date(), 'MMM d, yyyy h:mm a')}</p>
         </div>
       </body>

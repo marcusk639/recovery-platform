@@ -199,7 +199,7 @@ const ResidentPayment: React.FC<Props> = ({ navigation, route }) => {
 
       // Step 2 — initialise the Stripe payment sheet
       const { error: initError } = await initPaymentSheet({
-        merchantDisplayName: 'RATS Recovery',
+        merchantDisplayName: 'Regroup',
         paymentIntentClientSecret: clientSecret,
       });
 

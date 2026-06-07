@@ -350,7 +350,7 @@ describe('ResidentPayment', () => {
     await waitFor(() => {
       expect(mockInitPaymentSheet).toHaveBeenCalledWith(
         expect.objectContaining({
-          merchantDisplayName: 'RATS Recovery',
+          merchantDisplayName: 'Regroup',
           paymentIntentClientSecret: CLIENT_SECRET,
         }),
       );

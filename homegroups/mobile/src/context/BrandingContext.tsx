@@ -13,7 +13,7 @@ export interface BrandingConfig {
 export const DEFAULT_BRANDING: BrandingConfig = {
   primaryColor: '#2196F3',
   accentColor: '#4CAF50',
-  orgName: 'RecoveryConnect',
+  orgName: 'Homegroups',
   logoUrl: undefined,
 };
 

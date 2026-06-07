@@ -10,7 +10,7 @@
 //   • Meeting type filter chips (AA, NA, Al-Anon, CA, All)
 //   • Day-of-week filter chips
 //   • Favorite star on each card
-//   • "Is this your group? Get it on RecoveryConnect" CTA for external meetings
+//   • "Is this your group? Get it on Homegroups" CTA for external meetings
 //   • Navigates to MeetingDetailScreen on card press
 
 import React, {useState, useEffect, useCallback, useRef} from 'react';
@@ -182,7 +182,7 @@ const MeetingFinderScreen: React.FC = () => {
           {
             title: 'Location Permission',
             message:
-              'RecoveryConnect needs your location to find meetings near you.',
+              'Homegroups needs your location to find meetings near you.',
             buttonPositive: 'OK',
           },
         );
@@ -400,7 +400,7 @@ const MeetingFinderScreen: React.FC = () => {
             testID={`external-cta-${item.id}`}>
             <Icon name="plus-circle-outline" size={14} color="#2196F3" />
             <Text style={styles.externalCtaText}>
-              Is this your group? Get it on RecoveryConnect
+              Is this your group? Get it on Homegroups
             </Text>
             <Icon name="chevron-right" size={14} color="#2196F3" />
           </TouchableOpacity>
