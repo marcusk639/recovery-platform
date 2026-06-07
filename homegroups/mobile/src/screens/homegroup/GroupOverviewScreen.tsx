@@ -581,9 +581,10 @@ const GroupOverviewScreen: React.FC = () => {
 
     setStripeSetupLoading(true);
     try {
-      const createAccountLink = functions().httpsCallable(
-        'createStripeAccountLink',
-      );
+      const createAccountLink = functions().httpsCallable<
+        unknown,
+        {url?: string}
+      >('createStripeAccountLink');
       const response = await createAccountLink({
         groupId,
         refreshUrl: 'homegroups-app://group-overview',

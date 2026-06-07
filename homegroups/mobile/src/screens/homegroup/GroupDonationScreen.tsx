@@ -306,9 +306,10 @@ const GroupDonationScreen: React.FC = () => {
         return null;
       }
 
-      const createPaymentIntent = functions().httpsCallable(
-        'createStripePaymentIntent',
-      );
+      const createPaymentIntent = functions().httpsCallable<
+        unknown,
+        {clientSecret?: string; donationId?: string}
+      >('createStripePaymentIntent');
       const response = await createPaymentIntent({
         groupId,
         amount: amountInCents,
