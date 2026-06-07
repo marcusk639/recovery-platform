@@ -14,7 +14,7 @@ Stack: React Native (TypeScript) · Firebase (Auth, Firestore, Functions, FCM, S
 | ------- | ------------------------ |
 | default | `recovery-connect-cad4b` |
 
-> The project ID `recovery-connect-cad4b` is a legacy identifier from the app's former name ("Homegroups"). The canonical product name is now **Homegroups**; the Firebase project ID, iOS bundle (`org.recoveryconnect`), and deep-link scheme (`recoveryconnect://`) retain the old name for store/Firebase continuity and must not be renamed without coordinated native + backend migration.
+> The project ID `recovery-connect-cad4b`, the iOS bundle `org.recoveryconnect`, and the deep-link scheme `recoveryconnect://` are legacy identifiers retained for store/Firebase continuity. The canonical product name is now **Homegroups**; don't rename these without a coordinated native + backend migration.
 
 ---
 
@@ -132,7 +132,7 @@ Each subproject documents its own architecture in its CLAUDE.md (see [Subproject
 - **PostToolUse**: Auto-formats `.ts`, `.tsx`, `.js`, `.jsx`, `.json`, `.css`, `.scss`, `.md` with Prettier after every edit
 - **PostToolUse**: Runs `tsc --noEmit` after edits to any file under `functions/src/` (errors stream to stderr, first 20 lines shown)
 
-> ⚠️ **Known portability issue**: PostToolUse hooks `cd` into a hard-coded absolute path (`/Users/marcusklein/dev/Homegroups/` — `Homegroups` is the legacy local directory name for **Homegroups**; the repo now lives at `recovery-platform/homegroups/`) which won't exist on other machines or under different usernames. If you find the formatter/type-check is silently failing, this is why. Fix is a per-user concern, not a doc fix.
+> ⚠️ **Known portability issue**: PostToolUse hooks `cd` into a hard-coded absolute path (`/Users/marcusklein/dev/RecoveryConnect/` — a legacy local checkout path; this repo now lives at `recovery-platform/homegroups/`) which won't exist on other machines or under different usernames. If you find the formatter/type-check is silently failing, this is why. Fix is a per-user concern, not a doc fix.
 
 ### MCP Servers (`.mcp.json`)
 
@@ -140,7 +140,7 @@ Each subproject documents its own architecture in its CLAUDE.md (see [Subproject
 - **firebase**: Firebase CLI tools (emulators, deploy, auth, Firestore)
 - **context7**: Live documentation lookup for project dependencies
 
-> ⚠️ **Known issue with `.mcp.json`**: The `detox` and `firebase` entries hard-code an absolute path (`/Users/marcusklein/dev/Homegroups/` — legacy directory name for **Homegroups**) that won't exist on other machines. Update the path to match your local checkout before using these MCP servers.
+> ⚠️ **Known issue with `.mcp.json`**: The `detox` and `firebase` entries hard-code an absolute path (`/Users/marcusklein/dev/RecoveryConnect/`, a legacy local checkout path) that won't exist on other machines. Update the path to match your local checkout before using these MCP servers.
 
 ### Skills (`.claude/skills/`)
 
