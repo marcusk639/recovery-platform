@@ -69,9 +69,9 @@ target 'RecoveryConnect' do
   pod 'Stripe', '~> 24.12.0'
   pod 'StripePaymentSheet', '~> 24.12.0'
 
-  # Firebase 11.x for Xcode 16 compatibility (requires @react-native-firebase v21+)
-  $FirebaseSDKVersion = '11.6.0'
-  
+  # Firebase iOS SDK version is supplied by @react-native-firebase v21 (Firebase 11.x).
+  # Do not override $FirebaseSDKVersion here — let RNFB own the version to avoid nanopb drift.
+
   # Google Maps SDK
   # pod 'GoogleMaps'
   # pod 'GooglePlaces'
