@@ -142,9 +142,10 @@ export const createGroup = createAsyncThunk(
         return rejectWithValue('No authenticated user');
       }
 
-      const createGroupWithSubscriptionCallable = functions().httpsCallable(
-        'createGroupWithSubscription',
-      );
+      const createGroupWithSubscriptionCallable = functions().httpsCallable<
+        unknown,
+        {success: boolean; group: HomeGroup}
+      >('createGroupWithSubscription');
       const response = await createGroupWithSubscriptionCallable({
         groupData,
         meetings,
@@ -458,7 +459,10 @@ export const requestGroupAdminAccess = createAsyncThunk(
   ) => {
     try {
       const requestAdminAccessWithSubscriptionCallable =
-        functions().httpsCallable('requestAdminAccessWithSubscription');
+        functions().httpsCallable<
+          unknown,
+          {success: boolean; group: HomeGroup}
+        >('requestAdminAccessWithSubscription');
       const response = await requestAdminAccessWithSubscriptionCallable({
         groupId,
         message,

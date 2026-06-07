@@ -841,7 +841,7 @@ export class GroupModel {
               ({
                 id: doc.id,
                 ...doc.data(),
-              }) as Meeting,
+              } as Meeting),
           ),
         );
       }
@@ -1049,7 +1049,9 @@ export class GroupModel {
 
       // Call the Cloud Function to search groups by location
       const functions = firestore().app.functions('us-central1');
-      const searchFunction = functions.httpsCallable('searchGroupsByLocation');
+      const searchFunction = functions.httpsCallable<unknown, HomeGroup[]>(
+        'searchGroupsByLocation',
+      );
 
       const result = await searchFunction({
         lat: latitude,
