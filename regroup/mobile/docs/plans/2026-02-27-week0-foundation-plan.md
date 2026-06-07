@@ -29,7 +29,7 @@ Expected: `GONE — OK`
 In `docs/plans/ACTIVE_PLAN.md`, find the line:
 
 ```
-### Embedded functions/ (in regroup-rn7 repo)
+### Embedded functions/ (in Regroup repo)
 ```
 
 And replace the section with:

@@ -1,6 +1,6 @@
 # Web App (Angular)
 
-This directory contains the Angular web app for Regroup (RATS). Loaded by Claude Code automatically when working inside `web/`. See `../CLAUDE.md` for project-wide rules.
+This directory contains the Angular web app for Regroup. Loaded by Claude Code automatically when working inside `web/`. See `../CLAUDE.md` for project-wide rules.
 
 ## Project Overview
 

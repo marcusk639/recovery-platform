@@ -6,7 +6,7 @@
 
 ## Context
 
-The RATS codebase uses Firebase, Stripe, GitHub, and Sentry as its primary external services. Adding MCP servers for each gives Claude direct query access without leaving the editor — directly relevant to Sprint 5 (Firestore security rules, Stripe config) through Sprint 9 (CI setup, Sentry monitoring).
+The Regroup codebase uses Firebase, Stripe, GitHub, and Sentry as its primary external services. Adding MCP servers for each gives Claude direct query access without leaving the editor — directly relevant to Sprint 5 (Firestore security rules, Stripe config) through Sprint 9 (CI setup, Sentry monitoring).
 
 ## Servers
 

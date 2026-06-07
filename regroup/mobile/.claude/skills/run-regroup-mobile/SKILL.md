@@ -1,6 +1,6 @@
 ---
-name: run-rats-v2
-description: Run, start, build, screenshot, or interact with the rats-v2 React Native iOS app. Use when asked to launch the RATS app on a simulator, take a screenshot, test a screen change, or verify a React Native feature locally.
+name: run-regroup-mobile
+description: Run, start, build, screenshot, or interact with the Regroup React Native iOS app. Use when asked to launch the Regroup app on a simulator, take a screenshot, test a screen change, or verify a React Native feature locally.
 ---
 
 React Native 0.72 iOS app — the Regroup sober living management mobile app (bundle ID: `com.rats.dev`). Driven via `xcrun simctl` for screenshots. Requires Metro bundler running before launch. Use iPhone 15-Detox simulator (UDID: `353D62F5-F0D4-4F25-B952-3294D07586D3`) — "iPhone 14 Pro" from package.json is not installed.

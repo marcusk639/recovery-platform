@@ -85,11 +85,11 @@ Both `createGroupSubscription.ts` and `createStripeCheckoutSession.ts` now pass 
 
 **What exists:** `checkInToMeeting` callable and QR check-in flow are production-ready in Homegroups.
 
-**What's needed:** An authenticated Cloud Function that RATS can call to pull a resident's meeting check-in history by `userId` — without requiring the full Homegroups UI embed.
+**What's needed:** An authenticated Cloud Function that Regroup can call to pull a resident's meeting check-in history by `userId` — without requiring the full Homegroups UI embed.
 
 **Revenue:** $29/month/house. At 100 houses: $34,800/year.
 
-**Why it matters:** This is the integration bridge between Homegroups and RATS that enables the treatment center story (see `docs/03-integration-treatment-centers.md`).
+**Why it matters:** This is the integration bridge between Homegroups and Regroup that enables the treatment center story (see `docs/03-integration-treatment-centers.md`).
 
 ---
 

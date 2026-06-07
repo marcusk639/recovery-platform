@@ -1,7 +1,7 @@
 # Business Model
 
 **Last updated:** April 2026
-**Products:** Homegroups (RecoveryConnect) · RATS (Sober Living) · Aftercare System (planned)
+**Products:** Homegroups · Regroup (Sober Living) · Aftercare System (planned)
 
 ---
 
@@ -18,7 +18,7 @@
 
 7-day free trial with no payment method required at trial start.
 
-### RATS — Sober Living SaaS
+### Regroup — Sober Living SaaS
 
 Sold to house operators. Tiers gate base operations, Oxford House governance, and multi-house enterprise. Stripe Connect handles rent collection from residents.
 
@@ -44,7 +44,7 @@ $12/year is the wedge. Treatment center and intergroup revenue is the business. 
 | Stream                   | Year 1 ARR   | Year 2 ARR     | Year 3 ARR     |
 | ------------------------ | ------------ | -------------- | -------------- |
 | Homegroups subscriptions | $52,800      | $294,000       | $960,000       |
-| RATS (sober living)      | $57,600      | $245,280       | $676,800       |
+| Regroup (sober living)      | $57,600      | $245,280       | $676,800       |
 | Aftercare system         | $180,000     | $892,800       | $2,748,000     |
 | **Combined**             | **$290,400** | **$1,432,080** | **$4,384,800** |
 

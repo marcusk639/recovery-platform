@@ -1,4 +1,4 @@
-# RATS Pricing Strategy & Revenue Optimization
+# Regroup Pricing Strategy & Revenue Optimization
 
 **Date:** February 5, 2026
 **Purpose:** Data-driven pricing recommendations optimized for revenue growth and market penetration
@@ -8,11 +8,11 @@
 
 ## Executive Summary
 
-Current RATS pricing ($10/house + $1/resident ≈ $20/month) is **unsustainable** and captures less than **2% of value delivered** to customers. This document presents a comprehensive pricing strategy that:
+Current Regroup pricing ($10/house + $1/resident ≈ $20/month) is **unsustainable** and captures less than **2% of value delivered** to customers. This document presents a comprehensive pricing strategy that:
 
 1. **Increases revenue 3-7X** while maintaining excellent customer ROI
 2. **Enables business sustainability** with support, marketing, and development resources
-3. **Positions RATS as professional B2B SaaS** rather than consumer app
+3. **Positions Regroup as professional B2B SaaS** rather than consumer app
 4. **Differentiates pricing for Traditional vs. Oxford House markets**
 
 ### Recommended Pricing (Immediate Implementation)
@@ -225,7 +225,7 @@ You can spend $30K/year on marketing and still have 12X return.
 
 ### Pricing Philosophy
 
-**RATS pricing should be based on value delivered, NOT cost to provide.**
+**Regroup pricing should be based on value delivered, NOT cost to provide.**
 
 **Infrastructure costs are near-zero:**
 - Firebase free tier covers first 50 houses
@@ -250,7 +250,7 @@ You can spend $30K/year on marketing and still have 12X return.
 ```
 Monthly Revenue: 10 residents × $800 = $8,000
 
-Monthly Value from RATS:
+Monthly Value from Regroup:
 ├─ Admin time saved: 15 hrs × $50/hr = $750
 ├─ Meeting fraud prevention = $200
 ├─ Better compliance (avoid fines) = $300
@@ -277,7 +277,7 @@ As % of revenue: $1,800 / $8,000 = 22.5%
 ```
 Monthly EES Collections: 12 residents × $500 = $6,000
 
-Monthly Value from RATS:
+Monthly Value from Regroup:
 ├─ Treasurer time saved: 5 hrs × $30/hr = $150
 ├─ Better EES collection (+5%) = $300
 ├─ Secretary time saved: 3 hrs × $30/hr = $90
@@ -826,12 +826,12 @@ Cushion: $4,900/month
 | **Rent Manager** | Small landlords | $45-150/month | Basic tracking, maintenance |
 | **TenantCloud** | DIY landlords | $0-99/month | Freemium model, limited features |
 
-**RATS Positioning:**
+**Regroup Positioning:**
 - Lower than enterprise solutions (AppFolio)
 - Comparable to mid-tier (Buildium, Rent Manager)
 - Higher than freemium (but justified by recovery-specific features)
 
-**RATS Advantage:**
+**Regroup Advantage:**
 - ✅ Recovery-specific (not generic property management)
 - ✅ GPS meeting verification (unique)
 - ✅ Phase management and accountability tools
@@ -847,12 +847,12 @@ Cushion: $4,900/month
 | **Therap** | Disabilities | $75-150/month | Care documentation, incident reporting |
 | **HouseCall Pro** | Service pros | $49-169/month | Scheduling, billing, dispatching |
 
-**RATS Positioning:**
+**Regroup Positioning:**
 - Aligns with mid-tier compliance software
 - Lower than healthcare-specific (SimpleVisit)
 - Higher than basic service software
 
-**RATS Advantage:**
+**Regroup Advantage:**
 - ✅ Compliance features (phase requirements, meeting tracking)
 - ✅ Accountability tools (GPS verification)
 - ✅ Healthcare-adjacent (recovery is health)
@@ -868,7 +868,7 @@ Cushion: $4,900/month
 2. **Custom databases** - $0-50/month (limited features)
 3. **Generic SaaS** - Various (not recovery-specific)
 
-**RATS Advantage:**
+**Regroup Advantage:**
 - ✅ ONLY comprehensive solution for sober living
 - ✅ ONLY solution for Oxford Houses
 - ✅ First-to-market with GPS meeting verification
@@ -936,7 +936,7 @@ Cushion: $4,900/month
 **Month 3:**
 - 📧 Email: "As a thank you, grandfather rate extended to [DATE]"
 - 📝 Testimonials: More customer success stories
-- 📊 Webinar: How RATS saves you time and money
+- 📊 Webinar: How Regroup saves you time and money
 
 **Deliverable:** Existing customers feel valued, excited about future
 
@@ -1025,11 +1025,11 @@ Cushion: $4,900/month
 
 **Communication:**
 ```
-Subject: RATS Platform Update - Your Pricing is Protected
+Subject: Regroup Platform Update - Your Pricing is Protected
 
 Hi [Name],
 
-Thank you for being an early RATS customer!
+Thank you for being an early Regroup customer!
 
 We're excited to announce major platform improvements coming soon:
 ✅ Resident payment collection (Stripe integration)
@@ -1050,7 +1050,7 @@ a permanent discount for our early customers.
 Questions? Reply to this email.
 
 Thanks for growing with us!
-Marcus & RATS Team
+Marcus & Regroup Team
 ```
 
 **Goal:** Build excitement, no immediate action required
@@ -1157,11 +1157,11 @@ If house has:
 
 **Grace Period Email:**
 ```
-Subject: Your RATS Plan Has Been Updated
+Subject: Your Regroup Plan Has Been Updated
 
 Hi [Name],
 
-Your RATS account has been updated to [TIER NAME] ($XX/month).
+Your Regroup account has been updated to [TIER NAME] ($XX/month).
 
 You have a 7-day grace period to:
 1. Choose a different tier
@@ -1426,7 +1426,7 @@ Total Subscription Revenue: $1,313,800/year
 **Show full value before price:**
 
 ```
-RATS Saves You:
+Regroup Saves You:
 ✅ 15 hours/month admin time: $750/month
 ✅ Meeting fraud prevention: $200/month
 ✅ Compliance protection: $300/month
@@ -1474,10 +1474,10 @@ Enterprise: $249/month
 
 ### Loss Aversion
 
-**Frame as cost of NOT having RATS:**
+**Frame as cost of NOT having Regroup:**
 
 ```
-WITHOUT RATS:
+WITHOUT Regroup:
 ❌ 15 hours/month on spreadsheets
 ❌ Meeting attendance fraud
 ❌ Compliance violations (fines)
@@ -1485,7 +1485,7 @@ WITHOUT RATS:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 COST: $1,500+/month in time and problems
 
-WITH RATS:
+WITH Regroup:
 ✅ 15 hours saved → spend on residents
 ✅ GPS-verified meetings
 ✅ Automated compliance tracking
@@ -1509,7 +1509,7 @@ NET SAVINGS: $1,371/month
 Now it takes 20 seconds. Worth every penny."
 - John Smith, ABC Recovery Houses
 
-Join 250+ operators using RATS to run better houses.
+Join 250+ operators using Regroup to run better houses.
 
 Plans start at $69/month.
 ```
@@ -1734,7 +1734,7 @@ Difference: -$127K/year
 **4. Focus on Value Communication**
 - ROI calculator on website
 - Case studies and testimonials
-- "Cost of NOT having RATS" messaging
+- "Cost of NOT having Regroup" messaging
 
 **5. Monitor and Optimize**
 - Track churn rate (target <15%)
@@ -1782,7 +1782,7 @@ Recommended pricing ($49-249) is:
 - ✅ Enables team growth and market expansion
 - ✅ Creates path to $3.27M ARR in Year 3
 
-**The pricing change alone transforms RATS from a loss-making project to a venture-scale business.**
+**The pricing change alone transforms Regroup from a loss-making project to a venture-scale business.**
 
 **Next Step:** Approve recommended pricing, update Stripe, and launch new pricing for new customers this week.
 

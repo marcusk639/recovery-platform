@@ -1,14 +1,14 @@
 # Regroup Platform: Strategic Assessment & Prioritized Roadmap
 
 **Date:** 2026-05-24
-**Scope:** Full platform — mobile app (regroup-rn7), Cloud Functions (regroup-functions), marketing site (regroup-web)
+**Scope:** Full platform — mobile app (Regroup), Cloud Functions (regroup-functions), marketing site (regroup-web)
 **Audience:** Human operators and AI LLM agents
 
 ---
 
 ## Executive Summary
 
-Regroup (RATS) is a React Native sober living house management platform backed by Firebase. It has demonstrated real product-market fit — 5–10 paying houses — but has three critical blocking issues that must be resolved before any growth push:
+Regroup is a React Native sober living house management platform backed by Firebase. It has demonstrated real product-market fit — 5–10 paying houses — but has three critical blocking issues that must be resolved before any growth push:
 
 1. **Security:** Realtime Database security rules are open — all customer data is publicly readable/writable right now.
 2. **Pricing mismatch:** Cloud Functions have hardcoded subscription pricing of $9.99/$19.99 per month. Documentation recommends $39–99/month. The platform is charging a fraction of what it should.
@@ -28,7 +28,7 @@ Beyond these blockers, the platform has strong bones: 289+ screens, 32 Cloud Fun
 
 ## Platform Architecture (Three Repos)
 
-### regroup-rn7 — Mobile App (Primary Product)
+### Regroup — Mobile App (Primary Product)
 
 - React Native 0.72, Firebase backend
 - 289+ screens, 121 routes, 38 service files, 23+ entities, 19+ React Query hooks
@@ -319,7 +319,7 @@ Path to $200K ARR: 100+ houses. Each Oxford House acquired through word-of-mouth
 
 ## Appendix: Codebase Reference for AI Agents
 
-### regroup-rn7 (Mobile App)
+### Regroup (Mobile App)
 
 - **Entry:** `App.tsx` — provider tree: ErrorBoundary > SafeAreaProvider > StripeProvider > ThemeProvider > DataProvider > NotificationProvider > ModalProvider > Auth > RootNavigator
 - **Navigation:** All routes in `src/navigation/types.ts`. Phase 6.1 flat RootStack — no nested stacks except AuthStack and MainTab.

@@ -8,7 +8,7 @@
 
 ## Overview
 
-This document identifies all features in the RATS app that are **fully implemented** but **NOT covered** by the current E2E test plan. These features should be added in future test phases to achieve 80%+ coverage.
+This document identifies all features in the Regroup app that are **fully implemented** but **NOT covered** by the current E2E test plan. These features should be added in future test phases to achieve 80%+ coverage.
 
 **Current State:**
 

@@ -1,7 +1,7 @@
-# Release Readiness Audit — RATS v2
+# Release Readiness Audit — Regroup v2
 
 **Date:** 2026-05-19  
-**App:** RATS (Regroup) — React Native sober living house management  
+**App:** Regroup — React Native sober living house management  
 **Baseline:** ~80% production readiness assessed against codebase at commit `fcb2ac4`  
 **Scope:** App Store launch (covers soft launch as a strict subset)
 
@@ -32,7 +32,7 @@ The codebase has completed three major cleanup phases (P0 security fixes, Redux�
 - [ ] **Age rating** — Evaluate: sober living context likely 17+ (medical/health references) or 4+ (no objectionable content). Submit App Store questionnaire.
 - [ ] **IDFA disclosure** — Firebase Analytics uses IDFA; must check "Collect data used to track" and specify purposes.
 - [ ] **App Review notes** — Provide test account credentials and house setup context so reviewers can demo the app without real users.
-- [ ] **Entitlements audit** — Run `codesign -d --entitlements - Payload/RATS.app`; confirm only Push Notifications and In-App Purchase entitlements are present.
+- [ ] **Entitlements audit** — Run `codesign -d --entitlements - Payload/Regroup.app`; confirm only Push Notifications and In-App Purchase entitlements are present.
 
 #### 1.2 Google Play Store
 
@@ -110,7 +110,7 @@ Stripe is integrated for guest rent payments. There is no subscription paywall �
 - Average house size: 8 residents
 - Average rent: $600/month per resident
 - Total house revenue: ~$4,800/month
-- RATS fee at $49/house: ~1% of managed revenue (low friction price point)
+- Regroup fee at $49/house: ~1% of managed revenue (low friction price point)
 - Target: 50 houses at launch → $2,450 MRR
 - Oxford upsell at ~40% attach rate → additional ~$600 MRR
 
@@ -161,7 +161,7 @@ Four test accounts exist in the production Firebase Auth tenant:
 
 ### Domain 5 — Agentic AI Opportunities (Post-launch roadmap)
 
-These are revenue-generating features that can differentiate RATS from generic property management software in the recovery space.
+These are revenue-generating features that can differentiate Regroup from generic property management software in the recovery space.
 
 #### 5.1 Near-Term (3-6 months post-launch)
 

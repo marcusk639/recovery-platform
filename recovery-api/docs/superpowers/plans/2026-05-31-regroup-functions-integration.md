@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add recovery-platform integration to `regroup/functions/` so that regroup-rn7 can read/write shared user profiles and create cross-app referrals without needing a second Firebase app instance.
+**Goal:** Add recovery-platform integration to `regroup/functions/` so that Regroup can read/write shared user profiles and create cross-app referrals without needing a second Firebase app instance.
 
-**Architecture:** Add a typed `callPlatform` HTTP client util that posts to recovery-platform callable functions with service-key headers. Wrap it in thin `sharedProfile` and `referrals` callable functions that regroup-rn7 calls via its existing Firebase SDK. Seed the shared platform on user creation via a Firestore trigger.
+**Architecture:** Add a typed `callPlatform` HTTP client util that posts to recovery-platform callable functions with service-key headers. Wrap it in thin `sharedProfile` and `referrals` callable functions that Regroup calls via its existing Firebase SDK. Seed the shared platform on user creation via a Firestore trigger.
 
 **Tech Stack:** TypeScript, Firebase Functions v2, Jest 29, `fetch` (Node 18 built-in)
 

@@ -110,7 +110,7 @@ Only after this gate passes: replicate the same products/prices in **Live mode**
   when a product has no default price. This is the silent-failure root cause.
 - Homegroups product env vars: `homegroups/functions/src/utils/stripe.ts:14,17-34`
   (`STRIPE_PRODUCT_ID_GROUP`, `STRIPE_PRODUCT_ID_INTERGROUP_A`, `STRIPE_PRODUCT_ID_INTERGROUP_B`).
-- Homegroups version/name: `homegroups/mobile/package.json:2-3` (`"RecoveryConnect"`, `"0.0.1"`).
+- Homegroups version/name: `homegroups/mobile/package.json:2-3` (`"Homegroups"`, `"0.0.1"`).
 - Regroup tier config: `regroup/functions/src/config.ts:37-78` — 6 tiers, each with `priceEnvVar`.
 - Regroup price lookup at checkout: `regroup/functions/src/callable/subscriptions.ts:194`
   (`process.env[tierConfig.priceEnvVar]`).
@@ -198,7 +198,7 @@ array. Upload the 6 Price IDs to Secret Manager. 6. Bump `regroup/mobile/package
 
 ### Documentation references
 
-- Homegroups brand: `homegroups/mobile/package.json:2` (`name: "RecoveryConnect"` — outdated),
+- Homegroups brand: `homegroups/mobile/package.json:2` (`name: "Homegroups"` — outdated),
   App Store placeholder `homegroups/web/src/lib/deepLinks.js:9` (`id0000000000`, has `// TODO: real ID`).
 - Regroup iOS bundle: `regroup/mobile/ios/rats.xcodeproj/project.pbxproj:732` (`com.rats.dev`).
 - Regroup Android (already production, no change): `regroup/mobile/android/app/build.gradle:100`
@@ -215,7 +215,7 @@ array. Upload the 6 Price IDs to Secret Manager. 6. Bump `regroup/mobile/package
 4. **A-3 / deepLinks:** after Homegroups iOS approval, replace `id0000000000` in `deepLinks.js:9`
    with the real App Store ID.
 5. Optional brand cleanup: `homegroups/mobile/package.json` `name` → `Homegroups` (verify no native
-   build scripts depend on `RecoveryConnect` before changing).
+   build scripts depend on `Homegroups` before changing).
 
 ### Verification checklist (Phase 3)
 

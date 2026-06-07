@@ -1,4 +1,4 @@
-# RecoveryConnect Documentation Guide
+# Homegroups Documentation Guide
 
 **Quick Links:**
 - 🚀 **New to the project?** Start with [`docs/00-DOCUMENTATION-INDEX.md`](./docs/00-DOCUMENTATION-INDEX.md)
@@ -9,7 +9,7 @@
 
 ## Documentation Structure
 
-RecoveryConnect documentation is organized into three tiers:
+Homegroups documentation is organized into three tiers:
 
 ### 1. Canonical Documentation (Source of Truth)
 These are the current, authoritative documents:

@@ -1028,7 +1028,7 @@ git commit --allow-empty -m "chore: deploy getFacilityEngagementMetrics function
 
 ---
 
-## Bonus Task: Verify `getMeetingAttendance` is RATS-callable
+## Bonus Task: Verify `getMeetingAttendance` is Regroup-callable
 
 This is a verification task, not a code change. The function is already implemented — confirm it's deployed and accessible.
 
@@ -1040,7 +1040,7 @@ firebase functions:list 2>&1 | grep getMeetingAttendance
 
 Expected output: `getMeetingAttendance` with status `ACTIVE` and an HTTP URL.
 
-- [ ] **Step B.2: Test with a RATS API key**
+- [ ] **Step B.2: Test with a Regroup API key**
 
 The function uses `Authorization: Bearer <RATS_API_KEY>` (not Firebase Auth). The key is stored in Firebase environment config. Confirm it's set:
 
@@ -1054,7 +1054,7 @@ Or for Functions v2 (secrets):
 firebase functions:secrets:access RATS_API_KEY 2>&1 | head -5
 ```
 
-Share the function URL with RATS. They should be able to call it as:
+Share the function URL with Regroup. They should be able to call it as:
 
 ```
 GET https://us-central1-recovery-connect-cad4b.cloudfunctions.net/getMeetingAttendance?groupId=XXX&userId=YYY
@@ -1063,7 +1063,7 @@ Authorization: Bearer <RATS_API_KEY>
 
 - [ ] **Step B.3: Mark complete in REVENUE_OPPORTUNITIES.md**
 
-Once RATS confirms a successful call, update `docs/REVENUE_OPPORTUNITIES.md` item #11 to ✅:
+Once Regroup confirms a successful call, update `docs/REVENUE_OPPORTUNITIES.md` item #11 to ✅:
 
 ```bash
 # Find the line and mark it done
@@ -1074,7 +1074,7 @@ Then edit the file and commit:
 
 ```bash
 git add docs/REVENUE_OPPORTUNITIES.md
-git commit -m "docs: mark getMeetingAttendance RATS endpoint as verified"
+git commit -m "docs: mark getMeetingAttendance Regroup endpoint as verified"
 ```
 
 ---
@@ -1093,7 +1093,7 @@ git commit -m "docs: mark getMeetingAttendance RATS endpoint as verified"
 | Sponsorship links formed (anonymized)                                    | Task 1 (sponsorships count)                                  |
 | No individual member data exposed                                        | Task 1 (only counts returned), Task 3 (UI shows only counts) |
 | Works with existing `createIntergroup` + `type: "treatment_center"` flow | Task 4 (success page link)                                   |
-| `getMeetingAttendance` RATS verification                                 | Bonus Task                                                   |
+| `getMeetingAttendance` Regroup verification                                 | Bonus Task                                                   |
 | Deployed                                                                 | Task 5                                                       |
 
 **Placeholder scan:** No TBD/TODO/placeholder patterns present.

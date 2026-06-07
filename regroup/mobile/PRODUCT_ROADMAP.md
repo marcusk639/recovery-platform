@@ -1,4 +1,4 @@
-# RATS Product Roadmap - Path to $200K+ ARR
+# Regroup Product Roadmap - Path to $200K+ ARR
 
 **Date:** February 5, 2026
 **Vision:** Become the standard management platform for sober living homes and Oxford Houses across the United States
@@ -135,7 +135,7 @@
 ---
 
 ### Phase 3: Oxford House Pilot (Weeks 11-18)
-**Goal:** Get 10-15 Oxford Houses using RATS
+**Goal:** Get 10-15 Oxford Houses using Regroup
 
 **Strategy:**
 1. **Week 11-12: Preparation**
@@ -161,7 +161,7 @@
 
 **Time Investment:** 15-20 hours over 8 weeks
 **Success Criteria:**
-- 10+ Oxford Houses actively using RATS
+- 10+ Oxford Houses actively using Regroup
 - 80%+ satisfaction score
 - 2-3 strong testimonials
 - Payment processing adoption: 50%+
@@ -233,7 +233,7 @@
 
 **Time Investment:** 10 hours/week ongoing
 **Success Criteria:**
-- 100+ houses using RATS
+- 100+ houses using Regroup
 - 3+ regions with critical mass (10+ houses)
 - 50%+ using payment processing
 - NPS 8+
@@ -269,7 +269,7 @@
    - Consider going full-time (when revenue > $200K/year)
 
 **Success Criteria:**
-- 300+ houses using RATS
+- 300+ houses using Regroup
 - $200K+/year sustainable revenue
 - Industry recognition
 - You can go full-time if desired
@@ -479,7 +479,7 @@
 
 ### Month 3 Decision: Continue or Pivot?
 **Criteria for Continue:**
-- 15+ houses using RATS
+- 15+ houses using Regroup
 - 1+ house using payment processing successfully
 - Positive user feedback
 - Clear path to 50 houses
@@ -488,7 +488,7 @@
 
 ### Month 12 Decision: Accelerate or Maintain?
 **Criteria for Accelerate (invest more time):**
-- 80+ houses using RATS
+- 80+ houses using Regroup
 - $80K+ ARR
 - Strong Oxford House adoption
 - Clear path to $200K

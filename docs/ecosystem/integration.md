@@ -21,8 +21,8 @@
 | toApp                | Product                      |
 | -------------------- | ---------------------------- |
 | `treatment-center`   | detox-recovery (NextStep)    |
-| `phoenix-cleanhouse` | regroup (RATS)               |
-| `homegroups`         | homegroups (RecoveryConnect) |
+| `phoenix-cleanhouse` | regroup (Regroup)               |
+| `homegroups`         | homegroups (Homegroups) |
 
 ## Future State
 

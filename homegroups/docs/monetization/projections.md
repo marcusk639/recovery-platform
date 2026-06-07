@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-15  
 **Prepared for:** Internal planning, fundraising reference  
-**Scope:** Three-product recovery ecosystem — Homegroups (RecoveryConnect), Regroup/RATS (rats-v2), and Aftercare (planned)  
+**Scope:** Three-product recovery ecosystem — Homegroups, Regroup/Regroup (rats-v2), and Aftercare (planned)  
 **Horizon:** 3 years (April 2026 – March 2029)
 
 ---
@@ -14,7 +14,7 @@ The Recovery Ecosystem maps to the ASAM Continuum of Care across three phases of
 | Phase              | Product                | Buyer             | ARPU             |
 | ------------------ | ---------------------- | ----------------- | ---------------- |
 | 12-step community  | **Homegroups**         | Group admins      | $12/year         |
-| Sober living       | **Regroup (RATS)**     | House operators   | $49–99/month     |
+| Sober living       | **Regroup**     | House operators   | $49–99/month     |
 | Clinical aftercare | **Aftercare** (Year 2) | Treatment centers | $800–3,000/month |
 
 No competitor connects these three phases digitally. The integration play — selling a "continuity of care" bundle to treatment centers — is the highest-ACV product in the portfolio and the primary path to a venture-scale outcome.
@@ -50,7 +50,7 @@ No competitor connects these three phases digitally. The integration play — se
 - 5% platform fee on donations (implemented, minor revenue currently)
 - Trial: 7 days free, target 15% trial-to-paid conversion rate
 
-**Regroup / RATS (Sober Living)**
+**Regroup (Sober Living)**
 
 - Traditional houses: $79/month
 - Oxford Houses (individual): $49/month (lower price, higher volume via network)
@@ -65,7 +65,7 @@ No competitor connects these three phases digitally. The integration play — se
 - Enterprise tier: $3,000+/month (multi-site, SSO, BAA, custom exports)
 - Launch target: Network tier ($1,500/month avg) for first 10 customers
 
-**Treatment Center Bundle (RATS + Homegroups integrated)**
+**Treatment Center Bundle (Regroup + Homegroups integrated)**
 
 - Integrated "continuity of care" offering bundling all three products
 - Additional $200-500/month premium over individual product pricing
@@ -76,14 +76,14 @@ No competitor connects these three phases digitally. The integration play — se
 | Product                | Month 1 New Accounts | Month 12 New Accounts | Annual Churn |
 | ---------------------- | -------------------- | --------------------- | ------------ |
 | Homegroups (groups)    | 5                    | 30                    | 12%          |
-| RATS individual houses | 2                    | 12                    | 18%          |
-| RATS Oxford chapters   | 0                    | 2                     | 10%          |
+| Regroup individual houses | 2                    | 12                    | 18%          |
+| Regroup Oxford chapters   | 0                    | 2                     | 10%          |
 | Treatment centers      | 0                    | 1–2                   | 8%           |
 
 **Growth drivers by product:**
 
 - Homegroups: Intergroup outreach (GSR meetings), referral program, public group page SEO, word-of-mouth treasury handoff demo
-- RATS: Oxford House World Services partnership outreach, public sober living directory (Month 6), treatment center referral pipeline
+- Regroup: Oxford House World Services partnership outreach, public sober living directory (Month 6), treatment center referral pipeline
 - Aftercare: Direct sales to treatment centers < 50 beds; outcome tracking demo is the key differentiator
 
 ### Cost Structure Assumptions
@@ -130,16 +130,16 @@ Churn assumption: 1.0%/month (12%/year)
 
 **Year 1 Homegroups ARR: $2,892** (241 groups × $12)
 
-> **Note on Homegroups economics:** At $12/yr, Homegroups is a **distribution flywheel, not a primary revenue engine** in Year 1–2. Its strategic value is twofold: (1) it seeds the meeting database and group network that makes RATS and Aftercare more valuable, and (2) each group admin is a potential referral source to treatment centers. Do not optimize Homegroups pricing for near-term revenue — optimize it for adoption speed.
+> **Note on Homegroups economics:** At $12/yr, Homegroups is a **distribution flywheel, not a primary revenue engine** in Year 1–2. Its strategic value is twofold: (1) it seeds the meeting database and group network that makes Regroup and Aftercare more valuable, and (2) each group admin is a potential referral source to treatment centers. Do not optimize Homegroups pricing for near-term revenue — optimize it for adoption speed.
 
 ---
 
-### Regroup / RATS — Monthly Cohort (Base Case)
+### Regroup — Monthly Cohort (Base Case)
 
 **Individual houses:** Average $75/month (blended Oxford $49 + Traditional $79), 1.5%/month churn  
 **Oxford chapters:** $300/month, 0.83%/month churn
 
-| Month | Period   | New Houses | Total Houses | Houses MRR | New Chapters | Total Chapters | Chapters MRR | Total RATS MRR |
+| Month | Period   | New Houses | Total Houses | Houses MRR | New Chapters | Total Chapters | Chapters MRR | Total Regroup MRR |
 | ----- | -------- | ---------- | ------------ | ---------- | ------------ | -------------- | ------------ | -------------- |
 | M1    | Apr 2026 | 0          | 3\*          | $225       | 0            | 0              | $0           | $225           |
 | M2    | May 2026 | 2          | 5            | $375       | 0            | 0              | $0           | $375           |
@@ -156,7 +156,7 @@ Churn assumption: 1.0%/month (12%/year)
 
 \*3 existing operators transitioning to new pricing
 
-**Year 1 RATS ARR (from M12 MRR): ~$94,500**
+**Year 1 Regroup ARR (from M12 MRR): ~$94,500**
 
 ---
 
@@ -177,7 +177,7 @@ Average ACV: $18,000/year ($1,500/month), 0.67%/month churn
 
 ### Combined Monthly MRR — Year 1
 
-| Month    | Homegroups | RATS   | Aftercare | **Total MRR** | MoM Growth |
+| Month    | Homegroups | Regroup   | Aftercare | **Total MRR** | MoM Growth |
 | -------- | ---------- | ------ | --------- | ------------- | ---------- |
 | Apr 2026 | $5         | $225   | $0        | **$230**      | —          |
 | May 2026 | $13        | $375   | $0        | **$388**      | +69%       |
@@ -201,9 +201,9 @@ Average ACV: $18,000/year ($1,500/month), 0.67%/month churn
 
 ### Year 2 Quarterly (April 2027 – March 2028)
 
-By Year 2, RATS Oxford network effects kick in, Aftercare sales pipeline builds, and Homegroups intergroup tier launches.
+By Year 2, Regroup Oxford network effects kick in, Aftercare sales pipeline builds, and Homegroups intergroup tier launches.
 
-| Quarter         | Homegroups | RATS    | Aftercare | **Total MRR** | **ARR** |
+| Quarter         | Homegroups | Regroup    | Aftercare | **Total MRR** | **ARR** |
 | --------------- | ---------- | ------- | --------- | ------------- | ------- |
 | Q1 (Apr–Jun 27) | $480       | $14,500 | $10,500   | **$25,480**   | $306K   |
 | Q2 (Jul–Sep 27) | $720       | $20,000 | $18,000   | **$38,720**   | $465K   |
@@ -212,7 +212,7 @@ By Year 2, RATS Oxford network effects kick in, Aftercare sales pipeline builds,
 
 **Year 2 Total Revenue (actual): ~$530,000**
 
-_Year 2 RATS breakdown at Q4: ~300 houses × $75 + 25 chapters × $300 = $30,000_  
+_Year 2 Regroup breakdown at Q4: ~300 houses × $75 + 25 chapters × $300 = $30,000_  
 _Year 2 Aftercare at Q4: ~23 TCs × $1,500 = $34,500_  
 _Year 2 Homegroups at Q4: ~1,000 groups + 20 intergroups × $6 = $1,200_
 
@@ -222,7 +222,7 @@ _Year 2 Homegroups at Q4: ~1,000 groups + 20 intergroups × $6 = $1,200_
 
 By Year 3, treatment center enterprise deals + Oxford network effects drive compound growth.
 
-| Quarter         | Homegroups | RATS    | Aftercare | **Total MRR** | **ARR** |
+| Quarter         | Homegroups | Regroup    | Aftercare | **Total MRR** | **ARR** |
 | --------------- | ---------- | ------- | --------- | ------------- | ------- |
 | Q1 (Apr–Jun 28) | $2,000     | $45,000 | $55,000   | **$102,000**  | $1.22M  |
 | Q2 (Jul–Sep 28) | $2,800     | $58,000 | $75,000   | **$135,800**  | $1.63M  |
@@ -231,7 +231,7 @@ By Year 3, treatment center enterprise deals + Oxford network effects drive comp
 
 **Year 3 Total Revenue (actual): ~$1,620,000**
 
-_Year 3 RATS at Q4: ~700 houses × $80 avg + 60 chapters × $300 = $74,000_  
+_Year 3 Regroup at Q4: ~700 houses × $80 avg + 60 chapters × $300 = $74,000_  
 _Year 3 Aftercare at Q4: ~80 TCs × $1,500 avg = $120,000_  
 _Year 3 Homegroups at Q4: ~3,500 groups + 60 intergroups × $6 = $3,860 → rounded to $4,200 with donation fees_
 
@@ -244,7 +244,7 @@ _Year 3 Homegroups at Q4: ~3,500 groups + 60 intergroups × $6 = $3,860 → roun
 | Component                               | Year 1      | Year 2      | Year 3       |
 | --------------------------------------- | ----------- | ----------- | ------------ |
 | Firebase (all products)                 | $8,400      | $24,000     | $60,000      |
-| Stripe fees (~3% of RATS/TC revenue)    | $1,200      | $9,000      | $27,000      |
+| Stripe fees (~3% of Regroup/TC revenue)    | $1,200      | $9,000      | $27,000      |
 | SendGrid / Twilio (Year 2+)             | $600        | $3,600      | $9,600       |
 | HIPAA infra (GCP Cloud Run, encryption) | $0          | $12,000     | $18,000      |
 | Sentry, monitoring, tools               | $600        | $2,400      | $4,800       |
@@ -331,7 +331,7 @@ The founding constraint is a solo developer-founder. Hiring must wait until payi
 | Role                     | Department | Start           | Base Salary           | Fully-Loaded     | Notes                                   |
 | ------------------------ | ---------- | --------------- | --------------------- | ---------------- | --------------------------------------- |
 | Founder                  | All        | Apr 2026        | $72,000               | $72,000          | Often deferred Y1                       |
-| Full-Stack Engineer #1   | R&D        | Oct 2026 (M7)\* | $110,000              | $143,000/yr      | Accelerates Aftercare & RATS gaps       |
+| Full-Stack Engineer #1   | R&D        | Oct 2026 (M7)\* | $110,000              | $143,000/yr      | Accelerates Aftercare & Regroup gaps       |
 | Sales / Customer Success | S&M        | Jan 2027 (M10)  | $70,000 + commission  | $91,000/yr + 8%  | Owns TC pipeline                        |
 | Full-Stack Engineer #2   | R&D        | Apr 2027        | $110,000              | $143,000/yr      | Aftercare FHIR, integration layer       |
 | Product Manager          | R&D        | Jul 2027        | $120,000              | $156,000/yr      | Needed at 15+ enterprise accounts       |
@@ -339,7 +339,7 @@ The founding constraint is a solo developer-founder. Hiring must wait until payi
 | Customer Success #2      | S&M        | Jan 2028        | $75,000               | $97,500/yr       | Churn prevention at scale               |
 | Finance / Ops            | G&A        | Apr 2028        | $80,000               | $104,000/yr      | When revenue > $1M ARR                  |
 
-\*Engineer #1 conditional on seed funding OR RATS revenue reaching $3K+ MRR
+\*Engineer #1 conditional on seed funding OR Regroup revenue reaching $3K+ MRR
 
 ### Headcount by Department
 
@@ -359,7 +359,7 @@ The founding constraint is a solo developer-founder. Hiring must wait until payi
 
 - Starting cash: $0 (bootstrap) or $250,000 (post-seed)
 - Annual billing for Homegroups means cash collected upfront, recognized monthly
-- RATS and Aftercare billed monthly in arrears
+- Regroup and Aftercare billed monthly in arrears
 
 ### Bootstrap Scenario (No External Funding)
 
@@ -373,7 +373,7 @@ The founding constraint is a solo developer-founder. Hiring must wait until payi
 
 \*With founder salary. Without salary: net = ($6,400), cash balance = ($6,400)
 
-**Bootstrap viability:** Without a salary draw, the business is nearly self-funding by Month 10 when TC revenue arrives. This confirms the 12-month plan's sequencing is correct — the founder can run lean until RATS operators pay for themselves, then use TC revenue to hire.
+**Bootstrap viability:** Without a salary draw, the business is nearly self-funding by Month 10 when TC revenue arrives. This confirms the 12-month plan's sequencing is correct — the founder can run lean until Regroup operators pay for themselves, then use TC revenue to hire.
 
 ---
 
@@ -415,7 +415,7 @@ The founding constraint is a solo developer-founder. Hiring must wait until payi
 
 _ARPU grows as intergroup and donation fees compound; CAC falls as referral flywheel works_
 
-### Regroup / RATS (Individual Houses)
+### Regroup (Individual Houses)
 
 | Metric             | Year 1    | Year 2     | Year 3     | Target     |
 | ------------------ | --------- | ---------- | ---------- | ---------- |
@@ -456,15 +456,15 @@ _ARPU grows as intergroup and donation fees compound; CAC falls as referral flyw
 | Driver                        | Conservative | Base (P50) | Optimistic         |
 | ----------------------------- | ------------ | ---------- | ------------------ |
 | Homegroups groups at M12      | 120          | 241        | 400                |
-| RATS houses at M12            | 40           | 73         | 120                |
-| RATS Oxford chapters at M12   | 4            | 8          | 14                 |
+| Regroup houses at M12            | 40           | 73         | 120                |
+| Regroup Oxford chapters at M12   | 4            | 8          | 14                 |
 | TCs at M12                    | 1            | 3          | 5                  |
 | Annual group churn            | 18%          | 12%        | 8%                 |
 | Annual house churn            | 25%          | 18%        | 12%                |
 | TC churn                      | 12%          | 8%         | 5%                 |
-| RATS ARPU                     | $65/mo       | $75/mo     | $88/mo             |
+| Regroup ARPU                     | $65/mo       | $75/mo     | $88/mo             |
 | TC ARPU                       | $1,000/mo    | $1,500/mo  | $2,200/mo          |
-| Monthly new RATS houses (M12) | 7            | 12         | 20                 |
+| Monthly new Regroup houses (M12) | 7            | 12         | 20                 |
 | Oxford chapter pilot success  | Limited      | Moderate   | Strong partnership |
 
 ### Scenario Outcomes
@@ -477,7 +477,7 @@ _ARPU grows as intergroup and donation fees compound; CAC falls as referral flyw
 
 ### Scenario: Year 3 Customers
 
-| Scenario     | Homegroups Groups | RATS Houses | RATS Chapters | Treatment Centers |
+| Scenario     | Homegroups Groups | Regroup Houses | Regroup Chapters | Treatment Centers |
 | ------------ | ----------------- | ----------- | ------------- | ----------------- |
 | Conservative | 800               | 200         | 25            | 20                |
 | Base         | 3,000             | 700         | 60            | 80                |
@@ -498,8 +498,8 @@ _ARPU grows as intergroup and donation fees compound; CAC falls as referral flyw
 ### Option A: Pure Bootstrap (Recommended if Aftercare slips to Month 10+)
 
 - **Cash needed:** $0 external (founder defers salary or draws < $72K/year)
-- **Risk:** Solo bandwidth limits RATS feature completion, Aftercare delays until Month 10–12
-- **Milestone to watch:** RATS MRR > $5,000 — this is when hiring becomes self-funding
+- **Risk:** Solo bandwidth limits Regroup feature completion, Aftercare delays until Month 10–12
+- **Milestone to watch:** Regroup MRR > $5,000 — this is when hiring becomes self-funding
 - **Risk of this path:** Slower treatment center sales without a dedicated sales resource
 
 ### Option B: $250K Seed Round (Recommended)
@@ -511,7 +511,7 @@ _ARPU grows as intergroup and donation fees compound; CAC falls as referral flyw
 
 | Category                     | Amount  | Purpose                                                 |
 | ---------------------------- | ------- | ------------------------------------------------------- |
-| Engineering hire (6 months)  | $65,000 | Close RATS Sprint 2 gaps; ship Aftercare identity layer |
+| Engineering hire (6 months)  | $65,000 | Close Regroup Sprint 2 gaps; ship Aftercare identity layer |
 | Founder salary (12 months)   | $72,000 | Sustainable pace for solo founder                       |
 | HIPAA audit & legal          | $30,000 | Required before Aftercare goes to production (Month 8)  |
 | Sales / events (TC pipeline) | $20,000 | Industry conferences, Oxford outreach, TC demo tour     |
@@ -521,7 +521,7 @@ _ARPU grows as intergroup and donation fees compound; CAC falls as referral flyw
 **Milestones this buys:**
 
 - Homegroups: 200+ paying groups in App Store
-- RATS: 50+ paying operators, Oxford pilot live, public directory launched
+- Regroup: 50+ paying operators, Oxford pilot live, public directory launched
 - Aftercare: Infrastructure deployed, 3+ paying treatment centers
 - Combined MRR > $10,000 at month 12
 
@@ -548,10 +548,10 @@ When the following conditions are met, raise a Series A:
 
 | Check                                                     | Result                                                  |
 | --------------------------------------------------------- | ------------------------------------------------------- |
-| RATS at $75/month with 73 houses at Year 1 = $65,700 ARR  | ✓ Consistent with $1-2.5K MRR target from 12-month plan |
+| Regroup at $75/month with 73 houses at Year 1 = $65,700 ARR  | ✓ Consistent with $1-2.5K MRR target from 12-month plan |
 | TC at $1,500/month with 3 TCs at M12 = $54K ARR           | ✓ Consistent with plan's $2K-5K MRR target for Month 10 |
 | Year 3 ARR of $1.56M at 8 headcount → ~$195K ARR/employee | ✓ Healthy for SaaS (target >$150K)                      |
-| LTV:CAC for RATS at 11:1                                  | ✓ Exceptional (target >3:1)                             |
+| LTV:CAC for Regroup at 11:1                                  | ✓ Exceptional (target >3:1)                             |
 | Burn multiple < 2.0× in Year 1 (with salary)              | ✓ 2.1× barely above target; without salary = ~0.15×     |
 | Rule of 40 at Year 3 (42% margin + ~45% growth)           | ✓ Passes at 87                                          |
 
@@ -572,7 +572,7 @@ When the following conditions are met, raise a Series A:
 | ----------------------------------------------------------------------- | -------- | ----------- | ------------------------------------------------------------------------------------------------------------- |
 | Solo founder bandwidth — can't close all three products simultaneously  | HIGH     | HIGH        | Strict product sequencing per 12-month plan; hire earlier with seed                                           |
 | Homegroups conversion rate < 10% (trial-to-paid)                        | MEDIUM   | MEDIUM      | Fix known blockers (subscription gating, Day 5 push notification, money-back guarantee)                       |
-| RATS pricing increase causes churn among existing $10+$1 operators      | MEDIUM   | LOW         | Grandfather existing operators; new pricing only for new operators                                            |
+| Regroup pricing increase causes churn among existing $10+$1 operators      | MEDIUM   | LOW         | Grandfather existing operators; new pricing only for new operators                                            |
 | Oxford House World Services builds competing tool or blocks partnership | HIGH     | LOW         | Approach as partner, not competitor; offer revenue share, official endorsement path                           |
 | Aftercare HIPAA audit delayed / blocked                                 | HIGH     | MEDIUM      | Budget $30K and 3 months lead time; defer to Month 10 if needed                                               |
 | Apple App Store IAP compliance — Homegroups WebView subscription        | HIGH     | MEDIUM      | Consult App Store legal team; B2B organization subscription has carve-out precedent                           |
@@ -581,11 +581,11 @@ When the following conditions are met, raise a Series A:
 
 ### Key Assumptions to Monitor Monthly
 
-1. **RATS new operator monthly acquisition rate** — this is the primary cash driver in Year 1
+1. **Regroup new operator monthly acquisition rate** — this is the primary cash driver in Year 1
 2. **Homegroups trial-to-paid conversion rate** — target 15%; below 10% means messaging or product issue
 3. **Treatment center sales cycle length** — if > 6 months, bump Aftercare revenue timeline forward 3 months
 4. **Oxford House chapter MRR** — the viral growth flywheel; if chapters aren't converting at Month 7, reconsider Oxford strategy
-5. **RATS monthly churn** — any churn > 2.5%/month ($3%/month annually) indicates product-market fit issue
+5. **Regroup monthly churn** — any churn > 2.5%/month ($3%/month annually) indicates product-market fit issue
 
 ---
 
@@ -593,9 +593,9 @@ When the following conditions are met, raise a Series A:
 
 | Milestone                                  | Target Date | MRR Trigger  | Key Action                    |
 | ------------------------------------------ | ----------- | ------------ | ----------------------------- |
-| Break-even (infra only, no salary)         | Month 3     | $1,500 MRR   | RATS price increase live      |
+| Break-even (infra only, no salary)         | Month 3     | $1,500 MRR   | Regroup price increase live      |
 | Break-even (with founder salary $6K/month) | Month 8–9   | $6,000 MRR   | Oxford chapters + TC pipeline |
-| First hire funded by revenue               | Month 7–10  | $8,000+ MRR  | Raise seed OR RATS at $5K MRR |
+| First hire funded by revenue               | Month 7–10  | $8,000+ MRR  | Raise seed OR Regroup at $5K MRR |
 | HIPAA investment funded                    | Month 10    | $12,000 MRR  | TC revenue covers audit cost  |
 | Series A ready                             | Month 22–26 | $45,000+ MRR | 15+ TCs, Oxford network live  |
 | Cash-flow positive (with 6-person team)    | Month 20    | $30,000+ MRR | TC revenue dominates mix      |
@@ -606,7 +606,7 @@ When the following conditions are met, raise a Series A:
 
 1. **Treatment center sales velocity** — each TC deal is 150× the ARPU of a Homegroups group. One enterprise deal ($3K/month) = 3,000 individual group subscriptions. Prioritize TC sales above all else once Aftercare infrastructure ships.
 
-2. **RATS operator acquisition rate** — the monthly house acquisition rate directly determines when the business becomes self-sustaining. Target 10 new operators/month by Month 6.
+2. **Regroup operator acquisition rate** — the monthly house acquisition rate directly determines when the business becomes self-sustaining. Target 10 new operators/month by Month 6.
 
 3. **Oxford House chapter tier adoption** — the $300/month chapter tier is a 4× ARPU multiplier over individual houses with near-identical support cost. Oxford World Services partnership could unlock 2,500 houses simultaneously.
 
@@ -616,6 +616,6 @@ When the following conditions are met, raise a Series A:
 
 ---
 
-_This model was built from code-level product analysis of three repositories (RecoveryConnect, rats-v2, rats-web), all planning documents, pricing models, and the 12-month ecosystem implementation plan. All projections are estimates subject to market validation. The model is most sensitive to RATS operator acquisition rate in Year 1 and treatment center sales velocity in Year 2._
+_This model was built from code-level product analysis of three repositories (Homegroups, rats-v2, rats-web), all planning documents, pricing models, and the 12-month ecosystem implementation plan. All projections are estimates subject to market validation. The model is most sensitive to Regroup operator acquisition rate in Year 1 and treatment center sales velocity in Year 2._
 
 _Suggested update cadence: Monthly actuals vs. base case MRR by product. If any product is tracking 30%+ below base case at Month 6, revisit the growth assumptions and pricing strategy._

@@ -202,7 +202,7 @@ describe("submitPartnershipLead", () => {
 - [ ] Run:
 
 ```bash
-cd /Users/marcusklein/dev/RecoveryConnect/functions && npm test -- --testPathPattern=submitPartnershipLead
+cd /Users/marcusklein/dev/Homegroups/functions && npm test -- --testPathPattern=submitPartnershipLead
 ```
 
 Expected: FAIL with `Cannot find module '../callable/submitPartnershipLead'`.
@@ -303,7 +303,7 @@ export const submitPartnershipLead = functions.https.onCall(handler);
 - [ ] Run:
 
 ```bash
-cd /Users/marcusklein/dev/RecoveryConnect/functions && npm test -- --testPathPattern=submitPartnershipLead
+cd /Users/marcusklein/dev/Homegroups/functions && npm test -- --testPathPattern=submitPartnershipLead
 ```
 
 Expected: all 9 tests PASS.
@@ -323,7 +323,7 @@ Place it alphabetically (between existing `submitX` and `syncX` exports, or wher
 - [ ] Run:
 
 ```bash
-cd /Users/marcusklein/dev/RecoveryConnect/functions && npm run build
+cd /Users/marcusklein/dev/Homegroups/functions && npm run build
 ```
 
 Expected: clean TypeScript compile, no errors.
@@ -333,7 +333,7 @@ Expected: clean TypeScript compile, no errors.
 - [ ] Run:
 
 ```bash
-cd /Users/marcusklein/dev/RecoveryConnect
+cd /Users/marcusklein/dev/Homegroups
 git add functions/src/callable/submitPartnershipLead.ts \
   functions/src/__tests__/submitPartnershipLead.test.ts \
   functions/src/index.ts
@@ -369,7 +369,7 @@ match /partnershipLeads/{leadId} {
 - [ ] Check for existing rules tests:
 
 ```bash
-ls /Users/marcusklein/dev/RecoveryConnect/functions/src/tests/security-rules.test.ts 2>/dev/null && echo "exists" || echo "no rules tests"
+ls /Users/marcusklein/dev/Homegroups/functions/src/tests/security-rules.test.ts 2>/dev/null && echo "exists" || echo "no rules tests"
 ```
 
 - [ ] If tests exist, add a test asserting reads and writes to `partnershipLeads` are denied for both authenticated and unauthenticated users. If no tests exist, skip (rules tests require Firestore emulator).
@@ -379,7 +379,7 @@ ls /Users/marcusklein/dev/RecoveryConnect/functions/src/tests/security-rules.tes
 - [ ] Run:
 
 ```bash
-cd /Users/marcusklein/dev/RecoveryConnect
+cd /Users/marcusklein/dev/Homegroups
 git add firestore.rules
 git commit -m "feat(rules): deny direct client access to partnershipLeads"
 ```
@@ -670,7 +670,7 @@ export default function LeadCaptureForm({ kind, title, subtitle, tiers }) {
 - [ ] Run:
 
 ```bash
-cd /Users/marcusklein/dev/RecoveryConnect/web && npm run build
+cd /Users/marcusklein/dev/Homegroups/web && npm run build
 ```
 
 Expected: `Compiled successfully`. (No callers yet; just checks JSX/import correctness.)
@@ -680,7 +680,7 @@ Expected: `Compiled successfully`. (No callers yet; just checks JSX/import corre
 - [ ] Run:
 
 ```bash
-cd /Users/marcusklein/dev/RecoveryConnect
+cd /Users/marcusklein/dev/Homegroups
 git add web/src/components/LeadCaptureForm.js
 git commit -m "feat(web): shared LeadCaptureForm component with honeypot and callable submission"
 ```
@@ -1039,7 +1039,7 @@ export default TreatmentCentersPage;
 - [ ] Run:
 
 ```bash
-cd /Users/marcusklein/dev/RecoveryConnect/web && npm run build
+cd /Users/marcusklein/dev/Homegroups/web && npm run build
 ```
 
 Expected: `Compiled successfully`.
@@ -1049,7 +1049,7 @@ Expected: `Compiled successfully`.
 - [ ] Run:
 
 ```bash
-cd /Users/marcusklein/dev/RecoveryConnect
+cd /Users/marcusklein/dev/Homegroups
 git add web/src/pages/TreatmentCentersPage.js
 git commit -m "feat(web): treatment centers landing page with tiered pricing"
 ```
@@ -1246,7 +1246,7 @@ export default IntergroupsPage;
 - [ ] Run:
 
 ```bash
-cd /Users/marcusklein/dev/RecoveryConnect/web && npm run build
+cd /Users/marcusklein/dev/Homegroups/web && npm run build
 ```
 
 Expected: `Compiled successfully`.
@@ -1256,7 +1256,7 @@ Expected: `Compiled successfully`.
 - [ ] Run:
 
 ```bash
-cd /Users/marcusklein/dev/RecoveryConnect
+cd /Users/marcusklein/dev/Homegroups
 git add web/src/pages/IntergroupsPage.js
 git commit -m "feat(web): intergroups landing page with single-tier pricing"
 ```
@@ -1302,7 +1302,7 @@ Keep the existing column header (likely "Product"). If a more appropriate column
 - [ ] Run:
 
 ```bash
-cd /Users/marcusklein/dev/RecoveryConnect/web && npm run build
+cd /Users/marcusklein/dev/Homegroups/web && npm run build
 ```
 
 Expected: `Compiled successfully`.
@@ -1312,7 +1312,7 @@ Expected: `Compiled successfully`.
 - [ ] Run:
 
 ```bash
-cd /Users/marcusklein/dev/RecoveryConnect/web && npm start
+cd /Users/marcusklein/dev/Homegroups/web && npm start
 ```
 
 - [ ] In a browser, visit:
@@ -1328,7 +1328,7 @@ Stop the dev server (`Ctrl+C`) when done.
 - [ ] Run:
 
 ```bash
-cd /Users/marcusklein/dev/RecoveryConnect
+cd /Users/marcusklein/dev/Homegroups
 git add web/src/App.js web/src/components/Footer.js
 git commit -m "feat(web): wire partnership page routes and footer links"
 ```
@@ -1344,7 +1344,7 @@ git commit -m "feat(web): wire partnership page routes and footer links"
 - [ ] Run:
 
 ```bash
-cd /Users/marcusklein/dev/RecoveryConnect
+cd /Users/marcusklein/dev/Homegroups
 npx firebase-tools@13 deploy --only functions:submitPartnershipLead --project recovery-connect-cad4b
 ```
 
@@ -1355,7 +1355,7 @@ Expected: `Deploy complete!` with a line like `functions[submitPartnershipLead(u
 - [ ] Run:
 
 ```bash
-cd /Users/marcusklein/dev/RecoveryConnect
+cd /Users/marcusklein/dev/Homegroups
 npx firebase-tools@13 deploy --only hosting,firestore:rules --project recovery-connect-cad4b
 ```
 
@@ -1385,7 +1385,7 @@ document.querySelector('input[name="website"]').value =
 - [ ] Run:
 
 ```bash
-cd /Users/marcusklein/dev/RecoveryConnect
+cd /Users/marcusklein/dev/Homegroups
 git add web/build/
 git commit -m "build(web): rebuild with partnership pages"
 ```

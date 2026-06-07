@@ -1,4 +1,4 @@
-# RATS Pricing Strategy Options
+# Regroup Pricing Strategy Options
 
 ## Comprehensive Pricing Analysis & Recommendations
 
@@ -10,7 +10,7 @@
 
 ## Executive Summary
 
-This document outlines 6 potential pricing strategies for RATS, from conservative to aggressive. Given near-zero infrastructure costs, **pricing should be based on value delivered** (saves $500-1,000/month in admin time) rather than cost to provide.
+This document outlines 6 potential pricing strategies for Regroup, from conservative to aggressive. Given near-zero infrastructure costs, **pricing should be based on value delivered** (saves $500-1,000/month in admin time) rather than cost to provide.
 
 ### Key Recommendations:
 
@@ -470,7 +470,7 @@ Free Forever: $0/month
 ├─ Basic activity tracking
 ├─ Meeting check-ins
 ├─ Community support only
-└─ RATS branding
+└─ Regroup branding
 
 PREMIUM TIERS
 ━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -550,7 +550,7 @@ Enterprise: $199/month
 | ------------------ | ------------ | ---------------------- |
 | Excel spreadsheets | $0           | Manual tracking        |
 | Custom databases   | $0-50/month  | Limited features       |
-| RATS               | $10+$1/month | Comprehensive platform |
+| Regroup               | $10+$1/month | Comprehensive platform |
 
 **Insight:** You have NO direct competitors. You set the market. Don't undervalue!
 
@@ -667,11 +667,11 @@ Month 6: "Lock in discounted rate: $39/mo vs. future $49/mo..."
 **Sample Migration Email:**
 
 ```
-Subject: RATS Pricing Update - Lock In Founder Rate
+Subject: Regroup Pricing Update - Lock In Founder Rate
 
 Hi [Name],
 
-Thank you for being a RATS customer since [DATE]!
+Thank you for being a Regroup customer since [DATE]!
 
 As promised, we've honored your $10+$1 pricing for the past 6 months
 while we built out Oxford House support, Stripe integration, and

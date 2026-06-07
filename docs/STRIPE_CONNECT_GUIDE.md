@@ -1,7 +1,7 @@
 # Stripe Connect Setup Guide — recovery-platform
 
-How Stripe Connect is implemented in **homegroups** (RecoveryConnect) and **regroup**
-(RATS), how to set each up, and the cross-cutting guidance you need to operate Connect
+How Stripe Connect is implemented in **homegroups** (Homegroups) and **regroup**
+(Regroup), how to set each up, and the cross-cutting guidance you need to operate Connect
 safely. Grounded in the actual code as of 2026-06-06 (file:line citations throughout).
 
 > Both products use **Express** connected accounts and **destination charges**
@@ -12,7 +12,7 @@ safely. Grounded in the actual code as of 2026-06-06 (file:line citations throug
 
 ## 1. Connect at a glance — both products
 
-| Dimension              | homegroups (RecoveryConnect)                        | regroup (RATS)                                                                        |
+| Dimension              | homegroups (Homegroups)                        | regroup (Regroup)                                                                        |
 | ---------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | Account type           | Express                                             | Express                                                                               |
 | Charge type            | Destination charge (`transfer_data.destination`)    | Destination charge (`transfer_data.destination`)                                      |
@@ -32,7 +32,7 @@ reliably and the platform keeps a full record. This is deliberate; see
 
 ---
 
-## 2. homegroups (RecoveryConnect) — setup
+## 2. homegroups (Homegroups) — setup
 
 **Use case:** A group admin connects a Stripe account so members can make 7th Tradition
 donations to _that group_. The platform takes 5%.
@@ -90,7 +90,7 @@ exists, so step 2 is skipped and a fresh link is minted).
 
 ---
 
-## 3. regroup (RATS) — setup
+## 3. regroup (Regroup) — setup
 
 **Use case:** A sober-living **house** connects a Stripe account so residents can pay
 rent to that house. The platform takes 2%. Also supports **scheduled** auto rent

@@ -10,8 +10,8 @@
 
 `recovery-shared-api` is being migrated from a Hono/Cloud Run server to Firebase Cloud Functions v2, deployed to a dedicated Firebase project (`recovery-platform`). It will serve as the shared identity layer and shared feature platform for two apps:
 
-- **RecoveryConnect** (`homegroups`) — AA/NA meeting management
-- **regroup-rn7** (`sober-living`) — sober living house management
+- **Homegroups** (`homegroups`) — AA/NA meeting management
+- **Regroup** (`sober-living`) — sober living house management
 
 These apps currently have overlapping but independent user accounts. The platform is designed to support cross-app identity linking in the future without requiring a data migration.
 
@@ -32,7 +32,7 @@ recovery-platform/
 
 ### Repository Structure
 
-Replaces the current Hono/ESM layout. Follows the `firebase-functions` v2 pattern already established in `RecoveryConnect/functions` and `regroup-functions`.
+Replaces the current Hono/ESM layout. Follows the `firebase-functions` v2 pattern already established in `Homegroups/functions` and `regroup-functions`.
 
 ```
 src/
@@ -181,7 +181,7 @@ firebase functions:secrets:set RECOVERY_PLATFORM_API_KEY
 
 #### 2. Add utility: `src/util/sharedPlatform.ts`
 
-A typed HTTP client for calling recovery-platform HTTP functions. Follows the same pattern already used in `src/callable/homegroups.ts` (the RecoveryConnect `getMeetingAttendance` bridge).
+A typed HTTP client for calling recovery-platform HTTP functions. Follows the same pattern already used in `src/callable/homegroups.ts` (the Homegroups `getMeetingAttendance` bridge).
 
 - Wraps `fetch` with headers: `X-Service-Key`, `X-App-Id: sober-living`, `X-User-Uid`, `X-User-Email`
 - Base URL read from `RECOVERY_PLATFORM_URL` env var — set to the Firebase emulator URL locally, production Cloud Functions URL in prod
@@ -189,7 +189,7 @@ A typed HTTP client for calling recovery-platform HTTP functions. Follows the sa
 
 #### 3. Add callable: `src/callable/sharedProfile.ts`
 
-Thin wrappers that proxy `getUserProfile` and `updateUserProfile` to the shared platform. regroup-rn7 calls these via the existing regroup Firebase SDK — no second Firebase app initialization needed in the RN client.
+Thin wrappers that proxy `getUserProfile` and `updateUserProfile` to the shared platform. Regroup calls these via the existing regroup Firebase SDK — no second Firebase app initialization needed in the RN client.
 
 Export from `src/index.ts`:
 
@@ -219,9 +219,9 @@ export * from "./triggers/firestore/onUserCreate";
 
 ---
 
-### `~/dev/regroup-rn7`
+### `~/dev/Regroup`
 
-regroup-rn7 routes all shared-platform calls through `regroup-functions` rather than calling `recovery-platform` directly. This keeps the RN app pointed at a single Firebase project, avoiding the complexity of a named secondary `FirebaseApp` instance and split auth state.
+Regroup routes all shared-platform calls through `regroup-functions` rather than calling `recovery-platform` directly. This keeps the RN app pointed at a single Firebase project, avoiding the complexity of a named secondary `FirebaseApp` instance and split auth state.
 
 #### 1. Add service: `src/services/sharedProfile.ts`
 
@@ -264,6 +264,6 @@ Business logic (Zod schemas, Firestore queries) transfers directly — only the 
 
 ## What Is Not Changing
 
-- **`~/dev/RecoveryConnect`** — no changes required for Phase 1. RecoveryConnect can integrate with `recovery-platform` using the same `X-Service-Key` pattern as regroup-functions when cross-app features are needed, following the pattern already established in `regroup-functions/src/util/sharedPlatform.ts`.
+- **`~/dev/Homegroups`** — no changes required for Phase 1. Homegroups can integrate with `recovery-platform` using the same `X-Service-Key` pattern as regroup-functions when cross-app features are needed, following the pattern already established in `regroup-functions/src/util/sharedPlatform.ts`.
 - **Firebase Auth in each app's existing project** — no migration, no disruption to existing users in either app.
-- **regroup-rn7 Firebase SDK initialization** — continues to point at the regroup Firebase project only.
+- **Regroup Firebase SDK initialization** — continues to point at the regroup Firebase project only.

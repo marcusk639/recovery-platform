@@ -1,4 +1,4 @@
-# RATS: Go-To-Market Action Plan
+# Regroup: Go-To-Market Action Plan
 
 > **Generated:** February 23, 2026
 > **Basis:** Full codebase audit (rats-v2, regroup-functions, rats-web) + strategic synthesis
@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-RATS has two functional products built into one app:
+Regroup has two functional products built into one app:
 
 1. **Traditional Sober Living Management** — compliance tracking, dispute resolution, rent payments for manager-operated houses
 2. **Oxford House Governance Suite** — democratic officer management, voting, business meetings, EES financial tracking for self-governed Oxford Houses
@@ -193,7 +193,7 @@ RATS has two functional products built into one app:
 
 **The ask:** A listing in their resource guide and a mention in one newsletter.
 
-**Partnership economics:** Offer 20% revenue share to OHI for referred subscriptions. At $69/month per house: OHI earns $13.80/month per referred house. If 10% of 2,500 houses adopt RATS: $3,450/month in OHI revenue — meaningful to a nonprofit, durable referral pipeline.
+**Partnership economics:** Offer 20% revenue share to OHI for referred subscriptions. At $69/month per house: OHI earns $13.80/month per referred house. If 10% of 2,500 houses adopt Regroup: $3,450/month in OHI revenue — meaningful to a nonprofit, durable referral pipeline.
 
 **Action item:** Identify OHI program director, draft introduction email, request call within the next 2 weeks.
 
@@ -205,7 +205,7 @@ Multiple large Facebook groups exist for Oxford House residents and officers. Th
 
 ### Channel 3: Treatment Center Referrals (Traditional SLH)
 
-Treatment centers refer patients to sober living homes on discharge. Getting RATS-managed houses on the "Preferred Partner" list creates a passive referral funnel.
+Treatment centers refer patients to sober living homes on discharge. Getting Regroup-managed houses on the "Preferred Partner" list creates a passive referral funnel.
 
 **Target:** 50 treatment centers in 5 markets with highest SLH density (Los Angeles, Phoenix, Nashville, Boston, Denver).
 
@@ -219,13 +219,13 @@ The Oxford House category is essentially uncontested on app stores today.
 
 ### Channel 5: Court and Probation Officer Outreach
 
-The GPS meeting check-ins, weekly compliance stats, and dispute tracking are exactly what probation officers need to verify compliance for court-mandated residents. Reaching county probation departments with "here's how RATS verifies sober living compliance" opens a new institutional buyer and creates switching costs (compliance records become part of legal documentation).
+The GPS meeting check-ins, weekly compliance stats, and dispute tracking are exactly what probation officers need to verify compliance for court-mandated residents. Reaching county probation departments with "here's how Regroup verifies sober living compliance" opens a new institutional buyer and creates switching costs (compliance records become part of legal documentation).
 
 ### Referral / Virality Mechanics
 
 **Operator-to-operator referral:** "Refer another operator, get one month free." Requires a referral code field on `User` entity + Cloud Function that validates it at subscription creation + Stripe coupon. ~2 days backend work.
 
-**Resident-to-house pull referral:** When a resident completes their program (status → 'inactive'), send an in-app prompt: "Congratulations. If your next house doesn't use RATS, share it with your manager." Deep link with attribution tracking.
+**Resident-to-house pull referral:** When a resident completes their program (status → 'inactive'), send an in-app prompt: "Congratulations. If your next house doesn't use Regroup, share it with your manager." Deep link with attribution tracking.
 
 **House Search Marketplace:** The `HouseSearch` entity and geo-search Cloud Function are already built. A public, SEO-optimized house directory drives organic operator acquisition through the "be found by residents" value prop. The `certified: boolean` field on `House` already exists for a premium listing product.
 

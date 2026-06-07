@@ -8,7 +8,7 @@
 
 **Tech Stack:** React Native, TanStack Query v5 (`useMutation`), Firestore direct writes (`doc.set`), `oxfordQueries.ts` existing hooks, existing `Officer`/`BusinessMeeting` entities
 
-**Status (2026-05-26):** Tasks 1–4 are complete on `main` (commits `77027f1`, `30df8f2`, `247faf6` and others). The wizard screen, mutation, route, and dashboard redirect are all live. Tasks 5–9 below were added after a follow-up audit of Oxford-area test suites that surfaced rot in `EESTracker.test.tsx` and `OfficerManagement.test.tsx`, plus thin coverage in the wizard's own test file, plus a UX consistency gap and a CI-gate blind spot. The audit findings live in `~/.claude/projects/-Users-marcuspersonal-dev-regroup-rn7/memory/project_test_suite_rot_oxford.md`.
+**Status (2026-05-26):** Tasks 1–4 are complete on `main` (commits `77027f1`, `30df8f2`, `247faf6` and others). The wizard screen, mutation, route, and dashboard redirect are all live. Tasks 5–9 below were added after a follow-up audit of Oxford-area test suites that surfaced rot in `EESTracker.test.tsx` and `OfficerManagement.test.tsx`, plus thin coverage in the wizard's own test file, plus a UX consistency gap and a CI-gate blind spot. The audit findings live in `~/.claude/projects/-Users-marcuspersonal-dev-Regroup/memory/project_test_suite_rot_oxford.md`.
 
 ---
 
@@ -59,7 +59,7 @@
   });
   ```
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx jest src/__tests__/screens/Oxford/OxfordOnboardingWizard.test.tsx --no-coverage`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx jest src/__tests__/screens/Oxford/OxfordOnboardingWizard.test.tsx --no-coverage`
   Expected: FAIL — module not found
 
 - [x] **Step 2: Add route to types.ts**
@@ -185,7 +185,7 @@
 
 - [x] **Step 2: Check what houseKeys looks like**
 
-  Run: `grep -n "houseKeys\|selected" /Users/marcuspersonal/dev/regroup-rn7/src/state/queries/houseQueries.ts | head -10`
+  Run: `grep -n "houseKeys\|selected" /Users/marcuspersonal/dev/Regroup/src/state/queries/houseQueries.ts | head -10`
 
   If `houseKeys.selected()` doesn't exist, use the correct key pattern from the file. Adjust the import accordingly.
 
@@ -538,12 +538,12 @@
 
 - [x] **Step 2: Run test**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx jest src/__tests__/screens/Oxford/OxfordOnboardingWizard.test.tsx --no-coverage`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx jest src/__tests__/screens/Oxford/OxfordOnboardingWizard.test.tsx --no-coverage`
   Expected: PASS
 
 - [x] **Step 3: Type check**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx tsc --noEmit 2>&1 | grep OxfordOnboarding`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx tsc --noEmit 2>&1 | grep OxfordOnboarding`
   Expected: No type errors
 
 - [x] **Step 4: Commit**
@@ -588,7 +588,7 @@ After `setOxfordEnabled` sets `subscriptionMetadata.oxfordEnabled = true`, the o
   });
   ```
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx jest src/__tests__/screens/Oxford/OxfordOnboardingWizard.test.tsx --no-coverage`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx jest src/__tests__/screens/Oxford/OxfordOnboardingWizard.test.tsx --no-coverage`
   Expected: FAIL
 
 - [x] **Step 2: Add wizard redirect to OxfordDashboard**
@@ -616,7 +616,7 @@ After `setOxfordEnabled` sets `subscriptionMetadata.oxfordEnabled = true`, the o
   Check `src/entities/House.tsx`:
 
   ```bash
-  grep -n "oxfordOnboardingComplete\|houseType\|oxfordEnabled" /Users/marcuspersonal/dev/regroup-rn7/src/entities/House.tsx | head -10
+  grep -n "oxfordOnboardingComplete\|houseType\|oxfordEnabled" /Users/marcuspersonal/dev/Regroup/src/entities/House.tsx | head -10
   ```
 
   If `oxfordOnboardingComplete` is not in the entity, add it:
@@ -627,10 +627,10 @@ After `setOxfordEnabled` sets `subscriptionMetadata.oxfordEnabled = true`, the o
 
 - [x] **Step 4: Run tests**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx jest src/__tests__/screens/Oxford/OxfordOnboardingWizard.test.tsx --no-coverage`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx jest src/__tests__/screens/Oxford/OxfordOnboardingWizard.test.tsx --no-coverage`
   Expected: PASS
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npm test --no-coverage`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npm test --no-coverage`
   Expected: No regressions
 
 - [x] **Step 5: Commit**
@@ -658,7 +658,7 @@ The `RefreshControl` is wired in `src/screens/Oxford/EESTracker.tsx:208-214` as 
 - [ ] **Step 1: Run the baseline (see current red)**
 
   ```bash
-  cd /Users/marcuspersonal/dev/regroup-rn7
+  cd /Users/marcuspersonal/dev/Regroup
   npx jest src/screens/Oxford/__tests__/EESTracker.test.tsx --no-coverage > /tmp/ees-before.txt 2>&1
   grep -E "Tests:|✕" /tmp/ees-before.txt
   ```
@@ -731,7 +731,7 @@ The `RefreshControl` is wired in `src/screens/Oxford/EESTracker.tsx:208-214` as 
 - [ ] **Step 5: Run the file — expect all green**
 
   ```bash
-  cd /Users/marcuspersonal/dev/regroup-rn7
+  cd /Users/marcuspersonal/dev/Regroup
   npx jest src/screens/Oxford/__tests__/EESTracker.test.tsx --no-coverage
   ```
 
@@ -761,7 +761,7 @@ The `RefreshControl` is wired in `src/screens/Oxford/OfficerManagement.tsx:254-2
 - [ ] **Step 1: Run baseline**
 
   ```bash
-  cd /Users/marcuspersonal/dev/regroup-rn7
+  cd /Users/marcuspersonal/dev/Regroup
   npx jest src/screens/Oxford/__tests__/OfficerManagement.test.tsx --no-coverage > /tmp/om-before.txt 2>&1
   grep -E "Tests:|✕" /tmp/om-before.txt
   ```
@@ -810,7 +810,7 @@ The `RefreshControl` is wired in `src/screens/Oxford/OfficerManagement.tsx:254-2
 - [ ] **Step 4: Run the file — expect all green**
 
   ```bash
-  cd /Users/marcuspersonal/dev/regroup-rn7
+  cd /Users/marcuspersonal/dev/Regroup
   npx jest src/screens/Oxford/__tests__/OfficerManagement.test.tsx --no-coverage
   ```
 
@@ -849,7 +849,7 @@ The `RefreshControl` is wired in `src/screens/Oxford/OfficerManagement.tsx:254-2
 - [ ] **Step 1: Read the existing test file so the new file builds on (rather than discards) the existing mock setup**
 
   ```bash
-  cat /Users/marcuspersonal/dev/regroup-rn7/src/__tests__/screens/Oxford/OxfordOnboardingWizard.test.tsx
+  cat /Users/marcuspersonal/dev/Regroup/src/__tests__/screens/Oxford/OxfordOnboardingWizard.test.tsx
   ```
 
   The current file mocks `oxfordOnboardingMutations`, `useSelectedHouse`, and `screen-header`. The expansion will replace the existing single test but keep and extend those mocks.
@@ -1326,7 +1326,7 @@ The `RefreshControl` is wired in `src/screens/Oxford/OfficerManagement.tsx:254-2
 - [ ] **Step 3: Run the new test file**
 
   ```bash
-  cd /Users/marcuspersonal/dev/regroup-rn7
+  cd /Users/marcuspersonal/dev/Regroup
   npx jest src/__tests__/screens/Oxford/OxfordOnboardingWizard.test.tsx --no-coverage
   ```
 
@@ -1364,8 +1364,8 @@ We want the wizard to satisfy equivalent assertions.
 - [ ] **Step 1: Read the BusinessMeetings reference implementation**
 
   ```bash
-  grep -n "DatePicker\|scheduledDate\|YYYY-MM-DD" /Users/marcuspersonal/dev/regroup-rn7/src/screens/Oxford/BusinessMeetings.tsx
-  grep -n "DatePicker\|YYYY-MM-DD\|date mode" /Users/marcuspersonal/dev/regroup-rn7/src/screens/Oxford/__tests__/BusinessMeetings.test.tsx | head -20
+  grep -n "DatePicker\|scheduledDate\|YYYY-MM-DD" /Users/marcuspersonal/dev/Regroup/src/screens/Oxford/BusinessMeetings.tsx
+  grep -n "DatePicker\|YYYY-MM-DD\|date mode" /Users/marcuspersonal/dev/Regroup/src/screens/Oxford/__tests__/BusinessMeetings.test.tsx | head -20
   ```
 
   Note the import (`import DatePicker from 'react-native-date-picker'`), the state shape (a `Date` object, not a string), and how the display `TouchableOpacity` shows the formatted date.
@@ -1539,7 +1539,7 @@ We want the wizard to satisfy equivalent assertions.
 - [ ] **Step 5: Run the wizard test file — expect all green**
 
   ```bash
-  cd /Users/marcuspersonal/dev/regroup-rn7
+  cd /Users/marcuspersonal/dev/Regroup
   npx jest src/__tests__/screens/Oxford/OxfordOnboardingWizard.test.tsx --no-coverage
   ```
 
@@ -1548,7 +1548,7 @@ We want the wizard to satisfy equivalent assertions.
 - [ ] **Step 6: Type-check**
 
   ```bash
-  cd /Users/marcuspersonal/dev/regroup-rn7
+  cd /Users/marcuspersonal/dev/Regroup
   npx tsc --noEmit 2>&1 | grep -E "OxfordOnboardingWizard|Oxford/__tests__"
   ```
 
@@ -1569,14 +1569,14 @@ We want the wizard to satisfy equivalent assertions.
 
 - Read: `.github/workflows/*.yml` (all workflow files)
 - Possibly modify: one or more workflow files
-- Possibly add: a new task entry in `~/.claude/projects/-Users-marcuspersonal-dev-regroup-rn7/memory/project_test_suite_rot_oxford.md`
+- Possibly add: a new task entry in `~/.claude/projects/-Users-marcuspersonal-dev-Regroup/memory/project_test_suite_rot_oxford.md`
 
 **Context:** The audit memory establishes that three separate commits (`77027f1`, `abe400d`, and the original commit that broke OxfordDashboard) shipped to `main` while tests in this repo were red. The PR workflow `d5ca565` ostensibly runs unit tests, yet failures didn't block. This task confirms the gap and fixes it.
 
 - [ ] **Step 1: Enumerate workflows**
 
   ```bash
-  cd /Users/marcuspersonal/dev/regroup-rn7
+  cd /Users/marcuspersonal/dev/Regroup
   ls -la .github/workflows/
   ```
 
@@ -1605,7 +1605,7 @@ We want the wizard to satisfy equivalent assertions.
 
 - [ ] **Step 3: Capture findings**
 
-  Write a short note (3-5 sentences) to the memory file appending under the existing audit results section, describing **which** workflow ran tests, **why** the failures didn't block, and what change (if any) was made. Append to `~/.claude/projects/-Users-marcuspersonal-dev-regroup-rn7/memory/project_test_suite_rot_oxford.md`.
+  Write a short note (3-5 sentences) to the memory file appending under the existing audit results section, describing **which** workflow ran tests, **why** the failures didn't block, and what change (if any) was made. Append to `~/.claude/projects/-Users-marcuspersonal-dev-Regroup/memory/project_test_suite_rot_oxford.md`.
 
 - [ ] **Step 4: Fix the gate (if a fix exists)**
 
@@ -1683,7 +1683,7 @@ We want the wizard to satisfy equivalent assertions.
 
 **One-way door:** The `oxfordOnboardingComplete = true` flag written by Task 2's mutation is permanent — once set, the wizard won't show again. The wizard is skippable (user can tap back at step 1). No rollback mechanism needed.
 
-**Officer field matching:** The Officer entity in `src/entities/oxford/Officer.ts` must be verified before Task 3 step 1. If the field names differ, adjust the mutation payload in `oxfordOnboardingMutations.ts`. Run: `cat /Users/marcuspersonal/dev/regroup-rn7/src/entities/oxford/Officer.ts`. (Tasks 1–4 are shipped, so this was already verified.)
+**Officer field matching:** The Officer entity in `src/entities/oxford/Officer.ts` must be verified before Task 3 step 1. If the field names differ, adjust the mutation payload in `oxfordOnboardingMutations.ts`. Run: `cat /Users/marcuspersonal/dev/Regroup/src/entities/oxford/Officer.ts`. (Tasks 1–4 are shipped, so this was already verified.)
 
 **Task 5/6 RefreshControl pattern:** Both tests use `UNSAFE_getByType(RefreshControl)` and call `props.onRefresh()` directly. The alternative — adding a `testID` to the `RefreshControl` JSX in production code — is not worth it for a test-only concern, and `UNSAFE_getByType` is the documented escape hatch for React Native primitives without public testIDs.
 

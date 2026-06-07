@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Expose an authenticated HTTP endpoint RATS (a sober living house app) can call to retrieve a resident's meeting check-in history by `userId`, without requiring the Firebase SDK.
+**Goal:** Expose an authenticated HTTP endpoint Regroup (a sober living house app) can call to retrieve a resident's meeting check-in history by `userId`, without requiring the Firebase SDK.
 
-**Architecture:** A new `functions.https.onRequest` HTTP function (`getMeetingAttendance`) validates a shared API key from the `Authorization` header, then queries the `meetingInstances` collection for records where `attendees` contains the given `userId`. Auth is a shared secret stored in Firebase Functions environment config — RATS is a server-to-server caller that cannot use Firebase client SDK auth.
+**Architecture:** A new `functions.https.onRequest` HTTP function (`getMeetingAttendance`) validates a shared API key from the `Authorization` header, then queries the `meetingInstances` collection for records where `attendees` contains the given `userId`. Auth is a shared secret stored in Firebase Functions environment config — Regroup is a server-to-server caller that cannot use Firebase client SDK auth.
 
 **Tech Stack:** Firebase Cloud Functions v2 (TypeScript), Firestore `meetingInstances` collection, Jest for unit tests.
 
@@ -296,7 +296,7 @@ Expected: PASS — 6 tests passing
 
 ```bash
 git add functions/src/http/getMeetingAttendance.ts functions/src/tests/getMeetingAttendance.test.ts
-git commit -m "feat: add getMeetingAttendance HTTP endpoint for RATS integration"
+git commit -m "feat: add getMeetingAttendance HTTP endpoint for Regroup integration"
 ```
 
 ---
@@ -357,9 +357,9 @@ git commit -m "feat: export getMeetingAttendance in index.ts"
 Open `docs/BILLING_AND_PAYMENTS.md`. At the end of the file, add:
 
 ````markdown
-## RATS Integration
+## Regroup Integration
 
-The `getMeetingAttendance` HTTP endpoint is called by the RATS sober living app to verify
+The `getMeetingAttendance` HTTP endpoint is called by the Regroup sober living app to verify
 a resident's meeting attendance without embedding the full Homegroups UI.
 
 **Endpoint:** `GET https://us-central1-<project>.cloudfunctions.net/getMeetingAttendance`
@@ -404,7 +404,7 @@ Then reference it in your `.env` or secrets config as `RATS_API_KEY`.
 
 ```bash
 git add docs/BILLING_AND_PAYMENTS.md
-git commit -m "docs: document getMeetingAttendance RATS API endpoint"
+git commit -m "docs: document getMeetingAttendance Regroup API endpoint"
 ````
 
 ---

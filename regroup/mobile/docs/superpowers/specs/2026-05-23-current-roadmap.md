@@ -1,4 +1,4 @@
-# RATS v2 — Current Roadmap
+# Regroup v2 — Current Roadmap
 
 **Date:** 2026-05-23 (last reconciled 2026-05-25)
 **Method:** Full doc audit (30+ docs) + codebase cross-reference against git HEAD
@@ -385,4 +385,4 @@ _Updated 2026-05-25 to reflect actual code state._
    - P2-FEAT-1: Bulk guest CSV import (if operator demand)
    - Follow-up: fix `getTimeSober` Math.abs-on-future-date quirk surfaced by P2-TEST-3 (pinned as regression test for now)
 4. **Pre-TestFlight (human):** App Store assets (P0-STORE-3/4) + Stripe products (P0-STORE-1) — gated on P0-STORE-2 decision.
-5. **Future (separate plan needed):** Full ActivityType normalization — Firestore audit query + backfill of legacy `meeting_attended`/`hours_worked`/etc. activity docs, then remove dual-handling from both `regroup-rn7` and `regroup-functions`.
+5. **Future (separate plan needed):** Full ActivityType normalization — Firestore audit query + backfill of legacy `meeting_attended`/`hours_worked`/etc. activity docs, then remove dual-handling from both `Regroup` and `regroup-functions`.

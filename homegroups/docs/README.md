@@ -1,6 +1,6 @@
-# RecoveryConnect Documentation
+# Homegroups Documentation
 
-Welcome to the RecoveryConnect documentation hub. This folder contains all guides, specifications, and architectural documentation for the RecoveryConnect/Homegroups application.
+Welcome to the Homegroups documentation hub. This folder contains all guides, specifications, and architectural documentation for the Homegroups/Homegroups application.
 
 **New to the project? Start here:** [`00-DOCUMENTATION-INDEX.md`](./00-DOCUMENTATION-INDEX.md)
 

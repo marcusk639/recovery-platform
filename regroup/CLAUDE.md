@@ -1,6 +1,6 @@
 # regroup/CLAUDE.md
 
-**Regroup** (app name: **RATS** — Regroup Addiction Tracking System) is a sober living house management platform for operators, staff, and residents. It is part of the `recovery-platform` monorepo.
+**Regroup** is a sober living house management platform for operators, staff, and residents. It is part of the `recovery-platform` monorepo. (Historically codenamed **Regroup** — "Regroup." The `rats` identifier persists in the mobile `app.json` and iOS config for App Store / Firebase continuity; the canonical product name is **Regroup**.)
 
 **Target users:** Sober living house operators / managers, and their guests (residents in recovery).
 

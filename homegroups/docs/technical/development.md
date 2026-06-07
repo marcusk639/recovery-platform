@@ -55,10 +55,10 @@ You'll also need one of the following:
 
 ## Project Structure
 
-Here's how the RecoveryConnect project is organized:
+Here's how the Homegroups project is organized:
 
 ```
-RecoveryConnect/
+Homegroups/
 ├── README.md                      # High-level app overview
 ├── docs/                          # Documentation (you are here)
 │   ├── 00-DOCUMENTATION-INDEX.md # Documentation guide (START HERE)
@@ -118,7 +118,7 @@ Key directories to know:
 
 ### 1. Firebase Authentication
 
-RecoveryConnect uses Firebase for backend. You need a Firebase project.
+Homegroups uses Firebase for backend. You need a Firebase project.
 
 **Option A: Use Existing Project**
 If you have access to the shared Firebase project:

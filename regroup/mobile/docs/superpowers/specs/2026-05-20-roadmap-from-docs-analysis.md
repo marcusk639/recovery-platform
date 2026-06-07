@@ -1,4 +1,4 @@
-# RATS v2 — Docs-Derived Roadmap (v2)
+# Regroup v2 — Docs-Derived Roadmap (v2)
 
 **Date:** 2026-05-20 (updated — v2 supersedes earlier same-day run)
 **Method:** Full doc audit (22 docs reviewed) cross-referenced against codebase + git history
@@ -346,7 +346,7 @@ The resident application flow is architecturally two-sided: residents write to `
 - [ ] IDFA disclosure: Firebase Analytics uses IDFA
 - [ ] App Review notes: test account credentials + house setup for reviewers
 - [ ] Screenshots: 6.7" (iPhone 15 Pro Max) required; 5.5" required
-- [ ] Entitlements audit: `codesign -d --entitlements - Payload/RATS.app`
+- [ ] Entitlements audit: `codesign -d --entitlements - Payload/Regroup.app`
 
 **Google Play:**
 

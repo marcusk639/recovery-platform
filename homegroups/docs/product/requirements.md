@@ -1,7 +1,7 @@
 # Product Requirements (MVP)
 
 **Last updated:** 2026-02-05  
-**Product:** RecoveryConnect / Homegroups
+**Product:** Homegroups
 
 This document is the canonical product-level MVP scope and replaces older overlapping drafts:
 - `docs/spec.md`

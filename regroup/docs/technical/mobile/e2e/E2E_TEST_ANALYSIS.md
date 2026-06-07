@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-**Current State:** The existing E2E_TEST_PLANS.md covers only **7 critical paths** out of **20+ major features** in the RATS app.
+**Current State:** The existing E2E_TEST_PLANS.md covers only **7 critical paths** out of **20+ major features** in the Regroup app.
 
 **Critical Gaps:** Three CRITICAL features are fully implemented but have ZERO test coverage:
 1. Dispute/Challenge System - Core accountability feature

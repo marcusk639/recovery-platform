@@ -1,13 +1,13 @@
 # Privacy Policy
 
-**Regroup (RATS Recovery App)**
+**Regroup (Recovery App)**
 Last updated: May 21, 2026
 
 ---
 
 ## 1. Introduction
 
-Regroup ("we," "us," or "our") operates the RATS Recovery App ("App"), a mobile application and web platform designed to help sober living house operators and residents track accountability, manage house operations, and support long-term recovery.
+Regroup ("we," "us," or "our") operates the Regroup Recovery App ("App"), a mobile application and web platform designed to help sober living house operators and residents track accountability, manage house operations, and support long-term recovery.
 
 This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our App. Please read this policy carefully. If you disagree with its terms, please discontinue use.
 
@@ -197,7 +197,7 @@ We may update this Privacy Policy from time to time. We will notify users of mat
 
 For privacy questions or to exercise your rights:
 
-**Regroup / RATS Recovery App**
+**Regroup Recovery App**
 Email: privacy@regroup.app
 
 ---

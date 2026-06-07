@@ -4,16 +4,16 @@
 
 <!-- Merged from: 01-rats-sober-living.md, 02-recoveryconnect-homegroups.md, 03-integration-treatment-centers.md -->
 
-## RATS — Sober Living Operations Platform
+## Regroup — Sober Living Operations Platform
 
 > **Product family:** `rats-v2` (mobile), `rats-web` (marketing + web portal), `regroup-functions` (backend)
 > **Audience:** Sober living house operators, house managers, residents, and Oxford House chapters.
 
 ---
 
-### 1. What RATS Is
+### 1. What Regroup Is
 
-RATS (Recovery Activity Tracking System) is a full-stack platform for running sober living homes. It replaces the patchwork of paper binders, group chats, spreadsheets, and Venmo requests that most houses rely on today with a single system of record for residents, compliance, rent, and house governance.
+Regroup (Recovery Activity Tracking System) is a full-stack platform for running sober living homes. It replaces the patchwork of paper binders, group chats, spreadsheets, and Venmo requests that most houses rely on today with a single system of record for residents, compliance, rent, and house governance.
 
 The platform supports two operating models in one codebase:
 
@@ -26,7 +26,7 @@ Feature gating by subscription tier (`oxfordEnabled`, admin claims) lets a singl
 
 ### 2. Value Proposition
 
-| Stakeholder                            | Problem today                                                                                       | What RATS delivers                                                                                                                |
+| Stakeholder                            | Problem today                                                                                       | What Regroup delivers                                                                                                                |
 | -------------------------------------- | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | **House operator / owner**             | Rent collection, compliance paperwork, and incident logs are scattered; liability is hard to prove. | Stripe-powered rent, auditable activity logs, dispute and complaint records, drug-test history — all attributable and exportable. |
 | **House manager**                      | Tracking who did chores, attended meetings, worked, or took medication is manual.                   | Unified Activities module with one tap per event; automatic summaries per resident.                                               |
@@ -193,27 +193,27 @@ Idempotency keys for payment intents are deterministic (`guestId + utcDay`) unle
 
 ### 6. Commercial Positioning
 
-RATS is sold to the house operator, not the resident. Pricing tiers gate:
+Regroup is sold to the house operator, not the resident. Pricing tiers gate:
 
 - Base tier: bed management, activity tracking, communication, Stripe rent.
 - Oxford tier: officer/voting/EES modules.
 - Enterprise/multi-house tier (prerequisite for the treatment-center integration story): super-admin dashboard across many houses, exportable compliance reports.
 
-The platform's durable competitive moat is the **activity + payment ledger** — once a house runs rent and compliance through RATS for a few months, the switching cost is very high.
+The platform's durable competitive moat is the **activity + payment ledger** — once a house runs rent and compliance through Regroup for a few months, the switching cost is very high.
 
 ---
 
-## RecoveryConnect — Homegroups Platform
+## Homegroups — Homegroups Platform
 
 > **Marketed as:** Homegroups
-> **Repo:** `RecoveryConnect` (contains `mobile/`, `functions/`, `web/`)
+> **Repo:** `Homegroups` (contains `mobile/`, `functions/`, `web/`)
 > **Audience:** 12-step recovery group members, secretaries, treasurers, and intergroup / service committees.
 
 ---
 
 ### 1. What Homegroups Is
 
-Homegroups is a privacy-first mobile and web platform for running 12-step recovery groups (AA, NA, and similar fellowships). It does for the **group** what RATS does for the **sober living house**: it replaces paper ledgers, GroupMe chats, and seventh-tradition envelopes with a single, anonymity-preserving system of record.
+Homegroups is a privacy-first mobile and web platform for running 12-step recovery groups (AA, NA, and similar fellowships). It does for the **group** what Regroup does for the **sober living house**: it replaces paper ledgers, GroupMe chats, and seventh-tradition envelopes with a single, anonymity-preserving system of record.
 
 The product is built around the principle of **group autonomy + member anonymity**:
 
@@ -289,9 +289,9 @@ Homegroups is a **prosumer** product: free for individuals, $12/yr per group adm
 
 ---
 
-## RATS + Homegroups — Integrated Offering for Treatment Centers
+## Regroup + Homegroups — Integrated Offering for Treatment Centers
 
-> **Companion docs:** RATS section above · Homegroups section above
+> **Companion docs:** Regroup section above · Homegroups section above
 > **Audience:** Treatment-center directors of operations, clinical directors, alumni/aftercare coordinators, and the sales team pitching them.
 
 ---
@@ -302,8 +302,8 @@ The single biggest driver of long-term outcomes after inpatient or residential t
 
 Two best-of-breed products already solve the two halves of this problem:
 
-- **RATS** is the system of record for the **sober living house** — where the client sleeps, pays rent, does chores, takes drug tests, and logs activity.
-- **Homegroups (RecoveryConnect)** is the system of record for the **12-step group** — where the client actually works a program, has a sponsor, and builds a sober network.
+- **Regroup** is the system of record for the **sober living house** — where the client sleeps, pays rent, does chores, takes drug tests, and logs activity.
+- **Homegroups** is the system of record for the **12-step group** — where the client actually works a program, has a sponsor, and builds a sober network.
 
 Sold together, they close the loop that matters most to a treatment center: _Is our alumnus showing up — at home and at meetings — 30, 60, 180 days after discharge?_
 
@@ -314,23 +314,23 @@ Sold together, they close the loop that matters most to a treatment center: _Is 
 ```mermaid
 graph LR
   TC[Treatment Center<br/>Admin Portal]
-  RATS[RATS<br/>Sober Living Houses]
+  Regroup[Regroup<br/>Sober Living Houses]
   HG[Homegroups<br/>12-step Groups]
   Client[Alumnus / Client]
 
-  TC -- partners with --> RATS
+  TC -- partners with --> Regroup
   TC -- sponsors seats in --> HG
-  Client -- lives in --> RATS
+  Client -- lives in --> Regroup
   Client -- attends meetings via --> HG
-  RATS -- activity signal --> TC
+  Regroup -- activity signal --> TC
   HG -- engagement signal --> TC
-  RATS -- meeting attendance logged --> HG
-  HG -- verified meeting data --> RATS
+  Regroup -- meeting attendance logged --> HG
+  HG -- verified meeting data --> Regroup
 ```
 
 #### 2.1 The three surfaces the center buys
 
-1. **Sober Living network visibility (RATS super-admin tier).** Cross-house dashboard for partner sober-living homes. Alumni are placed into a house with one click, and every rent payment, drug test, phase advancement, dispute, and activity entry is visible to the center.
+1. **Sober Living network visibility (Regroup super-admin tier).** Cross-house dashboard for partner sober-living homes. Alumni are placed into a house with one click, and every rent payment, drug test, phase advancement, dispute, and activity entry is visible to the center.
 
 2. **Alumni homegroup engagement (Homegroups facility tier, V4.4).** Clients keep using Homegroups after discharge. The center is set up as a _facility_ and sees aggregated, privacy-preserving engagement: meetings checked into, milestones hit, sponsorship links formed — never chat content.
 
@@ -350,18 +350,18 @@ Both products are built on Firebase (Auth + Firestore + Functions + FCM + Stripe
 
 #### 3.2 Meeting / attendance bridge
 
-RATS already has a `meetings` concept inside the Activities module. Homegroups owns accurate, geolocated, verified meeting data and a real `checkInToMeeting` callable.
+Regroup already has a `meetings` concept inside the Activities module. Homegroups owns accurate, geolocated, verified meeting data and a real `checkInToMeeting` callable.
 
-- Point RATS's meeting finder at the Homegroups `findMeetings` callable → residents search from one canonical directory.
-- When a resident checks in on Homegroups, a trigger writes a RATS `Activity` record of type `meeting` referencing the Homegroups `meetingInstance` ID.
+- Point Regroup's meeting finder at the Homegroups `findMeetings` callable → residents search from one canonical directory.
+- When a resident checks in on Homegroups, a trigger writes a Regroup `Activity` record of type `meeting` referencing the Homegroups `meetingInstance` ID.
 
 #### 3.3 Facility dashboard bridge
 
 | Signal                   | Source                                            |
 | ------------------------ | ------------------------------------------------- |
-| Rent paid / outstanding  | RATS `stripeEvents` webhook + payment records     |
-| Drug test results        | RATS Drug Testing module                          |
-| Phase / activity summary | RATS Activities + guest summary                   |
+| Rent paid / outstanding  | Regroup `stripeEvents` webhook + payment records     |
+| Drug test results        | Regroup Drug Testing module                          |
+| Phase / activity summary | Regroup Activities + guest summary                   |
 | Meeting attendance       | Homegroups `recordCheckIn` / `checkInToMeeting`   |
 | Sobriety milestones      | Homegroups `recordMilestone` + `onMilestoneWrite` |
 | Sponsorship formed       | Homegroups `sponsorshipSlice` state + triggers    |
@@ -372,8 +372,8 @@ RATS already has a `meetings` concept inside the Activities module. Homegroups o
 
 | Phase                               | Scope                                                                                                      | Effort                       |
 | ----------------------------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| **0 — Pre-sales demo**              | Mocked combined dashboard using real RATS + Homegroups data from a pilot house/group pair                  | 2 weeks                      |
-| **1 — Identity + meeting bridge**   | Shared Auth tenant, `linkedIdentities`, Homegroups `findMeetings` wired into RATS, check-in mirror trigger | 4–6 weeks                    |
+| **0 — Pre-sales demo**              | Mocked combined dashboard using real Regroup + Homegroups data from a pilot house/group pair                  | 2 weeks                      |
+| **1 — Identity + meeting bridge**   | Shared Auth tenant, `linkedIdentities`, Homegroups `findMeetings` wired into Regroup, check-in mirror trigger | 4–6 weeks                    |
 | **2 — Facility dashboard**          | Per-alumnus timeline function, facility web view                                                           | 6–8 weeks                    |
 | **3 — Enterprise polish**           | SSO (`configureSSO`), BAA-grade logging, exportable PDF outcome reports, billing consolidation             | 8–10 weeks                   |
 | **4 — V4.4 intergroup/facility GA** | Ships Homegroups facility features already on the roadmap; treatment-center tier becomes a productized SKU | Aligned with Homegroups V4.4 |

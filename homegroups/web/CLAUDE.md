@@ -1,6 +1,6 @@
 # Web App
 
-This directory contains the React web app for RecoveryConnect (Homegroups). Loaded by Claude Code automatically when working inside `web/`. See `../CLAUDE.md` for project-wide rules.
+This directory contains the React web app for Homegroups. Loaded by Claude Code automatically when working inside `web/`. See `../CLAUDE.md` for project-wide rules.
 
 ## Commands
 
@@ -29,4 +29,4 @@ firebase deploy --only hosting        # Deploy to Firebase Hosting (run from rep
 
 ## Web-Local Skills
 
-`.claude/skills/run-recovery-connect-web/` provides a `run-recovery-connect-web` skill for launching the dev server and taking screenshots. Active automatically when Claude is working in `web/`.
+`.claude/skills/run-homegroups-web/` provides a `run-homegroups-web` skill for launching the dev server and taking screenshots. Active automatically when Claude is working in `web/`.

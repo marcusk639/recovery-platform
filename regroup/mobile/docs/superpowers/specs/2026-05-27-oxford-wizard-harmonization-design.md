@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-27
 **Status:** Approved (pending user spec review before plan generation)
-**Scope:** regroup-rn7 only
+**Scope:** Regroup only
 **Author:** Marcus Klein + Claude (brainstorming session)
 
 ---
@@ -264,7 +264,7 @@ For PR reviewers.
 For the next engineer building a wizard. Scannable; tells them which components to import + when to break convention. The markdown below is the **outline** of what this doc will contain — concrete code skeletons (`File layout template` section) and the initial "Candidates for future application" list will be authored during commit C1 alongside the components, not left as placeholders:
 
 ```markdown
-# Wizard UX Conventions (RATS mobile)
+# Wizard UX Conventions (Regroup mobile)
 
 When to use this pattern: multi-step forms with clear sequential progression
 (setup flows, onboarding, multi-page applications).

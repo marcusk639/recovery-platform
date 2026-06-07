@@ -1,4 +1,4 @@
-# RATS Feature Priority Roadmap
+# Regroup Feature Priority Roadmap
 
 ## Customer Acquisition & Retention Strategy
 
@@ -9,7 +9,7 @@
 
 ## Executive Summary
 
-This document prioritizes RATS platform features based on their potential to acquire new customers (houses) and retain existing ones. **Oxford House support is identified as the #1 priority** due to the massive untapped market opportunity (~2,500 Oxford Houses nationwide vs. ~25,000 traditional sober living homes).
+This document prioritizes Regroup platform features based on their potential to acquire new customers (houses) and retain existing ones. **Oxford House support is identified as the #1 priority** due to the massive untapped market opportunity (~2,500 Oxford Houses nationwide vs. ~25,000 traditional sober living homes).
 
 ### Market Opportunity Analysis
 

@@ -1,6 +1,6 @@
 # Firestore Security Rules Documentation
 
-This document describes the security rules implementation for the RecoveryConnect app, including the role-based access control (RBAC) system using Firebase Custom Claims.
+This document describes the security rules implementation for the Homegroups app, including the role-based access control (RBAC) system using Firebase Custom Claims.
 
 ## Table of Contents
 

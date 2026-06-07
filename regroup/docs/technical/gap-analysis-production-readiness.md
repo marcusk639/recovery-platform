@@ -1,4 +1,4 @@
-# RATS App Gap Analysis: Production Readiness
+# Regroup App Gap Analysis: Production Readiness
 
 > **⚠️ Historical Document — December 2025 Snapshot**
 > This document was written on December 25, 2025 and reflects the app at ~70-75% production readiness.
@@ -13,7 +13,7 @@
 
 ## Executive Summary
 
-The RATS (Regroup) sober living management app has **70-75% of core functionality working** but has **critical gaps** that must be addressed before confident distribution to paying clients. This document provides a comprehensive analysis of:
+The Regroup sober living management app has **70-75% of core functionality working** but has **critical gaps** that must be addressed before confident distribution to paying clients. This document provides a comprehensive analysis of:
 
 1. **Critical Gaps** - Blocks revenue generation or client acquisition
 2. **High Priority Gaps** - Core requirements from industry standards not met

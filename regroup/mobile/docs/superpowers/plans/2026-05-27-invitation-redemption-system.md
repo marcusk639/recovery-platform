@@ -17,7 +17,7 @@ Six phases land sequentially: **A** ships CFs + tests with zero mobile dep; **B*
 - Cloud Functions: TypeScript, `firebase-functions/v2/https`, `firebase-admin`, Zod for input validation, `crypto.randomBytes` for token generation, existing SendGrid send path.
 - Firestore: server-only `invitations/{token}` collection; rules-unit-testing.
 - Mobile: React Native, existing `services/setup-wizard.ts`, `screens/SignUp/SignUpForm.tsx`, `services/native-deep-links.ts`.
-- Repos touched: `~/dev/regroup-functions/` (Phases A, E), `~/dev/regroup-rn7/` (Phases B, C, D, F).
+- Repos touched: `~/dev/regroup-functions/` (Phases A, E), `~/dev/Regroup/` (Phases B, C, D, F).
 
 **Reference:** `.full-review/03-s2-cross-repo-audit.md` (Step 2 sketch).
 
@@ -36,7 +36,7 @@ Six phases land sequentially: **A** ships CFs + tests with zero mobile dep; **B*
 - **Create:** `functions/src/__tests__/callable/invitations.test.ts` — Jest test suite for the three new callables.
 - **Modify:** `functions/src/__tests__/callable/auth.test.ts` — append deny-case + delegation-case tests for the hardened CFs (Phase E).
 
-### regroup-rn7 (mobile + rules repo, Phases B + C + D + F)
+### Regroup (mobile + rules repo, Phases B + C + D + F)
 
 - **Modify:** `firebase/firestore.rules` — add `match /invitations/{token}` block: server-only read+write (Phase B).
 - **Modify:** `firebase/__tests__/firestore.rules.test.ts` — append `invitations` deny tests (Phase B).
@@ -53,7 +53,7 @@ Six phases land sequentially: **A** ships CFs + tests with zero mobile dep; **B*
 
 - **regroup-functions** uses `onCall` callables from `firebase-functions/v2/https`, Zod via `parseInput`, custom `HttpsError` codes, and `firebase-admin.firestore()` for server-side DB access (existing pattern in `callable/payments.ts:74`).
 - **createClaims** in `functions/src/util/claims.ts` is the canonical claim-merger; it reads current claims, adds houseIds, returns the merged claim object. Both Phases A and E should reuse it.
-- **regroup-rn7 services** wrap `functions.httpsCallable('name')(payload)` and return `result.data` (see `services/payments.ts`, `services/setup-wizard.ts`).
+- **Regroup services** wrap `functions.httpsCallable('name')(payload)` and return `result.data` (see `services/payments.ts`, `services/setup-wizard.ts`).
 - **Firestore mock for Jest unit tests in CF repo** uses the `call(fn, data, auth)` helper at `__tests__/callable/auth.test.ts:52` — keep that pattern.
 
 ---
@@ -1101,7 +1101,7 @@ The new collection must be writable only by the server (CFs using the admin SDK 
   If Java + Firebase emulator are available locally:
 
   ```bash
-  cd /Users/marcuspersonal/dev/regroup-rn7/firebase
+  cd /Users/marcuspersonal/dev/Regroup/firebase
   firebase emulators:exec --only firestore,storage --project demo-test "cd .. && npm run test:rules"
   ```
 
@@ -1112,7 +1112,7 @@ The new collection must be writable only by the server (CFs using the admin SDK 
 - [ ] **Step 4: Commit**
 
   ```bash
-  cd /Users/marcuspersonal/dev/regroup-rn7
+  cd /Users/marcuspersonal/dev/Regroup
   git add firebase/firestore.rules firebase/__tests__/firestore.rules.test.ts
   git commit -m "feat(rules): deny client access to invitations/{token} (server-only)"
   ```
@@ -1184,7 +1184,7 @@ This phase lets the mobile app handle BOTH the new `?token=` deep links and the 
   });
   ```
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx jest src/services/__tests__/native-deep-links.test.ts`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx jest src/services/__tests__/native-deep-links.test.ts`
   Expected: FAIL — parser doesn't return `token` yet.
 
 - [ ] **Step 3: Update the parser**
@@ -1258,13 +1258,13 @@ This phase lets the mobile app handle BOTH the new `?token=` deep links and the 
   };
   ```
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx jest src/services/__tests__/native-deep-links.test.ts`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx jest src/services/__tests__/native-deep-links.test.ts`
   Expected: PASS for both tests.
 
 - [ ] **Step 4: Commit**
 
   ```bash
-  cd /Users/marcuspersonal/dev/regroup-rn7
+  cd /Users/marcuspersonal/dev/Regroup
   git add src/entities/Invite.tsx src/services/native-deep-links.ts src/services/__tests__/native-deep-links.test.ts
   git commit -m "feat(invitations): parse token from new deep-link format (backward compat)"
   ```
@@ -1423,13 +1423,13 @@ This phase lets the mobile app handle BOTH the new `?token=` deep links and the 
 
 - [ ] **Step 3: Run the tests**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx jest src/services/__tests__/invitations.test.ts`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx jest src/services/__tests__/invitations.test.ts`
   Expected: 3 tests pass.
 
 - [ ] **Step 4: Commit**
 
   ```bash
-  cd /Users/marcuspersonal/dev/regroup-rn7
+  cd /Users/marcuspersonal/dev/Regroup
   git add src/services/invitations.ts src/services/__tests__/invitations.test.ts
   git commit -m "feat(invitations): add mobile service wrappers for create/peek/redeem"
   ```
@@ -1519,13 +1519,13 @@ Layout of the change:
 
 - [ ] **Step 4: Run the test suite**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npm test -- --no-coverage`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npm test -- --no-coverage`
   Expected: existing 4699 tests still pass; 3 new invitations-service tests pass.
 
 - [ ] **Step 5: Commit**
 
   ```bash
-  cd /Users/marcuspersonal/dev/regroup-rn7
+  cd /Users/marcuspersonal/dev/Regroup
   git add src/screens/SignUp/SignUpForm.tsx src/screens/SignUp/__tests__
   git commit -m "feat(invitations): SignUpForm uses redeemInvitation when token present"
   ```
@@ -1611,7 +1611,7 @@ Now that mobile can handle both formats, switch the inviter side to issue ONLY t
   Both helpers in `setup-wizard.ts` should now call `createInvitation` directly. If they're only consumed within `sendAllInvites`, you can delete them. Check first:
 
   ```bash
-  grep -rn "createAdminInvite\|createGuestInvite" /Users/marcuspersonal/dev/regroup-rn7/src --include='*.ts' --include='*.tsx' | grep -v setup-wizard | grep -v __tests__
+  grep -rn "createAdminInvite\|createGuestInvite" /Users/marcuspersonal/dev/Regroup/src --include='*.ts' --include='*.tsx' | grep -v setup-wizard | grep -v __tests__
   ```
 
   If no external callers → delete them. If external callers exist → migrate them too.
@@ -1621,21 +1621,21 @@ Now that mobile can handle both formats, switch the inviter side to issue ONLY t
   Look at both call sites:
 
   ```bash
-  sed -n '55,75p' /Users/marcuspersonal/dev/regroup-rn7/src/services/admin.tsx
-  sed -n '1,30p' /Users/marcuspersonal/dev/regroup-rn7/src/services/invites.ts
+  sed -n '55,75p' /Users/marcuspersonal/dev/Regroup/src/services/admin.tsx
+  sed -n '1,30p' /Users/marcuspersonal/dev/Regroup/src/services/invites.ts
   ```
 
   Replace each `functions.httpsCallable('sendInviteEmails')(payload)` with one or more `createInvitation({ email, houseId, role })` calls. The payload shape differs — read the call sites carefully.
 
 - [ ] **Step 4: Run mobile tests**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npm test -- --no-coverage`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npm test -- --no-coverage`
   Expected: pass.
 
 - [ ] **Step 5: Commit**
 
   ```bash
-  cd /Users/marcuspersonal/dev/regroup-rn7
+  cd /Users/marcuspersonal/dev/Regroup
   git add src/services/setup-wizard.ts src/services/admin.tsx src/services/invites.ts
   git commit -m "feat(invitations): inviter side issues server tokens via createInvitation"
   ```
@@ -1984,7 +1984,7 @@ This phase runs only after the operator has confirmed no users are stuck on lega
 - [ ] **Step 5: Run the full test suite + commit**
 
   ```bash
-  cd /Users/marcuspersonal/dev/regroup-rn7
+  cd /Users/marcuspersonal/dev/Regroup
   npm test -- --no-coverage
   git add src/services/native-deep-links.ts src/services/debug-deep-links.ts src/screens/SignUp/SignUpForm.tsx
   git commit -m "chore(invitations): remove legacy URL-payload deep-link path"

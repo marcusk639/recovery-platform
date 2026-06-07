@@ -8,13 +8,13 @@ The recovery platform serves individuals and organizations in the addiction reco
 
 ## Products
 
-| Directory         | Marketed Name                            | Stack                                                         | Firebase Project         | Target User                                 |
-| ----------------- | ---------------------------------------- | ------------------------------------------------------------- | ------------------------ | ------------------------------------------- |
-| `recovery-api/`   | (internal service)                       | Firebase Functions v2 (TypeScript)                            | `recovery-platform`      | Cross-app API layer                         |
-| `homegroups/`     | RecoveryConnect                          | React Native (TypeScript) + Firebase + Redux Toolkit + Stripe | `recovery-connect-cad4b` | 12-step group admins and members            |
-| `regroup/`        | RATS (Regroup Addiction Tracking System) | React Native 0.72 + Firebase Cloud Functions + Angular web    | `phoenix-cleanhouse`     | Sober living house operators and residents  |
-| `detox-recovery/` | NextStep Recovery                        | Next.js 15                                                    | `nextstep-recovery`      | Individuals/families seeking detox guidance |
-| `shared/`         | (reserved)                               | TypeScript                                                    | n/a                      | Future shared types/utilities               |
+| Directory         | Marketed Name             | Stack                                                         | Firebase Project         | Target User                                 |
+| ----------------- | ------------------------- | ------------------------------------------------------------- | ------------------------ | ------------------------------------------- |
+| `recovery-api/`   | (internal service)        | Firebase Functions v2 (TypeScript)                            | `recovery-platform`      | Cross-app API layer                         |
+| `homegroups/`     | Homegroups                | React Native (TypeScript) + Firebase + Redux Toolkit + Stripe | `recovery-connect-cad4b` | 12-step group admins and members            |
+| `regroup/`        | Regroup (Tentative Title) | React Native 0.72 + Firebase Cloud Functions + Angular web    | `phoenix-cleanhouse`     | Sober living house operators and residents  |
+| `detox-recovery/` | NextStep Recovery         | Next.js 15                                                    | `nextstep-recovery`      | Individuals/families seeking detox guidance |
+| `shared/`         | (reserved)                | TypeScript                                                    | n/a                      | Future shared types/utilities               |
 
 ## Directory Map
 
@@ -24,6 +24,12 @@ Each product has its own CLAUDE.md with product-specific context:
 - [regroup/CLAUDE.md](regroup/CLAUDE.md)
 - [detox-recovery/CLAUDE.md](detox-recovery/CLAUDE.md)
 - [recovery-api/CLAUDE.md](recovery-api/CLAUDE.md)
+
+`homegroups/` and `regroup/` share the same three-subproject layout, each with its own CLAUDE.md:
+
+- `web/` — the website / web app (homegroups: React; regroup: Angular)
+- `mobile/` — the React Native mobile app (iOS + Android)
+- `functions/` — the Firebase Cloud Functions backend
 
 ## Integration Map
 
@@ -87,3 +93,7 @@ These rules apply to all products in the monorepo without exception.
 - Each product has its own Firebase project and independent Firestore.
 - Never cross-query Firestore across products.
 - Cross-product data flows must go through recovery-api.
+
+## Gotchas
+
+- Ignore minified bundles and build artifacts (`**/public/`, `*.min.js`, `*-es5.js`, `*-es2015.js`, `lib/`, `dist/`, `build/`, `.next/`) when counting, searching, or reading source — they are regenerated on rebuild. `regroup/web/public/` alone holds ~1.15M lines of vendor bundles; real hand-written source platform-wide is ~380K lines.

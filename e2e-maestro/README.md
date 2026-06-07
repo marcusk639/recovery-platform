@@ -18,7 +18,7 @@ brew install maestro
 # All homegroups flows
 maestro test e2e-maestro/homegroups/
 
-# All regroup/RATS flows
+# All regroup/Regroup flows
 maestro test e2e-maestro/regroup/
 
 # Single flow
@@ -28,13 +28,13 @@ maestro test e2e-maestro/regroup/login-and-view-dashboard.yaml
 
 ## Flows
 
-### homegroups (RecoveryConnect — `org.recoveryconnect`)
+### homegroups (Homegroups — `org.recoveryconnect`)
 
 | File                        | Flow                                          | Status   |
 | --------------------------- | --------------------------------------------- | -------- |
 | `login-and-join-group.yaml` | User logs in and requests to join a homegroup | scaffold |
 
-### regroup / RATS (`com.rats.dev`)
+### regroup / Regroup (`com.rats.dev`)
 
 | File                            | Flow                                       | Status   |
 | ------------------------------- | ------------------------------------------ | -------- |

@@ -1,6 +1,6 @@
 ---
-name: rats-patterns
-description: Coding patterns and conventions extracted from the RATS sober living React Native app. Use when adding screens to src/screens/, creating service files, writing Firestore rules, or scaffolding new features. Triggers on: add screen, new feature, RATS conventions, where do I put, screen structure, service pattern, React Native pattern, Firebase service, how do we do X in this project.
+name: regroup-patterns
+description: Coding patterns and conventions extracted from the Regroup sober living React Native app. Use when adding screens to src/screens/, creating service files, writing Firestore rules, or scaffolding new features. Triggers on: add screen, new feature, Regroup conventions, where do I put, screen structure, service pattern, React Native pattern, Firebase service, how do we do X in this project.
 version: 1.0.0
 source: local-git-analysis
 analyzed_commits: 200

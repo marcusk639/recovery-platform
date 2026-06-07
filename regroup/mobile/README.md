@@ -1,4 +1,4 @@
-# RATS — Sober Living House Management
+# Regroup — Sober Living House Management
 
 React Native mobile application for managing sober living houses. Supports two operating models:
 

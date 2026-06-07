@@ -198,15 +198,15 @@ _(Tables below are verified against the working tree on 2026-06-03.)_
 ### 4.1 Architecture & Structure
 
 - **Type:** flat monorepo, **no workspace tooling** (no root `package.json` workspaces, `pnpm-workspace.yaml`, `turbo.json`, or `nx.json` — verified).
-- **Components (6):** `recovery-api/` (Firebase Functions v2, TS — cross-app service), `homegroups/` (RecoveryConnect; RN + Firebase + Redux + Stripe), `regroup/` (RATS; RN 0.72 + Cloud Functions + Angular web), `detox-recovery/` (NextStep; Next.js 15), `shared/` (**empty**), plus `.claude/` tooling.
+- **Components (6):** `recovery-api/` (Firebase Functions v2, TS — cross-app service), `homegroups/` (Homegroups; RN + Firebase + Redux + Stripe), `regroup/` (Regroup; RN 0.72 + Cloud Functions + Angular web), `detox-recovery/` (NextStep; Next.js 15), `shared/` (**empty**), plus `.claude/` tooling.
 - **Integration topology:** products are independent today (separate Firebase projects, auth, Firestore). `recovery-api` is the _intended_ future integration bus exposing 5 callables (`createReferral`, `getReferrals`, `getReferral`, `getUserProfile`, `updateUserProfile`) with `X-Service-Key`/`X-App-Id`/`X-User-Uid` auth (Phase 1).
 - **Existing `.claude/` config (verified):** 6 root agents (`cross-product-integrity`, `documentation-architect`, `monetization-architect`, `monorepo-health`, `product-manager`, `product-strategy-advisor`); 5 skills (`doc-organizer-recovery`, `engineer-prompt-for-skill`, `monorepo-run-check`, `new-referral-flow`, `prompt-engineer`); 2 recovery-api PostToolUse hooks; MCP = firebase + context7 only.
 
 ### 4.2 Current State by Project
 
-- **homegroups (RecoveryConnect):** most mature. V4 features shipped; Stripe integration present; launch gated on setting live default prices + claim-and-pay verification. Maps key now env-based.
+- **homegroups (Homegroups):** most mature. V4 features shipped; Stripe integration present; launch gated on setting live default prices + claim-and-pay verification. Maps key now env-based.
 - **detox-recovery (NextStep):** tech-complete Next.js 15; revenue gated on contact-form bug + email automations + paid-PDF migration. Closest to first revenue.
-- **regroup (RATS):** lowest feature-readiness; ~5% test coverage on critical paths; payments + Oxford-house flow incomplete; pricing strategy documented but not implemented.
+- **regroup (Regroup, Regroup):** lowest feature-readiness; ~5% test coverage on critical paths; payments + Oxford-house flow incomplete; pricing strategy documented but not implemented.
 - **recovery-api:** functional 5-callable service; **no test suite**; foundation for future cross-app integration.
 - **shared:** empty placeholder.
 
@@ -238,7 +238,7 @@ _(Tables below are verified against the working tree on 2026-06-03.)_
 
 Skills: `e2e-testing`, `security-review`. Hooks: payment/auth review gate (already has typecheck+prettier). MCP: `github`, `sentry`. CLAUDE.md: add testing section.
 
-### Project: homegroups (RecoveryConnect)
+### Project: homegroups (Homegroups)
 
 **Stack:** React Native (TS) + Firebase (`recovery-connect-cad4b`) + Redux Toolkit + Stripe.
 **Launch Score:** 7/10 (most launch-ready; activation-gated).
@@ -256,7 +256,7 @@ Skills: `e2e-testing`, `security-review`. Hooks: payment/auth review gate (alrea
 
 Skills: `stripe:stripe-projects`, `mobile-e2e`, `firebase:firebase-security-rules-auditor`. Hooks: Stripe/auth review gate, secret-scan. MCP: `stripe`, `sentry`. CLAUDE.md: keep maps-rotation note until completed.
 
-### Project: regroup (RATS)
+### Project: regroup (Regroup)
 
 **Stack:** React Native 0.72 + Firebase Cloud Functions + Angular web, Firebase `phoenix-cleanhouse`.
 **Launch Score:** 4/10 (weakest; coverage + incomplete flows).

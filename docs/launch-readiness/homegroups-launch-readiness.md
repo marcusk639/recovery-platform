@@ -1,7 +1,7 @@
-# Homegroups (RecoveryConnect) Launch Readiness Assessment
+# Homegroups Launch Readiness Assessment
 
 **Date:** 2026-06-06
-**Product:** Homegroups (RecoveryConnect)
+**Product:** Homegroups
 **Firebase Project:** `recovery-connect-cad4b`
 **Branch:** feat/regroup-tier-billing-migration
 **Purpose:** Spec- and plan-ready launch readiness document
@@ -131,7 +131,7 @@ V4.4 features (intergroup, treatment center, white-label) are built but gated be
 
 | Location                      | Brand Name Used          | Correct?                                                  |
 | ----------------------------- | ------------------------ | --------------------------------------------------------- |
-| `mobile/package.json` `name`  | `RecoveryConnect`        | Outdated -- should be `Homegroups`                        |
+| `mobile/package.json` `name`  | `Homegroups`        | Outdated -- should be `Homegroups`                        |
 | `mobile/package.json` version | `0.0.1`                  | Not updated for launch                                    |
 | iOS bundle ID                 | `org.recoveryconnect`    | Uses old brand; may need to keep for App Store continuity |
 | Web/share text                | `Homegroups`             | Correct (C-21 rebrand completed)                          |

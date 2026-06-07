@@ -1,4 +1,4 @@
-# RATS — Active Plan (Single Source of Truth)
+# Regroup — Active Plan (Single Source of Truth)
 
 **Date:** May 22, 2026 (v3 — false alarm resolved, score updated)
 **Previous revision:** February 27, 2026 (v2 — backend repo context)
@@ -11,7 +11,7 @@ This document replaces all prior planning documents. Strategy docs (`FEATURE_PRI
 
 ## Part 1: Full Ecosystem State
 
-### regroup-rn7 (React Native mobile app)
+### Regroup (React Native mobile app)
 
 - **232 test files**, CI via GitHub Actions (unit + e2e)
 - **70+ screens** including 6 payment screens and 5 Oxford House screens

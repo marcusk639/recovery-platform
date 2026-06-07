@@ -1,6 +1,6 @@
-# Contributing to RecoveryConnect
+# Contributing to Homegroups
 
-Thank you for contributing to RecoveryConnect! This guide will help you understand how to get started, where to find information, and how to contribute effectively.
+Thank you for contributing to Homegroups! This guide will help you understand how to get started, where to find information, and how to contribute effectively.
 
 ---
 

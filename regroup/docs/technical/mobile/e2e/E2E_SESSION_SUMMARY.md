@@ -68,7 +68,7 @@ Even when the app loads without errors, the Splash screen waits for Firebase aut
 
 **Current Behavior:**
 - App launches
-- Splash screen shows RATS logo
+- Splash screen shows Regroup logo
 - Waits for Firebase auth (authUser promise)
 - If auth fails → triggers anonymous login
 - If anonymous login fails → stuck forever

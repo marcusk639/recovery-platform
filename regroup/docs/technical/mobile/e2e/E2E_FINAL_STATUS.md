@@ -286,7 +286,7 @@ You'll see 5 passing tests proving E2E infrastructure works!
 
 ## ✨ Summary for Leadership/Teammates
 
-**We've built a complete E2E testing infrastructure for the RATS React Native app.**
+**We've built a complete E2E testing infrastructure for the Regroup React Native app.**
 
 **Time Invested:** ~4 hours over 1 session
 

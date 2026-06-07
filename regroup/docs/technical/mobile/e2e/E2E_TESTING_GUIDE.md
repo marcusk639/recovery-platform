@@ -1,4 +1,4 @@
-# E2E Testing Guide - RATS Recovery App
+# E2E Testing Guide - Regroup Recovery App
 
 **Complete guide for running, debugging, and maintaining E2E tests**
 

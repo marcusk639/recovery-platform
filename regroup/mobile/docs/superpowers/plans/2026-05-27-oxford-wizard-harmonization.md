@@ -59,38 +59,38 @@ This task confirms the environment matches the plan's assumptions. Each step is 
 
 - [ ] **Step 1: Confirm `react-native-reanimated/mock` setup**
 
-  Run: `grep -l "react-native-reanimated" /Users/marcuspersonal/dev/regroup-rn7/jest.setup.js /Users/marcuspersonal/dev/regroup-rn7/jest.setup.globals.js`
+  Run: `grep -l "react-native-reanimated" /Users/marcuspersonal/dev/Regroup/jest.setup.js /Users/marcuspersonal/dev/Regroup/jest.setup.globals.js`
   Expected: Either output empty (no mock yet — Task 4 adds it) OR contains the mock (Task 4 skips that step).
 
 - [ ] **Step 2: Confirm theme exports needed by new components**
 
-  Run: `grep -E "main|baby_blue|light_purple|green_blue|red|dark_blue|medium_grey|white|black|light_grey|dark_grey" /Users/marcuspersonal/dev/regroup-rn7/src/styles/theme.tsx | head -20`
+  Run: `grep -E "main|baby_blue|light_purple|green_blue|red|dark_blue|medium_grey|white|black|light_grey|dark_grey" /Users/marcuspersonal/dev/Regroup/src/styles/theme.tsx | head -20`
   Expected: All colors referenced in the plan exist in the `color` object.
 
 - [ ] **Step 3: Identify the BoxedIcon icons used for Oxford steps**
 
-  Run: `grep -rn 'BoxedIcon' /Users/marcuspersonal/dev/regroup-rn7/src --include='*.tsx' | grep -v __tests__ | head -10`
+  Run: `grep -rn 'BoxedIcon' /Users/marcuspersonal/dev/Regroup/src --include='*.tsx' | grep -v __tests__ | head -10`
   Read 2-3 usages and note the icon-name format. The codebase uses FontAwesome 5 names (e.g., `users`, `house-user`, `calendar-day`). If any of these are missing, substitute the nearest equivalent. Document substitutions in Task 6 Step 3 below.
 
 - [ ] **Step 4: Confirm `react-native-safe-area-context` is a dep**
 
-  Run: `grep "react-native-safe-area-context" /Users/marcuspersonal/dev/regroup-rn7/package.json`
+  Run: `grep "react-native-safe-area-context" /Users/marcuspersonal/dev/Regroup/package.json`
   Expected: present in `dependencies`. (Used by `OperatorSetupWizard.tsx` already.)
 
 - [ ] **Step 5: Confirm `react-native-reanimated 2.17.0` is a dep**
 
-  Run: `grep "react-native-reanimated" /Users/marcuspersonal/dev/regroup-rn7/package.json`
+  Run: `grep "react-native-reanimated" /Users/marcuspersonal/dev/Regroup/package.json`
   Expected: `"react-native-reanimated": "2.17.0"` in `dependencies`.
 
 - [ ] **Step 6: Run baseline tests**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx jest src/__tests__/screens/Oxford/OxfordOnboardingWizard.test.tsx src/screens/SetupWizards/__tests__/OperatorSetupWizard.test.tsx --no-coverage 2>&1 | tail -20`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx jest src/__tests__/screens/Oxford/OxfordOnboardingWizard.test.tsx src/screens/SetupWizards/__tests__/OperatorSetupWizard.test.tsx --no-coverage 2>&1 | tail -20`
   Expected: Both test files pass. Note the test count for each — it'll be the regression target after refactor.
 
 - [ ] **Step 7: Create working branch**
 
   ```bash
-  cd /Users/marcuspersonal/dev/regroup-rn7
+  cd /Users/marcuspersonal/dev/Regroup
   git checkout -b feat/oxford-wizard-harmonization
   ```
 
@@ -176,7 +176,7 @@ This task confirms the environment matches the plan's assumptions. Each step is 
 
 - [ ] **Step 2: Run test to confirm failure**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx jest src/hooks/__tests__/useKeyboardVisible.test.ts --no-coverage 2>&1 | tail -15`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx jest src/hooks/__tests__/useKeyboardVisible.test.ts --no-coverage 2>&1 | tail -15`
   Expected: FAIL — `Cannot find module '../useKeyboardVisible'`
 
 - [ ] **Step 3: Implement the hook**
@@ -222,12 +222,12 @@ This task confirms the environment matches the plan's assumptions. Each step is 
 
 - [ ] **Step 4: Run test to confirm pass**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx jest src/hooks/__tests__/useKeyboardVisible.test.ts --no-coverage 2>&1 | tail -10`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx jest src/hooks/__tests__/useKeyboardVisible.test.ts --no-coverage 2>&1 | tail -10`
   Expected: PASS — 4 tests pass.
 
 - [ ] **Step 5: TypeScript check**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx tsc --noEmit 2>&1 | grep -E "useKeyboardVisible" | head -5`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx tsc --noEmit 2>&1 | grep -E "useKeyboardVisible" | head -5`
   Expected: No output (no TS errors in the new files).
 
 ---
@@ -332,7 +332,7 @@ Reference: the inline `SetupButtons` at `src/screens/SetupWizards/OperatorSetupW
 
 - [ ] **Step 2: Run test to confirm failure**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx jest src/components/setup-buttons --no-coverage 2>&1 | tail -10`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx jest src/components/setup-buttons --no-coverage 2>&1 | tail -10`
   Expected: FAIL — `Cannot find module '../index'`
 
 - [ ] **Step 3: Implement the component**
@@ -429,12 +429,12 @@ Reference: the inline `SetupButtons` at `src/screens/SetupWizards/OperatorSetupW
 
 - [ ] **Step 4: Run test to confirm pass**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx jest src/components/setup-buttons --no-coverage 2>&1 | tail -10`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx jest src/components/setup-buttons --no-coverage 2>&1 | tail -10`
   Expected: PASS — 7 tests pass.
 
 - [ ] **Step 5: TypeScript check**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx tsc --noEmit 2>&1 | grep -E "setup-buttons" | head -5`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx tsc --noEmit 2>&1 | grep -E "setup-buttons" | head -5`
   Expected: No output.
 
 ---
@@ -512,7 +512,7 @@ Reference: the inline `SetupButtons` at `src/screens/SetupWizards/OperatorSetupW
 
 - [ ] **Step 2: Run test to confirm failure**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx jest src/components/rats-wizard-progress --no-coverage 2>&1 | tail -10`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx jest src/components/rats-wizard-progress --no-coverage 2>&1 | tail -10`
   Expected: FAIL — `Cannot find module '../index'`
 
 - [ ] **Step 3: Implement the component**
@@ -607,12 +607,12 @@ Reference: the inline `SetupButtons` at `src/screens/SetupWizards/OperatorSetupW
 
 - [ ] **Step 4: Run test to confirm pass**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx jest src/components/rats-wizard-progress --no-coverage 2>&1 | tail -10`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx jest src/components/rats-wizard-progress --no-coverage 2>&1 | tail -10`
   Expected: PASS — 5 tests pass.
 
 - [ ] **Step 5: TypeScript check**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx tsc --noEmit 2>&1 | grep -E "rats-wizard-progress" | head -5`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx tsc --noEmit 2>&1 | grep -E "rats-wizard-progress" | head -5`
   Expected: No output.
 
 ---
@@ -627,7 +627,7 @@ Reference: the inline `SetupButtons` at `src/screens/SetupWizards/OperatorSetupW
 
 - [ ] **Step 1: Verify or add the Reanimated mock**
 
-  Run: `grep -n "reanimated" /Users/marcuspersonal/dev/regroup-rn7/jest.setup.js`
+  Run: `grep -n "reanimated" /Users/marcuspersonal/dev/Regroup/jest.setup.js`
   If the output shows a `jest.mock('react-native-reanimated', ...)` line, skip to Step 2.
 
   Otherwise, add the official mock to the top of `jest.setup.js`:
@@ -703,7 +703,7 @@ Reference: the inline `SetupButtons` at `src/screens/SetupWizards/OperatorSetupW
 
 - [ ] **Step 3: Run test to confirm failure**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx jest src/components/rats-wizard-slide --no-coverage 2>&1 | tail -10`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx jest src/components/rats-wizard-slide --no-coverage 2>&1 | tail -10`
   Expected: FAIL — `Cannot find module '../index'`
 
 - [ ] **Step 4: Implement the component**
@@ -799,12 +799,12 @@ Reference: the inline `SetupButtons` at `src/screens/SetupWizards/OperatorSetupW
 
 - [ ] **Step 5: Run test to confirm pass**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx jest src/components/rats-wizard-slide --no-coverage 2>&1 | tail -10`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx jest src/components/rats-wizard-slide --no-coverage 2>&1 | tail -10`
   Expected: PASS — 4 tests pass.
 
 - [ ] **Step 6: TypeScript check**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx tsc --noEmit 2>&1 | grep -E "rats-wizard-slide" | head -5`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx tsc --noEmit 2>&1 | grep -E "rats-wizard-slide" | head -5`
   Expected: No output.
 
 ---
@@ -818,18 +818,18 @@ Reference: the inline `SetupButtons` at `src/screens/SetupWizards/OperatorSetupW
 - [ ] **Step 1: Create `docs/patterns/` directory and the doc**
 
   ```bash
-  cd /Users/marcuspersonal/dev/regroup-rn7
+  cd /Users/marcuspersonal/dev/Regroup
   mkdir -p docs/patterns
   ```
 
   Create `docs/patterns/2026-05-27-wizard-ux-conventions.md`:
 
   ````markdown
-  # Wizard UX Conventions (RATS mobile)
+  # Wizard UX Conventions (Regroup mobile)
 
   **Established:** 2026-05-27
   **Status:** Active convention
-  **Applies to:** Any multi-step form flow in regroup-rn7
+  **Applies to:** Any multi-step form flow in Regroup
 
   When to use this pattern: multi-step forms with clear sequential progression
   (setup flows, onboarding, multi-page applications).
@@ -942,18 +942,18 @@ Reference: the inline `SetupButtons` at `src/screens/SetupWizards/OperatorSetupW
 
 - [ ] **Step 2: Run full Commit 1 test suite**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx jest src/hooks/__tests__/useKeyboardVisible.test.ts src/components/setup-buttons src/components/rats-wizard-progress src/components/rats-wizard-slide --no-coverage 2>&1 | tail -10`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx jest src/hooks/__tests__/useKeyboardVisible.test.ts src/components/setup-buttons src/components/rats-wizard-progress src/components/rats-wizard-slide --no-coverage 2>&1 | tail -10`
   Expected: All 4 test files pass.
 
 - [ ] **Step 3: TypeScript clean check (project-wide)**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx tsc --noEmit 2>&1 | tail -10`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx tsc --noEmit 2>&1 | tail -10`
   Expected: No new TS errors (pre-existing errors in unrelated files are fine).
 
 - [ ] **Step 4: Commit C1**
 
   ```bash
-  cd /Users/marcuspersonal/dev/regroup-rn7
+  cd /Users/marcuspersonal/dev/Regroup
   git add \
     src/hooks/useKeyboardVisible.ts \
     src/hooks/__tests__/useKeyboardVisible.test.ts \
@@ -988,7 +988,7 @@ Reference: current file is at `src/screens/Oxford/OxfordOnboardingWizard.tsx` (3
 
 - [ ] **Step 1: Choose icons for each step**
 
-  Run: `grep -rhoE 'icon="[a-z-]+"' /Users/marcuspersonal/dev/regroup-rn7/src --include='*.tsx' | sort -u`
+  Run: `grep -rhoE 'icon="[a-z-]+"' /Users/marcuspersonal/dev/Regroup/src --include='*.tsx' | sort -u`
   Read the list of icon names already used in the app. Pick the closest match for each step from these — substitute as needed:
 
   | Step            | Preferred icon | Fallback if missing |
@@ -1356,7 +1356,7 @@ Reference: current file is at `src/screens/Oxford/OxfordOnboardingWizard.tsx` (3
 
 - [ ] **Step 3: TypeScript check**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx tsc --noEmit 2>&1 | grep -E "OxfordOnboardingWizard" | head -5`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx tsc --noEmit 2>&1 | grep -E "OxfordOnboardingWizard" | head -5`
   Expected: No output. If errors appear, the most likely cause is a missing color in the theme — replace with a present color (e.g., `color.baby_blue` instead of `color.green_blue` if the latter doesn't exist).
 
 ---
@@ -1375,7 +1375,7 @@ The existing test file is comprehensive (10+ tests). The refactor changes the re
 
 - [ ] **Step 1: Run existing test to confirm what breaks**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx jest src/__tests__/screens/Oxford/OxfordOnboardingWizard.test.tsx --no-coverage 2>&1 | tail -30`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx jest src/__tests__/screens/Oxford/OxfordOnboardingWizard.test.tsx --no-coverage 2>&1 | tail -30`
   Note which tests fail and why. Common patterns:
 
   - "Cannot find module 'screen-header'" — the mock import path needs updating
@@ -1509,14 +1509,14 @@ The existing test file is comprehensive (10+ tests). The refactor changes the re
 
 - [ ] **Step 4: Run tests to confirm pass**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx jest src/__tests__/screens/Oxford/OxfordOnboardingWizard.test.tsx --no-coverage 2>&1 | tail -15`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx jest src/__tests__/screens/Oxford/OxfordOnboardingWizard.test.tsx --no-coverage 2>&1 | tail -15`
   Expected: PASS — same test count as the baseline from Task 0 Step 6 (or higher; some Alert tests may have split into "next disabled when X" tests).
   If a test fails, look at the rendered tree (use `debug()` from `@testing-library/react-native`) — most failures are query-path issues, not logic issues.
 
 - [ ] **Step 5: Commit C2**
 
   ```bash
-  cd /Users/marcuspersonal/dev/regroup-rn7
+  cd /Users/marcuspersonal/dev/Regroup
   git add \
     src/screens/Oxford/OxfordOnboardingWizard.tsx \
     src/__tests__/screens/Oxford/OxfordOnboardingWizard.test.tsx
@@ -1682,7 +1682,7 @@ The existing test file is comprehensive (10+ tests). The refactor changes the re
 
 - [ ] **Step 2: TypeScript check**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx tsc --noEmit 2>&1 | grep -E "OperatorSetupWizard|SetupWizard" | head -10`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx tsc --noEmit 2>&1 | grep -E "OperatorSetupWizard|SetupWizard" | head -10`
   Expected: TS errors will appear because the step components (`HouseSetup`, etc.) still try to render their own `SetupButtons` rows. Those errors will resolve as we refactor each step in Task 9.
 
 ---
@@ -1707,7 +1707,7 @@ The general pattern per step:
 
 - [ ] **Step 1: Refactor `HouseSetup.tsx`**
 
-  Read the file first: `cat /Users/marcuspersonal/dev/regroup-rn7/src/screens/SetupWizards/HouseSetup.tsx | head -40` to see the current import + button block.
+  Read the file first: `cat /Users/marcuspersonal/dev/Regroup/src/screens/SetupWizards/HouseSetup.tsx | head -40` to see the current import + button block.
 
   Apply two changes:
 
@@ -1715,40 +1715,40 @@ The general pattern per step:
   - Find the `<SetupButtons ... />` JSX block (search for `SetupButtons`) and **delete** it. The parent now renders the button row.
   - If the step calls `submitHouseSetup()` or similar on Next, leave that function in place and ensure it's still called by `onNextPress` — change the parent's `goNext` callback in the page array to call `submitHouseSetup` first, then advance. For HouseSetup specifically, the existing flow does form submission on the Next press; preserve that.
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx tsc --noEmit 2>&1 | grep "HouseSetup" | head -5`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx tsc --noEmit 2>&1 | grep "HouseSetup" | head -5`
   Expected: TS clean for HouseSetup itself.
 
 - [ ] **Step 2: Refactor `ManagerSetup.tsx`**
 
   Same pattern as Step 1: replace the local `SetupHeader` / `SetupButtons` import with `import SetupHeader from '../../components/setup-header'`, delete the `<SetupButtons />` block.
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx tsc --noEmit 2>&1 | grep "ManagerSetup" | head -5`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx tsc --noEmit 2>&1 | grep "ManagerSetup" | head -5`
   Expected: TS clean.
 
 - [ ] **Step 3: Refactor `PhaseSetup/PhaseConfig.tsx`**
 
   Same pattern. **Additionally**: `PhaseConfig` had an iOS-specific `phaseConfigViewPagerRef` hack in the old parent. With Reanimated `RatsWizardSlide`, this hack is no longer needed — verify no references to `phaseConfigViewPagerRef` remain in `PhaseConfig.tsx`. If `PhaseConfig` uses its own internal `ViewPager`, that's a separate concern; leave it intact (it's the sub-pager inside the chore phase config step).
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx tsc --noEmit 2>&1 | grep "PhaseConfig" | head -5`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx tsc --noEmit 2>&1 | grep "PhaseConfig" | head -5`
   Expected: TS clean.
 
 - [ ] **Step 4: Refactor `ChoreSetup.tsx`**
 
   Same pattern.
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx tsc --noEmit 2>&1 | grep "ChoreSetup" | head -5`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx tsc --noEmit 2>&1 | grep "ChoreSetup" | head -5`
   Expected: TS clean.
 
 - [ ] **Step 5: Refactor `GuestSetup.tsx`**
 
   Same pattern.
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx tsc --noEmit 2>&1 | grep "GuestSetup" | head -5`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx tsc --noEmit 2>&1 | grep "GuestSetup" | head -5`
   Expected: TS clean.
 
 - [ ] **Step 6: Full TypeScript check**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx tsc --noEmit 2>&1 | tail -20`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx tsc --noEmit 2>&1 | tail -20`
   Expected: No new errors from `SetupWizards/`. Pre-existing errors in unrelated files are acceptable.
 
 ---
@@ -1763,19 +1763,19 @@ The new `OperatorSetupWizard.tsx` has its own colocated `StyleSheet.create()`. T
 
 - [ ] **Step 1: Confirm no remaining imports**
 
-  Run: `grep -rn "OperatorSetupWizardStyles" /Users/marcuspersonal/dev/regroup-rn7/src 2>/dev/null`
+  Run: `grep -rn "OperatorSetupWizardStyles" /Users/marcuspersonal/dev/Regroup/src 2>/dev/null`
   Expected: No output. If any file still imports it, refactor that file to inline its styles.
 
 - [ ] **Step 2: Delete the file**
 
   ```bash
-  cd /Users/marcuspersonal/dev/regroup-rn7
+  cd /Users/marcuspersonal/dev/Regroup
   rm src/screens/SetupWizards/OperatorSetupWizardStyles.ts
   ```
 
 - [ ] **Step 3: TypeScript check**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx tsc --noEmit 2>&1 | grep "OperatorSetupWizardStyles" | head -5`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx tsc --noEmit 2>&1 | grep "OperatorSetupWizardStyles" | head -5`
   Expected: No output.
 
 ---
@@ -1788,7 +1788,7 @@ The new `OperatorSetupWizard.tsx` has its own colocated `StyleSheet.create()`. T
 
 - [ ] **Step 1: Run existing test to see what breaks**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx jest src/screens/SetupWizards/__tests__/OperatorSetupWizard.test.tsx --no-coverage 2>&1 | tail -20`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx jest src/screens/SetupWizards/__tests__/OperatorSetupWizard.test.tsx --no-coverage 2>&1 | tail -20`
   Note failures. Likely issues:
 
   - `Cannot find module 'react-native-best-viewpager'` — if the test imported `ViewPager` directly; replace with the new RatsWizardSlide mock
@@ -1867,7 +1867,7 @@ The new `OperatorSetupWizard.tsx` has its own colocated `StyleSheet.create()`. T
 
 - [ ] **Step 4: Run test to confirm pass**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx jest src/screens/SetupWizards/__tests__/OperatorSetupWizard.test.tsx --no-coverage 2>&1 | tail -15`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx jest src/screens/SetupWizards/__tests__/OperatorSetupWizard.test.tsx --no-coverage 2>&1 | tail -15`
   Expected: PASS — same test count as baseline (Task 0 Step 6).
 
 ---
@@ -1876,23 +1876,23 @@ The new `OperatorSetupWizard.tsx` has its own colocated `StyleSheet.create()`. T
 
 - [ ] **Step 1: Run full test suite**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx jest src/screens/Oxford src/screens/SetupWizards src/components/rats-wizard-progress src/components/rats-wizard-slide src/components/setup-buttons src/hooks/__tests__/useKeyboardVisible.test.ts --no-coverage 2>&1 | tail -15`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx jest src/screens/Oxford src/screens/SetupWizards src/components/rats-wizard-progress src/components/rats-wizard-slide src/components/setup-buttons src/hooks/__tests__/useKeyboardVisible.test.ts --no-coverage 2>&1 | tail -15`
   Expected: All test files pass.
 
 - [ ] **Step 2: TypeScript clean**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx tsc --noEmit 2>&1 | tail -5`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx tsc --noEmit 2>&1 | tail -5`
   Expected: No new errors.
 
 - [ ] **Step 3: Confirm ViewPager not imported in src/**
 
-  Run: `grep -rln "react-native-best-viewpager" /Users/marcuspersonal/dev/regroup-rn7/src 2>/dev/null`
+  Run: `grep -rln "react-native-best-viewpager" /Users/marcuspersonal/dev/Regroup/src 2>/dev/null`
   Expected: No output. (Package stays in `package.json` for now; removal is a separate follow-up PR.)
 
 - [ ] **Step 4: iOS simulator smoke test (manual)**
 
   ```bash
-  cd /Users/marcuspersonal/dev/regroup-rn7
+  cd /Users/marcuspersonal/dev/Regroup
   npx react-native run-ios
   ```
 
@@ -1918,7 +1918,7 @@ The new `OperatorSetupWizard.tsx` has its own colocated `StyleSheet.create()`. T
 - [ ] **Step 6: Commit C3**
 
   ```bash
-  cd /Users/marcuspersonal/dev/regroup-rn7
+  cd /Users/marcuspersonal/dev/Regroup
   git add \
     src/screens/SetupWizards/OperatorSetupWizard.tsx \
     src/screens/SetupWizards/HouseSetup.tsx \
@@ -1952,7 +1952,7 @@ The new `OperatorSetupWizard.tsx` has its own colocated `StyleSheet.create()`. T
 - [ ] **Step 7: Push and open PR**
 
   ```bash
-  cd /Users/marcuspersonal/dev/regroup-rn7
+  cd /Users/marcuspersonal/dev/Regroup
   git push -u origin feat/oxford-wizard-harmonization
   ```
 

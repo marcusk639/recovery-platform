@@ -594,8 +594,8 @@ Direct Firestore cross-queries are forbidden — see CLAUDE.md §Cross-Cutting R
 | toApp                | Product                      | Firebase Project         |
 | -------------------- | ---------------------------- | ------------------------ |
 | `treatment-center`   | detox-recovery (NextStep)    | `nextstep-recovery`      |
-| `phoenix-cleanhouse` | regroup (RATS)               | `phoenix-cleanhouse`     |
-| `homegroups`         | homegroups (RecoveryConnect) | `recovery-connect-cad4b` |
+| `phoenix-cleanhouse` | regroup (Regroup)               | `phoenix-cleanhouse`     |
+| `homegroups`         | homegroups (Homegroups) | `recovery-connect-cad4b` |
 
 ## Authentication
 

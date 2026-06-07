@@ -1,6 +1,6 @@
-# RATS E2E Tests
+# Regroup E2E Tests
 
-End-to-end tests for the RATS React Native application using Detox and Firebase Emulator.
+End-to-end tests for the Regroup React Native application using Detox and Firebase Emulator.
 
 ## Overview
 

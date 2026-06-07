@@ -1,4 +1,4 @@
-# RATS: Production Readiness Design
+# Regroup: Production Readiness Design
 
 > **Generated:** February 27, 2026
 > **Scope:** End-to-April (8-week) plan to reach three milestones: first real payment, Oxford pilot live, App Store submission

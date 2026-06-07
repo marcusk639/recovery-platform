@@ -4,7 +4,7 @@
 
 ## Overview
 
-Add two tightly-related features to the RATS v2 React Native app:
+Add two tightly-related features to the Regroup v2 React Native app:
 
 1. **Chore Rotation** — a `choreRotations/{houseId}` Firestore document drives a weekly round-robin. Each Sunday the next resident in the ordered list becomes the assignee. Admins set the order via a new `ChoreRotationSetup` screen in House Settings. The app checks on load whether a new week has started and advances the index client-side (MVP; Cloud Function upgrade is noted as a follow-on).
 2. **Photo Evidence** — when a resident taps "COMPLETE CHORE" on `GuestChoreSummary`, they are first prompted to optionally attach a photo. The photo uploads to `houses/{houseId}/chore-evidence/{activityId}` in Firebase Storage and the download URL is stored in `ChoreActivityData.photoUrl`. Admins can see the photo URL from the activity feed.

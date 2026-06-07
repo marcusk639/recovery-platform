@@ -1,6 +1,6 @@
-# RATS (Regroup) - End-to-End Architecture
+# Regroup - End-to-End Architecture
 
-This document provides a comprehensive breakdown of the RATS sober living management platform, covering the React Native mobile client, Firebase Cloud Functions backend, and Firestore data architecture.
+This document provides a comprehensive breakdown of the Regroup sober living management platform, covering the React Native mobile client, Firebase Cloud Functions backend, and Firestore data architecture.
 
 ---
 

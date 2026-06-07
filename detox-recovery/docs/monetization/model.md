@@ -2,7 +2,7 @@
 
 **Prepared:** May 2026  
 **Scope:** Manual Stripe setup steps + monetization strategy for detox-recovery (nextsteprecovery.io)
-and the broader recovery ecosystem (RecoveryConnect, regroup-rn7, regroup-web/functions)
+and the broader recovery ecosystem (Homegroups, Regroup, regroup-web/functions)
 
 ---
 
@@ -195,11 +195,11 @@ If you pursue Medicaid billing (peer support specialist certification):
 
 ---
 
-## Part 3 — RecoveryConnect (Homegroups App) Monetization
+## Part 3 — Homegroups (App) Monetization
 
 ### 3.1 Product Context
 
-RecoveryConnect is a peer support app for AA/NA/SMART homegroup tracking — meeting attendance, step work logging, sponsor relationships, group communication.
+Homegroups is a peer support app for AA/NA/SMART homegroup tracking — meeting attendance, step work logging, sponsor relationships, group communication.
 
 ### 3.2 Revenue Model
 
@@ -217,9 +217,9 @@ RecoveryConnect is a peer support app for AA/NA/SMART homegroup tracking — mee
 1. **Launch free tier** — maximum adoption, prove utility, build network effects
 2. **Gate premium features** — once DAU > 500, introduce individual premium
 3. **Pitch treatment programs** — the institutional tier is the high-value play; treatment centers want alumni engagement data
-4. **RecoveryConnect as Next Step Recovery referral engine** — users in crisis get directed to nextsteprecovery.io for support calls; creates cross-product revenue
+4. **Homegroups as Next Step Recovery referral engine** — users in crisis get directed to nextsteprecovery.io for support calls; creates cross-product revenue
 
-### 3.4 Stripe Setup for RecoveryConnect
+### 3.4 Stripe Setup for Homegroups
 
 - **Individual subscriptions:** Stripe Checkout with `mode: "subscription"` — this requires the Stripe JS SDK (not just payment links)
 - **Institutional billing:** Stripe invoices (same as Next Step Recovery B2B)
@@ -232,12 +232,12 @@ RevenueCat unifies App Store, Play Store, and Stripe billing into one API. Setup
 1. Create RevenueCat account, add app
 2. Wire App Store Connect and Google Play Console API keys
 3. Define entitlements (e.g., "premium") and offerings (monthly, annual)
-4. Replace direct Stripe calls with RevenueCat SDK in regroup-rn7
+4. Replace direct Stripe calls with RevenueCat SDK in Regroup
 5. Use RevenueCat webhooks to update user entitlement state in your backend
 
 ---
 
-## Part 4 — regroup-rn7 (Regroup Sober Living App) Monetization
+## Part 4 — Regroup (Sober Living App) Monetization
 
 ### 4.1 Product Context
 
@@ -256,7 +256,7 @@ Regroup is a sober living house management app — resident tracking, chore sche
 
 **Key insight:** The operator pays, not the resident. Residents get free access (or cheap add-on). This removes the pricing barrier at the most vulnerable moment.
 
-### 4.3 Stripe Setup for regroup-rn7
+### 4.3 Stripe Setup for Regroup
 
 - **Operator subscriptions:** Stripe Checkout with `mode: "subscription"`, monthly billing, metered by house count
 - **Trial:** 30-day free trial (Stripe trial_period_days: 30) — operator proves value before paying
@@ -267,7 +267,7 @@ Regroup is a sober living house management app — resident tracking, chore sche
 
 - Direct outreach to sober living operators (Oxford Houses, state-certified facilities)
 - Integration with state Oxford House chapter directories
-- **Cross-product gate:** Once regroup-rn7 has 10+ houses, pitch Next Step Recovery consulting to those programs
+- **Cross-product gate:** Once Regroup has 10+ houses, pitch Next Step Recovery consulting to those programs
 
 ---
 
@@ -275,11 +275,11 @@ Regroup is a sober living house management app — resident tracking, chore sche
 
 ### 5.1 Product Context
 
-`regroup-web` is the web companion to regroup-rn7 — house manager dashboard, resident portal. `regroup-functions` is the Firebase Cloud Functions backend serving both regroup-rn7 and regroup-web.
+`regroup-web` is the web companion to Regroup — house manager dashboard, resident portal. `regroup-functions` is the Firebase Cloud Functions backend serving both Regroup and regroup-web.
 
 ### 5.2 Revenue Model
 
-**regroup-web and regroup-functions are infrastructure, not separate products.** They serve the same operator and resident customers as regroup-rn7. Monetization is entirely through regroup-rn7's Stripe subscriptions.
+**regroup-web and regroup-functions are infrastructure, not separate products.** They serve the same operator and resident customers as Regroup. Monetization is entirely through Regroup's Stripe subscriptions.
 
 There is no separate billing surface for regroup-web or regroup-functions.
 
@@ -308,10 +308,10 @@ At scale (50+ houses), there is an enterprise opportunity:
 nextsteprecovery.io
 (withdrawal support → treatment navigation)
          ↓  refers to sober living
-    regroup-rn7 / regroup-web
+    Regroup / regroup-web
 (sober living management)
          ↓  residents join homegroups
-    RecoveryConnect
+    Homegroups
 (peer support community)
          ↑  members in crisis contact
 nextsteprecovery.io
@@ -321,24 +321,24 @@ nextsteprecovery.io
 
 | From                    | To                            | Trigger                                       | Revenue impact                 |
 | ----------------------- | ----------------------------- | --------------------------------------------- | ------------------------------ |
-| nextsteprecovery.io     | regroup-rn7                   | Client needs sober living after detox         | New operator lead for Regroup  |
-| regroup-rn7             | nextsteprecovery.io           | Resident in crisis / needs withdrawal support | New support call booking       |
-| RecoveryConnect         | nextsteprecovery.io           | Member relapse risk / family in crisis        | New fit check → support call   |
-| nextsteprecovery.io B2B | RecoveryConnect Institutional | Consulting client wants peer-support tools    | New institutional subscription |
+| nextsteprecovery.io     | Regroup                   | Client needs sober living after detox         | New operator lead for Regroup  |
+| Regroup             | nextsteprecovery.io           | Resident in crisis / needs withdrawal support | New support call booking       |
+| Homegroups         | nextsteprecovery.io           | Member relapse risk / family in crisis        | New fit check → support call   |
+| nextsteprecovery.io B2B | Homegroups Institutional | Consulting client wants peer-support tools    | New institutional subscription |
 
 ### 6.2 Sequencing for Maximum Flywheel Impact
 
 1. **nextsteprecovery.io first** — live, generating revenue, proving the model (done)
-2. **RecoveryConnect pilot** — Oxford house pilot creates testimonials + referral channel
-3. **regroup-rn7 launch** — operator-facing B2B SaaS, compounding with Oxford pilot network
+2. **Homegroups pilot** — Oxford house pilot creates testimonials + referral channel
+3. **Regroup launch** — operator-facing B2B SaaS, compounding with Oxford pilot network
 4. **B2B consulting cross-sell** — once consulting has 3+ treatment center clients, offer Regroup as their sober living management tool (package deal)
-5. **Institutional tier** — RecoveryConnect + Regroup sold together to treatment programs as a post-discharge continuity package
+5. **Institutional tier** — Homegroups + Regroup sold together to treatment programs as a post-discharge continuity package
 
 ### 6.3 Shared Infrastructure Investments
 
 These investments benefit all products and should be built once:
 
-- **Shared identity / auth** — single user account across nextsteprecovery.io, RecoveryConnect, and Regroup (Firebase Auth already used in regroup-functions; extend to web)
+- **Shared identity / auth** — single user account across nextsteprecovery.io, Homegroups, and Regroup (Firebase Auth already used in regroup-functions; extend to web)
 - **Notification service** — regroup-functions already has FCM; expose as a shared service
 - **Analytics pipeline** — single event schema (user_id, product, event, properties) feeding one analytics tool — avoids rebuilding dashboards per product
 
@@ -347,8 +347,8 @@ These investments benefit all products and should be built once:
 | Product             | Model                    | Target MRR          |
 | ------------------- | ------------------------ | ------------------- |
 | nextsteprecovery.io | Service + digital + B2B  | $3,000–$8,000       |
-| RecoveryConnect     | Freemium + institutional | $2,000–$5,000       |
-| regroup-rn7 / web   | B2B SaaS                 | $5,000–$15,000      |
+| Homegroups     | Freemium + institutional | $2,000–$5,000       |
+| Regroup / web   | B2B SaaS                 | $5,000–$15,000      |
 | **Ecosystem total** |                          | **$10,000–$28,000** |
 
 At $10K+ MRR across all products, the ecosystem is self-sustaining and fundable.
@@ -371,7 +371,7 @@ At $10K+ MRR across all products, the ecosystem is self-sustaining and fundable.
 | `NEXT_PUBLIC_STRIPE_TREATMENT_COMPARISON_URL` | PDF → replace with Lemon Squeezy URL | Firebase App Hosting env |
 | `NEXT_PUBLIC_STRIPE_RELAPSE_PREVENTION_URL`   | PDF → replace with Lemon Squeezy URL | Firebase App Hosting env |
 
-### regroup-rn7 / regroup-web (when implemented)
+### Regroup / regroup-web (when implemented)
 
 | Variable                          | Purpose                                |
 | --------------------------------- | -------------------------------------- |

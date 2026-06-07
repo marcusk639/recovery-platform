@@ -6,7 +6,7 @@
 
 **Architecture:** The existing `createIntergroup` callable already supports `type: "treatment_center"` and returns a Stripe checkout URL. This plan wires the web pricing page's tier buttons to that callable. Because the web user must be authenticated to call a Firebase callable, we add an inline auth modal (reusing the pattern from `ClaimGroupPage.js`). On successful checkout, Stripe redirects to a new `/treatment-center-success` page. A `/treatment-center-cancel` page handles cancellations.
 
-**Scope note:** The facility dashboard (showing alumni engagement) is out of scope for this plan — it depends on the RATS integration being complete first (see `2026-05-21-meeting-attendance-api.md`). This plan delivers the checkout path only.
+**Scope note:** The facility dashboard (showing alumni engagement) is out of scope for this plan — it depends on the Regroup integration being complete first (see `2026-05-21-meeting-attendance-api.md`). This plan delivers the checkout path only.
 
 **Tech Stack:** React (web), Firebase Auth, Firebase callable (`createIntergroup`), Stripe Checkout, React Router v6.
 

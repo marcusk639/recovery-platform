@@ -6,7 +6,7 @@
 | ---------------------- | ------------------------------------ | ------------------------------------------------ |
 | `{{REPO_PATH}}`        | Absolute path to the repository root | `/Users/me/dev/my-app`                           |
 | `{{DOCS_PATH}}`        | Path to the docs directory           | `{{REPO_PATH}}/docs`                             |
-| `{{APP_NAME}}`         | Short name for the application       | `RATS`                                           |
+| `{{APP_NAME}}`         | Short name for the application       | `Regroup`                                           |
 | `{{THINKING_FILE}}`    | Temp file for agent thought process  | `{{REPO_PATH}}/.audit/thinking.md`               |
 | `{{FEATURES_FILE}}`    | Output: app functionality document   | `{{REPO_PATH}}/.audit/app-features.md`           |
 | `{{DISCREPANCY_FILE}}` | Output: discrepancy report           | `{{REPO_PATH}}/.audit/doc-code-discrepancies.md` |

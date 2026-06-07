@@ -1,5 +1,5 @@
 You are tasked with building an optimal, growth-optimized roadmap for the
-RecoveryConnect / Homegroups platform and its surrounding ecosystem.
+Homegroups platform and its surrounding ecosystem.
 Before writing a single roadmap item, you must do the work of determining
 which docs are the actual source of truth.
 
@@ -68,8 +68,8 @@ Pay special attention to the open items in `REVENUE_OPPORTUNITIES.md`:
 items 4, 8, 9, 10, 11, 12, 13, 14, 15 are explicitly not done as of May 2026.
 
 This is a multi-product ecosystem. Audit across:
-- Product 1: RecoveryConnect / Homegroups (this repo)
-- Product 2: RATS sober living (rats-v2) — reference from ecosystem plan
+- Product 1: Homegroups (this repo)
+- Product 2: Regroup sober living (rats-v2) — reference from ecosystem plan
 - Product 3: Aftercare Management System — not built yet
 
 ---
@@ -128,12 +128,12 @@ tier justification, effort, dependencies.
 Concrete tasks per the docs-to-roadmap skill format.
 
 ### 5. Cross-Product Sequencing
-How RecoveryConnect work gates or enables rats-v2 and Aftercare milestones.
+How Homegroups work gates or enables rats-v2 and Aftercare milestones.
 
 ### 6. Confidence Notes
 Where status is uncertain; what to manually verify.
 
 ---
-One change I'd make to the skill itself: update the "Context for RATS / Regroup" section at the bottom to replace the nonexistent file references with the actual authoritative paths listed in Step 1 above. That section currently misleads any agent following it.
+One change I'd make to the skill itself: update the "Context for Regroup" section at the bottom to replace the nonexistent file references with the actual authoritative paths listed in Step 1 above. That section currently misleads any agent following it.
 
 Alternative if you don't want to use the skill: the prompt above is self-contained enough to work without it — the skill mostly formalizes phases 2-4, which are all covered explicitly here. The main value the skill adds is the anti-patterns table, which is worth keeping.

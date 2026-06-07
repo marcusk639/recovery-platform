@@ -1,4 +1,4 @@
-# RecoveryConnect — End-to-End Architecture
+# Homegroups — End-to-End Architecture
 
 Comprehensive breakdown of the mobile app and Cloud Functions implementations.
 
