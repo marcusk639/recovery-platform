@@ -648,7 +648,7 @@ async function handleInvoicePaymentFailed(
 
   const subData = subSnap.docs[0].data() as SubscriptionDoc;
 
-  let notifBody = `Your RATS subscription payment failed.`;
+  let notifBody = `Your Regroup subscription payment failed.`;
   if (nextPaymentAttempt != null) {
     const retryDate = new Date(nextPaymentAttempt * 1000).toLocaleDateString();
     notifBody += ` Next retry: ${retryDate}.`;
@@ -721,7 +721,7 @@ async function handleSubscriptionDeleted(
   await sendFcmToHouseAdmins(
     subData.houseId,
     "Subscription Canceled",
-    `Your RATS subscription has been canceled as of ${canceledAt}. Contact support to reactivate.`,
+    `Your Regroup subscription has been canceled as of ${canceledAt}. Contact support to reactivate.`,
   );
 
   // B10: propagate canceled status to all operator houses.
@@ -792,7 +792,7 @@ async function handleSubscriptionUpdated(
     await sendFcmToHouseAdmins(
       previousData.houseId,
       "Subscription Past Due",
-      "Your RATS subscription is now past due. Please update your payment method to avoid service interruption.",
+      "Your Regroup subscription is now past due. Please update your payment method to avoid service interruption.",
     );
   }
 

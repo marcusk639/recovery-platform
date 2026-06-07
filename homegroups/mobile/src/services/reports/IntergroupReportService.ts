@@ -176,7 +176,7 @@ export class IntergroupReportService {
         }
 
         <div class="footer">
-          <p>${report.status === 'submitted' ? 'Submitted to intergroup' : 'Draft report'} &bull; RecoveryConnect</p>
+          <p>${report.status === 'submitted' ? 'Submitted to intergroup' : 'Draft report'} &bull; Homegroups</p>
           <p>Generated: ${format(new Date(), 'MMM d, yyyy h:mm a')}</p>
         </div>
       </body>

@@ -124,7 +124,7 @@ export class BylawsReportService {
         </div>
 
         <div class="footer">
-          <p>Ratified by group conscience vote &bull; RecoveryConnect</p>
+          <p>Ratified by group conscience vote &bull; Homegroups</p>
           <p>Generated: ${format(new Date(), 'MMM d, yyyy h:mm a')}</p>
         </div>
       </body>

@@ -165,7 +165,7 @@ const MeetingQRCodeScreen: React.FC = () => {
               <Text style={styles.stepBadgeText}>2</Text>
             </View>
             <Text style={styles.instructionText}>
-              Members tap the link to open RecoveryConnect and check in.
+              Members tap the link to open Homegroups and check in.
             </Text>
           </View>
           <View style={styles.instructionRow}>

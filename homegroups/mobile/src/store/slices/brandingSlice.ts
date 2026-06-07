@@ -105,7 +105,7 @@ export const selectAccentColor = (state: RootState) =>
   (state as any).branding?.branding?.accentColor ?? '#4CAF50';
 
 export const selectOrgName = (state: RootState) =>
-  (state as any).branding?.branding?.orgName ?? 'RecoveryConnect';
+  (state as any).branding?.branding?.orgName ?? 'Homegroups';
 
 export const selectBrandingStatus = (state: RootState) =>
   (state as any).branding?.status ?? 'idle';

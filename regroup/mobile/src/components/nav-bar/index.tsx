@@ -50,7 +50,7 @@ const NavBar = (props: NavBarProps) => {
     props.title ||
     props.navigation.getState().routeNames[props.navigation.getState().index] ||
     route.key ||
-    'RATS';
+    'Regroup';
   return (
     <View style={[barStyle, props.containerStyle]}>
       {drawer && (

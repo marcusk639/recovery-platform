@@ -68,7 +68,7 @@ const SubscriptionRequiredScreen: React.FC = () => {
 
       <RatsText
         translate={false}
-        text="To continue managing your house, renew your subscription on the RATS web portal."
+        text="To continue managing your house, renew your subscription on the Regroup web portal."
         style={styles.body}
       />
 

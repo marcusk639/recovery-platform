@@ -5,7 +5,7 @@
 // - "Join This Group" button for RecoveryConnect groups
 // - "Favorite" toggle
 // - "View Group" deep link into GroupOverview for RecoveryConnect groups
-// - "Is this your group? Get it on RecoveryConnect" for external meetings
+// - "Is this your group? Get it on Homegroups" for external meetings
 
 import React, {useEffect, useState} from 'react';
 import {
@@ -337,7 +337,7 @@ const MeetingDetailScreen: React.FC = () => {
             </>
           ) : null}
 
-          {/* External meeting: Get it on RecoveryConnect CTA */}
+          {/* External meeting: Get it on Homegroups CTA */}
           {!isRecoveryConnect ? (
             <TouchableOpacity
               style={styles.externalCta}
@@ -347,7 +347,7 @@ const MeetingDetailScreen: React.FC = () => {
               testID="external-cta">
               <Icon name="plus-circle-outline" size={18} color="#2196F3" />
               <Text style={styles.externalCtaText}>
-                Is this your group? Get it on RecoveryConnect
+                Is this your group? Get it on Homegroups
               </Text>
               <Icon name="chevron-right" size={16} color="#2196F3" />
             </TouchableOpacity>
