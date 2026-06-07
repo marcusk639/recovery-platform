@@ -30,7 +30,7 @@ export const SERVICE_TIERS: ServiceTier[] = [
     tier: 2,
     name: "30-Minute Withdrawal Support Call",
     duration: "30 min",
-    price: "$50",
+    price: "$75",
     betaLabel: "Introductory beta pricing",
     status: "available",
     purpose:
