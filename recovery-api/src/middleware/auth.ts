@@ -1,19 +1,26 @@
 import { CallableRequest, HttpsError } from 'firebase-functions/v2/https';
+import { resolveApp, isOriginatorAppId, ORIGINATOR_APP_IDS } from '../config/apps';
 
 export interface ServiceAuthContext {
-  appId: 'homegroups' | 'sober-living' | 'phoenix-cleanhouse';
+  /** Canonical app-id of the originating service (see config/apps.ts). */
+  appId: 'homegroups' | 'phoenix-cleanhouse' | 'nextstep-recovery';
   uid: string;
   email: string;
 }
 
-// 'sober-living' is a legacy alias for the regroup/RATS product.
-// 'phoenix-cleanhouse' is the canonical Firebase project ID for regroup/RATS
-// and the toApp value used in cross-product referrals (see CLAUDE.md).
-const VALID_APP_IDS: ReadonlySet<string> = new Set([
-  'homegroups',
-  'sober-living',
-  'phoenix-cleanhouse',
-]);
+// Incoming X-App-Id / appId claims are resolved through the registry, so
+// display names and legacy aliases (e.g. 'sober-living' → 'phoenix-cleanhouse')
+// are accepted and normalized to the canonical app-id before validation.
+const ORIGINATOR_LIST = ORIGINATOR_APP_IDS.join(', ');
+
+/** Resolve a raw X-App-Id / appId claim to a canonical originator app-id, or undefined. */
+function resolveOriginator(raw: string): ServiceAuthContext['appId'] | undefined {
+  const appId = resolveApp(raw)?.appId;
+  if (appId && isOriginatorAppId(appId)) {
+    return appId as ServiceAuthContext['appId'];
+  }
+  return undefined;
+}
 
 /**
  * Phase 1: Verify X-Service-Key + extract X-App-Id / X-User-Uid / X-User-Email.
@@ -25,30 +32,29 @@ export function requireServiceAuth(request: CallableRequest): ServiceAuthContext
   const apiKey = process.env.RECOVERY_PLATFORM_API_KEY;
 
   if (apiKey && serviceKey === apiKey) {
-    const appId = headers['x-app-id'] as string | undefined;
+    const rawAppId = headers['x-app-id'] as string | undefined;
     const uid = headers['x-user-uid'] as string | undefined;
     const email = (headers['x-user-email'] as string | undefined) ?? '';
 
-    if (!appId || !VALID_APP_IDS.has(appId)) {
-      throw new HttpsError(
-        'unauthenticated',
-        'X-App-Id must be homegroups, sober-living, or phoenix-cleanhouse',
-      );
+    const appId = rawAppId ? resolveOriginator(rawAppId) : undefined;
+    if (!appId) {
+      throw new HttpsError('unauthenticated', `X-App-Id must be one of: ${ORIGINATOR_LIST}`);
     }
     if (!uid) {
       throw new HttpsError('unauthenticated', 'Missing X-User-Uid header');
     }
-    return { appId: appId as ServiceAuthContext['appId'], uid, email };
+    return { appId, uid, email };
   }
 
   // Phase 2: Firebase custom token flow
   if (request.auth) {
-    const appId = request.auth.token['appId'] as string | undefined;
-    if (!appId || !VALID_APP_IDS.has(appId)) {
+    const rawAppId = request.auth.token['appId'] as string | undefined;
+    const appId = rawAppId ? resolveOriginator(rawAppId) : undefined;
+    if (!appId) {
       throw new HttpsError('unauthenticated', 'Missing or invalid appId claim');
     }
     return {
-      appId: appId as ServiceAuthContext['appId'],
+      appId,
       uid: request.auth.uid,
       email: (request.auth.token.email as string | undefined) ?? '',
     };
