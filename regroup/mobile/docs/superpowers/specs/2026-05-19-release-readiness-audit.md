@@ -32,7 +32,7 @@ The codebase has completed three major cleanup phases (P0 security fixes, Redux�
 - [ ] **Age rating** — Evaluate: sober living context likely 17+ (medical/health references) or 4+ (no objectionable content). Submit App Store questionnaire.
 - [ ] **IDFA disclosure** — Firebase Analytics uses IDFA; must check "Collect data used to track" and specify purposes.
 - [ ] **App Review notes** — Provide test account credentials and house setup context so reviewers can demo the app without real users.
-- [ ] **Entitlements audit** — Run `codesign -d --entitlements - Payload/Regroup.app`; confirm only Push Notifications and In-App Purchase entitlements are present.
+- [ ] **Entitlements audit** — Run `codesign -d --entitlements - Payload/rats.app`; confirm only Push Notifications and In-App Purchase entitlements are present.
 
 #### 1.2 Google Play Store
 
