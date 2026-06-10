@@ -206,7 +206,7 @@ _(Tables below are verified against the working tree on 2026-06-03.)_
 
 - **homegroups (Homegroups):** most mature. V4 features shipped; Stripe integration present; launch gated on setting live default prices + claim-and-pay verification. Maps key now env-based.
 - **detox-recovery (NextStep):** tech-complete Next.js 15; revenue gated on contact-form bug + email automations + paid-PDF migration. Closest to first revenue.
-- **regroup (Regroup, Regroup):** lowest feature-readiness; ~5% test coverage on critical paths; payments + Oxford-house flow incomplete; pricing strategy documented but not implemented.
+- **regroup (Regroup):** lowest feature-readiness; ~5% test coverage on critical paths; payments + Oxford-house flow incomplete; pricing strategy documented but not implemented.
 - **recovery-api:** functional 5-callable service; **no test suite**; foundation for future cross-app integration.
 - **shared:** empty placeholder.
 
