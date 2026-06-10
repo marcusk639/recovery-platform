@@ -1,8 +1,9 @@
 import type { Timestamp } from 'firebase-admin/firestore';
+import type { OriginatorAppId } from '../config/apps';
 
 export interface User {
   uid: string;
-  appId: 'homegroups' | 'phoenix-cleanhouse' | 'nextstep-recovery';
+  appId: OriginatorAppId;
   email: string;
   displayName?: string;
   sobrietyDate?: string; // ISO date "YYYY-MM-DD"
