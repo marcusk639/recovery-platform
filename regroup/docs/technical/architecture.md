@@ -26,7 +26,7 @@ This document provides a comprehensive breakdown of the Regroup sober living man
 ```
 +---------------------+        +----------------------+        +------------------+
 |  React Native App   | <----> |  Firebase Services   | <----> | External APIs    |
-|  (rats-v2 repo)     |        |  (regroup-functions)  |        |                  |
+|  (regroup/mobile/)  |        |  (regroup/functions/) |        |                  |
 +---------------------+        +----------------------+        +------------------+
 | - iOS & Android     |        | - Cloud Functions    |        | - Stripe         |
 | - React Navigation  |        | - Firestore          |        | - Google Maps    |
@@ -38,11 +38,11 @@ This document provides a comprehensive breakdown of the Regroup sober living man
 
 ### Repository Structure
 
-| Repo                  | Purpose                                     | Key Tech                                                  |
-| --------------------- | ------------------------------------------- | --------------------------------------------------------- |
-| **rats-v2**           | Mobile client + Firestore rules + E2E tests | React Native 0.72, TypeScript, Redux Toolkit, React Query |
-| **regroup-functions** | Cloud Functions backend                     | TypeScript, Firebase Admin SDK, Stripe SDK                |
-| **rats-web**          | Marketing/landing page                      | Web                                                       |
+| Component                | Path                 | Purpose                                     | Key Tech                                                  |
+| ------------------------ | -------------------- | ------------------------------------------- | --------------------------------------------------------- |
+| **Regroup mobile**       | `regroup/mobile/`    | Mobile client + Firestore rules + E2E tests | React Native 0.72, TypeScript, Redux Toolkit, React Query |
+| **Regroup functions**    | `regroup/functions/` | Cloud Functions backend                     | TypeScript, Firebase Admin SDK, Stripe SDK                |
+| **Regroup web**          | `regroup/web/`       | Marketing/landing page + web portal         | Angular, TypeScript, Firebase Hosting                     |
 
 ### Data Flow Summary
 
