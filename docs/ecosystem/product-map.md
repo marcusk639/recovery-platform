@@ -6,7 +6,7 @@
 
 ## Regroup — Sober Living Operations Platform
 
-> **Product family:** `rats-v2` (mobile), `rats-web` (marketing + web portal), `regroup-functions` (backend)
+> **Platform:** `regroup/` — sub-components: `mobile/` (iOS + Android), `web/` (marketing + web portal), `functions/` (backend)
 > **Audience:** Sober living house operators, house managers, residents, and Oxford House chapters.
 
 ---
@@ -89,21 +89,21 @@ Test recording, result history, and attribution per resident.
 
 ### 4. Technical Overview
 
-#### 4.1 Repos and responsibilities
+#### 4.1 Components
 
-| Repo                | Role                                         | Stack                                                                         |
-| ------------------- | -------------------------------------------- | ----------------------------------------------------------------------------- |
-| `rats-v2`           | iOS + Android app for managers and residents | React Native 0.72, TypeScript, Redux Toolkit, React Query, React Navigation 6 |
-| `rats-web`          | Public marketing site + web portal           | Angular 9, Angular Universal SSR, Firebase Hosting, ngx-stripe                |
-| `regroup-functions` | Shared backend                               | Node 22, Firebase Functions 7, Admin SDK 13, Stripe 20, SendGrid              |
+| Component          | Path               | Role                                         | Stack                                                                         |
+| ------------------ | ------------------ | -------------------------------------------- | ----------------------------------------------------------------------------- |
+| Regroup mobile     | `regroup/mobile/`  | iOS + Android app for managers and residents | React Native 0.72, TypeScript, Redux Toolkit, React Query, React Navigation 6 |
+| Regroup web        | `regroup/web/`     | Public marketing site + web portal           | Angular 9, Angular Universal SSR, Firebase Hosting, ngx-stripe                |
+| Regroup functions  | `regroup/functions/` | Shared backend                             | Node 22, Firebase Functions 7, Admin SDK 13, Stripe 20, SendGrid              |
 
 #### 4.2 System diagram
 
 ```mermaid
 graph TB
-  subgraph Clients
-    RN[rats-v2<br/>React Native]
-    NG[rats-web<br/>Angular + SSR]
+  subgraph "regroup/ (platform)"
+    RN[mobile/<br/>React Native]
+    NG[web/<br/>Angular + SSR]
   end
 
   subgraph Firebase
@@ -113,7 +113,7 @@ graph TB
     FCM[Cloud Messaging]
   end
 
-  subgraph "regroup-functions"
+  subgraph "regroup/functions/"
     Call[Callable<br/>auth / houses / meetings /<br/>payments / subscriptions]
     Http[HTTP<br/>stripeConnect / universal SSR]
     Hook[Webhooks<br/>stripeEvents]
@@ -141,7 +141,7 @@ graph TB
   RN --> FCM
 ```
 
-#### 4.3 Mobile app (`rats-v2`) architecture
+#### 4.3 Mobile app (`regroup/mobile/`) architecture
 
 - **Provider tree:** `ErrorBoundary → SafeAreaProvider → StripeProvider → ThemeProvider → DataProvider → NotificationProvider → ModalProvider → Auth → RootNavigator`.
 - **State:** Redux Toolkit for UI/client state (13 slices); React Query for server state (11 query files).
@@ -149,14 +149,14 @@ graph TB
 - **Service layer:** `src/services/` wraps Firestore reads/writes and Cloud Function calls (`httpsCallable`).
 - **Offline resilience:** `offlineQueue.enqueue()` with up to 3 retries on network failure.
 
-#### 4.4 Web app (`rats-web`) architecture
+#### 4.4 Web app (`regroup/web/`) architecture
 
 - Flat Angular routing with six theme variants for landing pages.
 - `AuthGuard` protects account and billing routes.
 - Two deployed functions: `universal` (SSR HTTP handler) and `warmWebsite` (per-minute Pub/Sub warmer to avoid cold starts).
 - Build requires `NODE_OPTIONS=--openssl-legacy-provider` (Angular 9 + newer Node).
 
-#### 4.5 Backend (`regroup-functions`) surface
+#### 4.5 Backend (`regroup/functions/`) surface
 
 | Type               | Examples                                                                                    | Notes                                            |
 | ------------------ | ------------------------------------------------------------------------------------------- | ------------------------------------------------ |
@@ -172,22 +172,22 @@ Idempotency keys for payment intents are deterministic (`guestId + utcDay`) unle
 
 - Firestore is the primary store; Realtime Database is legacy and being phased out.
 - Role-based access enforced in security rules using custom claims set from Firestore `admin`/`superAdmin` membership.
-- Entity interfaces live in `rats-v2/src/entities/` and `rats-web/src/app/entities/` — kept loosely in sync by convention (a shared-types package is a known future consolidation).
+- Entity interfaces live in `regroup/mobile/src/entities/` and `regroup/web/src/app/entities/` — kept loosely in sync by convention (a shared-types package is a known future consolidation).
 
 ---
 
 ### 5. Entry Points (for developers)
 
-| Concern         | File                                                        |
-| --------------- | ----------------------------------------------------------- |
-| Mobile app root | `rats-v2/App.tsx`                                           |
-| Mobile routes   | `rats-v2/src/navigation/types.ts`                           |
-| Mobile Redux    | `rats-v2/src/state/store.ts`                                |
-| Web root module | `rats-web/src/app/app.module.ts`                            |
-| Web routes      | `rats-web/src/app/app-routing.module.ts`                    |
-| Functions root  | `regroup-functions/functions/src/index.ts`                  |
-| Stripe webhook  | `regroup-functions/functions/src/webhooks/stripeWebhook.ts` |
-| Payment intent  | `regroup-functions/functions/src/callable/payments.ts`      |
+| Concern         | File                                                           |
+| --------------- | -------------------------------------------------------------- |
+| Mobile app root | `regroup/mobile/App.tsx`                                       |
+| Mobile routes   | `regroup/mobile/src/navigation/types.ts`                       |
+| Mobile Redux    | `regroup/mobile/src/state/store.ts`                            |
+| Web root module | `regroup/web/src/app/app.module.ts`                            |
+| Web routes      | `regroup/web/src/app/app-routing.module.ts`                    |
+| Functions root  | `regroup/functions/src/index.ts`                               |
+| Stripe webhook  | `regroup/functions/src/webhooks/stripeWebhook.ts`              |
+| Payment intent  | `regroup/functions/src/callable/payments.ts`                   |
 
 ---
 

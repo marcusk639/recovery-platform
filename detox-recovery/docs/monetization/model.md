@@ -2,7 +2,7 @@
 
 **Prepared:** May 2026  
 **Scope:** Manual Stripe setup steps + monetization strategy for detox-recovery (nextsteprecovery.io)
-and the broader recovery ecosystem (Homegroups, Regroup, regroup-web/functions)
+and the broader recovery ecosystem (Homegroups, Regroup)
 
 ---
 
