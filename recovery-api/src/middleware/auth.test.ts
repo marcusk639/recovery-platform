@@ -78,18 +78,33 @@ describe('requireServiceAuth', () => {
     );
   });
 
-  it('falls back to request.auth for Phase 2 token flow', () => {
+  it('falls back to request.auth for Phase 2 token flow, normalizing legacy alias', () => {
     const req = makeRequest(
       {},
       {
         uid: 'uid456',
+        // 'sober-living' is a legacy alias; it resolves to canonical 'phoenix-cleanhouse'.
         token: { appId: 'sober-living', email: 'user2@test.com' },
       },
     );
     expect(requireServiceAuth(req)).toEqual({
-      appId: 'sober-living',
+      appId: 'phoenix-cleanhouse',
       uid: 'uid456',
       email: 'user2@test.com',
+    });
+  });
+
+  it('accepts nextstep-recovery (detox) as a valid originator appId', () => {
+    const req = makeRequest({
+      'x-service-key': 'test-key',
+      'x-app-id': 'nextstep-recovery',
+      'x-user-uid': 'detox-anon',
+      'x-user-email': '',
+    });
+    expect(requireServiceAuth(req)).toEqual({
+      appId: 'nextstep-recovery',
+      uid: 'detox-anon',
+      email: '',
     });
   });
 

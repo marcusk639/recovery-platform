@@ -4,16 +4,12 @@ import { z } from 'zod';
 import { requireServiceAuth, ServiceAuthContext } from '../middleware/auth';
 import type { Referral } from '../entities/Referral';
 import { RECOVERY_PLATFORM_API_KEY } from '../config';
+import { resolveAppId, isTargetAppId } from '../config/apps';
 
-const TARGET_APPS = [
-  'treatment-center',
-  'phoenix-cleanhouse',
-  'homegroups',
-  'sober-living',
-] as const;
-
+// `toApp` accepts a display name, alias, or canonical app-id on the wire; it is
+// resolved to the canonical app-id (and validated as a target) before storage.
 const CreateReferralSchema = z.object({
-  toApp: z.enum(TARGET_APPS),
+  toApp: z.string().min(1).max(64),
   clientName: z.string().min(1).max(100),
   clientEmail: z.string().email(),
   condition: z.string().max(200).optional(),
@@ -26,8 +22,13 @@ export async function handleCreateReferral(
   db: FirebaseFirestore.Firestore,
 ): Promise<{ id: string; status: 'pending' }> {
   const parsed = CreateReferralSchema.parse(data);
+  const toApp = resolveAppId(parsed.toApp);
+  if (!toApp || !isTargetAppId(toApp)) {
+    throw new HttpsError('invalid-argument', `Unknown referral target: ${parsed.toApp}`);
+  }
   const ref = await db.collection('referrals').add({
     ...parsed,
+    toApp,
     fromApp: context.appId,
     referredBy: context.uid,
     referredByApp: context.appId,
