@@ -1,7 +1,15 @@
 import { Button } from "@/components/ui/Button";
 import { Section } from "@/components/ui/Section";
+import { SERVICE_TIERS } from "@/lib/services-data";
 
 export function HeroSection() {
+  const supportCall = SERVICE_TIERS.find((t) => t.id === "support-call");
+  const supportCallLabel = supportCall
+    ? `Book a support call — ${supportCall.price}${
+        supportCall.betaLabel ? " beta" : ""
+      }`
+    : "Book a support call";
+
   return (
     <Section className="bg-gradient-to-b from-teal-50 to-white py-24">
       <div className="mx-auto max-w-3xl text-center">
@@ -22,7 +30,7 @@ export function HeroSection() {
             Request a free fit check
           </Button>
           <Button href="/services#support-call" variant="secondary">
-            Book a support call — $50 beta
+            {supportCallLabel}
           </Button>
         </div>
       </div>
