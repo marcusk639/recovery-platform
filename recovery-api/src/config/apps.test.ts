@@ -1,4 +1,6 @@
 import {
+  APP_REGISTRY,
+  AppRegistryEntry,
   resolveApp,
   resolveAppId,
   isOriginatorAppId,
@@ -30,6 +32,33 @@ describe('app registry resolution', () => {
   it('returns undefined for unknown values', () => {
     expect(resolveApp('not-an-app')).toBeUndefined();
     expect(resolveAppId('not-an-app')).toBeUndefined();
+  });
+
+  it('returns undefined for non-string input instead of throwing', () => {
+    // Phase 2 JWT appId claims are client-influenceable; a non-string claim must
+    // resolve to undefined, not throw `value.trim is not a function` (opaque 500).
+    expect(resolveApp(undefined)).toBeUndefined();
+    expect(resolveApp(123)).toBeUndefined();
+    expect(resolveApp({ appId: 'homegroups' })).toBeUndefined();
+  });
+
+  it('never maps one lookup key to two different entries (no cross-entry collision)', () => {
+    // appId/displayName may coincide WITHIN an entry (e.g. 'treatment-center');
+    // what must never happen is one key silently resolving to a different entry
+    // (byKey is last-writer-wins, so a collision would corrupt resolution).
+    const owner = new Map<string, AppRegistryEntry>();
+    for (const entry of APP_REGISTRY as readonly AppRegistryEntry[]) {
+      const keys = [
+        entry.appId.toLowerCase(),
+        entry.displayName.toLowerCase(),
+        ...(entry.aliases ?? []).map((a) => a.toLowerCase()),
+      ];
+      for (const key of keys) {
+        const existing = owner.get(key);
+        expect(existing === undefined || existing === entry).toBe(true);
+        owner.set(key, entry);
+      }
+    }
   });
 
   it('classifies originators vs targets', () => {

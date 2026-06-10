@@ -1,9 +1,9 @@
 import { CallableRequest, HttpsError } from 'firebase-functions/v2/https';
-import { resolveApp, isOriginatorAppId, ORIGINATOR_APP_IDS } from '../config/apps';
+import { resolveApp, isOriginatorAppId, ORIGINATOR_APP_IDS, OriginatorAppId } from '../config/apps';
 
 export interface ServiceAuthContext {
   /** Canonical app-id of the originating service (see config/apps.ts). */
-  appId: 'homegroups' | 'phoenix-cleanhouse' | 'nextstep-recovery';
+  appId: OriginatorAppId;
   uid: string;
   email: string;
 }
@@ -14,10 +14,10 @@ export interface ServiceAuthContext {
 const ORIGINATOR_LIST = ORIGINATOR_APP_IDS.join(', ');
 
 /** Resolve a raw X-App-Id / appId claim to a canonical originator app-id, or undefined. */
-function resolveOriginator(raw: string): ServiceAuthContext['appId'] | undefined {
+function resolveOriginator(raw: string): OriginatorAppId | undefined {
   const appId = resolveApp(raw)?.appId;
   if (appId && isOriginatorAppId(appId)) {
-    return appId as ServiceAuthContext['appId'];
+    return appId;
   }
   return undefined;
 }
