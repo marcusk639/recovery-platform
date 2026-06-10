@@ -7,6 +7,14 @@ follow links in priority order.
 
 ---
 
+## I'm planning go-to-market (launch, monetization, roadmap)
+
+| What you need to know                                           | Read                                                  |
+| --------------------------------------------------------------- | ----------------------------------------------------- |
+| Go-to-market entry point (SSOT for launch/monetization/roadmap) | [docs/go-to-market/README.md](go-to-market/README.md) |
+
+---
+
 ## I'm implementing a feature or fixing a bug
 
 | What you need to know             | Read                                                                                                                                                                                   |
@@ -36,13 +44,13 @@ follow links in priority order.
 
 ## I'm planning the roadmap or next priorities
 
-| What you need to know   | Read                                                                                                                                                                    |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Ecosystem-level roadmap | [docs/strategy/roadmap.md](strategy/roadmap.md)                                                                                                                         |
-| homegroups roadmap      | [homegroups/docs/product/roadmap.md](../homegroups/docs/product/roadmap.md)                                                                                             |
-| regroup (Regroup) roadmap  | [regroup/docs/product/roadmap.md](../regroup/docs/product/roadmap.md)                                                                                                   |
-| detox-recovery roadmap  | [detox-recovery/docs/product/roadmap.md](../detox-recovery/docs/product/roadmap.md)                                                                                     |
-| Key product decisions   | [homegroups](../homegroups/docs/product/decisions.md) · [regroup](../regroup/docs/product/decisions.md) · [detox-recovery](../detox-recovery/docs/product/decisions.md) |
+| What you need to know     | Read                                                                                                                                                                    |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ecosystem-level roadmap   | [docs/strategy/roadmap.md](strategy/roadmap.md)                                                                                                                         |
+| homegroups roadmap        | [homegroups/docs/product/roadmap.md](../homegroups/docs/product/roadmap.md)                                                                                             |
+| regroup (Regroup) roadmap | [regroup/docs/product/roadmap.md](../regroup/docs/product/roadmap.md)                                                                                                   |
+| detox-recovery roadmap    | [detox-recovery/docs/product/roadmap.md](../detox-recovery/docs/product/roadmap.md)                                                                                     |
+| Key product decisions     | [homegroups](../homegroups/docs/product/decisions.md) · [regroup](../regroup/docs/product/decisions.md) · [detox-recovery](../detox-recovery/docs/product/decisions.md) |
 
 ---
 
@@ -72,8 +80,8 @@ follow links in priority order.
 
 | Product                            | Docs root                                                         | Serves                                      |
 | ---------------------------------- | ----------------------------------------------------------------- | ------------------------------------------- |
-| Homegroups (homegroups)       | [homegroups/docs/README.md](../homegroups/docs/README.md)         | 12-step group admins and members            |
-| Regroup                     | [regroup/docs/README.md](../regroup/docs/README.md)               | Sober living house operators and residents  |
+| Homegroups (homegroups)            | [homegroups/docs/README.md](../homegroups/docs/README.md)         | 12-step group admins and members            |
+| Regroup                            | [regroup/docs/README.md](../regroup/docs/README.md)               | Sober living house operators and residents  |
 | NextStep Recovery (detox-recovery) | [detox-recovery/docs/README.md](../detox-recovery/docs/README.md) | Individuals/families seeking detox guidance |
 | recovery-api                       | [recovery-api/docs/README.md](../recovery-api/docs/README.md)     | Cross-app integration layer                 |
 
