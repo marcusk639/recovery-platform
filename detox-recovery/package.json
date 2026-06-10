@@ -14,6 +14,7 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "setup:env": "bash scripts/setup-env.sh",
+    "pdfs": "node scripts/generate-pdfs.mjs",
     "typecheck": "tsc --noEmit",
     "verify:services": "bash scripts/verify-services.sh"
   },
@@ -42,6 +43,7 @@
     "eslint-config-next": "15.5.18",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",
+    "md-to-pdf": "^5.2.5",
     "prettier": "^3.8.3",
     "tailwindcss": "^3.4.19",
     "ts-jest": "^29.4.10",
