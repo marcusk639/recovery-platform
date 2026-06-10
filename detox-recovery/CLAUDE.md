@@ -4,7 +4,7 @@ This is the **Detox Recovery** product within the `recovery-platform` monorepo (
 
 **Target users:** Individuals or families seeking detox/treatment guidance. Non-clinical peer support only.
 
-**Production:** https://nextsteprecovery.io (Firebase App Hosting — `nextsteprecovery-1d5c2` backend, alias `nextstep-recovery`)
+**Production:** https://nextsteprecovery.io (Firebase App Hosting — `nextstep-recovery` backend)
 
 ---
 
@@ -115,13 +115,11 @@ Mirrors source structure: `__tests__/components/`, `__tests__/api/`, `__tests__/
 
 `app/api/contact/route.ts` has referral firing logic for `recovery-api` (triggers on "Sober Living / Housing" and "12-Step / Homegroup Support" contact interests). It is intentionally disabled — env vars are commented out in `apphosting.yaml` pending partner agreement negotiation. Do not activate without explicit instruction.
 
-When activated, detox originates referrals to recovery-api as app-id `nextstep-recovery` with system uid `detox-anon` (anonymous lead capture — no detox user account). recovery-api resolves the display-name `toApp` to a canonical app-id via its registry (`recovery-api/src/config/apps.ts`). Requests must send `X-App-Id` and `X-User-Uid` headers, not just `X-Service-Key`.
-
 The referral is dispatched via `Promise.allSettled([sendEmailPromise, referralPromise])` — both run in parallel, both are awaited, and referral rejection is logged but does not fail the user response. **Do not refactor this to `void fireReferral(...)`.** Firebase App Hosting (Cloud Run) throttles background CPU after the handler returns, so a fire-and-forget POST may be cut mid-handshake. There is no `waitUntil()` equivalent here. See `docs/architecture.md` "Referral Routing" for the full rationale.
 
 ## Deployment
 
-**Production:** https://nextsteprecovery.io (Firebase App Hosting — `nextsteprecovery-1d5c2` backend, alias `nextstep-recovery`, `us-central1`)
+**Production:** https://nextsteprecovery.io (Firebase App Hosting — `nextstep-recovery` backend, `us-central1`)
 
 `firebase deploy` must be run in the **user's terminal** (`! firebase deploy`) — the `firebase` CLI is not in Claude's shell PATH.
 
