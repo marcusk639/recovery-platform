@@ -102,18 +102,18 @@ All seven links are pre-filled in `apphosting.yaml` and in `npm run setup:env` �
 
 ---
 
-## recovery-shared-api — partner referrals (optional)
+## recovery-api — partner referrals (optional)
 
-**Where:** Internal service — https://github.com/your-org/recovery-shared-api
+**Where:** Internal service — https://github.com/your-org/recovery-api
 
 When a contact form submission indicates interest in sober living or 12-step support, the server fires a referral to this shared API. Both vars are optional — the referral silently no-ops if either is missing.
 
-| Variable           | Description                                                   |
-| ------------------ | ------------------------------------------------------------- |
-| `SHARED_API_URL`   | Base URL of the recovery-shared-api service                   |
-| `INTERNAL_API_KEY` | Shared secret (must match `INTERNAL_API_KEY` in that service) |
+| Variable           | Description                                                            |
+| ------------------ | ---------------------------------------------------------------------- |
+| `RECOVERY_API_URL` | Base URL of the recovery-api service                                   |
+| `RECOVERY_API_KEY` | Shared secret (must match `RECOVERY_PLATFORM_API_KEY` in that service) |
 
-**Local dev:** `SHARED_API_URL=http://localhost:8080`  
+**Local dev:** `RECOVERY_API_URL=http://localhost:8080`  
 **Generate a key:** `openssl rand -hex 32`
 
 ---

@@ -70,27 +70,27 @@ See [`docs/architecture.md`](docs/architecture.md) for the system diagram and da
 
 Run `npm run setup:env` to create `.env.local`. Stripe URLs are pre-filled. API keys must be added manually.
 
-| Variable                                      | Description                                                    |
-| --------------------------------------------- | -------------------------------------------------------------- |
-| `RESEND_API_KEY`                              | Resend key — contact form delivery                             |
-| `RESEND_TO_EMAIL`                             | Inbox that receives contact inquiries                          |
-| `RESEND_FROM_EMAIL`                           | Sender address (e.g. `Withdrawal Support <hello@domain.com>`)  |
-| `MAILERLITE_API_KEY`                          | MailerLite key — subscriber management                         |
-| `MAILERLITE_GROUP_ID_NEWSLETTER`              | Group ID for newsletter subscribers                            |
-| `MAILERLITE_GROUP_ID_LEAD_MAGNET_UNSAFE`      | Group ID for unsafe-withdrawal guide leads                     |
-| `MAILERLITE_GROUP_ID_LEAD_MAGNET_FAMILY`      | Group ID for family guide leads                                |
-| `MAILERLITE_GROUP_ID_B2B`                     | Group ID for B2B consulting leads                              |
-| `NEXT_PUBLIC_CALENDLY_FIT_CHECK_URL`          | Calendly link — free fit check                                 |
-| `NEXT_PUBLIC_CALENDLY_SUPPORT_CALL_URL`       | Calendly link — 30-min support call                            |
-| `NEXT_PUBLIC_STRIPE_SUPPORT_CALL_URL`         | Stripe link — support call ($50)                               |
-| `NEXT_PUBLIC_STRIPE_FAMILY_GUIDE_URL`         | Stripe link — Family Survival Guide ($19.99)                   |
-| `NEXT_PUBLIC_STRIPE_APPOINTMENT_PREP_URL`     | Stripe link — Appointment Prep Worksheet ($9.99)               |
-| `NEXT_PUBLIC_STRIPE_SAFETY_CHECKLIST_URL`     | Stripe link — Safety Checklist ($9.99)                         |
-| `NEXT_PUBLIC_STRIPE_TREATMENT_COMPARISON_URL` | Stripe link — Treatment Comparison ($9.99)                     |
-| `NEXT_PUBLIC_STRIPE_RELAPSE_PREVENTION_URL`   | Stripe link — Relapse Prevention Plan ($9.99)                  |
-| `NEXT_PUBLIC_STRIPE_DONATION_URL`             | Stripe link — sliding-scale donation                           |
-| `SHARED_API_URL`                              | recovery-shared-api URL (optional — enables partner referrals) |
-| `INTERNAL_API_KEY`                            | Shared secret for recovery-shared-api (optional)               |
+| Variable                                      | Description                                                   |
+| --------------------------------------------- | ------------------------------------------------------------- |
+| `RESEND_API_KEY`                              | Resend key — contact form delivery                            |
+| `RESEND_TO_EMAIL`                             | Inbox that receives contact inquiries                         |
+| `RESEND_FROM_EMAIL`                           | Sender address (e.g. `Withdrawal Support <hello@domain.com>`) |
+| `MAILERLITE_API_KEY`                          | MailerLite key — subscriber management                        |
+| `MAILERLITE_GROUP_ID_NEWSLETTER`              | Group ID for newsletter subscribers                           |
+| `MAILERLITE_GROUP_ID_LEAD_MAGNET_UNSAFE`      | Group ID for unsafe-withdrawal guide leads                    |
+| `MAILERLITE_GROUP_ID_LEAD_MAGNET_FAMILY`      | Group ID for family guide leads                               |
+| `MAILERLITE_GROUP_ID_B2B`                     | Group ID for B2B consulting leads                             |
+| `NEXT_PUBLIC_CALENDLY_FIT_CHECK_URL`          | Calendly link — free fit check                                |
+| `NEXT_PUBLIC_CALENDLY_SUPPORT_CALL_URL`       | Calendly link — 30-min support call                           |
+| `NEXT_PUBLIC_STRIPE_SUPPORT_CALL_URL`         | Stripe link — support call ($50)                              |
+| `NEXT_PUBLIC_STRIPE_FAMILY_GUIDE_URL`         | Stripe link — Family Survival Guide ($19.99)                  |
+| `NEXT_PUBLIC_STRIPE_APPOINTMENT_PREP_URL`     | Stripe link — Appointment Prep Worksheet ($9.99)              |
+| `NEXT_PUBLIC_STRIPE_SAFETY_CHECKLIST_URL`     | Stripe link — Safety Checklist ($9.99)                        |
+| `NEXT_PUBLIC_STRIPE_TREATMENT_COMPARISON_URL` | Stripe link — Treatment Comparison ($9.99)                    |
+| `NEXT_PUBLIC_STRIPE_RELAPSE_PREVENTION_URL`   | Stripe link — Relapse Prevention Plan ($9.99)                 |
+| `NEXT_PUBLIC_STRIPE_DONATION_URL`             | Stripe link — sliding-scale donation                          |
+| `RECOVERY_API_URL`                            | recovery-api URL (optional — enables partner referrals)       |
+| `RECOVERY_API_KEY`                            | Shared secret for recovery-api (optional)                     |
 
 See [`docs/environment.md`](docs/environment.md) for per-service setup instructions.
 

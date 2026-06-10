@@ -118,7 +118,7 @@ Graceful degradation: returns `{ success: true }` without subscribing if `MAILER
 
 ## Referral Routing
 
-When a contact form submission has `interest === "Sober Living / Housing"` or `"12-Step / Homegroup Support"`, the server dispatches a referral to `recovery-api`. The integration is currently env-gated and inactive in production — `SHARED_API_URL` and `INTERNAL_API_KEY` are intentionally unset (see commented block in `apphosting.yaml`). The code path is exercised only when both env vars are present.
+When a contact form submission has `interest === "Sober Living / Housing"` or `"12-Step / Homegroup Support"`, the server dispatches a referral to `recovery-api`. The integration is currently env-gated and inactive in production — `RECOVERY_API_URL` and `RECOVERY_API_KEY` are intentionally unset (see commented block in `apphosting.yaml`). The code path is exercised only when both env vars are present.
 
 **Dispatch pattern: `Promise.allSettled` (not `void`).**
 

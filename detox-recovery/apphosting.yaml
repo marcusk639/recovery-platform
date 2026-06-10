@@ -102,17 +102,20 @@ env:
     value: "188194959207171446"
     availability:
       - RUNTIME
+
   # ---------------------------------------------------------------------------
-  # recovery-shared-api — partner referral relay (optional)
-  # Set SHARED_API_URL to the Cloud Run URL once the service is deployed.
-  # Store INTERNAL_API_KEY as a Firebase secret (never commit the value here).
+  # recovery-api — partner referral relay (INACTIVE pending partner agreement)
+  # To enable: uncomment both vars below, set RECOVERY_API_URL to the deployed
+  # `createReferral` callable URL, and store the secret (see Secrets setup).
+  # While commented out, detox's fireReferral() no-ops. Do not activate without
+  # explicit instruction. See docs/ecosystem/referral-enablement.md.
   # ---------------------------------------------------------------------------
-  # - variable: SHARED_API_URL
-  #   value: "https://recovery-shared-api-XXXX-uc.a.run.app"
+  # - variable: RECOVERY_API_URL
+  #   value: "https://us-central1-recovery-platform.cloudfunctions.net/createReferral"
   #   availability:
   #     - RUNTIME
-  # - variable: INTERNAL_API_KEY
-  #   secret: internal-api-key
+  # - variable: RECOVERY_API_KEY
+  #   secret: recovery-api-key
   #   availability:
   #     - RUNTIME
 
@@ -121,7 +124,7 @@ env:
   #
   #   npx firebase-tools apphosting:secrets:set resend-api-key
   #   npx firebase-tools apphosting:secrets:set mailerlite-api-key
-  #   npx firebase-tools apphosting:secrets:set internal-api-key  # when shared API is ready
+  #   npx firebase-tools apphosting:secrets:set recovery-api-key  # partner referral relay (see docs/ecosystem/referral-enablement.md)
   #
   # These store values in Firebase Secret Manager — never committed to git.
   # ---------------------------------------------------------------------------

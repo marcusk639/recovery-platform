@@ -128,3 +128,8 @@ The referral is dispatched via `Promise.allSettled([sendEmailPromise, referralPr
 ## Important constraints
 
 This is a **non-clinical peer support** site. Copy and UX must never imply medical advice, diagnosis, or treatment. `REFERRAL_CONDITIONS` drives the `ReferralTriggers` component — conditions on that list always point users to emergency/medical care, not to site services.
+
+
+<claude-mem-context>
+
+</claude-mem-context>

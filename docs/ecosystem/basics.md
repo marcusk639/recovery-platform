@@ -1,0 +1,14 @@
+aude-mem:make-plan create a systematic plan to learn the entirety of the codebase within the monorepo as thoroughly as
+sible. due to the size of the repo, it likely makes sense to break it into chunks, beginning with the top level
+covery-platform), then moving to each app within the monorepo. detosx-recovery is relatively small compared to the
+ers, but regroup and homegroups are both quite large and contain 3 primary apps/services: /web, /functions, and /mobile,
+h respectively representing the website/webapp, the firebase/google cloud functions that act as the primary backend of
+ applications, and the react native mobile app containing the bulk of the app's user-facing functionality and comprises
+ true representation of the functionality and feature set offered by each application. the recovery-platform itself is
+ended to function as an ecosystem of loosely-coupled applications/latforms that users will ideally be able to use
+oughout their recovery journey beginning from seeking detox treatment, inpatient and/or outpatient rehab treatment,
+ercare plans such as sober living and eventually becoming an embedded member of the 12 step community via the Homegroups
+ (the regroup app being the sober living app). the hope is that down the line we will be able to offer further treatment
+vices/apps/platforms to treatment centers themselves, but what we have in the monorepo now serves as a reasonable
+rting place. treatment centers are always looking for ways to keep up with their alumni and past clients after they
+charge, and this provides a potentially meaningful and useful way to do that. via regroup, treatment centers can access a directory of sober living homes with beds available and an application process embedded within the app as well as contact info and house info, as well as the ability to make payments. residents can keep track of their responsibilities, which are largely customizable by the house admins/managers using a phase system containing requirements like chores, work, meeting attendance (the app contains a pre-seeded list of 100k+ meetings that users can locate meetings in and verify atttendance via GPS), sponsor meetings and step work progress, and managers can keep track of managerial tasks such as payroll, house issues, resident management, and more. homegroups allows a way for 12 step groups, or really any recovery related group, to stay connected and accountable to each other with the abiity to chat, celebrate sobriety dates, schedule meetings, business meetings, servie positions, maintain treasury and theøfinances, and more. the homegroups app is also pre-seeded with the same meeting list as regroup but also contains a pre-seeded list of recovery groups generated based on a proprietary algorithm.
