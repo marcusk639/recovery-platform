@@ -52,7 +52,7 @@ Content-Type: application/json
 ### Side Effects
 
 1. **Resend email** — sent to `RESEND_TO_EMAIL`, plain-text, `replyTo` set to submitter's email.
-2. **Partner referral** (conditional, currently env-gated and inactive) — if `interest` is `"Sober Living / Housing"` or `"12-Step / Homegroup Support"`, a POST is dispatched to `SHARED_API_URL/api/referrals` in parallel with the Resend send and awaited via `Promise.allSettled`. Referral failure is logged but does not fail the user response. Requires `SHARED_API_URL` and `INTERNAL_API_KEY`; intentionally unset in production. See `docs/architecture.md` "Referral Routing" for why this is not `void`-dispatched on Cloud Run.
+2. **Partner referral** (conditional, currently env-gated and inactive) — if `interest` is `"Sober Living / Housing"` or `"12-Step / Homegroup Support"`, a POST is dispatched to `RECOVERY_API_URL/api/referrals` in parallel with the Resend send and awaited via `Promise.allSettled`. Referral failure is logged but does not fail the user response. Requires `RECOVERY_API_URL` and `RECOVERY_API_KEY`; intentionally unset in production. See `docs/architecture.md` "Referral Routing" for why this is not `void`-dispatched on Cloud Run.
 
 ### Example Request
 

@@ -1,13 +1,13 @@
 # Terms of Service
 
-**Regroup (RATS Recovery App)**
+**Regroup (Recovery App)**
 Last updated: May 21, 2026
 
 ---
 
 ## 1. Acceptance of Terms
 
-By creating an account, downloading, or using the RATS Recovery App ("App"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree, do not use the App.
+By creating an account, downloading, or using the Regroup Recovery App ("App"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree, do not use the App.
 
 These Terms constitute a legally binding agreement between you and Regroup ("we," "us," or "our").
 
@@ -197,6 +197,6 @@ These Terms, together with the Privacy Policy, constitute the entire agreement b
 
 ## 18. Contact
 
-**Regroup / RATS Recovery App**
+**Regroup Recovery App**
 Email: admin@regroup.app
 Privacy: admin@regroup.app

@@ -813,7 +813,7 @@ Start here for any feature work or bug fix.
 | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Ecosystem-level roadmap | [docs/strategy/roadmap.md](strategy/roadmap.md)                                                                                                             |
 | homegroups roadmap      | [homegroups/docs/product/roadmap.md](../homegroups/docs/product/roadmap.md)                                                                                 |
-| regroup (RATS) roadmap  | [regroup/docs/product/roadmap.md](../regroup/docs/product/roadmap.md)                                                                                       |
+| regroup (Regroup) roadmap  | [regroup/docs/product/roadmap.md](../regroup/docs/product/roadmap.md)                                                                                       |
 | detox-recovery roadmap  | [detox-recovery/docs/product/roadmap.md](../detox-recovery/docs/product/roadmap.md)                                                                         |
 | Key product decisions   | [homegroups/docs/product/decisions.md](../homegroups/docs/product/decisions.md) · [regroup/docs/product/decisions.md](../regroup/docs/product/decisions.md) |
 
@@ -845,8 +845,8 @@ Start here for any feature work or bug fix.
 
 | Product                            | Docs root                                                         | Serves                                      |
 | ---------------------------------- | ----------------------------------------------------------------- | ------------------------------------------- |
-| RecoveryConnect (homegroups)       | [homegroups/docs/README.md](../homegroups/docs/README.md)         | 12-step group admins and members            |
-| RATS / Regroup                     | [regroup/docs/README.md](../regroup/docs/README.md)               | Sober living house operators and residents  |
+| Homegroups (homegroups)       | [homegroups/docs/README.md](../homegroups/docs/README.md)         | 12-step group admins and members            |
+| Regroup                     | [regroup/docs/README.md](../regroup/docs/README.md)               | Sober living house operators and residents  |
 | NextStep Recovery (detox-recovery) | [detox-recovery/docs/README.md](../detox-recovery/docs/README.md) | Individuals/families seeking detox guidance |
 | recovery-api                       | [recovery-api/docs/README.md](../recovery-api/docs/README.md)     | Cross-app integration layer                 |
 
@@ -961,8 +961,8 @@ becomes the primary agent entry point for all documentation in the monorepo.
 
 | Product                            | Docs                                            |
 | ---------------------------------- | ----------------------------------------------- |
-| RecoveryConnect (homegroups)       | [homegroups/docs/](../homegroups/docs/)         |
-| RATS / Regroup                     | [regroup/mobile/docs/](../regroup/mobile/docs/) |
+| Homegroups (homegroups)       | [homegroups/docs/](../homegroups/docs/)         |
+| Regroup                     | [regroup/mobile/docs/](../regroup/mobile/docs/) |
 | NextStep Recovery (detox-recovery) | [detox-recovery/docs/](../detox-recovery/docs/) |
 | recovery-api                       | [recovery-api/docs/](../recovery-api/docs/)     |
 

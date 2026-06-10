@@ -1,7 +1,7 @@
-# RecoveryConnect PR Review Context
+# Homegroups PR Review Context
 
 ## Product Overview
-RecoveryConnect is a privacy-first recovery community management platform for AA/NA home groups. The app helps groups manage meetings, treasury, service positions, and member engagement while respecting privacy boundaries around sobriety dates and personal information.
+Homegroups is a privacy-first recovery community management platform for AA/NA home groups. The app helps groups manage meetings, treasury, service positions, and member engagement while respecting privacy boundaries around sobriety dates and personal information.
 
 ## Architecture
 - **Mobile**: React Native (TypeScript) with Redux Toolkit

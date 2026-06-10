@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Add Firebase, Stripe, GitHub, and Sentry MCP servers to `~/.claude/.mcp.json` so Claude has direct query access to all primary external services used by the RATS codebase.
+**Goal:** Add Firebase, Stripe, GitHub, and Sentry MCP servers to `~/.claude/.mcp.json` so Claude has direct query access to all primary external services used by the Regroup codebase.
 
 **Architecture:** Four servers added globally so they're available across all projects. Firebase and Stripe are highest priority (Sprint 5 work). GitHub and Sentry support Sprint 9 CI and monitoring work. No project-level files are modified.
 

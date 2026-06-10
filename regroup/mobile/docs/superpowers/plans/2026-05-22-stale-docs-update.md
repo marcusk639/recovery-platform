@@ -115,7 +115,7 @@ git commit -m "docs: fix createRentPaymentIntent false alarm and update score ti
 
 - [ ] **Step 2.1: Add a historical notice banner at the top of the file**
 
-Insert this block immediately after the `# RATS App Gap Analysis: Production Readiness` heading (before `**Date:** December 25, 2025`):
+Insert this block immediately after the `# Regroup App Gap Analysis: Production Readiness` heading (before `**Date:** December 25, 2025`):
 
 ```markdown
 > **⚠️ Historical Document — December 2025 Snapshot**

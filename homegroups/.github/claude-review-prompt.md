@@ -1,6 +1,6 @@
 # Pull Request Code Review
 
-You are reviewing a pull request for **RecoveryConnect**, a privacy-first recovery community management platform for AA/NA home groups.
+You are reviewing a pull request for **Homegroups**, a privacy-first recovery community management platform for AA/NA home groups.
 
 ## Instructions
 

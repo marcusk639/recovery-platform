@@ -22,7 +22,7 @@
 
 - [ ] **Step 1: Check reportExport.ts pattern**
 
-  Run: `cat /Users/marcuspersonal/dev/regroup-rn7/src/util/reportExport.ts 2>/dev/null || find /Users/marcuspersonal/dev/regroup-rn7/src -name "reportExport*" | head -5`
+  Run: `cat /Users/marcuspersonal/dev/Regroup/src/util/reportExport.ts 2>/dev/null || find /Users/marcuspersonal/dev/Regroup/src -name "reportExport*" | head -5`
 
   Check what `Share` or file-write pattern is used. Common patterns:
   - `react-native`'s `Share.share({ message: csvString })`
@@ -93,7 +93,7 @@
   });
   ```
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx jest src/__tests__/screens/HouseSettings/paymentDashboardOverdue.test.tsx --no-coverage`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx jest src/__tests__/screens/HouseSettings/paymentDashboardOverdue.test.tsx --no-coverage`
   Expected: FAIL — `getByTestId("overdue-residents-card")` not found
 
 - [ ] **Step 2: Add overdue guests derivation to PaymentDashboard**
@@ -166,16 +166,16 @@
 
 - [ ] **Step 3: Check house.guests shape**
 
-  Run: `grep -n "guests\|guestIds\|GuestMap" /Users/marcuspersonal/dev/regroup-rn7/src/entities/House.tsx | head -15`
+  Run: `grep -n "guests\|guestIds\|GuestMap" /Users/marcuspersonal/dev/Regroup/src/entities/House.tsx | head -15`
 
   If `house.guests` is a map/object keyed by guestId (common Firestore pattern), `Object.values(house.guests)` is correct. If it's an array, use `.filter()` directly without `Object.values`.
 
 - [ ] **Step 4: Run tests**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx jest src/__tests__/screens/HouseSettings/paymentDashboardOverdue.test.tsx --no-coverage`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx jest src/__tests__/screens/HouseSettings/paymentDashboardOverdue.test.tsx --no-coverage`
   Expected: PASS
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npm test --no-coverage`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npm test --no-coverage`
   Expected: No regressions
 
 - [ ] **Step 5: Commit**
@@ -231,7 +231,7 @@
   });
   ```
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx jest src/__tests__/screens/HouseSettings/paymentDashboardCSV.test.tsx --no-coverage`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx jest src/__tests__/screens/HouseSettings/paymentDashboardCSV.test.tsx --no-coverage`
   Expected: FAIL — `getByTestId("csv-export-button")` not found
 
 - [ ] **Step 2: Add generateCSV helper inside PaymentDashboard.tsx**
@@ -259,7 +259,7 @@
   Note: Check the `HousePaymentRecord` type for actual field names. Run:
 
   ```bash
-  grep -n "interface HousePaymentRecord\|guestFirstName\|guestLastName\|isManual" /Users/marcuspersonal/dev/regroup-rn7/src/services/paymentService.ts 2>/dev/null | head -15
+  grep -n "interface HousePaymentRecord\|guestFirstName\|guestLastName\|isManual" /Users/marcuspersonal/dev/Regroup/src/services/paymentService.ts 2>/dev/null | head -15
   ```
 
   Adjust field names in `generateCSV` to match the actual type.
@@ -322,15 +322,15 @@
 
 - [ ] **Step 4: Run tests**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx jest src/__tests__/screens/HouseSettings/paymentDashboardCSV.test.tsx --no-coverage`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx jest src/__tests__/screens/HouseSettings/paymentDashboardCSV.test.tsx --no-coverage`
   Expected: PASS
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npm test --no-coverage`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npm test --no-coverage`
   Expected: No regressions
 
 - [ ] **Step 5: Type check**
 
-  Run: `cd /Users/marcuspersonal/dev/regroup-rn7 && npx tsc --noEmit 2>&1 | grep PaymentDashboard`
+  Run: `cd /Users/marcuspersonal/dev/Regroup && npx tsc --noEmit 2>&1 | grep PaymentDashboard`
   Expected: No type errors
 
 - [ ] **Step 6: Commit**

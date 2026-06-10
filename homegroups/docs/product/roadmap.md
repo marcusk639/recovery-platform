@@ -15,7 +15,7 @@
 | Sustainable                     | 2,000+ groups ($24K ARR) |
 | Revenue ceiling (consumer only) | ~5,000 groups ($60K ARR) |
 
-Revenue drivers in order: **Conversion** (admins claim and subscribe) → **Retention** (admins renew) → **Expansion** (intergroup, treatment center, RATS integration).
+Revenue drivers in order: **Conversion** (admins claim and subscribe) → **Retention** (admins renew) → **Expansion** (intergroup, treatment center, Regroup integration).
 
 ---
 
@@ -79,9 +79,9 @@ Acceptance criteria:
 
 Effort: M–L (3–7 days)
 
-**Verify `getMeetingAttendance` is RATS-callable**
+**Verify `getMeetingAttendance` is Regroup-callable**
 
-The `getMeetingAttendance` HTTP endpoint exists (`functions/src/http/getMeetingAttendance.ts`) and queries `meetingInstances` by `groupId` + `userId` with bearer-token auth via `RATS_API_KEY`. A composite Firestore index was recently fixed (commit 0b0e88a). Verify it's deployed and confirm with RATS that it's callable from their environment. If confirmed: this is the data bridge that makes the treatment center integration story credible — RATS can show per-resident meeting attendance without the full Homegroups UI.
+The `getMeetingAttendance` HTTP endpoint exists (`functions/src/http/getMeetingAttendance.ts`) and queries `meetingInstances` by `groupId` + `userId` with bearer-token auth via `RATS_API_KEY`. A composite Firestore index was recently fixed (commit 0b0e88a). Verify it's deployed and confirm with Regroup that it's callable from their environment. If confirmed: this is the data bridge that makes the treatment center integration story credible — Regroup can show per-resident meeting attendance without the full Homegroups UI.
 
 Effort: S (<1 day, verification only)
 
@@ -133,10 +133,10 @@ Per strategic consensus across all docs:
 
 ## Recovery Ecosystem Roadmap (12-Month)
 
-RecoveryConnect is Product 1 in a three-product recovery ecosystem. The consumer subscription ($12/year) is the wedge. B2B treatment center revenue ($300–$1K/month per facility) is the business. The ecosystem plan sequences work across products to maximize revenue while building toward the flywheel.
+Homegroups is Product 1 in a three-product recovery ecosystem. The consumer subscription ($12/year) is the wedge. B2B treatment center revenue ($300–$1K/month per facility) is the business. The ecosystem plan sequences work across products to maximize revenue while building toward the flywheel.
 
 ```
-RecoveryConnect (now)
+Homegroups (now)
   ├─ P0: Manual launch blockers
   ├─ P1: Treatment center facility dashboard  ──────────────────────┐
   └─ P1: Verify getMeetingAttendance callable  ────────────────────┤
@@ -155,20 +155,20 @@ Oxford Pilot (Month 6)
 Aftercare Management System (Month 8)
   ├─ New product: Next.js, GCP Cloud Run, PostgreSQL (HIPAA BAA)
   ├─ Treatment center onboarding → sober living referral → meeting assignment
-  └─ Reads from: RecoveryConnect meetingInstances, rats-v2 directory API
+  └─ Reads from: Homegroups meetingInstances, rats-v2 directory API
                                                                    ↓
 Enterprise Sales Push (Month 10)
   └─ 3–5 paying treatment centers at $800–$3K/month
      ← Requires: facility dashboard + getMeetingAttendance + rats-v2 Sprint 1
 ```
 
-### Integration Bridges Already Built (RecoveryConnect Side)
+### Integration Bridges Already Built (Homegroups Side)
 
 | Bridge                                             | Status               | Enables                                                         |
 | -------------------------------------------------- | -------------------- | --------------------------------------------------------------- |
-| `getMeetingAttendance` HTTP endpoint               | Likely done — verify | RATS meeting compliance tracking; treatment center outcome data |
+| `getMeetingAttendance` HTTP endpoint               | Likely done — verify | Regroup meeting compliance tracking; treatment center outcome data |
 | `createIntergroup` with `type: "treatment_center"` | ✅ Done              | Treatment center checkout and onboarding                        |
-| `checkInToMeeting` callable                        | ✅ Done              | Meeting attendance data that RATS can mirror                    |
+| `checkInToMeeting` callable                        | ✅ Done              | Meeting attendance data that Regroup can mirror                    |
 | `affiliateGroupToIntergroup`                       | ✅ Done              | Groups appear in treatment center facility view                 |
 | Intergroup upgrade flow (Tier A → B)               | ✅ Done              | Oxford chapter billing                                          |
 | `configureSSO` callable                            | ✅ Done              | Enterprise SSO for treatment center accounts                    |
@@ -177,7 +177,7 @@ Enterprise Sales Push (Month 10)
 
 | Month | Source          | Event                                            | Est. MRR               |
 | ----- | --------------- | ------------------------------------------------ | ---------------------- |
-| 1–2   | RecoveryConnect | First $12/year groups (beta)                     | ~$10–50                |
+| 1–2   | Homegroups | First $12/year groups (beta)                     | ~$10–50                |
 | 1–2   | rats-v2         | Existing operators                               | ~$100–200              |
 | 3     | rats-v2         | Price increase for new operators                 | ~$200–500              |
 | 4–6   | rats-v2         | 10–20 paying operators                           | ~$1,000–2,500          |
@@ -238,7 +238,7 @@ Enterprise Sales Push (Month 10)
 | D-18       | Treatment center `name` field wrote user email                                   | Field now requires user-provided facility name                                                                          |
 | D-27       | HttpsError leaked internal error details to clients                              | v2 migration sweep dropped 3-arg `HttpsError`                                                                           |
 | D-14, DC-2 | Counts in CLAUDE.md/ARCHITECTURE.md wrong                                        | Corrected with code-derived counts                                                                                      |
-| D-15–17    | `.full-review` stale findings (RATS index, treatment center 404, SDK mismatch)   | Annotated + all callables migrated to v2                                                                                |
+| D-15–17    | `.full-review` stale findings (Regroup index, treatment center 404, SDK mismatch)   | Annotated + all callables migrated to v2                                                                                |
 | D-19, D-20 | Stripe key + domain constants underdocumented                                    | `LAUNCH_BLOCKERS.md` updated                                                                                            |
 | D-28       | `RATS_API_KEY` missing from env table                                            | `BILLING_AND_PAYMENTS.md` env table updated                                                                             |
 | D-30       | Forgot-password scope incorrect in LAUNCH_BLOCKERS                               | Corrected to mobile modal only                                                                                          |

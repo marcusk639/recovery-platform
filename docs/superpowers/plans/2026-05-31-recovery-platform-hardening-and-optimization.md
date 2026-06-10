@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Close 8 critical security vulnerabilities, fix financial data integrity bugs, optimize Firebase Cloud Functions, gate the homegroups V4.4 launch, migrate RATS to sustainable pricing tiers, and establish Maestro E2E testing across both React Native apps.
+**Goal:** Close 8 critical security vulnerabilities, fix financial data integrity bugs, optimize Firebase Cloud Functions, gate the homegroups V4.4 launch, migrate Regroup to sustainable pricing tiers, and establish Maestro E2E testing across both React Native apps.
 
 **Architecture:** Six independent tracks — each track is self-contained and can be executed in parallel by separate agents. Track A (security) is the hard gate: regroup must not ship publicly until Tasks 1–5 are complete. Tracks B–F have no blocking dependencies on each other but should follow Track A.
 
@@ -957,11 +957,11 @@
 
 ---
 
-## Track E — RATS Pricing Migration
+## Track E — Regroup Pricing Migration
 
-### Task 12: Configure Stripe products for new RATS pricing tiers
+### Task 12: Configure Stripe products for new Regroup pricing tiers
 
-**Why:** Current RATS pricing (~$20/month) loses ~$178K/year. `regroup/mobile/PRICING_STRATEGY.md` defines the approved model. This task sets up the Stripe products so the code in Task 13 has real Price IDs to reference.
+**Why:** Current Regroup pricing (~$20/month) loses ~$178K/year. `regroup/mobile/PRICING_STRATEGY.md` defines the approved model. This task sets up the Stripe products so the code in Task 13 has real Price IDs to reference.
 
 **Files:** Stripe Dashboard (manual) + `regroup/functions/src/config.ts`.
 
@@ -973,12 +973,12 @@
 
   | Product name                  | Price   | Interval | Env var                          |
   | ----------------------------- | ------- | -------- | -------------------------------- |
-  | RATS Traditional Starter      | $69.00  | Monthly  | `STRIPE_PRICE_TRAD_STARTER`      |
-  | RATS Traditional Professional | $129.00 | Monthly  | `STRIPE_PRICE_TRAD_PROFESSIONAL` |
-  | RATS Traditional Enterprise   | $249.00 | Monthly  | `STRIPE_PRICE_TRAD_ENTERPRISE`   |
-  | RATS Oxford Standard          | $49.00  | Monthly  | `STRIPE_PRICE_OXFORD_STANDARD`   |
-  | RATS Oxford Plus              | $89.00  | Monthly  | `STRIPE_PRICE_OXFORD_PLUS`       |
-  | RATS Oxford Network           | $299.00 | Monthly  | `STRIPE_PRICE_OXFORD_NETWORK`    |
+  | Regroup Traditional Starter      | $69.00  | Monthly  | `STRIPE_PRICE_TRAD_STARTER`      |
+  | Regroup Traditional Professional | $129.00 | Monthly  | `STRIPE_PRICE_TRAD_PROFESSIONAL` |
+  | Regroup Traditional Enterprise   | $249.00 | Monthly  | `STRIPE_PRICE_TRAD_ENTERPRISE`   |
+  | Regroup Oxford Standard          | $49.00  | Monthly  | `STRIPE_PRICE_OXFORD_STANDARD`   |
+  | Regroup Oxford Plus              | $89.00  | Monthly  | `STRIPE_PRICE_OXFORD_PLUS`       |
+  | Regroup Oxford Network           | $299.00 | Monthly  | `STRIPE_PRICE_OXFORD_NETWORK`    |
 
   For each: set the price as default on the product. Copy the `price_xxx` ID.
 
@@ -1057,7 +1057,7 @@
 
   ```bash
   git add regroup/functions/src/config.ts
-  git commit -m "feat(regroup): add SUBSCRIPTION_TIERS config for new RATS pricing model"
+  git commit -m "feat(regroup): add SUBSCRIPTION_TIERS config for new Regroup pricing model"
   ```
 
 ---
@@ -1190,7 +1190,7 @@
   ```bash
   git add regroup/functions/src/callable/subscriptions.ts \
           regroup/functions/src/__tests__/callable/subscriptions.test.ts
-  git commit -m "feat(regroup): tier-based Stripe subscription creation using new RATS pricing model (PRICING_STRATEGY.md)"
+  git commit -m "feat(regroup): tier-based Stripe subscription creation using new Regroup pricing model (PRICING_STRATEGY.md)"
   ```
 
 ---
@@ -1322,7 +1322,7 @@
 
 ---
 
-### Task 15: Write the first regroup/RATS critical flow
+### Task 15: Write the first regroup/Regroup critical flow
 
 **Files:**
 
@@ -1386,7 +1386,7 @@
 
   ```bash
   git add e2e-maestro/regroup/
-  git commit -m "test: add Maestro E2E regroup/RATS login-and-view-dashboard flow"
+  git commit -m "test: add Maestro E2E regroup/Regroup login-and-view-dashboard flow"
   ```
 
 ---
@@ -1408,7 +1408,7 @@
 - [x] H22 `firebase-functions-test` incompatibility → Task 11
 - [x] L13 Stripe client per-request → Task 7
 - [x] Intergroup Stripe launch gate → Task 10
-- [x] RATS pricing migration → Tasks 12–13
+- [x] Regroup pricing migration → Tasks 12–13
 - [x] Maestro E2E → Tasks 14–15
 
 **Deferred (tracked in `CODEBASE-REVIEW.md`, each needs its own plan):**

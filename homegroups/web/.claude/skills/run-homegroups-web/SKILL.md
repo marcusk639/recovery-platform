@@ -1,6 +1,6 @@
 ---
-name: run-recovery-connect-web
-description: Run, start, screenshot, or interact with the RecoveryConnect web app (Homegroups). Use when asked to launch the recovery-connect web app, take a screenshot, or test a web page change locally.
+name: run-homegroups-web
+description: Run, start, screenshot, or interact with the Homegroups web app. Use when asked to launch the homegroups web app, take a screenshot, or test a web page change locally.
 ---
 
 Create React App web app — "Homegroups: Privacy-First Group Management for 12-Step Recovery". Driven via Chrome headless for screenshots. Default port is 3000, but `detox-recovery` (Next.js) is frequently already running there — use port 3001.

@@ -25,7 +25,7 @@ This phase bootstraps the entire Maestro E2E suite from scratch. It creates the 
   ```
 
   Create a `.gitkeep` placeholder in each subdirectory so they are committed. Write a brief `mobile/.maestro/README.md` with:
-  - One-liner: "Maestro E2E flows for the RATS React Native app"
+  - One-liner: "Maestro E2E flows for the Regroup React Native app"
   - App ID: `com.rats.dev`
   - How to run a single flow: `maestro test <path-to-flow>.yaml`
   - How to run a folder: `maestro test mobile/.maestro/auth/`

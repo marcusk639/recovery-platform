@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Migrate RATS operator billing from the legacy per-house + per-resident quantity model to the approved six-tier flat-fee model (Traditional Starter/Professional/Enterprise $69/$129/$249; Oxford Standard/Plus/Network $49/$89/$299), without breaking existing subscribers.
+**Goal:** Migrate Regroup operator billing from the legacy per-house + per-resident quantity model to the approved six-tier flat-fee model (Traditional Starter/Professional/Enterprise $69/$129/$249; Oxford Standard/Plus/Network $49/$89/$299), without breaking existing subscribers.
 
 **Architecture:** A feature flag (`TIER_BILLING_ENABLED`) gates a new single-item, flat-fee subscription path that bills the Stripe price resolved from `SUBSCRIPTION_TIERS`. Existing subscribers keep their two-item house+guest subscriptions untouched (grandfathered); only _new_ subscriptions created while the flag is on use the tier model. Per-unit quantity adjustment is replaced by cap _enforcement_ (`maxResidents`/`maxProperties`) for tier subscriptions. Cutover is staged and reversible by flipping the flag.
 
@@ -20,8 +20,8 @@ These MUST be done before Phase 2 code can run end-to-end. They create the Strip
 >
 > | App                          | Firebase project         | Stripe profile              | Notes                                                         |
 > | ---------------------------- | ------------------------ | --------------------------- | ------------------------------------------------------------- |
-> | regroup (RATS)               | `phoenix-cleanhouse`     | `--project-name regroup`    | This plan's primary target.                                   |
-> | homegroups (RecoveryConnect) | `recovery-connect-cad4b` | `--project-name homegroups` | Only if you are mirroring tier pricing there — separate plan. |
+> | regroup (Regroup)               | `phoenix-cleanhouse`     | `--project-name regroup`    | This plan's primary target.                                   |
+> | homegroups (Homegroups) | `recovery-connect-cad4b` | `--project-name homegroups` | Only if you are mirroring tier pricing there — separate plan. |
 >
 > Authenticate each app's account as a named profile (one-time):
 > `stripe login --project-name regroup` (repeat with `--project-name homegroups` for that app).
@@ -32,9 +32,9 @@ These MUST be done before Phase 2 code can run end-to-end. They create the Strip
 ```bash
 # One product per house-type keeps the dashboard tidy (optional: one shared product).
 TRAD_PRODUCT=$(stripe products create --project-name regroup \
-  --name "RATS — Traditional Sober Living" --output json | jq -r '.id')
+  --name "Regroup — Traditional Sober Living" --output json | jq -r '.id')
 OXFORD_PRODUCT=$(stripe products create --project-name regroup \
-  --name "RATS — Oxford Houses" --output json | jq -r '.id')
+  --name "Regroup — Oxford Houses" --output json | jq -r '.id')
 
 # Traditional tier prices (USD, cents). `-d "recurring[interval]=month"` makes them subscriptions.
 stripe prices create --project-name regroup --product "$TRAD_PRODUCT" \

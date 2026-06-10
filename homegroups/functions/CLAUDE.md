@@ -1,6 +1,6 @@
 # Cloud Functions
 
-This directory contains the Firebase Cloud Functions backend for RecoveryConnect. Loaded by Claude Code automatically when working inside `functions/`. See `../CLAUDE.md` for project-wide rules (including Stripe).
+This directory contains the Firebase Cloud Functions backend for Homegroups. Loaded by Claude Code automatically when working inside `functions/`. See `../CLAUDE.md` for project-wide rules (including Stripe).
 
 ## Commands
 

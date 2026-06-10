@@ -1,9 +1,9 @@
 ---
-name: run-recovery-connect-mobile
-description: Run, start, build, screenshot, or interact with the RecoveryConnect mobile React Native iOS app. Use when asked to launch RecoveryConnect on a simulator, take a screenshot, or test a mobile screen change locally.
+name: run-homegroups-mobile
+description: Run, start, build, screenshot, or interact with the Homegroups mobile React Native iOS app. Use when asked to launch Homegroups on a simulator, take a screenshot, or test a mobile screen change locally.
 ---
 
-React Native iOS app — the RecoveryConnect sober living management app. Driven via `xcrun simctl` for screenshots. Targets iPhone 16 Pro simulator (UDID: `DBCDC994-2415-4FCE-9807-888F6B8D96EB`). Requires Metro bundler running before launch.
+React Native iOS app — the Homegroups 12-step recovery group management app. Driven via `xcrun simctl` for screenshots. Targets iPhone 16 Pro simulator (UDID: `DBCDC994-2415-4FCE-9807-888F6B8D96EB`). Requires Metro bundler running before launch.
 
 ## Prerequisites
 

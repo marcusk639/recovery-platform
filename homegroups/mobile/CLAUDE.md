@@ -1,6 +1,6 @@
 # Mobile App
 
-This directory contains the React Native (TypeScript) mobile app for RecoveryConnect (iOS + Android). Loaded by Claude Code automatically when working inside `mobile/`. See `../CLAUDE.md` for project-wide rules.
+This directory contains the React Native (TypeScript) mobile app for Homegroups (iOS + Android). Loaded by Claude Code automatically when working inside `mobile/`. See `../CLAUDE.md` for project-wide rules.
 
 ## Commands
 
@@ -42,7 +42,7 @@ The `sentAt` field is a Unix timestamp (`number`), not a `Date` or Firestore `Ti
 ### QR Code Meeting Check-In
 
 - `src/screens/homegroup/MeetingQRCodeScreen.tsx` generates a deep link URL for a specific meeting on the current day and renders it as a QR code for secretaries to share.
-- Deep link format: `recoveryconnect://checkin?groupId=G&meetingId=M&date=YYYY-MM-DD`. The `checkInToMeeting` callable processes the actual check-in.
+- Deep link format: `recoveryconnect://checkin?groupId=G&meetingId=M&date=YYYY-MM-DD`. The `checkInToMeeting` callable processes the actual check-in. (The `recoveryconnect://` URL scheme is a legacy identifier tied to native iOS/Android registration and `org.recoveryconnect`; the canonical product name is **Homegroups**. Don't change the scheme without updating native config and store listings.)
 - Attendance lives in the top-level Firestore collection `meetingInstances`. Key fields: `meetingId` (string), `groupId` (string), `scheduledAt` (Timestamp), `attendees` (array of UIDs), `attendeeCount` (number, denormalized).
 - The screen subscribes to today's `meetingInstances` doc and renders a live attendee count from the snapshot.
 - Required composite index on `meetingInstances`: (`groupId ASC`, `attendees CONTAINS`, `scheduledAt DESC`) — defined in `../firestore.indexes.json`.
@@ -53,7 +53,7 @@ The `sentAt` field is a Unix timestamp (`number`), not a `Date` or Firestore `Ti
 2. **Group membership**: caller must be a member of `groupId` (checked server-side via `members/{groupId}_{userId}`).
 3. **Today's date only**: the callable rejects `date` values that aren't `YYYY-MM-DD` for "today" in the meeting's timezone.
 
-What this **does not** protect against: a member of the group can self-check-in to any meeting on the day's schedule without physically being there. The model accepts this — the policy is "members are trusted within their group." If facility-dashboard compliance reporting (the RATS endpoint, paid alumni networks) ever needs cryptographic proof of attendance, sign the QR payload with an HMAC keyed to `meetingId + scheduledAt` and verify in the callable.
+What this **does not** protect against: a member of the group can self-check-in to any meeting on the day's schedule without physically being there. The model accepts this — the policy is "members are trusted within their group." If facility-dashboard compliance reporting (the Regroup endpoint, paid alumni networks) ever needs cryptographic proof of attendance, sign the QR payload with an HMAC keyed to `meetingId + scheduledAt` and verify in the callable.
 
 ### Facility Dashboard (mobile entry)
 
@@ -61,4 +61,4 @@ What this **does not** protect against: a member of the group can self-check-in 
 
 ## Mobile-Local Skills
 
-`.claude/skills/run-recovery-connect-mobile/` provides a `run-recovery-connect-mobile` skill for launching the iOS simulator and taking screenshots. Active automatically when Claude is working in `mobile/`.
+`.claude/skills/run-homegroups-mobile/` provides a `run-homegroups-mobile` skill for launching the iOS simulator and taking screenshots. Active automatically when Claude is working in `mobile/`.

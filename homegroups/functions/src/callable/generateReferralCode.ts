@@ -51,7 +51,7 @@ export const generateReferralCode = onCall(
       throw new HttpsError("unauthenticated", "User must be logged in.");
     }
     if (!groupId) {
-      throw new HttpsError("invalid-argument", "Group ID is required.");
+      throw new HttpsError("invalid-argument", "Valid Group ID is required.");
     }
 
     try {

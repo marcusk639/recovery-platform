@@ -6,7 +6,7 @@
 
 ## Overview
 
-Successfully implemented comprehensive end-to-end testing infrastructure for RATS Phase 5 critical accountability features using Detox and Firebase Emulator.
+Successfully implemented comprehensive end-to-end testing infrastructure for Regroup Phase 5 critical accountability features using Detox and Firebase Emulator.
 
 ## Scope
 

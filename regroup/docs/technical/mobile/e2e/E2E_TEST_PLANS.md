@@ -23,7 +23,7 @@
 
 ## Overview
 
-This document provides detailed test plans for all critical code paths in the RATS app. Each test plan includes:
+This document provides detailed test plans for all critical code paths in the Regroup app. Each test plan includes:
 - User flow description
 - Required screens/components
 - testIDs needed
@@ -2357,7 +2357,7 @@ Each test should:
 
 ## Summary
 
-**This document provides a comprehensive testing roadmap for all critical code paths in the RATS app.**
+**This document provides a comprehensive testing roadmap for all critical code paths in the Regroup app.**
 
 ### Coverage Overview
 - **11 Critical Paths** with detailed test plans

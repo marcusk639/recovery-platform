@@ -1,6 +1,6 @@
 # Cloud Functions
 
-This directory contains the Firebase Cloud Functions backend for RATS (Regroup). Loaded by Claude Code automatically when working inside `functions/`. See `../CLAUDE.md` for project-wide rules (including Stripe and PII policy).
+This directory contains the Firebase Cloud Functions backend for Regroup. Loaded by Claude Code automatically when working inside `functions/`. See `../CLAUDE.md` for project-wide rules (including Stripe and PII policy).
 
 ## Commands
 
@@ -37,7 +37,7 @@ src/
     subscriptions.ts  Stripe subscriptions + Connect account management;
                       sendInviteEmails, sendConfirmationEmail
     oxford.ts       Oxford House management callables
-    homegroups.ts   RecoveryConnect / Homegroups bridge callables
+    homegroups.ts   Homegroups bridge callables
     invitations.ts  createInvitation, peekInvitation, redeemInvitation
   triggers/
     firestore/      Firestore document write triggers
@@ -70,9 +70,9 @@ All Stripe amounts are in **US cents** (integers). `50000` = $500.00. Convert on
 
 `http/stripeWebhook.ts` uses Stripe signature verification (`stripe.webhooks.constructEvent`). Never process a webhook payload without verifying the signature first.
 
-### RecoveryConnect bridge
+### Homegroups bridge
 
-`callable/homegroups.ts` contains callables that allow RATS to interact with the homegroups (RecoveryConnect) product via recovery-api. Do not add direct Firestore cross-queries to homegroups' database — route through recovery-api.
+`callable/homegroups.ts` contains callables that allow Regroup to interact with the Homegroups product via recovery-api. Do not add direct Firestore cross-queries to homegroups' database — route through recovery-api.
 
 ### Secrets
 

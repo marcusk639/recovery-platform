@@ -1,27 +1,27 @@
-# Codebase Comparison: regroup-rn7 vs recovery-platform/regroup
+# Codebase Comparison: Regroup vs recovery-platform/regroup
 
 **Generated:** 2026-06-01  
 **Method:** Full file-tree diff of source files across both repositories  
-**Direction:** Features/files present in `regroup-rn7` not present in `recovery-platform/regroup`, and vice versa
+**Direction:** Features/files present in `Regroup` not present in `recovery-platform/regroup`, and vice versa
 
 ---
 
 ## Summary
 
-The two mobile source trees (`regroup-rn7/src/` vs `recovery-platform/regroup/mobile/src/`) are **near-identical mirrors** at the file level — every screen, component, service, hook, entity, and state slice exists in both. The meaningful differences are:
+The two mobile source trees (`Regroup/src/` vs `recovery-platform/regroup/mobile/src/`) are **near-identical mirrors** at the file level — every screen, component, service, hook, entity, and state slice exists in both. The meaningful differences are:
 
-1. **regroup-rn7 is ahead on recent feature commits** (invitation token flow, setup wizard fixes) that may not be synced to `recovery-platform/regroup/mobile`
-2. **`recovery-platform/regroup` contains the Cloud Functions backend** (`functions/`) — an entire codebase absent from `regroup-rn7`
-3. **`recovery-platform/regroup/mobile` has utility files** not present in `regroup-rn7`
-4. **`regroup-rn7` has substantially more tooling, testing infrastructure, and documentation** not present in the recovery-platform version
+1. **Regroup is ahead on recent feature commits** (invitation token flow, setup wizard fixes) that may not be synced to `recovery-platform/regroup/mobile`
+2. **`recovery-platform/regroup` contains the Cloud Functions backend** (`functions/`) — an entire codebase absent from `Regroup`
+3. **`recovery-platform/regroup/mobile` has utility files** not present in `Regroup`
+4. **`Regroup` has substantially more tooling, testing infrastructure, and documentation** not present in the recovery-platform version
 
 ---
 
-## Section 1: In regroup-rn7 — Not in recovery-platform/regroup
+## Section 1: In Regroup — Not in recovery-platform/regroup
 
 ### 1.1 Recent Commits (May Not Be Synced)
 
-The following commits exist in `regroup-rn7/main` and represent features/fixes whose counterpart files in `recovery-platform/regroup/mobile` may be stale:
+The following commits exist in `Regroup/main` and represent features/fixes whose counterpart files in `recovery-platform/regroup/mobile` may be stale:
 
 | Commit    | Description                                                               | Affected Files                                                |
 | --------- | ------------------------------------------------------------------------- | ------------------------------------------------------------- |
@@ -35,7 +35,7 @@ The following commits exist in `regroup-rn7/main` and represent features/fixes w
 
 ### 1.2 E2E Testing Infrastructure
 
-`regroup-rn7` has a developed E2E testing layer that `recovery-platform/regroup/mobile` lacks:
+`Regroup` has a developed E2E testing layer that `recovery-platform/regroup/mobile` lacks:
 
 | Path                        | Description                                                                            |
 | --------------------------- | -------------------------------------------------------------------------------------- |
@@ -47,7 +47,7 @@ The following commits exist in `regroup-rn7/main` and represent features/fixes w
 
 ### 1.3 Claude Code / AI Development Tooling
 
-`regroup-rn7` has a mature `.claude/` configuration absent from recovery-platform:
+`Regroup` has a mature `.claude/` configuration absent from recovery-platform:
 
 | Path                          | Description                                       |
 | ----------------------------- | ------------------------------------------------- |
@@ -62,7 +62,7 @@ The following commits exist in `regroup-rn7/main` and represent features/fixes w
 
 ### 1.4 Unit Tests
 
-`regroup-rn7` has extensive unit tests co-located with source; `recovery-platform/regroup/mobile` has only `App-test.tsx`:
+`Regroup` has extensive unit tests co-located with source; `recovery-platform/regroup/mobile` has only `App-test.tsx`:
 
 | Test File                                                              | Coverage Area                                                |
 | ---------------------------------------------------------------------- | ------------------------------------------------------------ |
@@ -76,7 +76,7 @@ The following commits exist in `regroup-rn7/main` and represent features/fixes w
 
 ### 1.5 Documentation (docs/)
 
-`regroup-rn7` has a rich `docs/` directory; recovery-platform/regroup has no equivalent:
+`Regroup` has a rich `docs/` directory; recovery-platform/regroup has no equivalent:
 
 | Category     | Files                                                                                                    |
 | ------------ | -------------------------------------------------------------------------------------------------------- |
@@ -89,9 +89,9 @@ The following commits exist in `regroup-rn7/main` and represent features/fixes w
 
 ### 1.6 Native Project Files
 
-`regroup-rn7` is a fully configured standalone React Native app; `recovery-platform/regroup/mobile` has a barebones native layer:
+`Regroup` is a fully configured standalone React Native app; `recovery-platform/regroup/mobile` has a barebones native layer:
 
-| Asset              | regroup-rn7                            | recovery-platform/mobile |
+| Asset              | Regroup                            | recovery-platform/mobile |
 | ------------------ | -------------------------------------- | ------------------------ |
 | `ios/`             | Full Xcode project, CocoaPods, Podfile | Minimal                  |
 | `android/`         | Full Gradle setup                      | Minimal                  |
@@ -100,11 +100,11 @@ The following commits exist in `regroup-rn7/main` and represent features/fixes w
 
 ---
 
-## Section 2: In recovery-platform/regroup — Not in regroup-rn7
+## Section 2: In recovery-platform/regroup — Not in Regroup
 
 ### 2.1 Cloud Functions Backend (`functions/`) — MAJOR
 
-`recovery-platform/regroup` contains the entire Firebase Cloud Functions backend. This is absent from `regroup-rn7`:
+`recovery-platform/regroup` contains the entire Firebase Cloud Functions backend. This is absent from `Regroup`:
 
 **Callable functions:**
 | File | Purpose |
@@ -147,11 +147,11 @@ The following commits exist in `regroup-rn7/main` and represent features/fixes w
 
 **Function tests** (32 test files covering all callable, scheduled, webhook, and utility layers)
 
-**Note:** `functions/src/util/tokens.ts` is the server-side counterpart to the recent invitation token commits in `regroup-rn7`. This is likely where `createInvitation` generates the token that the mobile `SignUpForm` redeems. The sync between mobile changes and this functions code is critical.
+**Note:** `functions/src/util/tokens.ts` is the server-side counterpart to the recent invitation token commits in `Regroup`. This is likely where `createInvitation` generates the token that the mobile `SignUpForm` redeems. The sync between mobile changes and this functions code is critical.
 
 ### 2.2 Mobile Utility Files
 
-`recovery-platform/regroup/mobile` has files not present in `regroup-rn7`:
+`recovery-platform/regroup/mobile` has files not present in `Regroup`:
 
 | File                       | Purpose                                                     |
 | -------------------------- | ----------------------------------------------------------- |
@@ -167,7 +167,7 @@ The following commits exist in `regroup-rn7/main` and represent features/fixes w
 
 ### 3.1 Repository Structure
 
-| Aspect             | regroup-rn7                       | recovery-platform/regroup             |
+| Aspect             | Regroup                       | recovery-platform/regroup             |
 | ------------------ | --------------------------------- | ------------------------------------- |
 | Type               | Standalone RN app                 | Monorepo (mobile + functions)         |
 | Mobile path        | `src/`                            | `mobile/src/`                         |
@@ -178,7 +178,7 @@ The following commits exist in `regroup-rn7/main` and represent features/fixes w
 
 After stripping path prefixes (`src/` vs `mobile/src/`), the two mobile codebases share **100% of their file names**. Every screen, component, service, hook, entity, context, state slice, and utility exists in both.
 
-The content of those files may diverge wherever recent commits in `regroup-rn7` haven't been reflected in `recovery-platform/regroup/mobile`. The highest-risk divergence is the invitation token flow (4 recent commits).
+The content of those files may diverge wherever recent commits in `Regroup` haven't been reflected in `recovery-platform/regroup/mobile`. The highest-risk divergence is the invitation token flow (4 recent commits).
 
 ---
 

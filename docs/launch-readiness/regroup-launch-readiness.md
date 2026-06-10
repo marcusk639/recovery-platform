@@ -1,7 +1,7 @@
-# Regroup (RATS) Launch Readiness Assessment
+# Regroup Launch Readiness Assessment
 
 **Date:** 2026-06-06
-**Product:** RATS (Regroup Addiction Tracking System)
+**Product:** Regroup
 **Firebase Project:** `phoenix-cleanhouse`
 **Branch:** feat/regroup-tier-billing-migration
 **Purpose:** Spec- and plan-ready launch readiness document
@@ -10,7 +10,7 @@
 
 ## 1. Executive Summary
 
-RATS is a full-stack platform for running sober living homes, targeting operators, house managers, and residents. The product has **core feature depth** (bed management, activities, messaging, Oxford House governance, Stripe Connect rent collection) but is **further from launch than Homegroups** due to an incomplete pricing tier migration, an outdated Angular web frontend, and a lower overall quality bar on production hardening. The recently implemented subscription tier system (6 tiers across traditional and Oxford house types) is architecturally sound but **has not been tested end-to-end with real payments**.
+Regroup is a full-stack platform for running sober living homes, targeting operators, house managers, and residents. The product has **core feature depth** (bed management, activities, messaging, Oxford House governance, Stripe Connect rent collection) but is **further from launch than Homegroups** due to an incomplete pricing tier migration, an outdated Angular web frontend, and a lower overall quality bar on production hardening. The recently implemented subscription tier system (6 tiers across traditional and Oxford house types) is architecturally sound but **has not been tested end-to-end with real payments**.
 
 **Overall readiness: 5/10** -- solid functional base, but pricing activation, web modernization, and production validation are all required before revenue.
 
@@ -66,7 +66,7 @@ Each tier maps to a Stripe price via environment variable (`STRIPE_PRICE_TRAD_ST
 
 - **320 test files** (functions + mobile, excluding 100 Angular spec files).
 - **Zod validation** on subscription, payment, and invitation callables.
-- **Secret Manager integration**: 7 secrets defined via `defineSecret()` (Stripe, SendGrid, RATS API key, Maps API key).
+- **Secret Manager integration**: 7 secrets defined via `defineSecret()` (Stripe, SendGrid, Regroup API key, Maps API key).
 - **Auth guard**: `authGuard.ts` utility for consistent authentication checks.
 - **Error tracking**: Both Crashlytics (`@react-native-firebase/crashlytics` v17.3.1) and Sentry (`@sentry/react-native` v7.12.0) installed.
 - **CI pipelines**: `ci.yml`, `deploy.yml`, `e2e-tests.yml`, `unit-tests.yml` all present.
@@ -230,11 +230,11 @@ The PRICING_STRATEGY.md correctly identifies this as unsustainable: $60K/year at
 | **Sobriety Hub**                     | Per-user (staff) | $75/mo per full user, $25/mo per client manager | $250 onboarding fee. 3.9% CC / 1.2% ACH processing fees. Scales with staff, not beds. |
 | **One Step Software**                | Custom quotes    | Not published                                   | Higher than Sobriety Hub per user reviews. Established in drug court programs.        |
 | **Sober Living App (Behave Health)** | Custom quotes    | Not published                                   | NARR affiliate discounts. Best for clinical-adjacent operations.                      |
-| **RATS (proposed)**                  | Per-house tiered | $49-299/mo                                      | Scales with house capacity, not staff. Includes Stripe Connect rent collection.       |
+| **Regroup (proposed)**                  | Per-house tiered | $49-299/mo                                      | Scales with house capacity, not staff. Includes Stripe Connect rent collection.       |
 
-**Key insight**: Sobriety Hub's per-user model means a 3-house operator with 2 staff pays $150-200/month. RATS Professional at $129/month is competitive. For a single-house Oxford House with 1 house manager, Sobriety Hub costs $75/month vs RATS Standard at $49/month -- RATS is cheaper.
+**Key insight**: Sobriety Hub's per-user model means a 3-house operator with 2 staff pays $150-200/month. Regroup Professional at $129/month is competitive. For a single-house Oxford House with 1 house manager, Sobriety Hub costs $75/month vs Regroup Standard at $49/month -- Regroup is cheaper.
 
-**RATS's pricing advantage is at the low end** (single Oxford Houses). At the high end (multi-property operators with multiple staff), per-user pricing could actually be cheaper than RATS Enterprise ($249) if staff count is low.
+**Regroup's pricing advantage is at the low end** (single Oxford Houses). At the high end (multi-property operators with multiple staff), per-user pricing could actually be cheaper than Regroup Enterprise ($249) if staff count is low.
 
 ### 5.4 Platform Fee Opportunity
 
@@ -281,7 +281,7 @@ At 100 houses, that's $15,000/month ($180K/year) in platform fees alone -- poten
 | 6 Stripe price IDs not created in Stripe Dashboard            | CRITICAL | Create products + prices, upload env vars                   |
 | No end-to-end payment tested with new tier pricing            | CRITICAL | Manual walkthrough after price creation                     |
 | Platform fee on rent processing not implemented               | HIGH     | Code the 2.5% application fee on payment intents            |
-| Bundle discount criteria undefined                            | MEDIUM   | Define what triggers a bundle discount (RATS + Homegroups?) |
+| Bundle discount criteria undefined                            | MEDIUM   | Define what triggers a bundle discount (Regroup + Homegroups?) |
 | Existing house migration from $10+$1 to tiered pricing        | HIGH     | Build migration callable + communication plan               |
 | Connect account icon upload script exists but unclear if used | LOW      | `upload-stripe-icon.ts` -- verify brand consistency         |
 
@@ -327,30 +327,30 @@ Note: The 6 price env vars are referenced in `config.ts` as `priceEnvVar` string
 | Risk                                                                                    | Severity | Mitigation                                                                                                      |
 | --------------------------------------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------- |
 | Sober living operators are cost-sensitive small businesses                              | HIGH     | Price positioning is competitive vs Sobriety Hub. Lead with ROI: rent collection alone saves 5+ hours/month.    |
-| Sobriety Hub has 5.0 Capterra rating and momentum (3:1 switching from One Step)         | HIGH     | Differentiate on Oxford House governance features (Sobriety Hub has no EES/voting). RATS owns the Oxford niche. |
+| Sobriety Hub has 5.0 Capterra rating and momentum (3:1 switching from One Step)         | HIGH     | Differentiate on Oxford House governance features (Sobriety Hub has no EES/voting). Regroup owns the Oxford niche. |
 | Operators may not adopt digital rent collection                                         | MEDIUM   | Stripe Connect is opt-in. Core value prop (activity tracking, phase management) works without payments.         |
 | 5 existing houses at legacy pricing creates awkward migration                           | MEDIUM   | Grandfather for 6 months, personal outreach to explain value. 5 houses is small enough to call each one.        |
 | Angular 9 web is a liability in due diligence                                           | MEDIUM   | Plan rewrite for Q3/Q4 2026. Don't let it block launch -- most operators use mobile, not web.                   |
-| Drug court / compliance reporting is a potential competitor differentiator for One Step | MEDIUM   | Prioritize compliance report export in roadmap. RATS activity + drug testing data is already captured.          |
+| Drug court / compliance reporting is a potential competitor differentiator for One Step | MEDIUM   | Prioritize compliance report export in roadmap. Regroup activity + drug testing data is already captured.          |
 
 ### 7.3 Competitive Positioning
 
-**RATS vs Sobriety Hub:**
+**Regroup vs Sobriety Hub:**
 
-- RATS advantage: Oxford House governance (EES, voting, officer terms), Stripe Connect integrated rent collection, lower single-house pricing.
+- Regroup advantage: Oxford House governance (EES, voting, officer terms), Stripe Connect integrated rent collection, lower single-house pricing.
 - Sobriety Hub advantage: More mature, higher reviews, transparent per-user pricing (operators know exactly what they'll pay), no per-bed/per-house scaling surprises.
 
-**RATS vs One Step:**
+**Regroup vs One Step:**
 
-- RATS advantage: Modern mobile app, Stripe payments, lower cost.
+- Regroup advantage: Modern mobile app, Stripe payments, lower cost.
 - One Step advantage: Drug court integrations, established in court-ordered programs.
 
-**RATS vs Sober Living App (Behave Health):**
+**Regroup vs Sober Living App (Behave Health):**
 
-- RATS advantage: Purpose-built for sober living (not adapted from EHR), mobile-first.
+- Regroup advantage: Purpose-built for sober living (not adapted from EHR), mobile-first.
 - Behave Health advantage: Clinical integration pathway, NARR affiliation, enterprise positioning.
 
-**RATS whitespace**: The **Oxford House** segment is underserved. No competitor has EES calculation, democratic voting, officer term tracking, or chapter-level network management. This is a defensible niche.
+**Regroup whitespace**: The **Oxford House** segment is underserved. No competitor has EES calculation, democratic voting, officer term tracking, or chapter-level network management. This is a defensible niche.
 
 ---
 
@@ -408,7 +408,7 @@ Note: The 6 price env vars are referenced in `config.ts` as `priceEnvVar` string
 | RG-SPEC-08 | React Native 0.72 -> 0.74+ upgrade plan                   | Migration plan        | P2       | 40 hours           |
 | RG-SPEC-09 | Compliance report export for drug court programs          | Feature spec          | P2       | 20 hours           |
 | RG-SPEC-10 | Error tracking consolidation (Sentry vs Crashlytics)      | Decision doc          | P2       | 2 hours            |
-| RG-SPEC-11 | Bundle discount criteria definition (RATS + Homegroups)   | Product spec          | P2       | 4 hours            |
+| RG-SPEC-11 | Bundle discount criteria definition (Regroup + Homegroups)   | Product spec          | P2       | 4 hours            |
 | RG-SPEC-12 | Stripe API version alignment with Homegroups              | Tech debt             | P3       | 4 hours            |
 
 ---

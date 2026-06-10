@@ -217,4 +217,4 @@ For issues with:
 
 ## License
 
-This setup is part of RecoveryConnect and follows the same license.
+This setup is part of Homegroups and follows the same license.

@@ -6,7 +6,11 @@ import {
   checkRateLimit,
 } from "@/lib/abuse-protection";
 
-type ReferralApp = "phoenix-cleanhouse" | "homegroups" | "treatment-center";
+type ReferralApp =
+  | "Regroup"
+  | "Homegroups"
+  | "treatment-center"
+  | "Next Step Recovery";
 
 const KNOWN_INTERESTS = new Set([
   "Patient-Experience Training",
@@ -17,12 +21,14 @@ const KNOWN_INTERESTS = new Set([
   "Digital Health Startup Advisory",
   "Sober Living / Housing",
   "12-Step / Homegroup Support",
+  "Withdrawal Coaching Support",
   "Other",
 ]);
 
 const INTEREST_TO_APP: Record<string, ReferralApp> = {
-  "Sober Living / Housing": "phoenix-cleanhouse",
-  "12-Step / Homegroup Support": "homegroups",
+  "Sober Living / Housing": "Regroup",
+  "12-Step / Homegroup Support": "Homegroups",
+  "Withdrawal Coaching Support": "Next Step Recovery",
 };
 
 async function fireReferral(
@@ -31,17 +37,29 @@ async function fireReferral(
   clientEmail: string,
   notes: string,
 ): Promise<void> {
-  const url = process.env.SHARED_API_URL;
-  const key = process.env.INTERNAL_API_KEY;
+  // RECOVERY_API_URL must be the deployed `createReferral` callable URL.
+  // Intentionally inactive in production: the env vars stay commented out in
+  // apphosting.yaml pending the partner agreement, so this no-ops.
+  const url = process.env.RECOVERY_API_URL;
+  const key = process.env.RECOVERY_API_KEY;
   if (!url || !key) return;
 
-  await fetch(`${url}/api/referrals`, {
+  // recovery-api `createReferral` is a Firebase Functions v2 callable:
+  //   - body must be wrapped as { data: { ... } }
+  //   - Phase 1 service auth via custom headers (not a Firebase ID token)
+  //   - `toApp` is sent as a display name; recovery-api resolves it to the
+  //     canonical app-id at the boundary.
+  await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "X-Service-Key": key,
+      "X-App-Id": "nextstep-recovery", // detox's canonical recovery-platform app-id
+      "X-User-Uid": "detox-anon", // anonymous contact-form submitter (no Firebase user)
     },
-    body: JSON.stringify({ toApp, clientName, clientEmail, notes }),
+    body: JSON.stringify({
+      data: { toApp, clientName, clientEmail, notes },
+    }),
     signal: AbortSignal.timeout(5000),
   });
 }

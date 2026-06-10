@@ -21,7 +21,7 @@ The app has subscription infrastructure (Stripe, Cloud Functions, webhooks) but 
 ## Constraints
 
 - Subscriptions are purchased and managed on **rats-web** in a browser — not via Apple IAP
-- This is the pattern Apple approved for the original RATS distribution
+- This is the pattern Apple approved for the original Regroup distribution
 - The mobile app only enforces access; it never collects payment
 
 ---
@@ -189,13 +189,13 @@ Shown to operators with non-active subscriptions.
 ```
 ┌──────────────────────────────────┐
 │                                  │
-│  [RATS logo]                     │
+│  [Regroup logo]                     │
 │                                  │
 │  Your subscription has ended     │
 │                                  │
 │  To continue managing your       │
 │  house, renew your subscription  │
-│  on the RATS web portal.         │
+│  on the Regroup web portal.         │
 │                                  │
 │  ┌──────────────────────────┐    │
 │  │  Manage Subscription  →  │    │  Linking.openURL(RATS_WEB_URL/billing)
@@ -220,7 +220,7 @@ Shown to guests whose operator's grace period has expired.
 ```
 ┌──────────────────────────────────┐
 │                                  │
-│  [RATS logo]                     │
+│  [Regroup logo]                     │
 │                                  │
 │  Access temporarily unavailable  │
 │                                  │

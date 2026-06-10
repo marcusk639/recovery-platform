@@ -184,7 +184,7 @@ Claude Code detects it automatically after install.
 ### What the skill produces
 
 ```
-regroup-rn7/
+Regroup/
 ├── .maestro/
 │   ├── config.yaml                    # App ID, env vars, device config
 │   ├── utils/

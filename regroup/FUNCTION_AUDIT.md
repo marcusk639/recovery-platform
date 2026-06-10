@@ -1,16 +1,16 @@
-# Cloud Function Audit: RATS v2 Usage Analysis
+# Cloud Function Audit: Regroup v2 Usage Analysis
 
-> **Status (2026-05-31): STALE.** This audit was performed against an external repository at `/Users/marcusklein/dev/rats-v2` that no longer exists. The RATS mobile app now lives at `regroup/mobile/` in this monorepo. Function verdicts and call-site references should be verified against the current codebase before acting on any recommendation here.
+> **Status (2026-05-31): STALE.** This audit was performed against an external repository at `/Users/marcusklein/dev/rats-v2` that no longer exists. The Regroup mobile app now lives at `regroup/mobile/` in this monorepo. Function verdicts and call-site references should be verified against the current codebase before acting on any recommendation here.
 
 **Date:** February 2026
-**Analyzed against:** RATS v2 mobile app (`/Users/marcusklein/dev/rats-v2`) — **path no longer exists; see stale notice above**
+**Analyzed against:** Regroup v2 mobile app (`/Users/marcusklein/dev/rats-v2`) — **path no longer exists; see stale notice above**
 **Scope:** All exported functions in `functions/src/index.ts` and `functions/src/api/`
 
 ---
 
 ## Summary
 
-The repo contains **46 exported Cloud Functions** across callable, trigger-based, scheduled, and webhook categories. After cross-referencing every function against the RATS v2 mobile app's service layer, state management, and screens:
+The repo contains **46 exported Cloud Functions** across callable, trigger-based, scheduled, and webhook categories. After cross-referencing every function against the Regroup v2 mobile app's service layer, state management, and screens:
 
 - **44 functions should be kept** — either directly called by the app, automatically triggered by app data operations, or run on critical schedules.
 - **1 function should be removed** — `onboardStripeConnectUser` (explicitly legacy, fully superseded).

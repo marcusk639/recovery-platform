@@ -1,20 +1,20 @@
-# App Comparison: regroup-rn7 vs recovery-platform/regroup
+# App Comparison: Regroup vs recovery-platform/regroup
 
 _Generated: 2026-06-01 | Method: app-comparison-analysis skill_  
-_Codebase A: `/Users/marcus/dev/regroup-rn7`_  
+_Codebase A: `/Users/marcus/dev/Regroup`_  
 _Codebase B: `/Users/marcus/dev/recovery-platform/regroup`_
 
 ---
 
 ## Executive Summary
 
-These are not two competing apps — they are the same app living in two repositories with a shared mobile source tree and a diverging project boundary. The mobile `src/` directories are **byte-for-byte identical** in file count, test count, service count, component count, `any` usage count, and dependency list. The meaningful difference is structural: `regroup-rn7` is the active development standalone, while `recovery-platform/regroup` is a monorepo that adds the authoritative Cloud Functions backend. Neither is "better" — they are complementary halves of one system that need to be kept in sync.
+These are not two competing apps — they are the same app living in two repositories with a shared mobile source tree and a diverging project boundary. The mobile `src/` directories are **byte-for-byte identical** in file count, test count, service count, component count, `any` usage count, and dependency list. The meaningful difference is structural: `Regroup` is the active development standalone, while `recovery-platform/regroup` is a monorepo that adds the authoritative Cloud Functions backend. Neither is "better" — they are complementary halves of one system that need to be kept in sync.
 
 ---
 
 ## Tech Stack Overview
 
-| Dimension        | regroup-rn7                         | recovery-platform/regroup                                        |
+| Dimension        | Regroup                         | recovery-platform/regroup                                        |
 | ---------------- | ----------------------------------- | ---------------------------------------------------------------- |
 | Framework        | React Native 0.72                   | React Native 0.72 (mobile/)                                      |
 | Backend          | External (regroup-functions repo)   | Firebase Cloud Functions (functions/) — co-located               |
@@ -32,7 +32,7 @@ These are not two competing apps — they are the same app living in two reposit
 
 ## Quantitative Metrics
 
-| Metric                  | regroup-rn7/src | recovery-platform/mobile/src | Delta         |
+| Metric                  | Regroup/src | recovery-platform/mobile/src | Delta         |
 | ----------------------- | --------------- | ---------------------------- | ------------- |
 | Screens                 | 52              | 52                           | 0             |
 | Components (.tsx)       | 172             | 172                          | 0             |
@@ -45,11 +45,11 @@ These are not two competing apps — they are the same app living in two reposit
 
 ---
 
-## Where regroup-rn7 Leads
+## Where Regroup Leads
 
 ### 1. Active Development Velocity
 
-regroup-rn7 has 4 recent commits that represent features and critical bug fixes not yet confirmed in recovery-platform/mobile:
+Regroup has 4 recent commits that represent features and critical bug fixes not yet confirmed in recovery-platform/mobile:
 
 | Commit                                                                           | Type         | Impact                                                        |
 | -------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------- |
@@ -62,7 +62,7 @@ If recovery-platform/mobile hasn't received these commits, it has two critical o
 
 ### 2. E2E Testing Infrastructure
 
-regroup-rn7 has a mature E2E layer; recovery-platform/mobile has only one test stub (`App-test.tsx`):
+Regroup has a mature E2E layer; recovery-platform/mobile has only one test stub (`App-test.tsx`):
 
 - Full Detox suite: `e2e/tests/` (auth, house setup, invitations, residents, activity)
 - Firebase Emulator guard preventing accidental production test runs
@@ -72,7 +72,7 @@ regroup-rn7 has a mature E2E layer; recovery-platform/mobile has only one test s
 
 ### 3. Development Tooling
 
-regroup-rn7 has substantial AI-assisted development infrastructure:
+Regroup has substantial AI-assisted development infrastructure:
 
 - `.claude/` with architecture, Firebase, testing, and convention references
 - Custom subagents and skills for project-specific workflows
@@ -82,7 +82,7 @@ regroup-rn7 has substantial AI-assisted development infrastructure:
 
 ### 4. Documentation Depth
 
-regroup-rn7's `docs/` covers architecture, Firestore data model, product requirements, pricing strategy, performance analysis, legal (privacy policy, ToS), and production readiness gap analysis. recovery-platform has no equivalent.
+Regroup's `docs/` covers architecture, Firestore data model, product requirements, pricing strategy, performance analysis, legal (privacy policy, ToS), and production readiness gap analysis. recovery-platform has no equivalent.
 
 ---
 
@@ -90,7 +90,7 @@ regroup-rn7's `docs/` covers architecture, Firestore data model, product require
 
 ### 1. Cloud Functions Backend — Major
 
-recovery-platform/regroup contains the entire server-side implementation missing from regroup-rn7:
+recovery-platform/regroup contains the entire server-side implementation missing from Regroup:
 
 **Callable functions (7):** auth, homegroups, invitations, meetings, oxford, payments, subscriptions
 
@@ -128,18 +128,18 @@ recovery-platform/regroup contains the entire server-side implementation missing
 
 ### 2. Google API Integration Modules
 
-recovery-platform/mobile has two files absent from regroup-rn7:
+recovery-platform/mobile has two files absent from Regroup:
 
 | File                 | Purpose                    |
 | -------------------- | -------------------------- |
 | `google/apikeys.ts`  | Google API key management  |
 | `google/timezone.ts` | Google Timezone API client |
 
-If regroup-rn7 has timezone-aware features (meeting times, rent due dates in local time), these utilities may be missing.
+If Regroup has timezone-aware features (meeting times, rent due dates in local time), these utilities may be missing.
 
 ### 3. Data Migration Scripts
 
-recovery-platform/mobile has production data scripts not in regroup-rn7:
+recovery-platform/mobile has production data scripts not in Regroup:
 
 | File                       | Purpose                |
 | -------------------------- | ---------------------- |
@@ -164,7 +164,7 @@ Both codebases share **1,198 `any` usages** — identical because the source is 
 
 ### Test Quality
 
-| Dimension       | regroup-rn7                  | recovery-platform/mobile | recovery-platform/functions |
+| Dimension       | Regroup                  | recovery-platform/mobile | recovery-platform/functions |
 | --------------- | ---------------------------- | ------------------------ | --------------------------- |
 | Unit tests      | 291 (shared src)             | 291 (same src)           | 32 (dedicated)              |
 | E2E tests       | Full Detox suite             | Stub only                | N/A                         |
@@ -227,7 +227,7 @@ Both have identical subscription gating:
 
 ## Dimension Scorecard
 
-| Dimension                   | regroup-rn7 | recovery-platform/regroup | Weight | Notes                                                  |
+| Dimension                   | Regroup | recovery-platform/regroup | Weight | Notes                                                  |
 | --------------------------- | ----------- | ------------------------- | ------ | ------------------------------------------------------ |
 | Mobile Feature Completeness | 8/10        | 8/10                      | 20%    | Identical source                                       |
 | Backend Completeness        | 2/10        | 9/10                      | 25%    | Functions backend only in recovery-platform            |
@@ -243,7 +243,7 @@ Both have identical subscription gating:
 
 **These are not competitors — they are two views of one system.** The correct action is not to pick one, but to reconcile them:
 
-1. **regroup-rn7** is the active mobile development environment and should remain the source of truth for mobile code
+1. **Regroup** is the active mobile development environment and should remain the source of truth for mobile code
 2. **recovery-platform/regroup/functions** is the authoritative backend and should be treated as the canonical server-side
 3. **Sync the recent invitation and setup wizard commits** from rn7 → recovery-platform/mobile immediately — these contain critical bug fixes
 4. **Port `google/timezone.ts` and migration scripts** from recovery-platform/mobile → rn7 if they're needed

@@ -1,4 +1,4 @@
-# RATS v2 (Mobile) — Firestore Data Model & Access Patterns
+# Regroup v2 (Mobile) — Firestore Data Model & Access Patterns
 
 This document explains how the **core domain data** is modeled in **Firestore**, and how the **mobile app** reads/writes/queries it.
 

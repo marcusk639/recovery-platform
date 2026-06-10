@@ -1,4 +1,4 @@
-# RATS Feature Prioritization & Revenue/Growth Strategy
+# Regroup Feature Prioritization & Revenue/Growth Strategy
 
 **Date:** February 5, 2026
 **Purpose:** Strategic feature prioritization optimized for revenue generation and user growth
@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-This document prioritizes RATS platform features based on their potential to drive **revenue growth** and **user acquisition**, balanced against implementation effort. The analysis reveals that **Oxford House support** represents the single highest-impact opportunity, followed by **payment system completion** and **retention-focused features**.
+This document prioritizes Regroup platform features based on their potential to drive **revenue growth** and **user acquisition**, balanced against implementation effort. The analysis reveals that **Oxford House support** represents the single highest-impact opportunity, followed by **payment system completion** and **retention-focused features**.
 
 ### Top Strategic Priorities
 
@@ -627,7 +627,7 @@ Plus enables enterprise sales:
    - Pricing: $0-50/month
    - Weakness: Limited features
 
-**RATS Competitive Advantage:**
+**Regroup Competitive Advantage:**
 - ✅ ONLY solution for Oxford Houses
 - ✅ GPS meeting verification with 300K+ database
 - ✅ Recovery-specific features (phases, sponsors, accountability)
@@ -744,7 +744,7 @@ Monthly: $129 × 12 = $1,548/year
 Annual: $129 × 12 × 0.80 = $1,238/year (20% off)
 
 Customer saves: $310/year
-RATS gains: Improved cash flow, reduced churn
+Regroup gains: Improved cash flow, reduced churn
 
 With 30% annual adoption:
 75 houses × $1,238 prepay = $92,850 cash upfront
@@ -872,14 +872,14 @@ Annual billing reduces churn from 15% to 5% (locked in)
 
 ## 9. Competitive Analysis & Positioning
 
-### RATS vs. Traditional Property Management
+### Regroup vs. Traditional Property Management
 
 **Buildium (Competitor):**
 - Pricing: $50-160/month
 - Strengths: Mature product, accounting features, large customer base
 - Weaknesses: Not recovery-specific, no meeting tracking, no GPS verification
 
-**RATS Advantage:**
+**Regroup Advantage:**
 - Recovery-specific features (phases, meetings, sponsors)
 - GPS meeting verification (unique)
 - Lower price point ($49-129 vs $50-160)
@@ -889,14 +889,14 @@ Annual billing reduces churn from 15% to 5% (locked in)
 
 ---
 
-### RATS vs. Manual Tracking (Excel)
+### Regroup vs. Manual Tracking (Excel)
 
 **Excel (Status Quo):**
 - Pricing: Free
 - Strengths: Flexible, familiar
 - Weaknesses: Time-consuming (10-20 hrs/month), error-prone, no GPS, no automation
 
-**RATS Advantage:**
+**Regroup Advantage:**
 - Saves 15+ hours/month (value: $750/month at $50/hr)
 - Automated reminders and reports
 - GPS meeting verification (fraud prevention)
@@ -906,7 +906,7 @@ Annual billing reduces churn from 15% to 5% (locked in)
 
 **Value Equation:**
 ```
-RATS cost: $129/month
+Regroup cost: $129/month
 Time saved: 15 hours × $50/hr = $750/month
 ROI: 481% ($750 / $129 - 1)
 Payback period: 5 days
@@ -914,7 +914,7 @@ Payback period: 5 days
 
 ---
 
-### RATS vs. Oxford House Manual Processes
+### Regroup vs. Oxford House Manual Processes
 
 **Current Oxford House Tools:**
 - Paper forms
@@ -922,7 +922,7 @@ Payback period: 5 days
 - In-person voting
 - Paper meeting minutes
 
-**RATS Advantage:**
+**Regroup Advantage:**
 - ✅ Digital-first (accessible anywhere)
 - ✅ Financial transparency (all residents see finances)
 - ✅ Democratic tools (voting, meetings)

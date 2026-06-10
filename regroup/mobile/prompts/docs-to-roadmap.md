@@ -1,7 +1,7 @@
     /docs-to-roadmap
 
-**Project:** regroup-rn7 (RATS — sober living house management app)
-Working directory: /Users/marcuspersonal/dev/regroup-rn7
+**Project:** Regroup (— sober living house management app)
+Working directory: /Users/marcuspersonal/dev/Regroup
 
 **Optimization objectives (in priority order):**
 

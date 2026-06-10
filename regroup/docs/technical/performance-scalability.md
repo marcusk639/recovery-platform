@@ -1,4 +1,4 @@
-# RATS — Performance & Scalability Analysis
+# Regroup — Performance & Scalability Analysis
 
 **Date:** February 27, 2026
 **Reviewer role:** Performance Engineer
@@ -9,7 +9,7 @@
 
 ## Executive Summary
 
-The RATS documentation describes a system that is architecturally aware of Firestore performance at the design level but has several concrete gaps that will materially hurt performance as the app scales beyond a handful of houses. The most serious documented issues — an N+1 Cloud Function pattern on the operator payment dashboard, five duplicate timezone-split scheduled functions, a Firestore trigger fanout that issues sequential subcollection reads inside a single trigger invocation, and a complete absence of performance or load testing in the E2E suite — are all known to the planning team but none has a concrete sprint task that addresses the root cause. A secondary concern is the ongoing dual-repo deployment ambiguity, which creates operational risk that could mask performance regressions and delay incident response.
+The Regroup documentation describes a system that is architecturally aware of Firestore performance at the design level but has several concrete gaps that will materially hurt performance as the app scales beyond a handful of houses. The most serious documented issues — an N+1 Cloud Function pattern on the operator payment dashboard, five duplicate timezone-split scheduled functions, a Firestore trigger fanout that issues sequential subcollection reads inside a single trigger invocation, and a complete absence of performance or load testing in the E2E suite — are all known to the planning team but none has a concrete sprint task that addresses the root cause. A secondary concern is the ongoing dual-repo deployment ambiguity, which creates operational risk that could mask performance regressions and delay incident response.
 
 The migration from the embedded `currentWeek` / `previousWeek` model to the `WeekSummary` subcollection model is the most important architectural change documented. The migration document is thorough and performance-aware. However, several patterns it introduces create new concerns that it does not fully address: unbounded `activities` array growth inside week documents, a hot-write fan-out on `house-activities` for every resident action, and a sequential per-guest Firestore read loop inside the health-score Cloud Function trigger.
 

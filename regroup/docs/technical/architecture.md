@@ -1,6 +1,6 @@
-# RATS (Regroup) - End-to-End Architecture
+# Regroup - End-to-End Architecture
 
-This document provides a comprehensive breakdown of the RATS sober living management platform, covering the React Native mobile client, Firebase Cloud Functions backend, and Firestore data architecture.
+This document provides a comprehensive breakdown of the Regroup sober living management platform, covering the React Native mobile client, Firebase Cloud Functions backend, and Firestore data architecture.
 
 ---
 
@@ -26,7 +26,7 @@ This document provides a comprehensive breakdown of the RATS sober living manage
 ```
 +---------------------+        +----------------------+        +------------------+
 |  React Native App   | <----> |  Firebase Services   | <----> | External APIs    |
-|  (rats-v2 repo)     |        |  (regroup-functions)  |        |                  |
+|  (regroup/mobile/)  |        |  (regroup/functions/) |        |                  |
 +---------------------+        +----------------------+        +------------------+
 | - iOS & Android     |        | - Cloud Functions    |        | - Stripe         |
 | - React Navigation  |        | - Firestore          |        | - Google Maps    |
@@ -38,11 +38,11 @@ This document provides a comprehensive breakdown of the RATS sober living manage
 
 ### Repository Structure
 
-| Repo                  | Purpose                                     | Key Tech                                                  |
-| --------------------- | ------------------------------------------- | --------------------------------------------------------- |
-| **rats-v2**           | Mobile client + Firestore rules + E2E tests | React Native 0.72, TypeScript, Redux Toolkit, React Query |
-| **regroup-functions** | Cloud Functions backend                     | TypeScript, Firebase Admin SDK, Stripe SDK                |
-| **rats-web**          | Marketing/landing page                      | Web                                                       |
+| Component                | Path                 | Purpose                                     | Key Tech                                                  |
+| ------------------------ | -------------------- | ------------------------------------------- | --------------------------------------------------------- |
+| **Regroup mobile**       | `regroup/mobile/`    | Mobile client + Firestore rules + E2E tests | React Native 0.72, TypeScript, Redux Toolkit, React Query |
+| **Regroup functions**    | `regroup/functions/` | Cloud Functions backend                     | TypeScript, Firebase Admin SDK, Stripe SDK                |
+| **Regroup web**          | `regroup/web/`       | Marketing/landing page + web portal         | Angular, TypeScript, Firebase Hosting                     |
 
 ### Data Flow Summary
 

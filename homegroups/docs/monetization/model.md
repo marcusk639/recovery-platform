@@ -450,7 +450,7 @@ STRIPE_PRODUCT_ID_GROUP=prod_xxx
 STRIPE_PRODUCT_ID_INTERGROUP_A=prod_xxx  # Tier A: up to 10 groups
 STRIPE_PRODUCT_ID_INTERGROUP_B=prod_xxx  # Tier B: unlimited (maxGroups: 9999)
 
-# RATS integration (getMeetingAttendance HTTP endpoint)
+# Regroup integration (getMeetingAttendance HTTP endpoint)
 RATS_API_KEY=<64-char-hex-bearer-token>
 
 # SendGrid (for emails)
@@ -621,9 +621,9 @@ Use Stripe test mode for development:
 - `mobile/src/screens/homegroup/GroupOverviewScreen.tsx` - Claim group flow
 - `mobile/src/screens/homegroup/GroupDonationScreen.tsx` - Donation flow
 
-## RATS Integration
+## Regroup Integration
 
-The `getMeetingAttendance` HTTP endpoint is called by the RATS sober living app to verify
+The `getMeetingAttendance` HTTP endpoint is called by the Regroup sober living app to verify
 a resident's meeting attendance without embedding the full Homegroups UI.
 
 **Endpoint:** `GET https://us-central1-<project>.cloudfunctions.net/getMeetingAttendance`
@@ -635,7 +635,7 @@ a resident's meeting attendance without embedding the full Homegroups UI.
 - **Length leakage:** A naive `==` comparison short-circuits at the first byte mismatch, leaking the token length through response timing. HMAC-SHA256 produces a 32-byte digest regardless of input length, so the comparison length is constant.
 - **Byte-by-byte timing:** `timingSafeEqual` compares all bytes of the digest before returning, preventing per-byte timing attacks.
 
-Future RATS-style bearer endpoints should reuse this pattern rather than rolling a fresh comparison.
+Future Regroup-style bearer endpoints should reuse this pattern rather than rolling a fresh comparison.
 
 **Query params:**
 
@@ -670,7 +670,7 @@ Future RATS-style bearer endpoints should reuse this pattern rather than rolling
 
 **Hard cap:** The endpoint returns at most **100 records per call** (Firestore `.limit(100)`, ordered by `scheduledAt DESC`). The response shape does not currently include `truncated`, but callers should treat `count === 100` as potentially truncated and paginate by `scheduledAt` cursors if/when added. (If a future revision adds `truncated: true` to the response, that flag indicates the result was capped — older clients should still handle the 100-cap by inspection.)
 
-**Rate limits:** No built-in rate limiting is enforced server-side. As a courtesy / to avoid Firestore quota pressure, callers should not exceed approximately **60 requests per minute** per RATS instance. Higher sustained throughput should be coordinated with the Homegroups team before deploy.
+**Rate limits:** No built-in rate limiting is enforced server-side. As a courtesy / to avoid Firestore quota pressure, callers should not exceed approximately **60 requests per minute** per Regroup instance. Higher sustained throughput should be coordinated with the Homegroups team before deploy.
 
 **Setup:** Set `RATS_API_KEY` in Firebase Functions environment config:
 

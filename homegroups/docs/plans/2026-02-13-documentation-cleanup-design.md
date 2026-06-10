@@ -40,7 +40,7 @@ Single `DOCUMENTATION.md` at root level (~150-200 lines)
 
 ### Content Structure
 ```markdown
-# RecoveryConnect Documentation Guide
+# Homegroups Documentation Guide
 
 ## Quick Start
 - New to project? Start with: [docs/00-DOCUMENTATION-INDEX.md]

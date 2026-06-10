@@ -1,8 +1,8 @@
-# Wizard UX Conventions (RATS mobile)
+# Wizard UX Conventions (Regroup mobile)
 
 **Established:** 2026-05-27
 **Status:** Active convention
-**Applies to:** Any multi-step form flow in regroup-rn7
+**Applies to:** Any multi-step form flow in Regroup
 
 When to use this pattern: multi-step forms with clear sequential progression
 (setup flows, onboarding, multi-page applications).

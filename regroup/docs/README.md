@@ -1,8 +1,8 @@
-# RATS Documentation Index
+# Regroup Documentation Index
 
 **Last Updated:** 2026-05-24
 
-RATS (Regroup) is a React Native sober living house management app backed by Firebase. This index covers active documentation only — see [`archive/`](./archive/) for historical records.
+Regroup is a React Native sober living house management app backed by Firebase. This index covers active documentation only — see [`archive/`](./archive/) for historical records.
 
 ---
 
@@ -26,7 +26,7 @@ RATS (Regroup) is a React Native sober living house management app backed by Fir
 
 | Doc                                                                                | Description                                              | Status  |
 | ---------------------------------------------------------------------------------- | -------------------------------------------------------- | ------- |
-| [`ECOSYSTEM_ROADMAP_2026.md`](./ECOSYSTEM_ROADMAP_2026.md)                         | Cross-product roadmap: RATS, Homegroups, RecoveryConnect | CURRENT |
+| [`ECOSYSTEM_ROADMAP_2026.md`](./ECOSYSTEM_ROADMAP_2026.md)                         | Cross-product roadmap: Regroup, Homegroups, Homegroups | CURRENT |
 | [`STRATEGIC_PLATFORM_ASSESSMENT_2026.md`](./STRATEGIC_PLATFORM_ASSESSMENT_2026.md) | Prioritized roadmap with blockers and pricing            | CURRENT |
 | [`PRODUCT_STRATEGY_ASSESSMENT.md`](./PRODUCT_STRATEGY_ASSESSMENT.md)               | Market strategy, differentiation, GTM                    | CURRENT |
 | [`FULL_PLATFORM_REQUIREMENTS.md`](./FULL_PLATFORM_REQUIREMENTS.md)                 | Dream end-state feature spec (Traditional + Oxford)      | AGING   |

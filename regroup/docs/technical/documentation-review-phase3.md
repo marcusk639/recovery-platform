@@ -1,4 +1,4 @@
-# RATS Documentation Review — Phase 3: Completeness and Accuracy
+# Regroup Documentation Review — Phase 3: Completeness and Accuracy
 
 **Date:** February 27, 2026
 **Reviewer scope:** Inline doc quality, API documentation, architecture documentation, README/onboarding, accuracy against code, changelog/migration guides, and completely missing documentation
@@ -190,7 +190,7 @@ The `firebase/firestore.rules` file contains the actual security rules in produc
 
 **Severity:** High
 
-The RATS platform consists of:
+The Regroup platform consists of:
 
 - `rats-v2` (React Native mobile app) — this repo
 - `regroup-functions` (Firebase Cloud Functions) — separate repo, separate deployment
@@ -518,7 +518,7 @@ As established in Section 5.3. How to deploy the 49 Cloud Functions, how to rota
 
 **Severity:** High
 
-RATS collects health-adjacent data: sobriety dates, drug of choice, medication schedules, mental health observations, incident logs, and compliance history. This is sensitive personal information. No document exists that:
+Regroup collects health-adjacent data: sobriety dates, drug of choice, medication schedules, mental health observations, incident logs, and compliance history. This is sensitive personal information. No document exists that:
 
 - Classifies the data collected (PII, health-adjacent, etc.)
 - Describes what data retention policy applies

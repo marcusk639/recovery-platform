@@ -1,7 +1,7 @@
 # Recovery Ecosystem Roadmap — 2026
 
 **Date:** 2026-05-24 (reviewed + corrected 2026-05-24)
-**Scope:** Full ecosystem — regroup-rn7 (RATS mobile), regroup-functions (Cloud Functions backend), regroup-web (marketing site), RecoveryConnect / Homegroups, detox-recovery
+**Scope:** Full ecosystem — Regroup (mobile), regroup-functions (Cloud Functions backend), regroup-web (marketing site), Homegroups, detox-recovery
 **Audience:** Developers, product owner, AI agents
 
 > **⚠️ Review note:** This roadmap was cross-verified against actual codebase state after initial synthesis. Several items in `STRATEGIC_PLATFORM_ASSESSMENT_2026.md` (the primary source doc) were found to be stale. Corrections are applied in all sections below. The source doc should not be treated as authoritative on implementation status — code review overrides it.
@@ -12,19 +12,19 @@
 
 | Doc                                                                         | Repo            | Verdict                            | Rationale                                                                                                                                                     |
 | --------------------------------------------------------------------------- | --------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `docs/STRATEGIC_PLATFORM_ASSESSMENT_2026.md`                                | regroup-rn7     | **SOURCE_OF_TRUTH (with caveats)** | Most recent (2026-05-24), covers all 3 Regroup repos. Strategic priorities are sound. **Implementation status claims are stale** — see Section 1 corrections. |
-| `RecoveryConnect/docs/ROADMAP.md`                                           | RecoveryConnect | **SOURCE_OF_TRUTH**                | May 2026, current launch phase, explicit P0/P1/P2/P3 with completion status                                                                                   |
-| `RecoveryConnect/docs/plans/2026-04-13-recovery-ecosystem-12-month-plan.md` | RecoveryConnect | **SOURCE_OF_TRUTH**                | Ecosystem sequencing — defines cross-product dependencies and revenue timeline                                                                                |
-| `RecoveryConnect/docs/REVENUE_OPPORTUNITIES.md`                             | RecoveryConnect | **SOURCE_OF_TRUTH**                | Actionable backlog with ✅ completion markers (authoritative for "what's done")                                                                               |
-| `RecoveryConnect/docs/LAUNCH_BLOCKERS.md`                                   | RecoveryConnect | **SOURCE_OF_TRUTH**                | Specific manual actions blocking user acquisition                                                                                                             |
-| `docs/superpowers/specs/2026-05-23-current-roadmap.md`                      | regroup-rn7     | **SUPPORTING**                     | May 2026, rn7-only view, superseded by STRATEGIC_PLATFORM_ASSESSMENT_2026                                                                                     |
-| `RecoveryConnect/docs/BUSINESS_MODEL.md`                                    | RecoveryConnect | **SUPPORTING**                     | Pricing model and 3-year projections                                                                                                                          |
+| `docs/STRATEGIC_PLATFORM_ASSESSMENT_2026.md`                                | Regroup     | **SOURCE_OF_TRUTH (with caveats)** | Most recent (2026-05-24), covers all 3 Regroup repos. Strategic priorities are sound. **Implementation status claims are stale** — see Section 1 corrections. |
+| `Homegroups/docs/ROADMAP.md`                                           | Homegroups | **SOURCE_OF_TRUTH**                | May 2026, current launch phase, explicit P0/P1/P2/P3 with completion status                                                                                   |
+| `Homegroups/docs/plans/2026-04-13-recovery-ecosystem-12-month-plan.md` | Homegroups | **SOURCE_OF_TRUTH**                | Ecosystem sequencing — defines cross-product dependencies and revenue timeline                                                                                |
+| `Homegroups/docs/REVENUE_OPPORTUNITIES.md`                             | Homegroups | **SOURCE_OF_TRUTH**                | Actionable backlog with ✅ completion markers (authoritative for "what's done")                                                                               |
+| `Homegroups/docs/LAUNCH_BLOCKERS.md`                                   | Homegroups | **SOURCE_OF_TRUTH**                | Specific manual actions blocking user acquisition                                                                                                             |
+| `docs/superpowers/specs/2026-05-23-current-roadmap.md`                      | Regroup     | **SUPPORTING**                     | May 2026, rn7-only view, superseded by STRATEGIC_PLATFORM_ASSESSMENT_2026                                                                                     |
+| `Homegroups/docs/BUSINESS_MODEL.md`                                    | Homegroups | **SUPPORTING**                     | Pricing model and 3-year projections                                                                                                                          |
 | `detox-recovery/docs/features.md`                                           | detox-recovery  | **SUPPORTING**                     | Product spec for Next.js PDF delivery site                                                                                                                    |
 | `regroup-web/CLAUDE.md`                                                     | regroup-web     | **SUPPORTING**                     | Architecture reference; no product vision content                                                                                                             |
-| `docs/FEATURE_PRIORITY_ROADMAP.md`                                          | regroup-rn7     | **STALE**                          | Superseded by STRATEGIC_PLATFORM_ASSESSMENT_2026                                                                                                              |
-| `docs/FULL_PLATFORM_REQUIREMENTS.md`                                        | regroup-rn7     | **STALE**                          | Pre-dates recent feature completions                                                                                                                          |
-| `docs/archive/`                                                             | regroup-rn7     | **ARCHIVE**                        | Historical analysis                                                                                                                                           |
-| `RecoveryConnect/docs/archive/`                                             | RecoveryConnect | **ARCHIVE**                        | Feb 2026 analysis                                                                                                                                             |
+| `docs/FEATURE_PRIORITY_ROADMAP.md`                                          | Regroup     | **STALE**                          | Superseded by STRATEGIC_PLATFORM_ASSESSMENT_2026                                                                                                              |
+| `docs/FULL_PLATFORM_REQUIREMENTS.md`                                        | Regroup     | **STALE**                          | Pre-dates recent feature completions                                                                                                                          |
+| `docs/archive/`                                                             | Regroup     | **ARCHIVE**                        | Historical analysis                                                                                                                                           |
+| `Homegroups/docs/archive/`                                             | Homegroups | **ARCHIVE**                        | Feb 2026 analysis                                                                                                                                             |
 
 ---
 
@@ -49,12 +49,12 @@ Only MISSING, PARTIAL, and BLOCKED items are shown. Items marked **DONE** (confi
 | Requirement                                                | Status         | Notes                                                                                                                                                                                                 |
 | ---------------------------------------------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Verify correct Stripe Price IDs are deployed in production | **UNVERIFIED** | Env vars are the pattern, but which Price IDs are live is unknown. The difference between $9.99 (wrong) and $49 (correct) is in which value is stored in the Firebase env config, not in source code. |
-| `getMeetingAttendance` CF in regroup-functions             | **MISSING**    | Does not exist in regroup-functions. CF exists in RecoveryConnect's separate Firebase project. Cross-project bridge spec needed before P1.3.                                                          |
+| `getMeetingAttendance` CF in regroup-functions             | **MISSING**    | Does not exist in regroup-functions. CF exists in Homegroups's separate Firebase project. Cross-project bridge spec needed before P1.3.                                                          |
 | Stripe webhook handler for `payment_intent.succeeded`      | **UNVERIFIED** | `stripeWebhook.ts` exists; whether it handles `payment_intent` events and persists to `payments` collection needs confirmation before `listPayments` is meaningful.                                   |
 | Rate limiting on HTTP Cloud Functions                      | **MISSING**    | No rate limiting on unauthenticated-accessible CFs.                                                                                                                                                   |
 | Automated rent reminders (scheduled CF)                    | **MISSING**    | No scheduled rent-reminder function.                                                                                                                                                                  |
 
-### regroup-rn7 — actual MISSING/PARTIAL items
+### Regroup — actual MISSING/PARTIAL items
 
 | Requirement                                         | Status                     | Notes                                                                                                                                                                                                                |
 | --------------------------------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -79,7 +79,7 @@ Only MISSING, PARTIAL, and BLOCKED items are shown. Items marked **DONE** (confi
 | Operator testimonials + house count                    | **MISSING** |                                                                                                                                                                                                                               |
 | Angular 9 → 17+ upgrade                                | **MISSING** | Security and maintainability debt                                                                                                                                                                                             |
 
-### RecoveryConnect — actual MISSING/PARTIAL items
+### Homegroups — actual MISSING/PARTIAL items
 
 | Requirement                                             | Status               | Notes                                                               |
 | ------------------------------------------------------- | -------------------- | ------------------------------------------------------------------- |
@@ -90,7 +90,7 @@ Only MISSING, PARTIAL, and BLOCKED items are shown. Items marked **DONE** (confi
 | Submit to App Store + Google Play                       | **MISSING** (manual) | Move to P1 (after P0 fixes soak 72h); use TestFlight in P0          |
 | Set Stripe prices for intergroup Tier A + Tier B        | **MISSING** (manual) | Checkout silently breaks without these                              |
 | Treatment Center Facility Dashboard                     | **MISSING**          | Depends on `getMeetingAttendance` bridge being confirmed            |
-| Verify `getMeetingAttendance` cross-project callability | **UNVERIFIED**       | CF is in RC project; RATS must call across Firebase projects        |
+| Verify `getMeetingAttendance` cross-project callability | **UNVERIFIED**       | CF is in RC project; Regroup must call across Firebase projects        |
 | Flip `noindex` → `index` on unclaimed groups            | **MISSING**          | Trigger: ≥100 _claimed_ groups with rich content (not just created) |
 | Custom domain setup                                     | **MISSING**          | See LAUNCH_BLOCKERS.md §5 for multi-file checklist                  |
 
@@ -118,12 +118,12 @@ Growth score axes: **U** = Usability · **A** = Acquisition · **R** = Revenue
 | **Audit deployed Stripe Price IDs** — confirm prod env vars resolve to $49/$79, not legacy $9.99                                              | regroup-functions | —     | —   | **H** | Manual | 30min  |
 | **Audit deployed RTDB rules** — confirm Firebase console matches deny-all in `database.rules.json` (`firebase database:get /.settings/rules`) | regroup-functions | —     | —   | M     | Manual | 30min  |
 | **Count houses with `stripeStatus == "active"`** — determine addressable base for rent collection                                             | regroup-functions | —     | —   | **H** | Manual | 1h     |
-| **Confirm `getMeetingAttendance` cross-project spec** — which Firebase project, what auth, what API contract                                  | RecoveryConnect   | —     | M   | M     | Manual | 2h     |
+| **Confirm `getMeetingAttendance` cross-project spec** — which Firebase project, what auth, what API contract                                  | Homegroups   | —     | M   | M     | Manual | 2h     |
 | If Stripe env vars wrong: update Firebase env config + redeploy                                                                               | regroup-functions | —     | —   | **H** | Ops    | 1h     |
-| Run claim-and-pay flow end-to-end (RC)                                                                                                        | RecoveryConnect   | **H** | M   | **H** | Manual | 2h     |
-| Verify Stripe production key on deployed web (RC)                                                                                             | RecoveryConnect   | —     | —   | **H** | Manual | 30min  |
-| Configure Firebase Auth authorized domains (RC)                                                                                               | RecoveryConnect   | **H** | —   | —     | Manual | 30min  |
-| Fix Firebase email sender spam issue (RC)                                                                                                     | RecoveryConnect   | **H** | —   | —     | Manual | 1h     |
+| Run claim-and-pay flow end-to-end (RC)                                                                                                        | Homegroups   | **H** | M   | **H** | Manual | 2h     |
+| Verify Stripe production key on deployed web (RC)                                                                                             | Homegroups   | —     | —   | **H** | Manual | 30min  |
+| Configure Firebase Auth authorized domains (RC)                                                                                               | Homegroups   | **H** | —   | —     | Manual | 30min  |
+| Fix Firebase email sender spam issue (RC)                                                                                                     | Homegroups   | **H** | —   | —     | Manual | 1h     |
 
 **Excluded from P0:** App Store submission — moved to P1 (submit after P0 fixes have soaked 72h; use TestFlight in P0 week).
 
@@ -135,14 +135,14 @@ Growth score axes: **U** = Usability · **A** = Acquisition · **R** = Revenue
 | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------- | ----- | ----- | ----- | ----------- |
 | Verify payment CFs end-to-end in test mode                                                                             | regroup-functions                   | **H** | —     | **H** | S (1d)      |
 | Confirm Stripe webhook writes `payment_intent.succeeded` → `payments/{id}` Firestore doc                               | regroup-functions                   | M     | —     | **H** | S (2h)      |
-| `oxfordEnabled` unification — CF-based toggle that atomically updates house + user subscription metadata + Stripe plan | regroup-rn7 + regroup-functions     | **H** | **H** | **H** | M (2–3d)    |
-| Treatment Center Facility Dashboard (RC)                                                                               | RecoveryConnect                     | M     | **H** | **H** | M–L (3–7d)  |
-| Cross-project bridge for `getMeetingAttendance` (if spec confirms RC-only)                                             | regroup-functions + RecoveryConnect | M     | M     | M     | M (2–3d)    |
-| Set Stripe prices for intergroup Tier A + Tier B (RC)                                                                  | RecoveryConnect                     | —     | M     | **H** | Manual (1h) |
+| `oxfordEnabled` unification — CF-based toggle that atomically updates house + user subscription metadata + Stripe plan | Regroup + regroup-functions     | **H** | **H** | **H** | M (2–3d)    |
+| Treatment Center Facility Dashboard (RC)                                                                               | Homegroups                     | M     | **H** | **H** | M–L (3–7d)  |
+| Cross-project bridge for `getMeetingAttendance` (if spec confirms RC-only)                                             | regroup-functions + Homegroups | M     | M     | M     | M (2–3d)    |
+| Set Stripe prices for intergroup Tier A + Tier B (RC)                                                                  | Homegroups                     | —     | M     | **H** | Manual (1h) |
 | Rate limiting on `createPaymentIntent` and other HTTP CFs                                                              | regroup-functions                   | —     | —     | M     | S (4h)      |
 | Add App Store / Play Store buttons to regroup-web                                                                      | regroup-web                         | M     | **H** | M     | S (1h)      |
 | Wire MailerLite automations + Lemon Squeezy webhook (detox-recovery)                                                   | detox-recovery                      | M     | M     | M     | S (1d)      |
-| Submit to App Store + Google Play (RC)                                                                                 | RecoveryConnect                     | **H** | **H** | **H** | Manual      |
+| Submit to App Store + Google Play (RC)                                                                                 | Homegroups                     | **H** | **H** | **H** | Manual      |
 
 ---
 
@@ -150,17 +150,17 @@ Growth score axes: **U** = Usability · **A** = Acquisition · **R** = Revenue
 
 | Item                                                                       | Repo              | U     | A     | R     | Effort        |
 | -------------------------------------------------------------------------- | ----------------- | ----- | ----- | ----- | ------------- |
-| Oxford onboarding wizard                                                   | regroup-rn7       | **H** | **H** | **H** | L (5–7d)      |
-| Oxford network directory                                                   | regroup-rn7       | M     | **H** | M     | M (2–3d)      |
-| Resident TodayView (daily accountability dashboard)                        | regroup-rn7       | **H** | —     | M     | M (3d)        |
-| Push notification accountability loop (6 triggers)                         | regroup-rn7       | **H** | —     | M     | M (3d)        |
-| Phase advancement progress bar (wire queries → UI)                         | regroup-rn7       | M     | —     | M     | S (1d)        |
-| Activity dispute "Dispute This" action in feed                             | regroup-rn7       | M     | —     | —     | S (1d)        |
-| Shareable charter compliance PDF                                           | regroup-rn7       | M     | M     | M     | M (2–3d)      |
+| Oxford onboarding wizard                                                   | Regroup       | **H** | **H** | **H** | L (5–7d)      |
+| Oxford network directory                                                   | Regroup       | M     | **H** | M     | M (2–3d)      |
+| Resident TodayView (daily accountability dashboard)                        | Regroup       | **H** | —     | M     | M (3d)        |
+| Push notification accountability loop (6 triggers)                         | Regroup       | **H** | —     | M     | M (3d)        |
+| Phase advancement progress bar (wire queries → UI)                         | Regroup       | M     | —     | M     | S (1d)        |
+| Activity dispute "Dispute This" action in feed                             | Regroup       | M     | —     | —     | S (1d)        |
+| Shareable charter compliance PDF                                           | Regroup       | M     | M     | M     | M (2–3d)      |
 | Automated rent reminders (scheduled CF)                                    | regroup-functions | M     | —     | **H** | S–M (1–2d)    |
-| Flip `noindex` → `index` at ≥100 _claimed_ groups with rich content (RC)   | RecoveryConnect   | —     | **H** | M     | S (1h)        |
+| Flip `noindex` → `index` at ≥100 _claimed_ groups with rich content (RC)   | Homegroups   | —     | **H** | M     | S (1h)        |
 | Operator testimonials + house count (regroup-web)                          | regroup-web       | —     | M     | M     | S (2h)        |
-| Evaluate RC trial-to-paid conversion rate                                  | RecoveryConnect   | —     | —     | —     | Manual        |
+| Evaluate RC trial-to-paid conversion rate                                  | Homegroups   | —     | —     | —     | Manual        |
 | Pricing migration for existing operators (grandfather → renew-at-new-rate) | regroup-functions | —     | —     | **H** | S (4h script) |
 
 ---
@@ -169,8 +169,8 @@ Growth score axes: **U** = Usability · **A** = Acquisition · **R** = Revenue
 
 | Item                                      | Repo                            | U   | A     | R     | Notes                                                                                        |
 | ----------------------------------------- | ------------------------------- | --- | ----- | ----- | -------------------------------------------------------------------------------------------- |
-| Auto-pay / recurring rent enrollment      | regroup-rn7 + regroup-functions | M   | —     | **H** | Requires P1 payment verification first                                                       |
-| Custom domain (`homegroups-app.com`) (RC) | RecoveryConnect                 | M   | M     | —     | See LAUNCH_BLOCKERS.md §5 for multi-file checklist                                           |
+| Auto-pay / recurring rent enrollment      | Regroup + regroup-functions | M   | —     | **H** | Requires P1 payment verification first                                                       |
+| Custom domain (`homegroups-app.com`) (RC) | Homegroups                 | M   | M     | —     | See LAUNCH_BLOCKERS.md §5 for multi-file checklist                                           |
 | Regroup-web Stripe checkout flow          | regroup-web                     | M   | —     | M     | Subscribe page is currently email-only; requires Stripe Elements integration — not a 2h task |
 | Angular 9 → 17+ upgrade                   | regroup-web                     | M   | —     | —     | Security/maintainability; low acquisition impact                                             |
 | CF unit/integration test gap analysis     | regroup-functions               | —   | —     | M     | Identify uncovered paths before scaling                                                      |
@@ -181,7 +181,7 @@ Growth score axes: **U** = Usability · **A** = Acquisition · **R** = Revenue
 
 - Intergroup governance/analytics (RC) — no users yet; deferred post-launch
 - Elections, bylaws ratification, group health dashboards (RC) — deferred
-- Video calling (regroup-rn7) — niche
+- Video calling (Regroup) — niche
 - Paid acquisition (RC) — only after trial-to-paid > 30%
 
 ---
@@ -217,7 +217,7 @@ Growth score axes: **U** = Usability · **A** = Acquisition · **R** = Revenue
 
 ### P0.B — RC Manual Launch Actions (Ordered)
 
-**Status:** MISSING | **Repo:** RecoveryConnect | **Effort:** 1 day total
+**Status:** MISSING | **Repo:** Homegroups | **Effort:** 1 day total
 
 Execute in this order (dependencies are real):
 
@@ -259,7 +259,7 @@ Execute in this order (dependencies are real):
 
 ### P1.B — `oxfordEnabled` Unification (Oxford Toggle)
 
-**Status:** DESIGN ISSUE — dual source of truth | **Repo:** regroup-rn7 + regroup-functions | **Effort:** M (2–3d)
+**Status:** DESIGN ISSUE — dual source of truth | **Repo:** Regroup + regroup-functions | **Effort:** M (2–3d)
 **Growth Score:** U: H | A: H | R: H
 
 **Context — the problem:** Two independent `oxfordEnabled` values exist:
@@ -297,19 +297,19 @@ Building a HouseSettings toggle that only updates field #1 will: leave the upgra
 **Status:** MISSING in regroup-functions | **Effort:** M (2–3d) if bridge needed
 **Growth Score:** U: M | A: M | R: M (gates P1.3 Facility Dashboard and Month 10 enterprise revenue)
 
-**Context:** The CF exists in RecoveryConnect's Firebase project. For RATS to call it cross-project, auth must be federated.
+**Context:** The CF exists in Homegroups's Firebase project. For Regroup to call it cross-project, auth must be federated.
 
 **What's needed:**
 
 - [ ] Confirm RC's `getMeetingAttendance` endpoint details: URL, auth mechanism (`RATS_API_KEY` bearer header), request/response shape
 - [ ] Confirm composite Firestore index (commit 0b0e88a) is deployed in RC's project
-- [ ] Make a test call from a RATS Cloud Function using `RATS_API_KEY` to `getMeetingAttendance`
+- [ ] Make a test call from a Regroup Cloud Function using `RATS_API_KEY` to `getMeetingAttendance`
 - [ ] If successful: document the API contract; wire into Facility Dashboard data pipeline (P1.3)
 - [ ] If auth fails or endpoint unreachable: escalate — P1.3 cannot ship until bridge is operational
 
 **Acceptance criteria:**
 
-- [ ] RATS CF can call `getMeetingAttendance` and receive meeting attendance records for a given `groupId + userId`
+- [ ] Regroup CF can call `getMeetingAttendance` and receive meeting attendance records for a given `groupId + userId`
 - [ ] P1.3 Facility Dashboard has live data from the bridge
 
 ---
@@ -333,7 +333,7 @@ Building a HouseSettings toggle that only updates field #1 will: leave the upgra
 │  regroup-functions:                                               │
 │    ⑤ If Stripe env wrong: update + redeploy (1h)                  │
 │                                                                   │
-│  RecoveryConnect manual (in order):                               │
+│  Homegroups manual (in order):                               │
 │    ⑥ Set intergroup Stripe prices                                  │
 │    ⑦ Firebase Auth authorized domains                              │
 │    ⑧ Email sender fix                                              │
@@ -349,11 +349,11 @@ Building a HouseSettings toggle that only updates field #1 will: leave the upgra
 │    ⑪ Verify payment CFs + webhook handler end-to-end              │
 │    ⑫ Rate limiting on payment + HTTP CFs                           │
 │                                                                   │
-│  regroup-rn7:                                                     │
+│  Regroup:                                                     │
 │    ⑬ oxfordEnabled unification via CF (M, 2–3d)                   │
 │       → unlocks 2,500 Oxford Houses                               │
 │                                                                   │
-│  RecoveryConnect:                                                 │
+│  Homegroups:                                                 │
 │    ⑭ getMeetingAttendance cross-project bridge verify             │
 │    ⑮ Treatment Center Facility Dashboard (M–L, 3–7d)              │
 │       Depends on ⑭                                                │
@@ -370,7 +370,7 @@ Building a HouseSettings toggle that only updates field #1 will: leave the upgra
 ┌───────────────────────────────────────────────────────────────────┐
 │  MONTH 2: Oxford acquisition + resident retention (P2)            │
 │                                                                   │
-│  regroup-rn7:                                                     │
+│  Regroup:                                                     │
 │    ⑲ Oxford onboarding wizard (L, 5–7d)                           │
 │    ⑳ Oxford network directory (M, 2–3d)                           │
 │    ㉑ Resident TodayView daily dashboard (M, 3d)                   │
@@ -380,7 +380,7 @@ Building a HouseSettings toggle that only updates field #1 will: leave the upgra
 │    ㉓ Automated rent reminders (scheduled CF)                      │
 │       (payment CF verified in P1, so this can ship in P2)         │
 │                                                                   │
-│  RecoveryConnect:                                                 │
+│  Homegroups:                                                 │
 │    ㉔ noindex flip at ≥100 claimed groups                          │
 │    ㉕ Evaluate trial-to-paid conversion                            │
 │       > 30%: scale outreach                                        │
@@ -397,7 +397,7 @@ Building a HouseSettings toggle that only updates field #1 will: leave the upgra
 │                                                                   │
 │  Aftercare system (new product):                                  │
 │    Next.js + GCP Cloud Run + PostgreSQL (HIPAA BAA)               │
-│    Reads from: RC meetingInstances + RATS directory API           │
+│    Reads from: RC meetingInstances + Regroup directory API           │
 └────────────────────────────┬──────────────────────────────────────┘
                              │
                              ▼
@@ -405,7 +405,7 @@ Building a HouseSettings toggle that only updates field #1 will: leave the upgra
 │  MONTH 10: Enterprise sales push                                  │
 │  Target: 3–5 treatment centers @ $800–3K/month                   │
 │  Requires: ⑮ Facility Dashboard + ⑭ getMeetingAttendance bridge   │
-│            + RATS Oxford module live                              │
+│            + Regroup Oxford module live                              │
 └───────────────────────────────────────────────────────────────────┘
 ```
 
@@ -413,11 +413,11 @@ Building a HouseSettings toggle that only updates field #1 will: leave the upgra
 
 | Bridge                                           | Status                                 | Enables                                                  |
 | ------------------------------------------------ | -------------------------------------- | -------------------------------------------------------- |
-| `getMeetingAttendance` HTTP endpoint (RC → RATS) | UNVERIFIED cross-project callability   | RATS meeting compliance; treatment center outcome data   |
-| `createPaymentIntent` with Stripe Connect (RATS) | EXISTS — needs end-to-end verification | Rent collection; 2% platform fee (already wired in code) |
-| Oxford network directory API (RATS)              | MISSING (P2)                           | Public house listing; referral entry point               |
+| `getMeetingAttendance` HTTP endpoint (RC → Regroup) | UNVERIFIED cross-project callability   | Regroup meeting compliance; treatment center outcome data   |
+| `createPaymentIntent` with Stripe Connect (Regroup) | EXISTS — needs end-to-end verification | Rent collection; 2% platform fee (already wired in code) |
+| Oxford network directory API (Regroup)              | MISSING (P2)                           | Public house listing; referral entry point               |
 | Treatment Center Facility Dashboard (RC)         | MISSING (P1)                           | Enterprise sales demo; B2B unlock                        |
-| RATS directory → Aftercare referrals             | Future                                 | Month 8 Aftercare system                                 |
+| Regroup directory → Aftercare referrals             | Future                                 | Month 8 Aftercare system                                 |
 
 ---
 
@@ -431,12 +431,12 @@ Building a HouseSettings toggle that only updates field #1 will: leave the upgra
 
 | Month | Source          | Event                                                        | Est. MRR (if all goes well)    |
 | ----- | --------------- | ------------------------------------------------------------ | ------------------------------ |
-| 1     | RATS            | Audit reveals actual pricing; fix env vars if wrong          | ~$400–1,000 (depends on audit) |
-| 1     | RecoveryConnect | First $12/year groups (beta launch)                          | ~$10–50                        |
-| 2     | RATS            | Rent collection verified live; 2% fee begins flowing         | ~$600–1,500                    |
-| 3     | RATS            | New operators onboard at correct pricing; Oxford toggle live | ~$1,000–2,500                  |
-| 3     | RecoveryConnect | 30 groups in paid trial conversion                           | ~$50–300                       |
-| 6     | RATS            | Oxford pilot: free drives adoption; chapter billing          | ~$500–1,500                    |
+| 1     | Regroup            | Audit reveals actual pricing; fix env vars if wrong          | ~$400–1,000 (depends on audit) |
+| 1     | Homegroups | First $12/year groups (beta launch)                          | ~$10–50                        |
+| 2     | Regroup            | Rent collection verified live; 2% fee begins flowing         | ~$600–1,500                    |
+| 3     | Regroup            | New operators onboard at correct pricing; Oxford toggle live | ~$1,000–2,500                  |
+| 3     | Homegroups | 30 groups in paid trial conversion                           | ~$50–300                       |
+| 6     | Regroup            | Oxford pilot: free drives adoption; chapter billing          | ~$500–1,500                    |
 | 8     | Aftercare       | Product in development                                       | —                              |
 | 10    | All             | First treatment centers ($800–3K/month)                      | ~$2,000–5,000                  |
 | 12    | Combined        | Target                                                       | **~$5,000–10,000 MRR**         |
@@ -466,7 +466,7 @@ Building a HouseSettings toggle that only updates field #1 will: leave the upgra
 
 These require human operator action and cannot be automated. Execute in order — dependencies are real:
 
-**RecoveryConnect (must complete before App Store submission):**
+**Homegroups (must complete before App Store submission):**
 
 1. Set Stripe prices for intergroup Tier A + Tier B in Stripe dashboard (products mapped to `productIdIntergroupA` / `productIdIntergroupB`)
 2. Firebase Auth → Authorized Domains → add `recovery-connect-cad4b.web.app` + `.firebaseapp.com`
@@ -476,7 +476,7 @@ These require human operator action and cannot be automated. Execute in order �
 6. Submit to App Store (replaces `id0000000000` with real ID post-approval); submit to Google Play
 7. Attend 3 intergroup meetings in metro for treasury handoff demos
 
-**RATS (regroup-functions):**
+**Regroup (regroup-functions):**
 
 1. Audit deployed Stripe Price IDs (Firebase console or CLI) — verify $49/$79, not $9.99
 2. Audit RTDB rules in Firebase console — confirm deny-all is deployed

@@ -1,6 +1,6 @@
-# RecoveryConnect Utility Scripts
+# Homegroups Utility Scripts
 
-This directory contains utility scripts for database migrations and testing in the RecoveryConnect application.
+This directory contains utility scripts for database migrations and testing in the Homegroups application.
 
 ## Quick Links
 

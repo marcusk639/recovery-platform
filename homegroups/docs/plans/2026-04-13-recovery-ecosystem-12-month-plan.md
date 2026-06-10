@@ -8,9 +8,9 @@ The Product & Market Intelligence Brief describes a three-product recovery ecosy
 
 ## Current State of the Three Products
 
-### Product 1: 12-Step App (RecoveryConnect / "Homegroups")
+### Product 1: 12-Step App (Homegroups / "Homegroups")
 
-- **Repo**: `/Users/marcusklein/dev/RecoveryConnect`
+- **Repo**: `/Users/marcusklein/dev/Homegroups`
 - **Stack**: React Native 0.72 (TypeScript), Firebase, Redux Toolkit, Stripe
 - **Status**: Built (MVP→V4), pre-revenue. 108 screens, 81 Cloud Functions, 100K+ pre-seeded meetings
 - **V4 features** (governance, analytics, enterprise): all hidden behind feature flags per bloat reduction plan
@@ -72,16 +72,16 @@ The Product & Market Intelligence Brief describes a three-product recovery ecosy
 | 13  | Oxford House mode                | PARTIAL | `entities/oxford/`, `services/oxford/`, `screens/Oxford/` | Treasurer dashboard, comptroller approval, chapter roll-ups, EES calculator refinement |
 | 14  | Directory & public listing       | MISSING | `screens/HouseSearch/` (internal only)                    | Public-facing directory, SEO, application pipeline                                     |
 | 15  | Treatment center referral portal | MISSING | —                                                         | Entire feature                                                                         |
-| 16  | 12-Step meeting integration      | PARTIAL | `screens/StatUpdates/MeetingSearch.tsx`                   | RecoveryConnect's 100K+ database integration                                           |
+| 16  | 12-Step meeting integration      | PARTIAL | `screens/StatUpdates/MeetingSearch.tsx`                   | Homegroups's 100K+ database integration                                           |
 | 17  | Outcomes analytics dashboard     | MISSING | —                                                         | Occupancy, LOS, collection rate, phase completion, employment                          |
 
 ---
 
 ## Month-by-Month Plan
 
-### Month 1 (April): RecoveryConnect Launch Prep + rats-v2 Stabilization
+### Month 1 (April): Homegroups Launch Prep + rats-v2 Stabilization
 
-**RecoveryConnect (2 weeks):**
+**Homegroups (2 weeks):**
 
 - Execute Phase 1 of `docs/plans/2026-02-26-reduce-feature-bloat.md`
   - Fix MemberModel privacy defaults (`mobile/src/models/MemberModel.ts:34-35`)
@@ -145,7 +145,7 @@ The Product & Market Intelligence Brief describes a three-product recovery ecosy
 - Update Stripe subscription products in `regroup-functions`
 - Grandfather existing operators at current rate
 
-**RecoveryConnect: Continue beta onboarding → 15-20 groups**
+**Homegroups: Continue beta onboarding → 15-20 groups**
 
 **Deliverable:** Sprint 1 complete. Price increase live. **First meaningful sober living revenue.**
 
@@ -229,8 +229,8 @@ The Product & Market Intelligence Brief describes a three-product recovery ecosy
 
 **12-Step meeting integration (Sprint 3, #16):**
 
-- Expose RecoveryConnect's `findMeetings` as HTTP API endpoint
-  - New file: `RecoveryConnect/functions/src/api/meetingSearch.ts`
+- Expose Homegroups's `findMeetings` as HTTP API endpoint
+  - New file: `Homegroups/functions/src/api/meetingSearch.ts`
 - rats-v2 calls this API for meeting search (replaces current search)
 - Meeting attendance logged in rats-v2 feeds back to resident compliance tracking
 
@@ -253,7 +253,7 @@ The Product & Market Intelligence Brief describes a three-product recovery ecosy
 **Shared identity layer bootstrap:**
 
 - PostgreSQL (Neon) `persons` table linking identities across apps
-- Cloud Function in RecoveryConnect: sync user email to persons table on registration
+- Cloud Function in Homegroups: sync user email to persons table on registration
 - Cloud Function in rats-v2 (regroup-functions): sync resident data to persons table
 - Google Cloud Pub/Sub topics: `meeting.attended`, `housing.status.changed`
 
@@ -277,7 +277,7 @@ The Product & Market Intelligence Brief describes a three-product recovery ecosy
 - Treatment center onboarding (facility profile, staff accounts)
 - Patient intake (demographics, admission info, insurance)
 - Sober living directory search (reads from rats-v2 directory API)
-- Meeting finder (calls RecoveryConnect meeting search HTTP API)
+- Meeting finder (calls Homegroups meeting search HTTP API)
 
 **Deliverable:** Aftercare infrastructure deployed. Clinicians can search homes + meetings.
 
@@ -308,7 +308,7 @@ The Product & Market Intelligence Brief describes a three-product recovery ecosy
 
 **Outcome tracking dashboard:**
 
-- Meeting attendance from RecoveryConnect (via Pub/Sub trigger)
+- Meeting attendance from Homegroups (via Pub/Sub trigger)
 - Phase completion from rats-v2
 - Rent payment status from rats-v2
 - Aggregate compliance score per patient
@@ -337,7 +337,7 @@ The Product & Market Intelligence Brief describes a three-product recovery ecosy
 - FHIR R4 API: Patient, Encounter, CarePlan resources for EHR overlay
 - Full identity layer connected: patient → resident → member tracked end-to-end
 - Payer-ready outcome reports (PDF/CSV for value-based care contracts)
-- RecoveryConnect: un-hide intergroup features for larger organizations
+- Homegroups: un-hide intergroup features for larger organizations
 
 **Deliverable:** FHIR API available. Outcome reports for payers.
 
@@ -359,7 +359,7 @@ The Product & Market Intelligence Brief describes a three-product recovery ecosy
 
 | Month | Source          | Event                                                 | Est. MRR               |
 | ----- | --------------- | ----------------------------------------------------- | ---------------------- |
-| 1-2   | RecoveryConnect | First $12/year groups (beta)                          | ~$10-50                |
+| 1-2   | Homegroups | First $12/year groups (beta)                          | ~$10-50                |
 | 1-2   | rats-v2         | Existing operators at $10+$1                          | ~$100-200              |
 | 3     | rats-v2         | Price increase ($49-129/house) for new operators      | ~$200-500              |
 | 4-6   | rats-v2         | 10-20 paying operators                                | ~$1,000-2,500          |
@@ -371,7 +371,7 @@ The Product & Market Intelligence Brief describes a three-product recovery ecosy
 
 ## Cross-Product Code Reuse
 
-### From RecoveryConnect → rats-v2 / Aftercare
+### From Homegroups → rats-v2 / Aftercare
 
 | Asset                            | Source                                              | Reuse In                   |
 | -------------------------------- | --------------------------------------------------- | -------------------------- |
@@ -408,7 +408,7 @@ The Product & Market Intelligence Brief describes a three-product recovery ecosy
 ## Verification Plan
 
 - **rats-v2**: `npm test` (235 unit tests), `npm run test:e2e:ios` (16 E2E tests), `npm run test:integration` (5 integration tests)
-- **RecoveryConnect**: `cd mobile && npm test` (357 tests / 28 suites), `npm run test:e2e:test` (Detox)
+- **Homegroups**: `cd mobile && npm test` (357 tests / 28 suites), `npm run test:e2e:test` (Detox)
 - **Aftercare**: Set up Jest + Playwright from project init; target 80% coverage
 - **Cross-product**: Manual flow test: discharge → referral → acceptance → meeting attendance → outcome dashboard
 - **HIPAA audit**: Budget $15-30K before aftercare goes to production (Month 8)

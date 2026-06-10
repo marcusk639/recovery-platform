@@ -1,4 +1,4 @@
-# E2E Testing Status - RATS App
+# E2E Testing Status - Regroup App
 
 **Date:** February 5, 2026
 **Status:** 🔴 Blocked - Dependency Installation Issues (see E2E_TESTING_BLOCKERS.md)

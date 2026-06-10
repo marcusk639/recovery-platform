@@ -69,7 +69,7 @@ These items can't be resolved by code. They need either access to external conso
 
 **Why:** The `getMeetingAttendance` HTTP endpoint (`functions/src/http/getMeetingAttendance.ts`) authenticates rats-v2 sober-living app calls via a bearer token (`Authorization: Bearer <RATS_API_KEY>`). Without the secret bound, every call returns `401`.
 
-> **Updated 2026-05-25:** `functions/src/utils/stripe.ts` was refactored to lazy-init env-var checks via a `Proxy` (no longer validates at module load). Deploys now succeed without `RATS_API_KEY` present; only the RATS endpoint itself fails until the secret is bound. The old "deploy crashes during source-analysis" behavior described in earlier versions of this doc no longer applies.
+> **Updated 2026-05-25:** `functions/src/utils/stripe.ts` was refactored to lazy-init env-var checks via a `Proxy` (no longer validates at module load). Deploys now succeed without `RATS_API_KEY` present; only the Regroup endpoint itself fails until the secret is bound. The old "deploy crashes during source-analysis" behavior described in earlier versions of this doc no longer applies.
 
 **How:**
 
@@ -193,6 +193,6 @@ Current URL: `/groups/00005a07824ca170ef5046d32c9286215ffc3233963ea33f6afef71c1b
 
 - Spec: `docs/superpowers/specs/2026-04-14-public-group-page-design.md`
 - Plan: `docs/superpowers/plans/2026-04-14-public-group-page.md`
-- Claim flow memory: `~/.claude/projects/-Users-marcusklein-dev-RecoveryConnect/memory/project_public_group_page.md`
+- Claim flow memory: `~/.claude/projects/-Users-marcusklein-dev-Homegroups/memory/project_public_group_page.md`
 - Firebase project: `recovery-connect-cad4b`
 - Live hosting URL: https://recovery-connect-cad4b.web.app
