@@ -108,6 +108,27 @@ describe('requireServiceAuth', () => {
     });
   });
 
+  it('throws unauthenticated when a target-only app attempts to originate', () => {
+    // treatment-center is canReceive-only; it must never authenticate as an originator.
+    const req = makeRequest({
+      'x-service-key': 'test-key',
+      'x-app-id': 'treatment-center',
+      'x-user-uid': 'uid123',
+    });
+    expect(() => requireServiceAuth(req)).toThrow(
+      expect.objectContaining({ code: 'unauthenticated' }),
+    );
+  });
+
+  it('throws unauthenticated for a non-string Phase 2 appId claim', () => {
+    // A client-influenceable JWT claim that is not a string must resolve to
+    // unauthenticated, not surface as an opaque internal error.
+    const req = makeRequest({}, { uid: 'uid456', token: { appId: 123 } });
+    expect(() => requireServiceAuth(req)).toThrow(
+      expect.objectContaining({ code: 'unauthenticated' }),
+    );
+  });
+
   it('throws when no service key and no request.auth', () => {
     const req = makeRequest({});
     expect(() => requireServiceAuth(req)).toThrow(

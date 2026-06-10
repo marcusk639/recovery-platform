@@ -26,7 +26,7 @@ export interface AppRegistryEntry {
   canReceive: boolean;
 }
 
-export const APP_REGISTRY: readonly AppRegistryEntry[] = [
+export const APP_REGISTRY = [
   {
     appId: 'homegroups',
     displayName: 'Homegroups',
@@ -61,12 +61,24 @@ export const APP_REGISTRY: readonly AppRegistryEntry[] = [
     canOriginate: false,
     canReceive: true,
   },
-];
+] as const satisfies readonly AppRegistryEntry[];
+
+// Canonical app-id unions DERIVED from the registry — the registry is the SSOT,
+// so adding/removing an app updates every consumer with no parallel hand-editing.
+/** Canonical app-id of any registered app. */
+export type AppId = (typeof APP_REGISTRY)[number]['appId'];
+/** Canonical app-id of an app allowed to authenticate / originate referrals. */
+export type OriginatorAppId = Extract<
+  (typeof APP_REGISTRY)[number],
+  { canOriginate: true }
+>['appId'];
+/** Canonical app-id of an app allowed to be a referral target. */
+export type TargetAppId = Extract<(typeof APP_REGISTRY)[number], { canReceive: true }>['appId'];
 
 // Lowercased lookup over app-ids, display names, and aliases — built once.
 const byKey: ReadonlyMap<string, AppRegistryEntry> = (() => {
   const map = new Map<string, AppRegistryEntry>();
-  for (const entry of APP_REGISTRY) {
+  for (const entry of APP_REGISTRY as readonly AppRegistryEntry[]) {
     map.set(entry.appId.toLowerCase(), entry);
     map.set(entry.displayName.toLowerCase(), entry);
     for (const alias of entry.aliases ?? []) {
@@ -77,7 +89,8 @@ const byKey: ReadonlyMap<string, AppRegistryEntry> = (() => {
 })();
 
 /** Resolve a display name, alias, or app-id to its registry entry (case-insensitive). */
-export function resolveApp(value: string): AppRegistryEntry | undefined {
+export function resolveApp(value: unknown): AppRegistryEntry | undefined {
+  if (typeof value !== 'string') return undefined;
   return byKey.get(value.trim().toLowerCase());
 }
 
@@ -87,12 +100,12 @@ export function resolveAppId(value: string): string | undefined {
 }
 
 /** True if `appId` is a canonical app-id allowed to authenticate / originate referrals. */
-export function isOriginatorAppId(appId: string): boolean {
+export function isOriginatorAppId(appId: string): appId is OriginatorAppId {
   return APP_REGISTRY.some((e) => e.appId === appId && e.canOriginate);
 }
 
 /** True if `appId` is a canonical app-id allowed to be a referral target. */
-export function isTargetAppId(appId: string): boolean {
+export function isTargetAppId(appId: string): appId is TargetAppId {
   return APP_REGISTRY.some((e) => e.appId === appId && e.canReceive);
 }
 

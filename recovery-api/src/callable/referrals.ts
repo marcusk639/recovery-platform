@@ -1,4 +1,5 @@
 import { onCall, CallableRequest, HttpsError } from 'firebase-functions/v2/https';
+import { logger } from 'firebase-functions/v2';
 import { getFirestore } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import { requireServiceAuth, ServiceAuthContext } from '../middleware/auth';
@@ -21,21 +22,41 @@ export async function handleCreateReferral(
   context: ServiceAuthContext,
   db: FirebaseFirestore.Firestore,
 ): Promise<{ id: string; status: 'pending' }> {
-  const parsed = CreateReferralSchema.parse(data);
+  let parsed: z.infer<typeof CreateReferralSchema>;
+  try {
+    parsed = CreateReferralSchema.parse(data);
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      // Log issue paths/codes only — never the raw payload (clientName/email are PII).
+      logger.warn('createReferral: invalid payload', { issues: err.issues });
+      throw new HttpsError('invalid-argument', 'Invalid referral payload');
+    }
+    throw err;
+  }
+
   const toApp = resolveAppId(parsed.toApp);
   if (!toApp || !isTargetAppId(toApp)) {
     throw new HttpsError('invalid-argument', `Unknown referral target: ${parsed.toApp}`);
   }
-  const ref = await db.collection('referrals').add({
-    ...parsed,
-    toApp,
-    fromApp: context.appId,
-    referredBy: context.uid,
-    referredByApp: context.appId,
-    status: 'pending',
-    createdAt: new Date(),
-  });
-  return { id: ref.id, status: 'pending' };
+
+  // Drop the raw wire `toApp` so the spread can't re-store the unnormalized value;
+  // the canonical `toApp` below is the only one persisted.
+  const { toApp: _rawToApp, ...rest } = parsed;
+  try {
+    const ref = await db.collection('referrals').add({
+      ...rest,
+      toApp,
+      fromApp: context.appId,
+      referredBy: context.uid,
+      referredByApp: context.appId,
+      status: 'pending',
+      createdAt: new Date(),
+    });
+    return { id: ref.id, status: 'pending' };
+  } catch (err) {
+    logger.error('createReferral: persistence failed', err);
+    throw new HttpsError('internal', 'Failed to create referral');
+  }
 }
 
 export async function handleGetReferrals(
