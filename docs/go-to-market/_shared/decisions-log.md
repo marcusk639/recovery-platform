@@ -2,17 +2,33 @@
 title: Shared — Decisions Log
 scope: ecosystem
 category: project-management
-status: not_started
+status: in_progress
 last_verified: 2026-06-10
 sources:
   - docs/superpowers/plans/2026-06-10-docs-consolidation-gtm.md
+  - docs/go-to-market/_shared/pricing.md
+  - docs/go-to-market/regroup/monetization.md
+  - docs/go-to-market/homegroups/monetization.md
+  - docs/go-to-market/detox-recovery/monetization.md
+  - docs/go-to-market/ecosystem/monetization.md
 supersedes: []
 ---
 
 # Shared — Decisions Log
 
-> Stub — filled in Phase 6. Records D-1, D-9, D-10 and every reconciliation
-> decision (one resolution per row).
+> Records every §0.4 reconciliation decision — one resolution per row. Strategic
+> decisions (`D-n`) and resolved price conflicts (`PR-n`) both live here. Where a
+> row names a resolved value, that value IS the decision record (the SSOT for the
+> _number_ remains [`pricing.md`](pricing.md), referenced by `sku`); this mirrors
+> how the per-product monetization docs cite D-1. `status` uses the fixed
+> vocabulary: `done | in_progress | blocked | planned | not_started`.
 
-| id  | decision | resolution | date | source |
-| --- | -------- | ---------- | ---- | ------ |
+| id   | decision                                                                                        | resolution                                                                                                                                                                                                                                                                                                                           | date       | source                                                                                                                                 |
+| ---- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| D-1  | homegroups group price: $12/yr (shipped) vs $24/yr (launch-readiness rec.)                      | **RESOLVED — launch at $24/yr.** 2x shipped price, still trivially affordable for any group collecting 7th Tradition; avoids anchoring as a hobby tier. $12/yr retained only as migration context.                                                                                                                                   | 2026-06-10 | [homegroups/monetization.md#group-price--conflict-resolved-to-24year-per-d-1](../homegroups/monetization.md); pricing.md `HG-MON-1`    |
+| D-9  | regroup legacy→tier migration: 5 live houses on legacy $10+$1/mo plan need a grandfather policy | **RESOLVED — 6-month grandfather window** at legacy pricing, then migrate to nearest tier with personal per-operator outreach. No data migration required for grandfathering; tier model applies to new subs only. Per-sub migration via reviewable Stripe CLI batches with rollback list — never an unattended bulk script.         | 2026-06-10 | [regroup/monetization.md#3-legacy--tier-migration--grandfather-decision-d-9](../regroup/monetization.md)                               |
+| D-10 | recovery-api referral-monetization model is undefined (no SKU, no fee, no payer)                | **OPEN — recommend O-3 (B2B treatment-center SaaS seat) as strategic model, with O-1 (flat per-referral fee via Stripe Invoices) as a tactical bridge until the facility dashboard (ECO-6) ships.** Any per-referral money movement (O-1/O-2) must clear anti-kickback / patient-brokering legal review before the relay is enabled. | 2026-06-10 | [ecosystem/monetization.md#3-recovery-api-referral-monetization-model--open-decision-d-10](../ecosystem/monetization.md)               |
+| PR-1 | regroup pricing: legacy $9.99/$19.99 hardcoded CF tiers vs approved tiered ladder               | **RESOLVED — adopt the balanced six-tier ladder $49–$299** (`RG-MON-1`…`RG-MON-6`) + 2% rent fee (`RG-MON-7`). $9.99/$19.99 superseded; closed in code (env-var-driven `SUBSCRIPTION_TIERS`). Activation blocked on creating the 6 Stripe Price IDs.                                                                                 | 2026-06-10 | pricing.md `RG-MON-1`…`RG-MON-7`; [regroup/monetization.md#1-canonical-pricing-model-one-model-reconciled](../regroup/monetization.md) |
+| PR-2 | homegroups intergroup Tier A / Tier B price                                                     | **RESOLVED — Tier A $99/yr, Tier B $249/yr (recommended defaults).** `blocked` on R-1/R-2 (no default Stripe price set on the two intergroup products); treatment-center tiers reuse the same two products and inherit the blocker.                                                                                                  | 2026-06-10 | pricing.md `HG-MON-2`, `HG-MON-3`; [homegroups/monetization.md#intergroup-ab--recommended-ab-pricing](../homegroups/monetization.md)   |
+| PR-3 | detox-recovery support call price: $50 beta vs market-comp recommendation                       | **RESOLVED — raise to $75 (30-min support call).** Single-sourced from `lib/services-data.ts` `SERVICE_TIERS` (`id: support-call`); hardcoded `$50 beta` string removed. `betaLabel` kept so the raise reads as introductory repricing.                                                                                              | 2026-06-10 | pricing.md `DX-MON-1`; [detox-recovery/monetization.md#2-the-service-ladder](../detox-recovery/monetization.md)                        |
+| PR-4 | detox-recovery digital PDFs: pricing + processor                                                | **RESOLVED — PDF band $9.99–$19.99 via Lemon Squeezy** (merchant of record; handles tax + file delivery). Stripe stays for calls/donations; no new Stripe payment links for PDFs. `planned`/`blocked` on PDF authorship + buy-link env vars.                                                                                         | 2026-06-10 | pricing.md `DX-MON-4`…`DX-MON-8`; [detox-recovery/monetization.md#3-digital-products-lemon-squeezy](../detox-recovery/monetization.md) |

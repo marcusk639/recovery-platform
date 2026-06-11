@@ -33,7 +33,7 @@ whether they stay sober. The recovery platform is being built to be that
 connective tissue.
 
 The continuum and where each product sits
-(source: docs/strategy/market-opportunity.md#the-ecosystem-logic):
+(orig: docs/strategy/market-opportunity.md, archived):
 
 ```
 Detox → Residential → PHP → IOP → Outpatient → [ Regroup ] → [ Homegroups ]
@@ -59,13 +59,13 @@ navigation                            aftercare pipeline bridge the gaps ]
 Incumbent treatment-center software (Kipu Health, Sunwave, LightningStep, Opus
 EHR) **treats the patient journey as ending at discharge**. Sober-living software
 and 12-step apps are entirely separate industries with no integration between
-them (source: docs/strategy/market-opportunity.md#the-ecosystem-logic). The gap
+them (orig: docs/strategy/market-opportunity.md, archived). The gap
 between "discharged" and "in the community working a program" is exactly where
 relapse happens:
 
 - Relapse rates reach **85% in the first year post-discharge**, yet **80% of
   clinicians never measure post-discharge outcomes**
-  (source: docs/strategy/market-opportunity.md#key-macro-tailwinds).
+  (orig: docs/strategy/market-opportunity.md, archived).
 - Continuity of care — _did the client land in a safe house, and do they actually
   attend outside meetings?_ — is the single biggest driver of long-term outcomes,
   and treatment centers have near-zero visibility into either
@@ -93,7 +93,7 @@ The treatment center is the highest-value buyer because it has the clearest pain
 and the deepest pockets, and because regulation is moving its way: value-based
 care contracts increasingly require outcome documentation, CMS mandates FHIR R4
 interoperability by mid-2026, and ASAM CONTINUUM software is endorsed/required by
-30+ states (source: docs/strategy/market-opportunity.md#key-macro-tailwinds).
+30+ states (orig: docs/strategy/market-opportunity.md, archived).
 
 What the center buys is **a single "continuing care" view** stitched from the two
 systems of record (source: docs/ecosystem/product-map.md#21-the-three-surfaces-the-center-buys):
@@ -135,7 +135,7 @@ top:
 The market context that makes this worth building: U.S. substance-abuse treatment
 is a **$143.62B (2024)** market, ~17,353 licensed SUD facilities and ~17,900
 recovery residences serve ~275,000 people at any time, and ~4,324 Oxford Houses
-hold 35,796 beds (source: docs/strategy/market-opportunity.md#size--growth). The
+hold 35,796 beds (orig: docs/strategy/market-opportunity.md, archived). The
 combined-ecosystem 3-year revenue scenarios live in
 [`monetization.md`](monetization.md) (read from the projections rows in
 [`../_shared/pricing.md`](../_shared/pricing.md)) — never restated here.

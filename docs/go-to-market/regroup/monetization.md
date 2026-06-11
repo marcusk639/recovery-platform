@@ -11,7 +11,9 @@ sources:
   - regroup/docs/superpowers/plans/2026-06-06-regroup-tier-billing-migration.md
   - docs/launch-readiness/regroup-launch-readiness.md
   - docs/STRIPE_CONNECT_GUIDE.md
-supersedes: []
+supersedes:
+  - regroup/docs/monetization/model.md
+  - regroup/mobile/PRICING_STRATEGY.md
 ---
 
 # Regroup — Monetization
@@ -36,11 +38,15 @@ logic, and projections** and references each price by its stable `sku` ID
 ## 1. Canonical pricing model (one model, reconciled)
 
 Multiple historical pricing documents exist; they have been reconciled to **one
-canonical model**. The earlier `$10/house + $1/resident` legacy plan and the
-`$9.99/$19.99` hardcoded Cloud Functions tiers are **superseded** (see §3 and §4).
-The conservative `$39–$99` ladder floated in the 2026-05-24 assessment
-(source: regroup/docs/product/decisions.md#pricing-recommended) was **not
-adopted**; the approved figures are the **balanced** ladder below.
+canonical model**. The earlier `$10/house + $1/resident` legacy plan (≈$20/mo
+average) and the `$9.99/$19.99` hardcoded Cloud Functions tiers are **superseded**
+(see §3 and §4). A conservative `$39–$99` ladder was floated in the 2026-05-24
+strategic assessment (Oxford Standard $39 / Oxford Plus $69; traditional Starter
+$49 / Professional $99) but was **not adopted**; the approved figures are the
+**balanced** ladder below — the same six-tier shape now hardcoded as labels and
+resident limits in `SUBSCRIPTION_TIERS`
+(source: regroup/functions/src/config.ts#L37-L78). Historical provenance for the
+rejected conservative ladder: `regroup/docs/product/decisions.md` (stubbed).
 
 | sku (pricing.md) | Tier                     | House type  | Notes                                 |
 | ---------------- | ------------------------ | ----------- | ------------------------------------- |
@@ -54,20 +60,31 @@ adopted**; the approved figures are the **balanced** ladder below.
 
 Tier amounts, billing period, Stripe env-var names, and Connect fee are in
 [`../_shared/pricing.md`](../_shared/pricing.md) rows `RG-MON-1`…`RG-MON-7`. The
-approved ladder is the "balanced" recommendation
-(source: regroup/mobile/PRICING_STRATEGY.md#recommended-strategy) and matches the
-in-code `SUBSCRIPTION_TIERS` config
-(source: regroup/functions/src/config.ts#L37-L78).
+approved ladder is the "balanced" recommendation (Model #3 of five evaluated
+pricing models — chosen over conservative, aggressive-value, flat-rate, and
+per-resident alternatives because it maximizes revenue while staying inside the
+affordability ceiling for both house types) and matches the in-code
+`SUBSCRIPTION_TIERS` config
+(source: regroup/functions/src/config.ts#L37-L78). Provenance for the model
+selection: `regroup/mobile/PRICING_STRATEGY.md` §3/§4 (stubbed).
 
 ### Why these numbers
 
 - **Value-based, not cost-based.** Infrastructure runs near the Firebase free
-  tier; Regroup saves an operator an estimated 15+ hrs/mo of admin time. The
-  legacy `~$20/mo` plan captured ~1–2% of value delivered
-  (source: regroup/mobile/PRICING_STRATEGY.md#problem-3-captures-only-1-2-of-value-delivered).
+  tier. Estimated monthly value delivered to an average traditional house is
+  ~$1,400 (≈15 hrs admin time saved at $50/hr = $750, GPS meeting-fraud
+  prevention ~$200, fewer disputes ~$150, compliance-violation avoidance ~$300).
+  The legacy `~$20/mo` plan captured ~1.4% of that value (a ~69× customer ROI);
+  the industry standard is 10–20% capture, and even the balanced ladder leaves
+  customers a ~10× ROI. (orig: regroup/mobile/PRICING_STRATEGY.md "Problem 3",
+  stubbed.)
 - **Two ladders because two markets.** Oxford Houses are democratically run and
-  cost-sensitive; pricing sits below 1% of EES collections so a house vote passes
-  (source: regroup/docs/monetization/model.md#oxford-house-economics).
+  cost-sensitive. A 10-resident Oxford House collects ~$5,000/mo in EES
+  ($400–600/resident) against ~$2,775/mo expenses, leaving a $1,225–3,225
+  cushion; affordability lands at ~1–2% of collections ($35–75/mo). Pricing the
+  Oxford tiers at ~1–1.5% of collections keeps a house democratic vote passing
+  easily. (orig: regroup/docs/monetization/model.md "Oxford House Economics",
+  stubbed.)
 - **Network tier is gated.** Do not launch Oxford Network (`RG-MON-6`) until a
   regional chapter is signed; price it on real multi-house demand
   (source: docs/launch-readiness/regroup-launch-readiness.md#5-5-pricing-recommendations-spec-ready).
@@ -90,10 +107,11 @@ and in scheduled collection
 > (`RG-MON-7`). Treat "2.5%" mentions as a superseded recommendation
 > (source: docs/launch-readiness/regroup-launch-readiness.md#5-4-platform-fee-opportunity).
 
-At scale the rent fee can **equal or exceed** subscription revenue (driven by avg
-rent × residents × 2%); the worked example and figures are in the source
-(source: regroup/docs/product/decisions.md#pricing-recommended). Projection
-figures are referenced in §5, not restated.
+At scale the rent fee can **equal or exceed** subscription revenue. Worked
+example: $800 avg rent × 15 residents × 2% = ~$240/house/mo in platform fee —
+which on its own meets or beats the subscription line for the same house.
+(orig: regroup/docs/product/decisions.md "Pricing (Recommended)", stubbed.)
+Projection figures are referenced in §5, not restated.
 
 ---
 
@@ -106,8 +124,12 @@ The approved policy is:
 
 - **Grandfather existing subscribers** at legacy pricing for a **6-month window**,
   then migrate to the nearest tier with personal outreach (5 houses is small
-  enough to call each operator)
-  (source: regroup/mobile/PRICING_STRATEGY.md#phase-2-grandfather-period-months-1-6).
+  enough to call each operator). The communicated sequence is: months 1–6
+  pricing protected (no action required); around month 3 a permanent "founder
+  pricing" discount (~20–30% off the standard tier, locked for the lifetime of
+  the account) is offered to early customers; months 5–6 migration reminders;
+  migration executed at month 7. (orig: regroup/mobile/PRICING_STRATEGY.md
+  "Migration Strategy" §8, stubbed.)
 - New subscriptions created while the tier flag is on use the tier model; legacy
   two-item subscriptions are left untouched — **no data migration is required for
   grandfathering**
@@ -130,8 +152,11 @@ view:
 ### 4.1 Hardcoded-price defect (resolved in code; was the headline blocker)
 
 The 2026-05-24 assessment flagged `FREE / $9.99 Basic / $19.99 Premium` hardcoded
-in Cloud Functions as a launch blocker — charging a fraction of the target price
-(source: regroup/docs/product/decisions.md#issue-2-wrong-subscription-pricing-in-cloud-functions).
+in `createOrUpdateSubscription` / `createCheckoutSession` as a launch blocker —
+every paying operator was charged $9.99–$19.99 instead of the $39–$99 target,
+holding MRR at ~$100–150 instead of $400–1,000+ on the same customer base.
+(orig: regroup/docs/product/decisions.md "Issue 2 — Wrong Subscription Pricing",
+stubbed.)
 **Code reality (2026-06-10):** `9.99`/`19.99` no longer appear in regroup source —
 only in historical docs. Subscription pricing is now fully env-var driven through
 `SUBSCRIPTION_TIERS` (source: regroup/functions/src/config.ts#L37-L78). The defect
@@ -151,12 +176,17 @@ is verified with a real card, no operator can subscribe on a tier. See
 ### 4.3 IAP vs. web billing decision (D-11)
 
 Apple's IAP rules affect whether the iOS app can surface the upgrade CTA natively
-or must route operators to web checkout. The recommendation is **web-only / hybrid
-billing** (0% Apple cut; the `SubscriptionHandler` WebView is already built),
-justified by the B2B-SaaS exemption — but this must be **recorded as a decision**
-before live Stripe products are finalized
-(source: regroup/docs/operations/manual-tasks/2026-05-21-app-store-launch-checklist.md#p0-f-iap-vs-direct-billing-architecture-decision).
-Tracked as decision gate D-11.
+or must route operators to web checkout. The three options are: **(A) web-only**
+— upgrade CTA opens the `SubscriptionHandler` WebView to the web subscribe page
+(0% Apple cut, already built, no engineering); **(B) native IAP** — Apple payment
+sheet via StoreKit 2 (15–30% Apple cut, 2–3 weeks engineering); **(C) hybrid** —
+free tier in-app, paid upgrade only via web link (same as A). The recommendation
+is **A/C (web-only / hybrid)**: 0% cut, the WebView is already wired, and Regroup
+is a B2B operator tool (operators subscribe, not end users making micropurchases),
+which Apple has historically permitted to link out. This must be **recorded as a
+decision** before live Stripe products are finalized.
+(orig: regroup/docs/operations/manual-tasks/2026-05-21-app-store-launch-checklist.md
+"P0-F", stubbed.) Tracked as decision gate D-11.
 
 ### 4.4 Subscription-webhook seeding gap (revenue-operations risk)
 
@@ -181,26 +211,39 @@ assume the balanced ladder (`RG-MON-1`…`RG-MON-6`) plus the 2% rent fee
   the source)
   (source: docs/launch-readiness/regroup-launch-readiness.md#3-5-production-current-state).
 
-### 5.2 Post-activation 12-month target (decisions.md model)
+### 5.2 Post-activation 12-month target (strategic-assessment model)
 
-| Source            | Houses | Driver | MRR (see pricing.md projections) |
-| ----------------- | ------ | ------ | -------------------------------- |
-| Subscriptions     | 50     | tier   | per decisions.md projection      |
-| Rent payment fees | 30     | 2% fee | per decisions.md projection      |
+| Source            | Houses | Avg/mo | MRR                          |
+| ----------------- | ------ | ------ | ---------------------------- |
+| Subscriptions     | 50     | ~$70   | ~$3,500                      |
+| Rent payment fees | 30     | ~$200  | ~$6,000                      |
+| **Combined**      |        |        | **~$9,500 MRR (~$114K ARR)** |
 
-The combined MRR/ARR figures for this milestone live in the source and in the
-pricing.md projections section; they are not restated here
-(source: regroup/docs/product/decisions.md#pricing-recommended).
+Path to ~$200K ARR is roughly 100+ houses; Oxford-House word-of-mouth typically
+brings 2–3 neighboring houses within 6 months of each acquisition.
+(orig: regroup/docs/product/decisions.md "Pricing (Recommended)" 12-month
+projection, stubbed.)
 
-### 5.3 3-year scenario (PRICING_STRATEGY.md)
+### 5.3 3-year scenario (balanced-model projection)
 
-The balanced model projects subscription growth plus rent-processing volume scaling
-materially across Years 1–3 (exact ARR figures in the source)
-(source: regroup/mobile/PRICING_STRATEGY.md#9-revenue-projections-3-year). These
-are **aspirational** and depend on Oxford-House acquisition and rent-collection
-adoption rates that are not yet validated. The launch-readiness doc rates overall
-readiness **5/10** — pricing activation, web modernization, and E2E payment
-validation are all required before any of these numbers are real
+The balanced model projects total revenue scaling from ~$255K (Year 1, 250
+houses) to ~$1.49M (Year 2, 500 houses) to ~$3.27M (Year 3, 1,000 houses), split
+across subscriptions, payment-processing volume, and (Year 3) add-ons — with net
+margin widening from ~16% to ~75% as fixed costs amortize:
+
+| Metric        | Year 1 (250) | Year 2 (500) | Year 3 (1,000) |
+| ------------- | ------------ | ------------ | -------------- |
+| Subscriptions | ~$180K       | ~$697K       | ~$1.31M        |
+| Payment fees  | ~$75K        | ~$789K       | ~$1.83M        |
+| Add-ons       | $0           | $0           | ~$130K         |
+| **Total**     | **~$255K**   | **~$1.49M**  | **~$3.27M**    |
+| Net margin    | ~16%         | ~68%         | ~75%           |
+
+(orig: regroup/mobile/PRICING_STRATEGY.md "Revenue Projections (3-Year)" §9,
+stubbed.) These are **aspirational** and depend on Oxford-House acquisition and
+rent-collection adoption rates that are not yet validated. The launch-readiness
+doc rates overall readiness **5/10** — pricing activation, web modernization, and
+E2E payment validation are all required before any of these numbers are real
 (source: docs/launch-readiness/regroup-launch-readiness.md#1-executive-summary).
 
 ---

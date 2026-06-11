@@ -15,6 +15,7 @@ sources:
   - docs/go-to-market/detox-recovery/monetization.md
 supersedes:
   - docs/strategy/monetization.md
+  - docs/strategy/market-opportunity.md
 ---
 
 # Ecosystem — Monetization
@@ -142,17 +143,25 @@ with this recommendation; the roadmap item that depends on it is
 > rows — they include cross-sell/marketplace synergy the per-product P&Ls do not.
 > They are kept as the market-opportunity SSOT and referenced, not retyped.
 
-3-year combined-ecosystem ARR scenarios
-(source: docs/strategy/market-opportunity.md#combined-ecosystem-with-marketplace--data--cross-sell-synergy):
+3-year combined-ecosystem ARR scenarios — **this doc is now the SSOT for these
+combined figures** (the originating market brief is archived; figures inlined here
+verbatim so no live doc must be chased):
 
-| Scenario     | Year 1 ARR | Year 3 ARR | 3-Year Total |
-| ------------ | ---------- | ---------- | ------------ |
-| Conservative | $105,840   | $1,216,020 | ~$1.74M      |
-| Moderate     | $325,380   | $5,781,000 | ~$7.84M      |
+| Scenario     | Year 1 ARR | Year 2 ARR | Year 3 ARR | 3-Year Total |
+| ------------ | ---------- | ---------- | ---------- | ------------ |
+| Conservative | $105,840   | $417,900   | $1,216,020 | ~$1.74M      |
+| Moderate     | $325,380   | $1,731,888 | $5,781,000 | ~$7.84M      |
 
-At moderate Year-3 ARR and vertical health-tech SaaS multiples (8–15×), implied
-valuation is **$46M–$87M**
-(source: docs/strategy/market-opportunity.md#combined-ecosystem-with-marketplace--data--cross-sell-synergy).
+These scenarios fold in marketplace + data + cross-sell synergy on top of the
+three per-product P&Ls; the per-product 3-year ladders that sum into them are
+12-Step (Conservative Y3 $141,600 / Moderate Y3 $960,000), Sober Living
+(Conservative Y3 $187,800 / Moderate Y3 $676,800), and Aftercare (Conservative Y3
+$666,000 / Moderate Y3 $2,748,000)
+(orig: docs/strategy/market-opportunity.md, archived).
+
+At moderate Year-3 ARR of $5.78M and vertical health-tech SaaS multiples (8–15×),
+implied valuation is **$46M–$87M**
+(orig: docs/strategy/market-opportunity.md, archived).
 
 **Per-product near-term projections are owned by the per-product docs** and read
 from [`../_shared/pricing.md`](../_shared/pricing.md):

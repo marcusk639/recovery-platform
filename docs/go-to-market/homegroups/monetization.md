@@ -11,7 +11,11 @@ sources:
   - homegroups/docs/monetization/market-intelligence.md
   - docs/launch-readiness/homegroups-launch-readiness.md
   - docs/STRIPE_CONNECT_GUIDE.md
-supersedes: []
+supersedes:
+  - homegroups/docs/monetization/model.md
+  - homegroups/docs/monetization/projections.md
+  - homegroups/docs/monetization/revenue-opportunities.md
+  - homegroups/docs/monetization/market-intelligence.md
 ---
 
 # Homegroups — Monetization
@@ -71,8 +75,13 @@ are tracked in [`project-management.md`](project-management.md) (rows `HG-P0-1`,
 Two sources disagree on the consumer group price:
 
 - `homegroups/docs/monetization/model.md` and `roadmap.md` document the
-  **shipped** price as **$12/year**
-  (source: homegroups/docs/monetization/model.md#subscription-model).
+  **shipped** price as **$12/year** flat rate, billed yearly, with a 7-day free
+  trial — the `Group Admin` plan on Stripe product env var
+  `STRIPE_PRODUCT_ID_GROUP`, whose price ID is resolved at runtime (never
+  hardcoded). The product is configured and can transact today; the group tier
+  is the only one of the four streams able to bill at present
+  (code: homegroups/functions/src/utils/stripe.ts#L157 `getDefaultPriceForProduct`;
+  orig: homegroups/docs/monetization/model.md, archived).
 - The launch-readiness assessment recommends **$24–36/year** and flags $12/year
   as "extremely low" — below sustainability, signalling a hobby project to
   institutional buyers, and unable to fund even a single support interaction
@@ -91,10 +100,16 @@ R-track activation work — see [`HG-MON-1`](../_shared/pricing.md) (`status: in
 
 > The group tier is a **distribution flywheel, not a primary revenue engine** in
 > Year 1–2: at the resolved group price ([`HG-MON-1`](../_shared/pricing.md))
-> even 1,000 groups is a low-thousands-ARR line. Its strategic value is seeding
-> the meeting/group network and generating treatment-center referral leads.
-> Optimize it for adoption speed, not near-term revenue
-> (source: homegroups/docs/monetization/projections.md#section-2-revenue-projections-year-1-monthly-detail).
+> even 1,000 groups is a low-thousands-ARR line. The base-case Year-1 monthly
+> cohort grows from 5 groups (Apr 2026) to **241 groups by Mar 2027** at ~1.0%
+> monthly churn (5 → 13 → 25 → 40 → 57 → 76 → 101 → 128 → 157 → 185 → 213 →
+> 241), so Year-1 group-tier ARR is only ~$2,892 (241 × the shipped group price
+> [`HG-MON-1`](../_shared/pricing.md)) — a rounding error
+> against the portfolio. Its strategic value is twofold: it seeds the
+> meeting/group network that makes Regroup and the future Aftercare product
+> more valuable, and each group admin is a potential referral source to
+> treatment centers. Optimize it for adoption speed, not near-term revenue
+> (orig: homegroups/docs/monetization/projections.md, archived).
 
 ### Intergroup A/B — recommended A/B pricing
 
@@ -111,12 +126,24 @@ exist.
 ### Treatment-center tiers — reuse the two intergroup products
 
 Treatment centers are **not a separate Stripe product**. All three B2B UI entry
-points (intergroup, district/area, treatment center) fan in to **two** Stripe
-products (Tier A, Tier B); the Firestore `type` field is the only discriminator
-(source: homegroups/docs/monetization/model.md#pricing-to-product-mapping). The
-public marketing page surfaces treatment-center tiers as Basic (`tier_a`),
-Referral Partner (`tier_b`), and White-Label (lead-capture, not self-serve
-checkout) (source: homegroups/docs/monetization/model.md#treatment-center-checkout).
+points (intergroup, district/area, treatment center) route through the
+**`createIntergroup` callable** and fan in to **two** Stripe products (Tier A =
+up to 10 groups → `STRIPE_PRODUCT_ID_INTERGROUP_A`; Tier B = unlimited,
+`maxGroups: 9999` → `STRIPE_PRODUCT_ID_INTERGROUP_B`). The Firestore `type`
+field (`"intergroup" | "district" | "area" | "treatment_center"`) on the
+`intergroups/{id}` document is the only persistent discriminator — Stripe sees
+only the tier, not the customer type
+(code: homegroups/functions/src/callable/createIntergroup.ts;
+orig: homegroups/docs/monetization/model.md, archived). The public marketing
+page `web/src/pages/TreatmentCentersPage.js` surfaces treatment-center tiers as
+**Basic Listing** (→ `tier_a`), **Referral Partner** (→ `tier_b`), and
+**White-Label** — the last being a lead-capture "Request information" form, not
+a self-serve checkout. Treatment-center users authenticate cold on the web via
+Google OAuth `signInWithPopup` (requiring `emailVerified === true`) or
+email/password; they do **not** use the mobile→web `createWebAuthToken` flow.
+`facilityName` is a required free-text input in the checkout modal (not derived
+from email/profile); the modal blocks checkout until it is non-empty
+(orig: homegroups/docs/monetization/model.md, archived).
 The launch-readiness recommendation positions dedicated treatment-center annual
 tiers at a premium over intergroup, still negligible vs. EHR costs
 (source: docs/launch-readiness/homegroups-launch-readiness.md#5-4-pricing-recommendations-spec-ready);
@@ -149,8 +176,15 @@ See row [`HG-MON-5`](../_shared/pricing.md).
 ## Revenue-opportunities status tracker (folded from `revenue-opportunities.md`)
 
 The conversion-and-revenue backlog, with current status using the fixed
-vocabulary. Items marked `done` shipped in the May 2026 revenue sprint
-(source: homegroups/docs/monetization/revenue-opportunities.md#priority-summary).
+vocabulary. Items marked `done` shipped in the May 2026 revenue sprint; the
+source priority summary marks items 3, 2, 5, 6, 1, and 7 complete as of
+May 2026, with 4, 8, 9–15 still open. The single highest-impact open lever
+remains verifying the resolved Stripe price bills annually (HG-RO-4) — the
+source flags that `createGroupSubscription.ts` does not set `interval: 'year'`
+and relies on the dashboard product's default price, so a monthly default would
+silently bill admins monthly while the UI shows "$12/year"
+(code: homegroups/functions/src/utils/stripe.ts#L157;
+orig: homegroups/docs/monetization/revenue-opportunities.md, archived).
 
 | ID       | Opportunity                                   | Tier | Revenue impact | Status        |
 | -------- | --------------------------------------------- | ---- | -------------- | ------------- |
@@ -178,17 +212,23 @@ price is billed annually, not monthly) paired with clearing **R-1/R-2**
 
 ## 3-year projections (narrative)
 
-From the ecosystem financial model (base case), Homegroups is intentionally the
-**lowest-revenue, highest-distribution** product in the portfolio — the consumer
+From the ecosystem financial model (base case, prepared 2026-04-15), Homegroups
+is intentionally the **lowest-revenue, highest-distribution** product in the
+three-product portfolio (Homegroups, Regroup, planned Aftercare) — the consumer
 group tier seeds the network that makes Regroup and the future Aftercare product
-sellable to treatment centers
-(source: homegroups/docs/monetization/projections.md#executive-summary).
+sellable to treatment centers. The ecosystem maps to the ASAM continuum of care:
+Homegroups (group admins, group tier [`HG-MON-1`](../_shared/pricing.md)), Regroup
+(house operators, ~$49–99/mo), and Aftercare (treatment centers, ~$800–3,000/mo,
+planned); no competitor connects these three
+phases digitally, and the "continuity of care" bundle to treatment centers is
+the highest-ACV product and the primary path to a venture-scale outcome
+(orig: homegroups/docs/monetization/projections.md, archived).
 
-| Horizon               | Homegroups contribution (base case)                           | Note                                                                                                                                          |
-| --------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Year 1 end (Mar 2027) | ~241 groups; group-tier ARR is a rounding error vs. portfolio | Distribution flywheel, not revenue engine (source: homegroups/docs/monetization/projections.md#year-1-homegroups-arr-2-892-241-groups-12)     |
-| Year 2 end (Mar 2028) | ~1,000 groups + ~20 intergroups; intergroup tier un-gates     | Intergroup tier launches once R-1/R-2 clear (source: homegroups/docs/monetization/projections.md#year-2-quarterly-april-2027-march-2028)      |
-| Year 3 end (Mar 2029) | ~3,500 groups + ~60 intergroups; donation fees compound       | B2B + facility-dashboard ARPU is the growth path (source: homegroups/docs/monetization/projections.md#year-3-quarterly-april-2028-march-2029) |
+| Horizon               | Homegroups contribution (base case)                                                                                          | Note                                                                                                                    |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Year 1 end (Mar 2027) | ~241 groups; group-tier ARR ~$2,892 (241 × group price [`HG-MON-1`](../_shared/pricing.md)) — a rounding error vs. portfolio | Distribution flywheel, not revenue engine (orig: homegroups/docs/monetization/projections.md, archived)                 |
+| Year 2 end (Mar 2028) | ~1,000 groups + ~20 intergroups (~$1,200/mo); intergroup tier un-gates                                                       | Intergroup tier launches once R-1/R-2 clear; Year-2 portfolio ARR ~$788K at Q4 (orig: …/projections.md, archived)       |
+| Year 3 end (Mar 2029) | ~3,500 groups + ~60 intergroups (~$4,200/mo w/ donation fees); fees compound                                                 | B2B + facility-dashboard ARPU is the growth path; Year-3 portfolio ARR ~$2.43M at Q4 (orig: …/projections.md, archived) |
 
 The portfolio-level dollar figures, scenarios, and unit economics are owned by
 the ecosystem monetization doc and the projections SSOT — this doc does **not**
