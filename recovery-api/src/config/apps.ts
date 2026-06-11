@@ -95,7 +95,7 @@ export function resolveApp(value: unknown): AppRegistryEntry | undefined {
 }
 
 /** Resolve any accepted wire value to the canonical app-id, or undefined if unknown. */
-export function resolveAppId(value: string): string | undefined {
+export function resolveAppId(value: unknown): string | undefined {
   return resolveApp(value)?.appId;
 }
 
