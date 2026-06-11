@@ -32,11 +32,12 @@ below.
    table. Every monetization number lives here; all other docs link to a row.
 3. **[`ecosystem/vision.md`](ecosystem/vision.md)** — the platform thesis (why
    these three products form one recovery continuum).
-4. **Per-product deliverables** — for the product you care about, read in this
-   order: `monetization.md` → `roadmap.md` → `project-management.md`.
-   - [regroup/](regroup/)
-   - [homegroups/](homegroups/)
-   - [detox-recovery/](detox-recovery/)
+4. **Per-product deliverables** — these live **inside each app** (co-located with
+   the product code), not in this top-level tree. For the product you care about,
+   read in this order: `monetization.md` → `roadmap.md` → `project-management.md`.
+   - [regroup/docs/go-to-market/](../../regroup/docs/go-to-market/)
+   - [homegroups/docs/go-to-market/](../../homegroups/docs/go-to-market/)
+   - [detox-recovery/docs/go-to-market/](../../detox-recovery/docs/go-to-market/)
 5. **[`ecosystem/monetization.md`](ecosystem/monetization.md)** and
    **[`ecosystem/roadmap.md`](ecosystem/roadmap.md)** — the cross-platform model
    and combined roadmap (these read per-product numbers from
@@ -53,24 +54,24 @@ below.
 One topic, one owning file. If you need a fact, go to its owner — do not copy it
 elsewhere.
 
-| Topic                                                | Owning file                                                                    |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------ |
-| **All prices, SKUs, Stripe IDs, Connect fees**       | [`_shared/pricing.md`](_shared/pricing.md)                                     |
-| Cross-app referral / SKU integration map             | [`_shared/integration.md`](_shared/integration.md) → ecosystem                 |
-| Reconciliation decisions (D-1, D-9, D-10, prices)    | [`_shared/decisions-log.md`](_shared/decisions-log.md)                         |
-| regroup monetization narrative & projections         | [`regroup/monetization.md`](regroup/monetization.md)                           |
-| regroup roadmap                                      | [`regroup/roadmap.md`](regroup/roadmap.md)                                     |
-| regroup launch-to-monetized plan                     | [`regroup/project-management.md`](regroup/project-management.md)               |
-| homegroups monetization narrative & projections      | [`homegroups/monetization.md`](homegroups/monetization.md)                     |
-| homegroups roadmap                                   | [`homegroups/roadmap.md`](homegroups/roadmap.md)                               |
-| homegroups launch-to-monetized plan                  | [`homegroups/project-management.md`](homegroups/project-management.md)         |
-| detox-recovery monetization narrative & projections  | [`detox-recovery/monetization.md`](detox-recovery/monetization.md)             |
-| detox-recovery roadmap                               | [`detox-recovery/roadmap.md`](detox-recovery/roadmap.md)                       |
-| detox-recovery launch-to-monetized plan              | [`detox-recovery/project-management.md`](detox-recovery/project-management.md) |
-| Platform vision / thesis                             | [`ecosystem/vision.md`](ecosystem/vision.md)                                   |
-| Cross-platform monetization & referral model         | [`ecosystem/monetization.md`](ecosystem/monetization.md)                       |
-| Combined, market-feasible ecosystem roadmap          | [`ecosystem/roadmap.md`](ecosystem/roadmap.md)                                 |
-| Cross-product launch hub (sequence + decision gates) | [`ecosystem/project-management.md`](ecosystem/project-management.md)           |
+| Topic                                                | Owning file                                                                                            |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| **All prices, SKUs, Stripe IDs, Connect fees**       | [`_shared/pricing.md`](_shared/pricing.md)                                                             |
+| Cross-app referral / SKU integration map             | [`_shared/integration.md`](_shared/integration.md) → ecosystem                                         |
+| Reconciliation decisions (D-1, D-9, D-10, prices)    | [`_shared/decisions-log.md`](_shared/decisions-log.md)                                                 |
+| regroup monetization narrative & projections         | [`regroup/monetization.md`](../../regroup/docs/go-to-market/monetization.md)                           |
+| regroup roadmap                                      | [`regroup/roadmap.md`](../../regroup/docs/go-to-market/roadmap.md)                                     |
+| regroup launch-to-monetized plan                     | [`regroup/project-management.md`](../../regroup/docs/go-to-market/project-management.md)               |
+| homegroups monetization narrative & projections      | [`homegroups/monetization.md`](../../homegroups/docs/go-to-market/monetization.md)                     |
+| homegroups roadmap                                   | [`homegroups/roadmap.md`](../../homegroups/docs/go-to-market/roadmap.md)                               |
+| homegroups launch-to-monetized plan                  | [`homegroups/project-management.md`](../../homegroups/docs/go-to-market/project-management.md)         |
+| detox-recovery monetization narrative & projections  | [`detox-recovery/monetization.md`](../../detox-recovery/docs/go-to-market/monetization.md)             |
+| detox-recovery roadmap                               | [`detox-recovery/roadmap.md`](../../detox-recovery/docs/go-to-market/roadmap.md)                       |
+| detox-recovery launch-to-monetized plan              | [`detox-recovery/project-management.md`](../../detox-recovery/docs/go-to-market/project-management.md) |
+| Platform vision / thesis                             | [`ecosystem/vision.md`](ecosystem/vision.md)                                                           |
+| Cross-platform monetization & referral model         | [`ecosystem/monetization.md`](ecosystem/monetization.md)                                               |
+| Combined, market-feasible ecosystem roadmap          | [`ecosystem/roadmap.md`](ecosystem/roadmap.md)                                                         |
+| Cross-product launch hub (sequence + decision gates) | [`ecosystem/project-management.md`](ecosystem/project-management.md)                                   |
 
 That is the **12 scope×category deliverables + 3 `_shared` files** this tree
 owns.

@@ -100,9 +100,9 @@ stubbed.)
 
 | gate | decision                                        | status      | owner            | recorded in                                                  |
 | ---- | ----------------------------------------------- | ----------- | ---------------- | ------------------------------------------------------------ |
-| D-9  | Legacy→tier grandfather window (6-mo, 5 houses) | done        | Owner            | [`../_shared/decisions-log.md`](../_shared/decisions-log.md) |
-| D-11 | IAP vs. web-only billing (recommend web/hybrid) | not_started | Owner (+legal)   | [`../_shared/decisions-log.md`](../_shared/decisions-log.md) |
-| D-12 | HIPAA / BAA surface (legal opinion required)    | not_started | Owner (+counsel) | [`../_shared/decisions-log.md`](../_shared/decisions-log.md) |
+| D-9  | Legacy→tier grandfather window (6-mo, 5 houses) | done        | Owner            | [`../_shared/decisions-log.md`](../../../docs/go-to-market/_shared/decisions-log.md) |
+| D-11 | IAP vs. web-only billing (recommend web/hybrid) | not_started | Owner (+legal)   | [`../_shared/decisions-log.md`](../../../docs/go-to-market/_shared/decisions-log.md) |
+| D-12 | HIPAA / BAA surface (legal opinion required)    | not_started | Owner (+counsel) | [`../_shared/decisions-log.md`](../../../docs/go-to-market/_shared/decisions-log.md) |
 
 D-9 is resolved (grandfather 6 months, then migrate via reviewed Stripe CLI
 batches). D-11 and D-12 are **open and launch-blocking** — they gate RG-P0-2 and
@@ -159,7 +159,7 @@ stubbed.) Each task maps to a blocker row in §1.
   `phoenix-cleanhouse`), and verify the full flow in Stripe **test mode** (card
   `4242 4242 4242 4242`) before going live — subscription creates, webhook updates
   `subscriptionStatus` to `active`, grace banner clears. Amounts live in
-  [`../_shared/pricing.md`](../_shared/pricing.md); no prices restated here. **Do
+  [`../_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md); no prices restated here. **Do
   after Task F** (billing-model decision).
 - **Task F — IAP vs. direct-billing architecture decision (→ RG-P0-5, legal).**
   Apple requires in-app digital-goods sales to use IAP (15–30% cut). Options: **A
@@ -188,6 +188,6 @@ stubbed.) Each task maps to a blocker row in §1.
 
 - Pricing model + projections → [`monetization.md`](monetization.md)
 - Feature build status + phantom features → [`roadmap.md`](roadmap.md)
-- Prices / Stripe env vars → [`../_shared/pricing.md`](../_shared/pricing.md)
-- Decisions D-9, D-11, D-12 → [`../_shared/decisions-log.md`](../_shared/decisions-log.md)
-- Ecosystem launch sequence → [`../ecosystem/project-management.md`](../ecosystem/project-management.md)
+- Prices / Stripe env vars → [`../_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md)
+- Decisions D-9, D-11, D-12 → [`../_shared/decisions-log.md`](../../../docs/go-to-market/_shared/decisions-log.md)
+- Ecosystem launch sequence → [`../ecosystem/project-management.md`](../../../docs/go-to-market/ecosystem/project-management.md)

@@ -1,14 +1,14 @@
 ---
 title: Regroup Pricing Strategy Options — consolidated
 status: superseded
-superseded_by: docs/go-to-market/regroup/monetization.md
+superseded_by: regroup/docs/go-to-market/monetization.md
 last_verified: 2026-06-10
 ---
 
 # Regroup Pricing Strategy Options — moved to the go-to-market doc set
 
 > **Consolidated.** This document's content now lives in the canonical
-> go-to-market doc set: [docs/go-to-market/regroup/monetization.md](../../../docs/go-to-market/regroup/monetization.md).
+> go-to-market doc set: [regroup/docs/go-to-market/monetization.md](../go-to-market/monetization.md).
 > Entry point: [go-to-market/README.md](../../../docs/go-to-market/README.md).
 >
 > _Historical version available in git history._

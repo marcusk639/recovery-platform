@@ -15,16 +15,16 @@ This phase is **already done**. Its outputs are recorded here so every later pha
 
 ### 0.1 Validation-target inventory (verified against disk 2026-06-10)
 
-All under `docs/go-to-market/` — **exactly 17 files**, structure matches the spec:
+**17 files total. Hybrid layout (per D-1 amendment, 2026-06-11):** per-product docs live **inside each app**; only ecosystem + cross-cutting content is top-level. Per-product anchors below (e.g. `regroup/monetization.md:82-87`) are shorthand for the in-app path `{product}/docs/go-to-market/<file>`.
 
-| Scope             | Files                                                                 |
-| ----------------- | --------------------------------------------------------------------- |
-| `_shared/`        | `pricing.md`, `decisions-log.md`, `integration.md`                    |
-| `regroup/`        | `monetization.md`, `roadmap.md`, `project-management.md`              |
-| `homegroups/`     | `monetization.md`, `roadmap.md`, `project-management.md`              |
-| `detox-recovery/` | `monetization.md`, `roadmap.md`, `project-management.md`              |
-| `ecosystem/`      | `monetization.md`, `roadmap.md`, `project-management.md`, `vision.md` |
-| root              | `README.md`                                                           |
+| Scope      | Location                            | Files                                                                 |
+| ---------- | ----------------------------------- | --------------------------------------------------------------------- |
+| shared     | `docs/go-to-market/_shared/`        | `pricing.md`, `decisions-log.md`, `integration.md`                    |
+| ecosystem  | `docs/go-to-market/ecosystem/`      | `monetization.md`, `roadmap.md`, `project-management.md`, `vision.md` |
+| top README | `docs/go-to-market/`                | `README.md`                                                           |
+| regroup    | `regroup/docs/go-to-market/`        | `monetization.md`, `roadmap.md`, `project-management.md`              |
+| homegroups | `homegroups/docs/go-to-market/`     | `monetization.md`, `roadmap.md`, `project-management.md`              |
+| detox      | `detox-recovery/docs/go-to-market/` | `monetization.md`, `roadmap.md`, `project-management.md`              |
 
 **Verified load-bearing numbers (cite these anchors in the claim ledger — do NOT invent or round differently):**
 

@@ -25,7 +25,7 @@ and **Part B** (human-only external work — dashboards, DNS, payment providers,
 (source: detox-recovery/docs/superpowers/plans/2026-06-07-detox-completion.md).
 
 > Prices referenced by `DX-MON-n` into
-> [`../_shared/pricing.md`](../_shared/pricing.md). Roadmap item IDs (`DX-RM-*`)
+> [`../_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md). Roadmap item IDs (`DX-RM-*`)
 > live in [`roadmap.md`](roadmap.md). Status vocabulary:
 > `done | in_progress | blocked | planned | not_started`.
 
@@ -94,12 +94,12 @@ The authoritative runbooks for Part B:
 
 | id      | blocker (milestone)                              | severity | owner           | track    | status  | acceptance_check                                                                                             | source                                                                                           |
 | ------- | ------------------------------------------------ | -------- | --------------- | -------- | ------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| DX-MS-1 | First paid support call                          | —        | Founder         | —        | done    | Tier 2 [`DX-MON-1`](../_shared/pricing.md) transacted; proof of concept                                      | orig: detox-recovery/docs/monetization/projections.md, archived (§13 Milestones & Gates)         |
+| DX-MS-1 | First paid support call                          | —        | Founder         | —        | done    | Tier 2 [`DX-MON-1`](../../../docs/go-to-market/_shared/pricing.md) transacted; proof of concept                                      | orig: detox-recovery/docs/monetization/projections.md, archived (§13 Milestones & Gates)         |
 | DX-MS-2 | First digital-product sale (PDF deliverable)     | —        | Founder + agent | Part A+B | blocked | A Lemon Squeezy PDF sale delivers; gated on DX-PM-2 / DX-PM-8                                                | orig: detox-recovery/docs/monetization/projections.md, archived (§13 Milestones & Gates)         |
-| DX-MS-3 | First B2B engagement closed                      | —        | Founder         | manual   | planned | One [`DX-MON-9`](../_shared/pricing.md) engagement invoiced + paid                                           | orig: detox-recovery/docs/monetization/projections.md, archived (§13 Milestones & Gates)         |
-| DX-MS-4 | Tier 3 launched (60-min family call)             | —        | Founder + agent | Part A+B | planned | [`DX-MON-2`](../_shared/pricing.md) bookable + payable end-to-end                                            | orig: detox-recovery/docs/monetization/projections.md, archived (§13 Milestones & Gates)         |
+| DX-MS-3 | First B2B engagement closed                      | —        | Founder         | manual   | planned | One [`DX-MON-9`](../../../docs/go-to-market/_shared/pricing.md) engagement invoiced + paid                                           | orig: detox-recovery/docs/monetization/projections.md, archived (§13 Milestones & Gates)         |
+| DX-MS-4 | Tier 3 launched (60-min family call)             | —        | Founder + agent | Part A+B | planned | [`DX-MON-2`](../../../docs/go-to-market/_shared/pricing.md) bookable + payable end-to-end                                            | orig: detox-recovery/docs/monetization/projections.md, archived (§13 Milestones & Gates)         |
 | DX-MS-5 | $1,000/month run rate                            | —        | Founder         | —        | planned | Trailing-month revenue ≥ $1k; triggers Tier 3 ramp                                                           | orig: detox-recovery/docs/monetization/projections.md, archived (§13 Milestones & Gates)         |
-| DX-MS-6 | VA PSS certification + Community Care enrollment | —        | Founder         | manual   | planned | PSS cert complete; VA Community Care provider status approved; [`DX-MON-12`](../_shared/pricing.md) billable | orig: detox-recovery/docs/monetization/projections.md, archived (§7 Stream V1 VA Community Care) |
+| DX-MS-6 | VA PSS certification + Community Care enrollment | —        | Founder         | manual   | planned | PSS cert complete; VA Community Care provider status approved; [`DX-MON-12`](../../../docs/go-to-market/_shared/pricing.md) billable | orig: detox-recovery/docs/monetization/projections.md, archived (§7 Stream V1 VA Community Care) |
 
 **Milestone order:** first paid call ✅ → first deliverable PDF sale → first B2B
 → Tier 3 → $1k/mo → VA certification. The first-paid-call milestone is already
@@ -112,7 +112,7 @@ DX-PM-2).
 
 | Gate | Decision                                                                                      | Recommendation                                                                                    | Source                                                                                                                                |
 | ---- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| DP-1 | Support-call repriced value (within the researched band)                                      | Resolved — applied in code (`SERVICE_TIERS`); canonical value [`DX-MON-1`](../_shared/pricing.md) | detox-recovery/docs/superpowers/plans/2026-06-07-detox-completion.md#pricing-research-summary                                         |
+| DP-1 | Support-call repriced value (within the researched band)                                      | Resolved — applied in code (`SERVICE_TIERS`); canonical value [`DX-MON-1`](../../../docs/go-to-market/_shared/pricing.md) | detox-recovery/docs/superpowers/plans/2026-06-07-detox-completion.md#pricing-research-summary                                         |
 | DP-2 | Generate PDFs programmatically (Part A `md-to-pdf` script) vs author by hand in a design tool | Generate now to unblock launch; polish later                                                      | detox-recovery/docs/superpowers/plans/2026-06-07-detox-completion.md#task-2-optional-generate-product--lead-magnet-pdfs-from-markdown |
 
 ---

@@ -56,5 +56,5 @@ Emulator config is in `firebase.json` at this directory level.
 | `mobile/CLAUDE.md`                             | RN app deep-dive                                            |
 | `functions/CLAUDE.md`                          | Cloud Functions architecture                                |
 | `FUNCTION_AUDIT.md`                            | Audit of current function inventory                         |
-| `../docs/go-to-market/regroup/roadmap.md`      | Product roadmap (GTM SSOT; sources consolidated 2026-06-10) |
-| `../docs/go-to-market/regroup/monetization.md` | Pricing and subscription model (GTM SSOT)                   |
+| `../regroup/docs/go-to-market/roadmap.md`      | Product roadmap (GTM SSOT; sources consolidated 2026-06-10) |
+| `../regroup/docs/go-to-market/monetization.md` | Pricing and subscription model (GTM SSOT)                   |

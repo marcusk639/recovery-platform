@@ -4,7 +4,7 @@
 
 Regroup is a React Native sober living house management app backed by Firebase. This index covers active documentation only — see [`archive/`](./archive/) for historical records.
 
-> **Go-to-market SSOT.** Monetization/pricing, roadmap, and launch/PM topics now live in the canonical go-to-market doc set: [`docs/go-to-market/regroup/`](../../docs/go-to-market/regroup/) (entry point: [`docs/go-to-market/README.md`](../../docs/go-to-market/README.md)). The monetization, product roadmap, decisions, and launch-checklist docs under this tree are now pointer stubs.
+> **Go-to-market SSOT.** Monetization/pricing, roadmap, and launch/PM topics for this product live in this app's own go-to-market set: [`regroup/docs/go-to-market/`](go-to-market/). Cross-product/ecosystem strategy and the shared price table live at the top-level [`docs/go-to-market/README.md`](../../docs/go-to-market/README.md). The legacy monetization, product roadmap, decisions, and launch-checklist docs under this tree are now pointer stubs.
 
 ---
 

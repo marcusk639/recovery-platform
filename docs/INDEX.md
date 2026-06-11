@@ -21,7 +21,7 @@ follow links in priority order.
 | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Which product this touches        | [docs/ecosystem/product-map.md](ecosystem/product-map.md)                                                                                                                              |
 | Product requirements & priorities | [homegroups](../homegroups/docs/product/requirements.md) · [regroup](../regroup/docs/product/requirements.md) · [detox-recovery](../detox-recovery/docs/product/requirements.md)       |
-| Current roadmap                   | [homegroups](go-to-market/homegroups/roadmap.md) · [regroup](go-to-market/regroup/roadmap.md) · [detox-recovery](go-to-market/detox-recovery/roadmap.md)                               |
+| Current roadmap                   | [homegroups](../homegroups/docs/go-to-market/roadmap.md) · [regroup](../regroup/docs/go-to-market/roadmap.md) · [detox-recovery](../detox-recovery/docs/go-to-market/roadmap.md)                               |
 | Technical architecture            | [homegroups](../homegroups/docs/technical/architecture.md) · [regroup](../regroup/docs/technical/architecture.md) · [detox-recovery](../detox-recovery/docs/technical/architecture.md) |
 | Dev setup & conventions           | [homegroups](../homegroups/docs/technical/development.md) · [regroup](../regroup/docs/technical/development.md) · [detox-recovery](../detox-recovery/docs/technical/development.md)    |
 | Active implementation plans       | [homegroups](../homegroups/docs/plans/) · [regroup](../regroup/docs/plans/) · [detox-recovery](../detox-recovery/docs/plans/)                                                          |
@@ -35,10 +35,10 @@ follow links in priority order.
 | ------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | Cross-platform revenue strategy | [go-to-market/ecosystem/monetization.md](go-to-market/ecosystem/monetization.md)                                      |
 | Market opportunity & TAM        | [go-to-market/ecosystem/monetization.md](go-to-market/ecosystem/monetization.md)                                      |
-| homegroups billing & pricing    | [go-to-market/homegroups/monetization.md](go-to-market/homegroups/monetization.md)                                    |
-| regroup pricing model           | [go-to-market/regroup/monetization.md](go-to-market/regroup/monetization.md)                                          |
-| detox-recovery monetization     | [go-to-market/detox-recovery/monetization.md](go-to-market/detox-recovery/monetization.md)                            |
-| Financial projections           | [homegroups](go-to-market/homegroups/monetization.md) · [detox-recovery](go-to-market/detox-recovery/monetization.md) |
+| homegroups billing & pricing    | [go-to-market/homegroups/monetization.md](../homegroups/docs/go-to-market/monetization.md)                                    |
+| regroup pricing model           | [go-to-market/regroup/monetization.md](../regroup/docs/go-to-market/monetization.md)                                          |
+| detox-recovery monetization     | [go-to-market/detox-recovery/monetization.md](../detox-recovery/docs/go-to-market/monetization.md)                            |
+| Financial projections           | [homegroups](../homegroups/docs/go-to-market/monetization.md) · [detox-recovery](../detox-recovery/docs/go-to-market/monetization.md) |
 
 ---
 
@@ -47,9 +47,9 @@ follow links in priority order.
 | What you need to know     | Read                                                                                                                                                                    |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Ecosystem-level roadmap   | [go-to-market/ecosystem/roadmap.md](go-to-market/ecosystem/roadmap.md)                                                                                                  |
-| homegroups roadmap        | [go-to-market/homegroups/roadmap.md](go-to-market/homegroups/roadmap.md)                                                                                                |
-| regroup (Regroup) roadmap | [go-to-market/regroup/roadmap.md](go-to-market/regroup/roadmap.md)                                                                                                      |
-| detox-recovery roadmap    | [go-to-market/detox-recovery/roadmap.md](go-to-market/detox-recovery/roadmap.md)                                                                                        |
+| homegroups roadmap        | [go-to-market/homegroups/roadmap.md](../homegroups/docs/go-to-market/roadmap.md)                                                                                                |
+| regroup (Regroup) roadmap | [go-to-market/regroup/roadmap.md](../regroup/docs/go-to-market/roadmap.md)                                                                                                      |
+| detox-recovery roadmap    | [go-to-market/detox-recovery/roadmap.md](../detox-recovery/docs/go-to-market/roadmap.md)                                                                                        |
 | Key product decisions     | [homegroups](../homegroups/docs/product/decisions.md) · [regroup](../regroup/docs/product/decisions.md) · [detox-recovery](../detox-recovery/docs/product/decisions.md) |
 
 ---

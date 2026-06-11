@@ -9,9 +9,9 @@ sources:
   - docs/launch-readiness/03-launch-roadmap.md
   - docs/launch-readiness/homegroups-launch-readiness.md
   - docs/launch-readiness/regroup-launch-readiness.md
-  - docs/go-to-market/regroup/project-management.md
-  - docs/go-to-market/homegroups/project-management.md
-  - docs/go-to-market/detox-recovery/project-management.md
+  - regroup/docs/go-to-market/project-management.md
+  - homegroups/docs/go-to-market/project-management.md
+  - detox-recovery/docs/go-to-market/project-management.md
 supersedes:
   - docs/launch-readiness/cross-product-launch-roadmap.md
   - docs/launch-readiness/03-launch-roadmap.md
@@ -41,9 +41,9 @@ launch-to-monetized plan is its own SSOT:
 
 | Product        | Launch state (today)                                               | Plan (SSOT)                                                                          |
 | -------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| regroup        | 5 live houses on legacy pricing; tier billing + Stripe IDs pending | [`../regroup/project-management.md`](../regroup/project-management.md)               |
-| homegroups     | Code 30/30 `done`; activation-gated (infra + App Store + R-1/R-2)  | [`../homegroups/project-management.md`](../homegroups/project-management.md)         |
-| detox-recovery | Tier 2 + donations live; digital/B2B blocked on delivery wiring    | [`../detox-recovery/project-management.md`](../detox-recovery/project-management.md) |
+| regroup        | 5 live houses on legacy pricing; tier billing + Stripe IDs pending | [`../regroup/project-management.md`](../../../regroup/docs/go-to-market/project-management.md)               |
+| homegroups     | Code 30/30 `done`; activation-gated (infra + App Store + R-1/R-2)  | [`../homegroups/project-management.md`](../../../homegroups/docs/go-to-market/project-management.md)         |
+| detox-recovery | Tier 2 + donations live; digital/B2B blocked on delivery wiring    | [`../detox-recovery/project-management.md`](../../../detox-recovery/docs/go-to-market/project-management.md) |
 
 (sources: the three per-product project-management docs, last_verified 2026-06-10)
 
@@ -159,6 +159,6 @@ sequencing are summarized here. All gates are recorded in
 - Vision / why the continuum: [`vision.md`](vision.md)
 - Cross-platform model + D-10 detail: [`monetization.md`](monetization.md)
 - Phased roadmap + re-baseline ledger: [`roadmap.md`](roadmap.md)
-- Per-product launch plans: [`../regroup/project-management.md`](../regroup/project-management.md) · [`../homegroups/project-management.md`](../homegroups/project-management.md) · [`../detox-recovery/project-management.md`](../detox-recovery/project-management.md)
+- Per-product launch plans: [`../regroup/project-management.md`](../../../regroup/docs/go-to-market/project-management.md) · [`../homegroups/project-management.md`](../../../homegroups/docs/go-to-market/project-management.md) · [`../detox-recovery/project-management.md`](../../../detox-recovery/docs/go-to-market/project-management.md)
 - Decisions log: [`../_shared/decisions-log.md`](../_shared/decisions-log.md)
 - Superseded source (archived in Phase 6): `docs/launch-readiness/cross-product-launch-roadmap.md`

@@ -122,7 +122,7 @@ Prioritization rationale for the P1/P2 rows, inlined so the roadmap stands alone
 if the source docs are emptied. The original priority scores and revenue models
 came from the stubbed `decisions.md` (strategic-assessment priorities) and
 `FEATURE_PRIORITIZATION.md` (scored feature framework). No prices are restated;
-see [`../_shared/pricing.md`](../_shared/pricing.md).
+see [`../_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md).
 
 **From the strategic-assessment priorities (orig: regroup/docs/product/decisions.md, stubbed):**
 
@@ -189,4 +189,4 @@ for the phantom-feature rows above.
 5. **Oxford acquisition** (RG-RM-13, RG-RM-16, RG-RM-18) — the largest growth lever.
 
 See [`project-management.md`](project-management.md) for owners, decision gates,
-and acceptance checks; prices in [`../_shared/pricing.md`](../_shared/pricing.md).
+and acceptance checks; prices in [`../_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md).
