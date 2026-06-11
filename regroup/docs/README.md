@@ -4,6 +4,8 @@
 
 Regroup is a React Native sober living house management app backed by Firebase. This index covers active documentation only — see [`archive/`](./archive/) for historical records.
 
+> **Go-to-market SSOT.** Monetization/pricing, roadmap, and launch/PM topics now live in the canonical go-to-market doc set: [`docs/go-to-market/regroup/`](../../docs/go-to-market/regroup/) (entry point: [`docs/go-to-market/README.md`](../../docs/go-to-market/README.md)). The monetization, product roadmap, decisions, and launch-checklist docs under this tree are now pointer stubs.
+
 ---
 
 ## Quick Start
@@ -24,15 +26,15 @@ Regroup is a React Native sober living house management app backed by Firebase. 
 
 ## Strategy & Vision
 
-| Doc                                                                                | Description                                              | Status  |
-| ---------------------------------------------------------------------------------- | -------------------------------------------------------- | ------- |
+| Doc                                                                                | Description                                            | Status  |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------ | ------- |
 | [`ECOSYSTEM_ROADMAP_2026.md`](./ECOSYSTEM_ROADMAP_2026.md)                         | Cross-product roadmap: Regroup, Homegroups, Homegroups | CURRENT |
-| [`STRATEGIC_PLATFORM_ASSESSMENT_2026.md`](./STRATEGIC_PLATFORM_ASSESSMENT_2026.md) | Prioritized roadmap with blockers and pricing            | CURRENT |
-| [`PRODUCT_STRATEGY_ASSESSMENT.md`](./PRODUCT_STRATEGY_ASSESSMENT.md)               | Market strategy, differentiation, GTM                    | CURRENT |
-| [`FULL_PLATFORM_REQUIREMENTS.md`](./FULL_PLATFORM_REQUIREMENTS.md)                 | Dream end-state feature spec (Traditional + Oxford)      | AGING   |
-| [`FULL_PLATFORM_REQUIREMENTS-summary.md`](./FULL_PLATFORM_REQUIREMENTS-summary.md) | [summary] Condensed version of above                     | CURRENT |
-| [`FEATURE_PRIORITY_ROADMAP.md`](./FEATURE_PRIORITY_ROADMAP.md)                     | Feature rankings by market opportunity                   | AGING   |
-| [`recovery-ecosystem-market-brief.md`](./recovery-ecosystem-market-brief.md)       | Competitive landscape and market intelligence            | CURRENT |
+| [`STRATEGIC_PLATFORM_ASSESSMENT_2026.md`](./STRATEGIC_PLATFORM_ASSESSMENT_2026.md) | Prioritized roadmap with blockers and pricing          | CURRENT |
+| [`PRODUCT_STRATEGY_ASSESSMENT.md`](./PRODUCT_STRATEGY_ASSESSMENT.md)               | Market strategy, differentiation, GTM                  | CURRENT |
+| [`FULL_PLATFORM_REQUIREMENTS.md`](./FULL_PLATFORM_REQUIREMENTS.md)                 | Dream end-state feature spec (Traditional + Oxford)    | AGING   |
+| [`FULL_PLATFORM_REQUIREMENTS-summary.md`](./FULL_PLATFORM_REQUIREMENTS-summary.md) | [summary] Condensed version of above                   | CURRENT |
+| [`FEATURE_PRIORITY_ROADMAP.md`](./FEATURE_PRIORITY_ROADMAP.md)                     | Feature rankings by market opportunity                 | AGING   |
+| [`recovery-ecosystem-market-brief.md`](./recovery-ecosystem-market-brief.md)       | Competitive landscape and market intelligence          | CURRENT |
 
 ---
 

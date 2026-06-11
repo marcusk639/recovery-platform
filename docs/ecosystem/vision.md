@@ -1,10 +1,14 @@
-# Recovery Platform — Vision
+---
+title: Recovery Platform — Vision — consolidated
+status: superseded
+superseded_by: docs/go-to-market/ecosystem/vision.md
+last_verified: 2026-06-10
+---
 
-> **Stub** — Content needs to be written.
-> Created by doc-organizer-recovery on 2026-06-01.
+# Recovery Platform — Vision — moved to the go-to-market doc set
 
-## TODO
-
-- [ ] Document the platform mission and why the recovery ecosystem exists
-- [ ] Define what success looks like for the platform as a whole
-- [ ] Describe the long-term vision for cross-product integration
+> **Consolidated.** This document's content now lives in the canonical
+> go-to-market doc set: [docs/go-to-market/ecosystem/vision.md](../go-to-market/ecosystem/vision.md).
+> Entry point: [go-to-market/README.md](../go-to-market/README.md).
+>
+> _Historical version available in git history._

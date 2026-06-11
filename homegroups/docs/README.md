@@ -4,6 +4,8 @@ Welcome to the Homegroups documentation hub. This folder contains all guides, sp
 
 **New to the project? Start here:** [`00-DOCUMENTATION-INDEX.md`](./00-DOCUMENTATION-INDEX.md)
 
+> **Go-to-market SSOT.** Monetization/pricing, roadmap, and launch/PM topics now live in the canonical go-to-market doc set: [`docs/go-to-market/homegroups/`](../../docs/go-to-market/homegroups/) (entry point: [`docs/go-to-market/README.md`](../../docs/go-to-market/README.md)). The monetization, roadmap, launch-blockers, and pre-launch-checklist docs under this tree are now pointer stubs.
+
 ---
 
 ## Where to Start
