@@ -51,10 +51,10 @@ Emulator config is in `firebase.json` at this directory level.
 
 ## Key Docs
 
-| File                         | Purpose                                 |
-| ---------------------------- | --------------------------------------- |
-| `mobile/CLAUDE.md`           | RN app deep-dive                        |
-| `functions/CLAUDE.md`        | Cloud Functions architecture            |
-| `FUNCTION_AUDIT.md`          | Audit of current function inventory     |
-| `mobile/PRODUCT_ROADMAP.md`  | Product roadmap                         |
-| `mobile/PRICING_STRATEGY.md` | Pricing and subscription model overview |
+| File                                           | Purpose                                                     |
+| ---------------------------------------------- | ----------------------------------------------------------- |
+| `mobile/CLAUDE.md`                             | RN app deep-dive                                            |
+| `functions/CLAUDE.md`                          | Cloud Functions architecture                                |
+| `FUNCTION_AUDIT.md`                            | Audit of current function inventory                         |
+| `../docs/go-to-market/regroup/roadmap.md`      | Product roadmap (GTM SSOT; sources consolidated 2026-06-10) |
+| `../docs/go-to-market/regroup/monetization.md` | Pricing and subscription model (GTM SSOT)                   |

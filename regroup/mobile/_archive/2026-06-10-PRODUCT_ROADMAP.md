@@ -1,3 +1,5 @@
+> Archived 2026-06-10: duplicate of FEATURE_PRIORITIZATION.md; superseded by docs/go-to-market/regroup/roadmap.md.
+
 # Regroup Product Roadmap - Path to $200K+ ARR
 
 **Date:** February 5, 2026
@@ -9,11 +11,13 @@
 ## Current State
 
 **Active Users:**
+
 - 5 sober living houses
 - ~50-100 residents total (estimated)
 - $100-150/month revenue
 
 **Product Status:**
+
 - ✅ Core features working (chores, attendance, reports)
 - ✅ React Native app (iOS/Android)
 - ✅ Firebase backend
@@ -23,6 +27,7 @@
 - ❌ No payment processing (most requested feature)
 
 **Distribution:**
+
 - No active marketing
 - Word of mouth only
 - Oxford House connections available (local/regional)
@@ -33,16 +38,16 @@
 
 ### Revenue Milestones
 
-| Milestone | Houses | Monthly Revenue | Annual Revenue | Timeline |
-|-----------|--------|-----------------|----------------|----------|
-| **Current** | 5 | $150 | $1,800 | Today |
-| **Beta Success** | 20 | $800 | $9,600 | Month 3 |
-| **Oxford Pilot** | 50 | $2,500 | $30,000 | Month 6 |
-| **Regional Growth** | 100 | $6,000 | $72,000 | Month 12 |
-| **Multi-Region** | 200 | $15,000 | $180,000 | Month 18 |
-| **National Presence** | 300+ | $20,000+ | $240,000+ | Month 24 |
+| Milestone             | Houses | Monthly Revenue | Annual Revenue | Timeline |
+| --------------------- | ------ | --------------- | -------------- | -------- |
+| **Current**           | 5      | $150            | $1,800         | Today    |
+| **Beta Success**      | 20     | $800            | $9,600         | Month 3  |
+| **Oxford Pilot**      | 50     | $2,500          | $30,000        | Month 6  |
+| **Regional Growth**   | 100    | $6,000          | $72,000        | Month 12 |
+| **Multi-Region**      | 200    | $15,000         | $180,000       | Month 18 |
+| **National Presence** | 300+   | $20,000+        | $240,000+      | Month 24 |
 
-*Plus payment processing revenue (2.5% of rent collected) = $50K-200K additional*
+_Plus payment processing revenue (2.5% of rent collected) = $50K-200K additional_
 
 **Target: $200K+ total by Month 18-24**
 
@@ -51,15 +56,18 @@
 ## Roadmap Phases
 
 ### Phase 0: Quality Foundation (Weeks 1-4)
+
 **Goal:** Establish testing infrastructure before adding critical features
 
 **Why This First:**
+
 - Payment processing handles real money (must be bulletproof)
 - E2E tests catch regression bugs
 - Gives confidence for Oxford House pilots
 - Professional quality for scaling
 
 **Deliverables:**
+
 1. Detox E2E testing setup
 2. Critical user flow tests:
    - Login/signup
@@ -76,15 +84,18 @@
 ---
 
 ### Phase 1: Payment Processing MVP (Weeks 5-8)
+
 **Goal:** Launch payment system beta with 1-2 houses
 
 **Why This Next:**
+
 - #1 user request
 - Primary revenue driver
 - Must have for Oxford House adoption
 - Differentiator vs. spreadsheets
 
 **Features:**
+
 1. **Resident Payment Portal**
    - Credit card/ACH payment
    - View payment history
@@ -105,20 +116,24 @@
 
 **Time Investment:** 20-25 hours over 4 weeks
 **Success Criteria:**
+
 - 1 house using it for all rent collection
 - $0 in failed payments
 - All E2E tests passing
 
 **Revenue Impact:**
+
 - 1 house × $10K/month × 2.5% = $250/month = $3K/year
 - Proves concept for scaling
 
 ---
 
 ### Phase 2: Quality & Security Hardening (Weeks 9-10)
+
 **Goal:** Production-ready before Oxford House outreach
 
 **Critical Fixes:**
+
 1. ✅ Remove hardcoded Stripe secret (CRITICAL - Week 1)
 2. Add error handling to all services
 3. Implement offline mode (basics)
@@ -127,6 +142,7 @@
 
 **Time Investment:** 10-12 hours over 2 weeks
 **Success Criteria:**
+
 - No hardcoded secrets
 - All services have error boundaries
 - Can create chores offline
@@ -135,9 +151,11 @@
 ---
 
 ### Phase 3: Oxford House Pilot (Weeks 11-18)
+
 **Goal:** Get 10-15 Oxford Houses using Regroup
 
 **Strategy:**
+
 1. **Week 11-12: Preparation**
    - Create Oxford House-specific documentation
    - Build case study from beta testers
@@ -161,22 +179,26 @@
 
 **Time Investment:** 15-20 hours over 8 weeks
 **Success Criteria:**
+
 - 10+ Oxford Houses actively using Regroup
 - 80%+ satisfaction score
 - 2-3 strong testimonials
 - Payment processing adoption: 50%+
 
 **Revenue Impact:**
+
 - 15 houses × $20/month = $300/month
-- + Payment processing = $1,500-3,000/month
+- - Payment processing = $1,500-3,000/month
 - Total: ~$1,800-3,300/month = $22K-40K/year
 
 ---
 
 ### Phase 4: Feature Enhancement (Weeks 19-26)
+
 **Goal:** Build features that drive adoption and retention
 
 **Priority Features (from user research):**
+
 1. **Enhanced Reporting** (2 weeks)
    - Compliance reports for state licensing
    - Resident progress tracking
@@ -202,15 +224,18 @@
 
 **Time Investment:** 25-30 hours over 8 weeks
 **Success Criteria:**
+
 - Each feature adopted by 50%+ of houses
 - NPS score 8+ (Net Promoter Score)
 
 ---
 
 ### Phase 5: Regional Scaling (Months 7-12)
+
 **Goal:** Expand to 100+ houses across multiple regions
 
 **Growth Strategy:**
+
 1. **Content Marketing** (ongoing)
    - Blog posts about sober living management
    - Case studies from successful houses
@@ -233,22 +258,26 @@
 
 **Time Investment:** 10 hours/week ongoing
 **Success Criteria:**
+
 - 100+ houses using Regroup
 - 3+ regions with critical mass (10+ houses)
 - 50%+ using payment processing
 - NPS 8+
 
 **Revenue Impact:**
+
 - 100 houses × $25/month avg = $2,500/month
-- + Payment processing (50 houses × $8K × 2.5%) = $10,000/month
+- - Payment processing (50 houses × $8K × 2.5%) = $10,000/month
 - Total: $12,500/month = $150K/year
 
 ---
 
 ### Phase 6: National Expansion (Months 13-24)
+
 **Goal:** Reach $200K+/year, become industry standard
 
 **Strategies:**
+
 1. **National Oxford House Partnership**
    - Approach national organization
    - Official partnership/endorsement
@@ -269,6 +298,7 @@
    - Consider going full-time (when revenue > $200K/year)
 
 **Success Criteria:**
+
 - 300+ houses using Regroup
 - $200K+/year sustainable revenue
 - Industry recognition
@@ -281,12 +311,14 @@
 ### Week 1: Detox Setup & Configuration
 
 **Tasks:**
+
 1. Install Detox dependencies
 2. Configure iOS and Android test environments
 3. Set up test runner (Jest)
 4. Create first smoke test (app launches)
 
 **Deliverables:**
+
 ```
 /e2e
 ├── config.json         # Detox configuration
@@ -303,6 +335,7 @@
 ### Week 2: Critical Flow Tests
 
 **User Flows to Test:**
+
 1. **Authentication Flow**
    - Login with email/password
    - Signup new user
@@ -316,6 +349,7 @@
    - View house dashboard
 
 **Deliverables:**
+
 ```
 /e2e/tests/
 ├── auth.test.js
@@ -331,12 +365,14 @@
 ### Week 3: Payment Flow Tests (Foundation)
 
 **Prepare for payment testing:**
+
 1. Mock payment gateway responses
 2. Test payment UI flows (no real money)
 3. Verify error handling
 4. Test receipt generation
 
 **Deliverables:**
+
 ```
 /e2e/tests/
 └── payments.test.js
@@ -349,12 +385,14 @@
 ### Week 4: CI/CD Integration
 
 **Tasks:**
+
 1. Set up GitHub Actions workflow
 2. Run tests on every PR
 3. Block merges if tests fail
 4. Generate test coverage reports
 
 **Deliverables:**
+
 ```
 .github/workflows/
 └── e2e-tests.yml
@@ -368,15 +406,15 @@
 
 ### Time Investment by Phase
 
-| Phase | Duration | Hours/Week | Total Hours | When |
-|-------|----------|------------|-------------|------|
-| Phase 0: Testing | 4 weeks | 4-5 hrs | 16-20 hrs | Now |
-| Phase 1: Payments | 4 weeks | 5-6 hrs | 20-24 hrs | Weeks 5-8 |
-| Phase 2: Hardening | 2 weeks | 5-6 hrs | 10-12 hrs | Weeks 9-10 |
-| Phase 3: Oxford Pilot | 8 weeks | 2-3 hrs | 16-24 hrs | Weeks 11-18 |
-| Phase 4: Features | 8 weeks | 3-4 hrs | 24-32 hrs | Weeks 19-26 |
-| Phase 5: Scaling | 6 months | 2-3 hrs | 50-75 hrs | Months 7-12 |
-| Phase 6: National | 12 months | 3-5 hrs | 150-250 hrs | Months 13-24 |
+| Phase                 | Duration  | Hours/Week | Total Hours | When         |
+| --------------------- | --------- | ---------- | ----------- | ------------ |
+| Phase 0: Testing      | 4 weeks   | 4-5 hrs    | 16-20 hrs   | Now          |
+| Phase 1: Payments     | 4 weeks   | 5-6 hrs    | 20-24 hrs   | Weeks 5-8    |
+| Phase 2: Hardening    | 2 weeks   | 5-6 hrs    | 10-12 hrs   | Weeks 9-10   |
+| Phase 3: Oxford Pilot | 8 weeks   | 2-3 hrs    | 16-24 hrs   | Weeks 11-18  |
+| Phase 4: Features     | 8 weeks   | 3-4 hrs    | 24-32 hrs   | Weeks 19-26  |
+| Phase 5: Scaling      | 6 months  | 2-3 hrs    | 50-75 hrs   | Months 7-12  |
+| Phase 6: National     | 12 months | 3-5 hrs    | 150-250 hrs | Months 13-24 |
 
 **Total Year 1:** ~150-200 hours (sustainable for spare-time project)
 **Total Year 2:** ~150-250 hours
@@ -387,23 +425,23 @@
 
 ### Conservative Scenario
 
-| Timeline | Houses | Software Rev | Payment Rev | Total/Year | Cumulative |
-|----------|--------|--------------|-------------|------------|------------|
-| **Month 3** | 20 | $6K | $3K | $9K | $9K |
-| **Month 6** | 50 | $15K | $15K | $30K | $39K |
-| **Month 12** | 100 | $30K | $60K | $90K | $129K |
-| **Month 18** | 200 | $60K | $150K | $210K | $339K |
-| **Month 24** | 300 | $90K | $250K | $340K | $679K |
+| Timeline     | Houses | Software Rev | Payment Rev | Total/Year | Cumulative |
+| ------------ | ------ | ------------ | ----------- | ---------- | ---------- |
+| **Month 3**  | 20     | $6K          | $3K         | $9K        | $9K        |
+| **Month 6**  | 50     | $15K         | $15K        | $30K       | $39K       |
+| **Month 12** | 100    | $30K         | $60K        | $90K       | $129K      |
+| **Month 18** | 200    | $60K         | $150K       | $210K      | $339K      |
+| **Month 24** | 300    | $90K         | $250K       | $340K      | $679K      |
 
 **Reaches $200K+/year threshold at Month 18** ✓
 
 ### Optimistic Scenario (Oxford House National Partnership)
 
-| Timeline | Houses | Software Rev | Payment Rev | Total/Year |
-|----------|--------|--------------|-------------|------------|
-| **Month 12** | 200 | $60K | $120K | $180K |
-| **Month 18** | 500 | $150K | $350K | $500K |
-| **Month 24** | 1,000 | $300K | $750K | $1.05M |
+| Timeline     | Houses | Software Rev | Payment Rev | Total/Year |
+| ------------ | ------ | ------------ | ----------- | ---------- |
+| **Month 12** | 200    | $60K         | $120K       | $180K      |
+| **Month 18** | 500    | $150K        | $350K       | $500K      |
+| **Month 24** | 1,000  | $300K        | $750K       | $1.05M     |
 
 **Could hit $200K by Month 12 with aggressive Oxford House adoption**
 
@@ -412,24 +450,28 @@
 ## Success Metrics & KPIs
 
 ### Phase 0-2 (Months 1-3)
+
 - ✅ E2E test coverage: 30%+
 - ✅ Payment processing live: 1-2 beta houses
 - ✅ Zero security vulnerabilities
 - ✅ Total houses: 15-20
 
 ### Phase 3 (Months 4-6)
+
 - ✅ Oxford Houses: 10-15
 - ✅ Payment adoption: 50%+
 - ✅ NPS score: 8+
 - ✅ MRR: $2,000+
 
 ### Phase 4-5 (Months 7-12)
+
 - ✅ Total houses: 100+
 - ✅ Regional coverage: 3+ regions
 - ✅ MRR: $10,000+
 - ✅ ARR: $120,000+
 
 ### Phase 6 (Months 13-24)
+
 - ✅ Total houses: 300+
 - ✅ ARR: $200,000+
 - ✅ Industry recognition
@@ -442,16 +484,19 @@
 ### Technical Risks
 
 **Risk: Firebase costs spike**
+
 - Mitigation: Monitor usage weekly
 - Trigger: Move free tier houses to trial/paid at 80% of limits
 - Estimated threshold: 75-100 houses
 
 **Risk: Payment processing issues**
+
 - Mitigation: Extensive E2E testing
 - Mitigation: Beta test with 1-2 houses first
 - Mitigation: Stripe has fraud protection
 
 **Risk: App crashes in production**
+
 - Mitigation: E2E tests catch regressions
 - Mitigation: Monitoring/alerting (Sentry)
 - Mitigation: Staged rollout of new features
@@ -459,16 +504,19 @@
 ### Business Risks
 
 **Risk: Oxford Houses don't adopt**
+
 - Mitigation: Pilot program with local houses first
 - Mitigation: Gather feedback and iterate
 - Alternative: Focus on traditional houses ($49/month)
 
 **Risk: Competitors enter market**
+
 - Mitigation: Move fast, build network effects
 - Mitigation: Payment processing creates switching costs
 - Mitigation: Focus on quality and support
 
 **Risk: Can't scale support**
+
 - Mitigation: Hire part-time support at $50K ARR
 - Mitigation: Build comprehensive documentation
 - Mitigation: Community support forums
@@ -478,7 +526,9 @@
 ## Decision Points
 
 ### Month 3 Decision: Continue or Pivot?
+
 **Criteria for Continue:**
+
 - 15+ houses using Regroup
 - 1+ house using payment processing successfully
 - Positive user feedback
@@ -487,7 +537,9 @@
 **If not meeting criteria:** Re-evaluate pricing, features, or target market
 
 ### Month 12 Decision: Accelerate or Maintain?
+
 **Criteria for Accelerate (invest more time):**
+
 - 80+ houses using Regroup
 - $80K+ ARR
 - Strong Oxford House adoption
@@ -496,7 +548,9 @@
 **If meeting criteria:** Consider going part-time on day job, hiring contractor
 
 ### Month 18 Decision: Go Full-Time?
+
 **Criteria for Full-Time:**
+
 - 200+ houses
 - $200K+ ARR sustainable for 3+ months
 - Growth trajectory strong
@@ -507,16 +561,19 @@
 ## Immediate Next Steps
 
 ### This Week:
+
 1. ✅ Review and approve this roadmap
 2. ✅ Fix hardcoded Stripe secret (30 minutes)
 3. ✅ Set up Detox testing environment (2-3 hours)
 
 ### Next Week (Phase 0 Starts):
+
 1. Create first E2E smoke test
 2. Configure iOS/Android test builds
 3. Set up test runner
 
 ### Week 2:
+
 1. Build authentication flow tests
 2. Build resident management tests
 3. Build chore management tests
