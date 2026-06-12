@@ -35,7 +35,7 @@ The two tracks are deliberately separated:
   (source: docs/launch-readiness/homegroups-launch-readiness.md#1-executive-summary).
 
 > No price values appear here — they live in
-> [`../_shared/pricing.md`](../_shared/pricing.md). The roadmap items these
+> [`../_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md). The roadmap items these
 > blockers feed are in [`roadmap.md`](roadmap.md). Owner is **Marcus** for all
 > rows unless noted (single-founder product)
 > (source: homegroups/docs/operations/launch-blockers.md).
@@ -109,7 +109,7 @@ everything else following while App Store review is in progress
 
 Everything else (HG-P0-5 RATS secret, HG-P0-1/HG-P0-2 B2B prices, HG-P1-3/HG-P1-4
 field validation) can proceed while App Store review is in progress. The group
-tier ([`HG-MON-1`](../_shared/pricing.md)) can transact as soon as the sequence
+tier ([`HG-MON-1`](../../../docs/go-to-market/_shared/pricing.md)) can transact as soon as the sequence
 above completes; **B2B revenue stays `blocked` until HG-P0-1/HG-P0-2 clear**.
 
 ---
@@ -131,7 +131,7 @@ above completes; **B2B revenue stays `blocked` until HG-P0-1/HG-P0-2 clear**.
 
 - **D-1** — group price ($24/year). Resolved; see
   [`monetization.md`](monetization.md) and
-  [`../_shared/decisions-log.md`](../_shared/decisions-log.md). Does not block
+  [`../_shared/decisions-log.md`](../../../docs/go-to-market/_shared/decisions-log.md). Does not block
   shipping (the group product can transact at its configured default price);
   activating $24 is part of revenue-track work.
 - **R-3 / custom-domain decision** — open (HG-P1-2). Not launch-blocking;
@@ -141,4 +141,4 @@ above completes; **B2B revenue stays `blocked` until HG-P0-1/HG-P0-2 clear**.
 
 - Monetization narrative + R-1/R-2 detail: [`monetization.md`](monetization.md)
 - Roadmap (facility dashboard B2B unlock): [`roadmap.md`](roadmap.md)
-- Pricing rows: [`../_shared/pricing.md`](../_shared/pricing.md)
+- Pricing rows: [`../_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md)

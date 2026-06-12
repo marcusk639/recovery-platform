@@ -23,13 +23,13 @@ makes money two ways:
 
 1. **Operator subscriptions** — a flat-fee, six-tier model split across two house
    types (Traditional and Oxford); amounts in
-   [`../_shared/pricing.md`](../_shared/pricing.md) rows `RG-MON-1`…`RG-MON-6`.
+   [`../_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md) rows `RG-MON-1`…`RG-MON-6`.
 2. **Rent-payment platform fee** — a **2% application fee** on resident rent
    collected through Stripe Connect (destination charges), routed to the house
    operator's connected account.
 
 All price values live in the canonical table
-[`../_shared/pricing.md`](../_shared/pricing.md). This doc holds the **narrative,
+[`../_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md). This doc holds the **narrative,
 logic, and projections** and references each price by its stable `sku` ID
 (`RG-MON-*`). No price string is restated here.
 
@@ -59,7 +59,7 @@ rejected conservative ladder: `regroup/docs/product/decisions.md` (stubbed).
 | `RG-MON-7`       | Rent platform fee        | both        | 2% application fee via Stripe Connect |
 
 Tier amounts, billing period, Stripe env-var names, and Connect fee are in
-[`../_shared/pricing.md`](../_shared/pricing.md) rows `RG-MON-1`…`RG-MON-7`. The
+[`../_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md) rows `RG-MON-1`…`RG-MON-7`. The
 approved ladder is the "balanced" recommendation (Model #3 of five evaluated
 pricing models — chosen over conservative, aggressive-value, flat-rate, and
 per-resident alternatives because it maximizes revenue while staying inside the
@@ -139,7 +139,7 @@ The approved policy is:
   never an unattended bulk script over live revenue
   (source: regroup/docs/superpowers/plans/2026-06-06-regroup-tier-billing-migration.md#phase-7-existing-subscriber-strategy).
 
-D-9 is recorded in [`../_shared/decisions-log.md`](../_shared/decisions-log.md).
+D-9 is recorded in [`../_shared/decisions-log.md`](../../../docs/go-to-market/_shared/decisions-log.md).
 
 ---
 
@@ -250,7 +250,7 @@ E2E payment validation are all required before any of these numbers are real
 
 ## Cross-references
 
-- Prices, Stripe env vars, Connect fee → [`../_shared/pricing.md`](../_shared/pricing.md)
+- Prices, Stripe env vars, Connect fee → [`../_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md)
 - Launch blockers, owners, sequencing → [`project-management.md`](project-management.md)
 - Feature build status (incl. phantom features) → [`roadmap.md`](roadmap.md)
-- Decisions D-9, D-11 → [`../_shared/decisions-log.md`](../_shared/decisions-log.md)
+- Decisions D-9, D-11 → [`../_shared/decisions-log.md`](../../../docs/go-to-market/_shared/decisions-log.md)

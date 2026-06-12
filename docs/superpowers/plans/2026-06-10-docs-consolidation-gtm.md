@@ -4,9 +4,22 @@
 **Author:** orchestrator (make-plan)
 **Goal:** Read and understand the full documentation corpus, then produce an _optimized, organized, non-duplicative_ doc set covering three categories — **project-management**, **monetization**, **roadmap** — for each of **regroup**, **homegroups**, **detox-recovery** (each toward "ready to go live + fully monetized"), plus **one ecosystem roadmap** combining all apps into a cohesive, market-feasible, monetizable recovery platform.
 
-**Decision D-1 — RESOLVED (2026-06-10):** the deliverable set is **consolidated into one tree, `docs/go-to-market/`** — NOT scattered across per-product `docs/`. Per-product business docs (`{product}/docs/{monetization,product/roadmap,operations/launch-blockers,…}`) become **sources** that are consolidated here once, then reduced to a one-line pointer stub or archived (Phase 6) so there is exactly **one SSOT** and **zero redundancy**.
+**Decision D-1 — RESOLVED (2026-06-10), AMENDED (2026-06-11):** Originally resolved to consolidate the entire deliverable set into one top-level tree `docs/go-to-market/`. **Amended 2026-06-11 to a hybrid layout:** per-product business docs (`monetization.md`, `roadmap.md`, `project-management.md`) live **inside each app** at `{product}/docs/go-to-market/` (co-located with the product code — easiest for an agent making per-product changes), while the **top-level `docs/go-to-market/` retains only ecosystem-wide and cross-cutting content**: `ecosystem/` plus `_shared/` (`pricing.md`, `decisions-log.md`, `integration.md`). The `_shared/` single-source rule is preserved precisely because cross-product numbers (pricing, decisions) drift when duplicated. The original full-consolidation tree below is kept for historical context; the **current** structure is the amended hybrid.
 
-**Target tree (consolidated, AI-optimized):**
+**Current tree (hybrid, 2026-06-11):**
+
+```
+docs/go-to-market/             # top level = ecosystem + cross-cutting ONLY
+  README.md
+  _shared/ { pricing.md, integration.md, decisions-log.md }   # cross-product SSOT
+  ecosystem/ { vision.md, monetization.md, roadmap.md, project-management.md }
+{product}/docs/go-to-market/   # per-product docs live IN each app
+  regroup/docs/go-to-market/ { monetization.md, roadmap.md, project-management.md }
+  homegroups/docs/go-to-market/ { monetization.md, roadmap.md, project-management.md }
+  detox-recovery/docs/go-to-market/ { monetization.md, roadmap.md, project-management.md }
+```
+
+**Original target tree (consolidated — superseded 2026-06-11):**
 
 ```
 docs/go-to-market/
@@ -32,9 +45,9 @@ docs/go-to-market/
 
 | Scope          | project-management                                       | monetization                                       | roadmap                                       |
 | -------------- | -------------------------------------------------------- | -------------------------------------------------- | --------------------------------------------- |
-| regroup        | `docs/go-to-market/regroup/project-management.md`        | `docs/go-to-market/regroup/monetization.md`        | `docs/go-to-market/regroup/roadmap.md`        |
-| homegroups     | `docs/go-to-market/homegroups/project-management.md`     | `docs/go-to-market/homegroups/monetization.md`     | `docs/go-to-market/homegroups/roadmap.md`     |
-| detox-recovery | `docs/go-to-market/detox-recovery/project-management.md` | `docs/go-to-market/detox-recovery/monetization.md` | `docs/go-to-market/detox-recovery/roadmap.md` |
+| regroup        | `regroup/docs/go-to-market/project-management.md`        | `regroup/docs/go-to-market/monetization.md`        | `regroup/docs/go-to-market/roadmap.md`        |
+| homegroups     | `homegroups/docs/go-to-market/project-management.md`     | `homegroups/docs/go-to-market/monetization.md`     | `homegroups/docs/go-to-market/roadmap.md`     |
+| detox-recovery | `detox-recovery/docs/go-to-market/project-management.md` | `detox-recovery/docs/go-to-market/monetization.md` | `detox-recovery/docs/go-to-market/roadmap.md` |
 | ecosystem      | `docs/go-to-market/ecosystem/project-management.md`      | `docs/go-to-market/ecosystem/monetization.md`      | `docs/go-to-market/ecosystem/roadmap.md`      |
 
 ### AI-optimization conventions (apply to EVERY deliverable — this is the core quality bar)
@@ -147,9 +160,9 @@ This phase has already been executed (4 parallel read-only discovery agents + st
 
 **What to produce (synthesize from SSOTs in §0.2; reconcile per §0.4):**
 
-1. `docs/go-to-market/regroup/monetization.md` — reconcile to ONE canonical pricing model: tiered `$49–$299` (Traditional + Oxford ladders) + 2% rent fee via Stripe Connect. **Write the price rows into `_shared/pricing.md`** and link them here; this doc holds the narrative/logic + projections, not raw numbers. Document the legacy→tier **migration & grandfather** decision (D-9) and the hardcoded-price defect as a launch blocker.
-2. `docs/go-to-market/regroup/roadmap.md` — collapse `FEATURE_PRIORITIZATION.md` + `PRODUCT_ROADMAP.md` + `decisions.md` roadmap into one tier-scored roadmap (roadmap table column set) to "live + monetized"; mark phantom features (e-sign, Oxford CRUD) with truthful build/de-scope status + code anchors.
-3. `docs/go-to-market/regroup/project-management.md` — actionable plan (launch/PM table column set) from `decisions.md` 90-day sprint + `2026-06-06-regroup-tier-billing-migration.md` + app-store checklist: blockers (open security rules; hardcoded pricing; missing `createPaymentIntent`/`listPayments`/`listHousePayments` CFs; HIPAA decision; IAP vs web billing), milestones, sequencing, owners, decision gates, status.
+1. `regroup/docs/go-to-market/monetization.md` — reconcile to ONE canonical pricing model: tiered `$49–$299` (Traditional + Oxford ladders) + 2% rent fee via Stripe Connect. **Write the price rows into `_shared/pricing.md`** and link them here; this doc holds the narrative/logic + projections, not raw numbers. Document the legacy→tier **migration & grandfather** decision (D-9) and the hardcoded-price defect as a launch blocker.
+2. `regroup/docs/go-to-market/roadmap.md` — collapse `FEATURE_PRIORITIZATION.md` + `PRODUCT_ROADMAP.md` + `decisions.md` roadmap into one tier-scored roadmap (roadmap table column set) to "live + monetized"; mark phantom features (e-sign, Oxford CRUD) with truthful build/de-scope status + code anchors.
+3. `regroup/docs/go-to-market/project-management.md` — actionable plan (launch/PM table column set) from `decisions.md` 90-day sprint + `2026-06-06-regroup-tier-billing-migration.md` + app-store checklist: blockers (open security rules; hardcoded pricing; missing `createPaymentIntent`/`listPayments`/`listHousePayments` CFs; HIPAA decision; IAP vs web billing), milestones, sequencing, owners, decision gates, status.
 
 **Doc references:** all regroup SSOTs in §0.2; `docs/launch-readiness/regroup-launch-readiness.md` (readiness score 48/100, phantom-feature findings).
 
@@ -169,9 +182,9 @@ This phase has already been executed (4 parallel read-only discovery agents + st
 
 **What to produce (synthesize from §0.2; reconcile per §0.4):**
 
-1. `docs/go-to-market/homegroups/monetization.md` — reconcile group price (resolve `$12` vs `$24/yr` per D-1), intergroup A/B, treatment-center tiers, donations 5% Connect fee. **Price rows go into `_shared/pricing.md`**; link them here. Flag **R-1/R-2 (no default Stripe price set)** as the top monetization blocker; fold the `revenue-opportunities.md` status tracker + 3-yr projections narrative.
-2. `docs/go-to-market/homegroups/roadmap.md` — refresh to: launch → 30-group pilot → treatment-center facility dashboard (B2B unlock) → B2B sales; mark V4.1–V4.4 as intentionally flag-hidden.
-3. `docs/go-to-market/homegroups/project-management.md` — from `operations/launch-blockers.md` + `pre-launch-checklist.md` + `2026-05-26-go-live-revenue-growth.md`: P0 (Stripe prices, App Store submit, `RATS_API_KEY` secret, claim-and-pay E2E, Auth domains, email sender), P1 (custom domain, live Stripe key, pilot outreach), P2 (App Check, rate limiting). Milestones, owners, status.
+1. `homegroups/docs/go-to-market/monetization.md` — reconcile group price (resolve `$12` vs `$24/yr` per D-1), intergroup A/B, treatment-center tiers, donations 5% Connect fee. **Price rows go into `_shared/pricing.md`**; link them here. Flag **R-1/R-2 (no default Stripe price set)** as the top monetization blocker; fold the `revenue-opportunities.md` status tracker + 3-yr projections narrative.
+2. `homegroups/docs/go-to-market/roadmap.md` — refresh to: launch → 30-group pilot → treatment-center facility dashboard (B2B unlock) → B2B sales; mark V4.1–V4.4 as intentionally flag-hidden.
+3. `homegroups/docs/go-to-market/project-management.md` — from `operations/launch-blockers.md` + `pre-launch-checklist.md` + `2026-05-26-go-live-revenue-growth.md`: P0 (Stripe prices, App Store submit, `RATS_API_KEY` secret, claim-and-pay E2E, Auth domains, email sender), P1 (custom domain, live Stripe key, pilot outreach), P2 (App Check, rate limiting). Milestones, owners, status.
 
 **Doc references:** all homegroups SSOTs in §0.2; `docs/launch-readiness/homegroups-launch-readiness.md` (72/100); `docs/STRIPE_CONNECT_GUIDE.md`.
 
@@ -190,9 +203,9 @@ This phase has already been executed (4 parallel read-only discovery agents + st
 
 **What to produce (synthesize from §0.2; reconcile per §0.4):**
 
-1. `docs/go-to-market/detox-recovery/monetization.md` — canonical service ladder (Tier 2 call, Tier 3, Tier 4), digital PDFs via **Lemon Squeezy** (Stripe for calls/donations), B2B consulting/retainer, group subscription, VA Community Care, grants. **Price rows go into `_shared/pricing.md`** with the processor column distinguishing Stripe vs Lemon Squeezy; this doc holds the narrative + v2.0 3-scenario projections.
-2. `docs/go-to-market/detox-recovery/roadmap.md` — refresh P0–P3 to current: P0 launch blockers (`RUNTIMEi` typo, PDF delivery, custom domain, analytics), P1 lead-magnet content + automations + `/thank-you`, P2 Tier 3 + B2B guide + SEO, P3 Tier 4 + workshops.
-3. `docs/go-to-market/detox-recovery/project-management.md` — from `2026-06-07-detox-completion.md` (Part A agent-executable / Part B manual) + manual-task runbooks: blockers (broken lead-magnet delivery, undeliverable paid PDFs, price not single-sourced, missing analytics), milestones (first paid call ✅ → first B2B → Tier 3 → $1k/mo → VA cert), owners, status.
+1. `detox-recovery/docs/go-to-market/monetization.md` — canonical service ladder (Tier 2 call, Tier 3, Tier 4), digital PDFs via **Lemon Squeezy** (Stripe for calls/donations), B2B consulting/retainer, group subscription, VA Community Care, grants. **Price rows go into `_shared/pricing.md`** with the processor column distinguishing Stripe vs Lemon Squeezy; this doc holds the narrative + v2.0 3-scenario projections.
+2. `detox-recovery/docs/go-to-market/roadmap.md` — refresh P0–P3 to current: P0 launch blockers (`RUNTIMEi` typo, PDF delivery, custom domain, analytics), P1 lead-magnet content + automations + `/thank-you`, P2 Tier 3 + B2B guide + SEO, P3 Tier 4 + workshops.
+3. `detox-recovery/docs/go-to-market/project-management.md` — from `2026-06-07-detox-completion.md` (Part A agent-executable / Part B manual) + manual-task runbooks: blockers (broken lead-magnet delivery, undeliverable paid PDFs, price not single-sourced, missing analytics), milestones (first paid call ✅ → first B2B → Tier 3 → $1k/mo → VA cert), owners, status.
 
 **Doc references:** all detox SSOTs in §0.2.
 

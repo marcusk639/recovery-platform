@@ -1,4 +1,4 @@
-> Archived 2026-06-10: duplicate of FEATURE_PRIORITIZATION.md; superseded by docs/go-to-market/regroup/roadmap.md.
+> Archived 2026-06-10: duplicate of FEATURE_PRIORITIZATION.md; superseded by regroup/docs/go-to-market/roadmap.md.
 
 # Regroup Product Roadmap - Path to $200K+ ARR
 

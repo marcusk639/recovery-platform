@@ -29,7 +29,7 @@ default Stripe price is set on each. That gap — not features — is what stand
 between today and "fully monetized."
 
 All price values live in the canonical table
-[`../_shared/pricing.md`](../_shared/pricing.md); this doc references each row by
+[`../_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md); this doc references each row by
 its stable `HG-MON-*` ID and never restates a number.
 
 ---
@@ -47,11 +47,11 @@ treatment-center checkout fails
 
 | ID  | Product                                              | pricing.md row                      | Blocker                         |
 | --- | ---------------------------------------------------- | ----------------------------------- | ------------------------------- |
-| R-1 | Intergroup Tier A (`STRIPE_PRODUCT_ID_INTERGROUP_A`) | [`HG-MON-2`](../_shared/pricing.md) | `blocked` — default price unset |
-| R-2 | Intergroup Tier B (`STRIPE_PRODUCT_ID_INTERGROUP_B`) | [`HG-MON-3`](../_shared/pricing.md) | `blocked` — default price unset |
+| R-1 | Intergroup Tier A (`STRIPE_PRODUCT_ID_INTERGROUP_A`) | [`HG-MON-2`](../../../docs/go-to-market/_shared/pricing.md) | `blocked` — default price unset |
+| R-2 | Intergroup Tier B (`STRIPE_PRODUCT_ID_INTERGROUP_B`) | [`HG-MON-3`](../../../docs/go-to-market/_shared/pricing.md) | `blocked` — default price unset |
 
 Until R-1/R-2 clear, intergroup and treatment-center revenue is `blocked` and
-**must not be presented as live**. The consumer group tier ([`HG-MON-1`](../_shared/pricing.md))
+**must not be presented as live**. The consumer group tier ([`HG-MON-1`](../../../docs/go-to-market/_shared/pricing.md))
 has its product configured and is the only tier able to transact today
 (source: docs/launch-readiness/homegroups-launch-readiness.md#6-3-stripe-environment-configuration).
 Each fix is a ~10-minute Stripe Dashboard action; the launch sequence and owner
@@ -64,11 +64,11 @@ are tracked in [`project-management.md`](project-management.md) (rows `HG-P0-1`,
 
 | ID       | Stream                           | pricing.md row                                                            | Status        | Notes                                                |
 | -------- | -------------------------------- | ------------------------------------------------------------------------- | ------------- | ---------------------------------------------------- |
-| HG-MON-1 | Group Admin subscription         | [`HG-MON-1`](../_shared/pricing.md)                                       | `in_progress` | Consumer wedge; product configured, activation-gated |
-| HG-MON-2 | Intergroup Tier A (≤10 groups)   | [`HG-MON-2`](../_shared/pricing.md)                                       | `blocked`     | R-1 — no default price set                           |
-| HG-MON-3 | Intergroup Tier B (unlimited)    | [`HG-MON-3`](../_shared/pricing.md)                                       | `blocked`     | R-2 — no default price set                           |
-| HG-MON-4 | Treatment-center plans           | [`HG-MON-2`](../_shared/pricing.md) / [`HG-MON-3`](../_shared/pricing.md) | `blocked`     | Reuses the two intergroup products; inherits R-1/R-2 |
-| HG-MON-5 | Group donations (Stripe Connect) | [`HG-MON-5`](../_shared/pricing.md)                                       | `in_progress` | 5% platform fee; coded, low-frequency revenue        |
+| HG-MON-1 | Group Admin subscription         | [`HG-MON-1`](../../../docs/go-to-market/_shared/pricing.md)                                       | `in_progress` | Consumer wedge; product configured, activation-gated |
+| HG-MON-2 | Intergroup Tier A (≤10 groups)   | [`HG-MON-2`](../../../docs/go-to-market/_shared/pricing.md)                                       | `blocked`     | R-1 — no default price set                           |
+| HG-MON-3 | Intergroup Tier B (unlimited)    | [`HG-MON-3`](../../../docs/go-to-market/_shared/pricing.md)                                       | `blocked`     | R-2 — no default price set                           |
+| HG-MON-4 | Treatment-center plans           | [`HG-MON-2`](../../../docs/go-to-market/_shared/pricing.md) / [`HG-MON-3`](../../../docs/go-to-market/_shared/pricing.md) | `blocked`     | Reuses the two intergroup products; inherits R-1/R-2 |
+| HG-MON-5 | Group donations (Stripe Connect) | [`HG-MON-5`](../../../docs/go-to-market/_shared/pricing.md)                                       | `in_progress` | 5% platform fee; coded, low-frequency revenue        |
 
 ### Group price — conflict RESOLVED to **$24/year** (per D-1)
 
@@ -96,15 +96,15 @@ hobby tier before B2B sales begin
 The $12/year value is retained only as **historical / migration context** (the
 price the code currently resolves from Stripe's default). Activating $24
 requires updating the group product's default price in Stripe and is part of the
-R-track activation work — see [`HG-MON-1`](../_shared/pricing.md) (`status: in_progress`).
+R-track activation work — see [`HG-MON-1`](../../../docs/go-to-market/_shared/pricing.md) (`status: in_progress`).
 
 > The group tier is a **distribution flywheel, not a primary revenue engine** in
-> Year 1–2: at the resolved group price ([`HG-MON-1`](../_shared/pricing.md))
+> Year 1–2: at the resolved group price ([`HG-MON-1`](../../../docs/go-to-market/_shared/pricing.md))
 > even 1,000 groups is a low-thousands-ARR line. The base-case Year-1 monthly
 > cohort grows from 5 groups (Apr 2026) to **241 groups by Mar 2027** at ~1.0%
 > monthly churn (5 → 13 → 25 → 40 → 57 → 76 → 101 → 128 → 157 → 185 → 213 →
 > 241), so Year-1 group-tier ARR is only ~$2,892 (241 × the shipped group price
-> [`HG-MON-1`](../_shared/pricing.md)) — a rounding error
+> [`HG-MON-1`](../../../docs/go-to-market/_shared/pricing.md)) — a rounding error
 > against the portfolio. Its strategic value is twofold: it seeds the
 > meeting/group network that makes Regroup and the future Aftercare product
 > more valuable, and each group admin is a potential referral source to
@@ -118,9 +118,9 @@ The launch-readiness recommendation positions Tier A well below any B2B software
 (per-group-year pricing) and Tier B as network-effect pricing that makes sense
 only at scale (source: docs/launch-readiness/homegroups-launch-readiness.md#5-4-pricing-recommendations-spec-ready).
 The recommended A/B values are the defaults to set when clearing R-1/R-2 — they
-live in rows [`HG-MON-2`](../_shared/pricing.md) and
-[`HG-MON-3`](../_shared/pricing.md), both `blocked` in
-[`../_shared/pricing.md`](../_shared/pricing.md) until the Stripe default prices
+live in rows [`HG-MON-2`](../../../docs/go-to-market/_shared/pricing.md) and
+[`HG-MON-3`](../../../docs/go-to-market/_shared/pricing.md), both `blocked` in
+[`../_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md) until the Stripe default prices
 exist.
 
 ### Treatment-center tiers — reuse the two intergroup products
@@ -147,8 +147,8 @@ from email/profile); the modal blocks checkout until it is non-empty
 The launch-readiness recommendation positions dedicated treatment-center annual
 tiers at a premium over intergroup, still negligible vs. EHR costs
 (source: docs/launch-readiness/homegroups-launch-readiness.md#5-4-pricing-recommendations-spec-ready);
-those values live in rows [`HG-MON-2`](../_shared/pricing.md) /
-[`HG-MON-3`](../_shared/pricing.md). Because they ride the same two products,
+those values live in rows [`HG-MON-2`](../../../docs/go-to-market/_shared/pricing.md) /
+[`HG-MON-3`](../../../docs/go-to-market/_shared/pricing.md). Because they ride the same two products,
 treatment-center checkout inherits the R-1/R-2 blocker — it is `blocked` until
 those default prices are set.
 
@@ -157,7 +157,7 @@ those default prices are set.
 > without adding metadata
 > (source: docs/launch-readiness/homegroups-launch-readiness.md#4-4-pricing-to-product-mapping-complexity).
 > A future **per-facility facility dashboard** (monthly SaaS pricing — see row
-> [`HG-MON-6`](../_shared/pricing.md)) is the recommended dedicated
+> [`HG-MON-6`](../../../docs/go-to-market/_shared/pricing.md)) is the recommended dedicated
 > treatment-center line once the dashboard ships — see
 > [`roadmap.md`](roadmap.md) (`HG-RM-3`).
 
@@ -169,7 +169,7 @@ takes a **5% fee** (`PLATFORM_FEE_PERCENT = 0.05`)
 (source: docs/STRIPE_CONNECT_GUIDE.md#1-connect-at-a-glance-both-products).
 This is low-frequency, low-margin revenue — coded and promotable, but not a
 revenue pillar (source: docs/launch-readiness/homegroups-launch-readiness.md#7-3-business-model-risks).
-See row [`HG-MON-5`](../_shared/pricing.md).
+See row [`HG-MON-5`](../../../docs/go-to-market/_shared/pricing.md).
 
 ---
 
@@ -217,7 +217,7 @@ is intentionally the **lowest-revenue, highest-distribution** product in the
 three-product portfolio (Homegroups, Regroup, planned Aftercare) — the consumer
 group tier seeds the network that makes Regroup and the future Aftercare product
 sellable to treatment centers. The ecosystem maps to the ASAM continuum of care:
-Homegroups (group admins, group tier [`HG-MON-1`](../_shared/pricing.md)), Regroup
+Homegroups (group admins, group tier [`HG-MON-1`](../../../docs/go-to-market/_shared/pricing.md)), Regroup
 (house operators, ~$49–99/mo), and Aftercare (treatment centers, ~$800–3,000/mo,
 planned); no competitor connects these three
 phases digitally, and the "continuity of care" bundle to treatment centers is
@@ -226,7 +226,7 @@ the highest-ACV product and the primary path to a venture-scale outcome
 
 | Horizon               | Homegroups contribution (base case)                                                                                          | Note                                                                                                                    |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Year 1 end (Mar 2027) | ~241 groups; group-tier ARR ~$2,892 (241 × group price [`HG-MON-1`](../_shared/pricing.md)) — a rounding error vs. portfolio | Distribution flywheel, not revenue engine (orig: homegroups/docs/monetization/projections.md, archived)                 |
+| Year 1 end (Mar 2027) | ~241 groups; group-tier ARR ~$2,892 (241 × group price [`HG-MON-1`](../../../docs/go-to-market/_shared/pricing.md)) — a rounding error vs. portfolio | Distribution flywheel, not revenue engine (orig: homegroups/docs/monetization/projections.md, archived)                 |
 | Year 2 end (Mar 2028) | ~1,000 groups + ~20 intergroups (~$1,200/mo); intergroup tier un-gates                                                       | Intergroup tier launches once R-1/R-2 clear; Year-2 portfolio ARR ~$788K at Q4 (orig: …/projections.md, archived)       |
 | Year 3 end (Mar 2029) | ~3,500 groups + ~60 intergroups (~$4,200/mo w/ donation fees); fees compound                                                 | B2B + facility-dashboard ARPU is the growth path; Year-3 portfolio ARR ~$2.43M at Q4 (orig: …/projections.md, archived) |
 
@@ -238,17 +238,17 @@ the adoption flywheel** (source: docs/launch-readiness/homegroups-launch-readine
 
 The full cross-product model, scenarios, and the 12-month ecosystem sequencing
 are **not duplicated here** — see the ecosystem monetization doc and
-[`homegroups/docs/plans/2026-04-13-recovery-ecosystem-12-month-plan.md`](../../../homegroups/docs/plans/2026-04-13-recovery-ecosystem-12-month-plan.md).
+[`homegroups/docs/plans/2026-04-13-recovery-ecosystem-12-month-plan.md`](../plans/2026-04-13-recovery-ecosystem-12-month-plan.md).
 
 ---
 
 ## Decision references
 
 - **D-1** — group price resolved to $24/year (rationale above); recorded in
-  [`../_shared/decisions-log.md`](../_shared/decisions-log.md).
+  [`../_shared/decisions-log.md`](../../../docs/go-to-market/_shared/decisions-log.md).
 
 ## See also
 
-- Pricing rows: [`../_shared/pricing.md`](../_shared/pricing.md) (`HG-MON-*`)
+- Pricing rows: [`../_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md) (`HG-MON-*`)
 - Launch sequence + owners for R-1/R-2: [`project-management.md`](project-management.md)
 - Facility dashboard B2B unlock: [`roadmap.md`](roadmap.md) (`HG-RM-3`)

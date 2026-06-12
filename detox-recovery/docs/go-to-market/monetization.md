@@ -22,7 +22,7 @@ Marketed as **NextStep Recovery** (`nextsteprecovery.io`). A non-clinical peer
 pathway. Solo founder, part-time Year 1 → full-time transition Year 2.
 
 > **One fact, one home.** Every price, fee, and projection figure lives in
-> [`../_shared/pricing.md`](../_shared/pricing.md). This doc holds the
+> [`../_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md). This doc holds the
 > narrative and logic only; it references price rows by their stable `DX-MON-n`
 > SKU. No raw price number appears here.
 
@@ -45,7 +45,7 @@ checkout code or env config.
 | **Stripe**        | Support call (Tier 2), Tier 3/4 calls, donations, B2B invoices | Stripe Payment Links for service bookings; Stripe Invoices for B2B. Stripe is fine for services — no file to deliver.                                                   |
 | **Lemon Squeezy** | The 5 paid digital PDFs                                        | Lemon Squeezy is **merchant of record** — it handles checkout, EU VAT / US sales tax, **and file delivery + confirmation email** in one step. Stripe delivers no files. |
 
-**Hard rule (from [`detox-recovery/CLAUDE.md`](../../../detox-recovery/CLAUDE.md)
+**Hard rule (from [`detox-recovery/CLAUDE.md`](../../CLAUDE.md)
 and the Lemon Squeezy runbook):** _do not create new Stripe payment links for PDF
 products._ The 5 paid PDFs migrate to Lemon Squeezy; the support-call and
 donation links stay on Stripe and are untouched
@@ -55,7 +55,7 @@ The Lemon Squeezy per-transaction fee is higher than Stripe's; the zero-code
 delivery and tax compliance are the deliberate trade-off (exact fee figures:
 detox-recovery/docs/operations/manual-tasks/2026-05-23-lemon-squeezy-migration.md#notes--gotchas).
 
-Pricing rows in [`../_shared/pricing.md`](../_shared/pricing.md) carry the
+Pricing rows in [`../_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md) carry the
 processor in their `status`/`source` cells: Stripe SKUs name a
 `NEXT_PUBLIC_STRIPE_*` env var; Lemon Squeezy SKUs name a
 `NEXT_PUBLIC_LEMONSQUEEZY_*` env var and are flagged `planned` (delivery is
@@ -72,9 +72,9 @@ alongside.
 | Rung                                | Pricing row                         | Processor | Status today                              |
 | ----------------------------------- | ----------------------------------- | --------- | ----------------------------------------- |
 | Free Fit Check (lead gen)           | n/a (free)                          | —         | `done` — live, free lead-gen              |
-| **Tier 2 — 30-min support call**    | [`DX-MON-1`](../_shared/pricing.md) | Stripe    | `done` — the only live paid call tier     |
-| **Tier 3 — 60-min family/nav call** | [`DX-MON-2`](../_shared/pricing.md) | Stripe    | `planned` — target Q3 2026 (Month 7)      |
-| **Tier 4 — 2-week nav package**     | [`DX-MON-3`](../_shared/pricing.md) | Stripe    | `planned` — target Q2 2027 (Year 2)       |
+| **Tier 2 — 30-min support call**    | [`DX-MON-1`](../../../docs/go-to-market/_shared/pricing.md) | Stripe    | `done` — the only live paid call tier     |
+| **Tier 3 — 60-min family/nav call** | [`DX-MON-2`](../../../docs/go-to-market/_shared/pricing.md) | Stripe    | `planned` — target Q3 2026 (Month 7)      |
+| **Tier 4 — 2-week nav package**     | [`DX-MON-3`](../../../docs/go-to-market/_shared/pricing.md) | Stripe    | `planned` — target Q2 2027 (Year 2)       |
 | Tier 5 — sliding-scale slots        | subsidized via donations            | Stripe    | `planned` — Year 2, donation/grant-funded |
 
 **Support-call price is single-sourced.** The canonical value lives in
@@ -86,7 +86,7 @@ Market-comp research repriced it upward from the `$50` beta into the recommended
 band; the `betaLabel` (`detox-recovery/lib/services-data.ts`, line 34) is kept so
 the raise reads as introductory repricing
 (source: detox-recovery/docs/superpowers/plans/2026-06-07-detox-completion.md#pricing-research-summary).
-The canonical number is [`DX-MON-1`](../_shared/pricing.md) — never restate it in
+The canonical number is [`DX-MON-1`](../../../docs/go-to-market/_shared/pricing.md) — never restate it in
 copy; derive it from `SERVICE_TIERS`.
 
 ### Capacity constraint (why the ladder matters)
@@ -109,11 +109,11 @@ Five paid PDFs form the passive, uncapped revenue layer:
 
 | Product                        | Pricing row                         |
 | ------------------------------ | ----------------------------------- |
-| Family Survival Guide          | [`DX-MON-4`](../_shared/pricing.md) |
-| Appointment Prep Worksheet     | [`DX-MON-5`](../_shared/pricing.md) |
-| Withdrawal Safety Checklist    | [`DX-MON-6`](../_shared/pricing.md) |
-| Treatment Comparison Worksheet | [`DX-MON-7`](../_shared/pricing.md) |
-| Relapse Prevention Plan        | [`DX-MON-8`](../_shared/pricing.md) |
+| Family Survival Guide          | [`DX-MON-4`](../../../docs/go-to-market/_shared/pricing.md) |
+| Appointment Prep Worksheet     | [`DX-MON-5`](../../../docs/go-to-market/_shared/pricing.md) |
+| Withdrawal Safety Checklist    | [`DX-MON-6`](../../../docs/go-to-market/_shared/pricing.md) |
+| Treatment Comparison Worksheet | [`DX-MON-7`](../../../docs/go-to-market/_shared/pricing.md) |
+| Relapse Prevention Plan        | [`DX-MON-8`](../../../docs/go-to-market/_shared/pricing.md) |
 
 All five are sold through **Lemon Squeezy** (not Stripe) — each `ctaHref` reads a
 `NEXT_PUBLIC_LEMONSQUEEZY_*` env var in `detox-recovery/lib/products-data.ts`
@@ -126,7 +126,7 @@ monetization blocker tracked in [`project-management.md`](project-management.md)
 
 The market verdict on the PDF price band is "sound, keep" — these are
 value-positioned against comparable digital recovery workbooks on Gumroad/Etsy
-(band + comp figures: [`DX-MON-4`..`DX-MON-8`](../_shared/pricing.md);
+(band + comp figures: [`DX-MON-4`..`DX-MON-8`](../../../docs/go-to-market/_shared/pricing.md);
 source: detox-recovery/docs/superpowers/plans/2026-06-07-detox-completion.md#pricing-research-summary).
 
 ---
@@ -142,10 +142,10 @@ subject to the call-hour ceiling)
 Breakdown).
 
 - **Per-engagement consulting** — priced as a band, billed via **Stripe
-  Invoices** (not payment links). Pricing row [`DX-MON-9`](../_shared/pricing.md).
+  Invoices** (not payment links). Pricing row [`DX-MON-9`](../../../docs/go-to-market/_shared/pricing.md).
   Stays **contact-for-quote** publicly — no published price needed
   (source: detox-recovery/docs/superpowers/plans/2026-06-07-detox-completion.md#pricing-research-summary).
-- **Ongoing retainer** — [`DX-MON-10`](../_shared/pricing.md), a Year 3 target.
+- **Ongoing retainer** — [`DX-MON-10`](../../../docs/go-to-market/_shared/pricing.md), a Year 3 target.
 
 **Target B2B buyers and entry points** (the buyer ladder feeding `DX-MON-9`):
 
@@ -156,7 +156,7 @@ Breakdown).
 | Recovery startup      | Product advisory (ongoing)       | retainer band |
 | Behavioral health org | Communication workshops          | mid band      |
 
-(Exact band: [`DX-MON-9`](../_shared/pricing.md); orig:
+(Exact band: [`DX-MON-9`](../../../docs/go-to-market/_shared/pricing.md); orig:
 detox-recovery/docs/monetization/model.md, archived — §2.4 B2B Monetization
 Detail.)
 
@@ -181,10 +181,10 @@ links; net-7 or due-on-receipt). No marketing spend is required until Year 2
 
 These are the Year 2–3 expansion streams modeled in the v2.0 financial model.
 
-- **Group subscription** ("Field Notes Plus" community) — [`DX-MON-11`](../_shared/pricing.md),
+- **Group subscription** ("Field Notes Plus" community) — [`DX-MON-11`](../../../docs/go-to-market/_shared/pricing.md),
   Year 2 launch (Circle.so), recurring monthly. Modeled at ~40 members by end of
   Year 2, ~110 by end of Year 3.
-- **VA Community Care / Medicaid peer support** — [`DX-MON-12`](../_shared/pricing.md),
+- **VA Community Care / Medicaid peer support** — [`DX-MON-12`](../../../docs/go-to-market/_shared/pricing.md),
   ~per-session reimbursement, gated behind VA Peer Support Specialist (PSS)
   certification and Community Care provider enrollment. Prerequisite chain: enroll
   in VA healthcare → complete PSS certification (~40–80 hours + exam) → apply for
@@ -200,7 +200,7 @@ These are the Year 2–3 expansion streams modeled in the v2.0 financial model.
   to 3–5 opportunities (realistic ~$25K yield) → Year 3 larger SAMHSA/foundation
   applications (realistic ~$50K yield). Requires a 501(c)(3) or fiscal sponsor.
   Grant amounts are variable and recorded in the financial model
-  ([`../_shared/pricing.md`](../_shared/pricing.md) projection rows), not as fixed
+  ([`../_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md) projection rows), not as fixed
   SKUs in the pricing table.
 
 The **veteran pathway** (VA billing + VSO-sponsored workshops + grants) is the
@@ -220,7 +220,7 @@ Pathway Three-Year Impact; §13 Key Financial Milestones & Decision Gates.)
 
 The v2.0 model runs three scenarios (P10/P50/P90) over a 36-month
 monthly/quarterly horizon. The canonical headline revenue figures are
-single-sourced in [`../_shared/pricing.md`](../_shared/pricing.md) under the
+single-sourced in [`../_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md) under the
 `DX-PROJ-*` projection rows — reference them by id, never restate the numbers
 here. The three-scenario shape:
 
@@ -230,7 +230,7 @@ here. The three-scenario shape:
 | Year 2 revenue | `DX-PROJ-Y2` (P10) | `DX-PROJ-Y2` | `DX-PROJ-Y2`     |
 | Year 3 revenue | `DX-PROJ-Y3` (P10) | `DX-PROJ-Y3` | `DX-PROJ-Y3`     |
 
-(All values: [`../_shared/pricing.md`](../_shared/pricing.md) `DX-PROJ-Y1`..`Y3`
+(All values: [`../_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md) `DX-PROJ-Y1`..`Y3`
 rows. The cumulative 3-year base case is ~$213,238; the optimistic ceiling is
 ~$347,000 with all pathways open.)
 

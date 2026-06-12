@@ -10,9 +10,9 @@ sources:
   - docs/strategy/market-opportunity.md
   - recovery-api/src/config/apps.ts
   - recovery-api/CLAUDE.md
-  - docs/go-to-market/regroup/monetization.md
-  - docs/go-to-market/homegroups/monetization.md
-  - docs/go-to-market/detox-recovery/monetization.md
+  - regroup/docs/go-to-market/monetization.md
+  - homegroups/docs/go-to-market/monetization.md
+  - detox-recovery/docs/go-to-market/monetization.md
 supersedes:
   - docs/strategy/monetization.md
   - docs/strategy/market-opportunity.md
@@ -46,9 +46,9 @@ Stripe-Connect platform fees that skim transaction volume, and one
 Per-stream narrative, blockers, and projections live in the per-product
 monetization docs — this doc only assembles them:
 
-- [`../regroup/monetization.md`](../regroup/monetization.md)
-- [`../homegroups/monetization.md`](../homegroups/monetization.md)
-- [`../detox-recovery/monetization.md`](../detox-recovery/monetization.md)
+- [`../regroup/monetization.md`](../../../regroup/docs/go-to-market/monetization.md)
+- [`../homegroups/monetization.md`](../../../homegroups/docs/go-to-market/monetization.md)
+- [`../detox-recovery/monetization.md`](../../../detox-recovery/docs/go-to-market/monetization.md)
 
 ---
 
@@ -93,7 +93,7 @@ is no pricing row, no fee, no SKU for referrals anywhere in
 > **Honesty guard.** The referral bus is **not a live revenue stream**. The
 > detox-recovery launch definition explicitly keeps the recovery-api referral
 > relay **disabled** pending a partner agreement
-> (source: docs/go-to-market/detox-recovery/project-management.md#launch-done-definition).
+> (source: detox-recovery/docs/go-to-market/project-management.md#launch-done-definition).
 > D-10 defines the model to apply **when** the relay is turned on; it does not
 > assert revenue today.
 
@@ -168,9 +168,9 @@ from [`../_shared/pricing.md`](../_shared/pricing.md):
 
 - detox-recovery 3-year p10/p50/p90 → rows
   [`DX-PROJ-Y1`..`DX-PROJ-Y3`](../_shared/pricing.md#revenue-projections), narrated
-  in [`../detox-recovery/monetization.md`](../detox-recovery/monetization.md#6-financial-projections-v20-3-scenario).
-- regroup post-activation targets → [`../regroup/monetization.md`](../regroup/monetization.md#5-projections-narrative).
-- homegroups 3-year projections → [`../homegroups/monetization.md`](../homegroups/monetization.md#3-year-projections-narrative).
+  in [`../detox-recovery/monetization.md`](../../../detox-recovery/docs/go-to-market/monetization.md#6-financial-projections-v20-3-scenario).
+- regroup post-activation targets → [`../regroup/monetization.md`](../../../regroup/docs/go-to-market/monetization.md#5-projections-narrative).
+- homegroups 3-year projections → [`../homegroups/monetization.md`](../../../homegroups/docs/go-to-market/monetization.md#3-year-projections-narrative).
 
 > **No-contradiction rule.** This doc never states a per-product number that
 > differs from its owning monetization doc or its `pricing.md` row. The only
@@ -183,9 +183,9 @@ from [`../_shared/pricing.md`](../_shared/pricing.md):
 
 | Engine              | Top monetization blocker                                              | Tracked in                                                                                             |
 | ------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| regroup tiers       | 6 Stripe Price IDs not created; tier-billing code not activated       | [`../regroup/project-management.md`](../regroup/project-management.md) (RG-P0-1/RG-P0-2)               |
-| homegroups B2B      | R-1/R-2 — no default Stripe price set on intergroup Tier A/B products | [`../homegroups/project-management.md`](../homegroups/project-management.md) (HG-P0-1/HG-P0-2)         |
-| detox digital + B2B | Lead-magnet delivery + paid-PDF fulfillment broken/unauthored         | [`../detox-recovery/project-management.md`](../detox-recovery/project-management.md) (DX-PM-1/DX-PM-2) |
+| regroup tiers       | 6 Stripe Price IDs not created; tier-billing code not activated       | [`../regroup/project-management.md`](../../../regroup/docs/go-to-market/project-management.md) (RG-P0-1/RG-P0-2)               |
+| homegroups B2B      | R-1/R-2 — no default Stripe price set on intergroup Tier A/B products | [`../homegroups/project-management.md`](../../../homegroups/docs/go-to-market/project-management.md) (HG-P0-1/HG-P0-2)         |
+| detox digital + B2B | Lead-magnet delivery + paid-PDF fulfillment broken/unauthored         | [`../detox-recovery/project-management.md`](../../../detox-recovery/docs/go-to-market/project-management.md) (DX-PM-1/DX-PM-2) |
 | referral bus        | Model undefined (D-10) + relay disabled pending partner agreement     | this doc §3; [`roadmap.md`](roadmap.md) `ECO-8`                                                        |
 
 ---

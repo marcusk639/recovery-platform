@@ -11,9 +11,9 @@ sources:
   - docs/launch-readiness/regroup-launch-readiness.md
   - docs/ecosystem/product-map.md
   - docs/strategy/roadmap.md
-  - docs/go-to-market/regroup/roadmap.md
-  - docs/go-to-market/homegroups/roadmap.md
-  - docs/go-to-market/detox-recovery/roadmap.md
+  - regroup/docs/go-to-market/roadmap.md
+  - homegroups/docs/go-to-market/roadmap.md
+  - detox-recovery/docs/go-to-market/roadmap.md
   - recovery-api/src/config/apps.ts
 supersedes:
   - docs/strategy/roadmap.md
@@ -131,4 +131,4 @@ ECO-8). See [`vision.md`](vision.md#5-sequencing-logic-vision--execution).
 - Continuum thesis + wedge: [`vision.md`](vision.md)
 - Cross-platform model + D-10: [`monetization.md`](monetization.md)
 - Cross-product launch hub: [`project-management.md`](project-management.md)
-- Per-product roadmaps: [`../regroup/roadmap.md`](../regroup/roadmap.md) · [`../homegroups/roadmap.md`](../homegroups/roadmap.md) · [`../detox-recovery/roadmap.md`](../detox-recovery/roadmap.md)
+- Per-product roadmaps: [`../regroup/roadmap.md`](../../../regroup/docs/go-to-market/roadmap.md) · [`../homegroups/roadmap.md`](../../../homegroups/docs/go-to-market/roadmap.md) · [`../detox-recovery/roadmap.md`](../../../detox-recovery/docs/go-to-market/roadmap.md)
