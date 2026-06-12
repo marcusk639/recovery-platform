@@ -34,25 +34,27 @@ its stable `HG-MON-*` ID and never restates a number.
 
 ---
 
-## TOP BLOCKER — R-1 / R-2: no default Stripe price set on the B2B products
+## Cheap config gap — R-1 / R-2: no default Stripe price set on the B2B products
 
-**This is the headline monetization gap.** Two of the three revenue products
-(intergroup Tier A and Tier B — which also back every treatment-center sale)
-have **no default price configured in the Stripe Dashboard**. Because checkout
-resolves the price at runtime via `getDefaultPriceForProduct()`, an unset
-default price is a **silent revenue-zero failure mode**: the callable throws
-`'Product X has no default price set'` and **every** intergroup and
-treatment-center checkout fails
+This is a cheap (~10-min) config gap, not an engineering blocker. Two of the three
+revenue products (intergroup Tier A and Tier B — which also back every
+treatment-center sale) may have **no default price configured in the Stripe
+Dashboard**. Because checkout resolves the price at runtime via
+`getDefaultPriceForProduct()`, an unset default price **hard-fails loudly
+server-side** (revenue-zero until fixed): the callable throws
+`'Product X has no default price set'`, so intergroup and treatment-center
+checkouts fail **if the default prices are unset in the live Stripe Dashboard
+(verify there)**
 (source: docs/launch-readiness/homegroups-launch-readiness.md#3-3-revenue-activation-p1).
 
-| ID  | Product                                              | pricing.md row                      | Blocker                         |
-| --- | ---------------------------------------------------- | ----------------------------------- | ------------------------------- |
+| ID  | Product                                              | pricing.md row                                              | Blocker                         |
+| --- | ---------------------------------------------------- | ----------------------------------------------------------- | ------------------------------- |
 | R-1 | Intergroup Tier A (`STRIPE_PRODUCT_ID_INTERGROUP_A`) | [`HG-MON-2`](../../../docs/go-to-market/_shared/pricing.md) | `blocked` — default price unset |
 | R-2 | Intergroup Tier B (`STRIPE_PRODUCT_ID_INTERGROUP_B`) | [`HG-MON-3`](../../../docs/go-to-market/_shared/pricing.md) | `blocked` — default price unset |
 
 Until R-1/R-2 clear, intergroup and treatment-center revenue is `blocked` and
 **must not be presented as live**. The consumer group tier ([`HG-MON-1`](../../../docs/go-to-market/_shared/pricing.md))
-has its product configured and is the only tier able to transact today
+has its product configured and is transacting today; the B2B tiers transact as soon as their default prices are set (a Dashboard config step, verify)
 (source: docs/launch-readiness/homegroups-launch-readiness.md#6-3-stripe-environment-configuration).
 Each fix is a ~10-minute Stripe Dashboard action; the launch sequence and owner
 are tracked in [`project-management.md`](project-management.md) (rows `HG-P0-1`,
@@ -62,13 +64,13 @@ are tracked in [`project-management.md`](project-management.md) (rows `HG-P0-1`,
 
 ## The four revenue streams
 
-| ID       | Stream                           | pricing.md row                                                            | Status        | Notes                                                |
-| -------- | -------------------------------- | ------------------------------------------------------------------------- | ------------- | ---------------------------------------------------- |
-| HG-MON-1 | Group Admin subscription         | [`HG-MON-1`](../../../docs/go-to-market/_shared/pricing.md)                                       | `in_progress` | Consumer wedge; product configured, activation-gated |
-| HG-MON-2 | Intergroup Tier A (≤10 groups)   | [`HG-MON-2`](../../../docs/go-to-market/_shared/pricing.md)                                       | `blocked`     | R-1 — no default price set                           |
-| HG-MON-3 | Intergroup Tier B (unlimited)    | [`HG-MON-3`](../../../docs/go-to-market/_shared/pricing.md)                                       | `blocked`     | R-2 — no default price set                           |
+| ID       | Stream                           | pricing.md row                                                                                                            | Status        | Notes                                                |
+| -------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------- | ---------------------------------------------------- |
+| HG-MON-1 | Group Admin subscription         | [`HG-MON-1`](../../../docs/go-to-market/_shared/pricing.md)                                                               | `in_progress` | Consumer wedge; product configured, activation-gated |
+| HG-MON-2 | Intergroup Tier A (≤10 groups)   | [`HG-MON-2`](../../../docs/go-to-market/_shared/pricing.md)                                                               | `blocked`     | R-1 — no default price set                           |
+| HG-MON-3 | Intergroup Tier B (unlimited)    | [`HG-MON-3`](../../../docs/go-to-market/_shared/pricing.md)                                                               | `blocked`     | R-2 — no default price set                           |
 | HG-MON-4 | Treatment-center plans           | [`HG-MON-2`](../../../docs/go-to-market/_shared/pricing.md) / [`HG-MON-3`](../../../docs/go-to-market/_shared/pricing.md) | `blocked`     | Reuses the two intergroup products; inherits R-1/R-2 |
-| HG-MON-5 | Group donations (Stripe Connect) | [`HG-MON-5`](../../../docs/go-to-market/_shared/pricing.md)                                       | `in_progress` | 5% platform fee; coded, low-frequency revenue        |
+| HG-MON-5 | Group donations (Stripe Connect) | [`HG-MON-5`](../../../docs/go-to-market/_shared/pricing.md)                                                               | `in_progress` | 5% platform fee; coded, low-frequency revenue        |
 
 ### Group price — conflict RESOLVED to **$24/year** (per D-1)
 
@@ -89,8 +91,12 @@ Two sources disagree on the consumer group price:
 
 **Resolution (D-1): launch at $24/year.** Rationale, tied to the launch-readiness
 recommendation (its row D-1): "Test $24 first" — 2x the shipped price, still
-trivially affordable for any group collecting 7th Tradition (groups handle
-$200–2,000+/year), while doubling ARPU and avoiding anchoring the product as a
+trivially affordable for any group collecting 7th Tradition (groups are commonly
+cited as handling ~$200–2,000+/year — an estimate, uncited). The real adoption
+constraint is **Tradition 6 (non-affiliation / commercialization aversion)**,
+materially mitigated because an admin pays for a tool rather than the group
+endorsing a brand; launching at $24/year doubles ARPU while avoiding anchoring the
+product as a
 hobby tier before B2B sales begin
 (source: docs/launch-readiness/homegroups-launch-readiness.md#5-4-pricing-recommendations-spec-ready).
 The $12/year value is retained only as **historical / migration context** (the
@@ -224,11 +230,11 @@ phases digitally, and the "continuity of care" bundle to treatment centers is
 the highest-ACV product and the primary path to a venture-scale outcome
 (orig: homegroups/docs/monetization/projections.md, archived).
 
-| Horizon               | Homegroups contribution (base case)                                                                                          | Note                                                                                                                    |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Horizon               | Homegroups contribution (base case)                                                                                                                  | Note                                                                                                                    |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | Year 1 end (Mar 2027) | ~241 groups; group-tier ARR ~$2,892 (241 × group price [`HG-MON-1`](../../../docs/go-to-market/_shared/pricing.md)) — a rounding error vs. portfolio | Distribution flywheel, not revenue engine (orig: homegroups/docs/monetization/projections.md, archived)                 |
-| Year 2 end (Mar 2028) | ~1,000 groups + ~20 intergroups (~$1,200/mo); intergroup tier un-gates                                                       | Intergroup tier launches once R-1/R-2 clear; Year-2 portfolio ARR ~$788K at Q4 (orig: …/projections.md, archived)       |
-| Year 3 end (Mar 2029) | ~3,500 groups + ~60 intergroups (~$4,200/mo w/ donation fees); fees compound                                                 | B2B + facility-dashboard ARPU is the growth path; Year-3 portfolio ARR ~$2.43M at Q4 (orig: …/projections.md, archived) |
+| Year 2 end (Mar 2028) | ~1,000 groups + ~20 intergroups (~$1,200/mo); intergroup tier un-gates                                                                               | Intergroup tier launches once R-1/R-2 clear; Year-2 portfolio ARR ~$788K at Q4 (orig: …/projections.md, archived)       |
+| Year 3 end (Mar 2029) | ~3,500 groups + ~60 intergroups (~$4,200/mo w/ donation fees); fees compound                                                                         | B2B + facility-dashboard ARPU is the growth path; Year-3 portfolio ARR ~$2.43M at Q4 (orig: …/projections.md, archived) |
 
 The portfolio-level dollar figures, scenarios, and unit economics are owned by
 the ecosystem monetization doc and the projections SSOT — this doc does **not**
