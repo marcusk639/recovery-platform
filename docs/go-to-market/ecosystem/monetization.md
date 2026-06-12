@@ -99,11 +99,11 @@ is no pricing row, no fee, no SKU for referrals anywhere in
 
 ### 3.2 Options
 
-| Option                                      | Mechanic                                                                                                                                | Pros                                                                                                                 | Cons                                                                                                 | Best when                                                           |
-| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| **O-1 Flat per-referral fee**               | Charge the **receiving** app (or the treatment center) a fixed amount per accepted referral, billed via Stripe Invoices on recovery-api | Simple to meter (one referral doc = one unit); predictable; no conversion tracking needed                            | Weak link to value; risks looking like a patient-brokering kickback (legal/ethical review needed)    | Volume is low and you want a clean, auditable first model           |
-| **O-2 Rev-share on converted referral**     | Take a % of the **first paid transaction** the referred user makes in the destination app (e.g. first rent payment, first paid call)    | Aligns price with realized value; only earns when the platform actually helped                                       | Requires cross-app conversion attribution (a build); slower to first dollar                          | You want incentive-aligned pricing and can build attribution        |
-| **O-3 B2B SaaS seat for treatment centers** | The center pays a **subscription seat** for the continuing-care view; referrals are a feature of that seat, not metered individually    | Largest contract value; recurring; matches how centers already buy software; sidesteps per-referral brokering optics | Requires the facility dashboard + aftercare pipeline (ECO-6/ECO-7, **not built**) before it can sell | The facility dashboard exists and the buyer is the treatment center |
+| Option                                      | Mechanic                                                                                                                                | Pros                                                                                                                                        | Cons                                                                                                                                       | Best when                                                           |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| **O-1 Flat per-referral fee**               | Charge the **receiving** app (or the treatment center) a fixed amount per accepted referral, billed via Stripe Invoices on recovery-api | Simple to meter (one referral doc = one unit); predictable; no conversion tracking needed                                                   | Weak link to value; risks looking like a patient-brokering kickback (legal/ethical review needed)                                          | Volume is low and you want a clean, auditable first model           |
+| **O-2 Rev-share on converted referral**     | Take a % of the **first paid transaction** the referred user makes in the destination app (e.g. first rent payment, first paid call)    | Aligns price with realized value; only earns when the platform actually helped                                                              | Requires cross-app conversion attribution (a build); slower to first dollar                                                                | You want incentive-aligned pricing and can build attribution        |
+| **O-3 B2B SaaS seat for treatment centers** | The center pays a **subscription seat** for the continuing-care view; referrals are a feature of that seat, not metered individually    | Largest contract value; recurring; matches how centers already buy software; **reduces (does not eliminate)** per-referral brokering optics | Requires the facility dashboard + aftercare pipeline (ECO-6/ECO-7, **not built**) before it can sell — so O-3 cannot earn until that ships | The facility dashboard exists and the buyer is the treatment center |
 
 ### 3.3 Recommendation
 
@@ -127,9 +127,13 @@ Rationale:
   once attribution exists.
 
 **Avoid the brokering trap:** any per-referral money movement (O-1, O-2) must
-clear legal review against patient-brokering / anti-kickback rules before it is
-enabled. Folding referrals into a flat software seat (O-3) is the cleanest posture
-and is a reason to favor it.
+clear review by **specialized healthcare counsel** — covering **EKRA** and **each
+operating state's patient-brokering statute** — before it is enabled. Treat O-1/O-2
+as **likely unsalvageable** under current law. Folding referrals into a flat
+software seat (O-3) is a **cleaner** posture (it _reduces, but does not eliminate_,
+brokering exposure) and a reason to favor it — though that clean-posture narrative
+is partly aspirational until the unbuilt facility dashboard that makes O-3 sellable
+(ECO-6/ECO-7) actually ships.
 
 D-10 is recorded as **open** in [`../_shared/decisions-log.md`](../_shared/decisions-log.md)
 with this recommendation; the roadmap item that depends on it is
@@ -139,29 +143,37 @@ with this recommendation; the roadmap item that depends on it is
 
 ## 4. Combined-ecosystem revenue picture
 
-> These are **scenario projections** from the market brief, not a sum of the SKU
-> rows — they include cross-sell/marketplace synergy the per-product P&Ls do not.
-> They are kept as the market-opportunity SSOT and referenced, not retyped.
+> This is the **sum of the built per-product revenue ladders only**. Earlier
+> versions carried a higher "scenario" headline ($1.74M / $7.84M 3-yr) that folded
+> in marketplace / data / cross-sell **synergy the platform has not built**; that
+> uplift is removed here. External SUD-SaaS benchmarks put solo / early-stage ARR
+> well below the moderate figures — treat the moderate column as an optimistic
+> ceiling, not a forecast.
 
-3-year combined-ecosystem ARR scenarios — **this doc is now the SSOT for these
-combined figures** (the originating market brief is archived; figures inlined here
-verbatim so no live doc must be chased):
+Base case — **built products only** (Homegroups 12-Step + Regroup Sober Living),
+this doc being the SSOT for the combined figure (originating market brief
+archived):
 
-| Scenario     | Year 1 ARR | Year 2 ARR | Year 3 ARR | 3-Year Total |
-| ------------ | ---------- | ---------- | ---------- | ------------ |
-| Conservative | $105,840   | $417,900   | $1,216,020 | ~$1.74M      |
-| Moderate     | $325,380   | $1,731,888 | $5,781,000 | ~$7.84M      |
+| Scenario     | Year 3 ARR (built products) |
+| ------------ | --------------------------- |
+| Conservative | $329,400                    |
+| Moderate     | $1,636,800                  |
 
-These scenarios fold in marketplace + data + cross-sell synergy on top of the
-three per-product P&Ls; the per-product 3-year ladders that sum into them are
-12-Step (Conservative Y3 $141,600 / Moderate Y3 $960,000), Sober Living
-(Conservative Y3 $187,800 / Moderate Y3 $676,800), and Aftercare (Conservative Y3
-$666,000 / Moderate Y3 $2,748,000)
-(orig: docs/strategy/market-opportunity.md, archived).
+(12-Step Y3 $141,600 / $960,000 + Sober Living Y3 $187,800 / $676,800; orig:
+docs/strategy/market-opportunity.md, archived.)
 
-At moderate Year-3 ARR of $5.78M and vertical health-tech SaaS multiples (8–15×),
-implied valuation is **$46M–$87M**
-(orig: docs/strategy/market-opportunity.md, archived).
+**Upside, not base case — NextStep / aftercare.** Excluded from the sum above
+because it is unbuilt at the projected scale. Reconciled to the detox SSOT, its
+real Year-3 figure is **DX-PROJ-Y3 = $139,250**
+([`../_shared/pricing.md`](../_shared/pricing.md)) — far below the legacy
+"$666K / $2.748M Aftercare" line, which described the **unbuilt ECO-7 aftercare
+data pipeline**, not the shipping NextStep app. Carry it as labeled upside only.
+
+**Valuation.** Revenue-multiple valuation is premature for a solo, bootstrapped,
+pre-scale operation; the 8–15× health-tech band does not apply to a pre-revenue
+solo op. If a band must be cited, use a defensible **3–5×** on _realized_ ARR — at
+the corrected moderate built-product Y3 (~$1.64M) that implies roughly
+**$5M–$8M**, not $46M–$87M (orig: docs/strategy/market-opportunity.md, archived).
 
 **Per-product near-term projections are owned by the per-product docs** and read
 from [`../_shared/pricing.md`](../_shared/pricing.md):
@@ -181,12 +193,12 @@ from [`../_shared/pricing.md`](../_shared/pricing.md):
 
 ## 5. What gates each engine (monetization blockers, cross-linked)
 
-| Engine              | Top monetization blocker                                              | Tracked in                                                                                             |
-| ------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Engine              | Top monetization blocker                                              | Tracked in                                                                                                                     |
+| ------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | regroup tiers       | 6 Stripe Price IDs not created; tier-billing code not activated       | [`../regroup/project-management.md`](../../../regroup/docs/go-to-market/project-management.md) (RG-P0-1/RG-P0-2)               |
 | homegroups B2B      | R-1/R-2 — no default Stripe price set on intergroup Tier A/B products | [`../homegroups/project-management.md`](../../../homegroups/docs/go-to-market/project-management.md) (HG-P0-1/HG-P0-2)         |
 | detox digital + B2B | Lead-magnet delivery + paid-PDF fulfillment broken/unauthored         | [`../detox-recovery/project-management.md`](../../../detox-recovery/docs/go-to-market/project-management.md) (DX-PM-1/DX-PM-2) |
-| referral bus        | Model undefined (D-10) + relay disabled pending partner agreement     | this doc §3; [`roadmap.md`](roadmap.md) `ECO-8`                                                        |
+| referral bus        | Model undefined (D-10) + relay disabled pending partner agreement     | this doc §3; [`roadmap.md`](roadmap.md) `ECO-8`                                                                                |
 
 ---
 

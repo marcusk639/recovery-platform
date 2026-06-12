@@ -63,8 +63,10 @@ them (orig: docs/strategy/market-opportunity.md, archived). The gap
 between "discharged" and "in the community working a program" is exactly where
 relapse happens:
 
-- Relapse rates reach **85% in the first year post-discharge**, yet **80% of
-  clinicians never measure post-discharge outcomes**
+- Post-discharge relapse is high — **pooled estimates reach ~85% in year one;
+  NIDA's SUD-specific range is 40–60%** — yet **most clinicians do not
+  systematically measure post-discharge outcomes** (the widely-cited "80%" figure
+  lacks a firm denominator; treat as directional)
   (orig: docs/strategy/market-opportunity.md, archived).
 - Continuity of care — _did the client land in a safe house, and do they actually
   attend outside meetings?_ — is the single biggest driver of long-term outcomes,
@@ -92,8 +94,10 @@ view of an alumnus's recovery.
 The treatment center is the highest-value buyer because it has the clearest pain
 and the deepest pockets, and because regulation is moving its way: value-based
 care contracts increasingly require outcome documentation, CMS mandates FHIR R4
-interoperability by mid-2026, and ASAM CONTINUUM software is endorsed/required by
-30+ states (orig: docs/strategy/market-opportunity.md, archived).
+interoperability effective **Jan 1, 2027** (binding on **payers**), and the **ASAM
+Criteria framework is broadly adopted**, with **CONTINUUM software mandated in
+Arizona** (the vendor "30+ states" claim is dropped)
+(orig: docs/strategy/market-opportunity.md, archived).
 
 What the center buys is **a single "continuing care" view** stitched from the two
 systems of record (source: docs/ecosystem/product-map.md#21-the-three-surfaces-the-center-buys):
@@ -132,8 +136,11 @@ top:
   Its pricing model is **currently undefined** and is opened as decision gate
   **D-10** in [`monetization.md`](monetization.md).
 
-The market context that makes this worth building: U.S. substance-abuse treatment
-is a **$143.62B (2024)** market, ~17,353 licensed SUD facilities and ~17,900
+The market context that makes this worth building: U.S. **behavioral-health**
+treatment (mental health _and_ substance use, combined) is a **$143.62B (2024)**
+market — the narrow **SUD-software SAM is far smaller (~$2.3B–$41B depending on
+scope)**, and that SAM, not the headline TAM, is the relevant sizing for this
+product. As modeled upper bounds, ~17,353 licensed SUD facilities and ~17,900
 recovery residences serve ~275,000 people at any time, and ~4,324 Oxford Houses
 hold 35,796 beds (orig: docs/strategy/market-opportunity.md, archived). The
 combined-ecosystem 3-year revenue scenarios live in
