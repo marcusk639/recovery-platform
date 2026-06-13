@@ -1,5 +1,13 @@
 # Next Step Recovery — Comprehensive Financial Projections
 
+> **⚠️ SUPERSEDED — historical archive, do not cite for planning.** Revenue mixes
+> and base cases here are an earlier draft and conflict with the current model. The
+> single source of truth for detox-recovery projections is now
+> [`docs/go-to-market/_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md)
+> (`DX-PROJ-*`: Year-1 P50 $18,063, B2B ~47%) and
+> [`detox-recovery/docs/go-to-market/monetization.md`](../go-to-market/monetization.md).
+> Retained for history only.
+
 **Prepared:** May 2026  
 **Based on:** Full codebase analysis, market opportunity analysis ($40M TAM), and discovery strategy  
 **Horizon:** 36 months (May 2026 – April 2029)  
