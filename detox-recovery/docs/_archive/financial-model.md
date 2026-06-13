@@ -1,5 +1,13 @@
 # Next Step Recovery — Financial Model (2026–2028)
 
+> **⚠️ SUPERSEDED — historical archive, do not cite for planning.** The Year-1
+> base case here (~$13,454; B2B 41%) is an earlier draft. The single source of
+> truth for detox-recovery projections is now
+> [`docs/go-to-market/_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md)
+> (`DX-PROJ-*`: Year-1 P50 $18,063, B2B ~47%) and
+> [`detox-recovery/docs/go-to-market/monetization.md`](../go-to-market/monetization.md).
+> Retained for history only.
+
 **Prepared:** May 2026  
 **Operator:** Solo founder, part-time in Year 1  
 **Model horizon:** 3 years (monthly detail Y1, quarterly detail Y2–Y3)  

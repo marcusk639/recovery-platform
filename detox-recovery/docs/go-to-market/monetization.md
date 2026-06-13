@@ -69,13 +69,13 @@ A free top-of-funnel offer steps up into three paid call tiers. Calls are
 capacity-constrained; the uncapped levers (B2B, digital, group, grants) sit
 alongside.
 
-| Rung                                | Pricing row                         | Processor | Status today                              |
-| ----------------------------------- | ----------------------------------- | --------- | ----------------------------------------- |
-| Free Fit Check (lead gen)           | n/a (free)                          | —         | `done` — live, free lead-gen              |
+| Rung                                | Pricing row                                                 | Processor | Status today                              |
+| ----------------------------------- | ----------------------------------------------------------- | --------- | ----------------------------------------- |
+| Free Fit Check (lead gen)           | n/a (free)                                                  | —         | `done` — live, free lead-gen              |
 | **Tier 2 — 30-min support call**    | [`DX-MON-1`](../../../docs/go-to-market/_shared/pricing.md) | Stripe    | `done` — the only live paid call tier     |
 | **Tier 3 — 60-min family/nav call** | [`DX-MON-2`](../../../docs/go-to-market/_shared/pricing.md) | Stripe    | `planned` — target Q3 2026 (Month 7)      |
 | **Tier 4 — 2-week nav package**     | [`DX-MON-3`](../../../docs/go-to-market/_shared/pricing.md) | Stripe    | `planned` — target Q2 2027 (Year 2)       |
-| Tier 5 — sliding-scale slots        | subsidized via donations            | Stripe    | `planned` — Year 2, donation/grant-funded |
+| Tier 5 — sliding-scale slots        | subsidized via donations                                    | Stripe    | `planned` — Year 2, donation/grant-funded |
 
 **Support-call price is single-sourced.** The canonical value lives in
 `detox-recovery/lib/services-data.ts` (`SERVICE_TIERS`, `id: "support-call"`,
@@ -107,8 +107,8 @@ Model Summary, §8 Capacity and Revenue Ceiling).
 
 Five paid PDFs form the passive, uncapped revenue layer:
 
-| Product                        | Pricing row                         |
-| ------------------------------ | ----------------------------------- |
+| Product                        | Pricing row                                                 |
+| ------------------------------ | ----------------------------------------------------------- |
 | Family Survival Guide          | [`DX-MON-4`](../../../docs/go-to-market/_shared/pricing.md) |
 | Appointment Prep Worksheet     | [`DX-MON-5`](../../../docs/go-to-market/_shared/pricing.md) |
 | Withdrawal Safety Checklist    | [`DX-MON-6`](../../../docs/go-to-market/_shared/pricing.md) |
@@ -134,8 +134,9 @@ source: detox-recovery/docs/superpowers/plans/2026-06-07-detox-completion.md#pri
 ## 4. B2B consulting and retainer
 
 B2B is the **highest-leverage Year 1 revenue** despite low transaction count — in
-the base model it is **51% of Year 1 revenue from just 2 engagements** (~$8,500 of
-~$18,063). This is normal for early-stage service businesses and is why B2B
+the base model it is **47% of Year 1 revenue from just 2 engagements** (~$8,500 of
+~$18,063 — the single base-case SSOT, `DX-PROJ-Y1` in
+[`../_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md)). This is normal for early-stage service businesses and is why B2B
 pipeline development is the highest-leverage early activity. It is uncapped (not
 subject to the call-hour ceiling)
 (orig: detox-recovery/docs/monetization/projections.md, archived — Year 1 Revenue
@@ -184,14 +185,17 @@ These are the Year 2–3 expansion streams modeled in the v2.0 financial model.
 - **Group subscription** ("Field Notes Plus" community) — [`DX-MON-11`](../../../docs/go-to-market/_shared/pricing.md),
   Year 2 launch (Circle.so), recurring monthly. Modeled at ~40 members by end of
   Year 2, ~110 by end of Year 3.
-- **VA Community Care / Medicaid peer support** — [`DX-MON-12`](../../../docs/go-to-market/_shared/pricing.md),
-  ~per-session reimbursement, gated behind VA Peer Support Specialist (PSS)
-  certification and Community Care provider enrollment. Prerequisite chain: enroll
-  in VA healthcare → complete PSS certification (~40–80 hours + exam) → apply for
-  Community Care network provider status (a **3–6 month approval**). Medicaid peer
-  support is reimbursable in 43 states. Target volume ~10 sessions/month in Year 2
-  rising to ~25/month in Year 3. This removes the out-of-pocket barrier for
-  veterans who cannot pay out of pocket — as much mission as revenue.
+- **VA Community Care / Medicaid peer support** — [`DX-MON-12`](../../../docs/go-to-market/_shared/pricing.md).
+  **Not a solo billing line.** Medicaid covers peer support in **41 states + DC for
+  some populations (48 + DC in some form) — SAMHSA**, but a solo, unlicensed peer
+  **cannot independently enroll and bill**: VA PSS is a **W-2 employment role**, and
+  Medicaid peer billing flows through a certified agency or provider. Treat this as
+  **agency-/fiscal-sponsor-contingent, mission/grant-adjacent** — realizable only
+  via employment by or contract with a billing entity, not as a founder revenue
+  stream. If pursued, the chain (enroll in VA healthcare → PSS certification
+  ~40–80 hours + exam → Community Care provider status, a 3–6 month approval) gates
+  it. Where it does materialize it removes the out-of-pocket barrier for veterans —
+  **as much mission as revenue**.
 - **Grants (non-dilutive)** — SAMHSA State Opioid Response (SOR) + veteran
   foundations (Bob Woodruff, Gary Sinise) + VA Center for Innovation + state
   veteran-affairs departments. **100% margin, zero cost of delivery** — the single
@@ -203,10 +207,12 @@ These are the Year 2–3 expansion streams modeled in the v2.0 financial model.
   ([`../_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md) projection rows), not as fixed
   SKUs in the pricing table.
 
-The **veteran pathway** (VA billing + VSO-sponsored workshops + grants) is the
-most defensible upside lever relative to time invested. Against a non-veteran
-baseline it adds roughly +$750 in Year 1, +$9,600 in Year 2, and +$31,500 in
-Year 3 — a cumulative 3-year delta of about **+$41,850** (base case
+The **veteran pathway** (VSO-sponsored workshops + grants — **not solo VA
+billing**, which is an employment/agency role, not a founder-billable stream) is a
+defensible upside lever relative to time invested, with the VA/Medicaid portion
+**contingent on employment by or contract with a billing entity**. Against a
+non-veteran baseline it adds roughly +$750 in Year 1, +$9,600 in Year 2, and
++$31,500 in Year 3 — a cumulative 3-year delta of about **+$41,850** (base case
 ~$171,388 → ~$213,238).
 
 (Stream detail, prerequisites, funder list, and the veteran-pathway delta orig:
@@ -241,7 +247,7 @@ value, Tier 3/Tier 4 launch timing, VA PSS certification timing, grant funding
 
 **Structural insights from the model:**
 
-1. **B2B dominates Year 1** (~51% of revenue from 2 transactions) — pipeline
+1. **B2B dominates Year 1** (~47% of revenue from 2 transactions) — pipeline
    development is the highest-leverage early activity.
 2. **Calls are capped** at a fixed monthly ceiling (~$5,100/month even at optimal
    Year 3 mix) regardless of price; B2B, digital, group subscription, and grants

@@ -66,3 +66,8 @@ fact, one home); referenced by the per-product monetization docs by `id`.
 | detox-recovery | DX-PROJ-Y1 | $7,500  | $18,063  | $32,000  | annual (Year 1) | ../detox-recovery/monetization.md (orig: detox-recovery/docs/monetization/projections.md, archived) |
 | detox-recovery | DX-PROJ-Y2 | $28,500 | $55,925  | $90,000  | annual (Year 2) | ../detox-recovery/monetization.md (orig: detox-recovery/docs/monetization/projections.md, archived) |
 | detox-recovery | DX-PROJ-Y3 | $58,000 | $139,250 | $225,000 | annual (Year 3) | ../detox-recovery/monetization.md (orig: detox-recovery/docs/monetization/projections.md, archived) |
+
+> **Planning note (DX-PROJ-Y1).** Use the **P10 ($7,500) as the planning number**,
+> not P50. The P50 ($18,063) depends on closing **1–2 B2B engagements (~47% of the
+> figure)** that are unbooked and have no solo-founder comparable (see DX-PROJ-3);
+> a no-network solo founder should plan to the P10 and treat the P50 as upside.

@@ -110,11 +110,11 @@ Files: `detox-recovery/.../monetization.md`, `detox-recovery/.../roadmap.md`, `d
 
 **Verification checklist:**
 
-- [ ] All 24 claim_ids edited per their action; none skipped without a stated reason.
-- [ ] No broken-number string survives the Phase 5 grep sweep.
-- [ ] Each reconciled number resolves to one SSOT across the doc set.
-- [ ] `git diff` touches only GTM docs (+ this plan); no code, no research files.
-- [ ] Human approval obtained per phase before writes.
+- [x] All 24 claim_ids edited per their action; none skipped without a stated reason.
+- [x] No broken-number string survives the Phase 5 grep sweep.
+- [x] Each reconciled number resolves to one SSOT across the doc set.
+- [x] `git diff` touches only GTM docs (+ this plan + sanctioned item-20 archive banners); no code, no research files.
+- [x] Human approval obtained per phase before writes.
 
 ---
 

@@ -11,7 +11,7 @@ Analyzes 6 pricing strategies for RATS from conservative to aggressive, with rev
 ## Key Concepts
 
 - **Current pricing is broken**: $10 + $1/resident captures only 1–2% of delivered value; signals a "hobby project."
-- **Value anchor**: RATS saves $500–1,000/month in admin time + fraud prevention + compliance tracking. Pricing should reflect this.
+- **Value anchor**: Regroup saves $500–1,000/month in admin time + fraud prevention + compliance tracking. Pricing should reflect this.
 - **Recommended range**: $49–129/month for traditional houses; $39–89 for Oxford Houses (lower volume, tighter budgets).
 - **At 250 houses**: current model = $60K/year (unsustainable); recommended = $204K/year (scalable); aggressive = $312K/year.
 - **Support economics** flip at ~$79/month: below that, support costs exceed revenue at scale.
