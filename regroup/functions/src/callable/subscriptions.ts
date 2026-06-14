@@ -35,6 +35,11 @@ import {
 } from "../api/stripe";
 import { createStripeClient } from "../util/stripe";
 import {
+  withinResidentCap,
+  withinPropertyCap,
+  totalResidents,
+} from "../util/tierCaps";
+import {
   getUser,
   updateUser,
   upsertSubscriptionDoc,
@@ -418,6 +423,51 @@ export const updateSubscriptionGuests = onCall(
     const user = await getUser(ownerUserId);
     logger.info("User retrieved", { userId: ownerUserId });
 
+    // Tier model: flat fee, no per-resident Stripe quantity. Enforce the
+    // resident cap and persist occupancy instead of touching Stripe items.
+    const guestMeta = user.subscriptionMetadata;
+    if (guestMeta?.tier) {
+      const houses = guestMeta.houses ?? {};
+      const houseId = houseIds[0];
+      // The guests endpoint only mutates occupancy of houses already on the
+      // subscription. It must not implicitly create a house — that would
+      // bypass the property cap enforced by updateSubscriptionHouses.
+      if (!(houseId in houses)) {
+        throw new HttpsError(
+          "failed-precondition",
+          "House is not part of your subscription",
+        );
+      }
+      if (action === "add") {
+        if (
+          !withinResidentCap(
+            totalResidents(guestMeta),
+            guestMeta.maxResidents ?? null,
+          )
+        ) {
+          throw new HttpsError(
+            "failed-precondition",
+            "Resident limit reached for your plan",
+          );
+        }
+      }
+      const currentGuests = houses[houseId]?.numberOfGuests ?? 0;
+      const newGuests =
+        action === "add" ? currentGuests + 1 : Math.max(0, currentGuests - 1);
+      await updateUser(user.id!, {
+        subscriptionMetadata: {
+          ...guestMeta,
+          houses: { ...houses, [houseId]: { numberOfGuests: newGuests } },
+          lastUpdatedAt: new Date().toISOString(),
+        } as unknown as OperatorSubscription,
+      });
+      logger.info("Tier subscription resident occupancy updated", {
+        ownerUserId,
+        action,
+      });
+      return;
+    }
+
     // Check if user has subscription metadata
     if (!user.subscriptionMetadata || !user.subscriptionMetadata.items) {
       logger.warn(
@@ -507,6 +557,55 @@ export const updateSubscriptionHouses = onCall(
     const { ownerUserId, action, houseIds } = data;
     const user = await getUser(ownerUserId);
     logger.info("User retrieved", { userId: user.id });
+
+    // Tier model: flat fee, no per-house Stripe quantity and no per-house bundle
+    // discounts (multi-property is expressed by tier). Enforce the property cap
+    // and persist the houses map instead of touching Stripe items.
+    const houseMeta = user.subscriptionMetadata;
+    if (houseMeta?.tier) {
+      const houses = houseMeta.houses ?? {};
+      if (action === "add") {
+        // Check the cap per newly-added house so a multi-id batch cannot exceed
+        // the property cap in a single call (each new id must fit under the cap).
+        const added = { ...houses };
+        for (const id of houseIds ?? []) {
+          if (id in added) continue;
+          if (
+            !withinPropertyCap(
+              Object.keys(added).length,
+              houseMeta.maxProperties ?? null,
+            )
+          ) {
+            throw new HttpsError(
+              "failed-precondition",
+              "Property limit reached for your plan",
+            );
+          }
+          added[id] = { numberOfGuests: 0 };
+        }
+        await updateUser(user.id!, {
+          subscriptionMetadata: {
+            ...houseMeta,
+            houses: added,
+            lastUpdatedAt: new Date().toISOString(),
+          } as unknown as OperatorSubscription,
+        });
+      } else {
+        const { [houseIds[0]]: _removed, ...remaining } = houses;
+        await updateUser(user.id!, {
+          subscriptionMetadata: {
+            ...houseMeta,
+            houses: remaining,
+            lastUpdatedAt: new Date().toISOString(),
+          } as unknown as OperatorSubscription,
+        });
+      }
+      logger.info("Tier subscription house occupancy updated", {
+        ownerUserId,
+        action,
+      });
+      return;
+    }
 
     if (!user.subscriptionMetadata || !user.subscriptionMetadata.items) {
       logger.warn(
@@ -622,6 +721,15 @@ export const applyBundleDiscount = onCall(
       logger.warn("applyBundleDiscount: user has no subscriptionId, skipping", {
         userId: data.userId,
       });
+      return;
+    }
+    // Tier subscriptions express multi-property via tier (Professional/Enterprise/
+    // Network), not per-house quantity, so per-house bundle coupons do not apply.
+    if (user.subscriptionMetadata?.tier) {
+      logger.info(
+        "applyBundleDiscount: tier subscription — bundle discounts not applicable",
+        { userId: data.userId },
+      );
       return;
     }
     const houseCount = Object.keys(

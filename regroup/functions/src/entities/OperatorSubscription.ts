@@ -25,4 +25,7 @@ export default class OperatorSubscription {
   tier?: string;
   maxResidents?: number | null;
   maxProperties?: number | null;
+
+  // Tier model uses a single flat-fee line item rather than house/guest items.
+  subscriptionItemId?: string;
 }

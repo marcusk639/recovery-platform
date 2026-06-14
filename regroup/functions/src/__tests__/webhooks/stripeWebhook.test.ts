@@ -23,7 +23,7 @@ function mockGetDoc(collection: string, id: string) {
 }
 
 function mockBuildQuerySnap(
-  docs: Array<{ id: string; data: Record<string, any> }>
+  docs: Array<{ id: string; data: Record<string, any> }>,
 ) {
   return {
     empty: docs.length === 0,
@@ -89,7 +89,7 @@ jest.mock("firebase-functions/v2/https", () => {
   return {
     ...actual,
     onRequest: jest.fn((_optsOrHandler: any, handler?: any) =>
-      typeof _optsOrHandler === "function" ? _optsOrHandler : handler
+      typeof _optsOrHandler === "function" ? _optsOrHandler : handler,
     ),
   };
 });
@@ -164,7 +164,7 @@ function wireCollection(
   whereResultsByCollection: Record<
     string,
     Array<{ id: string; data: Record<string, any> }>
-  >
+  >,
 ) {
   mockCollectionFn.mockImplementation((col: string) => {
     const whereSnap = mockBuildQuerySnap(whereResultsByCollection[col] ?? []);
@@ -205,7 +205,7 @@ beforeEach(() => {
         set: jest.fn(),
       };
       return fn(txn);
-    }
+    },
   );
 
   // Default: no Stripe signature errors
@@ -215,7 +215,7 @@ beforeEach(() => {
       type: "unknown.event",
       account: undefined,
       data: { object: {} },
-    })
+    }),
   );
 
   // Default: quiet collection mock (empty results)
@@ -250,14 +250,14 @@ describe("stripeWebhook — signature verification", () => {
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.send).toHaveBeenCalledWith(
-      expect.stringContaining("Missing stripe-signature")
+      expect.stringContaining("Missing stripe-signature"),
     );
   });
 
   it("returns 400 when constructEvent throws (invalid signature)", async () => {
     mockConstructEvent.mockImplementation(() => {
       throw new Error(
-        "No signatures found matching the expected signature for payload"
+        "No signatures found matching the expected signature for payload",
       );
     });
 
@@ -268,7 +268,7 @@ describe("stripeWebhook — signature verification", () => {
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.send).toHaveBeenCalledWith(
-      expect.stringContaining("Webhook Error")
+      expect.stringContaining("Webhook Error"),
     );
   });
 
@@ -296,7 +296,7 @@ describe("stripeWebhook — signature verification", () => {
 
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.send).toHaveBeenCalledWith(
-      expect.objectContaining({ received: true })
+      expect.objectContaining({ received: true }),
     );
   });
 
@@ -318,7 +318,7 @@ describe("stripeWebhook — signature verification", () => {
           set: jest.fn(),
         };
         return fn(txn);
-      }
+      },
     );
 
     const req = makeReq();
@@ -328,7 +328,7 @@ describe("stripeWebhook — signature verification", () => {
 
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.send).toHaveBeenCalledWith(
-      expect.objectContaining({ received: true, duplicate: true })
+      expect.objectContaining({ received: true, duplicate: true }),
     );
   });
 });
@@ -430,7 +430,7 @@ describe("stripeWebhook — customer.subscription.updated", () => {
         status: "active",
         planId: "price_new",
         guestCount: 6,
-      })
+      }),
     );
   });
 
@@ -442,7 +442,7 @@ describe("stripeWebhook — customer.subscription.updated", () => {
     const existingDoc = { ...firestoreSubDoc.data, status: "active" };
 
     mockConstructEvent.mockReturnValue(
-      makeSubscriptionEvent({ status: "past_due" })
+      makeSubscriptionEvent({ status: "past_due" }),
     );
 
     mockCollectionFn.mockImplementation((col: string) => {
@@ -502,7 +502,7 @@ describe("stripeWebhook — customer.subscription.updated", () => {
 
     expect(res.status).toHaveBeenCalledWith(200);
     expect(mockUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "past_due" })
+      expect.objectContaining({ status: "past_due" }),
     );
   });
 
@@ -518,6 +518,84 @@ describe("stripeWebhook — customer.subscription.updated", () => {
     await (stripeWebhook as any)(req, res);
 
     expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it("handles a single-item tier subscription (no houseItemId/guestItemId) without throwing", async () => {
+    const mockUpdate = jest.fn().mockResolvedValue(undefined);
+    const subDocRef = { update: mockUpdate, set: jest.fn() };
+
+    // Single line item carrying a tier price, plus tier metadata — mirrors a
+    // subscription created via createTierSubscription.
+    mockConstructEvent.mockReturnValue(
+      makeSubscriptionEvent({
+        items: {
+          data: [{ id: "si_tier", price: { id: "price_tier_starter" } }],
+        },
+        metadata: {
+          userId: "user_op",
+          houseType: "traditional",
+          tier: "starter",
+        },
+      }),
+    );
+
+    mockCollectionFn.mockImplementation((col: string) => {
+      if (col === "subscriptions") {
+        return {
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockReturnValue({
+              get: jest.fn().mockResolvedValue({
+                empty: false,
+                docs: [
+                  {
+                    id: firestoreSubDoc.id,
+                    data: () => firestoreSubDoc.data,
+                    ref: subDocRef,
+                  },
+                ],
+              }),
+            }),
+          }),
+          doc: jest.fn().mockReturnValue({
+            get: mockDocGet,
+            update: mockUpdate,
+            set: mockDocSet,
+          }),
+        };
+      }
+      return {
+        where: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            get: jest.fn().mockResolvedValue({ empty: true, docs: [] }),
+          }),
+          limit: jest.fn().mockReturnValue({
+            get: jest.fn().mockResolvedValue({ empty: true, docs: [] }),
+          }),
+          get: jest.fn().mockResolvedValue({ empty: true, docs: [] }),
+        }),
+        doc: jest.fn().mockReturnValue({
+          get: jest.fn().mockResolvedValue({ exists: false }),
+          update: jest.fn(),
+          set: jest.fn(),
+        }),
+      };
+    });
+
+    const req = makeReq();
+    const res = makeRes();
+
+    await (stripeWebhook as any)(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    // planId reconciled from the single tier line item; guestCount falls back to
+    // the existing doc value since tier subs carry no per-guest quantity.
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "active",
+        planId: "price_tier_starter",
+        guestCount: 5,
+      }),
+    );
   });
 });
 
@@ -618,7 +696,7 @@ describe("stripeWebhook — payment_intent.succeeded", () => {
         houseId,
         guestId,
       }),
-      { merge: true }
+      { merge: true },
     );
     // Guest balance should be decremented from 600 to 100
     expect(mockGuestUpdate).toHaveBeenCalledWith({ balance: 100 });
@@ -675,7 +753,7 @@ describe("stripeWebhook — payment_intent.succeeded", () => {
         houseId: null,
         guestId: null,
       }),
-      { merge: true }
+      { merge: true },
     );
   });
 });
@@ -757,7 +835,7 @@ describe("stripeWebhook — invoice.payment_succeeded", () => {
 
     expect(res.status).toHaveBeenCalledWith(200);
     expect(mockUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "active" })
+      expect.objectContaining({ status: "active" }),
     );
   });
 });
@@ -848,7 +926,7 @@ describe("stripeWebhook — customer.subscription.deleted", () => {
       expect.objectContaining({
         status: "canceled",
         canceledAt: new Date(canceledAt * 1000).toISOString(),
-      })
+      }),
     );
   });
 });
@@ -928,7 +1006,7 @@ describe("stripeWebhook — account.updated", () => {
         stripeStatus: "active",
         stripeChargesEnabled: true,
         stripePayoutsEnabled: true,
-      })
+      }),
     );
   });
 
@@ -1009,7 +1087,7 @@ describe("stripeWebhook — account.updated", () => {
 
     expect(res.status).toHaveBeenCalledWith(200);
     expect(mockHouseUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ stripeStatus: "restricted" })
+      expect.objectContaining({ stripeStatus: "restricted" }),
     );
   });
 });
@@ -1109,7 +1187,7 @@ describe("handleStripeConnectWebhook", () => {
         stripeStatus: "disconnected",
         stripeChargesEnabled: false,
         stripePayoutsEnabled: false,
-      })
+      }),
     );
   });
 
@@ -1128,7 +1206,7 @@ describe("handleStripeConnectWebhook", () => {
 
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.send).toHaveBeenCalledWith(
-      expect.objectContaining({ received: true })
+      expect.objectContaining({ received: true }),
     );
   });
 });
@@ -1148,7 +1226,7 @@ describe("handleStripeConnectWebhook", () => {
 function wireHousesForOperator(
   operatorUid: string,
   houseId: string,
-  houseDocRef: { update: jest.Mock; set: jest.Mock }
+  houseDocRef: { update: jest.Mock; set: jest.Mock },
 ) {
   const houseDoc = {
     id: houseId,
@@ -1166,7 +1244,7 @@ function wireHousesForOperator(
             .mockResolvedValue(
               field === "adminIds"
                 ? { empty: false, docs: [houseDoc] }
-                : { empty: true, docs: [] }
+                : { empty: true, docs: [] },
             ),
         })),
         doc: jest.fn().mockReturnValue({
@@ -1261,7 +1339,7 @@ describe("B8 — house.subscriptionStatus propagation", () => {
     });
 
     mockCollectionFn.mockImplementation(
-      wireHousesForOperator(operatorUid, houseId, houseRef)
+      wireHousesForOperator(operatorUid, houseId, houseRef),
     );
 
     await (stripeWebhook as any)(makeReq(), makeRes());
@@ -1269,7 +1347,7 @@ describe("B8 — house.subscriptionStatus propagation", () => {
     expect(mockBatchCommit).toHaveBeenCalledTimes(1);
     expect(mockBatchUpdate).toHaveBeenCalledWith(
       houseRef,
-      expect.objectContaining({ subscriptionStatus: "active" })
+      expect.objectContaining({ subscriptionStatus: "active" }),
     );
   });
 
@@ -1295,7 +1373,7 @@ describe("B8 — house.subscriptionStatus propagation", () => {
     });
 
     mockCollectionFn.mockImplementation(
-      wireHousesForOperator(operatorUid, houseId, houseRef)
+      wireHousesForOperator(operatorUid, houseId, houseRef),
     );
 
     await (stripeWebhook as any)(makeReq(), makeRes());
@@ -1303,7 +1381,7 @@ describe("B8 — house.subscriptionStatus propagation", () => {
     expect(mockBatchCommit).toHaveBeenCalledTimes(1);
     expect(mockBatchUpdate).toHaveBeenCalledWith(
       houseRef,
-      expect.objectContaining({ subscriptionStatus: "canceled" })
+      expect.objectContaining({ subscriptionStatus: "canceled" }),
     );
   });
 
@@ -1328,7 +1406,7 @@ describe("B8 — house.subscriptionStatus propagation", () => {
     });
 
     mockCollectionFn.mockImplementation(
-      wireHousesForOperator(operatorUid, houseId, houseRef)
+      wireHousesForOperator(operatorUid, houseId, houseRef),
     );
 
     await (stripeWebhook as any)(makeReq(), makeRes());
@@ -1336,7 +1414,7 @@ describe("B8 — house.subscriptionStatus propagation", () => {
     expect(mockBatchCommit).toHaveBeenCalledTimes(1);
     expect(mockBatchUpdate).toHaveBeenCalledWith(
       houseRef,
-      expect.objectContaining({ subscriptionStatus: "past_due" })
+      expect.objectContaining({ subscriptionStatus: "past_due" }),
     );
   });
 
@@ -1364,7 +1442,7 @@ describe("B8 — house.subscriptionStatus propagation", () => {
     });
 
     mockCollectionFn.mockImplementation(
-      wireHousesForOperator(operatorUid, houseId, houseRef)
+      wireHousesForOperator(operatorUid, houseId, houseRef),
     );
 
     await (stripeWebhook as any)(makeReq(), makeRes());
@@ -1375,7 +1453,7 @@ describe("B8 — house.subscriptionStatus propagation", () => {
       expect.objectContaining({
         subscriptionStatus: "past_due",
         guestGraceEndsAt: expect.any(String),
-      })
+      }),
     );
   });
 
