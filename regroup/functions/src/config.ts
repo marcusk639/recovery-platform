@@ -38,18 +38,21 @@ export const SUBSCRIPTION_TIERS = {
   traditional: {
     starter: {
       priceEnvVar: "STRIPE_PRICE_TRAD_STARTER",
+      amountCents: 6900,
       maxResidents: 10,
       maxProperties: 1,
       label: "Traditional Starter",
     },
     professional: {
       priceEnvVar: "STRIPE_PRICE_TRAD_PROFESSIONAL",
+      amountCents: 12900,
       maxResidents: 20,
       maxProperties: 3,
       label: "Traditional Professional",
     },
     enterprise: {
       priceEnvVar: "STRIPE_PRICE_TRAD_ENTERPRISE",
+      amountCents: 24900,
       maxResidents: null,
       maxProperties: null,
       label: "Traditional Enterprise",
@@ -58,18 +61,21 @@ export const SUBSCRIPTION_TIERS = {
   oxford: {
     standard: {
       priceEnvVar: "STRIPE_PRICE_OXFORD_STANDARD",
+      amountCents: 4900,
       maxResidents: 15,
       maxProperties: 1,
       label: "Oxford Standard",
     },
     plus: {
       priceEnvVar: "STRIPE_PRICE_OXFORD_PLUS",
+      amountCents: 8900,
       maxResidents: 25,
       maxProperties: 1,
       label: "Oxford Plus",
     },
     network: {
       priceEnvVar: "STRIPE_PRICE_OXFORD_NETWORK",
+      amountCents: 29900,
       maxResidents: null,
       maxProperties: null,
       label: "Oxford Network",
@@ -81,3 +87,8 @@ export type HouseType = keyof typeof SUBSCRIPTION_TIERS;
 export type TraditionalTier = keyof typeof SUBSCRIPTION_TIERS.traditional;
 export type OxfordTier = keyof typeof SUBSCRIPTION_TIERS.oxford;
 export type TierKey = TraditionalTier | OxfordTier;
+
+// Gate for the tier-based flat-fee billing model. New subscriptions use the
+// tier model only when this is exactly "true". Legacy subscribers are unaffected.
+export const isTierBillingEnabled = (): boolean =>
+  process.env.TIER_BILLING_ENABLED === "true";
