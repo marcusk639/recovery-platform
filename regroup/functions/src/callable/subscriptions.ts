@@ -429,6 +429,15 @@ export const updateSubscriptionGuests = onCall(
     if (guestMeta?.tier) {
       const houses = guestMeta.houses ?? {};
       const houseId = houseIds[0];
+      // The guests endpoint only mutates occupancy of houses already on the
+      // subscription. It must not implicitly create a house — that would
+      // bypass the property cap enforced by updateSubscriptionHouses.
+      if (!(houseId in houses)) {
+        throw new HttpsError(
+          "failed-precondition",
+          "House is not part of your subscription",
+        );
+      }
       if (action === "add") {
         if (
           !withinResidentCap(
@@ -556,21 +565,24 @@ export const updateSubscriptionHouses = onCall(
     if (houseMeta?.tier) {
       const houses = houseMeta.houses ?? {};
       if (action === "add") {
-        if (
-          !withinPropertyCap(
-            Object.keys(houses).length,
-            houseMeta.maxProperties ?? null,
-          )
-        ) {
-          throw new HttpsError(
-            "failed-precondition",
-            "Property limit reached for your plan",
-          );
-        }
+        // Check the cap per newly-added house so a multi-id batch cannot exceed
+        // the property cap in a single call (each new id must fit under the cap).
         const added = { ...houses };
-        (houseIds ?? []).forEach((id) => {
-          added[id] = added[id] ?? { numberOfGuests: 0 };
-        });
+        for (const id of houseIds ?? []) {
+          if (id in added) continue;
+          if (
+            !withinPropertyCap(
+              Object.keys(added).length,
+              houseMeta.maxProperties ?? null,
+            )
+          ) {
+            throw new HttpsError(
+              "failed-precondition",
+              "Property limit reached for your plan",
+            );
+          }
+          added[id] = { numberOfGuests: 0 };
+        }
         await updateUser(user.id!, {
           subscriptionMetadata: {
             ...houseMeta,
