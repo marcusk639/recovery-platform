@@ -183,8 +183,9 @@ sheet via StoreKit 2 (15–30% Apple cut, 2–3 weeks engineering); **(C) hybrid
 free tier in-app, paid upgrade only via web link (same as A). The recommendation
 is **A/C (web-only / hybrid)**: 0% cut, the WebView is already wired, and Regroup
 is a B2B operator tool (operators subscribe, not end users making micropurchases),
-which Apple has historically permitted to link out. This must be **recorded as a
-decision** before live Stripe products are finalized.
+which Apple has historically permitted to link out. **RESOLVED 2026-06-13 —
+web-only/hybrid (A/C) adopted**; no native IAP. This unblocks finalizing live
+Stripe products (RG-P0-2).
 (orig: regroup/docs/operations/manual-tasks/2026-05-21-app-store-launch-checklist.md
 "P0-F", stubbed.) Tracked as decision gate D-11.
 

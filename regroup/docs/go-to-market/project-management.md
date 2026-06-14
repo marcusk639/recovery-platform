@@ -42,8 +42,8 @@ Tracks: `revenue` · `app-store` · `security` · `legal` · `web` · `ops`.
 | RG-P0-2  | 6 Stripe Price IDs not created / secrets not set              | P0       | Owner (Stripe)   | revenue   | blocked     | `stripe prices list` shows 6 prices; 6 `STRIPE_PRICE_*` secrets set in `phoenix-cleanhouse`                                                                                                                                                       | docs/launch-readiness/regroup-launch-readiness.md#3-1-pricing-tier-activation-p0-revenue-blocking                 |
 | RG-P0-3  | No end-to-end subscription + rent test (real card)            | P0       | Eng + Owner      | revenue   | not_started | One operator subscribes per tier; one resident rent payment succeeds; webhook updates Firestore                                                                                                                                                   | docs/launch-readiness/regroup-launch-readiness.md#3-2-end-to-end-payment-flow-p0                                  |
 | RG-P0-4  | Legacy 5-house migration path (D-9 grandfather)               | P0       | Owner            | revenue   | planned     | Each of 5 operators contacted; grandfather window communicated; dry-run migration script reviewed                                                                                                                                                 | regroup/docs/superpowers/plans/2026-06-06-regroup-tier-billing-migration.md#phase-7                               |
-| RG-P0-5  | IAP vs. web-billing decision (D-11)                           | P0       | Owner (+legal)   | legal     | not_started | Decision recorded in decisions-log; if web-only, upgrade CTA routes to web checkout                                                                                                                                                               | §6 task F below (orig: regroup/docs/operations/manual-tasks/2026-05-21-app-store-launch-checklist.md, stubbed)    |
-| RG-P0-6  | HIPAA / BAA surface decision (D-12)                           | P0       | Owner (+counsel) | legal     | not_started | Written legal opinion in hand; **free GCP BAA accepted** if PHI in scope (Stripe does not sign BAAs); 42 CFR Part 2 reviewed                                                                                                                      | §6 task D below (orig: regroup/docs/operations/manual-tasks/2026-05-21-app-store-launch-checklist.md, stubbed)    |
+| RG-P0-5  | IAP vs. web-billing decision (D-11)                           | P0       | Owner (+legal)   | legal     | done        | **RESOLVED 2026-06-13 — web-only/hybrid** (paid upgrade CTA opens WebView to web checkout; no native IAP). Unblocks RG-P0-2. | §6 task F below (orig: regroup/docs/operations/manual-tasks/2026-05-21-app-store-launch-checklist.md, stubbed) |
+| RG-P0-6  | HIPAA / BAA surface decision (D-12)                           | P0       | Owner (+counsel) | legal     | done        | **RESOLVED 2026-06-13 — accept free GCP BAA**; keep PHI out of Stripe; 42 CFR Part 2 noted; add BAA section to Privacy Policy. Monitor-grade. | §6 task D below (orig: regroup/docs/operations/manual-tasks/2026-05-21-app-store-launch-checklist.md, stubbed) |
 | RG-P0-7  | iOS bundle ID `com.rats.dev` + version `0.0.1`                | P0       | Eng (mobile)     | app-store | not_started | Production bundle ID set; `package.json` version `1.0.0`; provisioning profile updated                                                                                                                                                            | docs/launch-readiness/regroup-launch-readiness.md#3-4-mobile-app-readiness                                        |
 | RG-P0-8  | Rotate 3 leaked service-account keys + purge git history      | P0       | Owner (GCP)      | security  | not_started | keys **rotated in GCP** (verify rotation, not just git cleanliness); `git log --all -- "**/*service-account*.json"` returns nothing; CI green                                                                                                     | §6 task A below (orig: regroup/docs/operations/manual-tasks/2026-05-21-app-store-launch-checklist.md, stubbed)    |
 | RG-P0-9  | Delete 4 E2E test accounts from prod Firebase                 | P0       | Owner            | security  | not_started | 0 E2E accounts in Auth; no `guests`/`houses` docs reference deleted UIDs                                                                                                                                                                          | §6 task B below (orig: regroup/docs/operations/manual-tasks/2026-05-21-app-store-launch-checklist.md, stubbed)    |
@@ -98,16 +98,17 @@ stubbed.)
 
 ## 4. Decision gates
 
-| gate | decision                                        | status      | owner            | recorded in                                                                          |
-| ---- | ----------------------------------------------- | ----------- | ---------------- | ------------------------------------------------------------------------------------ |
-| D-9  | Legacy→tier grandfather window (6-mo, 5 houses) | done        | Owner            | [`../_shared/decisions-log.md`](../../../docs/go-to-market/_shared/decisions-log.md) |
-| D-11 | IAP vs. web-only billing (recommend web/hybrid) | not_started | Owner (+legal)   | [`../_shared/decisions-log.md`](../../../docs/go-to-market/_shared/decisions-log.md) |
-| D-12 | HIPAA / BAA surface (legal opinion required)    | not_started | Owner (+counsel) | [`../_shared/decisions-log.md`](../../../docs/go-to-market/_shared/decisions-log.md) |
+| gate | decision                                        | status | owner            | recorded in                                                                          |
+| ---- | ----------------------------------------------- | ------ | ---------------- | ------------------------------------------------------------------------------------ |
+| D-9  | Legacy→tier grandfather window (6-mo, 5 houses) | done   | Owner            | [`../_shared/decisions-log.md`](../../../docs/go-to-market/_shared/decisions-log.md) |
+| D-11 | IAP vs. web-only billing (web/hybrid)           | done   | Owner (+legal)   | [`../_shared/decisions-log.md`](../../../docs/go-to-market/_shared/decisions-log.md) |
+| D-12 | HIPAA / BAA surface (accept free GCP BAA)       | done   | Owner (+counsel) | [`../_shared/decisions-log.md`](../../../docs/go-to-market/_shared/decisions-log.md) |
 
-D-9 is resolved (grandfather 6 months, then migrate via reviewed Stripe CLI
-batches). D-11 is **open and launch-blocking** (gates RG-P0-2). **D-12 is open but
-monitor-grade, not a hard launch gate** — it informs RG-P0-10 (privacy policy) but
-is mitigated by cheap self-serve options (free GCP BAA; keep PHI out of Stripe).
+All three gates are resolved. D-9: grandfather 6 months, then migrate via reviewed
+Stripe CLI batches. **D-11 (2026-06-13): web-only/hybrid** — paid upgrade routes to
+web checkout, no native IAP; RG-P0-2 (Stripe product setup) is now unblocked.
+**D-12 (2026-06-13): accept the free GCP BAA** and keep PHI out of Stripe; the
+outcome (a BAA section) folds into RG-P0-10 (privacy policy) before publishing.
 
 ---
 
