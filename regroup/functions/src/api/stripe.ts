@@ -161,6 +161,29 @@ export const reactivateSubscription = async (
   subscriptionMetadata: OperatorSubscription,
   userId?: string,
 ): Promise<OperatorSubscription> => {
+  // Tier model: recreate a single flat-fee line item from the stored tier, and
+  // record the single subscriptionItemId. Legacy two-item subscriptions keep the
+  // house+guest createItemsFromMetadata path unchanged below.
+  if (subscriptionMetadata.tier) {
+    const houseType = subscriptionMetadata.houseType as HouseType;
+    const tier = subscriptionMetadata.tier as TierKey;
+    const price = resolveTierPriceId(houseType, tier);
+    const subscription = await stripe.subscriptions.create({
+      customer: customerId,
+      items: [{ price, quantity: 1 }],
+      ...(userId ? { metadata: { userId } } : {}),
+    });
+    const freshMetadata = new OperatorSubscription();
+    freshMetadata.houseType = houseType;
+    freshMetadata.tier = tier;
+    freshMetadata.maxResidents = subscriptionMetadata.maxResidents;
+    freshMetadata.maxProperties = subscriptionMetadata.maxProperties;
+    freshMetadata.houses = subscriptionMetadata.houses ?? {};
+    mapSubscriptionToMetadata(subscription, freshMetadata, customerId);
+    freshMetadata.subscriptionItemId = subscription.items.data[0].id;
+    return freshMetadata;
+  }
+
   const subscription = await stripe.subscriptions.create({
     customer: customerId,
     items: createItemsFromMetadata(subscriptionMetadata),
