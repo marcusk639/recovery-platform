@@ -859,6 +859,107 @@ describe("updateSubscriptionHouses — bundle discount integration", () => {
   });
 });
 
+describe("tier subscriptions skip Stripe quantity updates", () => {
+  const tierUserAtResidentCap = {
+    ...fakeUser,
+    subscriptionMetadata: {
+      customerId: "cus_tier",
+      subscriptionId: "sub_tier",
+      subscriptionItemId: "si_tier",
+      status: "trialing",
+      houseType: "traditional",
+      tier: "starter",
+      maxResidents: 10,
+      maxProperties: 1,
+      houses: { "house-1": { numberOfGuests: 10 } },
+    },
+  };
+  const tierUserUnderCap = {
+    ...fakeUser,
+    subscriptionMetadata: {
+      ...tierUserAtResidentCap.subscriptionMetadata,
+      maxResidents: 10,
+      maxProperties: 3,
+      houses: { "house-1": { numberOfGuests: 2 } },
+    },
+  };
+
+  it("enforces the resident cap and does not call Stripe for a tier sub (guests add)", async () => {
+    mockGetUser.mockResolvedValue(tierUserAtResidentCap);
+    await expect(
+      call(updateSubscriptionGuests, {
+        ownerUserId: "user-1",
+        houseIds: ["house-1"],
+        action: "add",
+      }),
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+    expect(mockUpdateSubscriptionItem).not.toHaveBeenCalled();
+  });
+
+  it("persists occupancy without Stripe when adding a resident under cap", async () => {
+    mockGetUser.mockResolvedValue(tierUserUnderCap);
+    mockUpdateUser.mockResolvedValue(undefined);
+    await call(updateSubscriptionGuests, {
+      ownerUserId: "user-1",
+      houseIds: ["house-1"],
+      action: "add",
+    });
+    expect(mockUpdateSubscriptionItem).not.toHaveBeenCalled();
+    expect(mockUpdateUser).toHaveBeenCalledWith(
+      "user-1",
+      expect.objectContaining({
+        subscriptionMetadata: expect.objectContaining({
+          tier: "starter",
+          houses: { "house-1": { numberOfGuests: 3 } },
+        }),
+      }),
+    );
+  });
+
+  it("enforces the property cap and does not call Stripe for a tier sub (houses add)", async () => {
+    const atPropertyCap = {
+      ...fakeUser,
+      subscriptionMetadata: {
+        ...tierUserUnderCap.subscriptionMetadata,
+        maxProperties: 1,
+        houses: { "house-1": { numberOfGuests: 0 } },
+      },
+    };
+    mockGetUser.mockResolvedValue(atPropertyCap);
+    await expect(
+      call(updateSubscriptionHouses, {
+        ownerUserId: "user-1",
+        action: "add",
+        houseIds: ["house-2"],
+      }),
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+    expect(mockUpdateSubscriptionItem).not.toHaveBeenCalled();
+    expect(mockApplyBundleDiscountToSubscription).not.toHaveBeenCalled();
+  });
+
+  it("persists a new house without Stripe or bundle discount when under property cap", async () => {
+    mockGetUser.mockResolvedValue(tierUserUnderCap);
+    mockUpdateUser.mockResolvedValue(undefined);
+    await call(updateSubscriptionHouses, {
+      ownerUserId: "user-1",
+      action: "add",
+      houseIds: ["house-2"],
+    });
+    expect(mockUpdateSubscriptionItem).not.toHaveBeenCalled();
+    expect(mockApplyBundleDiscountToSubscription).not.toHaveBeenCalled();
+    expect(mockUpdateUser).toHaveBeenCalledWith(
+      "user-1",
+      expect.objectContaining({
+        subscriptionMetadata: expect.objectContaining({
+          houses: expect.objectContaining({
+            "house-2": { numberOfGuests: 0 },
+          }),
+        }),
+      }),
+    );
+  });
+});
+
 describe("createOperatorSubscription — tier-billing flag branch", () => {
   afterEach(() => {
     delete process.env.TIER_BILLING_ENABLED;
