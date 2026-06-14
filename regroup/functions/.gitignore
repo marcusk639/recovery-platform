@@ -19,3 +19,5 @@ service-key.json
 
 # Firebase emulator local secret overrides — never commit
 .secret.local
+# Local Stripe price-ID reference (RG-P0-2)
+.stripe-price-ids.local.md
