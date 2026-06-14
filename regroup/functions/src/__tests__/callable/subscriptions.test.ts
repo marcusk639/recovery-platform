@@ -35,6 +35,7 @@ jest.mock("stripe", () => {
 jest.mock("lodash/isNil", () => jest.fn((v: any) => v == null));
 
 const mockInitializeCustomer = jest.fn();
+const mockInitializeTierCustomer = jest.fn();
 const mockUpdateSubscriptionItem = jest.fn();
 const mockGetSubscriptionItem = jest.fn();
 const mockRetrievePaymentMethod = jest.fn();
@@ -52,6 +53,7 @@ const mockApplyBundleDiscountToSubscription = jest
 
 jest.mock("../../api/stripe", () => ({
   initializeCustomer: mockInitializeCustomer,
+  initializeTierCustomer: mockInitializeTierCustomer,
   updateSubscriptionItem: mockUpdateSubscriptionItem,
   getSubscriptionItem: mockGetSubscriptionItem,
   updateSubscriptionMetadata: mockUpdateSubscriptionMetadata,
@@ -854,5 +856,81 @@ describe("updateSubscriptionHouses — bundle discount integration", () => {
         houseIds: ["house-3"],
       }),
     ).resolves.not.toThrow();
+  });
+});
+
+describe("createOperatorSubscription — tier-billing flag branch", () => {
+  afterEach(() => {
+    delete process.env.TIER_BILLING_ENABLED;
+    delete process.env.STRIPE_PRICE_TRAD_STARTER;
+  });
+
+  it("uses initializeTierCustomer (not legacy) when the flag is on", async () => {
+    process.env.TIER_BILLING_ENABLED = "true";
+    process.env.STRIPE_PRICE_TRAD_STARTER = "price_starter";
+    mockGetUser.mockResolvedValue(fakeUser);
+    mockInitializeTierCustomer.mockResolvedValue({
+      customerId: "cus_tier",
+      subscriptionId: "sub_tier",
+      subscriptionItemId: "si_tier",
+      status: "trialing",
+      houseType: "traditional",
+      tier: "starter",
+    });
+    mockUpdateUser.mockResolvedValue(undefined);
+
+    await call(createOperatorSubscription, {
+      user: fakeUser,
+      paymentMethod: "pm_test",
+      houseType: "traditional",
+      tier: "starter",
+    });
+
+    expect(mockInitializeTierCustomer).toHaveBeenCalledWith(
+      fakeUser.email,
+      "pm_test",
+      "traditional",
+      "starter",
+      fakeUser.id,
+    );
+    expect(mockInitializeCustomer).not.toHaveBeenCalled();
+    // Tier caps from SUBSCRIPTION_TIERS.traditional.starter are persisted.
+    expect(mockUpdateUser).toHaveBeenCalledWith(
+      fakeUser.id,
+      expect.objectContaining({
+        subscriptionMetadata: expect.objectContaining({
+          subscriptionItemId: "si_tier",
+          status: "trialing",
+          maxResidents: 10,
+          maxProperties: 1,
+        }),
+      }),
+    );
+  });
+
+  it("uses the legacy initializeCustomer when the flag is off", async () => {
+    process.env.TIER_BILLING_ENABLED = "false";
+    process.env.STRIPE_PRICE_TRAD_PROFESSIONAL = "price_pro";
+    mockGetUser.mockResolvedValue(fakeUser);
+    mockInitializeCustomer.mockResolvedValue({
+      customerId: "cus_legacy",
+      subscriptionId: "sub_legacy",
+      houses: {},
+      items: { houseItemId: "si_house", guestItemId: "si_guest" },
+      currentPeriodEnd: Date.now() + 1000000,
+      status: "trialing",
+    });
+    mockUpdateUser.mockResolvedValue(undefined);
+
+    await call(createOperatorSubscription, {
+      user: fakeUser,
+      paymentMethod: "pm_test",
+      houseType: "traditional",
+      tier: "professional",
+    });
+
+    expect(mockInitializeCustomer).toHaveBeenCalled();
+    expect(mockInitializeTierCustomer).not.toHaveBeenCalled();
+    delete process.env.STRIPE_PRICE_TRAD_PROFESSIONAL;
   });
 });

@@ -2,6 +2,8 @@ import { logger } from "firebase-functions";
 import Stripe from "stripe";
 import OperatorSubscription from "../entities/OperatorSubscription";
 import { User } from "../entities/User";
+import { HouseType, TierKey } from "../config";
+import { resolveTierPriceId } from "../util/tierPricing";
 
 // Lazy Proxy — secrets are only available at request time in v2, not at module load.
 let _stripe: Stripe | undefined;
@@ -101,6 +103,32 @@ export const createSubscription = async (
     // without an extra Firestore query. Passing it here avoids a second
     // Stripe round-trip that could fail after the subscription is already live.
     ...(userId ? { metadata: { userId } } : {}),
+  });
+};
+
+/**
+ * Tier-based (flat-fee) subscription creation. Unlike createSubscription's
+ * two-item house+guest model, this builds a SINGLE line item at the price
+ * resolved from the tier config, with a 30-day trial. Used only when
+ * TIER_BILLING_ENABLED is on. The legacy createSubscription is left untouched
+ * for grandfathered subscribers.
+ */
+export const createTierSubscription = async (
+  customerId: string,
+  houseType: HouseType,
+  tier: TierKey,
+  userId?: string,
+) => {
+  const price = resolveTierPriceId(houseType, tier);
+  return stripe.subscriptions.create({
+    customer: customerId,
+    items: [{ price, quantity: 1 }],
+    trial_period_days: 30,
+    metadata: {
+      ...(userId ? { userId } : {}),
+      houseType,
+      tier,
+    },
   });
 };
 
@@ -311,6 +339,35 @@ export const initializeCustomer = async (
 ) => {
   const customer = await createCustomer(email, paymentMethod);
   return initializeSubscription(customer.id, oxfordEnabled, userId);
+};
+
+/**
+ * Tier-model customer initialization. Mirrors initializeCustomer but creates a
+ * single-item flat-fee tier subscription and returns the single
+ * subscriptionItemId (there is no separate house/guest item in the tier model).
+ */
+export const initializeTierCustomer = async (
+  email: string,
+  paymentMethod: string,
+  houseType: HouseType,
+  tier: TierKey,
+  userId: string,
+) => {
+  const customer = await createCustomer(email, paymentMethod);
+  const subscription = await createTierSubscription(
+    customer.id,
+    houseType,
+    tier,
+    userId,
+  );
+  return {
+    customerId: customer.id,
+    subscriptionId: subscription.id,
+    subscriptionItemId: subscription.items.data[0].id,
+    status: subscription.status,
+    houseType,
+    tier,
+  };
 };
 
 export const updateSubscriptionMetadata = (
