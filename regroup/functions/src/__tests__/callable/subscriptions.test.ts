@@ -711,6 +711,21 @@ describe("applyBundleDiscount callable", () => {
     expect(mockApplyBundleDiscountToSubscription).not.toHaveBeenCalled();
   });
 
+  it("does not apply a bundle coupon to a tier subscription", async () => {
+    const tierUser = {
+      ...fakeUser,
+      subscriptionMetadata: {
+        subscriptionId: "sub_tier",
+        tier: "professional",
+        houseType: "traditional",
+        houses: { "house-1": { numberOfGuests: 0 } },
+      },
+    };
+    mockGetUser.mockResolvedValue(tierUser);
+    await call(applyBundleDiscount, { userId: "user-1" });
+    expect(mockApplyBundleDiscountToSubscription).not.toHaveBeenCalled();
+  });
+
   it("throws unauthenticated when no auth", async () => {
     await expect(
       call(applyBundleDiscount, { userId: "user-1" }, null as any),

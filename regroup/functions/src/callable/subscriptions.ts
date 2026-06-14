@@ -723,6 +723,15 @@ export const applyBundleDiscount = onCall(
       });
       return;
     }
+    // Tier subscriptions express multi-property via tier (Professional/Enterprise/
+    // Network), not per-house quantity, so per-house bundle coupons do not apply.
+    if (user.subscriptionMetadata?.tier) {
+      logger.info(
+        "applyBundleDiscount: tier subscription — bundle discounts not applicable",
+        { userId: data.userId },
+      );
+      return;
+    }
     const houseCount = Object.keys(
       user.subscriptionMetadata.houses ?? {},
     ).length;
