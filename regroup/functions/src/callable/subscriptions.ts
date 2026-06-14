@@ -8,8 +8,11 @@ import {
   SENDGRID_API_KEY,
   SUBSCRIPTION_TIERS,
   HouseType,
+  TierKey,
+  isTierBillingEnabled,
 } from "../config";
 import { User } from "../entities/User";
+import OperatorSubscription from "../entities/OperatorSubscription";
 import {
   InviteEmailPayload,
   EmailConfirmationPayload,
@@ -19,6 +22,7 @@ import { sendOneInviteEmail } from "../util/inviteEmails";
 import { notifyAdminsIfTheyExist } from "../util/invite";
 import {
   initializeCustomer,
+  initializeTierCustomer,
   updateSubscriptionItem,
   getSubscriptionItem,
   updateSubscriptionMetadata,
@@ -206,6 +210,58 @@ export const createOperatorSubscription = onCall(
       priceEnvVar: tierConfig.priceEnvVar,
     });
     const firestoreUser = await getUser(data.user.id);
+
+    // Tier-billing path (flag-gated). Builds a single-item flat-fee subscription
+    // from the resolved tier price. Legacy two-item subscribers are unaffected:
+    // the flag defaults off, so the existing block below runs unchanged.
+    if (isTierBillingEnabled()) {
+      const tierMetadata = await initializeTierCustomer(
+        data.user.email,
+        data.paymentMethod,
+        data.houseType as HouseType,
+        data.tier as TierKey,
+        data.user.id,
+      );
+      logger.info("Tier subscription created", {
+        subscriptionId: tierMetadata.subscriptionId,
+      });
+      const tierResolvedStatus = tierMetadata.status || "pending";
+      const persistedTierMetadata = {
+        ...tierMetadata,
+        status: tierResolvedStatus,
+        lastUpdatedAt: new Date().toISOString(),
+        maxResidents: tierConfig.maxResidents,
+        maxProperties: tierConfig.maxProperties,
+      };
+      await updateUser(data.user.id!, {
+        // Tier subscriptions have no house/guest items or houses map; the single
+        // subscriptionItemId is the billing handle. Cast to the entity type —
+        // legacy-only fields (items/houses/plan/oxfordEnabled) are intentionally absent.
+        subscriptionMetadata:
+          persistedTierMetadata as unknown as OperatorSubscription,
+      });
+      await upsertSubscriptionDoc({
+        houseId: "",
+        stripeCustomerId: tierMetadata.customerId,
+        stripeSubscriptionId: tierMetadata.subscriptionId,
+        status: tierResolvedStatus as SubscriptionDoc["status"],
+        currentPeriodEnd: "",
+        planId: priceId,
+        guestCount: 0,
+        userId: data.user.id,
+      });
+      await sendEmail({
+        to: "admin@regroup-app.com",
+        from: regroupEmail,
+        text: `A new user has subscribed to Regroup: Sober Living App\nUser ID: ${data.user.id}\nUser email: ${data.user.email}`,
+        subject: "New user subscription",
+      });
+      return {
+        ...data.user,
+        subscriptionMetadata: persistedTierMetadata,
+      } as unknown as User;
+    }
+
     const oxfordEnabled =
       firestoreUser?.subscriptionMetadata?.oxfordEnabled ?? false;
     // W12: userId is embedded in the Stripe subscription metadata at creation
