@@ -74,6 +74,8 @@ local.properties
 .cxx/
 *.keystore
 !debug.keystore
+# Keystore command notes contain plaintext store/key passwords — keep local only
+homegroups/mobile/android/keystore.md
 
 # ── Fastlane ──────────────────────────────────
 **/fastlane/report.xml
