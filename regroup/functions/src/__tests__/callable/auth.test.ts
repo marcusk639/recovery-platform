@@ -550,16 +550,25 @@ describe("removePrivilegesForGuests — authorization guard (C3)", () => {
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe("verifyUserEmail", () => {
-  it("calls _verifyUserEmail with userId", async () => {
+  it("verifies the caller's own email", async () => {
     mockVerifyUserEmail.mockResolvedValue(undefined);
-    await call(verifyUserEmail, { userId: "u1" });
-    expect(mockVerifyUserEmail).toHaveBeenCalledWith("u1");
+    // fakeAuth.uid === "test-user"
+    await call(verifyUserEmail, { userId: "test-user" });
+    expect(mockVerifyUserEmail).toHaveBeenCalledWith("test-user");
   });
 
-  it("returns the result of _verifyUserEmail", async () => {
+  it("returns the result of _verifyUserEmail for the caller", async () => {
     mockVerifyUserEmail.mockResolvedValue("verified");
-    const result = await call(verifyUserEmail, { userId: "u2" });
+    const result = await call(verifyUserEmail, { userId: "test-user" });
     expect(result).toBe("verified");
+  });
+
+  it("DENIES verifying another user's email", async () => {
+    mockVerifyUserEmail.mockResolvedValue(undefined);
+    await expect(
+      call(verifyUserEmail, { userId: "someone-else" }),
+    ).rejects.toMatchObject({ code: "permission-denied" });
+    expect(mockVerifyUserEmail).not.toHaveBeenCalled();
   });
 });
 

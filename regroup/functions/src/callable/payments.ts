@@ -5,7 +5,7 @@ import Stripe from "stripe";
 import { z } from "zod";
 import { STRIPE_SECRET_KEY, STRIPE_CLIENT_ID } from "../config";
 import { transferStats } from "../util/guest";
-import { User } from "../entities/User";
+import { getUser } from "../api/firestore";
 import {
   createStripeClient,
   mapStripeError,
@@ -41,16 +41,15 @@ const listHousePaymentsSchema = z.object({
   limit: z.number().int().positive().optional(),
 });
 
-const getPaymentMethodSchema = z.object({ customerId: z.string().min(1) });
+// customerId is accepted for backward compatibility but IGNORED — the Stripe
+// customer is always resolved server-side from the authenticated caller.
+const getPaymentMethodSchema = z.object({
+  customerId: z.string().min(1).optional(),
+});
 
+// The caller's Stripe customer is resolved server-side from their own user
+// record; client-supplied customer/subscription data is no longer trusted.
 const updatePaymentInfoSchema = z.object({
-  user: z
-    .object({
-      subscriptionMetadata: z
-        .object({ customerId: z.string().min(1) })
-        .passthrough(),
-    })
-    .passthrough(),
   paymentMethod: z.string().min(1),
   guestId: z.string().min(1).optional(),
 });
@@ -60,7 +59,7 @@ const safeUrlSchema = z
   .string()
   .refine(
     (u) => !/^javascript:/i.test(u) && /^[a-z][a-z0-9+\-.]*:\/\//i.test(u),
-    { message: "Invalid URL scheme" }
+    { message: "Invalid URL scheme" },
   );
 
 const connectStripeAccountSchema = z.object({
@@ -122,7 +121,7 @@ export const createPaymentIntent = onCall(
     if (!house.stripeAccountId || house.stripeStatus !== "active") {
       throw new HttpsError(
         "failed-precondition",
-        "House has no active Stripe account"
+        "House has no active Stripe account",
       );
     }
 
@@ -138,7 +137,7 @@ export const createPaymentIntent = onCall(
       if (guestData.userId !== request.auth.uid) {
         throw new HttpsError(
           "permission-denied",
-          "Only the resident or a house admin can initiate this payment"
+          "Only the resident or a house admin can initiate this payment",
         );
       }
     }
@@ -163,14 +162,14 @@ export const createPaymentIntent = onCall(
           transfer_data: { destination: house.stripeAccountId },
           application_fee_amount: applicationFeeAmount,
         },
-        { idempotencyKey }
+        { idempotencyKey },
       );
     } catch (err) {
       throw mapStripeError(err);
     }
 
     return { clientSecret: paymentIntent.client_secret };
-  }
+  },
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -193,7 +192,7 @@ export const listPayments = onCall(
     // Authorization: caller must be a member (admin or guest) of the house
     assertHouseMemberFromClaims(
       request.auth.token as Record<string, unknown>,
-      houseId
+      houseId,
     );
 
     const houseDoc = await db.collection("houses").doc(houseId).get();
@@ -203,12 +202,12 @@ export const listPayments = onCall(
     const stripe = createStripeClient();
     const charges = await stripe.charges.list(
       { limit },
-      { stripeAccount: house.stripeAccountId }
+      { stripeAccount: house.stripeAccountId },
     );
 
     // Filter client-side by guestId metadata
     const filtered = charges.data.filter(
-      (c) => c.metadata?.guestId === guestId
+      (c) => c.metadata?.guestId === guestId,
     );
 
     return {
@@ -222,7 +221,7 @@ export const listPayments = onCall(
         receiptUrl: c.receipt_url,
       })),
     };
-  }
+  },
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -239,12 +238,12 @@ export const listHousePayments = onCall(
 
     const { houseId, limit = 100 } = parseInput(
       listHousePaymentsSchema,
-      request.data
+      request.data,
     );
 
     assertHouseMemberFromClaims(
       request.auth.token as Record<string, unknown>,
-      houseId
+      houseId,
     );
 
     const houseDoc = await db.collection("houses").doc(houseId).get();
@@ -254,7 +253,7 @@ export const listHousePayments = onCall(
     const stripe = createStripeClient();
     const charges = await stripe.charges.list(
       { limit },
-      { stripeAccount: house.stripeAccountId }
+      { stripeAccount: house.stripeAccountId },
     );
 
     return {
@@ -270,7 +269,7 @@ export const listHousePayments = onCall(
         houseId: c.metadata?.houseId ?? houseId,
       })),
     };
-  }
+  },
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -282,20 +281,24 @@ export const getPaymentMethod = onCall(
   async (request) => {
     if (!request.auth)
       throw new HttpsError("unauthenticated", "Login required");
-    const data = parseInput(getPaymentMethodSchema, request.data);
-    const stripe = createStripeClient();
-    try {
-      // @ts-ignore — retrieveCustomer may return DeletedCustomer
-      const customer: Stripe.Customer = await stripe.customers.retrieve(
-        data.customerId
-      );
-      const paymentMethodId = customer.invoice_settings.default_payment_method;
-      return stripe.paymentMethods.retrieve(paymentMethodId as string);
-    } catch (error) {
-      logger.error("Could not retrieve payment method", error);
+    // Ownership: resolve the Stripe customer from the caller's own record.
+    // Never trust a client-supplied customerId — doing so let any authenticated
+    // user enumerate other tenants' card metadata.
+    parseInput(getPaymentMethodSchema, request.data);
+    const caller = await getUser(request.auth.uid);
+    const customerId = caller?.subscriptionMetadata?.customerId;
+    if (!customerId) {
+      throw new HttpsError("not-found", "No billing account on file");
     }
-    return null;
-  }
+    const stripe = createStripeClient();
+    const customer = await stripe.customers.retrieve(customerId);
+    if (customer.deleted) {
+      throw new HttpsError("not-found", "Billing account no longer exists");
+    }
+    const paymentMethodId = customer.invoice_settings?.default_payment_method;
+    if (!paymentMethodId) return null;
+    return stripe.paymentMethods.retrieve(paymentMethodId as string);
+  },
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -306,27 +309,61 @@ export const updatePaymentInfo = onCall(
   async (request) => {
     if (!request.auth)
       throw new HttpsError("unauthenticated", "Login required");
-    const parsed = parseInput(
+    const { paymentMethod, guestId } = parseInput(
       updatePaymentInfoSchema,
-      request.data
-    ) as unknown as {
-      user: User;
-      paymentMethod: string;
-      guestId?: string;
-    };
-    const { user, paymentMethod, guestId } = parsed;
+      request.data,
+    );
+
+    // Ownership 1: resolve the Stripe customer from the caller's own record,
+    // never from client-supplied data (prevents attaching a card to another
+    // tenant's customer).
+    const caller = await getUser(request.auth.uid);
+    const customerId = caller?.subscriptionMetadata?.customerId;
+    if (!customerId) {
+      throw new HttpsError("not-found", "No billing account on file");
+    }
+
+    // Ownership 2: if writing a guest's default payment method, the caller must
+    // be that resident or an admin of the guest's house.
+    if (guestId) {
+      const guestSnap = await db.collection("guests").doc(guestId).get();
+      if (!guestSnap.exists) {
+        throw new HttpsError("not-found", "Guest record not found");
+      }
+      const guestData = guestSnap.data() as {
+        userId?: string;
+        houseId?: string;
+      };
+      let authorized = guestData.userId === request.auth.uid;
+      if (!authorized && guestData.houseId) {
+        const houseSnap = await db
+          .collection("houses")
+          .doc(guestData.houseId)
+          .get();
+        authorized =
+          houseSnap.exists &&
+          isHouseAdmin(request.auth.uid, houseSnap.data() as HouseAdminFields);
+      }
+      if (!authorized) {
+        throw new HttpsError(
+          "permission-denied",
+          "Only the resident or a house admin can update this payment method",
+        );
+      }
+    }
+
     const stripe = createStripeClient();
     try {
       const payment = await stripe.paymentMethods.attach(paymentMethod, {
-        customer: user.subscriptionMetadata.customerId,
+        customer: customerId,
       });
-      await stripe.customers.update(user.subscriptionMetadata.customerId, {
+      await stripe.customers.update(customerId, {
         invoice_settings: {
           default_payment_method: payment.id,
         },
       });
       if (guestId) {
-        await admin.firestore().collection("guests").doc(guestId).update({
+        await db.collection("guests").doc(guestId).update({
           defaultPaymentMethodId: payment.id,
         });
       }
@@ -337,7 +374,7 @@ export const updatePaymentInfo = onCall(
       });
       throw new HttpsError("internal", "Failed to save payment method");
     }
-  }
+  },
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -375,7 +412,7 @@ export const connectStripeAccount = onCall(
     // are constructed below, after we know the Stripe account ID.
     const { houseId, returnUrl, refreshUrl } = parseInput(
       connectStripeAccountSchema,
-      data
+      data,
     );
 
     // ── 3. Fetch house & admin check ──────────────────────────────────────────
@@ -393,7 +430,7 @@ export const connectStripeAccount = onCall(
     assertHouseAdmin(
       auth.uid,
       house,
-      "Only house admins can connect a Stripe account"
+      "Only house admins can connect a Stripe account",
     );
 
     // ── 4. Get or create the Stripe Express account ───────────────────────────
@@ -480,7 +517,7 @@ export const connectStripeAccount = onCall(
     }
 
     return { url: accountLink.url };
-  }
+  },
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -524,7 +561,7 @@ export const disconnectStripeAccount = onCall(
     assertHouseAdmin(
       auth.uid,
       house,
-      "Only house admins can disconnect a Stripe account"
+      "Only house admins can disconnect a Stripe account",
     );
 
     // ── 4. If there is no account, we are already in the desired state ─────────
@@ -562,7 +599,7 @@ export const disconnectStripeAccount = onCall(
     });
 
     return { success: true };
-  }
+  },
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -680,7 +717,7 @@ export const getStripeAccountStatus = onCall(
 
     // All requirement items to persist — union of currently_due + past_due
     const requirementsToStore = Array.from(
-      new Set([...currentlyDue, ...pastDue, ...eventuallyDue])
+      new Set([...currentlyDue, ...pastDue, ...eventuallyDue]),
     );
 
     let status: StripeStatus;
@@ -720,5 +757,5 @@ export const getStripeAccountStatus = onCall(
       capabilities,
     };
     return result;
-  }
+  },
 );
