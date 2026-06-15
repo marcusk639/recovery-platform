@@ -9,11 +9,7 @@ import {
 import { Guest, Guests } from "../entities/Guest";
 import { House } from "../entities/House";
 import { calculateWeeklyHealth } from "./house";
-import {
-  buildWeekId,
-  getCurrentWeekStart,
-  getNextWeekStart,
-} from "./week";
+import { buildWeekId, getCurrentWeekStart, getNextWeekStart } from "./week";
 
 // ---------------------------------------------------------------------------
 // Retry configuration
@@ -27,9 +23,7 @@ const RETRY_CONFIG = {
 
 interface TransferFailure {
   guestId: string;
-  guestName: string;
   houseId: string;
-  houseName: string;
   error: string;
   timestamp: string;
   attempts: number;
@@ -60,9 +54,9 @@ export async function advanceGuestWeek(
   const currentWeekStart = guest.currentWeekStartDate ?? getCurrentWeekStart();
   const nextWeekStart = getNextWeekStart(currentWeekStart);
   const nextWeekId = buildWeekId(guest.id, nextWeekStart);
-  const nextWeekEndDate = new Date(nextWeekStart + 'T00:00:00Z');
+  const nextWeekEndDate = new Date(nextWeekStart + "T00:00:00Z");
   nextWeekEndDate.setUTCDate(nextWeekEndDate.getUTCDate() + 6);
-  const nextWeekEnd = nextWeekEndDate.toISOString().split('T')[0];
+  const nextWeekEnd = nextWeekEndDate.toISOString().split("T")[0];
   const currentMonday = getCurrentWeekStart();
 
   return ratsFirestore.runTransaction(async (transaction) => {
@@ -88,29 +82,39 @@ export async function advanceGuestWeek(
 
     // Pre-create empty week-summary document for the new week
     const summaryRef = weekSummariesCollection.doc(nextWeekId);
-    transaction.set(summaryRef, {
-      id: nextWeekId,
-      guestId: guest.id,
-      houseId: guest.houseId,
-      startDate: nextWeekStart,
-      endDate: nextWeekEnd,
-      stats: {
-        choresCompleted: 0,
-        meetingsAttended: 0,
-        hoursWorked: 0,
-        medicationTaken: 0,
-        primarySupporterMet: 0,
+    transaction.set(
+      summaryRef,
+      {
+        id: nextWeekId,
+        guestId: guest.id,
+        houseId: guest.houseId,
+        startDate: nextWeekStart,
+        endDate: nextWeekEnd,
+        stats: {
+          choresCompleted: 0,
+          meetingsAttended: 0,
+          hoursWorked: 0,
+          medicationTaken: 0,
+          primarySupporterMet: 0,
+        },
+        dailyStats: {},
+        lastUpdated: new Date().toISOString(),
+        activityCount: 0,
       },
-      dailyStats: {},
-      lastUpdated: new Date().toISOString(),
-      activityCount: 0,
-    }, { merge: true });
-
-    logger.info(
-      `Advanced week for ${guest.firstName} ${guest.lastName}: ${currentWeekStart} → ${nextWeekStart}`
+      { merge: true },
     );
 
-    return { ...currentGuest, currentWeekId: nextWeekId, currentWeekStartDate: nextWeekStart };
+    logger.info("Advanced guest week", {
+      guestId: guest.id,
+      from: currentWeekStart,
+      to: nextWeekStart,
+    });
+
+    return {
+      ...currentGuest,
+      currentWeekId: nextWeekId,
+      currentWeekStartDate: nextWeekStart,
+    };
   });
 }
 
@@ -120,7 +124,7 @@ export async function advanceGuestWeek(
 
 const transferGuestWeekWithRetry = async (
   guestDoc: FirebaseFirestore.QueryDocumentSnapshot,
-  house: House
+  house: House,
 ): Promise<{ success: boolean; guest?: Guest; error?: string }> => {
   const guest = guestDoc.data() as Guest;
 
@@ -139,8 +143,8 @@ const transferGuestWeekWithRetry = async (
       if (isRetryable && attempt < RETRY_CONFIG.maxRetries - 1) {
         const delay = getBackoffDelay(attempt);
         logger.warn(
-          `Retrying transfer for ${guest.firstName} ${guest.lastName} after ${delay}ms (attempt ${attempt + 1}/${RETRY_CONFIG.maxRetries})`,
-          error.message
+          `Retrying transfer for guest ${guest.id} after ${delay}ms (attempt ${attempt + 1}/${RETRY_CONFIG.maxRetries})`,
+          error.message,
         );
         await sleep(delay);
         continue;
@@ -148,9 +152,7 @@ const transferGuestWeekWithRetry = async (
 
       const failure: TransferFailure = {
         guestId: guest.id,
-        guestName: `${guest.firstName} ${guest.lastName}`,
         houseId: house.id,
-        houseName: house.name,
         error: error.message || "Unknown error",
         timestamp: new Date().toISOString(),
         attempts: attempt + 1,
@@ -158,8 +160,8 @@ const transferGuestWeekWithRetry = async (
       failedTransfers.push(failure);
 
       logger.error(
-        `Failed to transfer week for ${guest.firstName} ${guest.lastName} after ${attempt + 1} attempts`,
-        error
+        `Failed to transfer week for guest ${guest.id} after ${attempt + 1} attempts`,
+        error,
       );
 
       return { success: false, error: error.message };
@@ -176,7 +178,7 @@ const transferGuestWeekWithRetry = async (
 export const transferStats = async (
   context: unknown,
   timezone?: string | null,
-  houseId?: string
+  houseId?: string,
 ): Promise<Guests> => {
   logger.info("Starting weekly transfer...", { timezone, houseId });
 
@@ -195,7 +197,9 @@ export const transferStats = async (
     if (houseId) {
       houseQuery = await houseCollection.where("id", "==", houseId).get();
     } else if (timezone) {
-      houseQuery = await houseCollection.where("timezone", "==", timezone).get();
+      houseQuery = await houseCollection
+        .where("timezone", "==", timezone)
+        .get();
     } else {
       houseQuery = await houseCollection.get();
     }
@@ -218,14 +222,19 @@ export const transferStats = async (
           .get();
 
         results.totalGuests += guestQuery.size;
-        logger.info(`Found ${guestQuery.size} active guests in house ${house.name}`);
+        logger.info(
+          `Found ${guestQuery.size} active guests in house ${house.name}`,
+        );
 
         // Update house health
         try {
           calculateWeeklyHealth(guestQuery, house);
           await houseDoc.ref.update(JSON.parse(JSON.stringify(house)));
         } catch (healthError) {
-          logger.warn(`Failed to update house health for ${house.name}`, healthError);
+          logger.warn(
+            `Failed to update house health for ${house.name}`,
+            healthError,
+          );
         }
 
         // Advance each guest's week reference
@@ -253,7 +262,10 @@ export const transferStats = async (
   logger.info("Weekly transfer completed", results);
 
   if (failedTransfers.length > 0) {
-    logger.error(`${failedTransfers.length} guest transfers failed`, failedTransfers);
+    logger.error(
+      `${failedTransfers.length} guest transfers failed`,
+      failedTransfers,
+    );
   }
 
   return guests;

@@ -40,7 +40,7 @@ jest.mock("firebase-functions/v2/https", () => {
     // Handle both onCall(handler) and onCall(options, handler) signatures.
     onCall: (
       handlerOrOptions: unknown,
-      maybeHandler?: (request: unknown) => unknown
+      maybeHandler?: (request: unknown) => unknown,
     ) => {
       const handler =
         typeof handlerOrOptions === "function"
@@ -164,7 +164,7 @@ const mockRunTransaction = jest.fn(
     const result = await updateFn(tx);
     for (const w of writes) w();
     return result;
-  }
+  },
 );
 
 // ── Mock: firebase-admin ──────────────────────────────────────────────────────
@@ -180,9 +180,16 @@ jest.mock("firebase-admin", () => ({
       FieldValue: {
         delete: jest.fn(() => deleteFieldSentinel),
       },
-    }
+    },
   ),
   auth: jest.fn(() => ({ getUser: jest.fn() })),
+}));
+
+// ── Mock: api/firestore getUser (caller's own record for ownership checks) ─────
+const mockGetUser = jest.fn();
+jest.mock("../api/firestore", () => ({
+  ...(jest.requireActual("../api/firestore") as object),
+  getUser: (...args: unknown[]) => mockGetUser(...args),
 }));
 
 // ── Mock: stripe ──────────────────────────────────────────────────────────────
@@ -197,6 +204,7 @@ const mockStripeChargesList = jest.fn();
 const mockStripePaymentMethodsRetrieve = jest.fn();
 const mockStripePaymentMethodsAttach = jest.fn();
 const mockStripeCustomersUpdate = jest.fn();
+const mockStripeCustomersRetrieve = jest.fn();
 
 jest.mock("stripe", () => {
   // Preserve the real error classes so our production code's `instanceof` checks work.
@@ -219,7 +227,10 @@ jest.mock("stripe", () => {
       retrieve: mockStripePaymentMethodsRetrieve,
       attach: mockStripePaymentMethodsAttach,
     },
-    customers: { update: mockStripeCustomersUpdate },
+    customers: {
+      update: mockStripeCustomersUpdate,
+      retrieve: mockStripeCustomersRetrieve,
+    },
   }));
 
   // Attach the real errors namespace so that `Stripe.errors.StripeError` etc. work.
@@ -278,12 +289,12 @@ function readHouse(houseId: string): Record<string, unknown> | undefined {
 
 async function expectHttpsError(
   fn: () => Promise<unknown>,
-  code: functions.https.FunctionsErrorCode
+  code: functions.https.FunctionsErrorCode,
 ): Promise<void> {
   try {
     await fn();
     throw new Error(
-      "Expected HttpsError but function resolved without throwing"
+      "Expected HttpsError but function resolved without throwing",
     );
   } catch (err: unknown) {
     if (
@@ -307,7 +318,7 @@ function makeStripeError(
   ErrorClass: new (raw: Record<string, unknown>) => Error,
   message: string,
   type: string,
-  extra: Record<string, unknown> = {}
+  extra: Record<string, unknown> = {},
 ): Error {
   return new ErrorClass({ message, type, ...extra });
 }
@@ -373,9 +384,9 @@ describe("connectStripeAccount", () => {
         () =>
           (connectStripeAccount as unknown as Function)(
             baseData,
-            unauthContext
+            unauthContext,
           ),
-        "unauthenticated"
+        "unauthenticated",
       );
     });
 
@@ -385,9 +396,9 @@ describe("connectStripeAccount", () => {
         () =>
           (connectStripeAccount as unknown as Function)(
             { returnUrl: "https://x.com", refreshUrl: "https://y.com" },
-            authedContext(ADMIN_UID)
+            authedContext(ADMIN_UID),
           ),
-        "invalid-argument"
+        "invalid-argument",
       );
     });
 
@@ -399,14 +410,14 @@ describe("connectStripeAccount", () => {
       process.env.GCLOUD_PROJECT = "testproj";
       await (connectStripeAccount as unknown as Function)(
         { houseId: HOUSE_ID, refreshUrl: "https://y.com" },
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
       expect(mockStripeAccountLinksCreate).toHaveBeenCalledWith(
         expect.objectContaining({
           return_url:
             "https://us-central1-testproj.cloudfunctions.net/stripeConnectReturn",
           refresh_url: "https://y.com",
-        })
+        }),
       );
     });
 
@@ -418,14 +429,14 @@ describe("connectStripeAccount", () => {
       process.env.GCLOUD_PROJECT = "testproj";
       await (connectStripeAccount as unknown as Function)(
         { houseId: HOUSE_ID, returnUrl: "https://x.com" },
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
       expect(mockStripeAccountLinksCreate).toHaveBeenCalledWith(
         expect.objectContaining({
           return_url: "https://x.com",
           refresh_url:
             "https://us-central1-testproj.cloudfunctions.net/stripeConnectReauth?stripeAccountId=acct_existing_house",
-        })
+        }),
       );
     });
 
@@ -437,7 +448,7 @@ describe("connectStripeAccount", () => {
       process.env.GCLOUD_PROJECT = "testproj";
       await (connectStripeAccount as unknown as Function)(
         { houseId: HOUSE_ID },
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
       expect(mockStripeAccountLinksCreate).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -445,7 +456,7 @@ describe("connectStripeAccount", () => {
             "https://us-central1-testproj.cloudfunctions.net/stripeConnectReturn",
           refresh_url:
             "https://us-central1-testproj.cloudfunctions.net/stripeConnectReauth?stripeAccountId=acct_existing_house",
-        })
+        }),
       );
     });
 
@@ -455,9 +466,9 @@ describe("connectStripeAccount", () => {
         () =>
           (connectStripeAccount as unknown as Function)(
             { ...baseData, returnUrl: "javascript:alert(1)" },
-            authedContext(ADMIN_UID)
+            authedContext(ADMIN_UID),
           ),
-        "invalid-argument"
+        "invalid-argument",
       );
     });
 
@@ -467,9 +478,9 @@ describe("connectStripeAccount", () => {
         () =>
           (connectStripeAccount as unknown as Function)(
             { ...baseData, refreshUrl: "javascript:void(0)" },
-            authedContext(ADMIN_UID)
+            authedContext(ADMIN_UID),
           ),
-        "invalid-argument"
+        "invalid-argument",
       );
     });
 
@@ -478,9 +489,9 @@ describe("connectStripeAccount", () => {
         () =>
           (connectStripeAccount as unknown as Function)(
             baseData,
-            authedContext(ADMIN_UID)
+            authedContext(ADMIN_UID),
           ),
-        "not-found"
+        "not-found",
       );
     });
 
@@ -494,9 +505,9 @@ describe("connectStripeAccount", () => {
         () =>
           (connectStripeAccount as unknown as Function)(
             baseData,
-            authedContext("non-admin-uid")
+            authedContext("non-admin-uid"),
           ),
-        "permission-denied"
+        "permission-denied",
       );
     });
 
@@ -508,7 +519,7 @@ describe("connectStripeAccount", () => {
       });
       const result = await (connectStripeAccount as unknown as Function)(
         baseData,
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
       expect(result.url).toBe("https://connect.stripe.com/onboard");
     });
@@ -521,7 +532,7 @@ describe("connectStripeAccount", () => {
       });
       const result = await (connectStripeAccount as unknown as Function)(
         baseData,
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
       expect(result.url).toBe("https://connect.stripe.com/onboard");
     });
@@ -533,7 +544,7 @@ describe("connectStripeAccount", () => {
     it("creates a new Stripe Express account", async () => {
       await (connectStripeAccount as unknown as Function)(
         baseData,
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
       expect(mockStripeAccountsCreate).toHaveBeenCalledWith({
         type: "express",
@@ -544,7 +555,7 @@ describe("connectStripeAccount", () => {
     it("saves stripeAccountId and sets stripeStatus to pending", async () => {
       await (connectStripeAccount as unknown as Function)(
         baseData,
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
       const house = readHouse(HOUSE_ID);
       expect(house?.stripeAccountId).toBe("acct_new123");
@@ -554,7 +565,7 @@ describe("connectStripeAccount", () => {
     it("creates an account link with correct parameters", async () => {
       await (connectStripeAccount as unknown as Function)(
         baseData,
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
       expect(mockStripeAccountLinksCreate).toHaveBeenCalledWith({
         account: "acct_new123",
@@ -567,7 +578,7 @@ describe("connectStripeAccount", () => {
     it("returns the onboarding URL", async () => {
       const result = await (connectStripeAccount as unknown as Function)(
         baseData,
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
       expect(result.url).toBe("https://connect.stripe.com/onboard");
     });
@@ -584,7 +595,7 @@ describe("connectStripeAccount", () => {
     it("does NOT create a new Stripe account", async () => {
       await (connectStripeAccount as unknown as Function)(
         baseData,
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
       expect(mockStripeAccountsCreate).not.toHaveBeenCalled();
     });
@@ -592,7 +603,7 @@ describe("connectStripeAccount", () => {
     it("creates an account link for the existing account", async () => {
       await (connectStripeAccount as unknown as Function)(
         baseData,
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
       expect(mockStripeAccountLinksCreate).toHaveBeenCalledWith({
         account: "acct_existing123",
@@ -605,7 +616,7 @@ describe("connectStripeAccount", () => {
     it("returns the onboarding URL", async () => {
       const result = await (connectStripeAccount as unknown as Function)(
         baseData,
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
       expect(result.url).toBe("https://connect.stripe.com/onboard");
     });
@@ -618,16 +629,16 @@ describe("connectStripeAccount", () => {
       const err = makeStripeError(
         StripeErrors.StripeAPIError,
         "api exploded",
-        "api_error"
+        "api_error",
       );
       mockStripeAccountsCreate.mockRejectedValue(err);
       await expectHttpsError(
         () =>
           (connectStripeAccount as unknown as Function)(
             baseData,
-            authedContext(ADMIN_UID)
+            authedContext(ADMIN_UID),
           ),
-        "internal"
+        "internal",
       );
     });
 
@@ -635,16 +646,16 @@ describe("connectStripeAccount", () => {
       const err = makeStripeError(
         StripeErrors.StripeRateLimitError,
         "too many requests",
-        "rate_limit_error"
+        "rate_limit_error",
       );
       mockStripeAccountsCreate.mockRejectedValue(err);
       await expectHttpsError(
         () =>
           (connectStripeAccount as unknown as Function)(
             baseData,
-            authedContext(ADMIN_UID)
+            authedContext(ADMIN_UID),
           ),
-        "resource-exhausted"
+        "resource-exhausted",
       );
     });
 
@@ -657,16 +668,16 @@ describe("connectStripeAccount", () => {
       const err = makeStripeError(
         StripeErrors.StripeAPIError,
         "link failed",
-        "api_error"
+        "api_error",
       );
       mockStripeAccountLinksCreate.mockRejectedValue(err);
       await expectHttpsError(
         () =>
           (connectStripeAccount as unknown as Function)(
             baseData,
-            authedContext(ADMIN_UID)
+            authedContext(ADMIN_UID),
           ),
-        "internal"
+        "internal",
       );
     });
   });
@@ -686,17 +697,17 @@ describe("connectStripeAccount", () => {
             update: jest.fn(),
           };
           return fn(tx);
-        }
+        },
       );
 
       const result = await (connectStripeAccount as unknown as Function)(
         baseData,
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
 
       // Should have created a link for the concurrently-created account.
       expect(mockStripeAccountLinksCreate).toHaveBeenCalledWith(
-        expect.objectContaining({ account: "acct_concurrently_created" })
+        expect.objectContaining({ account: "acct_concurrently_created" }),
       );
       expect(result.url).toBe("https://connect.stripe.com/onboard");
 
@@ -721,9 +732,9 @@ describe("disconnectStripeAccount", () => {
         () =>
           (disconnectStripeAccount as unknown as Function)(
             { houseId: HOUSE_ID },
-            unauthContext
+            unauthContext,
           ),
-        "unauthenticated"
+        "unauthenticated",
       );
     });
 
@@ -732,9 +743,9 @@ describe("disconnectStripeAccount", () => {
         () =>
           (disconnectStripeAccount as unknown as Function)(
             {},
-            authedContext(ADMIN_UID)
+            authedContext(ADMIN_UID),
           ),
-        "invalid-argument"
+        "invalid-argument",
       );
     });
 
@@ -743,9 +754,9 @@ describe("disconnectStripeAccount", () => {
         () =>
           (disconnectStripeAccount as unknown as Function)(
             { houseId: HOUSE_ID },
-            authedContext(ADMIN_UID)
+            authedContext(ADMIN_UID),
           ),
-        "not-found"
+        "not-found",
       );
     });
 
@@ -759,9 +770,9 @@ describe("disconnectStripeAccount", () => {
         () =>
           (disconnectStripeAccount as unknown as Function)(
             { houseId: HOUSE_ID },
-            authedContext("random-user")
+            authedContext("random-user"),
           ),
-        "permission-denied"
+        "permission-denied",
       );
     });
   });
@@ -780,17 +791,17 @@ describe("disconnectStripeAccount", () => {
     it("calls stripe.oauth.deauthorize with the correct account id", async () => {
       await (disconnectStripeAccount as unknown as Function)(
         { houseId: HOUSE_ID },
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
       expect(mockStripeOAuthDeauthorize).toHaveBeenCalledWith(
-        expect.objectContaining({ stripe_user_id: "acct_to_disconnect" })
+        expect.objectContaining({ stripe_user_id: "acct_to_disconnect" }),
       );
     });
 
     it("clears stripeAccountId from the house document", async () => {
       await (disconnectStripeAccount as unknown as Function)(
         { houseId: HOUSE_ID },
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
       // Our update mock removes keys that received the delete sentinel.
       expect(readHouse(HOUSE_ID)?.stripeAccountId).toBeUndefined();
@@ -799,7 +810,7 @@ describe("disconnectStripeAccount", () => {
     it("sets stripeStatus to disconnected", async () => {
       await (disconnectStripeAccount as unknown as Function)(
         { houseId: HOUSE_ID },
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
       expect(readHouse(HOUSE_ID)?.stripeStatus).toBe("disconnected");
     });
@@ -807,7 +818,7 @@ describe("disconnectStripeAccount", () => {
     it("sets stripeChargesEnabled and stripePayoutsEnabled to false", async () => {
       await (disconnectStripeAccount as unknown as Function)(
         { houseId: HOUSE_ID },
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
       const house = readHouse(HOUSE_ID);
       expect(house?.stripeChargesEnabled).toBe(false);
@@ -817,7 +828,7 @@ describe("disconnectStripeAccount", () => {
     it("returns { success: true }", async () => {
       const result = await (disconnectStripeAccount as unknown as Function)(
         { houseId: HOUSE_ID },
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
       expect(result).toEqual({ success: true });
     });
@@ -831,7 +842,7 @@ describe("disconnectStripeAccount", () => {
     it("does not call stripe.oauth.deauthorize", async () => {
       await (disconnectStripeAccount as unknown as Function)(
         { houseId: HOUSE_ID },
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
       expect(mockStripeOAuthDeauthorize).not.toHaveBeenCalled();
     });
@@ -839,7 +850,7 @@ describe("disconnectStripeAccount", () => {
     it("still returns { success: true }", async () => {
       const result = await (disconnectStripeAccount as unknown as Function)(
         { houseId: HOUSE_ID },
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
       expect(result).toEqual({ success: true });
     });
@@ -854,13 +865,13 @@ describe("disconnectStripeAccount", () => {
       const alreadyGone = makeStripeError(
         StripeErrors.StripeInvalidRequestError,
         "No such account: acct_gone",
-        "invalid_request_error"
+        "invalid_request_error",
       );
       mockStripeOAuthDeauthorize.mockRejectedValue(alreadyGone);
 
       const result = await (disconnectStripeAccount as unknown as Function)(
         { houseId: HOUSE_ID },
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
       expect(result).toEqual({ success: true });
       // Firestore should still be cleared.
@@ -871,7 +882,7 @@ describe("disconnectStripeAccount", () => {
       const unexpected = makeStripeError(
         StripeErrors.StripeAPIError,
         "Something exploded",
-        "api_error"
+        "api_error",
       );
       mockStripeOAuthDeauthorize.mockRejectedValue(unexpected);
 
@@ -879,9 +890,9 @@ describe("disconnectStripeAccount", () => {
         () =>
           (disconnectStripeAccount as unknown as Function)(
             { houseId: HOUSE_ID },
-            authedContext(ADMIN_UID)
+            authedContext(ADMIN_UID),
           ),
-        "internal"
+        "internal",
       );
     });
   });
@@ -901,9 +912,9 @@ describe("getStripeAccountStatus", () => {
         () =>
           (getStripeAccountStatus as unknown as Function)(
             { houseId: HOUSE_ID },
-            unauthContext
+            unauthContext,
           ),
-        "unauthenticated"
+        "unauthenticated",
       );
     });
 
@@ -912,9 +923,9 @@ describe("getStripeAccountStatus", () => {
         () =>
           (getStripeAccountStatus as unknown as Function)(
             {},
-            authedContext(ADMIN_UID)
+            authedContext(ADMIN_UID),
           ),
-        "invalid-argument"
+        "invalid-argument",
       );
     });
 
@@ -923,9 +934,9 @@ describe("getStripeAccountStatus", () => {
         () =>
           (getStripeAccountStatus as unknown as Function)(
             { houseId: HOUSE_ID },
-            authedContext(ADMIN_UID)
+            authedContext(ADMIN_UID),
           ),
-        "not-found"
+        "not-found",
       );
     });
 
@@ -939,9 +950,9 @@ describe("getStripeAccountStatus", () => {
         () =>
           (getStripeAccountStatus as unknown as Function)(
             { houseId: HOUSE_ID },
-            authedContext("not-a-member")
+            authedContext("not-a-member"),
           ),
-        "permission-denied"
+        "permission-denied",
       );
     });
   });
@@ -952,7 +963,7 @@ describe("getStripeAccountStatus", () => {
 
       const result = await (getStripeAccountStatus as unknown as Function)(
         { houseId: HOUSE_ID },
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
 
       expect(result.status).toBe("not_connected");
@@ -980,7 +991,7 @@ describe("getStripeAccountStatus", () => {
     it("maps charges_enabled=true and payouts_enabled=true to active", async () => {
       const result = await (getStripeAccountStatus as unknown as Function)(
         { houseId: HOUSE_ID },
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
       expect(result.status).toBe("active");
     });
@@ -988,7 +999,7 @@ describe("getStripeAccountStatus", () => {
     it("returns chargesEnabled and payoutsEnabled as true", async () => {
       const result = await (getStripeAccountStatus as unknown as Function)(
         { houseId: HOUSE_ID },
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
       expect(result.chargesEnabled).toBe(true);
       expect(result.payoutsEnabled).toBe(true);
@@ -997,7 +1008,7 @@ describe("getStripeAccountStatus", () => {
     it("syncs status back to Firestore", async () => {
       await (getStripeAccountStatus as unknown as Function)(
         { houseId: HOUSE_ID },
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
       expect(readHouse(HOUSE_ID)?.stripeStatus).toBe("active");
     });
@@ -1005,7 +1016,7 @@ describe("getStripeAccountStatus", () => {
     it("returns the capabilities map", async () => {
       const result = await (getStripeAccountStatus as unknown as Function)(
         { houseId: HOUSE_ID },
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
       expect(result.capabilities).toEqual({
         card_payments: "active",
@@ -1036,7 +1047,7 @@ describe("getStripeAccountStatus", () => {
     it("maps charges_enabled=false with currently_due items to restricted", async () => {
       const result = await (getStripeAccountStatus as unknown as Function)(
         { houseId: HOUSE_ID },
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
       expect(result.status).toBe("restricted");
     });
@@ -1044,7 +1055,7 @@ describe("getStripeAccountStatus", () => {
     it("includes currentlyDue in requirements", async () => {
       const result = await (getStripeAccountStatus as unknown as Function)(
         { houseId: HOUSE_ID },
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
       expect(result.requirements.currentlyDue).toEqual([
         "individual.ssn_last_4",
@@ -1055,7 +1066,7 @@ describe("getStripeAccountStatus", () => {
     it("syncs restricted status and requirements to Firestore", async () => {
       await (getStripeAccountStatus as unknown as Function)(
         { houseId: HOUSE_ID },
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
       const house = readHouse(HOUSE_ID);
       expect(house?.stripeStatus).toBe("restricted");
@@ -1084,7 +1095,7 @@ describe("getStripeAccountStatus", () => {
     it("maps charges_enabled=false with no currently_due to pending", async () => {
       const result = await (getStripeAccountStatus as unknown as Function)(
         { houseId: HOUSE_ID },
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
       expect(result.status).toBe("pending");
     });
@@ -1099,7 +1110,7 @@ describe("getStripeAccountStatus", () => {
       const noSuchAccount = makeStripeError(
         StripeErrors.StripeInvalidRequestError,
         "No such account: acct_deleted",
-        "invalid_request_error"
+        "invalid_request_error",
       );
       mockStripeAccountsRetrieve.mockRejectedValue(noSuchAccount);
     });
@@ -1107,7 +1118,7 @@ describe("getStripeAccountStatus", () => {
     it("returns status disconnected", async () => {
       const result = await (getStripeAccountStatus as unknown as Function)(
         { houseId: HOUSE_ID },
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
       expect(result.status).toBe("disconnected");
     });
@@ -1115,7 +1126,7 @@ describe("getStripeAccountStatus", () => {
     it("syncs disconnected status to Firestore", async () => {
       await (getStripeAccountStatus as unknown as Function)(
         { houseId: HOUSE_ID },
-        authedContext(ADMIN_UID)
+        authedContext(ADMIN_UID),
       );
       expect(readHouse(HOUSE_ID)?.stripeStatus).toBe("disconnected");
     });
@@ -1127,7 +1138,7 @@ describe("getStripeAccountStatus", () => {
       const boom = makeStripeError(
         StripeErrors.StripeAPIError,
         "internal stripe boom",
-        "api_error"
+        "api_error",
       );
       mockStripeAccountsRetrieve.mockRejectedValue(boom);
 
@@ -1135,9 +1146,9 @@ describe("getStripeAccountStatus", () => {
         () =>
           (getStripeAccountStatus as unknown as Function)(
             { houseId: HOUSE_ID },
-            authedContext(ADMIN_UID)
+            authedContext(ADMIN_UID),
           ),
-        "internal"
+        "internal",
       );
     });
   });
@@ -1166,7 +1177,7 @@ describe("getStripeAccountStatus", () => {
       // The function should see the guest as a member and return active status.
       const result = await (getStripeAccountStatus as unknown as Function)(
         { houseId: HOUSE_ID },
-        authedContext(guestUid)
+        authedContext(guestUid),
       );
 
       expect(result.status).toBe("active");
@@ -1197,7 +1208,7 @@ describe("createPaymentIntent", () => {
       await expectHttpsError(
         () =>
           (createPaymentIntent as unknown as Function)(baseData, unauthContext),
-        "unauthenticated"
+        "unauthenticated",
       );
     });
 
@@ -1207,9 +1218,9 @@ describe("createPaymentIntent", () => {
         () =>
           (createPaymentIntent as unknown as Function)(
             noAmount,
-            authedContext(USER_UID)
+            authedContext(USER_UID),
           ),
-        "invalid-argument"
+        "invalid-argument",
       );
     });
 
@@ -1219,9 +1230,9 @@ describe("createPaymentIntent", () => {
         () =>
           (createPaymentIntent as unknown as Function)(
             noGuest,
-            authedContext(USER_UID)
+            authedContext(USER_UID),
           ),
-        "invalid-argument"
+        "invalid-argument",
       );
     });
 
@@ -1231,9 +1242,9 @@ describe("createPaymentIntent", () => {
         () =>
           (createPaymentIntent as unknown as Function)(
             noHouse,
-            authedContext(USER_UID)
+            authedContext(USER_UID),
           ),
-        "invalid-argument"
+        "invalid-argument",
       );
     });
 
@@ -1242,9 +1253,9 @@ describe("createPaymentIntent", () => {
         () =>
           (createPaymentIntent as unknown as Function)(
             { ...baseData, amount: 0 },
-            authedContext(USER_UID)
+            authedContext(USER_UID),
           ),
-        "invalid-argument"
+        "invalid-argument",
       );
     });
 
@@ -1253,9 +1264,9 @@ describe("createPaymentIntent", () => {
         () =>
           (createPaymentIntent as unknown as Function)(
             { ...baseData, amount: -10 },
-            authedContext(USER_UID)
+            authedContext(USER_UID),
           ),
-        "invalid-argument"
+        "invalid-argument",
       );
     });
   });
@@ -1266,9 +1277,9 @@ describe("createPaymentIntent", () => {
         () =>
           (createPaymentIntent as unknown as Function)(
             baseData,
-            authedContext(USER_UID)
+            authedContext(USER_UID),
           ),
-        "not-found"
+        "not-found",
       );
     });
 
@@ -1278,9 +1289,9 @@ describe("createPaymentIntent", () => {
         () =>
           (createPaymentIntent as unknown as Function)(
             baseData,
-            authedContext(USER_UID)
+            authedContext(USER_UID),
           ),
-        "failed-precondition"
+        "failed-precondition",
       );
     });
 
@@ -1293,9 +1304,9 @@ describe("createPaymentIntent", () => {
         () =>
           (createPaymentIntent as unknown as Function)(
             baseData,
-            authedContext(USER_UID)
+            authedContext(USER_UID),
           ),
-        "failed-precondition"
+        "failed-precondition",
       );
     });
 
@@ -1308,9 +1319,9 @@ describe("createPaymentIntent", () => {
         () =>
           (createPaymentIntent as unknown as Function)(
             baseData,
-            authedContext(USER_UID)
+            authedContext(USER_UID),
           ),
-        "failed-precondition"
+        "failed-precondition",
       );
     });
   });
@@ -1326,7 +1337,7 @@ describe("createPaymentIntent", () => {
     it("returns the clientSecret from Stripe", async () => {
       const result = await (createPaymentIntent as unknown as Function)(
         baseData,
-        authedContext(USER_UID)
+        authedContext(USER_UID),
       );
       expect(result.clientSecret).toBe("pi_test_secret_xyz");
     });
@@ -1334,11 +1345,11 @@ describe("createPaymentIntent", () => {
     it("passes the integer-cent amount through to Stripe unchanged", async () => {
       await (createPaymentIntent as unknown as Function)(
         { ...baseData, amount: 12550 }, // $125.50
-        authedContext(USER_UID)
+        authedContext(USER_UID),
       );
       expect(mockStripePaymentIntentsCreate).toHaveBeenCalledWith(
         expect.objectContaining({ amount: 12550 }),
-        expect.anything()
+        expect.anything(),
       );
     });
 
@@ -1346,37 +1357,37 @@ describe("createPaymentIntent", () => {
       // baseData.amount = 15000 cents ($150.00); 2% = 300 cents
       await (createPaymentIntent as unknown as Function)(
         baseData,
-        authedContext(USER_UID)
+        authedContext(USER_UID),
       );
       expect(mockStripePaymentIntentsCreate).toHaveBeenCalledWith(
         expect.objectContaining({ application_fee_amount: 300 }),
-        expect.anything()
+        expect.anything(),
       );
     });
 
     it("sets transfer_data destination to the house stripeAccountId", async () => {
       await (createPaymentIntent as unknown as Function)(
         baseData,
-        authedContext(USER_UID)
+        authedContext(USER_UID),
       );
       expect(mockStripePaymentIntentsCreate).toHaveBeenCalledWith(
         expect.objectContaining({
           transfer_data: { destination: "acct_active_house" },
         }),
-        expect.anything()
+        expect.anything(),
       );
     });
 
     it("includes guestId and houseId in metadata", async () => {
       await (createPaymentIntent as unknown as Function)(
         baseData,
-        authedContext(USER_UID)
+        authedContext(USER_UID),
       );
       expect(mockStripePaymentIntentsCreate).toHaveBeenCalledWith(
         expect.objectContaining({
           metadata: { guestId: GUEST_ID, houseId: HOUSE_ID },
         }),
-        expect.anything()
+        expect.anything(),
       );
     });
 
@@ -1384,13 +1395,13 @@ describe("createPaymentIntent", () => {
       const day = new Date().toISOString().slice(0, 10);
       await (createPaymentIntent as unknown as Function)(
         baseData,
-        authedContext(USER_UID)
+        authedContext(USER_UID),
       );
       expect(mockStripePaymentIntentsCreate).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
           idempotencyKey: `${GUEST_ID}-${HOUSE_ID}-${day}`,
-        })
+        }),
       );
     });
 
@@ -1398,11 +1409,11 @@ describe("createPaymentIntent", () => {
       const customKey = "my-custom-key-abc";
       await (createPaymentIntent as unknown as Function)(
         { ...baseData, idempotencyKey: customKey },
-        authedContext(USER_UID)
+        authedContext(USER_UID),
       );
       expect(mockStripePaymentIntentsCreate).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ idempotencyKey: customKey })
+        expect.objectContaining({ idempotencyKey: customKey }),
       );
     });
 
@@ -1410,11 +1421,11 @@ describe("createPaymentIntent", () => {
       const { currency: _c, ...noCurrency } = baseData;
       await (createPaymentIntent as unknown as Function)(
         noCurrency,
-        authedContext(USER_UID)
+        authedContext(USER_UID),
       );
       expect(mockStripePaymentIntentsCreate).toHaveBeenCalledWith(
         expect.objectContaining({ currency: "usd" }),
-        expect.anything()
+        expect.anything(),
       );
     });
   });
@@ -1432,16 +1443,16 @@ describe("createPaymentIntent", () => {
         StripeErrors.StripeCardError,
         "Your card was declined.",
         "card_error",
-        { code: "card_declined" }
+        { code: "card_declined" },
       );
       mockStripePaymentIntentsCreate.mockRejectedValue(cardErr);
       await expectHttpsError(
         () =>
           (createPaymentIntent as unknown as Function)(
             baseData,
-            authedContext(USER_UID)
+            authedContext(USER_UID),
           ),
-        "failed-precondition"
+        "failed-precondition",
       );
     });
 
@@ -1449,16 +1460,16 @@ describe("createPaymentIntent", () => {
       const rateErr = makeStripeError(
         StripeErrors.StripeRateLimitError,
         "Too many requests.",
-        "rate_limit_error"
+        "rate_limit_error",
       );
       mockStripePaymentIntentsCreate.mockRejectedValue(rateErr);
       await expectHttpsError(
         () =>
           (createPaymentIntent as unknown as Function)(
             baseData,
-            authedContext(USER_UID)
+            authedContext(USER_UID),
           ),
-        "resource-exhausted"
+        "resource-exhausted",
       );
     });
 
@@ -1466,16 +1477,16 @@ describe("createPaymentIntent", () => {
       const apiErr = makeStripeError(
         StripeErrors.StripeAPIError,
         "Internal Stripe error.",
-        "api_error"
+        "api_error",
       );
       mockStripePaymentIntentsCreate.mockRejectedValue(apiErr);
       await expectHttpsError(
         () =>
           (createPaymentIntent as unknown as Function)(
             baseData,
-            authedContext(USER_UID)
+            authedContext(USER_UID),
           ),
-        "internal"
+        "internal",
       );
     });
 
@@ -1483,16 +1494,16 @@ describe("createPaymentIntent", () => {
       const invalidErr = makeStripeError(
         StripeErrors.StripeInvalidRequestError,
         "Invalid currency.",
-        "invalid_request_error"
+        "invalid_request_error",
       );
       mockStripePaymentIntentsCreate.mockRejectedValue(invalidErr);
       await expectHttpsError(
         () =>
           (createPaymentIntent as unknown as Function)(
             baseData,
-            authedContext(USER_UID)
+            authedContext(USER_UID),
           ),
-        "invalid-argument"
+        "invalid-argument",
       );
     });
   });
@@ -1520,9 +1531,9 @@ describe("listPayments", () => {
         () =>
           (listPayments as unknown as Function)(
             { guestId: "guest-1", houseId: HOUSE_ID },
-            ctx
+            ctx,
           ),
-        "permission-denied"
+        "permission-denied",
       );
     });
 
@@ -1540,9 +1551,9 @@ describe("listPayments", () => {
         () =>
           (listPayments as unknown as Function)(
             { guestId: "guest-1", houseId: HOUSE_ID },
-            ctx
+            ctx,
           ),
-        "permission-denied"
+        "permission-denied",
       );
     });
 
@@ -1555,7 +1566,7 @@ describe("listPayments", () => {
       };
       const result = await (listPayments as unknown as Function)(
         { guestId: "guest-1", houseId: HOUSE_ID },
-        ctx
+        ctx,
       );
       expect(result).toHaveProperty("payments");
     });
@@ -1569,7 +1580,7 @@ describe("listPayments", () => {
       };
       const result = await (listPayments as unknown as Function)(
         { guestId: "guest-uid", houseId: HOUSE_ID },
-        ctx
+        ctx,
       );
       expect(result).toHaveProperty("payments");
     });
@@ -1579,9 +1590,9 @@ describe("listPayments", () => {
         () =>
           (listPayments as unknown as Function)(
             { guestId: "guest-1", houseId: HOUSE_ID },
-            unauthContext
+            unauthContext,
           ),
-        "unauthenticated"
+        "unauthenticated",
       );
     });
   });
@@ -1606,7 +1617,7 @@ describe("listPayments — input validation", () => {
   it("throws invalid-argument when houseId is missing", async () => {
     const auth = { uid: "u1", token: {} };
     await expect(
-      callV(listPayments, { guestId: "g1" }, auth)
+      callV(listPayments, { guestId: "g1" }, auth),
     ).rejects.toMatchObject({ code: "invalid-argument" });
   });
 });
@@ -1620,58 +1631,91 @@ describe("listHousePayments — input validation", () => {
   });
 });
 
-describe("getPaymentMethod — input validation", () => {
+describe("getPaymentMethod — ownership", () => {
   const auth = { uid: "u1", token: {} };
+  beforeEach(() => {
+    mockGetUser.mockReset();
+    mockStripeCustomersRetrieve.mockReset();
+    mockStripePaymentMethodsRetrieve.mockReset();
+  });
 
-  it("throws invalid-argument when customerId is missing", async () => {
+  it("throws not-found when the caller has no billing account", async () => {
+    mockGetUser.mockResolvedValue(undefined);
     await expect(callV(getPaymentMethod, {}, auth)).rejects.toMatchObject({
+      code: "not-found",
+    });
+  });
+
+  it("resolves the caller's own customer, IGNORING any client-supplied customerId", async () => {
+    // Caller's real customer is cus_self; the client tries to pass someone else's.
+    mockGetUser.mockResolvedValue({
+      subscriptionMetadata: { customerId: "cus_self" },
+    });
+    mockStripeCustomersRetrieve.mockResolvedValue({
+      deleted: false,
+      invoice_settings: { default_payment_method: "pm_self" },
+    });
+    mockStripePaymentMethodsRetrieve.mockResolvedValue({ id: "pm_self" });
+
+    await callV(getPaymentMethod, { customerId: "cus_attacker" }, auth);
+
+    // Never trust the client-supplied customerId.
+    expect(mockStripeCustomersRetrieve).toHaveBeenCalledWith("cus_self");
+    expect(mockStripeCustomersRetrieve).not.toHaveBeenCalledWith(
+      "cus_attacker",
+    );
+    expect(mockGetUser).toHaveBeenCalledWith("u1");
+  });
+});
+
+describe("updatePaymentInfo — ownership", () => {
+  const auth = { uid: "u1", token: {} };
+  beforeEach(() => {
+    mockGetUser.mockReset();
+    mockStripePaymentMethodsAttach.mockReset();
+    mockStripeCustomersUpdate.mockReset();
+  });
+
+  it("throws invalid-argument when paymentMethod is missing", async () => {
+    await expect(callV(updatePaymentInfo, {}, auth)).rejects.toMatchObject({
       code: "invalid-argument",
     });
   });
 
-  it("throws invalid-argument when customerId is empty", async () => {
+  it("throws not-found when the caller has no billing account", async () => {
+    mockGetUser.mockResolvedValue(undefined);
     await expect(
-      callV(getPaymentMethod, { customerId: "" }, auth)
-    ).rejects.toMatchObject({ code: "invalid-argument" });
-  });
-});
-
-describe("updatePaymentInfo — input validation", () => {
-  const auth = { uid: "u1", token: {} };
-
-  it("throws invalid-argument when paymentMethod is missing", async () => {
-    await expect(
-      callV(
-        updatePaymentInfo,
-        { user: { subscriptionMetadata: { customerId: "cus_123" } } },
-        auth
-      )
-    ).rejects.toMatchObject({ code: "invalid-argument" });
+      callV(updatePaymentInfo, { paymentMethod: "pm_123" }, auth),
+    ).rejects.toMatchObject({ code: "not-found" });
   });
 
-  it("throws invalid-argument when customerId is missing from user.subscriptionMetadata", async () => {
-    await expect(
-      callV(
-        updatePaymentInfo,
-        { user: { subscriptionMetadata: {} }, paymentMethod: "pm_123" },
-        auth
-      )
-    ).rejects.toMatchObject({ code: "invalid-argument" });
+  it("attaches to the CALLER's customer, not a client-supplied one", async () => {
+    mockGetUser.mockResolvedValue({
+      subscriptionMetadata: { customerId: "cus_self" },
+    });
+    mockStripePaymentMethodsAttach.mockResolvedValue({ id: "pm_123" });
+    mockStripeCustomersUpdate.mockResolvedValue({});
+
+    await callV(updatePaymentInfo, { paymentMethod: "pm_123" }, auth);
+
+    expect(mockStripePaymentMethodsAttach).toHaveBeenCalledWith("pm_123", {
+      customer: "cus_self",
+    });
+    expect(mockStripeCustomersUpdate).toHaveBeenCalledWith(
+      "cus_self",
+      expect.anything(),
+    );
   });
 
   it("throws internal HttpsError when stripe.paymentMethods.attach fails", async () => {
+    mockGetUser.mockResolvedValue({
+      subscriptionMetadata: { customerId: "cus_self" },
+    });
     mockStripePaymentMethodsAttach.mockRejectedValueOnce(
-      new Error("stripe attach failed")
+      new Error("stripe attach failed"),
     );
     await expect(
-      callV(
-        updatePaymentInfo,
-        {
-          user: { subscriptionMetadata: { customerId: "cus_123" } },
-          paymentMethod: "pm_123",
-        },
-        auth
-      )
+      callV(updatePaymentInfo, { paymentMethod: "pm_123" }, auth),
     ).rejects.toMatchObject({ code: "internal" });
   });
 });
@@ -1680,7 +1724,7 @@ describe("disconnectStripeAccount — input validation", () => {
   it("throws invalid-argument when houseId is missing", async () => {
     const auth = { uid: "u1" };
     await expect(
-      callV(disconnectStripeAccount, {}, auth)
+      callV(disconnectStripeAccount, {}, auth),
     ).rejects.toMatchObject({ code: "invalid-argument" });
   });
 });
@@ -1689,7 +1733,7 @@ describe("getStripeAccountStatus — input validation", () => {
   it("throws invalid-argument when houseId is missing", async () => {
     const auth = { uid: "u1" };
     await expect(callV(getStripeAccountStatus, {}, auth)).rejects.toMatchObject(
-      { code: "invalid-argument" }
+      { code: "invalid-argument" },
     );
   });
 });

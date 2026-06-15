@@ -260,6 +260,14 @@ export const verifyUserEmail = onCall(async (request) => {
   const data = parseInput(verifyEmailSchema, request.data) as {
     userId: string;
   };
+  // Ownership: a caller may only verify their own email. Without this guard any
+  // authenticated user could mark any account's email as verified.
+  if (data.userId !== request.auth.uid) {
+    throw new HttpsError(
+      "permission-denied",
+      "You can only verify your own email address",
+    );
+  }
   return _verifyUserEmail(data.userId);
 });
 
