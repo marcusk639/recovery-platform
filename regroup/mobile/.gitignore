@@ -74,3 +74,6 @@ ts-error-inventory.txt
 scripts/service-key.json
 scripts/credentials.json
 .worktrees/
+
+# Sentry CLI auth (use SENTRY_AUTH_TOKEN env var instead)
+**/sentry.properties
