@@ -15,30 +15,36 @@ const mockUser = (claims: Record<string, any> = {}) => ({
 beforeEach(() => jest.clearAllMocks());
 
 describe('createClaims', () => {
-  it('creates new role claims when user has none', async () => {
+  it('creates new role claims as a map keyed by houseId when user has none', async () => {
     mockGetUser.mockResolvedValue(mockUser({}));
     const result = await createClaims('user-1', ['house-1'], 'guest');
-    expect(result.guest).toEqual(['house-1']);
+    expect(result.guest).toEqual({ 'house-1': true });
   });
 
   it('merges new houseIds with existing claims of the same role', async () => {
-    mockGetUser.mockResolvedValue(mockUser({ guest: ['house-1'] }));
+    mockGetUser.mockResolvedValue(mockUser({ guest: { 'house-1': true } }));
     const result = await createClaims('user-1', ['house-2'], 'guest');
-    expect(result.guest).toContain('house-1');
-    expect(result.guest).toContain('house-2');
+    expect(result.guest).toEqual({ 'house-1': true, 'house-2': true });
   });
 
   it('deduplicates when adding an already-existing houseId', async () => {
-    mockGetUser.mockResolvedValue(mockUser({ guest: ['house-1'] }));
+    mockGetUser.mockResolvedValue(mockUser({ guest: { 'house-1': true } }));
     const result = await createClaims('user-1', ['house-1'], 'guest');
-    const guestClaims = result.guest as string[];
-    expect(guestClaims.filter(id => id === 'house-1')).toHaveLength(1);
+    expect(result.guest).toEqual({ 'house-1': true });
   });
 
   it('preserves other role claims', async () => {
-    mockGetUser.mockResolvedValue(mockUser({ admin: ['house-99'] }));
+    mockGetUser.mockResolvedValue(mockUser({ admin: { 'house-99': true } }));
     const result = await createClaims('user-1', ['house-1'], 'guest');
-    expect((result as any).admin).toEqual(['house-99']);
+    expect(result.admin).toEqual({ 'house-99': true });
+  });
+
+  it('migrates legacy array-shaped claims to the map shape', async () => {
+    // Production tokens written before P0-1 used arrays. Reading + rewriting
+    // them must transparently upgrade the shape to the map the rules require.
+    mockGetUser.mockResolvedValue(mockUser({ guest: ['house-1'] }));
+    const result = await createClaims('user-1', ['house-2'], 'guest');
+    expect(result.guest).toEqual({ 'house-1': true, 'house-2': true });
   });
 
   it('sets potentialSuperAdmin when specified', async () => {
@@ -46,28 +52,48 @@ describe('createClaims', () => {
     const result = await createClaims('user-1', [], 'guest', true);
     expect(result.potentialSuperAdmin).toBe(true);
   });
+
+  // Contract test: the shape createClaims emits MUST be the map shape that
+  // firestore.rules consumes (`houseId in token.role`, `token.role.keys()`).
+  // A regression to arrays here silently disables every role-scoped rule.
+  it('emits the map shape required by firestore.rules (contract)', async () => {
+    mockGetUser.mockResolvedValue(mockUser({}));
+    const result = await createClaims('user-1', ['house-1', 'house-2'], 'admin');
+    // Map, not array — `houseId in map` is a key lookup; on an array it would
+    // be an index lookup and `.keys()` would not exist.
+    expect(Array.isArray(result.admin)).toBe(false);
+    expect(result.admin).toEqual({ 'house-1': true, 'house-2': true });
+    expect(Object.keys(result.admin)).toEqual(['house-1', 'house-2']);
+    expect('house-1' in result.admin).toBe(true);
+  });
 });
 
 describe('deleteClaim', () => {
   it('removes the specified houseId from role claims', async () => {
-    mockGetUser.mockResolvedValue(mockUser({ guest: ['house-1', 'house-2'] }));
+    mockGetUser.mockResolvedValue(
+      mockUser({ guest: { 'house-1': true, 'house-2': true } })
+    );
     const result = await deleteClaim('user-1', ['house-1'], 'guest');
-    expect(result.guest).not.toContain('house-1');
-    expect(result.guest).toContain('house-2');
+    expect(result.guest).toEqual({ 'house-2': true });
   });
 
   it('leaves claims unchanged when houseId does not exist', async () => {
-    // When the houseId is not found, deleteClaim should not modify the array.
-    // Previously, splice(-1, 1) was called on a -1 index, incorrectly removing
-    // the last element. The fix uses filter(), so non-existent ids are a no-op.
-    mockGetUser.mockResolvedValue(mockUser({ guest: ['house-1'] }));
+    mockGetUser.mockResolvedValue(mockUser({ guest: { 'house-1': true } }));
     const result = await deleteClaim('user-1', ['house-99'], 'guest');
-    expect(result.guest).toEqual(['house-1']);
+    expect(result.guest).toEqual({ 'house-1': true });
   });
 
   it('handles user with no existing claims gracefully', async () => {
     mockGetUser.mockResolvedValue(mockUser({}));
     const result = await deleteClaim('user-1', ['house-1'], 'guest');
-    expect(result.guest).toEqual([]);
+    expect(result.guest).toEqual({});
+  });
+
+  it('migrates legacy array-shaped claims while removing', async () => {
+    mockGetUser.mockResolvedValue(
+      mockUser({ guest: ['house-1', 'house-2'] })
+    );
+    const result = await deleteClaim('user-1', ['house-1'], 'guest');
+    expect(result.guest).toEqual({ 'house-2': true });
   });
 });

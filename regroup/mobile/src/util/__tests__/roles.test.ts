@@ -28,16 +28,16 @@ beforeEach(() => {
 // ─── fillRoleFromClaim ───────────────────────────────────────────────────────
 
 describe('fillRoleFromClaim', () => {
-  it('assigns the claim value to each houseId in the roles object', () => {
-    const claims: any = { guest: ['house-1', 'house-2'] };
+  it('assigns the claim value to each houseId key in the roles object', () => {
+    const claims: any = { guest: { 'house-1': true, 'house-2': true } };
     const roles: any = {};
     fillRoleFromClaim(claims, 'guest', roles);
     expect(roles['house-1']).toBe('guest');
     expect(roles['house-2']).toBe('guest');
   });
 
-  it('does nothing when the claim array is empty', () => {
-    const claims: any = { guest: [] };
+  it('does nothing when the claim map is empty', () => {
+    const claims: any = { guest: {} };
     const roles: any = {};
     fillRoleFromClaim(claims, 'guest', roles);
     expect(Object.keys(roles)).toHaveLength(0);
@@ -51,10 +51,18 @@ describe('fillRoleFromClaim', () => {
   });
 
   it('overwrites an existing role when a higher-privilege claim is applied', () => {
-    const claims: any = { admin: ['house-1'] };
+    const claims: any = { admin: { 'house-1': true } };
     const roles: any = { 'house-1': 'guest' };
     fillRoleFromClaim(claims, 'admin', roles);
     expect(roles['house-1']).toBe('admin');
+  });
+
+  it('tolerates the legacy array shape (pre-P0-1 tokens)', () => {
+    const claims: any = { guest: ['house-1', 'house-2'] };
+    const roles: any = {};
+    fillRoleFromClaim(claims, 'guest', roles);
+    expect(roles['house-1']).toBe('guest');
+    expect(roles['house-2']).toBe('guest');
   });
 });
 
@@ -63,9 +71,9 @@ describe('fillRoleFromClaim', () => {
 describe('getRolesFromClaims', () => {
   it('builds a roles map from all three claim types', () => {
     const claims: any = {
-      guest: ['house-g'],
-      admin: ['house-a'],
-      superAdmin: ['house-sa'],
+      guest: { 'house-g': true },
+      admin: { 'house-a': true },
+      superAdmin: { 'house-sa': true },
     };
     const roles = getRolesFromClaims(claims);
     expect(roles['house-g']).toBe('guest');
@@ -75,17 +83,17 @@ describe('getRolesFromClaims', () => {
 
   it('gives higher privilege precedence (superAdmin overwrites guest for same house)', () => {
     const claims: any = {
-      guest: ['house-1'],
-      admin: [],
-      superAdmin: ['house-1'],
+      guest: { 'house-1': true },
+      admin: {},
+      superAdmin: { 'house-1': true },
     };
     const roles = getRolesFromClaims(claims);
     // guest is applied first, then superAdmin overwrites it
     expect(roles['house-1']).toBe('superAdmin');
   });
 
-  it('returns an empty object when all claim arrays are empty', () => {
-    const claims: any = { guest: [], admin: [], superAdmin: [] };
+  it('returns an empty object when all claim maps are empty', () => {
+    const claims: any = { guest: {}, admin: {}, superAdmin: {} };
     const roles = getRolesFromClaims(claims);
     expect(roles).toEqual({});
   });

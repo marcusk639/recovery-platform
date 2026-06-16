@@ -17,9 +17,11 @@ interface Props {
 }
 
 export interface Claims {
-  guest: string[];
-  admin: string[];
-  superAdmin: string[];
+  // Maps of houseId -> true, matching the custom-claims shape the backend writes
+  // (functions: util/claims.ts) and the Firestore rules consume. See P0-1.
+  guest: Record<string, boolean>;
+  admin: Record<string, boolean>;
+  superAdmin: Record<string, boolean>;
   potentialSuperAdmin: boolean;
 }
 
@@ -42,9 +44,9 @@ class State {
     };
   } = {
     claims: {
-      guest: [],
-      admin: [],
-      superAdmin: [],
+      guest: {},
+      admin: {},
+      superAdmin: {},
       potentialSuperAdmin: false,
     },
     role: {},
