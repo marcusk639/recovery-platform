@@ -31,7 +31,6 @@ import RatsScrollView from '../../components/rats-scroll-view';
 import { Guest } from '../../entities/Guest';
 import { House } from '../../entities/House';
 import { Guests } from '../../types';
-import { customizePhase } from '../../state/slices/guestsSlice';
 import ScreenHeader from '../../components/screen-header';
 import HelpIcon from '../../components/help-icon';
 import { RatsHR } from '../../components/rats-horizontal-rule';
@@ -39,8 +38,8 @@ import { RatsText } from '../../components/rats-text';
 
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
-import { useAppSelector, useAppDispatch } from '../../state/store';
-import { useGuests } from '../../state/queries/guestQueries';
+import { useGuests, useUpdateGuest } from '../../state/queries/guestQueries';
+import { logException } from '../../util/logging';
 import { useSelectedHouse } from '../../hooks/useSelectedHouse';
 import { useSelectedGuest } from '../../hooks/useSelectedGuest';
 
@@ -71,7 +70,7 @@ const PhaseCustomization: React.FC<Props> = ({ navigation }) => {
   // Context hook
   const { showPopover, setPopoverRef } = useNotification();
 
-  const dispatch = useAppDispatch();
+  const { mutateAsync: updateGuestAsync } = useUpdateGuest();
   const { house: selectedHouse } = useSelectedHouse();
   // React Query is the source of truth for guests; see .full-review [A2].
   const { data: guests = {} } = useGuests(selectedHouse?.id ?? '');
@@ -249,16 +248,20 @@ const PhaseCustomization: React.FC<Props> = ({ navigation }) => {
     );
   }, []);
 
-  const save = useCallback(() => {
+  const save = useCallback(async () => {
     if (!guest) return;
-    dispatch(
-      customizePhase({
-        guest: { ...guest, phase: customPhase.name },
-        house: selectedHouse!,
-      }),
-    );
+    try {
+      // Persist only the phase pointer through the safe transactional merge
+      // (useUpdateGuest → updateGuest) so no other guest field is clobbered.
+      await updateGuestAsync({
+        guest,
+        updatedGuest: { id: guest.id, phase: customPhase.name } as Guest,
+      });
+    } catch (error) {
+      logException(error);
+    }
     navigation.goBack();
-  }, [customPhase, guest, selectedHouse, dispatch, navigation]);
+  }, [customPhase, guest, updateGuestAsync, navigation]);
 
   const help = useCallback(() => {
     showPopover(

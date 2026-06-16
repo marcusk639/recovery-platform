@@ -283,7 +283,12 @@ export function subscribeToGuest(
 
 export async function customizePhase(guest: Guest, house: House) {
   const batch = firestore.batch();
-  batch.update(guestCollection.doc(guest.id), guest);
+  // Field-level update — writing the whole guest object here silently dropped
+  // any Firestore field not present in the in-memory copy (P0-5 data loss).
+  batch.update(guestCollection.doc(guest.id), {
+    phase: guest.phase,
+    updatedAt: new Date().toISOString(),
+  });
   batch.update(houseCollection.doc(house.id), house);
   await batch.commit();
   return { guest, house };
