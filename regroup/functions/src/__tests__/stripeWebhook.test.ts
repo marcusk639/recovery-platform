@@ -34,10 +34,17 @@ jest.mock("firebase-admin", () => {
     collection: mockCollection,
     runTransaction: mockRunTransaction,
   };
+  const firestoreFn = jest.fn(() => firestoreMock);
+  // Static FieldValue sentinels used by the webhook handlers.
+  (firestoreFn as any).FieldValue = {
+    serverTimestamp: jest.fn(() => "__FieldValue.serverTimestamp__"),
+    increment: jest.fn((n: number) => ({ __increment: n })),
+    delete: jest.fn(() => "__FieldValue.delete__"),
+  };
   return {
     initializeApp: jest.fn(),
     app: jest.fn(() => ({})),
-    firestore: jest.fn(() => firestoreMock),
+    firestore: firestoreFn,
     messaging: jest.fn(() => ({ send: mockMessagingSend })),
   };
 });
@@ -55,7 +62,10 @@ jest.mock("firebase-functions", () => ({
   https: {
     onRequest: jest.fn((handler) => handler), // return handler directly for testing
     HttpsError: class HttpsError extends Error {
-      constructor(public code: string, message: string) {
+      constructor(
+        public code: string,
+        message: string,
+      ) {
         super(message);
       }
     },
@@ -108,7 +118,7 @@ function makeRequest(
     headers: Record<string, string>;
     rawBody: Buffer | string;
     body: unknown;
-  }>
+  }>,
 ): Record<string, unknown> {
   return {
     method: "POST",
@@ -152,7 +162,7 @@ function buildQuerySnap(
     id: string;
     data: () => Record<string, unknown>;
     ref?: { update: jest.Mock; set: jest.Mock };
-  }>
+  }>,
 ): FirebaseFirestore.QuerySnapshot {
   const builtDocs = docs.map((d) => ({
     id: d.id,
@@ -193,14 +203,14 @@ interface HouseAdminMock {
    *  - Otherwise returns the supplied default (e.g. the guest user doc).
    */
   buildUserDocGet: (
-    defaultUserGet: jest.Mock
+    defaultUserGet: jest.Mock,
   ) => (uid: string) => { get: jest.Mock };
 }
 
 function buildHouseAdminMock(
   adminUid: string,
   token: string,
-  houseId: string = "house_1"
+  houseId: string = "house_1",
 ): HouseAdminMock {
   const houseDocGet = jest.fn().mockResolvedValue({
     exists: true,
@@ -234,7 +244,7 @@ function buildHouseAdminMock(
 function makeStripeEvent(
   type: string,
   object: unknown,
-  overrides: Partial<Stripe.Event> = {}
+  overrides: Partial<Stripe.Event> = {},
 ): Stripe.Event {
   const event = {
     id: `evt_test_${Math.random().toString(36).slice(2)}`,
@@ -253,7 +263,7 @@ function makeStripeEvent(
 }
 
 function makePaymentIntent(
-  overrides: Partial<Stripe.PaymentIntent> = {}
+  overrides: Partial<Stripe.PaymentIntent> = {},
 ): Stripe.PaymentIntent {
   return {
     id: "pi_test_123",
@@ -272,7 +282,7 @@ function makePaymentIntent(
  * subscription ID lives at invoice.parent.subscription_details.subscription
  */
 function makeInvoice(
-  overrides: Partial<Record<string, unknown>> = {}
+  overrides: Partial<Record<string, unknown>> = {},
 ): Stripe.Invoice {
   return {
     id: "in_test_123",
@@ -299,7 +309,7 @@ function makeInvoice(
  * current_period_end was removed; billing_cycle_anchor is used instead.
  */
 function makeSubscription(
-  overrides: Partial<Stripe.Subscription> = {}
+  overrides: Partial<Stripe.Subscription> = {},
 ): Stripe.Subscription {
   return {
     id: "sub_test_123",
@@ -367,7 +377,7 @@ function setupIdempotencyTransaction(alreadyExists: boolean): void {
         set: jest.fn(),
       };
       return fn(txn);
-    }
+    },
   );
 }
 
@@ -400,7 +410,7 @@ describe("Signature Verification", () => {
   test("valid signature processes the event and returns 200", async () => {
     const event = makeStripeEvent(
       "payment_intent.succeeded",
-      makePaymentIntent()
+      makePaymentIntent(),
     );
     mockConstructEvent.mockReturnValue(event);
 
@@ -443,7 +453,7 @@ describe("Signature Verification", () => {
   test("invalid signature returns 400 and does NOT process any event", async () => {
     mockConstructEvent.mockImplementation(() => {
       throw new Error(
-        "No signatures found matching the expected signature for payload"
+        "No signatures found matching the expected signature for payload",
       );
     });
 
@@ -454,7 +464,7 @@ describe("Signature Verification", () => {
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.send).toHaveBeenCalledWith(
-      expect.stringContaining("Webhook Error:")
+      expect.stringContaining("Webhook Error:"),
     );
     // Ensure no Firestore writes happened
     expect(mockRunTransaction).not.toHaveBeenCalled();
@@ -468,7 +478,7 @@ describe("Signature Verification", () => {
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.send).toHaveBeenCalledWith(
-      expect.stringContaining("Missing stripe-signature")
+      expect.stringContaining("Missing stripe-signature"),
     );
     expect(mockConstructEvent).not.toHaveBeenCalled();
   });
@@ -485,7 +495,7 @@ describe("Signature Verification", () => {
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.send).toHaveBeenCalledWith(
-      expect.stringContaining("Timestamp outside")
+      expect.stringContaining("Timestamp outside"),
     );
   });
 
@@ -508,7 +518,7 @@ describe("Idempotency", () => {
   test("duplicate event returns 200 without re-writing to Firestore", async () => {
     const event = makeStripeEvent(
       "payment_intent.succeeded",
-      makePaymentIntent()
+      makePaymentIntent(),
     );
     mockConstructEvent.mockReturnValue(event);
 
@@ -523,7 +533,7 @@ describe("Idempotency", () => {
     expect(res.status).toHaveBeenCalledWith(200);
     // body indicates duplicate
     expect(res.send).toHaveBeenCalledWith(
-      expect.objectContaining({ duplicate: true })
+      expect.objectContaining({ duplicate: true }),
     );
     // No payment writes should have occurred
     expect(mockSet).not.toHaveBeenCalled();
@@ -533,7 +543,7 @@ describe("Idempotency", () => {
   test("first occurrence of event is processed normally", async () => {
     const event = makeStripeEvent(
       "customer.subscription.deleted",
-      makeSubscription()
+      makeSubscription(),
     );
     mockConstructEvent.mockReturnValue(event);
     setupIdempotencyTransaction(false);
@@ -584,7 +594,7 @@ describe("Idempotency", () => {
 
     expect(res.status).toHaveBeenCalledWith(200);
     expect(mockUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "canceled" })
+      expect.objectContaining({ status: "canceled" }),
     );
   });
 
@@ -604,7 +614,7 @@ describe("Idempotency", () => {
           set: jest.fn(),
         };
         return fn(txn);
-      }
+      },
     );
 
     mockCollection.mockImplementation(() => ({
@@ -624,15 +634,15 @@ describe("Idempotency", () => {
 
     // First call: processed (no duplicate flag)
     expect(res1.send).toHaveBeenCalledWith(
-      expect.objectContaining({ received: true })
+      expect.objectContaining({ received: true }),
     );
     expect(res1.send).not.toHaveBeenCalledWith(
-      expect.objectContaining({ duplicate: true })
+      expect.objectContaining({ duplicate: true }),
     );
 
     // Second call: duplicate
     expect(res2.send).toHaveBeenCalledWith(
-      expect.objectContaining({ duplicate: true })
+      expect.objectContaining({ duplicate: true }),
     );
   });
 });
@@ -649,7 +659,7 @@ describe("payment_intent.succeeded", () => {
       id: string;
       data: () => Record<string, unknown>;
     }>,
-    fcmTokens = ["token_guest_1"],
+    messagingToken = ["token_guest_1"],
   } = {}): void {
     const guestDoc = {
       exists: guestExists,
@@ -665,7 +675,7 @@ describe("payment_intent.succeeded", () => {
 
     const userDoc = {
       exists: true,
-      data: () => ({ fcmTokens }),
+      data: () => ({ messagingToken }),
     };
 
     const adminSnap = buildQuerySnap(
@@ -674,9 +684,9 @@ describe("payment_intent.succeeded", () => {
         : [
             {
               id: "admin_user_1",
-              data: () => ({ fcmTokens: ["token_admin_1"] }),
+              data: () => ({ messagingToken: ["token_admin_1"] }),
             },
-          ]
+          ],
     );
 
     // sendFcmToHouseAdmins reads houses/{id} → adminIds, then users/{uid} → messagingToken.
@@ -738,12 +748,12 @@ describe("payment_intent.succeeded", () => {
         currency: "usd",
         status: "succeeded",
       }),
-      expect.any(Object)
+      expect.any(Object),
     );
 
-    // Balance decremented: 1000 - 500 = 500
+    // rentOwed atomically decremented by the paid amount in cents.
     expect(mockUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ balance: 500 })
+      expect.objectContaining({ rentOwed: { __increment: -50000 } }),
     );
 
     // FCM sent to guest and admin
@@ -774,7 +784,7 @@ describe("payment_intent.succeeded", () => {
     expect(res.status).toHaveBeenCalledWith(200);
     expect(functions.logger.warn).toHaveBeenCalledWith(
       expect.stringContaining("missing metadata"),
-      expect.any(Object)
+      expect.any(Object),
     );
   });
 
@@ -793,7 +803,7 @@ describe("payment_intent.succeeded", () => {
     expect(res.status).toHaveBeenCalledWith(200);
     expect(functions.logger.warn).toHaveBeenCalledWith(
       expect.stringContaining("guest not found"),
-      expect.any(Object)
+      expect.any(Object),
     );
     // No balance update attempted
     expect(mockUpdate).not.toHaveBeenCalled();
@@ -822,7 +832,7 @@ describe("payment_intent.succeeded", () => {
     const event = makeStripeEvent("payment_intent.succeeded", pi);
     mockConstructEvent.mockReturnValue(event);
     // Empty guest tokens — admin tokens still present via setupForPaymentSucceeded defaults
-    setupForPaymentSucceeded({ fcmTokens: [] });
+    setupForPaymentSucceeded({ messagingToken: [] });
 
     const res = makeResponse();
     await stripeWebhook(makeRequest({}) as never, res as never);
@@ -836,26 +846,29 @@ describe("payment_intent.succeeded", () => {
         notification: expect.objectContaining({
           title: "Rent Payment Received",
         }),
-      })
+      }),
     );
     // Confirm no crash occurred (logger.error not called with FCM context)
     const errorCalls = (functions.logger.error as jest.Mock).mock.calls;
     const fcmErrors = errorCalls.filter((args: unknown[]) =>
-      String(args[0]).toLowerCase().includes("fcm")
+      String(args[0]).toLowerCase().includes("fcm"),
     );
     expect(fcmErrors).toHaveLength(0);
   });
 
-  test("balance never goes below zero", async () => {
-    const pi = makePaymentIntent({ amount: 200000 }); // $2000 — more than balance of $1000
+  test("overpayment decrements rentOwed atomically (carries a credit)", async () => {
+    // $2000 paid against $1000 owed. The atomic FieldValue.increment refactor
+    // intentionally removed the old zero-floor clamp — overpayment now leaves a
+    // negative rentOwed (a credit). scheduledRentCollection only bills rentOwed > 0.
+    const pi = makePaymentIntent({ amount: 200000 });
     const event = makeStripeEvent("payment_intent.succeeded", pi);
     mockConstructEvent.mockReturnValue(event);
-    setupForPaymentSucceeded({ guestData: { balance: 500 } }); // only $500 balance
+    setupForPaymentSucceeded({ guestData: { rentOwed: 100000 } });
 
     await stripeWebhook(makeRequest({}) as never, makeResponse() as never);
 
     expect(mockUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ balance: 0 })
+      expect.objectContaining({ rentOwed: { __increment: -200000 } }),
     );
   });
 });
@@ -879,11 +892,11 @@ describe("payment_intent.payment_failed", () => {
 
     const userDoc = {
       exists: true,
-      data: () => ({ fcmTokens: ["token_guest_1"] }),
+      data: () => ({ messagingToken: ["token_guest_1"] }),
     };
 
     const adminSnap = buildQuerySnap([
-      { id: "admin_1", data: () => ({ fcmTokens: ["token_admin_1"] }) },
+      { id: "admin_1", data: () => ({ messagingToken: ["token_admin_1"] }) },
     ]);
 
     mockCollection.mockImplementation((name: string) => {
@@ -916,7 +929,7 @@ describe("payment_intent.payment_failed", () => {
 
   function makeFailedPaymentIntent(
     code: string,
-    extraProps: Partial<Stripe.PaymentIntent> = {}
+    extraProps: Partial<Stripe.PaymentIntent> = {},
   ): Stripe.PaymentIntent {
     return makePaymentIntent({
       status: "requires_payment_method",
@@ -944,7 +957,7 @@ describe("payment_intent.payment_failed", () => {
         notification: expect.objectContaining({
           body: expect.stringContaining("insufficient_funds"),
         }),
-      })
+      }),
     );
   });
 
@@ -961,7 +974,7 @@ describe("payment_intent.payment_failed", () => {
         notification: expect.objectContaining({
           body: expect.stringContaining("ACH"),
         }),
-      })
+      }),
     );
   });
 
@@ -978,7 +991,7 @@ describe("payment_intent.payment_failed", () => {
         notification: expect.objectContaining({
           body: expect.stringContaining("re-authenticate"),
         }),
-      })
+      }),
     );
   });
 
@@ -1008,7 +1021,7 @@ describe("payment_intent.payment_failed", () => {
         status: "failed",
         failureCode: "card_declined",
       }),
-      expect.any(Object)
+      expect.any(Object),
     );
   });
 
@@ -1022,7 +1035,7 @@ describe("payment_intent.payment_failed", () => {
 
     expect(functions.logger.error).toHaveBeenCalledWith(
       "payment_intent.payment_failed",
-      expect.objectContaining({ failureCode: "card_declined" })
+      expect.objectContaining({ failureCode: "card_declined" }),
     );
   });
 });
@@ -1044,7 +1057,7 @@ describe("charge.dispute.created", () => {
     });
 
     const adminSnap = buildQuerySnap([
-      { id: "admin_1", data: () => ({ fcmTokens: ["token_admin_1"] }) },
+      { id: "admin_1", data: () => ({ messagingToken: ["token_admin_1"] }) },
     ]);
 
     // sendFcmToHouseAdmins reads houses/{id} → adminIds, then users/{uid} → messagingToken.
@@ -1083,7 +1096,7 @@ describe("charge.dispute.created", () => {
     // Payment marked as disputed
     expect(mockSet).toHaveBeenCalledWith(
       expect.objectContaining({ disputed: true }),
-      expect.any(Object)
+      expect.any(Object),
     );
 
     // Admin notified
@@ -1092,7 +1105,7 @@ describe("charge.dispute.created", () => {
         notification: expect.objectContaining({
           title: "Payment Dispute Filed",
         }),
-      })
+      }),
     );
   });
 
@@ -1165,7 +1178,7 @@ describe("invoice.payment_succeeded", () => {
     await stripeWebhook(makeRequest({}) as never, makeResponse() as never);
 
     expect(mockUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "active" })
+      expect.objectContaining({ status: "active" }),
     );
   });
 
@@ -1197,7 +1210,7 @@ describe("invoice.payment_succeeded", () => {
     expect(res.status).toHaveBeenCalledWith(200);
     expect(functions.logger.warn).toHaveBeenCalledWith(
       expect.stringContaining("no subscription on invoice"),
-      expect.any(Object)
+      expect.any(Object),
     );
   });
 
@@ -1229,7 +1242,7 @@ describe("invoice.payment_succeeded", () => {
     expect(res.status).toHaveBeenCalledWith(200);
     expect(functions.logger.warn).toHaveBeenCalledWith(
       expect.stringContaining("subscription not found"),
-      expect.any(Object)
+      expect.any(Object),
     );
   });
 });
@@ -1253,7 +1266,7 @@ describe("invoice.payment_failed", () => {
     ]);
 
     const adminSnap = buildQuerySnap([
-      { id: "admin_1", data: () => ({ fcmTokens: ["token_admin_1"] }) },
+      { id: "admin_1", data: () => ({ messagingToken: ["token_admin_1"] }) },
     ]);
 
     // sendFcmToHouseAdmins reads houses/{id} → adminIds, then users/{uid} → messagingToken.
@@ -1302,7 +1315,7 @@ describe("invoice.payment_failed", () => {
     await stripeWebhook(makeRequest({}) as never, makeResponse() as never);
 
     expect(mockUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "past_due" })
+      expect.objectContaining({ status: "past_due" }),
     );
   });
 
@@ -1315,7 +1328,7 @@ describe("invoice.payment_failed", () => {
     await stripeWebhook(makeRequest({}) as never, makeResponse() as never);
 
     expect(mockUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "unpaid" })
+      expect.objectContaining({ status: "unpaid" }),
     );
   });
 
@@ -1335,10 +1348,10 @@ describe("invoice.payment_failed", () => {
     // Notification sent without retry date — body should not contain 'retry'
     const calls = mockMessagingSend.mock.calls;
     const bodyStrings = calls.map(
-      (c: [{ notification: { body: string } }]) => c[0].notification.body
+      (c: [{ notification: { body: string } }]) => c[0].notification.body,
     );
     expect(bodyStrings.some((b: string) => b.includes("Next retry"))).toBe(
-      false
+      false,
     );
   });
 
@@ -1359,7 +1372,7 @@ describe("invoice.payment_failed", () => {
         notification: expect.objectContaining({
           body: expect.stringContaining("Next retry"),
         }),
-      })
+      }),
     );
   });
 
@@ -1376,7 +1389,7 @@ describe("invoice.payment_failed", () => {
         notification: expect.objectContaining({
           title: "Subscription Payment Failed",
         }),
-      })
+      }),
     );
   });
 });
@@ -1409,7 +1422,7 @@ describe("customer.subscription.deleted", () => {
       },
     ]);
     const adminSnap = buildQuerySnap([
-      { id: "admin_1", data: () => ({ fcmTokens: ["token_admin_1"] }) },
+      { id: "admin_1", data: () => ({ messagingToken: ["token_admin_1"] }) },
     ]);
 
     // sendFcmToHouseAdmins reads houses/{id} → adminIds, then users/{uid} → messagingToken.
@@ -1451,14 +1464,14 @@ describe("customer.subscription.deleted", () => {
     await stripeWebhook(makeRequest({}) as never, makeResponse() as never);
 
     expect(mockUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "canceled" })
+      expect.objectContaining({ status: "canceled" }),
     );
     expect(mockMessagingSend).toHaveBeenCalledWith(
       expect.objectContaining({
         notification: expect.objectContaining({
           title: "Subscription Canceled",
         }),
-      })
+      }),
     );
   });
 
@@ -1516,7 +1529,7 @@ describe("customer.subscription.updated", () => {
       },
     ]);
     const adminSnap = buildQuerySnap([
-      { id: "admin_1", data: () => ({ fcmTokens: ["token_admin_1"] }) },
+      { id: "admin_1", data: () => ({ messagingToken: ["token_admin_1"] }) },
     ]);
 
     // sendFcmToHouseAdmins reads houses/{id} → adminIds, then users/{uid} → messagingToken.
@@ -1575,7 +1588,7 @@ describe("customer.subscription.updated", () => {
         planId: "price_new",
         guestCount: 10,
         status: "active",
-      })
+      }),
     );
   });
 
@@ -1594,7 +1607,7 @@ describe("customer.subscription.updated", () => {
         notification: expect.objectContaining({
           title: "Subscription Past Due",
         }),
-      })
+      }),
     );
   });
 
@@ -1619,10 +1632,10 @@ describe("customer.subscription.updated", () => {
 describe("account.updated", () => {
   function setupForAccountUpdated(
     houseExists: boolean,
-    previousStatus: HouseStatus = "active"
+    previousStatus: HouseStatus = "active",
   ): void {
     const adminSnap = buildQuerySnap([
-      { id: "admin_1", data: () => ({ fcmTokens: ["token_admin_1"] }) },
+      { id: "admin_1", data: () => ({ messagingToken: ["token_admin_1"] }) },
     ]);
 
     const houseSnap = houseExists
@@ -1694,7 +1707,7 @@ describe("account.updated", () => {
         stripeStatus: "active",
         stripeChargesEnabled: true,
         stripePayoutsEnabled: true,
-      })
+      }),
     );
   });
 
@@ -1720,7 +1733,7 @@ describe("account.updated", () => {
     await stripeWebhook(makeRequest({}) as never, makeResponse() as never);
 
     expect(mockUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ stripeStatus: "restricted" })
+      expect.objectContaining({ stripeStatus: "restricted" }),
     );
   });
 
@@ -1746,7 +1759,7 @@ describe("account.updated", () => {
     await stripeWebhook(makeRequest({}) as never, makeResponse() as never);
 
     expect(mockUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ stripeStatus: "pending" })
+      expect.objectContaining({ stripeStatus: "pending" }),
     );
   });
 
@@ -1775,7 +1788,7 @@ describe("account.updated", () => {
         notification: expect.objectContaining({
           title: "Stripe Account Restricted",
         }),
-      })
+      }),
     );
   });
 
@@ -1825,7 +1838,7 @@ describe("account.updated", () => {
 describe("payout.failed", () => {
   function setupForPayoutFailed(houseFound: boolean): void {
     const adminSnap = buildQuerySnap([
-      { id: "admin_1", data: () => ({ fcmTokens: ["token_admin_1"] }) },
+      { id: "admin_1", data: () => ({ messagingToken: ["token_admin_1"] }) },
     ]);
 
     const houseSnap = houseFound
@@ -1889,7 +1902,7 @@ describe("payout.failed", () => {
           title: "Payout Failed",
           body: expect.stringContaining("$1500.00"),
         }),
-      })
+      }),
     );
   });
 
@@ -1971,7 +1984,7 @@ describe("General error handling", () => {
     expect(res.status).toHaveBeenCalledWith(200);
     expect(functions.logger.info).toHaveBeenCalledWith(
       expect.stringContaining("unhandled event type"),
-      expect.any(Object)
+      expect.any(Object),
     );
   });
 
@@ -2001,7 +2014,7 @@ describe("General error handling", () => {
     expect(res.status).toHaveBeenCalledWith(200);
     expect(functions.logger.error).toHaveBeenCalledWith(
       "stripeWebhook: event handler threw an error",
-      expect.any(Object)
+      expect.any(Object),
     );
   });
 
@@ -2040,7 +2053,7 @@ describe("General error handling", () => {
     // Error logged
     expect(functions.logger.error).toHaveBeenCalledWith(
       "stripeWebhook: idempotency check failed",
-      expect.any(Object)
+      expect.any(Object),
     );
   });
 });

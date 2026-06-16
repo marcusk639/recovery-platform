@@ -72,6 +72,7 @@ jest.mock("firebase-admin", () => {
   (firestoreFn as any).FieldValue = {
     delete: jest.fn(() => "__FieldValue.delete__"),
     serverTimestamp: jest.fn(() => "__FieldValue.serverTimestamp__"),
+    increment: jest.fn((n: number) => ({ __increment: n })),
   };
   return {
     initializeApp: jest.fn(),
@@ -611,9 +612,10 @@ describe("stripeWebhook — payment_intent.succeeded", () => {
 
     const mockGuestUpdate = jest.fn().mockResolvedValue(undefined);
     const mockPaymentSet = jest.fn().mockResolvedValue(undefined);
-    const mockUserGet = jest
-      .fn()
-      .mockResolvedValue({ exists: true, data: () => ({ fcmTokens: [] }) });
+    const mockUserGet = jest.fn().mockResolvedValue({
+      exists: true,
+      data: () => ({ messagingToken: [] }),
+    });
 
     mockConstructEvent.mockReturnValue({
       id: "evt_pi_succeeded",
@@ -698,8 +700,10 @@ describe("stripeWebhook — payment_intent.succeeded", () => {
       }),
       { merge: true },
     );
-    // Guest balance should be decremented from 600 to 100
-    expect(mockGuestUpdate).toHaveBeenCalledWith({ balance: 100 });
+    // Guest rentOwed is atomically decremented by the paid amount in cents.
+    expect(mockGuestUpdate).toHaveBeenCalledWith({
+      rentOwed: { __increment: -50000 },
+    });
   });
 
   it("still writes partial payment doc when metadata is missing", async () => {

@@ -45,7 +45,8 @@ interface GuestDoc {
 // defined in ../api/firestore (and seeded there by createOperatorSubscription).
 
 interface UserDoc {
-  fcmTokens?: string[];
+  // Canonical per-user FCM token field (see entities/User.ts and util/notifications.ts).
+  messagingToken?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -81,7 +82,7 @@ async function sendFcmToUser(
     if (!userSnap.exists) return;
 
     const userData = userSnap.data() as UserDoc;
-    const tokens: string[] = userData.fcmTokens ?? [];
+    const tokens: string[] = userData.messagingToken ?? [];
     if (tokens.length === 0) return;
 
     const messaging = admin.messaging();
