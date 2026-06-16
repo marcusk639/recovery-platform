@@ -81,6 +81,24 @@ jest.mock("../../api/firestore", () => ({
   app: {},
   addNotification: jest.fn(),
   getUser: jest.fn(),
+  // onGuestWrite EES recalculation reads guestCollection + ratsFirestore directly.
+  guestCollection: makeQueryChain(mockGuestsGet),
+  houseCollection: makeQueryChain(
+    jest.fn().mockResolvedValue({ docs: [], empty: true }),
+  ),
+  notificationCollection: {
+    doc: jest.fn(() => ({ set: jest.fn(), update: jest.fn() })),
+  },
+  ratsFirestore: {
+    collection: jest.fn((name: string) =>
+      name === "ees-records"
+        ? makeQueryChain(mockEesGet)
+        : makeQueryChain(
+            jest.fn().mockResolvedValue({ docs: [], empty: true }),
+          ),
+    ),
+    batch: jest.fn(() => mockBatch),
+  },
 }));
 
 // ─── util/claims ─────────────────────────────────────────────────────────────

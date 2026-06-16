@@ -16,7 +16,7 @@ jest.mock("../../api/firestore", () => ({
             stripeCustomerId: "cus_test1",
             defaultPaymentMethodId: "pm_test1",
             autoPayEnabled: true,
-            balance: 500,
+            rentOwed: 500,
           }),
         },
         {
@@ -26,7 +26,7 @@ jest.mock("../../api/firestore", () => ({
             stripeCustomerId: "cus_test2",
             defaultPaymentMethodId: "pm_test2",
             autoPayEnabled: true,
-            balance: 750,
+            rentOwed: 750,
           }),
         },
       ],

@@ -1332,6 +1332,9 @@ describe("createPaymentIntent", () => {
         stripeAccountId: "acct_active_house",
         stripeStatus: "active",
       });
+      // Caller is the resident paying their own rent — ownership check reads
+      // guests/{guestId}.userId and requires it to match request.auth.uid.
+      firestoreDocStore[`guests/${GUEST_ID}`] = { userId: USER_UID };
     });
 
     it("returns the clientSecret from Stripe", async () => {
@@ -1436,6 +1439,9 @@ describe("createPaymentIntent", () => {
         stripeAccountId: "acct_active_house",
         stripeStatus: "active",
       });
+      // Caller is the resident paying their own rent — ownership check reads
+      // guests/{guestId}.userId and requires it to match request.auth.uid.
+      firestoreDocStore[`guests/${GUEST_ID}`] = { userId: USER_UID };
     });
 
     it("wraps StripeCardError as failed-precondition HttpsError", async () => {
