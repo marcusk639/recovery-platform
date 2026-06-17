@@ -77,3 +77,10 @@ scripts/credentials.json
 
 # Sentry CLI auth (use SENTRY_AUTH_TOKEN env var instead)
 **/sentry.properties
+
+# Maestro E2E run artifacts (JUnit reports, screen recordings)
+maestro/output/
+
+# Maestro helper scripts are hand-written source, not compiled output — re-include
+# them despite the blanket **/*.js rule in regroup/.gitignore.
+!maestro/scripts/*.js
