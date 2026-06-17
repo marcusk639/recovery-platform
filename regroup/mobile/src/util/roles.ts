@@ -9,11 +9,18 @@ export const fillRoleFromClaim = (
   claim: keyof Claims,
   roles: any,
 ) => {
-  if (claims[claim] && (claims[claim] as string[]).length) {
-    (claims[claim] as string[]).forEach(houseId => {
-      roles[houseId] = claim;
-    });
+  const value = claims[claim];
+  if (!value) {
+    return;
   }
+  // Claims are maps of houseId -> true (see P0-1). Tolerate the legacy array
+  // shape so tokens minted before the migration still resolve correctly.
+  const houseIds = Array.isArray(value)
+    ? (value as string[])
+    : Object.keys(value as Record<string, unknown>);
+  houseIds.forEach(houseId => {
+    roles[houseId] = claim;
+  });
 };
 
 export const getRolesFromClaims = (claims: Claims) => {

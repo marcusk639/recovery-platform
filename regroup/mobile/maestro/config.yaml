@@ -1,0 +1,20 @@
+# Maestro workspace configuration for the Regroup mobile E2E suite.
+# Docs: https://docs.maestro.dev/advanced/configuring-maestro-workspace
+#
+# Flows live in flows/; reusable subflows in subflows/ (excluded from the
+# top-level run because they are invoked via runFlow, not standalone).
+flows:
+  - flows/*
+
+# Animations make black-box assertions flaky; disable them on both platforms.
+platform:
+  ios:
+    disableAnimations: true
+  android:
+    disableAnimations: true
+
+executionOrder:
+  continueOnFailure: false
+
+# JUnit + recordings land here (gitignored).
+testOutputDir: maestro/output

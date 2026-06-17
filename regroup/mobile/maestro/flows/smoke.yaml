@@ -1,0 +1,18 @@
+# Smoke flow — proves the harness end-to-end:
+#  1. Maestro can launch the per-platform app (appId via -e APP_ID=...).
+#  2. The IS_E2E_TEST launch argument reaches the app (Phase 1 spike) so it
+#     connects to the local Firebase emulator instead of production.
+#  3. The pre-auth landing screen renders.
+#
+# Run (iOS):     maestro test -e APP_ID=com.rats.dev maestro/flows/smoke.yaml
+# Run (Android): maestro test -e APP_ID=com.regroup.app maestro/flows/smoke.yaml
+appId: ${APP_ID}
+tags:
+  - smoke
+---
+- launchApp:
+    clearState: true
+    arguments:
+      IS_E2E_TEST: "1"
+- assertVisible:
+    id: "initial-landing-screen"

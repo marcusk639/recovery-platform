@@ -1,7 +1,6 @@
 import React from 'react';
 import { View, TextStyle } from 'react-native';
 import { withFormik, FormikProps } from 'formik';
-import { updateSelectedGuest } from '../../state/slices/guestsSlice';
 import { Guest } from '../../entities/Guest';
 import { Guests } from '../../types';
 import { House } from '../../entities/House';
@@ -17,10 +16,10 @@ import { UpdatableStat } from '../../components/rats-hoc/withStatUpdateModal';
 import { cloneDeep } from 'lodash';
 import ConfirmationButtons from '../../components/confirmation-buttons';
 import RatsScrollView from '../../components/rats-scroll-view';
-import { useAppSelector, useAppDispatch } from '../../state/store';
+import { useAppSelector } from '../../state/store';
 import { useSelectedHouse } from '../../hooks/useSelectedHouse';
 import { useSelectedGuest } from '../../hooks/useSelectedGuest';
-import { useGuests } from '../../state/queries/guestQueries';
+import { useGuests, useUpdateGuest } from '../../state/queries/guestQueries';
 import { logActivity } from '../../services/activity';
 import { logException } from '../../util/logging';
 import {
@@ -174,7 +173,7 @@ const ProfileUpdateFormWithFormik = withFormik<ProfileUpdateFormProps, Guest>({
 const ProfileUpdateForm: React.FC<
   Omit<ProfileUpdateFormProps, 'guest' | 'guests' | 'house' | 'loggedByUserId'>
 > = props => {
-  const dispatch = useAppDispatch();
+  const { mutateAsync: updateGuestAsync } = useUpdateGuest();
   const { guest } = useSelectedGuest();
   const { house } = useSelectedHouse();
   const user = useAppSelector(state => state.user.user);
@@ -193,9 +192,11 @@ const ProfileUpdateForm: React.FC<
       guests={guests}
       house={house}
       loggedByUserId={user?.id}
-      saveGuest={(updatedGuest: Guest) =>
-        dispatch(updateSelectedGuest(updatedGuest))
-      }
+      saveGuest={(updatedGuest: Guest) => {
+        // Persist edits to Firestore via the safe transactional merge. The
+        // previous Redux-only dispatch never reached the database (P0-5).
+        updateGuestAsync({ guest, updatedGuest }).catch(logException);
+      }}
     />
   );
 };

@@ -38,14 +38,24 @@ jest.mock('../../../firebase-setup', () => {
   }));
   const collection = jest.fn(() => ({ doc }));
 
+  const mockBatchUpdate = jest.fn();
+  const mockBatchCommit = jest.fn().mockResolvedValue(undefined);
+  const batch = jest.fn(() => ({
+    update: mockBatchUpdate,
+    commit: mockBatchCommit,
+  }));
+
   return {
     firestore: {
       collection,
       runTransaction,
+      batch,
       _mockTxGet: mockTxGet,
       _mockTxUpdate: mockTxUpdate,
       _mockOnSnapshot: mockOnSnapshot,
       _mockDocUpdate: mockDocUpdate,
+      _mockBatchUpdate: mockBatchUpdate,
+      _mockBatchCommit: mockBatchCommit,
     },
   };
 });
@@ -78,6 +88,7 @@ import {
   subscribeToGuest,
   OptimisticLockError,
   dischargeGuest,
+  customizePhase,
 } from '../guest';
 import { Guest } from '../../entities/Guest';
 
@@ -471,6 +482,40 @@ describe('guest service', () => {
       await expect(dischargeGuest('guest-1', '2026-05-20')).rejects.toThrow(
         'Failed to discharge resident',
       );
+    });
+  });
+
+  describe('customizePhase', () => {
+    let mockBatchUpdate: jest.Mock;
+
+    beforeEach(() => {
+      mockBatchUpdate = (firestore as any)._mockBatchUpdate;
+      mockBatchUpdate.mockReset();
+      (firestore as any)._mockBatchCommit.mockClear();
+    });
+
+    // Data-loss guard (P0-5): customizePhase must NOT write the whole guest
+    // object, or any guest field absent from the in-memory object (userAsGuest
+    // is computed, tier/subscription fields, etc.) would be silently dropped.
+    it('updates only the guest phase field, never the whole guest object', async () => {
+      const guest = makeGuest({
+        id: 'g1',
+        phase: 'phase-2',
+        firstName: 'Jane',
+        rentOwed: 12345,
+      });
+      const house = { id: 'h1', phases: {} } as any;
+
+      await customizePhase(guest, house);
+
+      // First batch.update call is the guest write: (docRef, data).
+      const guestUpdateData = mockBatchUpdate.mock.calls[0][1];
+      expect(guestUpdateData).toEqual(
+        expect.objectContaining({ phase: 'phase-2' }),
+      );
+      // Must NOT carry unrelated guest fields that would clobber the DB.
+      expect(guestUpdateData).not.toHaveProperty('firstName');
+      expect(guestUpdateData).not.toHaveProperty('rentOwed');
     });
   });
 });

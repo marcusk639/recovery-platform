@@ -1,0 +1,41 @@
+# Reusable login subflow. Launches the app in emulator mode, walks the
+# landing -> login -> authenticated path, and lands on house-tab.
+#
+# Parameterize the persona via env:
+#   runFlow:
+#     file: ../subflows/login.yaml
+#     env:
+#       EMAIL: test-manager@rats-e2e.com
+#       PASSWORD: TestPassword123!
+#
+# Selector path ported from e2e/helpers/auth.js (Detox).
+appId: ${APP_ID}
+---
+- launchApp:
+    clearState: true
+    arguments:
+      IS_E2E_TEST: "1"
+# Cold anonymous Firebase auth can take 10-15s on a simulator; give the
+# landing screen room before interacting.
+- extendedWaitUntil:
+    visible:
+      id: "initial-landing-screen"
+    timeout: 30000
+- tapOn:
+    id: "sign-in-button"
+- assertVisible:
+    id: "login-screen"
+- tapOn:
+    id: "email-input"
+- inputText: ${EMAIL}
+- tapOn:
+    id: "password-input"
+- inputText: ${PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: "login-button"
+# Login round-trip (auth + initial house data) can take up to a minute.
+- extendedWaitUntil:
+    visible:
+      id: "house-tab"
+    timeout: 60000

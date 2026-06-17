@@ -1,0 +1,19 @@
+# Reusable logout subflow. Assumes an authenticated session (house-tab visible).
+# Ends on the login screen, mirroring e2e/helpers/auth.js logout().
+appId: ${APP_ID}
+---
+- tapOn:
+    id: "profile-tab"
+- assertVisible:
+    id: "profile-screen"
+- tapOn:
+    id: "logout-button"
+# The logout thunk navigates back to InitialLanding, not login-screen directly.
+- extendedWaitUntil:
+    visible:
+      id: "initial-landing-screen"
+    timeout: 10000
+- tapOn:
+    id: "sign-in-button"
+- assertVisible:
+    id: "login-screen"
