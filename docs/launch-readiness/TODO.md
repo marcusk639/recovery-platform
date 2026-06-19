@@ -100,5 +100,8 @@ Status legend: ☐ open · ◐ in progress · ☑ done
 ### Both
 
 - ☐ **ToS / Privacy** hosted at stable HTTPS + active support inboxes (roadmap #12).
-- ☐ **Cross-product isolation decision (H11)** — regroup calls homegroups
-  `getMeetingAttendance` directly; spec says route via recovery-api (roadmap #15).
+- ☐ **Cross-product isolation decision (H11)** — superseded by
+  `docs/launch-readiness/recovery-api-meetings-discovery-plan.md`, which consolidates
+  meeting **discovery** (not attendance) into recovery-api. The earlier attendance
+  proxy (regroup → recovery-api → homegroups) was reverted as dead code; no caller
+  ever invoked it (roadmap #15).

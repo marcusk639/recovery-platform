@@ -19,9 +19,6 @@ export * from "./callable/subscriptions";
 // Callable functions — Oxford House management
 export * from "./callable/oxford";
 
-// Callable functions — RecoveryConnect / Homegroups bridge
-export * from "./callable/homegroups";
-
 // Callable functions — Invitations (server-issued invitation tokens)
 export {
   createInvitation,
