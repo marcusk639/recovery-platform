@@ -187,7 +187,7 @@ results.
 
 ## 7. Open questions
 
-- **Q1:** recovery-api `findMeetings` — service-key (recommended) or end-user callable?
+- **Q1 — RESOLVED (2026-06-19):** **service-key, via each product function** — not a direct end-user callable. A new requirement ("we need to know WHICH USERS hit the shared API") ruled out the unauthenticated/anonymous read path. Each product authenticates the end user against its OWN Firebase Auth, then calls recovery-api server-to-server with `X-Service-Key` + `X-App-Id` + `X-User-Uid`. recovery-api logs a per-request audit row (`appId` + **hashed** uid + query, **no email/PII**); attribution/audit only (no per-user rate-limit/authz). **No App Check** (clients never hit recovery-api directly). See stabilization plan Phase 4.
 - **Q2:** Move `userIsAtMeeting` (geo-proximity) to recovery-api too, or leave in regroup?
 - **Q3:** Are the external sources identical across the two forks, or has one
   product added sources the other lacks? (resolve in Phase 0)
