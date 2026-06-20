@@ -37,7 +37,6 @@ src/
     subscriptions.ts  Stripe subscriptions + Connect account management;
                       sendInviteEmails, sendConfirmationEmail
     oxford.ts       Oxford House management callables
-    homegroups.ts   Homegroups bridge callables
     invitations.ts  createInvitation, peekInvitation, redeemInvitation
   triggers/
     firestore/      Firestore document write triggers
@@ -70,9 +69,9 @@ All Stripe amounts are in **US cents** (integers). `50000` = $500.00. Convert on
 
 `http/stripeWebhook.ts` uses Stripe signature verification (`stripe.webhooks.constructEvent`). Never process a webhook payload without verifying the signature first.
 
-### Homegroups bridge
+### Cross-product access (meetings, referrals)
 
-`callable/homegroups.ts` contains callables that allow Regroup to interact with the Homegroups product via recovery-api. Do not add direct Firestore cross-queries to homegroups' database — route through recovery-api.
+Never add direct Firestore cross-queries to another product's database — route through recovery-api with service-key auth (`X-Service-Key`/`X-App-Id`/`X-User-Uid`). Firebase Auth ID tokens are project-scoped, so recovery-api (`recovery-platform`) cannot verify a `phoenix-cleanhouse` end-user token — cross-product calls are server-to-server, not end-user. (The former `callable/homegroups.ts` attendance bridge was removed as dead code — zero callers; regroup tracks attendance natively. Meeting **discovery** is being consolidated into recovery-api: see `docs/launch-readiness/recovery-api-meetings-stabilization-plan.md`.)
 
 ### Secrets
 
