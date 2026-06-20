@@ -35,14 +35,15 @@ recovery-api supplies the shared **directory** slice; each product **merges** it
 
 ### Resolved decisions (carried from the discovery session)
 
-| Decision                                 | Resolution                                                                                                                                           |
-| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| System of record                         | recovery-api `directoryMeetings` (full shared directory)                                                                                             |
-| Read auth                                | **Unauthenticated** `onCall`/`onRequest` + rate-limit/cache; App Check as fast-follow. Data is public; cross-project end-user tokens are infeasible. |
-| Write auth (user-created public meeting) | **Service-key via product function** (`requireServiceAuth` Phase-1: `X-Service-Key` + `X-App-Id` + `X-User-Uid`).                                    |
-| Coverage strategy                        | **Grid sweep** (continental-US lat/lng grid), the only true coverage solution in-repo.                                                               |
-| Idempotency                              | **Deterministic hashed doc id + `merge:true` upsert** + resumable cursor.                                                                            |
-| Google Maps key                          | Lives ONLY in the ingester/refresh job, never on the read path.                                                                                      |
+| Decision                                 | Resolution                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| System of record                         | recovery-api `directoryMeetings` (full shared directory)                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Read auth                                | **Service-key via product function** (`requireServiceAuth` Phase-1: `X-Service-Key` + `X-App-Id` + `X-User-Uid`). Each product authenticates the end user against its OWN Firebase Auth, then calls recovery-api server-to-server forwarding the user context. Cross-project end-user tokens are infeasible; recovery-api never verifies foreign tokens. **No App Check** — clients never hit recovery-api directly. (Reopened 2026-06-19: "we need to know WHICH USERS hit the shared API" killed the unauthenticated option.) |
+| Read attribution                         | recovery-api writes a per-request **audit row** to a Firestore collection: `appId` + **hashed** `uid` + query + timestamp. **No email, no names, no PII** (cross-cutting privacy rule). Attribution/audit only — no per-user rate-limiting or authz in this scope.                                                                                                                                                                                                                                                              |
+| Write auth (user-created public meeting) | **Service-key via product function** (`requireServiceAuth` Phase-1: `X-Service-Key` + `X-App-Id` + `X-User-Uid`).                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Coverage strategy                        | **Grid sweep** (continental-US lat/lng grid), the only true coverage solution in-repo.                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Idempotency                              | **Deterministic hashed doc id + `merge:true` upsert** + resumable cursor.                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Google Maps key                          | Lives ONLY in the ingester/refresh job, never on the read path.                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
 ---
 
@@ -178,18 +179,27 @@ Consolidated from the 2026-06-19 discovery session. Re-confirm each file:line be
 
 ## Phase 4 — Cross-product read endpoint (retrieval)
 
+> **Auth model (reconciled 2026-06-19):** the read endpoint is **service-key, not public**.
+> Each product authenticates the end user against its OWN Firebase Auth in the product
+> function, then calls this endpoint server-to-server with `X-Service-Key` + `X-App-Id` +
+> `X-User-Uid`. recovery-api attributes/audits per-user without verifying foreign tokens.
+> No App Check (clients never hit recovery-api directly). See Phases 5/6 for the caller side.
+
 **What to implement (recovery-api):**
 
-1. `recovery-api/src/callable/findMeetings.ts` — handler `handleFindMeetings(data, deps)` + thin wrapper (COPY referrals structure, but **no service-key on the read** — public). Input: `{ location {lat,lng}, day?, type?, radiusMeters? }` (Zod-validated). Query `directoryMeetings` by `geohashQueryBounds` + distance filter (COPY `findMeetingsByLocation.ts`). Output: `DirectoryMeeting[]`.
-2. **Rate-limit/cache:** add a lightweight per-cell result cache (Firestore-doc or in-memory TTL) + basic IP/quota guard (none exists in-repo — build minimal). Document App Check as fast-follow.
+1. `recovery-api/src/callable/findMeetings.ts` — handler `handleFindMeetings(data, ctx, deps)` + thin wrapper, **gated by `requireServiceAuth`** (COPY referrals structure + its auth wiring; carries `appId`/`uid` from the Phase-1 headers, `recovery-api/src/middleware/auth.ts` L29-64). Input: `{ location {lat,lng}, day?, type?, radiusMeters? }` (Zod-validated). Query `directoryMeetings` by `geohashQueryBounds` + distance filter (COPY `findMeetingsByLocation.ts`). Output: `DirectoryMeeting[]`.
+2. **Per-request audit (attribution only):** write one row to a `directoryMeetingRequests` (or similar) Firestore collection per call — `{ appId, uidHash: sha256(uid), day?, type?, lat/lng (coarsened), at: serverTimestamp }`. **NEVER store email, names, or raw uid** (cross-cutting privacy rule). Hash with a single shared helper. No per-user rate-limiting or authz in this scope (attribution/audit only).
+3. **Caching (optional, later):** a lightweight per-cell result cache (Firestore-doc or in-memory TTL) is a fast-follow, not required for v1. Reads stay pure Firestore on the data path.
 
 **Verification checklist:**
 
+- [ ] Rejects calls missing/invalid `X-Service-Key` (mirror referrals auth test); accepts a valid service-key call and returns results.
 - [ ] Returns directory results for a known seeded location; respects `day`/`type` filters.
-- [ ] No auth required; no external API hit on read (pure Firestore) — test with external fetch mock asserting **zero** calls.
-- [ ] Handler unit-tested with injected Firestore (mirror referrals.test.ts).
+- [ ] No external API hit on read (pure Firestore) — test with external fetch mock asserting **zero** calls.
+- [ ] Audit row written with **hashed** uid and NO email/PII; assert the row contains no email/name field (test).
+- [ ] Handler unit-tested with injected Firestore + auth context (mirror referrals.test.ts).
 
-**Anti-pattern guards:** confirm endpoint does not import any `sources/` fetcher.
+**Anti-pattern guards:** confirm endpoint does not import any `sources/` fetcher; grep the audit-write for `email`/raw `uid` — must be absent (only `uidHash`).
 
 ---
 
@@ -197,10 +207,10 @@ Consolidated from the 2026-06-19 discovery session. Re-confirm each file:line be
 
 **What to implement (regroup, behavior-preserving):**
 
-1. Rewrite `regroup/functions/src/callable/meetings.ts` `findMeetings` internals to: call recovery-api `findMeetings` for the **directory** slice, then **merge regroup's own custom meetings** (`getCustomMeetings` from the regroup `meetings` collection — UNCHANGED), map directory results → `RatsMeeting`, preserve the existing error-swallow-→`[]` behavior and `"Celebrate Recovery"` handling.
+1. Rewrite `regroup/functions/src/callable/meetings.ts` `findMeetings` internals to: **authenticate the end user via regroup's own Firebase Auth** (`request.auth`), then call recovery-api `findMeetings` **server-to-server with `X-Service-Key` + `X-App-Id: phoenix-cleanhouse` + `X-User-Uid: <request.auth.uid>`** for the **directory** slice; then **merge regroup's own custom meetings** (`getCustomMeetings` from the regroup `meetings` collection — UNCHANGED), map directory results → `RatsMeeting`, preserve the existing error-swallow-→`[]` behavior and `"Celebrate Recovery"` handling.
 2. **Keep intact:** `userIsAtMeeting` (geo proximity, regroup-only); client-side CRUD in `regroup/mobile/src/services/meeting.ts` (`addMeeting`/`updateMeeting`/`deleteMeeting` direct to `meetings`); attendance `Activity.meetingId` projection; client-side filtering/sort in `MeetingResultsList.tsx`; check-in gating.
 3. Delete only the **forked directory-fetch internals** that recovery-api now owns (regroup `util/meetings.ts` AA/CR fetchers), NOT the custom-meeting path.
-4. Reuse `RECOVERY_API_BASE_URL` (re-add if needed) for the recovery-api call.
+4. Re-add `RECOVERY_API_BASE_URL` + the service key (`RECOVERY_PLATFORM_API_KEY`, reverted in §2 cleanup) to `regroup/functions/src/config.ts` for the recovery-api call. Mobile/web stay unchanged — they keep calling regroup's `findMeetings`, which is where the end-user Firebase Auth check lives.
 
 **Verification checklist:**
 
@@ -217,7 +227,7 @@ Consolidated from the 2026-06-19 discovery session. Re-confirm each file:line be
 
 **What to implement (homegroups, behavior-preserving):**
 
-1. Rewrite `homegroups/functions/src/callable/findMeetings.ts` internals to: call recovery-api `findMeetings` for the **directory** slice, then **merge homegroups' product-owned meetings** (Firestore `meetings` group/custom rows — UNCHANGED query), serialize to `SerializedMeeting` (overlay fields `groupId`/`groupName`/`venmo`/`square`/`paypal`/`verified` filled from the product row), preserve `HttpsError` semantics. Keep the search response's `groupId`/"claimed" marker.
+1. Rewrite `homegroups/functions/src/callable/findMeetings.ts` internals to: **authenticate the end user via homegroups' own Firebase Auth** (`request.auth`), then call recovery-api `findMeetings` **server-to-server with `X-Service-Key` + `X-App-Id: homegroups` + `X-User-Uid: <request.auth.uid>`** for the **directory** slice; then **merge homegroups' product-owned meetings** (Firestore `meetings` group/custom rows — UNCHANGED query), serialize to `SerializedMeeting` (overlay fields `groupId`/`groupName`/`venmo`/`square`/`paypal`/`verified` filled from the product row), preserve `HttpsError` semantics. Keep the search response's `groupId`/"claimed" marker. Add `RECOVERY_API_BASE_URL` + service key to homegroups functions config (none today).
 2. **Keep intact:** `meetingInstances` + QR check-in; `createGroupWithSubscription` meeting writes; meeting→group synthesis (seeding/orphan scripts) — **all stay product-side**; group-screen overlay (`group.paymentLinks`).
 3. Delete only the forked directory-fetch internals recovery-api now owns. Fix the casing/`day` normalization at the product↔directory boundary.
 
@@ -247,7 +257,7 @@ Consolidated from the 2026-06-19 discovery session. Re-confirm each file:line be
 
 - **Refresh cadence** default: full grid weekly, sliced nightly (adjustable). NA: manual/seasonal.
 - **Geohash precision** value to freeze (recommend matching the read query precision used in `findMeetingsByLocation.ts`).
-- **App Check**: fast-follow after launch (greenfield on both mobile apps).
+- **App Check**: **N/A / dropped** (reconciled 2026-06-19). Reads are service-key-only via each product function; clients never call recovery-api directly, so App Check on the recovery-api path adds nothing. Revisit only if a direct client→recovery-api read path is ever introduced.
 - **User-created public-meeting WRITE path (§4a of the discovery doc):** service-key product-function → recovery-api `upsertDirectoryMeeting`. Can be a follow-on phase once read consolidation is stable.
 
 ## Out of scope
