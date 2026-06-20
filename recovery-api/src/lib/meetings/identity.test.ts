@@ -110,4 +110,60 @@ describe('directoryMeetingId', () => {
     const id = directoryMeetingId({ name: 'X', day: 0, time: '00:00' });
     expect(id).toHaveLength(24);
   });
+
+  it('treats undefined link the same as empty string', () => {
+    expect(directoryMeetingId({ ...base, link: undefined })).toBe(
+      directoryMeetingId({ ...base, link: '' }),
+    );
+  });
+
+  it('trims surrounding whitespace on formattedAddress before hashing', () => {
+    const padded = directoryMeetingId({
+      ...base,
+      formattedAddress: '  123 Main St, Springfield, IL 62704  ',
+    });
+    expect(padded).toBe(directoryMeetingId(base));
+  });
+
+  it('does not collide when a free-form field contains the legacy "|" separator', () => {
+    // Pre-hardening these two could share a hash by shifting field boundaries.
+    const a = directoryMeetingId({ ...base, name: 'Sunrise|Group', formattedAddress: '' });
+    const b = directoryMeetingId({ ...base, name: 'Sunrise', formattedAddress: 'Group' });
+    expect(a).not.toBe(b);
+  });
+});
+
+// Regression coverage for iterative-review hardening (2026-06-20).
+describe('normalizeDay — review hardening', () => {
+  it('accepts 4-char abbreviations that are genuine prefixes', () => {
+    expect(normalizeDay('Tues')).toBe(2);
+    expect(normalizeDay('Thurs')).toBe(4);
+  });
+
+  it('throws on empty / whitespace-only input', () => {
+    expect(() => normalizeDay('')).toThrow();
+    expect(() => normalizeDay('   ')).toThrow();
+  });
+
+  it('throws on float and NaN', () => {
+    expect(() => normalizeDay(2.5)).toThrow();
+    expect(() => normalizeDay(Number.NaN)).toThrow();
+  });
+});
+
+describe('normalizeTime — review hardening', () => {
+  it('maps bare "0:00" (24-hour) to midnight', () => {
+    expect(normalizeTime('0:00')).toBe('00:00');
+  });
+
+  it('rejects hour 0 with a meridiem (invalid 12-hour notation)', () => {
+    // Intentional: 12-hour clock has hours 1–12. Use bare "0:00" for midnight.
+    expect(() => normalizeTime('0:00 AM')).toThrow();
+    expect(() => normalizeTime('0:00 PM')).toThrow();
+  });
+
+  it('rejects 12-hour values above 12', () => {
+    expect(() => normalizeTime('13:00 AM')).toThrow();
+    expect(() => normalizeTime('13:00 PM')).toThrow();
+  });
 });

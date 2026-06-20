@@ -35,9 +35,11 @@ const DAYS = [
 
 /**
  * Canonicalize a day-of-week to an integer 0–6 (0 = Sunday).
- * Accepts an integer, a numeric string, a full weekday name, or a 3-letter
- * abbreviation (case-insensitive). Throws on anything else so bad source data
- * surfaces rather than silently producing a divergent id.
+ * Accepts an integer, a numeric string, a full weekday name, or any unambiguous
+ * abbreviation that is a genuine prefix of the name and ≥3 chars
+ * (case-insensitive: "Sun", "Tue", "Tues", "Thurs", "Wed"). Throws on anything
+ * else so bad source data surfaces rather than silently producing a divergent id.
+ * Note: "Weds" is not a prefix of "wednesday" — use "Wed".
  */
 export function normalizeDay(input: number | string): number {
   if (typeof input === 'number') {
@@ -46,13 +48,21 @@ export function normalizeDay(input: number | string): number {
   }
 
   const raw = input.trim().toLowerCase();
+  if (!raw) {
+    throw new RangeError('normalizeDay: empty day');
+  }
   if (/^[0-6]$/.test(raw)) return Number(raw);
 
-  const full = DAYS.indexOf(raw as (typeof DAYS)[number]);
-  if (full !== -1) return full;
+  const exact = DAYS.findIndex((d) => d === raw);
+  if (exact !== -1) return exact;
 
-  const abbrev = DAYS.findIndex((d) => d.slice(0, 3) === raw);
-  if (abbrev !== -1) return abbrev;
+  // Prefix match for abbreviations. Require ≥3 chars so 1–2 letter prefixes
+  // (ambiguous: s→sun/sat, t→tue/thu) can never match; at length 3 every prefix
+  // in this set resolves to a single day.
+  if (raw.length >= 3) {
+    const prefix = DAYS.findIndex((d) => d.startsWith(raw));
+    if (prefix !== -1) return prefix;
+  }
 
   throw new RangeError(`normalizeDay: unrecognized day: ${JSON.stringify(input)}`);
 }
@@ -101,11 +111,22 @@ export interface DirectoryMeetingIdInput {
   formattedAddress?: string;
 }
 
+// Field separator for the hash preimage. A NUL byte is used (not "|") so a
+// literal separator inside a free-form field (name/address from external
+// sources, e.g. "Suite 100 | Bldg B") can't shift field boundaries and collide
+// two distinct meetings onto the same id. NUL never appears in real source text.
+const ID_FIELD_SEP = '\u0000';
+
 /**
  * Deterministic 24-char directory id. Pure function of the meeting's identifying
  * fields, hashed AFTER normalization so format variants collapse to one id.
  * `day` is deliberately part of the key (the same room hosts distinct meetings
  * on different days).
+ *
+ * `name`/`formattedAddress` are case-SENSITIVE by design (matches the ported
+ * homegroups recipe). If a source is known to vary capitalization for the same
+ * real meeting, the INGESTOR must normalize case before calling this — otherwise
+ * "Sunrise Group" and "SUNRISE GROUP" produce two directory docs.
  */
 export function directoryMeetingId(m: DirectoryMeetingIdInput): string {
   const parts = [
@@ -114,7 +135,7 @@ export function directoryMeetingId(m: DirectoryMeetingIdInput): string {
     normalizeTime(m.time),
     (m.link ?? '').trim(),
     (m.formattedAddress ?? '').trim(),
-  ].join('|');
+  ].join(ID_FIELD_SEP);
 
   return createHash('sha1').update(parts).digest('hex').slice(0, 24);
 }
