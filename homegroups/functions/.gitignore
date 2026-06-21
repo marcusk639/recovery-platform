@@ -17,3 +17,7 @@ scripts/recovery-connect.json
 !.env.example
 
 firebase-debug.log
+
+# Service account credentials — never commit a rotated key dropped here
+service-account.json
+*.json.key

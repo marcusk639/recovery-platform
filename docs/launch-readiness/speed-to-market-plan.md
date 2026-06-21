@@ -40,6 +40,21 @@ These unlock live revenue with **zero new features**. Sequence them first.
 **Track A is the entire near-term revenue case.** Nothing in Track B is required
 to take the first dollar.
 
+### Track A status — code-readiness audit (2026-06-20)
+
+Read-only audit of the code/config behind each Track A ops task, plus A2 progress.
+
+| #   | Status                        | Findings / what's left                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| --- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A1  | ⚠️ BLOCKED (ops)              | Price-resolution code is correct & runtime-driven. **Gap:** `STRIPE_PRODUCT_ID_INTERGROUP_A/_B` are absent from `homegroups/functions/.env` → intergroup A/B **and** treatment-center checkout throw `"Intergroup product not configured"` regardless of any Dashboard price. TC has **no separate product** (bills on intergroup A/B). Each product also needs a Dashboard **default price**. CLI cannot do this — it's authenticated to the Regroup account only; do A1 in the Homegroups Stripe Dashboard + add the two prod IDs to `.env`. Minor: dead typo key `STRIPE_TEST_PRODCT_ID_GROUP` in `.env`.                                                                                                                                                              |
+| A2  | 🟡 CODE/CONFIG DONE           | **6 live monthly prices created** (Oxford $49/$89/$299 on `prod_UhV71tzKC4XToy`; Traditional $69/$129/$249 on `prod_UhV6sgrWbOgsyg`) and written to `regroup/functions/.env` (`STRIPE_PRICE_OXFORD_*` / `STRIPE_PRICE_TRAD_*`). Code reads these via plain `process.env` (NOT `defineSecret()` — the original task assumption was wrong; no code change needed). **Left:** set `TIER_BILLING_ENABLED=true`, redeploy, then A3 live-card test. Flag left OFF intentionally (activates tier billing for new subs on deploy).                                                                                                                                                                                                                                                |
+| A3  | ✅ CODE READY                 | Both products: webhook signatures verified against env/secret signing keys; every successful-payment event maps to the correct Firestore write; initiation callables exported. Preconditions (dashboard, not code): (1) HG default prices set (A1); (2) confirm Regroup's **platform** webhook endpoint is subscribed to `payment_intent.*` + `charge.dispute.created` (else rent fees silently don't post). Regroup webhook lives at `webhooks/stripeWebhook.ts`.                                                                                                                                                                                                                                                                                                        |
+| A4  | 🟡 PARTIAL (commit `e18a1b9`) | **Done (safe, in-repo known-good values):** homegroups Play URL `com.homegroups`→`com.recoveryconnect` (`deepLinks.js:11`); regroup stale Play URLs `com.rats.dev`→`com.regroup.app` (`footer-one.component.ts:22`, `download.component.ts:20`). **Still needs owner-supplied values:** (1) homegroups real App Store ID — `id0000000000` placeholder at `deepLinks.js:9`; (2) regroup iOS **release** bundle is dev `com.rats.dev` in `ios/rats.xcodeproj/project.pbxproj:766` (reconcile vs live listing `id1502040260`); (3) two AASA files with conflicting Team IDs — `regroup/mobile/apple-app-site-association` (`D8K3FS4HAX`, matches pbxproj `DEVELOPMENT_TEAM`) vs `regroup/mobile/.well-known/apple-app-site-association` (`KQSSHWK7V7`, not in Xcode config). |
+| A5  | ✅ DONE (commit `e18a1b9`)    | Code side closed. `homegroups/functions/.gitignore` now ignores `service-account.json` + `*.json.key` (mirrors monorepo-root convention). Correction to prior audit: `recovery-api/.gitignore` **already** had `service-account.json` + `*.json.key` — only homegroups/functions was missing it. No service-account key currently tracked or untracked in either package. Rotation + BFG history purge remain ops.                                                                                                                                                                                                                                                                                                                                                        |
+| A6  | ⛔ LEGAL                      | HIPAA / 42 CFR Part 2 BAA decision — out of code scope.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+
+**Track B1 (hardening): DONE** — `findMeetings` input validation shipped (commit `8318576`); unauth-callable sweep found no safe code change remaining (see `b1-hardening-handoff.md`). **B2 (recovery-api directory owner): DONE** (commits `17823f4`→`503fd08`) — built end-to-end (stabilization-plan Phases 2, 2b, 3, 4): external source fetchers, idempotent grid-sweep ingestion + seed script, NA migration script, nightly scheduled refresh + stale prune, and the service-key `findMeetings` read callable (registered in `index.ts`, audited, returns `DirectoryMeeting[]`). recovery-api tsc clean, **122/122 jest green**. B3–B5 (repoint regroup/homegroups) are now **unblocked**. Note: live ingestion is an ops step — requires `GOOGLE_MAPS_API_KEY`/seed run; AA+CR sources are keyless so the scheduled refresh runs without it.
+
 ---
 
 ## Track B — Implement the differentiator (CODE, agent)
@@ -61,14 +76,19 @@ execute.
 **Acceptance:** typecheck + Jest green in homegroups/functions; malformed input
 returns a clean validation error, not a crash.
 
-### B2 — recovery-api `findMeetings` is the directory owner (verify Phase 1 done)
+### B2 — recovery-api `findMeetings` is the directory owner ✅ DONE
 
-Phase 1 already landed `DirectoryMeeting` + `identity.ts` (sha1[:24] + geohash-10).
-Confirm the recovery-api `findMeetings` callable exists and is service-key
-authed before repointing products.
+Built end-to-end (commits `17823f4`→`503fd08`), per `recovery-api-meetings-stabilization-plan.md`:
 
-**Acceptance:** recovery-api `findMeetings` callable registered in `index.ts`;
-unit tests green; returns canonical `DirectoryMeeting[]`.
+- **Phase 2a** — `lib/meetings/sources/{meetingGuide,celebrateRecovery,geocode}.ts`: pure, DI'd external fetchers → `DirectoryMeeting` (`source:'external'`); `GOOGLE_MAPS_API_KEY` secret declared.
+- **Phase 2** — `lib/meetings/ingest.ts` `ingestGridCell` (idempotent `.set(merge:true)`, `source:'app'` guard, re-stamps freshness) + `scripts/seedDirectory.ts` resumable grid sweep.
+- **Phase 2b** — `scripts/migrateNaMeetings.ts` one-off NA dataset migration.
+- **Phase 3** — `triggers/refreshDirectory.ts` v2 `onSchedule` nightly refresh (weekly grid cycle) + `pruneStale` (never prunes `source:'app'`).
+- **Phase 4** — `callable/findMeetings.ts`: service-key (`requireServiceAuth`), Zod input, pure-Firestore geohash query, returns `DirectoryMeeting[]`, writes a privacy-safe audit row (`uidHash` only). Registered in `index.ts`.
+
+Single frozen hash/geohash recipe throughout; Google key never on the read path. Code review: 0 CRITICAL; 2 HIGH + 3 MEDIUM found and fixed (`503fd08`).
+
+**Acceptance:** ✅ callable registered in `index.ts`; ✅ 122/122 jest green; ✅ returns canonical `DirectoryMeeting[]`.
 
 ### B3 — Repoint Regroup (discovery plan Phase 2)
 
