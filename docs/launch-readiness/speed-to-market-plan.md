@@ -53,7 +53,7 @@ Read-only audit of the code/config behind each Track A ops task, plus A2 progres
 | A5  | ✅ DONE (commit `e18a1b9`)    | Code side closed. `homegroups/functions/.gitignore` now ignores `service-account.json` + `*.json.key` (mirrors monorepo-root convention). Correction to prior audit: `recovery-api/.gitignore` **already** had `service-account.json` + `*.json.key` — only homegroups/functions was missing it. No service-account key currently tracked or untracked in either package. Rotation + BFG history purge remain ops.                                                                                                                                                                                                                                                                                                                                                        |
 | A6  | ⛔ LEGAL                      | HIPAA / 42 CFR Part 2 BAA decision — out of code scope.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
-**Track B1 (hardening): DONE** — `findMeetings` input validation shipped (commit `8318576`); unauth-callable sweep found no safe code change remaining (see `b1-hardening-handoff.md`). **B2 (recovery-api `findMeetings` directory owner): NOT built** — only `DirectoryMeeting` + identity scheme exist; B3–B5 are blocked on B2.
+**Track B1 (hardening): DONE** — `findMeetings` input validation shipped (commit `8318576`); unauth-callable sweep found no safe code change remaining (see `b1-hardening-handoff.md`). **B2 (recovery-api directory owner): DONE** (commits `17823f4`→`503fd08`) — built end-to-end (stabilization-plan Phases 2, 2b, 3, 4): external source fetchers, idempotent grid-sweep ingestion + seed script, NA migration script, nightly scheduled refresh + stale prune, and the service-key `findMeetings` read callable (registered in `index.ts`, audited, returns `DirectoryMeeting[]`). recovery-api tsc clean, **122/122 jest green**. B3–B5 (repoint regroup/homegroups) are now **unblocked**. Note: live ingestion is an ops step — requires `GOOGLE_MAPS_API_KEY`/seed run; AA+CR sources are keyless so the scheduled refresh runs without it.
 
 ---
 
@@ -76,14 +76,19 @@ execute.
 **Acceptance:** typecheck + Jest green in homegroups/functions; malformed input
 returns a clean validation error, not a crash.
 
-### B2 — recovery-api `findMeetings` is the directory owner (verify Phase 1 done)
+### B2 — recovery-api `findMeetings` is the directory owner ✅ DONE
 
-Phase 1 already landed `DirectoryMeeting` + `identity.ts` (sha1[:24] + geohash-10).
-Confirm the recovery-api `findMeetings` callable exists and is service-key
-authed before repointing products.
+Built end-to-end (commits `17823f4`→`503fd08`), per `recovery-api-meetings-stabilization-plan.md`:
 
-**Acceptance:** recovery-api `findMeetings` callable registered in `index.ts`;
-unit tests green; returns canonical `DirectoryMeeting[]`.
+- **Phase 2a** — `lib/meetings/sources/{meetingGuide,celebrateRecovery,geocode}.ts`: pure, DI'd external fetchers → `DirectoryMeeting` (`source:'external'`); `GOOGLE_MAPS_API_KEY` secret declared.
+- **Phase 2** — `lib/meetings/ingest.ts` `ingestGridCell` (idempotent `.set(merge:true)`, `source:'app'` guard, re-stamps freshness) + `scripts/seedDirectory.ts` resumable grid sweep.
+- **Phase 2b** — `scripts/migrateNaMeetings.ts` one-off NA dataset migration.
+- **Phase 3** — `triggers/refreshDirectory.ts` v2 `onSchedule` nightly refresh (weekly grid cycle) + `pruneStale` (never prunes `source:'app'`).
+- **Phase 4** — `callable/findMeetings.ts`: service-key (`requireServiceAuth`), Zod input, pure-Firestore geohash query, returns `DirectoryMeeting[]`, writes a privacy-safe audit row (`uidHash` only). Registered in `index.ts`.
+
+Single frozen hash/geohash recipe throughout; Google key never on the read path. Code review: 0 CRITICAL; 2 HIGH + 3 MEDIUM found and fixed (`503fd08`).
+
+**Acceptance:** ✅ callable registered in `index.ts`; ✅ 122/122 jest green; ✅ returns canonical `DirectoryMeeting[]`.
 
 ### B3 — Repoint Regroup (discovery plan Phase 2)
 
