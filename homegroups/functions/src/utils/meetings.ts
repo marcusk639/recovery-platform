@@ -1,137 +1,14 @@
 import { Location } from "../entities/GeocodeResponse";
-import {
-  getNAMeetings,
-  getAAMeetings,
-  partialGeocode,
-  getCelebrateRecoveryMeetings,
-} from "../api/api";
+import { partialGeocode } from "../api/api";
 import { getDistance } from "./location";
-import { NAMeetingResponse, NAMeeting } from "../entities/NAMeetingResponse";
-import {
-  MeetingSearchCriteria,
-  MeetingType,
-  Meeting,
-} from "../entities/Meeting";
-import { AAMeeting } from "../entities/AAMeetingResponse";
-import { daysOfWeek } from "./date";
+import { MeetingSearchCriteria, Meeting } from "../entities/Meeting";
 import geohash from "ngeohash";
 import { logger } from "firebase-functions/v1";
-import { parseString } from "xml2js";
-import {
-  CelebrateRecoveryMeeting,
-  CelebrateRecoveryMeetings,
-} from "../entities/CelebrateRecoveryMeeting";
-import moment from "moment";
 import * as admin from "firebase-admin";
-import { Query, Timestamp } from "firebase-admin/firestore";
+import { Query } from "firebase-admin/firestore";
 import crypto from "crypto";
 import * as geofire from "geofire-common";
 import * as functions from "firebase-functions";
-
-// Local minimal interface definition for Firestore data
-interface FuncMeetingDocument {
-  id: string;
-  type: string;
-  day?: string | null;
-  geohash?: string | null;
-  lat?: number | null;
-  lng?: number | null;
-  name?: string; // Needed for filtering/mapping
-  // Add other fields used in mapping or filtering
-  createdAt?: Timestamp; // Use Admin SDK Timestamp
-  updatedAt?: Timestamp; // Use Admin SDK Timestamp
-  address?: string | null;
-  city?: string | null;
-  state?: string | null;
-  zip?: string | null;
-  location?: string | null;
-  isOnline?: boolean;
-  onlineLink?: string | null;
-  onlineNotes?: string | null;
-  format?: string | null;
-  locationName?: string | null;
-  verified?: boolean;
-  addedBy?: string | null;
-  groupId?: string;
-}
-
-// expects time in military format (800, 1600, 2300, etc)
-const getMeetingTime = (time: number) => {
-  const hours = Math.floor(time / 100);
-  const minutes = time % 100;
-  return (
-    (hours < 10 ? "0" + hours : hours) +
-    ":" +
-    (minutes < 10 ? "0" + minutes : minutes)
-  );
-};
-
-export const getMeetingEntity = (meeting: any, type: MeetingType) => {
-  try {
-    const meetingEntity = new Meeting();
-    if (type === "AA") {
-      const aaMeeting = meeting as AAMeeting;
-      meetingEntity.name = aaMeeting.name;
-      meetingEntity.street = aaMeeting.address;
-      meetingEntity.city = aaMeeting.city;
-      meetingEntity.time = aaMeeting.time.substring(
-        0,
-        aaMeeting.time.lastIndexOf(":")
-      );
-      meetingEntity.zip = aaMeeting.postal_code;
-      meetingEntity.state = aaMeeting.state;
-      meetingEntity.locationName = aaMeeting.location_name;
-      meetingEntity.types = aaMeeting.types;
-      meetingEntity.lat = parseFloat(aaMeeting.latitude);
-      meetingEntity.lng = parseFloat(aaMeeting.longitude);
-      meetingEntity.type = "AA";
-      meetingEntity.day = daysOfWeek[aaMeeting.day];
-      meetingEntity.online = !!aaMeeting.conference_url;
-      meetingEntity.link = aaMeeting.conference_url;
-      meetingEntity.onlineNotes = aaMeeting.conference_url_notes;
-    }
-    if (type === "NA") {
-      const naMeeting = meeting as NAMeeting;
-      meetingEntity.type = "NA";
-      meetingEntity.name = naMeeting.com_name;
-      meetingEntity.street = naMeeting.address;
-      meetingEntity.city = naMeeting.city;
-      meetingEntity.state = naMeeting.state;
-      meetingEntity.zip = naMeeting.zip;
-      meetingEntity.address = `${naMeeting.com_name}, ${naMeeting.address}, ${naMeeting.city}, ${naMeeting.state} ${naMeeting.zip}`;
-      meetingEntity.day = daysOfWeek[naMeeting.mtg_day - 1];
-      meetingEntity.time = getMeetingTime(naMeeting.mtg_time);
-      meetingEntity.lat = naMeeting.latitude;
-      meetingEntity.lng = naMeeting.longitude;
-      meetingEntity.online = naMeeting.online === "Yes";
-      meetingEntity.onlineNotes = naMeeting.password;
-      meetingEntity.link = naMeeting.link;
-    }
-    if (type === "Celebrate Recovery") {
-      const crMeeting = meeting as CelebrateRecoveryMeeting;
-      meetingEntity.type = "Celebrate Recovery";
-      const addressParts = crMeeting.address[0].split(",");
-      meetingEntity.name = crMeeting.name[0];
-      meetingEntity.street = addressParts[0];
-      meetingEntity.city = addressParts[1].trim();
-      const stateZipCountry = addressParts[2].split(" ").slice(1); // ignore the first element since it is an empty string
-      meetingEntity.state = stateZipCountry[0];
-      meetingEntity.zip = stateZipCountry[1];
-      meetingEntity.country = stateZipCountry[2];
-      const [day, time] = crMeeting.custom2[0]._.split(" ");
-      if (day && time) {
-        meetingEntity.day = day.toLowerCase().trim();
-        meetingEntity.time = moment(time, ["h:mm A"]).format("HH:mm"); // 12 hour time to 24 hour time (e.g., 5:00 PM to 17:00)
-      }
-      meetingEntity.lat = parseFloat(crMeeting.lat[0]);
-      meetingEntity.lng = parseFloat(crMeeting.lng[0]);
-    }
-    return meetingEntity;
-  } catch (err) {
-    logger.error("failed to map meeting", meeting, err);
-    return null;
-  }
-};
 
 const criteriaExists = (criteria: string) => {
   return criteria && criteria.length;
@@ -140,24 +17,16 @@ const criteriaExists = (criteria: string) => {
 const getMeetingsWithinDistance = (
   location: Location,
   meetings: Meeting[],
-  type?: MeetingType,
-  distance = 16000
+  distance = 16000,
 ) => {
-  const meetingsWithinDistance = [];
+  const meetingsWithinDistance: Meeting[] = [];
   meetings.forEach((meeting) => {
-    let meetingEntity = meeting;
-    if (type) {
-      meetingEntity = getMeetingEntity(meeting, type);
-      if (!meetingEntity) return;
-    }
     // 10 miles in meters
     if (
-      getDistance(
-        { lat: meetingEntity.lat || 0, lng: meetingEntity.lng || 0 },
-        location
-      ) <= distance
+      getDistance({ lat: meeting.lat || 0, lng: meeting.lng || 0 }, location) <=
+      distance
     ) {
-      meetingsWithinDistance.push(meetingEntity);
+      meetingsWithinDistance.push(meeting);
     }
   });
   return meetingsWithinDistance;
@@ -165,7 +34,7 @@ const getMeetingsWithinDistance = (
 
 export const filterCustomMeetings = (
   meetings: Meeting[],
-  criteria: MeetingSearchCriteria
+  criteria: MeetingSearchCriteria,
 ) => {
   logger.info("Filtering custom meetings by critera", criteria);
   return meetings.filter((meeting) => {
@@ -194,7 +63,7 @@ export const filterCustomMeetings = (
       meetingMeetsCriteria =
         getDistance(
           { lat: meeting.lat || 0, lng: meeting.lng || 0 },
-          criteria.location
+          criteria.location,
         ) <= 500 && meetingMeetsCriteria;
     }
     return meetingMeetsCriteria;
@@ -204,7 +73,7 @@ export const filterCustomMeetings = (
 export async function getCustomMeetings(
   location: { lat: number; lng: number },
   criteria?: MeetingSearchCriteria,
-  dayFilter?: string | null
+  dayFilter?: string | null,
 ): Promise<Meeting[]> {
   logger.info("Retrieving custom meetings");
   try {
@@ -221,7 +90,7 @@ export async function getCustomMeetings(
 
     const meetingQuery = await query.limit(100).get();
     let meetings = meetingQuery.docs.map(
-      (doc) => ({ id: doc.id, ...doc.data() } as Meeting)
+      (doc) => ({ id: doc.id, ...doc.data() }) as Meeting,
     );
     meetings = getMeetingsWithinDistance(location, meetings);
     if (criteria) {
@@ -235,85 +104,6 @@ export async function getCustomMeetings(
   return [];
 }
 
-export const filterMeetingsByCriteria = (
-  meetings: Meeting[],
-  criteria: MeetingSearchCriteria,
-  type: MeetingType
-) => {
-  let filteredMeetings = meetings.slice();
-  if (criteria && (type === "AA" || type === "Celebrate Recovery")) {
-    logger.info("Filtering by criteria", criteria);
-    if (criteria.name) {
-      filteredMeetings = meetings.filter((meeting) =>
-        meeting.name.toLowerCase().includes(criteria.name.toLowerCase())
-      );
-    }
-  }
-  if (criteria && type === "NA") {
-    logger.info("Filtering by criteria", criteria);
-    if (criteria.name) {
-      filteredMeetings = meetings.filter((meeting) =>
-        meeting.name.toLowerCase().includes(criteria.name.toLowerCase())
-      );
-    }
-    // do some stuff
-  }
-  return filteredMeetings;
-};
-
-export const getNarcoticsAnoymousMeetings = async (
-  location: Location,
-  criteria?: MeetingSearchCriteria,
-  day?: string
-) => {
-  try {
-    const start = Date.now();
-    const naMeetingList = await getNAMeetings(location, 10, day); // 15 miles
-    logger.info("NA meeting list", naMeetingList);
-    logger.info("NA meetings in", (Date.now() - start) / 1000, "seconds");
-    return filterMeetingsByCriteria(naMeetingList, criteria, "NA");
-  } catch (error) {
-    logger.info("Failed to get NA meetings", error);
-    return [];
-  }
-};
-
-export const getCelebrateMeetings = async (
-  location: Location,
-  criteria?: MeetingSearchCriteria
-) => {
-  logger.info("Retrieving celebrate recovery meetings...");
-  const result = await getCelebrateRecoveryMeetings(location.lat, location.lng);
-  const parsed = await parseXml(result);
-  const meetings = parsed.markers.marker
-    .map((meeting) => getMeetingEntity(meeting, "Celebrate Recovery"))
-    .filter((meeting) => meeting);
-  logger.info("Retrieved celebrate recovery meetings");
-  return filterMeetingsByCriteria(meetings, criteria, "Celebrate Recovery");
-};
-
-const parseXml = (xml: string): Promise<CelebrateRecoveryMeetings> => {
-  return new Promise((resolve, reject) => {
-    parseString(xml, (err, result: CelebrateRecoveryMeetings) => {
-      if (err) return reject(err);
-      resolve(result);
-    });
-  });
-};
-
-const mapFirestoreToMeeting = (
-  id: string,
-  data: FuncMeetingDocument
-): Meeting => {
-  const meeting = new Meeting();
-
-  meeting.createdAt = data.createdAt.toDate();
-  meeting.updatedAt = data.updatedAt.toDate();
-  meeting.id = data.id;
-
-  return meeting;
-};
-
 /**
  * Returns meetings by location and optionally by other criteria
  * @param location
@@ -322,7 +112,7 @@ const mapFirestoreToMeeting = (
 export async function getAlcoholicsAnonymousMeetings(
   location: { lat: number; lng: number },
   criteria?: MeetingSearchCriteria,
-  dayFilter?: string
+  dayFilter?: string,
 ): Promise<Meeting[]> {
   const startTime = Date.now();
   functions.logger.info("getAlcoholicsAnonymousMeetings called with:", {
@@ -338,7 +128,7 @@ export async function getAlcoholicsAnonymousMeetings(
     // Get geohash query bounds for the location and radius
     const bounds = geofire.geohashQueryBounds(
       [location.lat, location.lng],
-      radiusInM
+      radiusInM,
     );
     functions.logger.info("Generated geohash bounds:", { bounds });
 
@@ -386,7 +176,7 @@ export async function getAlcoholicsAnonymousMeetings(
         if (meeting.lat && meeting.lng) {
           const distanceInKm = geofire.distanceBetween(
             [meeting.lat, meeting.lng],
-            [location.lat, location.lng]
+            [location.lat, location.lng],
           );
           const distanceInM = distanceInKm * 1000;
 
@@ -434,27 +224,6 @@ export async function getAlcoholicsAnonymousMeetings(
     throw error;
   }
 }
-
-export const getAll12StepMeetings = async (
-  location: Location,
-  criteria?: MeetingSearchCriteria,
-  day?: string
-) => {
-  logger.info("Retrieving all 12 step meetings...");
-  const start = Date.now();
-  const meetingPromises = [
-    getAlcoholicsAnonymousMeetings(location, criteria, day),
-    getNarcoticsAnoymousMeetings(location, criteria, day),
-    getCelebrateMeetings(location, criteria),
-    getCustomMeetings(location, criteria, day),
-  ];
-  const meetings = await Promise.all(meetingPromises);
-  logger.info(
-    "Retrieved all 12 step meetings in ",
-    (Date.now() - start) / 1000
-  );
-  return [...meetings[0], ...meetings[1], ...meetings[2], ...meetings[3]];
-};
 
 /**
  * Gets the latitude and longitude from the NA meeting Location property
@@ -568,7 +337,7 @@ const longitudeBitsForResolution = function (resolution, latitude) {
 const latitudeBitsForResolution = function (resolution) {
   return Math.min(
     Math.log2(g_EARTH_MERI_CIRCUMFERENCE / 2 / resolution),
-    g_MAXIMUM_BITS_PRECISION
+    g_MAXIMUM_BITS_PRECISION,
   );
 };
 
@@ -611,7 +380,7 @@ const boundingBoxBits = function (coordinate, size) {
     bitsLat,
     bitsLongNorth,
     bitsLongSouth,
-    g_MAXIMUM_BITS_PRECISION
+    g_MAXIMUM_BITS_PRECISION,
   );
 };
 
@@ -662,7 +431,7 @@ const geohashQuery = function (geohash, bits) {
         " bits=" +
         bits +
         " g_BITS_PER_CHAR=" +
-        g_BITS_PER_CHAR
+        g_BITS_PER_CHAR,
     );
     return [geohash, geohash + "~"];
   }
@@ -685,7 +454,7 @@ const geohashQuery = function (geohash, bits) {
         " bits=" +
         bits +
         " g_BITS_PER_CHAR=" +
-        g_BITS_PER_CHAR
+        g_BITS_PER_CHAR,
     );
     return [base + g_BASE32[startValue], base + "~"];
   } else {
@@ -708,7 +477,7 @@ const geohashQueries = function (center, radius) {
   const queries = coordinates.map(function (coordinate) {
     return geohashQuery(
       geohash.encode(coordinate[0], coordinate[1]),
-      queryBits
+      queryBits,
     );
   });
   // remove duplicates
@@ -724,7 +493,7 @@ const geohashQueries = function (center, radius) {
 export function getQueriesForDocumentsAround(ref, center, radiusInKm, day) {
   const geohashesToQuery = geohashQueries(
     [center.lat, center.lon],
-    radiusInKm * 1000
+    radiusInKm * 1000,
   );
   logger.info("geohashes", JSON.stringify(geohashesToQuery));
   return geohashesToQuery.map(function (location) {
