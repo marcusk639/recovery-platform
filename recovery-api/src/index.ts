@@ -2,6 +2,7 @@
 // Firebase Functions v2 discovers and deploys each exported function.
 export * from './callable/users';
 export * from './callable/referrals';
+export * from './callable/findMeetings';
 export * from './callable/identity';
 export * from './http/health';
 export * from './triggers/onUserWrite';
