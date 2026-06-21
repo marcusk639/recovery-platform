@@ -17,7 +17,7 @@ export class DownloadComponent extends BaseComponent implements OnInit {
   openGooglePlay() {
     if (!isPlatformBrowser(this.platformId)) return;
     window.location.href =
-      "https://play.google.com/store/apps/details?id=com.rats.dev&hl=en&gl=US";
+      "https://play.google.com/store/apps/details?id=com.regroup.app&hl=en&gl=US";
   }
 
   openAppStore() {

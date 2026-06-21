@@ -8,7 +8,7 @@
 
 const APP_STORE_URL = "https://apps.apple.com/app/homegroups/id0000000000"; // TODO: real ID
 const PLAY_STORE_URL =
-  "https://play.google.com/store/apps/details?id=com.homegroups";
+  "https://play.google.com/store/apps/details?id=com.recoveryconnect";
 // Note: update to the custom domain (homegroups-app.com) once DNS is configured.
 // Firebase Hosting's default domain is what's live today.
 const WEB_ORIGIN = "https://recovery-connect-cad4b.web.app";
