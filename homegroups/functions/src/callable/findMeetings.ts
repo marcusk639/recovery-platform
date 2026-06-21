@@ -40,6 +40,98 @@ export type MeetingTypeFilters =
   | "all"
   | "Celebrate Recovery";
 
+const MEETING_TYPE_FILTERS: readonly MeetingTypeFilters[] = [
+  "AA",
+  "NA",
+  "AL-ANON",
+  "Religious",
+  "Custom",
+  "all",
+  "Celebrate Recovery",
+];
+
+/**
+ * Validates and normalizes raw `request.data` for findMeetings. Replaces the
+ * prior unchecked `request.data as MeetingSearchInput` cast (B1 hardening).
+ * Throws HttpsError("invalid-argument") on malformed input so bad requests fail
+ * fast rather than flowing untyped into the handler.
+ */
+function validateFindMeetingsInput(data: unknown): MeetingSearchInput {
+  if (typeof data !== "object" || data === null) {
+    throw new HttpsError("invalid-argument", "Request data must be an object.");
+  }
+
+  const { filters, criteria } = data as Record<string, unknown>;
+
+  if (typeof filters !== "object" || filters === null) {
+    throw new HttpsError(
+      "invalid-argument",
+      "filters are required for meeting search.",
+    );
+  }
+  const f = filters as Record<string, unknown>;
+
+  if (typeof f.location !== "object" || f.location === null) {
+    throw new HttpsError(
+      "invalid-argument",
+      "filters.location is required and must contain lat and lng.",
+    );
+  }
+  const { lat, lng } = f.location as Record<string, unknown>;
+  if (
+    typeof lat !== "number" ||
+    !Number.isFinite(lat) ||
+    typeof lng !== "number" ||
+    !Number.isFinite(lng)
+  ) {
+    throw new HttpsError(
+      "invalid-argument",
+      "filters.location.lat and filters.location.lng must be finite numbers.",
+    );
+  }
+
+  let type: MeetingTypeFilters = "all";
+  if (f.type !== undefined) {
+    if (
+      typeof f.type !== "string" ||
+      !MEETING_TYPE_FILTERS.includes(f.type as MeetingTypeFilters)
+    ) {
+      throw new HttpsError(
+        "invalid-argument",
+        `filters.type must be one of: ${MEETING_TYPE_FILTERS.join(", ")}.`,
+      );
+    }
+    type = f.type as MeetingTypeFilters;
+  }
+
+  if (f.day !== undefined && typeof f.day !== "string") {
+    throw new HttpsError(
+      "invalid-argument",
+      "filters.day must be a string when provided.",
+    );
+  }
+
+  if (
+    criteria !== undefined &&
+    (typeof criteria !== "object" || criteria === null)
+  ) {
+    throw new HttpsError(
+      "invalid-argument",
+      "criteria must be an object when provided.",
+    );
+  }
+
+  return {
+    filters: {
+      date: typeof f.date === "string" ? f.date : "",
+      location: { lat, lng },
+      day: f.day as string | undefined,
+      type,
+    },
+    criteria: criteria as MeetingSearchCriteria | undefined,
+  };
+}
+
 // Interface for serialized meeting data
 interface SerializedMeeting {
   id: string;
@@ -153,6 +245,9 @@ export const findMeetings = onCall(async (request: CallableRequest) => {
     throw new HttpsError("unauthenticated", "Must be authenticated.");
   }
 
+  // Validate before the try block so invalid-argument is not rewrapped as internal.
+  const meetingInput = validateFindMeetingsInput(request.data);
+
   const startTime = Date.now();
   logger.info("findMeetings called with request:", {
     filters: request.data?.filters,
@@ -160,7 +255,6 @@ export const findMeetings = onCall(async (request: CallableRequest) => {
   });
 
   try {
-    const meetingInput = request.data as MeetingSearchInput;
     const meetingPromises: Promise<Meeting[]>[] = [];
     const dayFilter = meetingInput.filters?.day?.toLowerCase();
 

@@ -140,3 +140,123 @@ describe("findMeetings auth check (FH-1)", () => {
     expect(Array.isArray(result)).toBe(true);
   });
 });
+
+describe("findMeetings input validation (B1)", () => {
+  const authedRequest = (data: unknown) => ({
+    auth: { uid: "user-123", token: {} },
+    data,
+  });
+
+  it("rejects missing filters with invalid-argument", async () => {
+    jest.resetModules();
+    const { findMeetings } = await import("../callable/findMeetings");
+
+    await expect(
+      (findMeetings as Function)(authedRequest({})),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+  });
+
+  it("rejects missing filters.location with invalid-argument", async () => {
+    jest.resetModules();
+    const { findMeetings } = await import("../callable/findMeetings");
+
+    await expect(
+      (findMeetings as Function)(authedRequest({ filters: { type: "AA" } })),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+  });
+
+  it("rejects non-finite location coordinates with invalid-argument", async () => {
+    jest.resetModules();
+    const { findMeetings } = await import("../callable/findMeetings");
+
+    await expect(
+      (findMeetings as Function)(
+        authedRequest({
+          filters: { location: { lat: "40.7", lng: -74.006 } },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+  });
+
+  it("rejects NaN location coordinates with invalid-argument", async () => {
+    jest.resetModules();
+    const { findMeetings } = await import("../callable/findMeetings");
+
+    await expect(
+      (findMeetings as Function)(
+        authedRequest({ filters: { location: { lat: NaN, lng: -74.006 } } }),
+      ),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+  });
+
+  it("rejects Infinity location coordinates with invalid-argument", async () => {
+    jest.resetModules();
+    const { findMeetings } = await import("../callable/findMeetings");
+
+    await expect(
+      (findMeetings as Function)(
+        authedRequest({
+          filters: { location: { lat: 40.7128, lng: Infinity } },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+  });
+
+  it("rejects an unknown filters.type with invalid-argument", async () => {
+    jest.resetModules();
+    const { findMeetings } = await import("../callable/findMeetings");
+
+    await expect(
+      (findMeetings as Function)(
+        authedRequest({
+          filters: {
+            location: { lat: 40.7128, lng: -74.006 },
+            type: "BOGUS",
+          },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+  });
+
+  it("rejects a non-string filters.day with invalid-argument", async () => {
+    jest.resetModules();
+    const { findMeetings } = await import("../callable/findMeetings");
+
+    await expect(
+      (findMeetings as Function)(
+        authedRequest({
+          filters: { location: { lat: 40.7128, lng: -74.006 }, day: 5 },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+  });
+
+  it("defaults a missing type to 'all' and returns an array", async () => {
+    jest.resetModules();
+    const { findMeetings } = await import("../callable/findMeetings");
+
+    const result = await (findMeetings as Function)(
+      authedRequest({
+        filters: { location: { lat: 40.7128, lng: -74.006 } },
+      }),
+    );
+    expect(Array.isArray(result)).toBe(true);
+  });
+
+  it("passes valid input through unchanged and returns an array", async () => {
+    jest.resetModules();
+    const { findMeetings } = await import("../callable/findMeetings");
+
+    const result = await (findMeetings as Function)(
+      authedRequest({
+        filters: {
+          location: { lat: 40.7128, lng: -74.006 },
+          day: "monday",
+          type: "AA",
+        },
+        criteria: { city: "New York" },
+      }),
+    );
+    expect(Array.isArray(result)).toBe(true);
+  });
+});
