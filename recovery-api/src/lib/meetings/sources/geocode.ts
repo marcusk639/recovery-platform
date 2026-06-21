@@ -37,8 +37,13 @@ export interface GeocodeDeps {
   fetchFn?: typeof fetch;
 }
 
-const GEOCODE = (street: string, city: string, state: string, key: string): string =>
-  `https://maps.googleapis.com/maps/api/geocode/json?address=${street},+${city},+${state}&key=${key}`;
+const GEOCODE = (street: string, city: string, state: string, key: string): string => {
+  // Encode each data-derived address component so characters like `&` or `#`
+  // can't corrupt the query string or break out into the `key` param. The key
+  // is from Secret Manager (safe) and is intentionally left un-encoded.
+  const address = `${encodeURIComponent(street)},+${encodeURIComponent(city)},+${encodeURIComponent(state)}`;
+  return `https://maps.googleapis.com/maps/api/geocode/json?address=${address}&key=${key}`;
+};
 
 const REVERSE_GEOCODE = (lat: number, lng: number, key: string): string =>
   `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}+&key=${key}`;

@@ -191,6 +191,22 @@ describe('findMeetings audit row', () => {
     expect(result.meetings.map((m) => m.id)).toEqual(['m1']);
   });
 
+  it('returns results WITHOUT awaiting the audit write (fire-and-forget)', async () => {
+    // The audit write returns a promise that never resolves. If handleFindMeetings
+    // awaited it the call would hang; instead it must resolve the meetings
+    // immediately while the audit write is still pending.
+    const { db, requestsCollection } = makeDb([meeting({ id: 'm1' })]);
+    (requestsCollection.add as jest.Mock).mockImplementationOnce(
+      () => new Promise(() => {}), // never resolves / never rejects
+    );
+
+    const result = await handleFindMeetings({ location: CENTER }, ctx, { db });
+
+    expect(result.meetings.map((m) => m.id)).toEqual(['m1']);
+    // The audit write was kicked off (fire-and-forget), not awaited.
+    expect(requestsCollection.add).toHaveBeenCalledTimes(1);
+  });
+
   it('stores null for omitted day/type', async () => {
     const { db, addedDocs } = makeDb([meeting()]);
     await handleFindMeetings({ location: CENTER }, ctx, { db });

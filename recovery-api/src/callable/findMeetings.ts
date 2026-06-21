@@ -103,10 +103,13 @@ export async function handleFindMeetings(
     }
   }
 
-  // Per-request attribution audit row. Best-effort: a write failure must NOT
-  // block returning results. Stores ONLY a hashed uid + coarsened coordinates —
-  // never email, names, or the raw uid.
-  await writeAuditRow(db, context, parsed);
+  // Per-request attribution audit row. FIRE-AND-FORGET: the write must NOT add
+  // its latency to the read hot path, and a write failure must NOT block (or
+  // reject) returning results. We deliberately do NOT await it. Stores ONLY a
+  // hashed uid + coarsened coordinates — never email, names, or the raw uid.
+  void writeAuditRow(db, context, parsed).catch((err) =>
+    logger.warn('findMeetings: audit write failed', err),
+  );
 
   return { meetings };
 }
@@ -121,20 +124,17 @@ async function writeAuditRow(
   context: ServiceAuthContext,
   parsed: z.infer<typeof FindMeetingsSchema>,
 ): Promise<void> {
-  try {
-    await db.collection('directoryMeetingRequests').add({
-      appId: context.appId,
-      uidHash: hashUid(context.uid),
-      day: parsed.day ?? null,
-      type: parsed.type ?? null,
-      lat: coarsen(parsed.location.lat),
-      lng: coarsen(parsed.location.lng),
-      at: FieldValue.serverTimestamp(),
-    });
-  } catch (err) {
-    // Attribution is non-critical — log and continue so the read still returns.
-    logger.warn('findMeetings: audit write failed', err);
-  }
+  // No try/catch here: the caller invokes this fire-and-forget and attaches a
+  // .catch() that logs failures, so a rejection never reaches the read path.
+  await db.collection('directoryMeetingRequests').add({
+    appId: context.appId,
+    uidHash: hashUid(context.uid),
+    day: parsed.day ?? null,
+    type: parsed.type ?? null,
+    lat: coarsen(parsed.location.lat),
+    lng: coarsen(parsed.location.lng),
+    at: FieldValue.serverTimestamp(),
+  });
 }
 
 export const findMeetings = onCall(

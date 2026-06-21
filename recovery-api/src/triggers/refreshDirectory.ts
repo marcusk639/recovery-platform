@@ -150,6 +150,14 @@ export async function refreshSlice(deps: RefreshDeps): Promise<RefreshSliceResul
     await ingestGridCell(lat, lng, { db: database, fetchFn });
   }
 
+  // Cursor advances past EVERY cell in this slice unconditionally — including any
+  // cell where one source fetcher failed (ingestGridCell now returns a non-zero
+  // fetchErrors but still upserts the healthy source rather than throwing). This
+  // is an INTENTIONAL design choice: we do NOT retry/re-pin a partially-failed
+  // cell. A transient source outage self-heals on the NEXT full sweep, and the
+  // stale-prune horizon (STALE_PRUNE_DAYS) plus lastSeenAt re-stamping eventually
+  // reconcile any rows missed during the outage. Pinning the cursor on partial
+  // failures would risk stalling the whole grid behind one flaky source.
   await writeCursor(database, nextCursor);
 
   // Run the stale prune at the close of each full grid cycle.

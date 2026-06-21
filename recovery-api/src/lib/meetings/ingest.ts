@@ -1,4 +1,5 @@
 import { FieldValue } from 'firebase-admin/firestore';
+import { logger } from 'firebase-functions/v2';
 import type { DirectoryMeeting } from '../../entities/DirectoryMeeting';
 import { directoryMeetingId } from './identity';
 import { fetchAAMeetings } from './sources/meetingGuide';
@@ -74,6 +75,12 @@ export interface IngestResult {
   upserted: number;
   /** Records skipped because the existing doc is app-owned. */
   skippedAppOwned: number;
+  /**
+   * Number of source fetchers that rejected for this cell. Additive/observability
+   * field: a single source failing no longer drops the whole cell — the healthy
+   * source's data is still upserted. 0 means all sources succeeded.
+   */
+  fetchErrors: number;
 }
 
 /**
@@ -114,12 +121,34 @@ export async function ingestGridCell(
 ): Promise<IngestResult> {
   const { db, fetchFn } = deps;
 
-  const [aa, cr] = await Promise.all([
-    fetchAAMeetings(lat, lng, { fetchFn }),
-    fetchCelebrateRecoveryMeetings(lat, lng, { fetchFn }),
-  ]);
+  // Resilient fan-out: one source rejecting must NOT drop the whole cell (and
+  // with it the healthy source's data). Use allSettled, keep the fulfilled
+  // results, and log+count the rejected ones for observability.
+  const sources: Array<{ name: string; fetch: () => Promise<DirectoryMeeting[]> }> = [
+    { name: 'AA', fetch: () => fetchAAMeetings(lat, lng, { fetchFn }) },
+    {
+      name: 'CelebrateRecovery',
+      fetch: () => fetchCelebrateRecoveryMeetings(lat, lng, { fetchFn }),
+    },
+  ];
 
-  const fetched = [...aa, ...cr];
+  const settled = await Promise.allSettled(sources.map((s) => s.fetch()));
+
+  const fetched: DirectoryMeeting[] = [];
+  let fetchErrors = 0;
+  settled.forEach((outcome, i) => {
+    if (outcome.status === 'fulfilled') {
+      fetched.push(...outcome.value);
+    } else {
+      fetchErrors++;
+      logger.warn('ingestGridCell: source fetch failed', {
+        source: sources[i].name,
+        lat,
+        lng,
+        error: outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason),
+      });
+    }
+  });
 
   // Dedupe within the cell by directory id (the same room can surface from
   // overlapping radius queries). Keep the first occurrence.
@@ -172,5 +201,5 @@ export async function ingestGridCell(
     await batch.commit();
   }
 
-  return { fetched: fetched.length, upserted, skippedAppOwned };
+  return { fetched: fetched.length, upserted, skippedAppOwned, fetchErrors };
 }

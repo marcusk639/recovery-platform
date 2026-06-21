@@ -15,6 +15,11 @@ jest.mock('firebase-admin/firestore', () => ({
   FieldValue: { serverTimestamp: () => SERVER_TS },
 }));
 
+// Silence the package logger (used for source-fetch failure warnings).
+jest.mock('firebase-functions/v2', () => ({
+  logger: { warn: jest.fn(), info: jest.fn(), error: jest.fn() },
+}));
+
 /** A minimal source meeting (pre-timestamp slice, as the fetchers return). */
 function sourceMeeting(over: Partial<DirectoryMeeting> = {}): DirectoryMeeting {
   return {
@@ -195,6 +200,41 @@ describe('ingestGridCell', () => {
     expect(doc).toEqual(appDoc);
     expect(doc.source).toBe('app');
     expect(doc.lastSeenAt).toBeUndefined();
+  });
+
+  it('upserts the healthy source when the other source rejects (one failure does not drop the cell)', async () => {
+    const { db, store } = makeDb();
+
+    // A valid CR marker XML that maps to one DirectoryMeeting.
+    const crXml =
+      '<markers>' +
+      '<marker>' +
+      '<name>Hope CR Group</name>' +
+      '<address>2 Oak St, Dallas,  TX 75001 USA</address>' +
+      '<lat>32.7</lat>' +
+      '<lng>-96.8</lng>' +
+      '<custom2 name="schedule">Friday 5:00 PM</custom2>' +
+      '</marker>' +
+      '</markers>';
+
+    // AA (meetingguide.org) rejects; Celebrate Recovery resolves.
+    const fetchFn = jest.fn(async (url: unknown) => {
+      if (typeof url === 'string' && url.includes('meetingguide.org')) {
+        throw new Error('AA source down');
+      }
+      return { ok: true, text: async () => crXml };
+    }) as unknown as jest.Mock & typeof fetch;
+
+    const result = await ingestGridCell(40, -100, { db, fetchFn });
+
+    // The healthy CR meeting was still upserted; exactly one source failed.
+    expect(result.fetchErrors).toBe(1);
+    expect(result.upserted).toBe(1);
+    expect(store.size).toBe(1);
+
+    const doc = [...store.values()][0];
+    expect(doc.name).toBe('Hope CR Group');
+    expect(doc.provider).toBe('CELEBRATE_RECOVERY');
   });
 
   it('does zero real network and zero real Firestore (mocks only)', async () => {

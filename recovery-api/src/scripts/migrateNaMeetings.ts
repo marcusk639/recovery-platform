@@ -112,6 +112,24 @@ function buildNaPayload(m: DirectoryMeeting): Record<string, unknown> {
 export async function runMigration(deps: MigrateDeps): Promise<MigrateResult> {
   const { sourceDb, destDb } = deps;
 
+  // Guard the same-instance no-op. A REAL cross-project migration requires the
+  // SOURCE (product project, e.g. recovery-connect-cad4b) and DEST
+  // (recovery-platform) to be DISTINCT Firestore instances wired with per-project
+  // admin credentials. main() currently defaults both to getFirestore(), so an
+  // operator who forgets the two-project setup would silently read the wrong
+  // project (typically read=0) and think the migration "succeeded". We do NOT
+  // hard-throw (single-project emulator/test runs are legitimate) but the warning
+  // must be loud and unmissable in the logs.
+  if (sourceDb === destDb) {
+    console.warn(
+      '⚠️  migrateNaMeetings: WARNING — sourceDb and destDb are the SAME Firestore instance. ' +
+        'A real cross-project NA migration needs DISTINCT source/destination Firestore ' +
+        "instances, each with that project's admin credentials. If you intended a real " +
+        'migration, you are almost certainly pointed at the wrong project (expect read=0). ' +
+        'Single-project emulator/test runs can ignore this warning.',
+    );
+  }
+
   const snapshot = await sourceDb.collection(SOURCE_COLLECTION).get();
   const read = snapshot.size;
 

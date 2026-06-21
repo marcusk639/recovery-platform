@@ -36,6 +36,20 @@ describe('geocode', () => {
     expect(url).toContain('https://maps.googleapis.com/maps/api/geocode/json?address=');
     expect(url).toContain('key=TEST_KEY');
   });
+
+  it('percent-encodes address components so `&`/spaces cannot corrupt the URL or key param', async () => {
+    const fetchFn = makeFetch({ status: 'OK', results: [] });
+    await geocode({ street: 'Foo & Bar St', city: 'New York', state: 'NY' }, deps(fetchFn));
+
+    const url = fetchFn.mock.calls[0][0] as string;
+    // The literal "&" from the street is encoded (not a raw `&` that would split params).
+    expect(url).toContain('Foo%20%26%20Bar%20St');
+    expect(url).not.toContain('Foo & Bar St');
+    // Spaces in the city are encoded too.
+    expect(url).toContain('New%20York');
+    // The key remains the final, intact param.
+    expect(url.endsWith('key=TEST_KEY')).toBe(true);
+  });
 });
 
 describe('reverseGeocode', () => {
