@@ -34,6 +34,15 @@ export const RATS_API_KEY = defineSecret("RATS_API_KEY");
 // Restrict to specific APIs + IPs in Google Cloud Console.
 export const GOOGLE_MAPS_API_KEY = defineSecret("GOOGLE_MAPS_API_KEY");
 
+// Shared service key for server-to-server calls into recovery-api (the shared
+// meeting directory). Must match recovery-api's RECOVERY_PLATFORM_API_KEY.
+// Set in Firebase Secret Manager: firebase functions:secrets:set RECOVERY_PLATFORM_API_KEY
+// The recovery-api base URL is a non-secret deploy config read from
+// process.env.RECOVERY_API_BASE_URL.
+export const RECOVERY_PLATFORM_API_KEY = defineSecret(
+  "RECOVERY_PLATFORM_API_KEY",
+);
+
 export const SUBSCRIPTION_TIERS = {
   traditional: {
     starter: {

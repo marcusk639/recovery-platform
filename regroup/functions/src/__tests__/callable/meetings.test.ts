@@ -11,18 +11,16 @@ jest.mock("firebase-functions", () => ({
   logger: { info: jest.fn(), error: jest.fn(), warn: jest.fn() },
 }));
 
-const mockGetAlcoholicsAnonymousMeetings = jest.fn();
-const mockGetNarcoticsAnoymousMeetings = jest.fn();
-const mockGetAll12StepMeetings = jest.fn();
-const mockGeocodeNAMeeting = jest.fn();
+const mockFetchDirectoryMeetings = jest.fn();
+jest.mock("../../api/recoveryApi", () => ({
+  fetchDirectoryMeetings: mockFetchDirectoryMeetings,
+}));
 
+const mockGetCustomMeetings = jest.fn();
+const mockGeocodeNAMeeting = jest.fn();
 jest.mock("../../util/meetings", () => ({
-  getAlcoholicsAnonymousMeetings: mockGetAlcoholicsAnonymousMeetings,
-  getNarcoticsAnoymousMeetings: mockGetNarcoticsAnoymousMeetings,
-  getAll12StepMeetings: mockGetAll12StepMeetings,
+  getCustomMeetings: mockGetCustomMeetings,
   geocodeNAMeeting: mockGeocodeNAMeeting,
-  getCustomMeetings: jest.fn().mockResolvedValue([]),
-  getCelebrateMeetings: jest.fn().mockResolvedValue([]),
 }));
 
 const mockGetDistance = jest.fn();
@@ -36,52 +34,122 @@ const fakeAuth = { uid: "test-user" };
 const call = (fn: unknown, data: unknown) =>
   (fn as Function)({ data, auth: fakeAuth });
 
-beforeEach(() => jest.clearAllMocks());
+const directoryMeeting = (over: Record<string, unknown> = {}) => ({
+  id: "dir-1",
+  source: "external",
+  provider: "AA",
+  name: "AA Meeting",
+  day: 1,
+  time: "19:30",
+  location: { lat: 30.2, lng: -97.7, address: "1 Main St", city: "Austin" },
+  online: false,
+  ...over,
+});
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockFetchDirectoryMeetings.mockResolvedValue([]);
+  mockGetCustomMeetings.mockResolvedValue([]);
+});
 
 describe("findMeetings", () => {
   const location = { lat: 30.267, lng: -97.743 };
 
-  it("calls getAlcoholicsAnonymousMeetings for AA type", async () => {
-    mockGetAlcoholicsAnonymousMeetings.mockResolvedValue([]);
+  it("queries the recovery-api directory for AA type", async () => {
     await call(findMeetings, { filters: { type: "AA", location, day: "" } });
-    expect(mockGetAlcoholicsAnonymousMeetings).toHaveBeenCalled();
+    expect(mockFetchDirectoryMeetings).toHaveBeenCalled();
   });
 
-  it("calls getNarcoticsAnoymousMeetings for NA type", async () => {
-    mockGetNarcoticsAnoymousMeetings.mockResolvedValue([]);
+  it("queries the recovery-api directory for NA type", async () => {
     await call(findMeetings, {
       filters: { type: "NA", location, day: "monday" },
     });
-    expect(mockGetNarcoticsAnoymousMeetings).toHaveBeenCalled();
+    expect(mockFetchDirectoryMeetings).toHaveBeenCalled();
   });
 
-  it('calls getAll12StepMeetings for "all" type', async () => {
-    mockGetAll12StepMeetings.mockResolvedValue([]);
-    await call(findMeetings, { filters: { type: "all", location, day: "" } });
-    expect(mockGetAll12StepMeetings).toHaveBeenCalled();
-  });
-
-  it("returns an array of meeting results", async () => {
-    mockGetAlcoholicsAnonymousMeetings.mockResolvedValue([
-      { name: "AA Meeting" },
+  it("filters directory results down to the requested provider", async () => {
+    mockFetchDirectoryMeetings.mockResolvedValue([
+      directoryMeeting({ provider: "AA", name: "AA One" }),
+      directoryMeeting({ provider: "NA", name: "NA One" }),
     ]);
     const result = await call(findMeetings, {
       filters: { type: "AA", location, day: "" },
     });
-    expect(Array.isArray(result)).toBe(true);
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("AA One");
+    expect(result[0].type).toBe("AA");
   });
 
-  it("returns meetings from the resolved promise", async () => {
-    const fakeMeetings = [
-      { name: "Test Meeting" },
-      { name: "Another Meeting" },
-    ];
-    mockGetAlcoholicsAnonymousMeetings.mockResolvedValue(fakeMeetings);
+  it("returns custom meetings only for Custom type without hitting the directory", async () => {
+    mockGetCustomMeetings.mockResolvedValue([{ name: "House Meeting" }]);
+    const result = await call(findMeetings, {
+      filters: { type: "Custom", location, day: "" },
+    });
+    expect(mockFetchDirectoryMeetings).not.toHaveBeenCalled();
+    expect(result).toEqual([{ name: "House Meeting" }]);
+  });
+
+  it("merges directory + custom meetings for 'all' type", async () => {
+    mockFetchDirectoryMeetings.mockResolvedValue([
+      directoryMeeting({ provider: "AA", name: "AA One" }),
+    ]);
+    mockGetCustomMeetings.mockResolvedValue([{ name: "House Meeting" }]);
+    const result = await call(findMeetings, {
+      filters: { type: "all", location, day: "" },
+    });
+    const names = result.map((m: any) => m.name);
+    expect(names).toContain("AA One");
+    expect(names).toContain("House Meeting");
+  });
+
+  it("returns an empty array for AL-ANON without hitting the directory", async () => {
+    const result = await call(findMeetings, {
+      filters: { type: "AL-ANON", location, day: "" },
+    });
+    expect(result).toEqual([]);
+    expect(mockFetchDirectoryMeetings).not.toHaveBeenCalled();
+  });
+
+  it("returns an array of RatsMeeting results", async () => {
+    mockFetchDirectoryMeetings.mockResolvedValue([directoryMeeting()]);
     const result = await call(findMeetings, {
       filters: { type: "AA", location, day: "" },
     });
-    expect(result).toHaveLength(2);
-    expect(result[0].name).toBe("Test Meeting");
+    expect(Array.isArray(result)).toBe(true);
+    expect(result[0].name).toBe("AA Meeting");
+  });
+
+  it("maps the directory day index to a weekday string", async () => {
+    mockFetchDirectoryMeetings.mockResolvedValue([
+      directoryMeeting({ day: 1 }),
+    ]);
+    const result = await call(findMeetings, {
+      filters: { type: "AA", location, day: "monday" },
+    });
+    expect(result[0].day).toBe("monday");
+  });
+
+  it("forwards the numeric day index and caller uid to the directory query", async () => {
+    await call(findMeetings, {
+      filters: { type: "AA", location, day: "monday" },
+    });
+    expect(mockFetchDirectoryMeetings).toHaveBeenCalledWith(
+      expect.objectContaining({ day: 1 }),
+      expect.objectContaining({ uid: "test-user" }),
+    );
+  });
+
+  it("filters mapped results by name criteria", async () => {
+    mockFetchDirectoryMeetings.mockResolvedValue([
+      directoryMeeting({ name: "Sunrise Group" }),
+      directoryMeeting({ name: "Evening Group" }),
+    ]);
+    const result = await call(findMeetings, {
+      filters: { type: "AA", location, day: "" },
+      criteria: { name: "sunrise" },
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("Sunrise Group");
   });
 });
 
