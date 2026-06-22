@@ -44,8 +44,8 @@ import { ActivatedRoute } from "@angular/router";
         align-items: center;
         min-height: 100vh;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          sans-serif;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       }
 
       .redirect-content {
@@ -148,7 +148,7 @@ export class RedirectComponent implements OnInit {
 
   constructor(
     @Inject(PLATFORM_ID) private platformId: Object,
-    private route: ActivatedRoute
+    private route: ActivatedRoute,
   ) {}
 
   ngOnInit() {
@@ -184,7 +184,7 @@ export class RedirectComponent implements OnInit {
     if (this.customSchemeUrl) {
       const universalLink = this.customSchemeUrl.replace(
         "regroup-app://",
-        "https://regroup-app.com/"
+        "https://regroup-app.com/",
       );
       window.location.href = universalLink;
     }
@@ -194,7 +194,7 @@ export class RedirectComponent implements OnInit {
     if (this.customSchemeUrl) {
       const bundleIdScheme = this.customSchemeUrl.replace(
         "regroup-app://",
-        "com.rats.dev://"
+        "com.rats.dev://",
       );
       window.location.href = bundleIdScheme;
     }
@@ -210,12 +210,36 @@ export class RedirectComponent implements OnInit {
     this.userAgent = navigator.userAgent;
 
     if (redirectUrl) {
-      this.customSchemeUrl = decodeURIComponent(redirectUrl);
-      this.redirectToCustomScheme(this.customSchemeUrl);
+      const decoded = decodeURIComponent(redirectUrl);
+      // Open-redirect guard: only act on known app deep-link schemes / our own
+      // domain. Anything else (javascript:, external phishing URLs) falls back
+      // to home instead of being navigated to.
+      if (this.isAllowedDeepLink(decoded)) {
+        this.customSchemeUrl = decoded;
+        this.redirectToCustomScheme(this.customSchemeUrl);
+      } else {
+        window.location.href = "/";
+      }
     } else {
       // Fallback to home page if no redirect URL
       window.location.href = "/";
     }
+  }
+
+  // Prefixes accepted from the untrusted `?url=` parameter. Scheme comparison
+  // is case-insensitive so e.g. "JavaScript:" cannot slip past the allowlist.
+  private static readonly ALLOWED_DEEP_LINK_PREFIXES = [
+    "regroup-app://",
+    "com.rats.dev://",
+    "https://regroup-app.com/",
+    "https://regroup-app.page.link/",
+  ];
+
+  private isAllowedDeepLink(url: string): boolean {
+    const normalized = url.trim().toLowerCase();
+    return RedirectComponent.ALLOWED_DEEP_LINK_PREFIXES.some((prefix) =>
+      normalized.startsWith(prefix),
+    );
   }
 
   private redirectToCustomScheme(customSchemeUrl: string) {
@@ -250,11 +274,11 @@ export class RedirectComponent implements OnInit {
       setTimeout(() => {
         const bundleIdScheme = appUrl.replace(
           "regroup-app://",
-          "com.rats.dev://"
+          "com.rats.dev://",
         );
         console.log(
           "attemptAppLaunchWithFallbacks - trying bundle ID scheme:",
-          bundleIdScheme
+          bundleIdScheme,
         );
         this.attemptAppLaunch(bundleIdScheme, fallbackUrl);
       }, 500);
@@ -266,19 +290,19 @@ export class RedirectComponent implements OnInit {
       if (appUrl.startsWith("regroup-app://")) {
         universalLink = appUrl.replace(
           "regroup-app://",
-          "https://regroup-app.com/"
+          "https://regroup-app.com/",
         );
       } else if (appUrl.startsWith("com.rats.dev://")) {
         universalLink = appUrl.replace(
           "com.rats.dev://",
-          "https://regroup-app.com/"
+          "https://regroup-app.com/",
         );
       } else {
         universalLink = appUrl;
       }
       console.log(
         "attemptAppLaunchWithFallbacks - trying universal link:",
-        universalLink
+        universalLink,
       );
       this.attemptAppLaunch(universalLink, fallbackUrl);
     }, 1000);
@@ -316,7 +340,7 @@ export class RedirectComponent implements OnInit {
     // Clean up and fallback
     setTimeout(() => {
       console.log(
-        "attemptAppLaunch - timeout reached, redirecting to fallback"
+        "attemptAppLaunch - timeout reached, redirecting to fallback",
       );
       if (document.body.contains(iframe)) {
         document.body.removeChild(iframe);
