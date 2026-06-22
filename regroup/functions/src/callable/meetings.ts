@@ -117,7 +117,9 @@ export const findMeetings = onCall(
     const { location, day, type } = data.filters;
     const criteria = data.criteria;
     try {
-      logger.info("FIND MEETING Filters", data.filters);
+      // Do not log data.filters — it contains the caller's precise GPS
+      // coordinates (PII). Log only non-identifying query dimensions.
+      logger.info("FIND MEETING", { day, type });
 
       // Custom (regroup-owned) house meetings live only in regroup Firestore — not
       // the shared directory — so they are served locally without a directory call.

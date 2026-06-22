@@ -125,7 +125,6 @@ export const createGuestInvite = (
 export const uploadHousePhotos = async (
   houses: Houses,
 ): Promise<{ houseId: string; url: string }[]> => {
-  console.log('uploadHousePhotos - houses:', houses);
   const promises: Promise<{ houseId: string; url: string }>[] = [];
   each(houses, house => {
     if (house.imageUrl) {

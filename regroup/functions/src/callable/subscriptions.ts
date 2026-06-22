@@ -823,7 +823,11 @@ export const sendInviteEmails = onCall(
       await Promise.all(promises);
       logger.info("Invite emails sent!");
     } catch (err) {
-      logger.info("ERROR!", JSON.stringify(err));
+      // Use logger.error (surfaces in alerting) and a sanitized message —
+      // the raw SendGrid error can echo recipient email addresses (PII).
+      logger.error("sendInviteEmails: email delivery failed", {
+        err: (err as Error).message,
+      });
     }
   },
 );

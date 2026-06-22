@@ -133,7 +133,6 @@ const AppContent: React.FC = () => {
     // Auth Listener
     const unsubscribeAuth = auth().onAuthStateChanged(
       async (user: FirebaseAuthTypes.User | null) => {
-        console.log('Auth state changed, user:', user?.uid);
         dispatch(setUser(user)); // Update user in Redux store
         if (user) {
           await dispatch(fetchUserData(user.uid)); // Fetch user data
@@ -416,9 +415,10 @@ const App = () => {
           // Set user identifier for crash reports (helps identify affected users)
           await crashlytics().setUserId(user.uid);
 
-          // Set custom attributes for better crash context
+          // Set custom attributes for better crash context. Do NOT send email
+          // (PII) to Crashlytics — setUserId(uid) above already correlates
+          // crashes to a user without exposing personal data.
           await crashlytics().setAttributes({
-            email: user.email || 'anonymous',
             signInMethod: user.providerData[0]?.providerId || 'unknown',
           });
 
@@ -461,10 +461,6 @@ const App = () => {
   }, [isOffline]);
 
   useEffect(() => {
-    console.log(
-      'Initializing Stripe with publishable key:',
-      process.env.STRIPE_TEST_PUBLISHABLE_KEY,
-    );
     initStripe({
       publishableKey: process.env.STRIPE_TEST_PUBLISHABLE_KEY as string,
     });

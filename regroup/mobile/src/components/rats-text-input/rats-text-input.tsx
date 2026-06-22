@@ -237,9 +237,6 @@ const RatsTextInput = (props: Props & TextInputProps) => {
   }, [value]);
 
   const setPropertyValue = (key: string, addressDetails: AddressDetails, path: string) => {
-    console.log('key', key);
-    console.log('addressDetails[key]', addressDetails[key as keyof AddressDetails]);
-    console.log('path + key', path + key);
     setFieldValue?.(path + key, addressDetails[key as keyof AddressDetails]);
   };
 
