@@ -14,7 +14,7 @@ service cloud.firestore {
     }
     
     function isHouseAdmin(houseId) {
-      return houseId in request.auth.token.admin;
+      return 'admin' in request.auth.token && houseId in request.auth.token.admin;
     }
     
     function isHouseSuperAdmin(houseId) {
@@ -226,7 +226,7 @@ service cloud.firestore {
     }
     
     match /issues/{issueId} {
-    	allow create: if signedIn() || isGuest([resource.data.houseId]) || isAdmin([resource.data.houseId]);
+    	allow create: if isGuest([request.resource.data.houseId]) || isAdmin([request.resource.data.houseId]);
     	allow update: if isGuest([request.resource.data.houseId]) || isAdmin([request.resource.data.houseId]);
       allow read: if isGuest([resource.data.houseId]) || isAdmin([resource.data.houseId]);
       allow delete: if isAdmin([resource.data.houseId]);

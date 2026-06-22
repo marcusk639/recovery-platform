@@ -49,6 +49,24 @@ export const stripeConnectReauth = onRequest(
       return;
     }
 
+    // This endpoint is unauthenticated (reached via Stripe redirect), so verify
+    // the account belongs to a regroup house before calling Stripe. Prevents an
+    // attacker from minting onboarding links / probing arbitrary account IDs.
+    const houseSnap = await admin
+      .firestore()
+      .collection("houses")
+      .where("stripeAccountId", "==", stripeAccountId)
+      .limit(1)
+      .get();
+
+    if (houseSnap.empty) {
+      logger.warn("stripeConnectReauth: no house found for account", {
+        stripeAccountId,
+      });
+      res.status(404).send("Unknown account.");
+      return;
+    }
+
     // Build the return and refresh URLs from this same function so they
     // remain consistent regardless of which environment is deployed.
     const baseUrl = `${req.protocol}://${req.hostname}`;
@@ -110,25 +128,9 @@ export const stripeConnectReturn = onRequest(
     }
 
     try {
-      // Eagerly sync the account status so the app reflects it immediately
-      // without waiting for the account.updated webhook.
-      const account = await getStripe().accounts.retrieve(stripeAccountId);
-      const chargesEnabled = account.charges_enabled === true;
-      const payoutsEnabled = account.payouts_enabled === true;
-
-      let stripeStatus: "active" | "pending" | "restricted";
-      if (chargesEnabled && payoutsEnabled) {
-        stripeStatus = "active";
-      } else if (
-        account.requirements?.disabled_reason ||
-        (account.requirements?.currently_due &&
-          account.requirements.currently_due.length > 0)
-      ) {
-        stripeStatus = "restricted";
-      } else {
-        stripeStatus = "pending";
-      }
-
+      // This endpoint is unauthenticated (reached via Stripe redirect). Verify
+      // the account maps to a regroup house BEFORE calling Stripe, so an
+      // attacker cannot use it to probe arbitrary connected-account IDs.
       const db = admin.firestore();
       const snap = await db
         .collection("houses")
@@ -136,7 +138,30 @@ export const stripeConnectReturn = onRequest(
         .limit(1)
         .get();
 
-      if (!snap.empty) {
+      if (snap.empty) {
+        logger.warn("stripeConnectReturn: no house found for account", {
+          stripeAccountId,
+        });
+      } else {
+        // Eagerly sync the account status so the app reflects it immediately
+        // without waiting for the account.updated webhook.
+        const account = await getStripe().accounts.retrieve(stripeAccountId);
+        const chargesEnabled = account.charges_enabled === true;
+        const payoutsEnabled = account.payouts_enabled === true;
+
+        let stripeStatus: "active" | "pending" | "restricted";
+        if (chargesEnabled && payoutsEnabled) {
+          stripeStatus = "active";
+        } else if (
+          account.requirements?.disabled_reason ||
+          (account.requirements?.currently_due &&
+            account.requirements.currently_due.length > 0)
+        ) {
+          stripeStatus = "restricted";
+        } else {
+          stripeStatus = "pending";
+        }
+
         await snap.docs[0].ref.update({
           stripeStatus,
           stripeChargesEnabled: chargesEnabled,
@@ -146,10 +171,6 @@ export const stripeConnectReturn = onRequest(
         logger.info("stripeConnectReturn: synced account status to Firestore", {
           stripeAccountId,
           stripeStatus,
-        });
-      } else {
-        logger.warn("stripeConnectReturn: no house found for account", {
-          stripeAccountId,
         });
       }
     } catch (err) {

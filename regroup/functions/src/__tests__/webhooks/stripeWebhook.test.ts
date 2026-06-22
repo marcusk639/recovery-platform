@@ -1213,6 +1213,77 @@ describe("handleStripeConnectWebhook", () => {
       expect.objectContaining({ received: true }),
     );
   });
+
+  it("skips processing and returns 200 when the Connect event was already processed (idempotency)", async () => {
+    const mockHouseUpdate = jest.fn().mockResolvedValue(undefined);
+
+    mockConstructEvent.mockReturnValue({
+      id: "evt_connect_duplicate",
+      type: "account.application.deauthorized",
+      account: "acct_dup",
+      data: { object: { id: "app_id" } },
+    });
+
+    // Transaction reports the event already exists.
+    mockRunTransaction.mockImplementation(
+      async (fn: (txn: any) => Promise<any>) => {
+        const txn = {
+          get: jest.fn().mockResolvedValue({ exists: true }),
+          set: jest.fn(),
+        };
+        return fn(txn);
+      },
+    );
+
+    // If idempotency works, the deauthorization handler (and its house write)
+    // must never run.
+    mockCollectionFn.mockImplementation((col: string) => {
+      if (col === "houses") {
+        return {
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockReturnValue({
+              get: jest.fn().mockResolvedValue({
+                empty: false,
+                docs: [
+                  {
+                    id: "house_dup",
+                    data: () => ({ stripeAccountId: "acct_dup" }),
+                    ref: { update: mockHouseUpdate, set: jest.fn() },
+                  },
+                ],
+              }),
+            }),
+          }),
+          doc: jest
+            .fn()
+            .mockReturnValue({ update: mockHouseUpdate, set: jest.fn() }),
+        };
+      }
+      return {
+        where: jest.fn().mockReturnValue({
+          limit: jest.fn().mockReturnValue({
+            get: jest.fn().mockResolvedValue({ empty: true, docs: [] }),
+          }),
+        }),
+        doc: jest.fn().mockReturnValue({
+          get: jest.fn().mockResolvedValue({ exists: false }),
+          update: jest.fn(),
+          set: jest.fn(),
+        }),
+      };
+    });
+
+    const req = makeReq();
+    const res = makeRes();
+
+    await (handleStripeConnectWebhook as any)(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({ received: true, duplicate: true }),
+    );
+    expect(mockHouseUpdate).not.toHaveBeenCalled();
+  });
 });
 
 // ===========================================================================

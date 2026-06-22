@@ -1164,6 +1164,29 @@ export const handleStripeConnectWebhook = onRequest(
       type: event.type,
     });
 
+    // Idempotency check (transaction-safe) — Stripe retries Connect events, and
+    // replaying account.application.deauthorized after a reconnect would wrongly
+    // disconnect a re-onboarded account. Mirrors the platform webhook handler.
+    let alreadyProcessed: boolean;
+    try {
+      alreadyProcessed = await checkAndMarkEventProcessed(event.id, event.type);
+    } catch (err) {
+      logger.error("handleStripeConnectWebhook: idempotency check failed", {
+        eventId: event.id,
+        err: (err as Error).message,
+      });
+      alreadyProcessed = false;
+    }
+
+    if (alreadyProcessed) {
+      logger.info("handleStripeConnectWebhook: duplicate event ignored", {
+        eventId: event.id,
+        type: event.type,
+      });
+      res.status(200).send({ received: true, duplicate: true });
+      return;
+    }
+
     try {
       switch (event.type) {
         case "account.updated":
