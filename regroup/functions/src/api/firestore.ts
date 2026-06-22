@@ -236,7 +236,9 @@ export function updateContact(contactId: string, contact: Contact) {
 }
 
 export async function updateHouseAdmins(houseId: string, adminId: string) {
-  const adminIds = admin.firestore.FieldValue.arrayUnion([adminId]);
+  // arrayUnion is variadic — pass the element directly. Passing [adminId]
+  // appended the array itself as a single element, corrupting adminIds.
+  const adminIds = admin.firestore.FieldValue.arrayUnion(adminId);
   return houseCollection.doc(houseId).update({ adminIds: adminIds });
 }
 

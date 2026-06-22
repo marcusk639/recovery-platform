@@ -30,6 +30,35 @@ type GroupLiteratureBookmarksRouteProp = RouteProp<
 >;
 type GroupLiteratureNavProp = StackNavigationProp<GroupStackParamList>;
 
+// Each row is a real component so the useSelector hook is called inside React's
+// render tree. Calling the hook directly inside FlatList's renderItem callback
+// violated the Rules of Hooks (hook count varied with list length -> crash).
+const BookmarkRow: React.FC<{item: GroupLiteratureBookmarkDocument}> = ({
+  item,
+}) => {
+  const literatureItem = useSelector((state: RootState) =>
+    selectLiteratureById(state, item.literatureId),
+  );
+
+  return (
+    <View style={styles.row}>
+      <View style={styles.rowContent}>
+        <Text style={styles.rowTitle}>
+          {literatureItem?.title || item.literatureId}
+        </Text>
+        {literatureItem?.summary && (
+          <Text style={styles.rowSummary} numberOfLines={2}>
+            {literatureItem.summary}
+          </Text>
+        )}
+        {item.note && <Text style={styles.rowNote}>Note: {item.note}</Text>}
+        <Text style={styles.rowMeta}>Added by {item.addedByName}</Text>
+      </View>
+      <Icon name="chevron-forward" size={18} color="#9E9E9E" />
+    </View>
+  );
+};
+
 const GroupLiteratureBookmarksScreen: React.FC = () => {
   const route = useRoute<GroupLiteratureBookmarksRouteProp>();
   const navigation = useNavigation<GroupLiteratureNavProp>();
@@ -45,33 +74,9 @@ const GroupLiteratureBookmarksScreen: React.FC = () => {
     dispatch(loadGroupBookmarks(groupId));
   }, [dispatch, groupId]);
 
-  const renderItem = ({item}: {item: GroupLiteratureBookmarkDocument}) => {
-    const literatureItem = useSelector((state: RootState) =>
-      selectLiteratureById(state, item.literatureId),
-    );
-
-    return (
-      <View style={styles.row}>
-        <View style={styles.rowContent}>
-          <Text style={styles.rowTitle}>
-            {literatureItem?.title || item.literatureId}
-          </Text>
-          {literatureItem?.summary && (
-            <Text style={styles.rowSummary} numberOfLines={2}>
-              {literatureItem.summary}
-            </Text>
-          )}
-          {item.note && (
-            <Text style={styles.rowNote}>
-              Note: {item.note}
-            </Text>
-          )}
-          <Text style={styles.rowMeta}>Added by {item.addedByName}</Text>
-        </View>
-        <Icon name="chevron-forward" size={18} color="#9E9E9E" />
-      </View>
-    );
-  };
+  const renderItem = ({item}: {item: GroupLiteratureBookmarkDocument}) => (
+    <BookmarkRow item={item} />
+  );
 
   return (
     <SafeAreaView style={styles.container}>

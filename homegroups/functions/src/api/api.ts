@@ -83,7 +83,9 @@ export const getNAMeetings = async (
 };
 
 export const getTimezone = async (lat: number, lng: number, _time?: number) => {
-  const time = _time || new Date().getUTCSeconds();
+  // Google Timezone API expects a Unix epoch in SECONDS. getUTCSeconds() returns
+  // only the seconds component (0-59), which mapped every request to 1970-01-01.
+  const time = _time || Math.floor(Date.now() / 1000);
   try {
     const url = timezoneUrl(lat, lng, time);
     const result = await Axios.get(url);

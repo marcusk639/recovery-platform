@@ -9,6 +9,7 @@ import {
   MeetingInstanceDocument,
 } from "../entities/Meeting";
 import * as geofire from "geofire-common"; // Import geofire
+import ngeohash from "ngeohash";
 import { generateMeetingHash } from "./meetings";
 
 const GEOHASH_PRECISION = 9;
@@ -19,7 +20,7 @@ const GEOHASH_PRECISION = 9;
  * Helper function to format a meeting from the Meeting Guide API into a Firestore document
  */
 export function formatMeetingForFirestore(
-  apiMeeting: MeetingGuideMeeting
+  apiMeeting: MeetingGuideMeeting,
 ): Meeting {
   // Extract the relevant fields from the Meeting Guide API response
   // and format them for storage in Firestore
@@ -44,7 +45,7 @@ export function formatMeetingForFirestore(
   meeting.geohash = ngeohash.encode(
     apiMeeting.latitude,
     apiMeeting.longitude,
-    GEOHASH_PRECISION
+    GEOHASH_PRECISION,
   ); // Add geohash
   meeting.country = apiMeeting.country || "USA";
   meeting.locationName = apiMeeting.location;
@@ -86,7 +87,7 @@ export function hasNameOverlap(meeting: any, groupName: string): boolean {
   if (groupNameWords.length > 0) {
     const meetingNameWords = (meeting.name || "").toLowerCase().split(/\s+/);
     const hasOverlap = groupNameWords.some(
-      (word) => word.length > 3 && meetingNameWords.includes(word)
+      (word) => word.length > 3 && meetingNameWords.includes(word),
     );
     return hasOverlap;
   }
@@ -122,7 +123,7 @@ export function findRelevantMeetings(meetings: any[], groupData: any): any[] {
       try {
         const distance = geofire.distanceBetween(
           groupLocation,
-          meetingLocation
+          meetingLocation,
         );
         if (distance <= MAX_DISTANCE_METERS) {
           locationMatch = true;
@@ -144,12 +145,12 @@ export function findRelevantMeetings(meetings: any[], groupData: any): any[] {
 export function createMeetingTimestamp(
   date: Date | string,
   time: string,
-  timezone: string
+  timezone: string,
 ): AdminTimestamp | null {
   try {
     if (!moment.tz.zone(timezone)) {
       functions.logger.warn(
-        `Invalid timezone provided: ${timezone}. Falling back to UTC.`
+        `Invalid timezone provided: ${timezone}. Falling back to UTC.`,
       );
       timezone = "UTC";
     }
@@ -159,12 +160,12 @@ export function createMeetingTimestamp(
     const meetingMoment = moment.tz(
       dateTimeString,
       "YYYY-MM-DD HH:mm",
-      timezone
+      timezone,
     );
 
     if (!meetingMoment.isValid()) {
       functions.logger.error(
-        `Failed to parse combined date/time: ${dateTimeString} in timezone ${timezone}`
+        `Failed to parse combined date/time: ${dateTimeString} in timezone ${timezone}`,
       );
       return null;
     }
@@ -172,7 +173,7 @@ export function createMeetingTimestamp(
   } catch (error) {
     functions.logger.error(
       `Error creating meeting timestamp for ${date} ${time} [${timezone}]:`,
-      error
+      error,
     );
     return null;
   }
@@ -189,7 +190,7 @@ export async function generateInstancesForMeeting(
   startDate: moment.Moment,
   endDate: moment.Moment,
   groupTimezone: string,
-  db: admin.firestore.Firestore // Pass Firestore instance
+  db: admin.firestore.Firestore, // Pass Firestore instance
 ): Promise<number> {
   const daysOfWeek = [
     "sunday",
@@ -201,7 +202,7 @@ export async function generateInstancesForMeeting(
     "saturday",
   ];
   const templateDayIndex = daysOfWeek.indexOf(
-    (meetingTemplate.day || "").toLowerCase()
+    (meetingTemplate.day || "").toLowerCase(),
   );
   const templateTime = meetingTemplate.time;
   const templateUpdatedAt: AdminTimestamp =
@@ -210,7 +211,7 @@ export async function generateInstancesForMeeting(
 
   if (templateDayIndex === -1 || !templateTime || !groupId) {
     functions.logger.warn(
-      `Cannot generate instances for meeting ${meetingId}: Invalid day, time, or missing groupId.`
+      `Cannot generate instances for meeting ${meetingId}: Invalid day, time, or missing groupId.`,
     );
     return 0;
   }
@@ -227,7 +228,7 @@ export async function generateInstancesForMeeting(
       const scheduledAtTimestamp = createMeetingTimestamp(
         currentDate.toDate(),
         templateTime,
-        groupTimezone
+        groupTimezone,
       );
 
       if (scheduledAtTimestamp) {
@@ -291,8 +292,8 @@ export async function generateInstancesForMeeting(
   await Promise.all(generationPromises);
   functions.logger.info(
     `Generated ${createdCount} instances for meeting ${meetingId} between ${startDate.format(
-      "YYYY-MM-DD"
-    )} and ${endDate.format("YYYY-MM-DD")}.`
+      "YYYY-MM-DD",
+    )} and ${endDate.format("YYYY-MM-DD")}.`,
   );
   return createdCount;
 }
