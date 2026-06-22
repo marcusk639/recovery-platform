@@ -1038,7 +1038,7 @@ describe("seedDailyReflections — idempotency", () => {
       doc: reflectionsDoc,
     };
 
-    const req = makeRequest({ force: false }, "admin_1");
+    const req = makeRequest({ force: false }, "admin_1", { superAdmin: true });
     const result = await seedDailyReflections(req);
 
     expect(result).toHaveProperty("seeded", 0);

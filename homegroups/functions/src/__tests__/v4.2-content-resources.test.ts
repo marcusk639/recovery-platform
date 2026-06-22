@@ -444,10 +444,9 @@ describe("seedDailyReflections", () => {
   });
 
   it('returns skipped count early when doc "001" exists and force is false', async () => {
-    setDoc("users/user-1", { role: "admin" });
     // Simulate doc "001" existing
     setDoc("daily_reflections/001", { dayOfYear: 1, title: "Already seeded" });
-    const req = makeRequest({ force: false });
+    const req = makeRequest({ force: false }, "user-1", { superAdmin: true });
 
     const result = await (seedDailyReflections as Function)(req);
 
@@ -458,9 +457,8 @@ describe("seedDailyReflections", () => {
   });
 
   it('seeds all reflections when force is true even if doc "001" exists', async () => {
-    setDoc("users/user-1", { role: "admin" });
     setDoc("daily_reflections/001", { dayOfYear: 1, title: "Already seeded" });
-    const req = makeRequest({ force: true });
+    const req = makeRequest({ force: true }, "user-1", { superAdmin: true });
 
     const result = await (seedDailyReflections as Function)(req);
 
@@ -469,9 +467,8 @@ describe("seedDailyReflections", () => {
   });
 
   it("seeds all reflections when collection is empty (no force needed)", async () => {
-    setDoc("users/user-1", { role: "admin" });
     // doc "001" does NOT exist — omit from collections so get() returns null
-    const req = makeRequest({});
+    const req = makeRequest({}, "user-1", { superAdmin: true });
 
     const result = await (seedDailyReflections as Function)(req);
 
