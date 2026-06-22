@@ -200,15 +200,9 @@ export const userIsAtMeeting = onCall(
         return false;
       }
     }
-    logger.info(
-      "Comparing distance between user at",
-      userLocation,
-      "and meeting at",
-      locationOfMeeting,
-    );
     if (!userLocation || !locationOfMeeting) return false;
     const distance = getDistance(userLocation, locationOfMeeting);
-    logger.info("Distance is", distance);
+    logger.debug("Meeting proximity check", { distanceMeters: distance });
     return distance <= ACCEPTABLE_DISTANCE;
   },
 );

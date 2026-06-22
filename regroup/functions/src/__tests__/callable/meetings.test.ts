@@ -8,7 +8,12 @@ jest.mock("firebase-functions/v2/https", () => {
 });
 
 jest.mock("firebase-functions", () => ({
-  logger: { info: jest.fn(), error: jest.fn(), warn: jest.fn() },
+  logger: {
+    info: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+  },
 }));
 
 const mockFetchDirectoryMeetings = jest.fn();
