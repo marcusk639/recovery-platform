@@ -23,7 +23,11 @@ import * as admin from "firebase-admin";
 import Stripe from "stripe";
 import { createStripeClient } from "../util/stripe";
 
-const stripe = createStripeClient();
+// Lazily instantiated to avoid constructing the Stripe client at module load
+// (Firebase source analysis loads modules without secrets bound, so eager
+// `createStripeClient()` would throw on an empty key). Memoized on first use.
+let _stripe: Stripe | undefined;
+const getStripe = (): Stripe => (_stripe ??= createStripeClient());
 
 // ---------------------------------------------------------------------------
 // stripeConnectReauth
@@ -52,7 +56,7 @@ export const stripeConnectReauth = onRequest(
     const returnUrl = `${baseUrl}/stripeConnectReturn`;
 
     try {
-      const accountLink = await stripe.accountLinks.create({
+      const accountLink = await getStripe().accountLinks.create({
         account: stripeAccountId,
         refresh_url: refreshUrl,
         return_url: returnUrl,
@@ -108,7 +112,7 @@ export const stripeConnectReturn = onRequest(
     try {
       // Eagerly sync the account status so the app reflects it immediately
       // without waiting for the account.updated webhook.
-      const account = await stripe.accounts.retrieve(stripeAccountId);
+      const account = await getStripe().accounts.retrieve(stripeAccountId);
       const chargesEnabled = account.charges_enabled === true;
       const payoutsEnabled = account.payouts_enabled === true;
 
