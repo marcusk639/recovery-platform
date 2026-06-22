@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { logger } from "firebase-functions/v2";
 import { House } from "../entities/House";
 import { Notification } from "../entities/Notification";
 import { Guest } from "../entities/Guest";
@@ -125,10 +126,13 @@ export async function getHousesByAttributes(
   return shapeHouses(result.docs);
 }
 
-export async function getUserBySubscription(subscriptionId: string) {
+export async function getUserBySubscription(
+  subscriptionId: string,
+): Promise<User | null> {
   const result = await userCollection
     .where("subscriptionMetadata.subscriptionId", "==", subscriptionId)
     .get();
+  if (result.empty) return null;
   return result.docs[0].data() as User;
 }
 
@@ -151,6 +155,10 @@ export async function updateUserSubscriptionStatus(
   status: string,
 ) {
   const user = await getUserBySubscription(subscriptionId);
+  if (!user) {
+    logger.warn("updateUserSubscriptionStatus: no user for subscription");
+    return;
+  }
   const subscriptionMetadata: Partial<User> = {
     subscriptionMetadata: {
       ...user.subscriptionMetadata,
@@ -167,6 +175,10 @@ export async function updateUserPeriodEnd(
   cancel: boolean = false,
 ) {
   const user = await getUserBySubscription(subscriptionId);
+  if (!user) {
+    logger.warn("updateUserPeriodEnd: no user for subscription");
+    return;
+  }
   const subscriptionMetadata: Partial<User> = {
     subscriptionMetadata: {
       ...user.subscriptionMetadata,

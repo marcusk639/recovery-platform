@@ -259,8 +259,12 @@ service cloud.firestore {
     }
     
     match /guest-archive/{guestId} {
+      // Archived discharge + financial records: residents may read, but only
+      // house admins may create/update/delete (prevents residents overwriting
+      // their own discharge/financial history).
       allow read: if isGuestOrAdmin([resource.data.houseId]);
-      allow write: if isGuestOrAdmin([request.resource.data.houseId]);
+      allow create, update: if isAdmin([request.resource.data.houseId]);
+      allow delete: if isAdmin([resource.data.houseId]);
     }
 
     match /activities/{activityId} {

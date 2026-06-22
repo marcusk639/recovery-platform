@@ -788,6 +788,19 @@ export const sendInviteEmails = onCall(
   async (request) => {
     if (!request.auth)
       throw new HttpsError("unauthenticated", "Login required");
+    // Only house operators (admin/superAdmin of at least one house) may send
+    // invites — prevents any authenticated user from abusing the SendGrid
+    // sender to email arbitrary addresses.
+    const token = (request.auth.token ?? {}) as Record<string, unknown>;
+    const isOperator =
+      (token.admin && Object.keys(token.admin as object).length > 0) ||
+      (token.superAdmin && Object.keys(token.superAdmin as object).length > 0);
+    if (!isOperator) {
+      throw new HttpsError(
+        "permission-denied",
+        "Only house administrators can send invitations",
+      );
+    }
     const data = parseInput(
       inviteEmailSchema,
       request.data,
@@ -819,16 +832,22 @@ export const sendInviteEmails = onCall(
         }),
       );
     });
-    try {
-      await Promise.all(promises);
-      logger.info("Invite emails sent!");
-    } catch (err) {
-      // Use logger.error (surfaces in alerting) and a sanitized message —
-      // the raw SendGrid error can echo recipient email addresses (PII).
+    // Use allSettled so one failed recipient doesn't hide the others, and so
+    // the caller is told when delivery failed instead of seeing a false success.
+    const results = await Promise.allSettled(promises);
+    const failed = results.filter((r) => r.status === "rejected");
+    if (failed.length > 0) {
+      // Sanitized: never echo the raw SendGrid error (can contain recipient PII).
       logger.error("sendInviteEmails: email delivery failed", {
-        err: (err as Error).message,
+        failedCount: failed.length,
+        totalCount: results.length,
       });
+      throw new HttpsError(
+        "unavailable",
+        `${failed.length} of ${results.length} invite emails failed to send`,
+      );
     }
+    logger.info("Invite emails sent!");
   },
 );
 
@@ -845,6 +864,16 @@ export const sendConfirmationEmail = onCall(
       request.data,
     ) as EmailConfirmationPayload;
     const { email, dynamicLink, name } = data;
+    // Confirmation emails may only be sent to the caller's own address —
+    // prevents abusing the SendGrid sender to email arbitrary recipients.
+    const callerEmail = (request.auth.token as Record<string, unknown>)
+      .email as string | undefined;
+    if (!callerEmail || callerEmail.toLowerCase() !== email.toLowerCase()) {
+      throw new HttpsError(
+        "permission-denied",
+        "Confirmation emails can only be sent to your own address",
+      );
+    }
     const html = [
       '<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">',
       '<h2 style="color: #333; text-align: center;">Confirm Your Email</h2>',

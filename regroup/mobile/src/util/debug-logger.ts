@@ -14,6 +14,11 @@ class DebugLogger {
   private logFile = `${RNFS.DocumentDirectoryPath}/debug-logs.json`;
 
   log(level: LogEntry['level'], message: string, data?: any) {
+    // PII guard: this logger persists full objects (which can include SSN/DOB/
+    // phone) to device storage and console. Never run outside development.
+    // Route production errors through logException (Sentry) instead.
+    if (!__DEV__) return;
+
     const entry: LogEntry = {
       timestamp: new Date().toISOString(),
       level,

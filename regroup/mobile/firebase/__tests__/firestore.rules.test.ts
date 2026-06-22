@@ -844,3 +844,99 @@ describe('invitations/{token} — all client access denied (server-only)', () =>
     );
   });
 });
+
+// ===========================================================================
+// guest-archive/{guestId} — admin-only write guard [C5]
+// ===========================================================================
+//
+// guest-archive holds archived discharge + financial records. Before this
+// guard, the write rule used isGuestOrAdmin, so a resident could create,
+// overwrite, or delete their own discharge/financial history. The rule now
+// allows residents to read but restricts create/update/delete to house admins.
+
+const ARCHIVE_DOC_ID = 'archivedGuest1';
+const BASELINE_ARCHIVE = {
+  id: ARCHIVE_DOC_ID,
+  houseId: HOUSE_ID,
+  firstName: 'Alice',
+  rentOwed: 500,
+  dischargeReason: 'completed',
+};
+
+async function seedArchiveDoc() {
+  await testEnv.withSecurityRulesDisabled(async ctx => {
+    await setDoc(
+      doc(ctx.firestore(), `guest-archive/${ARCHIVE_DOC_ID}`),
+      BASELINE_ARCHIVE,
+    );
+  });
+}
+
+function archiveDocRef(
+  ctx: ReturnType<RulesTestEnvironment['authenticatedContext']>,
+) {
+  return doc(ctx.firestore(), `guest-archive/${ARCHIVE_DOC_ID}`);
+}
+
+describe('guest-archive/{guestId} — admin-only write guard (C5)', () => {
+  test('ALLOW guest reading archive in their house', async () => {
+    await seedArchiveDoc();
+    const ctx = testEnv.authenticatedContext(
+      GUEST_UID,
+      authHouseGuest(GUEST_UID, HOUSE_ID),
+    );
+    await assertSucceeds(getDoc(archiveDocRef(ctx)));
+  });
+
+  test('ALLOW admin creating an archive record', async () => {
+    const ctx = testEnv.authenticatedContext(
+      ADMIN_UID,
+      authHouseAdmin(ADMIN_UID, HOUSE_ID),
+    );
+    await assertSucceeds(setDoc(archiveDocRef(ctx), BASELINE_ARCHIVE));
+  });
+
+  test('ALLOW admin updating an archive record', async () => {
+    await seedArchiveDoc();
+    const ctx = testEnv.authenticatedContext(
+      ADMIN_UID,
+      authHouseAdmin(ADMIN_UID, HOUSE_ID),
+    );
+    await assertSucceeds(updateDoc(archiveDocRef(ctx), { rentOwed: 0 }));
+  });
+
+  test('ALLOW admin deleting an archive record', async () => {
+    await seedArchiveDoc();
+    const ctx = testEnv.authenticatedContext(
+      ADMIN_UID,
+      authHouseAdmin(ADMIN_UID, HOUSE_ID),
+    );
+    await assertSucceeds(deleteDoc(archiveDocRef(ctx)));
+  });
+
+  test('DENY guest creating an archive record', async () => {
+    const ctx = testEnv.authenticatedContext(
+      GUEST_UID,
+      authHouseGuest(GUEST_UID, HOUSE_ID),
+    );
+    await assertFails(setDoc(archiveDocRef(ctx), BASELINE_ARCHIVE));
+  });
+
+  test('DENY guest overwriting their own discharge/financial record', async () => {
+    await seedArchiveDoc();
+    const ctx = testEnv.authenticatedContext(
+      GUEST_UID,
+      authHouseGuest(GUEST_UID, HOUSE_ID),
+    );
+    await assertFails(updateDoc(archiveDocRef(ctx), { rentOwed: 0 }));
+  });
+
+  test('DENY guest deleting an archive record', async () => {
+    await seedArchiveDoc();
+    const ctx = testEnv.authenticatedContext(
+      GUEST_UID,
+      authHouseGuest(GUEST_UID, HOUSE_ID),
+    );
+    await assertFails(deleteDoc(archiveDocRef(ctx)));
+  });
+});
