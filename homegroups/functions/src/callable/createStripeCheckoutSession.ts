@@ -5,6 +5,7 @@ import {
 } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
+import { APP_BASE_URL } from "../utils/appConfig";
 import {
   stripe,
   productIdGroup,
@@ -15,8 +16,8 @@ import * as admin from "firebase-admin"; // For FieldValue
 
 // Hardcoded redirect URLs — never accept these from the client to prevent open redirect attacks.
 const SUCCESS_URL =
-  "https://homegroups-app.com/subscription/success?session_id={CHECKOUT_SESSION_ID}";
-const CANCEL_URL = "https://homegroups-app.com/subscription/cancel";
+  `${APP_BASE_URL}/subscription/success?session_id={CHECKOUT_SESSION_ID}`;
+const CANCEL_URL = `${APP_BASE_URL}/subscription/cancel`;
 
 interface CreateCheckoutData {
   groupId: string;

@@ -6,6 +6,7 @@ import {
 import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
 import { stripe } from "../utils/stripe";
+import { APP_BASE_URL } from "../utils/appConfig";
 
 interface AccountLinkData {
   groupId: string;
@@ -72,8 +73,8 @@ export const createStripeAccountLink = onCall(
 
       const accountLink = await stripe.accountLinks.create({
         account: accountId,
-        refresh_url: `https://homegroups-app.com/stripe-redirect?groupId=${groupId}&type=refresh`,
-        return_url: `https://homegroups-app.com/stripe-redirect?groupId=${groupId}&type=return`,
+        refresh_url: `${APP_BASE_URL}/stripe-redirect?groupId=${groupId}&type=refresh`,
+        return_url: `${APP_BASE_URL}/stripe-redirect?groupId=${groupId}&type=return`,
         type: "account_onboarding",
         collect: "eventually_due",
       });

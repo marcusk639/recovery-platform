@@ -10,6 +10,7 @@ import {
   productIdIntergroupB,
 } from "./stripe";
 import { db, messaging } from "./firebase";
+import { APP_BASE_URL } from "./appConfig";
 
 // --- Typed Stripe helpers ---
 
@@ -904,7 +905,7 @@ async function notifyAdminsOfPaymentFailure(
 ): Promise<void> {
   if (adminIds.length === 0) return;
 
-  const billingUrl = `https://homegroups-app.com/billing?groupId=${groupId}`;
+  const billingUrl = `${APP_BASE_URL}/billing?groupId=${groupId}`;
 
   try {
     // Send push notifications
@@ -1008,7 +1009,7 @@ async function notifyAdminsOfTrialEnding(
 ): Promise<void> {
   if (adminIds.length === 0) return;
 
-  const billingUrl = `https://homegroups-app.com/billing?groupId=${groupId}`;
+  const billingUrl = `${APP_BASE_URL}/billing?groupId=${groupId}`;
 
   try {
     // Send push notifications

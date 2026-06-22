@@ -5,6 +5,7 @@ import {
 } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
+import { APP_BASE_URL } from "../utils/appConfig";
 import * as admin from "firebase-admin";
 
 interface GenerateInviteData {
@@ -45,7 +46,7 @@ export const generateGroupInvite = onCall(
       throw new HttpsError("invalid-argument", "Group ID is required.");
     }
 
-    const webLinkBase = "https://homegroups-app.com/";
+    const webLinkBase = `${APP_BASE_URL}/`;
 
     try {
       // Fetch group and membership in parallel

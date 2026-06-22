@@ -5,6 +5,7 @@ import {
 } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
+import { APP_BASE_URL } from "../utils/appConfig";
 import {
   stripe,
   productIdIntergroupA,
@@ -88,7 +89,7 @@ export const createIntergroup = onCall(
 
     // Update this list when switching domains — see docs/LAUNCH_BLOCKERS.md
     const ALLOWED_REDIRECT_ORIGINS = [
-      "https://homegroups-app.com",
+      APP_BASE_URL,
       "https://recovery-connect-cad4b.web.app",
       "https://recovery-connect-cad4b.firebaseapp.com",
       ...(process.env.NODE_ENV !== "production"
@@ -196,8 +197,8 @@ export const createIntergroup = onCall(
         line_items: [{ price: priceId, quantity: 1 }],
         success_url:
           successUrl ??
-          `https://homegroups-app.com/intergroup-success?intergroupId=${intergroupId}`,
-        cancel_url: cancelUrl ?? `https://homegroups-app.com/intergroup-cancel`,
+          `${APP_BASE_URL}/intergroup-success?intergroupId=${intergroupId}`,
+        cancel_url: cancelUrl ?? `${APP_BASE_URL}/intergroup-cancel`,
         metadata: { intergroupId, uid, tier },
       });
       stripeSessionId = session.id;

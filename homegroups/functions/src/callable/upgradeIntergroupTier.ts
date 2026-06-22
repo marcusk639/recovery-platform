@@ -5,6 +5,7 @@ import {
   HttpsError,
 } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
+import { APP_BASE_URL } from "../utils/appConfig";
 import {
   stripe,
   productIdIntergroupB,
@@ -77,8 +78,8 @@ export async function upgradeIntergroupTierHandler(
     mode: "subscription",
     customer: data.stripeCustomerId ?? undefined,
     line_items: [{ price: priceId, quantity: 1 }],
-    success_url: `https://homegroups-app.com/intergroup-success?intergroupId=${intergroupId}`,
-    cancel_url: `https://homegroups-app.com/intergroup-cancel`,
+    success_url: `${APP_BASE_URL}/intergroup-success?intergroupId=${intergroupId}`,
+    cancel_url: `${APP_BASE_URL}/intergroup-cancel`,
     metadata: {
       intergroupId,
       uid: userId,
