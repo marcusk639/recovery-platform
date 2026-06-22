@@ -2,7 +2,11 @@ import * as admin from "firebase-admin";
 import Stripe from "stripe";
 import { createStripeClient } from "../util/stripe";
 
-const stripe = createStripeClient();
+// Lazily instantiated to avoid constructing the Stripe client at module load
+// (Firebase source analysis loads modules without secrets bound, so eager
+// `createStripeClient()` would throw on an empty key). Memoized on first use.
+let _stripe: Stripe | undefined;
+const getStripe = (): Stripe => (_stripe ??= createStripeClient());
 import { onRequest } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import {
@@ -956,7 +960,11 @@ export const stripeWebhook = onRequest(
     let event: Stripe.Event;
     try {
       // req.rawBody is provided by Firebase Cloud Functions for onRequest handlers
-      event = stripe.webhooks.constructEvent(req.rawBody, sig, endpointSecret);
+      event = getStripe().webhooks.constructEvent(
+        req.rawBody,
+        sig,
+        endpointSecret,
+      );
     } catch (err) {
       logger.warn("stripeWebhook: signature verification failed", {
         err: (err as Error).message,
@@ -1016,7 +1024,7 @@ export const stripeWebhook = onRequest(
         case "charge.dispute.created":
           await handleDisputeCreated(
             event.data.object as Stripe.Dispute,
-            stripe,
+            getStripe(),
           );
           break;
 
@@ -1024,7 +1032,7 @@ export const stripeWebhook = onRequest(
         case "invoice.payment_succeeded":
           await handleInvoicePaymentSucceeded(
             event.data.object as Stripe.Invoice,
-            stripe,
+            getStripe(),
           );
           break;
 
@@ -1138,7 +1146,7 @@ export const handleStripeConnectWebhook = onRequest(
 
     let event: Stripe.Event;
     try {
-      event = stripe.webhooks.constructEvent(
+      event = getStripe().webhooks.constructEvent(
         req.rawBody,
         sig,
         process.env.STRIPE_CONNECT_WEBHOOK_SECRET!,

@@ -3,18 +3,20 @@ import {
   CallableRequest,
   HttpsError,
 } from "firebase-functions/v2/https";
+import { defineSecret } from "firebase-functions/params";
 import * as logger from "firebase-functions/logger";
 import {
-  getNarcoticsAnoymousMeetings,
-  getAll12StepMeetings,
   getCustomMeetings,
   getAlcoholicsAnonymousMeetings,
 } from "../utils/meetings"; // Assuming meetings utils are one level up
-import {
-  Meeting,
-  MeetingSearchCriteria,
-  MeetingType,
-} from "../entities/Meeting";
+import { Meeting, MeetingSearchCriteria } from "../entities/Meeting";
+import { fetchDirectoryMeetings } from "../api/recoveryApi";
+import { mapDirectoryToSerialized } from "../utils/directoryMapping";
+import { daysOfWeek } from "../utils/date";
+
+// recovery-api service key. The non-secret base URL is read from the
+// RECOVERY_API_BASE_URL env var inside the recoveryApi client.
+const RECOVERY_PLATFORM_API_KEY = defineSecret("RECOVERY_PLATFORM_API_KEY");
 
 // Define input type again for clarity within this file
 interface MeetingSearchInput {
@@ -133,7 +135,7 @@ function validateFindMeetingsInput(data: unknown): MeetingSearchInput {
 }
 
 // Interface for serialized meeting data
-interface SerializedMeeting {
+export interface SerializedMeeting {
   id: string;
   name: string;
   time: string;
@@ -240,136 +242,175 @@ function serializeMeeting(meeting: Meeting): SerializedMeeting {
   return serialized;
 }
 
-export const findMeetings = onCall(async (request: CallableRequest) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "Must be authenticated.");
-  }
+/**
+ * Resolve the client-supplied `day` filter (a lowercase weekday string like
+ * "monday", or a numeric "0".."6" string) to the directory's integer day index
+ * (0 = Sunday). Returns undefined when the day cannot be resolved so the
+ * directory request omits `day` and searches all days.
+ */
+function resolveDirectoryDay(dayFilter?: string): number | undefined {
+  if (!dayFilter) return undefined;
+  const index = daysOfWeek.indexOf(dayFilter);
+  if (index !== -1) return index;
+  if (/^[0-6]$/.test(dayFilter)) return Number(dayFilter);
+  return undefined;
+}
 
-  // Validate before the try block so invalid-argument is not rewrapped as internal.
-  const meetingInput = validateFindMeetingsInput(request.data);
+export const findMeetings = onCall(
+  { secrets: [RECOVERY_PLATFORM_API_KEY] },
+  async (request: CallableRequest) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Must be authenticated.");
+    }
 
-  const startTime = Date.now();
-  logger.info("findMeetings called with request:", {
-    filters: request.data?.filters,
-    criteria: request.data?.criteria,
-  });
+    // Validate before the try block so invalid-argument is not rewrapped as internal.
+    const meetingInput = validateFindMeetingsInput(request.data);
 
-  try {
-    const meetingPromises: Promise<Meeting[]>[] = [];
-    const dayFilter = meetingInput.filters?.day?.toLowerCase();
-
-    logger.info("Processing meeting search with:", {
-      type: meetingInput.filters?.type || "all",
-      dayFilter,
-      location: meetingInput.filters?.location,
-      criteria: meetingInput.criteria,
+    const startTime = Date.now();
+    logger.info("findMeetings called with request:", {
+      filters: request.data?.filters,
+      criteria: request.data?.criteria,
     });
 
-    if (
-      meetingInput.filters &&
-      meetingInput.filters.type &&
-      meetingInput.filters.type !== "all"
-    ) {
-      if (meetingInput.filters.type === "AA") {
-        logger.info("Fetching AA meetings");
-        const aaMeetings = getAlcoholicsAnonymousMeetings(
-          meetingInput.filters.location,
-          meetingInput.criteria,
-          dayFilter,
-        );
-        meetingPromises.push(aaMeetings);
-      }
-      if (meetingInput.filters.type === "NA") {
-        logger.info("Fetching NA meetings");
-        const naMeetings = getNarcoticsAnoymousMeetings(
-          meetingInput.filters.location,
-          meetingInput.criteria,
-          dayFilter,
-        );
-        meetingPromises.push(naMeetings);
-      }
-      if (meetingInput.filters.type === "Custom") {
-        logger.info("Fetching Custom meetings");
-        const customMeetings = getCustomMeetings(
-          meetingInput.filters.location,
-          meetingInput.criteria,
-          dayFilter,
-        );
-        meetingPromises.push(customMeetings);
-      }
-    } else if (meetingInput.filters) {
-      logger.info("Fetching all 12-step meetings");
-      const all12StepMeetings = getAll12StepMeetings(
-        meetingInput.filters.location,
-        meetingInput.criteria,
+    try {
+      const dayFilter = meetingInput.filters?.day?.toLowerCase();
+      const type = meetingInput.filters?.type ?? "all";
+      const location = meetingInput.filters!.location;
+      const directoryDay = resolveDirectoryDay(dayFilter);
+
+      logger.info("Processing meeting search with:", {
+        type,
         dayFilter,
+        location,
+        criteria: meetingInput.criteria,
+      });
+
+      // Firestore-backed (homegroups-owned) promises, keyed by source. AA and
+      // Custom remain native Firestore reads; NA and CR now route through the
+      // recovery-api shared directory.
+      const firestorePromises: Promise<Meeting[]>[] = [];
+
+      // Provider set requested from the directory (single call, filtered client-side).
+      let directoryProviders: ReadonlyArray<string> | null = null;
+
+      if (type === "AA") {
+        firestorePromises.push(
+          getAlcoholicsAnonymousMeetings(
+            location,
+            meetingInput.criteria,
+            dayFilter,
+          ),
+        );
+      } else if (type === "NA") {
+        directoryProviders = ["NA"];
+      } else if (type === "Custom") {
+        firestorePromises.push(
+          getCustomMeetings(location, meetingInput.criteria, dayFilter),
+        );
+      } else if (type === "AL-ANON" || type === "Religious") {
+        // Parity: no source — returns empty.
+      } else if (type === "Celebrate Recovery") {
+        // Parity: standalone "Celebrate Recovery" type currently returns empty.
+      } else {
+        // type === "all": Firestore AA + Custom, plus directory NA + CR.
+        firestorePromises.push(
+          getAlcoholicsAnonymousMeetings(
+            location,
+            meetingInput.criteria,
+            dayFilter,
+          ),
+          getCustomMeetings(location, meetingInput.criteria, dayFilter),
+        );
+        directoryProviders = ["NA", "CELEBRATE_RECOVERY"];
+      }
+
+      // Make at most ONE directory call (no type filter — filter by provider
+      // client-side). On failure the client returns [] so discovery degrades.
+      const directoryPromise = directoryProviders
+        ? fetchDirectoryMeetings(
+            {
+              location: { lat: location.lat, lng: location.lng },
+              ...(directoryDay !== undefined ? { day: directoryDay } : {}),
+            },
+            {
+              uid: request.auth.uid,
+              email: request.auth.token?.email,
+            },
+            { apiKey: RECOVERY_PLATFORM_API_KEY.value() },
+          )
+        : Promise.resolve([]);
+
+      logger.info(
+        `Starting to fetch ${firestorePromises.length} Firestore meeting set(s)` +
+          `${directoryProviders ? " + directory" : ""}`,
       );
-      meetingPromises.push(all12StepMeetings);
-    } else {
-      logger.error("Missing required filters for meeting search");
-      throw new HttpsError(
-        "invalid-argument",
-        "Missing required filters for meeting search",
-      );
-    }
+      const [firestoreResults, directoryResults] = await Promise.all([
+        Promise.all(firestorePromises),
+        directoryPromise,
+      ]);
 
-    logger.info(`Starting to fetch ${meetingPromises.length} meeting sets`);
-    const results = await Promise.all(meetingPromises);
-
-    const meetings: Meeting[] = [];
-    for (const meetingSet of results) {
-      meetings.push(...meetingSet);
-    }
-
-    logger.info("Meetings fetched successfully", {
-      totalMeetings: meetings.length,
-      meetingTypes: meetings
-        .map((m) => m.type)
-        .filter((v, i, a) => a.indexOf(v) === i),
-    });
-
-    // Serialize meetings before returning
-    const serializedMeetings = meetings.map(serializeMeeting);
-
-    const endTime = Date.now();
-    const duration = (endTime - startTime) / 1000;
-
-    logger.info("Meeting search completed", {
-      duration: `${duration} seconds`,
-      totalMeetings: serializedMeetings.length,
-      firstMeeting: serializedMeetings[0]
-        ? {
-            id: serializedMeetings[0].id,
-            name: serializedMeetings[0].name,
-            type: serializedMeetings[0].type,
+      const serializedMeetings: SerializedMeeting[] = [];
+      for (const meetingSet of firestoreResults) {
+        for (const meeting of meetingSet) {
+          serializedMeetings.push(serializeMeeting(meeting));
+        }
+      }
+      if (directoryProviders) {
+        const allowed = new Set(directoryProviders);
+        for (const dirMeeting of directoryResults) {
+          if (allowed.has(dirMeeting.provider)) {
+            serializedMeetings.push(mapDirectoryToSerialized(dirMeeting));
           }
-        : null,
-    });
+        }
+      }
 
-    return serializedMeetings;
-  } catch (error) {
-    const errorTime = Date.now();
-    const errorDuration = (errorTime - startTime) / 1000;
+      logger.info("Meetings fetched successfully", {
+        totalMeetings: serializedMeetings.length,
+        meetingTypes: serializedMeetings
+          .map((m) => m.type)
+          .filter((v, i, a) => a.indexOf(v) === i),
+      });
 
-    logger.error("Error in findMeetings:", {
-      error:
-        error instanceof Error
+      const endTime = Date.now();
+      const duration = (endTime - startTime) / 1000;
+
+      logger.info("Meeting search completed", {
+        duration: `${duration} seconds`,
+        totalMeetings: serializedMeetings.length,
+        firstMeeting: serializedMeetings[0]
           ? {
-              message: error.message,
-              stack: error.stack,
+              id: serializedMeetings[0].id,
+              name: serializedMeetings[0].name,
+              type: serializedMeetings[0].type,
             }
-          : String(error),
-      duration: `${errorDuration} seconds`,
-      request: {
-        filters: request.data?.filters,
-        criteria: request.data?.criteria,
-      },
-    });
+          : null,
+      });
 
-    throw new HttpsError(
-      "internal",
-      "Error retrieving meetings",
-      error instanceof Error ? error.message : String(error),
-    );
-  }
-});
+      return serializedMeetings;
+    } catch (error) {
+      const errorTime = Date.now();
+      const errorDuration = (errorTime - startTime) / 1000;
+
+      logger.error("Error in findMeetings:", {
+        error:
+          error instanceof Error
+            ? {
+                message: error.message,
+                stack: error.stack,
+              }
+            : String(error),
+        duration: `${errorDuration} seconds`,
+        request: {
+          filters: request.data?.filters,
+          criteria: request.data?.criteria,
+        },
+      });
+
+      throw new HttpsError(
+        "internal",
+        "Error retrieving meetings",
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  },
+);

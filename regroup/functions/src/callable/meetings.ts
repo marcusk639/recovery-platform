@@ -4,16 +4,13 @@ import { z } from "zod";
 import { parseInput } from "../validation";
 import { getDistance } from "../util/location";
 import { Location } from "../entities/GeocodeResponse";
-import {
-  getAlcoholicsAnonymousMeetings,
-  getNarcoticsAnoymousMeetings,
-  getAll12StepMeetings,
-  geocodeNAMeeting,
-  getCustomMeetings,
-  getCelebrateMeetings,
-} from "../util/meetings";
+import { geocodeNAMeeting, getCustomMeetings } from "../util/meetings";
+import { mapDirectoryToRats } from "../util/directoryMapping";
+import { fetchDirectoryMeetings } from "../api/recoveryApi";
 import { MeetingSearchCriteria, RatsMeeting } from "../entities/Meeting";
-import { GOOGLE_MAPS_API_KEY } from "../config";
+import { DirectoryProvider } from "../entities/DirectoryMeeting";
+import { daysOfWeek } from "../util/date";
+import { GOOGLE_MAPS_API_KEY, RECOVERY_PLATFORM_API_KEY } from "../config";
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
 const locationSchema = z.object({ lat: z.number(), lng: z.number() });
@@ -76,8 +73,39 @@ export type MeetingTypeFilters =
   | "all"
   | "Celebrate Recovery";
 
+/** Map a client meeting-type filter onto a directory provider, or undefined for "all". */
+function providerForType(
+  type: MeetingTypeFilters,
+): DirectoryProvider | undefined {
+  switch (type) {
+    case "AA":
+      return "AA";
+    case "NA":
+      return "NA";
+    case "Celebrate Recovery":
+      return "CELEBRATE_RECOVERY";
+    default:
+      return undefined;
+  }
+}
+
+/** Mirror the legacy name-only criteria filter applied to external sources. */
+function filterByName(
+  meetings: RatsMeeting[],
+  criteria?: MeetingSearchCriteria,
+): RatsMeeting[] {
+  if (!criteria?.name) return meetings;
+  const name = criteria.name.toLowerCase();
+  return meetings.filter((m) => m.name.toLowerCase().includes(name));
+}
+
+/**
+ * Discovery is served by recovery-api (the shared cross-product directory) for
+ * external 12-step sources, merged with regroup-owned custom house meetings. The
+ * `RatsMeeting[]` contract is preserved so mobile/web need no change.
+ */
 export const findMeetings = onCall(
-  { secrets: [GOOGLE_MAPS_API_KEY] },
+  { secrets: [RECOVERY_PLATFORM_API_KEY] },
   async (request) => {
     if (!request.auth)
       throw new HttpsError("unauthenticated", "Login required");
@@ -86,41 +114,46 @@ export const findMeetings = onCall(
       request.data,
     ) as MeetingSearchInput;
     const start = Date.now();
+    const { location, day, type } = data.filters;
+    const criteria = data.criteria;
     try {
       logger.info("FIND MEETING Filters", data.filters);
-      let meetings: RatsMeeting[];
-      if (data.filters?.type && data.filters.type !== "all") {
-        if (data.filters.type === "AA") {
-          meetings = await getAlcoholicsAnonymousMeetings(
-            data.filters.location,
-            data.criteria,
-          );
-        } else if (data.filters.type === "NA") {
-          meetings = await getNarcoticsAnoymousMeetings(
-            data.filters.location,
-            data.criteria,
-            data.filters.day,
-          );
-        } else if (data.filters.type === "Custom") {
-          meetings = await getCustomMeetings(
-            data.filters.location,
-            data.criteria,
-          );
-        } else if (data.filters.type === "Celebrate Recovery") {
-          meetings = await getCelebrateMeetings(
-            data.filters.location,
-            data.criteria,
-          );
-        } else {
-          meetings = [];
-        }
-      } else {
-        meetings = await getAll12StepMeetings(
-          data.filters.location,
-          data.criteria,
-          data.filters.day,
-        );
+
+      // Custom (regroup-owned) house meetings live only in regroup Firestore — not
+      // the shared directory — so they are served locally without a directory call.
+      if (type === "Custom") {
+        return (await getCustomMeetings(location, criteria)) ?? [];
       }
+
+      // AL-ANON / Religious have no shared-directory provider today; preserve the
+      // prior empty-result behavior for these filters.
+      if (type === "AL-ANON" || type === "Religious") {
+        return [];
+      }
+
+      const provider = providerForType(type);
+      const dayIndex = day ? daysOfWeek.indexOf(day.toLowerCase()) : -1;
+
+      const directory = await fetchDirectoryMeetings(
+        { location, day: dayIndex >= 0 ? dayIndex : undefined },
+        { uid: request.auth.uid, email: request.auth.token?.email },
+      );
+
+      let meetings: RatsMeeting[] = directory
+        .filter((m) =>
+          provider ? m.provider === provider : m.provider !== "CUSTOM",
+        )
+        .map(mapDirectoryToRats);
+
+      meetings = filterByName(meetings, criteria);
+
+      // "all" historically merged regroup custom house meetings alongside the
+      // external 12-step sources — preserve that.
+      if (type === "all") {
+        const custom = (await getCustomMeetings(location, criteria)) ?? [];
+        meetings = [...meetings, ...custom];
+      }
+
       logger.info(
         "Meeting retrieval took",
         (Date.now() - start) / 1000,

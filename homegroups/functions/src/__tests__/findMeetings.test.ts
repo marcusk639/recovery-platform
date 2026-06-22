@@ -69,12 +69,21 @@ jest.mock("../utils/firebase", () => ({
   messaging: { sendEachForMulticast: jest.fn() },
 }));
 
-// Mock the meetings utilities so tests don't make real HTTP calls
+// Mock the (kept) Firestore-backed meetings utilities. NA/CR external fetchers
+// were removed in B4 — discovery for those now routes through recovery-api.
 jest.mock("../utils/meetings", () => ({
-  getNarcoticsAnoymousMeetings: jest.fn().mockResolvedValue([]),
-  getAll12StepMeetings: jest.fn().mockResolvedValue([]),
   getCustomMeetings: jest.fn().mockResolvedValue([]),
   getAlcoholicsAnonymousMeetings: jest.fn().mockResolvedValue([]),
+}));
+
+// Mock the recovery-api directory client so tests make no real HTTP calls.
+jest.mock("../api/recoveryApi", () => ({
+  fetchDirectoryMeetings: jest.fn().mockResolvedValue([]),
+}));
+
+// defineSecret(...).value() is called in the callable; stub the params module.
+jest.mock("firebase-functions/params", () => ({
+  defineSecret: jest.fn().mockReturnValue({ value: () => "test-key" }),
 }));
 
 // ---- Tests ----
@@ -258,5 +267,127 @@ describe("findMeetings input validation (B1)", () => {
       }),
     );
     expect(Array.isArray(result)).toBe(true);
+  });
+});
+
+describe("findMeetings directory orchestration (B4)", () => {
+  const authedRequest = (data: unknown) => ({
+    auth: { uid: "user-123", token: { email: "u@example.com" } },
+    data,
+  });
+
+  const loadMocks = async () => {
+    const meetings = await import("../utils/meetings");
+    const recoveryApi = await import("../api/recoveryApi");
+    return {
+      getAlcoholicsAnonymousMeetings:
+        meetings.getAlcoholicsAnonymousMeetings as jest.Mock,
+      getCustomMeetings: meetings.getCustomMeetings as jest.Mock,
+      fetchDirectoryMeetings: recoveryApi.fetchDirectoryMeetings as jest.Mock,
+    };
+  };
+
+  const dirMeeting = (overrides: Record<string, unknown> = {}) => ({
+    id: "dir-1",
+    source: "external",
+    provider: "NA",
+    name: "Directory NA Group",
+    day: 1,
+    time: "19:30",
+    location: {
+      address: "123 Main St",
+      city: "Austin",
+      state: "TX",
+      zip: "78701",
+      lat: 30.267,
+      lng: -97.743,
+      geohash: "abc",
+    },
+    ...overrides,
+  });
+
+  it("NA type calls fetchDirectoryMeetings and NOT the Firestore AA fetcher", async () => {
+    jest.resetModules();
+    const { getAlcoholicsAnonymousMeetings, fetchDirectoryMeetings } =
+      await loadMocks();
+    fetchDirectoryMeetings.mockResolvedValueOnce([]);
+    const { findMeetings } = await import("../callable/findMeetings");
+
+    await (findMeetings as Function)(
+      authedRequest({
+        filters: { location: { lat: 30.2, lng: -97.7 }, type: "NA" },
+      }),
+    );
+
+    expect(fetchDirectoryMeetings).toHaveBeenCalledTimes(1);
+    expect(getAlcoholicsAnonymousMeetings).not.toHaveBeenCalled();
+  });
+
+  it("AA type calls getAlcoholicsAnonymousMeetings and NOT the directory", async () => {
+    jest.resetModules();
+    const { getAlcoholicsAnonymousMeetings, fetchDirectoryMeetings } =
+      await loadMocks();
+    getAlcoholicsAnonymousMeetings.mockResolvedValueOnce([]);
+    const { findMeetings } = await import("../callable/findMeetings");
+
+    await (findMeetings as Function)(
+      authedRequest({
+        filters: { location: { lat: 30.2, lng: -97.7 }, type: "AA" },
+      }),
+    );
+
+    expect(getAlcoholicsAnonymousMeetings).toHaveBeenCalledTimes(1);
+    expect(fetchDirectoryMeetings).not.toHaveBeenCalled();
+  });
+
+  it("filters directory results by provider for type 'all' (NA + CR only)", async () => {
+    jest.resetModules();
+    const {
+      getAlcoholicsAnonymousMeetings,
+      getCustomMeetings,
+      fetchDirectoryMeetings,
+    } = await loadMocks();
+    getAlcoholicsAnonymousMeetings.mockResolvedValueOnce([]);
+    getCustomMeetings.mockResolvedValueOnce([]);
+    fetchDirectoryMeetings.mockResolvedValueOnce([
+      dirMeeting({ id: "na-1", provider: "NA" }),
+      dirMeeting({ id: "cr-1", provider: "CELEBRATE_RECOVERY" }),
+      dirMeeting({ id: "aa-1", provider: "AA" }), // must be filtered OUT
+    ]);
+    const { findMeetings } = await import("../callable/findMeetings");
+
+    const result = await (findMeetings as Function)(
+      authedRequest({ filters: { location: { lat: 30.2, lng: -97.7 } } }),
+    );
+
+    const ids = (result as Array<{ id: string }>).map((m) => m.id).sort();
+    expect(ids).toEqual(["cr-1", "na-1"]);
+    expect(fetchDirectoryMeetings).toHaveBeenCalledTimes(1);
+  });
+
+  it("maps a directory meeting into the SerializedMeeting shape", async () => {
+    jest.resetModules();
+    const { fetchDirectoryMeetings } = await loadMocks();
+    fetchDirectoryMeetings.mockResolvedValueOnce([
+      dirMeeting({ id: "na-9", provider: "NA", day: 1, name: "Mapped NA" }),
+    ]);
+    const { findMeetings } = await import("../callable/findMeetings");
+
+    const result = (await (findMeetings as Function)(
+      authedRequest({
+        filters: { location: { lat: 30.2, lng: -97.7 }, type: "NA" },
+      }),
+    )) as Array<Record<string, unknown>>;
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      id: "na-9",
+      name: "Mapped NA",
+      type: "NA",
+      day: "monday",
+      verified: false,
+      createdAt: "",
+      updatedAt: "",
+    });
   });
 });
