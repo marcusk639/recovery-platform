@@ -18,6 +18,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 // Firebase Functions v2 discovers and deploys each exported function.
 __exportStar(require("./callable/users"), exports);
 __exportStar(require("./callable/referrals"), exports);
+__exportStar(require("./callable/findMeetings"), exports);
 __exportStar(require("./callable/identity"), exports);
 __exportStar(require("./http/health"), exports);
 __exportStar(require("./triggers/onUserWrite"), exports);
+__exportStar(require("./triggers/refreshDirectory"), exports);

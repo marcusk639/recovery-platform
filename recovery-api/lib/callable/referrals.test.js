@@ -36,9 +36,9 @@ describe('handleCreateReferral', () => {
         expect(result).toEqual({ id: 'ref123', status: 'pending' });
         expect(db.collection).toHaveBeenCalledWith('referrals');
     });
-    it('throws on invalid toApp value', async () => {
+    it('rejects an unknown toApp with invalid-argument (registry gate, not Zod enum)', async () => {
         const db = makeDb();
-        await expect((0, referrals_1.handleCreateReferral)({ toApp: 'unknown', clientName: 'Jane', clientEmail: 'jane@test.com' }, ctx, db)).rejects.toThrow();
+        await expect((0, referrals_1.handleCreateReferral)({ toApp: 'unknown', clientName: 'Jane', clientEmail: 'jane@test.com' }, ctx, db)).rejects.toMatchObject({ code: 'invalid-argument' });
     });
     it('writes fromApp and referredByApp from context.appId', async () => {
         const db = makeDb();
@@ -46,6 +46,18 @@ describe('handleCreateReferral', () => {
         const addCall = db.collection.mock.results[0].value.add.mock.calls[0][0];
         expect(addCall.fromApp).toBe('homegroups');
         expect(addCall.referredByApp).toBe('homegroups');
+    });
+    it('stores the canonical toApp for a display-name wire value', async () => {
+        const db = makeDb();
+        await (0, referrals_1.handleCreateReferral)({ toApp: 'Regroup', clientName: 'Jane', clientEmail: 'jane@test.com' }, ctx, db);
+        const addCall = db.collection.mock.results[0].value.add.mock.calls[0][0];
+        expect(addCall.toApp).toBe('phoenix-cleanhouse');
+    });
+    it('stores the canonical toApp for a legacy alias wire value', async () => {
+        const db = makeDb();
+        await (0, referrals_1.handleCreateReferral)({ toApp: 'sober-living', clientName: 'Jane', clientEmail: 'jane@test.com' }, ctx, db);
+        const addCall = db.collection.mock.results[0].value.add.mock.calls[0][0];
+        expect(addCall.toApp).toBe('phoenix-cleanhouse');
     });
 });
 describe('handleGetReferral', () => {
