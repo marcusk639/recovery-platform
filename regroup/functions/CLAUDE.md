@@ -92,11 +92,20 @@ Each tier in `SUBSCRIPTION_TIERS` carries a `features` map
 with `tierAllows(houseType, tier, featureKey)` (`util/tierPricing.ts`) — **compose
 with the `maxResidents`/`maxProperties` caps, don't replace them**. Currently
 enforced: `multiProperty` in `updateSubscriptionHouses` (capability-specific error
-before the numeric cap) and `complianceExport` in the `complianceExport` callable
-(`callable/compliance.ts`, Phase-5 stub — RG-SPEC-09: returns `upgrade_required`
-vs `coming_soon`, exports nothing yet). The remaining flags
-(`automatedRentCollection`, `analytics`, `whiteLabel`) are defined value-ladder
-labels; do not gate a capability that has no real feature or Phase-5 stub behind it.
+before the numeric cap); `complianceExport` in the `complianceExport` callable
+(`callable/compliance.ts`, RG-SPEC-09 — returns `upgrade_required` when the tier
+lacks it, else a real court/drug-court **CSV** of drug tests + meeting attendance,
+issue #31); and `analytics` in the `rentRoiMetrics` callable
+(`callable/analytics.ts`, RG-TRACK — returns `upgrade_required` else rent-collection
+ROI metrics, issue #32). The remaining flags (`automatedRentCollection`,
+`whiteLabel`) are defined value-ladder labels; do not gate a capability that has no
+real feature behind it.
+
+**Read-only money/PHI note:** both `complianceExport` and `rentRoiMetrics` are
+read-only and log only ids + aggregate counts (never names, test results, or
+amounts per resident). `payments` docs store `amount` in **dollars** (webhook
+divides by 100) — convert to cents when aggregating; `guests.rentOwed` is integer
+cents. `collectedGrossCents` is gross (refunds are not written to Firestore).
 
 Oxford Network has `availableForSale: false` (P-8) — `isTierAvailableForSale()`
 blocks it in `createOperatorSubscription` checkout while keeping the tier defined.

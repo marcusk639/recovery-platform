@@ -1,6 +1,6 @@
 # RG-TRACK — Rent-Collection ROI Dashboard
 
-**Status:** Tracking issue (metrics + data sources defined; no UI built) — GitHub issue [#32](https://github.com/marcusk639/recovery-platform/issues/32)
+**Status:** v1 shipped (`rentRoiMetrics` callable: collected-gross $, outstanding $, overdue count) — GitHub issue [#32](https://github.com/marcusk639/recovery-platform/issues/32). Deferred: on-time %, hours-saved, refund-netting, UI (see caveats).
 **Tier:** Professional / Plus and higher (value-ladder capability `analytics`)
 **Source rationale:** [regroup-pricing-justification.md §6c](../../launch-readiness/regroup-pricing-justification.md) · [regroup-pricing-revision-plan.md Phase 5](../../launch-readiness/regroup-pricing-revision-plan.md)
 
