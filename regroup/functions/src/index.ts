@@ -19,6 +19,9 @@ export * from "./callable/subscriptions";
 // Callable functions — Oxford House management
 export * from "./callable/oxford";
 
+// Callable functions — Compliance (RG-SPEC-09 court/drug-court export; Phase 5 stub)
+export * from "./callable/compliance";
+
 // Callable functions — Invitations (server-issued invitation tokens)
 export {
   createInvitation,
