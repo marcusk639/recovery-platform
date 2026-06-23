@@ -512,11 +512,7 @@ const HouseSearchScreen: React.FC<HouseSearchProps> = props => {
             />
           </View>
         )}
-        {searching && (
-          <View testID="house-search-loading">
-            <RatsLoadingIndicator />
-          </View>
-        )}
+        {searching && <RatsLoadingIndicator testID="house-search-loading" />}
         {!searching && !isEmpty(searchedHouses) && renderHouses()}
         {!searching && isEmpty(searchedHouses) && (
           <EmptyScreen

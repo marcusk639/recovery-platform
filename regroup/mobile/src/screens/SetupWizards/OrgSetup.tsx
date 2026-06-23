@@ -38,7 +38,6 @@ import { RatsText } from '../../components/rats-text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-
 export const WIZARD_BUTTON_CONTAINER: ViewStyle = {
   margin: normalize(10),
   position: 'absolute',
@@ -68,7 +67,8 @@ const OrgSetupFormView: React.FC<OrgSetupFormViewProps> = props => {
   } = props;
 
   // Phase 3.3: Use hooks instead of HOCs
-  const { showLoadingModal, hideLoadingModal, setLoadingModalState } = useModal();
+  const { showLoadingModal, hideLoadingModal, setLoadingModalState } =
+    useModal();
   const { notify, showPopover } = useNotification();
 
   const [collapsedHouses, setCollapsedHouses] = useState<{
@@ -79,14 +79,21 @@ const OrgSetupFormView: React.FC<OrgSetupFormViewProps> = props => {
 
   useEffect(() => {
     const loadingMessage = 'Processing...';
-    const errorMessage = submittingFailed ? 'House submission failed' : undefined;
+    const errorMessage = submittingFailed
+      ? 'House submission failed'
+      : undefined;
     setLoadingModalState(
       submitting || false,
       submittingSuccessful || false,
       loadingMessage,
       errorMessage,
     );
-  }, [submitting, submittingSuccessful, submittingFailed, setLoadingModalState]);
+  }, [
+    submitting,
+    submittingSuccessful,
+    submittingFailed,
+    setLoadingModalState,
+  ]);
 
   const onCloseMenu = useCallback(() => {
     setSelectedHouse(null);
@@ -145,7 +152,7 @@ const OrgSetupFormView: React.FC<OrgSetupFormViewProps> = props => {
   const renderHelp = useCallback(() => {
     showPopover(
       'ORG SETUP',
-      'Here you can set up your organization. You can add houses, managers, and other information.'
+      'Here you can set up your organization. You can add houses, managers, and other information.',
     );
   }, [showPopover]);
 
@@ -154,22 +161,29 @@ const OrgSetupFormView: React.FC<OrgSetupFormViewProps> = props => {
       house ? (
         <View key={house.id} testID={`house-item-${house.id}`}>
           <ActivityItemWithButtons
-          rightButtonContainerStyle={{ borderColor: color.red }}
-          rightButtonTextStyle={{ color: color.red }}
-          rightButtonLight
-          leftButtonAction={editHouse(house)}
-          rightButtonAction={deleteHouse(house)}
-          leftButtonTitle="EDIT"
-          rightButtonTitle="DELETE"
-          container={{
-            marginTop: normalize(20),
-            borderColor: errors[house.id] ? color.red : color.dark_grey,
-            backgroundColor: errors[house.id] ? color.light_red : color.white,
-          }}
-          boxedIconName="home"
-          boxedIconBackground={color.dark_blue}
-          description={getAddressDisplay(house.street, undefined, undefined, undefined)}
-          descriptionHeader={house.name}
+            rightButtonContainerStyle={{ borderColor: color.red }}
+            rightButtonTextStyle={{ color: color.red }}
+            rightButtonLight
+            leftButtonAction={editHouse(house)}
+            rightButtonAction={deleteHouse(house)}
+            leftButtonTitle="EDIT"
+            leftButtonTestID={`edit-house-button-${house.id}`}
+            rightButtonTestID={`delete-house-button-${house.id}`}
+            rightButtonTitle="DELETE"
+            container={{
+              marginTop: normalize(20),
+              borderColor: errors[house.id] ? color.red : color.dark_grey,
+              backgroundColor: errors[house.id] ? color.light_red : color.white,
+            }}
+            boxedIconName="home"
+            boxedIconBackground={color.dark_blue}
+            description={getAddressDisplay(
+              house.street,
+              undefined,
+              undefined,
+              undefined,
+            )}
+            descriptionHeader={house.name}
             error={errors[house.id]}
           />
         </View>

@@ -201,6 +201,8 @@ interface ActivityItemWithButtonProps extends ActivityItemProps {
   leftButtonTextStyle?: TextStyle;
   leftButtonContainerStyle?: ViewStyle;
   leftButtonTitle: string;
+  leftButtonTestID?: string;
+  rightButtonTestID?: string;
   rightButtonTitle?: string;
   leftButtonAction: () => any;
   leftButtonLight?: boolean;
@@ -248,6 +250,7 @@ export const ActivityItemWithButtons = (props: ActivityItemWithButtonProps) => {
                 { marginTop: normalize(10), justifyContent: 'space-between' },
               ]}>
               <RatsButton
+                testID={props.leftButtonTestID}
                 disabled={leftDisabled}
                 light
                 style={{ ...leftButtonTextStyle }}
@@ -262,6 +265,7 @@ export const ActivityItemWithButtons = (props: ActivityItemWithButtonProps) => {
               />
               {rightButtonTitle && (
                 <RatsButton
+                  testID={props.rightButtonTestID}
                   disabled={rightDisabled}
                   light={props.rightButtonLight}
                   style={{ ...rightButtonTextStyle }}

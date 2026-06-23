@@ -19,6 +19,7 @@ interface Option {
   selected: boolean;
   size: number;
   value: any;
+  testID?: string;
 }
 
 interface Props extends HOCProps {
@@ -56,6 +57,10 @@ const styles = StyleSheet.create({
   error: {
     color: color.red,
     fontSize: fontSize.small,
+  },
+  optionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
 });
 
@@ -114,38 +119,44 @@ const RatsRadioButtonGroup = (props: Props & FieldProps) => {
               labelHorizontal={labelHorizontal}
               key={i}>
               {/*  You can set RadioButtonLabel before RadioButtonInput */}
-              <RadioButtonInput
-                obj={obj}
-                index={i}
-                isSelected={!obj.disabled && value === obj.value}
-                onPress={(value: any) =>
-                  !obj.disabled ? setFieldValue(name, value) : null
-                }
-                borderWidth={1}
-                buttonInnerColor={obj.disabled ? color.dark_grey : color.black}
-                buttonOuterColor={obj.disabled ? color.dark_grey : color.black}
-                buttonSize={normalize(20)}
-                buttonOuterSize={normalize(25)}
-                buttonStyle={{}}
-                buttonWrapStyle={{}}
-              />
-              <RadioButtonLabel
-                obj={obj}
-                index={i}
-                labelHorizontal={labelHorizontal}
-                onPress={(value: any) =>
-                  !obj.disabled ? setFieldValue(name, value) : null
-                }
-                labelStyle={{
-                  fontSize: fontSize.regular_medium,
-                  color: obj.disabled ? color.dark_grey : color.black,
-                  fontFamily: fontFamily.roboto,
-                }}
-                labelWrapStyle={{
-                  paddingBottom: normalize(20),
-                  width: formHorizontal ? undefined : '93%',
-                }}
-              />
+              <View testID={obj.testID} style={styles.optionRow}>
+                <RadioButtonInput
+                  obj={obj}
+                  index={i}
+                  isSelected={!obj.disabled && value === obj.value}
+                  onPress={(value: any) =>
+                    !obj.disabled ? setFieldValue(name, value) : null
+                  }
+                  borderWidth={1}
+                  buttonInnerColor={
+                    obj.disabled ? color.dark_grey : color.black
+                  }
+                  buttonOuterColor={
+                    obj.disabled ? color.dark_grey : color.black
+                  }
+                  buttonSize={normalize(20)}
+                  buttonOuterSize={normalize(25)}
+                  buttonStyle={{}}
+                  buttonWrapStyle={{}}
+                />
+                <RadioButtonLabel
+                  obj={obj}
+                  index={i}
+                  labelHorizontal={labelHorizontal}
+                  onPress={(value: any) =>
+                    !obj.disabled ? setFieldValue(name, value) : null
+                  }
+                  labelStyle={{
+                    fontSize: fontSize.regular_medium,
+                    color: obj.disabled ? color.dark_grey : color.black,
+                    fontFamily: fontFamily.roboto,
+                  }}
+                  labelWrapStyle={{
+                    paddingBottom: normalize(20),
+                    width: formHorizontal ? undefined : '93%',
+                  }}
+                />
+              </View>
             </RadioButton>
           );
         })}

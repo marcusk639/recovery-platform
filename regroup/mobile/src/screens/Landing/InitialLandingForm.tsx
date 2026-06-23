@@ -102,8 +102,16 @@ const InitialLandingFormView = (props: FormViewProps) => {
           wrapStyle={{ marginHorizontal: 0 }}
           selectedButtonColor={color.black}
           radioButtons={[
-            { label: potentialGuestLabel, value: 'guest' },
-            { label: potentialManagerLabel, value: 'superAdmin' },
+            {
+              label: potentialGuestLabel,
+              value: 'guest',
+              testID: 'landing-role-guest',
+            },
+            {
+              label: potentialManagerLabel,
+              value: 'superAdmin',
+              testID: 'landing-role-manager',
+            },
           ]}
         />
         {Object.keys(props.errors).length > 0 && <View>{renderErrors()}</View>}
@@ -164,6 +172,7 @@ const InitialLandingFormView = (props: FormViewProps) => {
             text="Want to try it out?"
           />
           <TouchableOpacity
+            testID="landing-demo-link"
             onPress={() => {
               navigation.navigate(Routes.Login);
             }}>
