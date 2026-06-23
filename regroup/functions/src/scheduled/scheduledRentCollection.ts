@@ -66,7 +66,10 @@ export async function runRentCollection(): Promise<void> {
         return;
       }
 
-      const amountCents = guest.rentOwed; // already integer cents
+      // rentOwed is stored as integer cents, but guard against legacy/float
+      // values — Stripe rejects non-integer `amount`, which would silently
+      // skip a guest's auto-pay. Round to the nearest cent.
+      const amountCents = Math.round(guest.rentOwed);
       const idempotencyKey = `auto-rent-${guest.id}-${today}`;
 
       // The platform application fee only applies to Connect transfers. When

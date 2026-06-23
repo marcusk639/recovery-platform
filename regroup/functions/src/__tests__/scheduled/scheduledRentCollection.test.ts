@@ -92,6 +92,35 @@ describe("runRentCollection", () => {
     expect(mockCreatePaymentIntent).toHaveBeenCalledTimes(2);
   });
 
+  it("rounds a non-integer rentOwed before charging (H-fns-1)", async () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { guestCollection } = require("../../api/firestore");
+    guestCollection.get.mockResolvedValueOnce({
+      empty: false,
+      size: 1,
+      docs: [
+        {
+          id: "guest-float",
+          data: () => ({
+            houseId: "house-1",
+            stripeCustomerId: "cus_float",
+            defaultPaymentMethodId: "pm_float",
+            autoPayEnabled: true,
+            rentOwed: 149.5, // stray non-integer cents — Stripe would reject as-is
+          }),
+        },
+      ],
+    });
+    mockCreatePaymentIntent.mockResolvedValue({ id: "pi_f", status: "succeeded" });
+
+    await runRentCollection();
+
+    expect(mockCreatePaymentIntent).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 150 }),
+      expect.anything(),
+    );
+  });
+
   describe("method-aware Connect application fee", () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { guestCollection } = require("../../api/firestore");
