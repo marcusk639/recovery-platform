@@ -141,6 +141,8 @@ Confirm these exist and capture exact locations (they were accurate as of the 20
 
 **Goal:** Re-gate tiers on capabilities (not just bed caps) so upgrades buy outcomes, using only flags that map to features that exist today. Mark Oxford Network "not for sale" (P-8).
 
+> **STATUS 2026-06-22 — DONE.** `features` map added to all 6 tiers per the §6b ladder; `availableForSale: false` on Oxford Network. Helpers `tierAllows()` + `isTierAvailableForSale()` added in `util/tierPricing.ts`. Enforced: `multiProperty` in `updateSubscriptionHouses` (capability error before the numeric cap) and `availableForSale` in `createOperatorSubscription` checkout. **Deviation:** the automated-rent path is NOT tier-gated — `scheduledRentCollection.runRentCollection` is a guest-keyed money-movement loop with no houseId→operator index and no server-side autopay-enable boundary (autopay is toggled client-side); gating it would risk halting rent collection and require infra that doesn't exist. `automatedRentCollection`/`complianceExport`/`analytics`/`whiteLabel` remain defined value-ladder flags, not enforced (no real feature/Phase-5 stub yet — per the anti-pattern guard, don't gate vaporware). Tests: tierPricing + subscriptions suites green (611 total). Documented in `functions/CLAUDE.md`.
+
 **What to implement:**
 
 1. Add a `features` capability map to each tier in `SUBSCRIPTION_TIERS` (copy the existing field-addition pattern), e.g. `{ automatedRentCollection, multiProperty, complianceExport, analytics, whiteLabel }` booleans. Set per the justification §6b ladder:

@@ -85,6 +85,13 @@ export const SUBSCRIPTION_TIERS = {
       maxResidents: 10,
       maxProperties: 1,
       label: "Traditional Starter",
+      features: {
+        automatedRentCollection: false,
+        multiProperty: false,
+        complianceExport: false,
+        analytics: false,
+        whiteLabel: false,
+      },
     },
     professional: {
       priceEnvVar: "STRIPE_PRICE_TRAD_PROFESSIONAL",
@@ -93,6 +100,13 @@ export const SUBSCRIPTION_TIERS = {
       maxResidents: 20,
       maxProperties: 3,
       label: "Traditional Professional",
+      features: {
+        automatedRentCollection: true,
+        multiProperty: true,
+        complianceExport: true,
+        analytics: true,
+        whiteLabel: false,
+      },
     },
     enterprise: {
       priceEnvVar: "STRIPE_PRICE_TRAD_ENTERPRISE",
@@ -101,6 +115,13 @@ export const SUBSCRIPTION_TIERS = {
       maxResidents: null,
       maxProperties: null,
       label: "Traditional Enterprise",
+      features: {
+        automatedRentCollection: true,
+        multiProperty: true,
+        complianceExport: true,
+        analytics: true,
+        whiteLabel: true,
+      },
     },
   },
   oxford: {
@@ -111,6 +132,13 @@ export const SUBSCRIPTION_TIERS = {
       maxResidents: 15,
       maxProperties: 1,
       label: "Oxford Standard",
+      features: {
+        automatedRentCollection: false,
+        multiProperty: false,
+        complianceExport: false,
+        analytics: false,
+        whiteLabel: false,
+      },
     },
     plus: {
       priceEnvVar: "STRIPE_PRICE_OXFORD_PLUS",
@@ -119,6 +147,13 @@ export const SUBSCRIPTION_TIERS = {
       maxResidents: 25,
       maxProperties: 1,
       label: "Oxford Plus",
+      features: {
+        automatedRentCollection: true,
+        multiProperty: true,
+        complianceExport: true,
+        analytics: true,
+        whiteLabel: false,
+      },
     },
     network: {
       priceEnvVar: "STRIPE_PRICE_OXFORD_NETWORK",
@@ -127,6 +162,16 @@ export const SUBSCRIPTION_TIERS = {
       maxResidents: null,
       maxProperties: null,
       label: "Oxford Network",
+      // P-8: keep the tier defined but block checkout until a regional chapter
+      // signs and validates the price.
+      availableForSale: false,
+      features: {
+        automatedRentCollection: true,
+        multiProperty: true,
+        complianceExport: true,
+        analytics: true,
+        whiteLabel: true,
+      },
     },
   },
 } as const;

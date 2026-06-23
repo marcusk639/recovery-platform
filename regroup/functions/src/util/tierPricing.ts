@@ -1,5 +1,16 @@
 import { SUBSCRIPTION_TIERS, HouseType, TierKey } from "../config";
 
+// Capability flags that express the value ladder (justification §6b). Each maps
+// to a real feature or a Phase-5 stub — never gate vaporware beyond a flag.
+export type TierFeatureKey =
+  | "automatedRentCollection"
+  | "multiProperty"
+  | "complianceExport"
+  | "analytics"
+  | "whiteLabel";
+
+type TierFeatures = { [K in TierFeatureKey]: boolean };
+
 interface TierConfig {
   priceEnvVar: string;
   annualPriceEnvVar?: string;
@@ -7,6 +18,9 @@ interface TierConfig {
   maxResidents: number | null;
   maxProperties: number | null;
   label: string;
+  features: TierFeatures;
+  // Absent ⇒ sellable. Set false to keep a tier defined but block checkout (P-8).
+  availableForSale?: boolean;
 }
 
 export type BillingInterval = "month" | "year";
@@ -35,9 +49,7 @@ export const resolveTierPriceId = (
 ): string => {
   const config = getTier(houseType, tier);
   const envVar =
-    billingInterval === "year"
-      ? config.annualPriceEnvVar
-      : config.priceEnvVar;
+    billingInterval === "year" ? config.annualPriceEnvVar : config.priceEnvVar;
   if (!envVar) {
     throw new Error(
       `No ${billingInterval} price env var configured for tier "${tier}" (houseType "${houseType}")`,
@@ -49,3 +61,19 @@ export const resolveTierPriceId = (
   }
   return priceId;
 };
+
+// Whether a tier includes a given capability (value-ladder gate, P-7). Used to
+// gate features at their real invocation site — compose with cap enforcement,
+// do not replace it.
+export const tierAllows = (
+  houseType: HouseType,
+  tier: TierKey,
+  feature: TierFeatureKey,
+): boolean => getTier(houseType, tier).features[feature];
+
+// P-8: a tier with availableForSale === false is defined but not sellable.
+// Absent flag ⇒ sellable.
+export const isTierAvailableForSale = (
+  houseType: HouseType,
+  tier: TierKey,
+): boolean => getTier(houseType, tier).availableForSale !== false;

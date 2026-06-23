@@ -208,6 +208,19 @@ describe("createOperatorSubscription", () => {
     );
   });
 
+  it("rejects checkout for a not-for-sale tier (Oxford Network, P-8)", async () => {
+    mockGetUser.mockResolvedValue(fakeUser);
+    await expect(
+      call(createOperatorSubscription, {
+        user: fakeUser,
+        paymentMethod: "pm_test",
+        houseType: "oxford",
+        tier: "network",
+      }),
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+    expect(mockInitializeCustomer).not.toHaveBeenCalled();
+  });
+
   it("reads oxfordEnabled from Firestore, not from request payload", async () => {
     // Security: billing tier must be server-authoritative (Firestore), not client-supplied.
     const oxfordFirestoreUser = {
@@ -959,6 +972,9 @@ describe("tier subscriptions skip Stripe quantity updates", () => {
     ...fakeUser,
     subscriptionMetadata: {
       ...tierUserAtResidentCap.subscriptionMetadata,
+      // Professional allows multiProperty (P-7) so the numeric cap — not the
+      // capability gate — is what bounds these multi-house cases.
+      tier: "professional",
       maxResidents: 10,
       maxProperties: 3,
       houses: { "house-1": { numberOfGuests: 2 } },
@@ -990,7 +1006,7 @@ describe("tier subscriptions skip Stripe quantity updates", () => {
       "user-1",
       expect.objectContaining({
         subscriptionMetadata: expect.objectContaining({
-          tier: "starter",
+          tier: "professional",
           houses: { "house-1": { numberOfGuests: 3 } },
         }),
       }),
@@ -1065,6 +1081,29 @@ describe("tier subscriptions skip Stripe quantity updates", () => {
         }),
       }),
     );
+  });
+
+  it("denies a second property on a tier without the multiProperty capability (P-7)", async () => {
+    // Starter has multiProperty=false: adding a 2nd house is blocked by the
+    // capability gate, independent of the numeric cap.
+    const starterSingleHouse = {
+      ...fakeUser,
+      subscriptionMetadata: {
+        ...tierUserAtResidentCap.subscriptionMetadata,
+        houseType: "traditional",
+        tier: "starter",
+        houses: { "house-1": { numberOfGuests: 0 } },
+      },
+    };
+    mockGetUser.mockResolvedValue(starterSingleHouse);
+    await expect(
+      call(updateSubscriptionHouses, {
+        ownerUserId: "user-1",
+        action: "add",
+        houseIds: ["house-2"],
+      }),
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+    expect(mockUpdateUser).not.toHaveBeenCalled();
   });
 });
 

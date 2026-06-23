@@ -84,6 +84,21 @@ re-touching this path, keep the tier skip. The two coupons exist in Stripe **tes
 mode**; live coupons are pending a Dashboard create (the `rk_live_` key can't write
 coupons).
 
+### Tier capabilities (value ladder, P-7/P-8)
+
+Each tier in `SUBSCRIPTION_TIERS` carries a `features` map
+(`automatedRentCollection`, `multiProperty`, `complianceExport`, `analytics`,
+`whiteLabel`) expressing the value ladder. Gate features at their real call site
+with `tierAllows(houseType, tier, featureKey)` (`util/tierPricing.ts`) — **compose
+with the `maxResidents`/`maxProperties` caps, don't replace them**. Currently
+enforced: `multiProperty` in `updateSubscriptionHouses` (capability-specific error
+before the numeric cap). The other flags are defined value-ladder labels; do not
+gate a capability that has no real feature or Phase-5 stub behind it.
+
+Oxford Network has `availableForSale: false` (P-8) — `isTierAvailableForSale()`
+blocks it in `createOperatorSubscription` checkout while keeping the tier defined.
+Absent flag ⇒ sellable.
+
 ### Webhook security
 
 `http/stripeWebhook.ts` uses Stripe signature verification (`stripe.webhooks.constructEvent`). Never process a webhook payload without verifying the signature first.

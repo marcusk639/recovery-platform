@@ -43,6 +43,7 @@ import {
   withinPropertyCap,
   totalResidents,
 } from "../util/tierCaps";
+import { tierAllows, isTierAvailableForSale } from "../util/tierPricing";
 import {
   getUser,
   updateUser,
@@ -205,6 +206,17 @@ export const createOperatorSubscription = onCall(
       throw new HttpsError(
         "invalid-argument",
         `Unknown tier "${data.tier}" for houseType "${data.houseType}"`,
+      );
+    }
+
+    // P-8: block checkout for tiers held back until a chapter signs (Oxford
+    // Network). The tier stays defined so existing subs are unaffected.
+    if (
+      !isTierAvailableForSale(data.houseType as HouseType, data.tier as TierKey)
+    ) {
+      throw new HttpsError(
+        "failed-precondition",
+        `The "${tierConfig.label}" plan is not currently available for new subscriptions`,
       );
     }
 
@@ -586,6 +598,23 @@ export const updateSubscriptionHouses = onCall(
         const added = { ...houses };
         for (const id of houseIds ?? []) {
           if (id in added) continue;
+          // P-7: a second property requires the multiProperty capability. Checked
+          // before the numeric cap so single-property tiers get a capability-
+          // specific message; the cap still bounds multi-property tiers (e.g.
+          // Professional adding a 4th house past maxProperties=3).
+          if (
+            Object.keys(added).length >= 1 &&
+            !tierAllows(
+              houseMeta.houseType as HouseType,
+              houseMeta.tier as TierKey,
+              "multiProperty",
+            )
+          ) {
+            throw new HttpsError(
+              "failed-precondition",
+              "Your plan does not include multiple properties — upgrade to add more houses",
+            );
+          }
           if (
             !withinPropertyCap(
               Object.keys(added).length,
