@@ -64,7 +64,9 @@ export const createHouseId = () => houseCollection.doc().id;
 export const createAdminId = () => adminCollection.doc().id;
 export const createGuestId = () => guestCollection.doc().id;
 
-export function shapeHouses(docs: any[]): { [id: string]: House } {
+export function shapeHouses(
+  docs: admin.firestore.QueryDocumentSnapshot[],
+): { [id: string]: House } {
   const houses: { [id: string]: House } = {};
   docs.forEach((house) => (houses[house.id] = house.data() as House));
   return houses;
@@ -200,8 +202,33 @@ export async function getUser(id: string) {
   return (await userCollection.doc(id).get()).data() as User;
 }
 
+// Recursively removes `undefined` values (Firestore rejects them by default)
+// while preserving FieldValue sentinels (serverTimestamp/increment/delete),
+// Date, and Timestamp objects — unlike JSON.parse(JSON.stringify(...)), which
+// silently collapses sentinels to {} and converts Dates to ISO strings.
+function stripUndefinedDeep<T>(value: T): T {
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    value instanceof Date ||
+    value instanceof admin.firestore.FieldValue ||
+    value instanceof admin.firestore.Timestamp
+  ) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => stripUndefinedDeep(item)) as unknown as T;
+  }
+  const result: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+    if (val === undefined) continue;
+    result[key] = stripUndefinedDeep(val);
+  }
+  return result as T;
+}
+
 export async function updateUser(id: string, values: Partial<User>) {
-  return userCollection.doc(id).update(JSON.parse(JSON.stringify(values)));
+  return userCollection.doc(id).update(stripUndefinedDeep(values));
 }
 
 export async function addNotification(notification: Notification) {

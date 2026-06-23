@@ -199,15 +199,28 @@ export const promoteGuestsToAdmin = onCall(async (request) => {
     z.array(guestMinSchema),
     request.data,
   ) as unknown as Guest[];
-  const houseIds = [...new Set(data.map((g) => g.houseId))];
-  if (houseIds.length === 0) return "success";
-  await assertCanGrantClaimForHouses({
-    callerUid: request.auth.uid,
-    callerToken: request.auth.token,
-    targetUid: request.auth.uid,
-    houseIds,
-    callableName: "promoteGuestsToAdmin",
-  });
+  if (data.length === 0) return "success";
+  // Authorize each target user against the specific house(s) being modified for
+  // that user. Passing the caller's own uid as the target would collapse the
+  // delegation branch in the guard, trivially self-authorizing a bulk op the
+  // caller is not actually an admin/owner of the affected houses for.
+  const housesByTarget = new Map<string, Set<string>>();
+  for (const guest of data) {
+    const houses = housesByTarget.get(guest.userId) ?? new Set<string>();
+    houses.add(guest.houseId);
+    housesByTarget.set(guest.userId, houses);
+  }
+  await Promise.all(
+    [...housesByTarget.entries()].map(([targetUid, houses]) =>
+      assertCanGrantClaimForHouses({
+        callerUid: request.auth!.uid,
+        callerToken: request.auth!.token,
+        targetUid,
+        houseIds: [...houses],
+        callableName: "promoteGuestsToAdmin",
+      }),
+    ),
+  );
   const users = await getGuestsAsUsers(data);
   await Promise.all(
     users.map(async (user) => {
@@ -230,15 +243,28 @@ export const removePrivilegesForGuests = onCall(async (request) => {
     guests: Guest[];
     role: Role;
   };
-  const houseIds = [...new Set(data.guests.map((g) => g.houseId))];
-  if (houseIds.length === 0) return "success";
-  await assertCanGrantClaimForHouses({
-    callerUid: request.auth.uid,
-    callerToken: request.auth.token,
-    targetUid: request.auth.uid,
-    houseIds,
-    callableName: "removePrivilegesForGuests",
-  });
+  if (data.guests.length === 0) return "success";
+  // Authorize each target user against the specific house(s) being modified for
+  // that user. Passing the caller's own uid as the target would collapse the
+  // delegation branch in the guard, trivially self-authorizing a bulk op the
+  // caller is not actually an admin/owner of the affected houses for.
+  const housesByTarget = new Map<string, Set<string>>();
+  for (const guest of data.guests) {
+    const houses = housesByTarget.get(guest.userId) ?? new Set<string>();
+    houses.add(guest.houseId);
+    housesByTarget.set(guest.userId, houses);
+  }
+  await Promise.all(
+    [...housesByTarget.entries()].map(([targetUid, houses]) =>
+      assertCanGrantClaimForHouses({
+        callerUid: request.auth!.uid,
+        callerToken: request.auth!.token,
+        targetUid,
+        houseIds: [...houses],
+        callableName: "removePrivilegesForGuests",
+      }),
+    ),
+  );
   const users = await getGuestsAsUsers(data.guests);
   await Promise.all(
     users.map(async (user) => {

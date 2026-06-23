@@ -9,7 +9,7 @@ jest.mock("firebase-functions/v2/https", () => ({
 }));
 
 import { z } from "zod";
-import { parseInput } from "../../validation";
+import { parseInput, safeReturnUrlSchema } from "../../validation";
 import { HttpsError } from "firebase-functions/v2/https";
 
 const schema = z.object({
@@ -57,5 +57,29 @@ describe("parseInput", () => {
       },
     } as any;
     expect(() => parseInput(badSchema, {})).toThrow(RangeError);
+  });
+});
+
+describe("safeReturnUrlSchema", () => {
+  it("accepts URLs on an allowed origin", () => {
+    expect(
+      safeReturnUrlSchema.safeParse("https://regroup-app.com/return").success,
+    ).toBe(true);
+    expect(
+      safeReturnUrlSchema.safeParse("http://localhost:4200/x").success,
+    ).toBe(true);
+  });
+
+  it("rejects URLs on an off-allowlist origin (open-redirect guard)", () => {
+    expect(
+      safeReturnUrlSchema.safeParse("https://evil.example.com/return").success,
+    ).toBe(false);
+  });
+
+  it("rejects javascript: and non-URL values", () => {
+    expect(safeReturnUrlSchema.safeParse("javascript:alert(1)").success).toBe(
+      false,
+    );
+    expect(safeReturnUrlSchema.safeParse("not a url").success).toBe(false);
   });
 });

@@ -372,10 +372,12 @@ describe("connectStripeAccount", () => {
   const HOUSE_ID = "house-connect-1";
   const ADMIN_UID = "admin-uid-1";
 
+  // returnUrl / refreshUrl must use an allowed origin (open-redirect guard,
+  // shared with the billing portal via safeReturnUrlSchema).
   const baseData = {
     houseId: HOUSE_ID,
-    returnUrl: "https://app.example.com/return",
-    refreshUrl: "https://app.example.com/refresh",
+    returnUrl: "https://regroup-app.com/return",
+    refreshUrl: "https://regroup-app.com/refresh",
   };
 
   describe("auth and input validation", () => {
@@ -409,14 +411,14 @@ describe("connectStripeAccount", () => {
       });
       process.env.GCLOUD_PROJECT = "testproj";
       await (connectStripeAccount as unknown as Function)(
-        { houseId: HOUSE_ID, refreshUrl: "https://y.com" },
+        { houseId: HOUSE_ID, refreshUrl: "https://regroup-app.com/refresh" },
         authedContext(ADMIN_UID),
       );
       expect(mockStripeAccountLinksCreate).toHaveBeenCalledWith(
         expect.objectContaining({
           return_url:
             "https://us-central1-testproj.cloudfunctions.net/stripeConnectReturn",
-          refresh_url: "https://y.com",
+          refresh_url: "https://regroup-app.com/refresh",
         }),
       );
     });
@@ -428,12 +430,12 @@ describe("connectStripeAccount", () => {
       });
       process.env.GCLOUD_PROJECT = "testproj";
       await (connectStripeAccount as unknown as Function)(
-        { houseId: HOUSE_ID, returnUrl: "https://x.com" },
+        { houseId: HOUSE_ID, returnUrl: "https://regroup-app.com/return" },
         authedContext(ADMIN_UID),
       );
       expect(mockStripeAccountLinksCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          return_url: "https://x.com",
+          return_url: "https://regroup-app.com/return",
           refresh_url:
             "https://us-central1-testproj.cloudfunctions.net/stripeConnectReauth?stripeAccountId=acct_existing_house",
         }),
@@ -478,6 +480,30 @@ describe("connectStripeAccount", () => {
         () =>
           (connectStripeAccount as unknown as Function)(
             { ...baseData, refreshUrl: "javascript:void(0)" },
+            authedContext(ADMIN_UID),
+          ),
+        "invalid-argument",
+      );
+    });
+
+    it("throws invalid-argument when returnUrl uses an off-allowlist origin", async () => {
+      seedHouse(HOUSE_ID, { adminId: ADMIN_UID });
+      await expectHttpsError(
+        () =>
+          (connectStripeAccount as unknown as Function)(
+            { ...baseData, returnUrl: "https://evil.example.com/return" },
+            authedContext(ADMIN_UID),
+          ),
+        "invalid-argument",
+      );
+    });
+
+    it("throws invalid-argument when refreshUrl uses an off-allowlist origin", async () => {
+      seedHouse(HOUSE_ID, { adminId: ADMIN_UID });
+      await expectHttpsError(
+        () =>
+          (connectStripeAccount as unknown as Function)(
+            { ...baseData, refreshUrl: "https://evil.example.com/refresh" },
             authedContext(ADMIN_UID),
           ),
         "invalid-argument",

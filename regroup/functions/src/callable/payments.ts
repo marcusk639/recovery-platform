@@ -23,7 +23,7 @@ import {
   isHouseAdmin,
   HouseAdminFields,
 } from "../util/houseAuth";
-import { parseInput } from "../validation";
+import { parseInput, safeReturnUrlSchema } from "../validation";
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
 const createPaymentIntentSchema = z.object({
@@ -62,18 +62,10 @@ const updatePaymentInfoSchema = z.object({
   guestId: z.string().min(1).optional(),
 });
 
-// Allows any URI scheme except javascript: (matches existing URL validation logic)
-const safeUrlSchema = z
-  .string()
-  .refine(
-    (u) => !/^javascript:/i.test(u) && /^[a-z][a-z0-9+\-.]*:\/\//i.test(u),
-    { message: "Invalid URL scheme" },
-  );
-
 const connectStripeAccountSchema = z.object({
   houseId: z.string().min(1),
-  returnUrl: safeUrlSchema.optional(),
-  refreshUrl: safeUrlSchema.optional(),
+  returnUrl: safeReturnUrlSchema.optional(),
+  refreshUrl: safeReturnUrlSchema.optional(),
 });
 
 const houseIdSchema = z.object({ houseId: z.string().min(1) });

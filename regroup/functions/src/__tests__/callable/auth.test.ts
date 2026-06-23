@@ -487,12 +487,36 @@ describe("promoteGuestsToAdmin — authorization guard (C2)", () => {
     ).rejects.toMatchObject({ code: "permission-denied" });
     expect(mockGetGuestsAsUsers).not.toHaveBeenCalled();
     expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+    // The guard must be evaluated against the user being modified (the guest),
+    // not the caller — passing the caller's own uid would collapse the
+    // delegation branch and trivially self-authorize the bulk op.
     expect(mockAssertCanGrantClaimForHouses).toHaveBeenCalledWith(
       expect.objectContaining({
         houseIds: ["house-1"],
-        targetUid: request.uid,
+        targetUid: "target-uid",
         callableName: "promoteGuestsToAdmin",
       }),
+    );
+  });
+
+  it("authorizes each target user against the specific house(s) they are modified in", async () => {
+    mockAssertCanGrantClaimForHouses.mockResolvedValue(undefined);
+    mockGetGuestsAsUsers.mockResolvedValue([{ uid: "u1" }, { uid: "u2" }]);
+    mockCreateClaims.mockResolvedValue({});
+    mockSetCustomUserClaims.mockResolvedValue(undefined);
+    const guests = [
+      { userId: "u1", houseId: "h1" },
+      { userId: "u2", houseId: "h2" },
+    ];
+    const request = { uid: "admin-uid", token: {} };
+
+    await call(promoteGuestsToAdmin, guests, request);
+
+    expect(mockAssertCanGrantClaimForHouses).toHaveBeenCalledWith(
+      expect.objectContaining({ targetUid: "u1", houseIds: ["h1"] }),
+    );
+    expect(mockAssertCanGrantClaimForHouses).toHaveBeenCalledWith(
+      expect.objectContaining({ targetUid: "u2", houseIds: ["h2"] }),
     );
   });
 });
@@ -535,10 +559,11 @@ describe("removePrivilegesForGuests — authorization guard (C3)", () => {
     ).rejects.toMatchObject({ code: "permission-denied" });
     expect(mockGetGuestsAsUsers).not.toHaveBeenCalled();
     expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+    // Guard is evaluated against the guest being modified, not the caller.
     expect(mockAssertCanGrantClaimForHouses).toHaveBeenCalledWith(
       expect.objectContaining({
         houseIds: ["house-1"],
-        targetUid: request.uid,
+        targetUid: "target-uid",
         callableName: "removePrivilegesForGuests",
       }),
     );

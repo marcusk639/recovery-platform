@@ -163,8 +163,13 @@ export const findMeetings = onCall(
       );
       return meetings;
     } catch (error) {
-      logger.error("SOMETHING WENT WRONG", error);
-      return [];
+      // Re-throw client-facing errors (e.g. validation) untouched.
+      if (error instanceof HttpsError) throw error;
+      // A backend failure is not "no results" — surface it so the client can
+      // distinguish an error from a genuinely empty search. The explicit
+      // empty-result returns above (Custom/AL-ANON/Religious) are unaffected.
+      logger.error("findMeetings failed", error);
+      throw new HttpsError("internal", "Failed to retrieve meetings");
     }
   },
 );

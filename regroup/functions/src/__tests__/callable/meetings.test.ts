@@ -156,6 +156,13 @@ describe("findMeetings", () => {
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe("Sunrise Group");
   });
+
+  it("throws internal (not an empty array) when the directory fetch fails", async () => {
+    mockFetchDirectoryMeetings.mockRejectedValue(new Error("directory down"));
+    await expect(
+      call(findMeetings, { filters: { type: "AA", location, day: "" } }),
+    ).rejects.toMatchObject({ code: "internal" });
+  });
 });
 
 describe("userIsAtMeeting", () => {

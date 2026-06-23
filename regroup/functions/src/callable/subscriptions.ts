@@ -33,7 +33,11 @@ import {
   uncancelSubscription,
   applyBundleDiscountToSubscription,
 } from "../api/stripe";
-import { createStripeClient } from "../util/stripe";
+import {
+  createStripeClient,
+  isResourceMissing,
+  mapStripeError,
+} from "../util/stripe";
 import {
   withinResidentCap,
   withinPropertyCap,
@@ -522,8 +526,15 @@ export const updateSubscriptionGuests = onCall(
       // HttpsErrors thrown by guards (e.g. negative quantity check above).
       if (error instanceof HttpsError) throw error;
       logger.error("Error updating subscription:", error);
-      // If subscription doesn't exist in Stripe, just update the user metadata
-      // This handles cases where the subscription was deleted in Stripe but metadata still exists
+      // Only fall back to Firestore-only updates when Stripe reports the
+      // subscription/item genuinely no longer exists (resource_missing). For
+      // transient failures (rate limit, network, API errors) surface the error
+      // so Firestore occupancy does not permanently diverge from Stripe billing.
+      if (!isResourceMissing(error)) {
+        throw mapStripeError(error);
+      }
+      // The subscription item was deleted in Stripe but metadata still exists —
+      // reconcile by updating the local metadata only.
       try {
         await updateUser(user.id!, {
           subscriptionMetadata: updateSubscriptionMetadata(

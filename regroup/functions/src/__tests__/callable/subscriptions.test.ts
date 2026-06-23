@@ -476,6 +476,52 @@ describe("updateSubscriptionGuests", () => {
 
     expect(mockUpdateSubscriptionItem).not.toHaveBeenCalled();
   });
+
+  it("re-throws (does NOT fall back to Firestore) on a transient Stripe error", async () => {
+    mockGetUser.mockResolvedValue(fakeUser);
+    mockGetSubscriptionItem.mockResolvedValue({ quantity: 2 });
+    // Simulate a rate-limit/network style failure — NOT resource_missing.
+    mockUpdateSubscriptionItem.mockRejectedValue({
+      type: "StripeRateLimitError",
+      code: "rate_limit",
+      message: "Too many requests",
+    });
+    mockUpdateUser.mockResolvedValue(undefined);
+
+    await expect(
+      call(updateSubscriptionGuests, {
+        ownerUserId: "user-1",
+        houseIds: ["house-1"],
+        action: "add",
+      }),
+    ).rejects.toMatchObject({ code: "resource-exhausted" });
+
+    // Firestore occupancy must NOT diverge from Stripe on a transient error.
+    expect(mockUpdateUser).not.toHaveBeenCalled();
+  });
+
+  it("falls back to Firestore-only metadata when Stripe reports resource_missing", async () => {
+    mockGetUser.mockResolvedValue(fakeUser);
+    mockGetSubscriptionItem.mockResolvedValue({ quantity: 2 });
+    mockUpdateSubscriptionItem.mockRejectedValue({
+      type: "StripeInvalidRequestError",
+      code: "resource_missing",
+      message: "No such subscription item",
+    });
+    mockUpdateSubscriptionMetadata.mockReturnValue(
+      fakeUser.subscriptionMetadata,
+    );
+    mockUpdateUser.mockResolvedValue(undefined);
+
+    await call(updateSubscriptionGuests, {
+      ownerUserId: "user-1",
+      houseIds: ["house-1"],
+      action: "add",
+    });
+
+    // Subscription was deleted in Stripe — reconcile local metadata only.
+    expect(mockUpdateUser).toHaveBeenCalled();
+  });
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
