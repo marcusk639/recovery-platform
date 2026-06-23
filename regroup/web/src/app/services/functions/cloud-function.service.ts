@@ -24,8 +24,19 @@ export class CloudFunctionService {
   }
 
   initializeSubscription(user: User, paymentMethod: string) {
+    // Forward only the identifiers the callable requires — never the full
+    // User PII object. The createOperatorSubscription callable validates
+    // user.{ id, email, subscriptionMetadata } and the payment method id.
+    const userIdentifiers = {
+      id: user.id,
+      email: user.email,
+      subscriptionMetadata: user.subscriptionMetadata,
+    };
     return this.functions
-      .httpsCallable("createOperatorSubscription")({ user, paymentMethod })
+      .httpsCallable("createOperatorSubscription")({
+        user: userIdentifiers,
+        paymentMethod,
+      })
       .toPromise();
   }
 

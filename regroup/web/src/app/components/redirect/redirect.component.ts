@@ -1,6 +1,7 @@
 import { Component, OnInit, Inject, PLATFORM_ID } from "@angular/core";
 import { isPlatformBrowser } from "@angular/common";
 import { ActivatedRoute } from "@angular/router";
+import { environment } from "../../../environments/environment";
 
 @Component({
   selector: "app-redirect",
@@ -205,8 +206,8 @@ export class RedirectComponent implements OnInit {
     const redirectUrl = urlParams.get("url");
     const debug = urlParams.get("debug");
 
-    // Show debug info if debug parameter is present
-    this.showDebugInfo = debug === "true";
+    // Show debug info if debug parameter is present (never in production)
+    this.showDebugInfo = debug === "true" && !environment.production;
     this.userAgent = navigator.userAgent;
 
     if (redirectUrl) {
@@ -264,8 +265,6 @@ export class RedirectComponent implements OnInit {
   }
 
   private attemptAppLaunchWithFallbacks(appUrl: string, fallbackUrl: string) {
-    console.log("attemptAppLaunchWithFallbacks - appUrl:", appUrl);
-
     // Method 1: Try the URL as-is first (should be com.rats.dev:// for debug builds)
     this.attemptAppLaunch(appUrl, fallbackUrl);
 
@@ -275,10 +274,6 @@ export class RedirectComponent implements OnInit {
         const bundleIdScheme = appUrl.replace(
           "regroup-app://",
           "com.rats.dev://",
-        );
-        console.log(
-          "attemptAppLaunchWithFallbacks - trying bundle ID scheme:",
-          bundleIdScheme,
         );
         this.attemptAppLaunch(bundleIdScheme, fallbackUrl);
       }, 500);
@@ -300,24 +295,16 @@ export class RedirectComponent implements OnInit {
       } else {
         universalLink = appUrl;
       }
-      console.log(
-        "attemptAppLaunchWithFallbacks - trying universal link:",
-        universalLink,
-      );
       this.attemptAppLaunch(universalLink, fallbackUrl);
     }, 1000);
   }
 
   private attemptAppLaunch(appUrl: string, fallbackUrl: string) {
-    console.log("attemptAppLaunch - trying to open:", appUrl);
-    console.log("attemptAppLaunch - fallback URL:", fallbackUrl);
-
     // Method 1: Try direct window.location
     try {
-      console.log("attemptAppLaunch - trying window.location.href");
       window.location.href = appUrl;
     } catch (error) {
-      console.log("Direct location failed:", error);
+      // Swallow: scheme may be unhandled; subsequent methods handle fallback.
     }
 
     // Method 2: Create a hidden iframe
@@ -325,23 +312,18 @@ export class RedirectComponent implements OnInit {
     iframe.style.display = "none";
     iframe.src = appUrl;
     document.body.appendChild(iframe);
-    console.log("attemptAppLaunch - created iframe with src:", appUrl);
 
     // Method 3: Try opening in a new window/tab
     setTimeout(() => {
       try {
-        console.log("attemptAppLaunch - trying window.open");
         window.open(appUrl, "_blank");
       } catch (error) {
-        console.log("Window open failed:", error);
+        // Swallow: handled by the fallback redirect below.
       }
     }, 500);
 
     // Clean up and fallback
     setTimeout(() => {
-      console.log(
-        "attemptAppLaunch - timeout reached, redirecting to fallback",
-      );
       if (document.body.contains(iframe)) {
         document.body.removeChild(iframe);
       }
