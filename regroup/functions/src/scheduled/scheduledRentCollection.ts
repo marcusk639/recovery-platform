@@ -17,7 +17,11 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logger } from "firebase-functions";
 import Stripe from "stripe";
 import { guestCollection } from "../api/firestore";
-import { STRIPE_SECRET_KEY } from "../config";
+import { STRIPE_SECRET_KEY, LEGACY_RENT_FEE_HOUSE_IDS } from "../config";
+import {
+  computeApplicationFee,
+  RentPaymentMethodType,
+} from "../util/rentFee";
 
 interface AutoPayGuest {
   id: string;
@@ -65,6 +69,27 @@ export async function runRentCollection(): Promise<void> {
       const amountCents = guest.rentOwed; // already integer cents
       const idempotencyKey = `auto-rent-${guest.id}-${today}`;
 
+      // The platform application fee only applies to Connect transfers. When
+      // present, derive the method-aware fee (P-1/P-2): look up the stored
+      // default method's type so ACH vs card is priced correctly; legacy
+      // houses stay on the flat 2% via the allow-list (P-3).
+      let transferParams: Partial<Stripe.PaymentIntentCreateParams> = {};
+      if (guest.stripeConnectId) {
+        const method = await stripe.paymentMethods.retrieve(
+          guest.defaultPaymentMethodId,
+        );
+        const paymentMethodType: RentPaymentMethodType =
+          method.type === "us_bank_account" ? "us_bank_account" : "card";
+        transferParams = {
+          transfer_data: { destination: guest.stripeConnectId },
+          application_fee_amount: computeApplicationFee({
+            amountCents,
+            paymentMethodType,
+            isLegacyHouse: LEGACY_RENT_FEE_HOUSE_IDS.includes(guest.houseId),
+          }),
+        };
+      }
+
       const intent = await stripe.paymentIntents.create(
         {
           amount: amountCents,
@@ -74,12 +99,7 @@ export async function runRentCollection(): Promise<void> {
           confirm: true,
           off_session: true,
           metadata: { guestId: guest.id, houseId: guest.houseId },
-          ...(guest.stripeConnectId
-            ? {
-                transfer_data: { destination: guest.stripeConnectId },
-                application_fee_amount: Math.round(amountCents * 0.02),
-              }
-            : {}),
+          ...transferParams,
         },
         { idempotencyKey },
       );

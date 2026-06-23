@@ -99,6 +99,9 @@ const createOperatorSubscriptionSchema = z.object({
   paymentMethod: z.string().min(1),
   houseType: z.enum(["traditional", "oxford"] as const),
   tier: z.string().min(1),
+  // Monthly (default) or annual billing. Annual resolves a separate Stripe
+  // price per tier (~17% off, P-4). Legacy callers omit this and get monthly.
+  billingInterval: z.enum(["month", "year"] as const).optional(),
 });
 
 const reactivateOperatorSubscriptionSchema = z.object({
@@ -175,6 +178,7 @@ export const createOperatorSubscription = onCall(
       paymentMethod: string;
       houseType: string;
       tier: string;
+      billingInterval?: "month" | "year";
     };
     if (data.user.id !== request.auth.uid)
       throw new HttpsError("permission-denied", "User ID mismatch");
@@ -226,6 +230,7 @@ export const createOperatorSubscription = onCall(
         data.houseType as HouseType,
         data.tier as TierKey,
         data.user.id,
+        data.billingInterval ?? "month",
       );
       logger.info("Tier subscription created", {
         subscriptionId: tierMetadata.subscriptionId,

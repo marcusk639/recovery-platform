@@ -3,7 +3,7 @@ import Stripe from "stripe";
 import OperatorSubscription from "../entities/OperatorSubscription";
 import { User } from "../entities/User";
 import { HouseType, TierKey } from "../config";
-import { resolveTierPriceId } from "../util/tierPricing";
+import { resolveTierPriceId, BillingInterval } from "../util/tierPricing";
 
 // Lazy Proxy — secrets are only available at request time in v2, not at module load.
 let _stripe: Stripe | undefined;
@@ -118,8 +118,9 @@ export const createTierSubscription = async (
   houseType: HouseType,
   tier: TierKey,
   userId?: string,
+  billingInterval: BillingInterval = "month",
 ) => {
-  const price = resolveTierPriceId(houseType, tier);
+  const price = resolveTierPriceId(houseType, tier, billingInterval);
   return stripe.subscriptions.create({
     customer: customerId,
     items: [{ price, quantity: 1 }],
@@ -128,6 +129,7 @@ export const createTierSubscription = async (
       ...(userId ? { userId } : {}),
       houseType,
       tier,
+      billingInterval,
     },
   });
 };
@@ -375,6 +377,7 @@ export const initializeTierCustomer = async (
   houseType: HouseType,
   tier: TierKey,
   userId: string,
+  billingInterval: BillingInterval = "month",
 ) => {
   const customer = await createCustomer(email, paymentMethod);
   const subscription = await createTierSubscription(
@@ -382,6 +385,7 @@ export const initializeTierCustomer = async (
     houseType,
     tier,
     userId,
+    billingInterval,
   );
   return {
     customerId: customer.id,
@@ -390,6 +394,7 @@ export const initializeTierCustomer = async (
     status: subscription.status,
     houseType,
     tier,
+    billingInterval,
   };
 };
 

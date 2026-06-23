@@ -1356,8 +1356,43 @@ describe("createPaymentIntent", () => {
       );
     });
 
-    it("applies a 2% application fee on the amount in cents", async () => {
-      // baseData.amount = 15000 cents ($150.00); 2% = 300 cents
+    it("applies the 0.75% card platform fee by default (method-aware)", async () => {
+      // baseData.amount = 15000 cents ($150.00); 0.75% = 112.5 -> 113 cents.
+      await (createPaymentIntent as unknown as Function)(
+        baseData,
+        authedContext(USER_UID),
+      );
+      expect(mockStripePaymentIntentsCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          application_fee_amount: 113,
+          payment_method_types: ["card"],
+        }),
+        expect.anything(),
+      );
+    });
+
+    it("applies the flat ACH fee for us_bank_account payments", async () => {
+      // ACH = flat $2.00 (200 cents) regardless of amount.
+      await (createPaymentIntent as unknown as Function)(
+        { ...baseData, paymentMethodType: "us_bank_account" },
+        authedContext(USER_UID),
+      );
+      expect(mockStripePaymentIntentsCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          application_fee_amount: 200,
+          payment_method_types: ["us_bank_account"],
+        }),
+        expect.anything(),
+      );
+    });
+
+    it("grandfathers a legacy house at the flat 2% fee", async () => {
+      // baseData.amount = 15000 cents; legacy 2% = 300 cents, even on card.
+      seedHouse(HOUSE_ID, {
+        stripeAccountId: "acct_active_house",
+        stripeStatus: "active",
+        legacyRentFee: true,
+      });
       await (createPaymentIntent as unknown as Function)(
         baseData,
         authedContext(USER_UID),

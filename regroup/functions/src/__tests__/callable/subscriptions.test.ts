@@ -1055,6 +1055,7 @@ describe("createOperatorSubscription — tier-billing flag branch", () => {
       "traditional",
       "starter",
       fakeUser.id,
+      "month",
     );
     expect(mockInitializeCustomer).not.toHaveBeenCalled();
     // Tier caps from SUBSCRIPTION_TIERS.traditional.starter are persisted.
@@ -1069,6 +1070,55 @@ describe("createOperatorSubscription — tier-billing flag branch", () => {
         }),
       }),
     );
+  });
+
+  it("forwards an annual billingInterval to initializeTierCustomer", async () => {
+    process.env.TIER_BILLING_ENABLED = "true";
+    process.env.STRIPE_PRICE_TRAD_STARTER = "price_starter";
+    mockGetUser.mockResolvedValue(fakeUser);
+    mockInitializeTierCustomer.mockResolvedValue({
+      customerId: "cus_tier",
+      subscriptionId: "sub_tier",
+      subscriptionItemId: "si_tier",
+      status: "trialing",
+      houseType: "traditional",
+      tier: "starter",
+    });
+    mockUpdateUser.mockResolvedValue(undefined);
+
+    await call(createOperatorSubscription, {
+      user: fakeUser,
+      paymentMethod: "pm_test",
+      houseType: "traditional",
+      tier: "starter",
+      billingInterval: "year",
+    });
+
+    expect(mockInitializeTierCustomer).toHaveBeenCalledWith(
+      fakeUser.email,
+      "pm_test",
+      "traditional",
+      "starter",
+      fakeUser.id,
+      "year",
+    );
+  });
+
+  it("rejects an invalid billingInterval with invalid-argument", async () => {
+    process.env.TIER_BILLING_ENABLED = "true";
+    process.env.STRIPE_PRICE_TRAD_STARTER = "price_starter";
+    mockGetUser.mockResolvedValue(fakeUser);
+
+    await expect(
+      call(createOperatorSubscription, {
+        user: fakeUser,
+        paymentMethod: "pm_test",
+        houseType: "traditional",
+        tier: "starter",
+        billingInterval: "weekly",
+      }),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+    expect(mockInitializeTierCustomer).not.toHaveBeenCalled();
   });
 
   it("uses the legacy initializeCustomer when the flag is off", async () => {
