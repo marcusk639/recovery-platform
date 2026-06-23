@@ -105,7 +105,13 @@ real feature behind it.
 read-only and log only ids + aggregate counts (never names, test results, or
 amounts per resident). `payments` docs store `amount` in **dollars** (webhook
 divides by 100) — convert to cents when aggregating; `guests.rentOwed` is integer
-cents. `collectedGrossCents` is gross (refunds are not written to Firestore).
+cents. `rentRoiMetrics` returns `collectedGrossCents`, `refundedCents`,
+`collectedNetCents` (gross − refunds), `outstandingCents`, `overdueResidentCount`,
+and `onTimeRatePct`/`duePaymentCount`. Refunds are recorded by the
+`charge.refunded` webhook handler as `payments.refundedAmountCents` (cents);
+on-time uses `payments.dueDate`, the guest's `rentDueDate` captured at charge time
+in `handlePaymentIntentSucceeded` (an approximation — no per-charge schedule
+history). Hours-saved remains deferred (#32 caveats).
 
 Oxford Network has `availableForSale: false` (P-8) — `isTierAvailableForSale()`
 blocks it in `createOperatorSubscription` checkout while keeping the tier defined.
