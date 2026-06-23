@@ -33,6 +33,7 @@
     "moment": "^2.24.0",
     "ngeohash": "^0.6.3",
     "nodemailer": "^6.3.0",
+    "pdfkit": "^0.19.1",
     "robust-point-in-polygon": "^1.0.3",
     "stripe": "^20.3.1",
     "tabletojson": "git+https://git@github.com/mklein530/tabletojson.git",
@@ -44,6 +45,7 @@
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",
+    "@types/pdfkit": "^0.17.6",
     "@types/xml2js": "^0.4.13",
     "@typescript-eslint/eslint-plugin": "^5.12.0",
     "@typescript-eslint/parser": "^5.12.0",

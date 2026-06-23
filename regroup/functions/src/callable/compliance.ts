@@ -20,6 +20,8 @@ const complianceExportSchema = z.object({
   // Avoid z.string().datetime() (deprecated) — validate loosely.
   startDate: z.string().optional(),
   endDate: z.string().optional(),
+  // Output format. Defaults to "csv" when omitted (handled in code).
+  format: z.enum(["csv", "pdf"]).optional(),
 });
 
 // Loosely-typed shapes for the data we export. We deliberately do NOT import
@@ -97,6 +99,234 @@ function inWindow(dateIso: string, start?: string, end?: string): boolean {
   return true;
 }
 
+// In-memory per-resident export bundle. Both the CSV and PDF renderers consume
+// this shared structure so the two formats can never drift apart.
+interface ResidentExport {
+  resident: ResidentRecord;
+  tests: DrugTest[];
+  meetings: MeetingActivity[];
+}
+
+interface ExportData {
+  residents: ResidentExport[];
+  counts: { residents: number; drugTests: number; meetings: number };
+}
+
+// Gathers, per resident, the profile + window-filtered drug tests and meeting
+// activities. Returns the shared structure plus running counts. The only place
+// that touches Firestore for the entitled branch.
+async function gatherExportData(
+  residents: ResidentRecord[],
+  residentId: string | undefined,
+  startDate: string | undefined,
+  endDate: string | undefined,
+): Promise<ExportData> {
+  const bundles: ResidentExport[] = [];
+  let drugTestCount = 0;
+  let meetingCount = 0;
+
+  for (const resident of residents) {
+    const rid = resident.id ?? residentId ?? "";
+
+    const tests = (await getDrugTestsForGuest(rid)) as DrugTest[];
+    const filteredTests = tests.filter((t) =>
+      inWindow(t.testDate ?? "", startDate, endDate),
+    );
+
+    const meetings = (await getMeetingActivitiesForGuest(
+      rid,
+    )) as MeetingActivity[];
+    const filteredMeetings = meetings.filter((m) =>
+      inWindow(m.timestamp ?? m.loggedAt ?? "", startDate, endDate),
+    );
+
+    drugTestCount += filteredTests.length;
+    meetingCount += filteredMeetings.length;
+
+    bundles.push({
+      resident,
+      tests: filteredTests,
+      meetings: filteredMeetings,
+    });
+  }
+
+  return {
+    residents: bundles,
+    counts: {
+      residents: residents.length,
+      drugTests: drugTestCount,
+      meetings: meetingCount,
+    },
+  };
+}
+
+// Renders the shared export data as the court-ready CSV string. This is the
+// original CSV layout — output is byte-for-byte unchanged.
+function renderCsv(data: ExportData): string {
+  const lines: string[] = [];
+
+  for (const { resident, tests, meetings } of data.residents) {
+    // Profile header block.
+    lines.push(toCsvRow(["Resident", residentLabel(resident)]));
+    lines.push(toCsvRow(["Move-in", resident.moveInDate ?? ""]));
+    lines.push(toCsvRow(["Intake", resident.intakeDate ?? ""]));
+    lines.push(toCsvRow(["Move-out", resident.moveOutDate ?? ""]));
+    lines.push(toCsvRow(["Legal status", resident.legalStatus ?? "none"]));
+    lines.push(toCsvRow(["Current phase", resident.phase ?? ""]));
+    lines.push("");
+
+    // Drug tests.
+    lines.push("Drug Tests");
+    lines.push(
+      toCsvRow([
+        "Test Date",
+        "Result",
+        "Type",
+        "Substances",
+        "Observer",
+        "Random",
+        "Notes",
+      ]),
+    );
+    for (const t of tests) {
+      lines.push(
+        toCsvRow([
+          t.testDate ?? "",
+          t.result ?? "",
+          t.testType ?? "",
+          (t.substancesDetected ?? []).join("; "),
+          t.observerName ?? t.observedBy ?? "",
+          t.isRandom === true,
+          t.notes ?? "",
+        ]),
+      );
+    }
+    lines.push("");
+
+    // Meeting attendance.
+    lines.push("Meeting Attendance");
+    lines.push(toCsvRow(["Date", "Meeting", "Type", "Duration", "Verified"]));
+    for (const m of meetings) {
+      lines.push(
+        toCsvRow([
+          datePart(m.timestamp ?? m.loggedAt ?? ""),
+          m.data?.meetingName ?? "",
+          m.data?.meetingType ?? "",
+          m.data?.duration ?? "",
+          m.verified === true,
+        ]),
+      );
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n");
+}
+
+// Renders the shared export data as a court-ready PDF buffer.
+//
+// pdfkit is lazy-loaded here so the CSV and upgrade_required paths never pay its
+// cold-start cost. Only the built-in Helvetica fonts are used (no external font
+// files). The doc stream is collected into a single Buffer.
+//
+// v1 returns the PDF inline as base64. For large multi-resident exports a future
+// improvement is to write the buffer to Cloud Storage and return a short-lived
+// signed URL instead of inlining the bytes.
+async function renderPdf(
+  data: ExportData,
+  houseId: string,
+  startDate: string | undefined,
+  endDate: string | undefined,
+): Promise<Buffer> {
+  const PDFDocument = (await import("pdfkit")).default;
+
+  return await new Promise<Buffer>((resolve, reject) => {
+    const doc = new PDFDocument({ size: "LETTER", margin: 50 });
+    const chunks: Buffer[] = [];
+    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+
+    // Report header.
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(16)
+      .text(`Compliance Report — ${houseId}`);
+    if (startDate || endDate) {
+      doc
+        .font("Helvetica")
+        .fontSize(10)
+        .text(`Period: ${startDate ?? "—"} to ${endDate ?? "—"}`);
+    }
+
+    data.residents.forEach((bundle, index) => {
+      if (index > 0) doc.addPage();
+      const { resident, tests, meetings } = bundle;
+
+      // Resident title.
+      doc.moveDown();
+      doc.font("Helvetica-Bold").fontSize(14).text(residentLabel(resident));
+
+      // Profile block.
+      doc.moveDown(0.5).font("Helvetica").fontSize(10);
+      doc.text(`Move-in: ${resident.moveInDate ?? "—"}`);
+      doc.text(`Intake: ${resident.intakeDate ?? "—"}`);
+      doc.text(`Move-out: ${resident.moveOutDate ?? "—"}`);
+      doc.text(`Legal status: ${resident.legalStatus ?? "none"}`);
+      doc.text(`Current phase: ${resident.phase ?? "—"}`);
+
+      // Drug tests.
+      doc.moveDown().font("Helvetica-Bold").fontSize(12).text("Drug Tests");
+      doc.font("Helvetica").fontSize(9);
+      if (tests.length === 0) {
+        doc.text("No drug tests in range.");
+      } else {
+        for (const t of tests) {
+          const substances = (t.substancesDetected ?? []).join("; ");
+          doc.text(
+            [
+              t.testDate ?? "—",
+              t.result ?? "—",
+              t.testType ?? "—",
+              substances || "—",
+              t.observerName ?? t.observedBy ?? "—",
+              t.isRandom === true ? "Random" : "Scheduled",
+              t.notes ?? "",
+            ]
+              .filter((part) => part !== "")
+              .join(" · "),
+          );
+        }
+      }
+
+      // Meeting attendance.
+      doc
+        .moveDown()
+        .font("Helvetica-Bold")
+        .fontSize(12)
+        .text("Meeting Attendance");
+      doc.font("Helvetica").fontSize(9);
+      if (meetings.length === 0) {
+        doc.text("No meetings in range.");
+      } else {
+        for (const m of meetings) {
+          doc.text(
+            [
+              datePart(m.timestamp ?? m.loggedAt ?? "") || "—",
+              m.data?.meetingName ?? "—",
+              m.data?.meetingType ?? "—",
+              m.data?.duration != null ? String(m.data.duration) : "—",
+              m.verified === true ? "Verified" : "Unverified",
+            ].join(" · "),
+          );
+        }
+      }
+    });
+
+    doc.end();
+  });
+}
+
 // Lowest sellable tier whose `features.complianceExport` is true, per house type
 // (justification §6b value ladder). Used only to phrase the upgrade prompt — the
 // authoritative gate is `tierAllows(..., "complianceExport")`.
@@ -121,10 +351,16 @@ const COMPLIANCE_EXPORT_MIN_TIER: Record<HouseType, string> = {
 export const complianceExport = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
 
-  const { houseId, residentId, startDate, endDate } = parseInput(
-    complianceExportSchema,
-    request.data,
-  ) as z.infer<typeof complianceExportSchema>;
+  const {
+    houseId,
+    residentId,
+    startDate,
+    endDate,
+    format: requestedFormat,
+  } = parseInput(complianceExportSchema, request.data) as z.infer<
+    typeof complianceExportSchema
+  >;
+  const format = requestedFormat ?? "csv";
 
   const house = await getHouse(houseId);
   if (!house) throw new HttpsError("not-found", "House not found");
@@ -169,7 +405,7 @@ export const complianceExport = onCall(async (request) => {
     };
   }
 
-  // ── Entitled: build the real CSV export ────────────────────────────────────
+  // ── Entitled: build the real export ─────────────────────────────────────────
   // Resolve the resident scope.
   let residents: ResidentRecord[];
   if (residentId) {
@@ -182,101 +418,43 @@ export const complianceExport = onCall(async (request) => {
     residents = (await getGuestsForHouse(houseId)) as ResidentRecord[];
   }
 
-  const lines: string[] = [];
-  let drugTestCount = 0;
-  let meetingCount = 0;
-
-  for (const resident of residents) {
-    const rid = resident.id ?? residentId ?? "";
-
-    // Profile header block.
-    lines.push(toCsvRow(["Resident", residentLabel(resident)]));
-    lines.push(toCsvRow(["Move-in", resident.moveInDate ?? ""]));
-    lines.push(toCsvRow(["Intake", resident.intakeDate ?? ""]));
-    lines.push(toCsvRow(["Move-out", resident.moveOutDate ?? ""]));
-    lines.push(toCsvRow(["Legal status", resident.legalStatus ?? "none"]));
-    lines.push(toCsvRow(["Current phase", resident.phase ?? ""]));
-    lines.push("");
-
-    // Drug tests.
-    const tests = (await getDrugTestsForGuest(rid)) as DrugTest[];
-    const filteredTests = tests.filter((t) =>
-      inWindow(t.testDate ?? "", startDate, endDate),
-    );
-    lines.push("Drug Tests");
-    lines.push(
-      toCsvRow([
-        "Test Date",
-        "Result",
-        "Type",
-        "Substances",
-        "Observer",
-        "Random",
-        "Notes",
-      ]),
-    );
-    for (const t of filteredTests) {
-      lines.push(
-        toCsvRow([
-          t.testDate ?? "",
-          t.result ?? "",
-          t.testType ?? "",
-          (t.substancesDetected ?? []).join("; "),
-          t.observerName ?? t.observedBy ?? "",
-          t.isRandom === true,
-          t.notes ?? "",
-        ]),
-      );
-    }
-    drugTestCount += filteredTests.length;
-    lines.push("");
-
-    // Meeting attendance.
-    const meetings = (await getMeetingActivitiesForGuest(
-      rid,
-    )) as MeetingActivity[];
-    const filteredMeetings = meetings.filter((m) =>
-      inWindow(m.timestamp ?? m.loggedAt ?? "", startDate, endDate),
-    );
-    lines.push("Meeting Attendance");
-    lines.push(toCsvRow(["Date", "Meeting", "Type", "Duration", "Verified"]));
-    for (const m of filteredMeetings) {
-      lines.push(
-        toCsvRow([
-          datePart(m.timestamp ?? m.loggedAt ?? ""),
-          m.data?.meetingName ?? "",
-          m.data?.meetingType ?? "",
-          m.data?.duration ?? "",
-          m.verified === true,
-        ]),
-      );
-    }
-    meetingCount += filteredMeetings.length;
-    lines.push("");
-  }
-
-  const csv = lines.join("\n");
+  // Gather the shared in-memory structure once; both renderers consume it.
+  const data = await gatherExportData(
+    residents,
+    residentId,
+    startDate,
+    endDate,
+  );
 
   logger.info("complianceExport: export generated", {
     houseId,
     residentId: residentId ?? null,
-    counts: {
-      residents: residents.length,
-      drugTests: drugTestCount,
-      meetings: meetingCount,
-    },
+    format,
+    counts: data.counts,
   });
+
+  const filenameBase = `compliance-${houseId}${
+    residentId ? "-" + residentId : ""
+  }`;
+
+  if (format === "pdf") {
+    const buffer = await renderPdf(data, houseId, startDate, endDate);
+    return {
+      available: true,
+      format: "pdf" as const,
+      filename: `${filenameBase}.pdf`,
+      pdfBase64: buffer.toString("base64"),
+      counts: data.counts,
+      spec: "RG-SPEC-09",
+    };
+  }
 
   return {
     available: true,
     format: "csv" as const,
-    filename: `compliance-${houseId}${residentId ? "-" + residentId : ""}.csv`,
-    csv,
-    counts: {
-      residents: residents.length,
-      drugTests: drugTestCount,
-      meetings: meetingCount,
-    },
+    filename: `${filenameBase}.csv`,
+    csv: renderCsv(data),
+    counts: data.counts,
     spec: "RG-SPEC-09",
   };
 });

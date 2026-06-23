@@ -250,4 +250,89 @@ describe("complianceExport — entitled CSV export", () => {
     const result = await call({ houseId: "house-1" });
     expect(result.csv).toContain('"missed, then rescheduled"');
   });
+
+  it("defaults to csv format when format is omitted", async () => {
+    entitledTraditional();
+    mockGetGuestsForHouse.mockResolvedValue([
+      { id: "g1", displayName: "Jane", houseId: "house-1", phase: 1 },
+    ]);
+    mockGetDrugTestsForGuest.mockResolvedValue([]);
+    mockGetMeetingActivitiesForGuest.mockResolvedValue([]);
+
+    const result = await call({ houseId: "house-1" });
+    expect(result.format).toBe("csv");
+    expect(typeof result.csv).toBe("string");
+    expect(result.pdfBase64).toBeUndefined();
+  });
+});
+
+describe("complianceExport — entitled PDF export", () => {
+  const entitledTraditional = () => {
+    mockGetHouse.mockResolvedValue(baseHouse);
+    mockGetUser.mockResolvedValue(userWithTier("traditional", "professional"));
+  };
+
+  it("returns a PDF export with valid %PDF bytes and correct counts", async () => {
+    entitledTraditional();
+    mockGetGuestsForHouse.mockResolvedValue([
+      {
+        id: "g1",
+        firstName: "Jane",
+        lastName: "Doe",
+        legalStatus: "probation",
+        phase: 2,
+        houseId: "house-1",
+      },
+    ]);
+    mockGetDrugTestsForGuest.mockResolvedValue([
+      {
+        testDate: "2026-06-01",
+        result: "negative",
+        testType: "urine",
+        substancesDetected: [],
+        observerName: "Staff A",
+        isRandom: true,
+        notes: "routine",
+      },
+    ]);
+    mockGetMeetingActivitiesForGuest.mockResolvedValue([
+      {
+        timestamp: "2026-06-02T10:00:00.000Z",
+        verified: true,
+        data: { meetingName: "Morning AA", meetingType: "AA", duration: 60 },
+      },
+    ]);
+
+    const result = await call({ houseId: "house-1", format: "pdf" });
+    expect(result).toMatchObject({
+      available: true,
+      format: "pdf",
+      spec: "RG-SPEC-09",
+      filename: "compliance-house-1.pdf",
+      counts: { residents: 1, drugTests: 1, meetings: 1 },
+    });
+    expect(typeof result.pdfBase64).toBe("string");
+    expect(result.pdfBase64.length).toBeGreaterThan(0);
+    // Base64 of "%PDF" begins with "JVBER".
+    expect(result.pdfBase64.startsWith("JVBER")).toBe(true);
+    // Decoded bytes start with the %PDF magic.
+    expect(
+      Buffer.from(result.pdfBase64, "base64")
+        .toString("latin1")
+        .startsWith("%PDF"),
+    ).toBe(true);
+    expect(result.csv).toBeUndefined();
+  });
+
+  it("still returns upgrade_required for a non-entitled tier on pdf format", async () => {
+    mockGetHouse.mockResolvedValue(baseHouse);
+    mockGetUser.mockResolvedValue(userWithTier("traditional", "starter"));
+    const result = await call({ houseId: "house-1", format: "pdf" });
+    expect(result).toMatchObject({
+      available: false,
+      status: "upgrade_required",
+      feature: "complianceExport",
+    });
+    expect(result.pdfBase64).toBeUndefined();
+  });
 });
