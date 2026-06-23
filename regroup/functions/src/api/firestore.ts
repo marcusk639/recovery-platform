@@ -27,6 +27,7 @@ export const contactCollection = ratsFirestore.collection("contact");
 export const subscriptionCollection = ratsFirestore.collection("subscriptions");
 export const drugTestCollection = ratsFirestore.collection("drug-tests");
 export const activityCollection = ratsFirestore.collection("activities");
+export const paymentsCollection = ratsFirestore.collection("payments");
 
 /**
  * Shape of a document in the `subscriptions` collection. Read by the Stripe
@@ -322,6 +323,21 @@ export async function getMeetingActivitiesForGuest(
   const result = await activityCollection
     .where("guestId", "==", guestId)
     .where("type", "==", "meeting")
+    .get();
+  return result.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+// ─── Rent-collection ROI metrics (RG-TRACK) read helper ─────────────────────
+// Returns all successful payment docs for a house. The date window is filtered
+// in memory by the analytics callable (avoids a composite index on
+// houseId + status + createdAt). The `payments` collection is written by the
+// Stripe webhook on `payment_intent.succeeded`; `amount` is in dollars.
+export async function getSuccessfulPaymentsForHouse(
+  houseId: string,
+): Promise<FirebaseFirestore.DocumentData[]> {
+  const result = await paymentsCollection
+    .where("houseId", "==", houseId)
+    .where("status", "==", "succeeded")
     .get();
   return result.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
