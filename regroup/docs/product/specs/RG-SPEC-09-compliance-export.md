@@ -1,6 +1,6 @@
 # RG-SPEC-09 — Compliance / Drug-Court Report Export
 
-**Status:** Tracking spec (stub shipped; full feature not built)
+**Status:** Tracking spec (stub shipped; full feature not built) — GitHub issue [#31](https://github.com/marcusk639/recovery-platform/issues/31)
 **Tier:** Professional / Plus and higher (value-ladder capability `complianceExport`)
 **Source rationale:** [regroup-pricing-justification.md §6c](../../launch-readiness/regroup-pricing-justification.md) · [regroup-pricing-revision-plan.md Phase 5](../../launch-readiness/regroup-pricing-revision-plan.md)
 

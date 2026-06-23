@@ -1,6 +1,6 @@
 # RG-TRACK — Rent-Collection ROI Dashboard
 
-**Status:** Tracking issue (metrics + data sources defined; no UI built)
+**Status:** Tracking issue (metrics + data sources defined; no UI built) — GitHub issue [#32](https://github.com/marcusk639/recovery-platform/issues/32)
 **Tier:** Professional / Plus and higher (value-ladder capability `analytics`)
 **Source rationale:** [regroup-pricing-justification.md §6c](../../launch-readiness/regroup-pricing-justification.md) · [regroup-pricing-revision-plan.md Phase 5](../../launch-readiness/regroup-pricing-revision-plan.md)
 
