@@ -191,14 +191,34 @@ No `__DEV__` guard (unlike the sibling `SimpleDebugLogger`). Persists PII to `de
 - [x] **H-sec-3 — Fixed:** `bugs` scoped to the `reporter` (pinned to caller on create); reads/updates/deletes restricted to that user. Devs triage via Admin SDK.
 - [x] **H-sec-4 — Fixed:** `feedback` scoped to the submitter (`reviewer`, pinned on create) or a house admin; app-level feedback (`houseId == ''`) is submitter-only.
 - [x] **H-sec-5 — Fixed:** `contact` create is size-bounded (field-count + message/email length caps) and all client reads/updates/deletes denied; `beta-users` locked to server-only (no client read/write path exists).
+- [x] **H-sec-1 — Fixed:** `connectStripeAccount` `returnUrl`/`refreshUrl` validated by the shared `safeReturnUrlSchema` origin allowlist (open redirect on the Stripe Connect onboarding link closed).
+- [x] **H-sec-6 — Fixed:** `promoteGuestsToAdmin`/`removePrivilegesForGuests` authorize each target user against the specific house(s) being modified (no longer self-targeted, which collapsed the delegation branch and skipped per-house re-validation).
+- [x] **H-fns-2 — Fixed:** `updateUser` no longer `JSON.parse(JSON.stringify())`s values (`stripUndefinedDeep` preserves `FieldValue` sentinels / `Date`).
+- [x] **H-fns-4 — Already fixed (pricing commit):** Connect webhook handler now runs `checkAndMarkEventProcessed` (idempotent), mirroring the platform handler.
+- [x] **H-fns-7 — Fixed:** `updateSubscriptionGuests` Firestore-only fallback gated to `resource_missing`; other Stripe errors re-throw (no silent Firestore↔Stripe drift).
+- [x] **H-fns-8 — Fixed:** `shapeHouses` typed `QueryDocumentSnapshot[]` (was `any[]`).
+- [x] **H-fns-9 — Fixed:** `findMeetings` re-throws `HttpsError` on backend failure instead of returning `[]`.
+- [x] **H-web-1 — Fixed:** `redirect.component.ts` `?debug=true` panel gated behind `!environment.production`.
+- [x] **H-web-2 — Fixed:** `initializeSubscription` forwards only `{ id, email, subscriptionMetadata }` + paymentMethod (matches the callable's Zod schema; full `User` PII no longer transmitted).
+- [x] **H-web-3 — Fixed:** removed the ~12 prod `console.log`s emitting deep-link URLs (token/path data).
+- [x] **H-web-4 — Fixed:** `my-account` `updateUser` writes an explicit field allowlist (`contact → phoneNumber`).
+- [x] **H-mob-1 — Fixed:** `useLogNewActivity` `onError` uses `logException` + user `Alert` (lost check-in/drug-test no longer silent).
+- [x] **H-mob-2 — Fixed:** dispute/verify/resolve writes in `useBaseActivityScreen` awaited in try/catch with `logException` + `Alert`; dispute re-throws so the UI can't show false success.
+- [x] **H-mob-3 — Fixed:** deleted the unguarded `debug-logger.ts` (+test); all callers use the `__DEV__`-guarded `simple-debug-logger`.
+- [x] **H-mob-4 — Fixed:** `GuestList` renders via virtualized `FlatList` (header/empty-state/refresh preserved).
+- [x] **H-mob-5 — Fixed:** `rats-text-input` address `useEffect` deps corrected (no stale address).
 
-577 functions tests pass; Firestore rules suite expanded to 105 tests (was 58) — all pass (+47 allow/deny tests for H-sec-2/3/4/5); web app typechecks clean. (Rules emulator now requires JDK 21 — global `firebase-tools` dropped Java 17 support.)
+**Deferred:** **H-fns-6** (`tsconfig noUnusedLocals: false`) — enabling it surfaces many unused-locals across existing + pricing code; needs a dedicated cleanup pass.
+
+604 functions tests pass; Firestore rules suite expanded to 105 tests (was 58) — all pass (+47 allow/deny tests for H-sec-2/3/4/5); mobile changed-suite jest green (122 tests); web `tsc --noEmit` clean. (Rules/storage emulators now require JDK 21 — global `firebase-tools` dropped Java 17 support; `storage.rules.test.ts` updated for the `mockUserToken` `uid`→`sub` API change.)
 
 ## Recommended Next Steps (launch-ordered)
 
 1. **C2 web Stripe test key** + **C3 open redirect** — revenue-blocking + phishing surface; both ~1-line fixes.
 2. ~~**Firestore rules pass** — C5 (`guest-archive`), H-sec-3/4/5 (`bugs`/`feedback`/`contact`), H-sec-2 (`complaints`/`disputes`). Add allow/deny rules tests for each.~~ ✅ **Done** — see Actions Taken (H-sec-2/3/4/5).
-3. **C4 email-abuse authz** + **C6 fire-and-forget email** + **H-fns-5 swallowed failures** — one focused `subscriptions.ts`/triggers PR.
-4. **C8 mobile debug-logger** `__DEV__` guard (PII) + **H-mob-1/H-mob-2** error reporting via `logException`.
-5. **C7** + **H-fns-7** subscription-state correctness (Firestore↔Stripe drift) — billing integrity.
-6. Tech-debt batch: consolidate Stripe clients + pin `STRIPE_API_VERSION`, add `functions/.env.example`, remove Crashlytics, fix the 4 doc discrepancies.
+3. ~~**C4 email-abuse authz** + **C6 fire-and-forget email** + **H-fns-5 swallowed failures**~~ ✅ **Done.**
+4. ~~**C8 mobile debug-logger** `__DEV__` guard (PII) + **H-mob-1/H-mob-2** error reporting via `logException`.~~ ✅ **Done.**
+5. ~~**C7** + **H-fns-7** subscription-state correctness (Firestore↔Stripe drift).~~ ✅ **Done.**
+6. Tech-debt batch (remaining): consolidate Stripe clients + pin `STRIPE_API_VERSION`, add `functions/.env.example`, remove Crashlytics, fix the 4 doc discrepancies, enable `tsconfig noUnusedLocals` (H-fns-6), and the MEDIUM findings.
+
+**All CRITICAL and HIGH findings are now resolved** except the deliberately deferred **H-fns-6** (lint cleanup) and remaining MEDIUM/LOW items. Action still required from a human: set the real `pk_live_` Stripe key (C2) before production deploy.
