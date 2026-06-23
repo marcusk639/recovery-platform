@@ -152,8 +152,8 @@ const OrgSetupFormView: React.FC<OrgSetupFormViewProps> = props => {
   const renderHouses = () => {
     return map(houses, house =>
       house ? (
-        <ActivityItemWithButtons
-          key={house.id}
+        <View key={house.id} testID={`house-item-${house.id}`}>
+          <ActivityItemWithButtons
           rightButtonContainerStyle={{ borderColor: color.red }}
           rightButtonTextStyle={{ color: color.red }}
           rightButtonLight
@@ -170,8 +170,9 @@ const OrgSetupFormView: React.FC<OrgSetupFormViewProps> = props => {
           boxedIconBackground={color.dark_blue}
           description={getAddressDisplay(house.street, undefined, undefined, undefined)}
           descriptionHeader={house.name}
-          error={errors[house.id]}
-        />
+            error={errors[house.id]}
+          />
+        </View>
       ) : null,
     );
   };

@@ -259,6 +259,7 @@ const HouseSearchScreen: React.FC<HouseSearchProps> = props => {
           header="Find Houses"
         />
         <RatsSearchBar
+          testID="house-search-input"
           container={{ ...CARD_STYLE, marginBottom: 1 }}
           onSubmitEditing={executeSearch}
           value={searchTerm}
@@ -373,6 +374,7 @@ const HouseSearchScreen: React.FC<HouseSearchProps> = props => {
     (house: House) => {
       return (
         <RatsButton
+          testID={`house-details-button-${house.id}`}
           onPress={() => selectHouse(house.id)}
           title="VIEW DETAILS"
           containerStyle={{
@@ -407,6 +409,7 @@ const HouseSearchScreen: React.FC<HouseSearchProps> = props => {
       return (
         <View
           key={listItem.index}
+          testID={`house-card-${house.id}`}
           style={[
             CARD_STYLE,
             {
@@ -509,7 +512,11 @@ const HouseSearchScreen: React.FC<HouseSearchProps> = props => {
             />
           </View>
         )}
-        {searching && <RatsLoadingIndicator />}
+        {searching && (
+          <View testID="house-search-loading">
+            <RatsLoadingIndicator />
+          </View>
+        )}
         {!searching && !isEmpty(searchedHouses) && renderHouses()}
         {!searching && isEmpty(searchedHouses) && (
           <EmptyScreen

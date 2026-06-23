@@ -213,12 +213,21 @@ const OperatorSetupWizard: React.FC<Props> = props => {
       <RatsWizardSlide currentStep={currentPage} testID="operator-wizard-slide">
         {pages}
       </RatsWizardSlide>
-      <SharedSetupButtons
-        onBackPress={goBack}
-        onNextPress={goNext}
-        hideBack={currentPage === 0}
-        nextLabel={currentPage === TOTAL_STEPS - 1 ? 'Finish' : 'Next'}
-      />
+      <View
+        testID={
+          currentPage === TOTAL_STEPS - 1
+            ? 'wizard-finish-button'
+            : 'wizard-next-button'
+        }>
+        <View testID="wizard-back-button">
+          <SharedSetupButtons
+            onBackPress={goBack}
+            onNextPress={goNext}
+            hideBack={currentPage === 0}
+            nextLabel={currentPage === TOTAL_STEPS - 1 ? 'Finish' : 'Next'}
+          />
+        </View>
+      </View>
     </SafeAreaView>
   );
 };
