@@ -2,13 +2,100 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { z } from "zod";
 import { HouseType, TierKey } from "../config";
-import { getHouse, getUser } from "../api/firestore";
+import {
+  getHouse,
+  getUser,
+  getGuest,
+  getGuestsForHouse,
+  getDrugTestsForGuest,
+  getMeetingActivitiesForGuest,
+} from "../api/firestore";
 import { tierAllows } from "../util/tierPricing";
 import { parseInput } from "../validation";
 
 const complianceExportSchema = z.object({
   houseId: z.string().min(1),
+  residentId: z.string().optional(),
+  // ISO date strings; compared lexicographically (ISO sorts chronologically).
+  // Avoid z.string().datetime() (deprecated) — validate loosely.
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
 });
+
+// Loosely-typed shapes for the data we export. We deliberately do NOT import
+// the mobile entities — the callable owns the field contract it reads.
+interface DrugTest {
+  testDate?: string;
+  result?: string;
+  testType?: string;
+  substancesDetected?: string[];
+  observerName?: string;
+  observedBy?: string;
+  isRandom?: boolean;
+  notes?: string;
+}
+
+interface MeetingActivity {
+  timestamp?: string;
+  loggedAt?: string;
+  verified?: boolean;
+  data?: {
+    meetingName?: string;
+    meetingType?: string;
+    duration?: number | string;
+  };
+}
+
+interface ResidentRecord {
+  firstName?: string;
+  lastName?: string;
+  displayName?: string;
+  moveInDate?: string;
+  intakeDate?: string;
+  moveOutDate?: string;
+  legalStatus?: string;
+  phase?: number | string;
+  houseId?: string;
+  id?: string;
+}
+
+// Escapes a single CSV value: wrap in double-quotes and double any internal
+// quotes when the value contains a comma, quote, or newline.
+function csvEscape(value: string | number | boolean): string {
+  const str = String(value ?? "");
+  if (/[",\n\r]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+function toCsvRow(fields: (string | number | boolean)[]): string {
+  return fields.map(csvEscape).join(",");
+}
+
+function residentLabel(r: ResidentRecord): string {
+  return (
+    r.displayName ||
+    [r.firstName, r.lastName].filter(Boolean).join(" ") ||
+    "Unknown"
+  );
+}
+
+// Returns the date portion (YYYY-MM-DD) of an ISO string, for window compare.
+function datePart(iso?: string): string {
+  if (!iso) return "";
+  return iso.slice(0, 10);
+}
+
+// Inclusive [startDate, endDate] window check on a date (ISO/date string).
+// Empty bounds are treated as open-ended.
+function inWindow(dateIso: string, start?: string, end?: string): boolean {
+  const d = datePart(dateIso);
+  if (!d) return false;
+  if (start && d < datePart(start)) return false;
+  if (end && d > datePart(end)) return false;
+  return true;
+}
 
 // Lowest sellable tier whose `features.complianceExport` is true, per house type
 // (justification §6b value ladder). Used only to phrase the upgrade prompt — the
@@ -19,24 +106,22 @@ const COMPLIANCE_EXPORT_MIN_TIER: Record<HouseType, string> = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// complianceExport (Phase 5 stub — RG-SPEC-09)
+// complianceExport (RG-SPEC-09)
 //
-// Court/drug-court compliance export is the Professional+ differentiator. The
-// full export (turning captured activity + drug-test data into a court-ready
-// artifact) is specified in RG-SPEC-09
-// (docs/product/specs/RG-SPEC-09-compliance-export.md) and not built yet. This callable stands
-// up the tier gate now so the value ladder is real and the client can render the
-// correct messaging:
+// Court/drug-court compliance export is the Professional+ differentiator. It
+// turns captured drug-test and meeting-attendance data into a court-ready CSV
+// artifact. The tier gate stays in place so the value ladder is real and the
+// client can render the correct messaging:
 //   • caller's tier lacks the capability → "upgrade_required" (which tier unlocks it)
-//   • caller's tier includes it          → "coming_soon" (entitled; feature pending)
+//   • caller's tier includes it          → real CSV export ({ available: true })
 //
-// It performs no data export and writes nothing. Replace the stub branch with the
-// real export when RG-SPEC-09 lands; the auth + gate scaffolding stays.
+// The export is read-only — it writes nothing. PII safety: only ids + counts are
+// logged, never resident names, test results, or CSV contents.
 // ─────────────────────────────────────────────────────────────────────────────
 export const complianceExport = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
 
-  const { houseId } = parseInput(
+  const { houseId, residentId, startDate, endDate } = parseInput(
     complianceExportSchema,
     request.data,
   ) as z.infer<typeof complianceExportSchema>;
@@ -84,16 +169,114 @@ export const complianceExport = onCall(async (request) => {
     };
   }
 
-  logger.info("complianceExport: coming soon", {
+  // ── Entitled: build the real CSV export ────────────────────────────────────
+  // Resolve the resident scope.
+  let residents: ResidentRecord[];
+  if (residentId) {
+    const guest = (await getGuest(residentId)) as ResidentRecord | undefined;
+    if (!guest || guest.houseId !== houseId) {
+      throw new HttpsError("not-found", "Resident not found in this house");
+    }
+    residents = [{ ...guest, id: residentId }];
+  } else {
+    residents = (await getGuestsForHouse(houseId)) as ResidentRecord[];
+  }
+
+  const lines: string[] = [];
+  let drugTestCount = 0;
+  let meetingCount = 0;
+
+  for (const resident of residents) {
+    const rid = resident.id ?? residentId ?? "";
+
+    // Profile header block.
+    lines.push(toCsvRow(["Resident", residentLabel(resident)]));
+    lines.push(toCsvRow(["Move-in", resident.moveInDate ?? ""]));
+    lines.push(toCsvRow(["Intake", resident.intakeDate ?? ""]));
+    lines.push(toCsvRow(["Move-out", resident.moveOutDate ?? ""]));
+    lines.push(toCsvRow(["Legal status", resident.legalStatus ?? "none"]));
+    lines.push(toCsvRow(["Current phase", resident.phase ?? ""]));
+    lines.push("");
+
+    // Drug tests.
+    const tests = (await getDrugTestsForGuest(rid)) as DrugTest[];
+    const filteredTests = tests.filter((t) =>
+      inWindow(t.testDate ?? "", startDate, endDate),
+    );
+    lines.push("Drug Tests");
+    lines.push(
+      toCsvRow([
+        "Test Date",
+        "Result",
+        "Type",
+        "Substances",
+        "Observer",
+        "Random",
+        "Notes",
+      ]),
+    );
+    for (const t of filteredTests) {
+      lines.push(
+        toCsvRow([
+          t.testDate ?? "",
+          t.result ?? "",
+          t.testType ?? "",
+          (t.substancesDetected ?? []).join("; "),
+          t.observerName ?? t.observedBy ?? "",
+          t.isRandom === true,
+          t.notes ?? "",
+        ]),
+      );
+    }
+    drugTestCount += filteredTests.length;
+    lines.push("");
+
+    // Meeting attendance.
+    const meetings = (await getMeetingActivitiesForGuest(
+      rid,
+    )) as MeetingActivity[];
+    const filteredMeetings = meetings.filter((m) =>
+      inWindow(m.timestamp ?? m.loggedAt ?? "", startDate, endDate),
+    );
+    lines.push("Meeting Attendance");
+    lines.push(toCsvRow(["Date", "Meeting", "Type", "Duration", "Verified"]));
+    for (const m of filteredMeetings) {
+      lines.push(
+        toCsvRow([
+          datePart(m.timestamp ?? m.loggedAt ?? ""),
+          m.data?.meetingName ?? "",
+          m.data?.meetingType ?? "",
+          m.data?.duration ?? "",
+          m.verified === true,
+        ]),
+      );
+    }
+    meetingCount += filteredMeetings.length;
+    lines.push("");
+  }
+
+  const csv = lines.join("\n");
+
+  logger.info("complianceExport: export generated", {
     houseId,
-    status: "coming_soon",
+    residentId: residentId ?? null,
+    counts: {
+      residents: residents.length,
+      drugTests: drugTestCount,
+      meetings: meetingCount,
+    },
   });
+
   return {
-    available: false,
-    status: "coming_soon" as const,
-    feature: "complianceExport",
+    available: true,
+    format: "csv" as const,
+    filename: `compliance-${houseId}${residentId ? "-" + residentId : ""}.csv`,
+    csv,
+    counts: {
+      residents: residents.length,
+      drugTests: drugTestCount,
+      meetings: meetingCount,
+    },
     spec: "RG-SPEC-09",
-    message:
-      "Compliance export (RG-SPEC-09) is included in your plan and coming soon.",
   };
 });

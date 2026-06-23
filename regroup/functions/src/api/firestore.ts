@@ -25,6 +25,8 @@ export const adminCollection = ratsFirestore.collection("admins");
 export const stripeEventCollection = ratsFirestore.collection("stripeEvents");
 export const contactCollection = ratsFirestore.collection("contact");
 export const subscriptionCollection = ratsFirestore.collection("subscriptions");
+export const drugTestCollection = ratsFirestore.collection("drug-tests");
+export const activityCollection = ratsFirestore.collection("activities");
 
 /**
  * Shape of a document in the `subscriptions` collection. Read by the Stripe
@@ -64,9 +66,9 @@ export const createHouseId = () => houseCollection.doc().id;
 export const createAdminId = () => adminCollection.doc().id;
 export const createGuestId = () => guestCollection.doc().id;
 
-export function shapeHouses(
-  docs: admin.firestore.QueryDocumentSnapshot[],
-): { [id: string]: House } {
+export function shapeHouses(docs: admin.firestore.QueryDocumentSnapshot[]): {
+  [id: string]: House;
+} {
   const houses: { [id: string]: House } = {};
   docs.forEach((house) => (houses[house.id] = house.data() as House));
   return houses;
@@ -279,6 +281,59 @@ export async function updateHouseAdmins(houseId: string, adminId: string) {
   // appended the array itself as a single element, corrupting adminIds.
   const adminIds = admin.firestore.FieldValue.arrayUnion(adminId);
   return houseCollection.doc(houseId).update({ adminIds: adminIds });
+}
+
+// ─── Compliance export (RG-SPEC-09) read helpers ────────────────────────────
+// Typed loosely as DocumentData — the compliance callable owns the field shapes.
+// Drug-test docs live in `drug-tests`; meeting attendance lives in the flat
+// `activities` collection (type === "meeting").
+
+export async function getGuestsForHouse(
+  houseId: string,
+): Promise<FirebaseFirestore.DocumentData[]> {
+  const result = await guestCollection.where("houseId", "==", houseId).get();
+  return result.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+export async function getGuest(
+  guestId: string,
+): Promise<FirebaseFirestore.DocumentData | undefined> {
+  const snap = await guestCollection.doc(guestId).get();
+  return snap.exists ? { id: snap.id, ...snap.data() } : undefined;
+}
+
+export async function getDrugTestsForGuest(
+  guestId: string,
+): Promise<FirebaseFirestore.DocumentData[]> {
+  const result = await drugTestCollection.where("guestId", "==", guestId).get();
+  return result.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+export async function getDrugTestsForHouse(
+  houseId: string,
+): Promise<FirebaseFirestore.DocumentData[]> {
+  const result = await drugTestCollection.where("houseId", "==", houseId).get();
+  return result.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+export async function getMeetingActivitiesForGuest(
+  guestId: string,
+): Promise<FirebaseFirestore.DocumentData[]> {
+  const result = await activityCollection
+    .where("guestId", "==", guestId)
+    .where("type", "==", "meeting")
+    .get();
+  return result.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+export async function getMeetingActivitiesForHouse(
+  houseId: string,
+): Promise<FirebaseFirestore.DocumentData[]> {
+  const result = await activityCollection
+    .where("houseId", "==", houseId)
+    .where("type", "==", "meeting")
+    .get();
+  return result.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
 export async function getNaMeetings(

@@ -15,10 +15,18 @@ jest.mock("firebase-functions", () => ({
 
 const mockGetHouse = jest.fn();
 const mockGetUser = jest.fn();
+const mockGetGuest = jest.fn();
+const mockGetGuestsForHouse = jest.fn();
+const mockGetDrugTestsForGuest = jest.fn();
+const mockGetMeetingActivitiesForGuest = jest.fn();
 
 jest.mock("../../api/firestore", () => ({
   getHouse: mockGetHouse,
   getUser: mockGetUser,
+  getGuest: mockGetGuest,
+  getGuestsForHouse: mockGetGuestsForHouse,
+  getDrugTestsForGuest: mockGetDrugTestsForGuest,
+  getMeetingActivitiesForGuest: mockGetMeetingActivitiesForGuest,
 }));
 
 import { complianceExport } from "../../callable/compliance";
@@ -101,23 +109,145 @@ describe("complianceExport — tier gate (upgrade_required)", () => {
   });
 });
 
-describe("complianceExport — tier gate (coming_soon)", () => {
-  it("returns coming_soon for an entitled traditional tier", async () => {
+describe("complianceExport — entitled CSV export", () => {
+  const entitledTraditional = () => {
     mockGetHouse.mockResolvedValue(baseHouse);
     mockGetUser.mockResolvedValue(userWithTier("traditional", "professional"));
+  };
+
+  it("returns a CSV export for an entitled traditional tier", async () => {
+    entitledTraditional();
+    mockGetGuestsForHouse.mockResolvedValue([
+      {
+        id: "g1",
+        firstName: "Jane",
+        lastName: "Doe",
+        legalStatus: "probation",
+        phase: 2,
+        houseId: "house-1",
+      },
+    ]);
+    mockGetDrugTestsForGuest.mockResolvedValue([
+      {
+        testDate: "2026-06-01",
+        result: "negative",
+        testType: "urine",
+        substancesDetected: [],
+        observerName: "Staff A",
+        isRandom: true,
+        notes: "routine",
+      },
+    ]);
+    mockGetMeetingActivitiesForGuest.mockResolvedValue([
+      {
+        timestamp: "2026-06-02T10:00:00.000Z",
+        verified: true,
+        data: { meetingName: "Morning AA", meetingType: "AA", duration: 60 },
+      },
+    ]);
+
     const result = await call({ houseId: "house-1" });
     expect(result).toMatchObject({
-      available: false,
-      status: "coming_soon",
-      feature: "complianceExport",
+      available: true,
+      format: "csv",
       spec: "RG-SPEC-09",
+      filename: "compliance-house-1.csv",
+      counts: { residents: 1, drugTests: 1, meetings: 1 },
     });
+    expect(result.csv).toContain("negative");
+    expect(result.csv).toContain("Morning AA");
+    expect(result.csv).toContain("Drug Tests");
+    expect(result.csv).toContain("Meeting Attendance");
   });
 
-  it("returns coming_soon for an entitled oxford tier", async () => {
+  it("scopes to a single resident and verifies house ownership", async () => {
+    entitledTraditional();
+    mockGetGuest.mockResolvedValue({
+      id: "g1",
+      displayName: "John R.",
+      houseId: "house-1",
+      phase: 1,
+    });
+    mockGetDrugTestsForGuest.mockResolvedValue([]);
+    mockGetMeetingActivitiesForGuest.mockResolvedValue([]);
+
+    const result = await call({ houseId: "house-1", residentId: "g1" });
+    expect(result).toMatchObject({
+      available: true,
+      filename: "compliance-house-1-g1.csv",
+      counts: { residents: 1, drugTests: 0, meetings: 0 },
+    });
+    expect(result.csv).toContain("John R.");
+  });
+
+  it("rejects a resident that does not belong to the house", async () => {
+    entitledTraditional();
+    mockGetGuest.mockResolvedValue({ id: "g1", houseId: "other-house" });
+    await expect(
+      call({ houseId: "house-1", residentId: "g1" }),
+    ).rejects.toMatchObject({ code: "not-found" });
+  });
+
+  it("returns a CSV export for an entitled oxford tier", async () => {
     mockGetHouse.mockResolvedValue({ ...baseHouse, houseType: "oxford" });
     mockGetUser.mockResolvedValue(userWithTier("oxford", "plus"));
+    mockGetGuestsForHouse.mockResolvedValue([
+      { id: "g1", displayName: "Resident One", houseId: "house-1", phase: 1 },
+    ]);
+    mockGetDrugTestsForGuest.mockResolvedValue([]);
+    mockGetMeetingActivitiesForGuest.mockResolvedValue([]);
+
     const result = await call({ houseId: "house-1" });
-    expect(result).toMatchObject({ status: "coming_soon" });
+    expect(result).toMatchObject({ available: true, format: "csv" });
+  });
+
+  it("filters out records outside the [startDate, endDate] window", async () => {
+    entitledTraditional();
+    mockGetGuestsForHouse.mockResolvedValue([
+      { id: "g1", displayName: "Jane", houseId: "house-1", phase: 1 },
+    ]);
+    mockGetDrugTestsForGuest.mockResolvedValue([
+      { testDate: "2026-05-01", result: "positive", testType: "urine" }, // before window
+      { testDate: "2026-06-15", result: "negative", testType: "urine" }, // in window
+    ]);
+    mockGetMeetingActivitiesForGuest.mockResolvedValue([
+      {
+        timestamp: "2026-07-01T10:00:00.000Z", // after window
+        data: { meetingName: "Late Meeting" },
+      },
+      {
+        timestamp: "2026-06-10T10:00:00.000Z", // in window
+        data: { meetingName: "In Window Meeting" },
+      },
+    ]);
+
+    const result = await call({
+      houseId: "house-1",
+      startDate: "2026-06-01",
+      endDate: "2026-06-30",
+    });
+    expect(result.counts).toMatchObject({ drugTests: 1, meetings: 1 });
+    expect(result.csv).toContain("In Window Meeting");
+    expect(result.csv).not.toContain("Late Meeting");
+    expect(result.csv).not.toContain("positive");
+  });
+
+  it("escapes CSV values containing commas by quoting them", async () => {
+    entitledTraditional();
+    mockGetGuestsForHouse.mockResolvedValue([
+      { id: "g1", displayName: "Jane", houseId: "house-1", phase: 1 },
+    ]);
+    mockGetDrugTestsForGuest.mockResolvedValue([
+      {
+        testDate: "2026-06-05",
+        result: "negative",
+        testType: "urine",
+        notes: "missed, then rescheduled",
+      },
+    ]);
+    mockGetMeetingActivitiesForGuest.mockResolvedValue([]);
+
+    const result = await call({ houseId: "house-1" });
+    expect(result.csv).toContain('"missed, then rescheduled"');
   });
 });
