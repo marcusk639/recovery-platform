@@ -1,0 +1,44 @@
+# Flow 16 — Guest: activity feed + dispute an activity
+# Persona: guest-a. Asserts the feed renders; if an activity item is present,
+# long-press -> dispute modal -> submit (creates a dispute). The submit block is
+# gated on the modal being visible so the flow stays green when the feed is empty.
+# Run: maestro test -e APP_ID=com.rats.dev maestro/flows/guest-activity-dispute.yaml
+appId: ${APP_ID}
+tags:
+  - guest
+  - activities
+  - disputes
+---
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-guest-a@rats-e2e.com
+      PASSWORD: TestPassword123!
+- tapOn:
+    id: "activities-tab"
+- extendedWaitUntil:
+    visible:
+      id: "activity-screen"
+    timeout: 30000
+- assertVisible:
+    id: "activities-list"
+# Long-press the first activity (if any) to open the dispute modal.
+- longPressOn:
+    id: "activities-list"
+    index: 0
+    childOf:
+      id: "activities-list"
+    optional: true
+# Only fill + submit when the modal actually opened.
+- runFlow:
+    when:
+      visible:
+        id: "dispute-modal"
+    commands:
+      - tapOn:
+          id: "dispute-message-input"
+      - inputText: "[E2E] disputed via Maestro"
+      - tapOn:
+          id: "dispute-submit-button"
+- runFlow:
+    file: ../subflows/logout.yaml

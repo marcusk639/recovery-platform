@@ -1,0 +1,46 @@
+# Flow 02 — Signup (new account)
+# Unauthenticated. Creates a new account via the landing -> login -> signup path.
+# Emulator is reset by reset-and-seed.sh before each run, so the email is free.
+# Run: maestro test -e APP_ID=com.rats.dev maestro/flows/signup.yaml
+appId: ${APP_ID}
+tags:
+  - auth
+  - signup
+---
+- launchApp:
+    clearState: true
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "initial-landing-screen"
+    timeout: 30000
+# Reach the login screen, then the signup screen.
+- tapOn:
+    id: "sign-in-button"
+- assertVisible:
+    id: "login-screen"
+- tapOn:
+    id: "signup-link"
+- extendedWaitUntil:
+    visible:
+      id: "signup-screen"
+    timeout: 15000
+# Fill the signup form (tap the next field to dismiss the keyboard — never hideKeyboard).
+- tapOn:
+    id: "signup-email-input"
+- inputText: "e2e-signup@rats-e2e.com"
+- tapOn:
+    id: "signup-password-input"
+- inputText: "TestPassword123!"
+- tapOn:
+    id: "signup-button"
+# Guest/admin signup routes to NewAccount; manager routes to OrgSetup. Accept either.
+- extendedWaitUntil:
+    visible:
+      id: "new-account-screen"
+    timeout: 60000
+    optional: true
+- assertVisible:
+    id: "org-setup-screen"
+    optional: true

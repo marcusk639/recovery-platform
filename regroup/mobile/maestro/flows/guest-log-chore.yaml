@@ -1,0 +1,46 @@
+# Flow 12 — Guest: open chore summary and complete a chore
+# Persona: guest-a. Completing a chore writes an activity (CHORE) to Firestore.
+# A photo-upload Alert may appear; the "skip" path is handled optionally.
+# Verify persistence afterward with: node maestro/scripts/assert-firestore.js
+# Run: maestro test -e APP_ID=com.rats.dev maestro/flows/guest-log-chore.yaml
+appId: ${APP_ID}
+tags:
+  - guest
+  - activities
+---
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-guest-a@rats-e2e.com
+      PASSWORD: TestPassword123!
+- tapOn:
+    id: "guest-tab"
+- extendedWaitUntil:
+    visible:
+      id: "guest-overview-screen"
+    timeout: 30000
+- tapOn:
+    id: "chores-card"
+- extendedWaitUntil:
+    visible:
+      id: "chore-summary-screen"
+    timeout: 30000
+- assertVisible:
+    id: "complete-chore-button"
+- tapOn:
+    id: "complete-chore-button"
+# Photo prompt is a native Alert — choose the no-photo option if offered.
+- tapOn:
+    text: "Skip"
+    index: 1
+    optional: true
+- tapOn:
+    text: "No"
+    index: 1
+    optional: true
+- tapOn:
+    text: "Without Photo"
+    index: 1
+    optional: true
+- runFlow:
+    file: ../subflows/logout.yaml

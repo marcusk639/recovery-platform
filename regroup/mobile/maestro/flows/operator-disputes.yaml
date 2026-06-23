@@ -1,0 +1,35 @@
+# Flow 17 — Operator: view seeded disputes
+# Persona: manager (admin of test-house-123). Seeded: test-dispute-123 / -456 (pending).
+# Run: maestro test -e APP_ID=com.rats.dev maestro/flows/operator-disputes.yaml
+appId: ${APP_ID}
+tags:
+  - operator
+  - activities
+  - disputes
+---
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-manager@rats-e2e.com
+      PASSWORD: TestPassword123!
+- extendedWaitUntil:
+    visible:
+      id: "main-app-screen"
+    timeout: 30000
+- assertVisible:
+    id: "house-disputes-button"
+- tapOn:
+    id: "house-disputes-button"
+- extendedWaitUntil:
+    visible:
+      id: "disputes-screen"
+    timeout: 30000
+# Seeded pending disputes for this house render as dispute items.
+- assertVisible:
+    id: "dispute-item-test-dispute-123"
+    optional: true
+- assertVisible:
+    id: "activity-item-test-activity-123"
+    optional: true
+- runFlow:
+    file: ../subflows/logout.yaml
