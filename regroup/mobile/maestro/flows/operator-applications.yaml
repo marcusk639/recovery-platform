@@ -1,0 +1,41 @@
+# Flow 09 — Operator: applications review -> approve -> intake
+# Persona: manager (admin of test-house-123). Seeded: pending application
+# test-app-1 (see e2e/setup/seedTestData.js seedTestApplications()).
+# Run: maestro test -e APP_ID=com.rats.dev maestro/flows/operator-applications.yaml
+appId: ${APP_ID}
+tags:
+  - operator
+  - applications
+---
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-manager@rats-e2e.com
+      PASSWORD: TestPassword123!
+# Login lands on the House tab (HouseSummary).
+- extendedWaitUntil:
+    visible:
+      id: "main-app-screen"
+    timeout: 30000
+# The "Applications" section has no testID — tap by its label text.
+- tapOn:
+    text: "Applications"
+# ApplicationListScreen renders one row per seeded application.
+- extendedWaitUntil:
+    visible:
+      id: "app-row-test-app-1"
+    timeout: 30000
+- tapOn:
+    id: "app-row-test-app-1"
+# ApplicationDetailScreen exposes btn-approve / btn-reject.
+- assertVisible:
+    id: "btn-approve"
+- tapOn:
+    id: "btn-approve"
+# Approval routes the operator into the resident intake form.
+- extendedWaitUntil:
+    visible:
+      id: "intake-form-screen"
+    timeout: 30000
+- runFlow:
+    file: ../subflows/logout.yaml

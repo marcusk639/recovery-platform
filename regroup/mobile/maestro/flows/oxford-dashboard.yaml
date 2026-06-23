@@ -1,0 +1,42 @@
+# Flow 31 — Oxford: dashboard -> charter compliance (read)
+# Persona: oxford operator (admin of test-house-oxford, subscriptionMetadata
+# .oxfordEnabled=true). The house is seeded with houseType='oxford' and
+# oxfordOnboardingComplete=true, so OxfordDashboard renders directly.
+# The operator owns only this one house, so login lands on it (no switch needed).
+# Run: maestro test -e APP_ID=com.rats.dev maestro/flows/oxford-dashboard.yaml
+appId: ${APP_ID}
+tags:
+  - oxford
+  - charter
+---
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-oxford-operator@rats-e2e.com
+      PASSWORD: TestPassword123!
+# Login lands on the House tab (HouseSummary) for the Oxford house.
+- extendedWaitUntil:
+    visible:
+      id: "main-app-screen"
+    timeout: 30000
+# Oxford-only sections render because house.houseType==='oxford'.
+# "Oxford House Hub" has no testID — tap by its label text.
+- tapOn:
+    text: "Oxford House Hub"
+- extendedWaitUntil:
+    visible:
+      id: "oxford-dashboard-content"
+    timeout: 30000
+- assertVisible:
+    id: "oxford-charter-card"
+- tapOn:
+    id: "oxford-charter-card"
+- extendedWaitUntil:
+    visible:
+      id: "charter-compliance-screen"
+    timeout: 30000
+# Charter cards: democratic | financial | zeroTolerance.
+- assertVisible:
+    id: "charter-card-democratic"
+- runFlow:
+    file: ../subflows/logout.yaml

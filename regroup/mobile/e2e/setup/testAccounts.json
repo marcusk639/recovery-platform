@@ -41,6 +41,17 @@
         "test-house-b": "guest"
       },
       "phone": "555-0200"
+    },
+    {
+      "id": "oxford-operator",
+      "email": "test-oxford-operator@rats-e2e.com",
+      "password": "TestPassword123!",
+      "firstName": "Oxford",
+      "lastName": "Operator",
+      "role": "admin",
+      "houseId": "test-house-oxford",
+      "phone": "555-0400",
+      "subscriptionMetadata": { "oxfordEnabled": true }
     }
   ]
 }
