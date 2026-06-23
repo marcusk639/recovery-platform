@@ -91,6 +91,38 @@ selection: `regroup/mobile/PRICING_STRATEGY.md` §3/§4 (stubbed).
 
 ---
 
+## 1a. Multi-house bundle discounts (legacy per-house model only)
+
+Operators running multiple houses on the **legacy per-house subscription** receive
+a stacking subscription discount, applied automatically as a Stripe coupon:
+
+| Houses | Coupon ID          | Discount |
+| ------ | ------------------ | -------- |
+| 3–4    | `regroup-bundle-3` | 10% off  |
+| 5+     | `regroup-bundle-5` | 15% off  |
+
+The discount is recomputed from the operator's house count whenever houses are
+added/removed (`updateSubscriptionHouses`) and on demand via the
+`applyBundleDiscount` callable; it is removed when the count drops below 3
+(source: regroup/functions/src/api/stripe.ts `getBundleCoupon` /
+`applyBundleDiscountToSubscription`; coupons are `duration: forever`).
+
+**Bundles do NOT apply to the six-tier model.** Tier subscriptions express
+multi-property capacity through the tier itself (Professional / Enterprise /
+Network), not per-house quantity, so stacking a per-house bundle coupon on a tier
+would double-discount. The `applyBundleDiscount` callable explicitly skips any
+subscription that carries a `tier` (decision locked 2026-06-22, gate P-6,
+legacy-only). New tier operators who scale houses move up a tier rather than
+accruing bundle coupons.
+
+> **Stripe state (2026-06-22):** both coupons exist and are valid in **test mode**.
+> They are **not yet created in live mode** — the available `rk_live_` restricted
+> key lacks coupon-write permission, so they must be created in the Stripe
+> Dashboard (or via a full-access key) before the legacy bundle path can discount
+> a production subscription.
+
+---
+
 ## 2. Rent platform fee (2% via Stripe Connect)
 
 Resident rent flows through **destination charges** on a platform-owned
