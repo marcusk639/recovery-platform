@@ -22,6 +22,8 @@ import {
   ComplianceResult,
   getComplianceStatus,
 } from '../../util/compliance';
+import { logException } from '../../util/logging';
+import { Alert } from 'react-native';
 
 // ============================================================================
 // QUERY KEYS
@@ -266,9 +268,14 @@ export const useLogNewActivity = () => {
       });
     },
 
-    onError: (err, variables, context) => {
-      console.error('Failed to log activity:', err);
-      // Could show toast notification here
+    onError: err => {
+      // Surface to Sentry so a lost check-in/drug-test is never silent. The
+      // error still rejects the mutation so callers can handle it too.
+      logException(err);
+      Alert.alert(
+        'Could not save',
+        'We could not save this activity. Please check your connection and try again.',
+      );
     },
   });
 };

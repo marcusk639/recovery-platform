@@ -37,6 +37,7 @@ import {
   resolveDispute as resolveDisputeInFirestore,
   verifyActivity as verifyActivityInFirestore,
 } from '../services/activity';
+import { logException } from '../util/logging';
 
 import { useActivityModal } from './useActivityModal';
 import { useActivityFilters } from './useActivityFilters';
@@ -207,18 +208,31 @@ export const useBaseActivityScreen = (
         notifications: buildNotifications(dispute),
       });
 
-      disputeActivityInFirestore(activity.id, message, user.id || '').catch(
-        err => console.warn('[Activity] Failed to dispute activity:', err),
-      );
+      try {
+        await disputeActivityInFirestore(activity.id, message, user.id || '');
+      } catch (err) {
+        logException(err);
+        Alert.alert(
+          'Dispute not saved',
+          'We could not record the dispute. Please try again.',
+        );
+        throw err;
+      }
     },
     [guests, house, disputes, user, updateDisputeMutation, buildNotifications],
   );
 
   const verifyActivity = useCallback(
     async (activityId: string): Promise<void> => {
-      verifyActivityInFirestore(activityId, user.id || '').catch(err =>
-        console.warn('[Activity] Failed to verify activity:', err),
-      );
+      try {
+        await verifyActivityInFirestore(activityId, user.id || '');
+      } catch (err) {
+        logException(err);
+        Alert.alert(
+          'Verification failed',
+          'We could not verify this activity. Please try again.',
+        );
+      }
     },
     [user.id],
   );
@@ -303,16 +317,19 @@ export const useBaseActivityScreen = (
                 resolvedDispute,
               });
 
-              resolveDisputeInFirestore(
-                dispute.activityId,
-                user.id || '',
-                'delete',
-              ).catch(err =>
-                console.warn(
-                  '[Activity] Failed to resolve dispute (overturn):',
-                  err,
-                ),
-              );
+              try {
+                await resolveDisputeInFirestore(
+                  dispute.activityId,
+                  user.id || '',
+                  'delete',
+                );
+              } catch (err) {
+                logException(err);
+                Alert.alert(
+                  'Override not saved',
+                  'We could not resolve this dispute. Please try again.',
+                );
+              }
             },
           },
         ],
@@ -347,16 +364,19 @@ export const useBaseActivityScreen = (
                 resolvedDispute,
               });
 
-              resolveDisputeInFirestore(
-                dispute.activityId,
-                user.id || '',
-                'keep',
-              ).catch(err =>
-                console.warn(
-                  '[Activity] Failed to resolve dispute (allow):',
-                  err,
-                ),
-              );
+              try {
+                await resolveDisputeInFirestore(
+                  dispute.activityId,
+                  user.id || '',
+                  'keep',
+                );
+              } catch (err) {
+                logException(err);
+                Alert.alert(
+                  'Allowance not saved',
+                  'We could not resolve this dispute. Please try again.',
+                );
+              }
             },
           },
         ],
