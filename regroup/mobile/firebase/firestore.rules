@@ -71,10 +71,16 @@ service cloud.firestore {
     //   allow read, write: if signedIn();
     // }
     match /contact/{contactId} {
-      // Public contact form: anyone (including unauthenticated) can submit.
-      // Only signed-in users can read/manage submissions.
-      allow create: if true;
-      allow read, update, delete: if signedIn();
+      // Public contact form: anyone (incl. unauthenticated) can submit, but the
+      // payload is size-bounded to limit spam / quota-drain / SendGrid cost
+      // amplification. Submissions are triaged server-side (Admin SDK / console),
+      // so all client reads/updates/deletes are denied.
+      allow create: if request.resource.data.size() <= 12
+        && request.resource.data.message is string
+        && request.resource.data.message.size() <= 5000
+        && request.resource.data.email is string
+        && request.resource.data.email.size() <= 254;
+      allow read, update, delete: if false;
     }
 
     match /subscriptions/{subscriptionId} {
@@ -86,10 +92,12 @@ service cloud.firestore {
     }
 
     match /beta-users/{docId} {
-      // Beta signup form: anyone (including unauthenticated) can submit.
-      // Only signed-in users can read/manage entries.
-      allow create: if true;
-      allow read, update, delete: if signedIn();
+      // Beta allowlist (beta-users/users holds an admin-managed emails array).
+      // No client write path exists today; reads/writes go through the Admin SDK
+      // or console. Deny all client access to remove the unauthenticated-write
+      // spam/quota-drain surface. If a public beta form is added later, route it
+      // through a rate-limited Cloud Function.
+      allow read, write: if false;
     }
     
     match /admins/{adminId} {
@@ -146,7 +154,11 @@ service cloud.firestore {
     }
     
     match /bugs/{bugId} {
-    	allow read, write: if signedIn();
+      // Bug reports carry free-text that may contain PII. Only the reporter can
+      // access their own report; developers triage via the Admin SDK / console
+      // (which bypasses these rules). reporter is pinned to the caller on create.
+      allow create: if isSameUser(request.resource.data.reporter);
+      allow read, update, delete: if isSameUser(resource.data.reporter);
     }
     
     match /houses/{houseId} {
@@ -222,7 +234,13 @@ service cloud.firestore {
     }
 
     match /complaints/{complaintId} {
-    	allow read, write: if isGuestOrAdmin([resource.data.houseId]);
+      allow read: if isGuestOrAdmin([resource.data.houseId]);
+      allow create: if isGuestOrAdmin([request.resource.data.houseId]);
+      // houseId is immutable on update; membership is checked against the
+      // existing house so a complaint can't be re-parented into another house.
+      allow update: if isGuestOrAdmin([resource.data.houseId])
+        && request.resource.data.houseId == resource.data.houseId;
+      allow delete: if isAdmin([resource.data.houseId]);
     }
     
     match /issues/{issueId} {
@@ -233,8 +251,13 @@ service cloud.firestore {
     }
     
     match /disputes/{disputeId} {
-    	allow read: if isGuest([resource.data.houseId]) || isAdmin([resource.data.houseId]);
-      allow write: if isGuestOrAdmin([request.resource.data.houseId])
+      allow read: if isGuestOrAdmin([resource.data.houseId]);
+      allow create: if isGuestOrAdmin([request.resource.data.houseId]);
+      // houseId is immutable on update; membership is checked against the
+      // existing house so a dispute can't be re-parented into another house.
+      allow update: if isGuestOrAdmin([resource.data.houseId])
+        && request.resource.data.houseId == resource.data.houseId;
+      allow delete: if isAdmin([resource.data.houseId]);
     }
     
     match /users/{userId} {
@@ -248,7 +271,14 @@ service cloud.firestore {
     }
     
     match /feedback/{feedbackId} {
-    	allow read, write: if signedIn();
+      // Feedback carries free-text that may contain PII. The submitter (reviewer)
+      // can access their own; house admins can access house-scoped feedback.
+      // App-level feedback (houseId == '') is submitter-only since no one is an
+      // admin of ''. reviewer is pinned to the caller on create.
+      allow create: if isSameUser(request.resource.data.reviewer);
+      allow read: if isSameUser(resource.data.reviewer) || isAdmin([resource.data.houseId]);
+      allow update: if isSameUser(resource.data.reviewer) || isAdmin([resource.data.houseId]);
+      allow delete: if isSameUser(resource.data.reviewer) || isAdmin([resource.data.houseId]);
     }
     
     match /meetings/{meetingId} {
