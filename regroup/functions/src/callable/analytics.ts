@@ -32,6 +32,8 @@ const ANALYTICS_MIN_TIER: Record<HouseType, string> = {
 interface PaymentRecord {
   amount?: number; // DOLLARS (paymentIntent.amount / 100)
   createdAt?: unknown; // Firestore Timestamp | ISO string | Date
+  refundedAmountCents?: number; // cumulative refunds in CENTS (#35, charge.refunded)
+  dueDate?: string; // YYYY-MM-DD due date captured at charge time (#34)
 }
 
 interface GuestRecord {
@@ -151,6 +153,30 @@ export const rentRoiMetrics = onCall(async (request) => {
   );
   const paymentCount = filteredPayments.length;
 
+  // #35 refund netting: refundedAmountCents is already integer cents (written by
+  // the charge.refunded webhook). Net collected floors at 0 so heavy refunds
+  // can't produce a negative figure.
+  const refundedCents = filteredPayments.reduce(
+    (sum, p) => sum + (p.refundedAmountCents ?? 0),
+    0,
+  );
+  const collectedNetCents = Math.max(0, collectedGrossCents - refundedCents);
+
+  // #34 on-time rate: only payments with a recorded dueDate are considered. A
+  // payment is on-time when its payment date (createdAt) is on or before the
+  // due date (YYYY-MM-DD lexical compare — ISO sorts chronologically).
+  const duePayments = filteredPayments.filter(
+    (p) => typeof p.dueDate === "string" && p.dueDate.length > 0,
+  );
+  const onTimePayments = duePayments.filter(
+    (p) => toDateStr(p.createdAt) <= (p.dueDate as string).slice(0, 10),
+  );
+  const duePaymentCount = duePayments.length;
+  const onTimeRatePct =
+    duePaymentCount > 0
+      ? Math.round((onTimePayments.length / duePaymentCount) * 100)
+      : null;
+
   const guests = (await getGuestsForHouse(houseId)) as GuestRecord[];
   // Missing status ⇒ treat as active.
   const activeGuests = guests.filter(
@@ -175,10 +201,29 @@ export const rentRoiMetrics = onCall(async (request) => {
   logger.info("rentRoiMetrics: metrics computed", {
     houseId,
     collectedGrossCents,
+    collectedNetCents,
+    refundedCents,
     paymentCount,
+    duePaymentCount,
+    onTimeRatePct,
     outstandingCents,
     overdueResidentCount,
   });
+
+  // Caveats: only surface notes that still apply.
+  //   • #35 (gross-only) resolved — refunds now netted via collectedNetCents.
+  //   • #34 (deferred on-time) resolved — on-time rate now computed from
+  //     per-charge dueDate. If some windowed payments predate dueDate capture
+  //     (or the guest had no due date), the rate covers only those with a
+  //     recorded due date — flag that partial coverage.
+  //   • hours-saved remains deferred.
+  const caveats: string[] = [];
+  if (duePaymentCount < paymentCount) {
+    caveats.push(
+      "on-time rate covers only payments with a recorded due date; payments without a captured dueDate are excluded",
+    );
+  }
+  caveats.push("hours-saved is deferred (not yet computed)");
 
   return {
     available: true,
@@ -188,12 +233,13 @@ export const rentRoiMetrics = onCall(async (request) => {
       endDate: endDate ?? null,
     },
     collectedGrossCents,
+    collectedNetCents,
+    refundedCents,
     paymentCount,
+    onTimeRatePct,
+    duePaymentCount,
     outstandingCents,
     overdueResidentCount,
-    caveats: [
-      "collectedGrossCents is GROSS — refunds are not reflected in Firestore (Stripe-only)",
-      "on-time rate and hours-saved are deferred: only a single current rentDueDate per guest exists (no per-charge due-date history)",
-    ],
+    caveats,
   };
 });
