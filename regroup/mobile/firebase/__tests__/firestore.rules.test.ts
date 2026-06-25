@@ -1353,13 +1353,31 @@ describe('complaints/{complaintId} — house-scoped, houseId immutable (H-sec-2)
     );
   });
 
-  test('ALLOW member reading a complaint in their house', async () => {
-    await seedComplaint();
+  test('ALLOW the complainant (plaintiff) reading their own complaint', async () => {
+    await seedComplaint(); // plaintiff === GUEST_UID
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
       authHouseGuest(GUEST_UID, HOUSE_ID),
     );
     await assertSucceeds(getDoc(complaintRef(ctx)));
+  });
+
+  test('ALLOW house admin reading a complaint', async () => {
+    await seedComplaint();
+    const ctx = testEnv.authenticatedContext(
+      ADMIN_UID,
+      authHouseAdmin(ADMIN_UID, HOUSE_ID),
+    );
+    await assertSucceeds(getDoc(complaintRef(ctx)));
+  });
+
+  test('DENY a house member who is not the complainant reading a complaint', async () => {
+    await seedComplaint(); // plaintiff === GUEST_UID
+    const ctx = testEnv.authenticatedContext(
+      'guest-2',
+      authHouseGuest('guest-2', HOUSE_ID),
+    );
+    await assertFails(getDoc(complaintRef(ctx)));
   });
 
   test('DENY non-member reading a complaint', async () => {
@@ -1467,13 +1485,31 @@ describe('disputes/{disputeId} — house-scoped, houseId immutable (H-sec-2)', (
     );
   });
 
-  test('ALLOW member reading a dispute in their house', async () => {
+  test('ALLOW house admin reading a dispute', async () => {
     await seedDispute();
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
       authHouseAdmin(ADMIN_UID, HOUSE_ID),
     );
     await assertSucceeds(getDoc(disputeRef(ctx)));
+  });
+
+  test('ALLOW the disputing resident reading their own dispute', async () => {
+    await seedDispute(); // guestId === GUEST_UID
+    const ctx = testEnv.authenticatedContext(
+      GUEST_UID,
+      authHouseGuest(GUEST_UID, HOUSE_ID),
+    );
+    await assertSucceeds(getDoc(disputeRef(ctx)));
+  });
+
+  test('DENY a house member who is not the disputing resident reading a dispute', async () => {
+    await seedDispute(); // guestId === GUEST_UID
+    const ctx = testEnv.authenticatedContext(
+      'guest-2',
+      authHouseGuest('guest-2', HOUSE_ID),
+    );
+    await assertFails(getDoc(disputeRef(ctx)));
   });
 
   test('DENY non-member reading a dispute', async () => {

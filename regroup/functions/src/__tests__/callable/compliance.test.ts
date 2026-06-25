@@ -266,6 +266,101 @@ describe("complianceExport — entitled CSV export", () => {
   });
 });
 
+describe("complianceExport — PHI scoping (no cross-house leak)", () => {
+  const entitledTraditional = () => {
+    mockGetHouse.mockResolvedValue(baseHouse);
+    mockGetUser.mockResolvedValue(userWithTier("traditional", "professional"));
+  };
+
+  it("scopes the bulk export to the requested house and never reads a foreign resident's PHI", async () => {
+    entitledTraditional();
+    // The Firestore layer returns only this house's residents; the callable
+    // must drive its per-resident PHI lookups exclusively from this set.
+    mockGetGuestsForHouse.mockResolvedValue([
+      { id: "g1", displayName: "Jane", houseId: "house-1", phase: 1 },
+      { id: "g2", displayName: "Bob", houseId: "house-1", phase: 2 },
+    ]);
+    mockGetDrugTestsForGuest.mockImplementation(async (rid: string) =>
+      rid === "g1"
+        ? [{ testDate: "2026-06-01", result: "negative", testType: "urine" }]
+        : [],
+    );
+    mockGetMeetingActivitiesForGuest.mockResolvedValue([]);
+
+    const result = await call({ houseId: "house-1" });
+
+    // Residents were resolved by house, not by an arbitrary caller-supplied id.
+    expect(mockGetGuestsForHouse).toHaveBeenCalledWith("house-1");
+    expect(mockGetGuest).not.toHaveBeenCalled();
+
+    // PHI lookups happened only for residents of house-1.
+    const queriedIds = mockGetDrugTestsForGuest.mock.calls.map(
+      (c: unknown[]) => c[0],
+    );
+    expect(new Set(queriedIds)).toEqual(new Set(["g1", "g2"]));
+    expect(
+      mockGetMeetingActivitiesForGuest.mock.calls.map((c: unknown[]) => c[0]),
+    ).toEqual(expect.arrayContaining(["g1", "g2"]));
+    expect(result.counts).toMatchObject({ residents: 2 });
+  });
+
+  it("does not fall back to a foreign resident id when a record lacks its own id", async () => {
+    entitledTraditional();
+    // A malformed house resident with no `id`. The legacy `?? residentId` path
+    // must not leak: with no residentId in a bulk call, the query key is "",
+    // which matches no foreign PHI rather than another house's resident.
+    mockGetGuestsForHouse.mockResolvedValue([
+      { displayName: "No Id", houseId: "house-1", phase: 1 },
+    ]);
+    mockGetDrugTestsForGuest.mockResolvedValue([]);
+    mockGetMeetingActivitiesForGuest.mockResolvedValue([]);
+
+    await call({ houseId: "house-1" });
+
+    const queriedIds = mockGetDrugTestsForGuest.mock.calls.map(
+      (c: unknown[]) => c[0],
+    );
+    expect(queriedIds).toEqual([""]);
+  });
+});
+
+describe("complianceExport — CSV formula injection", () => {
+  const entitledTraditional = () => {
+    mockGetHouse.mockResolvedValue(baseHouse);
+    mockGetUser.mockResolvedValue(userWithTier("traditional", "professional"));
+  };
+
+  it("neutralizes leading formula characters in resident-controlled fields", async () => {
+    entitledTraditional();
+    mockGetGuestsForHouse.mockResolvedValue([
+      {
+        id: "g1",
+        displayName: "=cmd|'/c calc'!A1",
+        houseId: "house-1",
+        phase: 1,
+      },
+    ]);
+    mockGetDrugTestsForGuest.mockResolvedValue([
+      {
+        testDate: "2026-06-05",
+        result: "negative",
+        testType: "urine",
+        notes: "@SUM(A1:A9)",
+      },
+    ]);
+    mockGetMeetingActivitiesForGuest.mockResolvedValue([]);
+
+    const result = await call({ houseId: "house-1" });
+
+    // Dangerous cells are prefixed with a single quote and must never appear
+    // as a raw formula at a cell boundary (start-of-line or after a comma).
+    expect(result.csv).not.toMatch(/(^|,)=cmd/m);
+    expect(result.csv).not.toMatch(/(^|,)@SUM/m);
+    expect(result.csv).toContain("'=cmd");
+    expect(result.csv).toContain("'@SUM");
+  });
+});
+
 describe("complianceExport — entitled PDF export", () => {
   const entitledTraditional = () => {
     mockGetHouse.mockResolvedValue(baseHouse);

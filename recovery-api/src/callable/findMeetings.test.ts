@@ -92,9 +92,18 @@ function makeDb(seed: DirectoryMeeting[] = []) {
 }
 
 describe('handleFindMeetings (auth via wrapper)', () => {
+  const OLD_ENV = process.env;
+  beforeEach(() => {
+    process.env = { ...OLD_ENV, RECOVERY_PLATFORM_API_KEY: 'test-key' };
+  });
+  afterEach(() => {
+    process.env = OLD_ENV;
+  });
+
   it('rejects a call with a missing/invalid X-Service-Key', async () => {
-    // The deployed wrapper gates on requireServiceAuth; a request with neither a
-    // valid service key nor request.auth must be rejected as unauthenticated.
+    // The deployed wrapper gates on requireServiceAuth; with the service key
+    // configured, a request with neither a valid service key nor request.auth
+    // must be rejected as unauthenticated.
     const request = {
       data: { location: CENTER },
       rawRequest: { headers: {} },
@@ -103,6 +112,19 @@ describe('handleFindMeetings (auth via wrapper)', () => {
 
     await expect(findMeetings.run(request)).rejects.toMatchObject({
       code: 'unauthenticated',
+    });
+  });
+
+  it('fails closed (internal) when the service key secret is not provisioned', async () => {
+    delete process.env.RECOVERY_PLATFORM_API_KEY;
+    const request = {
+      data: { location: CENTER },
+      rawRequest: { headers: { 'x-service-key': 'anything' } },
+      auth: undefined,
+    } as unknown as CallableRequest;
+
+    await expect(findMeetings.run(request)).rejects.toMatchObject({
+      code: 'internal',
     });
   });
 });

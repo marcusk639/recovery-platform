@@ -115,4 +115,70 @@ describe("computeApplicationFee", () => {
       }),
     ).toBe(150);
   });
+
+  describe("integer / non-negative invariant (Stripe rejects floats & negatives)", () => {
+    const cases: {
+      method: "card" | "ach" | "us_bank_account";
+      legacy: boolean;
+    }[] = [
+      { method: "card", legacy: false },
+      { method: "ach", legacy: false },
+      { method: "us_bank_account", legacy: false },
+      { method: "card", legacy: true },
+    ];
+
+    it("returns an integer fee for a fractional amountCents on every path", () => {
+      for (const { method, legacy } of cases) {
+        const fee = computeApplicationFee(
+          {
+            amountCents: 150.5,
+            paymentMethodType: method,
+            isLegacyHouse: legacy,
+          },
+          DEFAULT_FEES,
+        );
+        expect(Number.isInteger(fee)).toBe(true);
+        expect(fee).toBeGreaterThanOrEqual(0);
+        expect(fee).toBeLessThanOrEqual(151);
+      }
+    });
+
+    it("returns 0 for a zero or negative amountCents (no charge to fee)", () => {
+      for (const amountCents of [0, -1, -15000]) {
+        for (const { method, legacy } of cases) {
+          expect(
+            computeApplicationFee(
+              { amountCents, paymentMethodType: method, isLegacyHouse: legacy },
+              DEFAULT_FEES,
+            ),
+          ).toBe(0);
+        }
+      }
+    });
+
+    it("returns 0 for a non-finite amountCents (NaN/Infinity)", () => {
+      for (const amountCents of [NaN, Infinity, -Infinity]) {
+        expect(
+          computeApplicationFee(
+            { amountCents, paymentMethodType: "ach", isLegacyHouse: false },
+            DEFAULT_FEES,
+          ),
+        ).toBe(0);
+      }
+    });
+
+    it("never charges a flat ACH fee exceeding the (rounded) rent amount", () => {
+      // Flat $2 (200c) but rent is only 150.5c -> clamp to rounded amount 151.
+      expect(
+        computeApplicationFee(
+          {
+            amountCents: 150.5,
+            paymentMethodType: "ach",
+            isLegacyHouse: false,
+          },
+          DEFAULT_FEES,
+        ),
+      ).toBe(151);
+    });
+  });
 });

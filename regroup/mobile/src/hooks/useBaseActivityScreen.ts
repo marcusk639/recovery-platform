@@ -202,12 +202,12 @@ export const useBaseActivityScreen = (
 
       const updatedGuest = cloneDeep(activityGuest);
 
-      await updateDisputeMutation.mutateAsync({
-        guest: updatedGuest,
-        house: housePayload,
-        notifications: buildNotifications(dispute),
-      });
-
+      // Write the authoritative record (the activity's DISPUTED status, which
+      // compliance/export reads) FIRST. Only mirror it into the denormalized
+      // house.disputes cache on success — otherwise a failed activity write
+      // leaves the house showing a dispute the activity never recorded, and the
+      // "Dispute not saved" alert would be a lie. If the activity write fails,
+      // nothing is half-applied.
       try {
         await disputeActivityInFirestore(activity.id, message, user.id || '');
       } catch (err) {
@@ -218,6 +218,12 @@ export const useBaseActivityScreen = (
         );
         throw err;
       }
+
+      await updateDisputeMutation.mutateAsync({
+        guest: updatedGuest,
+        house: housePayload,
+        notifications: buildNotifications(dispute),
+      });
     },
     [guests, house, disputes, user, updateDisputeMutation, buildNotifications],
   );
@@ -310,13 +316,10 @@ export const useBaseActivityScreen = (
               const updatedGuest = cloneDeep(activityGuest);
 
               modal.setLoadingMessage('Processing dispute...');
-              await updateDisputeMutation.mutateAsync({
-                guest: updatedGuest,
-                house: partialHouse,
-                notifications: [],
-                resolvedDispute,
-              });
-
+              // Resolve the authoritative activity record first; only update the
+              // denormalized house cache to "resolved" if it succeeds. Otherwise
+              // the UI would show the dispute resolved while the activity stays
+              // DISPUTED, and the alert would be a lie.
               try {
                 await resolveDisputeInFirestore(
                   dispute.activityId,
@@ -329,7 +332,15 @@ export const useBaseActivityScreen = (
                   'Override not saved',
                   'We could not resolve this dispute. Please try again.',
                 );
+                return;
               }
+
+              await updateDisputeMutation.mutateAsync({
+                guest: updatedGuest,
+                house: partialHouse,
+                notifications: [],
+                resolvedDispute,
+              });
             },
           },
         ],
@@ -357,13 +368,10 @@ export const useBaseActivityScreen = (
               const updatedGuest = cloneDeep(activityGuest);
 
               modal.setLoadingMessage('Processing dispute...');
-              await updateDisputeMutation.mutateAsync({
-                guest: updatedGuest,
-                house: partialHouse,
-                notifications: [],
-                resolvedDispute,
-              });
-
+              // Resolve the authoritative activity record first; only update the
+              // denormalized house cache to "resolved" if it succeeds. Otherwise
+              // the UI would show the dispute resolved while the activity stays
+              // DISPUTED, and the alert would be a lie.
               try {
                 await resolveDisputeInFirestore(
                   dispute.activityId,
@@ -376,7 +384,15 @@ export const useBaseActivityScreen = (
                   'Allowance not saved',
                   'We could not resolve this dispute. Please try again.',
                 );
+                return;
               }
+
+              await updateDisputeMutation.mutateAsync({
+                guest: updatedGuest,
+                house: partialHouse,
+                notifications: [],
+                resolvedDispute,
+              });
             },
           },
         ],

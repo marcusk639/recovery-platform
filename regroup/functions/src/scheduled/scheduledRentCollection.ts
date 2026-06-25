@@ -18,10 +18,7 @@ import { logger } from "firebase-functions";
 import Stripe from "stripe";
 import { guestCollection } from "../api/firestore";
 import { STRIPE_SECRET_KEY, LEGACY_RENT_FEE_HOUSE_IDS } from "../config";
-import {
-  computeApplicationFee,
-  RentPaymentMethodType,
-} from "../util/rentFee";
+import { computeApplicationFee, RentPaymentMethodType } from "../util/rentFee";
 
 interface AutoPayGuest {
   id: string;
@@ -66,9 +63,17 @@ export async function runRentCollection(): Promise<void> {
         return;
       }
 
-      // rentOwed is stored as integer cents, but guard against legacy/float
-      // values — Stripe rejects non-integer `amount`, which would silently
-      // skip a guest's auto-pay. Round to the nearest cent.
+      // rentOwed is stored as integer cents, but the Firestore doc is read with
+      // an unchecked cast. Guard against legacy/float/non-numeric values —
+      // Stripe rejects a non-integer or non-positive `amount`, which would
+      // otherwise reject inside this promise and be swallowed by the aggregate
+      // failure handler below (a silently uncollected rent). Log + skip.
+      if (!Number.isFinite(guest.rentOwed) || guest.rentOwed <= 0) {
+        logger.error("scheduledRentCollection: invalid rentOwed, skipping", {
+          guestId: guest.id,
+        });
+        return;
+      }
       const amountCents = Math.round(guest.rentOwed);
       const idempotencyKey = `auto-rent-${guest.id}-${today}`;
 
@@ -78,11 +83,23 @@ export async function runRentCollection(): Promise<void> {
       // houses stay on the flat 2% via the allow-list (P-3).
       let transferParams: Partial<Stripe.PaymentIntentCreateParams> = {};
       if (guest.stripeConnectId) {
-        const method = await stripe.paymentMethods.retrieve(
-          guest.defaultPaymentMethodId,
-        );
-        const paymentMethodType: RentPaymentMethodType =
-          method.type === "us_bank_account" ? "us_bank_account" : "card";
+        // The method type only affects the (cents-level) fee. If the lookup
+        // fails (deleted method, rate limit, transient network), fall back to
+        // pricing as a card rather than skipping the whole rent charge.
+        let paymentMethodType: RentPaymentMethodType = "card";
+        try {
+          const method = await stripe.paymentMethods.retrieve(
+            guest.defaultPaymentMethodId,
+          );
+          paymentMethodType =
+            method.type === "us_bank_account" ? "us_bank_account" : "card";
+        } catch (err) {
+          logger.warn(
+            "scheduledRentCollection: payment method lookup failed, " +
+              "defaulting to card fee",
+            { guestId: guest.id, err: (err as Error)?.message },
+          );
+        }
         transferParams = {
           transfer_data: { destination: guest.stripeConnectId },
           application_fee_amount: computeApplicationFee({
@@ -115,10 +132,22 @@ export async function runRentCollection(): Promise<void> {
     }),
   );
 
-  const failures = results.filter((r) => r.status === "rejected");
-  if (failures.length > 0) {
+  // Surface each failed charge with its guest id and sanitized reason so a
+  // declined/errored auto-pay can be followed up — an aggregate count alone
+  // hides which resident's rent went uncollected and why.
+  let failureCount = 0;
+  results.forEach((result, index) => {
+    if (result.status === "rejected") {
+      failureCount += 1;
+      logger.error("scheduledRentCollection: charge failed", {
+        guestId: snapshot.docs[index].id,
+        reason: (result.reason as Error)?.message ?? String(result.reason),
+      });
+    }
+  });
+  if (failureCount > 0) {
     logger.error("scheduledRentCollection: some payments failed", {
-      failureCount: failures.length,
+      failureCount,
       totalCount: snapshot.size,
     });
   }

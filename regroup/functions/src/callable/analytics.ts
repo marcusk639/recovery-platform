@@ -13,10 +13,17 @@ import { parseInput } from "../validation";
 
 const rentRoiMetricsSchema = z.object({
   houseId: z.string().min(1),
-  // ISO/date strings; compared lexicographically (ISO sorts chronologically).
-  // Avoid z.string().datetime() (deprecated) — validate loosely.
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
+  // YYYY-MM-DD only; compared lexicographically (ISO sorts chronologically).
+  // A loose string would let a malformed bound silently over/under-include
+  // payments in the ROI window, so require the calendar-date shape.
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
 });
 
 // Lowest sellable tier whose `features.analytics` is true, per house type
@@ -115,8 +122,16 @@ export const rentRoiMetrics = onCall(async (request) => {
   if (tier) {
     try {
       entitled = tierAllows(houseType, tier, "analytics");
-    } catch {
-      // Unknown tier/houseType combo ⇒ treat as not entitled.
+    } catch (err) {
+      // Unknown tier/houseType combo ⇒ treat as not entitled. Log so a genuine
+      // SUBSCRIPTION_TIERS misconfiguration (which would silently downgrade a
+      // paying operator) is distinguishable from a real under-tier user.
+      logger.error("rentRoiMetrics: tierAllows threw", {
+        houseId,
+        houseType,
+        tier,
+        err: (err as Error)?.message,
+      });
       entitled = false;
     }
   }
@@ -198,16 +213,16 @@ export const rentRoiMetrics = onCall(async (request) => {
       g.rentDueDate < todayStr,
   ).length;
 
+  // Log only non-sensitive counts. Dollar aggregates (collected/outstanding)
+  // and the overdue-resident count tied to a houseId are operationally
+  // sensitive financial data and must not land in Cloud Functions logs — they
+  // are returned to the entitled caller below instead.
   logger.info("rentRoiMetrics: metrics computed", {
     houseId,
-    collectedGrossCents,
-    collectedNetCents,
-    refundedCents,
     paymentCount,
     duePaymentCount,
-    onTimeRatePct,
-    outstandingCents,
-    overdueResidentCount,
+    hasOutstanding: outstandingCents > 0,
+    hasOverdue: overdueResidentCount > 0,
   });
 
   // Caveats: only surface notes that still apply.

@@ -593,23 +593,35 @@ export const updateSubscriptionHouses = onCall(
     if (houseMeta?.tier) {
       const houses = houseMeta.houses ?? {};
       if (action === "add") {
+        // P-7: a second property requires the multiProperty capability. Resolve
+        // it once, fail-closed: a mismatched/grandfathered tier makes tierAllows
+        // throw, which must deny the capability (and log) rather than surface a
+        // 500 to the operator.
+        let allowsMultiProperty = false;
+        try {
+          allowsMultiProperty = tierAllows(
+            houseMeta.houseType as HouseType,
+            houseMeta.tier as TierKey,
+            "multiProperty",
+          );
+        } catch (err) {
+          logger.error("updateSubscriptionHouses: tierAllows threw", {
+            userId: user.id,
+            houseType: houseMeta.houseType,
+            tier: houseMeta.tier,
+            err: (err as Error)?.message,
+          });
+          allowsMultiProperty = false;
+        }
         // Check the cap per newly-added house so a multi-id batch cannot exceed
         // the property cap in a single call (each new id must fit under the cap).
         const added = { ...houses };
         for (const id of houseIds ?? []) {
           if (id in added) continue;
-          // P-7: a second property requires the multiProperty capability. Checked
-          // before the numeric cap so single-property tiers get a capability-
-          // specific message; the cap still bounds multi-property tiers (e.g.
-          // Professional adding a 4th house past maxProperties=3).
-          if (
-            Object.keys(added).length >= 1 &&
-            !tierAllows(
-              houseMeta.houseType as HouseType,
-              houseMeta.tier as TierKey,
-              "multiProperty",
-            )
-          ) {
+          // Checked before the numeric cap so single-property tiers get a
+          // capability-specific message; the cap still bounds multi-property
+          // tiers (e.g. Professional adding a 4th house past maxProperties=3).
+          if (Object.keys(added).length >= 1 && !allowsMultiProperty) {
             throw new HttpsError(
               "failed-precondition",
               "Your plan does not include multiple properties — upgrade to add more houses",

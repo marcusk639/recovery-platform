@@ -234,7 +234,14 @@ service cloud.firestore {
     }
 
     match /complaints/{complaintId} {
-      allow read: if isGuestOrAdmin([resource.data.houseId]);
+      // Confidential: only house admins and the named complainant may read a
+      // complaint — not every resident of the house (which would expose
+      // complaints filed about, or by, other residents and chill reporting).
+      // Clients render complaints from the embedded house.complaints map, not by
+      // querying this collection, so admin-scoped reads don't break the app.
+      // Anonymous complaints (plaintiff == '') are admin-only by construction.
+      allow read: if isAdmin([resource.data.houseId])
+        || isSameUser(resource.data.plaintiff);
       allow create: if isGuestOrAdmin([request.resource.data.houseId]);
       // houseId is immutable on update; membership is checked against the
       // existing house so a complaint can't be re-parented into another house.
@@ -251,7 +258,12 @@ service cloud.firestore {
     }
     
     match /disputes/{disputeId} {
-      allow read: if isGuestOrAdmin([resource.data.houseId]);
+      // Only house admins and the disputing resident may read a dispute — not
+      // every resident of the house. Clients render disputes from the embedded
+      // house map / activities collection, not by querying this collection, so
+      // admin-scoped reads don't break the app.
+      allow read: if isAdmin([resource.data.houseId])
+        || isSameUser(resource.data.guestId);
       allow create: if isGuestOrAdmin([request.resource.data.houseId]);
       // houseId is immutable on update; membership is checked against the
       // existing house so a dispute can't be re-parented into another house.

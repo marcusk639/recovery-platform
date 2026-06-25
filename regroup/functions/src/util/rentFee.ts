@@ -35,25 +35,42 @@ const isBankTransfer = (type: RentPaymentMethodType): boolean =>
  * Always returns a non-negative integer (Stripe rejects floats / over-charges).
  */
 export function computeApplicationFee(
-  { amountCents, paymentMethodType, isLegacyHouse }: ComputeApplicationFeeParams,
+  {
+    amountCents,
+    paymentMethodType,
+    isLegacyHouse,
+  }: ComputeApplicationFeeParams,
   feeConfig: RentFeeConfig = RENT_FEE,
 ): number {
+  // Normalize the rent amount to a non-negative integer cents value up front.
+  // Callers may pass a float (legacy data) or a non-positive amount; Stripe
+  // rejects a non-integer or negative `application_fee_amount`, which would
+  // fail the entire PaymentIntent. Every branch below derives from `amount`,
+  // so the returned fee is always a non-negative integer.
+  const amount =
+    Number.isFinite(amountCents) && amountCents > 0
+      ? Math.round(amountCents)
+      : 0;
+  if (amount === 0) {
+    return 0;
+  }
+
   if (isLegacyHouse) {
-    return Math.round(amountCents * feeConfig.legacyRate);
+    return Math.min(Math.round(amount * feeConfig.legacyRate), amount);
   }
 
   if (isBankTransfer(paymentMethodType)) {
     const fee =
       feeConfig.achRate > 0
         ? Math.min(
-            Math.round(amountCents * feeConfig.achRate),
+            Math.round(amount * feeConfig.achRate),
             feeConfig.achCapCents,
           )
         : feeConfig.achFlatCents;
     // Never charge more than the rent itself (guards tiny amounts).
-    return Math.min(fee, amountCents);
+    return Math.min(Math.round(fee), amount);
   }
 
   // card (default)
-  return Math.round(amountCents * feeConfig.cardPlatformRate);
+  return Math.min(Math.round(amount * feeConfig.cardPlatformRate), amount);
 }

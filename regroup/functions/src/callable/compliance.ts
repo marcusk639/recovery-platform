@@ -16,10 +16,17 @@ import { parseInput } from "../validation";
 const complianceExportSchema = z.object({
   houseId: z.string().min(1),
   residentId: z.string().optional(),
-  // ISO date strings; compared lexicographically (ISO sorts chronologically).
-  // Avoid z.string().datetime() (deprecated) — validate loosely.
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
+  // YYYY-MM-DD only; compared lexicographically (ISO sorts chronologically).
+  // A loose string would let a malformed bound silently over/under-include
+  // records in a court-facing export, so require the calendar-date shape.
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
   // Output format. Defaults to "csv" when omitted (handled in code).
   format: z.enum(["csv", "pdf"]).optional(),
 });
@@ -64,7 +71,15 @@ interface ResidentRecord {
 // Escapes a single CSV value: wrap in double-quotes and double any internal
 // quotes when the value contains a comma, quote, or newline.
 function csvEscape(value: string | number | boolean): string {
-  const str = String(value ?? "");
+  let str = String(value ?? "");
+  // Neutralize spreadsheet formula injection: a cell beginning with =, +, -,
+  // @, or a control char (tab/CR) is interpreted as a formula by Excel/Sheets.
+  // Resident-controlled free text (notes, names, substances) flows into this
+  // court-facing export, so prefix such values with a single quote. RFC-4180
+  // quoting below still applies for commas/quotes/newlines.
+  if (str.length > 0 && /^[=+\-@\t\r]/.test(str)) {
+    str = `'${str}`;
+  }
   if (/[",\n\r]/.test(str)) {
     return `"${str.replace(/"/g, '""')}"`;
   }
@@ -119,43 +134,39 @@ async function gatherExportData(
   residents: ResidentRecord[],
   residentId: string | undefined,
   startDate: string | undefined,
-  endDate: string | undefined,
+  endDate: string | undefined
 ): Promise<ExportData> {
-  const bundles: ResidentExport[] = [];
-  let drugTestCount = 0;
-  let meetingCount = 0;
+  // Fetch each resident's drug tests + meetings concurrently. The previous
+  // serial N+1 (2 awaits per resident, one resident at a time) made a
+  // whole-house export's latency scale with resident count and risked the
+  // callable timeout for large houses. Promise.all preserves resident order.
+  const bundles: ResidentExport[] = await Promise.all(
+    residents.map(async (resident) => {
+      const rid = resident.id ?? residentId ?? "";
 
-  for (const resident of residents) {
-    const rid = resident.id ?? residentId ?? "";
+      const [tests, meetings] = await Promise.all([
+        getDrugTestsForGuest(rid) as Promise<DrugTest[]>,
+        getMeetingActivitiesForGuest(rid) as Promise<MeetingActivity[]>,
+      ]);
 
-    const tests = (await getDrugTestsForGuest(rid)) as DrugTest[];
-    const filteredTests = tests.filter((t) =>
-      inWindow(t.testDate ?? "", startDate, endDate),
-    );
-
-    const meetings = (await getMeetingActivitiesForGuest(
-      rid,
-    )) as MeetingActivity[];
-    const filteredMeetings = meetings.filter((m) =>
-      inWindow(m.timestamp ?? m.loggedAt ?? "", startDate, endDate),
-    );
-
-    drugTestCount += filteredTests.length;
-    meetingCount += filteredMeetings.length;
-
-    bundles.push({
-      resident,
-      tests: filteredTests,
-      meetings: filteredMeetings,
-    });
-  }
+      return {
+        resident,
+        tests: tests.filter((t) =>
+          inWindow(t.testDate ?? "", startDate, endDate)
+        ),
+        meetings: meetings.filter((m) =>
+          inWindow(m.timestamp ?? m.loggedAt ?? "", startDate, endDate)
+        ),
+      };
+    })
+  );
 
   return {
     residents: bundles,
     counts: {
       residents: residents.length,
-      drugTests: drugTestCount,
-      meetings: meetingCount,
+      drugTests: bundles.reduce((sum, b) => sum + b.tests.length, 0),
+      meetings: bundles.reduce((sum, b) => sum + b.meetings.length, 0),
     },
   };
 }
@@ -186,7 +197,7 @@ function renderCsv(data: ExportData): string {
         "Observer",
         "Random",
         "Notes",
-      ]),
+      ])
     );
     for (const t of tests) {
       lines.push(
@@ -198,7 +209,7 @@ function renderCsv(data: ExportData): string {
           t.observerName ?? t.observedBy ?? "",
           t.isRandom === true,
           t.notes ?? "",
-        ]),
+        ])
       );
     }
     lines.push("");
@@ -214,7 +225,7 @@ function renderCsv(data: ExportData): string {
           m.data?.meetingType ?? "",
           m.data?.duration ?? "",
           m.verified === true,
-        ]),
+        ])
       );
     }
     lines.push("");
@@ -236,7 +247,7 @@ async function renderPdf(
   data: ExportData,
   houseId: string,
   startDate: string | undefined,
-  endDate: string | undefined,
+  endDate: string | undefined
 ): Promise<Buffer> {
   const PDFDocument = (await import("pdfkit")).default;
 
@@ -294,7 +305,7 @@ async function renderPdf(
               t.notes ?? "",
             ]
               .filter((part) => part !== "")
-              .join(" · "),
+              .join(" · ")
           );
         }
       }
@@ -317,7 +328,7 @@ async function renderPdf(
               m.data?.meetingType ?? "—",
               m.data?.duration != null ? String(m.data.duration) : "—",
               m.verified === true ? "Verified" : "Unverified",
-            ].join(" · "),
+            ].join(" · ")
           );
         }
       }
@@ -368,7 +379,7 @@ export const complianceExport = onCall(async (request) => {
   if (house.superAdminId !== request.auth.uid) {
     throw new HttpsError(
       "permission-denied",
-      "Only the house owner can export compliance data",
+      "Only the house owner can export compliance data"
     );
   }
 
@@ -381,8 +392,16 @@ export const complianceExport = onCall(async (request) => {
   if (tier) {
     try {
       entitled = tierAllows(houseType, tier, "complianceExport");
-    } catch {
-      // Unknown tier/houseType combo ⇒ treat as not entitled.
+    } catch (err) {
+      // Unknown tier/houseType combo ⇒ treat as not entitled. Log so a genuine
+      // SUBSCRIPTION_TIERS misconfiguration (which would silently downgrade a
+      // paying operator) is distinguishable from a real under-tier user.
+      logger.error("complianceExport: tierAllows threw", {
+        houseId,
+        houseType,
+        tier,
+        err: (err as Error)?.message,
+      });
       entitled = false;
     }
   }
@@ -423,7 +442,7 @@ export const complianceExport = onCall(async (request) => {
     residents,
     residentId,
     startDate,
-    endDate,
+    endDate
   );
 
   logger.info("complianceExport: export generated", {
