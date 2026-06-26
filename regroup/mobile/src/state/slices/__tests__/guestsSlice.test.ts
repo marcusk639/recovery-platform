@@ -34,6 +34,7 @@ import { configureStore } from '@reduxjs/toolkit';
 import guestsReducer, {
   selectGuest,
   selectGuestById,
+  setUserAsGuest,
   updateSelectedGuest,
   cacheGuests,
   cacheGuest,
@@ -192,6 +193,22 @@ describe('guestsSlice', () => {
       store.dispatch(selectGuestById('guest-456'));
       store.dispatch(selectGuestById(null));
       expect(store.getState().guests.selectedGuestId).toBeNull();
+    });
+  });
+
+  describe('setUserAsGuest', () => {
+    it('sets userAsGuest to the given guest', () => {
+      const base = guestsReducer(undefined, { type: '@@INIT' });
+      const guest = { id: 'g1', userId: 'u1', houseId: 'h1' } as any;
+      const state = guestsReducer(base, setUserAsGuest(guest));
+      expect(state.userAsGuest).toEqual(guest);
+    });
+
+    it('clears userAsGuest when dispatched with null', () => {
+      const base = guestsReducer(undefined, { type: '@@INIT' });
+      const preloaded = { ...base, userAsGuest: { id: 'g1' } as any };
+      const state = guestsReducer(preloaded, setUserAsGuest(null));
+      expect(state.userAsGuest).toBeNull();
     });
   });
 

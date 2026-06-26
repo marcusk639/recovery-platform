@@ -31,6 +31,7 @@ export class OperatorSubscription {
   status: SubscriptionStatus = '';
   lastUpdatedAt?: string = undefined;
   plan: string = '';
+  tier?: string;
   items: {
     houseItemId: string;
     guestItemId: string;
