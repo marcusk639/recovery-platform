@@ -160,7 +160,7 @@ export const createGroupWithSubscription = onCall(
       );
 
       // 3. Prepare Group Document and Meetings in a single Firestore batch
-      logger.info(`Preparing Firestore batch for group ${groupData.name}`);
+      logger.info(`Preparing Firestore batch for group ${groupRef.id}`);
       const firestoreBatch = db.batch();
       // groupRef was pre-generated above so its ID could seed Stripe idempotency keys.
       const newGroup: Partial<HomeGroup> = {

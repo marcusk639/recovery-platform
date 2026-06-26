@@ -1,0 +1,66 @@
+# Flow 26 — Oxford: onboarding wizard
+# Persona: oxford operator (admin of test-house-oxford, oxfordEnabled=true).
+#
+# PRECONDITION (re-seed required): this flow only renders the onboarding wizard
+# when the Oxford house has oxfordOnboardingComplete===false. The default seed
+# (e2e/setup/seedTestData.js) sets test-house-oxford.oxfordOnboardingComplete=true
+# (so the dashboard flow 31 works). To run this flow, EITHER:
+#   - re-seed test-house-oxford with oxfordOnboardingComplete:false, OR
+#   - seed a SECOND oxford house with onboarding incomplete and point this
+#     operator at it.
+# Until then this flow will land on oxford-dashboard-content instead of the wizard.
+#
+# Run: maestro test -e APP_ID=com.rats.dev maestro/flows/oxford-onboarding.yaml
+appId: ${APP_ID}
+tags:
+  - oxford
+  - onboarding
+---
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-oxford-operator@rats-e2e.com
+      PASSWORD: TestPassword123!
+- extendedWaitUntil:
+    visible:
+      id: "main-app-screen"
+    timeout: 30000
+# Enter the Oxford hub; with onboarding incomplete the wizard is presented.
+- tapOn:
+    text: "Oxford House Hub"
+# Wizard step 1 of 5.
+- extendedWaitUntil:
+    visible:
+      id: "wizard-step-1"
+    timeout: 30000
+# Advance through the 5 steps. The wizard's nav button is the shared
+# setup-buttons-next control (its label becomes "Finish" on the last step);
+# there is no dedicated button-finish testID (see MISSING TESTIDS in report).
+- assertVisible:
+    id: "wizard-step-1"
+- tapOn:
+    id: "setup-buttons-next"
+- assertVisible:
+    id: "wizard-step-2"
+- tapOn:
+    id: "setup-buttons-next"
+- assertVisible:
+    id: "wizard-step-3"
+- tapOn:
+    id: "setup-buttons-next"
+- assertVisible:
+    id: "wizard-step-4"
+- tapOn:
+    id: "setup-buttons-next"
+- assertVisible:
+    id: "wizard-step-5"
+# Last step: the same next control finishes the wizard ("Finish" label).
+- tapOn:
+    id: "setup-buttons-next"
+# Completion lands on the Oxford dashboard.
+- extendedWaitUntil:
+    visible:
+      id: "oxford-dashboard-content"
+    timeout: 30000
+- runFlow:
+    file: ../subflows/logout.yaml

@@ -23,13 +23,14 @@ makes money two ways:
 
 1. **Operator subscriptions** — a flat-fee, six-tier model split across two house
    types (Traditional and Oxford); amounts in
-   [`../_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md) rows `RG-MON-1`…`RG-MON-6`.
-2. **Rent-payment platform fee** — a **2% application fee** on resident rent
-   collected through Stripe Connect (destination charges), routed to the house
-   operator's connected account.
+   [`_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md) rows `RG-MON-1`…`RG-MON-6`.
+2. **Rent-payment platform fee** — a **method-aware application fee** on resident
+   rent collected through Stripe Connect (destination charges), routed to the house
+   operator's connected account: ACH/bank = flat **$2/txn**, card = **0.75%**
+   platform fee, legacy houses grandfathered at **2%** (see §2).
 
 All price values live in the canonical table
-[`../_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md). This doc holds the **narrative,
+[`_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md). This doc holds the **narrative,
 logic, and projections** and references each price by its stable `sku` ID
 (`RG-MON-*`). No price string is restated here.
 
@@ -48,18 +49,18 @@ resident limits in `SUBSCRIPTION_TIERS`
 (source: regroup/functions/src/config.ts#L37-L78). Historical provenance for the
 rejected conservative ladder: `regroup/docs/product/decisions.md` (stubbed).
 
-| sku (pricing.md) | Tier                     | House type  | Notes                                 |
-| ---------------- | ------------------------ | ----------- | ------------------------------------- |
-| `RG-MON-1`       | Traditional Starter      | Traditional | ≤10 residents, 1 property             |
-| `RG-MON-2`       | Traditional Professional | Traditional | ≤20 residents, ≤3 properties          |
-| `RG-MON-3`       | Traditional Enterprise   | Traditional | unlimited residents/properties        |
-| `RG-MON-4`       | Oxford Standard          | Oxford      | ≤15 residents, 1 property             |
-| `RG-MON-5`       | Oxford Plus              | Oxford      | ≤25 residents, 1 property             |
-| `RG-MON-6`       | Oxford Network           | Oxford      | regional chapter, unlimited           |
-| `RG-MON-7`       | Rent platform fee        | both        | 2% application fee via Stripe Connect |
+| sku (pricing.md) | Tier                     | House type  | Notes                                    |
+| ---------------- | ------------------------ | ----------- | ---------------------------------------- |
+| `RG-MON-1`       | Traditional Starter      | Traditional | ≤10 residents, 1 property                |
+| `RG-MON-2`       | Traditional Professional | Traditional | ≤20 residents, ≤3 properties             |
+| `RG-MON-3`       | Traditional Enterprise   | Traditional | unlimited residents/properties           |
+| `RG-MON-4`       | Oxford Standard          | Oxford      | ≤15 residents, 1 property                |
+| `RG-MON-5`       | Oxford Plus              | Oxford      | ≤25 residents, 1 property                |
+| `RG-MON-6`       | Oxford Network           | Oxford      | regional chapter, unlimited              |
+| `RG-MON-7`       | Rent platform fee        | both        | Method-aware fee via Stripe Connect (§2) |
 
 Tier amounts, billing period, Stripe env-var names, and Connect fee are in
-[`../_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md) rows `RG-MON-1`…`RG-MON-7`. The
+[`_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md) rows `RG-MON-1`…`RG-MON-7`. The
 approved ladder is the "balanced" recommendation (Model #3 of five evaluated
 pricing models — chosen over conservative, aggressive-value, flat-rate, and
 per-resident alternatives because it maximizes revenue while staying inside the
@@ -91,21 +92,95 @@ selection: `regroup/mobile/PRICING_STRATEGY.md` §3/§4 (stubbed).
 
 ---
 
-## 2. Rent platform fee (2% via Stripe Connect)
+## 1a. Multi-house bundle discounts (legacy per-house model only)
+
+Operators running multiple houses on the **legacy per-house subscription** receive
+a stacking subscription discount, applied automatically as a Stripe coupon:
+
+| Houses | Coupon ID          | Discount |
+| ------ | ------------------ | -------- |
+| 3–4    | `regroup-bundle-3` | 10% off  |
+| 5+     | `regroup-bundle-5` | 15% off  |
+
+The discount is recomputed from the operator's house count whenever houses are
+added/removed (`updateSubscriptionHouses`) and on demand via the
+`applyBundleDiscount` callable; it is removed when the count drops below 3
+(source: regroup/functions/src/api/stripe.ts `getBundleCoupon` /
+`applyBundleDiscountToSubscription`; coupons are `duration: forever`).
+
+**Bundles do NOT apply to the six-tier model.** Tier subscriptions express
+multi-property capacity through the tier itself (Professional / Enterprise /
+Network), not per-house quantity, so stacking a per-house bundle coupon on a tier
+would double-discount. The `applyBundleDiscount` callable explicitly skips any
+subscription that carries a `tier` (decision locked 2026-06-22, gate P-6,
+legacy-only). New tier operators who scale houses move up a tier rather than
+accruing bundle coupons.
+
+> **Stripe state (2026-06-22):** both coupons exist and are valid in **test mode**.
+> They are **not yet created in live mode** — the available `rk_live_` restricted
+> key lacks coupon-write permission, so they must be created in the Stripe
+> Dashboard (or via a full-access key) before the legacy bundle path can discount
+> a production subscription.
+
+---
+
+## 1b. Capability value ladder, annual billing & trial (P-4/P-5/P-7/P-8)
+
+Tiers gate on **capabilities**, not just bed/property caps, so an upgrade buys
+outcomes. Each tier in `SUBSCRIPTION_TIERS` carries a `features` map
+(`automatedRentCollection`, `multiProperty`, `complianceExport`, `analytics`,
+`whiteLabel`); the value ladder (justification §6b):
+
+- **Starter / Standard:** core only.
+- **Professional / Plus:** + `automatedRentCollection`, `multiProperty`,
+  `complianceExport`, `analytics`.
+- **Enterprise / Network:** + `whiteLabel`, chapter rollups.
+
+Capabilities are enforced server-side at their real call site via
+`tierAllows(houseType, tier, feature)` (`util/tierPricing.ts`) — composed with,
+not replacing, the `maxResidents`/`maxProperties` caps. Enforced today:
+`multiProperty` (in `updateSubscriptionHouses`) and `complianceExport` (the
+`complianceExport` callable, a Phase-5 stub — RG-SPEC-09). The remaining flags are
+defined ladder labels, not yet gated (no feature behind them yet — don't gate
+vaporware).
+
+- **Oxford Network is not for sale (P-8).** `availableForSale: false` keeps the
+  tier defined but blocks checkout (`isTierAvailableForSale()`) until a regional
+  chapter signs.
+- **Annual billing (P-4).** Each tier has an `annualPriceEnvVar` (~17% off, 2
+  months free). `createOperatorSubscription` accepts `billingInterval:
+"month" | "year"`.
+- **Trial (P-5).** 30-day trial wired into tier checkout (`trial_period_days`).
+
+Premium-feature handoffs: [RG-SPEC-09 compliance export](../product/specs/RG-SPEC-09-compliance-export.md)
+and the [rent-ROI dashboard tracking spec](../product/specs/RG-TRACK-rent-roi-dashboard.md).
+
+---
+
+## 2. Rent platform fee (method-aware via Stripe Connect)
 
 Resident rent flows through **destination charges** on a platform-owned
 PaymentIntent with `transfer_data.destination` = the house's connected account and
-`application_fee_amount` = 2% of the charge
-(source: docs/STRIPE_CONNECT_GUIDE.md#3-2-taking-rent-destination-charge). This is
-**implemented and code-verified**: the 2% fee is set in
-`createPaymentIntent` (source: regroup/functions/src/callable/payments.ts#L152)
-and in scheduled collection
-(source: regroup/functions/src/scheduled/scheduledRentCollection.ts#L80).
+a **method-aware `application_fee_amount`** (pricing-revision gates P-1/P-2/P-3,
+2026-06-22). The fee is computed by `computeApplicationFee(...)` in
+`util/rentFee.ts` and applied identically in `createPaymentIntent`
+(regroup/functions/src/callable/payments.ts) and scheduled collection
+(regroup/functions/src/scheduled/scheduledRentCollection.ts):
+
+| Payment method | Platform fee                                                    | Rationale                                                                                                      |
+| -------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| ACH / bank     | flat **$2/txn** (`RENT_FEE_ACH_FLAT_CENTS`; capped % available) | Cheap, to nudge bank payments (property-mgmt norm).                                                            |
+| Card           | **0.75%** (`RENT_FEE_CARD_PLATFORM_RATE`)                       | Thin platform fee; Stripe's card cost is a resident-borne disclosed convenience fee (P-2), not double-charged. |
+| Legacy houses  | **2%** (`RENT_FEE_LEGACY_RATE`)                                 | The 5 live houses grandfathered until migration (P-3, §3).                                                     |
+
+Legacy houses are identified by `house.legacyRentFee === true` or the
+`LEGACY_RENT_FEE_HOUSE_IDS` allow-list. All values are integer cents / decimal
+rates and env-overridable (see `functions/.env.example`). The earlier flat **2%
+on all rent** is superseded by this model; only the legacy branch still charges 2%.
 
 > Note: the 2026-05-24 strategy doc and the launch-readiness doc reference a "2.5%"
-> recommended fee. The **shipped code charges 2%**; 2% is the canonical value
-> (`RG-MON-7`). Treat "2.5%" mentions as a superseded recommendation
-> (source: docs/launch-readiness/regroup-launch-readiness.md#5-4-platform-fee-opportunity).
+> flat fee — also superseded. The canonical model is the method-aware table above
+> (`RG-MON-7`).
 
 At scale the rent fee can **equal or exceed** subscription revenue. Worked
 example: $800 avg rent × 15 residents × 2% = ~$240/house/mo in platform fee —
@@ -251,7 +326,7 @@ E2E payment validation are all required before any of these numbers are real
 
 ## Cross-references
 
-- Prices, Stripe env vars, Connect fee → [`../_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md)
+- Prices, Stripe env vars, Connect fee → [`_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md)
 - Launch blockers, owners, sequencing → [`project-management.md`](project-management.md)
 - Feature build status (incl. phantom features) → [`roadmap.md`](roadmap.md)
 - Decisions D-9, D-11 → [`../_shared/decisions-log.md`](../../../docs/go-to-market/_shared/decisions-log.md)

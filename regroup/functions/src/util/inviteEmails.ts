@@ -1,4 +1,3 @@
-import { logger } from "firebase-functions";
 import { sendEmail, regroupEmail } from "./email";
 
 export type InviteEmailType = "admin" | "guest" | "superAdmin" | "supporter";
@@ -32,10 +31,6 @@ export async function sendOneInviteEmail(
 
   const decodedLink = decodeURIComponent(inviteLink);
 
-  // Debug logging (matches existing behaviour in sendInviteEmails)
-  logger.info("Original dynamic link:", inviteLink);
-  logger.info("Decoded link:", decodedLink);
-
   const text =
     role === "guest"
       ? `You have been invited to join a sober living house. Click ${decodedLink} to join.`
@@ -56,8 +51,6 @@ export async function sendOneInviteEmail(
       )}`
     : customSchemeLink;
 
-  // Debug logging
-  logger.info("Final link to use:", linkToUse);
 
   // Build HTML more explicitly to avoid template string issues
   const invitationMessage =
@@ -95,8 +88,6 @@ export async function sendOneInviteEmail(
     "</div>",
   ].join("");
 
-  // Debug: Log the final HTML to see if href is present
-  logger.info("Final HTML for email:", html.substring(0, 500) + "...");
 
   await sendEmail({
     text,

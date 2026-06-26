@@ -6,6 +6,7 @@ import {
 import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
 import { stripe } from "../utils/stripe";
+import { APP_BASE_URL } from "../utils/appConfig";
 
 interface CreatePortalSessionData {
   groupId: string;
@@ -63,7 +64,7 @@ export const createCustomerPortalSession = onCall(
       // Create a Customer Portal session
       const portalSession = await stripe.billingPortal.sessions.create({
         customer: customerId,
-        return_url: `https://homegroups-app.com/billing?groupId=${groupId}`,
+        return_url: `${APP_BASE_URL}/billing?groupId=${groupId}`,
       });
 
       logger.info(

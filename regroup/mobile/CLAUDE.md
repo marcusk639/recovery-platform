@@ -26,6 +26,8 @@ npm run lint
 
 **Error logging** — Always `logException(error)` from `src/util/logging.ts`. Never `console.error` or `console.log` in production code.
 
+**Debug loggers** — Use `simple-debug-logger.ts` (it is `__DEV__`-guarded). Do NOT use `debug-logger.ts` — it persists full user objects to device storage + console unconditionally (PII leak). Both export `logInfo/logWarn/logError/logDebug`, so importing the wrong one is easy. Crashlytics is removed (zero call sites) — Sentry via `logException` is the only error sink.
+
 **Imports** — No `@/` path alias in source files; use relative paths. `@/` works in Jest tests only.
 
 **Firebase auth singleton** — `auth.currentUser` (not `auth().currentUser`). `auth` is a pre-initialized singleton from `firebase-setup.ts`.

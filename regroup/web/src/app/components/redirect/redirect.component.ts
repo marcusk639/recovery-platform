@@ -1,6 +1,7 @@
 import { Component, OnInit, Inject, PLATFORM_ID } from "@angular/core";
 import { isPlatformBrowser } from "@angular/common";
 import { ActivatedRoute } from "@angular/router";
+import { environment } from "../../../environments/environment";
 
 @Component({
   selector: "app-redirect",
@@ -44,8 +45,8 @@ import { ActivatedRoute } from "@angular/router";
         align-items: center;
         min-height: 100vh;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          sans-serif;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       }
 
       .redirect-content {
@@ -148,7 +149,7 @@ export class RedirectComponent implements OnInit {
 
   constructor(
     @Inject(PLATFORM_ID) private platformId: Object,
-    private route: ActivatedRoute
+    private route: ActivatedRoute,
   ) {}
 
   ngOnInit() {
@@ -184,7 +185,7 @@ export class RedirectComponent implements OnInit {
     if (this.customSchemeUrl) {
       const universalLink = this.customSchemeUrl.replace(
         "regroup-app://",
-        "https://regroup-app.com/"
+        "https://regroup-app.com/",
       );
       window.location.href = universalLink;
     }
@@ -194,7 +195,7 @@ export class RedirectComponent implements OnInit {
     if (this.customSchemeUrl) {
       const bundleIdScheme = this.customSchemeUrl.replace(
         "regroup-app://",
-        "com.rats.dev://"
+        "com.rats.dev://",
       );
       window.location.href = bundleIdScheme;
     }
@@ -205,17 +206,41 @@ export class RedirectComponent implements OnInit {
     const redirectUrl = urlParams.get("url");
     const debug = urlParams.get("debug");
 
-    // Show debug info if debug parameter is present
-    this.showDebugInfo = debug === "true";
+    // Show debug info if debug parameter is present (never in production)
+    this.showDebugInfo = debug === "true" && !environment.production;
     this.userAgent = navigator.userAgent;
 
     if (redirectUrl) {
-      this.customSchemeUrl = decodeURIComponent(redirectUrl);
-      this.redirectToCustomScheme(this.customSchemeUrl);
+      const decoded = decodeURIComponent(redirectUrl);
+      // Open-redirect guard: only act on known app deep-link schemes / our own
+      // domain. Anything else (javascript:, external phishing URLs) falls back
+      // to home instead of being navigated to.
+      if (this.isAllowedDeepLink(decoded)) {
+        this.customSchemeUrl = decoded;
+        this.redirectToCustomScheme(this.customSchemeUrl);
+      } else {
+        window.location.href = "/";
+      }
     } else {
       // Fallback to home page if no redirect URL
       window.location.href = "/";
     }
+  }
+
+  // Prefixes accepted from the untrusted `?url=` parameter. Scheme comparison
+  // is case-insensitive so e.g. "JavaScript:" cannot slip past the allowlist.
+  private static readonly ALLOWED_DEEP_LINK_PREFIXES = [
+    "regroup-app://",
+    "com.rats.dev://",
+    "https://regroup-app.com/",
+    "https://regroup-app.page.link/",
+  ];
+
+  private isAllowedDeepLink(url: string): boolean {
+    const normalized = url.trim().toLowerCase();
+    return RedirectComponent.ALLOWED_DEEP_LINK_PREFIXES.some((prefix) =>
+      normalized.startsWith(prefix),
+    );
   }
 
   private redirectToCustomScheme(customSchemeUrl: string) {
@@ -240,8 +265,6 @@ export class RedirectComponent implements OnInit {
   }
 
   private attemptAppLaunchWithFallbacks(appUrl: string, fallbackUrl: string) {
-    console.log("attemptAppLaunchWithFallbacks - appUrl:", appUrl);
-
     // Method 1: Try the URL as-is first (should be com.rats.dev:// for debug builds)
     this.attemptAppLaunch(appUrl, fallbackUrl);
 
@@ -250,11 +273,7 @@ export class RedirectComponent implements OnInit {
       setTimeout(() => {
         const bundleIdScheme = appUrl.replace(
           "regroup-app://",
-          "com.rats.dev://"
-        );
-        console.log(
-          "attemptAppLaunchWithFallbacks - trying bundle ID scheme:",
-          bundleIdScheme
+          "com.rats.dev://",
         );
         this.attemptAppLaunch(bundleIdScheme, fallbackUrl);
       }, 500);
@@ -266,34 +285,26 @@ export class RedirectComponent implements OnInit {
       if (appUrl.startsWith("regroup-app://")) {
         universalLink = appUrl.replace(
           "regroup-app://",
-          "https://regroup-app.com/"
+          "https://regroup-app.com/",
         );
       } else if (appUrl.startsWith("com.rats.dev://")) {
         universalLink = appUrl.replace(
           "com.rats.dev://",
-          "https://regroup-app.com/"
+          "https://regroup-app.com/",
         );
       } else {
         universalLink = appUrl;
       }
-      console.log(
-        "attemptAppLaunchWithFallbacks - trying universal link:",
-        universalLink
-      );
       this.attemptAppLaunch(universalLink, fallbackUrl);
     }, 1000);
   }
 
   private attemptAppLaunch(appUrl: string, fallbackUrl: string) {
-    console.log("attemptAppLaunch - trying to open:", appUrl);
-    console.log("attemptAppLaunch - fallback URL:", fallbackUrl);
-
     // Method 1: Try direct window.location
     try {
-      console.log("attemptAppLaunch - trying window.location.href");
       window.location.href = appUrl;
     } catch (error) {
-      console.log("Direct location failed:", error);
+      // Swallow: scheme may be unhandled; subsequent methods handle fallback.
     }
 
     // Method 2: Create a hidden iframe
@@ -301,23 +312,18 @@ export class RedirectComponent implements OnInit {
     iframe.style.display = "none";
     iframe.src = appUrl;
     document.body.appendChild(iframe);
-    console.log("attemptAppLaunch - created iframe with src:", appUrl);
 
     // Method 3: Try opening in a new window/tab
     setTimeout(() => {
       try {
-        console.log("attemptAppLaunch - trying window.open");
         window.open(appUrl, "_blank");
       } catch (error) {
-        console.log("Window open failed:", error);
+        // Swallow: handled by the fallback redirect below.
       }
     }, 500);
 
     // Clean up and fallback
     setTimeout(() => {
-      console.log(
-        "attemptAppLaunch - timeout reached, redirecting to fallback"
-      );
       if (document.body.contains(iframe)) {
         document.body.removeChild(iframe);
       }

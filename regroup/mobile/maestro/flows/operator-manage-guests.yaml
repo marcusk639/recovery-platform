@@ -1,0 +1,31 @@
+# Flow 05 — Operator: house summary -> manage guests
+# Persona: manager (admin of test-house-123). Seeded: guest-a, guest-b residents.
+# Run: maestro test -e APP_ID=com.rats.dev maestro/flows/operator-manage-guests.yaml
+appId: ${APP_ID}
+tags:
+  - operator
+  - guests
+---
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-manager@rats-e2e.com
+      PASSWORD: TestPassword123!
+# Login lands on the House tab (HouseSummary).
+- extendedWaitUntil:
+    visible:
+      id: "main-app-screen"
+    timeout: 30000
+- assertVisible:
+    id: "manage-guests-button"
+- tapOn:
+    id: "manage-guests-button"
+- extendedWaitUntil:
+    visible:
+      id: "guest-list-screen"
+    timeout: 30000
+# At least one seeded resident is listed.
+- assertVisible:
+    id: "guest-list-item"
+- runFlow:
+    file: ../subflows/logout.yaml

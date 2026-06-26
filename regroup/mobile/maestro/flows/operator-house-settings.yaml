@@ -1,0 +1,36 @@
+# Flow 08 (partial) — Operator: open house settings
+# Persona: manager. Asserts the settings screen + a known testID'd section.
+# Section rows (Reports / Payment Dashboard / Phases) still need entry testIDs —
+# see docs/e2e/testid-backlog.md; until then deep links into those are text-tapped.
+# Run: maestro test -e APP_ID=com.rats.dev maestro/flows/operator-house-settings.yaml
+appId: ${APP_ID}
+tags:
+  - operator
+  - settings
+---
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-manager@rats-e2e.com
+      PASSWORD: TestPassword123!
+- extendedWaitUntil:
+    visible:
+      id: "main-app-screen"
+    timeout: 30000
+- assertVisible:
+    id: "house-settings-button"
+- tapOn:
+    id: "house-settings-button"
+- extendedWaitUntil:
+    visible:
+      id: "house-settings-screen"
+    timeout: 30000
+# Managers section is the testID'd anchor on this screen.
+- assertVisible:
+    id: "managers-section"
+    optional: true
+- assertVisible:
+    id: "manage-guests-button"
+    optional: true
+- runFlow:
+    file: ../subflows/logout.yaml

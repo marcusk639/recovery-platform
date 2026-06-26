@@ -33,12 +33,17 @@ import {
   uncancelSubscription,
   applyBundleDiscountToSubscription,
 } from "../api/stripe";
-import { createStripeClient } from "../util/stripe";
+import {
+  createStripeClient,
+  isResourceMissing,
+  mapStripeError,
+} from "../util/stripe";
 import {
   withinResidentCap,
   withinPropertyCap,
   totalResidents,
 } from "../util/tierCaps";
+import { tierAllows, isTierAvailableForSale } from "../util/tierPricing";
 import {
   getUser,
   updateUser,
@@ -99,6 +104,9 @@ const createOperatorSubscriptionSchema = z.object({
   paymentMethod: z.string().min(1),
   houseType: z.enum(["traditional", "oxford"] as const),
   tier: z.string().min(1),
+  // Monthly (default) or annual billing. Annual resolves a separate Stripe
+  // price per tier (~17% off, P-4). Legacy callers omit this and get monthly.
+  billingInterval: z.enum(["month", "year"] as const).optional(),
 });
 
 const reactivateOperatorSubscriptionSchema = z.object({
@@ -175,6 +183,7 @@ export const createOperatorSubscription = onCall(
       paymentMethod: string;
       houseType: string;
       tier: string;
+      billingInterval?: "month" | "year";
     };
     if (data.user.id !== request.auth.uid)
       throw new HttpsError("permission-denied", "User ID mismatch");
@@ -197,6 +206,17 @@ export const createOperatorSubscription = onCall(
       throw new HttpsError(
         "invalid-argument",
         `Unknown tier "${data.tier}" for houseType "${data.houseType}"`,
+      );
+    }
+
+    // P-8: block checkout for tiers held back until a chapter signs (Oxford
+    // Network). The tier stays defined so existing subs are unaffected.
+    if (
+      !isTierAvailableForSale(data.houseType as HouseType, data.tier as TierKey)
+    ) {
+      throw new HttpsError(
+        "failed-precondition",
+        `The "${tierConfig.label}" plan is not currently available for new subscriptions`,
       );
     }
 
@@ -226,6 +246,7 @@ export const createOperatorSubscription = onCall(
         data.houseType as HouseType,
         data.tier as TierKey,
         data.user.id,
+        data.billingInterval ?? "month",
       );
       logger.info("Tier subscription created", {
         subscriptionId: tierMetadata.subscriptionId,
@@ -517,8 +538,15 @@ export const updateSubscriptionGuests = onCall(
       // HttpsErrors thrown by guards (e.g. negative quantity check above).
       if (error instanceof HttpsError) throw error;
       logger.error("Error updating subscription:", error);
-      // If subscription doesn't exist in Stripe, just update the user metadata
-      // This handles cases where the subscription was deleted in Stripe but metadata still exists
+      // Only fall back to Firestore-only updates when Stripe reports the
+      // subscription/item genuinely no longer exists (resource_missing). For
+      // transient failures (rate limit, network, API errors) surface the error
+      // so Firestore occupancy does not permanently diverge from Stripe billing.
+      if (!isResourceMissing(error)) {
+        throw mapStripeError(error);
+      }
+      // The subscription item was deleted in Stripe but metadata still exists —
+      // reconcile by updating the local metadata only.
       try {
         await updateUser(user.id!, {
           subscriptionMetadata: updateSubscriptionMetadata(
@@ -565,11 +593,40 @@ export const updateSubscriptionHouses = onCall(
     if (houseMeta?.tier) {
       const houses = houseMeta.houses ?? {};
       if (action === "add") {
+        // P-7: a second property requires the multiProperty capability. Resolve
+        // it once, fail-closed: a mismatched/grandfathered tier makes tierAllows
+        // throw, which must deny the capability (and log) rather than surface a
+        // 500 to the operator.
+        let allowsMultiProperty = false;
+        try {
+          allowsMultiProperty = tierAllows(
+            houseMeta.houseType as HouseType,
+            houseMeta.tier as TierKey,
+            "multiProperty",
+          );
+        } catch (err) {
+          logger.error("updateSubscriptionHouses: tierAllows threw", {
+            userId: user.id,
+            houseType: houseMeta.houseType,
+            tier: houseMeta.tier,
+            err: (err as Error)?.message,
+          });
+          allowsMultiProperty = false;
+        }
         // Check the cap per newly-added house so a multi-id batch cannot exceed
         // the property cap in a single call (each new id must fit under the cap).
         const added = { ...houses };
         for (const id of houseIds ?? []) {
           if (id in added) continue;
+          // Checked before the numeric cap so single-property tiers get a
+          // capability-specific message; the cap still bounds multi-property
+          // tiers (e.g. Professional adding a 4th house past maxProperties=3).
+          if (Object.keys(added).length >= 1 && !allowsMultiProperty) {
+            throw new HttpsError(
+              "failed-precondition",
+              "Your plan does not include multiple properties — upgrade to add more houses",
+            );
+          }
           if (
             !withinPropertyCap(
               Object.keys(added).length,
@@ -788,6 +845,19 @@ export const sendInviteEmails = onCall(
   async (request) => {
     if (!request.auth)
       throw new HttpsError("unauthenticated", "Login required");
+    // Only house operators (admin/superAdmin of at least one house) may send
+    // invites — prevents any authenticated user from abusing the SendGrid
+    // sender to email arbitrary addresses.
+    const token = (request.auth.token ?? {}) as Record<string, unknown>;
+    const isOperator =
+      (token.admin && Object.keys(token.admin as object).length > 0) ||
+      (token.superAdmin && Object.keys(token.superAdmin as object).length > 0);
+    if (!isOperator) {
+      throw new HttpsError(
+        "permission-denied",
+        "Only house administrators can send invitations",
+      );
+    }
     const data = parseInput(
       inviteEmailSchema,
       request.data,
@@ -819,12 +889,22 @@ export const sendInviteEmails = onCall(
         }),
       );
     });
-    try {
-      await Promise.all(promises);
-      logger.info("Invite emails sent!");
-    } catch (err) {
-      logger.info("ERROR!", JSON.stringify(err));
+    // Use allSettled so one failed recipient doesn't hide the others, and so
+    // the caller is told when delivery failed instead of seeing a false success.
+    const results = await Promise.allSettled(promises);
+    const failed = results.filter((r) => r.status === "rejected");
+    if (failed.length > 0) {
+      // Sanitized: never echo the raw SendGrid error (can contain recipient PII).
+      logger.error("sendInviteEmails: email delivery failed", {
+        failedCount: failed.length,
+        totalCount: results.length,
+      });
+      throw new HttpsError(
+        "unavailable",
+        `${failed.length} of ${results.length} invite emails failed to send`,
+      );
     }
+    logger.info("Invite emails sent!");
   },
 );
 
@@ -841,6 +921,16 @@ export const sendConfirmationEmail = onCall(
       request.data,
     ) as EmailConfirmationPayload;
     const { email, dynamicLink, name } = data;
+    // Confirmation emails may only be sent to the caller's own address —
+    // prevents abusing the SendGrid sender to email arbitrary recipients.
+    const callerEmail = (request.auth.token as Record<string, unknown>)
+      .email as string | undefined;
+    if (!callerEmail || callerEmail.toLowerCase() !== email.toLowerCase()) {
+      throw new HttpsError(
+        "permission-denied",
+        "Confirmation emails can only be sent to your own address",
+      );
+    }
     const html = [
       '<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">',
       '<h2 style="color: #333; text-align: center;">Confirm Your Email</h2>',

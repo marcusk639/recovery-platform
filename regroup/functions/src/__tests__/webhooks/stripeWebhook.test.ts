@@ -643,6 +643,7 @@ describe("stripeWebhook — payment_intent.succeeded", () => {
                 lastName: "Doe",
                 balance: 600,
                 houseId,
+                rentDueDate: "2026-06-30",
               }),
             }),
             update: mockGuestUpdate,
@@ -689,7 +690,8 @@ describe("stripeWebhook — payment_intent.succeeded", () => {
     await (stripeWebhook as any)(req, res);
 
     expect(res.status).toHaveBeenCalledWith(200);
-    // Payment doc should be written with merge:true
+    // Payment doc should be written with merge:true, including the guest's
+    // rentDueDate captured at charge time (#34 on-time rate).
     expect(mockPaymentSet).toHaveBeenCalledWith(
       expect.objectContaining({
         stripePaymentIntentId: "pi_test_1",
@@ -697,6 +699,7 @@ describe("stripeWebhook — payment_intent.succeeded", () => {
         status: "succeeded",
         houseId,
         guestId,
+        dueDate: "2026-06-30",
       }),
       { merge: true },
     );
@@ -759,6 +762,162 @@ describe("stripeWebhook — payment_intent.succeeded", () => {
       }),
       { merge: true },
     );
+  });
+});
+
+// ===========================================================================
+// stripeWebhook — charge.refunded (#35 refund netting)
+// ===========================================================================
+
+describe("stripeWebhook — charge.refunded", () => {
+  it("merges refundedAmountCents onto the payment doc (string payment_intent)", async () => {
+    const mockPaymentSet = jest.fn().mockResolvedValue(undefined);
+
+    mockConstructEvent.mockReturnValue({
+      id: "evt_charge_refunded",
+      type: "charge.refunded",
+      account: undefined,
+      data: {
+        object: {
+          id: "ch_test_1",
+          payment_intent: "pi_test_1",
+          amount: 50000,
+          amount_refunded: 15000, // $150 refunded (cents)
+        },
+      },
+    });
+
+    mockCollectionFn.mockImplementation((col: string) => {
+      if (col === "payments") {
+        return {
+          doc: jest
+            .fn()
+            .mockReturnValue({ set: mockPaymentSet, update: jest.fn() }),
+        };
+      }
+      return {
+        doc: jest.fn().mockReturnValue({
+          get: jest.fn().mockResolvedValue({ exists: false }),
+          update: jest.fn(),
+          set: jest.fn(),
+        }),
+        where: jest.fn().mockReturnValue({
+          limit: jest.fn().mockReturnValue({
+            get: jest.fn().mockResolvedValue({ empty: true, docs: [] }),
+          }),
+        }),
+      };
+    });
+
+    const req = makeReq();
+    const res = makeRes();
+
+    await (stripeWebhook as any)(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(mockPaymentSet).toHaveBeenCalledWith(
+      expect.objectContaining({ refundedAmountCents: 15000 }),
+      { merge: true },
+    );
+  });
+
+  it("resolves payment_intent from an expanded object form", async () => {
+    const mockPaymentSet = jest.fn().mockResolvedValue(undefined);
+
+    mockConstructEvent.mockReturnValue({
+      id: "evt_charge_refunded_obj",
+      type: "charge.refunded",
+      account: undefined,
+      data: {
+        object: {
+          id: "ch_test_2",
+          payment_intent: { id: "pi_test_2" }, // expanded object
+          amount: 20000,
+          amount_refunded: 20000,
+        },
+      },
+    });
+
+    mockCollectionFn.mockImplementation((col: string) => {
+      if (col === "payments") {
+        return {
+          doc: jest
+            .fn()
+            .mockReturnValue({ set: mockPaymentSet, update: jest.fn() }),
+        };
+      }
+      return {
+        doc: jest.fn().mockReturnValue({
+          get: jest.fn().mockResolvedValue({ exists: false }),
+          update: jest.fn(),
+          set: jest.fn(),
+        }),
+        where: jest.fn().mockReturnValue({
+          limit: jest.fn().mockReturnValue({
+            get: jest.fn().mockResolvedValue({ empty: true, docs: [] }),
+          }),
+        }),
+      };
+    });
+
+    const req = makeReq();
+    const res = makeRes();
+
+    await (stripeWebhook as any)(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(mockPaymentSet).toHaveBeenCalledWith(
+      expect.objectContaining({ refundedAmountCents: 20000 }),
+      { merge: true },
+    );
+  });
+
+  it("no-ops (no write) when the charge has no payment_intent", async () => {
+    const mockPaymentSet = jest.fn().mockResolvedValue(undefined);
+
+    mockConstructEvent.mockReturnValue({
+      id: "evt_charge_refunded_no_pi",
+      type: "charge.refunded",
+      account: undefined,
+      data: {
+        object: {
+          id: "ch_test_3",
+          payment_intent: null,
+          amount: 10000,
+          amount_refunded: 10000,
+        },
+      },
+    });
+
+    mockCollectionFn.mockImplementation((col: string) => {
+      if (col === "payments") {
+        return {
+          doc: jest
+            .fn()
+            .mockReturnValue({ set: mockPaymentSet, update: jest.fn() }),
+        };
+      }
+      return {
+        doc: jest.fn().mockReturnValue({
+          get: jest.fn().mockResolvedValue({ exists: false }),
+          update: jest.fn(),
+          set: jest.fn(),
+        }),
+        where: jest.fn().mockReturnValue({
+          limit: jest.fn().mockReturnValue({
+            get: jest.fn().mockResolvedValue({ empty: true, docs: [] }),
+          }),
+        }),
+      };
+    });
+
+    const req = makeReq();
+    const res = makeRes();
+
+    await (stripeWebhook as any)(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(mockPaymentSet).not.toHaveBeenCalled();
   });
 });
 
@@ -1212,6 +1371,77 @@ describe("handleStripeConnectWebhook", () => {
     expect(res.send).toHaveBeenCalledWith(
       expect.objectContaining({ received: true }),
     );
+  });
+
+  it("skips processing and returns 200 when the Connect event was already processed (idempotency)", async () => {
+    const mockHouseUpdate = jest.fn().mockResolvedValue(undefined);
+
+    mockConstructEvent.mockReturnValue({
+      id: "evt_connect_duplicate",
+      type: "account.application.deauthorized",
+      account: "acct_dup",
+      data: { object: { id: "app_id" } },
+    });
+
+    // Transaction reports the event already exists.
+    mockRunTransaction.mockImplementation(
+      async (fn: (txn: any) => Promise<any>) => {
+        const txn = {
+          get: jest.fn().mockResolvedValue({ exists: true }),
+          set: jest.fn(),
+        };
+        return fn(txn);
+      },
+    );
+
+    // If idempotency works, the deauthorization handler (and its house write)
+    // must never run.
+    mockCollectionFn.mockImplementation((col: string) => {
+      if (col === "houses") {
+        return {
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockReturnValue({
+              get: jest.fn().mockResolvedValue({
+                empty: false,
+                docs: [
+                  {
+                    id: "house_dup",
+                    data: () => ({ stripeAccountId: "acct_dup" }),
+                    ref: { update: mockHouseUpdate, set: jest.fn() },
+                  },
+                ],
+              }),
+            }),
+          }),
+          doc: jest
+            .fn()
+            .mockReturnValue({ update: mockHouseUpdate, set: jest.fn() }),
+        };
+      }
+      return {
+        where: jest.fn().mockReturnValue({
+          limit: jest.fn().mockReturnValue({
+            get: jest.fn().mockResolvedValue({ empty: true, docs: [] }),
+          }),
+        }),
+        doc: jest.fn().mockReturnValue({
+          get: jest.fn().mockResolvedValue({ exists: false }),
+          update: jest.fn(),
+          set: jest.fn(),
+        }),
+      };
+    });
+
+    const req = makeReq();
+    const res = makeRes();
+
+    await (handleStripeConnectWebhook as any)(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({ received: true, duplicate: true }),
+    );
+    expect(mockHouseUpdate).not.toHaveBeenCalled();
   });
 });
 

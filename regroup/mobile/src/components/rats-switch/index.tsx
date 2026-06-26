@@ -102,7 +102,6 @@ export const RatsSwitch = (
         value={props.value || value}
         style={[SWITCH_STYLE, props.style]}
         onValueChange={val => {
-          console.log(val, 'switch value');
           if (props.onValueChange) {
             return props.onValueChange(val);
           }

@@ -42,6 +42,7 @@ interface GuestDoc {
   firstName: string;
   lastName: string;
   rentOwed?: number;
+  rentDueDate?: string; // YYYY-MM-DD (optional live field)
   email?: string;
 }
 
@@ -311,6 +312,34 @@ async function handlePaymentIntentSucceeded(
   // paymentIntent.amount is already in cents (Stripe always uses cents)
   const amountCents = paymentIntent.amount;
 
+  // Read the guest once up front so we can both (a) capture the due date active
+  // when this payment posted and (b) reuse the snapshot for the rentOwed
+  // decrement + notifications below. (#34 on-time rate)
+  const guestRef = db.collection("guests").doc(guestId);
+  let guestSnap: FirebaseFirestore.DocumentSnapshot | undefined;
+  try {
+    guestSnap = await guestRef.get();
+  } catch (err) {
+    // Never block payment recording on a guest read failure.
+    logger.warn("payment_intent.succeeded: guest read failed (non-fatal)", {
+      guestId,
+      err: (err as Error).message,
+    });
+  }
+
+  // dueDate is the guest's rentDueDate at charge time. This is an approximation:
+  // it reflects the due date *active when the payment posted* (the best available
+  // signal — no per-charge due-date schedule history exists). Omitted when the
+  // guest has no rentDueDate or the read failed.
+  const guestDataForDueDate = guestSnap?.exists
+    ? (guestSnap.data() as GuestDoc)
+    : undefined;
+  const dueDate =
+    typeof guestDataForDueDate?.rentDueDate === "string" &&
+    guestDataForDueDate.rentDueDate.length > 0
+      ? guestDataForDueDate.rentDueDate
+      : undefined;
+
   // 1. Write / update payment document
   await upsertPaymentDoc(paymentIntent.id, {
     stripePaymentIntentId: paymentIntent.id,
@@ -319,15 +348,13 @@ async function handlePaymentIntentSucceeded(
     amount: amountDollars,
     currency: paymentIntent.currency,
     status: "succeeded",
+    ...(dueDate ? { dueDate } : {}),
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
   // 2. Atomically decrement guest rentOwed (integer cents) — eliminates read-modify-write race
-  const guestRef = db.collection("guests").doc(guestId);
-  const guestSnap = await guestRef.get();
-
-  if (!guestSnap.exists) {
+  if (!guestSnap || !guestSnap.exists) {
     logger.warn("payment_intent.succeeded: guest not found", { guestId });
   } else {
     const guestData = guestSnap.data() as GuestDoc;
@@ -529,6 +556,43 @@ async function handleDisputeCreated(
       { disputeId: dispute.id },
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// Event handler: charge.refunded (and charge.refund.updated)
+//
+// Records the cumulative refunded amount on the payment doc so analytics can net
+// refunds out of gross collected (#35). Stripe's `charge.amount_refunded` is the
+// running total of all refunds against the charge (in cents), so a plain merge
+// is correct even when multiple refunds occur. The charge carries a reference to
+// the originating PaymentIntent, which is our payments doc id.
+// ---------------------------------------------------------------------------
+
+async function handleChargeRefunded(charge: Stripe.Charge): Promise<void> {
+  const paymentIntentId =
+    typeof charge.payment_intent === "string"
+      ? charge.payment_intent
+      : (charge.payment_intent?.id ?? null);
+
+  if (!paymentIntentId) {
+    logger.warn("charge.refunded: no payment_intent on charge — no-op", {
+      chargeId: charge.id,
+    });
+    return;
+  }
+
+  // charge.amount_refunded is the cumulative refunded total in cents.
+  const refundedAmountCents = charge.amount_refunded ?? 0;
+
+  await upsertPaymentDoc(paymentIntentId, {
+    refundedAmountCents,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  logger.info("charge.refunded: recorded refund on payment doc", {
+    paymentIntentId,
+    refundedAmountCents,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1028,6 +1092,10 @@ export const stripeWebhook = onRequest(
           );
           break;
 
+        case "charge.refunded":
+          await handleChargeRefunded(event.data.object as Stripe.Charge);
+          break;
+
         // --- Subscription events (RATS platform) ---
         case "invoice.payment_succeeded":
           await handleInvoicePaymentSucceeded(
@@ -1163,6 +1231,29 @@ export const handleStripeConnectWebhook = onRequest(
       eventId: event.id,
       type: event.type,
     });
+
+    // Idempotency check (transaction-safe) — Stripe retries Connect events, and
+    // replaying account.application.deauthorized after a reconnect would wrongly
+    // disconnect a re-onboarded account. Mirrors the platform webhook handler.
+    let alreadyProcessed: boolean;
+    try {
+      alreadyProcessed = await checkAndMarkEventProcessed(event.id, event.type);
+    } catch (err) {
+      logger.error("handleStripeConnectWebhook: idempotency check failed", {
+        eventId: event.id,
+        err: (err as Error).message,
+      });
+      alreadyProcessed = false;
+    }
+
+    if (alreadyProcessed) {
+      logger.info("handleStripeConnectWebhook: duplicate event ignored", {
+        eventId: event.id,
+        type: event.type,
+      });
+      res.status(200).send({ received: true, duplicate: true });
+      return;
+    }
 
     try {
       switch (event.type) {

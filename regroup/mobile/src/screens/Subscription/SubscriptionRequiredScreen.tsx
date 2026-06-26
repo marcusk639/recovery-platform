@@ -57,7 +57,7 @@ const SubscriptionRequiredScreen: React.FC = () => {
   };
 
   return (
-    <View style={styles.container}>
+    <View testID="subscription-required-screen" style={styles.container}>
       <RatsLogo imageStyle={styles.logo} />
 
       <RatsText
@@ -73,12 +73,14 @@ const SubscriptionRequiredScreen: React.FC = () => {
       />
 
       <RatsButton
+        testID="btn-manage-subscription"
         title="Manage Subscription"
         onPress={handleManageSubscription}
         containerStyle={styles.primaryButton}
       />
 
       <RatsButton
+        testID="btn-refresh-subscription"
         title="I've Subscribed"
         onPress={handleRefreshSubscription}
         light
@@ -86,6 +88,7 @@ const SubscriptionRequiredScreen: React.FC = () => {
       />
 
       <RatsText
+        testID="btn-sign-out"
         translate={false}
         text="Sign out"
         style={styles.signOutLink}

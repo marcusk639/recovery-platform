@@ -210,7 +210,7 @@ import { AuthGuard } from "./guards/auth.guard";
     AngularFireFunctionsModule,
     FormsModule,
     ReactiveFormsModule,
-    NgxStripeModule.forRoot("pk_test_PHY9XItnPuSWxhpixEkULA0o00DfMn6uns"),
+    NgxStripeModule.forRoot(environment.stripePublishableKey),
   ],
   providers: [AuthService, ContactService, SubscriptionService, AuthGuard],
   bootstrap: [AppComponent],

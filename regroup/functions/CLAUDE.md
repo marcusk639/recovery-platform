@@ -65,6 +65,58 @@ src/
 
 All Stripe amounts are in **US cents** (integers). `50000` = $500.00. Convert only at the UI boundary — never inside function logic.
 
+### Bundle discounts (legacy per-house subscriptions only)
+
+Multi-house operators on the **legacy per-house** subscription get an automatic
+stacking coupon: 3–4 houses → `regroup-bundle-3` (10% off), 5+ → `regroup-bundle-5`
+(15% off). The logic lives in `api/stripe.ts` (`getBundleCoupon`,
+`applyBundleDiscountToSubscription`, `removeBundleDiscount`) and is invoked from
+`callable/subscriptions.ts` — `updateSubscriptionHouses` (recompute on house
+add/remove) and the `applyBundleDiscount` callable. The discount is keyed off the
+count of `subscriptionMetadata.houses` and removed when it drops below 3. Coupons
+are `duration: forever`.
+
+**Do not apply bundles to tier subscriptions.** The 6-tier model prices
+multi-property via the tier (Professional/Enterprise/Network), so per-house bundle
+coupons would double-discount. `applyBundleDiscount` deliberately early-returns for
+any sub carrying a `tier` (locked decision, pricing gate P-6 — legacy-only). When
+re-touching this path, keep the tier skip. The two coupons exist in Stripe **test
+mode**; live coupons are pending a Dashboard create (the `rk_live_` key can't write
+coupons).
+
+### Tier capabilities (value ladder, P-7/P-8)
+
+Each tier in `SUBSCRIPTION_TIERS` carries a `features` map
+(`automatedRentCollection`, `multiProperty`, `complianceExport`, `analytics`,
+`whiteLabel`) expressing the value ladder. Gate features at their real call site
+with `tierAllows(houseType, tier, featureKey)` (`util/tierPricing.ts`) — **compose
+with the `maxResidents`/`maxProperties` caps, don't replace them**. Currently
+enforced: `multiProperty` in `updateSubscriptionHouses` (capability-specific error
+before the numeric cap); `complianceExport` in the `complianceExport` callable
+(`callable/compliance.ts`, RG-SPEC-09 — returns `upgrade_required` when the tier
+lacks it, else a real court/drug-court **CSV** of drug tests + meeting attendance,
+issue #31); and `analytics` in the `rentRoiMetrics` callable
+(`callable/analytics.ts`, RG-TRACK — returns `upgrade_required` else rent-collection
+ROI metrics, issue #32). The remaining flags (`automatedRentCollection`,
+`whiteLabel`) are defined value-ladder labels; do not gate a capability that has no
+real feature behind it.
+
+**Read-only money/PHI note:** both `complianceExport` and `rentRoiMetrics` are
+read-only and log only ids + aggregate counts (never names, test results, or
+amounts per resident). `payments` docs store `amount` in **dollars** (webhook
+divides by 100) — convert to cents when aggregating; `guests.rentOwed` is integer
+cents. `rentRoiMetrics` returns `collectedGrossCents`, `refundedCents`,
+`collectedNetCents` (gross − refunds), `outstandingCents`, `overdueResidentCount`,
+and `onTimeRatePct`/`duePaymentCount`. Refunds are recorded by the
+`charge.refunded` webhook handler as `payments.refundedAmountCents` (cents);
+on-time uses `payments.dueDate`, the guest's `rentDueDate` captured at charge time
+in `handlePaymentIntentSucceeded` (an approximation — no per-charge schedule
+history). Hours-saved remains deferred (#32 caveats).
+
+Oxford Network has `availableForSale: false` (P-8) — `isTierAvailableForSale()`
+blocks it in `createOperatorSubscription` checkout while keeping the tier defined.
+Absent flag ⇒ sellable.
+
 ### Webhook security
 
 `http/stripeWebhook.ts` uses Stripe signature verification (`stripe.webhooks.constructEvent`). Never process a webhook payload without verifying the signature first.
@@ -76,3 +128,5 @@ Never add direct Firestore cross-queries to another product's database — route
 ### Secrets
 
 Service key lives in `service-key.json` (gitignored). Download from Firebase Console under `phoenix-cleanhouse`. Functions read secrets via environment config, not hardcoded values.
+
+There is no `functions/.env.example`. Required deploy-time config beyond the `defineSecret` set: `STRIPE_CONNECT_WEBHOOK_SECRET` (defined but missing from the setup runbook), plain `process.env` values `STRIPE_PRICE_TRAD_*` / `STRIPE_PRICE_OXFORD_*`, `STRIPE_HOUSE_PRICE_ID` / `STRIPE_GUEST_PRICE_ID` / `STRIPE_OXFORD_PRICE_ID` (legacy), `TIER_BILLING_ENABLED`, `RECOVERY_API_BASE_URL`, and `STRIPE_API_VERSION` (pin to `2026-01-28.clover` — unset today, which silently defaults the `api/stripe.ts` client).

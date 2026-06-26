@@ -7,6 +7,7 @@ import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
 import * as admin from "firebase-admin";
 import { sendEmail } from "../utils/email";
+import { APP_BASE_URL } from "../utils/appConfig";
 
 interface SendInviteEmailData {
   groupId: string;
@@ -88,7 +89,7 @@ export const sendGroupInviteEmail = onCall(
         throw new HttpsError("failed-precondition", "Invite code has expired.");
       }
 
-      const universalLinkBase = "https://homegroups-app.com/";
+      const universalLinkBase = `${APP_BASE_URL}/`;
       const link = `${universalLinkBase}join?code=${inviteCode}`;
       const inviterName = userData?.displayName || "A member";
       const groupName = groupData?.name || "the group";

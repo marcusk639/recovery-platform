@@ -135,4 +135,16 @@ describe('requireServiceAuth', () => {
       expect.objectContaining({ code: 'unauthenticated' }),
     );
   });
+
+  it('fails closed (internal) when the service key secret is not provisioned', () => {
+    // A misconfigured deploy with no RECOVERY_PLATFORM_API_KEY must NOT fall
+    // through to the Phase 2 token path — a valid Firebase token + appId claim
+    // would otherwise bypass service-key auth entirely.
+    delete process.env.RECOVERY_PLATFORM_API_KEY;
+    const req = makeRequest(
+      {},
+      { uid: 'uid456', token: { appId: 'homegroups', email: 'u@test.com' } },
+    );
+    expect(() => requireServiceAuth(req)).toThrow(expect.objectContaining({ code: 'internal' }));
+  });
 });

@@ -31,7 +31,15 @@ export function requireServiceAuth(request: CallableRequest): ServiceAuthContext
   const serviceKey = headers['x-service-key'] as string | undefined;
   const apiKey = process.env.RECOVERY_PLATFORM_API_KEY;
 
-  if (apiKey && serviceKey === apiKey) {
+  // Fail closed: if the service key is not provisioned (unset/empty), do NOT
+  // silently fall through to the Phase 2 token path — that would let any caller
+  // with a valid Firebase token + appId claim bypass service-key auth on a
+  // misconfigured deploy. A missing secret is a server misconfiguration.
+  if (!apiKey) {
+    throw new HttpsError('internal', 'Service authentication is not configured');
+  }
+
+  if (serviceKey === apiKey) {
     const rawAppId = headers['x-app-id'] as string | undefined;
     const uid = headers['x-user-uid'] as string | undefined;
     const email = (headers['x-user-email'] as string | undefined) ?? '';

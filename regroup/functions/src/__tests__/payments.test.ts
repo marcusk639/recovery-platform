@@ -372,10 +372,12 @@ describe("connectStripeAccount", () => {
   const HOUSE_ID = "house-connect-1";
   const ADMIN_UID = "admin-uid-1";
 
+  // returnUrl / refreshUrl must use an allowed origin (open-redirect guard,
+  // shared with the billing portal via safeReturnUrlSchema).
   const baseData = {
     houseId: HOUSE_ID,
-    returnUrl: "https://app.example.com/return",
-    refreshUrl: "https://app.example.com/refresh",
+    returnUrl: "https://regroup-app.com/return",
+    refreshUrl: "https://regroup-app.com/refresh",
   };
 
   describe("auth and input validation", () => {
@@ -409,14 +411,14 @@ describe("connectStripeAccount", () => {
       });
       process.env.GCLOUD_PROJECT = "testproj";
       await (connectStripeAccount as unknown as Function)(
-        { houseId: HOUSE_ID, refreshUrl: "https://y.com" },
+        { houseId: HOUSE_ID, refreshUrl: "https://regroup-app.com/refresh" },
         authedContext(ADMIN_UID),
       );
       expect(mockStripeAccountLinksCreate).toHaveBeenCalledWith(
         expect.objectContaining({
           return_url:
             "https://us-central1-testproj.cloudfunctions.net/stripeConnectReturn",
-          refresh_url: "https://y.com",
+          refresh_url: "https://regroup-app.com/refresh",
         }),
       );
     });
@@ -428,12 +430,12 @@ describe("connectStripeAccount", () => {
       });
       process.env.GCLOUD_PROJECT = "testproj";
       await (connectStripeAccount as unknown as Function)(
-        { houseId: HOUSE_ID, returnUrl: "https://x.com" },
+        { houseId: HOUSE_ID, returnUrl: "https://regroup-app.com/return" },
         authedContext(ADMIN_UID),
       );
       expect(mockStripeAccountLinksCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          return_url: "https://x.com",
+          return_url: "https://regroup-app.com/return",
           refresh_url:
             "https://us-central1-testproj.cloudfunctions.net/stripeConnectReauth?stripeAccountId=acct_existing_house",
         }),
@@ -478,6 +480,30 @@ describe("connectStripeAccount", () => {
         () =>
           (connectStripeAccount as unknown as Function)(
             { ...baseData, refreshUrl: "javascript:void(0)" },
+            authedContext(ADMIN_UID),
+          ),
+        "invalid-argument",
+      );
+    });
+
+    it("throws invalid-argument when returnUrl uses an off-allowlist origin", async () => {
+      seedHouse(HOUSE_ID, { adminId: ADMIN_UID });
+      await expectHttpsError(
+        () =>
+          (connectStripeAccount as unknown as Function)(
+            { ...baseData, returnUrl: "https://evil.example.com/return" },
+            authedContext(ADMIN_UID),
+          ),
+        "invalid-argument",
+      );
+    });
+
+    it("throws invalid-argument when refreshUrl uses an off-allowlist origin", async () => {
+      seedHouse(HOUSE_ID, { adminId: ADMIN_UID });
+      await expectHttpsError(
+        () =>
+          (connectStripeAccount as unknown as Function)(
+            { ...baseData, refreshUrl: "https://evil.example.com/refresh" },
             authedContext(ADMIN_UID),
           ),
         "invalid-argument",
@@ -1356,8 +1382,43 @@ describe("createPaymentIntent", () => {
       );
     });
 
-    it("applies a 2% application fee on the amount in cents", async () => {
-      // baseData.amount = 15000 cents ($150.00); 2% = 300 cents
+    it("applies the 0.75% card platform fee by default (method-aware)", async () => {
+      // baseData.amount = 15000 cents ($150.00); 0.75% = 112.5 -> 113 cents.
+      await (createPaymentIntent as unknown as Function)(
+        baseData,
+        authedContext(USER_UID),
+      );
+      expect(mockStripePaymentIntentsCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          application_fee_amount: 113,
+          payment_method_types: ["card"],
+        }),
+        expect.anything(),
+      );
+    });
+
+    it("applies the flat ACH fee for us_bank_account payments", async () => {
+      // ACH = flat $2.00 (200 cents) regardless of amount.
+      await (createPaymentIntent as unknown as Function)(
+        { ...baseData, paymentMethodType: "us_bank_account" },
+        authedContext(USER_UID),
+      );
+      expect(mockStripePaymentIntentsCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          application_fee_amount: 200,
+          payment_method_types: ["us_bank_account"],
+        }),
+        expect.anything(),
+      );
+    });
+
+    it("grandfathers a legacy house at the flat 2% fee", async () => {
+      // baseData.amount = 15000 cents; legacy 2% = 300 cents, even on card.
+      seedHouse(HOUSE_ID, {
+        stripeAccountId: "acct_active_house",
+        stripeStatus: "active",
+        legacyRentFee: true,
+      });
       await (createPaymentIntent as unknown as Function)(
         baseData,
         authedContext(USER_UID),

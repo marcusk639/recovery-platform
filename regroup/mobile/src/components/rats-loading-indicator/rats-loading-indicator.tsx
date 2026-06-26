@@ -7,17 +7,21 @@ interface Props {
   color?: string;
   containerStyle?: any;
   size?: number | 'small' | 'large';
+  testID?: string;
 }
 
 const RatsLoadingIndicator = ({
   containerStyle,
   color,
   size,
+  testID,
 }: Props) => {
   const { theme } = useTheme();
 
   return (
-    <View style={[styles.activityIndicatorContainer, containerStyle]}>
+    <View
+      testID={testID}
+      style={[styles.activityIndicatorContainer, containerStyle]}>
       <ActivityIndicator
         animating
         size={size || 'large'}

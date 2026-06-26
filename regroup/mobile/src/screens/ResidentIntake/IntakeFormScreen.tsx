@@ -164,18 +164,21 @@ const IntakeFormScreen = () => {
   const renderStep1 = () => (
     <View>
       <TextInput
+        testID="intake-first-name-input"
         style={styles.input}
         placeholder="First Name"
         value={values.firstName}
         onChangeText={v => updateField('firstName', v)}
       />
       <TextInput
+        testID="intake-last-name-input"
         style={styles.input}
         placeholder="Last Name"
         value={values.lastName}
         onChangeText={v => updateField('lastName', v)}
       />
       <TextInput
+        testID="intake-email-input"
         style={styles.input}
         placeholder="Email"
         value={values.email}
@@ -184,6 +187,7 @@ const IntakeFormScreen = () => {
         autoCapitalize="none"
       />
       <TextInput
+        testID="intake-phone-input"
         style={styles.input}
         placeholder="Phone Number"
         value={values.phoneNumber}
@@ -191,12 +195,14 @@ const IntakeFormScreen = () => {
         keyboardType="phone-pad"
       />
       <TextInput
+        testID="intake-sobriety-date-input"
         style={styles.input}
         placeholder="Sobriety Date"
         value={values.sobrietyDate}
         onChangeText={v => updateField('sobrietyDate', v)}
       />
       <TextInput
+        testID="intake-drug-of-choice-input"
         style={styles.input}
         placeholder="Drug of Choice"
         value={values.drugOfChoice}
@@ -208,12 +214,14 @@ const IntakeFormScreen = () => {
   const renderStep2 = () => (
     <View>
       <TextInput
+        testID="intake-emergency-name-input"
         style={styles.input}
         placeholder="Emergency Contact Name"
         value={values.emergencyContactName}
         onChangeText={v => updateField('emergencyContactName', v)}
       />
       <TextInput
+        testID="intake-emergency-phone-input"
         style={styles.input}
         placeholder="Emergency Contact Phone"
         value={values.emergencyContactPhone}
@@ -221,6 +229,7 @@ const IntakeFormScreen = () => {
         keyboardType="phone-pad"
       />
       <TextInput
+        testID="intake-emergency-relation-input"
         style={styles.input}
         placeholder="Relationship"
         value={values.emergencyContactRelation}
@@ -308,13 +317,15 @@ const IntakeFormScreen = () => {
   const isLastStep = step === STEP_LABELS.length - 1;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} testID="intake-form-screen">
       <ScreenHeader header="Resident Intake" renderBackButton />
-      <RatsStepIndicator
-        currentPosition={step}
-        stepCount={STEP_LABELS.length}
-        labels={STEP_LABELS}
-      />
+      <View testID="intake-step-indicator">
+        <RatsStepIndicator
+          currentPosition={step}
+          stepCount={STEP_LABELS.length}
+          labels={STEP_LABELS}
+        />
+      </View>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {renderCurrentStep()}
         <View style={styles.buttonRow}>
@@ -327,6 +338,7 @@ const IntakeFormScreen = () => {
           )}
           {isLastStep ? (
             <TouchableOpacity
+              testID="intake-submit-button"
               style={[styles.button, styles.submitButton]}
               onPress={handleSubmit}
               disabled={isPending}>
@@ -338,6 +350,7 @@ const IntakeFormScreen = () => {
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
+              testID="intake-continue-button"
               style={[styles.button, styles.continueButton]}
               onPress={handleContinue}>
               <RatsText text="Continue" />

@@ -119,14 +119,30 @@ export class MyAccountComponent implements OnInit {
     this.scrollUp();
   };
 
+  // Fields each account form is allowed to write to the user's own doc.
+  // Restricting the write prevents arbitrary/privileged fields (e.g. isAdmin)
+  // from being persisted if they ever appear in a form value.
+  private static readonly EDITABLE_FIELDS: Record<string, string[]> = {
+    contact: ["phoneNumber"],
+  };
+
   updateUser = (formGroup: "contact") => async () => {
     this.setLoading();
     try {
-      if (this.formGroups[formGroup]?.value) {
-        await this.userService.updateUser(
-          this.user.id,
-          this.formGroups[formGroup].value,
+      const formValue = this.formGroups[formGroup]?.value;
+      if (formValue) {
+        const allowedFields =
+          MyAccountComponent.EDITABLE_FIELDS[formGroup] ?? [];
+        const update = allowedFields.reduce(
+          (acc, field) => {
+            if (field in formValue) {
+              acc[field] = formValue[field];
+            }
+            return acc;
+          },
+          {} as Record<string, any>,
         );
+        await this.userService.updateUser(this.user.id, update);
         this.user = this.userService.user;
       }
       this.setSuccess();

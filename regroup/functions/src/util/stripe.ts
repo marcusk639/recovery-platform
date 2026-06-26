@@ -16,32 +16,59 @@ export const createStripeClient = (): Stripe =>
  * receive a meaningful error code rather than a generic `internal`.
  */
 export function mapStripeError(err: unknown): HttpsError {
-  if (err instanceof Stripe.errors.StripeError) {
-    switch (err.type) {
+  // Guard against `Stripe.errors` being unavailable (e.g. under test harnesses
+  // that fully mock the `stripe` module); fall back to duck-typing the error.
+  const isStripeError = Stripe.errors?.StripeError
+    ? err instanceof Stripe.errors.StripeError
+    : typeof err === "object" &&
+      err !== null &&
+      typeof (err as { type?: unknown }).type === "string" &&
+      (err as { type: string }).type.startsWith("Stripe");
+  if (isStripeError) {
+    const stripeErr = err as { type?: string; message?: string };
+    const message = stripeErr.message ?? "Stripe error";
+    switch (stripeErr.type) {
       case "StripeCardError":
         // Card declined, insufficient funds, etc. — surface to the user.
-        return new HttpsError("failed-precondition", err.message);
+        return new HttpsError("failed-precondition", message);
       case "StripeInvalidRequestError":
-        return new HttpsError("invalid-argument", err.message);
+        return new HttpsError("invalid-argument", message);
       case "StripeAuthenticationError":
         return new HttpsError(
           "unauthenticated",
-          "Stripe authentication failed"
+          "Stripe authentication failed",
         );
       case "StripeRateLimitError":
         return new HttpsError(
           "resource-exhausted",
-          "Stripe rate limit exceeded"
+          "Stripe rate limit exceeded",
         );
       case "StripeConnectionError":
-        return new HttpsError("unavailable", err.message);
+        return new HttpsError("unavailable", message);
       case "StripeAPIError":
-        return new HttpsError("internal", err.message);
+        return new HttpsError("internal", message);
       default:
-        return new HttpsError("internal", err.message);
+        return new HttpsError("internal", message);
     }
   }
   return new HttpsError("internal", "An unexpected error occurred");
+}
+
+/**
+ * Returns true when a Stripe error indicates the referenced resource genuinely
+ * no longer exists (`resource_missing`). Used to distinguish a deleted
+ * subscription/item from transient failures (rate limit, network) so callers
+ * only fall back to local-only state when Stripe truly has nothing to update.
+ */
+export function isResourceMissing(err: unknown): boolean {
+  // Duck-typed rather than `instanceof Stripe.errors.StripeError` so it also
+  // works under test harnesses that fully mock the `stripe` module.
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    (err as { type?: unknown }).type === "StripeInvalidRequestError" &&
+    (err as { code?: unknown }).code === "resource_missing"
+  );
 }
 
 /**

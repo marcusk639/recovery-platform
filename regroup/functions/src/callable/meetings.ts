@@ -117,7 +117,9 @@ export const findMeetings = onCall(
     const { location, day, type } = data.filters;
     const criteria = data.criteria;
     try {
-      logger.info("FIND MEETING Filters", data.filters);
+      // Do not log data.filters — it contains the caller's precise GPS
+      // coordinates (PII). Log only non-identifying query dimensions.
+      logger.info("FIND MEETING", { day, type });
 
       // Custom (regroup-owned) house meetings live only in regroup Firestore — not
       // the shared directory — so they are served locally without a directory call.
@@ -161,8 +163,13 @@ export const findMeetings = onCall(
       );
       return meetings;
     } catch (error) {
-      logger.error("SOMETHING WENT WRONG", error);
-      return [];
+      // Re-throw client-facing errors (e.g. validation) untouched.
+      if (error instanceof HttpsError) throw error;
+      // A backend failure is not "no results" — surface it so the client can
+      // distinguish an error from a genuinely empty search. The explicit
+      // empty-result returns above (Custom/AL-ANON/Religious) are unaffected.
+      logger.error("findMeetings failed", error);
+      throw new HttpsError("internal", "Failed to retrieve meetings");
     }
   },
 );
@@ -198,15 +205,9 @@ export const userIsAtMeeting = onCall(
         return false;
       }
     }
-    logger.info(
-      "Comparing distance between user at",
-      userLocation,
-      "and meeting at",
-      locationOfMeeting,
-    );
     if (!userLocation || !locationOfMeeting) return false;
     const distance = getDistance(userLocation, locationOfMeeting);
-    logger.info("Distance is", distance);
+    logger.debug("Meeting proximity check", { distanceMeters: distance });
     return distance <= ACCEPTABLE_DISTANCE;
   },
 );

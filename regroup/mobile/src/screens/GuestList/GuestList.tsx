@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo } from 'react';
-import { RefreshControl } from 'react-native';
+import { FlatList, ListRenderItemInfo, RefreshControl } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 /**
  * GuestList - Migrated to React Query + Redux Toolkit
@@ -163,17 +163,16 @@ const GuestList: React.FC<Props> = ({ navigation }) => {
     );
   };
 
-  // Render individual guest sections
-  const renderGuestSections = () => {
-    if (!house) return null;
+  // Render an individual guest row for the virtualized list
+  const renderGuestItem = useCallback(
+    ({ item: guest }: ListRenderItemInfo<Guest>) => {
+      if (!house) return null;
 
-    return guests.map(guest => {
       const healthScore = getHealthByPercentage(
         getOverallPercentage(guest, house, getTodaysDate()),
       );
       return (
         <Section
-          key={guest.id}
           testID="guest-list-item"
           forceAvatar
           avatar={guest.avatar}
@@ -198,8 +197,11 @@ const GuestList: React.FC<Props> = ({ navigation }) => {
           }
         />
       );
-    });
-  };
+    },
+    [house, weekStart, handleGuestSelect],
+  );
+
+  const keyExtractor = useCallback((guest: Guest) => guest.id, []);
 
   // Loading state - React Query handles this automatically
   if (isLoading) {
@@ -246,32 +248,36 @@ const GuestList: React.FC<Props> = ({ navigation }) => {
 
   // Main render
   return (
-    <RatsScrollView
-      contentContainerStyle={styles.container}
+    <FlatList
       testID="guest-list-screen"
+      data={guests}
+      renderItem={renderGuestItem}
+      keyExtractor={keyExtractor}
+      contentContainerStyle={styles.container}
+      keyboardShouldPersistTaps="always"
+      showsVerticalScrollIndicator={false}
       refreshControl={
         <RefreshControl
           refreshing={isFetching && !isLoading}
           onRefresh={refetch}
         />
-      }>
-      {/******************************* HEADER *******************************/}
-      <ScreenHeader
-        renderBackButton
-        icon={<HelpIcon setRef={setPopoverRef} helpFn={renderHelp} />}
-        header={house ? `${house.name} Guests` : 'Guests'}
-      />
-
-      {/******************************* GUEST LIST *******************************/}
-      {guests.length === 0 && (
+      }
+      ListHeaderComponent={
+        /******************************* HEADER *******************************/
+        <ScreenHeader
+          renderBackButton
+          icon={<HelpIcon setRef={setPopoverRef} helpFn={renderHelp} />}
+          header={house ? `${house.name} Guests` : 'Guests'}
+        />
+      }
+      ListEmptyComponent={
         <RatsText
           translate={false}
           text="No residents in this house yet."
           style={styles.emptyText}
         />
-      )}
-      {renderGuestSections()}
-    </RatsScrollView>
+      }
+    />
   );
 };
 

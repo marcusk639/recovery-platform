@@ -53,17 +53,21 @@ export const notifyNewHouseCreated = onDocumentCreated(
     if (!data) return;
 
     const house = data as House;
-    sendEmail({
-      to: regroupEmail,
-      from: regroupEmail,
-      text: `
+    try {
+      await sendEmail({
+        to: regroupEmail,
+        from: regroupEmail,
+        text: `
         Name: ${house.name}
         ID: ${house.id}
         Super Admin: ${house.superAdminId}
         Date: ${house.createdDate}
       `,
-      subject: "New house created",
-    });
+        subject: "New house created",
+      });
+    } catch (error) {
+      logger.error("notifyNewHouseCreated: email delivery failed", { error });
+    }
   },
 );
 
@@ -112,15 +116,21 @@ export const sendSubscriptionUpdateEmail = onDocumentUpdated(
     const statusAfter = after.subscriptionMetadata?.status;
 
     if (statusBefore !== statusAfter) {
-      sendEmail({
-        to: regroupEmail,
-        from: regroupEmail,
-        text: `
+      try {
+        await sendEmail({
+          to: regroupEmail,
+          from: regroupEmail,
+          text: `
           Subscription status updated for user ${before.id}
           Status changed from ${statusBefore} to ${statusAfter}
         `,
-        subject: "User subscription changed",
-      });
+          subject: "User subscription changed",
+        });
+      } catch (error) {
+        logger.error("sendSubscriptionUpdateEmail: email delivery failed", {
+          error,
+        });
+      }
     }
   },
 );
@@ -135,17 +145,21 @@ export const reportBug = onDocumentCreated(
     if (!data) return;
 
     const bugReport = data as BugReport;
-    sendEmail({
-      to: regroupEmail,
-      from: regroupEmail,
-      text: `
+    try {
+      await sendEmail({
+        to: regroupEmail,
+        from: regroupEmail,
+        text: `
         Description: ${bugReport.description}
         Reporter: ${bugReport.reporter}
         ID: ${bugReport.id}
         Date: ${bugReport.createdDate}
       `,
-      subject: "New bug report",
-    });
+        subject: "New bug report",
+      });
+    } catch (error) {
+      logger.error("reportBug: email delivery failed", { error });
+    }
   },
 );
 
@@ -159,17 +173,21 @@ export const submitFeedback = onDocumentCreated(
     if (!data) return;
 
     const feedback = data as Feedback;
-    sendEmail({
-      to: regroupEmail,
-      from: regroupEmail,
-      text: `
+    try {
+      await sendEmail({
+        to: regroupEmail,
+        from: regroupEmail,
+        text: `
         Description: ${feedback.description}
         Reporter: ${feedback.reviewer}
         ID: ${feedback.id}
         Date: ${feedback.createdDate}
       `,
-      subject: "New feedback",
-    });
+        subject: "New feedback",
+      });
+    } catch (error) {
+      logger.error("submitFeedback: email delivery failed", { error });
+    }
   },
 );
 

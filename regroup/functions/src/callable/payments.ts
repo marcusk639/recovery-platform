@@ -3,7 +3,12 @@ import { logger } from "firebase-functions";
 import * as admin from "firebase-admin";
 import Stripe from "stripe";
 import { z } from "zod";
-import { STRIPE_SECRET_KEY, STRIPE_CLIENT_ID } from "../config";
+import {
+  STRIPE_SECRET_KEY,
+  STRIPE_CLIENT_ID,
+  LEGACY_RENT_FEE_HOUSE_IDS,
+} from "../config";
+import { computeApplicationFee } from "../util/rentFee";
 import { transferStats } from "../util/guest";
 import { getUser } from "../api/firestore";
 import {
@@ -18,7 +23,7 @@ import {
   isHouseAdmin,
   HouseAdminFields,
 } from "../util/houseAuth";
-import { parseInput } from "../validation";
+import { parseInput, safeReturnUrlSchema } from "../validation";
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
 const createPaymentIntentSchema = z.object({
@@ -28,6 +33,9 @@ const createPaymentIntentSchema = z.object({
   houseId: z.string().min(1),
   description: z.string().optional(),
   idempotencyKey: z.string().optional(),
+  // Method the resident is paying with — drives the method-aware platform fee
+  // and restricts the PaymentIntent to that method. Defaults to card.
+  paymentMethodType: z.enum(["card", "us_bank_account"]).optional(),
 });
 
 const listPaymentsSchema = z.object({
@@ -54,18 +62,10 @@ const updatePaymentInfoSchema = z.object({
   guestId: z.string().min(1).optional(),
 });
 
-// Allows any URI scheme except javascript: (matches existing URL validation logic)
-const safeUrlSchema = z
-  .string()
-  .refine(
-    (u) => !/^javascript:/i.test(u) && /^[a-z][a-z0-9+\-.]*:\/\//i.test(u),
-    { message: "Invalid URL scheme" },
-  );
-
 const connectStripeAccountSchema = z.object({
   houseId: z.string().min(1),
-  returnUrl: safeUrlSchema.optional(),
-  refreshUrl: safeUrlSchema.optional(),
+  returnUrl: safeReturnUrlSchema.optional(),
+  refreshUrl: safeReturnUrlSchema.optional(),
 });
 
 const houseIdSchema = z.object({ houseId: z.string().min(1) });
@@ -104,6 +104,7 @@ export const createPaymentIntent = onCall(
       houseId,
       description,
       idempotencyKey: clientKey,
+      paymentMethodType = "card",
     } = parseInput(createPaymentIntentSchema, request.data);
 
     // ── 3. Fetch and validate house ───────────────────────────────────────────
@@ -116,6 +117,7 @@ export const createPaymentIntent = onCall(
     const house = houseSnap.data() as HouseAdminFields & {
       stripeAccountId?: string;
       stripeStatus?: string;
+      legacyRentFee?: boolean;
     };
 
     if (!house.stripeAccountId || house.stripeStatus !== "active") {
@@ -148,7 +150,15 @@ export const createPaymentIntent = onCall(
 
     // ── 5. Create PaymentIntent ───────────────────────────────────────────────
     // amount is already integer cents (validated above).
-    const applicationFeeAmount = Math.round(amount * 0.02);
+    // Method-aware platform fee (P-1/P-2); legacy houses stay on the flat 2%.
+    const isLegacyHouse =
+      house.legacyRentFee === true ||
+      LEGACY_RENT_FEE_HOUSE_IDS.includes(houseId);
+    const applicationFeeAmount = computeApplicationFee({
+      amountCents: amount,
+      paymentMethodType,
+      isLegacyHouse,
+    });
 
     const stripe = createStripeClient();
     let paymentIntent: Stripe.PaymentIntent;
@@ -159,6 +169,7 @@ export const createPaymentIntent = onCall(
           currency,
           description: description || `Rent payment for ${houseId}`,
           metadata: { guestId, houseId },
+          payment_method_types: [paymentMethodType],
           transfer_data: { destination: house.stripeAccountId },
           application_fee_amount: applicationFeeAmount,
         },

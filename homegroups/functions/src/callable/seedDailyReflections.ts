@@ -30,12 +30,14 @@ export const seedDailyReflections = onCall(
       throw new HttpsError("unauthenticated", "Must be authenticated.");
     }
 
-    // Only platform admins can seed
-    const userDoc = await db.collection("users").doc(request.auth.uid).get();
-    if (!userDoc.exists || userDoc.data()?.role !== "admin") {
+    // Only super admins can seed. Check the superAdmin JWT claim (the
+    // authoritative privilege source) rather than the mutable users/{uid}.role
+    // field — setUserAsSuperAdmin writes role:"superAdmin", so the old
+    // role==="admin" comparison locked out every real super admin.
+    if (!request.auth.token.superAdmin) {
       throw new HttpsError(
         "permission-denied",
-        "Only platform admins can seed daily reflections.",
+        "Only super admins can seed daily reflections.",
       );
     }
 

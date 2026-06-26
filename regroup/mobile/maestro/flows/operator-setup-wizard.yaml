@@ -1,0 +1,62 @@
+# Flow 03 — Operator: org setup wizard (add house + edit/delete existing)
+# Persona: manager (admin of test-house-123).
+#
+# PRECONDITION (seed gap): the in-app OrgSetup entry point ("Add Home" on the
+# Profile screen) is gated on admin.superAdmin (Personal.tsx:330). The seeded
+# test-manager is role:'admin' only (claims.admin, not superAdmin), so "Add Home"
+# is currently DISABLED for this persona. To run this flow, grant the manager
+# superAdmin on test-house-123 in the seed (claims.superAdmin + admins doc), OR
+# run it against the new-account onboarding OrgSetup (initialRouteName during
+# setup, same screen signup.yaml lands managers on).
+#
+# Notes on testIDs used:
+#   - "Add Home" Profile menu item has no testID -> tapped by label text.
+#   - OrgSetup: org-setup-screen, add-house-button, complete-setup-button,
+#     house-item-${id}, edit-house-button-${id}, delete-house-button-${id} (the
+#     last two now forwarded via ActivityItemWithButtons left/rightButtonTestID,
+#     Phase A a2).
+#   - Wizard nav: setup-buttons-back / setup-buttons-next (shared SharedSetupButtons).
+#
+# Run: maestro test -e APP_ID=com.rats.dev maestro/flows/operator-setup-wizard.yaml
+appId: ${APP_ID}
+tags:
+  - operator
+  - setup
+---
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-manager@rats-e2e.com
+      PASSWORD: TestPassword123!
+- extendedWaitUntil:
+    visible:
+      id: "main-app-screen"
+    timeout: 30000
+# Reach the in-app org setup via Profile -> "Add Home".
+- tapOn:
+    id: "profile-tab"
+- assertVisible:
+    id: "profile-screen"
+- tapOn:
+    text: "Add Home"
+- extendedWaitUntil:
+    visible:
+      id: "org-setup-screen"
+    timeout: 30000
+# The operator's existing house renders as an editable item.
+- assertVisible:
+    id: "edit-house-button-test-house-123"
+# Add a second house: opens the house wizard.
+- tapOn:
+    id: "add-house-button"
+# Wizard navigation (shared setup buttons): step forward then back.
+- extendedWaitUntil:
+    visible:
+      id: "setup-buttons-next"
+    timeout: 30000
+- tapOn:
+    id: "setup-buttons-next"
+- tapOn:
+    id: "setup-buttons-back"
+- runFlow:
+    file: ../subflows/logout.yaml

@@ -34,7 +34,11 @@ const mockFirestoreDocRef = {
 
 let mockQuerySnap: {
   empty: boolean;
-  docs: Array<{ id: string; ref: typeof mockFirestoreDocRef; data: () => Record<string, any> }>;
+  docs: Array<{
+    id: string;
+    ref: typeof mockFirestoreDocRef;
+    data: () => Record<string, any>;
+  }>;
 } = { empty: true, docs: [] };
 
 const mockCollectionFn = jest.fn();
@@ -54,7 +58,7 @@ jest.mock("firebase-functions/v2/https", () => {
   return {
     ...actual,
     onRequest: jest.fn((_optsOrHandler: any, handler?: any) =>
-      typeof _optsOrHandler === "function" ? _optsOrHandler : handler
+      typeof _optsOrHandler === "function" ? _optsOrHandler : handler,
     ),
   };
 });
@@ -80,7 +84,10 @@ jest.mock("firebase-functions", () => ({
 // ---------------------------------------------------------------------------
 // Imports — after all mocks
 // ---------------------------------------------------------------------------
-import { stripeConnectReauth, stripeConnectReturn } from "../../http/stripeConnect";
+import {
+  stripeConnectReauth,
+  stripeConnectReturn,
+} from "../../http/stripeConnect";
 import { universal } from "../../http/universal";
 
 // ---------------------------------------------------------------------------
@@ -88,7 +95,7 @@ import { universal } from "../../http/universal";
 // ---------------------------------------------------------------------------
 const makeReq = (
   query: Record<string, string> = {},
-  options: Partial<{ method: string; path: string }> = {}
+  options: Partial<{ method: string; path: string }> = {},
 ) => ({
   method: options.method ?? "GET",
   path: options.path ?? "/",
@@ -108,6 +115,32 @@ const makeRes = () => {
   res.redirect = jest.fn(() => res);
   return res;
 };
+
+// Re-wire the Firestore collection mock so the `houses` ownership lookup
+// resolves to `snap`. The handlers verify the stripeAccountId maps to a known
+// house before calling Stripe, so happy-path tests must seed a matching house.
+const seedHouseQuery = (snap: typeof mockQuerySnap) => {
+  mockQuerySnap = snap;
+  mockCollectionFn.mockImplementation((_col: string) => ({
+    where: jest.fn().mockReturnValue({
+      limit: jest.fn().mockReturnValue({
+        get: jest.fn().mockResolvedValue(mockQuerySnap),
+      }),
+    }),
+    doc: jest.fn().mockReturnValue(mockFirestoreDocRef),
+  }));
+};
+
+const matchingHouse = (stripeAccountId: string) => ({
+  empty: false,
+  docs: [
+    {
+      id: "house_1",
+      ref: mockFirestoreDocRef,
+      data: () => ({ stripeAccountId }),
+    },
+  ],
+});
 
 // ---------------------------------------------------------------------------
 // Reset between tests
@@ -140,14 +173,18 @@ describe("stripeConnectReauth", () => {
     await (stripeConnectReauth as any)(req, res);
 
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith(expect.stringContaining("Missing stripeAccountId"));
+    expect(res.send).toHaveBeenCalledWith(
+      expect.stringContaining("Missing stripeAccountId"),
+    );
   });
 
   it("redirects to Stripe onboarding URL when AccountLink is created successfully", async () => {
     const stripeAccountId = "acct_reauth_1";
-    const onboardingUrl = "https://connect.stripe.com/setup/e/acct_reauth_1/abc123";
+    const onboardingUrl =
+      "https://connect.stripe.com/setup/e/acct_reauth_1/abc123";
 
     mockAccountLinksCreate.mockResolvedValue({ url: onboardingUrl });
+    seedHouseQuery(matchingHouse(stripeAccountId));
 
     const req = makeReq({ stripeAccountId });
     const res = makeRes();
@@ -158,13 +195,25 @@ describe("stripeConnectReauth", () => {
       expect.objectContaining({
         account: stripeAccountId,
         type: "account_onboarding",
-      })
+      }),
     );
     expect(res.redirect).toHaveBeenCalledWith(303, onboardingUrl);
   });
 
+  it("returns 404 when no house matches the stripeAccountId", async () => {
+    // mockQuerySnap stays empty (default) — unknown account.
+    const req = makeReq({ stripeAccountId: "acct_unknown" });
+    const res = makeRes();
+
+    await (stripeConnectReauth as any)(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(mockAccountLinksCreate).not.toHaveBeenCalled();
+  });
+
   it("returns 500 when Stripe accountLinks.create throws", async () => {
     mockAccountLinksCreate.mockRejectedValue(new Error("Stripe API error"));
+    seedHouseQuery(matchingHouse("acct_err"));
 
     const req = makeReq({ stripeAccountId: "acct_err" });
     const res = makeRes();
@@ -172,12 +221,17 @@ describe("stripeConnectReauth", () => {
     await (stripeConnectReauth as any)(req, res);
 
     expect(res.status).toHaveBeenCalledWith(500);
-    expect(res.send).toHaveBeenCalledWith(expect.stringContaining("Failed to generate"));
+    expect(res.send).toHaveBeenCalledWith(
+      expect.stringContaining("Failed to generate"),
+    );
   });
 
   it("includes the stripeAccountId in both refresh_url and return_url", async () => {
     const stripeAccountId = "acct_url_check";
-    mockAccountLinksCreate.mockResolvedValue({ url: "https://stripe.com/setup" });
+    mockAccountLinksCreate.mockResolvedValue({
+      url: "https://stripe.com/setup",
+    });
+    seedHouseQuery(matchingHouse(stripeAccountId));
 
     const req = makeReq({ stripeAccountId });
     const res = makeRes();
@@ -188,7 +242,7 @@ describe("stripeConnectReauth", () => {
       expect.objectContaining({
         refresh_url: expect.stringContaining(stripeAccountId),
         return_url: expect.stringContaining("stripeConnectReturn"),
-      })
+      }),
     );
   });
 });
@@ -221,7 +275,13 @@ describe("stripeConnectReturn", () => {
 
     mockQuerySnap = {
       empty: false,
-      docs: [{ id: "house_return_1", ref: mockFirestoreDocRef, data: () => ({ stripeAccountId }) }],
+      docs: [
+        {
+          id: "house_return_1",
+          ref: mockFirestoreDocRef,
+          data: () => ({ stripeAccountId }),
+        },
+      ],
     };
 
     // Re-wire collection with the updated snap
@@ -245,7 +305,7 @@ describe("stripeConnectReturn", () => {
         stripeStatus: "active",
         stripeChargesEnabled: true,
         stripePayoutsEnabled: true,
-      })
+      }),
     );
     expect(res.status).toHaveBeenCalledWith(200);
   });
@@ -265,7 +325,9 @@ describe("stripeConnectReturn", () => {
 
     mockQuerySnap = {
       empty: false,
-      docs: [{ id: "house_restricted", ref: mockFirestoreDocRef, data: () => ({}) }],
+      docs: [
+        { id: "house_restricted", ref: mockFirestoreDocRef, data: () => ({}) },
+      ],
     };
 
     mockCollectionFn.mockImplementation((_col: string) => ({
@@ -283,7 +345,7 @@ describe("stripeConnectReturn", () => {
     await (stripeConnectReturn as any)(req, res);
 
     expect(mockFirestoreUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ stripeStatus: "restricted" })
+      expect.objectContaining({ stripeStatus: "restricted" }),
     );
     expect(res.status).toHaveBeenCalledWith(200);
   });
@@ -300,7 +362,9 @@ describe("stripeConnectReturn", () => {
 
     mockQuerySnap = {
       empty: false,
-      docs: [{ id: "house_pending", ref: mockFirestoreDocRef, data: () => ({}) }],
+      docs: [
+        { id: "house_pending", ref: mockFirestoreDocRef, data: () => ({}) },
+      ],
     };
 
     mockCollectionFn.mockImplementation((_col: string) => ({
@@ -318,7 +382,7 @@ describe("stripeConnectReturn", () => {
     await (stripeConnectReturn as any)(req, res);
 
     expect(mockFirestoreUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ stripeStatus: "pending" })
+      expect.objectContaining({ stripeStatus: "pending" }),
     );
     expect(res.status).toHaveBeenCalledWith(200);
   });
@@ -374,7 +438,7 @@ describe("universal", () => {
 
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "ok" })
+      expect.objectContaining({ status: "ok" }),
     );
   });
 
@@ -386,7 +450,7 @@ describe("universal", () => {
 
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "ok" })
+      expect.objectContaining({ status: "ok" }),
     );
   });
 
@@ -398,7 +462,7 @@ describe("universal", () => {
 
     expect(res.status).toHaveBeenCalledWith(404);
     expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ error: "Not found" })
+      expect.objectContaining({ error: "Not found" }),
     );
   });
 
@@ -409,7 +473,7 @@ describe("universal", () => {
     await (universal as any)(req, res);
 
     expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ path: "/some/deep/path" })
+      expect.objectContaining({ path: "/some/deep/path" }),
     );
   });
 
@@ -421,6 +485,8 @@ describe("universal", () => {
 
     const responseArg = res.json.mock.calls[0][0];
     expect(typeof responseArg.timestamp).toBe("string");
-    expect(new Date(responseArg.timestamp).toISOString()).toBe(responseArg.timestamp);
+    expect(new Date(responseArg.timestamp).toISOString()).toBe(
+      responseArg.timestamp,
+    );
   });
 });

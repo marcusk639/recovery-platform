@@ -10,6 +10,13 @@ class SimpleDebugLogger {
   private maxLogs = 1000; // Keep last 1000 logs in memory
 
   log(level: LogEntry['level'], message: string, data?: any) {
+    // Never log in production. `data` payloads here include full user objects
+    // (SSN, DOB, phone), so console output / the in-memory buffer must be
+    // dev-only to avoid leaking PII to Metro, Logcat, and crash tools.
+    if (!__DEV__) {
+      return;
+    }
+
     const entry: LogEntry = {
       timestamp: new Date().toISOString(),
       level,

@@ -10,11 +10,11 @@
 
 ## Stack
 
-| Layer     | Technology                                                 |
-| --------- | ---------------------------------------------------------- |
-| Mobile    | React Native 0.72, TypeScript, Redux Toolkit, Firebase SDK |
-| Functions | Firebase Cloud Functions v1, TypeScript, Stripe, SendGrid  |
-| Web       | Angular, TypeScript, Firebase Hosting                      |
+| Layer     | Technology                                                                                                  |
+| --------- | ----------------------------------------------------------------------------------------------------------- |
+| Mobile    | React Native 0.72, TypeScript, Redux Toolkit, Firebase SDK                                                  |
+| Functions | Firebase Cloud Functions v2 (firebase-functions ^7), TypeScript, Stripe, SendGrid (some v1 legacy triggers) |
+| Web       | Angular 9 (EOL — see web/CLAUDE.md), TypeScript, Firebase Hosting                                           |
 
 ---
 
@@ -45,7 +45,7 @@ Emulator config is in `firebase.json` at this directory level.
 - **Firebase emulator ports** for this product: Firestore 8080, Functions 5001, Auth 9099 (same as homegroups — do not run both simultaneously without port overrides).
 - **Service key** for Cloud Functions: `functions/service-key.json` (gitignored). Download from Firebase Console under `phoenix-cleanhouse`.
 - **Stripe** amounts are in **US cents** (integers). `50000` = $500.00. Convert at the UI boundary only.
-- **Subscription model:** Operators pay per-house and per-guest. `OperatorSubscription` in Firestore tracks Stripe `customerId`, `subscriptionId`, and a `houses` map.
+- **Subscription model:** 6-tier flat monthly pricing (`SUBSCRIPTION_TIERS` in `functions/src/config.ts`: Traditional 69/129/249, Oxford 49/89/299), selected at checkout and gated by `TIER_BILLING_ENABLED` / `isTierBillingEnabled()`. The legacy per-house + per-guest model (`STRIPE_GUEST_PRICE_ID`) is retained only for existing subscribers. `OperatorSubscription` tracks Stripe `customerId`/`subscriptionId`.
 
 ---
 

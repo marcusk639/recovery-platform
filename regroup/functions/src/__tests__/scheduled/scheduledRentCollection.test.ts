@@ -1,6 +1,7 @@
 import { runRentCollection } from "../../scheduled/scheduledRentCollection";
 
 const mockCreatePaymentIntent = jest.fn();
+const mockPaymentMethodsRetrieve = jest.fn();
 
 jest.mock("../../api/firestore", () => ({
   guestCollection: {
@@ -37,12 +38,21 @@ jest.mock("../../api/firestore", () => ({
 jest.mock("stripe", () => {
   return jest.fn().mockImplementation(() => ({
     paymentIntents: { create: mockCreatePaymentIntent },
+    paymentMethods: { retrieve: mockPaymentMethodsRetrieve },
   }));
 });
 
-// Mock config to provide secret name
+// Mock config to provide secret name + the rent-fee model used by the helper.
 jest.mock("../../config", () => ({
   STRIPE_SECRET_KEY: { name: "STRIPE_SECRET_KEY" },
+  LEGACY_RENT_FEE_HOUSE_IDS: [],
+  RENT_FEE: {
+    achFlatCents: 200,
+    achRate: 0,
+    achCapCents: 300,
+    cardPlatformRate: 0.0075,
+    legacyRate: 0.02,
+  },
 }));
 
 describe("runRentCollection", () => {
@@ -80,5 +90,96 @@ describe("runRentCollection", () => {
 
     await expect(runRentCollection()).resolves.not.toThrow();
     expect(mockCreatePaymentIntent).toHaveBeenCalledTimes(2);
+  });
+
+  it("rounds a non-integer rentOwed before charging (H-fns-1)", async () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { guestCollection } = require("../../api/firestore");
+    guestCollection.get.mockResolvedValueOnce({
+      empty: false,
+      size: 1,
+      docs: [
+        {
+          id: "guest-float",
+          data: () => ({
+            houseId: "house-1",
+            stripeCustomerId: "cus_float",
+            defaultPaymentMethodId: "pm_float",
+            autoPayEnabled: true,
+            rentOwed: 149.5, // stray non-integer cents — Stripe would reject as-is
+          }),
+        },
+      ],
+    });
+    mockCreatePaymentIntent.mockResolvedValue({ id: "pi_f", status: "succeeded" });
+
+    await runRentCollection();
+
+    expect(mockCreatePaymentIntent).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 150 }),
+      expect.anything(),
+    );
+  });
+
+  describe("method-aware Connect application fee", () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { guestCollection } = require("../../api/firestore");
+
+    const seedConnectGuest = (overrides: Record<string, unknown>) => {
+      guestCollection.get.mockResolvedValueOnce({
+        empty: false,
+        size: 1,
+        docs: [
+          {
+            id: "guest-c",
+            data: () => ({
+              houseId: "house-1",
+              stripeCustomerId: "cus_c",
+              defaultPaymentMethodId: "pm_c",
+              stripeConnectId: "acct_dest",
+              autoPayEnabled: true,
+              rentOwed: 10000, // $100.00
+              ...overrides,
+            }),
+          },
+        ],
+      });
+    };
+
+    it("charges the 0.75% card platform fee when the default method is a card", async () => {
+      seedConnectGuest({});
+      mockPaymentMethodsRetrieve.mockResolvedValue({ type: "card" });
+      mockCreatePaymentIntent.mockResolvedValue({
+        id: "pi_c",
+        status: "succeeded",
+      });
+
+      await runRentCollection();
+
+      expect(mockPaymentMethodsRetrieve).toHaveBeenCalledWith("pm_c");
+      expect(mockCreatePaymentIntent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          application_fee_amount: 75, // 0.75% of 10000
+          transfer_data: { destination: "acct_dest" },
+        }),
+        expect.anything(),
+      );
+    });
+
+    it("charges the flat ACH fee when the default method is a bank account", async () => {
+      seedConnectGuest({});
+      mockPaymentMethodsRetrieve.mockResolvedValue({ type: "us_bank_account" });
+      mockCreatePaymentIntent.mockResolvedValue({
+        id: "pi_c",
+        status: "succeeded",
+      });
+
+      await runRentCollection();
+
+      expect(mockCreatePaymentIntent).toHaveBeenCalledWith(
+        expect.objectContaining({ application_fee_amount: 200 }), // flat $2
+        expect.anything(),
+      );
+    });
   });
 });

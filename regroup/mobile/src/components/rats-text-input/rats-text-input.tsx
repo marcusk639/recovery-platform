@@ -157,7 +157,11 @@ const RatsTextInput = (props: Props & TextInputProps) => {
     style = { inputView: {}, textInput: {} },
     touchedValue,
     field: { name, value, onChange, onBlur } = {},
-    form: { errors = {}, touched = {}, setFieldValue, values } = { errors: {}, touched: {}, values: {} },
+    form: { errors = {}, touched = {}, setFieldValue, values } = {
+      errors: {},
+      touched: {},
+      values: {},
+    },
     disabled = false,
     labelDisabled = false,
     // autoCapitalize = 'none',
@@ -184,7 +188,9 @@ const RatsTextInput = (props: Props & TextInputProps) => {
     // lowercase = false
   } = props;
   const hasBeenTouched = () =>
-    (address ? (touched as Record<string, boolean>)?.state : (name && (touched as Record<string, boolean>)?.[name])) || touchedValue;
+    (address
+      ? (touched as Record<string, boolean>)?.state
+      : name && (touched as Record<string, boolean>)?.[name]) || touchedValue;
   const onInputBlur = (event: any) => {
     if (value) {
       const val = (value as string).replace(/\s+/gi, ' ');
@@ -230,16 +236,17 @@ const RatsTextInput = (props: Props & TextInputProps) => {
       const address = value
         ? value
         : showCurrentLocation
-        ? 'Current Location'
-        : '';
+          ? 'Current Location'
+          : '';
       googlePlacesRef.current.setAddressText(address);
     }
-  }, [value]);
+  }, [value, values, props.pathToAddress, showCurrentLocation]);
 
-  const setPropertyValue = (key: string, addressDetails: AddressDetails, path: string) => {
-    console.log('key', key);
-    console.log('addressDetails[key]', addressDetails[key as keyof AddressDetails]);
-    console.log('path + key', path + key);
+  const setPropertyValue = (
+    key: string,
+    addressDetails: AddressDetails,
+    path: string,
+  ) => {
     setFieldValue?.(path + key, addressDetails[key as keyof AddressDetails]);
   };
 
@@ -304,8 +311,12 @@ const RatsTextInput = (props: Props & TextInputProps) => {
                   underlineColorAndroid="transparent"
                   style={{
                     ...textInputStyle,
-                    ...(props.numberOfLines ? { textAlignVertical: 'top' as const } : {}),
-                    ...(props.numberOfLines ? { minHeight: 20 * props.numberOfLines } : {}),
+                    ...(props.numberOfLines
+                      ? { textAlignVertical: 'top' as const }
+                      : {}),
+                    ...(props.numberOfLines
+                      ? { minHeight: 20 * props.numberOfLines }
+                      : {}),
                     ...(textAlign ? { textAlign: textAlign as any } : {}),
                   }}
                   // onChangeText={customHandleChange ? text => customHandleChange(text) : onChange(name)}
@@ -391,8 +402,8 @@ const RatsTextInput = (props: Props & TextInputProps) => {
               return value
                 ? value
                 : showCurrentLocation
-                ? 'Current Location'
-                : '';
+                  ? 'Current Location'
+                  : '';
             }}
             listViewDisplayed={listViewDisplayed}
             keepResultsAfterBlur={keepResultsAfterBlur}

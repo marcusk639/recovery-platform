@@ -1,0 +1,29 @@
+# Flow 11 — Guest: home dashboard renders with stat cards
+# Persona: guest-a (resident of test-house-123).
+# Run: maestro test -e APP_ID=com.rats.dev maestro/flows/guest-home.yaml
+appId: ${APP_ID}
+tags:
+  - guest
+---
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-guest-a@rats-e2e.com
+      PASSWORD: TestPassword123!
+# Login lands on the tab bar; switch to the Guest tab.
+- tapOn:
+    id: "guest-tab"
+- extendedWaitUntil:
+    visible:
+      id: "guest-overview-screen"
+    timeout: 30000
+# Core resident stat cards.
+- assertVisible:
+    id: "meetings-card"
+- assertVisible:
+    id: "chores-card"
+- assertVisible:
+    id: "week-summary-card"
+    optional: true
+- runFlow:
+    file: ../subflows/logout.yaml

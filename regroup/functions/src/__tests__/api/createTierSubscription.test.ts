@@ -47,8 +47,36 @@ describe("createTierSubscription", () => {
           userId: "uid_1",
           houseType: "traditional",
           tier: "starter",
+          billingInterval: "month",
         },
       }),
     );
+  });
+
+  it("uses the annual price + records the interval when billing yearly", async () => {
+    process.env.STRIPE_PRICE_TRAD_STARTER_ANNUAL = "price_starter_annual";
+
+    await createTierSubscription(
+      "cus_1",
+      "traditional",
+      "starter",
+      "uid_1",
+      "year",
+    );
+
+    expect(mockSubscriptionsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        items: [{ price: "price_starter_annual", quantity: 1 }],
+        trial_period_days: 30,
+        metadata: {
+          userId: "uid_1",
+          houseType: "traditional",
+          tier: "starter",
+          billingInterval: "year",
+        },
+      }),
+    );
+
+    delete process.env.STRIPE_PRICE_TRAD_STARTER_ANNUAL;
   });
 });

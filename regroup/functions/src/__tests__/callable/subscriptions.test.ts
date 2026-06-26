@@ -208,6 +208,19 @@ describe("createOperatorSubscription", () => {
     );
   });
 
+  it("rejects checkout for a not-for-sale tier (Oxford Network, P-8)", async () => {
+    mockGetUser.mockResolvedValue(fakeUser);
+    await expect(
+      call(createOperatorSubscription, {
+        user: fakeUser,
+        paymentMethod: "pm_test",
+        houseType: "oxford",
+        tier: "network",
+      }),
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+    expect(mockInitializeCustomer).not.toHaveBeenCalled();
+  });
+
   it("reads oxfordEnabled from Firestore, not from request payload", async () => {
     // Security: billing tier must be server-authoritative (Firestore), not client-supplied.
     const oxfordFirestoreUser = {
@@ -476,6 +489,52 @@ describe("updateSubscriptionGuests", () => {
 
     expect(mockUpdateSubscriptionItem).not.toHaveBeenCalled();
   });
+
+  it("re-throws (does NOT fall back to Firestore) on a transient Stripe error", async () => {
+    mockGetUser.mockResolvedValue(fakeUser);
+    mockGetSubscriptionItem.mockResolvedValue({ quantity: 2 });
+    // Simulate a rate-limit/network style failure — NOT resource_missing.
+    mockUpdateSubscriptionItem.mockRejectedValue({
+      type: "StripeRateLimitError",
+      code: "rate_limit",
+      message: "Too many requests",
+    });
+    mockUpdateUser.mockResolvedValue(undefined);
+
+    await expect(
+      call(updateSubscriptionGuests, {
+        ownerUserId: "user-1",
+        houseIds: ["house-1"],
+        action: "add",
+      }),
+    ).rejects.toMatchObject({ code: "resource-exhausted" });
+
+    // Firestore occupancy must NOT diverge from Stripe on a transient error.
+    expect(mockUpdateUser).not.toHaveBeenCalled();
+  });
+
+  it("falls back to Firestore-only metadata when Stripe reports resource_missing", async () => {
+    mockGetUser.mockResolvedValue(fakeUser);
+    mockGetSubscriptionItem.mockResolvedValue({ quantity: 2 });
+    mockUpdateSubscriptionItem.mockRejectedValue({
+      type: "StripeInvalidRequestError",
+      code: "resource_missing",
+      message: "No such subscription item",
+    });
+    mockUpdateSubscriptionMetadata.mockReturnValue(
+      fakeUser.subscriptionMetadata,
+    );
+    mockUpdateUser.mockResolvedValue(undefined);
+
+    await call(updateSubscriptionGuests, {
+      ownerUserId: "user-1",
+      houseIds: ["house-1"],
+      action: "add",
+    });
+
+    // Subscription was deleted in Stripe — reconcile local metadata only.
+    expect(mockUpdateUser).toHaveBeenCalled();
+  });
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -630,22 +689,42 @@ describe("updateSubscriptionHouses — input validation", () => {
 });
 
 describe("sendInviteEmails — input validation", () => {
+  // sendInviteEmails requires the caller to be a house operator (admin claim)
+  // before input is processed.
+  const operatorAuth = { uid: "user-1", token: { admin: { "house-1": true } } };
+
   it("throws invalid-argument when payload is not an array", async () => {
     await expect(
-      callFn(sendInviteEmails, { email: "not-an-array" }),
+      callFn(sendInviteEmails, { email: "not-an-array" }, operatorAuth),
     ).rejects.toMatchObject({ code: "invalid-argument" });
   });
 
   it("throws invalid-argument when email.to is not a valid email", async () => {
     await expect(
+      callFn(
+        sendInviteEmails,
+        [
+          {
+            email: { to: "bad-email", from: "a", subject: "s", text: "t" },
+            dynamicLink: "https://example.com",
+            type: "guest",
+          },
+        ],
+        operatorAuth,
+      ),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+  });
+
+  it("throws permission-denied when caller is not a house operator", async () => {
+    await expect(
       callFn(sendInviteEmails, [
         {
-          email: { to: "bad-email", from: "a", subject: "s", text: "t" },
-          dynamicLink: "https://example.com",
+          email: { to: "a@b.com", from: "a", subject: "s", text: "t" },
+          dynamicLink: "https://regroup-app.com/x",
           type: "guest",
         },
       ]),
-    ).rejects.toMatchObject({ code: "invalid-argument" });
+    ).rejects.toMatchObject({ code: "permission-denied" });
   });
 });
 
@@ -893,6 +972,9 @@ describe("tier subscriptions skip Stripe quantity updates", () => {
     ...fakeUser,
     subscriptionMetadata: {
       ...tierUserAtResidentCap.subscriptionMetadata,
+      // Professional allows multiProperty (P-7) so the numeric cap — not the
+      // capability gate — is what bounds these multi-house cases.
+      tier: "professional",
       maxResidents: 10,
       maxProperties: 3,
       houses: { "house-1": { numberOfGuests: 2 } },
@@ -924,7 +1006,7 @@ describe("tier subscriptions skip Stripe quantity updates", () => {
       "user-1",
       expect.objectContaining({
         subscriptionMetadata: expect.objectContaining({
-          tier: "starter",
+          tier: "professional",
           houses: { "house-1": { numberOfGuests: 3 } },
         }),
       }),
@@ -1000,6 +1082,29 @@ describe("tier subscriptions skip Stripe quantity updates", () => {
       }),
     );
   });
+
+  it("denies a second property on a tier without the multiProperty capability (P-7)", async () => {
+    // Starter has multiProperty=false: adding a 2nd house is blocked by the
+    // capability gate, independent of the numeric cap.
+    const starterSingleHouse = {
+      ...fakeUser,
+      subscriptionMetadata: {
+        ...tierUserAtResidentCap.subscriptionMetadata,
+        houseType: "traditional",
+        tier: "starter",
+        houses: { "house-1": { numberOfGuests: 0 } },
+      },
+    };
+    mockGetUser.mockResolvedValue(starterSingleHouse);
+    await expect(
+      call(updateSubscriptionHouses, {
+        ownerUserId: "user-1",
+        action: "add",
+        houseIds: ["house-2"],
+      }),
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+    expect(mockUpdateUser).not.toHaveBeenCalled();
+  });
 });
 
 describe("createOperatorSubscription — tier-billing flag branch", () => {
@@ -1035,6 +1140,7 @@ describe("createOperatorSubscription — tier-billing flag branch", () => {
       "traditional",
       "starter",
       fakeUser.id,
+      "month",
     );
     expect(mockInitializeCustomer).not.toHaveBeenCalled();
     // Tier caps from SUBSCRIPTION_TIERS.traditional.starter are persisted.
@@ -1049,6 +1155,55 @@ describe("createOperatorSubscription — tier-billing flag branch", () => {
         }),
       }),
     );
+  });
+
+  it("forwards an annual billingInterval to initializeTierCustomer", async () => {
+    process.env.TIER_BILLING_ENABLED = "true";
+    process.env.STRIPE_PRICE_TRAD_STARTER = "price_starter";
+    mockGetUser.mockResolvedValue(fakeUser);
+    mockInitializeTierCustomer.mockResolvedValue({
+      customerId: "cus_tier",
+      subscriptionId: "sub_tier",
+      subscriptionItemId: "si_tier",
+      status: "trialing",
+      houseType: "traditional",
+      tier: "starter",
+    });
+    mockUpdateUser.mockResolvedValue(undefined);
+
+    await call(createOperatorSubscription, {
+      user: fakeUser,
+      paymentMethod: "pm_test",
+      houseType: "traditional",
+      tier: "starter",
+      billingInterval: "year",
+    });
+
+    expect(mockInitializeTierCustomer).toHaveBeenCalledWith(
+      fakeUser.email,
+      "pm_test",
+      "traditional",
+      "starter",
+      fakeUser.id,
+      "year",
+    );
+  });
+
+  it("rejects an invalid billingInterval with invalid-argument", async () => {
+    process.env.TIER_BILLING_ENABLED = "true";
+    process.env.STRIPE_PRICE_TRAD_STARTER = "price_starter";
+    mockGetUser.mockResolvedValue(fakeUser);
+
+    await expect(
+      call(createOperatorSubscription, {
+        user: fakeUser,
+        paymentMethod: "pm_test",
+        houseType: "traditional",
+        tier: "starter",
+        billingInterval: "weekly",
+      }),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+    expect(mockInitializeTierCustomer).not.toHaveBeenCalled();
   });
 
   it("uses the legacy initializeCustomer when the flag is off", async () => {

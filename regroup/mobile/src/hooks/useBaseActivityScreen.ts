@@ -37,6 +37,7 @@ import {
   resolveDispute as resolveDisputeInFirestore,
   verifyActivity as verifyActivityInFirestore,
 } from '../services/activity';
+import { logException } from '../util/logging';
 
 import { useActivityModal } from './useActivityModal';
 import { useActivityFilters } from './useActivityFilters';
@@ -201,24 +202,43 @@ export const useBaseActivityScreen = (
 
       const updatedGuest = cloneDeep(activityGuest);
 
+      // Write the authoritative record (the activity's DISPUTED status, which
+      // compliance/export reads) FIRST. Only mirror it into the denormalized
+      // house.disputes cache on success — otherwise a failed activity write
+      // leaves the house showing a dispute the activity never recorded, and the
+      // "Dispute not saved" alert would be a lie. If the activity write fails,
+      // nothing is half-applied.
+      try {
+        await disputeActivityInFirestore(activity.id, message, user.id || '');
+      } catch (err) {
+        logException(err);
+        Alert.alert(
+          'Dispute not saved',
+          'We could not record the dispute. Please try again.',
+        );
+        throw err;
+      }
+
       await updateDisputeMutation.mutateAsync({
         guest: updatedGuest,
         house: housePayload,
         notifications: buildNotifications(dispute),
       });
-
-      disputeActivityInFirestore(activity.id, message, user.id || '').catch(
-        err => console.warn('[Activity] Failed to dispute activity:', err),
-      );
     },
     [guests, house, disputes, user, updateDisputeMutation, buildNotifications],
   );
 
   const verifyActivity = useCallback(
     async (activityId: string): Promise<void> => {
-      verifyActivityInFirestore(activityId, user.id || '').catch(err =>
-        console.warn('[Activity] Failed to verify activity:', err),
-      );
+      try {
+        await verifyActivityInFirestore(activityId, user.id || '');
+      } catch (err) {
+        logException(err);
+        Alert.alert(
+          'Verification failed',
+          'We could not verify this activity. Please try again.',
+        );
+      }
     },
     [user.id],
   );
@@ -296,23 +316,31 @@ export const useBaseActivityScreen = (
               const updatedGuest = cloneDeep(activityGuest);
 
               modal.setLoadingMessage('Processing dispute...');
+              // Resolve the authoritative activity record first; only update the
+              // denormalized house cache to "resolved" if it succeeds. Otherwise
+              // the UI would show the dispute resolved while the activity stays
+              // DISPUTED, and the alert would be a lie.
+              try {
+                await resolveDisputeInFirestore(
+                  dispute.activityId,
+                  user.id || '',
+                  'delete',
+                );
+              } catch (err) {
+                logException(err);
+                Alert.alert(
+                  'Override not saved',
+                  'We could not resolve this dispute. Please try again.',
+                );
+                return;
+              }
+
               await updateDisputeMutation.mutateAsync({
                 guest: updatedGuest,
                 house: partialHouse,
                 notifications: [],
                 resolvedDispute,
               });
-
-              resolveDisputeInFirestore(
-                dispute.activityId,
-                user.id || '',
-                'delete',
-              ).catch(err =>
-                console.warn(
-                  '[Activity] Failed to resolve dispute (overturn):',
-                  err,
-                ),
-              );
             },
           },
         ],
@@ -340,23 +368,31 @@ export const useBaseActivityScreen = (
               const updatedGuest = cloneDeep(activityGuest);
 
               modal.setLoadingMessage('Processing dispute...');
+              // Resolve the authoritative activity record first; only update the
+              // denormalized house cache to "resolved" if it succeeds. Otherwise
+              // the UI would show the dispute resolved while the activity stays
+              // DISPUTED, and the alert would be a lie.
+              try {
+                await resolveDisputeInFirestore(
+                  dispute.activityId,
+                  user.id || '',
+                  'keep',
+                );
+              } catch (err) {
+                logException(err);
+                Alert.alert(
+                  'Allowance not saved',
+                  'We could not resolve this dispute. Please try again.',
+                );
+                return;
+              }
+
               await updateDisputeMutation.mutateAsync({
                 guest: updatedGuest,
                 house: partialHouse,
                 notifications: [],
                 resolvedDispute,
               });
-
-              resolveDisputeInFirestore(
-                dispute.activityId,
-                user.id || '',
-                'keep',
-              ).catch(err =>
-                console.warn(
-                  '[Activity] Failed to resolve dispute (allow):',
-                  err,
-                ),
-              );
             },
           },
         ],
