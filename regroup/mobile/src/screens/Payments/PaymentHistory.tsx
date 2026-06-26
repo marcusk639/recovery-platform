@@ -175,10 +175,10 @@ const PaymentHistory: React.FC<Props> = ({ navigation }) => {
   }
 
   return (
-    <View style={styles.container}>
+    <View testID="payment-history-screen" style={styles.container}>
       <ScreenHeader renderBackButton header="Payment History" />
       {payments.length === 0 ? (
-        <View style={styles.centered}>
+        <View testID="payment-history-empty" style={styles.centered}>
           <RatsText
             translate={false}
             text="No payments found."
