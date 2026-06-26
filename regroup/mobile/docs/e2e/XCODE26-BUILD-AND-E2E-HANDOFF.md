@@ -13,18 +13,17 @@ top blocker.
 
 ## TL;DR for the next session
 
-1. **Build is unblocked under Xcode 26.6.** Three fixes were needed (Stripe upgrade,
-   Yoga patch, Sentry build-phase guards) — details + persistence status below.
-2. **One open BLOCKER:** the app crashes on mount with a red render error
-   `useFlushOfflineQueue is not a function` (`useOfflineSync.ts:61` →
-   `DataProvider` `DataContext.tsx:95`). Fix this first — nothing E2E passes until
-   the app mounts.
-3. **Two things still need to be persisted** so the build is reproducible on a clean
-   checkout / CI: the **Yoga patch** (via patch-package) and a decision on the
-   **Sentry** change (already committed to project.pbxproj, but see notes).
-4. Environment that's already set up and reusable: iOS 26.5 runtime + booted sim
-   `E2E-iPhone` (UDID `809BD7B9-D9D5-45D2-AEA8-12F885F54407`), Firebase emulators,
-   Metro, and seeded data.
+1. **Build is unblocked under Xcode 26.6** (Stripe upgrade, Yoga patch, Sentry
+   guards — all committed except the Yoga patch-package step below).
+2. **Offline-sync crash is FIXED** (commit `6e0d615`): `useFlushOfflineQueue` was
+   moved to its own file (`src/state/queries/useFlushOfflineQueue.ts`) to break
+   the Metro init cycle. The app should now mount cleanly.
+3. **One thing still needs to be persisted:** the **Yoga patch** (via patch-package).
+   See Part 1 §2 below. Without it, `npm ci` / CI will break on the first `pod install`.
+4. **Next step:** run the smoke flow to confirm the app mounts, then run the full
+   Maestro suite. See Part 3 for the exact commands.
+5. Environment that's already set up: iOS 26.5 runtime + booted sim `E2E-iPhone`
+   (UDID `809BD7B9-D9D5-45D2-AEA8-12F885F54407`), Firebase emulators, Metro, seeded data.
 
 ---
 
@@ -159,10 +158,9 @@ connected). The harness is fully functional.
 
 ---
 
-## Part 2 — OPEN BLOCKER: app crashes on mount (offline-sync)
+## Part 2 — FIXED: app crash on mount (offline-sync) — commit 6e0d615
 
-**This is the top priority for the next session.** Until the app mounts, no flow
-passes.
+**RESOLVED.** Root cause was a Metro module-init cycle; fix is committed. Details preserved for reference.
 
 - **Symptom (red error box on launch, screenshot in Maestro artifacts):**
   ```
@@ -240,28 +238,26 @@ Screenshot the sim directly with:
 
 ---
 
-## Part 4 — Uncommitted changes right now (branch `test/e2e-launch-prep`)
+## Part 4 — Commit status (branch `test/e2e-launch-prep`)
 
-```
- M regroup/mobile/ios/rats.xcodeproj/project.pbxproj   # Sentry phase guards (commit)
- M regroup/mobile/package.json                         # stripe-react-native 0.67 (commit)
- M regroup/mobile/package-lock.json                    # "" (commit)
-?? regroup/mobile/ios/Podfile.lock                     # gitignored — not committed
-   node_modules/.../YGValue.h                          # Yoga fix — NOT persisted (patch-package needed)
-```
+All previously-uncommitted changes are now committed in `6e0d615`:
 
-Already committed on this branch earlier (PR #37): `PaymentHistory.tsx` testIDs +
-`docs/e2e/reports/2026-06-26-readiness.md`.
+| File                                                       | Status                                                  |
+| ---------------------------------------------------------- | ------------------------------------------------------- |
+| `package.json` / `package-lock.json` — Stripe 0.59→0.67    | ✅ committed                                            |
+| `ios/rats.xcodeproj/project.pbxproj` — Sentry phase guards | ✅ committed                                            |
+| `src/hooks/useOfflineSync.ts` — updated import path        | ✅ committed                                            |
+| `src/state/queries/activityQueries.ts` — re-export only    | ✅ committed                                            |
+| `src/state/queries/useFlushOfflineQueue.ts` — new file     | ✅ committed                                            |
+| `docs/e2e/XCODE26-BUILD-AND-E2E-HANDOFF.md` — this doc     | ✅ committed                                            |
+| `ios/Podfile.lock`                                         | gitignored — not committed (expected)                   |
+| `node_modules/.../YGValue.h` — Yoga fix                    | ❌ NOT persisted — patch-package needed (see Part 1 §2) |
 
-### Suggested commit grouping
+### One remaining TODO before CI is fully reproducible
 
-1. `chore(regroup-mobile): upgrade stripe-react-native 0.59→0.67 for Xcode 26 build`
-   — package.json + package-lock.json (+ note StripeiOS 25.17, runtime payment flows
-   still need verification).
-2. `chore(regroup-mobile): guard Sentry build phases on SENTRY_AUTH_TOKEN` —
-   project.pbxproj.
-3. Yoga patch-package patch (after adding patch-package).
-4. The offline-sync fix (Part 2) — separate, once debugged.
+Run the patch-package step from Part 1 §2 and commit the resulting
+`patches/react-native+0.72.17.patch`. Without it, `npm ci` on a clean machine
+re-installs the unpatched `YGValue.h` and the iOS build fails under Xcode 26.6.
 
 ---
 
