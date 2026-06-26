@@ -126,30 +126,33 @@ declaration is deprecated [-Werror,-Wdeprecated-literal-operator]`.
   Code Sentry plugin** (value `sntryu_…`), but `SENTRY_ORG` is unset, so `sentry-cli`
   ran and failed. (`SENTRY_DISABLE_AUTO_UPLOAD` does NOT stop `sentry-cli react-native
 xcode` / `debug-files upload` — those ignore it.)
-- **Fix applied (committed in `ios/rats.xcodeproj/project.pbxproj`):** both phases now
-  guard on `SENTRY_AUTH_TOKEN` — when it's set they run sentry-cli (CI path); when
-  unset they run the plain RN bundler / skip the dif upload (local path).
-- **IMPORTANT — to build locally you must run with the token unset**, because the
-  plugin sets it without an org:
-  ```bash
-  env -u SENTRY_AUTH_TOKEN npx react-native run-ios \
-    --udid 809BD7B9-D9D5-45D2-AEA8-12F885F54407 --no-packager
-  ```
-  Alternatively, set a real `SENTRY_ORG`/`SENTRY_PROJECT` so the full upload works.
+- **Fix applied (committed in `ios/rats.xcodeproj/project.pbxproj`, commit `6e0d615`):**
+  both phases now guard on the **presence of `ios/sentry.properties`** — when the file
+  exists they run sentry-cli (CI/release path, sourcemap + dif upload); when it's
+  absent they run the plain RN bundler / skip the dif upload (local path). There is no
+  `sentry.properties` checked in, so local builds skip Sentry automatically.
+- **Why this guard, not `SENTRY_AUTH_TOKEN`:** the token is exported globally by the
+  Claude Code Sentry plugin, so a token-based guard would still fire sentry-cli (and
+  fail on the missing org) on local CLI builds. Keying on `sentry.properties` is the
+  real signal that uploads are configured, so **no `env -u SENTRY_AUTH_TOKEN` is
+  needed** — the build is green with the token set. To enable uploads, drop in a
+  `sentry.properties` with `defaults.org`/`defaults.project` (+ auth token).
 - **Watch-out:** xcodebuild caches run-script phases in `XCBuildData`. After editing
   the phases, a **clean build** (`rm -rf ~/Library/Developer/Xcode/DerivedData/rats-*`)
   is needed for the new scripts to actually run.
 - **Decision for the team:** confirm the guard approach is acceptable, or revert and
   instead provide Sentry creds in CI only. The change is reversible (2 edits in
-  project.pbxproj, search `SENTRY_AUTH_TOKEN`).
+  project.pbxproj, search `sentry.properties`).
 
 ### The known-good local build command
 
 ```bash
 cd regroup/mobile
-env -u SENTRY_AUTH_TOKEN npx react-native run-ios \
+npx react-native run-ios \
   --udid 809BD7B9-D9D5-45D2-AEA8-12F885F54407 --no-packager
 # (npm run ios targets "iPhone 14 Pro" which doesn't exist on iOS 26.5 — use the UDID)
+# No `env -u SENTRY_AUTH_TOKEN` needed: the Sentry phases guard on sentry.properties.
+# A pure `xcodebuild ... -scheme rats build CODE_SIGNING_ALLOWED=NO` also succeeds.
 ```
 
 This **succeeds**: BUILD SUCCEEDED → app installed (`com.rats.dev`) → launched →
@@ -242,16 +245,16 @@ Screenshot the sim directly with:
 
 All previously-uncommitted changes are now committed in `6e0d615`:
 
-| File                                                       | Status                                                  |
-| ---------------------------------------------------------- | ------------------------------------------------------- |
-| `package.json` / `package-lock.json` — Stripe 0.59→0.67    | ✅ committed                                            |
-| `ios/rats.xcodeproj/project.pbxproj` — Sentry phase guards | ✅ committed                                            |
-| `src/hooks/useOfflineSync.ts` — updated import path        | ✅ committed                                            |
-| `src/state/queries/activityQueries.ts` — re-export only    | ✅ committed                                            |
-| `src/state/queries/useFlushOfflineQueue.ts` — new file     | ✅ committed                                            |
-| `docs/e2e/XCODE26-BUILD-AND-E2E-HANDOFF.md` — this doc     | ✅ committed                                            |
-| `ios/Podfile.lock`                                         | gitignored — not committed (expected)                   |
-| `node_modules/.../YGValue.h` — Yoga fix                    | ❌ NOT persisted — patch-package needed (see Part 1 §2) |
+| File                                                       | Status                                                                |
+| ---------------------------------------------------------- | --------------------------------------------------------------------- |
+| `package.json` / `package-lock.json` — Stripe 0.59→0.67    | ✅ committed                                                          |
+| `ios/rats.xcodeproj/project.pbxproj` — Sentry phase guards | ✅ committed                                                          |
+| `src/hooks/useOfflineSync.ts` — updated import path        | ✅ committed                                                          |
+| `src/state/queries/activityQueries.ts` — re-export only    | ✅ committed                                                          |
+| `src/state/queries/useFlushOfflineQueue.ts` — new file     | ✅ committed                                                          |
+| `docs/e2e/XCODE26-BUILD-AND-E2E-HANDOFF.md` — this doc     | ✅ committed                                                          |
+| `ios/Podfile.lock` — pins StripeiOS 25.17                  | ✅ committed in `958a733` (re-tracked; removed in #6, not gitignored) |
+| `node_modules/.../YGValue.h` — Yoga fix                    | ❌ NOT persisted — patch-package needed (see Part 1 §2)               |
 
 ### One remaining TODO before CI is fully reproducible
 
