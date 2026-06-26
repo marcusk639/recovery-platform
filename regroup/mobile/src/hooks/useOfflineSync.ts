@@ -19,7 +19,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { offlineQueue } from '../services/offlineQueue';
-import { useFlushOfflineQueue } from '../state/queries/activityQueries';
+import { useFlushOfflineQueue } from '../state/queries/useFlushOfflineQueue';
 
 // ---------------------------------------------------------------------------
 // NetInfo — loaded lazily so the module does not crash when the package is
@@ -112,7 +112,7 @@ export function useOfflineSync(): UseOfflineSyncResult {
       await new Promise<void>((resolve, reject) => {
         flushRef.current(undefined, {
           onSuccess: () => resolve(),
-          onError: (err) => reject(err),
+          onError: err => reject(err),
         });
       });
       // Refresh count again after flush completes so the badge is up to date.
