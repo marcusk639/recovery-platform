@@ -77,3 +77,34 @@ jobs:
         run: cd detox-recovery && npx tsc --noEmit
       - name: Test
         run: cd detox-recovery && npm test -- --passWithNoTests --forceExit
+
+  maestro-smoke:
+    name: Maestro Cloud — smoke tests
+    needs: [recovery-api, homegroups-functions, regroup-functions, detox-recovery]
+    runs-on: ubuntu-latest
+    # Only run on PRs to avoid burning Maestro Cloud credits on every push to main
+    if: github.event_name == 'pull_request' && secrets.MAESTRO_CLOUD_API_KEY != ''
+    steps:
+      - uses: actions/checkout@v4
+
+      # TODO: Add a build step (or download from a release artifact) that produces
+      # the .apk/.ipa before these steps run. Until then, set app-file to the
+      # artifact path and add MAESTRO_CLOUD_API_KEY as a GitHub Actions secret.
+
+      - name: Maestro smoke — regroup (login-and-view-dashboard)
+        continue-on-error: true
+        uses: mobile-dev-inc/action-maestro-cloud@v1
+        with:
+          api-key: ${{ secrets.MAESTRO_CLOUD_API_KEY }}
+          # TODO: replace with path to pre-built regroup .apk (or .ipa for iOS)
+          # app-file: regroup/mobile/build/app-release.apk
+          flow-file: e2e-maestro/regroup/login-and-view-dashboard.yaml
+
+      - name: Maestro smoke — homegroups (login-and-join-group)
+        continue-on-error: true
+        uses: mobile-dev-inc/action-maestro-cloud@v1
+        with:
+          api-key: ${{ secrets.MAESTRO_CLOUD_API_KEY }}
+          # TODO: replace with path to pre-built homegroups .apk (or .ipa for iOS)
+          # app-file: homegroups/mobile/build/app-release.apk
+          flow-file: e2e-maestro/homegroups/login-and-join-group.yaml
