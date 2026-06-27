@@ -1558,4 +1558,221 @@ describe('disputes/{disputeId} — house-scoped, houseId immutable (H-sec-2)', (
     );
     await assertSucceeds(deleteDoc(disputeRef(ctx)));
   });
+
+  // P1-2 identity pinning: guestId must match request.auth.uid for guest creates
+  test('DENY guest creating a dispute attributed to a different guestId', async () => {
+    const ctx = testEnv.authenticatedContext(
+      GUEST_UID,
+      authHouseGuest(GUEST_UID, HOUSE_ID),
+    );
+    await assertFails(
+      setDoc(disputeRef(ctx), { ...DISPUTE_DOC, guestId: OTHER_UID }),
+    );
+  });
+
+  test('ALLOW admin creating a dispute attributed to another resident', async () => {
+    const ctx = testEnv.authenticatedContext(
+      ADMIN_UID,
+      authHouseAdmin(ADMIN_UID, HOUSE_ID),
+    );
+    // Admin may file on behalf of any guestId — guestId != admin's UID
+    await assertSucceeds(
+      setDoc(disputeRef(ctx), { ...DISPUTE_DOC, guestId: OTHER_UID }),
+    );
+  });
+});
+
+// P1-2: complaint plaintiff identity pinning
+describe('complaints/{complaintId} — plaintiff identity pinning (P1-2)', () => {
+  test('DENY guest creating a complaint attributed to a different plaintiff', async () => {
+    const ctx = testEnv.authenticatedContext(
+      GUEST_UID,
+      authHouseGuest(GUEST_UID, HOUSE_ID),
+    );
+    await assertFails(
+      setDoc(complaintRef(ctx), { ...COMPLAINT_DOC, plaintiff: OTHER_UID }),
+    );
+  });
+
+  test('ALLOW admin creating a complaint with an anonymous plaintiff (empty string)', async () => {
+    const ctx = testEnv.authenticatedContext(
+      ADMIN_UID,
+      authHouseAdmin(ADMIN_UID, HOUSE_ID),
+    );
+    // Anonymous complaints are admin-only by construction (plaintiff == '')
+    await assertSucceeds(
+      setDoc(complaintRef(ctx), { ...COMPLAINT_DOC, plaintiff: '' }),
+    );
+  });
+
+  test('DENY guest creating an anonymous complaint (plaintiff empty — admin-only)', async () => {
+    const ctx = testEnv.authenticatedContext(
+      GUEST_UID,
+      authHouseGuest(GUEST_UID, HOUSE_ID),
+    );
+    await assertFails(
+      setDoc(complaintRef(ctx), { ...COMPLAINT_DOC, plaintiff: '' }),
+    );
+  });
+});
+
+// ===========================================================================
+// issues/{issueId} — house-scoped, houseId immutable (P1-2)
+// ===========================================================================
+//
+// The issues update rule previously used request.resource.data.houseId (the
+// new value) for membership checks without enforcing houseId immutability.
+// This would allow re-parenting an issue to a different house. The rule now
+// mirrors disputes/complaints: membership is checked against resource.data
+// (existing house) and houseId must not change.
+
+const ISSUE_ID = 'issue1';
+const ISSUE_DOC = {
+  id: ISSUE_ID,
+  type: 'MAINTENANCE',
+  description: 'Leaky faucet in bathroom',
+  emergency: false,
+  issuer: GUEST_UID,
+  resolver: '',
+  houseId: HOUSE_ID,
+  status: 'OPEN',
+};
+
+function issueRef(
+  ctx: ReturnType<RulesTestEnvironment['authenticatedContext']>,
+) {
+  return doc(ctx.firestore(), `issues/${ISSUE_ID}`);
+}
+
+async function seedIssue() {
+  await testEnv.withSecurityRulesDisabled(async ctx => {
+    await setDoc(doc(ctx.firestore(), `issues/${ISSUE_ID}`), ISSUE_DOC);
+  });
+}
+
+describe('issues/{issueId} — house-scoped, houseId immutable (P1-2)', () => {
+  describe('create', () => {
+    test('ALLOW guest of the house creating an issue', async () => {
+      const ctx = testEnv.authenticatedContext(
+        GUEST_UID,
+        authHouseGuest(GUEST_UID, HOUSE_ID),
+      );
+      await assertSucceeds(setDoc(issueRef(ctx), ISSUE_DOC));
+    });
+
+    test('ALLOW admin of the house creating an issue', async () => {
+      const ctx = testEnv.authenticatedContext(
+        ADMIN_UID,
+        authHouseAdmin(ADMIN_UID, HOUSE_ID),
+      );
+      await assertSucceeds(setDoc(issueRef(ctx), ISSUE_DOC));
+    });
+
+    test('DENY non-member creating an issue', async () => {
+      const ctx = testEnv.authenticatedContext(
+        OTHER_UID,
+        authUserOnly(OTHER_UID),
+      );
+      await assertFails(setDoc(issueRef(ctx), ISSUE_DOC));
+    });
+
+    test('DENY creating an issue scoped to a house the caller is not in', async () => {
+      const ctx = testEnv.authenticatedContext(
+        GUEST_UID,
+        authHouseGuest(GUEST_UID, HOUSE_ID),
+      );
+      await assertFails(
+        setDoc(issueRef(ctx), { ...ISSUE_DOC, houseId: HOUSE_ID_OTHER }),
+      );
+    });
+  });
+
+  describe('read', () => {
+    test('ALLOW guest reading an issue in their house', async () => {
+      await seedIssue();
+      const ctx = testEnv.authenticatedContext(
+        GUEST_UID,
+        authHouseGuest(GUEST_UID, HOUSE_ID),
+      );
+      await assertSucceeds(getDoc(issueRef(ctx)));
+    });
+
+    test('ALLOW admin reading an issue in their house', async () => {
+      await seedIssue();
+      const ctx = testEnv.authenticatedContext(
+        ADMIN_UID,
+        authHouseAdmin(ADMIN_UID, HOUSE_ID),
+      );
+      await assertSucceeds(getDoc(issueRef(ctx)));
+    });
+
+    test('DENY non-member reading an issue', async () => {
+      await seedIssue();
+      const ctx = testEnv.authenticatedContext(
+        OTHER_UID,
+        authUserOnly(OTHER_UID),
+      );
+      await assertFails(getDoc(issueRef(ctx)));
+    });
+  });
+
+  describe('update — houseId immutability', () => {
+    test('ALLOW guest updating an issue (houseId unchanged)', async () => {
+      await seedIssue();
+      const ctx = testEnv.authenticatedContext(
+        GUEST_UID,
+        authHouseGuest(GUEST_UID, HOUSE_ID),
+      );
+      await assertSucceeds(updateDoc(issueRef(ctx), { status: 'IN_PROGRESS' }));
+    });
+
+    test('ALLOW admin updating an issue (houseId unchanged)', async () => {
+      await seedIssue();
+      const ctx = testEnv.authenticatedContext(
+        ADMIN_UID,
+        authHouseAdmin(ADMIN_UID, HOUSE_ID),
+      );
+      await assertSucceeds(
+        updateDoc(issueRef(ctx), { status: 'RESOLVED', resolver: ADMIN_UID }),
+      );
+    });
+
+    test('DENY update that re-parents the issue to another house', async () => {
+      await seedIssue();
+      const ctx = testEnv.authenticatedContext(
+        ADMIN_UID,
+        authHouseAdmin(ADMIN_UID, HOUSE_ID),
+      );
+      await assertFails(updateDoc(issueRef(ctx), { houseId: HOUSE_ID_OTHER }));
+    });
+
+    test('DENY non-member updating an issue', async () => {
+      await seedIssue();
+      const ctx = testEnv.authenticatedContext(
+        OTHER_UID,
+        authUserOnly(OTHER_UID),
+      );
+      await assertFails(updateDoc(issueRef(ctx), { status: 'RESOLVED' }));
+    });
+  });
+
+  describe('delete', () => {
+    test('ALLOW admin deleting an issue', async () => {
+      await seedIssue();
+      const ctx = testEnv.authenticatedContext(
+        ADMIN_UID,
+        authHouseAdmin(ADMIN_UID, HOUSE_ID),
+      );
+      await assertSucceeds(deleteDoc(issueRef(ctx)));
+    });
+
+    test('DENY guest deleting an issue', async () => {
+      await seedIssue();
+      const ctx = testEnv.authenticatedContext(
+        GUEST_UID,
+        authHouseGuest(GUEST_UID, HOUSE_ID),
+      );
+      await assertFails(deleteDoc(issueRef(ctx)));
+    });
+  });
 });
