@@ -97,3 +97,66 @@ These rules apply to all products in the monorepo without exception.
 ## Gotchas
 
 - Ignore minified bundles and build artifacts (`**/public/`, `*.min.js`, `*-es5.js`, `*-es2015.js`, `lib/`, `dist/`, `build/`, `.next/`) when counting, searching, or reading source — they are regenerated on rebuild. `regroup/web/public/` alone holds ~1.15M lines of vendor bundles; real hand-written source platform-wide is ~380K lines.
+
+---
+
+## Model Tier Policy (80/15/5 Rule)
+
+### Tier A — Reasoning (5% of tasks) — Claude Opus / Sonnet full context
+
+Use ONLY for:
+
+- Cross-product architectural decisions affecting multiple modules
+- Security-critical code (auth, token handling, PII flows)
+- Complex bugs requiring deep multi-file causal reasoning
+- Final review of client-facing or legally sensitive output
+- Anything requiring genuine architectural judgment
+
+### Tier B — Planning (15% of tasks) — Claude Sonnet or OpenRouter Auto
+
+Use for:
+
+- Single-module feature implementation
+- Database schema changes and migrations
+- Code reviews of non-trivial PRs
+- Research synthesis and strategy document drafting
+- Debugging with a clear hypothesis
+
+### Tier C — Execution (80% of tasks) — OpenRouter DeepSeek V4 Flash or Haiku
+
+Use for:
+
+- Test stub generation and boilerplate
+- Repetitive file patches and linting fixes
+- Type annotation passes
+- Document reformatting and collateral variations
+- Firebase function scaffolding from established patterns
+- Content calendar generation, email drafts, standard templates
+
+### Anti-pattern guard
+
+NEVER use Tier A for tasks completable by Tier C.
+When in doubt, start at Tier C and escalate if output quality is insufficient.
+
+## Recovery Platform Tier Calibration
+
+Tier A tasks in this repo:
+
+- Cross-product integration changes (recovery-api ↔ homegroups/regroup)
+- Firebase security rules changes (affects all users)
+- Stripe webhook and payment logic
+- Redux state architecture changes in mobile apps
+
+Tier B tasks:
+
+- Single-product feature implementation
+- Firestore query optimization
+- React/RN component implementation from defined spec
+
+Tier C tasks:
+
+- Firebase function boilerplate (copy established pattern from existing function)
+- Jest test stubs for new service functions
+- Maestro flow generation for new screens (copy from e2e-maestro/ patterns)
+- Angular/React component props updates
+- Package.json script additions
