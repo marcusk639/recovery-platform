@@ -32,7 +32,10 @@ jest.mock('../../../firebase-setup', () => ({
   functions: { httpsCallable: jest.fn() },
   auth: {
     currentUser: null,
-    onAuthStateChanged: jest.fn((cb: any) => { cb(null); return jest.fn(); }),
+    onAuthStateChanged: jest.fn((cb: any) => {
+      cb(null);
+      return jest.fn();
+    }),
   },
 }));
 
@@ -58,13 +61,27 @@ jest.mock('@react-native-firebase/auth', () => {
 jest.mock('@react-native-firebase/messaging', () => ({
   __esModule: true,
   default: () => ({
-    get requestPermission() { return (global as any).__splashTestRequestPermission; },
-    get getToken() { return (global as any).__splashTestGetToken; },
-    get onMessage() { return (global as any).__splashTestOnMessage; },
-    get onNotificationOpenedApp() { return jest.fn(() => jest.fn()); },
-    get getInitialNotification() { return jest.fn().mockResolvedValue(null); },
-    get setBackgroundMessageHandler() { return (global as any).__splashTestSetBGHandler; },
-    get onTokenRefresh() { return (global as any).__splashTestOnTokenRefresh; },
+    get requestPermission() {
+      return (global as any).__splashTestRequestPermission;
+    },
+    get getToken() {
+      return (global as any).__splashTestGetToken;
+    },
+    get onMessage() {
+      return (global as any).__splashTestOnMessage;
+    },
+    get onNotificationOpenedApp() {
+      return jest.fn(() => jest.fn());
+    },
+    get getInitialNotification() {
+      return jest.fn().mockResolvedValue(null);
+    },
+    get setBackgroundMessageHandler() {
+      return (global as any).__splashTestSetBGHandler;
+    },
+    get onTokenRefresh() {
+      return (global as any).__splashTestOnTokenRefresh;
+    },
   }),
 }));
 
@@ -76,10 +93,18 @@ jest.mock('@react-native-firebase/firestore', () => ({
 
 // ─── Native deep links mock ───────────────────────────────────────────────────
 jest.mock('../../../services/native-deep-links', () => ({
-  get getInitialLink() { return (global as any).__splashTestGetInitialLink; },
-  get onLink() { return (global as any).__splashTestOnLink; },
-  get getLinkType() { return (global as any).__splashTestGetLinkType; },
-  get createInvitationFromLink() { return (global as any).__splashTestCreateInvitationFromLink; },
+  get getInitialLink() {
+    return (global as any).__splashTestGetInitialLink;
+  },
+  get onLink() {
+    return (global as any).__splashTestOnLink;
+  },
+  get getLinkType() {
+    return (global as any).__splashTestGetLinkType;
+  },
+  get createInvitationFromLink() {
+    return (global as any).__splashTestCreateInvitationFromLink;
+  },
 }));
 
 // ─── Linking mock ─────────────────────────────────────────────────────────────
@@ -116,8 +141,12 @@ jest.mock('../../../util/simple-debug-logger', () => ({
   logWarn: jest.fn(),
   logInfo: jest.fn(),
   simpleDebugLogger: {
-    info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(),
-    getLogs: jest.fn(() => []), clearLogs: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    getLogs: jest.fn(() => []),
+    clearLogs: jest.fn(),
   },
 }));
 
@@ -153,7 +182,9 @@ jest.mock('../../../components/rats-logo', () => ({
   },
   RatsLogoHorizontal: () => {
     const { View } = require('react-native');
-    return require('react').createElement(View, { testID: 'rats-logo-horizontal' });
+    return require('react').createElement(View, {
+      testID: 'rats-logo-horizontal',
+    });
   },
 }));
 
@@ -165,10 +196,18 @@ jest.mock('../../../components/DeepLinkTester', () => ({
 // Full mock of the userSlice module prevents transitive imports from loading
 // the real service layer (which would fail due to missing native modules).
 jest.mock('../../../state/slices/userSlice', () => ({
-  get autoLogin() { return (global as any).__splashTestAutoLogin; },
-  get anonymouslyLogin() { return (global as any).__splashTestAnonLogin; },
-  get loginFailedAction() { return (global as any).__splashTestLoginFailed; },
-  get initializeInvitation() { return (global as any).__splashTestInitInvitation; },
+  get autoLogin() {
+    return (global as any).__splashTestAutoLogin;
+  },
+  get anonymouslyLogin() {
+    return (global as any).__splashTestAnonLogin;
+  },
+  get loginFailedAction() {
+    return (global as any).__splashTestLoginFailed;
+  },
+  get initializeInvitation() {
+    return (global as any).__splashTestInitInvitation;
+  },
 }));
 
 // ─── Redux store mock (useAppSelector / useAppDispatch) ───────────────────────
@@ -217,7 +256,8 @@ const mockDispatch = jest.fn();
 (global as any).__splashTestGetInitialLink = mockGetInitialLink;
 (global as any).__splashTestOnLink = mockOnLink;
 (global as any).__splashTestGetLinkType = mockGetLinkType;
-(global as any).__splashTestCreateInvitationFromLink = mockCreateInvitationFromLink;
+(global as any).__splashTestCreateInvitationFromLink =
+  mockCreateInvitationFromLink;
 (global as any).__splashTestAutoLogin = mockAutoLogin;
 (global as any).__splashTestAnonLogin = mockAnonLogin;
 (global as any).__splashTestLoginFailed = mockLoginFailed;
@@ -265,7 +305,11 @@ const SplashHOC = withSplash(WrappedContent);
 
 function renderSplash(userState: Partial<typeof baseUserState> = {}) {
   (global as any).__splashTestUserState = { ...baseUserState, ...userState };
-  const mockNavigation = { navigate: jest.fn(), goBack: jest.fn(), reset: jest.fn() };
+  const mockNavigation = {
+    navigate: jest.fn(),
+    goBack: jest.fn(),
+    reset: jest.fn(),
+  };
   const utils = render(<SplashHOC navigation={mockNavigation as any} />);
   return { mockNavigation, ...utils };
 }
@@ -287,7 +331,8 @@ describe('Splash (withSplash HOC)', () => {
     (global as any).__splashTestGetInitialLink = mockGetInitialLink;
     (global as any).__splashTestOnLink = mockOnLink;
     (global as any).__splashTestGetLinkType = mockGetLinkType;
-    (global as any).__splashTestCreateInvitationFromLink = mockCreateInvitationFromLink;
+    (global as any).__splashTestCreateInvitationFromLink =
+      mockCreateInvitationFromLink;
     (global as any).__splashTestAutoLogin = mockAutoLogin;
     (global as any).__splashTestAnonLogin = mockAnonLogin;
     (global as any).__splashTestLoginFailed = mockLoginFailed;
@@ -366,11 +411,31 @@ describe('Splash (withSplash HOC)', () => {
     it('shows wrapped component when an invitation is present (no user required)', async () => {
       const { getByTestId } = renderSplash({
         invitation: {
-          id: 'inv-1', type: 'guest', houseId: 'h1',
-          inviterId: '', ownerId: '', email: 'g@e.com',
-          initialPhase: 'Basic', expirationDate: new Date(),
-          createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+          id: 'inv-1',
+          type: 'guest',
+          houseId: 'h1',
+          inviterId: '',
+          ownerId: '',
+          email: 'g@e.com',
+          initialPhase: 'Basic',
+          expirationDate: new Date(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         },
+      });
+      await act(async () => {});
+      expect(getByTestId('wrapped-component')).toBeTruthy();
+    });
+
+    it('shows wrapped component once auth resolves to no-user (loginFailed) so a no-account user reaches the landing screen', async () => {
+      // A prospective resident with no account must not be trapped on the
+      // splash screen waiting for a background anonymous login. Once auth has
+      // resolved to "no user" (loginFailed), the app is ready and renders the
+      // unauthenticated stack (landing → browse).
+      const { getByTestId } = renderSplash({
+        user: null,
+        invitation: null,
+        loginFailed: true,
       });
       await act(async () => {});
       expect(getByTestId('wrapped-component')).toBeTruthy();
@@ -423,10 +488,16 @@ describe('Splash (withSplash HOC)', () => {
     it('skips initial deep link check when invitation already exists in state', async () => {
       renderSplash({
         invitation: {
-          id: 'inv-1', type: 'guest', houseId: 'h1',
-          inviterId: '', ownerId: '', email: 'g@e.com',
-          initialPhase: 'Basic', expirationDate: new Date(),
-          createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+          id: 'inv-1',
+          type: 'guest',
+          houseId: 'h1',
+          inviterId: '',
+          ownerId: '',
+          email: 'g@e.com',
+          initialPhase: 'Basic',
+          expirationDate: new Date(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         },
       });
       await act(async () => {});
@@ -434,14 +505,22 @@ describe('Splash (withSplash HOC)', () => {
     });
 
     it('dispatches initializeInvitation when initial link has invitation type', async () => {
-      const invitationLink = { url: 'regroup-app://?type=invitation&house=h1&email=a@b.com' };
+      const invitationLink = {
+        url: 'regroup-app://?type=invitation&house=h1&email=a@b.com',
+      };
       mockGetInitialLink.mockResolvedValueOnce(invitationLink);
       mockGetLinkType.mockReturnValueOnce('invitation');
       const invPayload = {
-        id: '', type: 'guest', houseId: 'h1',
-        inviterId: '', ownerId: '', email: 'a@b.com',
-        initialPhase: '', expirationDate: new Date(),
-        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        id: '',
+        type: 'guest',
+        houseId: 'h1',
+        inviterId: '',
+        ownerId: '',
+        email: 'a@b.com',
+        initialPhase: '',
+        expirationDate: new Date(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
       mockCreateInvitationFromLink.mockReturnValueOnce(invPayload);
 
@@ -467,7 +546,9 @@ describe('Splash (withSplash HOC)', () => {
 
       const { unmount } = renderSplash();
       await act(async () => {});
-      act(() => { unmount(); });
+      act(() => {
+        unmount();
+      });
 
       expect(mockUnsubscribeAuth).toHaveBeenCalledTimes(1);
     });
@@ -478,7 +559,9 @@ describe('Splash (withSplash HOC)', () => {
 
       const { unmount } = renderSplash();
       await act(async () => {});
-      act(() => { unmount(); });
+      act(() => {
+        unmount();
+      });
 
       expect(linkUnsub).toHaveBeenCalledTimes(1);
     });

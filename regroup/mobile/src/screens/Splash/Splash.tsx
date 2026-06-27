@@ -192,7 +192,12 @@ export const withSplash = <P extends object>(
       const user = userState.user;
       const invitation = userState.invitation;
 
-      if (user || invitation) {
+      // Ready once auth state has RESOLVED: a real user, a pending invitation,
+      // OR a confirmed no-user (loginFailed). Anonymous login still runs in the
+      // background, but the unauthenticated landing/browse experience must not
+      // be gated behind it — otherwise any anon-login hiccup traps the user on
+      // the splash screen with no recourse.
+      if (user || invitation || userState.loginFailed) {
         return true;
       } else {
         return false;
