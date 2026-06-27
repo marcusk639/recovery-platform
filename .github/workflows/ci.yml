@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  recovery-api:
+    name: recovery-api — typecheck + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: recovery-api/package-lock.json
+      - name: Install dependencies
+        run: cd recovery-api && npm ci
+      - name: Typecheck
+        run: cd recovery-api && npx tsc --noEmit
+      - name: Test
+        run: cd recovery-api && npm test -- --passWithNoTests --forceExit
+
+  homegroups-functions:
+    name: homegroups/functions — typecheck + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: homegroups/functions/package-lock.json
+      - name: Install dependencies
+        run: cd homegroups/functions && npm ci
+      - name: Typecheck
+        run: cd homegroups/functions && npx tsc --noEmit
+      - name: Test
+        run: cd homegroups/functions && npm test -- --passWithNoTests --forceExit
+
+  regroup-functions:
+    name: regroup/functions — typecheck + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: regroup/functions/package-lock.json
+      - name: Install dependencies
+        run: cd regroup/functions && npm ci
+      - name: Typecheck
+        run: cd regroup/functions && npx tsc --noEmit
+      - name: Test
+        run: cd regroup/functions && npm test -- --passWithNoTests --forceExit
+
+  detox-recovery:
+    name: detox-recovery — typecheck + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: detox-recovery/package-lock.json
+      - name: Install dependencies
+        run: cd detox-recovery && npm ci
+      - name: Typecheck
+        run: cd detox-recovery && npx tsc --noEmit
+      - name: Test
+        run: cd detox-recovery && npm test -- --passWithNoTests --forceExit
