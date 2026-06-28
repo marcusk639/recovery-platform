@@ -24,7 +24,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 EMU_DIR="${REPO_ROOT}/regroup/mobile/firebase" # firebase.json here defines storage:9199
 SEED="${REPO_ROOT}/regroup/mobile/maestro/scripts/reset-and-seed.sh"
 UI_URL="http://127.0.0.1:4000"
-PROJECT="demo-rats"
+PROJECT="phoenix-cleanhouse"
 
 # firebase-tools >= 15 requires JDK 21+. The system default may be older, so
 # select a 21+ runtime for this process if needed (prefer the Homebrew keg).
