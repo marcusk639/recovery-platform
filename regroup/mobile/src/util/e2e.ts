@@ -16,10 +16,3 @@ const e2eFlag = Platform.OS === 'ios' ? Settings.get('IS_E2E_TEST') : undefined;
 
 export const IS_E2E_TEST: boolean =
   __DEV__ && (e2eFlag === true || e2eFlag === 1 || e2eFlag === '1');
-
-// TEMP DIAGNOSTIC — remove after verifying E2E flag wiring.
-console.log(
-  `[E2E-DIAG] platform=${Platform.OS} rawFlag=${JSON.stringify(
-    e2eFlag,
-  )} type=${typeof e2eFlag} __DEV__=${__DEV__} IS_E2E_TEST=${IS_E2E_TEST}`,
-);

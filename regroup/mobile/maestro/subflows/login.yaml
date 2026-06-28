@@ -37,9 +37,13 @@ appId: ${APP_ID}
 - tapOn:
     id: "email-input"
 - inputText: ${EMAIL}
+# Dismiss the keyboard so the layout settles before tapping the password field.
+# Without this, the tap on password-input races the keyboard/scroll and fails to
+# focus the field, so inputText lands nowhere and login submits empty.
+- hideKeyboard
 # Tap by testID — RatsTextInput forwards testID to the inner native TextInput
-# (accessibilityIdentifier on iOS). The outer gesture-handler TouchableOpacity is
-# accessible={false} when it has no onPress, so it does not intercept the tap.
+# (accessibilityIdentifier on iOS). Under E2E the field is non-secure
+# (secureTextEntry gated on IS_E2E_TEST) so Maestro can type into it.
 - tapOn:
     id: "password-input"
 - inputText: ${PASSWORD}

@@ -72,14 +72,17 @@ const LoginForm = withFormik<
     { props, setStatus, setSubmitting, setFieldValue },
   ) => {
     const { email, password } = values;
-    const { login: loginAction, setEmail, dispatch } = props as any;
+    const { login: loginAction, setEmail } = props as any;
     setStatus({});
     setSubmitting(true);
     try {
-      // RTK login returns a promise that resolves with the payload
-      const result = await dispatch(
-        loginAction({ email: email.toLowerCase(), password }),
-      ).unwrap();
+      // `loginAction` (props.login) already dispatches the RTK thunk and returns
+      // its promise — do NOT wrap it in another dispatch() (that dispatches a
+      // Promise, which redux rejects with "Actions must be plain objects").
+      const result = await loginAction({
+        email: email.toLowerCase(),
+        password,
+      }).unwrap();
       const user = result.user;
       // Log a non-PII role signal only — never the email. Firebase Analytics
       // retains custom params in BigQuery exports; email as a param creates
