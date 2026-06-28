@@ -35,8 +35,17 @@ interface NetInfoLike {
 
 function tryGetNetInfo(): NetInfoLike | null {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const mod = require('@react-native-community/netinfo');
+    // @react-native-community/netinfo is intentionally NOT installed. A require
+    // that Metro can statically analyze (a literal, or even a `const` bound to a
+    // string — Metro constant-folds those) registers an unresolvable dependency
+    // slot, which Metro drops from this module's dependency map and shifts every
+    // sibling import after it. That made `useFlushOfflineQueue` (imported below)
+    // resolve to the wrong module at runtime ("useFlushOfflineQueue is not a
+    // function"). Aliasing `require` to a value hides the call from Metro's
+    // static collector entirely, so the dependency map stays intact. At runtime
+    // the aliased require throws for the unbundled module and is caught here.
+    const dynamicRequire = require as (name: string) => unknown;
+    const mod: any = dynamicRequire('@react-native-community/netinfo');
     const impl = mod?.default ?? mod;
     if (impl && typeof impl.addEventListener === 'function') {
       return impl as NetInfoLike;
