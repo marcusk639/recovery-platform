@@ -173,10 +173,12 @@ describe('getComplianceTrend', () => {
   it('computes chore and meeting rates from returned Firestore docs', async () => {
     const { __mockGet } = require('../../../firebase-setup');
 
-    // Simulate one doc returned: choresCompleted=2, meetingsAttended=3
+    // Simulate one doc returned: choresCompleted=2, meetingsAttended=3.
+    // startDate must fall in the week the service computes for weeksBack=1
+    // relative to "now" — derive it dynamically so the test can't go stale.
     const doc1 = makeWeekSummary({
       guestId: 'g1',
-      startDate: '2026-05-17',
+      startDate: getSundayAnchoredWeekStart(new Date()),
       stats: {
         choresCompleted: 2,
         meetingsAttended: 3,

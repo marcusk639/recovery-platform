@@ -52,6 +52,9 @@ const guestsSlice = createSlice({
         state.guests[action.payload.id] = action.payload;
       }
     },
+    setUserAsGuest: (state, action: PayloadAction<Guest | null>) => {
+      state.userAsGuest = action.payload;
+    },
     cacheGuests: (state, action: PayloadAction<{ [id: string]: Guest }>) => {
       state.guests = { ...state.guests, ...action.payload };
     },
@@ -77,6 +80,7 @@ const guestsSlice = createSlice({
 export const {
   selectGuest,
   selectGuestById,
+  setUserAsGuest,
   updateSelectedGuest,
   cacheGuests,
   cacheGuest,

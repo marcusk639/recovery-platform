@@ -31,10 +31,11 @@
     "maestro:android": "maestro test -e APP_ID=com.regroup.app maestro/flows/",
     "maestro:smoke:ios": "maestro test -e APP_ID=com.rats.dev maestro/flows/smoke.yaml",
     "maestro:smoke:android": "maestro test -e APP_ID=com.regroup.app maestro/flows/smoke.yaml",
+    "maestro:suite:ios": "maestro test -e APP_ID=com.rats.dev maestro/flows/run-all.yaml",
     "uninstall": "rm -rf node_modules",
     "pod:install": "cd ios && pod install && cd ..",
     "fresh-install": "rm -rf $TMPDIR/react-* && watchman watch-del-all && rm -rf ios/build/ModuleCache/* && rm -rf node_modules/ && npm cache clean --force && npm install",
-    "postinstall": "react-native setup-ios-permissions && pod-install"
+    "postinstall": "patch-package && react-native setup-ios-permissions && pod-install"
   },
   "dependencies": {
     "@callstack/react-theme-provider": "^3.0.8",
@@ -64,7 +65,7 @@
     "@react-navigation/stack": "^7.1.2",
     "@reduxjs/toolkit": "^2.8.2",
     "@sentry/react-native": "^7.12.0",
-    "@stripe/stripe-react-native": "^0.59.0",
+    "@stripe/stripe-react-native": "^0.67.0",
     "@tanstack/react-query": "^5.90.20",
     "@tanstack/react-query-devtools": "^5.91.3",
     "@types/react-native-push-notification": "^8.1.1",
@@ -143,6 +144,7 @@
     "firebase-admin": "^13.6.0",
     "jest": "^29.2.1",
     "metro-react-native-babel-preset": "0.76.5",
+    "patch-package": "^8.0.1",
     "pod-install": "0.1.38",
     "prettier": "^2.4.1",
     "react-test-renderer": "18.2.0",

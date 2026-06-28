@@ -21,6 +21,16 @@ const STRIPE_TEST_PRODUCT_ID_INTERGROUP_A_ENV =
 const STRIPE_TEST_PRODUCT_ID_INTERGROUP_B_ENV =
   "STRIPE_TEST_PRODUCT_ID_INTERGROUP_B";
 
+// Direct price ID env vars — preferred fallback for getDefaultPriceForProduct.
+// Set these to skip the Stripe API round-trip and avoid a throw when a product
+// has no default_price configured in the Stripe dashboard.
+const STRIPE_PRICE_ID_GROUP_ENV = "STRIPE_PRICE_ID_GROUP";
+const STRIPE_TEST_PRICE_ID_GROUP_ENV = "STRIPE_TEST_PRICE_ID_GROUP";
+const STRIPE_PRICE_ID_INTERGROUP_A_ENV = "STRIPE_PRICE_ID_INTERGROUP_A";
+const STRIPE_TEST_PRICE_ID_INTERGROUP_A_ENV = "STRIPE_TEST_PRICE_ID_INTERGROUP_A";
+const STRIPE_PRICE_ID_INTERGROUP_B_ENV = "STRIPE_PRICE_ID_INTERGROUP_B";
+const STRIPE_TEST_PRICE_ID_INTERGROUP_B_ENV = "STRIPE_TEST_PRICE_ID_INTERGROUP_B";
+
 // Determine if we're in test mode (use test keys if test secret key is set)
 const isTestMode = !!process.env[STRIPE_TEST_SECRET_KEY_ENV];
 
@@ -157,6 +167,36 @@ export class NonRetriableError extends Error {
 export async function getDefaultPriceForProduct(
   productId: string,
 ): Promise<string> {
+  // Check direct env-var price IDs first — avoids a Stripe API round-trip and
+  // works even when the Stripe product has no default_price configured in the
+  // dashboard. Operators set STRIPE_PRICE_ID_GROUP / _INTERGROUP_A / _B.
+  const directPriceMap: Record<string, string | undefined> = {
+    ...(productIdGroup
+      ? {
+          [productIdGroup]: isTestMode
+            ? process.env[STRIPE_TEST_PRICE_ID_GROUP_ENV]
+            : process.env[STRIPE_PRICE_ID_GROUP_ENV],
+        }
+      : {}),
+    ...(productIdIntergroupA
+      ? {
+          [productIdIntergroupA]: isTestMode
+            ? process.env[STRIPE_TEST_PRICE_ID_INTERGROUP_A_ENV]
+            : process.env[STRIPE_PRICE_ID_INTERGROUP_A_ENV],
+        }
+      : {}),
+    ...(productIdIntergroupB
+      ? {
+          [productIdIntergroupB]: isTestMode
+            ? process.env[STRIPE_TEST_PRICE_ID_INTERGROUP_B_ENV]
+            : process.env[STRIPE_PRICE_ID_INTERGROUP_B_ENV],
+        }
+      : {}),
+  };
+  const directPriceId = directPriceMap[productId];
+  if (directPriceId) return directPriceId;
+
+  // Fall back to retrieving default_price from the Stripe product object.
   try {
     const product = await stripe.products.retrieve(productId);
     const defaultPriceId =

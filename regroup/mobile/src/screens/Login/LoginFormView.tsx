@@ -21,6 +21,7 @@ const LoginFormView: React.FC<
   LoginProps & FormikProps<LoginFormValues>
 > = props => {
   const { isSubmitting, handleSubmit, setModalVisible } = props;
+  const passwordRef = React.useRef<any>(null);
 
   return (
     <View style={[styles.loginForm, { alignSelf: 'center' }]}>
@@ -31,6 +32,8 @@ const LoginFormView: React.FC<
         disabled={isSubmitting}
         styleType="secondary"
         autoCapitalize="none"
+        returnKeyType="next"
+        onSubmitEditing={() => passwordRef.current?.focus()}
       />
       <Field
         component={RatsTextInput}
@@ -41,6 +44,9 @@ const LoginFormView: React.FC<
         disabled={isSubmitting}
         autoCapitalize="none"
         secureTextEntry
+        setRef={(ref: any) => {
+          passwordRef.current = ref;
+        }}
         lowerContent={
           <TouchableOpacity
             testID="forgot-password-link"

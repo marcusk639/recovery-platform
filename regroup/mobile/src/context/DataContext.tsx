@@ -13,7 +13,7 @@ import { Guest } from '../entities/Guest';
 import Admin from '../entities/Admin';
 import { User } from '../entities/User';
 import { selectHouseById } from '../state/slices/housesSlice';
-import { selectGuestById } from '../state/slices/guestsSlice';
+import { selectGuestById, setUserAsGuest } from '../state/slices/guestsSlice';
 import { houseKeys } from '../state/queries/houseQueries';
 import { guestKeys } from '../state/queries/guestQueries';
 import { adminKeys } from '../state/queries/adminQueries';
@@ -157,6 +157,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
                 );
                 if (userAsGuest) {
                   dispatch(selectGuestById(userAsGuest.id));
+                  dispatch(setUserAsGuest(userAsGuest));
                 }
               }
             }
@@ -165,7 +166,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
 
         // Guest users: house + guest can also load in parallel
         if (currentUser.isGuest && currentUser.houseId) {
-          await Promise.all([
+          const [, fetchedGuest] = await Promise.all([
             queryClient.fetchQuery({
               queryKey: houseKeys.detail(currentUser.houseId),
               queryFn: () => houseService.getHouse(currentUser.houseId!),
@@ -182,6 +183,9 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
           dispatch(selectHouseById(currentUser.houseId));
           if (currentUser.guestId) {
             dispatch(selectGuestById(currentUser.guestId));
+            if (fetchedGuest) {
+              dispatch(setUserAsGuest(fetchedGuest as Guest));
+            }
           }
         }
       } catch (error) {

@@ -1,0 +1,19 @@
+# maestro/flows/run-all.yaml
+appId: ${APP_ID}
+tags:
+  - suite
+---
+- runFlow: smoke.yaml
+- runFlow: signup.yaml
+- runFlow: guest-home.yaml
+- runFlow: guest-log-chore.yaml
+- runFlow: guest-activity-dispute.yaml
+- runFlow: guest-payment-history.yaml
+- runFlow: guest-rent-payment.yaml
+- runFlow: operator-setup-wizard.yaml
+- runFlow: operator-applications.yaml
+- runFlow: operator-manage-guests.yaml
+- runFlow: operator-house-settings.yaml
+- runFlow: operator-disputes.yaml
+- runFlow: oxford-dashboard.yaml
+- runFlow: oxford-onboarding.yaml

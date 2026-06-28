@@ -31,7 +31,9 @@ jest.mock('../../services/offlineQueue', () => ({
 // Mock: useFlushOfflineQueue
 // ---------------------------------------------------------------------------
 const mockMutate = jest.fn();
-jest.mock('../../state/queries/activityQueries', () => ({
+// useOfflineSync imports the hook from the extracted leaf module (see 6e0d615),
+// so the mock must target that path — not activityQueries, which only re-exports it.
+jest.mock('../../state/queries/useFlushOfflineQueue', () => ({
   useFlushOfflineQueue: () => ({
     mutate: mockMutate,
   }),
@@ -148,7 +150,11 @@ describe('useOfflineSync', () => {
     });
 
     it('sets pendingCount to the actual queue size', async () => {
-      mockGetPending.mockResolvedValueOnce([{ id: 'a' }, { id: 'b' }, { id: 'c' }]);
+      mockGetPending.mockResolvedValueOnce([
+        { id: 'a' },
+        { id: 'b' },
+        { id: 'c' },
+      ]);
 
       const { result } = renderHook(() => useOfflineSync());
 

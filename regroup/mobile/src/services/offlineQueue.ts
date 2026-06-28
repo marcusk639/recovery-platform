@@ -51,8 +51,14 @@ type AsyncStorageLike = {
 
 function tryGetAsyncStorage(): AsyncStorageLike | null {
   try {
+    // Hide from Metro's static require collector. A string-literal require of a
+    // non-installed package registers an unresolvable slot in the dependency map,
+    // producing require(undefined) at runtime which crashes even inside try/catch
+    // (same issue fixed in useOfflineSync.ts for @react-native-community/netinfo).
+    // Aliasing `require` prevents Metro from registering the dependency slot.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const mod = require('@react-native-async-storage/async-storage');
+    const dynamicRequire = require as (name: string) => unknown;
+    const mod: any = dynamicRequire('@react-native-async-storage/async-storage');
     const impl = mod?.default ?? mod;
     if (impl && typeof impl.getItem === 'function' && typeof impl.setItem === 'function') {
       return impl as AsyncStorageLike;

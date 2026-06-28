@@ -14,9 +14,7 @@ import {
   ActivityData,
   ActivityStatus,
 } from '../../entities/ActivityModel';
-import { WeekSummary } from '../../entities/WeekSummary';
 import * as activityService from '../../services/activity';
-import { offlineQueue } from '../../services/offlineQueue';
 import {
   checkPhaseCompliance,
   ComplianceResult,
@@ -462,33 +460,7 @@ export const useComplianceCheck = (
   };
 };
 
-/**
- * Flush the offline activity queue.
- *
- * Call when the app regains connectivity. Syncs all queued activities to
- * Firestore and invalidates caches so the UI reflects newly synced data.
- * Items that exceed the retry limit are silently dropped (dead-letter behaviour
- * is handled inside ActivityOfflineQueue.flush()).
- */
-export const useFlushOfflineQueue = () => {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: () =>
-      offlineQueue.flush(async item => {
-        await activityService.logActivity(
-          item.guestId,
-          item.houseId,
-          item.type,
-          item.data,
-          item.loggedBy,
-          item.timestamp,
-        );
-      }),
-
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: activityKeys.newActivities() });
-      queryClient.invalidateQueries({ queryKey: activityKeys.weekSummaries() });
-    },
-  });
-};
+// Moved to its own file to break the DataContext ↔ activityQueries init cycle.
+// useOfflineSync (called inside DataContext) now imports from there directly,
+// avoiding the circular chain that left useFlushOfflineQueue undefined on first load.
+export { useFlushOfflineQueue } from './useFlushOfflineQueue';

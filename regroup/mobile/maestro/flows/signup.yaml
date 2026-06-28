@@ -2,6 +2,9 @@
 # Unauthenticated. Creates a new account via the landing -> login -> signup path.
 # Emulator is reset by reset-and-seed.sh before each run, so the email is free.
 # Run: maestro test -e APP_ID=com.rats.dev maestro/flows/signup.yaml
+#
+# NOTE: Inputs are inside KeyboardAwareScrollView which does not expose testIDs
+# to the iOS accessibility tree. Use text-label selectors for form fields.
 appId: ${APP_ID}
 tags:
   - auth
@@ -26,15 +29,20 @@ tags:
     visible:
       id: "signup-screen"
     timeout: 15000
-# Fill the signup form (tap the next field to dismiss the keyboard — never hideKeyboard).
+- extendedWaitUntil:
+    visible:
+      text: "Let's Get Started"
+    timeout: 10000
+# Fill the signup form by label text (testIDs not accessible inside KeyboardAwareScrollView on iOS).
+# Tap the next field to dismiss the keyboard — never hideKeyboard.
 - tapOn:
-    id: "signup-email-input"
+    text: "Email"
 - inputText: "e2e-signup@rats-e2e.com"
 - tapOn:
-    id: "signup-password-input"
+    text: "Password"
 - inputText: "TestPassword123!"
 - tapOn:
-    id: "signup-button"
+    text: "SIGN UP"
 # Guest/admin signup routes to NewAccount; manager routes to OrgSetup. Accept either.
 - extendedWaitUntil:
     visible:

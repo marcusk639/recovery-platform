@@ -2,27 +2,25 @@
  * Firebase Emulator Configuration for E2E Testing
  *
  * This configures Firebase to use local emulators instead of production
- * when running E2E tests with Detox.
+ * when running E2E tests (Maestro / Detox). In __DEV__ builds the emulator
+ * connection is always attempted; if emulators aren't running the try/catch
+ * silences the failure and Firebase falls back to production.
  */
 
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
-import { Settings } from 'react-native';
 
 // Use 127.0.0.1 instead of localhost to avoid IPv6 connection issues
 const EMULATOR_HOST = '127.0.0.1';
 
 export const connectToEmulators = () => {
-  // Check if we're in E2E test mode via launch arg set by Detox
-  const isE2ETest = __DEV__ && Settings.get('IS_E2E_TEST') === '1';
-
-  if (!isE2ETest) {
-    console.log('[Firebase] Not in E2E mode, using production Firebase');
+  // In non-dev builds, never connect to emulators.
+  if (!__DEV__) {
     return false;
   }
 
-  console.log('[Firebase] E2E mode detected - connecting to emulators');
+  console.log('[Firebase] DEV mode — connecting to local emulators');
 
   try {
     // Connect Auth to emulator
