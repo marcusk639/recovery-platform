@@ -26,24 +26,25 @@
 
 ## Current State Audit
 
-| #   | Item                                     | Status                                                                                                                                             |
-| --- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | CFBundleDisplayName                      | ✅ "Regroup"                                                                                                                                       |
-| 2   | iOS deployment target                    | ✅ 13.0 (Podfile) / 12.0 (fallback)                                                                                                                |
-| 3   | Fastlane metadata files                  | ✅ name, subtitle, description, keywords, privacy_url present                                                                                      |
-| 4   | Privacy usage strings                    | ✅ mention "Regroup", but motion description is vague                                                                                              |
-| 5   | MARKETING_VERSION                        | ⚠️ `1.52` — should be `1.0.0` for v1 launch                                                                                                        |
-| 6   | CURRENT_PROJECT_VERSION (build)          | ⚠️ `1` — must be incremented for each TestFlight upload                                                                                            |
-| 7   | Code signing for distribution            | 🚨 Set to "Apple Development" + empty provisioning profile — blocks archive                                                                        |
-| 8   | iOS screenshots                          | 🚨 Directory empty — App Store requires ≥3 screenshots                                                                                             |
-| 9   | Fastlane gem missing                     | 🚨 `Gemfile` only has `cocoapods`; `deliver`/`pilot` won't run                                                                                     |
-| 10  | ExportOptions.plist                      | 🚨 Missing — required for `xcodebuild -exportArchive`                                                                                              |
-| 11  | Firestore emulator seeding               | 🚨 `--project demo-rats` vs seed's `phoenix-cleanhouse` → login fails                                                                              |
-| 12  | Password field Maestro tap               | 🚨 `tapOn: text: "Password"` hits label, not TextInput → E2E login stuck                                                                           |
-| 13  | Privacy manifest (PrivacyInfo.xcprivacy) | ⚠️ May be required for Firebase/React Native SDKs on iOS 17+                                                                                       |
-| 14  | Location "Always" permission             | ⚠️ `NSLocationAlwaysAndWhenInUseUsageDescription` risks App Store rejection if not needed                                                          |
-| 15  | Release notes                            | ⚠️ "First release." — needs more content                                                                                                           |
-| 16  | Debug bundle ID                          | ⚠️ Xcode Debug uses generic template ID (`org.reactjs.native.example…`); Release uses `com.rats.dev` — verify the right config is used for archive |
+| #   | Item                                     | Status                                                                                                                                                                                                      |
+| --- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | CFBundleDisplayName                      | ✅ "Regroup"                                                                                                                                                                                                |
+| 2   | iOS deployment target                    | ✅ 13.0 (Podfile) / 12.0 (fallback)                                                                                                                                                                         |
+| 3   | Fastlane metadata files                  | ✅ name, subtitle, description, keywords, privacy_url present                                                                                                                                               |
+| 4   | Privacy usage strings                    | ✅ Fixed — `NSLocationAlways*` + `NSMotionUsage` removed (unused); remaining 3 keys have specific descriptions (`4cec04d`)                                                                                  |
+| 5   | MARKETING_VERSION                        | ✅ `1.53` (`4cec04d`)                                                                                                                                                                                       |
+| 6   | CURRENT_PROJECT_VERSION (build)          | ✅ `40` (`4cec04d`)                                                                                                                                                                                         |
+| 7   | Code signing for distribution            | 🚨 `ExportOptions.plist` created (`4cec04d`). But `security find-identity` → **0 valid identities**. No Apple Distribution cert or provisioning profile in Keychain. Must be fixed manually before archive. |
+| 8   | iOS screenshots                          | ⚠️ 2 placeholder screenshots captured (`01_landing.png`, `02_login.png`) — wrong device size (1206×2622, need 1290×2796 for 6.7"). Also missing 3 logged-in screens.                                        |
+| 9   | Fastlane gem missing                     | ✅ `gem 'fastlane', '~> 2.220'` added to Gemfile (`4cec04d`)                                                                                                                                                |
+| 10  | ExportOptions.plist                      | ✅ Created at `ios/ExportOptions.plist` (`4cec04d`)                                                                                                                                                         |
+| 11  | Firestore emulator seeding               | ✅ `PROJECT="phoenix-cleanhouse"` in `test-prep.sh` (`ce7b7dd`). Seed produces 5 users + 4 houses.                                                                                                          |
+| 12  | Password field Maestro tap               | ✅ `testID="password-input"` on RatsTextInput; `login.yaml` uses `tapOn: id: "password-input"` (`d359b5f`)                                                                                                  |
+| 13  | Privacy manifest (PrivacyInfo.xcprivacy) | ⚠️ May be required for Firebase/React Native SDKs on iOS 17+ — App Store Connect will flag post-upload if missing                                                                                           |
+| 14  | Location "Always" permission             | ✅ Removed — no background location usage found in codebase                                                                                                                                                 |
+| 15  | Release notes                            | ✅ Descriptive copy in `fastlane/metadata/en-US/release_notes.txt` (`86ba36f`)                                                                                                                              |
+| 16  | connectToEmulators() not called          | ✅ Fixed — wired into `index.js` before Firebase imports (`4ea6e14`). **App needs rebuild before testing.** Smoke ✓ but login `house-tab` not yet verified with fix.                                        |
+| 17  | Fastfile beta lane                       | ✅ `lane :beta` added for TestFlight upload via `pilot` (`48c56ff`)                                                                                                                                         |
 
 ---
 
@@ -76,65 +77,15 @@
 
 - Produces: emulator started with `--project phoenix-cleanhouse`; seed, app, and emulator all agree on the same project ID
 
-- [ ] **Step 1: Confirm the mismatch**
+- [x] **Step 1: Confirm the mismatch** — confirmed `demo-rats` vs `phoenix-cleanhouse`
 
-```bash
-grep -n "PROJECT=" scripts/test-prep.sh
-grep "projectId" regroup/mobile/e2e/setup/seedTestData.js | head -3
-```
+- [x] **Step 2: Fix the PROJECT variable** — `PROJECT="phoenix-cleanhouse"` in `scripts/test-prep.sh`
 
-Expected: `PROJECT="demo-rats"` vs `projectId: 'phoenix-cleanhouse'`
+- [x] **Step 3: Restart emulators and verify seeding works** — 5 users seeded, 4 houses seeded ✓
 
-- [ ] **Step 2: Fix the PROJECT variable**
+- [x] **Step 4: Verify REST login succeeds** — `OK` ✓
 
-Edit `scripts/test-prep.sh`. Find:
-
-```bash
-PROJECT="demo-rats"
-```
-
-Change to:
-
-```bash
-PROJECT="phoenix-cleanhouse"
-```
-
-- [ ] **Step 3: Restart emulators and verify seeding works**
-
-```bash
-# Kill any running emulators
-pkill -f "firebase emulators" || true
-sleep 3
-
-# Start fresh
-./scripts/test-prep.sh &
-sleep 40
-
-# Verify auth users exist in emulator
-curl -s "http://127.0.0.1:9099/emulator/v1/projects/phoenix-cleanhouse/accounts" \
-  | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('users',[])), 'users seeded')"
-```
-
-Expected: `5 users seeded` (or similar non-zero count).
-
-- [ ] **Step 4: Verify REST login succeeds**
-
-```bash
-curl -s -X POST \
-  "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=fake-key" \
-  -H "Content-Type: application/json" \
-  -d '{"email":"test-manager@rats-e2e.com","password":"TestPassword123!","returnSecureToken":true}' \
-  | python3 -c "import sys,json; d=json.load(sys.stdin); print('OK' if 'idToken' in d else d.get('error'))"
-```
-
-Expected: `OK`
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add scripts/test-prep.sh
-git commit -m "fix(e2e): align emulator --project with seed projectId (phoenix-cleanhouse)"
-```
+- [x] **Step 5: Commit** — `ce7b7dd fix(e2e): align emulator --project with seed projectId (phoenix-cleanhouse)`
 
 ---
 
@@ -151,100 +102,19 @@ git commit -m "fix(e2e): align emulator --project with seed projectId (phoenix-c
 
 - Produces: `testID="password-input"` + `accessibilityLabel="password-input"` on the password input; `login.yaml` uses `id: "password-input"`
 
-- [ ] **Step 1: Locate the password input in source**
+- [x] **Step 1: Locate the password input in source** — at `src/screens/Login/LoginFormView.tsx` (not `src/components/`)
 
-```bash
-grep -n "secureTextEntry\|password\|Password" regroup/mobile/src/components/LoginFormView.tsx | head -20
-```
+- [x] **Step 2: Check how email-input testID is forwarded** — RatsTextInput forwards props via `{...props}`; `returnKeyType` prop also added
 
-Note the line where the password `<RatsTextInput>` (or `<TextInput>`) is rendered.
+- [x] **Step 3a: Add testID and accessibilityLabel to the password RatsTextInput** — `testID="password-input"` added at line 41 of `LoginFormView.tsx`
 
-- [ ] **Step 2: Check how email-input testID is forwarded**
+- [x] **Step 3b: n/a** — RatsTextInput already forwarded props
 
-Find the email input and confirm how `testID` reaches the native TextInput. RatsTextInput may need to forward it explicitly:
+- [x] **Step 4: Update login.yaml** — `tapOn: id: "password-input"` in `maestro/subflows/login.yaml`
 
-```bash
-grep -n "testID\|accessibilityLabel" regroup/mobile/src/components/atoms/RatsTextInput.tsx | head -10
-```
+- [x] **Step 5: Test confirmed field tap works** — Maestro completes email + password input steps without error
 
-If `RatsTextInput` does NOT forward `testID` to its inner `<TextInput>`, add the forwarding (see Step 3b).
-
-- [ ] **Step 3a: Add testID and accessibilityLabel to the password RatsTextInput in LoginFormView.tsx**
-
-Find the password input in `LoginFormView.tsx` and add:
-
-```tsx
-<RatsTextInput
-  testID="password-input"
-  accessibilityLabel="password-input"
-  secureTextEntry={!showPassword}
-  placeholder="Password"
-  // ... other existing props
-/>
-```
-
-- [ ] **Step 3b: If RatsTextInput doesn't forward testID, add forwarding**
-
-In `regroup/mobile/src/components/atoms/RatsTextInput.tsx`, ensure the inner `<TextInput>` receives these props:
-
-```tsx
-<TextInput
-  {...props} // spreads testID and accessibilityLabel
-  testID={props.testID} // explicit forward (redundant but safe)
-  accessibilityLabel={props.accessibilityLabel}
-/>
-```
-
-Only do this if Step 2 shows the props are not already forwarded.
-
-- [ ] **Step 4: Update login.yaml**
-
-Edit `regroup/mobile/maestro/subflows/login.yaml`. Replace:
-
-```yaml
-- tapOn:
-    text: 'Password'
-- inputText: ${PASSWORD}
-```
-
-with:
-
-```yaml
-- tapOn:
-    id: 'password-input'
-- inputText: ${PASSWORD}
-```
-
-- [ ] **Step 5: Test on iOS simulator with E2E-iPhone**
-
-With emulators running (from Task 1) and app installed on `E2E-iPhone`:
-
-```bash
-cd regroup/mobile
-maestro test -e APP_ID=com.rats.dev \
-  -e EMAIL=test-manager@rats-e2e.com \
-  -e PASSWORD=TestPassword123! \
-  maestro/subflows/login.yaml
-```
-
-Expected: flow completes, `house-tab` is visible (no timeout, no "element not found").
-
-- [ ] **Step 6: If still failing, use hierarchy to find the real ID**
-
-```bash
-maestro hierarchy
-```
-
-Scroll to the password area in the output. Copy the exact `id`, `accessibilityIdentifier`, or `text` shown and update `login.yaml` to use it.
-
-- [ ] **Step 7: Commit**
-
-```bash
-git add regroup/mobile/src/components/LoginFormView.tsx \
-        regroup/mobile/src/components/atoms/RatsTextInput.tsx \
-        regroup/mobile/maestro/subflows/login.yaml
-git commit -m "fix(e2e): add testID/accessibilityLabel to password field; fix Maestro login tap"
-```
+- [x] **Step 7: Commit** — `d359b5f fix(e2e): tap password field by testID; smoke extendedWaitUntil; add suite:full script`
 
 ---
 
@@ -260,41 +130,13 @@ git commit -m "fix(e2e): add testID/accessibilityLabel to password field; fix Ma
 
 - Produces: `bundle exec fastlane -v` prints a Fastlane version
 
-- [ ] **Step 1: Check current Gemfile**
+- [x] **Step 1: Check current Gemfile** — only had `cocoapods`
 
-```bash
-cat regroup/mobile/Gemfile
-```
+- [x] **Step 2: Add fastlane gem** — `gem 'fastlane', '~> 2.220'` added
 
-- [ ] **Step 2: Add fastlane gem**
+- [x] **Step 3: Install and verify** — `bundle install` succeeded
 
-Edit `regroup/mobile/Gemfile` to add:
-
-```ruby
-source 'https://rubygems.org'
-
-ruby File.read(File.join(__dir__, '.ruby-version')).strip
-
-gem 'cocoapods', '~> 1.12', '>= 1.12.0'
-gem 'fastlane', '~> 2.220'
-```
-
-- [ ] **Step 3: Install and verify**
-
-```bash
-cd regroup/mobile
-bundle install
-bundle exec fastlane -v
-```
-
-Expected: `fastlane 2.220.x` (or similar) printed.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add regroup/mobile/Gemfile regroup/mobile/Gemfile.lock
-git commit -m "chore(ios): add fastlane gem to Gemfile"
-```
+- [x] **Step 4: Commit** — included in `4cec04d chore(ios): App Store config prep`
 
 ---
 
@@ -310,26 +152,11 @@ The App Store review team checks that `NSMotionUsageDescription` explains **why*
 
 - Produces: specific, user-readable descriptions for each permission key
 
-- [ ] **Step 1: List all current permission strings**
+- [x] **Step 1: List all current permission strings** — vague one-liners for all 5 keys
 
-```bash
-grep -A1 "UsageDescription" regroup/mobile/ios/rats/Info.plist
-```
+- [x] **Step 2: Determine if "Always" location is needed** — no `requestAlwaysAuthorization` / `CLLocationManager` calls found; removed both `NSLocationAlways*` keys and `NSMotionUsageDescription` (no motion usage either)
 
-- [ ] **Step 2: Determine if "Always" location is needed**
-
-Search the codebase for background location usage:
-
-```bash
-grep -r "requestAlwaysAuthorization\|allowsBackgroundLocationUpdates\|CLLocationManager" \
-  regroup/mobile/src/ 2>/dev/null | grep -v ".test." | head -10
-```
-
-If no results: the app only needs "When In Use" location. Remove `NSLocationAlwaysAndWhenInUseUsageDescription` and `NSLocationAlwaysUsageDescription` to avoid App Store scrutiny.
-
-If results exist: keep the keys but improve the description.
-
-- [ ] **Step 3: Update Info.plist with specific descriptions**
+- [x] **Step 3: Update Info.plist with specific descriptions** — result:
 
 Edit `regroup/mobile/ios/rats/Info.plist`. Update (or remove where noted):
 
@@ -951,20 +778,140 @@ Click "Submit to App Review". The status will change to "Waiting for Review" (us
 
 ### Spec Coverage Check
 
-| Requirement                                           | Task(s) |
-| ----------------------------------------------------- | ------- |
-| E2E emulator seeding works (iOS login not blocked)    | Task 1  |
-| Maestro login tap works on iOS                        | Task 2  |
-| Fastlane `deliver` / `pilot` can run                  | Task 3  |
-| Privacy descriptions pass App Store review            | Task 4  |
-| Version set to 1.53 / build 40 for next release       | Task 5  |
-| Archive + export produces valid IPA                   | Task 6  |
-| iOS smoke + login E2E passes                          | Task 7  |
-| App Store screenshots captured (≥3, correct sizes)    | Task 8  |
-| Store listing metadata complete within char limits    | Task 9  |
-| Metadata + screenshots visible in App Store Connect   | Task 10 |
-| Build uploaded to TestFlight, passes internal testing | Task 11 |
-| Submitted for App Store review                        | Task 12 |
+| Requirement                                           | Task(s) | Status                                   |
+| ----------------------------------------------------- | ------- | ---------------------------------------- |
+| E2E emulator seeding works (iOS login not blocked)    | Task 1  | ✅ Done (`ce7b7dd`)                      |
+| Maestro login tap works on iOS                        | Task 2  | ✅ Done (`d359b5f`)                      |
+| Fastlane `deliver` / `pilot` can run                  | Task 3  | ✅ Done (`4cec04d`)                      |
+| Privacy descriptions pass App Store review            | Task 4  | ✅ Done (`4cec04d`)                      |
+| Version set to 1.53 / build 40 for next release       | Task 5  | ✅ Done (`4cec04d`)                      |
+| Archive + export produces valid IPA                   | Task 6  | 🚨 Blocked — no certs                    |
+| iOS smoke + login E2E passes                          | Task 7  | ⚠️ Smoke ✓; login pending rebuild        |
+| App Store screenshots captured (≥3, correct sizes)    | Task 8  | ⚠️ 2 placeholders, wrong size            |
+| Store listing metadata complete within char limits    | Task 9  | ✅ Done (`86ba36f`)                      |
+| Metadata + screenshots visible in App Store Connect   | Task 10 | ⏳ Pending Tasks 6+8                     |
+| Build uploaded to TestFlight, passes internal testing | Task 11 | ⏳ Pending Task 6 (lane ready `48c56ff`) |
+| Submitted for App Store review                        | Task 12 | ⏳ Pending Task 11                       |
+
+---
+
+## Handoff — Next Session Entry Point
+
+**Last commit:** `4ea6e14 fix(e2e): call connectToEmulators() at app entry before Firebase imports`
+
+**Branch:** `test/e2e-launch-prep`
+
+### Key Discovery This Session
+
+`connectToEmulators()` existed in `src/config/firebase-emulator.ts` but was never imported or called. The app was always connecting to **production** Firebase, so `test-manager@rats-e2e.com` had no house data there and `house-tab` never appeared after login. Fix committed to `index.js` (`4ea6e14`) — **app must be rebuilt before re-testing the login flow**.
+
+### Immediate Next Steps (in order)
+
+**Step A — Rebuild app with emulator fix (5 min)**
+
+```bash
+# Ensure emulators are running first
+./scripts/test-prep.sh &
+sleep 40  # wait for seed
+
+# Rebuild and install on E2E-iPhone
+cd regroup/mobile
+npx react-native run-ios --simulator="E2E-iPhone"
+```
+
+**Step B — Verify login E2E now reaches house-tab (2 min)**
+
+```bash
+cd regroup/mobile
+maestro test \
+  -e APP_ID=com.rats.dev \
+  -e EMAIL=test-manager@rats-e2e.com \
+  -e PASSWORD=TestPassword123! \
+  maestro/subflows/login.yaml
+```
+
+Expected: all steps `COMPLETED`, including `Assert that id: house-tab is visible`.
+
+**Step C — Capture correct-size App Store screenshots (10 min)**
+
+```bash
+# Boot the correct 6.7" simulator (required for App Store)
+xcrun simctl boot "iPhone 15 Pro Max"
+cd regroup/mobile
+npx react-native run-ios --simulator="iPhone 15 Pro Max"
+
+# Then capture these screens (app must be logged in for 03-05):
+# 1. Landing / login screen (brand + Sign In form)
+xcrun simctl io booted screenshot fastlane/screenshots/ios/en-US/01_landing.png
+
+# 2. Sign In screen (same screen, good for store listing)
+xcrun simctl io booted screenshot fastlane/screenshots/ios/en-US/02_login.png
+
+# Login via Maestro, then capture logged-in screens:
+maestro test -e APP_ID=com.rats.dev -e EMAIL=test-manager@rats-e2e.com \
+  -e PASSWORD=TestPassword123! maestro/subflows/login.yaml
+
+# 3. Operator dashboard (house tab)
+xcrun simctl io booted screenshot fastlane/screenshots/ios/en-US/03_operator_dashboard.png
+
+# Navigate to residents list, then:
+# 4. Residents / guests screen
+xcrun simctl io booted screenshot fastlane/screenshots/ios/en-US/04_residents.png
+
+# 5. Guest home (login as guest-a)
+maestro test -e APP_ID=com.rats.dev -e EMAIL=test-guest-a@rats-e2e.com \
+  -e PASSWORD=TestPassword123! maestro/subflows/login.yaml
+xcrun simctl io booted screenshot fastlane/screenshots/ios/en-US/05_guest_home.png
+
+# Verify dimensions are 1290x2796
+for f in fastlane/screenshots/ios/en-US/*.png; do
+  sips -g pixelWidth -g pixelHeight "$f" | awk '/pixel/{printf $2"x"}'; echo " $f"
+done
+```
+
+**Step D — Fix code signing (manual Xcode step — required before archive)**
+
+`security find-identity -v -p codesigning` returns **0 valid identities**. No certificates in Keychain.
+
+1. Open Xcode → Settings → Accounts → add `marcusk639@gmail.com` Apple ID
+2. Click "Download Manual Profiles" (or "Manage Certificates" → create Apple Distribution cert)
+3. In Xcode: open `ios/rats.xcodeproj` → rats target → Signing & Capabilities → **Release** tab
+   - Uncheck "Automatically manage signing"
+   - Team: `D8K3FS4HAX`
+   - Provisioning Profile: select the App Store profile for `com.rats.dev`
+4. Verify: `security find-identity -v -p codesigning | grep "Apple Distribution"` → should show cert
+
+**Step E — Archive + export + TestFlight upload**
+
+```bash
+cd regroup/mobile
+
+xcodebuild archive \
+  -workspace ios/rats.xcworkspace \
+  -scheme rats \
+  -configuration Release \
+  -archivePath /tmp/regroup.xcarchive \
+  -allowProvisioningUpdates \
+  | grep -E "SUCCEEDED|FAILED|error:"
+
+xcodebuild -exportArchive \
+  -archivePath /tmp/regroup.xcarchive \
+  -exportPath /tmp/regroup-export \
+  -exportOptionsPlist ios/ExportOptions.plist \
+  | grep -E "SUCCEEDED|FAILED|error:"
+
+# Upload to TestFlight
+bundle exec fastlane spaceauth -u marcusk639@gmail.com
+bundle exec fastlane ios beta
+```
+
+**Step F — Upload metadata + screenshots, submit**
+
+```bash
+cd regroup/mobile
+bundle exec fastlane ios metadata
+# Review in App Store Connect, then submit for review (Task 12 — manual in App Store Connect UI)
+```
 
 ### Open Decisions / Notes
 
@@ -977,3 +924,5 @@ Click "Submit to App Review". The status will change to "Waiting for Review" (us
 4. **PrivacyInfo.xcprivacy**: Apple requires a privacy manifest for apps using certain SDKs (Firebase, etc.) on iOS 17+. App Store Connect will flag it post-upload if missing. If rejected for this reason, create `regroup/mobile/ios/PrivacyInfo.xcprivacy` with the required `NSPrivacyAccessedAPITypes` entries.
 
 5. **Certificates expiry**: Distribution certs expire annually. Confirm the Apple Distribution cert in Keychain is not expired before archiving (Task 6 Step 1).
+
+6. **index.js in .gitignore**: `regroup/.gitignore` has `**/*.js` which ignores `regroup/mobile/index.js`. It was force-added (`git add -f`) to commit the `connectToEmulators` fix. This is intentional — the rule was meant for build output, not source. Consider adding `!regroup/mobile/index.js` to the gitignore as a follow-up.
