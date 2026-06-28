@@ -32,6 +32,7 @@
     "maestro:smoke:ios": "maestro test -e APP_ID=com.rats.dev maestro/flows/smoke.yaml",
     "maestro:smoke:android": "maestro test -e APP_ID=com.regroup.app maestro/flows/smoke.yaml",
     "maestro:suite:ios": "maestro test -e APP_ID=com.rats.dev maestro/flows/run-all.yaml",
+    "maestro:suite:full": "maestro test -e APP_ID=com.rats.dev maestro/flows/run-all.yaml",
     "uninstall": "rm -rf node_modules",
     "pod:install": "cd ios && pod install && cd ..",
     "fresh-install": "rm -rf $TMPDIR/react-* && watchman watch-del-all && rm -rf ios/build/ModuleCache/* && rm -rf node_modules/ && npm cache clean --force && npm install",

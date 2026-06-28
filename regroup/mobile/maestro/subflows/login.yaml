@@ -37,10 +37,11 @@ appId: ${APP_ID}
 - tapOn:
     id: "email-input"
 - inputText: ${EMAIL}
-# Press the keyboard's Next key — triggers onSubmitEditing on the email
-# field which focuses the password TextInput directly (no dismiss needed).
-- pressKey: Return
-
+# Tap by testID — RatsTextInput forwards testID to the inner native TextInput
+# (accessibilityIdentifier on iOS). The outer gesture-handler TouchableOpacity is
+# accessible={false} when it has no onPress, so it does not intercept the tap.
+- tapOn:
+    id: "password-input"
 - inputText: ${PASSWORD}
 - tapOn:
     id: "login-button"
