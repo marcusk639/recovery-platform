@@ -254,6 +254,7 @@ const RatsTextInput = (props: Props & TextInputProps) => {
     <View>
       <TouchableOpacity
         onPress={onPress}
+        accessible={!!onPress}
         activeOpacity={onPress ? 0.2 : 1.0}
         style={[
           styles[styleType!].container,
@@ -340,6 +341,7 @@ const RatsTextInput = (props: Props & TextInputProps) => {
                     props.secureTextEntry ? false : props.multiline || false
                   }
                   onSubmitEditing={props.onSubmitEditing}
+                  returnKeyType={props.returnKeyType}
                   numberOfLines={props.numberOfLines || 1}
                 />
               )}

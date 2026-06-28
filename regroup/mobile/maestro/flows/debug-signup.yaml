@@ -1,0 +1,27 @@
+appId: ${APP_ID}
+---
+- launchApp:
+    clearState: true
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "initial-landing-screen"
+    timeout: 30000
+- tapOn:
+    id: "sign-in-button"
+- assertVisible:
+    id: "login-screen"
+- tapOn:
+    id: "signup-link"
+- extendedWaitUntil:
+    visible:
+      id: "signup-screen"
+    timeout: 15000
+# Probe: can we see text elements on the signup screen?
+- assertVisible:
+    text: "Let's Get Started"
+# Try tapping by text label
+- tapOn:
+    text: "Email"
+- inputText: "e2e-signup@rats-e2e.com"

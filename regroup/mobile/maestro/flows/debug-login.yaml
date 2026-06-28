@@ -1,0 +1,33 @@
+appId: ${APP_ID}
+---
+- launchApp:
+    clearState: true
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "initial-landing-screen"
+    timeout: 30000
+- tapOn:
+    id: "sign-in-button"
+- extendedWaitUntil:
+    visible:
+      id: "login-screen"
+    timeout: 15000
+# Try testID with 30s timeout
+- extendedWaitUntil:
+    visible:
+      id: "email-input"
+    timeout: 30000
+- tapOn:
+    id: "email-input"
+- inputText: "test-guest-a@rats-e2e.com"
+- tapOn:
+    text: "Password"
+- inputText: "TestPassword123!"
+- tapOn:
+    text: "SIGN IN"
+- extendedWaitUntil:
+    visible:
+      id: "house-tab"
+    timeout: 60000

@@ -27,8 +27,9 @@ appId: ${APP_ID}
     visible:
       id: "login-screen"
     timeout: 15000
-# Formik Field components register with the accessibility tree asynchronously
-# after the screen container mounts; wait explicitly before interacting.
+# Use testID selectors — they map to accessibilityIdentifier on iOS and are
+# reliable even inside KeyboardAwareScrollView. Text selectors hit the
+# RatsLabel above the field, not the TextInput itself.
 - extendedWaitUntil:
     visible:
       id: "email-input"
@@ -36,12 +37,18 @@ appId: ${APP_ID}
 - tapOn:
     id: "email-input"
 - inputText: ${EMAIL}
-- tapOn:
-    id: "password-input"
+# Press the keyboard's Next key — triggers onSubmitEditing on the email
+# field which focuses the password TextInput directly (no dismiss needed).
+- pressKey: Return
+
 - inputText: ${PASSWORD}
-- hideKeyboard
 - tapOn:
     id: "login-button"
+# iOS may show a "Save Password?" Keychain sheet after credentials are submitted.
+# Dismiss it so it doesn't block navigation to house-tab.
+- tapOn:
+    text: "Not Now"
+    optional: true
 # Login round-trip (auth + initial house data) can take up to a minute.
 - extendedWaitUntil:
     visible:
