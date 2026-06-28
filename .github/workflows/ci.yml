@@ -79,7 +79,7 @@ jobs:
         run: cd detox-recovery && npm test -- --passWithNoTests --forceExit
 
   maestro-smoke:
-    name: Maestro Cloud — smoke tests
+    name: Maestro Cloud — smoke tests (regroup Android)
     needs: [recovery-api, homegroups-functions, regroup-functions, detox-recovery]
     runs-on: ubuntu-latest
     # Only run on PRs to avoid burning Maestro Cloud credits on every push to main
@@ -87,24 +87,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # TODO: Add a build step (or download from a release artifact) that produces
-      # the .apk/.ipa before these steps run. Until then, set app-file to the
-      # artifact path and add MAESTRO_CLOUD_API_KEY as a GitHub Actions secret.
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: regroup/mobile/package-lock.json
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install regroup/mobile dependencies
+        run: cd regroup/mobile && npm ci
+
+      - name: Build regroup Android debug APK
+        run: cd regroup/mobile/android && ./gradlew assembleDebug --no-daemon
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx4g"
 
       - name: Maestro smoke — regroup (login-and-view-dashboard)
         continue-on-error: true
         uses: mobile-dev-inc/action-maestro-cloud@v1
         with:
           api-key: ${{ secrets.MAESTRO_CLOUD_API_KEY }}
-          # TODO: replace with path to pre-built regroup .apk (or .ipa for iOS)
-          # app-file: regroup/mobile/build/app-release.apk
+          app-file: regroup/mobile/android/app/build/outputs/apk/debug/app-debug.apk
           flow-file: e2e-maestro/regroup/login-and-view-dashboard.yaml
-
-      - name: Maestro smoke — homegroups (login-and-join-group)
-        continue-on-error: true
-        uses: mobile-dev-inc/action-maestro-cloud@v1
-        with:
-          api-key: ${{ secrets.MAESTRO_CLOUD_API_KEY }}
-          # TODO: replace with path to pre-built homegroups .apk (or .ipa for iOS)
-          # app-file: homegroups/mobile/build/app-release.apk
-          flow-file: e2e-maestro/homegroups/login-and-join-group.yaml
