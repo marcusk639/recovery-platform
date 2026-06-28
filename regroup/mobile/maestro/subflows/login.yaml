@@ -23,8 +23,16 @@ appId: ${APP_ID}
     timeout: 30000
 - tapOn:
     id: "sign-in-button"
-- assertVisible:
-    id: "login-screen"
+- extendedWaitUntil:
+    visible:
+      id: "login-screen"
+    timeout: 15000
+# Formik Field components register with the accessibility tree asynchronously
+# after the screen container mounts; wait explicitly before interacting.
+- extendedWaitUntil:
+    visible:
+      id: "email-input"
+    timeout: 10000
 - tapOn:
     id: "email-input"
 - inputText: ${EMAIL}
