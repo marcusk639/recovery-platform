@@ -17,7 +17,7 @@
 		<key>CFBundlePackageType</key>
 		<string>APPL</string>
 		<key>CFBundleShortVersionString</key>
-		<string>$(MARKETING_VERSION)</string>
+		<string>1.53</string>
 		<key>CFBundleSignature</key>
 		<string>????</string>
 		<key>CFBundleURLTypes</key>
@@ -50,7 +50,7 @@
 			</dict>
 		</array>
 		<key>CFBundleVersion</key>
-		<string>$(CURRENT_PROJECT_VERSION)</string>
+		<string>40</string>
 		<key>LSApplicationQueriesSchemes</key>
 		<array>
 			<string>tel</string>
@@ -72,17 +72,11 @@
 			</dict>
 		</dict>
 		<key>NSCameraUsageDescription</key>
-		<string>Regroup would like to access your camera</string>
-		<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-		<string>Regroup wants to access your location for GPS capabilities</string>
-		<key>NSLocationAlwaysUsageDescription</key>
-		<string>Regroup wants to access your location for GPS capabilities</string>
+		<string>Regroup uses your camera to attach photos to resident activity reports and house documentation.</string>
 		<key>NSLocationWhenInUseUsageDescription</key>
-		<string>Regroup wants to access your location for GPS capabilities</string>
-		<key>NSMotionUsageDescription</key>
-		<string>Regroup wants to access your motion usage</string>
+		<string>Regroup uses your location to verify meeting attendance and record check-ins at house locations.</string>
 		<key>NSPhotoLibraryUsageDescription</key>
-		<string>Regroup would like to access your photo library</string>
+		<string>Regroup uses your photo library to attach images to activity reports and resident profiles.</string>
 		<key>UIAppFonts</key>
 		<array>
 			<string>oswald.ttf</string>
