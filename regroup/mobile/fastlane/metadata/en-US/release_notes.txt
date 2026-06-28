@@ -1,1 +1,9 @@
-First release.
+Welcome to Regroup — sober living house management built for operators and residents.
+
+• Manage residents, track rent, and monitor sobriety milestones
+• Oxford House governance — officers, votes, EES tracking, and business meetings
+• Guest portal — submit rent, view payment history, log chores, and dispute activities
+• Secure login backed by Firebase Auth
+• Offline-capable with automatic sync when reconnected
+
+Built by people in recovery, for people in recovery.
