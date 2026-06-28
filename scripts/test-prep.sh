@@ -14,9 +14,10 @@
 #   * The emulator config that defines storage:9199 lives in
 #     regroup/mobile/firebase/firebase.json — NOT regroup/firebase.json (which
 #     only configures functions). We start from that directory.
-#   * --project demo-rats matches the project id used by the running E2E harness;
-#     the Firestore emulator runs in single-project mode, so the seed's
-#     projectId (phoenix-cleanhouse) maps to the same store.
+#   * --project phoenix-cleanhouse matches the seed's projectId (seedTestData.js)
+#     and the app's Firebase project, so auth users and Firestore docs land in
+#     the same store the app reads from. (Was previously demo-rats, which caused
+#     EMAIL_NOT_FOUND on every E2E login.)
 #
 set -euo pipefail
 
