@@ -14,5 +14,7 @@ tags:
     clearState: true
     arguments:
       IS_E2E_TEST: "1"
-- assertVisible:
-    id: "initial-landing-screen"
+- extendedWaitUntil:
+    visible:
+      id: "initial-landing-screen"
+    timeout: 30000

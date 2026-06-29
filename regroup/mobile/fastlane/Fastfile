@@ -15,6 +15,16 @@ platform :ios do
     )
   end
 
+  desc "Upload IPA to TestFlight"
+  lane :beta do
+    pilot(
+      ipa: "/tmp/regroup-export/rats.ipa",
+      skip_waiting_for_build_processing: true,
+      apple_id: "marcusk639@gmail.com",
+      team_id: "D8K3FS4HAX",
+    )
+  end
+
   desc "Capture screenshots using Detox"
   lane :screenshots do
     sh("cd .. && npm run test:e2e:build:ios 2>&1")

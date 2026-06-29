@@ -713,7 +713,7 @@
 				CODE_SIGN_ENTITLEMENTS = rats/ratsDebug.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 40;
 				DEVELOPMENT_TEAM = D8K3FS4HAX;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = rats/Info.plist;
@@ -723,7 +723,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.52;
+				MARKETING_VERSION = 1.53;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -748,7 +748,7 @@
 				CODE_SIGN_ENTITLEMENTS = rats/rats.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 40;
 				DEVELOPMENT_TEAM = D8K3FS4HAX;
 				INFOPLIST_FILE = rats/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
@@ -757,7 +757,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.52;
+				MARKETING_VERSION = 1.53;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",

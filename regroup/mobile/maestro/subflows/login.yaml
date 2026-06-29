@@ -37,10 +37,15 @@ appId: ${APP_ID}
 - tapOn:
     id: "email-input"
 - inputText: ${EMAIL}
-# Press the keyboard's Next key — triggers onSubmitEditing on the email
-# field which focuses the password TextInput directly (no dismiss needed).
-- pressKey: Return
-
+# Dismiss the keyboard so the layout settles before tapping the password field.
+# Without this, the tap on password-input races the keyboard/scroll and fails to
+# focus the field, so inputText lands nowhere and login submits empty.
+- hideKeyboard
+# Tap by testID — RatsTextInput forwards testID to the inner native TextInput
+# (accessibilityIdentifier on iOS). Under E2E the field is non-secure
+# (secureTextEntry gated on IS_E2E_TEST) so Maestro can type into it.
+- tapOn:
+    id: "password-input"
 - inputText: ${PASSWORD}
 - tapOn:
     id: "login-button"

@@ -15,6 +15,20 @@
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
   [FIRApp configure];
+
+  // E2E detection: Maestro launches the app with an IS_E2E_TEST argument. Surface
+  // it into NSUserDefaults so JS can read it via the React Native Settings module
+  // (used to relax automation-hostile UI, e.g. secureTextEntry on the login form).
+  // Checks argv (with/without leading dash) and the environment to be robust to
+  // however the launcher passes it. Always written explicitly so a normal launch
+  // resets the flag to NO.
+  NSArray<NSString *> *launchArgs = [[NSProcessInfo processInfo] arguments];
+  NSDictionary<NSString *, NSString *> *launchEnv = [[NSProcessInfo processInfo] environment];
+  BOOL isE2ETest = [launchArgs containsObject:@"IS_E2E_TEST"] ||
+                   [launchArgs containsObject:@"-IS_E2E_TEST"] ||
+                   [launchEnv[@"IS_E2E_TEST"] isEqualToString:@"1"];
+  [[NSUserDefaults standardUserDefaults] setBool:isE2ETest forKey:@"IS_E2E_TEST"];
+
   self.moduleName = @"rats";
   // You can add your custom initial props in the dictionary below.
   // They will be passed down to the ViewController used by React Native.
