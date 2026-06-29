@@ -36,7 +36,10 @@ export async function handleCreateReferral(
 
   const toApp = resolveAppId(parsed.toApp);
   if (!toApp || !isTargetAppId(toApp)) {
-    throw new HttpsError('invalid-argument', `Unknown referral target: ${parsed.toApp}`);
+    // Log the raw target server-side (not PII); return a sanitized message that
+    // neither echoes caller input nor enumerates the valid target app-ids.
+    logger.warn('createReferral: unknown toApp', { toApp: parsed.toApp });
+    throw new HttpsError('invalid-argument', 'Invalid referral target');
   }
 
   // Drop the raw wire `toApp` so the spread can't re-store the unnormalized value;

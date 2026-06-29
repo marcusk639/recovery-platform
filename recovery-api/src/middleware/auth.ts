@@ -1,5 +1,14 @@
+import { timingSafeEqual } from 'crypto';
 import { CallableRequest, HttpsError } from 'firebase-functions/v2/https';
 import { resolveApp, isOriginatorAppId, ORIGINATOR_APP_IDS, OriginatorAppId } from '../config/apps';
+
+/** Constant-time string comparison — avoids leaking the service key via early-exit timing. */
+function timingSafeEqualStr(a: string, b: string): boolean {
+  const aBuf = Buffer.from(a, 'utf8');
+  const bBuf = Buffer.from(b, 'utf8');
+  if (aBuf.length !== bBuf.length) return false;
+  return timingSafeEqual(aBuf, bBuf);
+}
 
 export interface ServiceAuthContext {
   /** Canonical app-id of the originating service (see config/apps.ts). */
@@ -39,7 +48,7 @@ export function requireServiceAuth(request: CallableRequest): ServiceAuthContext
     throw new HttpsError('internal', 'Service authentication is not configured');
   }
 
-  if (serviceKey === apiKey) {
+  if (serviceKey && timingSafeEqualStr(serviceKey, apiKey)) {
     const rawAppId = headers['x-app-id'] as string | undefined;
     const uid = headers['x-user-uid'] as string | undefined;
     const email = (headers['x-user-email'] as string | undefined) ?? '';
@@ -56,7 +65,8 @@ export function requireServiceAuth(request: CallableRequest): ServiceAuthContext
 
   // Phase 2: Firebase custom token flow
   if (request.auth) {
-    const rawAppId = request.auth.token['appId'] as string | undefined;
+    const rawClaim = request.auth.token['appId'];
+    const rawAppId = typeof rawClaim === 'string' ? rawClaim : undefined;
     const appId = rawAppId ? resolveOriginator(rawAppId) : undefined;
     if (!appId) {
       throw new HttpsError('unauthenticated', 'Missing or invalid appId claim');

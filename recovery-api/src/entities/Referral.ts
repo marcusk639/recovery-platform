@@ -7,7 +7,7 @@ export interface Referral {
   fromApp: OriginatorAppId;
   toApp: TargetAppId;
   referredBy: string; // uid
-  referredByApp: string; // appId — uid alone is ambiguous across projects
+  referredByApp: OriginatorAppId; // appId — uid alone is ambiguous across projects
   clientName: string;
   clientEmail: string;
   condition?: string;
