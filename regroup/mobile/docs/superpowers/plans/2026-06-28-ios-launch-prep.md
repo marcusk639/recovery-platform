@@ -8,6 +8,66 @@
 
 **Tech Stack:** React Native 0.72, Xcode 15+, Fastlane `deliver` + `pilot`, Maestro 2.6.0 (E2E), Firebase Emulator Suite.
 
+---
+
+## Session Status — updated 2026-06-29 (E2E login deep-dive)
+
+This session focused on the shared E2E blockers (Tasks 1 & 2) and then drove the
+Maestro login flow end-to-end on the `E2E-iPhone` simulator (iOS 26.5),
+root-causing a **cascade** of blockers. Environment is verified: emulators up
+(`phoenix-cleanhouse`, ports 8080/9099/9199/4000) + seeded (4 houses, logins
+work), Metro up, app installed. **Smoke test passes.**
+
+### DONE (committed unless noted)
+
+| Item                               | Detail                                                                                                                                                                                                                                                                                                                                     | Commit                   |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------ |
+| Task 1 — emulator projectId        | `test-prep.sh` already `phoenix-cleanhouse`; matches seed                                                                                                                                                                                                                                                                                  | `ce7b7dd` / pre-existing |
+| Task 2 — password testID           | `login.yaml` taps `id: password-input`; RatsTextInput forwards testID                                                                                                                                                                                                                                                                      | `d359b5f`                |
+| Task 3 — fastlane gem              | already in `Gemfile`                                                                                                                                                                                                                                                                                                                       | —                        |
+| Task 4 — iOS perms                 | removed unused Always-location + motion keys; tightened descriptions                                                                                                                                                                                                                                                                       | `4cec04d`                |
+| Task 5 — version bump              | `MARKETING_VERSION 1.53` / `CURRENT_PROJECT_VERSION 40`                                                                                                                                                                                                                                                                                    | `4cec04d`                |
+| Task 6 (partial) — ExportOptions   | `ios/ExportOptions.plist` created (app-store)                                                                                                                                                                                                                                                                                              | `4cec04d`                |
+| Task 9 — release notes             | replaced "First release."                                                                                                                                                                                                                                                                                                                  | `86ba36f`                |
+| connectToEmulators at entry        | called in `index.js` before Firebase imports                                                                                                                                                                                                                                                                                               | `4ea6e14`                |
+| **E2E blocker: secureTextEntry**   | Maestro/XCUITest cannot type into iOS `secureTextEntry` (iOS 26.5). Option B: `AppDelegate.mm` detects `IS_E2E_TEST` launch arg → NSUserDefaults → JS `Settings` (`src/util/e2e.ts`) → `secureTextEntry={!IS_E2E_TEST}` in `LoginFormView`, gated on `__DEV__` (prod can never unmask)                                                     | `207b360`                |
+| **E2E blocker: keyboard race**     | `hideKeyboard` after email so password tap focuses reliably                                                                                                                                                                                                                                                                                | `d643de3`                |
+| **APP BUG: login double-dispatch** | `LoginForm.handleSubmit` did `dispatch(loginAction(...))` but `loginAction` (props.login) already dispatches → dispatched a Promise → "Actions must be plain objects" → every login caught as failure once submit reached. Fixed: `await loginAction(...).unwrap()`. Keep regardless of E2E.                                               | `d643de3`                |
+| **E2E seed: role flags**           | seeded `users/{uid}` docs lacked `isAdmin`/`houseId` (real signup writes them) → nav classified `NO_USER` → routed to `PriorAuth`. Seed now writes `isGuest/isAdmin/isSuperAdmin/houseId/houseCode/houseAccountVerified`. **NOTE: `seedTestData.js` is gitignored (`regroup/.gitignore: **/*.js`) — change is LOCAL ONLY, not committed.** | local                    |
+
+**Verified outcome:** login now authenticates (`signInWithEmail` → `getUser` →
+token), `handleSubmit` fires with correct creds, and the admin **routes into the
+operator flow** — confirmed via device logs + screenshots.
+
+### REMAINING for a green login E2E → `house-tab`
+
+- [ ] **A. Seed an active operator subscription.** Login now lands on the
+      subscription paywall ("Your subscription has ended") because the seeded
+      operator has no active `OperatorSubscription`. Add one to the seed so the
+      admin bypasses the gate and reaches `house-tab`. Model: `OperatorSubscription`
+      (Stripe `customerId`/`subscriptionId`; tiers in `functions/src/config.ts`).
+      Determine the collection/shape the mobile app's subscription gate reads
+      (`SubscriptionRequiredScreen` / `subscriptionStatus()` in userSlice /
+      `useOxfordGate`). Seed change goes in `e2e/setup/seedTestData.js` (gitignored).
+- [ ] **B. Reset auth between runs.** Firebase's Keychain auth session **survives
+      Maestro `clearState`**, so on relaunch the app auto-logs-in and the
+      `initial-landing-screen` precondition in `login.yaml` no longer holds. Add a
+      sign-out / keychain clear at flow start (or `clearKeychain: true` on
+      `launchApp`) so login is exercised from a clean unauthenticated state.
+
+### Diagnostics
+
+All temporary `console.log` diagnostics added during debugging were removed
+(`[E2E-DIAG]`, `[LOGIN-DIAG]`, `[LOGIN-THUNK]`, `[LOGIN-NAV]`, `[LOGIN-CATCH]`).
+`userSlice.ts login` thunk reverted to original. Clean: `grep -rE "LOGIN-DIAG|LOGIN-NAV|LOGIN-CATCH|LOGIN-THUNK|E2E-DIAG" src/` → none.
+
+### Still pending (credentialed / GUI / device — unchanged from prior handoff)
+
+Tasks 6 (signing+archive), 7 (full E2E run — blocked on A+B), 8 (screenshots),
+10 (deliver metadata), 11 (TestFlight), 12 (submit). See per-task sections below.
+
+---
+
 ## Global Constraints
 
 - Bundle ID (App Store): `com.rats.dev` — do NOT rename without coordinating App Store Connect record

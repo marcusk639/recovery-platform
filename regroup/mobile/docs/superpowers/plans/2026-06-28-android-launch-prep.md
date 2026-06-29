@@ -8,6 +8,17 @@
 
 **Tech Stack:** React Native 0.72, Maestro 2.6.0 (E2E), Firebase Emulator Suite, Gradle (Android), Fastlane (store submission).
 
+> **Shared E2E work (done on iOS 2026-06-29):** Several login-flow fixes are
+> platform-shared — see the Session Status section in
+> `2026-06-28-ios-launch-prep.md`. Already fixed: login double-dispatch bug
+> (`LoginForm.handleSubmit`), `login.yaml` `hideKeyboard` step, and seeded user
+> role flags (`seedTestData.js`, gitignored/local). The **secureTextEntry** fix
+> is iOS-only (`IS_E2E_TEST` via NSUserDefaults); Android needs its own check —
+> Maestro typically types into Android secure fields fine, but `IS_E2E_TEST` is
+> not yet read on Android (the JS helper `src/util/e2e.ts` is iOS-only). Remaining
+> shared E2E items: (A) seed an active operator subscription to pass the paywall,
+> (B) reset auth between runs (Firebase Keychain/session survives `clearState`).
+
 ## Global Constraints
 
 - App ID for Android: `com.regroup.app`
