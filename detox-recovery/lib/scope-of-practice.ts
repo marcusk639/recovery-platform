@@ -2,10 +2,9 @@
  * Canonical non-clinical scope-of-practice copy.
  *
  * These lists ARE the legal/clinical boundary of this site. They are
- * rendered by both `components/home/TrustSignals.tsx` and
- * `components/services/WhatICanHelp.tsx`. Any drift between the two
- * surfaces is a compliance risk — that's why both components import
- * from this single source.
+ * rendered by `components/home/TrustSignals.tsx`, `components/services/WhatICanHelp.tsx`,
+ * and `app/terms/page.tsx`. Any drift between these surfaces is a compliance
+ * risk — that's why all three import from this single source.
  *
  * Edits here are a clinical-safety change. They must be reviewed under
  * the same care as `lib/referral-conditions.ts`. The

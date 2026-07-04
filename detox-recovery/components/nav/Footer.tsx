@@ -61,6 +61,14 @@ export function Footer() {
             experiencing a medical emergency, call 911 or go to your nearest
             emergency room.
           </p>
+          <p className="mt-3 flex gap-4">
+            <Link href="/privacy" className="hover:text-teal-700">
+              Privacy Policy
+            </Link>
+            <Link href="/terms" className="hover:text-teal-700">
+              Terms of Service
+            </Link>
+          </p>
         </div>
       </div>
     </footer>
