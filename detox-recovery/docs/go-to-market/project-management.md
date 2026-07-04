@@ -131,6 +131,90 @@ DX-PM-2).
 
 ---
 
+## Optimal launch sequence (2026-07-04)
+
+Synthesized from the technical, monetization, marketing, and cross-product
+audits above, plus a monorepo-wide reuse check (see reuse notes). Ordered by
+what unblocks the most downstream work per unit of effort — not by blocker ID
+order.
+
+**Week 1 (Part A — agent-executable, fast wins):**
+
+- `DX-PM-5` — fix `RUNTIMEi` typo (minutes; unblocks newsletter capture).
+- `DX-PM-9` — Privacy Policy + ToS. **Reuse, don't draft from scratch:**
+  `regroup/docs/operations/legal/privacy-policy.md` and `terms-of-service.md`
+  are an existing 11-section, health-adjacent legal template (already covers
+  a "Health-Adjacent Data" section) — adapt it rather than writing new, and
+  follow `homegroups/web/src/pages/PrivacyPage.js` / `TermsPage.js` as the
+  proven React page pattern (already has tests) for the Next.js route shape.
+- `DX-PM-10` (robots/sitemap half) — copy `homegroups/web/public/robots.txt`
+  verbatim (2 lines); hand-write `app/sitemap.ts` using Next.js 15's built-in
+  convention (no existing pattern to copy — this one's genuinely new; only 6
+  routes, trivial).
+- `DX-PM-4` code portion — install Plausible script in `app/layout.tsx`.
+- Verify `DP-6` — founder confirms in Firebase console whether Stripe/Lemon
+  Squeezy env vars are actually set in production before anything downstream
+  assumes Tier 2 checkout works.
+
+**Week 1–2 (Part B — founder manual, external accounts):**
+
+- B1 Resend sending-domain verification (`DX-PM-7`).
+- Custom domain DNS (`DX-RM-P0-3`) — prerequisite for SEO indexing and for
+  `DX-RM-P2-7`'s OG/schema work to mean anything.
+- Lemon Squeezy store setup — but scoped to **one** flagship PDF per `DP-3`,
+  not all 5.
+
+**Week 2–3 (critical path — nothing downstream matters without this):**
+
+- `DX-PM-1` — MailerLite automations for the 3 lead magnets. This is the
+  single highest-leverage fix per the monetization review: the entire funnel
+  (free magnet → email → paid ladder) is inert until this ships.
+- Author the flagship PDF (Family Survival Guide, `DX-MON-4`) — 8 source
+  markdowns already exist (`DX-PM-8`), so this is finishing, not starting
+  from zero.
+
+**Week 3–4 (soft launch):**
+
+- Deploy; smoke-test the full contact → email → MailerLite path; confirm
+  custom domain live with SSL.
+- Begin Tier-1 discovery (per `discovery-strategy.md`): 5 directory listings,
+  authentic Reddit participation in r/stopdrinking, r/opiatesrecovery,
+  r/quitting7oh, r/quittingkratom; contact the 2 warm B2B relationships;
+  referral one-pager for SBIRT/intake-coordinator outreach.
+
+**Month 2:**
+
+- SBIRT hospital-partnership outreach begins (2–5 referrals/mo expected once
+  established).
+- First SEO pillar article, plus the new pillar #6 ("How to Continue Your
+  Sobriety After Detox," `DX-RM-P2-8`) — gated on `DX-RM-P2-7`'s sitemap/OG
+  work actually shipping first, or it won't rank.
+- TikTok account launch.
+- Author PDFs 2–5 only after the flagship PDF's first sale validates the
+  funnel (per `DP-3`).
+
+**Month 3:**
+
+- Tier 3 launch (`DX-RM-P2-1`).
+- B2B guide + structured intake form (`DX-RM-P2-2`, `P2-3`); start asking
+  $7,500 by the 3rd engagement per `DP-4`.
+- Small-budget Reddit Ads test (the only paid channel not blocked by
+  LegitScript) — treat as an experiment, not a committed spend.
+
+**Independent of the above (decision-gated, not on the critical path):**
+
+- Partner-agreement negotiation for the recovery-api referral relay — a
+  business decision with its own timeline, not an engineering task.
+- `DP-5` — minimal `getReferrals` consumer in homegroups/regroup — deferred
+  until/unless the partner agreement closes.
+
+(Reuse findings and sequencing: 2026-07-04 monorepo-wide codebase search
+across homegroups/regroup for existing privacy/terms/robots/analytics
+patterns, cross-referenced against the technical/monetization/marketing
+audits above.)
+
+---
+
 ## Launch-done definition
 
 Launch is complete when: support-call price reads from data everywhere (no `$50`
