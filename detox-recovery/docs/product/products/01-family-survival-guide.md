@@ -44,7 +44,29 @@ If a buyer downloaded both, they should feel the paid one is the deeper, longer,
 
 ## Chapter 1 — Emergency triggers
 
-(Use the same 16-condition list and framing as the free lead magnet _02-helping-someone-in-withdrawal.md, Section 1_. Reproduce it here so the paid guide is self-contained. End with US emergency numbers.)
+These override everything else in this guide. If the person you love is showing any of these signs, **stop reading and act:**
+
+- **Seizure** — actively having one, or just had one
+- **Withdrawing from alcohol, benzodiazepines (Xanax, Valium, Klonopin, Ativan), barbiturates, GHB/GBL, or phenibut** — these can cause seizures and need medical supervision
+- **History of seizures** in their withdrawal history
+- **Hallucinations** — seeing, hearing, or feeling things that aren't there
+- **Delirium or acute confusion** — can't track time, place, or who you are
+- **Suicidal statements or behavior** — including indirect ones ("everyone would be better off…")
+- **Chest pain or pressure**
+- **Fainted or lost consciousness**
+- **Severe dehydration** — can't keep water down for hours, hasn't urinated in 12+ hours
+- **Vital signs that look wrong** — racing pulse, very high or low blood pressure, blue lips, gray skin
+- **Severe psychiatric symptoms** — panic that won't stop, paranoia, mania
+- **Pregnancy** plus active withdrawal
+- **Multiple substances** in active use or withdrawal at once
+
+You don't need their permission. You don't need to be sure. If you would call 911 for any other adult showing these signs, do it now.
+
+**US numbers:**
+
+- Emergency: **911**
+- Suicide & Crisis Lifeline: **988**
+- SAMHSA National Helpline: **1-800-662-4357**
 
 ---
 
