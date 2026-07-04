@@ -102,14 +102,14 @@ The authoritative runbooks for Part B:
 
 ## Milestones
 
-| id      | blocker (milestone)                              | severity | owner           | track    | status  | acceptance_check                                                                                                                     | source                                                                                           |
-| ------- | ------------------------------------------------ | -------- | --------------- | -------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| DX-MS-1 | First paid support call                          | —        | Founder         | —        | done    | Tier 2 [`DX-MON-1`](../../../docs/go-to-market/_shared/pricing.md) transacted; proof of concept                                      | orig: detox-recovery/docs/monetization/projections.md, archived (§13 Milestones & Gates)         |
-| DX-MS-2 | First digital-product sale (PDF deliverable)     | —        | Founder + agent | Part A+B | blocked | A Lemon Squeezy PDF sale delivers; gated on DX-PM-2 / DX-PM-8                                                                        | orig: detox-recovery/docs/monetization/projections.md, archived (§13 Milestones & Gates)         |
-| DX-MS-3 | First B2B engagement closed                      | —        | Founder         | manual   | planned | One [`DX-MON-9`](../../../docs/go-to-market/_shared/pricing.md) engagement invoiced + paid                                           | orig: detox-recovery/docs/monetization/projections.md, archived (§13 Milestones & Gates)         |
-| DX-MS-4 | Tier 3 launched (60-min family call)             | —        | Founder + agent | Part A+B | planned | [`DX-MON-2`](../../../docs/go-to-market/_shared/pricing.md) bookable + payable end-to-end                                            | orig: detox-recovery/docs/monetization/projections.md, archived (§13 Milestones & Gates)         |
-| DX-MS-5 | $1,000/month run rate                            | —        | Founder         | —        | planned | Trailing-month revenue ≥ $1k; triggers Tier 3 ramp                                                                                   | orig: detox-recovery/docs/monetization/projections.md, archived (§13 Milestones & Gates)         |
-| DX-MS-6 | VA PSS certification + Community Care enrollment | —        | Founder         | manual   | planned | PSS cert complete; VA Community Care provider status approved; [`DX-MON-12`](../../../docs/go-to-market/_shared/pricing.md) billable | orig: detox-recovery/docs/monetization/projections.md, archived (§7 Stream V1 VA Community Care) |
+| id      | blocker (milestone)                              | severity | owner           | track    | status  | acceptance_check                                                                                                                     | source                                                                                                                        |
+| ------- | ------------------------------------------------ | -------- | --------------- | -------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| DX-MS-1 | First paid support call                          | —        | Founder         | —        | done    | Tier 2 [`DX-MON-1`](../../../docs/go-to-market/_shared/pricing.md) transacted; proof of concept                                      | orig: detox-recovery/docs/monetization/projections.md, archived (§13 Milestones & Gates)                                      |
+| DX-MS-2 | First digital-product sale (PDF deliverable)     | —        | Founder + agent | Part A+B | blocked | A Lemon Squeezy sale of the flagship PDF (`DX-MON-4`) delivers; gated on `DX-PM-2` / `DX-PM-8` per `DP-3`'s scope                    | orig: detox-recovery/docs/monetization/projections.md, archived (§13 Milestones & Gates); scope updated 2026-07-04 per `DP-3` |
+| DX-MS-3 | First B2B engagement closed                      | —        | Founder         | manual   | planned | One [`DX-MON-9`](../../../docs/go-to-market/_shared/pricing.md) engagement invoiced + paid                                           | orig: detox-recovery/docs/monetization/projections.md, archived (§13 Milestones & Gates)                                      |
+| DX-MS-4 | Tier 3 launched (60-min family call)             | —        | Founder + agent | Part A+B | planned | [`DX-MON-2`](../../../docs/go-to-market/_shared/pricing.md) bookable + payable end-to-end                                            | orig: detox-recovery/docs/monetization/projections.md, archived (§13 Milestones & Gates)                                      |
+| DX-MS-5 | $1,000/month run rate                            | —        | Founder         | —        | planned | Trailing-month revenue ≥ $1k; triggers Tier 3 ramp                                                                                   | orig: detox-recovery/docs/monetization/projections.md, archived (§13 Milestones & Gates)                                      |
+| DX-MS-6 | VA PSS certification + Community Care enrollment | —        | Founder         | manual   | planned | PSS cert complete; VA Community Care provider status approved; [`DX-MON-12`](../../../docs/go-to-market/_shared/pricing.md) billable | orig: detox-recovery/docs/monetization/projections.md, archived (§7 Stream V1 VA Community Care)                              |
 
 **Milestone order:** first paid call ✅ → first deliverable PDF sale → first B2B
 → Tier 3 → $1k/mo → VA certification. The first-paid-call milestone is already
@@ -220,7 +220,16 @@ audits above.)
 Launch is complete when: support-call price reads from data everywhere (no `$50`
 drift); typecheck + full test suite + production build all green; CI green on
 `main`; contact-form email arrives correctly (not double-wrapped, not spam); each
-of 3 lead magnets delivers within 5 min; all 5 paid PDF CTAs open Lemon Squeezy
-**live** checkout; the 5 old Stripe PDF links are archived; and the recovery-api
-referral relay remains **disabled** (partner agreement pending)
-(source: detox-recovery/docs/superpowers/plans/2026-06-07-detox-completion.md#verification-checklist-launch-done-when-all-true).
+of 3 lead magnets delivers within 5 min; **at minimum the flagship PDF CTA**
+(Family Survival Guide, `DX-MON-4`) opens Lemon Squeezy **live** checkout — see
+`DP-3`; the 5 old Stripe PDF links are archived; and the recovery-api
+referral relay remains **disabled** (partner agreement pending).
+
+> **Supersedes the original all-5-PDF criterion.** The source plan below
+> required all 5 paid PDF CTAs live before launch; the 2026-07-04
+> monetization review (`DP-3`) recommends shipping only the flagship PDF
+> first and treats the remaining 4 as a post-launch (Month 2) follow-on. This
+> section reflects that recommendation. If the founder rejects `DP-3` and
+> reinstates the all-5 requirement, revert this section and `DX-MS-2`'s
+> acceptance check to the original all-5 wording
+> (source: detox-recovery/docs/superpowers/plans/2026-06-07-detox-completion.md#verification-checklist-launch-done-when-all-true).
