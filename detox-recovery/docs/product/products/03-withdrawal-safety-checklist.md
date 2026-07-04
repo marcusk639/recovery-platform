@@ -7,18 +7,17 @@
 
 ---
 
-## Critical reframe — read this section first as the author
-
-This product name (_"Withdrawal Safety Checklist"_) is at the edge of our scope. We do **not** assess medical safety — that is a clinical determination. What this checklist _does_ is help the patient or supporter:
-
-1. Recognize the conditions that always require emergency care (the 16 referral conditions)
-2. Communicate what's happening clearly to a clinician
-3. Track symptoms and timing for that clinician
-4. Decide what level of care to seek
-
-The checklist is a **communication aid**, not a safety determination. The disclaimer and framing throughout must reinforce this. If the buyer thinks this product replaces a clinician, we have failed.
-
----
+<!--
+Author-only note (do not include in generated PDF): this product name
+("Withdrawal Safety Checklist") is at the edge of our scope. We do not assess
+medical safety — that is a clinical determination. What this checklist does
+is help the patient or supporter (1) recognize the conditions that always
+require emergency care, (2) communicate what's happening clearly to a
+clinician, (3) track symptoms and timing for that clinician, (4) decide what
+level of care to seek. The checklist is a communication aid, not a safety
+determination. The disclaimer and framing throughout must reinforce this. If
+the buyer thinks this product replaces a clinician, we have failed.
+-->
 
 ## Front matter
 

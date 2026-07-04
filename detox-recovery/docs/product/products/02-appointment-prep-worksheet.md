@@ -20,9 +20,31 @@
 
 ---
 
+<!-- design: render this section as a visually distinct red banner / bold border in the generated PDF -->
+
 ## Section 0 — Stop and go to the ER if any of these apply
 
-(Reproduce the 16 referral conditions. Make this section visually distinct — red banner, bold border, etc. Make clear: _do not fill out the rest of this worksheet if any of these apply; go to emergency care now._)
+Do not fill out the rest of this worksheet if any of these apply to you or the person you're helping. Go to an emergency room or call 911 now.
+
+- **Seizure** — actively having one, or just had one
+- **Withdrawing from alcohol, benzodiazepines (Xanax, Valium, Klonopin, Ativan), barbiturates, GHB/GBL, or phenibut** — these can cause seizures and need medical supervision
+- **History of seizures** in withdrawal
+- **Hallucinations** — seeing, hearing, or feeling things that aren't there
+- **Delirium or acute confusion** — can't track time, place, or who you are
+- **Suicidal statements or behavior** — including indirect ones ("everyone would be better off…")
+- **Chest pain or pressure**
+- **Fainted or lost consciousness**
+- **Severe dehydration** — can't keep water down for hours, hasn't urinated in 12+ hours
+- **Vital signs that look wrong** — racing pulse, very high or low blood pressure, blue lips, gray skin
+- **Severe psychiatric symptoms** — panic that won't stop, paranoia, mania
+- **Pregnancy** plus active withdrawal
+- **Multiple substances** in active use or withdrawal at once
+
+**US numbers:**
+
+- Emergency: **911**
+- Suicide & Crisis Lifeline: **988**
+- SAMHSA National Helpline: **1-800-662-4357**
 
 ---
 

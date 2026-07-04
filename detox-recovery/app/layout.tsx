@@ -9,10 +9,37 @@ const geist = Geist({ subsets: ["latin"] });
 
 const PLAUSIBLE_DOMAIN = process.env.NEXT_PUBLIC_PLAUSIBLE_DOMAIN;
 
+const SITE_URL = "https://nextsteprecovery.io";
+const SITE_TITLE = "Withdrawal Support — Find Your Next Safe Step";
+const SITE_DESCRIPTION =
+  "Non-clinical support for people navigating withdrawal and the people who care about them.";
+
 export const metadata: Metadata = {
-  title: "Withdrawal Support — Find Your Next Safe Step",
-  description:
-    "Non-clinical support for people navigating withdrawal and the people who care about them.",
+  metadataBase: new URL(SITE_URL),
+  title: SITE_TITLE,
+  description: SITE_DESCRIPTION,
+  openGraph: {
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    url: SITE_URL,
+    siteName: "NextStep Recovery",
+    type: "website",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
+};
+
+const ORGANIZATION_JSON_LD = {
+  "@context": "https://schema.org",
+  "@type": "ProfessionalService",
+  name: "NextStep Recovery",
+  url: SITE_URL,
+  description: SITE_DESCRIPTION,
+  areaServed: "US",
 };
 
 export default function RootLayout({
@@ -23,6 +50,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${geist.className} bg-white text-slate-900`}>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(ORGANIZATION_JSON_LD),
+          }}
+        />
         {PLAUSIBLE_DOMAIN ? (
           <Script
             defer

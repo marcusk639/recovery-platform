@@ -21,9 +21,31 @@
 
 ---
 
+<!-- design: render this section as visually distinct in the generated PDF -->
+
 ## Section 1 — Emergency triggers (always)
 
-(Reproduce the 16-condition list. End with US emergency numbers. Make visually distinct.)
+If any of these are true, stop and get emergency care or call your clinician now — do not continue with this worksheet.
+
+- **Seizure** — actively having one, or just had one
+- **Withdrawing from alcohol, benzodiazepines (Xanax, Valium, Klonopin, Ativan), barbiturates, GHB/GBL, or phenibut** — these can cause seizures and need medical supervision
+- **History of seizures** in withdrawal
+- **Hallucinations** — seeing, hearing, or feeling things that aren't there
+- **Delirium or acute confusion** — can't track time, place, or who you are
+- **Suicidal statements or behavior** — including indirect ones ("everyone would be better off…")
+- **Chest pain or pressure**
+- **Fainted or lost consciousness**
+- **Severe dehydration** — can't keep water down for hours, hasn't urinated in 12+ hours
+- **Vital signs that look wrong** — racing pulse, very high or low blood pressure, blue lips, gray skin
+- **Severe psychiatric symptoms** — panic that won't stop, paranoia, mania
+- **Pregnancy** plus active withdrawal
+- **Multiple substances** in active use or withdrawal at once
+
+**US numbers:**
+
+- Emergency: **911**
+- Suicide & Crisis Lifeline: **988**
+- SAMHSA National Helpline: **1-800-662-4357**
 
 ---
 
