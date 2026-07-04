@@ -19,6 +19,12 @@ The single launch-to-monetized plan for NextStep Recovery (`nextsteprecovery.io`
 Today only **Tier 2 (support call)** and **donations** are live and deliverable;
 this doc is the path from there to the full ladder.
 
+> **Founder: everything left that requires your login, your voice, or your
+> decision is consolidated in
+> [`founder-manual-launch-guide.md`](founder-manual-launch-guide.md),
+> sequenced for fastest path to first user/dollar. Read that instead of
+> re-deriving priority order from the tables below.**
+
 The completion plan splits cleanly into **Part A** (agent-executable code work)
 and **Part B** (human-only external work — dashboards, DNS, payment providers,
 `firebase deploy`). That split is preserved in the `track` column below
