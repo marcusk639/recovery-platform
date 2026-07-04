@@ -82,8 +82,10 @@ jobs:
     name: Maestro Cloud — smoke tests (regroup Android)
     needs: [recovery-api, homegroups-functions, regroup-functions, detox-recovery]
     runs-on: ubuntu-latest
-    # Only run on PRs to avoid burning Maestro Cloud credits on every push to main
-    if: github.event_name == 'pull_request' && secrets.MAESTRO_CLOUD_API_KEY != ''
+    # Only run on PRs — the `secrets` context isn't available in job-level `if:`
+    # (only github/inputs/needs/vars are), so the actual Maestro-credit-saving
+    # check happens on the Maestro step itself, below.
+    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
 
