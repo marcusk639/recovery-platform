@@ -99,6 +99,15 @@ These take 30–60 minutes each and should be done in Week 1.
 - When someone explicitly asks "is there someone I can talk to," that's when you can mention services
 - **Do not** post promotional content; subreddit moderators will ban you
 
+**Addendum (2026-07-04) — additional subreddits verified:**
+
+- **r/quitting7oh** — real, small (~800+ members, started July 2024), fast-growing given 7-OH's emerging addiction profile. Highest signal-to-noise fit of any additional sub for the Day-0-withdrawal persona this plan targets. **Add to the Tier-1 list above.**
+- **r/quittingkratom** — real and active, but **quarantined** (no ads, reduced discoverability, strict mod enforcement against outside promotion). Same authentic-participation-only rules as r/opiatesrecovery apply. **Add to the Tier-1 list above.**
+- **r/addiction** — real, large, but broad/diffuse general discussion rather than crisis-onset specific; lower conversion intent than the core four. Optional passive presence only, not a priority.
+- **r/recovery** — real, mid-sized, skews toward people already maintaining sobriety (post-acute), off-peak for the "moment of need" thesis. Lowest priority.
+
+Exact live member counts should be spot-checked in-app before outreach — kratom-related subs are quarantined and stats aggregators don't render their numbers reliably.
+
 **Longer-term opportunity:**
 
 - Host a verified AMA (Ask Me Anything) in r/stopdrinking or r/opiatesrecovery as a "peer withdrawal support specialist with lived experience" — these communities regularly host relevant AMAs
@@ -217,6 +226,16 @@ Recovery podcasts have loyal, high-trust audiences. A single appearance on a wel
 - Billing infrastructure (could use a billing service at 5–8% of collections)
 
 **Recommendation:** Evaluate in Year 2 once the practice is established. This is a meaningful expansion option if call volume is constrained by cost.
+
+---
+
+## Addendum (2026-07-04) — ebook, paid ads, partnership scope
+
+**Ebook strategy.** The 5 paid PDFs (`DX-MON-4`–`DX-MON-8`) are deliberately narrow, transactional products blocked on authorship. A broader "complete withdrawal navigation guide" the founder wants to write should **not** become a 6th paid product — it would compete with and cannibalize the same buyer. Instead, position it as the **free email-capture lead magnet** this plan already references ("free guide download" in the SEO/TikTok CTAs) but never named a specific asset for. Flow: give away the comprehensive guide → capture email → upsell into the 5 narrow paid PDFs and the paid support call. One flagship writing effort feeds the whole funnel; it doesn't compete with the existing ladder.
+
+**Paid advertising — effectively blocked on Google/Meta/Bing.** Verified: all three require LegitScript addiction-treatment certification to run ads in this category, and LegitScript explicitly (a) does not certify non-clinical peer/recovery-residence services without licensed clinical care, and (b) bars lead-generators/referrers who route people to other providers — close to this site's referral model. Do not budget for paid search/social. The only realistic paid test channel is **Reddit Ads**, where addiction recovery is a restricted (extra-review) rather than prohibited category, and can be targeted directly at r/stopdrinking, r/opiatesrecovery, r/quittingkratom — but given this plan's organic-first Reddit strategy and mod sensitivity in those communities, treat it as a small test, not a core channel, and verify current eligibility for a non-clinical advertiser before spending.
+
+**Treatment center / outpatient partnerships — no new category needed.** This is already fully covered above via the Treatment Center Intake Coordinator Network and SBIRT hospital-ER programs (plus the B2C→B2B flywheel). "Outpatient program" partnerships are a variant of the same intake-coordinator channel (outpatient intake staff face the identical waitlist/overflow problem) — fold that language into the existing outreach one-pager rather than standing up a third workstream.
 
 ---
 
