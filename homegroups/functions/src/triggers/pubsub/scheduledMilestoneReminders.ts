@@ -129,7 +129,7 @@ export async function scheduledMilestoneRemindersHandler(): Promise<void> {
     }
 
     functions.logger.info(
-      `scheduledMilestoneReminders: sent reminder for ${displayName} (${daysLabel}) in group ${groupId} to ${tokens.length} admin token(s)`,
+      `scheduledMilestoneReminders: sent reminder (${daysLabel}) in group ${groupId} to ${tokens.length} admin token(s)`,
     );
   }
 }

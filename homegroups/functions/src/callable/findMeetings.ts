@@ -268,7 +268,7 @@ export const findMeetings = onCall(
 
     const startTime = Date.now();
     logger.info("findMeetings called with request:", {
-      filters: request.data?.filters,
+      hasLocationFilter: Boolean(request.data?.filters?.location),
       criteria: request.data?.criteria,
     });
 
@@ -281,7 +281,7 @@ export const findMeetings = onCall(
       logger.info("Processing meeting search with:", {
         type,
         dayFilter,
-        location,
+        hasLocation: Boolean(location),
         criteria: meetingInput.criteria,
       });
 
@@ -401,7 +401,7 @@ export const findMeetings = onCall(
             : String(error),
         duration: `${errorDuration} seconds`,
         request: {
-          filters: request.data?.filters,
+          hasLocationFilter: Boolean(request.data?.filters?.location),
           criteria: request.data?.criteria,
         },
       });

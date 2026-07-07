@@ -180,12 +180,10 @@ async function sendPersonalMilestoneNotification(
         },
       },
     });
-    functions.logger.info(
-      `Sent personal milestone notification to ${userData.displayName}`,
-    );
+    functions.logger.info("Sent personal milestone notification");
   } catch (error) {
     functions.logger.error(
-      `Error sending personal milestone notification to ${userData.displayName}:`,
+      "Error sending personal milestone notification:",
       error,
     );
   }
