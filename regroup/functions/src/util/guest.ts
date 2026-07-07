@@ -49,7 +49,7 @@ const getBackoffDelay = (attempt: number): number => {
  */
 export async function advanceGuestWeek(
   guestRef: FirebaseFirestore.DocumentReference,
-  guest: Guest,
+  guest: Guest
 ): Promise<Guest> {
   const currentWeekStart = guest.currentWeekStartDate ?? getCurrentWeekStart();
   const nextWeekStart = getNextWeekStart(currentWeekStart);
@@ -101,7 +101,7 @@ export async function advanceGuestWeek(
         lastUpdated: new Date().toISOString(),
         activityCount: 0,
       },
-      { merge: true },
+      { merge: true }
     );
 
     logger.info("Advanced guest week", {
@@ -124,7 +124,7 @@ export async function advanceGuestWeek(
 
 const transferGuestWeekWithRetry = async (
   guestDoc: FirebaseFirestore.QueryDocumentSnapshot,
-  house: House,
+  house: House
 ): Promise<{ success: boolean; guest?: Guest; error?: string }> => {
   const guest = guestDoc.data() as Guest;
 
@@ -143,8 +143,10 @@ const transferGuestWeekWithRetry = async (
       if (isRetryable && attempt < RETRY_CONFIG.maxRetries - 1) {
         const delay = getBackoffDelay(attempt);
         logger.warn(
-          `Retrying transfer for guest ${guest.id} after ${delay}ms (attempt ${attempt + 1}/${RETRY_CONFIG.maxRetries})`,
-          error.message,
+          `Retrying transfer for guest ${guest.id} after ${delay}ms (attempt ${
+            attempt + 1
+          }/${RETRY_CONFIG.maxRetries})`,
+          error.message
         );
         await sleep(delay);
         continue;
@@ -160,8 +162,10 @@ const transferGuestWeekWithRetry = async (
       failedTransfers.push(failure);
 
       logger.error(
-        `Failed to transfer week for guest ${guest.id} after ${attempt + 1} attempts`,
-        error,
+        `Failed to transfer week for guest ${guest.id} after ${
+          attempt + 1
+        } attempts`,
+        error
       );
 
       return { success: false, error: error.message };
@@ -178,7 +182,7 @@ const transferGuestWeekWithRetry = async (
 export const transferStats = async (
   context: unknown,
   timezone?: string | null,
-  houseId?: string,
+  houseId?: string
 ): Promise<Guests> => {
   logger.info("Starting weekly transfer...", { timezone, houseId });
 
@@ -223,17 +227,17 @@ export const transferStats = async (
 
         results.totalGuests += guestQuery.size;
         logger.info(
-          `Found ${guestQuery.size} active guests in house ${house.name}`,
+          `Found ${guestQuery.size} active guests in house ${house.name}`
         );
 
         // Update house health
         try {
-          calculateWeeklyHealth(guestQuery, house);
+          await calculateWeeklyHealth(guestQuery, house);
           await houseDoc.ref.update(JSON.parse(JSON.stringify(house)));
         } catch (healthError) {
           logger.warn(
             `Failed to update house health for ${house.name}`,
-            healthError,
+            healthError
           );
         }
 
@@ -264,7 +268,7 @@ export const transferStats = async (
   if (failedTransfers.length > 0) {
     logger.error(
       `${failedTransfers.length} guest transfers failed`,
-      failedTransfers,
+      failedTransfers
     );
   }
 

@@ -164,7 +164,17 @@ service cloud.firestore {
     match /houses/{houseId} {
       allow read: if isGuestOrAdmin([houseId]);
       allow create: if isAdmin([houseId]);
-      allow delete: if isHouseAdmin(request.resource.data.id);
+      // Hardened 2026-07-05: request.resource does not exist on delete
+      // operations (there is no incoming document), so this rule always
+      // evaluated to false/error and the "delete house" path was dead —
+      // no admin could ever delete a house. houseId (the path segment) is
+      // the same value the rest of this match block already uses.
+      //
+      // Hardened 2026-07-07: used isHouseAdmin(houseId) (admin claim only),
+      // inconsistent with every sibling rule in this match block (create,
+      // update, read all use isAdmin([houseId]), which also grants
+      // superAdmin) — a superAdmin who can edit a house couldn't delete it.
+      allow delete: if isAdmin([houseId]);
       // Admins can update anything; guests cannot modify sensitive fields
       allow update: if isAdmin([houseId]) ||
         (isGuest([houseId]) && !request.resource.data.diff(resource.data).affectedKeys()
@@ -191,7 +201,16 @@ service cloud.firestore {
       match /votes/{voteId} {
         allow read: if isGuestOrAdmin([houseId]);
         allow create: if isAdmin([houseId]) && houseOxfordActive(houseId);
-        allow update: if isGuestOrAdmin([houseId]) && houseOxfordActive(houseId);
+        // Hardened 2026-07-07: this used to allow any guest/admin of the
+        // house to update ANY field of ANY vote doc with no scoping, which
+        // is how a modified client (or a raw Firestore write) could inflate
+        // an anonymous tally, clear its own id out of voterIds to re-vote, or
+        // edit another guest's individualVotes entry — the client-side
+        // "already voted" check was real code, but was never a security
+        // boundary. Vote casting now goes exclusively through the
+        // castOxfordVote Cloud Function (Admin SDK, bypasses these rules),
+        // which resolves the caller's guestId from their own auth uid.
+        allow update: if false;
         allow delete: if false;
       }
 
