@@ -60,10 +60,27 @@ interface CallerRequest {
   };
 }
 
-/** Derives a per-caller identifier for rate-limiting unauthenticated callables. */
+function sanitizeKeyPart(s: string): string {
+  return s.replace(/[^a-zA-Z0-9_.-]/g, "_");
+}
+
+/**
+ * Derives a per-caller identifier for rate-limiting unauthenticated callables.
+ * Prefers the framework-resolved connecting IP (request.rawRequest.ip) over
+ * the client-supplied X-Forwarded-For header, since an unauthenticated caller
+ * can set X-Forwarded-For to anything — trusting its first entry directly
+ * would let an attacker defeat the rate limit by sending a fresh fake value
+ * on every request. Falls back to X-Forwarded-For's LAST entry (the one
+ * closest to our own infrastructure) only when .ip is unavailable. The
+ * result is sanitized because it's used as a Firestore document ID, which
+ * cannot contain "/" or certain other characters.
+ */
 export function callerKey(request: CallerRequest): string {
+  const ip = request.rawRequest?.ip;
+  if (ip) return sanitizeKeyPart(ip);
+
   const xff = request.rawRequest?.headers?.["x-forwarded-for"];
-  const forwarded =
-    typeof xff === "string" ? xff.split(",")[0].trim() : undefined;
-  return forwarded || request.rawRequest?.ip || "unknown";
+  const last =
+    typeof xff === "string" ? xff.split(",").pop()?.trim() : undefined;
+  return sanitizeKeyPart(last || "unknown");
 }

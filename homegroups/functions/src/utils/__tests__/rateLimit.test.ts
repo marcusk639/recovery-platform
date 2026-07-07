@@ -102,23 +102,40 @@ describe("enforceRateLimit", () => {
 });
 
 describe("callerKey", () => {
-  it("prefers the first X-Forwarded-For entry", () => {
+  it("prefers rawRequest.ip over X-Forwarded-For when both are present", () => {
     const key = callerKey({
       rawRequest: {
-        headers: { "x-forwarded-for": "1.2.3.4, 5.6.7.8" },
         ip: "9.9.9.9",
+        headers: { "x-forwarded-for": "1.2.3.4, 5.6.7.8" },
       },
     } as any);
-    expect(key).toBe("1.2.3.4");
-  });
-
-  it("falls back to rawRequest.ip when no X-Forwarded-For header is present", () => {
-    const key = callerKey({ rawRequest: { ip: "9.9.9.9" } } as any);
     expect(key).toBe("9.9.9.9");
   });
 
-  it('falls back to "unknown" when neither is present', () => {
+  it("falls back to the LAST X-Forwarded-For entry when rawRequest.ip is absent", () => {
+    const key = callerKey({
+      rawRequest: { headers: { "x-forwarded-for": "1.2.3.4, 5.6.7.8" } },
+    } as any);
+    expect(key).toBe("5.6.7.8");
+  });
+
+  it('falls back to "unknown" when neither ip nor X-Forwarded-For is present', () => {
     const key = callerKey({ rawRequest: {} } as any);
     expect(key).toBe("unknown");
+  });
+
+  it("sanitizes a slash-containing ip so it cannot break a Firestore document path", () => {
+    const key = callerKey({
+      rawRequest: { ip: "1.2.3.4/../../etc" },
+    } as any);
+    expect(key).not.toContain("/");
+    expect(key).toBe("1.2.3.4_.._.._etc");
+  });
+
+  it("sanitizes a slash-containing X-Forwarded-For fallback value", () => {
+    const key = callerKey({
+      rawRequest: { headers: { "x-forwarded-for": "a/b/c" } },
+    } as any);
+    expect(key).not.toContain("/");
   });
 });
