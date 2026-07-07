@@ -1,32 +1,32 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from "react";
 // Phase 3.3: Removed withRats HOC (translation/theme available globally via useTranslation and ThemeProvider)
-import { useAppSelector, useAppDispatch } from '../../state/store';
-import { useSelectedHouse } from '../../hooks/useSelectedHouse';
-import { useSelectedGuest } from '../../hooks/useSelectedGuest';
-import { useGuests } from '../../state/queries/guestQueries';
-import { Message } from '../../entities/Message';
+import { useAppSelector, useAppDispatch } from "../../state/store";
+import { useSelectedHouse } from "../../hooks/useSelectedHouse";
+import { useSelectedGuest } from "../../hooks/useSelectedGuest";
+import { useGuests } from "../../state/queries/guestQueries";
+import { Message } from "../../entities/Message";
 
-import { loadDirectChat } from '../../services/message';
+import { loadDirectChat } from "../../services/message";
 import {
   sendDirectMessage as sendDirectMessageThunk,
   addMessageToConversation,
   markMessagesAsRead,
   setActiveConversation,
-} from '../../state/slices/chatSlice';
-import { selectGuest as selectGuestThunk } from '../../state/slices/guestsSlice';
+} from "../../state/slices/chatSlice";
+import { selectGuest as selectGuestThunk } from "../../state/slices/guestsSlice";
 import {
   ChatParticipant,
   DirectMessage,
-} from '../../entities/DirectConversation';
-import RatsLoadingIndicator from '../../components/rats-loading-indicator/rats-loading-indicator';
+} from "../../entities/DirectConversation";
+import RatsLoadingIndicator from "../../components/rats-loading-indicator/rats-loading-indicator";
 import {
   Alert,
   View,
   TouchableOpacity,
   TextInput,
   Dimensions,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
   color,
   normalize,
@@ -34,26 +34,26 @@ import {
   elevateStyle,
   ROW,
   fontFamily,
-} from '../../styles/theme';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../navigation/types';
-import RatsButton from '../../components/rats-button/rats-button';
-import { RatsIcon } from '../../components/rats-icon';
-import RatsAvatar from '../../components/rats-avatar';
-import { RatsText } from '../../components/rats-text';
-import { Icon } from '../../components/rats-icon';
-import { callNumber } from '../../util/phone';
-import { dateAndTime } from '../../util/display';
-import { toDateSafe } from '../../util/firestore';
-import { House } from '../../entities/House';
-import { Guest } from '../../entities/Guest';
-import { Guests, Admins } from '../../types';
-import Admin from '../../entities/Admin';
-import { User } from '../../entities/User';
-import { Routes } from '../../navigation/types';
-import { KeyboardAwareFlatList } from 'react-native-keyboard-aware-scroll-view';
-import { IOS } from '../../util/platform';
-import * as uuid from 'uuid';
+} from "../../styles/theme";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { RootStackParamList } from "../../navigation/types";
+import RatsButton from "../../components/rats-button/rats-button";
+import { RatsIcon } from "../../components/rats-icon";
+import RatsAvatar from "../../components/rats-avatar";
+import { RatsText } from "../../components/rats-text";
+import { Icon } from "../../components/rats-icon";
+import { callNumber } from "../../util/phone";
+import { dateAndTime } from "../../util/display";
+import { toDateSafe } from "../../util/firestore";
+import { House } from "../../entities/House";
+import { Guest } from "../../entities/Guest";
+import { Guests, Admins } from "../../types";
+import Admin from "../../entities/Admin";
+import { User } from "../../entities/User";
+import { Routes } from "../../navigation/types";
+import { KeyboardAwareFlatList } from "react-native-keyboard-aware-scroll-view";
+import { IOS } from "../../util/platform";
+import * as uuid from "uuid";
 
 export interface ChatProps {
   house: House;
@@ -77,15 +77,15 @@ export interface ChatProps {
   navigation: NativeStackNavigationProp<RootStackParamList>;
 }
 
-const DirectChatInner: React.FC<ChatProps> = props => {
+const DirectChatInner: React.FC<ChatProps> = (props) => {
   const [loadingNewConversation, setLoadingNewConversation] = useState(false);
-  const [text, setText] = useState('');
+  const [text, setText] = useState("");
 
   const receiveMessages = useCallback(
     (msgs: Message[], chatId: string, loading: boolean = false) => {
       props.addDirectMessage(msgs, chatId, loading);
     },
-    [props.addDirectMessage],
+    [props.addDirectMessage]
   );
 
   const markLatestMessageRead = useCallback(
@@ -94,7 +94,7 @@ const DirectChatInner: React.FC<ChatProps> = props => {
         props.markMessageRead(props.conversationId, msgs[0].key);
       }
     },
-    [props.markMessageRead, props.conversationId],
+    [props.markMessageRead, props.conversationId]
   );
 
   useEffect(() => {
@@ -102,7 +102,7 @@ const DirectChatInner: React.FC<ChatProps> = props => {
       setLoadingNewConversation(true);
       const msgs = await loadDirectChat(
         props.conversationId,
-        receiveMessages as any,
+        receiveMessages as any
       );
       markLatestMessageRead(msgs);
       setLoadingNewConversation(false);
@@ -125,11 +125,11 @@ const DirectChatInner: React.FC<ChatProps> = props => {
         await loadDirectChat(
           props.conversationId,
           receiveMessages as any,
-          lastMessageId,
+          lastMessageId
         );
       }
     },
-    [props.conversationId, receiveMessages],
+    [props.conversationId, receiveMessages]
   );
 
   const createMessage = useCallback(
@@ -137,12 +137,12 @@ const DirectChatInner: React.FC<ChatProps> = props => {
       const { house, user, userAsAdmin: admin, guest, recipient } = props;
       const participants: ChatParticipant[] = [
         {
-          type: user.isAdmin ? 'admin' : 'guest',
-          id: (user.isAdmin ? admin?.id : guest?.id) || '',
+          type: user.isAdmin ? "admin" : "guest",
+          id: (user.isAdmin ? admin?.id : guest?.id) || "",
         },
         {
-          type: admin && recipient?.id === admin.id ? 'admin' : 'guest',
-          id: recipient?.id || '',
+          type: admin && recipient?.id === admin.id ? "admin" : "guest",
+          id: recipient?.id || "",
         },
       ];
 
@@ -158,35 +158,39 @@ const DirectChatInner: React.FC<ChatProps> = props => {
         updatedAt: new Date().toISOString(),
         _id: messageId,
         text: messageText,
-        houseId: house?.id || '',
-        senderId: user?.uid || '',
+        houseId: house?.id || "",
+        senderId: user?.uid || "",
         recipientId: recipient ? recipient.userId : undefined,
         sortKey: 0 - Date.now(),
-        senderName: `${user?.firstName || ''} ${user?.lastName || ''}`,
+        senderName: `${user?.firstName || ""} ${user?.lastName || ""}`,
         read: false,
         participants: participants as any, // DirectConversation.ChatParticipant vs Message.ChatParticipant type mismatch
       };
 
       return [message];
     },
-    [props],
+    [props]
   );
 
   const onSend = useCallback(
     async (messageText: string) => {
       const { sendDirectMessage, conversationId } = props;
-      setText('');
+      setText("");
       const newMessages = createMessage(messageText);
       try {
         // DirectMessage and Message types are compatible for this operation
         await sendDirectMessage(conversationId, newMessages as any);
       } catch (error) {
+        // Hardened 2026-07-05: the composed text was cleared unconditionally
+        // before the send was confirmed — a failed send lost the user's
+        // typed message, which they had to retype from memory. Restore it.
+        setText(messageText);
         Alert.alert(
-          'Failed to send the message! Please check your network connection and try again.',
+          "Failed to send the message! Please check your network connection and try again."
         );
       }
     },
-    [props.sendDirectMessage, props.conversationId, createMessage],
+    [props.sendDirectMessage, props.conversationId, createMessage]
   );
 
   const renderMessage = useCallback(
@@ -197,12 +201,12 @@ const DirectChatInner: React.FC<ChatProps> = props => {
         user && currentMessage?.user?._id === user.uid;
 
       const CONTAINER = {
-        width: '60%',
+        width: "60%",
         marginHorizontal: normalize(15),
         marginBottom: normalize(10),
         alignSelf: messageIsFromThisUser
-          ? ('flex-end' as const)
-          : ('flex-start' as const),
+          ? ("flex-end" as const)
+          : ("flex-start" as const),
       };
 
       const MESSAGE_CONTAINER = {
@@ -212,8 +216,8 @@ const DirectChatInner: React.FC<ChatProps> = props => {
         marginBottom: normalize(5),
       };
 
-      const name = currentMessage.user.name.split(' ');
-      const firstName = name.length ? name[0] : 'Unknown';
+      const name = currentMessage.user.name.split(" ");
+      const firstName = name.length ? name[0] : "Unknown";
 
       return (
         <View style={CONTAINER as any}>
@@ -231,14 +235,15 @@ const DirectChatInner: React.FC<ChatProps> = props => {
             style={{
               ...ROW,
               alignSelf: messageIsFromThisUser
-                ? ('flex-end' as const)
-                : ('flex-start' as const),
-            }}>
+                ? ("flex-end" as const)
+                : ("flex-start" as const),
+            }}
+          >
             <RatsText
               translate={false}
               text={(() => {
                 const d = toDateSafe(currentMessage.createdAt);
-                return d ? dateAndTime(d) : '';
+                return d ? dateAndTime(d) : "";
               })()}
               style={{ color: color.grey }}
             />
@@ -246,38 +251,40 @@ const DirectChatInner: React.FC<ChatProps> = props => {
         </View>
       );
     },
-    [props.user],
+    [props.user]
   );
 
   // Stable renderItem for the FlatList so cell memoization isn't
   // invalidated on every parent re-render by an inline arrow.
   const renderItem = useCallback(
     (info: { item: Message }) => renderMessage(info.item),
-    [renderMessage],
+    [renderMessage]
   );
 
   const renderHeader = useCallback(() => {
     const { recipient, admins, navigation } = props;
     const name = recipient
       ? `${recipient.firstName} ${recipient.lastName}`
-      : '';
+      : "";
     const recipientIsAdmin = admins && admins[recipient?.id!];
-    const avatar = recipient ? recipient.avatar : '';
+    const avatar = recipient ? recipient.avatar : "";
 
     return (
       <View
         style={{
           height: normalize(60),
-          width: '100%',
+          width: "100%",
           backgroundColor: color.white,
           paddingVertical: normalize(5),
           paddingHorizontal: normalize(15),
           ...elevateStyle,
-        }}>
-        <View style={{ flexDirection: 'row', flex: 1, alignItems: 'center' }}>
+        }}
+      >
+        <View style={{ flexDirection: "row", flex: 1, alignItems: "center" }}>
           <TouchableOpacity
             onPress={() => navigation.goBack()}
-            style={{ marginRight: normalize(15) }}>
+            style={{ marginRight: normalize(15) }}
+          >
             <RatsIcon
               name="arrow-left"
               size={fontSize.large}
@@ -305,15 +312,17 @@ const DirectChatInner: React.FC<ChatProps> = props => {
           />
           <View
             style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              marginLeft: 'auto',
-            }}>
+              flexDirection: "row",
+              alignItems: "center",
+              marginLeft: "auto",
+            }}
+          >
             <TouchableOpacity
               style={{ paddingRight: !recipientIsAdmin ? normalize(20) : 0 }}
               onPress={() =>
                 recipient?.phoneNumber && callNumber(recipient.phoneNumber)
-              }>
+              }
+            >
               <Icon
                 style={{ color: color.baby_blue }}
                 name="phone"
@@ -325,7 +334,8 @@ const DirectChatInner: React.FC<ChatProps> = props => {
                 onPress={() => {
                   props.selectGuest(recipient.id);
                   navigation.navigate(Routes.Guest);
-                }}>
+                }}
+              >
                 <Icon
                   solid
                   style={{ color: color.baby_blue }}
@@ -349,8 +359,9 @@ const DirectChatInner: React.FC<ChatProps> = props => {
 
   return (
     <SafeAreaView
-      edges={['bottom']}
-      style={{ backgroundColor: color.white, flex: 1 }}>
+      edges={["bottom"]}
+      style={{ backgroundColor: color.white, flex: 1 }}
+    >
       {renderHeader()}
       <View style={{ flex: 1, backgroundColor: color.light_grey }}>
         <KeyboardAwareFlatList
@@ -377,15 +388,16 @@ const DirectChatInner: React.FC<ChatProps> = props => {
         />
         <View
           style={{
-            width: '100%',
+            width: "100%",
             height: normalize(50),
             paddingHorizontal: normalize(10),
             backgroundColor: color.white,
             paddingTop: normalize(5),
             bottom: 0,
-            position: 'absolute',
-          }}>
-          <View style={[ROW, { flex: 1, justifyContent: 'space-between' }]}>
+            position: "absolute",
+          }}
+        >
+          <View style={[ROW, { flex: 1, justifyContent: "space-between" }]}>
             <TextInput
               placeholder="Type a message"
               placeholderTextColor={color.grey}
@@ -394,7 +406,7 @@ const DirectChatInner: React.FC<ChatProps> = props => {
               style={{
                 backgroundColor: color.white,
                 height: normalize(40),
-                width: '80%',
+                width: "80%",
                 borderRadius: 5,
                 borderWidth: 1,
                 borderColor: color.dark_grey,
@@ -412,7 +424,8 @@ const DirectChatInner: React.FC<ChatProps> = props => {
                 flex: 1,
                 marginTop: normalize(5),
                 marginLeft: normalize(10),
-              }}>
+              }}
+            >
               <RatsButton
                 title="SEND"
                 disabled={!text}
@@ -444,23 +457,23 @@ const DirectChatInner: React.FC<ChatProps> = props => {
  * - Added typed selectors (removed 7 'as any' casts)
  * - Kept HOCs (will be removed in Phase 3)
  */
-const DirectChat: React.FC<any> = props => {
+const DirectChat: React.FC<any> = (props) => {
   const dispatch = useAppDispatch();
 
   // RTK Typed Selectors (no more 'as any')
   const { house } = useSelectedHouse();
   const { guest } = useSelectedGuest();
   // React Query is the source of truth for guests; see .full-review [A2].
-  const { data: guests = {} } = useGuests(house?.id ?? '');
-  const user = useAppSelector(state => state.user.user);
-  const admins = useAppSelector(state => state.admin.houseAdmins);
-  const userAsAdmin = useAppSelector(state => state.admin.userAsAdmin);
+  const { data: guests = {} } = useGuests(house?.id ?? "");
+  const user = useAppSelector((state) => state.user.user);
+  const admins = useAppSelector((state) => state.admin.houseAdmins);
+  const userAsAdmin = useAppSelector((state) => state.admin.userAsAdmin);
   const conversationId = useAppSelector(
-    state => state.chat.activeConversationId,
+    (state) => state.chat.activeConversationId
   );
-  const recipient = useAppSelector(state => state.chat.recipient);
-  const messages = useAppSelector(state =>
-    conversationId ? state.chat.conversations[conversationId] : [],
+  const recipient = useAppSelector((state) => state.chat.recipient);
+  const messages = useAppSelector((state) =>
+    conversationId ? state.chat.conversations[conversationId] : []
   );
 
   return (
@@ -473,37 +486,41 @@ const DirectChat: React.FC<any> = props => {
       admins={admins || {}}
       userAsAdmin={userAsAdmin}
       messages={messages}
-      conversationId={conversationId || ''}
+      conversationId={conversationId || ""}
       recipient={recipient}
       addDirectMessage={(
         messages: Message[],
         chatId: string,
-        loading?: boolean,
+        loading?: boolean
       ) => {
         // Add each message to conversation
-        messages.forEach(message => {
+        messages.forEach((message) => {
           dispatch(
-            addMessageToConversation({ conversationId: chatId, message }),
+            addMessageToConversation({ conversationId: chatId, message })
           );
         });
       }}
       sendDirectMessage={async (
         conversationId: string,
-        messages: DirectMessage[],
+        messages: DirectMessage[]
       ) => {
         // Send the first message (typically only one message per send)
         const message = messages[0];
         if (message) {
+          // .unwrap() is required — dispatch(thunk()) alone resolves to the
+          // action object (fulfilled or rejected) and never rejects, which
+          // would silently swallow send failures and skip onSend's
+          // catch-and-restore-text/Alert handling below.
           await dispatch(
             sendDirectMessageThunk({
               conversationId,
               text: message.text,
-              senderId: message.senderId || '',
+              senderId: message.senderId || "",
               senderName: message.senderName,
-              recipientId: message.recipientId || '',
+              recipientId: message.recipientId || "",
               houseId: message.houseId,
-            }),
-          );
+            })
+          ).unwrap();
         }
       }}
       startConversation={(conversationId: string) =>
@@ -514,12 +531,12 @@ const DirectChat: React.FC<any> = props => {
       }
       addChatMessage={(messages: Message[]) => {
         // Add each message to conversation
-        messages.forEach(message => {
+        messages.forEach((message) => {
           dispatch(
             addMessageToConversation({
-              conversationId: conversationId || '',
+              conversationId: conversationId || "",
               message,
-            }),
+            })
           );
         });
       }}
@@ -531,21 +548,21 @@ const DirectChat: React.FC<any> = props => {
             sendDirectMessageThunk({
               conversationId: houseId,
               text: message.text,
-              senderId: message.senderId || '',
-              senderName: message.senderName || '',
-              recipientId: message.recipientId || '',
-              houseId: message.houseId || '',
-            }),
-          );
+              senderId: message.senderId || "",
+              senderName: message.senderName || "",
+              recipientId: message.recipientId || "",
+              houseId: message.houseId || "",
+            })
+          ).unwrap();
         }
       }}
       updateNavigationTitle={(title: string) => {
         // Navigation title update - keeping as-is for now
-        dispatch({ type: 'UPDATE_TITLE', title } as any);
+        dispatch({ type: "UPDATE_TITLE", title } as any);
       }}
       markMessageRead={(conversationId: string, messageKey: string) =>
         dispatch(
-          markMessagesAsRead({ conversationId, messageIds: [messageKey] }),
+          markMessagesAsRead({ conversationId, messageIds: [messageKey] })
         )
       }
       conversations={{}}

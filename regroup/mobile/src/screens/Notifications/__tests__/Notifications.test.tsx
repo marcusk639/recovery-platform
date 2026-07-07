@@ -12,12 +12,12 @@
  */
 
 // ─── Firebase / native module mocks ────────────────────────────────────────
-jest.mock('../../../../firebase-setup', () => ({
+jest.mock("../../../../firebase-setup", () => ({
   firestore: {
     collection: jest.fn(() => ({
       doc: jest.fn(() => ({
         get: jest.fn(() =>
-          Promise.resolve({ exists: false, data: () => null }),
+          Promise.resolve({ exists: false, data: () => null })
         ),
         set: jest.fn(() => Promise.resolve()),
         update: jest.fn(() => Promise.resolve()),
@@ -39,7 +39,7 @@ const mockGetUserNotifications = jest.fn();
 const mockMarkNotificationAsRead = jest.fn();
 const mockMarkAllNotificationsAsRead = jest.fn();
 
-jest.mock('../../../services/notifications', () => ({
+jest.mock("../../../services/notifications", () => ({
   getUserNotifications: mockGetUserNotifications,
   markNotificationAsRead: mockMarkNotificationAsRead,
   markAllNotificationsAsRead: mockMarkAllNotificationsAsRead,
@@ -51,29 +51,29 @@ jest.mock('../../../services/notifications', () => ({
 }));
 
 // ─── Context mocks ─────────────────────────────────────────────────────────
-jest.mock('../../../context', () => ({
+jest.mock("../../../context", () => ({
   useTheme: () => ({
     theme: {
-      primaryFontFamily: 'System',
-      secondaryFontFamily: 'System',
-      primaryColor: '#000',
-      secondaryColor: '#fff',
-      tertiaryColor: '#ccc',
-      backgroundColor: '#fff',
-      textColor: '#000',
-      logoTintColor: '#fff',
+      primaryFontFamily: "System",
+      secondaryFontFamily: "System",
+      primaryColor: "#000",
+      secondaryColor: "#fff",
+      tertiaryColor: "#ccc",
+      backgroundColor: "#fff",
+      textColor: "#000",
+      logoTintColor: "#fff",
     },
   }),
   useTranslation: () => ({
     t: (key: string) => key,
-    i18n: { language: 'en', changeLanguage: jest.fn() },
+    i18n: { language: "en", changeLanguage: jest.fn() },
   }),
 }));
 
 // ─── Navigation mocks ──────────────────────────────────────────────────────
-jest.mock('@react-navigation/native-stack', () => ({}));
+jest.mock("@react-navigation/native-stack", () => ({}));
 
-jest.mock('@react-navigation/native', () => ({
+jest.mock("@react-navigation/native", () => ({
   useNavigation: () => ({
     goBack: jest.fn(),
     navigate: jest.fn(),
@@ -82,73 +82,71 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 // ─── ScreenHeader stub ────────────────────────────────────────────────────
-jest.mock('../../../components/screen-header', () => {
+jest.mock("../../../components/screen-header", () => {
   const mockScreenHeader = ({ children }: any) => {
-    const { View } = require('react-native');
-    return require('react').createElement(
+    const { View } = require("react-native");
+    return require("react").createElement(
       View,
-      { testID: 'screen-header' },
-      children,
+      { testID: "screen-header" },
+      children
     );
   };
   return mockScreenHeader;
 });
 
 // ─── RatsIcon stub ────────────────────────────────────────────────────────
-jest.mock('../../../components/rats-icon', () => ({
+jest.mock("../../../components/rats-icon", () => ({
   RatsIcon: ({ name, testID }: { name: string; testID?: string }) => {
-    const { View } = require('react-native');
-    return require('react').createElement(View, {
+    const { View } = require("react-native");
+    return require("react").createElement(View, {
       testID: testID || `icon-${name}`,
     });
   },
 }));
 
 // ─── title-bar-right-button stubs ─────────────────────────────────────────
-jest.mock('../../../components/title-bar-right-button', () => ({
+jest.mock("../../../components/title-bar-right-button", () => ({
   HouseSelectionButton: () => null,
   GuestSelectionButton: () => null,
   UserPersonalButton: () => null,
 }));
 
 // ─── rats-button stub ─────────────────────────────────────────────────────
-jest.mock('../../../components/rats-button/rats-button', () => 'RatsButton');
+jest.mock("../../../components/rats-button/rats-button", () => "RatsButton");
 
 // ─── React imports (after mocks) ─────────────────────────────────────────
-import React from 'react';
-import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
-import { Provider } from 'react-redux';
-import { configureStore } from '@reduxjs/toolkit';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React from "react";
+import { render, fireEvent, waitFor, act } from "@testing-library/react-native";
+import { Provider } from "react-redux";
+import { configureStore } from "@reduxjs/toolkit";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import housesReducer from '../../../state/slices/housesSlice';
-import guestsReducer from '../../../state/slices/guestsSlice';
-import userReducer from '../../../state/slices/userSlice';
-import adminReducer from '../../../state/slices/adminSlice';
-import uiReducer from '../../../state/slices/uiSlice';
-import authReducer from '../../../state/slices/authSlice';
-import themeReducer from '../../../state/slices/themeSlice';
-import navigationReducer from '../../../state/slices/navigationSlice';
-import chatReducer from '../../../state/slices/chatSlice';
-import setupReducer from '../../../state/slices/setupSlice';
-import notificationsReducer from '../../../state/slices/notificationsSlice';
-import meetingsReducer from '../../../state/slices/meetingsSlice';
+import housesReducer from "../../../state/slices/housesSlice";
+import guestsReducer from "../../../state/slices/guestsSlice";
+import userReducer from "../../../state/slices/userSlice";
+import adminReducer from "../../../state/slices/adminSlice";
+import authReducer from "../../../state/slices/authSlice";
+import themeReducer from "../../../state/slices/themeSlice";
+import chatReducer from "../../../state/slices/chatSlice";
+import setupReducer from "../../../state/slices/setupSlice";
+import notificationsReducer from "../../../state/slices/notificationsSlice";
+import meetingsReducer from "../../../state/slices/meetingsSlice";
 
-import { Notification } from '../../../entities/Notification';
-import NotificationsScreen from '../Notifications';
+import { Notification } from "../../../entities/Notification";
+import NotificationsScreen from "../Notifications";
 
 // ─── Test data ─────────────────────────────────────────────────────────────
 
 function makeNotification(
   id: string,
-  overrides: Partial<Notification> = {},
+  overrides: Partial<Notification> = {}
 ): Notification {
   const n = new Notification();
   n.id = id;
-  n.userId = 'user-1';
+  n.userId = "user-1";
   n.subject = `Notification ${id}`;
   n.message = `Message for ${id}`;
-  n.type = 'dispute';
+  n.type = "dispute";
   n.read = false;
   n.date = new Date().toISOString();
   return Object.assign(n, overrides);
@@ -156,13 +154,11 @@ function makeNotification(
 
 // ─── Store builder ──────────────────────────────────────────────────────────
 
-function buildStore() {
+function buildStore(userOverrides: Record<string, any> = {}) {
   return configureStore({
     reducer: {
-      ui: uiReducer,
       auth: authReducer,
       theme: themeReducer,
-      navigation: navigationReducer,
       user: userReducer,
       houses: housesReducer,
       guests: guestsReducer,
@@ -175,10 +171,11 @@ function buildStore() {
     preloadedState: {
       user: {
         user: {
-          uid: 'user-1',
-          id: 'user-1',
+          uid: "user-1",
+          id: "user-1",
           isAdmin: false,
-          email: 'test@example.com',
+          email: "test@example.com",
+          ...userOverrides,
         },
         loading: false,
         error: null,
@@ -214,12 +211,12 @@ function buildQueryClient(notifications?: Notification[]) {
   if (notifications !== undefined) {
     // Apply the same sort transform that useNotifications' `select` applies
     const sorted = [...notifications].sort((a, b) => {
-      const dateA = a.date || a.createdAt || '';
-      const dateB = b.date || b.createdAt || '';
+      const dateA = a.date || a.createdAt || "";
+      const dateB = b.date || b.createdAt || "";
       return dateB.localeCompare(dateA);
     });
     // Key: ['notifications', 'list', 'user-1']
-    queryClient.setQueryData(['notifications', 'list', 'user-1'], sorted);
+    queryClient.setQueryData(["notifications", "list", "user-1"], sorted);
   }
 
   return queryClient;
@@ -240,13 +237,13 @@ function renderScreen(notifications?: Notification[], store = buildStore()) {
       <QueryClientProvider client={queryClient}>
         <NotificationsScreen navigation={mockNavigation} />
       </QueryClientProvider>
-    </Provider>,
+    </Provider>
   );
 }
 
 // ─── Tests ─────────────────────────────────────────────────────────────────
 
-describe('NotificationsScreen', () => {
+describe("NotificationsScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     // Default: mock service to return empty array for any query triggered
@@ -256,96 +253,96 @@ describe('NotificationsScreen', () => {
   });
 
   // ─── Loading state ──────────────────────────────────────────────────────
-  describe('loading state', () => {
-    it('renders the screen container without crashing', () => {
+  describe("loading state", () => {
+    it("renders the screen container without crashing", () => {
       // No pre-populated cache → query is pending (loading)
       mockGetUserNotifications.mockReturnValue(new Promise(() => {}));
       const { getByTestId } = renderScreen(/* no notifications */);
-      expect(getByTestId('notifications-screen')).toBeTruthy();
+      expect(getByTestId("notifications-screen")).toBeTruthy();
     });
 
-    it('does not show empty state while the query is still pending', () => {
+    it("does not show empty state while the query is still pending", () => {
       mockGetUserNotifications.mockReturnValue(new Promise(() => {}));
       const { queryByTestId } = renderScreen();
-      expect(queryByTestId('notifications-empty-state')).toBeNull();
+      expect(queryByTestId("notifications-empty-state")).toBeNull();
     });
   });
 
   // ─── Empty state ────────────────────────────────────────────────────────
-  describe('empty state', () => {
-    it('shows empty state when there are no notifications', () => {
+  describe("empty state", () => {
+    it("shows empty state when there are no notifications", () => {
       // Pre-populate with empty array → isLoading=false, data=[]
       const { getByTestId } = renderScreen([]);
-      expect(getByTestId('notifications-empty-state')).toBeTruthy();
+      expect(getByTestId("notifications-empty-state")).toBeTruthy();
     });
 
-    it('does not show notification rows when empty', () => {
+    it("does not show notification rows when empty", () => {
       const { queryByTestId } = renderScreen([]);
       expect(queryByTestId(/notification-row-/)).toBeNull();
     });
   });
 
   // ─── Notification list ──────────────────────────────────────────────────
-  describe('notification list', () => {
-    it('renders notification rows when notifications exist', () => {
+  describe("notification list", () => {
+    it("renders notification rows when notifications exist", () => {
       const notifications = [
-        makeNotification('notif-1'),
-        makeNotification('notif-2', { read: true }),
+        makeNotification("notif-1"),
+        makeNotification("notif-2", { read: true }),
       ];
       const { getByTestId } = renderScreen(notifications);
-      expect(getByTestId('notification-row-notif-1')).toBeTruthy();
-      expect(getByTestId('notification-row-notif-2')).toBeTruthy();
+      expect(getByTestId("notification-row-notif-1")).toBeTruthy();
+      expect(getByTestId("notification-row-notif-2")).toBeTruthy();
     });
 
-    it('shows notification subject and message', () => {
-      const notifications = [makeNotification('notif-abc')];
+    it("shows notification subject and message", () => {
+      const notifications = [makeNotification("notif-abc")];
       const { getByTestId } = renderScreen(notifications);
-      expect(getByTestId('notification-subject-notif-abc')).toBeTruthy();
-      expect(getByTestId('notification-message-notif-abc')).toBeTruthy();
+      expect(getByTestId("notification-subject-notif-abc")).toBeTruthy();
+      expect(getByTestId("notification-message-notif-abc")).toBeTruthy();
     });
 
-    it('does not show empty state when notifications exist', () => {
-      const notifications = [makeNotification('notif-1')];
+    it("does not show empty state when notifications exist", () => {
+      const notifications = [makeNotification("notif-1")];
       const { getByTestId, queryByTestId } = renderScreen(notifications);
-      expect(getByTestId('notification-row-notif-1')).toBeTruthy();
-      expect(queryByTestId('notifications-empty-state')).toBeNull();
+      expect(getByTestId("notification-row-notif-1")).toBeTruthy();
+      expect(queryByTestId("notifications-empty-state")).toBeNull();
     });
   });
 
   // ─── Unread indicators ──────────────────────────────────────────────────
-  describe('unread indicators', () => {
-    it('shows unread dot for unread notifications', () => {
-      const notifications = [makeNotification('unread-1', { read: false })];
+  describe("unread indicators", () => {
+    it("shows unread dot for unread notifications", () => {
+      const notifications = [makeNotification("unread-1", { read: false })];
       const { getByTestId } = renderScreen(notifications);
-      expect(getByTestId('notification-unread-dot-unread-1')).toBeTruthy();
+      expect(getByTestId("notification-unread-dot-unread-1")).toBeTruthy();
     });
 
-    it('does not show unread dot for read notifications', () => {
-      const notifications = [makeNotification('read-1', { read: true })];
+    it("does not show unread dot for read notifications", () => {
+      const notifications = [makeNotification("read-1", { read: true })];
       const { getByTestId, queryByTestId } = renderScreen(notifications);
-      expect(getByTestId('notification-row-read-1')).toBeTruthy();
-      expect(queryByTestId('notification-unread-dot-read-1')).toBeNull();
+      expect(getByTestId("notification-row-read-1")).toBeTruthy();
+      expect(queryByTestId("notification-unread-dot-read-1")).toBeNull();
     });
   });
 
   // ─── Mark all read ──────────────────────────────────────────────────────
-  describe('mark all read', () => {
+  describe("mark all read", () => {
     it('shows "Mark all read" button when there are unread notifications', () => {
-      const notifications = [makeNotification('unread-1', { read: false })];
+      const notifications = [makeNotification("unread-1", { read: false })];
       const { getByTestId } = renderScreen(notifications);
-      expect(getByTestId('mark-all-read-button')).toBeTruthy();
+      expect(getByTestId("mark-all-read-button")).toBeTruthy();
     });
 
     it('does not show "Mark all read" button when all notifications are read', () => {
-      const notifications = [makeNotification('read-1', { read: true })];
+      const notifications = [makeNotification("read-1", { read: true })];
       const { queryByTestId } = renderScreen(notifications);
-      expect(queryByTestId('mark-all-read-button')).toBeNull();
+      expect(queryByTestId("mark-all-read-button")).toBeNull();
     });
 
-    it('triggers the mark-all-read action when the button is pressed', async () => {
-      const notifications = [makeNotification('unread-1', { read: false })];
+    it("triggers the mark-all-read action when the button is pressed", async () => {
+      const notifications = [makeNotification("unread-1", { read: false })];
       const { getByTestId } = renderScreen(notifications);
-      const btn = getByTestId('mark-all-read-button');
+      const btn = getByTestId("mark-all-read-button");
 
       // Verify the button exists before pressing
       expect(btn).toBeTruthy();
@@ -364,11 +361,11 @@ describe('NotificationsScreen', () => {
   });
 
   // ─── Tap a notification ─────────────────────────────────────────────────
-  describe('tap notification row', () => {
-    it('calls markNotificationAsRead when a notification row is pressed', async () => {
-      const notifications = [makeNotification('notif-tap', { read: false })];
+  describe("tap notification row", () => {
+    it("calls markNotificationAsRead when a notification row is pressed", async () => {
+      const notifications = [makeNotification("notif-tap", { read: false })];
       const { getByTestId } = renderScreen(notifications);
-      const row = getByTestId('notification-row-notif-tap');
+      const row = getByTestId("notification-row-notif-tap");
 
       // Verify the row exists and is pressable (no crash on press)
       expect(row).toBeTruthy();
@@ -384,29 +381,60 @@ describe('NotificationsScreen', () => {
   });
 
   // ─── Preferences section ────────────────────────────────────────────────
-  describe('notification preferences', () => {
-    it('renders the preferences section', () => {
+  describe("notification preferences", () => {
+    it("renders the preferences section", () => {
       const { getByTestId } = renderScreen([]);
-      expect(getByTestId('notification-preferences-section')).toBeTruthy();
+      expect(getByTestId("notification-preferences-section")).toBeTruthy();
     });
 
-    it('renders all preference toggles', () => {
+    it("renders all preference toggles", () => {
       const { getByTestId } = renderScreen([]);
-      expect(getByTestId('pref-toggle-activity')).toBeTruthy();
-      expect(getByTestId('pref-toggle-chore')).toBeTruthy();
-      expect(getByTestId('pref-toggle-meeting')).toBeTruthy();
-      expect(getByTestId('pref-toggle-admin')).toBeTruthy();
+      expect(getByTestId("pref-toggle-activity")).toBeTruthy();
+      expect(getByTestId("pref-toggle-chore")).toBeTruthy();
+      expect(getByTestId("pref-toggle-meeting")).toBeTruthy();
+      expect(getByTestId("pref-toggle-admin")).toBeTruthy();
     });
 
-    it('toggles a preference when the switch fires a value change', async () => {
+    it("toggles a preference when the switch fires a value change", async () => {
       const { getByTestId } = renderScreen([]);
-      const toggle = getByTestId('pref-toggle-activity');
+      const toggle = getByTestId("pref-toggle-activity");
 
       await act(async () => {
-        fireEvent(toggle, 'valueChange', false);
+        fireEvent(toggle, "valueChange", false);
       });
 
-      expect(toggle).toBeTruthy();
+      expect(toggle.props.value).toBe(false);
+    });
+
+    // Regression coverage for 2026-07-05: these toggles were local useState
+    // only (with a code comment acknowledging they weren't persisted) —
+    // every selection silently reset on next app launch.
+    it("initializes from the user's persisted notificationPrefs instead of always defaulting to true", () => {
+      const store = buildStore({
+        notificationPrefs: {
+          activityUpdates: false,
+          choreReminders: true,
+          meetingReminders: true,
+          adminMessages: true,
+        },
+      });
+      const { getByTestId } = renderScreen([], store);
+      expect(getByTestId("pref-toggle-activity").props.value).toBe(false);
+    });
+
+    it("persists a toggle change to the user doc via the updateUser thunk", async () => {
+      const store = buildStore();
+      const { getByTestId } = renderScreen([], store);
+
+      await act(async () => {
+        fireEvent(getByTestId("pref-toggle-chore"), "valueChange", false);
+      });
+
+      await waitFor(() =>
+        expect(store.getState().user.user?.notificationPrefs).toEqual(
+          expect.objectContaining({ choreReminders: false })
+        )
+      );
     });
   });
 });

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from "react";
 import {
   View,
   ScrollView,
@@ -6,12 +6,12 @@ import {
   Switch,
   TouchableOpacity,
   ViewStyle,
-} from 'react-native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../navigation/types';
-import ScreenHeader from '../../components/screen-header';
-import { RatsText } from '../../components/rats-text';
-import { RatsIcon } from '../../components/rats-icon';
+} from "react-native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { RootStackParamList } from "../../navigation/types";
+import ScreenHeader from "../../components/screen-header";
+import { RatsText } from "../../components/rats-text";
+import { RatsIcon } from "../../components/rats-icon";
 import {
   color,
   fontSize,
@@ -20,14 +20,17 @@ import {
   CARD_NO_ELEVATION,
   ROW,
   fontFamily,
-} from '../../styles/theme';
-import { Notification } from '../../entities/Notification';
-import { useAppSelector } from '../../state/store';
+} from "../../styles/theme";
+import { Notification } from "../../entities/Notification";
+import { NotificationPrefs, User } from "../../entities/User";
+import { useAppSelector, useAppDispatch } from "../../state/store";
+import { updateUser } from "../../state/slices/userSlice";
+import { logException } from "../../util/logging";
 import {
   useNotifications,
   useMarkAllNotificationsRead,
   useMarkNotificationRead,
-} from '../../state/queries/notificationQueries';
+} from "../../state/queries/notificationQueries";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -35,12 +38,12 @@ interface NotificationsScreenProps {
   navigation: NativeStackNavigationProp<RootStackParamList>;
 }
 
-interface NotificationPrefs {
-  activityUpdates: boolean;
-  choreReminders: boolean;
-  meetingReminders: boolean;
-  adminMessages: boolean;
-}
+const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
+  activityUpdates: true,
+  choreReminders: true,
+  meetingReminders: true,
+  adminMessages: true,
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -48,15 +51,15 @@ interface NotificationPrefs {
  * Map a notification type to a FontAwesome5 icon name and accent colour.
  */
 const TYPE_CONFIG: Record<string, { icon: string; iconColor: string }> = {
-  dispute: { icon: 'gavel', iconColor: color.orange },
-  'meeting-added': { icon: 'calendar-plus', iconColor: color.green },
-  'meeting-forced': { icon: 'calendar-times', iconColor: color.red },
-  chore_reminder: { icon: 'broom', iconColor: color.purple },
-  admin_message: { icon: 'bullhorn', iconColor: color.baby_blue },
-  system_alert: { icon: 'exclamation-triangle', iconColor: color.yellow },
-  activity_approved: { icon: 'check-circle', iconColor: color.green },
-  activity_disputed: { icon: 'times-circle', iconColor: color.red },
-  default: { icon: 'bell', iconColor: color.dark_grey },
+  dispute: { icon: "gavel", iconColor: color.orange },
+  "meeting-added": { icon: "calendar-plus", iconColor: color.green },
+  "meeting-forced": { icon: "calendar-times", iconColor: color.red },
+  chore_reminder: { icon: "broom", iconColor: color.purple },
+  admin_message: { icon: "bullhorn", iconColor: color.baby_blue },
+  system_alert: { icon: "exclamation-triangle", iconColor: color.yellow },
+  activity_approved: { icon: "check-circle", iconColor: color.green },
+  activity_disputed: { icon: "times-circle", iconColor: color.red },
+  default: { icon: "bell", iconColor: color.dark_grey },
 };
 
 function getTypeConfig(type: string) {
@@ -68,7 +71,7 @@ function getTypeConfig(type: string) {
  * e.g. "Just now", "2 hours ago", "Yesterday", "Jan 5"
  */
 function getRelativeTime(dateStr?: string): string {
-  if (!dateStr) return '';
+  if (!dateStr) return "";
   const date = new Date(dateStr);
   if (isNaN(date.getTime())) return dateStr;
 
@@ -78,13 +81,13 @@ function getRelativeTime(dateStr?: string): string {
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
 
-  if (diffMins < 1) return 'Just now';
+  if (diffMins < 1) return "Just now";
   if (diffMins < 60) return `${diffMins}m ago`;
   if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays === 1) return 'Yesterday';
+  if (diffDays === 1) return "Yesterday";
   if (diffDays < 7) return `${diffDays} days ago`;
 
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 // ─── Notification Row ─────────────────────────────────────────────────────────
@@ -101,13 +104,13 @@ const NotificationRow: React.FC<NotificationRowProps> = React.memo(
 
     const containerStyle: ViewStyle = {
       ...CARD_NO_ELEVATION,
-      flexDirection: 'row',
-      alignItems: 'flex-start',
+      flexDirection: "row",
+      alignItems: "flex-start",
       paddingVertical: normalize(14),
       paddingHorizontal: normalize(16),
       marginBottom: 2,
       borderLeftWidth: isUnread ? 4 : 0,
-      borderLeftColor: isUnread ? iconColor : 'transparent',
+      borderLeftColor: isUnread ? iconColor : "transparent",
     };
 
     const dateStr = notification.date || notification.createdAt;
@@ -116,7 +119,8 @@ const NotificationRow: React.FC<NotificationRowProps> = React.memo(
       <TouchableOpacity
         testID={`notification-row-${notification.id}`}
         activeOpacity={0.7}
-        onPress={() => onPress(notification.id)}>
+        onPress={() => onPress(notification.id)}
+      >
         <View style={containerStyle}>
           {/* Icon circle */}
           <View
@@ -124,12 +128,13 @@ const NotificationRow: React.FC<NotificationRowProps> = React.memo(
               width: normalize(38),
               height: normalize(38),
               borderRadius: normalize(19),
-              backgroundColor: iconColor + '22', // 13% opacity tint
-              alignItems: 'center',
-              justifyContent: 'center',
+              backgroundColor: iconColor + "22", // 13% opacity tint
+              alignItems: "center",
+              justifyContent: "center",
               marginRight: normalize(12),
               flexShrink: 0,
-            }}>
+            }}
+          >
             <RatsIcon
               name={icon}
               size={normalize(16)}
@@ -142,13 +147,15 @@ const NotificationRow: React.FC<NotificationRowProps> = React.memo(
             <View
               style={[
                 ROW,
-                { alignItems: 'center', marginBottom: normalize(2) },
-              ]}>
+                { alignItems: "center", marginBottom: normalize(2) },
+              ]}
+            >
               <View
                 testID={`notification-subject-${notification.id}`}
-                style={{ flex: 1 }}>
+                style={{ flex: 1 }}
+              >
                 <RatsText
-                  text={notification.subject || 'Notification'}
+                  text={notification.subject || "Notification"}
                   style={{
                     fontSize: fontSize.regular_medium,
                     fontFamily: isUnread ? fontFamily.bold : fontFamily.roboto,
@@ -198,7 +205,7 @@ const NotificationRow: React.FC<NotificationRowProps> = React.memo(
         </View>
       </TouchableOpacity>
     );
-  },
+  }
 );
 
 // ─── Empty state ──────────────────────────────────────────────────────────────
@@ -208,10 +215,11 @@ const EmptyState: React.FC = () => (
     testID="notifications-empty-state"
     style={{
       flex: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
       paddingTop: normalize(80),
-    }}>
+    }}
+  >
     <RatsIcon
       name="check-circle"
       size={normalize(48)}
@@ -253,12 +261,13 @@ const PrefRow: React.FC<PrefRowProps> = ({
       CARD_NO_ELEVATION,
       ROW,
       {
-        alignItems: 'center',
+        alignItems: "center",
         paddingVertical: normalize(14),
         paddingHorizontal: normalize(16),
         marginBottom: 2,
       },
-    ]}>
+    ]}
+  >
     <RatsText
       text={label}
       style={{ flex: 1, fontSize: fontSize.regular_medium, color: color.black }}
@@ -278,22 +287,38 @@ const PrefRow: React.FC<PrefRowProps> = ({
 const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
   navigation,
 }) => {
-  const user = useAppSelector(state => state.user.user);
-  const userId = user?.uid || user?.id || '';
+  const user = useAppSelector((state) => state.user.user);
+  const userId = user?.uid || user?.id || "";
+  const dispatch = useAppDispatch();
 
-  // Notification preferences (local-only for now — can be persisted to Firestore later)
-  const [prefs, setPrefs] = useState<NotificationPrefs>({
-    activityUpdates: true,
-    choreReminders: true,
-    meetingReminders: true,
-    adminMessages: true,
-  });
+  // Hardened 2026-07-05: these toggles were local useState only (with a code
+  // comment acknowledging they weren't persisted) — every selection silently
+  // reset on next app launch. Now backed by user.notificationPrefs, patched
+  // via the same updateUser thunk already used elsewhere (e.g. messaging
+  // tokens), with an optimistic local update that rolls back on failure.
+  const [prefs, setPrefs] = useState<NotificationPrefs>(
+    user?.notificationPrefs ?? DEFAULT_NOTIFICATION_PREFS
+  );
 
   const togglePref = useCallback(
-    (key: keyof NotificationPrefs) => (val: boolean) => {
-      setPrefs(prev => ({ ...prev, [key]: val }));
+    (key: keyof NotificationPrefs) => async (val: boolean) => {
+      const previousPrefs = prefs;
+      const nextPrefs = { ...prefs, [key]: val };
+      setPrefs(nextPrefs);
+      if (!user) return;
+      try {
+        await dispatch(
+          updateUser({
+            user: user as User,
+            updates: { notificationPrefs: nextPrefs },
+          })
+        ).unwrap();
+      } catch (error) {
+        logException(error, "Failed to persist notification preferences");
+        setPrefs(previousPrefs);
+      }
     },
-    [],
+    [prefs, user, dispatch]
   );
 
   // ─── Data fetching ───────────────────────────────────────────────────────
@@ -308,8 +333,8 @@ const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
   const markAllRead = useMarkAllNotificationsRead(userId);
 
   const unreadCount = useMemo(
-    () => notifications.filter(n => !n.read).length,
-    [notifications],
+    () => notifications.filter((n) => !n.read).length,
+    [notifications]
   );
 
   const hasUnread = unreadCount > 0;
@@ -319,7 +344,7 @@ const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
     (notificationId: string) => {
       markRead.mutate(notificationId);
     },
-    [markRead],
+    [markRead]
   );
 
   const handleMarkAllRead = useCallback(() => {
@@ -340,7 +365,8 @@ const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
             marginTop: normalize(8),
             marginBottom: 2,
           },
-        ]}>
+        ]}
+      >
         <RatsText
           text="Notification Preferences"
           style={{
@@ -354,25 +380,25 @@ const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
         label="Activity approvals & disputes"
         value={prefs.activityUpdates}
         testID="pref-toggle-activity"
-        onToggle={togglePref('activityUpdates')}
+        onToggle={togglePref("activityUpdates")}
       />
       <PrefRow
         label="Chore reminders"
         value={prefs.choreReminders}
         testID="pref-toggle-chore"
-        onToggle={togglePref('choreReminders')}
+        onToggle={togglePref("choreReminders")}
       />
       <PrefRow
         label="Meeting reminders"
         value={prefs.meetingReminders}
         testID="pref-toggle-meeting"
-        onToggle={togglePref('meetingReminders')}
+        onToggle={togglePref("meetingReminders")}
       />
       <PrefRow
         label="Admin messages"
         value={prefs.adminMessages}
         testID="pref-toggle-admin"
-        onToggle={togglePref('adminMessages')}
+        onToggle={togglePref("adminMessages")}
       />
     </View>
   );
@@ -398,7 +424,8 @@ const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
               paddingVertical: normalize(12),
               marginBottom: 2,
             },
-          ]}>
+          ]}
+        >
           <RatsText
             text="Recent Notifications"
             style={{
@@ -410,7 +437,7 @@ const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
         </View>
 
         {/* Notification rows */}
-        {notifications.map(notification => (
+        {notifications.map((notification) => (
           <NotificationRow
             key={notification.id}
             notification={notification}
@@ -424,17 +451,20 @@ const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
   return (
     <View
       testID="notifications-screen"
-      style={{ flex: 1, backgroundColor: color.light_grey }}>
+      style={{ flex: 1, backgroundColor: color.light_grey }}
+    >
       {/* Header */}
       <ScreenHeader
         renderBackButton
         header="Notifications"
-        container={{ marginBottom: 2 }}>
+        container={{ marginBottom: 2 }}
+      >
         {hasUnread && (
           <TouchableOpacity
             testID="mark-all-read-button"
             onPress={handleMarkAllRead}
-            style={{ paddingVertical: normalize(4) }}>
+            style={{ paddingVertical: normalize(4) }}
+          >
             <RatsText
               text="Mark all read"
               style={{
@@ -457,7 +487,8 @@ const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
             tintColor={color.main}
           />
         }
-        contentContainerStyle={{ flexGrow: 1 }}>
+        contentContainerStyle={{ flexGrow: 1 }}
+      >
         {renderNotifications()}
         {renderPreferences()}
       </ScrollView>

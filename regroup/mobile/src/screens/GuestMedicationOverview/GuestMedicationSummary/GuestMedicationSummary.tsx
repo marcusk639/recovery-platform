@@ -2,39 +2,101 @@
  * GuestMedicationSummary - Migrated to Redux Toolkit
  */
 
-import React from 'react';
-import { View } from 'react-native';
+import React, { useState } from "react";
+import { View, Alert } from "react-native";
 
 // Hooks
-import { useStatSummary } from '../../../hooks/useStatSummary';
+import { useStatSummary } from "../../../hooks/useStatSummary";
 
 // Components
 import StatSummaryScreen, {
   ActionButtons,
-} from '../../../components/StatSummaryScreen';
-import { RatsStatCard } from '../../../components/rats-stat-card';
-import { RatsText } from '../../../components/rats-text';
+} from "../../../components/StatSummaryScreen";
+import { RatsStatCard } from "../../../components/rats-stat-card";
+import { RatsText } from "../../../components/rats-text";
+import RatsTextInput from "../../../components/rats-text-input/rats-text-input";
+import RatsButton from "../../../components/rats-button/rats-button";
 // Phase 3.3: Migrated from 1 HOC layer to Context hooks
 // Removed: withPopover
 // Added: useModal, useNotification hooks
-import { useModal, useNotification } from '../../../context';
+import { useModal, useNotification } from "../../../context";
+
+// Services & queries
+import { useLogNewActivity } from "../../../state/queries/activityQueries";
+import { ActivityType } from "../../../entities/ActivityModel";
+import { auth } from "../../../../firebase-setup";
+import { logException } from "../../../util/logging";
 
 // Utils
-import { getPhaseRule } from '../../../util/guest';
-import { fontSize, normalize, fontFamily } from '../../../styles/theme';
+import { getPhaseRule } from "../../../util/guest";
+import { fontSize, normalize, fontFamily } from "../../../styles/theme";
 
 // Navigation
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../../navigation/types';
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { RootStackParamList } from "../../../navigation/types";
 
 interface Props {
   navigation: NativeStackNavigationProp<RootStackParamList>;
 }
 
+// A standalone, independently-mounted component so its own text input state
+// re-renders correctly inside the frozen showFormModal snapshot. Passing
+// inline JSX built from the outer screen's useState (the original version of
+// this fix) doesn't work: showFormModal stores whatever element it's given
+// as a frozen snapshot in ModalContext, and the outer screen re-rendering
+// doesn't re-render ModalProvider, so a controlled input driven by the outer
+// screen's state would never reflect keystrokes. See FinancialRecordDetail's
+// RejectRecordForm for the same pattern.
+interface MedicationFormProps {
+  onSubmit: (medicationName: string, dosage: string) => Promise<void>;
+}
+
+const MedicationForm: React.FC<MedicationFormProps> = ({ onSubmit }) => {
+  const [medicationName, setMedicationName] = useState("");
+  const [dosage, setDosage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handlePress = async () => {
+    setIsSubmitting(true);
+    try {
+      await onSubmit(medicationName, dosage);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <View>
+      <RatsTextInput
+        testID="medication-name-input"
+        placeholder="Medication name"
+        label="Medication name"
+        field={{ name: "medicationName", value: medicationName }}
+        customHandleChange={setMedicationName}
+      />
+      <RatsTextInput
+        testID="medication-dosage-input"
+        placeholder="Dosage"
+        label="Dosage"
+        field={{ name: "dosage", value: dosage }}
+        customHandleChange={setDosage}
+      />
+      <RatsButton
+        testID="submit-medication-button"
+        title="SUBMIT"
+        onPress={handlePress}
+        disabled={isSubmitting}
+        containerStyle={{ marginTop: normalize(15) }}
+      />
+    </View>
+  );
+};
+
 const GuestMedicationSummary: React.FC<Props> = ({ navigation }) => {
   // Context hooks (replaces 1 HOC layer)
-  const { showFormModal } = useModal();
+  const { showFormModal, dismissFormModal } = useModal();
   const { showPopover, setPopoverRef } = useNotification();
+  const logActivity = useLogNewActivity();
 
   // Get stat summary data (hook provides guest, house, user from RTK slices).
   // statSum and graphData are sourced exclusively from the 'week-summaries'
@@ -51,21 +113,64 @@ const GuestMedicationSummary: React.FC<Props> = ({ navigation }) => {
     graphData,
     getBarFillColor,
     isLoading,
-  } = useStatSummary('medication');
+  } = useStatSummary("medication");
 
   const renderHelp = () => {
     showPopover(
-      'MEDICATION',
-      "Here you can view this resident's medication tracking.",
+      "MEDICATION",
+      "Here you can view this resident's medication tracking."
     );
   };
 
+  // Hardened 2026-07-05: both buttons previously opened a blank modal
+  // (showFormModal(<View />, ...)) — there was no way to actually log or
+  // update medication through this screen. There's no per-guest medication
+  // registry field on the Guest entity (unlike jobs/chores), so both actions
+  // log a real MEDICATION activity via the same activity system the
+  // chore/work screens use — this one asks for name/dosage since neither is
+  // implied by any existing field.
+  const submitMedicationActivity = async (
+    medicationName: string,
+    dosage: string
+  ) => {
+    if (!guest || !house) return;
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+
+    try {
+      await logActivity.mutateAsync({
+        guestId: guest.id,
+        houseId: house.id,
+        type: ActivityType.MEDICATION,
+        data: {
+          type: "medication",
+          medicationName: medicationName || undefined,
+          dosage: dosage || undefined,
+        },
+        loggedBy: currentUser.uid,
+      });
+      dismissFormModal();
+      Alert.alert("Done", "Medication logged!");
+    } catch (error) {
+      logException(error, "Failed to log medication activity");
+      Alert.alert("Error", "Could not log medication. Please try again.");
+    }
+  };
+
   const showLogMedicationModal = () => {
-    showFormModal(<View />, 'Log Medication', true);
+    showFormModal(
+      <MedicationForm onSubmit={submitMedicationActivity} />,
+      "Log Medication",
+      true
+    );
   };
 
   const showChangeMedicationModal = () => {
-    showFormModal(<View />, 'Update Medication Info', true);
+    showFormModal(
+      <MedicationForm onSubmit={submitMedicationActivity} />,
+      "Update Medication Info",
+      true
+    );
   };
 
   const renderStatDetails = () => {
@@ -80,13 +185,14 @@ const GuestMedicationSummary: React.FC<Props> = ({ navigation }) => {
             text="Medication"
             style={{ fontSize: fontSize.medium, fontFamily: fontFamily.bold }}
           />,
-        ]}>
-        <View style={{ width: '100%' }}>
+        ]}
+      >
+        <View style={{ width: "100%" }}>
           <RatsText
             text={
-              getPhaseRule(house, guest, 'medication') > 0
-                ? 'You must take your prescribed medications daily as required.'
-                : 'No medication requirements set for your current phase.'
+              getPhaseRule(house, guest, "medication") > 0
+                ? "You must take your prescribed medications daily as required."
+                : "No medication requirements set for your current phase."
             }
             translate={false}
             style={{
