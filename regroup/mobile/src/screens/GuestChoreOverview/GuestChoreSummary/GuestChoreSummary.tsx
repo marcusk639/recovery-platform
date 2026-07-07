@@ -9,13 +9,12 @@
  * - Removed connect() HOC
  */
 
-import React, { useMemo, useState, useCallback } from 'react';
-import { View, Alert } from 'react-native';
-import { Field } from 'formik';
-import { launchImageLibrary } from 'react-native-image-picker';
+import React, { useMemo, useState, useCallback } from "react";
+import { View, Alert } from "react-native";
+import { launchImageLibrary } from "react-native-image-picker";
 
 // Hooks
-import { useStatSummary } from '../../../hooks/useStatSummary';
+import { useStatSummary } from "../../../hooks/useStatSummary";
 
 // Phase 3.3: Migrated from 2 HOC layers to Context hooks
 // Removed: withStatUpdateModal, withPopover
@@ -24,37 +23,102 @@ import { useStatSummary } from '../../../hooks/useStatSummary';
 // Components
 import StatSummaryScreen, {
   ActionButtons,
-} from '../../../components/StatSummaryScreen';
-import { RatsStatCard } from '../../../components/rats-stat-card';
-import { RatsText } from '../../../components/rats-text';
-import RatsPicker from '../../../components/rats-picker/rats-picker';
-import { useModal, useNotification } from '../../../context';
+} from "../../../components/StatSummaryScreen";
+import { RatsStatCard } from "../../../components/rats-stat-card";
+import { RatsText } from "../../../components/rats-text";
+import RatsPicker from "../../../components/rats-picker/rats-picker";
+import RatsButton from "../../../components/rats-button/rats-button";
+import { useModal, useNotification } from "../../../context";
 
 // Utils
-import { fontSize, normalize, fontFamily } from '../../../styles/theme';
-import { getPickerItems } from '../../../util/display';
+import { fontSize, normalize, fontFamily } from "../../../styles/theme";
 
 // Services & queries
-import { uploadChoreEvidencePhoto } from '../../../services/storage';
-import { useLogNewActivity } from '../../../state/queries/activityQueries';
-import { ActivityType } from '../../../entities/ActivityModel';
-import { auth } from '../../../../firebase-setup';
-import { logException } from '../../../util/logging';
+import { uploadChoreEvidencePhoto } from "../../../services/storage";
+import { useLogNewActivity } from "../../../state/queries/activityQueries";
+import { useUpdateGuest } from "../../../state/queries/guestQueries";
+import { ActivityType } from "../../../entities/ActivityModel";
+import { auth } from "../../../../firebase-setup";
+import { logException } from "../../../util/logging";
 
 // Navigation
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../../navigation/types';
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { RootStackParamList } from "../../../navigation/types";
 
 interface Props {
   navigation: NativeStackNavigationProp<RootStackParamList>;
 }
+
+// Hardened 2026-07-06: this modal used to render a bare Formik <Field
+// component={RatsPicker} .../> with no <Formik> provider anywhere in the
+// tree (ModalContext renders form-modal content directly) — Formik's
+// useField() throws outside Formik context, crashing the whole app to the
+// top-level ErrorBoundary the moment CHANGE CHORE was pressed. RatsPicker
+// already supports a non-Formik mode via `handleValueChange`, so this is a
+// standalone, independently-mounted local-state component instead — the
+// same pattern as GuestMedicationSummary's MedicationForm. A standalone
+// component (not inline JSX built from the outer screen's useState) is
+// required because showFormModal stores whatever element it's given as a
+// frozen snapshot in ModalContext; the outer screen re-rendering doesn't
+// re-render that snapshot.
+interface ChoreSelectFormProps {
+  chores: Record<string, unknown>;
+  initialChore: string;
+  onSubmit: (choreName: string) => Promise<void>;
+}
+
+const ChoreSelectForm: React.FC<ChoreSelectFormProps> = ({
+  chores,
+  initialChore,
+  onSubmit,
+}) => {
+  const [chore, setChore] = useState(initialChore);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handlePress = async () => {
+    setIsSubmitting(true);
+    try {
+      await onSubmit(chore);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <View>
+      <View testID="chore-select-picker">
+        <RatsPicker
+          field={{ name: "chore", value: chore }}
+          form={{}}
+          handleValueChange={setChore}
+          label="New Chore"
+          pickerItems={chores}
+          getPickerItems={(items: Record<string, unknown>) =>
+            Object.keys(items).map((name) => ({
+              key: name,
+              label: name,
+              value: name,
+            }))
+          }
+        />
+      </View>
+      <RatsButton
+        testID="submit-chore-change-button"
+        title="SAVE"
+        onPress={handlePress}
+        disabled={isSubmitting}
+        containerStyle={{ marginTop: normalize(15) }}
+      />
+    </View>
+  );
+};
 
 /**
  * GuestChoreSummary Component
  */
 const GuestChoreSummary: React.FC<Props> = ({ navigation }) => {
   // Context hooks (replaces 2 HOC layers)
-  const { showFormModal } = useModal();
+  const { showFormModal, dismissFormModal } = useModal();
   const { showPopover, setPopoverRef } = useNotification();
 
   // Get stat summary data (hook provides guest, house, user from RTK slices).
@@ -72,19 +136,20 @@ const GuestChoreSummary: React.FC<Props> = ({ navigation }) => {
     graphData,
     getBarFillColor,
     isLoading,
-  } = useStatSummary('choreCompleted');
+  } = useStatSummary("choreCompleted");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const logActivity = useLogNewActivity();
+  const updateGuestMutation = useUpdateGuest();
 
   const choreName = useMemo(() => {
-    return guest?.currentChore || 'Weekly Chore';
+    return guest?.currentChore || "Weekly Chore";
   }, [guest?.currentChore]);
 
   const choreDescription = useMemo(() => {
     return (
       house?.chores?.[choreName]?.description ||
-      'Complete your assigned chore for this week.'
+      "Complete your assigned chore for this week."
     );
   }, [house?.chores, choreName]);
 
@@ -98,21 +163,21 @@ const GuestChoreSummary: React.FC<Props> = ({ navigation }) => {
       // Step 1: Optional photo
       let photoUrl: string | undefined;
 
-      await new Promise<void>(resolve => {
+      await new Promise<void>((resolve) => {
         Alert.alert(
-          'Attach Photo?',
-          'Would you like to attach a photo as evidence?',
+          "Attach Photo?",
+          "Would you like to attach a photo as evidence?",
           [
             {
-              text: 'Skip',
-              style: 'cancel',
+              text: "Skip",
+              style: "cancel",
               onPress: () => resolve(),
             },
             {
-              text: 'Add Photo',
+              text: "Add Photo",
               onPress: async () => {
                 const result = await launchImageLibrary({
-                  mediaType: 'photo',
+                  mediaType: "photo",
                   quality: 0.7,
                   selectionLimit: 1,
                 });
@@ -124,7 +189,7 @@ const GuestChoreSummary: React.FC<Props> = ({ navigation }) => {
                     photoUrl = await uploadChoreEvidencePhoto(
                       uri,
                       house.id,
-                      tempId,
+                      tempId
                     );
                   } catch (uploadError) {
                     logException(uploadError);
@@ -134,30 +199,30 @@ const GuestChoreSummary: React.FC<Props> = ({ navigation }) => {
                 resolve();
               },
             },
-          ],
+          ]
         );
       });
 
       // Step 2: Log chore activity
       const currentUser = auth.currentUser;
-      if (!currentUser) throw new Error('Not authenticated');
+      if (!currentUser) throw new Error("Not authenticated");
 
       await logActivity.mutateAsync({
         guestId: guest.id,
         houseId: house.id,
         type: ActivityType.CHORE,
         data: {
-          type: 'chore',
-          choreType: 'weekly',
+          type: "chore",
+          choreType: "weekly",
           choreName: choreName,
           ...(photoUrl ? { photoUrl } : {}),
         },
         loggedBy: currentUser.uid,
       });
 
-      Alert.alert('Done', 'Chore marked as complete!');
+      Alert.alert("Done", "Chore marked as complete!");
     } catch {
-      Alert.alert('Error', 'Could not complete chore. Please try again.');
+      Alert.alert("Error", "Could not complete chore. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -166,25 +231,39 @@ const GuestChoreSummary: React.FC<Props> = ({ navigation }) => {
   // Modal handlers
   const showChoreCompletedModal = handleCompleteChore;
 
+  const submitChoreChange = async (newChore: string) => {
+    if (!guest || !newChore) return;
+    try {
+      await updateGuestMutation.mutateAsync({
+        guest,
+        updatedGuest: { id: guest.id, currentChore: newChore },
+      });
+      dismissFormModal();
+      Alert.alert("Done", "Chore updated!");
+    } catch (error) {
+      logException(error, "Failed to update guest's chore");
+      Alert.alert("Error", "Could not update chore. Please try again.");
+    }
+  };
+
   const showChoreChangedModal = () => {
     if (!house) return;
     showFormModal(
-      <Field
-        component={RatsPicker}
-        name="chore"
-        label="new.chore"
-        items={getPickerItems(house.chores, undefined, true)}
+      <ChoreSelectForm
+        chores={house.chores ?? {}}
+        initialChore={choreName}
+        onSubmit={submitChoreChange}
       />,
-      'change.chore.modal.title',
-      true,
+      "change.chore.modal.title",
+      true
     );
   };
 
   // Help popover
   const renderHelp = () => {
     showPopover(
-      'CHORE',
-      "Here you can view information related to this resident's chore.",
+      "CHORE",
+      "Here you can view information related to this resident's chore."
     );
   };
 
@@ -201,8 +280,9 @@ const GuestChoreSummary: React.FC<Props> = ({ navigation }) => {
             text={choreName}
             style={{ fontSize: fontSize.medium, fontFamily: fontFamily.bold }}
           />,
-        ]}>
-        <View style={{ width: '100%' }}>
+        ]}
+      >
+        <View style={{ width: "100%" }}>
           <RatsText
             text={choreDescription}
             translate={false}
