@@ -28,6 +28,7 @@ export const sendMentionNotifications = onCall(
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Must be authenticated.");
     }
+    const callerId = request.auth.uid;
 
     const snap = request.data;
     if (!snap || !snap.groupId || !snap.messageId || !snap.message) {
@@ -38,7 +39,6 @@ export const sendMentionNotifications = onCall(
       );
     }
 
-    // Validate groupId and messageId are non-empty strings
     if (typeof snap.groupId !== "string" || snap.groupId.trim() === "") {
       throw new HttpsError("invalid-argument", "Invalid groupId.");
     }
@@ -46,44 +46,56 @@ export const sendMentionNotifications = onCall(
       throw new HttpsError("invalid-argument", "Invalid messageId.");
     }
 
-    const messageData = snap.message;
     const { groupId, messageId } = snap;
-    const senderId = messageData.senderId;
-    const senderName = messageData.senderName || "Someone";
-    const messageText = messageData.text || "";
+
+    // Verify the caller is a member of the group before trusting anything
+    // else about this request — membership doc IDs are {groupId}_{userId}.
+    const memberSnap = await db
+      .collection("members")
+      .doc(`${groupId}_${callerId}`)
+      .get();
+    if (!memberSnap.exists) {
+      throw new HttpsError(
+        "permission-denied",
+        "You are not a member of this group.",
+      );
+    }
+
+    // Derive sender identity server-side — never trust client-supplied
+    // senderId/senderName, which would let any caller spoof another user.
+    const callerDoc = await db.collection("users").doc(callerId).get();
+    const senderName = callerDoc.data()?.displayName || "Someone";
+    const messageText = snap.message.text || "";
 
     logger.info(
       `New message ${messageId} in group ${groupId}. Checking for mentions.`,
     );
 
-    let mentionedUserIds: string[] = [];
-    if (
-      messageData.mentionedUserIds &&
-      messageData.mentionedUserIds.length > 0
-    ) {
-      mentionedUserIds = messageData.mentionedUserIds;
-      logger.info(
-        `Found mentioned user IDs from message data: ${mentionedUserIds.join(
-          ", ",
-        )}`,
-      );
-    } else {
-      const mentionRegex = /@([a-zA-Z0-9_\.]+)/g;
-      let match;
-      const mentionedNames: string[] = [];
-      while ((match = mentionRegex.exec(messageText)) !== null) {
-        mentionedNames.push(match[1]);
-      }
-      if (mentionedNames.length > 0) {
-        logger.warn(
-          "Mention lookup by name not fully implemented. Store mentionedUserIds with message.",
-        );
-      }
-    }
-    const recipients = mentionedUserIds.filter((uid) => uid !== senderId);
-    if (recipients.length === 0) {
+    // mentionedUserIds still comes from client data (the message payload),
+    // but recipients are cross-checked against actual group membership below
+    // so an attacker can't target arbitrary UIDs outside the group.
+    const rawMentionedUserIds = snap.message.mentionedUserIds ?? [];
+    const candidateRecipients = rawMentionedUserIds.filter(
+      (uid) => uid !== callerId,
+    );
+    if (candidateRecipients.length === 0) {
       logger.info("No valid recipients found for mention notification.");
-      return { success: true, sentCount: 0 }; // Return successfully if no recipients
+      return { success: true, sentCount: 0 };
+    }
+
+    const recipientMemberSnaps = await Promise.all(
+      candidateRecipients.map((uid) =>
+        db.collection("members").doc(`${groupId}_${uid}`).get(),
+      ),
+    );
+    const recipients = candidateRecipients.filter(
+      (_, i) => recipientMemberSnaps[i].exists,
+    );
+    if (recipients.length === 0) {
+      logger.info(
+        "No valid in-group recipients found for mention notification.",
+      );
+      return { success: true, sentCount: 0 };
     }
     logger.info(`Recipients for notification: ${recipients.join(", ")}`);
 
