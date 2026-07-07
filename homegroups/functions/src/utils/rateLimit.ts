@@ -1,9 +1,23 @@
+import { createHash } from "crypto";
 import { HttpsError } from "firebase-functions/v2/https";
 import type { Transaction } from "firebase-admin/firestore";
 import { db } from "./firebase";
 
 const WINDOW_MS = 60_000;
 const MAX_REQUESTS_PER_WINDOW = 30;
+
+/**
+ * `key` often embeds caller-supplied data (e.g. an X-Forwarded-For header
+ * value on an unauthenticated callable), so it cannot be trusted as a literal
+ * Firestore document ID: `.doc(path)` treats "/" as a path separator, letting
+ * unsanitized input steer the write into arbitrary nested collections instead
+ * of a flat key. Hashing collapses any input to a fixed-length hex string,
+ * which is safe as a document ID and still maps the same caller to the same
+ * bucket.
+ */
+function toDocId(key: string): string {
+  return createHash("sha256").update(key).digest("hex");
+}
 
 /**
  * Firestore-backed fixed-window rate limiter. An in-memory counter is not
@@ -14,7 +28,7 @@ const MAX_REQUESTS_PER_WINDOW = 30;
  * MAX_REQUESTS_PER_WINDOW times within the current WINDOW_MS window.
  */
 export async function enforceRateLimit(key: string): Promise<void> {
-  const ref = db.collection("_rateLimits").doc(key);
+  const ref = db.collection("_rateLimits").doc(toDocId(key));
   const now = Date.now();
 
   await db.runTransaction(async (tx: Transaction) => {

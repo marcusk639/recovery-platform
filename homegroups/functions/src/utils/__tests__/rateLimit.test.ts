@@ -2,7 +2,7 @@ export {}; // Ensure isolated module
 
 const mockGet = jest.fn();
 const mockSet = jest.fn();
-const mockDoc = jest.fn(() => ({}));
+const mockDoc = jest.fn((_docId: string) => ({}));
 const mockRunTransaction = jest.fn(async (fn: any) =>
   fn({ get: mockGet, set: mockSet }),
 );
@@ -67,6 +67,37 @@ describe("enforceRateLimit", () => {
       expect.anything(),
       expect.objectContaining({ count: 1 }),
     );
+  });
+
+  it("hashes the key into a fixed-length, slash-free Firestore document ID", async () => {
+    mockGet.mockResolvedValueOnce(snap(undefined, false));
+    await enforceRateLimit("getPublicGroupProfile:1.2.3.4");
+    const docId = mockDoc.mock.calls[0][0];
+    expect(docId).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("cannot be steered into a different Firestore path via slashes or traversal segments in the key", async () => {
+    mockGet.mockResolvedValueOnce(snap(undefined, false));
+    await enforceRateLimit("getPublicGroupProfile:../../groups/some-group");
+    const docId = mockDoc.mock.calls[0][0];
+    expect(docId).not.toContain("/");
+    expect(docId).not.toContain("..");
+  });
+
+  it("produces the same document ID for the same key (rate limiting still works after hashing)", async () => {
+    mockGet.mockResolvedValueOnce(snap(undefined, false));
+    await enforceRateLimit("same-caller");
+    mockGet.mockResolvedValueOnce(snap(undefined, false));
+    await enforceRateLimit("same-caller");
+    expect(mockDoc.mock.calls[0][0]).toBe(mockDoc.mock.calls[1][0]);
+  });
+
+  it("produces different document IDs for different keys", async () => {
+    mockGet.mockResolvedValueOnce(snap(undefined, false));
+    await enforceRateLimit("caller-a");
+    mockGet.mockResolvedValueOnce(snap(undefined, false));
+    await enforceRateLimit("caller-b");
+    expect(mockDoc.mock.calls[0][0]).not.toBe(mockDoc.mock.calls[1][0]);
   });
 });
 
