@@ -66,8 +66,36 @@ jest.mock("firebase-admin", () => ({
   auth: jest.fn().mockReturnValue({}),
 }));
 
+// ------------------------------------------------------------------
+// Transaction mocks (D-6 atomic rewrite).
+//
+// `db.runTransaction(fn)` invokes `fn` with a `tx` object exposing
+// `get`/`set`. The default implementation here forwards to whatever
+// `get`/`set` method exists on the ref that was passed in — this lets
+// every pre-existing test (which wires `get`/`set` directly onto doc refs
+// via `setupCollections`) keep working unchanged, since
+// `tx.set(statsRef, ...)` transparently becomes `statsRef.set(...)`.
+// Individual "D-6 idempotency" tests override `mockTxGet`/`mockTxSet`
+// directly where the test's behavior hinges on the transaction body.
+// ------------------------------------------------------------------
+const mockTxGet = jest.fn(async (ref: any) => {
+  if (ref && typeof ref.get === "function") {
+    return ref.get();
+  }
+  return { exists: false };
+});
+const mockTxSet = jest.fn((ref: any, data: any, opts?: any) => {
+  if (ref && typeof ref.set === "function") {
+    return ref.set(data, opts);
+  }
+  return undefined;
+});
+const mockRunTransaction = jest.fn(async (fn: any) =>
+  fn({ get: mockTxGet, set: mockTxSet }),
+);
+
 jest.mock("../utils/firebase", () => ({
-  db: { collection: mockCollection },
+  db: { collection: mockCollection, runTransaction: mockRunTransaction },
 }));
 
 // Wire up the collection mock for each test. `setupCollections` lets each
@@ -84,6 +112,7 @@ function setupCollections(
     if (name === "groups") {
       return {
         doc: jest.fn().mockReturnValue({
+          __collection: "groups",
           get: jest.fn().mockResolvedValue(g),
           collection: jest.fn(),
         }),
@@ -92,9 +121,11 @@ function setupCollections(
     if (name === "intergroups") {
       return {
         doc: jest.fn().mockReturnValue({
+          __collection: "intergroups",
           get: jest.fn().mockResolvedValue(ig),
           collection: jest.fn().mockReturnValue({
             doc: jest.fn().mockReturnValue({
+              __collection: "facilityStats",
               set: mockStatsSet,
             }),
           }),
@@ -104,6 +135,7 @@ function setupCollections(
     if (name === "processed_milestone_events") {
       return {
         doc: jest.fn().mockReturnValue({
+          __collection: "processed_milestone_events",
           create: mockLockCreate,
           update: mockLockUpdate,
           delete: mockLockDelete,
@@ -156,24 +188,23 @@ describe("onMilestoneWrite", () => {
   });
 
   describe("happy path", () => {
-    it("first delivery: claims lock, increments stats, marks processed", async () => {
+    it("first delivery: runs the atomic transaction, increments stats, writes a processed lock", async () => {
       await capturedHandler(makeEvent({ beforeCount: 0, afterCount: 1 }));
 
-      expect(mockLockCreate).toHaveBeenCalledTimes(1);
+      expect(mockRunTransaction).toHaveBeenCalledTimes(1);
       expect(mockStatsSet).toHaveBeenCalledWith(
         expect.objectContaining({
           totalMilestonesAwarded: expect.objectContaining({ __increment: 1 }),
         }),
         { merge: true },
       );
-      expect(mockLockUpdate).toHaveBeenCalledWith({ status: "processed" });
-      expect(mockLockDelete).not.toHaveBeenCalled();
     });
 
-    it("no delta: skips the stats write but still claims the lock", async () => {
+    it("no delta: skips the stats write and never starts a transaction", async () => {
       await capturedHandler(makeEvent({ beforeCount: 2, afterCount: 2 }));
 
-      expect(mockLockCreate).toHaveBeenCalledTimes(1);
+      // delta === 0 returns before the lock/transaction is ever touched.
+      expect(mockRunTransaction).not.toHaveBeenCalled();
       expect(mockStatsSet).not.toHaveBeenCalled();
     });
 
@@ -198,77 +229,81 @@ describe("onMilestoneWrite", () => {
     });
   });
 
-  describe("D-6 idempotency", () => {
-    it("duplicate delivery (ALREADY_EXISTS): skips the stats write entirely", async () => {
+  describe("D-6 idempotency (atomic transaction)", () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
       setupCollections();
-      mockLockCreate.mockRejectedValueOnce(
-        Object.assign(new Error("Document already exists"), { code: 6 }),
+      mockRunTransaction.mockImplementation(async (fn: any) =>
+        fn({ get: mockTxGet, set: mockTxSet }),
       );
+    });
+
+    it("first delivery: no existing lock, applies the increment and writes a processed lock", async () => {
+      mockTxGet.mockImplementation(async (ref: any) => {
+        if (ref.__collection === "processed_milestone_events") {
+          return { exists: false };
+        }
+        if (ref.__collection === "groups") {
+          return groupDoc;
+        }
+        if (ref.__collection === "intergroups") {
+          return intergroupDoc;
+        }
+        return { exists: false };
+      });
 
       await capturedHandler(makeEvent({ beforeCount: 0, afterCount: 1 }));
 
-      expect(mockLockCreate).toHaveBeenCalledTimes(1);
-      // No stats update on duplicate delivery
-      expect(mockStatsSet).not.toHaveBeenCalled();
-      // No lock delete (we didn't claim it; existing lock stays)
-      expect(mockLockDelete).not.toHaveBeenCalled();
+      expect(mockRunTransaction).toHaveBeenCalledTimes(1);
+      expect(mockTxSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          __collection: "processed_milestone_events",
+        }),
+        expect.objectContaining({ status: "processed" }),
+      );
+      expect(mockTxSet).toHaveBeenCalledWith(
+        expect.objectContaining({ __collection: "facilityStats" }),
+        expect.anything(),
+        { merge: true },
+      );
     });
 
-    it("non-ALREADY_EXISTS lock failure: proceeds (event-drop avoidance)", async () => {
-      setupCollections();
-      mockLockCreate.mockRejectedValueOnce(
-        Object.assign(new Error("Firestore unavailable"), { code: 14 }),
-      );
+    it("duplicate delivery: lock already exists, skips the increment entirely", async () => {
+      mockTxGet.mockImplementation(async (ref: any) => {
+        if (ref.__collection === "processed_milestone_events") {
+          return { exists: true };
+        }
+        return { exists: false };
+      });
 
       await capturedHandler(makeEvent({ beforeCount: 0, afterCount: 1 }));
 
-      // Stats still updated despite the lock not being claimed
-      expect(mockStatsSet).toHaveBeenCalledTimes(1);
+      expect(mockTxSet).not.toHaveBeenCalled();
     });
 
-    it("downstream failure after lock claimed: releases the lock and rethrows", async () => {
-      setupCollections();
-      mockStatsSet.mockRejectedValueOnce(new Error("Firestore write failed"));
+    it("a failed transaction rethrows and leaves no partial state to clean up", async () => {
+      mockRunTransaction.mockRejectedValueOnce(
+        new Error("Firestore contention"),
+      );
 
       await expect(
         capturedHandler(makeEvent({ beforeCount: 0, afterCount: 1 })),
-      ).rejects.toThrow(/Firestore write failed/);
-
-      expect(mockLockCreate).toHaveBeenCalledTimes(1);
-      expect(mockLockDelete).toHaveBeenCalledTimes(1);
-      // Lock was NOT marked "processed" — that only happens on success
-      expect(mockLockUpdate).not.toHaveBeenCalled();
+      ).rejects.toThrow(/Firestore contention/);
     });
 
     it("uses event.id as the lock document ID", async () => {
-      const lockDocSpy = jest.fn().mockReturnValue({
-        create: mockLockCreate,
-        update: mockLockUpdate,
-        delete: mockLockDelete,
-      });
+      mockTxGet.mockResolvedValue({ exists: false });
+      const lockDocSpy = jest.fn((id: string) => ({
+        id,
+        __collection: "processed_milestone_events",
+      }));
       mockCollection.mockImplementation((name: string) => {
-        if (name === "groups") {
-          return {
-            doc: jest.fn().mockReturnValue({
-              get: jest.fn().mockResolvedValue(groupDoc),
-              collection: jest.fn(),
-            }),
-          };
-        }
-        if (name === "intergroups") {
-          return {
-            doc: jest.fn().mockReturnValue({
-              get: jest.fn().mockResolvedValue(intergroupDoc),
-              collection: jest.fn().mockReturnValue({
-                doc: jest.fn().mockReturnValue({ set: mockStatsSet }),
-              }),
-            }),
-          };
-        }
         if (name === "processed_milestone_events") {
           return { doc: lockDocSpy };
         }
-        return {};
+        return {
+          doc: jest.fn((id: string) => ({ id, __collection: name })),
+        };
       });
 
       await capturedHandler(

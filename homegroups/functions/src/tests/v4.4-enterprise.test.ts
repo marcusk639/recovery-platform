@@ -74,6 +74,16 @@ const mockFirestore = {
   collection: jest.fn((path: string) => {
     return firestoreCollections[path] ?? makeCollectionRef(path);
   }),
+  // Forwards to whatever get/set exists on the ref passed in, so trigger
+  // code that moved to db.runTransaction(...) (see onMilestoneWrite D-6
+  // atomic rewrite) keeps working against the same collection/doc mocks
+  // used by the rest of this file's direct .get()/.set() assertions.
+  runTransaction: jest.fn(async (fn: any) =>
+    fn({
+      get: (ref: any) => ref.get(),
+      set: (ref: any, data: any, opts?: any) => ref.set(data, opts),
+    }),
+  ),
   FieldValue: {
     serverTimestamp: mockServerTimestamp,
     arrayUnion: mockArrayUnion,
@@ -1108,6 +1118,18 @@ describe("onMilestoneWrite — milestonesThisYear (I2)", () => {
       })),
     });
     firestoreCollections["intergroups"] = intergroupsCollection;
+
+    // processed_milestone_events (D-6 idempotency lock) — no existing lock.
+    // Without this, the generic makeCollectionRef/makeDocRef fallback
+    // resolves get() to `{ exists: true, data: () => ({}) }` (empty object
+    // is truthy), which would make onMilestoneWrite's atomic transaction
+    // think a lock is already held and skip the increment entirely.
+    const lockCollection = makeCollectionRef("processed_milestone_events");
+    lockCollection.doc = jest.fn().mockReturnValue({
+      get: jest.fn().mockResolvedValue({ exists: false, data: () => null }),
+      set: jest.fn().mockResolvedValue(undefined),
+    });
+    firestoreCollections["processed_milestone_events"] = lockCollection;
   });
 
   test("increments milestonesThisYear when a new milestone is in the current year", async () => {

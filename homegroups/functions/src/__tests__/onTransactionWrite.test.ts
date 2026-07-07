@@ -83,8 +83,36 @@ jest.mock("firebase-functions/v1", () => ({
   },
 }));
 
+// ------------------------------------------------------------------
+// Transaction mocks (D-5 atomic rewrite).
+//
+// `db.runTransaction(fn)` invokes `fn` with a `tx` object exposing
+// `get`/`set`. The default implementation here forwards to whatever
+// `get`/`set` method exists on the ref that was passed in — this lets
+// every pre-existing test (which wires `mockSet`/`mockGet` directly onto
+// doc refs via `setupCollectionMock`) keep working unchanged, since
+// `tx.set(overviewRef, ...)` transparently becomes `overviewRef.set(...)`.
+// Individual "D-5 idempotency" tests override `mockTxGet`/`mockTxSet`
+// directly where the test's behavior hinges on the transaction body.
+// ------------------------------------------------------------------
+const mockTxGet = jest.fn(async (ref: any) => {
+  if (ref && typeof ref.get === "function") {
+    return ref.get();
+  }
+  return { exists: false };
+});
+const mockTxSet = jest.fn((ref: any, data: any, opts?: any) => {
+  if (ref && typeof ref.set === "function") {
+    return ref.set(data, opts);
+  }
+  return undefined;
+});
+const mockRunTransaction = jest.fn(async (fn: any) =>
+  fn({ get: mockTxGet, set: mockTxSet }),
+);
+
 jest.mock("../utils/firebase", () => ({
-  db: { collection: mockCollection },
+  db: { collection: mockCollection, runTransaction: mockRunTransaction },
 }));
 
 // ---- Helpers ----
@@ -171,6 +199,7 @@ function setupCollectionMock(overviewDoc = existingOverview) {
     if (name === "treasury_overviews") {
       return {
         doc: jest.fn().mockReturnValue({
+          __collection: "treasury_overviews",
           ...mockOverviewDocRef,
           get: jest.fn().mockResolvedValue(overviewDoc),
         }),
@@ -179,6 +208,7 @@ function setupCollectionMock(overviewDoc = existingOverview) {
     if (name === "processed_transaction_events") {
       return {
         doc: jest.fn().mockReturnValue({
+          __collection: "processed_transaction_events",
           create: mockLockCreate,
           update: mockLockUpdate,
           delete: mockLockDelete,
@@ -540,14 +570,29 @@ describe("onTransactionWrite", () => {
   // function failures (timeout/OOM/network blip between increment landing
   // and the function returning). Each retry re-fires the SAME eventId.
   //
-  // The handler must:
-  //  - On first delivery: claim the lock (create succeeds) → apply update
-  //  - On retry: create fails with ALREADY_EXISTS → short-circuit, no update
-  //  - On runtime error mid-flight: delete the lock so retry can re-attempt
+  // The lock claim and the increment now happen inside a single
+  // `db.runTransaction(...)` call, so either both commit or neither does —
+  // there is no window where the lock and the counter can diverge.
   // -----------------------------------------------------------------------
-  describe("D-5 idempotency", () => {
-    it("first delivery: claims the lock and applies the increment", async () => {
-      setupCollectionMock();
+  describe("D-5 idempotency (atomic transaction)", () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+      // Tests in this block don't necessarily call setupCollectionMock(),
+      // so give mockCollection a generic tagged-doc default that lets
+      // assertions identify which collection a given tx.get/tx.set call
+      // targeted.
+      mockCollection.mockImplementation((name: string) => ({
+        doc: jest.fn((id: string) => ({ id, __collection: name })),
+      }));
+      mockRunTransaction.mockImplementation(async (fn: any) =>
+        fn({ get: mockTxGet, set: mockTxSet }),
+      );
+    });
+
+    it("first delivery: no existing lock, applies the increment and writes a processed lock", async () => {
+      mockTxGet.mockImplementation(async (ref: any) => ({
+        exists: false,
+      }));
 
       const change = makeChange(null, {
         groupId: "group-1",
@@ -557,29 +602,30 @@ describe("onTransactionWrite", () => {
 
       await capturedHandler(change, context);
 
-      // Lock was claimed via create() (not create()+update())
-      expect(mockLockCreate).toHaveBeenCalledTimes(1);
-      expect(mockLockCreate).toHaveBeenCalledWith(
+      expect(mockRunTransaction).toHaveBeenCalledTimes(1);
+      expect(mockTxSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          __collection: "processed_transaction_events",
+        }),
         expect.objectContaining({
           transactionId: "tx-001",
-          status: "processing",
+          status: "processed",
         }),
       );
-      // Increment applied
-      expect(mockSet).toHaveBeenCalledTimes(1);
-      // Lock marked processed on success (best-effort)
-      expect(mockLockUpdate).toHaveBeenCalledWith({ status: "processed" });
-      // No lock delete on success path
-      expect(mockLockDelete).not.toHaveBeenCalled();
+      expect(mockTxSet).toHaveBeenCalledWith(
+        expect.objectContaining({ __collection: "treasury_overviews" }),
+        expect.anything(),
+        { merge: true },
+      );
     });
 
-    it("duplicate delivery (ALREADY_EXISTS): skips the increment entirely", async () => {
-      setupCollectionMock();
-      // Simulate Firestore returning code 6 (ALREADY_EXISTS) — the lock is
-      // already held by a previous successful processing.
-      mockLockCreate.mockRejectedValueOnce(
-        Object.assign(new Error("Document already exists"), { code: 6 }),
-      );
+    it("duplicate delivery: lock already exists, skips the increment entirely", async () => {
+      mockTxGet.mockImplementation(async (ref: any) => {
+        if (ref.__collection === "processed_transaction_events") {
+          return { exists: true };
+        }
+        return { exists: false };
+      });
 
       const change = makeChange(null, {
         groupId: "group-1",
@@ -589,38 +635,13 @@ describe("onTransactionWrite", () => {
 
       await capturedHandler(change, context);
 
-      // Lock claim was attempted...
-      expect(mockLockCreate).toHaveBeenCalledTimes(1);
-      // ...but the treasury was NOT touched (no double-count)
-      expect(mockSet).not.toHaveBeenCalled();
-      // And we did NOT delete the existing lock
-      expect(mockLockDelete).not.toHaveBeenCalled();
+      expect(mockTxSet).not.toHaveBeenCalled();
     });
 
-    it("non-ALREADY_EXISTS create failure: proceeds (prefers duplicate risk over event drop)", async () => {
-      setupCollectionMock();
-      // Simulate Firestore being temporarily unavailable when claiming the lock.
-      mockLockCreate.mockRejectedValueOnce(
-        Object.assign(new Error("Firestore unavailable"), { code: 14 }),
+    it("a failed transaction rethrows and leaves no partial state to clean up", async () => {
+      mockRunTransaction.mockRejectedValueOnce(
+        new Error("Firestore contention"),
       );
-
-      const change = makeChange(null, {
-        groupId: "group-1",
-        type: "income",
-        amount: 50,
-      });
-
-      await capturedHandler(change, context);
-
-      // The treasury IS updated despite the lock not being claimed —
-      // accepting duplicate risk is preferred to dropping the event.
-      expect(mockSet).toHaveBeenCalledTimes(1);
-    });
-
-    it("downstream failure after lock claimed: releases the lock and rethrows", async () => {
-      setupCollectionMock();
-      // Lock claim succeeds, but the overview write fails.
-      mockSet.mockRejectedValueOnce(new Error("Firestore write failed"));
 
       const change = makeChange(null, {
         groupId: "group-1",
@@ -629,36 +650,23 @@ describe("onTransactionWrite", () => {
       });
 
       await expect(capturedHandler(change, context)).rejects.toThrow(
-        /Firestore write failed/,
+        /Firestore contention/,
       );
-
-      // Lock was claimed, then released so retry can re-attempt cleanly
-      expect(mockLockCreate).toHaveBeenCalledTimes(1);
-      expect(mockLockDelete).toHaveBeenCalledTimes(1);
-      // Lock was NOT marked "processed" — that only happens on success
-      expect(mockLockUpdate).not.toHaveBeenCalled();
     });
 
     it("uses context.eventId as the lock document ID", async () => {
-      // Capture the doc(id) call so we can assert the key
-      const docMock = jest.fn().mockReturnValue({
-        create: mockLockCreate,
-        update: mockLockUpdate,
-        delete: mockLockDelete,
-      });
+      mockTxGet.mockResolvedValue({ exists: false });
+      const lockDocSpy = jest.fn((id: string) => ({
+        id,
+        __collection: "processed_transaction_events",
+      }));
       mockCollection.mockImplementation((name: string) => {
-        if (name === "treasury_overviews") {
-          return {
-            doc: jest.fn().mockReturnValue({
-              ...mockOverviewDocRef,
-              get: jest.fn().mockResolvedValue(existingOverview),
-            }),
-          };
-        }
         if (name === "processed_transaction_events") {
-          return { doc: docMock };
+          return { doc: lockDocSpy };
         }
-        return {};
+        return {
+          doc: jest.fn((id: string) => ({ id, __collection: name })),
+        };
       });
 
       const change = makeChange(null, {
@@ -672,7 +680,7 @@ describe("onTransactionWrite", () => {
         eventId: "specific-event-id-xyz",
       });
 
-      expect(docMock).toHaveBeenCalledWith("specific-event-id-xyz");
+      expect(lockDocSpy).toHaveBeenCalledWith("specific-event-id-xyz");
     });
   });
 });
