@@ -5,20 +5,20 @@
  * Follows the same patterns as activityQueries.ts and guestQueries.ts.
  */
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import * as oxfordService from '../../services/oxford';
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import * as oxfordService from "../../services/oxford";
 import {
   getVotes as getHouseVotes,
   createVote as createHouseVote,
   castVote as castHouseVote,
-} from '../../services/oxford/votes';
+} from "../../services/oxford/votes";
 import {
   getEESRecords,
   getEESRecordsForRecentWeeks,
   markEESPaid,
   createEESRecords,
-} from '../../services/oxford/ees';
-import { logException } from '../../util/logging';
+} from "../../services/oxford/ees";
+import { logException } from "../../util/logging";
 import {
   Officer,
   BusinessMeeting,
@@ -26,41 +26,41 @@ import {
   Election,
   EESTransaction,
   FinancialRecord,
-} from '../../entities/oxford';
+} from "../../entities/oxford";
 
 // ─── Query Keys ──────────────────────────────────────────────────────────────
 
 export const oxfordKeys = {
-  all: ['oxford'] as const,
+  all: ["oxford"] as const,
 
-  officers: () => [...oxfordKeys.all, 'officers'] as const,
+  officers: () => [...oxfordKeys.all, "officers"] as const,
   officersByHouse: (houseId: string) =>
     [...oxfordKeys.officers(), houseId] as const,
 
-  meetings: () => [...oxfordKeys.all, 'meetings'] as const,
+  meetings: () => [...oxfordKeys.all, "meetings"] as const,
   meetingsByHouse: (houseId: string) =>
     [...oxfordKeys.meetings(), houseId] as const,
   meetingVotes: (meetingId: string) =>
-    [...oxfordKeys.meetings(), 'votes', meetingId] as const,
+    [...oxfordKeys.meetings(), "votes", meetingId] as const,
 
-  elections: () => [...oxfordKeys.all, 'elections'] as const,
+  elections: () => [...oxfordKeys.all, "elections"] as const,
   electionsByHouse: (houseId: string) =>
     [...oxfordKeys.elections(), houseId] as const,
 
-  eesTransactions: () => [...oxfordKeys.all, 'eesTransactions'] as const,
+  eesTransactions: () => [...oxfordKeys.all, "eesTransactions"] as const,
   eesTransactionsByHouse: (houseId: string) =>
     [...oxfordKeys.eesTransactions(), houseId] as const,
 
-  eesRecords: () => [...oxfordKeys.all, 'eesRecords'] as const,
+  eesRecords: () => [...oxfordKeys.all, "eesRecords"] as const,
   eesRecordsByHouseWeek: (houseId: string, weekStart: string) =>
     [...oxfordKeys.eesRecords(), houseId, weekStart] as const,
   eesRecordsByHouseRecent: (houseId: string, weekCount: number) =>
-    [...oxfordKeys.eesRecords(), houseId, 'recent', weekCount] as const,
+    [...oxfordKeys.eesRecords(), houseId, "recent", weekCount] as const,
 
-  votes: () => [...oxfordKeys.all, 'votes'] as const,
+  votes: () => [...oxfordKeys.all, "votes"] as const,
   votesByHouse: (houseId: string) => [...oxfordKeys.votes(), houseId] as const,
 
-  financialRecords: () => [...oxfordKeys.all, 'financialRecords'] as const,
+  financialRecords: () => [...oxfordKeys.all, "financialRecords"] as const,
   financialRecordsByHouse: (houseId: string) =>
     [...oxfordKeys.financialRecords(), houseId] as const,
 };
@@ -86,10 +86,10 @@ export const useCreateOfficer = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (officer: Omit<Officer, 'id'>) =>
+    mutationFn: (officer: Omit<Officer, "id">) =>
       oxfordService.createOfficer(officer),
 
-    onSuccess: data => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({
         queryKey: oxfordKeys.officersByHouse(data.houseId),
       });
@@ -147,7 +147,7 @@ export const useRemoveOfficer = () => {
  */
 export const useBusinessMeetings = (
   houseId: string,
-  enabled: boolean = true,
+  enabled: boolean = true
 ) => {
   return useQuery({
     queryKey: oxfordKeys.meetingsByHouse(houseId),
@@ -179,11 +179,11 @@ export const useCreateBusinessMeeting = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (meeting: Omit<BusinessMeeting, 'id'>) =>
+    mutationFn: (meeting: Omit<BusinessMeeting, "id">) =>
       oxfordService.createBusinessMeeting(meeting),
 
     // Optimistic update: insert a temporary meeting at the top of the list
-    onMutate: async newMeeting => {
+    onMutate: async (newMeeting) => {
       const queryKey = oxfordKeys.meetingsByHouse(newMeeting.houseId);
       await queryClient.cancelQueries({ queryKey });
 
@@ -207,7 +207,7 @@ export const useCreateBusinessMeeting = () => {
       if (context?.previousMeetings) {
         queryClient.setQueryData(
           oxfordKeys.meetingsByHouse(newMeeting.houseId),
-          context.previousMeetings,
+          context.previousMeetings
         );
       }
     },
@@ -246,26 +246,14 @@ export const useUpdateBusinessMeeting = () => {
 };
 
 // ─── Votes / Ballots ──────────────────────────────────────────────────────────
-
-/**
- * Cast a vote on an agenda item or election.
- */
-export const useCastVote = () => {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (vote: Omit<Vote, 'id'>) => oxfordService.castVote(vote),
-
-    onSuccess: data => {
-      if (data.meetingId) {
-        queryClient.invalidateQueries({
-          queryKey: oxfordKeys.meetingVotes(data.meetingId),
-        });
-      }
-      queryClient.invalidateQueries({ queryKey: oxfordKeys.elections() });
-    },
-  });
-};
+//
+// NOTE: useCastVote() used to live here, calling oxfordService.castVote()
+// (services/oxford/index.ts). Removed 2026-07-04 as dead-code cleanup — no
+// screen ever called this hook (confirmed by searching every call site;
+// only its own tests did), and the function it called didn't respect a
+// vote's `isAnonymous` flag. The real, live vote-casting path is
+// useCastHouseVote() below, which does respect it. See services/oxford/
+// index.ts for the full removal note.
 
 /**
  * Fetch all votes for a house (subcollection-based).
@@ -293,10 +281,10 @@ export const useCreateHouseVote = () => {
       vote,
     }: {
       houseId: string;
-      vote: Omit<Vote, 'id'>;
+      vote: Omit<Vote, "id">;
     }) => createHouseVote(houseId, vote),
 
-    onError: error => logException(error),
+    onError: (error) => logException(error),
     onSettled: (_data, _error, { houseId }) => {
       queryClient.invalidateQueries({
         queryKey: oxfordKeys.votesByHouse(houseId),
@@ -321,10 +309,10 @@ export const useCastHouseVote = () => {
       houseId: string;
       voteId: string;
       guestId: string;
-      choice: 'yes' | 'no' | 'abstain';
+      choice: "yes" | "no" | "abstain";
     }) => castHouseVote(houseId, voteId, guestId, choice),
 
-    onError: error => logException(error),
+    onError: (error) => logException(error),
     onSettled: (_data, _error, { houseId }) => {
       queryClient.invalidateQueries({
         queryKey: oxfordKeys.votesByHouse(houseId),
@@ -354,10 +342,10 @@ export const useCreateElection = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (election: Omit<Election, 'id'>) =>
+    mutationFn: (election: Omit<Election, "id">) =>
       oxfordService.createElection(election),
 
-    onSuccess: data => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({
         queryKey: oxfordKeys.electionsByHouse(data.houseId),
       });
@@ -372,7 +360,7 @@ export const useCreateElection = () => {
  */
 export const useEESTransactions = (
   houseId: string,
-  enabled: boolean = true,
+  enabled: boolean = true
 ) => {
   return useQuery({
     queryKey: oxfordKeys.eesTransactionsByHouse(houseId),
@@ -389,10 +377,10 @@ export const useCreateEESTransaction = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (tx: Omit<EESTransaction, 'id'>) =>
+    mutationFn: (tx: Omit<EESTransaction, "id">) =>
       oxfordService.createEESTransaction(tx),
 
-    onSuccess: data => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({
         queryKey: oxfordKeys.eesTransactionsByHouse(data.houseId),
       });
@@ -408,7 +396,7 @@ export const useCreateEESTransaction = () => {
 export const useEESRecords = (
   houseId: string,
   weekStart: string,
-  enabled: boolean = true,
+  enabled: boolean = true
 ) => {
   return useQuery({
     queryKey: oxfordKeys.eesRecordsByHouseWeek(houseId, weekStart),
@@ -424,7 +412,7 @@ export const useEESRecords = (
 export const useEESRecordsRecent = (
   houseId: string,
   weekCount: number,
-  enabled: boolean = true,
+  enabled: boolean = true
 ) => {
   return useQuery({
     queryKey: oxfordKeys.eesRecordsByHouseRecent(houseId, weekCount),
@@ -449,7 +437,7 @@ export const useMarkEESPaid = () => {
       weekStart: string;
     }) => markEESPaid(recordId),
 
-    onError: error => logException(error),
+    onError: (error) => logException(error),
     onSettled: (_data, _error, { houseId, weekStart }) => {
       queryClient.invalidateQueries({
         queryKey: oxfordKeys.eesRecordsByHouseWeek(houseId, weekStart),
@@ -477,7 +465,7 @@ export const useCreateEESRecords = () => {
       amountPerGuest: number;
     }) => createEESRecords(houseId, weekStart, guestIds, amountPerGuest),
 
-    onError: error => logException(error),
+    onError: (error) => logException(error),
     onSettled: (_data, _error, { houseId, weekStart }) => {
       queryClient.invalidateQueries({
         queryKey: oxfordKeys.eesRecordsByHouseWeek(houseId, weekStart),
@@ -493,7 +481,7 @@ export const useCreateEESRecords = () => {
  */
 export const useFinancialRecords = (
   houseId: string,
-  enabled: boolean = true,
+  enabled: boolean = true
 ) => {
   return useQuery({
     queryKey: oxfordKeys.financialRecordsByHouse(houseId),
@@ -510,10 +498,10 @@ export const useCreateFinancialRecord = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (record: Omit<FinancialRecord, 'id'>) =>
+    mutationFn: (record: Omit<FinancialRecord, "id">) =>
       oxfordService.createFinancialRecord(record),
 
-    onSuccess: data => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({
         queryKey: oxfordKeys.financialRecordsByHouse(data.houseId),
       });

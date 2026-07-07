@@ -6,54 +6,54 @@
  * when house.houseType === 'oxford'.
  */
 
-import React, { useMemo, useCallback, useEffect } from 'react';
+import React, { useMemo, useCallback, useEffect } from "react";
 import {
   View,
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
   StyleSheet,
-} from 'react-native';
-import { RatsIcon } from '../../components/rats-icon';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import ScreenHeader from '../../components/screen-header';
-import { RatsText } from '../../components/rats-text';
-import { color, fontSize, normalize, CARD_STYLE } from '../../styles/theme';
-import { useAppSelector } from '../../state/store';
-import { Guest } from '../../entities/Guest';
-import { useSelectedHouse } from '../../hooks/useSelectedHouse';
+} from "react-native";
+import { RatsIcon } from "../../components/rats-icon";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import ScreenHeader from "../../components/screen-header";
+import { RatsText } from "../../components/rats-text";
+import { color, fontSize, normalize, CARD_STYLE } from "../../styles/theme";
+import { useAppSelector } from "../../state/store";
+import { Guest } from "../../entities/Guest";
+import { useSelectedHouse } from "../../hooks/useSelectedHouse";
 import {
   useOfficers,
   useBusinessMeetings,
   useEESTransactions,
-} from '../../state/queries/oxfordQueries';
-import { useGuests } from '../../state/queries/guestQueries';
-import { useCharterCompliance } from '../../state/queries/charterComplianceQueries';
-import CharterBadge from '../../components/oxford/CharterBadge';
-import { useCurrentWeekRecord } from '../../state/queries/treasuryQueries';
-import { Routes, RootStackParamList } from '../../navigation/types';
-import { Officer } from '../../entities/oxford/Officer';
-import { BusinessMeeting } from '../../entities/oxford/BusinessMeeting';
-import { EESTransaction } from '../../entities/oxford/EESTransaction';
+} from "../../state/queries/oxfordQueries";
+import { useGuests } from "../../state/queries/guestQueries";
+import { useCharterCompliance } from "../../state/queries/charterComplianceQueries";
+import CharterBadge from "../../components/oxford/CharterBadge";
+import { useCurrentWeekRecord } from "../../state/queries/treasuryQueries";
+import { Routes, RootStackParamList } from "../../navigation/types";
+import { Officer } from "../../entities/oxford/Officer";
+import { BusinessMeeting } from "../../entities/oxford/BusinessMeeting";
+import { EESTransaction } from "../../entities/oxford/EESTransaction";
 
 interface Props {
   navigation: NativeStackNavigationProp<RootStackParamList>;
 }
 
 const ROLE_LABELS: Record<string, string> = {
-  president: 'President',
-  treasurer: 'Treasurer',
-  secretary: 'Secretary',
-  comptroller: 'Comptroller',
+  president: "President",
+  treasurer: "Treasurer",
+  secretary: "Secretary",
+  comptroller: "Comptroller",
 };
 
 const OxfordDashboard: React.FC<Props> = ({ navigation }) => {
   const { house } = useSelectedHouse();
   const subscriptionMetadata = useAppSelector(
-    state => state.user.user?.subscriptionMetadata,
+    (state) => state.user.user?.subscriptionMetadata
   );
 
-  const houseId = house?.id ?? '';
+  const houseId = house?.id ?? "";
   // Source of truth for guests is React Query — the Redux state.guests.guests
   // slot is dead in production (cacheGuests is never dispatched).
   // See .full-review/01-quality-architecture.md [A2].
@@ -73,13 +73,13 @@ const OxfordDashboard: React.FC<Props> = ({ navigation }) => {
     (userId: string): string => {
       const guest = guestByUserId[userId];
       if (!guest) {
-        return 'Unknown';
+        return "Unknown";
       }
       return (
-        `${guest.firstName || ''} ${guest.lastName || ''}`.trim() || 'Unknown'
+        `${guest.firstName || ""} ${guest.lastName || ""}`.trim() || "Unknown"
       );
     },
-    [guestByUserId],
+    [guestByUserId]
   );
 
   const officersQuery = useOfficers(houseId, !!houseId);
@@ -92,16 +92,16 @@ const OxfordDashboard: React.FC<Props> = ({ navigation }) => {
   // so without useMemo these filter/slice chains re-run on every render
   // (including renders caused by the other two queries refetching).
   const activeOfficers = useMemo(
-    () => (officersQuery.data ?? []).filter(o => o.isActive).slice(0, 4),
-    [officersQuery.data],
+    () => (officersQuery.data ?? []).filter((o) => o.isActive).slice(0, 4),
+    [officersQuery.data]
   );
   const upcomingMeetings = useMemo(
-    () => (meetingsQuery.data ?? []).filter(m => !m.actualDate).slice(0, 3),
-    [meetingsQuery.data],
+    () => (meetingsQuery.data ?? []).filter((m) => !m.actualDate).slice(0, 3),
+    [meetingsQuery.data]
   );
   const recentTransactions = useMemo(
     () => (transactionsQuery.data ?? []).slice(0, 5),
-    [transactionsQuery.data],
+    [transactionsQuery.data]
   );
 
   // Guard against firing before `house` arrives from Firestore: when house is
@@ -110,7 +110,7 @@ const OxfordDashboard: React.FC<Props> = ({ navigation }) => {
   // used to be implicit in the early return below.
   const shouldRedirectToOnboarding =
     !!house &&
-    house.houseType === 'oxford' &&
+    house.houseType === "oxford" &&
     !!subscriptionMetadata?.oxfordEnabled &&
     !house.oxfordOnboardingComplete;
 
@@ -120,7 +120,7 @@ const OxfordDashboard: React.FC<Props> = ({ navigation }) => {
     }
   }, [shouldRedirectToOnboarding, navigation]);
 
-  if (!house || house.houseType !== 'oxford') {
+  if (!house || house.houseType !== "oxford") {
     return (
       <View style={styles.container}>
         <ScreenHeader header="Oxford House" renderBackButton />
@@ -211,7 +211,8 @@ const OxfordDashboard: React.FC<Props> = ({ navigation }) => {
             <TouchableOpacity
               testID="oxford-upgrade-button"
               onPress={() => navigation.navigate(Routes.SubscriptionHandler)}
-              style={styles.upgradeButton}>
+              style={styles.upgradeButton}
+            >
               <RatsText
                 text="Start 14-Day Free Trial"
                 style={styles.upgradeButtonText}
@@ -233,13 +234,14 @@ const OxfordDashboard: React.FC<Props> = ({ navigation }) => {
     title: string,
     content: React.ReactNode,
     onPress: () => void,
-    testID?: string,
+    testID?: string
   ) => (
     <TouchableOpacity
       testID={testID}
       style={styles.card}
       onPress={onPress}
-      activeOpacity={0.8}>
+      activeOpacity={0.8}
+    >
       <View style={styles.cardHeader}>
         <RatsText text={title} style={styles.cardTitle} translate={false} />
         <RatsText text="View All" style={styles.viewAll} translate={false} />
@@ -307,7 +309,7 @@ const OxfordDashboard: React.FC<Props> = ({ navigation }) => {
             />
             <RatsText
               text={`${meeting.agenda.length} item${
-                meeting.agenda.length !== 1 ? 's' : ''
+                meeting.agenda.length !== 1 ? "s" : ""
               }`}
               style={styles.listRowSubtext}
               translate={false}
@@ -333,23 +335,30 @@ const OxfordDashboard: React.FC<Props> = ({ navigation }) => {
     }
     return (
       <View>
-        {recentTransactions.map((tx: EESTransaction) => (
-          <View key={tx.id} style={styles.listRow}>
-            <RatsText
-              text={`$${tx.amount.toFixed(2)}`}
-              style={[
-                styles.listRowText,
-                { color: tx.type === 'refund' ? color.green : color.dark_blue },
-              ]}
-              translate={false}
-            />
-            <RatsText
-              text={tx.type.charAt(0).toUpperCase() + tx.type.slice(1)}
-              style={styles.listRowSubtext}
-              translate={false}
-            />
-          </View>
-        ))}
+        {recentTransactions.map((tx: EESTransaction) => {
+          // Defensive fallback for any pre-hardening records written before
+          // 2026-07-05 that never set `type` — see ees.ts createEESRecords.
+          const txType = tx.type ?? "payment";
+          return (
+            <View key={tx.id} style={styles.listRow}>
+              <RatsText
+                text={`$${tx.amount.toFixed(2)}`}
+                style={[
+                  styles.listRowText,
+                  {
+                    color: txType === "refund" ? color.green : color.dark_blue,
+                  },
+                ]}
+                translate={false}
+              />
+              <RatsText
+                text={txType.charAt(0).toUpperCase() + txType.slice(1)}
+                style={styles.listRowSubtext}
+                translate={false}
+              />
+            </View>
+          );
+        })}
       </View>
     );
   };
@@ -363,13 +372,15 @@ const OxfordDashboard: React.FC<Props> = ({ navigation }) => {
       />
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}>
+        contentContainerStyle={styles.scrollContent}
+      >
         {/* Charter Compliance Summary */}
         <TouchableOpacity
           testID="oxford-charter-card"
           style={styles.card}
           onPress={() => navigation.navigate(Routes.CharterCompliance)}
-          activeOpacity={0.8}>
+          activeOpacity={0.8}
+        >
           <View style={styles.cardHeader}>
             <RatsText
               text="Charter Compliance"
@@ -391,10 +402,10 @@ const OxfordDashboard: React.FC<Props> = ({ navigation }) => {
 
         {/* Officers Summary */}
         {renderSummaryCard(
-          'Current Officers',
+          "Current Officers",
           renderOfficerContent(),
           () => navigation.navigate(Routes.OfficerManagement),
-          'oxford-officers-card',
+          "oxford-officers-card"
         )}
 
         {/* Treasury Summary */}
@@ -402,7 +413,8 @@ const OxfordDashboard: React.FC<Props> = ({ navigation }) => {
           testID="oxford-treasury-card"
           style={styles.card}
           onPress={() => navigation.navigate(Routes.TreasuryDashboard)}
-          activeOpacity={0.8}>
+          activeOpacity={0.8}
+        >
           <View style={styles.cardHeader}>
             <View style={styles.cardTitleRow}>
               <RatsIcon
@@ -429,7 +441,7 @@ const OxfordDashboard: React.FC<Props> = ({ navigation }) => {
                 ? `Balance: $${(
                     currentWeekRecord.endingCheckingBalance / 100
                   ).toFixed(2)} — ${currentWeekRecord.status}`
-                : 'No report this week'
+                : "No report this week"
             }
             style={styles.emptyCardText}
           />
@@ -437,18 +449,18 @@ const OxfordDashboard: React.FC<Props> = ({ navigation }) => {
 
         {/* Upcoming Meetings Summary */}
         {renderSummaryCard(
-          'Upcoming Meetings',
+          "Upcoming Meetings",
           renderMeetingsContent(),
           () => navigation.navigate(Routes.BusinessMeetings),
-          'oxford-meetings-card',
+          "oxford-meetings-card"
         )}
 
         {/* Recent EES Transactions */}
         {renderSummaryCard(
-          'Recent EES Transactions',
+          "Recent EES Transactions",
           renderTransactionsContent(),
           () => navigation.navigate(Routes.EESTracker),
-          'oxford-transactions-card',
+          "oxford-transactions-card"
         )}
 
         {/* Quick Links */}
@@ -456,7 +468,8 @@ const OxfordDashboard: React.FC<Props> = ({ navigation }) => {
           <TouchableOpacity
             testID="oxford-elections-link"
             style={styles.quickLinkButton}
-            onPress={() => navigation.navigate(Routes.OxfordVoting)}>
+            onPress={() => navigation.navigate(Routes.OxfordVoting)}
+          >
             <RatsText
               text="Elections"
               style={styles.quickLinkText}
@@ -492,9 +505,9 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: normalize(8),
     paddingBottom: normalize(8),
     borderBottomWidth: 1,
@@ -502,12 +515,12 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     fontSize: fontSize.medium,
-    fontWeight: '600',
+    fontWeight: "600",
     color: color.dark_blue,
   },
   cardTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: normalize(6),
   },
   viewAll: {
@@ -515,9 +528,9 @@ const styles = StyleSheet.create({
     color: color.baby_blue,
   },
   listRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingVertical: normalize(4),
   },
   listRowText: {
@@ -540,28 +553,28 @@ const styles = StyleSheet.create({
   roleBadgeText: {
     fontSize: fontSize.extraSmall,
     color: color.dark_blue,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   emptyCardText: {
     fontSize: fontSize.regular,
     color: color.grey,
-    textAlign: 'center',
+    textAlign: "center",
     paddingVertical: normalize(8),
   },
   emptyState: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     padding: normalize(20),
   },
   emptyText: {
     fontSize: fontSize.regular,
     color: color.grey,
-    textAlign: 'center',
+    textAlign: "center",
   },
   quickLinks: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: normalize(8),
     marginTop: normalize(4),
   },
@@ -582,21 +595,21 @@ const styles = StyleSheet.create({
     paddingBottom: normalize(40),
   },
   upgradeHeader: {
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: normalize(24),
     paddingTop: normalize(8),
   },
   upgradeTitle: {
     fontSize: fontSize.large,
-    fontWeight: '700',
+    fontWeight: "700",
     color: color.dark_blue,
-    textAlign: 'center',
+    textAlign: "center",
     marginBottom: normalize(8),
   },
   upgradeSubtitle: {
     fontSize: fontSize.regular,
     color: color.grey,
-    textAlign: 'center',
+    textAlign: "center",
   },
   featureCard: {
     backgroundColor: color.white,
@@ -608,7 +621,7 @@ const styles = StyleSheet.create({
   },
   featureTitle: {
     fontSize: fontSize.medium,
-    fontWeight: '600',
+    fontWeight: "600",
     color: color.dark_blue,
     marginBottom: normalize(6),
   },
@@ -618,7 +631,7 @@ const styles = StyleSheet.create({
     lineHeight: normalize(20),
   },
   upgradeCtaContainer: {
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: normalize(24),
     padding: normalize(20),
     backgroundColor: color.white,
@@ -626,7 +639,7 @@ const styles = StyleSheet.create({
   },
   upgradePriceLine: {
     fontSize: fontSize.large,
-    fontWeight: '700',
+    fontWeight: "700",
     color: color.dark_blue,
     marginBottom: normalize(4),
   },
@@ -640,14 +653,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingVertical: normalize(14),
     paddingHorizontal: normalize(32),
-    alignSelf: 'stretch',
-    alignItems: 'center',
+    alignSelf: "stretch",
+    alignItems: "center",
     marginBottom: normalize(12),
   },
   upgradeButtonText: {
     color: color.white,
     fontSize: fontSize.medium,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   upgradeNote: {
     fontSize: fontSize.small,

@@ -142,10 +142,8 @@ import housesReducer from '../../../state/slices/housesSlice';
 import guestsReducer from '../../../state/slices/guestsSlice';
 import userReducer from '../../../state/slices/userSlice';
 import adminReducer from '../../../state/slices/adminSlice';
-import uiReducer from '../../../state/slices/uiSlice';
 import authReducer from '../../../state/slices/authSlice';
 import themeReducer from '../../../state/slices/themeSlice';
-import navigationReducer from '../../../state/slices/navigationSlice';
 import chatReducer from '../../../state/slices/chatSlice';
 import setupReducer from '../../../state/slices/setupSlice';
 import notificationsReducer from '../../../state/slices/notificationsSlice';
@@ -238,10 +236,8 @@ function buildStore(options: { userAsGuest?: any; userId?: string } = {}) {
   });
   return configureStore({
     reducer: {
-      ui: uiReducer,
       auth: authReducer,
       theme: themeReducer,
-      navigation: navigationReducer,
       user: userReducer,
       houses: housesReducer,
       guests: guestsReducer,

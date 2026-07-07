@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState } from "react";
 import {
   View,
   FlatList,
@@ -8,27 +8,27 @@ import {
   Switch,
   TextInput,
   TouchableOpacity,
-} from 'react-native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { format, parseISO } from 'date-fns';
-import { RootStackParamList } from '../../navigation/types';
+} from "react-native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { format, parseISO } from "date-fns";
+import { RootStackParamList } from "../../navigation/types";
 
-import RatsScrollView from '../../components/rats-scroll-view';
-import ScreenHeader from '../../components/screen-header';
-import RatsButton from '../../components/rats-button/rats-button';
-import { RatsText } from '../../components/rats-text';
+import RatsScrollView from "../../components/rats-scroll-view";
+import ScreenHeader from "../../components/screen-header";
+import RatsButton from "../../components/rats-button/rats-button";
+import { RatsText } from "../../components/rats-text";
 
-import { useAppSelector } from '../../state/store';
-import { useOxfordGate } from '../../hooks/useOxfordGate';
-import { Vote, VoteType } from '../../entities/oxford/Vote';
-import { calculateResult, VoteResult } from '../../services/oxford/votes';
+import { useAppSelector } from "../../state/store";
+import { useOxfordGate } from "../../hooks/useOxfordGate";
+import { Vote, VoteType } from "../../entities/oxford/Vote";
+import { calculateResult, VoteResult } from "../../services/oxford/votes";
 import {
   useHouseVotes,
   useCreateHouseVote,
   useCastHouseVote,
-} from '../../state/queries/oxfordQueries';
-import { logException } from '../../util/logging';
-import { color, normalize, fontSize, CARD_STYLE } from '../../styles/theme';
+} from "../../state/queries/oxfordQueries";
+import { logException } from "../../util/logging";
+import { color, normalize, fontSize, CARD_STYLE } from "../../styles/theme";
 
 interface Props {
   navigation: NativeStackNavigationProp<RootStackParamList>;
@@ -37,19 +37,19 @@ interface Props {
 const THRESHOLD = 0.8;
 
 const RESULT_CONFIG: Record<VoteResult, { bg: string; label: string }> = {
-  passed: { bg: color.green, label: 'PASSED' },
-  failed: { bg: color.red, label: 'FAILED' },
-  pending: { bg: color.grey, label: 'PENDING' },
+  passed: { bg: color.green, label: "PASSED" },
+  failed: { bg: color.red, label: "FAILED" },
+  pending: { bg: color.grey, label: "PENDING" },
 };
 
 const Voting: React.FC<Props> = ({ navigation }) => {
   const { allowed, houseId } = useOxfordGate();
-  const user = useAppSelector(state => state.user.user);
-  const userAsGuest = useAppSelector(state => state.guests.userAsGuest);
+  const user = useAppSelector((state) => state.user.user);
+  const userAsGuest = useAppSelector((state) => state.guests.userAsGuest);
 
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [topic, setTopic] = useState('');
-  const [description, setDescription] = useState('');
+  const [topic, setTopic] = useState("");
+  const [description, setDescription] = useState("");
   const [isAnonymous, setIsAnonymous] = useState(false);
 
   const {
@@ -67,7 +67,7 @@ const Voting: React.FC<Props> = ({ navigation }) => {
       return;
     }
     if (!topic.trim()) {
-      Alert.alert('Validation', 'Please enter a topic.');
+      Alert.alert("Validation", "Please enter a topic.");
       return;
     }
 
@@ -78,8 +78,8 @@ const Voting: React.FC<Props> = ({ navigation }) => {
           houseId,
           topic: topic.trim(),
           description: description.trim(),
-          type: 'general' as VoteType,
-          options: ['yes', 'no', 'abstain'],
+          type: "general" as VoteType,
+          options: ["yes", "no", "abstain"],
           results: {},
           individualVotes: {},
           threshold: THRESHOLD,
@@ -88,24 +88,24 @@ const Voting: React.FC<Props> = ({ navigation }) => {
           createdAt: new Date().toISOString(),
         },
       });
-      setTopic('');
-      setDescription('');
+      setTopic("");
+      setDescription("");
       setIsAnonymous(false);
       setShowCreateForm(false);
     } catch (err) {
       logException(err);
-      Alert.alert('Error', 'Failed to create vote. Please try again.');
+      Alert.alert("Error", "Failed to create vote. Please try again.");
     }
   };
 
   const handleCastVote = useCallback(
-    async (vote: Vote, choice: 'yes' | 'no' | 'abstain') => {
+    async (vote: Vote, choice: "yes" | "no" | "abstain") => {
       if (!houseId || !userAsGuest?.id) {
-        Alert.alert('Error', 'You must be a resident to vote.');
+        Alert.alert("Error", "You must be a resident to vote.");
         return;
       }
       if (vote.closedAt) {
-        Alert.alert('Vote Closed', 'This vote has already been closed.');
+        Alert.alert("Vote Closed", "This vote has already been closed.");
         return;
       }
 
@@ -118,18 +118,18 @@ const Voting: React.FC<Props> = ({ navigation }) => {
         });
       } catch (err) {
         logException(err);
-        Alert.alert('Error', 'Failed to cast vote. Please try again.');
+        Alert.alert("Error", "Failed to cast vote. Please try again.");
       }
     },
-    [houseId, userAsGuest?.id, castMutation],
+    [houseId, userAsGuest?.id, castMutation]
   );
 
   const getTally = (
-    vote: Vote,
+    vote: Vote
   ): { yes: number; no: number; abstain: number; total: number } => {
-    const yes = vote.results['yes'] || 0;
-    const no = vote.results['no'] || 0;
-    const abstain = vote.results['abstain'] || 0;
+    const yes = vote.results["yes"] || 0;
+    const no = vote.results["no"] || 0;
+    const abstain = vote.results["abstain"] || 0;
     return { yes, no, abstain, total: yes + no + abstain };
   };
 
@@ -153,12 +153,22 @@ const Voting: React.FC<Props> = ({ navigation }) => {
   // re-renders whenever useHouseVotes returns a new data array (on refetch).
   const renderVote = useCallback(
     ({ item }: { item: Vote }) => {
-      const result = calculateResult(item, THRESHOLD);
+      const result = calculateResult(item, item.threshold);
       const resultConfig = RESULT_CONFIG[result];
+      const thresholdPercent = Math.round(item.threshold * 100);
       const tally = getTally(item);
       const yesPercent = getYesPercent(item);
       const currentChoice = getCurrentVoterChoice(item);
       const isClosed = !!item.closedAt;
+      // Anonymous polls never populate individualVotes, so currentChoice is
+      // always undefined for them — voterIds is the only way to know this
+      // guest already voted, needed to stop the buttons from staying
+      // tappable (they'd otherwise successfully re-inflate the tally right
+      // up until the service-layer rejection was added).
+      const hasVotedAnonymously =
+        !!item.isAnonymous &&
+        !!userAsGuest?.id &&
+        (item.voterIds ?? []).includes(userAsGuest.id);
 
       return (
         <View
@@ -170,27 +180,29 @@ const Voting: React.FC<Props> = ({ navigation }) => {
               padding: normalize(14),
               borderLeftWidth: 4,
               borderLeftColor:
-                result === 'passed'
+                result === "passed"
                   ? color.green
-                  : result === 'failed'
-                    ? color.red
-                    : color.baby_blue,
+                  : result === "failed"
+                  ? color.red
+                  : color.baby_blue,
             },
-          ]}>
+          ]}
+        >
           {/* Header */}
           <View
             style={{
-              flexDirection: 'row',
-              justifyContent: 'space-between',
-              alignItems: 'flex-start',
-            }}>
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+            }}
+          >
             <View style={{ flex: 1, marginRight: normalize(8) }}>
               <RatsText
                 text={item.topic}
                 style={{ fontSize: fontSize.medium, color: color.black }}
               />
               <RatsText
-                text={item.type.replace('_', ' ')}
+                text={item.type.replace("_", " ")}
                 style={{
                   fontSize: fontSize.small,
                   color: color.grey,
@@ -204,7 +216,8 @@ const Voting: React.FC<Props> = ({ navigation }) => {
                 paddingHorizontal: normalize(10),
                 paddingVertical: normalize(4),
                 borderRadius: normalize(4),
-              }}>
+              }}
+            >
               <RatsText
                 text={resultConfig.label}
                 style={{ color: color.white, fontSize: fontSize.small }}
@@ -228,14 +241,13 @@ const Voting: React.FC<Props> = ({ navigation }) => {
           <View style={{ marginTop: normalize(12) }}>
             <View
               style={{
-                flexDirection: 'row',
-                justifyContent: 'space-between',
+                flexDirection: "row",
+                justifyContent: "space-between",
                 marginBottom: normalize(4),
-              }}>
+              }}
+            >
               <RatsText
-                text={`Yes: ${yesPercent}% (need ${Math.round(
-                  THRESHOLD * 100,
-                )}%)`}
+                text={`Yes: ${yesPercent}% (need ${thresholdPercent}%)`}
                 style={{ fontSize: fontSize.small, color: color.dark_grey }}
               />
               <RatsText
@@ -248,21 +260,22 @@ const Voting: React.FC<Props> = ({ navigation }) => {
                 height: normalize(8),
                 backgroundColor: color.light_grey,
                 borderRadius: normalize(4),
-                overflow: 'hidden',
-              }}>
+                overflow: "hidden",
+              }}
+            >
               <View
                 style={{
-                  height: '100%',
+                  height: "100%",
                   width: `${yesPercent}%`,
                   backgroundColor:
-                    yesPercent >= THRESHOLD * 100
+                    yesPercent >= thresholdPercent
                       ? color.green
                       : color.baby_blue,
                   borderRadius: normalize(4),
                 }}
               />
             </View>
-            <View style={{ flexDirection: 'row', marginTop: normalize(4) }}>
+            <View style={{ flexDirection: "row", marginTop: normalize(4) }}>
               <RatsText
                 text={`Yes: ${tally.yes}  No: ${tally.no}  Abstain: ${tally.abstain}`}
                 style={{ fontSize: fontSize.extraSmall, color: color.grey }}
@@ -272,7 +285,7 @@ const Voting: React.FC<Props> = ({ navigation }) => {
 
           {/* Threshold indicator */}
           <RatsText
-            text={`Threshold: 80% yes votes required`}
+            text={`Threshold: ${thresholdPercent}% yes votes required`}
             style={{
               fontSize: fontSize.extraSmall,
               color: color.grey,
@@ -280,8 +293,22 @@ const Voting: React.FC<Props> = ({ navigation }) => {
             }}
           />
 
+          {/* Already-voted message for anonymous polls (no buttons — a
+              second vote can't be reconciled without knowing the first
+              choice, so it's rejected rather than allowed to change). */}
+          {!isClosed && userAsGuest && hasVotedAnonymously && (
+            <RatsText
+              text="You have already voted on this poll."
+              style={{
+                fontSize: fontSize.small,
+                color: color.dark_grey,
+                marginTop: normalize(12),
+              }}
+            />
+          )}
+
           {/* Vote buttons */}
-          {!isClosed && userAsGuest && (
+          {!isClosed && userAsGuest && !hasVotedAnonymously && (
             <View style={{ marginTop: normalize(12) }}>
               {!item.isAnonymous && currentChoice ? (
                 <RatsText
@@ -305,10 +332,11 @@ const Voting: React.FC<Props> = ({ navigation }) => {
               )}
               <View
                 style={{
-                  flexDirection: 'row',
-                  justifyContent: 'space-between',
-                }}>
-                {(['yes', 'no', 'abstain'] as const).map(choice => (
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                }}
+              >
+                {(["yes", "no", "abstain"] as const).map((choice) => (
                   <TouchableOpacity
                     key={choice}
                     onPress={() => handleCastVote(item, choice)}
@@ -317,23 +345,24 @@ const Voting: React.FC<Props> = ({ navigation }) => {
                       marginHorizontal: normalize(4),
                       paddingVertical: normalize(8),
                       borderRadius: normalize(4),
-                      alignItems: 'center',
+                      alignItems: "center",
                       backgroundColor:
                         currentChoice === choice
-                          ? choice === 'yes'
+                          ? choice === "yes"
                             ? color.green
-                            : choice === 'no'
-                              ? color.red
-                              : color.grey
+                            : choice === "no"
+                            ? color.red
+                            : color.grey
                           : color.light_grey,
                       borderWidth: 1,
                       borderColor:
-                        choice === 'yes'
+                        choice === "yes"
                           ? color.green
-                          : choice === 'no'
-                            ? color.red
-                            : color.grey,
-                    }}>
+                          : choice === "no"
+                          ? color.red
+                          : color.grey,
+                    }}
+                  >
                     <RatsText
                       text={choice.toUpperCase()}
                       style={{
@@ -354,7 +383,7 @@ const Voting: React.FC<Props> = ({ navigation }) => {
             <RatsText
               text={`Closed: ${format(
                 parseISO(item.closedAt!),
-                'MMM d, yyyy',
+                "MMM d, yyyy"
               )}`}
               style={{
                 color: color.grey,
@@ -366,14 +395,14 @@ const Voting: React.FC<Props> = ({ navigation }) => {
         </View>
       );
     },
-    [userAsGuest, handleCastVote],
+    [userAsGuest, handleCastVote]
   );
 
   if (!allowed) {
     return (
       <RatsScrollView>
         <ScreenHeader header="Oxford Voting" renderBackButton />
-        <View style={{ padding: normalize(24), alignItems: 'center' }}>
+        <View style={{ padding: normalize(24), alignItems: "center" }}>
           <RatsText
             text="Oxford House features are not enabled for this house."
             style={{ color: color.dark_grey, fontSize: fontSize.regular }}
@@ -403,7 +432,8 @@ const Voting: React.FC<Props> = ({ navigation }) => {
           refreshing={isFetching && !isLoading}
           onRefresh={refetch}
         />
-      }>
+      }
+    >
       <ScreenHeader header="Oxford Voting" />
       <View style={{ padding: normalize(16) }}>
         {showCreateForm ? (
@@ -415,7 +445,8 @@ const Voting: React.FC<Props> = ({ navigation }) => {
                 padding: normalize(16),
                 marginBottom: normalize(16),
               },
-            ]}>
+            ]}
+          >
             <RatsText
               text="Create New Vote"
               style={{
@@ -470,15 +501,16 @@ const Voting: React.FC<Props> = ({ navigation }) => {
                 fontSize: fontSize.regular,
                 color: color.black,
                 marginBottom: normalize(16),
-                textAlignVertical: 'top',
+                textAlignVertical: "top",
               }}
             />
             <View
               style={{
-                flexDirection: 'row',
-                alignItems: 'center',
+                flexDirection: "row",
+                alignItems: "center",
                 marginBottom: normalize(12),
-              }}>
+              }}
+            >
               <Switch
                 testID="anonymous-toggle"
                 value={isAnonymous}
@@ -502,7 +534,7 @@ const Voting: React.FC<Props> = ({ navigation }) => {
               }}
             />
             <RatsButton
-              title={createMutation.isPending ? 'Creating...' : 'Open Vote'}
+              title={createMutation.isPending ? "Creating..." : "Open Vote"}
               disabled={createMutation.isPending}
               onPress={handleCreate}
               containerStyle={{ marginBottom: normalize(8) }}
@@ -523,11 +555,11 @@ const Voting: React.FC<Props> = ({ navigation }) => {
 
         <FlatList
           data={votes}
-          keyExtractor={item => item.id}
+          keyExtractor={(item) => item.id}
           renderItem={renderVote}
           scrollEnabled={false}
           ListEmptyComponent={
-            <View style={{ alignItems: 'center', marginTop: normalize(32) }}>
+            <View style={{ alignItems: "center", marginTop: normalize(32) }}>
               <RatsText
                 text="No votes open at this time."
                 style={{ color: color.dark_grey, fontSize: fontSize.regular }}

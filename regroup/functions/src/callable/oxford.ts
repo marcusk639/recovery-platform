@@ -12,6 +12,7 @@ import {
   getUser,
   houseCollection,
   userCollection,
+  guestCollection,
   ratsFirestore,
 } from "../api/firestore";
 import { parseInput } from "../validation";
@@ -131,3 +132,126 @@ export const setOxfordEnabled = onCall(
     return { success: true, changed: true };
   },
 );
+
+const castOxfordVoteSchema = z.object({
+  houseId: z.string().min(1),
+  voteId: z.string().min(1),
+  choice: z.enum(["yes", "no", "abstain"]),
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// castOxfordVote
+//
+// The mobile client used to write votes/{voteId} directly from a client-side
+// Firestore transaction, with only "isGuestOrAdmin(houseId) && houseOxfordActive"
+// enforced by firestore.rules — no field-level scoping. Since anonymous ballots
+// carry no signed identity in the vote document itself, a client (or a modified
+// build, or a raw Firestore write) could set `results`/`voterIds` to anything:
+// inflate a tally, remove its own guestId from `voterIds` to re-vote, or edit
+// another guest's `individualVotes` entry. The client-side "already voted" check
+// was real code, but it was never a security boundary — only this server-side
+// path is, because it resolves the caller's guestId from `request.auth.uid`
+// itself rather than trusting whatever guestId a mobile payload claims to be
+// voting as. firestore.rules now denies direct client writes to `votes/{voteId}`
+// entirely; this callable (Admin SDK) is the only writer.
+// ─────────────────────────────────────────────────────────────────────────────
+export const castOxfordVote = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
+
+  const { houseId, voteId, choice } = parseInput(
+    castOxfordVoteSchema,
+    request.data,
+  ) as {
+    houseId: string;
+    voteId: string;
+    choice: "yes" | "no" | "abstain";
+  };
+
+  const house = await getHouse(houseId);
+  if (!house) throw new HttpsError("not-found", "House not found");
+
+  const oxfordActive =
+    house.houseType === "oxford" &&
+    (house.subscriptionStatus === "active" ||
+      house.subscriptionStatus === "trialing");
+  if (!oxfordActive) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Oxford voting is not active for this house",
+    );
+  }
+
+  // The `guest` custom claim only proves the caller is A guest of this house
+  // (houseId -> true), not which guest doc is theirs — resolve that server-side
+  // rather than trusting a guestId the client might supply.
+  const callerIsAdmin =
+    request.auth.token.admin?.[houseId] === true ||
+    request.auth.token.superAdmin?.[houseId] === true;
+  const callerIsGuest = request.auth.token.guest?.[houseId] === true;
+  if (!callerIsAdmin && !callerIsGuest) {
+    throw new HttpsError("permission-denied", "Not a member of this house");
+  }
+
+  const guestSnap = await guestCollection
+    .where("houseId", "==", houseId)
+    .where("userId", "==", request.auth.uid)
+    .limit(1)
+    .get();
+  if (guestSnap.empty) {
+    throw new HttpsError(
+      "permission-denied",
+      "No guest record found for this house",
+    );
+  }
+  const guestId = guestSnap.docs[0].id;
+
+  const voteRef = houseCollection.doc(houseId).collection("votes").doc(voteId);
+
+  await ratsFirestore.runTransaction(async (transaction) => {
+    const voteDoc = await transaction.get(voteRef);
+    if (!voteDoc.exists) {
+      throw new HttpsError("not-found", `Vote ${voteId} not found`);
+    }
+
+    const voteData = voteDoc.data()!;
+    const isAnonymous = voteData.isAnonymous ?? false;
+    const voterIds: string[] = voteData.voterIds ?? [];
+    const hasVoted = voterIds.includes(guestId);
+
+    if (isAnonymous && hasVoted) {
+      throw new HttpsError(
+        "failed-precondition",
+        "You have already voted on this poll.",
+      );
+    }
+
+    const previousChoice = isAnonymous
+      ? undefined
+      : voteData.individualVotes?.[guestId];
+
+    const updatedResults = { ...voteData.results };
+    if (previousChoice) {
+      updatedResults[previousChoice] =
+        (updatedResults[previousChoice] || 1) - 1;
+    }
+    updatedResults[choice] = (updatedResults[choice] || 0) + 1;
+
+    const updatePayload: Record<string, unknown> = {
+      results: updatedResults,
+    };
+    if (!isAnonymous) {
+      updatePayload[`individualVotes.${guestId}`] = choice;
+    }
+    if (!hasVoted) {
+      updatePayload.voterIds = [...voterIds, guestId];
+    }
+
+    transaction.update(
+      voteRef,
+      updatePayload as FirebaseFirestore.UpdateData<FirebaseFirestore.DocumentData>,
+    );
+  });
+
+  logger.info("castOxfordVote: vote recorded", { houseId, voteId, guestId });
+  return { success: true };
+});
