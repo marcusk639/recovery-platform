@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo } from "react";
 import {
   View,
   ActivityIndicator,
@@ -11,26 +11,26 @@ import {
   Share,
   KeyboardAvoidingView,
   Platform,
-} from 'react-native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../navigation/types';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useFocusEffect } from '@react-navigation/native';
-import { useCallback } from 'react';
+} from "react-native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { RootStackParamList } from "../../navigation/types";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useFocusEffect } from "@react-navigation/native";
+import { useCallback } from "react";
 import {
   paymentKeys,
   useFailedPayments,
-} from '../../state/queries/paymentQueries';
-import FailedPaymentBanner from '../Payments/FailedPaymentBanner';
-import StalePendingBanner from '../Payments/StalePendingBanner';
-import { logException } from '../../util/logging';
-import { toDateSafe } from '../../util/firestore';
+} from "../../state/queries/paymentQueries";
+import FailedPaymentBanner from "../Payments/FailedPaymentBanner";
+import StalePendingBanner from "../Payments/StalePendingBanner";
+import { logException } from "../../util/logging";
+import { toDateSafe } from "../../util/firestore";
 import {
   VictoryBar,
   VictoryChart,
   VictoryAxis,
   VictoryTheme,
-} from 'victory-native';
+} from "victory-native";
 import {
   format,
   isAfter,
@@ -39,29 +39,29 @@ import {
   subWeeks,
   endOfISOWeek,
   isWithinInterval,
-} from 'date-fns';
+} from "date-fns";
 
-import ScreenHeader from '../../components/screen-header';
-import { RatsText } from '../../components/rats-text';
-import RatsButton from '../../components/rats-button/rats-button';
+import ScreenHeader from "../../components/screen-header";
+import { RatsText } from "../../components/rats-text";
+import RatsButton from "../../components/rats-button/rats-button";
 
-import { useSelectedHouse } from '../../hooks/useSelectedHouse';
-import { useGuests } from '../../state/queries/guestQueries';
+import { useSelectedHouse } from "../../hooks/useSelectedHouse";
+import { useGuests } from "../../state/queries/guestQueries";
 import {
   listHousePayments,
   recordManualPayment,
   HousePaymentRecord,
-} from '../../services/payments';
-import { Guest } from '../../entities/Guest';
+} from "../../services/payments";
+import { Guest } from "../../entities/Guest";
 import {
   color,
   normalize,
   fontSize,
   CARD_STYLE,
   fontFamily,
-} from '../../styles/theme';
+} from "../../styles/theme";
 
-type DateFilter = 'week' | 'month' | 'all';
+type DateFilter = "week" | "month" | "all";
 
 interface Props {
   navigation: NativeStackNavigationProp<RootStackParamList>;
@@ -70,11 +70,11 @@ interface Props {
 const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
   const { house } = useSelectedHouse();
   // React Query is the source of truth for guests; see .full-review [A2].
-  const { data: guestsData = {} } = useGuests(house?.id ?? '');
+  const { data: guestsData = {} } = useGuests(house?.id ?? "");
   const guests = guestsData as Record<string, Guest>;
-  const { data: failedPayments = [] } = useFailedPayments(house?.id ?? '');
+  const { data: failedPayments = [] } = useFailedPayments(house?.id ?? "");
 
-  const [dateFilter, setDateFilter] = useState<DateFilter>('month');
+  const [dateFilter, setDateFilter] = useState<DateFilter>("month");
   const [showManualModal, setShowManualModal] = useState(false);
 
   const queryClient = useQueryClient();
@@ -84,7 +84,7 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
     isLoading,
     error,
   } = useQuery({
-    queryKey: paymentKeys.housePayments(house?.id ?? ''),
+    queryKey: paymentKeys.housePayments(house?.id ?? ""),
     queryFn: () => listHousePayments(house!.id),
     enabled: !!house?.id,
     staleTime: 60_000,
@@ -92,10 +92,10 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
 
   const stalePendingPayments = useMemo(() => {
     const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-    return allPayments.filter(p => {
+    return allPayments.filter((p) => {
       const created = toDateSafe(p.createdAt)?.getTime();
       return (
-        p.status === 'pending' && created !== undefined && created < cutoff
+        p.status === "pending" && created !== undefined && created < cutoff
       );
     });
   }, [allPayments]);
@@ -120,7 +120,7 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
           exact: true,
         });
       }
-    }, [house?.id, queryClient]),
+    }, [house?.id, queryClient])
   );
 
   // Memoize the guest array so ManualPaymentModal's guests prop is stable
@@ -130,9 +130,9 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
   const overdueGuests = useMemo(
     () =>
       guestList
-        .filter(g => (g.rentOwed ?? 0) > 0)
+        .filter((g) => (g.rentOwed ?? 0) > 0)
         .sort((a, b) => (b.rentOwed ?? 0) - (a.rentOwed ?? 0)),
-    [guestList],
+    [guestList]
   );
 
   const guestNames = useMemo(
@@ -141,21 +141,21 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
         (acc, g) => ({
           ...acc,
           [g.id]:
-            `${g.firstName || ''} ${g.lastName || ''}`.trim() ||
-            'Unknown Resident',
+            `${g.firstName || ""} ${g.lastName || ""}`.trim() ||
+            "Unknown Resident",
         }),
-        {},
+        {}
       ),
-    [guestList],
+    [guestList]
   );
 
   const filteredPayments = useMemo(() => {
-    if (dateFilter === 'all') return allPayments;
+    if (dateFilter === "all") return allPayments;
     const cutoff =
-      dateFilter === 'week'
+      dateFilter === "week"
         ? startOfISOWeek(new Date())
         : startOfMonth(new Date());
-    return allPayments.filter(p => {
+    return allPayments.filter((p) => {
       const createdAt = toDateSafe(p.createdAt);
       return createdAt !== null && isAfter(createdAt, cutoff);
     });
@@ -163,38 +163,38 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
 
   const guestName = useCallback(
     (guestId: string | null): string => {
-      if (!guestId) return 'Unknown';
+      if (!guestId) return "Unknown";
       const g = guests[guestId];
-      if (!g) return 'Unknown Resident';
+      if (!g) return "Unknown Resident";
       return (
-        `${g.firstName || ''} ${g.lastName || ''}`.trim() || 'Unknown Resident'
+        `${g.firstName || ""} ${g.lastName || ""}`.trim() || "Unknown Resident"
       );
     },
-    [guests],
+    [guests]
   );
 
   const generateCSV = useCallback((): string => {
-    const header = 'Date,Guest Name,Amount,Status,Type';
-    const rows = filteredPayments.map(p => {
+    const header = "Date,Guest Name,Amount,Status,Type";
+    const rows = filteredPayments.map((p) => {
       const date = (() => {
         const d = toDateSafe(p.createdAt);
-        return d ? format(d, 'yyyy-MM-dd') : 'Unknown';
+        return d ? format(d, "yyyy-MM-dd") : "Unknown";
       })();
       const name = `"${guestName(p.guestId)}"`;
       const amount = (p.amount / 100).toFixed(2);
       const status = p.status;
-      const type = (p.description ?? '').includes('Manual')
-        ? 'Manual'
-        : 'Stripe';
+      const type = (p.description ?? "").includes("Manual")
+        ? "Manual"
+        : "Stripe";
       return `${date},${name},${amount},${status},${type}`;
     });
-    return [header, ...rows].join('\n');
+    return [header, ...rows].join("\n");
   }, [filteredPayments, guestName]);
 
   const handleExportCSV = useCallback(async () => {
     try {
       const csv = generateCSV();
-      const filename = `payments-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+      const filename = `payments-${format(new Date(), "yyyy-MM-dd")}.csv`;
       await Share.share({
         message: csv,
         title: filename,
@@ -212,11 +212,11 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
     let succeededCount = 0;
     let actionableCount = 0;
     for (const p of filteredPayments) {
-      if (p.status === 'succeeded') {
+      if (p.status === "succeeded") {
         collected += p.amount;
         succeededCount += 1;
         actionableCount += 1;
-      } else if (p.status === 'pending') {
+      } else if (p.status === "pending") {
         outstanding += p.amount;
         actionableCount += 1;
       }
@@ -238,8 +238,8 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
       const weekStart = startOfISOWeek(subWeeks(new Date(), i));
       const weekEnd = endOfISOWeek(weekStart);
       const total = allPayments
-        .filter(p => {
-          if (p.status !== 'succeeded') return false;
+        .filter((p) => {
+          if (p.status !== "succeeded") return false;
           const createdAt = toDateSafe(p.createdAt);
           return (
             createdAt !== null &&
@@ -247,7 +247,7 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
           );
         })
         .reduce((sum, p) => sum + p.amount, 0);
-      weeks.push({ week: format(weekStart, 'M/d'), total: total / 100 });
+      weeks.push({ week: format(weekStart, "M/d"), total: total / 100 });
     }
     return weeks;
   }, [allPayments]);
@@ -284,7 +284,7 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
       <ScrollView contentContainerStyle={styles.scroll}>
         <FailedPaymentBanner
           failedPayments={failedPayments}
-          houseId={house?.id ?? ''}
+          houseId={house?.id ?? ""}
           guestNames={guestNames}
         />
         <StalePendingBanner
@@ -293,19 +293,20 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
         />
         {/* Date Filter Pills */}
         <View style={styles.pills}>
-          {(['week', 'month', 'all'] as DateFilter[]).map(f => (
+          {(["week", "month", "all"] as DateFilter[]).map((f) => (
             <TouchableOpacity
               key={f}
               onPress={() => setDateFilter(f)}
-              style={[styles.pill, dateFilter === f && styles.pillActive]}>
+              style={[styles.pill, dateFilter === f && styles.pillActive]}
+            >
               <RatsText
                 translate={false}
                 text={
-                  f === 'week'
-                    ? 'This Week'
-                    : f === 'month'
-                    ? 'This Month'
-                    : 'All Time'
+                  f === "week"
+                    ? "This Week"
+                    : f === "month"
+                    ? "This Month"
+                    : "All Time"
                 }
                 style={[
                   styles.pillText,
@@ -319,27 +320,29 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
         {overdueGuests.length > 0 && (
           <View
             testID="overdue-residents-card"
-            style={[CARD_STYLE, styles.overdueCard]}>
+            style={[CARD_STYLE, styles.overdueCard]}
+          >
             <RatsText
               translate={false}
               text={`Overdue Residents (${overdueGuests.length})`}
               style={styles.overdueCardTitle}
             />
-            {overdueGuests.map(guest => (
+            {overdueGuests.map((guest) => (
               <View
                 key={guest.id}
                 testID="overdue-resident-row"
-                style={styles.overdueRow}>
+                style={styles.overdueRow}
+              >
                 <RatsText
                   translate={false}
-                  text={`${guest.firstName || ''} ${
-                    guest.lastName || ''
+                  text={`${guest.firstName || ""} ${
+                    guest.lastName || ""
                   }`.trim()}
                   style={styles.overdueGuestName}
                 />
                 <RatsText
                   translate={false}
-                  text={`$${(guest.rentOwed ?? 0).toFixed(2)} owed`}
+                  text={`$${((guest.rentOwed ?? 0) / 100).toFixed(2)} owed`}
                   style={styles.overdueAmount}
                 />
               </View>
@@ -351,7 +354,8 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
         <TouchableOpacity
           testID="csv-export-button"
           style={styles.exportButton}
-          onPress={handleExportCSV}>
+          onPress={handleExportCSV}
+        >
           <RatsText
             translate={false}
             text="Export CSV"
@@ -362,7 +366,8 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
         {/* Stats Card */}
         <View
           style={[CARD_STYLE, styles.statsCard]}
-          testID="payment-stats-card">
+          testID="payment-stats-card"
+        >
           <View style={styles.statRow}>
             <View style={styles.stat}>
               <RatsText
@@ -413,7 +418,8 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
           <VictoryChart
             theme={VictoryTheme.material}
             height={180}
-            padding={{ top: 10, bottom: 40, left: 50, right: 20 }}>
+            padding={{ top: 10, bottom: 40, left: 50, right: 20 }}
+          >
             <VictoryAxis
               tickFormat={(t: string) => t}
               style={{ tickLabels: { fontSize: 9, angle: -30 } }}
@@ -438,8 +444,8 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
             />
           </View>
         ) : (
-          filteredPayments.map(item => {
-            const succeeded = item.status === 'succeeded';
+          filteredPayments.map((item) => {
+            const succeeded = item.status === "succeeded";
             return (
               <View
                 key={item.id}
@@ -447,7 +453,8 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
                   CARD_STYLE,
                   styles.paymentCard,
                   { borderLeftColor: succeeded ? color.green : color.red },
-                ]}>
+                ]}
+              >
                 <View style={styles.row}>
                   <View style={{ flex: 1 }}>
                     <RatsText
@@ -457,14 +464,14 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
                     />
                     <RatsText
                       translate={false}
-                      text={item.description || ''}
+                      text={item.description || ""}
                       style={styles.description}
                     />
                     <RatsText
                       translate={false}
                       text={(() => {
                         const d = toDateSafe(item.createdAt);
-                        return d ? format(d, 'MMM d, yyyy') : '—';
+                        return d ? format(d, "MMM d, yyyy") : "—";
                       })()}
                       style={styles.date}
                     />
@@ -481,7 +488,8 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
                         {
                           backgroundColor: succeeded ? color.green : color.red,
                         },
-                      ]}>
+                      ]}
+                    >
                       <RatsText
                         translate={false}
                         text={item.status.toUpperCase()}
@@ -500,7 +508,8 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
       <TouchableOpacity
         testID="manual-payment-fab"
         style={styles.fab}
-        onPress={() => setShowManualModal(true)}>
+        onPress={() => setShowManualModal(true)}
+      >
         <RatsText
           translate={false}
           text="+ Record Payment"
@@ -512,7 +521,7 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
         visible={showManualModal}
         onClose={() => setShowManualModal(false)}
         guests={guestList}
-        houseId={house?.id ?? ''}
+        houseId={house?.id ?? ""}
       />
     </View>
   );
@@ -533,11 +542,11 @@ const ManualPaymentModal: React.FC<ManualPaymentModalProps> = ({
   guests,
   houseId,
 }) => {
-  const [amount, setAmount] = useState('');
-  const [method, setMethod] = useState<'Cash' | 'Check' | 'Venmo' | 'Zelle'>(
-    'Cash',
+  const [amount, setAmount] = useState("");
+  const [method, setMethod] = useState<"Cash" | "Check" | "Venmo" | "Zelle">(
+    "Cash"
   );
-  const [notes, setNotes] = useState('');
+  const [notes, setNotes] = useState("");
   const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
@@ -552,7 +561,7 @@ const ManualPaymentModal: React.FC<ManualPaymentModalProps> = ({
         houseId,
         amountInCents,
         method,
-        notes,
+        notes
       );
       // Refresh the parent dashboard list and any guest-balance views.
       queryClient.invalidateQueries({
@@ -564,14 +573,14 @@ const ManualPaymentModal: React.FC<ManualPaymentModalProps> = ({
       queryClient.invalidateQueries({
         queryKey: paymentKeys.history(selectedGuestId),
       });
-      setAmount('');
-      setNotes('');
+      setAmount("");
+      setNotes("");
       setSelectedGuestId(null);
-      setMethod('Cash');
+      setMethod("Cash");
       onClose();
     } catch (err) {
       logException(err);
-      Alert.alert('Error', 'Failed to record payment. Please try again.');
+      Alert.alert("Error", "Failed to record payment. Please try again.");
     }
   };
 
@@ -581,18 +590,21 @@ const ManualPaymentModal: React.FC<ManualPaymentModalProps> = ({
       animationType="slide"
       presentationStyle="pageSheet"
       onRequestClose={() => {
-        setAmount('');
-        setNotes('');
+        setAmount("");
+        setNotes("");
         setSelectedGuestId(null);
-        setMethod('Cash');
+        setMethod("Cash");
         onClose();
-      }}>
+      }}
+    >
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
         <ScrollView
           contentContainerStyle={{ padding: normalize(16) }}
-          keyboardShouldPersistTaps="handled">
+          keyboardShouldPersistTaps="handled"
+        >
           <RatsText
             translate={false}
             text="Record Manual Payment"
@@ -607,10 +619,11 @@ const ManualPaymentModal: React.FC<ManualPaymentModalProps> = ({
             horizontal
             showsHorizontalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-            style={{ marginBottom: normalize(8) }}>
-            {guests.map(g => {
+            style={{ marginBottom: normalize(8) }}
+          >
+            {guests.map((g) => {
               const name =
-                `${g.firstName || ''} ${g.lastName || ''}`.trim() || 'Unknown';
+                `${g.firstName || ""} ${g.lastName || ""}`.trim() || "Unknown";
               const selected = selectedGuestId === g.id;
               return (
                 <TouchableOpacity
@@ -620,7 +633,8 @@ const ManualPaymentModal: React.FC<ManualPaymentModalProps> = ({
                   style={[
                     styles.methodPill,
                     selected && styles.methodPillActive,
-                  ]}>
+                  ]}
+                >
                   <RatsText
                     translate={false}
                     text={name}
@@ -641,14 +655,15 @@ const ManualPaymentModal: React.FC<ManualPaymentModalProps> = ({
             style={styles.input}
           />
           <View style={styles.methodRow}>
-            {(['Cash', 'Check', 'Venmo', 'Zelle'] as const).map(m => (
+            {(["Cash", "Check", "Venmo", "Zelle"] as const).map((m) => (
               <TouchableOpacity
                 key={m}
                 onPress={() => setMethod(m)}
                 style={[
                   styles.methodPill,
                   method === m && styles.methodPillActive,
-                ]}>
+                ]}
+              >
                 <RatsText
                   translate={false}
                   text={m}
@@ -675,10 +690,10 @@ const ManualPaymentModal: React.FC<ManualPaymentModalProps> = ({
             title="Cancel"
             light
             onPress={() => {
-              setAmount('');
-              setNotes('');
+              setAmount("");
+              setNotes("");
               setSelectedGuestId(null);
-              setMethod('Cash');
+              setMethod("Cash");
               onClose();
             }}
             containerStyle={{ marginTop: normalize(8) }}
@@ -696,18 +711,18 @@ const styles = StyleSheet.create({
   scroll: { padding: normalize(12), paddingBottom: normalize(80) },
   centered: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: normalize(20),
     minHeight: normalize(100),
   },
   emptyContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: normalize(20),
     minHeight: normalize(100),
   },
-  pills: { flexDirection: 'row', marginBottom: normalize(12) },
+  pills: { flexDirection: "row", marginBottom: normalize(12) },
   pill: {
     paddingHorizontal: normalize(14),
     paddingVertical: normalize(6),
@@ -724,8 +739,8 @@ const styles = StyleSheet.create({
   pillText: { fontSize: fontSize.small, color: color.dark_grey },
   pillTextActive: { color: color.white },
   statsCard: { marginBottom: normalize(12), padding: normalize(16) },
-  statRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  stat: { alignItems: 'center', flex: 1 },
+  statRow: { flexDirection: "row", justifyContent: "space-between" },
+  stat: { alignItems: "center", flex: 1 },
   statLabel: {
     fontSize: fontSize.small,
     color: color.dark_grey,
@@ -745,7 +760,7 @@ const styles = StyleSheet.create({
     backgroundColor: color.white,
     padding: normalize(12),
   },
-  row: { flexDirection: 'row', alignItems: 'center' },
+  row: { flexDirection: "row", alignItems: "center" },
   guestName: {
     fontSize: fontSize.medium,
     color: color.black,
@@ -761,7 +776,7 @@ const styles = StyleSheet.create({
     color: color.grey,
     marginTop: normalize(2),
   },
-  rightColumn: { alignItems: 'flex-end' },
+  rightColumn: { alignItems: "flex-end" },
   amount: {
     fontSize: fontSize.medium,
     color: color.black,
@@ -777,15 +792,15 @@ const styles = StyleSheet.create({
   emptyText: {
     color: color.dark_grey,
     fontSize: fontSize.regular,
-    textAlign: 'center',
+    textAlign: "center",
   },
   errorText: {
     color: color.red,
     fontSize: fontSize.regular,
-    textAlign: 'center',
+    textAlign: "center",
   },
   fab: {
-    position: 'absolute',
+    position: "absolute",
     bottom: normalize(24),
     right: normalize(24),
     backgroundColor: color.baby_blue,
@@ -793,7 +808,7 @@ const styles = StyleSheet.create({
     paddingVertical: normalize(12),
     borderRadius: normalize(24),
     elevation: 4,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOpacity: 0.2,
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
@@ -813,8 +828,8 @@ const styles = StyleSheet.create({
     marginBottom: normalize(8),
   },
   methodRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     marginBottom: normalize(8),
   },
   methodPill: {
@@ -844,8 +859,8 @@ const styles = StyleSheet.create({
     marginBottom: normalize(8),
   },
   overdueRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     paddingVertical: normalize(6),
     borderBottomWidth: 1,
     borderBottomColor: color.medium_grey,
@@ -860,7 +875,7 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.bold,
   },
   exportButton: {
-    alignSelf: 'flex-end',
+    alignSelf: "flex-end",
     paddingHorizontal: normalize(12),
     paddingVertical: normalize(6),
     marginBottom: normalize(8),

@@ -2,11 +2,32 @@
  * RentPaymentScreen
  *
  * Allows a resident (Guest) to view their current rent balance and initiate
- * a payment via Stripe.  The actual card-entry step opens a Stripe-hosted
- * payment URL in a WebView (PaymentWebView).
+ * a payment via Stripe, confirmed in-app via the Stripe payment sheet (same
+ * mechanism as the sibling ResidentPayment.tsx screen).
+ *
+ * Hardened 2026-07-05: this screen used to branch on a `paymentUrl` field the
+ * `createPaymentIntent` Cloud Function never actually returns (see
+ * services/payments.ts's CreatePaymentIntentResult — both `paymentUrl` and
+ * `paymentIntentId` are documented `@deprecated`), so it always fell into a
+ * "treat as success" branch with no Stripe confirmation ever happening: no
+ * charge, no webhook, but the resident saw "Payment initiated!" Fixed by
+ * wiring in `usePaymentSheet` directly, matching ResidentPayment.tsx.
+ *
+ * Also fixed in the same pass: `guest.rentOwed`/`guest.choreFees` are stored
+ * in integer cents (confirmed via functions/src/callable/analytics.ts's
+ * explicit type comment, functions/src/scheduled/scheduledRentCollection.ts's
+ * comment, and the historical functions/src/scripts/migrateBalanceToCents.ts
+ * migration script) — but this screen was formatting them with the
+ * dollars-only `formatCurrency` helper (displaying a balance 100x too large)
+ * and then multiplying by 100 *again* when building the Stripe charge amount.
+ * Had the "doesn't actually charge" bug been fixed without also fixing this,
+ * every resident would have been charged 100x their real balance. Both bugs
+ * are fixed together here. `house.monthlyRent`/`weeklyRent` are genuinely in
+ * dollars (confirmed via HouseInfo.tsx/IntroHouseSummary.tsx display sites)
+ * and are intentionally left using `formatCurrency` as before.
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useRef } from "react";
 import {
   View,
   ScrollView,
@@ -14,24 +35,27 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Switch,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import firestore from '@react-native-firebase/firestore';
-import { RootStackParamList } from '../../navigation/types';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import firestore from "@react-native-firebase/firestore";
+import { useQueryClient } from "@tanstack/react-query";
+import { RootStackParamList } from "../../navigation/types";
 
-import { RatsText } from '../../components/rats-text';
-import RatsButton from '../../components/rats-button/rats-button';
-import ScreenHeader from '../../components/screen-header';
-import { RatsIcon } from '../../components/rats-icon';
+import { RatsText } from "../../components/rats-text";
+import RatsButton from "../../components/rats-button/rats-button";
+import ScreenHeader from "../../components/screen-header";
+import { RatsIcon } from "../../components/rats-icon";
 
 import {
   usePaymentHistory,
-  useCreateRentPayment,
-} from '../../state/queries/paymentQueries';
-import { Guest } from '../../entities/Guest';
-import { House, StripeAccountStatus } from '../../entities/House';
-import { logException } from '../../util/logging';
+  paymentKeys,
+} from "../../state/queries/paymentQueries";
+import * as paymentService from "../../services/payments";
+import { Guest } from "../../entities/Guest";
+import { House, StripeAccountStatus } from "../../entities/House";
+import { logException } from "../../util/logging";
+import { cancelRentReminder } from "../../services/notifications/rentReminder";
 
 import {
   color,
@@ -41,13 +65,34 @@ import {
   CARD_STYLE,
   SAVE_BUTTON,
   ROW,
-} from '../../styles/theme';
+} from "../../styles/theme";
 
 // ─── Helpers & Sub-components (extracted) ─────────────────────────────────────
 
-import { formatCurrency } from './rentPaymentHelpers';
-import PaymentRow from './PaymentRow';
+import { formatCurrency, formatCentsAsCurrency } from "./rentPaymentHelpers";
+import PaymentRow from "./PaymentRow";
 export { formatCurrency };
+
+// ─── Stripe import — wrapped defensively, matching ResidentPayment.tsx, so
+// the screen compiles before @stripe/stripe-react-native is linked. ──────────
+let usePaymentSheet: () => {
+  initPaymentSheet: (params: any) => Promise<{ error?: { message: string } }>;
+  presentPaymentSheet: () => Promise<{
+    error?: { code?: string; message: string };
+  }>;
+  loading: boolean;
+};
+
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  usePaymentSheet = require("@stripe/stripe-react-native").usePaymentSheet;
+} catch {
+  usePaymentSheet = () => ({
+    initPaymentSheet: async () => ({}),
+    presentPaymentSheet: async () => ({}),
+    loading: false,
+  });
+}
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
@@ -60,21 +105,29 @@ interface Props {
 const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [isPaying, setIsPaying] = useState(false);
   const [saveCard, setSaveCard] = useState(guest.autoPayEnabled ?? false);
+  const paymentInProgress = useRef(false);
 
+  // guest.rentOwed / guest.choreFees are stored in integer CENTS — see the
+  // file-header note. totalDue (and amountInCents below) stay in cents
+  // throughout; only formatCentsAsCurrency touches the /100 conversion.
   const rentOwed = guest.rentOwed ?? 0;
   const choreFees = guest.choreFees ?? 0;
   const totalDue = rentOwed + choreFees;
 
-  // Rent amount to show in breakdown (based on rentFrequency)
+  // Rent amount to show in breakdown (based on rentFrequency). Unlike
+  // rentOwed/choreFees, house.monthlyRent/weeklyRent are genuinely stored in
+  // dollars (confirmed via HouseInfo.tsx/IntroHouseSummary.tsx) — formatCurrency
+  // is correct for this one field.
   const rentLabel =
-    house.rentFrequency === 'weekly'
-      ? 'Weekly Rent'
-      : house.rentFrequency === 'monthly'
-      ? 'Monthly Rent'
-      : 'Rent';
+    house.rentFrequency === "weekly"
+      ? "Weekly Rent"
+      : house.rentFrequency === "monthly"
+      ? "Monthly Rent"
+      : "Rent";
   const rentAmount =
-    house.rentFrequency === 'weekly' ? house.weeklyRent : house.monthlyRent;
+    house.rentFrequency === "weekly" ? house.weeklyRent : house.monthlyRent;
 
   // Stripe connected & active
   const stripeActive = house.stripeStatus === StripeAccountStatus.ACTIVE;
@@ -87,21 +140,96 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
     refetch: refetchHistory,
   } = usePaymentHistory(guest.id, !!guest.id);
 
-  const createPayment = useCreateRentPayment();
+  const queryClient = useQueryClient();
+  const {
+    initPaymentSheet,
+    presentPaymentSheet,
+    loading: stripeLoading,
+  } = usePaymentSheet();
 
   const handlePayNow = useCallback(async () => {
-    if (totalDue <= 0) return;
+    if (paymentInProgress.current || totalDue <= 0) return;
+    paymentInProgress.current = true;
+    setIsPaying(true);
     setPaymentError(null);
     setPaymentSuccess(false);
 
     try {
-      const amountInCents = Math.round(totalDue * 100);
-      const result = await createPayment.mutateAsync({
-        guestId: guest.id,
-        houseId: house.id,
-        amount: amountInCents,
-        description: rentLabel,
+      const amountInCents = Math.round(totalDue);
+
+      // Step 1 — create the PaymentIntent via the Cloud Function.
+      let clientSecret: string;
+      try {
+        const intentResult = await paymentService.createRentPaymentIntent(
+          guest.id,
+          house.id,
+          amountInCents
+        );
+        clientSecret = intentResult.clientSecret;
+      } catch (err: any) {
+        const raw: string = err?.message ?? "";
+        const lower = raw.toLowerCase();
+        if (lower.includes("not found") || lower.includes("not deployed")) {
+          setPaymentError(
+            "Online payments are not yet available. Please contact your house manager."
+          );
+        } else if (lower.includes("network") || lower.includes("timeout")) {
+          setPaymentError(
+            "Network error. Please check your connection and try again."
+          );
+        } else {
+          setPaymentError(
+            "There was a problem initiating the payment. Please try again."
+          );
+        }
+        return;
+      }
+
+      // Step 2 — initialize the Stripe payment sheet with the real amount.
+      const { error: initError } = await initPaymentSheet({
+        merchantDisplayName: "Regroup",
+        paymentIntentClientSecret: clientSecret,
       });
+      if (initError) {
+        setPaymentError(
+          initError.message || "Unable to load the payment form."
+        );
+        return;
+      }
+
+      // Step 3 — present the sheet; the user enters/confirms a card here.
+      const { error: presentError } = await presentPaymentSheet();
+      if (presentError) {
+        const code = (presentError as any).code;
+        if (code === "Canceled") {
+          // User backed out — not an error worth showing a banner for.
+          return;
+        }
+        setPaymentError(
+          presentError.message || "Payment failed. Please try again."
+        );
+        return;
+      }
+
+      // Step 4 — Stripe has confirmed the charge. Record it against the same
+      // document the webhook will (eventually) update to 'succeeded', keyed
+      // by the real PaymentIntent ID — see recordRentPayment's doc comment.
+      const paymentIntentId =
+        paymentService.paymentIntentIdFromClientSecret(clientSecret);
+      try {
+        await paymentService.recordRentPayment(
+          guest.id,
+          house.id,
+          amountInCents,
+          rentLabel,
+          paymentIntentId
+        );
+      } catch (recordError) {
+        // The charge succeeded; only our optimistic record failed to write.
+        // Don't show this as a payment failure — the webhook will still
+        // create the authoritative record — but do log it for reconciliation.
+        logException(recordError);
+      }
 
       // Persist auto-pay preference to Firestore when it differs from the
       // currently-persisted value. The scheduled CF reads this flag to
@@ -109,7 +237,7 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
       const persistedAutoPayEnabled = guest.autoPayEnabled ?? false;
       if (saveCard !== persistedAutoPayEnabled) {
         try {
-          await firestore().collection('guests').doc(guest.id).update({
+          await firestore().collection("guests").doc(guest.id).update({
             autoPayEnabled: saveCard,
           });
         } catch (e) {
@@ -118,47 +246,32 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
         }
       }
 
-      // Open the Stripe-hosted payment URL in a WebView or browser
-      if (result.paymentUrl) {
-        navigation.navigate('PaymentWebView', {
-          paymentUrl: result.paymentUrl,
-          amount: totalDue,
-          guestId: guest.id,
-        });
-      } else {
-        // No URL returned — treat as success-pending (webhook will confirm)
-        setPaymentSuccess(true);
-      }
+      cancelRentReminder(guest);
+      setPaymentSuccess(true);
+      queryClient.invalidateQueries({
+        queryKey: paymentKeys.history(guest.id),
+      });
+      queryClient.invalidateQueries({
+        queryKey: paymentKeys.guestBalances(house.id),
+      });
     } catch (err: any) {
-      const raw: string = err?.message ?? '';
-      const lower = raw.toLowerCase();
-      if (lower.includes('not found') || lower.includes('not deployed')) {
-        setPaymentError(
-          'Online payments are not yet available. Please contact your house manager.',
-        );
-      } else if (lower.includes('network') || lower.includes('timeout')) {
-        setPaymentError(
-          'Network error. Please check your connection and try again.',
-        );
-      } else if (lower.includes('stripe') || lower.includes('payment')) {
-        setPaymentError(
-          'There was a problem initiating the payment. Please try again.',
-        );
-      } else {
-        setPaymentError(
-          'Something went wrong. Please try again or contact your house manager.',
-        );
-      }
+      logException(err);
+      setPaymentError(
+        "Something went wrong. Please try again or contact your house manager."
+      );
+    } finally {
+      setIsPaying(false);
+      paymentInProgress.current = false;
     }
   }, [
     totalDue,
-    guest.id,
-    guest.autoPayEnabled,
+    guest,
     house.id,
     rentLabel,
-    createPayment,
-    navigation,
     saveCard,
+    initPaymentSheet,
+    presentPaymentSheet,
+    queryClient,
   ]);
 
   // ── Stripe not connected state ────────────────────────────────────────────
@@ -196,7 +309,8 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
-        testID="rent-payment-scroll">
+        testID="rent-payment-scroll"
+      >
         {/* ── Balance Breakdown Card ─────────────────────────────────────── */}
         <View style={[CARD_STYLE, styles.card]} testID="balance-card">
           <RatsText
@@ -230,7 +344,7 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
             />
             <RatsText
               translate={false}
-              text={formatCurrency(rentOwed)}
+              text={formatCentsAsCurrency(rentOwed)}
               style={[styles.lineValue, rentOwed > 0 && styles.amountDue]}
             />
           </View>
@@ -245,7 +359,7 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
               />
               <RatsText
                 translate={false}
-                text={formatCurrency(choreFees)}
+                text={formatCentsAsCurrency(choreFees)}
                 style={[styles.lineValue, styles.amountDue]}
               />
             </View>
@@ -257,7 +371,8 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
           {/* Total */}
           <View
             style={[ROW, styles.lineRow, styles.totalRow]}
-            testID="total-due-label">
+            testID="total-due-label"
+          >
             <RatsText
               translate={false}
               text="Total Due"
@@ -265,7 +380,7 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
             />
             <RatsText
               translate={false}
-              text={formatCurrency(totalDue)}
+              text={formatCentsAsCurrency(totalDue)}
               style={[styles.totalValue, totalDue > 0 && styles.totalAmountDue]}
             />
           </View>
@@ -275,7 +390,8 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
         {allPaidUp ? (
           <View
             style={[CARD_STYLE, styles.card, styles.paidUpCard]}
-            testID="all-paid-up">
+            testID="all-paid-up"
+          >
             <RatsIcon
               name="check-circle"
               solid
@@ -306,7 +422,7 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
             />
             <RatsText
               translate={false}
-              text="Payment initiated! Your balance will update once confirmed."
+              text="Payment successful! Your balance will update shortly."
               style={styles.successText}
             />
           </View>
@@ -333,7 +449,8 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
         {/* ── Payment History ────────────────────────────────────────────── */}
         <View
           style={[CARD_STYLE, styles.card]}
-          testID="payment-history-section">
+          testID="payment-history-section"
+        >
           <RatsText
             translate={false}
             text="Payment History"
@@ -343,7 +460,8 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
           {historyLoading ? (
             <View
               style={styles.historyLoading}
-              testID="payment-history-loading">
+              testID="payment-history-loading"
+            >
               <ActivityIndicator size="small" color={color.main} />
             </View>
           ) : historyError ? (
@@ -355,7 +473,8 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
               />
               <TouchableOpacity
                 onPress={() => refetchHistory()}
-                testID="payment-history-retry">
+                testID="payment-history-retry"
+              >
                 <RatsText
                   translate={false}
                   text="Tap to retry"
@@ -372,7 +491,7 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
               />
             </View>
           ) : (
-            paymentHistory.map(payment => (
+            paymentHistory.map((payment) => (
               <PaymentRow key={payment.id} payment={payment} />
             ))
           )}
@@ -382,7 +501,8 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
         {!allPaidUp && (
           <View
             style={[CARD_STYLE, styles.card, styles.autoPayCard]}
-            testID="auto-pay-card">
+            testID="auto-pay-card"
+          >
             <View style={styles.autoPayRow}>
               <RatsText
                 translate={false}
@@ -407,9 +527,16 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
       </ScrollView>
 
       {/* ── Bottom CTA ──────────────────────────────────────────────────── */}
-      {!allPaidUp && (
-        <SafeAreaView edges={['bottom']} style={styles.ctaContainer}>
-          {createPayment.isPending ? (
+      {/* Hardened 2026-07-07: this used to stay mounted after a successful
+          payment (gated only on !allPaidUp, which reflects the still-stale
+          `guest` prop until the parent refetches balances), showing an
+          active "Pay $X Now" button right next to the success banner during
+          the webhook-confirmation window. Re-tapping it would create a
+          fresh, non-idempotent PaymentIntent. Hiding it once paymentSuccess
+          is true removes that window entirely. */}
+      {!allPaidUp && !paymentSuccess && (
+        <SafeAreaView edges={["bottom"]} style={styles.ctaContainer}>
+          {isPaying || stripeLoading ? (
             <View style={styles.loadingCta} testID="pay-now-loading">
               <ActivityIndicator size="small" color={color.white} />
               <RatsText
@@ -421,9 +548,9 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
           ) : (
             <RatsButton
               onPress={handlePayNow}
-              title={`Pay ${formatCurrency(totalDue)} Now`}
+              title={`Pay ${formatCentsAsCurrency(totalDue)} Now`}
               containerStyle={styles.payButton}
-              disabled={createPayment.isPending}
+              disabled={isPaying || stripeLoading}
               testID="pay-now-button"
             />
           )}
@@ -456,8 +583,8 @@ const styles = StyleSheet.create({
     marginBottom: normalize(12),
   },
   lineRow: {
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: normalize(8),
   },
   lineLabel: {
@@ -497,7 +624,7 @@ const styles = StyleSheet.create({
     fontSize: fontSize.medium_large,
   },
   paidUpCard: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingVertical: normalize(20),
   },
   paidUpIcon: {
@@ -508,18 +635,18 @@ const styles = StyleSheet.create({
     fontSize: fontSize.medium,
     fontFamily: fontFamily.bold,
     color: color.green,
-    textAlign: 'center',
+    textAlign: "center",
   },
   paidUpSubtext: {
     fontSize: fontSize.regular,
     color: color.dark_grey,
-    textAlign: 'center',
+    textAlign: "center",
     marginTop: normalize(4),
   },
   successBanner: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: color.green + '22',
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: color.green + "22",
     borderRadius: 6,
     padding: normalize(10),
     marginBottom: normalize(8),
@@ -538,8 +665,8 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.bold,
   },
   errorBanner: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    alignItems: "flex-start",
     backgroundColor: color.light_red,
     borderRadius: 6,
     padding: normalize(10),
@@ -556,24 +683,24 @@ const styles = StyleSheet.create({
     fontSize: fontSize.regular,
   },
   historyLoading: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingVertical: normalize(16),
   },
   historyErrorText: {
     fontSize: fontSize.regular,
     color: color.dark_grey,
-    textAlign: 'center',
+    textAlign: "center",
     marginBottom: normalize(8),
   },
   retryText: {
     fontSize: fontSize.regular,
     color: color.baby_blue,
-    textAlign: 'center',
+    textAlign: "center",
   },
   emptyHistoryText: {
     fontSize: fontSize.regular,
     color: color.grey,
-    textAlign: 'center',
+    textAlign: "center",
     paddingVertical: normalize(12),
   },
   ctaContainer: {
@@ -589,9 +716,9 @@ const styles = StyleSheet.create({
     ...SAVE_BUTTON,
     backgroundColor: color.main,
     borderColor: color.main,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     height: normalize(50),
     borderRadius: 5,
   },
@@ -603,8 +730,8 @@ const styles = StyleSheet.create({
   },
   centerContainer: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     padding: normalize(24),
   },
   centerIcon: {
@@ -615,21 +742,21 @@ const styles = StyleSheet.create({
     fontSize: fontSize.medium,
     fontFamily: fontFamily.bold,
     color: color.dark_grey,
-    textAlign: 'center',
+    textAlign: "center",
     marginBottom: normalize(8),
   },
   centerSubtitle: {
     fontSize: fontSize.regular,
     color: color.grey,
-    textAlign: 'center',
+    textAlign: "center",
   },
   autoPayCard: {
     paddingVertical: normalize(12),
   },
   autoPayRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: normalize(4),
   },
   autoPayLabel: {

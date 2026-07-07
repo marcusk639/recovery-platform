@@ -1,34 +1,38 @@
-import React from 'react';
+import React, { useState } from "react";
 import {
   Alert,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
   View,
-} from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
-import { useQuery } from '@tanstack/react-query';
-import { useData } from '../../context/DataContext';
+} from "react-native";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import { useQuery } from "@tanstack/react-query";
+import { useData } from "../../context/DataContext";
+import { useModal } from "../../context";
 import {
   treasuryKeys,
   useApproveRecord,
   useRejectRecord,
-} from '../../state/queries/treasuryQueries';
-import { getFinancialRecord } from '../../services/treasury';
-import { shareWeeklyReport } from '../../services/treasuryReport';
-import { useTreasuryRole } from '../../hooks/useTreasuryRole';
-import { Routes } from '../../navigation/types';
-import type { FinancialRecord } from '../../entities/oxford/FinancialRecord';
-import RatsText from '../../components/rats-text/rats-text';
-import ScreenHeader from '../../components/screen-header/screen-header';
-import RatsLoadingIndicator from '../../components/rats-loading-indicator/rats-loading-indicator';
+} from "../../state/queries/treasuryQueries";
+import { getFinancialRecord } from "../../services/treasury";
+import { shareWeeklyReport } from "../../services/treasuryReport";
+import { useTreasuryRole } from "../../hooks/useTreasuryRole";
+import { Routes } from "../../navigation/types";
+import type { FinancialRecord } from "../../entities/oxford/FinancialRecord";
+import RatsText from "../../components/rats-text/rats-text";
+import ScreenHeader from "../../components/screen-header/screen-header";
+import RatsLoadingIndicator from "../../components/rats-loading-indicator/rats-loading-indicator";
+import RatsTextInput from "../../components/rats-text-input/rats-text-input";
+import RatsButton from "../../components/rats-button/rats-button";
+import { logException } from "../../util/logging";
 import {
   CARD_STYLE,
   color,
   fontSize,
   fontFamily,
   normalize,
-} from '../../styles/theme';
+} from "../../styles/theme";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -37,19 +41,67 @@ function fmt(cents: number): string {
 }
 
 function formatWeekRange(periodStart: string): string {
-  const start = new Date(periodStart + 'T00:00:00');
+  const start = new Date(periodStart + "T00:00:00");
   const end = new Date(start);
   end.setDate(start.getDate() + 6);
   const fmtDate = (d: Date) =>
-    d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   return `${fmtDate(start)} – ${fmtDate(end)}`;
 }
 
-const STATUS_COLORS: Record<FinancialRecord['status'], string> = {
+const STATUS_COLORS: Record<FinancialRecord["status"], string> = {
   draft: color.medium_grey,
-  submitted: '#F59E0B',
+  submitted: "#F59E0B",
   approved: color.green,
   rejected: color.red,
+};
+
+// ─── Reject record form ─────────────────────────────────────────────────────
+// A standalone, independently-mounted component so its own text input state
+// re-renders correctly inside the frozen showFormModal snapshot (see
+// handleReject below for why this can't just be inline JSX + outer state).
+
+interface RejectRecordFormProps {
+  onSubmit: (reason: string) => Promise<void>;
+}
+
+const RejectRecordForm: React.FC<RejectRecordFormProps> = ({ onSubmit }) => {
+  const [reason, setReason] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handlePress = async () => {
+    if (!reason.trim()) {
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await onSubmit(reason.trim());
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <View style={{ padding: normalize(15) }}>
+      <RatsText
+        text="Please provide a reason for rejection:"
+        style={{ fontSize: fontSize.medium, marginBottom: normalize(10) }}
+      />
+      <RatsTextInput
+        testID="reject-reason-input"
+        placeholder="Reason for rejection"
+        field={{ name: "rejectionReason", value: reason }}
+        customHandleChange={setReason}
+      />
+      <RatsButton
+        testID="submit-rejection-button"
+        title="REJECT RECORD"
+        onPress={handlePress}
+        disabled={isSubmitting || !reason.trim()}
+        containerStyle={{ marginTop: normalize(15) }}
+      />
+    </View>
+  );
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -72,6 +124,7 @@ const FinancialRecordDetail: React.FC = () => {
 
   const approveMutation = useApproveRecord();
   const rejectMutation = useRejectRecord();
+  const { showFormModal, dismissFormModal } = useModal();
 
   const handleApprove = async () => {
     if (!record) {
@@ -81,31 +134,42 @@ const FinancialRecordDetail: React.FC = () => {
       await approveMutation.mutateAsync({
         houseId,
         recordId,
-        userId: currentUser?.uid ?? '',
+        userId: currentUser?.uid ?? "",
       });
-      Alert.alert('Approved', 'Financial record has been approved.');
+      Alert.alert("Approved", "Financial record has been approved.");
     } catch {
-      Alert.alert('Error', 'Failed to approve record.');
+      Alert.alert("Error", "Failed to approve record.");
     }
   };
 
+  // Hardened 2026-07-05: Alert.prompt is gated to iOS only in React Native's
+  // source (no Android branch at all), so this admin-only "Reject" button
+  // silently did nothing on Android. Replaced with a cross-platform text
+  // input modal. The form is its own mounted component (RejectRecordForm)
+  // rather than inline JSX built from this component's state — showFormModal
+  // stores whatever element it's given as a frozen snapshot in ModalContext,
+  // so a controlled input driven by this component's state would never
+  // reflect keystrokes (this component re-rendering doesn't re-render
+  // ModalProvider). A real, independently-mounted component re-renders
+  // itself correctly on its own state changes, same as AddManager.tsx.
   const handleReject = () => {
     if (!record) {
       return;
     }
-    Alert.prompt(
-      'Reject Record',
-      'Please provide a reason for rejection:',
-      async (reason: string) => {
-        if (!reason?.trim()) {
-          return;
-        }
-        try {
-          await rejectMutation.mutateAsync({ houseId, recordId, reason });
-        } catch {
-          Alert.alert('Error', 'Failed to reject record.');
-        }
-      },
+    showFormModal(
+      <RejectRecordForm
+        onSubmit={async (reason) => {
+          try {
+            await rejectMutation.mutateAsync({ houseId, recordId, reason });
+            dismissFormModal();
+          } catch (error) {
+            logException(error, "Failed to reject financial record");
+            Alert.alert("Error", "Failed to reject record.");
+          }
+        }}
+      />,
+      "Reject Record",
+      true
     );
   };
 
@@ -113,8 +177,8 @@ const FinancialRecordDetail: React.FC = () => {
     if (!record) {
       return;
     }
-    const houseName = currentHouse?.name ?? '';
-    const submitterName = record.submittedBy ?? '';
+    const houseName = currentHouse?.name ?? "";
+    const submitterName = record.submittedBy ?? "";
     const approverName = record.approvedBy;
     await shareWeeklyReport(record, houseName, submitterName, approverName);
   };
@@ -206,7 +270,8 @@ const FinancialRecordDetail: React.FC = () => {
             <View
               key={index}
               testID={`income-line-${index}`}
-              style={styles.tableRow}>
+              style={styles.tableRow}
+            >
               <RatsText
                 translate={false}
                 text={line.category}
@@ -251,7 +316,8 @@ const FinancialRecordDetail: React.FC = () => {
             <View
               key={index}
               testID={`expense-line-${index}`}
-              style={styles.tableRow}>
+              style={styles.tableRow}
+            >
               <View style={styles.tableCellGroup}>
                 <RatsText
                   translate={false}
@@ -306,7 +372,8 @@ const FinancialRecordDetail: React.FC = () => {
               <View
                 key={index}
                 testID={`bill-line-${index}`}
-                style={styles.tableRow}>
+                style={styles.tableRow}
+              >
                 <RatsText
                   translate={false}
                   text={bill.description}
@@ -386,14 +453,15 @@ const FinancialRecordDetail: React.FC = () => {
         </View>
 
         {/* Approval section */}
-        {record.status === 'submitted' && canApprove && (
+        {record.status === "submitted" && canApprove && (
           <View style={[CARD_STYLE, styles.section]} testID="approval-section">
             <View style={styles.actionRow}>
               <TouchableOpacity
                 testID="btn-approve"
                 style={[styles.actionButton, styles.approveButton]}
                 onPress={handleApprove}
-                disabled={approveMutation.isPending}>
+                disabled={approveMutation.isPending}
+              >
                 <RatsText
                   translate={false}
                   text="Approve"
@@ -404,7 +472,8 @@ const FinancialRecordDetail: React.FC = () => {
                 testID="btn-reject"
                 style={[styles.actionButton, styles.rejectButton]}
                 onPress={handleReject}
-                disabled={rejectMutation.isPending}>
+                disabled={rejectMutation.isPending}
+              >
                 <RatsText
                   translate={false}
                   text="Reject"
@@ -416,7 +485,7 @@ const FinancialRecordDetail: React.FC = () => {
         )}
 
         {/* Rejection info */}
-        {record.status === 'rejected' && (
+        {record.status === "rejected" && (
           <View style={[CARD_STYLE, styles.section]} testID="rejection-section">
             <RatsText
               translate={false}
@@ -425,14 +494,15 @@ const FinancialRecordDetail: React.FC = () => {
             />
             <RatsText
               translate={false}
-              text={record.rejectionReason ?? 'No reason provided.'}
+              text={record.rejectionReason ?? "No reason provided."}
               style={styles.rejectionReason}
             />
             {canCreate && (
               <TouchableOpacity
                 testID="btn-edit-resubmit"
                 style={[styles.actionButton, styles.editButton]}
-                onPress={handleEditResubmit}>
+                onPress={handleEditResubmit}
+              >
                 <RatsText
                   translate={false}
                   text="Edit & Resubmit"
@@ -444,12 +514,13 @@ const FinancialRecordDetail: React.FC = () => {
         )}
 
         {/* Share button */}
-        {record.status === 'approved' && (
+        {record.status === "approved" && (
           <View style={styles.shareRow}>
             <TouchableOpacity
               testID="btn-share"
               style={[styles.actionButton, styles.shareButton]}
-              onPress={handleShare}>
+              onPress={handleShare}
+            >
               <RatsText
                 translate={false}
                 text="Share Report"
@@ -468,10 +539,10 @@ const FinancialRecordDetail: React.FC = () => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: color.light_grey },
   scroll: { padding: normalize(12), paddingBottom: normalize(40) },
-  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  emptyState: { flex: 1, alignItems: "center", justifyContent: "center" },
 
   statusRow: {
-    alignItems: 'flex-end',
+    alignItems: "flex-end",
     marginBottom: normalize(8),
   },
   statusBadge: {
@@ -495,16 +566,16 @@ const styles = StyleSheet.create({
   },
 
   balanceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
-  balanceItem: { alignItems: 'center', flex: 1 },
+  balanceItem: { alignItems: "center", flex: 1 },
   balanceLabel: {
     fontSize: fontSize.small,
     color: color.dark_grey,
     marginBottom: normalize(4),
-    textAlign: 'center',
+    textAlign: "center",
   },
   balanceValue: {
     fontSize: fontSize.regular_medium,
@@ -518,9 +589,9 @@ const styles = StyleSheet.create({
   },
 
   tableRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingVertical: normalize(4),
     borderBottomWidth: 1,
     borderBottomColor: color.light_grey,
@@ -558,8 +629,8 @@ const styles = StyleSheet.create({
   },
 
   totalRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginBottom: normalize(6),
   },
   totalLabel: { fontSize: fontSize.small, color: color.dark_grey },
@@ -591,7 +662,7 @@ const styles = StyleSheet.create({
   },
 
   actionRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: normalize(10),
   },
   shareRow: {
@@ -601,7 +672,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: normalize(12),
     borderRadius: normalize(8),
-    alignItems: 'center',
+    alignItems: "center",
   },
   approveButton: { backgroundColor: color.green },
   rejectButton: { backgroundColor: color.red },
