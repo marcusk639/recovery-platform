@@ -4,18 +4,6 @@
  * Central export point for all RTK slices and actions
  */
 
-// UI Slice
-export {
-  default as uiReducer,
-  showModal,
-  hideModal,
-  hideAllModals,
-  setLoading,
-  clearLoading,
-  showToast,
-  hideToast,
-} from './uiSlice';
-
 // Auth Slice
 export {
   default as authReducer,
@@ -28,10 +16,10 @@ export {
   setInvitation,
   setToken,
   clearAuthError,
-} from './authSlice';
+} from "./authSlice";
 
 // Theme Slice
-export { default as themeReducer, setTheme } from './themeSlice';
+export { default as themeReducer } from "./themeSlice";
 
 // User Slice
 export {
@@ -49,7 +37,7 @@ export {
   setSubscriptionStatus,
   clearError as clearUserError,
   resetUserState,
-} from './userSlice';
+} from "./userSlice";
 
 // Houses Slice
 export {
@@ -58,7 +46,7 @@ export {
   selectHouseById,
   clearHouseError,
   resetSearchResults,
-} from './housesSlice';
+} from "./housesSlice";
 
 // Guests Slice
 export {
@@ -69,7 +57,7 @@ export {
   cacheGuests,
   cacheGuest,
   clearGuestError,
-} from './guestsSlice';
+} from "./guestsSlice";
 
 // Meetings Slice
 export {
@@ -82,14 +70,7 @@ export {
   clearMeetingError,
   resetCheckInStatus,
   clearMeetings,
-} from './meetingsSlice';
-
-// Navigation Slice
-export {
-  default as navigationReducer,
-  setTitle,
-  setModalShowing,
-} from './navigationSlice';
+} from "./meetingsSlice";
 
 // Admin Slice
 export {
@@ -106,7 +87,7 @@ export {
   selectHouseAdmins,
   selectAdminLoading,
   selectAdminError,
-} from './adminSlice';
+} from "./adminSlice";
 
 // Chat Slice
 export {
@@ -132,7 +113,7 @@ export {
   selectMessageSent,
   selectChatLoading,
   selectChatError,
-} from './chatSlice';
+} from "./chatSlice";
 
 // Setup Slice
 export {
@@ -169,16 +150,11 @@ export {
   selectSubmittingSuccessful,
   selectSubmittingFailed,
   selectSetupError,
-} from './setupSlice';
+} from "./setupSlice";
 
 // Notifications Slice
 export {
   default as notificationsReducer,
-  registerDevice,
-  fetchNotifications,
-  markAsRead,
-  markAllAsRead,
-  deleteNotification,
   setFcmToken,
   addNotification,
   updateNotification,
@@ -192,4 +168,4 @@ export {
   selectFcmToken,
   selectNotificationsLoading,
   selectNotificationsError,
-} from './notificationsSlice';
+} from "./notificationsSlice";

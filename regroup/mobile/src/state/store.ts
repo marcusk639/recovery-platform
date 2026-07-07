@@ -1,19 +1,17 @@
-import { configureStore } from '@reduxjs/toolkit';
-import { useDispatch, useSelector, TypedUseSelectorHook } from 'react-redux';
+import { configureStore } from "@reduxjs/toolkit";
+import { useDispatch, useSelector, TypedUseSelectorHook } from "react-redux";
 
 // New RTK slices
-import uiReducer from './slices/uiSlice';
-import authReducer from './slices/authSlice';
-import themeReducer from './slices/themeSlice';
-import userReducer from './slices/userSlice';
-import housesReducer from './slices/housesSlice';
-import guestsReducer from './slices/guestsSlice';
-import meetingsReducer from './slices/meetingsSlice';
-import navigationReducer from './slices/navigationSlice';
-import adminReducer from './slices/adminSlice';
-import chatReducer from './slices/chatSlice';
-import setupReducer from './slices/setupSlice';
-import notificationsReducer from './slices/notificationsSlice';
+import authReducer from "./slices/authSlice";
+import themeReducer from "./slices/themeSlice";
+import userReducer from "./slices/userSlice";
+import housesReducer from "./slices/housesSlice";
+import guestsReducer from "./slices/guestsSlice";
+import meetingsReducer from "./slices/meetingsSlice";
+import adminReducer from "./slices/adminSlice";
+import chatReducer from "./slices/chatSlice";
+import setupReducer from "./slices/setupSlice";
+import notificationsReducer from "./slices/notificationsSlice";
 
 /**
  * Redux Toolkit Store Configuration
@@ -21,7 +19,7 @@ import notificationsReducer from './slices/notificationsSlice';
  * ✅ Phase 2 Complete: Full Redux Toolkit Migration
  *
  * State Management Architecture:
- * - UI state → RTK slices (ui, auth, theme, navigation)
+ * - UI state → RTK slices (auth, theme)
  * - Entity state → RTK slices with async thunks (user, houses, guests, meetings, admin)
  * - Feature state → RTK slices (chat, setup, cache, notifications, reports)
  * - Server data fetching → React Query hooks (activities, disputes)
@@ -35,10 +33,8 @@ export const store = configureStore({
     // --- NEW RTK SLICES (Primary State Management) ---
 
     // UI & App State
-    ui: uiReducer,
     auth: authReducer,
     theme: themeReducer,
-    navigation: navigationReducer,
 
     // Entity Management (with async thunks)
     user: userReducer,
@@ -52,25 +48,25 @@ export const store = configureStore({
     setup: setupReducer,
     notifications: notificationsReducer,
   },
-  middleware: getDefaultMiddleware =>
+  middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
       serializableCheck: {
         // Ignore Firebase timestamps and other non-serializable values
         ignoredActions: [
-          'auth/loginSuccess',
-          'auth/setToken',
-          'user/login/fulfilled',
-          'houses/getHouses/fulfilled',
-          'guests/getGuests/fulfilled',
+          "auth/loginSuccess",
+          "auth/setToken",
+          "user/login/fulfilled",
+          "houses/getHouses/fulfilled",
+          "guests/getGuests/fulfilled",
         ],
         ignoredPaths: [
-          'auth.token',
-          'auth.user.createdAt',
-          'auth.user.updatedAt',
-          'user.user.createdAt',
-          'user.user.updatedAt',
-          'guests.guests',
-          'houses.houses',
+          "auth.token",
+          "auth.user.createdAt",
+          "auth.user.updatedAt",
+          "user.user.createdAt",
+          "user.user.updatedAt",
+          "guests.guests",
+          "houses.houses",
         ],
       },
     }),
