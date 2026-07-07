@@ -70,7 +70,7 @@ describe("getOverallPercentage", () => {
     const house = makeHouse();
 
     await expect(
-      getOverallPercentage(guest, house, "2026-07-04"),
+      getOverallPercentage(guest, house),
     ).resolves.toEqual(expect.any(Number));
     expect(mockWeekSummaryDoc).not.toHaveBeenCalled();
   });
@@ -80,7 +80,7 @@ describe("getOverallPercentage", () => {
     const guest = makeGuest({ currentWeekId: "guest1_2026-06-29" });
     const house = makeHouse();
 
-    const result = await getOverallPercentage(guest, house, "2026-07-04");
+    const result = await getOverallPercentage(guest, house);
 
     expect(result).toBe(0);
   });
@@ -97,7 +97,7 @@ describe("getOverallPercentage", () => {
       phases: { Default: makePhase({ meetings: 4, work: 10 }) },
     });
 
-    const result = await getOverallPercentage(guest, house, "2026-07-04");
+    const result = await getOverallPercentage(guest, house);
 
     expect(result).toBe(100);
   });
@@ -114,7 +114,7 @@ describe("getOverallPercentage", () => {
       phases: { Default: makePhase({ meetings: 4, work: 10 }) },
     });
 
-    const result = await getOverallPercentage(guest, house, "2026-07-04");
+    const result = await getOverallPercentage(guest, house);
 
     expect(result).toBe(100);
   });
@@ -131,7 +131,7 @@ describe("getOverallPercentage", () => {
       phases: { Default: makePhase({ meetings: 4, work: 10 }) },
     });
 
-    const result = await getOverallPercentage(guest, house, "2026-07-04");
+    const result = await getOverallPercentage(guest, house);
 
     // Only the supporter category (25%) is credited.
     expect(result).toBe(25);
@@ -142,7 +142,7 @@ describe("getOverallPercentage", () => {
     const guest = makeGuest({ currentWeekId: "guest1_2026-06-29" });
     const house = makeHouse();
 
-    await getOverallPercentage(guest, house, "2026-07-04");
+    await getOverallPercentage(guest, house);
 
     expect(mockWeekSummaryDoc).toHaveBeenCalledWith("guest1_2026-06-29");
   });
@@ -155,7 +155,7 @@ describe("getHousePercentage", () => {
 
   it("returns 0 for a house with no guests", async () => {
     const house = makeHouse();
-    const result = await getHousePercentage(house, {}, "2026-07-04");
+    const result = await getHousePercentage(house, {});
     expect(result).toBe(0);
   });
 
@@ -168,7 +168,7 @@ describe("getHousePercentage", () => {
       guest2: makeGuest({ id: "guest2", currentWeekId: "guest2_2026-06-29" }),
     };
 
-    const result = await getHousePercentage(house, guests, "2026-07-04");
+    const result = await getHousePercentage(house, guests);
 
     expect(result).toBe(0);
   });

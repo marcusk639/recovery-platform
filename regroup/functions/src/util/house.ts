@@ -2,7 +2,6 @@ import { House } from "../entities/House";
 import _ from "lodash";
 import { Guests, Guest } from "../entities/Guest";
 import { getYesterdaysDate, dateIsAfter } from "./date";
-import { Day } from "../entities/Day";
 import { weekSummariesCollection } from "../api/firestore";
 
 interface WeekStats {
@@ -26,16 +25,16 @@ interface Place {
 }
 
 export const findStreetComponent = (
-  addressComponents: PlaceAddressComponent[]
+  addressComponents: PlaceAddressComponent[],
 ) => {
   return addressComponents.find((component) =>
-    component.types.includes("route")
+    component.types.includes("route"),
   );
 };
 
 export const houseAtPlace = (
   place: Place,
-  houses: { [key: string]: House }
+  houses: { [key: string]: House },
 ) => {
   return _.find(houses, (house) => {
     const streetAddressComponent = findStreetComponent(place.addressComponents);
@@ -56,18 +55,6 @@ export const placeIsNotLocale = (place: Place) => {
     return !place.types.includes("locality");
   }
   return false;
-};
-
-export const addObjectProperties = (object: { [key: string]: number }) => {
-  let total = 0;
-  _.each(object, (property) => {
-    total += property;
-  });
-  return total;
-};
-
-export const addHoursWorked = (day: Day) => {
-  return addObjectProperties(day.hoursWorked);
 };
 
 const EMPTY_WEEK_STATS: WeekStats = {
@@ -104,11 +91,7 @@ const getWeekStats = async (guest: Guest): Promise<WeekStats> => {
   return { ...EMPTY_WEEK_STATS, ...stats };
 };
 
-export const getOverallPercentage = async (
-  guest: Guest,
-  house: House,
-  date: string
-) => {
+export const getOverallPercentage = async (guest: Guest, house: House) => {
   const phaseRules = house.phases[guest.phase].rules;
   const stats = await getWeekStats(guest);
   // Each category is weighted equally at 25%.
@@ -128,19 +111,14 @@ export const getOverallPercentage = async (
   return Math.ceil(overall * 100);
 };
 
-/** weekEndDate should be the Saturday of the week being evaluated. */
-export const getHousePercentage = async (
-  house: House,
-  guests: Guests,
-  weekEndDate: string
-) => {
-  let runningTotal = 0;
-  let count = 0;
-  for (const guest of Object.values(guests)) {
-    count++;
-    runningTotal += await getOverallPercentage(guest, house, weekEndDate);
-  }
-  return count > 0 ? Math.ceil(runningTotal / count) : 0;
+export const getHousePercentage = async (house: House, guests: Guests) => {
+  const guestList = Object.values(guests);
+  if (guestList.length === 0) return 0;
+  const percentages = await Promise.all(
+    guestList.map((guest) => getOverallPercentage(guest, house)),
+  );
+  const total = percentages.reduce((sum, pct) => sum + pct, 0);
+  return Math.ceil(total / guestList.length);
 };
 
 export const fillGuests = (guestsQuery: FirebaseFirestore.QuerySnapshot) => {
@@ -154,11 +132,11 @@ export const fillGuests = (guestsQuery: FirebaseFirestore.QuerySnapshot) => {
 
 export const calculateWeeklyHealth = async (
   guestsQuery: FirebaseFirestore.QuerySnapshot,
-  house: House
+  house: House,
 ) => {
   const guests = fillGuests(guestsQuery);
   const weekEndDate = getYesterdaysDate();
-  const health = await getHousePercentage(house, guests, weekEndDate);
+  const health = await getHousePercentage(house, guests);
   // Support legacy houses that stored health as a plain number or string.
   if (
     !house.health ||
