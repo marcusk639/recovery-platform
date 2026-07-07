@@ -57,6 +57,13 @@ jest.mock("../utils/firebase", () => ({
   db: { collection: mockCollection },
 }));
 
+const mockEnforceRateLimit = jest.fn().mockResolvedValue(undefined);
+const mockCallerKey = jest.fn().mockReturnValue("test-ip");
+jest.mock("../utils/rateLimit", () => ({
+  enforceRateLimit: mockEnforceRateLimit,
+  callerKey: mockCallerKey,
+}));
+
 // Default: meetings subquery returns empty. Individual tests can override.
 beforeEach(() => {
   mockMeetingsGet.mockResolvedValue({ docs: [] });
@@ -289,5 +296,18 @@ describe("getPublicGroupProfile", () => {
 
     // The meetings collection must NOT have been queried
     expect(mockMeetingsGet).not.toHaveBeenCalled();
+  });
+
+  it("propagates resource-exhausted when the caller has been rate limited, without touching Firestore", async () => {
+    mockEnforceRateLimit.mockRejectedValueOnce({
+      code: "resource-exhausted",
+      message: "Too many requests. Please try again shortly.",
+    });
+    const { getPublicGroupProfile: fn } =
+      await import("../callable/getPublicGroupProfile");
+    await expect(
+      (fn as any)(makeRequest({ groupId: "group-1" })),
+    ).rejects.toMatchObject({ code: "resource-exhausted" });
+    expect(mockGroupGet).not.toHaveBeenCalled();
   });
 });

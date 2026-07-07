@@ -4,6 +4,7 @@ import {
   HttpsError,
 } from "firebase-functions/v2/https";
 import { db } from "../utils/firebase";
+import { enforceRateLimit, callerKey } from "../utils/rateLimit";
 
 interface GetPublicGroupProfileData {
   groupId: string;
@@ -43,6 +44,8 @@ function pickMeeting(m: Record<string, unknown>): PublicMeeting {
 async function getPublicGroupProfileHandler(
   request: CallableRequest<GetPublicGroupProfileData>,
 ): Promise<PublicGroupProfile> {
+  await enforceRateLimit(`getPublicGroupProfile:${callerKey(request)}`);
+
   const { groupId } = request.data || ({} as GetPublicGroupProfileData);
 
   if (!groupId) {
