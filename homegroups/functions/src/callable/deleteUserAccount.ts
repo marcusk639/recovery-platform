@@ -310,12 +310,18 @@ export const deleteUserAccount = onCall(
         logger.warn(`Could not delete Auth account: ${authError.message}`);
       }
 
-      logger.info(`Account deletion complete for user: ${userId}`, deletedData);
+      const message = deletedData.authAccount
+        ? "Your account and data have been successfully deleted. Some data may have been anonymized to preserve group history."
+        : "Your account data has been deleted, but we could not remove your login credentials. Please contact support to complete account closure.";
+
+      logger.info(`Account deletion complete for user: ${userId}`, {
+        ...deletedData,
+        success: deletedData.authAccount,
+      });
 
       return {
-        success: true,
-        message:
-          "Your account and data have been successfully deleted. Some data may have been anonymized to preserve group history.",
+        success: deletedData.authAccount,
+        message,
         deletedData,
       };
     } catch (error: any) {
@@ -323,7 +329,10 @@ export const deleteUserAccount = onCall(
         throw error;
       }
       logger.error(`Account deletion failed for ${userId}:`, error);
-      throw new HttpsError("internal", "Failed to delete account. Please try again or contact support.");
+      throw new HttpsError(
+        "internal",
+        "Failed to delete account. Please try again or contact support.",
+      );
     }
   },
 );

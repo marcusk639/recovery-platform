@@ -80,7 +80,7 @@ const TreasurerHandoffScreen: React.FC = () => {
 
   useEffect(() => {
     loadData();
-    subscribeToHandoffChanges();
+    return subscribeToHandoffChanges();
   }, [groupId]);
 
   const loadData = async () => {
@@ -147,14 +147,15 @@ const TreasurerHandoffScreen: React.FC = () => {
   const filteredMembers = useMemo(() => {
     if (!searchQuery) return members;
     const query = searchQuery.toLowerCase();
-    return members.filter(m =>
-      m.displayName.toLowerCase().includes(query),
-    );
+    return members.filter(m => m.displayName.toLowerCase().includes(query));
   }, [members, searchQuery]);
 
   const handleInitiateHandoff = async () => {
     if (!selectedMember) {
-      Alert.alert('Select Member', 'Please select a member to transfer the role to.');
+      Alert.alert(
+        'Select Member',
+        'Please select a member to transfer the role to.',
+      );
       return;
     }
 
@@ -201,7 +202,7 @@ const TreasurerHandoffScreen: React.FC = () => {
   const handleAcceptHandoff = async () => {
     Alert.alert(
       'Accept Treasurer Role',
-      'By accepting, you will become the treasurer for this group. This responsibility includes managing the group\'s finances.',
+      "By accepting, you will become the treasurer for this group. This responsibility includes managing the group's finances.",
       [
         {text: 'Cancel', style: 'cancel'},
         {
@@ -324,9 +325,7 @@ const TreasurerHandoffScreen: React.FC = () => {
           </Text>
           {item.role && <Text style={styles.memberRole}>{item.role}</Text>}
         </View>
-        {isSelected && (
-          <Icon name="check-circle" size={24} color="#1976D2" />
-        )}
+        {isSelected && <Icon name="check-circle" size={24} color="#1976D2" />}
       </TouchableOpacity>
     );
   };
@@ -430,9 +429,7 @@ const TreasurerHandoffScreen: React.FC = () => {
 
             <View style={styles.pendingStatus}>
               <ActivityIndicator size="small" color="#FF9800" />
-              <Text style={styles.pendingStatusText}>
-                Awaiting response...
-              </Text>
+              <Text style={styles.pendingStatusText}>Awaiting response...</Text>
             </View>
 
             <TouchableOpacity
@@ -539,9 +536,7 @@ const TreasurerHandoffScreen: React.FC = () => {
             ) : (
               <>
                 <Icon name="send" size={20} color="#FFFFFF" />
-                <Text style={styles.initiateButtonText}>
-                  Initiate Transfer
-                </Text>
+                <Text style={styles.initiateButtonText}>Initiate Transfer</Text>
               </>
             )}
           </TouchableOpacity>
@@ -849,4 +844,3 @@ const styles = StyleSheet.create({
 });
 
 export default TreasurerHandoffScreen;
-

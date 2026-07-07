@@ -37,6 +37,7 @@ interface CategorySummary {
  * Returns a signed URL to download the generated PDF.
  */
 export const generateTreasuryReport = onCall(
+  { region: "us-central1", memory: "512MiB", timeoutSeconds: 120 },
   async (request: CallableRequest<GenerateTreasuryReportData>) => {
     const data = request.data;
 

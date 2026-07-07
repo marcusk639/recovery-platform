@@ -753,3 +753,95 @@ describe("deleteUserAccount — Stripe subscription cancellation for sole-admin 
     expect(mockStripeSubscriptionsCancel).not.toHaveBeenCalled();
   });
 });
+
+describe("deleteUserAccount — H-2: accurate success reporting when Auth deletion fails", () => {
+  const makeEmptyCollectionMock = () => (name: string) => {
+    if (name === "users") {
+      return {
+        doc: jest.fn().mockReturnValue({
+          get: jest.fn().mockResolvedValue({ exists: false }),
+        }),
+      };
+    }
+    if (
+      name === "members" ||
+      name === "direct_message_threads" ||
+      name === "sponsorships" ||
+      name === "reports" ||
+      name === "groups"
+    ) {
+      return {
+        where: jest.fn().mockReturnValue({
+          get: jest.fn().mockResolvedValue({ docs: [], size: 0 }),
+        }),
+      };
+    }
+    return {
+      where: jest.fn().mockReturnThis(),
+      get: jest.fn().mockResolvedValue({ docs: [] }),
+    };
+  };
+
+  const makeEmptyCollectionGroupMock = () => (name: string) => {
+    if (name === "messages" || name === "transactions") {
+      return {
+        where: jest.fn().mockReturnValue({
+          get: jest.fn().mockResolvedValue({ docs: [], size: 0 }),
+        }),
+      };
+    }
+    return {
+      where: jest.fn().mockReturnThis(),
+      get: jest.fn().mockResolvedValue({ docs: [] }),
+    };
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    duaMockDeleteUser.mockResolvedValue(undefined);
+    duaBatchCommit.mockResolvedValue(undefined);
+    duaMockBatch.mockImplementation(() => ({
+      update: duaBatchUpdate,
+      delete: duaBatchDelete,
+      commit: duaBatchCommit,
+    }));
+    duaMockCollection.mockImplementation(makeEmptyCollectionMock());
+    duaMockCollectionGroup.mockImplementation(makeEmptyCollectionGroupMock());
+  });
+
+  it("reports success: false when Firebase Auth deletion fails, without discarding completed Firestore cleanup", async () => {
+    duaMockDeleteUser.mockRejectedValueOnce(
+      new Error("Auth service unavailable"),
+    );
+
+    jest.resetModules();
+    const { deleteUserAccount } = await import("../callable/deleteUserAccount");
+
+    const request = makeAuthRequest(
+      "user-1",
+      "user@example.com",
+      "user@example.com",
+    );
+    const result = await (deleteUserAccount as any)(request);
+
+    expect(result.success).toBe(false);
+    expect(result.deletedData?.authAccount).toBe(false);
+    expect(result.message).not.toMatch(/successfully deleted/i);
+  });
+
+  it("still reports success: true when Auth deletion succeeds", async () => {
+    jest.resetModules();
+    const { deleteUserAccount } = await import("../callable/deleteUserAccount");
+
+    const request = makeAuthRequest(
+      "user-2",
+      "user2@example.com",
+      "user2@example.com",
+    );
+    const result = await (deleteUserAccount as any)(request);
+
+    expect(result.success).toBe(true);
+    expect(result.deletedData?.authAccount).toBe(true);
+    expect(result.message).toMatch(/successfully deleted/i);
+  });
+});

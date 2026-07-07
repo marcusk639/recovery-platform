@@ -232,17 +232,25 @@ const GroupOverviewScreen: React.FC = () => {
     });
   }, [navigation]);
 
-  // Listen for new messages in real-time to update unread badge
+  // Listen for new messages in real-time to update unread badge.
+  // Scoped to lastMessageAt so typing-indicator writes to the same document
+  // (which touch a different field, `typing`) don't trigger an unread-count
+  // refetch on every keystroke of every typing member.
   useEffect(() => {
     const currentUser = auth().currentUser;
     if (!currentUser) {
       return;
     }
+    let lastKnownMessageAt: number | null = null;
     const unsubscribe = firestore()
       .collection('group_chats')
       .doc(groupId)
       .onSnapshot(snapshot => {
-        if (snapshot.exists) {
+        if (!snapshot.exists) return;
+        const data = snapshot.data();
+        const lastMessageAt = data?.lastMessageAt?.toMillis?.() ?? null;
+        if (lastMessageAt !== null && lastMessageAt !== lastKnownMessageAt) {
+          lastKnownMessageAt = lastMessageAt;
           dispatch(fetchUnreadCount(groupId));
         }
       });

@@ -15,6 +15,6 @@ module.exports = {
   testPathIgnorePatterns: [
     "/node_modules/",
     "/lib/",
-    "security-rules.test.ts", // requires Firestore emulator on port 8080
+    ...(process.env.FIRESTORE_EMULATOR_HOST ? [] : ["security-rules.test.ts"]), // requires Firestore emulator on port 8080
   ],
 };

@@ -44,6 +44,42 @@ jobs:
       - name: Test
         run: cd homegroups/functions && npm test -- --passWithNoTests --forceExit
 
+  homegroups-firestore-rules:
+    name: homegroups/functions — Firestore security rules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: homegroups/functions/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "21"
+      - name: Install dependencies
+        run: cd homegroups/functions && npm ci
+      - name: Install firebase-tools
+        run: npm install -g firebase-tools
+      - name: Run Firestore rules tests
+        run: cd homegroups/functions && npm run test:rules
+
+  homegroups-mobile:
+    name: homegroups/mobile — test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: homegroups/mobile/package-lock.json
+      - name: Install dependencies
+        run: cd homegroups/mobile && npm ci
+      - name: Test
+        run: cd homegroups/mobile && npm test -- --ci
+
   regroup-functions:
     name: regroup/functions — typecheck + test
     runs-on: ubuntu-latest

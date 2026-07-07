@@ -47,15 +47,16 @@ export const onMemberCreate = functionsV1.firestore
 
     if (!groupId) {
       functions.logger.error(
-        `Could not determine groupId from member document ${memberId}`
+        `Could not determine groupId from member document ${memberId}`,
       );
       return;
     }
 
-    const memberName = newMemberData.displayName || newMemberData.name || "A new member";
+    const memberName =
+      newMemberData.displayName || newMemberData.name || "A new member";
 
     functions.logger.info(
-      `New member ${memberId} joined group ${groupId}: ${memberName}`
+      `New member ${memberId} joined group ${groupId}: ${memberName}`,
     );
 
     try {
@@ -76,18 +77,15 @@ export const onMemberCreate = functionsV1.firestore
       if (membersSnapshot.size <= 1) {
         // Only the new member exists, no one to notify
         functions.logger.info(
-          `No other members in group ${groupId} to notify about new member`
+          `No other members in group ${groupId} to notify about new member`,
         );
         return;
       }
 
-      // Collect FCM tokens from existing members
-      const tokens: string[] = [];
+      // Collect existing members' user IDs (excluding the new member)
       const existingMemberUserIds: string[] = [];
-
       for (const memberDoc of membersSnapshot.docs) {
         const memberData = memberDoc.data() as MemberData;
-        // Skip the new member
         if (memberData.userId !== newMemberData.userId) {
           existingMemberUserIds.push(memberData.userId);
         }
@@ -98,31 +96,39 @@ export const onMemberCreate = functionsV1.firestore
         return;
       }
 
-      // Fetch user documents to get FCM tokens
-      const userPromises = existingMemberUserIds.map((userId) =>
-        db.collection("users").doc(userId).get()
-      );
-      const userDocs = await Promise.all(userPromises);
+      // Fetch user documents in batches of 10 (Firestore 'in' query limit)
+      // instead of one get() per member — see onMeetingInstanceUpdate.ts's
+      // getGroupMemberTokens for the same pattern applied elsewhere.
+      const tokens: string[] = [];
+      for (let i = 0; i < existingMemberUserIds.length; i += 10) {
+        const batch = existingMemberUserIds.slice(i, i + 10);
+        if (batch.length === 0) continue;
 
-      for (const userDoc of userDocs) {
-        if (!userDoc.exists) continue;
+        const usersSnapshot = await db
+          .collection("users")
+          .where("__name__", "in", batch)
+          .get();
 
-        const userData = userDoc.data() as UserData;
+        usersSnapshot.docs.forEach((userDoc) => {
+          const userData = userDoc.data() as UserData;
+          const pushEnabled =
+            userData.notificationSettings?.allowPushNotifications !== false;
+          const newMemberNotificationsEnabled =
+            userData.notificationSettings?.newMemberNotifications !== false;
 
-        // Check if push notifications are enabled
-        const pushEnabled =
-          userData.notificationSettings?.allowPushNotifications !== false;
-        const newMemberNotificationsEnabled =
-          userData.notificationSettings?.newMemberNotifications !== false;
-
-        if (pushEnabled && newMemberNotificationsEnabled && userData.fcmTokens?.length) {
-          tokens.push(...userData.fcmTokens);
-        }
+          if (
+            pushEnabled &&
+            newMemberNotificationsEnabled &&
+            userData.fcmTokens?.length
+          ) {
+            tokens.push(...userData.fcmTokens);
+          }
+        });
       }
 
       if (tokens.length === 0) {
         functions.logger.info(
-          "No eligible FCM tokens found for new member notification"
+          "No eligible FCM tokens found for new member notification",
         );
         return;
       }
@@ -159,19 +165,18 @@ export const onMemberCreate = functionsV1.firestore
       });
 
       functions.logger.info(
-        `Sent ${response.successCount} new member notifications for group ${groupId}`
+        `Sent ${response.successCount} new member notifications for group ${groupId}`,
       );
 
       if (response.failureCount > 0) {
         functions.logger.warn(
-          `Failed to send ${response.failureCount} new member notifications`
+          `Failed to send ${response.failureCount} new member notifications`,
         );
       }
     } catch (error) {
       functions.logger.error(
         `Error sending new member notifications for group ${groupId}:`,
-        error
+        error,
       );
     }
   });
-

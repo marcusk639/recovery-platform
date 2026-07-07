@@ -182,10 +182,19 @@ describe("sendMentionNotifications auth check (FH-2)", () => {
 
   it("proceeds past auth check when request.auth is present and data is valid", async () => {
     mockCollection.mockImplementation((name: string) => {
+      if (name === "members") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue({ exists: true }),
+          })),
+        };
+      }
       if (name === "users") {
         return {
           doc: jest.fn().mockReturnValue({
-            get: jest.fn().mockResolvedValue({ exists: false }),
+            get: jest
+              .fn()
+              .mockResolvedValue({ exists: false, data: () => undefined }),
           }),
         };
       }
@@ -228,5 +237,111 @@ describe("sendMentionNotifications auth check (FH-2)", () => {
     // Should NOT throw — should return successfully with sentCount 0
     const result = await (sendMentionNotifications as Function)(authRequest);
     expect(result).toEqual({ success: true, sentCount: 0 });
+  });
+
+  it("throws permission-denied when the caller is not a member of the group", async () => {
+    jest.resetModules();
+    mockCollection.mockImplementation((name: string) => {
+      if (name === "members") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue({ exists: false }),
+          })),
+        };
+      }
+      return { doc: jest.fn(() => ({ get: jest.fn() })) };
+    });
+    const { sendMentionNotifications: fn } =
+      await import("../callable/sendMentionNotifications");
+    const request = {
+      auth: { uid: "caller-uid" },
+      data: {
+        groupId: "group-1",
+        messageId: "msg-1",
+        message: {
+          id: "msg-1",
+          senderId: "caller-uid",
+          senderName: "Caller",
+          text: "hi @someone",
+          sentAt: {},
+          groupId: "group-1",
+          mentionedUserIds: ["victim-uid"],
+        },
+      },
+    };
+    await expect((fn as any)(request)).rejects.toMatchObject({
+      code: "permission-denied",
+    });
+  });
+
+  it("derives senderId from request.auth.uid, ignoring a spoofed senderId in message data", async () => {
+    jest.resetModules();
+    mockCollection.mockImplementation((name: string) => {
+      if (name === "members") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue({ exists: true }),
+          })),
+        };
+      }
+      if (name === "users") {
+        return {
+          doc: jest.fn((uid: string) => ({
+            get: jest.fn().mockResolvedValue({
+              exists: true,
+              id: uid,
+              data: () => ({
+                displayName: "Real Caller",
+                fcmTokens: ["tok"],
+                notificationSettings: {
+                  allowPushNotifications: true,
+                  groupChatMentions: true,
+                },
+              }),
+            }),
+          })),
+        };
+      }
+      if (name === "groups") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest
+              .fn()
+              .mockResolvedValue({ exists: true, data: () => ({ name: "G" }) }),
+          })),
+        };
+      }
+      return { doc: jest.fn(() => ({ get: jest.fn() })) };
+    });
+    mockSendEachForMulticast.mockResolvedValue({
+      successCount: 1,
+      failureCount: 0,
+    });
+    const { sendMentionNotifications: fn } =
+      await import("../callable/sendMentionNotifications");
+    const request = {
+      auth: { uid: "real-caller-uid" },
+      data: {
+        groupId: "group-1",
+        messageId: "msg-1",
+        message: {
+          id: "msg-1",
+          senderId: "spoofed-uid",
+          senderName: "Spoofed Name",
+          text: "hi @victim",
+          sentAt: {},
+          groupId: "group-1",
+          mentionedUserIds: ["victim-uid"],
+        },
+      },
+    };
+    await (fn as any)(request);
+    expect(mockSendEachForMulticast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        notification: expect.objectContaining({
+          body: expect.stringContaining("Real Caller"),
+        }),
+      }),
+    );
   });
 });

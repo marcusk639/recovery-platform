@@ -114,6 +114,18 @@ jest.mock('../store/slices/chatSlice', () => ({
   fetchUnreadCount: jest.fn(() => ({type: 'chat/fetchUnread'})),
 }));
 
+// --- Firestore: capture the group_chats/{groupId} onSnapshot callback so
+// tests can simulate document changes without a real listener firing. ---
+const mockOnSnapshot = jest.fn(() => jest.fn());
+jest.mock('@react-native-firebase/firestore', () => {
+  const fn: any = () => ({
+    collection: () => ({
+      doc: () => ({onSnapshot: mockOnSnapshot}),
+    }),
+  });
+  return fn;
+});
+
 // --- Native deps not covered by jest.setup.js ---
 jest.mock('react-native-vector-icons/MaterialCommunityIcons', () => 'Icon');
 
@@ -235,6 +247,59 @@ describe('GroupOverviewScreen — subscription gate', () => {
     expect(mockNavigate).toHaveBeenCalledWith(
       'GroupAnnouncements',
       expect.objectContaining({groupId: 'g1'}),
+    );
+  });
+});
+
+describe('GroupOverviewScreen — unread count listener', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockDispatch.mockReturnValue({unwrap: () => Promise.resolve([])});
+    mockTrialStatus.isInTrial = false;
+    mockTrialStatus.isActive = false;
+    mockTrialStatus.isExpired = true;
+    mockTrialStatus.daysRemaining = 0;
+  });
+
+  it('does not refetch unread count when only the typing field changes', async () => {
+    await act(async () => {
+      renderer.create(<GroupOverviewScreen />);
+      await Promise.resolve();
+    });
+
+    const snapshotCallback = mockOnSnapshot.mock.calls[0][0];
+    const fixedMillis = 1000;
+
+    // First snapshot: a real new message. Establishes lastKnownMessageAt
+    // and should trigger the initial unread-count fetch.
+    act(() => {
+      snapshotCallback({
+        exists: true,
+        data: () => ({
+          lastMessageAt: {toMillis: () => fixedMillis},
+        }),
+      });
+    });
+    expect(mockDispatch).toHaveBeenCalledWith(
+      expect.objectContaining({type: 'chat/fetchUnread'}),
+    );
+
+    mockDispatch.mockClear();
+
+    // Second snapshot: only the `typing` field changed; lastMessageAt is
+    // unchanged, so no refetch should occur.
+    act(() => {
+      snapshotCallback({
+        exists: true,
+        data: () => ({
+          lastMessageAt: {toMillis: () => fixedMillis},
+          typing: {user2: {name: 'Bob', at: {toMillis: () => Date.now()}}},
+        }),
+      });
+    });
+
+    expect(mockDispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({type: 'chat/fetchUnread'}),
     );
   });
 });

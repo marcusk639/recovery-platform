@@ -1,4 +1,5 @@
 import sgMail from "@sendgrid/mail";
+import * as logger from "firebase-functions/logger";
 
 // Initialize SendGrid with API key from Firebase config
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
@@ -25,7 +26,7 @@ export const sendEmail = async ({
     };
 
     await sgMail.send(msg);
-    console.log(`Email sent successfully to ${to}`);
+    logger.info("Email sent successfully");
   } catch (error) {
     console.error("Error sending email:", error);
     throw new Error("Failed to send email");

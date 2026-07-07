@@ -107,6 +107,7 @@ const GroupChatScreen: React.FC = () => {
   const [isTyping, setIsTyping] = useState(false);
   const [otherTypers, setOtherTypers] = useState<string[]>([]); // names of others currently typing
   const typingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastTypingWriteRef = useRef<number>(0);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [messageToReport, setMessageToReport] = useState<ChatMessage | null>(
@@ -160,7 +161,9 @@ const GroupChatScreen: React.FC = () => {
         firestore()
           .collection('group_chats')
           .doc(groupId)
-          .update({[`typing.${currentUser.uid}`]: firestore.FieldValue.delete()})
+          .update({
+            [`typing.${currentUser.uid}`]: firestore.FieldValue.delete(),
+          })
           .catch(() => {});
       }
       if (typingTimerRef.current) {
@@ -627,22 +630,29 @@ const GroupChatScreen: React.FC = () => {
 
     if (!currentUser || !groupId) return;
 
-    // Write typing indicator (non-critical, ignore errors)
-    firestore()
-      .collection('group_chats')
-      .doc(groupId)
-      .set(
-        {
-          typing: {
-            [currentUser.uid]: {
-              name: currentUser.displayName || 'Someone',
-              at: firestore.Timestamp.now(),
+    // Write typing indicator (non-critical, ignore errors) — debounced to
+    // at most once per 1.5s to avoid a Firestore write on every keystroke,
+    // which was fanning out into GroupOverviewScreen's unread-count listener
+    // on every change to this document.
+    const now = Date.now();
+    if (now - lastTypingWriteRef.current >= 1500) {
+      lastTypingWriteRef.current = now;
+      firestore()
+        .collection('group_chats')
+        .doc(groupId)
+        .set(
+          {
+            typing: {
+              [currentUser.uid]: {
+                name: currentUser.displayName || 'Someone',
+                at: firestore.Timestamp.now(),
+              },
             },
           },
-        },
-        {merge: true},
-      )
-      .catch(() => {});
+          {merge: true},
+        )
+        .catch(() => {});
+    }
 
     // Clear own typing entry after 5s of inactivity
     if (typingTimerRef.current) {

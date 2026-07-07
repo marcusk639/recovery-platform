@@ -24,6 +24,8 @@ import reflectionsReducer from './slices/reflectionsSlice';
 import literatureReducer from './slices/literatureSlice';
 import groupResourcesReducer from './slices/groupResourcesSlice';
 import groupHealthReducer from './slices/groupHealthSlice';
+import intergroupReducer from './slices/intergroupSlice';
+import brandingReducer from './slices/brandingSlice';
 import {RootState} from './types';
 
 export const store = configureStore({
@@ -52,6 +54,8 @@ export const store = configureStore({
     literature: literatureReducer,
     groupResources: groupResourcesReducer,
     groupHealth: groupHealthReducer,
+    intergroup: intergroupReducer,
+    branding: brandingReducer,
   },
   middleware: getDefaultMiddleware =>
     getDefaultMiddleware({

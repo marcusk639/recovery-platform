@@ -17,6 +17,34 @@ interface SearchGroupsData {
   type?: MeetingType; // Optional filter by meeting type
 }
 
+export interface PublicSearchResult {
+  id: string;
+  name: string;
+  type: string;
+  placeName?: string;
+  city?: string;
+  state?: string;
+  isClaimed: boolean;
+  distanceInM: number;
+}
+
+function pickPublicSearchFields(
+  groupData: Record<string, unknown>,
+  id: string,
+  distanceInM: number,
+): PublicSearchResult {
+  return {
+    id,
+    name: (groupData.name as string) ?? "",
+    type: (groupData.type as string) ?? "",
+    placeName: groupData.placeName as string | undefined,
+    city: groupData.city as string | undefined,
+    state: groupData.state as string | undefined,
+    isClaimed: groupData.isClaimed === true,
+    distanceInM,
+  };
+}
+
 /**
  * Calculates the distance between two coordinates in meters using geofire.
  */
@@ -93,7 +121,7 @@ export const searchGroupsByLocation = onCall(
 
       // Execute all queries in parallel
       const snapshots = await Promise.all(promises);
-      const matchingGroups: any[] = []; // Use any temporarily or define Group type
+      const matchingGroups: PublicSearchResult[] = [];
 
       // Process results from all queries
       for (const snap of snapshots) {
@@ -104,7 +132,6 @@ export const searchGroupsByLocation = onCall(
 
           // Ensure the group has valid coordinates
           if (groupLat !== undefined && groupLng !== undefined) {
-            // Calculate precise distance in meters
             const distanceInM = calculateDistanceMeters(
               latitude,
               longitude,
@@ -112,13 +139,17 @@ export const searchGroupsByLocation = onCall(
               groupLng,
             );
 
-            // Filter out false positives based on precise distance
             if (distanceInM <= radiusInM) {
-              matchingGroups.push({
-                ...groupData,
-                id: doc.id, // Add the document ID
-                distanceInM: Math.round(distanceInM), // Add distance in meters
-              });
+              const publicEnabled = groupData?.publicProfileEnabled ?? true;
+              if (publicEnabled !== false) {
+                matchingGroups.push(
+                  pickPublicSearchFields(
+                    groupData,
+                    doc.id,
+                    Math.round(distanceInM),
+                  ),
+                );
+              }
             }
           }
         }
