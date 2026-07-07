@@ -1,11 +1,13 @@
-import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import Organization from '../../entities/Organization';
-import { House, PartialHouseWithId } from '../../entities/House';
-import { PhaseConfiguration } from '../../entities/Phase';
-import { Chore } from '../../entities/Chore';
-import { Guests, Admins } from '../../types';
-import * as houseService from '../../services/house';
-import * as orgService from '../../services/organization';
+import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
+import Organization from "../../entities/Organization";
+import { House, PartialHouseWithId } from "../../entities/House";
+import { PhaseConfiguration } from "../../entities/Phase";
+import { Chore } from "../../entities/Chore";
+import { Guests, Admins, Houses } from "../../types";
+import { User } from "../../entities/User";
+import * as houseService from "../../services/house";
+import * as orgService from "../../services/organization";
+import { initializeHouses } from "../../services/setup-wizard";
 
 /**
  * Setup State Interface
@@ -61,22 +63,16 @@ const initialState: SetupState = {
 export const createOrganization = createAsyncThunk<
   Organization,
   Partial<Organization>
->(
-  'setup/createOrganization',
-  async (orgData: Partial<Organization>) => {
-    const organization = await orgService.createOrganization(orgData);
-    return organization;
-  }
-);
+>("setup/createOrganization", async (orgData: Partial<Organization>) => {
+  const organization = await orgService.createOrganization(orgData);
+  return organization;
+});
 
 /**
  * Create house
  */
-export const createHouse = createAsyncThunk<
-  House,
-  Partial<House>
->(
-  'setup/createHouse',
+export const createHouse = createAsyncThunk<House, Partial<House>>(
+  "setup/createHouse",
   async (houseData: Partial<House>) => {
     const house = await houseService.createHouse(houseData as House);
     return house;
@@ -89,15 +85,12 @@ export const createHouse = createAsyncThunk<
 export const updateHouseConfig = createAsyncThunk<
   House,
   { houseId: string; updates: PartialHouseWithId }
->(
-  'setup/updateHouseConfig',
-  async ({ houseId, updates }) => {
-    await houseService.updateHouse(houseId, updates);
-    // updateHouse returns void, so we need to fetch the updated house
-    const house = await houseService.getHouse(houseId);
-    return house;
-  }
-);
+>("setup/updateHouseConfig", async ({ houseId, updates }) => {
+  await houseService.updateHouse(houseId, updates);
+  // updateHouse returns void, so we need to fetch the updated house
+  const house = await houseService.getHouse(houseId);
+  return house;
+});
 
 /**
  * Complete setup wizard
@@ -105,19 +98,32 @@ export const updateHouseConfig = createAsyncThunk<
 export const completeSetup = createAsyncThunk<
   string,
   { houseId: string; finalConfig: Partial<House> }
->(
-  'setup/completeSetup',
-  async ({ houseId, finalConfig }) => {
-    await houseService.finalizeHouseSetup(houseId, finalConfig);
-    return houseId;
-  }
-);
+>("setup/completeSetup", async ({ houseId, finalConfig }) => {
+  await houseService.finalizeHouseSetup(houseId, finalConfig);
+  return houseId;
+});
+
+/**
+ * Submit all houses configured in the wizard — creates the admin doc, house
+ * docs, grants the admin claim, and sends invites (see initializeHouses).
+ *
+ * Added 2026-07-05 as part of wiring OrgSetup's "COMPLETE SETUP" button:
+ * previously nothing in the app called initializeHouses at all, so houses
+ * built through the setup wizard were held only in Redux and discarded the
+ * moment a user navigated away or closed the app.
+ */
+export const submitHouseSetup = createAsyncThunk<
+  Awaited<ReturnType<typeof initializeHouses>>,
+  { houses: Houses; operator: User; inApp?: boolean }
+>("setup/submitHouseSetup", async ({ houses, operator, inApp }) => {
+  return initializeHouses(houses, operator, inApp);
+});
 
 /**
  * Setup Slice
  */
 const setupSlice = createSlice({
-  name: 'setup',
+  name: "setup",
   initialState,
   reducers: {
     // Navigation
@@ -145,9 +151,27 @@ const setupSlice = createSlice({
       state.houses[action.payload.id] = action.payload;
     },
 
+    // Hardened 2026-07-05: this used to only update state.selectedHouse,
+    // never state.houses[id] — so edits made by the ManagerSetup/ChoreSetup/
+    // PhaseConfigSetup wizard steps (all of which call this via updateHouse)
+    // were invisible to OrgSetup's house list and to submitHouse's read of
+    // state.houses when finalizing setup. Both are now kept in sync.
     updateHouseData: (state, action: PayloadAction<Partial<House>>) => {
       if (state.selectedHouse) {
-        state.selectedHouse = { ...state.selectedHouse, ...action.payload };
+        const updated = { ...state.selectedHouse, ...action.payload };
+        state.selectedHouse = updated;
+        if (state.houses[updated.id]) {
+          state.houses[updated.id] = updated;
+        }
+      }
+    },
+
+    // Remove a house from the in-progress setup (e.g. "DELETE" on OrgSetup's
+    // house list, before the org has completed setup).
+    removeHouseFromSetup: (state, action: PayloadAction<string>) => {
+      delete state.houses[action.payload];
+      if (state.selectedHouse?.id === action.payload) {
+        state.selectedHouse = null;
       }
     },
 
@@ -214,7 +238,7 @@ const setupSlice = createSlice({
       .addCase(createOrganization.rejected, (state, action) => {
         state.submitting = false;
         state.submittingFailed = true;
-        state.error = action.error.message || 'Failed to create organization';
+        state.error = action.error.message || "Failed to create organization";
       });
 
     // Create House
@@ -233,7 +257,7 @@ const setupSlice = createSlice({
       .addCase(createHouse.rejected, (state, action) => {
         state.submitting = false;
         state.submittingFailed = true;
-        state.error = action.error.message || 'Failed to create house';
+        state.error = action.error.message || "Failed to create house";
       });
 
     // Update House Config
@@ -252,7 +276,8 @@ const setupSlice = createSlice({
       })
       .addCase(updateHouseConfig.rejected, (state, action) => {
         state.submitting = false;
-        state.error = action.error.message || 'Failed to update house configuration';
+        state.error =
+          action.error.message || "Failed to update house configuration";
       });
 
     // Complete Setup
@@ -268,7 +293,24 @@ const setupSlice = createSlice({
       .addCase(completeSetup.rejected, (state, action) => {
         state.submitting = false;
         state.submittingFailed = true;
-        state.error = action.error.message || 'Failed to complete setup';
+        state.error = action.error.message || "Failed to complete setup";
+      });
+
+    // Submit House Setup (OrgSetup "COMPLETE SETUP")
+    builder
+      .addCase(submitHouseSetup.pending, (state) => {
+        state.submitting = true;
+        state.submittingFailed = false;
+        state.error = null;
+      })
+      .addCase(submitHouseSetup.fulfilled, (state) => {
+        state.submitting = false;
+        state.submittingSuccessful = true;
+      })
+      .addCase(submitHouseSetup.rejected, (state, action) => {
+        state.submitting = false;
+        state.submittingFailed = true;
+        state.error = action.error.message || "Failed to submit house setup";
       });
   },
 });
@@ -283,6 +325,7 @@ export const {
   setOrganization,
   setSelectedHouse,
   updateHouseData,
+  removeHouseFromSetup,
   setSelectedPhase,
   setSelectedChore,
   setGuests,
@@ -297,21 +340,31 @@ export const {
 /**
  * Selectors
  */
-export const selectCurrentStep = (state: { setup: SetupState }) => state.setup.currentStep;
-export const selectOrganization = (state: { setup: SetupState }) => state.setup.organization;
-export const selectSelectedHouse = (state: { setup: SetupState }) => state.setup.selectedHouse;
-export const selectHouses = (state: { setup: SetupState }) => state.setup.houses;
-export const selectSelectedPhase = (state: { setup: SetupState }) => state.setup.selectedPhase;
-export const selectSelectedChore = (state: { setup: SetupState }) => state.setup.selectedChore;
-export const selectSetupGuests = (state: { setup: SetupState }) => state.setup.guests;
-export const selectSetupAdmins = (state: { setup: SetupState }) => state.setup.admins;
+export const selectCurrentStep = (state: { setup: SetupState }) =>
+  state.setup.currentStep;
+export const selectOrganization = (state: { setup: SetupState }) =>
+  state.setup.organization;
+export const selectSelectedHouse = (state: { setup: SetupState }) =>
+  state.setup.selectedHouse;
+export const selectHouses = (state: { setup: SetupState }) =>
+  state.setup.houses;
+export const selectSelectedPhase = (state: { setup: SetupState }) =>
+  state.setup.selectedPhase;
+export const selectSelectedChore = (state: { setup: SetupState }) =>
+  state.setup.selectedChore;
+export const selectSetupGuests = (state: { setup: SetupState }) =>
+  state.setup.guests;
+export const selectSetupAdmins = (state: { setup: SetupState }) =>
+  state.setup.admins;
 export const selectInApp = (state: { setup: SetupState }) => state.setup.inApp;
-export const selectSubmitting = (state: { setup: SetupState }) => state.setup.submitting;
+export const selectSubmitting = (state: { setup: SetupState }) =>
+  state.setup.submitting;
 export const selectSubmittingSuccessful = (state: { setup: SetupState }) =>
   state.setup.submittingSuccessful;
 export const selectSubmittingFailed = (state: { setup: SetupState }) =>
   state.setup.submittingFailed;
-export const selectSetupError = (state: { setup: SetupState }) => state.setup.error;
+export const selectSetupError = (state: { setup: SetupState }) =>
+  state.setup.error;
 
 /**
  * Reducer

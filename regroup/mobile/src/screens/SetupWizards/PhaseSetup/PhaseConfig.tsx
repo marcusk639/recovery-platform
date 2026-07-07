@@ -1,42 +1,49 @@
-import React, { useCallback } from 'react';
-import { withHouseSetupWizard } from '../withHouseSetupWizard';
-import { ViewStyle } from 'react-native';
-import { SETUP_BUTTON_STYLE } from '../SetupStyles';
-import ManagerSetupProps from '../ManagerSetupEntity';
-import { PhaseConfigType } from '../../../entities/Phase';
+import React, { useCallback } from "react";
+import { withHouseSetupWizard } from "../withHouseSetupWizard";
+import { useHouseSetupWizard } from "../../../hooks/useHouseSetupWizard";
+import { ViewStyle } from "react-native";
+import { SETUP_BUTTON_STYLE } from "../SetupStyles";
+import ManagerSetupProps from "../ManagerSetupEntity";
+import { PhaseConfigType } from "../../../entities/Phase";
 import {
   initializeBasicConfig,
   initializeModerateConfig,
   initializeAdvancedConfig,
-} from '../../../util/phase';
-import { PhaseConfigView } from './PhaseConfigSetup';
-import { House } from '../../../entities/House';
+} from "../../../util/phase";
+import { PhaseConfigView } from "./PhaseConfigSetup";
+import { House } from "../../../entities/House";
 
 export const BUTTON_STYLE: ViewStyle = {
   ...SETUP_BUTTON_STYLE,
-  justifyContent: 'space-between',
+  justifyContent: "space-between",
 };
 
 type PhaseConfigProps = ManagerSetupProps;
 
-const PhaseConfigComponent: React.FC<PhaseConfigProps> = props => {
-  const { updateHouse, selectedHouse, ...managerProps } = props;
+const PhaseConfigComponent: React.FC<PhaseConfigProps> = (props) => {
+  const {
+    updateHouse: propsUpdateHouse,
+    selectedHouse,
+    ...managerProps
+  } = props;
+  const setupWizard = useHouseSetupWizard();
+  const updateHouse = propsUpdateHouse ?? setupWizard.updateHouse;
 
   const setupPhases = useCallback(
     (configType: PhaseConfigType) => {
       if (!updateHouse || !selectedHouse?.id) return;
 
       switch (configType) {
-        case 'basic':
+        case "basic":
           updateHouse({ id: selectedHouse.id, ...initializeBasicConfig() });
           break;
-        case 'moderate':
+        case "moderate":
           updateHouse({ id: selectedHouse.id, ...initializeModerateConfig() });
           break;
-        case 'advanced':
+        case "advanced":
           updateHouse({ id: selectedHouse.id, ...initializeAdvancedConfig() });
           break;
-        case 'custom':
+        case "custom":
           updateHouse({
             id: selectedHouse.id,
             phases: { ...new House().phases },
@@ -45,14 +52,14 @@ const PhaseConfigComponent: React.FC<PhaseConfigProps> = props => {
         default:
       }
     },
-    [updateHouse, selectedHouse],
+    [updateHouse, selectedHouse]
   );
 
   const onPhaseButtonPress = useCallback(
     (configType: PhaseConfigType) => {
       setupPhases(configType);
     },
-    [setupPhases],
+    [setupPhases]
   );
 
   const PhaseConfigViewTyped = PhaseConfigView as any;
@@ -74,5 +81,5 @@ const PhaseConfigComponent: React.FC<PhaseConfigProps> = props => {
 export const PhaseConfig = withHouseSetupWizard(
   PhaseConfigComponent,
   undefined,
-  undefined,
+  undefined
 );

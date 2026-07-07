@@ -1,11 +1,11 @@
-import React, { Fragment } from 'react';
-import { withFormik, FormikProps, Field } from 'formik';
+import React, { Fragment } from "react";
+import { withFormik, FormikProps, Field } from "formik";
 // Phase 4.1: Extracted business logic to usePhaseForm hook
-import { usePhaseForm } from './hooks/usePhaseForm';
-import { ManagerSetupWithForm } from '../ManagerSetupEntity';
-import { PhaseConfiguration } from '../../../entities/Phase';
-import { House } from '../../../entities/House';
-import RatsScrollView from '../../../components/rats-scroll-view';
+import { usePhaseForm } from "./hooks/usePhaseForm";
+import { ManagerSetupWithForm } from "../ManagerSetupEntity";
+import { PhaseConfiguration } from "../../../entities/Phase";
+import { House } from "../../../entities/House";
+import RatsScrollView from "../../../components/rats-scroll-view";
 import {
   SCROLL_CONTAINER,
   normalize,
@@ -15,37 +15,35 @@ import {
   ROW,
   STAT_BUTTON,
   STAT_BUTTON_TEXT,
-} from '../../../styles/theme';
-import { Weekdays } from '../../../components/weekdays';
-import { View, Dimensions, ViewStyle, TextStyle } from 'react-native';
-import {
-  militaryTimeToDate,
-} from '../../../util/display';
-import { RatsSwitch } from '../../../components/rats-switch';
-import { renderField } from '../../../util/form';
-import RatsTextInput from '../../../components/rats-text-input/rats-text-input';
-import RatsNumericInput from '../../../components/rats-numeric-input';
-import RatsButton from '../../../components/rats-button/rats-button';
-import { cloneDeep, each, find } from 'lodash';
+} from "../../../styles/theme";
+import { Weekdays } from "../../../components/weekdays";
+import { View, Dimensions, ViewStyle, TextStyle } from "react-native";
+import { militaryTimeToDate } from "../../../util/display";
+import { RatsSwitch } from "../../../components/rats-switch";
+import { renderField } from "../../../util/form";
+import RatsTextInput from "../../../components/rats-text-input/rats-text-input";
+import RatsNumericInput from "../../../components/rats-numeric-input";
+import RatsButton from "../../../components/rats-button/rats-button";
+import { cloneDeep, each, find } from "lodash";
 
-import WeekdayWithTime from '../../../components/weekdays/weekday-with-time';
-import ScreenHeader from '../../../components/screen-header';
-import HelpIcon from '../../../components/help-icon';
-import { RatsText } from '../../../components/rats-text';
-import { NEXT_BUTTON, NEXT_BUTTON_TEXT } from '../SetupStyles';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { SetupHeader } from '../OperatorSetupWizard';
-import { RatsHR } from '../../../components/rats-horizontal-rule';
-import { IOS } from '../../../util/platform';
+import WeekdayWithTime from "../../../components/weekdays/weekday-with-time";
+import ScreenHeader from "../../../components/screen-header";
+import HelpIcon from "../../../components/help-icon";
+import { RatsText } from "../../../components/rats-text";
+import { NEXT_BUTTON, NEXT_BUTTON_TEXT } from "../SetupStyles";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { SetupHeader } from "../OperatorSetupWizard";
+import { RatsHR } from "../../../components/rats-horizontal-rule";
+import { IOS } from "../../../util/platform";
 import {
   withPopover,
   WithPopoverProps,
-} from '../../../components/rats-hoc/withPopover';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import DatePicker from 'react-native-date-picker';
+} from "../../../components/rats-hoc/withPopover";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import DatePicker from "react-native-date-picker";
 
 const DAY_CONTAINER: ViewStyle = {
-  width: Dimensions.get('screen').width / 5,
+  width: Dimensions.get("screen").width / 5,
   height: normalize(45),
   borderColor: color.black,
   borderWidth: 1,
@@ -53,16 +51,26 @@ const DAY_CONTAINER: ViewStyle = {
   backgroundColor: color.white,
 };
 
-type Props = FormikProps<PhaseConfiguration> & WithPopoverProps & {
-  setCustomPhase: (phase: PhaseConfiguration) => any;
-  dismissModal: () => void;
-  customize?: boolean;
-  header?: string;
-  description?: string;
-};
+type Props = FormikProps<PhaseConfiguration> &
+  WithPopoverProps & {
+    setCustomPhase: (phase: PhaseConfiguration) => any;
+    dismissModal: () => void;
+    customize?: boolean;
+    header?: string;
+    description?: string;
+  };
 
-const PhaseConfigFormView: React.FC<Props> = props => {
-  const { values, setFieldValue, handleSubmit, dismissModal, customize, header, description, showPopover } = props;
+const PhaseConfigFormView: React.FC<Props> = (props) => {
+  const {
+    values,
+    setFieldValue,
+    handleSubmit,
+    dismissModal,
+    customize,
+    header,
+    description,
+    showPopover,
+  } = props;
 
   // Use custom hook for business logic
   const phaseForm = usePhaseForm({
@@ -95,13 +103,15 @@ const PhaseConfigFormView: React.FC<Props> = props => {
   const renderButtons = () => {
     return (
       <View
-        style={{ paddingTop: normalize(10), justifyContent: 'space-between' }}>
+        style={{ paddingTop: normalize(10), justifyContent: "space-between" }}
+      >
         <View
           style={{
             ...ROW,
-            justifyContent: 'space-between',
-            marginTop: 'auto',
-          }}>
+            justifyContent: "space-between",
+            marginTop: "auto",
+          }}
+        >
           <RatsButton
             light
             title="CANCEL"
@@ -114,7 +124,7 @@ const PhaseConfigFormView: React.FC<Props> = props => {
             onPress={handleSubmitClick}
             containerStyle={{
               flex: 0.48,
-              width: '100%',
+              width: "100%",
               marginTop: 0,
               marginBottom: 0,
             }}
@@ -129,7 +139,7 @@ const PhaseConfigFormView: React.FC<Props> = props => {
     marginHorizontal: 0,
   };
   const SWITCH_STYLE: ViewStyle = {
-    marginLeft: 'auto',
+    marginLeft: "auto",
     marginRight: 0,
   };
   const SECTION: ViewStyle = {
@@ -152,35 +162,33 @@ const PhaseConfigFormView: React.FC<Props> = props => {
     <RatsScrollView contentContainerStyle={[SCROLL_CONTAINER]}>
       <SafeAreaView
         style={{ backgroundColor: color.light_grey }}
-        edges={['top', 'bottom']}>
+        edges={["top", "bottom"]}
+      >
         <ScreenHeader
           renderBackButton
           onBackPress={dismissModal}
-          icon={
-            <HelpIcon
-              helpFn={renderHelp}
-            />
-          }
+          icon={<HelpIcon helpFn={renderHelp} />}
           header="Phase Setup"
         />
         <SetupHeader
-          header={header || 'Phase setup'}
+          header={header || "Phase setup"}
           text={
             description ||
-            'A phase is a set of rules that guests must follow if they are currently in that phase.'
-          }>
+            "A phase is a set of rules that guests must follow if they are currently in that phase."
+          }
+        >
           {!customize && (
             <Fragment>
               <View style={SECTION}>
                 {renderField(
-                  'name',
-                  'phase name',
+                  "name",
+                  "phase name",
                   RatsTextInput,
                   false,
-                  'Phase Name',
-                  'string',
+                  "Phase Name",
+                  "string",
                   color.black,
-                  undefined,
+                  undefined
                 )}
                 <Field
                   name="order"
@@ -217,13 +225,7 @@ const PhaseConfigFormView: React.FC<Props> = props => {
                   onWeekdayPress={onWeekdayPress}
                   customWeekdayContent={(day: string) => {
                     const { time, day: displayDay } = Weekday(day);
-                    return (
-                      <WeekdayWithTime
-                        value={new Date()}
-                        time={time}
-                        day={displayDay}
-                      />
-                    );
+                    return <WeekdayWithTime time={time} day={displayDay} />;
                   }}
                 />
               </View>
@@ -245,8 +247,8 @@ const PhaseConfigFormView: React.FC<Props> = props => {
                 component={RatsNumericInput}
                 label={
                   customize
-                    ? 'How many nights out are allowed for this guest?'
-                    : 'How many nights out are allowed for a guest in this phase?'
+                    ? "How many nights out are allowed for this guest?"
+                    : "How many nights out are allowed for a guest in this phase?"
                 }
                 containerStyle={NUMERIC_CONTAINER}
               />
@@ -278,8 +280,8 @@ const PhaseConfigFormView: React.FC<Props> = props => {
                 labelStyle={NUMERIC_LABEL}
                 label={
                   customize
-                    ? 'How many meetings must this guest attend?'
-                    : 'How many meetings must a guest in this phase attend?'
+                    ? "How many meetings must this guest attend?"
+                    : "How many meetings must a guest in this phase attend?"
                 }
                 maximumValue={20}
                 containerStyle={NUMERIC_CONTAINER}
@@ -297,11 +299,11 @@ const PhaseConfigFormView: React.FC<Props> = props => {
             />
             {values.rules.work > 0 && (
               <Field
-                name={'rules.work'}
+                name={"rules.work"}
                 label={
                   customize
-                    ? 'How many hours must this guest work?'
-                    : 'How many hours must a guest in this phase work?'
+                    ? "How many hours must this guest work?"
+                    : "How many hours must a guest in this phase work?"
                 }
                 component={RatsNumericInput}
                 maximumValue={80}
@@ -332,7 +334,7 @@ const PhaseConfigFormView: React.FC<Props> = props => {
             mode="time"
             open={show}
             date={getTime()}
-            onConfirm={date => {
+            onConfirm={(date) => {
               setTime(date);
             }}
             onCancel={() => {
@@ -353,7 +355,7 @@ export const PhaseConfigForm = withFormik<
   },
   PhaseConfiguration
 >({
-  mapPropsToValues: props => {
+  mapPropsToValues: (props) => {
     return props.phase || new PhaseConfiguration();
   },
   handleSubmit: (values, formikBag) => {
@@ -382,7 +384,7 @@ export const PhaseConfigForm = withFormik<
       // find guest with that phase name
       const guestWithPhase = find(
         updatedGuests,
-        guest => guest.phase === phase.name,
+        (guest) => guest.phase === phase.name
       );
       if (guestWithPhase && updatedGuests) {
         updatedGuests[guestWithPhase.id] = {
@@ -395,7 +397,7 @@ export const PhaseConfigForm = withFormik<
       updateHouse({
         ...house,
         id: house.id,
-        phases: { ...house?.phases, [values.name]: values }
+        phases: { ...house?.phases, [values.name]: values },
       });
     }
     dismissModal();
@@ -407,14 +409,14 @@ export const PhaseConfigForm = withFormik<
     let maxOrder = 0;
     each(
       phases,
-      phase => (maxOrder = phase.order > maxOrder ? phase.order : maxOrder),
+      (phase) => (maxOrder = phase.order > maxOrder ? phase.order : maxOrder)
     );
     const errors: { name?: string; order?: string } = {};
     if (!values.name) {
-      errors.name = 'Required';
+      errors.name = "Required";
     }
     if (!values.order) {
-      errors.order = 'Required';
+      errors.order = "Required";
     }
     if (values.order > maxOrder + 1) {
       errors.order = `Phases must be sequential. Should this number be ${

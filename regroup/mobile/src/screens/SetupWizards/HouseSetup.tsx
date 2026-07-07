@@ -1,42 +1,42 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from "react";
 // Phase 3.3: Migrated from withHouseSetupWizard HOC to useHouseSetupWizard hook
-import { useHouseSetupWizard } from '../../hooks/useHouseSetupWizard';
+import { useHouseSetupWizard } from "../../hooks/useHouseSetupWizard";
 
-import { withFormik, Field } from 'formik';
-import ManagerSetupProps, { ManagerSetupWithForm } from './ManagerSetupEntity';
-import { View } from 'react-native';
-import { validateAddress } from '../../util/form';
-import RatsTextInput from '../../components/rats-text-input/rats-text-input';
+import { withFormik, Field } from "formik";
+import ManagerSetupProps, { ManagerSetupWithForm } from "./ManagerSetupEntity";
+import { View } from "react-native";
+import { validateAddress } from "../../util/form";
+import RatsTextInput from "../../components/rats-text-input/rats-text-input";
 import {
   color,
   HEADER,
   normalize,
   fontSize,
   SAVE_BUTTON,
-} from '../../styles/theme';
-import { House, houseSchema } from '../../entities/House';
-import RatsRadioButtonGroup from '../../components/rats-radio-button-group';
-import RatsScrollView from '../../components/rats-scroll-view';
-import RatsNumericInput from '../../components/rats-numeric-input';
-import { RatsSwitch } from '../../components/rats-switch';
-import { RatsText } from '../../components/rats-text';
-import { SetupButtons } from './OperatorSetupWizard';
+} from "../../styles/theme";
+import { House, houseSchema } from "../../entities/House";
+import RatsRadioButtonGroup from "../../components/rats-radio-button-group";
+import RatsScrollView from "../../components/rats-scroll-view";
+import RatsNumericInput from "../../components/rats-numeric-input";
+import { RatsSwitch } from "../../components/rats-switch";
+import { RatsText } from "../../components/rats-text";
+import { SetupButtons } from "./OperatorSetupWizard";
 import {
   getAddressDisplay,
   AddressKeys,
   AddressDetails,
-} from '../../util/address';
-import { phoneFormatter } from '../../util/formatters';
-import KeyboardManager from 'react-native-keyboard-manager';
-import { IOS, ANDROID } from '../../util/platform';
-import RatsImagePicker from '../../components/rats-image-picker';
-import isEmpty from 'lodash/isEmpty';
+} from "../../util/address";
+import { phoneFormatter } from "../../util/formatters";
+import KeyboardManager from "react-native-keyboard-manager";
+import { IOS, ANDROID } from "../../util/platform";
+import RatsImagePicker from "../../components/rats-image-picker";
+import isEmpty from "lodash/isEmpty";
 
-const labelColor = 'black';
+const labelColor = "black";
 
 type HouseSetupFormViewProps = ManagerSetupWithForm;
 
-const HouseSetupFormView: React.FC<HouseSetupFormViewProps> = props => {
+const HouseSetupFormView: React.FC<HouseSetupFormViewProps> = (props) => {
   const setupWizard = useHouseSetupWizard();
   const {
     values,
@@ -51,7 +51,7 @@ const HouseSetupFormView: React.FC<HouseSetupFormViewProps> = props => {
   const effectiveSelectedHouse = selectedHouse || setupWizard.selectedHouse;
 
   const [height, setHeight] = useState(ANDROID ? normalize(95) : 0);
-  const [focused, setFocused] = useState('');
+  const [focused, setFocused] = useState("");
 
   const scrollRef = useRef<any>(null);
   const refsRef = useRef<{ [field: string]: any }>({});
@@ -66,7 +66,7 @@ const HouseSetupFormView: React.FC<HouseSetupFormViewProps> = props => {
       refsRef.current.address.refs.textInput.measure(
         (x: any, y: any, width: any, height: any, pageX: any, pageY: any) => {
           scrollRef.current?.scrollTo({ x: 0, y: pageY + normalize(50) });
-        },
+        }
       );
     }
     if (IOS) {
@@ -75,7 +75,7 @@ const HouseSetupFormView: React.FC<HouseSetupFormViewProps> = props => {
     } else {
       setHeight(normalize(115));
     }
-    setFocused('address');
+    setFocused("address");
   }, []);
 
   const resetKeyboard = useCallback(() => {
@@ -90,7 +90,7 @@ const HouseSetupFormView: React.FC<HouseSetupFormViewProps> = props => {
     (name: string) => (ref: any) => {
       refsRef.current = { ...refsRef.current, [name]: ref };
     },
-    [],
+    []
   );
 
   const addressChanged = useCallback(
@@ -99,13 +99,13 @@ const HouseSetupFormView: React.FC<HouseSetupFormViewProps> = props => {
         return false;
       }
 
-      const res = AddressKeys.some(key => {
+      const res = AddressKeys.some((key) => {
         return (values as any)[key] !== (prevHouse as any)[key];
       });
 
       return res;
     },
-    [values],
+    [values]
   );
 
   const setAddress = useCallback(
@@ -116,23 +116,23 @@ const HouseSetupFormView: React.FC<HouseSetupFormViewProps> = props => {
             (values as any)?.street,
             (values as any)?.city,
             (values as any)?.state,
-            (values as any)?.zip,
+            (values as any)?.zip
           );
-          refsRef.current.address.setAddressText(address || '');
+          refsRef.current.address.setAddressText(address || "");
         } else {
           const address = effectiveSelectedHouse?.street
             ? getAddressDisplay(
                 effectiveSelectedHouse.street,
                 effectiveSelectedHouse?.city,
                 effectiveSelectedHouse?.state,
-                effectiveSelectedHouse?.zip,
+                effectiveSelectedHouse?.zip
               )
-            : '';
-          refsRef.current.address.setAddressText(address || '');
+            : "";
+          refsRef.current.address.setAddressText(address || "");
         }
       }
     },
-    [values, effectiveSelectedHouse, addressChanged],
+    [values, effectiveSelectedHouse, addressChanged]
   );
 
   useEffect(() => {
@@ -158,9 +158,10 @@ const HouseSetupFormView: React.FC<HouseSetupFormViewProps> = props => {
 
   return (
     <View
-      style={{ flex: 1, backgroundColor: color.white, paddingHorizontal: 0 }}>
+      style={{ flex: 1, backgroundColor: color.white, paddingHorizontal: 0 }}
+    >
       <RatsScrollView
-        innerRef={ref => (scrollRef.current = ref)}
+        innerRef={(ref) => (scrollRef.current = ref)}
         enableOnAndroid
         enableResetScrollToCoords={false}
         enableAutomaticScroll={ANDROID}
@@ -171,7 +172,8 @@ const HouseSetupFormView: React.FC<HouseSetupFormViewProps> = props => {
         contentContainerStyle={{
           paddingHorizontal: normalize(20),
           flexGrow: 1,
-        }}>
+        }}
+      >
         <RatsText text="Details" style={{ ...HEADER, marginLeft: 0 }} />
         <RatsText
           style={{
@@ -187,7 +189,7 @@ const HouseSetupFormView: React.FC<HouseSetupFormViewProps> = props => {
           component={RatsTextInput}
           labelColor={labelColor}
           label="House Name"
-          setRef={initRef('name')}
+          setRef={initRef("name")}
           testID="house-name-input"
         />
         {/* {renderField(
@@ -210,7 +212,7 @@ const HouseSetupFormView: React.FC<HouseSetupFormViewProps> = props => {
           labelColor={labelColor}
           name="address"
           label="Address"
-          setRef={initRef('address')}
+          setRef={initRef("address")}
           testID="house-address-input"
         />
         <Field
@@ -222,16 +224,16 @@ const HouseSetupFormView: React.FC<HouseSetupFormViewProps> = props => {
           label="Contact Number"
           keyboardType="phone-pad"
           labelColor={labelColor}
-          setRef={initRef('phoneNumber')}
+          setRef={initRef("phoneNumber")}
         />
         <RatsImagePicker
-          onImageSelect={response => {
+          onImageSelect={(response) => {
             const asset = response.assets?.[0];
-            setFieldValue('imageUrl', asset?.uri);
+            setFieldValue("imageUrl", asset?.uri);
           }}
           label="Photo (optional)"
           onClear={() => {
-            setFieldValue('imageUrl', null);
+            setFieldValue("imageUrl", null);
           }}
           uri={values.imageUrl}
         />
@@ -277,8 +279,8 @@ const HouseSetupFormView: React.FC<HouseSetupFormViewProps> = props => {
           wrapStyle={{ marginHorizontal: 0, marginRight: normalize(15) }}
           selectedButtonColor={color.black}
           radioButtons={[
-            { label: 'Certified', value: true },
-            { label: 'Not Certified', value: false },
+            { label: "Certified", value: true },
+            { label: "Not Certified", value: false },
           ]}
         />
         <Field
@@ -291,14 +293,14 @@ const HouseSetupFormView: React.FC<HouseSetupFormViewProps> = props => {
           wrapStyle={{ marginHorizontal: 0, marginRight: normalize(15) }}
           selectedButtonColor={color.black}
           radioButtons={[
-            { label: 'Traditional', value: 'traditional' },
-            { label: 'Oxford House', value: 'oxford' },
+            { label: "Traditional", value: "traditional" },
+            { label: "Oxford House", value: "oxford" },
           ]}
         />
         <Field
           component={RatsRadioButtonGroup}
           name="gender"
-          setRef={initRef('gender')}
+          setRef={initRef("gender")}
           label="Guest Gender"
           labelDisabled={false}
           formHorizontal={true}
@@ -306,19 +308,19 @@ const HouseSetupFormView: React.FC<HouseSetupFormViewProps> = props => {
           wrapStyle={{ marginHorizontal: 0, marginRight: normalize(15) }}
           selectedButtonColor={color.black}
           radioButtons={[
-            { label: 'Male', value: 'male' },
-            { label: 'Female', value: 'female' },
-            { label: 'Non-binary', value: 'non-binary' },
+            { label: "Male", value: "male" },
+            { label: "Female", value: "female" },
+            { label: "Non-binary", value: "non-binary" },
           ]}
           testID="house-type-selector"
         />
       </RatsScrollView>
       {forSettings && (
         <SetupButtons
-          rightLabel={forSettings ? 'Save' : 'Next'}
+          rightLabel={forSettings ? "Save" : "Next"}
           leftLabel="Cancel"
           rightButtonContainer={
-            forSettings ? { ...SAVE_BUTTON, width: '49%' } : {}
+            forSettings ? { ...SAVE_BUTTON, width: "49%" } : {}
           }
           submit={submit}
           leftPress={onPrevPress ? onPrevPress : navigation.goBack}
@@ -333,7 +335,7 @@ const initialValues = new House();
 
 const HouseSetupForm = withFormik<ManagerSetupProps, House>({
   enableReinitialize: true,
-  mapPropsToValues: props =>
+  mapPropsToValues: (props) =>
     props.selectedHouse ? props.selectedHouse : initialValues,
   handleSubmit: (values, formikBag) => {
     if (formikBag.props.handleSubmit) {
@@ -348,7 +350,7 @@ const HouseSetupForm = withFormik<ManagerSetupProps, House>({
       }
     }
   },
-  validate: async values => {
+  validate: async (values) => {
     const errors: Record<string, string> = {};
     try {
       // const result = await houseSchema.validate(values);
@@ -360,11 +362,11 @@ const HouseSetupForm = withFormik<ManagerSetupProps, House>({
     }
     const address: Record<string, any> = {};
     AddressKeys.forEach(
-      key => (address[key] = (values as Record<string, any>)[key]),
+      (key) => (address[key] = (values as Record<string, any>)[key])
     );
     const addressErrors = await validateAddress(
       address as AddressDetails,
-      'address',
+      "address"
     );
     const result = { ...errors, ...addressErrors };
     if (!isEmpty(result)) {
@@ -374,8 +376,17 @@ const HouseSetupForm = withFormik<ManagerSetupProps, House>({
   //@ts-ignore
 })(HouseSetupFormView);
 
-export const HouseSetup: React.FC<ManagerSetupWithForm> = props => {
-  return <HouseSetupForm {...props} />;
+export const HouseSetup: React.FC<ManagerSetupWithForm> = (props) => {
+  const setupWizard = useHouseSetupWizard();
+  return (
+    <HouseSetupForm
+      {...props}
+      selectedHouse={
+        props.selectedHouse || setupWizard.selectedHouse || undefined
+      }
+      updateHouse={props.updateHouse ?? setupWizard.updateHouse}
+    />
+  );
 };
 
 export default HouseSetup;

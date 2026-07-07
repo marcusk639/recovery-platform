@@ -8,7 +8,7 @@
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
-jest.mock('../../../firebase-setup', () => {
+jest.mock("../../../firebase-setup", () => {
   const mockBatch = {
     set: jest.fn(),
     update: jest.fn(),
@@ -17,7 +17,7 @@ jest.mock('../../../firebase-setup', () => {
   };
 
   const docObj = {
-    id: 'generated-doc-id',
+    id: "generated-doc-id",
     get: jest.fn(() => Promise.resolve({ exists: false, data: () => null })),
     set: jest.fn(() => Promise.resolve()),
     update: jest.fn(() => Promise.resolve()),
@@ -30,7 +30,7 @@ jest.mock('../../../firebase-setup', () => {
     orderBy: jest.fn().mockReturnThis(),
     limit: jest.fn().mockReturnThis(),
     get: jest.fn(() => Promise.resolve({ docs: [] })),
-    add: jest.fn(() => Promise.resolve({ id: 'mock-id' })),
+    add: jest.fn(() => Promise.resolve({ id: "mock-id" })),
   };
   collectionObj.where = jest.fn(() => collectionObj);
 
@@ -44,59 +44,63 @@ jest.mock('../../../firebase-setup', () => {
     },
     functions: {
       httpsCallable: jest.fn(() =>
-        jest.fn(() => Promise.resolve({ data: true })),
+        jest.fn(() => Promise.resolve({ data: true }))
       ),
     },
   };
 });
 
-jest.mock('../house', () => ({
+jest.mock("../house", () => ({
   houseCollection: {
-    doc: jest.fn(() => ({ id: 'house-doc-id' })),
+    doc: jest.fn(() => ({ id: "house-doc-id" })),
   },
 }));
 
-jest.mock('../invitations', () => ({
-  createInvitation: jest.fn(() => Promise.resolve({ token: 'mock-token' })),
+jest.mock("../invitations", () => ({
+  createInvitation: jest.fn(() => Promise.resolve({ token: "mock-token" })),
 }));
 
-jest.mock('../admin', () => ({
+jest.mock("../admin", () => ({
   adminCollection: {
-    doc: jest.fn(() => ({ id: 'admin-doc-id' })),
+    doc: jest.fn(() => ({ id: "admin-doc-id" })),
   },
   getAdmin: jest.fn(),
+  createAdminId: jest.fn(() => "generated-admin-id"),
 }));
 
-jest.mock('../storage', () => ({
+jest.mock("../storage", () => ({
   uploadHousePhoto: jest.fn(() =>
-    Promise.resolve({ houseId: 'h1', url: 'https://mock-photo-url' }),
+    Promise.resolve({ houseId: "h1", url: "https://mock-photo-url" })
   ),
 }));
 
-jest.mock('../users', () => ({
+jest.mock("../users", () => ({
   refreshClaims: jest.fn(() => Promise.resolve()),
-  getAuthUser: jest.fn(() => Promise.resolve({ uid: 'mock-user' })),
+  getAuthUser: jest.fn(() => Promise.resolve({ uid: "mock-user" })),
+  userCollection: {
+    doc: jest.fn(() => ({ id: "user-doc-id" })),
+  },
 }));
 
-jest.mock('../subscription', () => ({
+jest.mock("../subscription", () => ({
   updateSubscriptionHouses: jest.fn(() =>
-    Promise.resolve({ subscriptionMetadata: { plan: 'pro' } }),
+    Promise.resolve({ subscriptionMetadata: { plan: "pro" } })
   ),
 }));
 
-jest.mock('../../util/geolocation', () => ({
-  geohash: jest.fn(() => 'mock-geohash'),
+jest.mock("../../util/geolocation", () => ({
+  geohash: jest.fn(() => "mock-geohash"),
 }));
 
-jest.mock('../../util/house', () => ({
-  getInitialPhase: jest.fn(() => ({ name: 'Phase 1' })),
+jest.mock("../../util/house", () => ({
+  getInitialPhase: jest.fn(() => ({ name: "Phase 1" })),
 }));
 
-jest.mock('../../util/logging', () => ({
+jest.mock("../../util/logging", () => ({
   logException: jest.fn(),
 }));
 
-jest.mock('../../util/forEach', () => ({
+jest.mock("../../util/forEach", () => ({
   asyncForEach: jest.fn(async (items: any, fn: any) => {
     for (const item of Object.values(items)) {
       await fn(item);
@@ -104,16 +108,17 @@ jest.mock('../../util/forEach', () => ({
   }),
 }));
 
-jest.mock('../../../google/timezone', () => ({
-  getTimezone: jest.fn(() => Promise.resolve('America/Chicago')),
+jest.mock("../../../google/timezone", () => ({
+  getTimezone: jest.fn(() => Promise.resolve("America/Chicago")),
 }));
 
 // ─── Imports ─────────────────────────────────────────────────────────────────
 
-import { functions } from '../../../firebase-setup';
-import * as adminService from '../admin';
-import * as invitationsService from '../invitations';
-import { getAdmin } from '../admin';
+import { firestore, functions } from "../../../firebase-setup";
+import * as adminService from "../admin";
+import * as invitationsService from "../invitations";
+import { getAdmin } from "../admin";
+import { userCollection } from "../users";
 import {
   addPotentialSuperAdminPrivilege,
   addAdminAuthorization,
@@ -122,20 +127,21 @@ import {
   createAdminInvite,
   createGuestInvite,
   uploadHousePhotos,
-} from '../setup-wizard';
-import { User } from '../../entities/User';
-import { Houses } from '../../types';
-import Admin from '../../entities/Admin';
+  initializeHouses,
+} from "../setup-wizard";
+import { User } from "../../entities/User";
+import { Houses } from "../../types";
+import Admin from "../../entities/Admin";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const makeUser = (overrides: Partial<User> = {}): User =>
   ({
-    uid: 'operator-uid',
-    id: 'operator-id',
-    email: 'operator@test.com',
-    firstName: 'Alice',
-    lastName: 'Smith',
+    uid: "operator-uid",
+    id: "operator-id",
+    email: "operator@test.com",
+    firstName: "Alice",
+    lastName: "Smith",
     adminId: undefined,
     isAdmin: false,
     isSuperAdmin: false,
@@ -146,13 +152,13 @@ const makeUser = (overrides: Partial<User> = {}): User =>
 const makeHouses = (): Houses =>
   ({
     h1: {
-      id: 'h1',
-      name: 'House One',
-      ownerId: 'operator-id',
+      id: "h1",
+      name: "House One",
+      ownerId: "operator-id",
       adminIds: [],
       superAdminIds: [],
-      pendingAdminInvites: ['admin@test.com'],
-      pendingGuestInvites: ['guest@test.com'],
+      pendingAdminInvites: ["admin@test.com"],
+      pendingGuestInvites: ["guest@test.com"],
       seniorPeerEmails: [],
       imageUrl: undefined,
       lat: 41.8781,
@@ -162,153 +168,153 @@ const makeHouses = (): Houses =>
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
-describe('setup-wizard service', () => {
+describe("setup-wizard service", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     // Restore httpsCallable default
     (functions.httpsCallable as jest.Mock).mockReturnValue(
-      jest.fn(() => Promise.resolve({ data: true })),
+      jest.fn(() => Promise.resolve({ data: true }))
     );
   });
 
   // ── addPotentialSuperAdminPrivilege ───────────────────────────────────────
 
-  describe('addPotentialSuperAdminPrivilege', () => {
-    it('returns the callable function from functions.httpsCallable', async () => {
+  describe("addPotentialSuperAdminPrivilege", () => {
+    it("returns the callable function from functions.httpsCallable", async () => {
       const result = await addPotentialSuperAdminPrivilege();
 
       expect(functions.httpsCallable).toHaveBeenCalledWith(
-        'givePotentialSuperAdminPrivilege',
+        "givePotentialSuperAdminPrivilege"
       );
-      expect(typeof result).toBe('function');
+      expect(typeof result).toBe("function");
     });
   });
 
   // ── addAdminAuthorization ─────────────────────────────────────────────────
 
-  describe('addAdminAuthorization', () => {
-    it('calls the addAdminAuthorization cloud function with the admin object', async () => {
-      const admin = { id: 'a1', email: 'admin@test.com' } as Admin;
+  describe("addAdminAuthorization", () => {
+    it("calls the addAdminAuthorization cloud function with the admin object", async () => {
+      const admin = { id: "a1", email: "admin@test.com" } as Admin;
 
       await addAdminAuthorization(admin);
 
       expect(functions.httpsCallable).toHaveBeenCalledWith(
-        'addAdminAuthorization',
+        "addAdminAuthorization"
       );
     });
 
-    it('throws when the callable returns falsy data', async () => {
+    it("throws when the callable returns falsy data", async () => {
       (functions.httpsCallable as jest.Mock).mockReturnValue(
-        jest.fn(() => Promise.resolve({ data: null })),
+        jest.fn(() => Promise.resolve({ data: null }))
       );
 
-      const admin = { id: 'a1' } as Admin;
+      const admin = { id: "a1" } as Admin;
 
       await expect(addAdminAuthorization(admin)).rejects.toMatchObject({
-        message: 'Something went wrong.',
+        message: "Something went wrong.",
       });
     });
 
-    it('propagates cloud function errors', async () => {
+    it("propagates cloud function errors", async () => {
       (functions.httpsCallable as jest.Mock).mockReturnValue(
-        jest.fn(() => Promise.reject(new Error('Function error'))),
+        jest.fn(() => Promise.reject(new Error("Function error")))
       );
 
       await expect(
-        addAdminAuthorization({ id: 'a1' } as Admin),
-      ).rejects.toThrow('Function error');
+        addAdminAuthorization({ id: "a1" } as Admin)
+      ).rejects.toThrow("Function error");
     });
   });
 
   // ── addGuestAuthorization ─────────────────────────────────────────────────
 
-  describe('addGuestAuthorization', () => {
-    it('calls the addGuestAuthorization cloud function', async () => {
-      const guest = { id: 'g1', houseId: 'h1' } as any;
+  describe("addGuestAuthorization", () => {
+    it("calls the addGuestAuthorization cloud function", async () => {
+      const guest = { id: "g1", houseId: "h1" } as any;
 
       await addGuestAuthorization(guest);
 
       expect(functions.httpsCallable).toHaveBeenCalledWith(
-        'addGuestAuthorization',
+        "addGuestAuthorization"
       );
     });
 
-    it('throws when the callable returns falsy data', async () => {
+    it("throws when the callable returns falsy data", async () => {
       (functions.httpsCallable as jest.Mock).mockReturnValue(
-        jest.fn(() => Promise.resolve({ data: false })),
+        jest.fn(() => Promise.resolve({ data: false }))
       );
 
       await expect(
-        addGuestAuthorization({ id: 'g1' } as any),
+        addGuestAuthorization({ id: "g1" } as any)
       ).rejects.toMatchObject({
-        message: 'Something went wrong',
+        message: "Something went wrong",
       });
     });
 
-    it('propagates cloud function errors', async () => {
+    it("propagates cloud function errors", async () => {
       (functions.httpsCallable as jest.Mock).mockReturnValue(
-        jest.fn(() => Promise.reject(new Error('Guest auth failed'))),
+        jest.fn(() => Promise.reject(new Error("Guest auth failed")))
       );
 
-      await expect(addGuestAuthorization({ id: 'g1' } as any)).rejects.toThrow(
-        'Guest auth failed',
+      await expect(addGuestAuthorization({ id: "g1" } as any)).rejects.toThrow(
+        "Guest auth failed"
       );
     });
   });
 
   // ── createAdminInvite ─────────────────────────────────────────────────────
 
-  describe('createAdminInvite', () => {
-    it('forwards email + houseId + role=admin to createInvitation', async () => {
-      await createAdminInvite('admin@test.com', 'h1');
+  describe("createAdminInvite", () => {
+    it("forwards email + houseId + role=admin to createInvitation", async () => {
+      await createAdminInvite("admin@test.com", "h1");
 
       expect(invitationsService.createInvitation).toHaveBeenCalledWith({
-        email: 'admin@test.com',
-        houseId: 'h1',
-        role: 'admin',
+        email: "admin@test.com",
+        houseId: "h1",
+        role: "admin",
       });
     });
 
-    it('resolves with the token returned by createInvitation', async () => {
+    it("resolves with the token returned by createInvitation", async () => {
       (invitationsService.createInvitation as jest.Mock).mockResolvedValueOnce({
-        token: 'token-abc',
+        token: "token-abc",
       });
 
-      const result = await createAdminInvite('admin@test.com', 'h1');
+      const result = await createAdminInvite("admin@test.com", "h1");
 
-      expect(result).toEqual({ token: 'token-abc' });
+      expect(result).toEqual({ token: "token-abc" });
     });
   });
 
   // ── createGuestInvite ─────────────────────────────────────────────────────
 
-  describe('createGuestInvite', () => {
-    it('forwards email + houseId + role=guest + initialPhase to createInvitation', async () => {
-      await createGuestInvite('guest@test.com', 'h1', 'Phase 1');
+  describe("createGuestInvite", () => {
+    it("forwards email + houseId + role=guest + initialPhase to createInvitation", async () => {
+      await createGuestInvite("guest@test.com", "h1", "Phase 1");
 
       expect(invitationsService.createInvitation).toHaveBeenCalledWith({
-        email: 'guest@test.com',
-        houseId: 'h1',
-        role: 'guest',
-        initialPhase: 'Phase 1',
+        email: "guest@test.com",
+        houseId: "h1",
+        role: "guest",
+        initialPhase: "Phase 1",
       });
     });
 
-    it('resolves with the token returned by createInvitation', async () => {
+    it("resolves with the token returned by createInvitation", async () => {
       (invitationsService.createInvitation as jest.Mock).mockResolvedValueOnce({
-        token: 'token-xyz',
+        token: "token-xyz",
       });
 
-      const result = await createGuestInvite('guest@test.com', 'h1', 'Phase 1');
+      const result = await createGuestInvite("guest@test.com", "h1", "Phase 1");
 
-      expect(result).toEqual({ token: 'token-xyz' });
+      expect(result).toEqual({ token: "token-xyz" });
     });
   });
 
   // ── sendAllInvites ────────────────────────────────────────────────────────
 
-  describe('sendAllInvites', () => {
-    it('calls createInvitation once per pending invite', async () => {
+  describe("sendAllInvites", () => {
+    it("calls createInvitation once per pending invite", async () => {
       const houses = makeHouses();
       const operator = makeUser();
 
@@ -318,7 +324,7 @@ describe('setup-wizard service', () => {
       expect(invitationsService.createInvitation).toHaveBeenCalledTimes(2);
     });
 
-    it('issues createInvitation calls for both admin and guest roles', async () => {
+    it("issues createInvitation calls for both admin and guest roles", async () => {
       const houses = makeHouses();
       const operator = makeUser();
 
@@ -327,11 +333,11 @@ describe('setup-wizard service', () => {
       const calls = (invitationsService.createInvitation as jest.Mock).mock
         .calls;
       const roles = calls.map(([arg]) => arg.role);
-      expect(roles).toContain('admin');
-      expect(roles).toContain('guest');
+      expect(roles).toContain("admin");
+      expect(roles).toContain("guest");
     });
 
-    it('skips admin invites when admin flag is false', async () => {
+    it("skips admin invites when admin flag is false", async () => {
       const houses = makeHouses();
       const operator = makeUser();
 
@@ -340,10 +346,10 @@ describe('setup-wizard service', () => {
       const calls = (invitationsService.createInvitation as jest.Mock).mock
         .calls;
       const roles = calls.map(([arg]) => arg.role);
-      expect(roles).not.toContain('admin');
+      expect(roles).not.toContain("admin");
     });
 
-    it('skips guest invites when guest flag is false', async () => {
+    it("skips guest invites when guest flag is false", async () => {
       const houses = makeHouses();
       const operator = makeUser();
 
@@ -352,26 +358,26 @@ describe('setup-wizard service', () => {
       const calls = (invitationsService.createInvitation as jest.Mock).mock
         .calls;
       const roles = calls.map(([arg]) => arg.role);
-      expect(roles).not.toContain('guest');
+      expect(roles).not.toContain("guest");
     });
 
-    it('propagates errors from createInvitation', async () => {
+    it("propagates errors from createInvitation", async () => {
       (invitationsService.createInvitation as jest.Mock).mockRejectedValue(
-        new Error('Email service down'),
+        new Error("Email service down")
       );
 
       await expect(sendAllInvites(makeHouses(), makeUser())).rejects.toThrow(
-        'Email service down',
+        "Email service down"
       );
     });
   });
 
   // ── uploadHousePhotos ─────────────────────────────────────────────────────
 
-  describe('uploadHousePhotos', () => {
-    it('returns an empty array when no houses have imageUrl', async () => {
+  describe("uploadHousePhotos", () => {
+    it("returns an empty array when no houses have imageUrl", async () => {
       const houses: Houses = {
-        h1: { id: 'h1', imageUrl: undefined } as any,
+        h1: { id: "h1", imageUrl: undefined } as any,
       };
 
       const result = await uploadHousePhotos(houses);
@@ -379,22 +385,69 @@ describe('setup-wizard service', () => {
       expect(result).toEqual([]);
     });
 
-    it('uploads photos only for houses that have imageUrl set', async () => {
-      const { uploadHousePhoto } = require('../storage');
+    it("uploads photos only for houses that have imageUrl set", async () => {
+      const { uploadHousePhoto } = require("../storage");
       (uploadHousePhoto as jest.Mock).mockResolvedValue({
-        houseId: 'h1',
-        url: 'https://mock-url',
+        houseId: "h1",
+        url: "https://mock-url",
       });
 
       const houses: Houses = {
-        h1: { id: 'h1', imageUrl: 'file://local/photo.jpg' } as any,
-        h2: { id: 'h2', imageUrl: undefined } as any,
+        h1: { id: "h1", imageUrl: "file://local/photo.jpg" } as any,
+        h2: { id: "h2", imageUrl: undefined } as any,
       };
 
       const result = await uploadHousePhotos(houses);
 
       expect(uploadHousePhoto).toHaveBeenCalledTimes(1);
       expect(result).toHaveLength(1);
+    });
+  });
+
+  // ── initializeHouses ──────────────────────────────────────────────────────
+
+  describe("initializeHouses", () => {
+    it("persists orgSetupCompleted/isAdmin/isSuperAdmin/adminId/housesOwned to the operator's user doc, in the same batch as the admin/house writes", async () => {
+      const houses = makeHouses();
+      const operator = makeUser({ id: "operator-id", adminId: undefined });
+
+      await initializeHouses(houses, operator);
+
+      const mockBatch = (firestore as any)._mockBatch;
+
+      // The operator doc must be updated via batch.update (not a separate
+      // write) so it commits atomically with the admin/house docs.
+      expect(userCollection.doc).toHaveBeenCalledWith("operator-id");
+      const userDocUpdateCall = mockBatch.update.mock.calls.find(
+        ([doc]: [any]) => doc?.id === "user-doc-id"
+      );
+      expect(userDocUpdateCall).toBeDefined();
+      expect(userDocUpdateCall[1]).toEqual(
+        expect.objectContaining({
+          orgSetupCompleted: true,
+          isAdmin: true,
+          isSuperAdmin: true,
+          adminId: expect.any(String),
+          housesOwned: expect.arrayContaining(["h1"]),
+        })
+      );
+
+      // The batch must commit once, after all writes (including the user
+      // doc update) have been queued — this is what makes the write atomic.
+      expect(mockBatch.commit).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not attempt to update the user doc when the operator has no id", async () => {
+      const houses = makeHouses();
+      const operator = makeUser({ id: undefined });
+
+      await initializeHouses(houses, operator);
+
+      const mockBatch = (firestore as any)._mockBatch;
+      const userDocUpdateCall = mockBatch.update.mock.calls.find(
+        ([doc]: [any]) => doc?.id === "user-doc-id"
+      );
+      expect(userDocUpdateCall).toBeUndefined();
     });
   });
 });

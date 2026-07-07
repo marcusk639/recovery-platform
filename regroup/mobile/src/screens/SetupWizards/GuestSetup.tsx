@@ -1,12 +1,12 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from "react";
 // Phase 3.3: Migrated from withHouseSetupWizard HOC to useHouseSetupWizard hook
-import { useHouseSetupWizard } from '../../hooks/useHouseSetupWizard';
+import { useHouseSetupWizard } from "../../hooks/useHouseSetupWizard";
 
-import { withFormik, FormikProps, FieldArray, FormikBag, Field } from 'formik';
-import ManagerSetupProps, { ManagerSetupWithForm } from './ManagerSetupEntity';
-import { View } from 'react-native';
-import { renderField, validateEmail } from '../../util/form';
-import RatsTextInput from '../../components/rats-text-input/rats-text-input';
+import { withFormik, FormikProps, FieldArray, FormikBag, Field } from "formik";
+import ManagerSetupProps, { ManagerSetupWithForm } from "./ManagerSetupEntity";
+import { View } from "react-native";
+import { renderField, validateEmail } from "../../util/form";
+import RatsTextInput from "../../components/rats-text-input/rats-text-input";
 import {
   normalize,
   ROW,
@@ -19,25 +19,25 @@ import {
   SAVE_BUTTON,
   RED_BUTTON,
   RED_BUTTON_TEXT,
-} from '../../styles/theme';
-import { each, uniqueId } from 'lodash';
-import { ActionButton } from '../../components/action-button';
-import RatsButton from '../../components/rats-button/rats-button';
-import { NEXT_BUTTON, NEXT_BUTTON_TEXT } from './SetupStyles';
-import ScreenHeader from '../../components/screen-header';
-import HelpIcon from '../../components/help-icon';
-import RatsScrollView from '../../components/rats-scroll-view';
-import { extractGuestEmails } from '../../util/house';
-import { SetupHeader, SetupButtons } from './OperatorSetupWizard';
-import { ActivityItemWithButtons } from '../../components/card-list/card-list';
+} from "../../styles/theme";
+import { each, uniqueId } from "lodash";
+import { ActionButton } from "../../components/action-button";
+import RatsButton from "../../components/rats-button/rats-button";
+import { NEXT_BUTTON, NEXT_BUTTON_TEXT } from "./SetupStyles";
+import ScreenHeader from "../../components/screen-header";
+import HelpIcon from "../../components/help-icon";
+import RatsScrollView from "../../components/rats-scroll-view";
+import { extractGuestEmails } from "../../util/house";
+import { SetupHeader, SetupButtons } from "./OperatorSetupWizard";
+import { ActivityItemWithButtons } from "../../components/card-list/card-list";
 
-const labelColor = 'black';
+const labelColor = "black";
 
 type GuestSetupFormViewProps = ManagerSetupWithForm &
   FormikProps<GuestSetupFormValues> &
   GuestSetupScreenProps;
 
-const GuestSetupFormView: React.FC<GuestSetupFormViewProps> = props => {
+const GuestSetupFormView: React.FC<GuestSetupFormViewProps> = (props) => {
   const setupWizard = useHouseSetupWizard();
   const {
     values,
@@ -49,12 +49,12 @@ const GuestSetupFormView: React.FC<GuestSetupFormViewProps> = props => {
     onPrevPress,
     completeButtonText,
     selectedHouse = setupWizard.selectedHouse,
-    updateHouse,
+    updateHouse = setupWizard.updateHouse,
     navigation,
   } = props;
 
   const addEmailField = useCallback(() => {
-    setFieldValue('guestEmails', [...values.guestEmails, '']);
+    setFieldValue("guestEmails", [...values.guestEmails, ""]);
   }, [values.guestEmails, setFieldValue]);
 
   const getGuestEmailsTouchedValue = useCallback(
@@ -66,17 +66,17 @@ const GuestSetupFormView: React.FC<GuestSetupFormViewProps> = props => {
       }
       return (touchedArray as unknown as Record<number, boolean>)[index];
     },
-    [touched],
+    [touched]
   );
 
   const deleteGuest = useCallback(
     (index: number) => {
       setFieldValue(
-        'guestEmails',
-        values.guestEmails.filter((email, i) => index !== i),
+        "guestEmails",
+        values.guestEmails.filter((email, i) => index !== i)
       );
     },
-    [values.guestEmails, setFieldValue],
+    [values.guestEmails, setFieldValue]
   );
 
   const renderCornerIcon = useCallback(
@@ -93,7 +93,7 @@ const GuestSetupFormView: React.FC<GuestSetupFormViewProps> = props => {
         />
       );
     },
-    [deleteGuest],
+    [deleteGuest]
   );
 
   const renderEmailFields = () => {
@@ -104,7 +104,7 @@ const GuestSetupFormView: React.FC<GuestSetupFormViewProps> = props => {
     return (
       <FieldArray
         name="guestEmails"
-        render={arrayHelpers =>
+        render={(arrayHelpers) =>
           guestEmails.map((email, i) => (
             <Field
               name={`guestEmails.${i}`}
@@ -126,7 +126,7 @@ const GuestSetupFormView: React.FC<GuestSetupFormViewProps> = props => {
 
   const renderAddButton = () => {
     return (
-      <View style={{ justifyContent: 'space-between' }}>
+      <View style={{ justifyContent: "space-between" }}>
         <RatsButton
           title="ADD GUEST"
           onPress={addEmailField}
@@ -148,7 +148,7 @@ const GuestSetupFormView: React.FC<GuestSetupFormViewProps> = props => {
           navigation={navigation}
           rightLabel="Save"
           leftLabel="Cancel"
-          rightButtonContainer={{ ...SAVE_BUTTON, width: '49%' }}
+          rightButtonContainer={{ ...SAVE_BUTTON, width: "49%" }}
           submit={handleSubmit}
           leftPress={onPrevPress}
         />
@@ -162,11 +162,11 @@ const GuestSetupFormView: React.FC<GuestSetupFormViewProps> = props => {
         rightButtonContainer={{
           borderColor: color.green,
           backgroundColor: color.green,
-          width: showPreviousButton ? '48%' : '100%',
+          width: showPreviousButton ? "48%" : "100%",
         }}
         submit={handleSubmit}
         hideLeft={!showPreviousButton}
-        rightLabel={completeButtonText || 'DONE'}
+        rightLabel={completeButtonText || "DONE"}
       />
     );
   };
@@ -186,7 +186,7 @@ const GuestSetupFormView: React.FC<GuestSetupFormViewProps> = props => {
         }
       }
     },
-    [selectedHouse, setupWizard.selectedHouse, updateHouse],
+    [selectedHouse, setupWizard.selectedHouse, updateHouse]
   );
 
   const renderPendingEmails = () => {
@@ -224,7 +224,7 @@ const GuestSetupFormView: React.FC<GuestSetupFormViewProps> = props => {
                   }}
                 />
               );
-            },
+            }
           )}
         </View>
       );
@@ -236,7 +236,8 @@ const GuestSetupFormView: React.FC<GuestSetupFormViewProps> = props => {
       <RatsScrollView contentContainerStyle={SCROLL_CONTAINER}>
         <SetupHeader
           header="Guests"
-          text="Enter the email addresses of your guests to send them each an invite to join the app.">
+          text="Enter the email addresses of your guests to send them each an invite to join the app."
+        >
           {renderPendingEmails()}
           {renderEmailFields()}
           {renderAddButton()}
@@ -255,7 +256,7 @@ interface GuestSetupScreenProps {
     formikBag: FormikBag<
       ManagerSetupProps & GuestSetupScreenProps,
       GuestSetupFormValues
-    >,
+    >
   ) => void;
 }
 
@@ -271,7 +272,7 @@ export const GuestSetupForm = withFormik<
   ManagerSetupProps & GuestSetupScreenProps,
   GuestSetupFormValues
 >({
-  mapPropsToValues: props => initialValues,
+  mapPropsToValues: (props) => initialValues,
   handleSubmit: (values, formikBag) => {
     const { selectedHouse, onSubmit, updateHouse, onNextPress } =
       formikBag.props;
@@ -282,7 +283,7 @@ export const GuestSetupForm = withFormik<
       if (selectedHouse) {
         const houseWithGuestEmails = extractGuestEmails(
           selectedHouse,
-          values.guestEmails,
+          values.guestEmails
         );
         updateHouse?.(houseWithGuestEmails);
         onNextPress?.();
@@ -294,8 +295,8 @@ export const GuestSetupForm = withFormik<
     const errors: Record<string, string> = {};
     each(guestEmails, (email, key) => {
       if (email && email.length && !validateEmail(email)) {
-        if (email !== 'deleted') {
-          errors[`guestEmails.${key}`] = 'Must be a valid email';
+        if (email !== "deleted") {
+          errors[`guestEmails.${key}`] = "Must be a valid email";
         }
       }
     });
@@ -306,10 +307,15 @@ export const GuestSetupForm = withFormik<
 
 export const GuestSetup: React.FC<
   ManagerSetupWithForm & GuestSetupScreenProps
-> = props => {
+> = (props) => {
+  const setupWizard = useHouseSetupWizard();
   return (
     <GuestSetupForm
       {...props}
+      selectedHouse={
+        props.selectedHouse || setupWizard.selectedHouse || undefined
+      }
+      updateHouse={props.updateHouse ?? setupWizard.updateHouse}
       showPreviousButton={
         props.showPreviousButton !== null &&
         props.showPreviousButton !== undefined

@@ -1,12 +1,12 @@
-import React, { Fragment, useState, useCallback, useEffect } from 'react';
+import React, { Fragment, useState, useCallback, useEffect } from "react";
 // Phase 3.3: Migrated from withHouseSetupWizard HOC to useHouseSetupWizard hook
-import { useHouseSetupWizard } from '../../hooks/useHouseSetupWizard';
+import { useHouseSetupWizard } from "../../hooks/useHouseSetupWizard";
 
-import { withFormik, Field, FormikProps } from 'formik';
-import ManagerSetupProps, { ManagerSetupWithForm } from './ManagerSetupEntity';
-import { View } from 'react-native';
-import { renderField, validateEmail } from '../../util/form';
-import RatsTextInput from '../../components/rats-text-input/rats-text-input';
+import { withFormik, Field, FormikProps } from "formik";
+import ManagerSetupProps, { ManagerSetupWithForm } from "./ManagerSetupEntity";
+import { View } from "react-native";
+import { renderField, validateEmail } from "../../util/form";
+import RatsTextInput from "../../components/rats-text-input/rats-text-input";
 import {
   normalize,
   color,
@@ -14,30 +14,29 @@ import {
   SCROLL_CONTAINER,
   STAT_BUTTON_TEXT,
   SAVE_BUTTON,
-} from '../../styles/theme';
-import { cloneDeep, each, isEmpty, size } from 'lodash';
-import RatsRadioButtonGroup from '../../components/rats-radio-button-group';
-import { ActionButton } from '../../components/action-button';
-import RatsButton from '../../components/rats-button/rats-button';
-import RatsScrollView from '../../components/rats-scroll-view';
-import { RatsText } from '../../components/rats-text';
-import { SetupButtons, SetupHeader } from './OperatorSetupWizard';
-import { RatsHR } from '../../components/rats-horizontal-rule';
-import { House } from '../../entities/House';
+} from "../../styles/theme";
+import { cloneDeep, each, isEmpty, size } from "lodash";
+import RatsRadioButtonGroup from "../../components/rats-radio-button-group";
+import { ActionButton } from "../../components/action-button";
+import RatsButton from "../../components/rats-button/rats-button";
+import RatsScrollView from "../../components/rats-scroll-view";
+import { RatsText } from "../../components/rats-text";
+import { SetupButtons, SetupHeader } from "./OperatorSetupWizard";
+import { RatsHR } from "../../components/rats-horizontal-rule";
+import { House } from "../../entities/House";
 
-const labelColor = 'black';
+const labelColor = "black";
 
-const operatorOnlyLabel = 'operator.only.label';
-const seniorPeerLabel = 'senior.peer.label';
-const externalManagersLabel = 'external.managers.label';
+const operatorOnlyLabel = "operator.only.label";
+const seniorPeerLabel = "senior.peer.label";
+const externalManagersLabel = "external.managers.label";
 const democraticLabel =
-  'This home will be democratically run by the guests. (Coming soon)';
+  "This home will be democratically run by the guests. (Coming soon)";
 
 type ManagerSetupFormViewProps = ManagerSetupWithForm &
   FormikProps<ManagerSetupFormValues>;
 
-const ManagerSetupFormView: React.FC<ManagerSetupFormViewProps> = props => {
-  const setupWizard = useHouseSetupWizard();
+const ManagerSetupFormView: React.FC<ManagerSetupFormViewProps> = (props) => {
   const {
     values,
     setFieldValue,
@@ -53,21 +52,21 @@ const ManagerSetupFormView: React.FC<ManagerSetupFormViewProps> = props => {
 
   const managerIsRequired = useCallback(() => {
     return (
-      values.managerSetupType === 'external-managers' ||
-      values.managerSetupType === 'senior-peer'
+      values.managerSetupType === "external-managers" ||
+      values.managerSetupType === "senior-peer"
     );
   }, [values.managerSetupType]);
 
   useEffect(() => {
     if (managerIsRequired()) {
       setManagerEmailCount(1);
-      setFieldValue('managerEmails', { manager_0: '' });
+      setFieldValue("managerEmails", { manager_0: "" });
     }
   }, [values.managerSetupType]);
 
   const addEmailField = useCallback(() => {
     const count = size(values.managerEmails);
-    setFieldValue(`managerEmails.manager_${count}`, '');
+    setFieldValue(`managerEmails.manager_${count}`, "");
   }, [values.managerEmails, setFieldValue]);
 
   const getManagerEmailsTouchedValue = useCallback(
@@ -78,22 +77,22 @@ const ManagerSetupFormView: React.FC<ManagerSetupFormViewProps> = props => {
         touched.managerEmails[`manager_${index}`]
       );
     },
-    [touched],
+    [touched]
   );
 
   const deleteManager = useCallback(
     (index: number) => {
       const emails = cloneDeep(values.managerEmails);
-      delete emails['manager_' + index];
+      delete emails["manager_" + index];
       const managerEmails: Record<string, string> = {};
       let i = 0;
       each(emails, (email, key) => {
         managerEmails[`manager_${i}`] = email;
         i++;
       });
-      setFieldValue('managerEmails', managerEmails);
+      setFieldValue("managerEmails", managerEmails);
     },
-    [values.managerEmails, setFieldValue],
+    [values.managerEmails, setFieldValue]
   );
 
   const renderCornerIcon = useCallback(
@@ -110,25 +109,25 @@ const ManagerSetupFormView: React.FC<ManagerSetupFormViewProps> = props => {
         />
       );
     },
-    [deleteManager],
+    [deleteManager]
   );
 
   const renderEmailFields = () => {
     if (managerIsRequired()) {
-      const seniorPeer = values.managerSetupType === 'senior-peer';
+      const seniorPeer = values.managerSetupType === "senior-peer";
       const managerEmailFields: JSX.Element[] = [];
       each(values.managerEmails, (email, key) => {
-        const result = key.substring(key.indexOf('_') + 1, key.length);
+        const result = key.substring(key.indexOf("_") + 1, key.length);
         const index = parseInt(result);
         managerEmailFields.push(
           <Fragment key={key}>
             {renderField(
               `managerEmails.${key}`,
-              'Email',
+              "Email",
               RatsTextInput,
               false,
-              'Email',
-              'string',
+              "Email",
+              "string",
               labelColor,
               undefined,
               getManagerEmailsTouchedValue(index),
@@ -138,9 +137,9 @@ const ManagerSetupFormView: React.FC<ManagerSetupFormViewProps> = props => {
               true,
               false,
               () => deleteManager(index),
-              'none',
+              "none"
             )}
-          </Fragment>,
+          </Fragment>
         );
       });
       return (
@@ -149,12 +148,12 @@ const ManagerSetupFormView: React.FC<ManagerSetupFormViewProps> = props => {
             style={{ borderBottomWidth: 1, marginBottom: normalize(10) }}
           />
           <RatsText
-            text={seniorPeer ? 'Senior peers' : 'Managers'}
+            text={seniorPeer ? "Senior peers" : "Managers"}
             style={{ fontSize: fontSize.large, marginVertical: normalize(10) }}
           />
           {managerEmailFields}
           <RatsButton
-            title={seniorPeer ? 'ADD SENIOR PEER' : 'ADD MANAGER'}
+            title={seniorPeer ? "ADD SENIOR PEER" : "ADD MANAGER"}
             onPress={addEmailField}
             light
             style={STAT_BUTTON_TEXT}
@@ -170,11 +169,11 @@ const ManagerSetupFormView: React.FC<ManagerSetupFormViewProps> = props => {
       <SetupButtons
         navigation={navigation}
         rightButtonContainer={
-          forSettings ? { ...SAVE_BUTTON, width: '49%' } : {}
+          forSettings ? { ...SAVE_BUTTON, width: "49%" } : {}
         }
-        leftLabel={forSettings ? 'Cancel' : 'Back'}
+        leftLabel={forSettings ? "Cancel" : "Back"}
         leftPress={onPrevPress}
-        rightLabel={forSettings ? 'Save' : 'Next'}
+        rightLabel={forSettings ? "Save" : "Next"}
         submit={handleSubmit}
       />
     );
@@ -188,7 +187,8 @@ const ManagerSetupFormView: React.FC<ManagerSetupFormViewProps> = props => {
       <RatsScrollView contentContainerStyle={SCROLL_CONTAINER}>
         <SetupHeader
           header="Managers"
-          text="This application assumes that there is a person in charge of the house who oversees its operation at some level. You will be able to assign managerial privileges to guests if necessary.">
+          text="This application assumes that there is a person in charge of the house who oversees its operation at some level. You will be able to assign managerial privileges to guests if necessary."
+        >
           <View>
             <Field
               component={RatsRadioButtonGroup}
@@ -197,11 +197,11 @@ const ManagerSetupFormView: React.FC<ManagerSetupFormViewProps> = props => {
               selectedButtonColor={color.black}
               wrapStyle={{ marginHorizontal: 0 }}
               radioButtons={[
-                { label: operatorOnlyLabel, value: 'operator-only' },
-                { label: externalManagersLabel, value: 'external-managers' },
+                { label: operatorOnlyLabel, value: "operator-only" },
+                { label: externalManagersLabel, value: "external-managers" },
                 {
                   label: democraticLabel,
-                  value: 'democratic',
+                  value: "democratic",
                   disabled: true,
                 },
               ]}
@@ -210,7 +210,7 @@ const ManagerSetupFormView: React.FC<ManagerSetupFormViewProps> = props => {
               <RatsText
                 text={managerSetupTypeError}
                 style={{
-                  alignSelf: 'center' as const,
+                  alignSelf: "center" as const,
                   color: color.red,
                   fontSize: fontSize.medium,
                 }}
@@ -221,7 +221,7 @@ const ManagerSetupFormView: React.FC<ManagerSetupFormViewProps> = props => {
               <RatsText
                 text={managerRequiredError}
                 style={{
-                  alignSelf: 'center' as const,
+                  alignSelf: "center" as const,
                   color: color.red,
                   fontSize: fontSize.medium,
                 }}
@@ -238,28 +238,28 @@ const ManagerSetupFormView: React.FC<ManagerSetupFormViewProps> = props => {
 };
 
 interface ManagerSetupFormValues {
-  managerSetupType: 'operator-only' | 'senior-peer' | 'external-managers';
+  managerSetupType: "operator-only" | "senior-peer" | "external-managers";
   managerEmails: { [key: string]: string };
 }
 
 const initialValues: ManagerSetupFormValues = {
-  managerSetupType: 'operator-only',
+  managerSetupType: "operator-only",
   managerEmails: {},
 };
 
 const ManagerSetupForm = withFormik<ManagerSetupProps, ManagerSetupFormValues>({
   mapPropsToValues: ({ selectedHouse }) => {
     let managerEmails: Record<string, string> = {};
-    const emailField = 'pendingAdminInvites';
+    const emailField = "pendingAdminInvites";
     if (selectedHouse?.pendingAdminInvites) {
       selectedHouse.pendingAdminInvites.forEach((email, index) => {
         managerEmails[`manager_${index}`] = email;
       });
     }
-    const managerSetupType = selectedHouse?.managerSetupType ?? 'operator-only';
+    const managerSetupType = selectedHouse?.managerSetupType ?? "operator-only";
     // Filter out 'democratic' as it's not supported yet
-    const validType: 'operator-only' | 'senior-peer' | 'external-managers' =
-      managerSetupType === 'democratic' ? 'operator-only' : managerSetupType;
+    const validType: "operator-only" | "senior-peer" | "external-managers" =
+      managerSetupType === "democratic" ? "operator-only" : managerSetupType;
     return {
       managerEmails,
       managerSetupType: validType,
@@ -271,14 +271,14 @@ const ManagerSetupForm = withFormik<ManagerSetupProps, ManagerSetupFormValues>({
     if (!selectedHouse) return;
 
     const houseWithManagers = cloneDeep(selectedHouse) as House;
-    const emailAttribute = 'pendingAdminInvites';
+    const emailAttribute = "pendingAdminInvites";
     // map attributes to house
     houseWithManagers.pendingAdminInvites = [];
     houseWithManagers.pendingGuestInvites = [];
     houseWithManagers.seniorPeerEmails = [];
     houseWithManagers.managerSetupType = values.managerSetupType;
-    each(values.managerEmails, email => {
-      if (email && email.length && email !== 'deleted') {
+    each(values.managerEmails, (email) => {
+      if (email && email.length && email !== "deleted") {
         houseWithManagers.pendingAdminInvites?.push(email.trim());
       }
     });
@@ -293,25 +293,25 @@ const ManagerSetupForm = withFormik<ManagerSetupProps, ManagerSetupFormValues>({
     const { managerSetupType, managerEmails } = values;
     const errors: Record<string, string> = {};
     if (!managerSetupType) {
-      errors.managerSetupType = 'Please select an option';
+      errors.managerSetupType = "Please select an option";
     }
     if (
-      managerSetupType === 'senior-peer' ||
-      managerSetupType === 'external-managers'
+      managerSetupType === "senior-peer" ||
+      managerSetupType === "external-managers"
     ) {
       if (isEmpty(managerEmails)) {
-        errors.managerRequired = 'Please enter at least one email';
+        errors.managerRequired = "Please enter at least one email";
       }
       each(managerEmails, (email, key) => {
         if (!email || email.length === 0) {
-          errors[`managerEmails.${key}`] = 'Must be a valid email';
+          errors[`managerEmails.${key}`] = "Must be a valid email";
         }
         if (
           email &&
-          email !== 'deleted' &&
-          !validateEmail(email?.trim() ?? '')
+          email !== "deleted" &&
+          !validateEmail(email?.trim() ?? "")
         ) {
-          errors[`managerEmails.${key}`] = 'Must be a valid email';
+          errors[`managerEmails.${key}`] = "Must be a valid email";
         }
       });
     }
@@ -320,8 +320,17 @@ const ManagerSetupForm = withFormik<ManagerSetupProps, ManagerSetupFormValues>({
   //@ts-ignore
 })(ManagerSetupFormView);
 
-export const ManagerSetup: React.FC<ManagerSetupWithForm> = props => {
-  return <ManagerSetupForm {...props} />;
+export const ManagerSetup: React.FC<ManagerSetupWithForm> = (props) => {
+  const setupWizard = useHouseSetupWizard();
+  return (
+    <ManagerSetupForm
+      {...props}
+      selectedHouse={
+        props.selectedHouse || setupWizard.selectedHouse || undefined
+      }
+      updateHouse={props.updateHouse ?? setupWizard.updateHouse}
+    />
+  );
 };
 
 export default ManagerSetup;

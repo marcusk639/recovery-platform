@@ -1,39 +1,40 @@
-import { firestore, functions } from '../../firebase-setup';
-import { houseCollection } from './house';
-import { Houses } from '../types';
-import { cloneDeep, each, map } from 'lodash';
-import { User } from '../entities/User';
-import { getInitialPhase } from '../util/house';
-import { createInvitation, CreateInvitationResult } from './invitations';
-import { adminCollection, getAdmin } from './admin';
-import Admin from '../entities/Admin';
-import '@react-native-firebase/firestore';
-import { uploadHousePhoto } from './storage';
-import { logException } from '../util/logging';
-import { refreshClaims, getAuthUser } from './users';
-import { Guest } from '../entities/Guest';
-import { updateSubscriptionHouses } from './subscription';
-import { geohash } from '../util/geolocation';
-import { asyncForEach } from '../util/forEach';
-import { getTimezone } from '../../google/timezone';
-import { House } from '../entities/House';
+import { firestore, functions } from "../../firebase-setup";
+import { houseCollection } from "./house";
+import { Houses } from "../types";
+import { cloneDeep, each, map } from "lodash";
+import { User } from "../entities/User";
+import { getInitialPhase } from "../util/house";
+import { createInvitation, CreateInvitationResult } from "./invitations";
+import { adminCollection, getAdmin } from "./admin";
+import { userCollection } from "./users";
+import Admin from "../entities/Admin";
+import "@react-native-firebase/firestore";
+import { uploadHousePhoto } from "./storage";
+import { logException } from "../util/logging";
+import { refreshClaims, getAuthUser } from "./users";
+import { Guest } from "../entities/Guest";
+import { updateSubscriptionHouses } from "./subscription";
+import { geohash } from "../util/geolocation";
+import { asyncForEach } from "../util/forEach";
+import { getTimezone } from "../../google/timezone";
+import { House } from "../entities/House";
 
 export async function addPotentialSuperAdminPrivilege() {
-  return functions.httpsCallable('givePotentialSuperAdminPrivilege');
+  return functions.httpsCallable("givePotentialSuperAdminPrivilege");
 }
 
 export async function addAdminAuthorization(admin: Admin) {
-  const result = await functions.httpsCallable('addAdminAuthorization')(admin);
+  const result = await functions.httpsCallable("addAdminAuthorization")(admin);
   if (!result.data) {
-    throw { message: 'Something went wrong.' };
+    throw { message: "Something went wrong." };
   }
   return refreshClaims();
 }
 
 export async function addGuestAuthorization(guest: Guest) {
-  const result = await functions.httpsCallable('addGuestAuthorization')(guest);
+  const result = await functions.httpsCallable("addGuestAuthorization")(guest);
   if (!result.data) {
-    throw { message: 'Something went wrong' };
+    throw { message: "Something went wrong" };
   }
   return refreshClaims();
 }
@@ -43,44 +44,44 @@ export async function sendAllInvites(
   _operator: User,
   guest: boolean = true,
   admin: boolean = true,
-  seniorPeer: boolean = true,
+  seniorPeer: boolean = true
 ): Promise<CreateInvitationResult[]> {
   const calls: Promise<CreateInvitationResult>[] = [];
-  each(houses, house => {
+  each(houses, (house) => {
     const initialPhase = getInitialPhase(house);
     if (house.pendingAdminInvites && admin) {
-      house.pendingAdminInvites.forEach(email => {
+      house.pendingAdminInvites.forEach((email) => {
         calls.push(
           createInvitation({
             email,
             houseId: house.id,
-            role: 'admin',
+            role: "admin",
             initialPhase: initialPhase?.name,
-          }),
+          })
         );
       });
     }
     if (house.pendingGuestInvites && guest) {
-      house.pendingGuestInvites.forEach(email => {
+      house.pendingGuestInvites.forEach((email) => {
         calls.push(
           createInvitation({
             email,
             houseId: house.id,
-            role: 'guest',
+            role: "guest",
             initialPhase: initialPhase?.name,
-          }),
+          })
         );
       });
     }
     if (house.seniorPeerEmails && seniorPeer) {
-      house.seniorPeerEmails.forEach(email => {
+      house.seniorPeerEmails.forEach((email) => {
         calls.push(
           createInvitation({
             email,
             houseId: house.id,
-            role: 'senior-peer',
+            role: "senior-peer",
             initialPhase: initialPhase?.name,
-          }),
+          })
         );
       });
     }
@@ -95,12 +96,12 @@ export async function sendAllInvites(
  */
 export const createAdminInvite = (
   adminEmail: string,
-  houseId: string,
+  houseId: string
 ): Promise<CreateInvitationResult> => {
   return createInvitation({
     email: adminEmail,
     houseId,
-    role: 'admin',
+    role: "admin",
   });
 };
 
@@ -112,21 +113,21 @@ export const createAdminInvite = (
 export const createGuestInvite = (
   guestEmail: string,
   houseId: string,
-  initialPhaseName: string,
+  initialPhaseName: string
 ): Promise<CreateInvitationResult> => {
   return createInvitation({
     email: guestEmail,
     houseId,
-    role: 'guest',
+    role: "guest",
     initialPhase: initialPhaseName,
   });
 };
 
 export const uploadHousePhotos = async (
-  houses: Houses,
+  houses: Houses
 ): Promise<{ houseId: string; url: string }[]> => {
   const promises: Promise<{ houseId: string; url: string }>[] = [];
-  each(houses, house => {
+  each(houses, (house) => {
     if (house.imageUrl) {
       const photo = uploadHousePhoto(house.imageUrl, house);
       promises.push(photo);
@@ -138,7 +139,7 @@ export const uploadHousePhotos = async (
 export async function initializeHouses(
   houses: Houses,
   _operator: User,
-  inApp: boolean = false,
+  inApp: boolean = false
 ) {
   const batch = firestore.batch();
   const operator = cloneDeep(_operator);
@@ -154,21 +155,21 @@ export async function initializeHouses(
       operator.email.toLowerCase(),
       operator.firstName,
       operator.lastName,
-      operator.uid,
+      operator.uid
     );
     adminDoc = adminCollection.doc();
     operatorAdmin.id = adminDoc.id;
     operator.adminId = operatorAdmin.id;
   }
   // if (!operatorAdmin.houseIds)
-  operatorAdmin.houseIds.push(...map(houses, house => house.id));
+  operatorAdmin.houseIds.push(...map(houses, (house) => house.id));
   if (
-    typeof operatorAdmin.superAdmin === 'boolean' ||
+    typeof operatorAdmin.superAdmin === "boolean" ||
     !operatorAdmin.superAdmin
   ) {
     operatorAdmin.superAdmin = [];
   }
-  operatorAdmin.superAdmin.push(...map(houses, house => house.id));
+  operatorAdmin.superAdmin.push(...map(houses, (house) => house.id));
   // NOTE: addAdminAuthorization is intentionally deferred to AFTER batch.commit().
   // The CF (post-S2 hardening, regroup-functions commit bb31845) fetches
   // houses/{id} to verify ownership and rejects with not-found if the house
@@ -183,10 +184,10 @@ export async function initializeHouses(
     house.adminIds.push(operatorAdmin.id!);
     house.superAdminIds.push(operatorAdmin.id!);
     house.pendingAdminInvites!.push(
-      ...Array.from(new Set(house.pendingAdminInvites)),
+      ...Array.from(new Set(house.pendingAdminInvites))
     );
     house.pendingGuestInvites!.push(
-      ...Array.from(new Set(house.pendingGuestInvites)),
+      ...Array.from(new Set(house.pendingGuestInvites))
     );
     house.geohash = geohash(house.lat, house.lng);
     house.timezone = await getTimezone(house.lat, house.lng);
@@ -201,7 +202,7 @@ export async function initializeHouses(
 
   try {
     const houseUrls = await uploadHousePhotos(houses);
-    houseUrls.forEach(houseUrl => {
+    houseUrls.forEach((houseUrl) => {
       houses[houseUrl.houseId].imageUrl = houseUrl.url;
       houses[houseUrl.houseId].avatar = houseUrl.url;
     });
@@ -209,11 +210,28 @@ export async function initializeHouses(
     logException(error);
   }
 
-  newHouseDocs.forEach(doc => batch.set(doc, houses[doc.id]));
+  newHouseDocs.forEach((doc) => batch.set(doc, houses[doc.id]));
 
   operator.orgSetupCompleted = true;
   operator.isAdmin = true;
   operator.isSuperAdmin = true;
+
+  // Hardened 2026-07-05: this function computed all the right operator
+  // fields (orgSetupCompleted/isAdmin/isSuperAdmin/adminId/housesOwned) but
+  // never wrote them to the user's Firestore doc — only the admin doc and
+  // house docs were batched. Every new operator therefore looked like they
+  // still needed to complete org setup on next login. Included in the same
+  // atomic batch as the admin/house writes since it depends on nothing that
+  // is only known post-commit (unlike the claim grant and invites below).
+  if (operator.id) {
+    batch.update(userCollection.doc(operator.id), {
+      orgSetupCompleted: operator.orgSetupCompleted,
+      isAdmin: operator.isAdmin,
+      isSuperAdmin: operator.isSuperAdmin,
+      adminId: operator.adminId,
+      housesOwned: operator.housesOwned,
+    });
+  }
 
   let inviteError;
 
@@ -238,7 +256,7 @@ export async function initializeHouses(
       ownerUserId: operator.id!,
       houseIds: houseIds,
       amountToAdjust: houseIds.length,
-      action: 'add',
+      action: "add",
     });
     return {
       houses,
@@ -249,6 +267,6 @@ export async function initializeHouses(
     };
   } catch (error) {
     logException(error);
-    throw new Error('Failed to create houses.');
+    throw new Error("Failed to create houses.");
   }
 }
