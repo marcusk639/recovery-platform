@@ -1,37 +1,37 @@
-import React from 'react';
-import { withFormik } from 'formik';
-import * as yup from 'yup';
-import { cloneDeep } from 'lodash';
-import { useAppSelector, useAppDispatch } from '../../state/store';
+import React from "react";
+import { withFormik } from "formik";
+import * as yup from "yup";
+import { cloneDeep } from "lodash";
+import { useAppSelector, useAppDispatch } from "../../state/store";
 import {
   createUser as createUserRTK,
   updateUser as updateUserRTK,
-} from '../../state/slices/userSlice';
-import { useCreateGuest } from '../../state/queries/guestQueries';
-import { useCreateAdmin } from '../../state/queries/adminQueries';
-import SignUpFormView from './SignUpFormView';
-import { User } from '../../entities/User';
+} from "../../state/slices/userSlice";
+import { useCreateGuest } from "../../state/queries/guestQueries";
+import { useCreateAdmin } from "../../state/queries/adminQueries";
+import SignUpFormView from "./SignUpFormView";
+import { User } from "../../entities/User";
 import {
   AuthScreenNavigationProp,
   AuthStackParamList,
   Routes,
-} from '../../navigation/types';
-import { navigateAuthStackRoute } from '../../navigation/authNavigation';
-import { Invitation } from '../../entities/Invite';
-import { Guest } from '../../entities/Guest';
-import { mapUserToGuest } from '../../util/guest';
-import { Role } from '../../entities/Roles';
-import { mapValuesToUser } from '../../util/user';
-import { mapUserToAdmin } from '../../util/admin';
-import Admin from '../../entities/Admin';
-import { checkPasswordReqs } from '../../services/password';
-import { logException } from '../../util/logging';
+} from "../../navigation/types";
+import { navigateAuthStackRoute } from "../../navigation/authNavigation";
+import { Invitation } from "../../entities/Invite";
+import { Guest } from "../../entities/Guest";
+import { mapUserToGuest } from "../../util/guest";
+import { Role } from "../../entities/Roles";
+import { mapValuesToUser } from "../../util/user";
+import { mapUserToAdmin } from "../../util/admin";
+import Admin from "../../entities/Admin";
+import { checkPasswordReqs } from "../../services/password";
+import { logException } from "../../util/logging";
 import {
   addAdminAuthorization,
   addGuestAuthorization,
-} from '../../services/setup-wizard';
-import { redeemInvitation } from '../../services/invitations';
-import { updateSubscriptionGuests } from '../../services/subscription';
+} from "../../services/setup-wizard";
+import { redeemInvitation } from "../../services/invitations";
+import { updateSubscriptionGuests } from "../../services/subscription";
 
 export interface SignUpFormProps {
   createUser: (user: User) => any;
@@ -50,36 +50,37 @@ export interface SignUpFormProps {
   setSubmittingForm: (submitting: boolean) => void;
 }
 
-export type SignUpFormValues = Partial<User> & { password: string };
+export type SignUpFormValues = Partial<User> & {
+  password: string;
+  confirmPassword: string;
+  termsOfService: boolean;
+};
 
 const handleUserInvitation = (
   newUser: Partial<User>,
-  invitation: Invitation,
+  invitation: Invitation
 ) => {
   if (invitation) {
     // we don't need to verify user email if this is an invitation
     newUser.email = invitation.email;
-    if (invitation.type === 'guest' || invitation.type === 'senior-peer') {
+    if (invitation.type === "guest" || invitation.type === "senior-peer") {
       newUser.houseId = invitation.houseId;
       newUser.isGuest = true;
     }
-    if (invitation.type === 'admin' || invitation.type === 'senior-peer') {
+    if (invitation.type === "admin" || invitation.type === "senior-peer") {
       newUser.isAdmin = true;
     }
   }
 };
 
-const SignUpForm = withFormik<
-  SignUpFormProps,
-  Partial<User> & { password: string }
->({
-  mapPropsToValues: props => ({
+const SignUpForm = withFormik<SignUpFormProps, SignUpFormValues>({
+  mapPropsToValues: (props) => ({
     email: props.invitation && props.invitation.email,
-    password: '',
-    confirmPassword: '',
+    password: "",
+    confirmPassword: "",
     termsOfService: false,
-    firstName: '',
-    lastName: '',
+    firstName: "",
+    lastName: "",
   }),
   handleSubmit: async (values, { props, setSubmitting }) => {
     const {
@@ -103,17 +104,17 @@ const SignUpForm = withFormik<
     } catch (error: any) {
       logException(error);
       props.setError(
-        error?.message || error?.nativeErrorMessage || 'Failed to create user',
+        error?.message || error?.nativeErrorMessage || "Failed to create user"
       );
       setSubmittingForm(false);
       return;
     }
     if (
       invitation &&
-      (invitation.type === 'guest' || invitation.type === 'senior-peer')
+      (invitation.type === "guest" || invitation.type === "senior-peer")
     ) {
       const newGuest = mapUserToGuest(createdUser, new Guest());
-      newGuest.isAdmin = invitation.type === 'senior-peer';
+      newGuest.isAdmin = invitation.type === "senior-peer";
       newGuest.phase = invitation.initialPhase;
       try {
         if (invitation.token) {
@@ -126,17 +127,17 @@ const SignUpForm = withFormik<
         }
 
         // Add a small delay to ensure custom claims are propagated
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, 1000));
 
         // Refresh the auth token to ensure we have the latest claims
-        const { getAuthUser } = require('../../services/users');
+        const { getAuthUser } = require("../../services/users");
         await getAuthUser(true);
       } catch (error: any) {
         logException(error);
         props.setError(
           error?.message ||
             error?.nativeErrorMessage ||
-            'Failed to add guest authorization',
+            "Failed to add guest authorization"
         );
         setSubmittingForm(false);
         return; // Don't proceed with guest creation if authorization failed
@@ -153,7 +154,7 @@ const SignUpForm = withFormik<
           updateSubscriptionGuests({
             houseIds: [invitation.houseId],
             ownerUserId: invitation.ownerId,
-            action: 'add',
+            action: "add",
           }),
         ]);
         props.navigation.navigate(Routes.NewAccount);
@@ -165,16 +166,16 @@ const SignUpForm = withFormik<
         props.setError(
           error?.message ||
             error?.nativeErrorMessage ||
-            'Failed to create guest account',
+            "Failed to create guest account"
         );
         setSubmittingForm(false);
         return;
       }
     }
-    if (invitation && invitation.type === 'admin') {
+    if (invitation && invitation.type === "admin") {
       const mappedAdmin = mapUserToAdmin(
         createdUser,
-        new Admin(createdUser.email),
+        new Admin(createdUser.email)
       );
       // Immutable add — avoid mutating the object returned by mapUserToAdmin
       // in case that result is ever memoized / cached.
@@ -193,17 +194,17 @@ const SignUpForm = withFormik<
         }
 
         // Add a small delay to ensure custom claims are propagated
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, 1000));
 
         // Refresh the auth token to ensure we have the latest claims
-        const { getAuthUser } = require('../../services/users');
+        const { getAuthUser } = require("../../services/users");
         await getAuthUser(true);
       } catch (error: any) {
         logException(error);
         props.setError(
           error?.message ||
             error?.nativeErrorMessage ||
-            'Failed to add admin authorization',
+            "Failed to add admin authorization"
         );
         setSubmittingForm(false);
         return; // Don't proceed with admin creation if authorization failed
@@ -223,7 +224,7 @@ const SignUpForm = withFormik<
         props.setError(
           error?.message ||
             error?.nativeErrorMessage ||
-            'Failed to create admin account',
+            "Failed to create admin account"
         );
         setSubmittingForm(false);
         return;
@@ -242,12 +243,22 @@ const SignUpForm = withFormik<
   validate: (values, props) => {
     let errors: Record<string, string> = {};
     checkPasswordReqs(values.password, errors);
-    if (props.signUpRole === 'admin') {
+    // Hardened 2026-07-05: confirmPassword and termsOfService were seeded in
+    // form state and rendered (confirmPassword field, ToS checkbox) but
+    // never validated — signup could submit with a mismatched confirmation
+    // or with no affirmative terms acceptance at all.
+    if (values.password !== values.confirmPassword) {
+      errors.confirmPassword = "Passwords do not match";
+    }
+    if (!values.termsOfService) {
+      errors.termsOfService = "You must agree to the Terms of Service";
+    }
+    if (props.signUpRole === "admin") {
       if (!values.firstName || values.firstName.length === 0) {
-        errors.firstName = 'Required';
+        errors.firstName = "Required";
       }
       if (!values.lastName || values.lastName.length === 0) {
-        errors.lastName = 'Required';
+        errors.lastName = "Required";
       }
     }
     return errors;
@@ -265,11 +276,11 @@ const SignUpForm = withFormik<
  * - Updated Props interface to use generic function types
  * - Removed spread of old actions, now passes RTK thunks directly
  */
-const SignUpFormWrapper: React.FC<any> = props => {
+const SignUpFormWrapper: React.FC<any> = (props) => {
   const dispatch = useAppDispatch();
-  const user = useAppSelector(state => state.user.user);
-  const invitation = useAppSelector(state => state.user.invitation);
-  const signUpRole = useAppSelector(state => state.user.signUpRole);
+  const user = useAppSelector((state) => state.user.user);
+  const invitation = useAppSelector((state) => state.user.invitation);
+  const signUpRole = useAppSelector((state) => state.user.signUpRole);
   const { mutateAsync: createGuest } = useCreateGuest();
   const { mutateAsync: createAdmin } = useCreateAdmin();
 
@@ -282,7 +293,12 @@ const SignUpFormWrapper: React.FC<any> = props => {
       createUser={(user: User) => dispatch(createUserRTK(user))}
       createGuest={(guest: Guest) => createGuest(guest)}
       updateUser={(user: User, values: Partial<User>) =>
-        dispatch(updateUserRTK({ user, updates: values }))
+        // Hardened 2026-07-05: without .unwrap(), dispatch(thunk) always
+        // resolves (even on failure, to a "rejected" action object) instead
+        // of rejecting — so a failed user update inside the surrounding
+        // Promise.all/try-catch was silently swallowed and the signup flow
+        // proceeded to navigate as if it had succeeded.
+        dispatch(updateUserRTK({ user, updates: values })).unwrap()
       }
       createAdmin={(admin: Admin) => createAdmin(admin)}
     />

@@ -1,36 +1,36 @@
-import React from 'react';
-import { FormikProps, withFormik } from 'formik';
-import { useAppSelector, useAppDispatch } from '../../state/store';
-import { updateUser as updateUserRTK } from '../../state/slices/userSlice';
-import { useUpdateGuest } from '../../state/queries/guestQueries';
-import { useQueryClient } from '@tanstack/react-query';
-import { guestKeys } from '../../state/queries/guestQueries';
-import { useSelectedGuest } from '../../hooks/useSelectedGuest';
-import { cloneDeep, isEmpty } from 'lodash';
-import NewAccountFormView from './NewAccountFormView';
-import { User } from '../../entities/User';
-import { newAccountSchema } from './NewAccountSchema';
-import { Guest } from '../../entities/Guest';
-import { mapUserToGuest } from '../../util/guest';
-import { Invitation } from '../../entities/Invite';
-import { Alert } from 'react-native';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Routes, AuthScreenNavigationProp } from '../../navigation/types';
-import { navigateToMainTab } from '../../navigation/authNavigation';
-import { logDebug, logError } from '../../util/simple-debug-logger';
-import { ComponentType } from 'react';
+import React from "react";
+import { FormikProps, withFormik } from "formik";
+import { useAppSelector, useAppDispatch } from "../../state/store";
+import { updateUser as updateUserRTK } from "../../state/slices/userSlice";
+import { useUpdateGuest } from "../../state/queries/guestQueries";
+import { useQueryClient } from "@tanstack/react-query";
+import { guestKeys } from "../../state/queries/guestQueries";
+import { useSelectedGuest } from "../../hooks/useSelectedGuest";
+import { cloneDeep, isEmpty } from "lodash";
+import NewAccountFormView from "./NewAccountFormView";
+import { User } from "../../entities/User";
+import { newAccountSchema } from "./NewAccountSchema";
+import { Guest } from "../../entities/Guest";
+import { mapUserToGuest } from "../../util/guest";
+import { Invitation } from "../../entities/Invite";
+import { Alert } from "react-native";
+import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { Routes, AuthScreenNavigationProp } from "../../navigation/types";
+import { navigateToMainTab } from "../../navigation/authNavigation";
+import { logDebug, logError } from "../../util/simple-debug-logger";
+import { ComponentType } from "react";
 
 export const initialValues: Partial<User> = {
-  firstName: '',
-  lastName: '',
-  middleInitial: '',
-  phoneNumber: '',
-  gender: 'male',
-  ethnicity: '',
-  dateOfBirth: '',
-  ssn: '',
-  maritalStatus: 'single',
-  housingStatus: 'homeowner',
+  firstName: "",
+  lastName: "",
+  middleInitial: "",
+  phoneNumber: "",
+  gender: "male",
+  ethnicity: "",
+  dateOfBirth: "",
+  ssn: "",
+  maritalStatus: "single",
+  housingStatus: "homeowner",
   infoEntered: true,
 };
 
@@ -67,21 +67,21 @@ const NewAccountForm = withFormik<NewAccountFormProps, Partial<User>>({
     try {
       let selectedGuest =
         guest && !isEmpty(guest) ? guest : await getGuest(user.guestId);
-      values.guestId = selectedGuest ? selectedGuest.id : '';
+      values.guestId = selectedGuest ? selectedGuest.id : "";
       values.infoEntered = true;
       const updatedUser = await updateUser(user, values);
-      logDebug('NewAccountForm - updatedUser after updateUser:', updatedUser);
-      logDebug('NewAccountForm - updatedUser.isGuest:', updatedUser?.isGuest);
+      logDebug("NewAccountForm - updatedUser after updateUser:", updatedUser);
+      logDebug("NewAccountForm - updatedUser.isGuest:", updatedUser?.isGuest);
       logDebug(
-        'NewAccountForm - updatedUser.infoEntered:',
-        updatedUser?.infoEntered,
+        "NewAccountForm - updatedUser.infoEntered:",
+        updatedUser?.infoEntered
       );
-      logDebug('NewAccountForm - updatedUser.guestId:', updatedUser?.guestId);
+      logDebug("NewAccountForm - updatedUser.guestId:", updatedUser?.guestId);
 
       if (user.isGuest) {
         const updatedGuest = mapUserToGuest(
           updatedUser as User,
-          cloneDeep(selectedGuest as Guest),
+          cloneDeep(selectedGuest as Guest)
         );
         // Await the updateGuest action - it now returns the updated guest
         // This ensures Redux state is fully updated before navigation
@@ -91,7 +91,7 @@ const NewAccountForm = withFormik<NewAccountFormProps, Partial<User>>({
 
       // After successful form submission, navigate to the main app
       // This navigation happens after all state updates are complete
-      logDebug('NewAccountForm - Form submission completed, user updated:', {
+      logDebug("NewAccountForm - Form submission completed, user updated:", {
         isGuest: updatedUser!.isGuest,
         isAdmin: updatedUser!.isAdmin,
         infoEntered: updatedUser!.infoEntered,
@@ -101,7 +101,7 @@ const NewAccountForm = withFormik<NewAccountFormProps, Partial<User>>({
       // to prevent App.tsx from remounting the navigator and resetting navigation
       navigateToMainTab(
         props.navigation,
-        updatedUser?.isGuest ? Routes.Guest : Routes.House,
+        updatedUser?.isGuest ? Routes.Guest : Routes.House
       );
 
       // The navigation will be handled by the App component's re-render
@@ -109,7 +109,7 @@ const NewAccountForm = withFormik<NewAccountFormProps, Partial<User>>({
     } catch (error) {
       setSubmitting(false);
       setStatus({ failed: true });
-      logError('NewAccountForm - error:', error);
+      logError("NewAccountForm - error:", error);
       // Alert.alert('Something went wrong. Please try again later.');
     }
   },
@@ -126,10 +126,10 @@ const NewAccountForm = withFormik<NewAccountFormProps, Partial<User>>({
  * - Updated Props interface to use generic function types
  * - Removed spread of old actions, now passes RTK thunks directly
  */
-const NewAccountFormWrapper: React.FC<any> = props => {
+const NewAccountFormWrapper: React.FC<any> = (props) => {
   const dispatch = useAppDispatch();
-  const user = useAppSelector(state => state.user.user);
-  const invitation = useAppSelector(state => state.user.invitation);
+  const user = useAppSelector((state) => state.user.user);
+  const invitation = useAppSelector((state) => state.user.invitation);
   const { guest } = useSelectedGuest();
   const { mutateAsync: updateGuestMutation } = useUpdateGuest();
   const queryClient = useQueryClient();
@@ -141,7 +141,13 @@ const NewAccountFormWrapper: React.FC<any> = props => {
       invitation={invitation}
       guest={guest}
       updateUser={(user: User, values: Partial<User>) =>
-        dispatch(updateUserRTK({ user, updates: values }))
+        // Hardened 2026-07-05: without .unwrap(), this resolved to the raw
+        // action envelope ({type, payload, meta}), not the User — so every
+        // field read off "updatedUser" downstream (isGuest, guestId,
+        // infoEntered) was undefined, sending every guest to Routes.House
+        // instead of Routes.Guest and corrupting the Firestore guest patch
+        // built from the undefined-riddled object.
+        dispatch(updateUserRTK({ user, updates: values })).unwrap()
       }
       updateGuest={(updatedGuest: Guest, _clearCache?: boolean) =>
         updateGuestMutation({ guest: updatedGuest, updatedGuest })
@@ -150,7 +156,7 @@ const NewAccountFormWrapper: React.FC<any> = props => {
         queryClient.fetchQuery({
           queryKey: guestKeys.detail(guestId),
           queryFn: () =>
-            import('../../services/guest').then(m => m.getGuest(guestId)),
+            import("../../services/guest").then((m) => m.getGuest(guestId)),
         })
       }
     />

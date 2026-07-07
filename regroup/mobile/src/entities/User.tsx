@@ -1,8 +1,15 @@
-import * as yup from 'yup';
-import { parseISO, startOfDay, isAfter } from 'date-fns';
-import SchemaConstants from './SchemaConstants';
-import { BaseEntity } from './BaseEntity';
-import { Role } from './Roles';
+import * as yup from "yup";
+import { parseISO, startOfDay, isAfter } from "date-fns";
+import SchemaConstants from "./SchemaConstants";
+import { BaseEntity } from "./BaseEntity";
+import { Role } from "./Roles";
+
+export interface NotificationPrefs {
+  activityUpdates: boolean;
+  choreReminders: boolean;
+  meetingReminders: boolean;
+  adminMessages: boolean;
+}
 
 export const removeUserFromHouse = () => {
   return {
@@ -16,26 +23,26 @@ export const removeUserFromHouse = () => {
 };
 
 export type SubscriptionStatus =
-  | 'active'
-  | 'trialing'
-  | 'past_due'
-  | 'canceled'
-  | 'unpaid'
-  | 'pending'
-  | '';
+  | "active"
+  | "trialing"
+  | "past_due"
+  | "canceled"
+  | "unpaid"
+  | "pending"
+  | "";
 
 export class OperatorSubscription {
-  subscriptionId: string = '';
+  subscriptionId: string = "";
   currentPeriodEnd: number = 0;
-  customerId: string = '';
-  status: SubscriptionStatus = '';
+  customerId: string = "";
+  status: SubscriptionStatus = "";
   lastUpdatedAt?: string = undefined;
-  plan: string = '';
+  plan: string = "";
   tier?: string;
   items: {
     houseItemId: string;
     guestItemId: string;
-  } = { guestItemId: '', houseItemId: '' };
+  } = { guestItemId: "", houseItemId: "" };
   houses: {
     [houseId: string]: {
       numberOfGuests: number;
@@ -57,12 +64,12 @@ export class OperatorSubscription {
  */
 class User extends BaseEntity {
   // Primary identifier (Firebase Auth UID)
-  uid: string = '';
+  uid: string = "";
 
   // Role-specific IDs
-  adminId: string = '';
-  guestId: string = '';
-  houseId: string = '';
+  adminId: string = "";
+  guestId: string = "";
+  houseId: string = "";
 
   // Role flags
   isAdmin: boolean = false;
@@ -74,7 +81,7 @@ class User extends BaseEntity {
   // Account status
   emailVerified: boolean = true;
   houseAccountVerified: boolean = false;
-  houseCode: string = '';
+  houseCode: string = "";
   infoEntered: boolean = false;
   orgSetupCompleted?: boolean = false;
   isAnonymous: boolean = false;
@@ -82,24 +89,25 @@ class User extends BaseEntity {
   keepUpdated: boolean = false;
 
   // Personal information
-  email: string = '';
-  firstName: string = '';
-  lastName: string = '';
-  middleInitial: string = '';
-  phoneNumber: string = '';
-  avatar: string = '';
-  gender: 'male' | 'female' = 'male';
-  ethnicity: string = '';
-  dateOfBirth: string = '';
-  sobrietyDate: string = '';
-  ssn: string = '';
-  maritalStatus: '' | 'single' | 'separated' | 'married' = '';
-  housingStatus: 'homeless' | 'renter' | 'homeowner' | 'family' = 'renter';
+  email: string = "";
+  firstName: string = "";
+  lastName: string = "";
+  middleInitial: string = "";
+  phoneNumber: string = "";
+  avatar: string = "";
+  gender: "male" | "female" = "male";
+  ethnicity: string = "";
+  dateOfBirth: string = "";
+  sobrietyDate: string = "";
+  ssn: string = "";
+  maritalStatus: "" | "single" | "separated" | "married" = "";
+  housingStatus: "homeless" | "renter" | "homeowner" | "family" = "renter";
 
   // Management
   housesOwned: string[] = [];
   messagingToken: string[] = [];
   subscriptionMetadata: OperatorSubscription = new OperatorSubscription();
+  notificationPrefs?: NotificationPrefs;
 
   // Authentication
   password?: string | null;
@@ -170,13 +178,13 @@ const userSchema = yup.object().shape({
   dateOfBirth: yup
     .string()
     .test(
-      'Maximum date',
-      'error.no.future.date',
-      value =>
-        !value || !isAfter(startOfDay(parseISO(value)), startOfDay(new Date())),
+      "Maximum date",
+      "error.no.future.date",
+      (value) =>
+        !value || !isAfter(startOfDay(parseISO(value)), startOfDay(new Date()))
     )
     .required(SchemaConstants.REQUIRED),
-  termsOfService: yup.boolean().oneOf([true], 'error.terms.of.service'),
+  termsOfService: yup.boolean().oneOf([true], "error.terms.of.service"),
 });
 
 export { User, userSchema };

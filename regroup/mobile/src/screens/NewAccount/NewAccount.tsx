@@ -1,25 +1,26 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from "react";
 // Phase 3.3: Removed withRats HOC (translation/theme available globally via useTranslation and ThemeProvider)
-import { View } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
-import { RatsText } from '../../components/rats-text';
-import styles from './NewAccountStyles';
-import NewAccountForm from './NewAccountForm';
-import { User } from '../../entities/User';
-import { logout } from '../../state/slices/userSlice';
-import RatsButton from '../../components/rats-button/rats-button';
+import { View } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
+import { RatsText } from "../../components/rats-text";
+import styles from "./NewAccountStyles";
+import NewAccountForm from "./NewAccountForm";
+import { User } from "../../entities/User";
+import { logout } from "../../state/slices/userSlice";
+import RatsButton from "../../components/rats-button/rats-button";
+import { logException } from "../../util/logging";
 
-import RatsLoadingIndicator from '../../components/rats-loading-indicator/rats-loading-indicator';
-import { Invitation } from '../../entities/Invite';
-import RatsScrollView from '../../components/rats-scroll-view';
-import { SCROLL_CONTAINER } from '../../styles/theme';
-import ScreenHeader from '../../components/screen-header';
-import HelpIcon from '../../components/help-icon';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import auth from '@react-native-firebase/auth';
-import { AuthScreenNavigationProp } from '../../navigation/types';
-import { ReactNativeFirebase } from '@react-native-firebase/app';
-import { useAppSelector, useAppDispatch } from '../../state/store';
+import RatsLoadingIndicator from "../../components/rats-loading-indicator/rats-loading-indicator";
+import { Invitation } from "../../entities/Invite";
+import RatsScrollView from "../../components/rats-scroll-view";
+import { SCROLL_CONTAINER } from "../../styles/theme";
+import ScreenHeader from "../../components/screen-header";
+import HelpIcon from "../../components/help-icon";
+import { SafeAreaView } from "react-native-safe-area-context";
+import auth from "@react-native-firebase/auth";
+import { AuthScreenNavigationProp } from "../../navigation/types";
+import { ReactNativeFirebase } from "@react-native-firebase/app";
+import { useAppSelector, useAppDispatch } from "../../state/store";
 
 interface Props {
   navigation: AuthScreenNavigationProp;
@@ -39,14 +40,14 @@ interface Props {
  * - Replaced 1 dispatch call with RTK thunk (.unwrap() for error handling)
  * - HOCs kept for Phase 3 removal
  */
-const NewAccount: React.FC<Props> = props => {
+const NewAccount: React.FC<Props> = (props) => {
   const { navigation } = props;
 
   const dispatch = useAppDispatch();
-  const user = useAppSelector(state => state.user.user);
-  const updating = useAppSelector(state => state.user.updating);
-  const error = useAppSelector(state => state.user.error);
-  const invitation = useAppSelector(state => state.user.invitation);
+  const user = useAppSelector((state) => state.user.user);
+  const updating = useAppSelector((state) => state.user.updating);
+  const error = useAppSelector((state) => state.user.error);
+  const invitation = useAppSelector((state) => state.user.invitation);
 
   const userSubscriptionRef = useRef<(() => void) | null>(null);
 
@@ -54,7 +55,7 @@ const NewAccount: React.FC<Props> = props => {
     try {
       await dispatch(logout()).unwrap();
     } catch (error) {
-      // do something
+      logException(error, "Failed to sign out from NewAccount screen");
     }
   }, [dispatch]);
 
@@ -77,10 +78,10 @@ const NewAccount: React.FC<Props> = props => {
   //   return <RatsLoadingIndicator />;
   // }
   return (
-    <SafeAreaView style={{ flex: 1 }} edges={['bottom']}>
+    <SafeAreaView style={{ flex: 1 }} edges={["bottom"]}>
       <RatsScrollView contentContainerStyle={SCROLL_CONTAINER}>
         <View style={styles.innerContainer}>
-          {error && <RatsText style={{ color: 'red' }} text={error.message} />}
+          {error && <RatsText style={{ color: "red" }} text={error.message} />}
           {/* Email verification removed */}
           <>
             <ScreenHeader icon={<HelpIcon />} header="About You" />

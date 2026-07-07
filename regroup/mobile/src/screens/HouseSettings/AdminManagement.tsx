@@ -1,32 +1,34 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback } from "react";
 import {
   View,
   Alert,
   ActivityIndicator,
   StyleSheet,
   TextStyle,
-} from 'react-native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../navigation/types';
+} from "react-native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { RootStackParamList } from "../../navigation/types";
 
-import RatsScrollView from '../../components/rats-scroll-view';
-import ScreenHeader from '../../components/screen-header';
-import RatsButton from '../../components/rats-button/rats-button';
-import { RatsText } from '../../components/rats-text';
+import RatsScrollView from "../../components/rats-scroll-view";
+import ScreenHeader from "../../components/screen-header";
+import RatsButton from "../../components/rats-button/rats-button";
+import { RatsText } from "../../components/rats-text";
 
-import RatsTextInput from '../../components/rats-text-input/rats-text-input';
+import RatsTextInput from "../../components/rats-text-input/rats-text-input";
 import {
   ActivityItemWithButtons,
   ActivityItem,
-} from '../../components/card-list/card-list';
+} from "../../components/card-list/card-list";
 
-import { useAppSelector, useAppDispatch } from '../../state/store';
-import { useSelectedHouse } from '../../hooks/useSelectedHouse';
-import { inviteAdmin } from '../../state/slices/adminSlice';
-import { useDeleteAdmin } from '../../state/queries/adminQueries';
-import { isSuperAdmin } from '../../util/admin';
-import { formatName } from '../../util/display';
-import { validateEmail } from '../../util/form';
+import { useAppSelector } from "../../state/store";
+import { useSelectedHouse } from "../../hooks/useSelectedHouse";
+import {
+  useDeleteAdmin,
+  useInviteAdmin,
+} from "../../state/queries/adminQueries";
+import { isSuperAdmin } from "../../util/admin";
+import { formatName } from "../../util/display";
+import { validateEmail } from "../../util/form";
 
 import {
   color,
@@ -36,7 +38,7 @@ import {
   CARD_STYLE,
   RED_BUTTON,
   RED_BUTTON_TEXT,
-} from '../../styles/theme';
+} from "../../styles/theme";
 
 interface Props {
   navigation: NativeStackNavigationProp<RootStackParamList>;
@@ -57,7 +59,7 @@ const styles = StyleSheet.create({
     fontSize: fontSize.regular,
     color: color.grey,
     padding: normalize(15),
-    textAlign: 'center',
+    textAlign: "center",
   } as TextStyle,
   inputCard: {
     ...CARD_STYLE,
@@ -69,16 +71,16 @@ const styles = StyleSheet.create({
 });
 
 const AdminManagement: React.FC<Props> = ({ navigation }) => {
-  const dispatch = useAppDispatch();
   const { mutateAsync: deleteAdminMutation } = useDeleteAdmin();
+  const { mutateAsync: inviteAdminMutation } = useInviteAdmin();
 
   const { house } = useSelectedHouse();
-  const houseAdmins = useAppSelector(state => state.admin.houseAdmins);
-  const currentUser = useAppSelector(state => state.user.user);
-  const loading = useAppSelector(state => state.admin.loading);
+  const houseAdmins = useAppSelector((state) => state.admin.houseAdmins);
+  const currentUser = useAppSelector((state) => state.user.user);
+  const loading = useAppSelector((state) => state.admin.loading);
 
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [emailError, setEmailError] = useState('');
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [emailError, setEmailError] = useState("");
   const [emailTouched, setEmailTouched] = useState(false);
   const [inviting, setInviting] = useState(false);
 
@@ -89,21 +91,21 @@ const AdminManagement: React.FC<Props> = ({ navigation }) => {
       setInviteEmail(value);
       if (emailTouched) {
         if (!value.trim()) {
-          setEmailError('');
+          setEmailError("");
         } else if (!validateEmail(value)) {
-          setEmailError('Must be a valid email address');
+          setEmailError("Must be a valid email address");
         } else {
-          setEmailError('');
+          setEmailError("");
         }
       }
     },
-    [emailTouched],
+    [emailTouched]
   );
 
   const handleEmailBlur = useCallback(() => {
     setEmailTouched(true);
     if (inviteEmail && !validateEmail(inviteEmail)) {
-      setEmailError('Must be a valid email address');
+      setEmailError("Must be a valid email address");
     }
   }, [inviteEmail]);
 
@@ -111,28 +113,28 @@ const AdminManagement: React.FC<Props> = ({ navigation }) => {
     (adminId: string, adminName: string) => {
       if (!house) return;
       Alert.alert(
-        'Remove Manager',
+        "Remove Manager",
         `Are you sure you want to remove ${adminName} as a manager?`,
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: "Cancel", style: "cancel" },
           {
-            text: 'Remove',
-            style: 'destructive',
+            text: "Remove",
+            style: "destructive",
             onPress: async () => {
               try {
                 await deleteAdminMutation({ adminId, houseId: house.id });
               } catch {
                 Alert.alert(
-                  'Error',
-                  'Failed to remove manager. Please try again.',
+                  "Error",
+                  "Failed to remove manager. Please try again."
                 );
               }
             },
           },
-        ],
+        ]
       );
     },
-    [house, deleteAdminMutation],
+    [house, deleteAdminMutation]
   );
 
   const handleSendInvite = useCallback(async () => {
@@ -140,32 +142,30 @@ const AdminManagement: React.FC<Props> = ({ navigation }) => {
 
     if (!validateEmail(inviteEmail)) {
       setEmailTouched(true);
-      setEmailError('Must be a valid email address');
+      setEmailError("Must be a valid email address");
       return;
     }
 
     setInviting(true);
     try {
-      await dispatch(
-        inviteAdmin({
-          email: inviteEmail.trim().toLowerCase(),
-          houseId: house.id,
-          houseName: house.name || 'your house',
-        }),
-      ).unwrap();
-      setInviteEmail('');
+      await inviteAdminMutation({
+        email: inviteEmail.trim().toLowerCase(),
+        houseId: house.id,
+        houseName: house.name || "your house",
+      });
+      setInviteEmail("");
       setEmailTouched(false);
-      setEmailError('');
+      setEmailError("");
       Alert.alert(
-        'Invitation Sent',
-        `An invitation has been sent to ${inviteEmail.trim()}.`,
+        "Invitation Sent",
+        `An invitation has been sent to ${inviteEmail.trim()}.`
       );
     } catch {
-      Alert.alert('Error', 'Failed to send invitation. Please try again.');
+      Alert.alert("Error", "Failed to send invitation. Please try again.");
     } finally {
       setInviting(false);
     }
-  }, [house, inviteEmail, dispatch]);
+  }, [house, inviteEmail, inviteAdminMutation]);
 
   const isInviteDisabled =
     !inviteEmail.trim() ||
@@ -208,14 +208,14 @@ const AdminManagement: React.FC<Props> = ({ navigation }) => {
           </View>
         ) : (
           <View testID="admin-list">
-            {adminList.map(admin => {
+            {adminList.map((admin) => {
               const name =
                 formatName(admin.firstName, admin.lastName) ||
                 admin.email ||
-                'Unknown';
+                "Unknown";
               const isSuper = house?.id ? isSuperAdmin(admin, house.id) : false;
               const isSelf = admin.userId === currentUser?.id;
-              const role = isSuper ? 'Operator' : 'Administrator';
+              const role = isSuper ? "Operator" : "Administrator";
               const canRemove = !isSuper && !isSelf;
 
               return (
@@ -259,7 +259,7 @@ const AdminManagement: React.FC<Props> = ({ navigation }) => {
               style={styles.sectionHeader}
               testID="pending-invites-header"
             />
-            {pendingInvites.map(email => (
+            {pendingInvites.map((email) => (
               <ActivityItem
                 key={email}
                 testID={`pending-invite-${email}`}
@@ -304,7 +304,7 @@ const AdminManagement: React.FC<Props> = ({ navigation }) => {
                 errors: emailError ? { email: emailError } : {},
                 touched: emailTouched ? { email: true } : {},
               }}
-              field={{ name: 'email', value: inviteEmail }}
+              field={{ name: "email", value: inviteEmail }}
               customHandleChange={validateAndSetEmail}
               onBlur={handleEmailBlur}
             />
@@ -312,7 +312,7 @@ const AdminManagement: React.FC<Props> = ({ navigation }) => {
           <View style={[CARD_STYLE, { paddingTop: normalize(5) }]}>
             <RatsButton
               testID="send-invite-button"
-              title={inviting ? 'Sending...' : 'Send Invitation'}
+              title={inviting ? "Sending..." : "Send Invitation"}
               disabled={isInviteDisabled}
               onPress={handleSendInvite}
               containerStyle={{ marginTop: 0 }}

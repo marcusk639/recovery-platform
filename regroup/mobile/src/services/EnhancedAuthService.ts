@@ -1,9 +1,9 @@
 // Enhanced authentication service with security improvements
-import { auth } from '../../firebase-setup';
-import { logException } from '../util/logging';
-import { FirebaseAuthTypes } from '@react-native-firebase/auth';
-import { SimpleValidationService } from './SimpleValidationService';
-import { getCurrentTime } from '../util/display';
+import { auth } from "../../firebase-setup";
+import { logException } from "../util/logging";
+import { FirebaseAuthTypes } from "@react-native-firebase/auth";
+import { SimpleValidationService } from "./SimpleValidationService";
+import { getCurrentTime } from "../util/display";
 
 export interface AuthResult {
   success: boolean;
@@ -26,7 +26,7 @@ export class EnhancedAuthService {
    */
   static async signInWithEmail(
     email: string,
-    password: string,
+    password: string
   ): Promise<AuthResult> {
     try {
       // Rate limiting
@@ -35,7 +35,7 @@ export class EnhancedAuthService {
       ) {
         return {
           success: false,
-          error: 'Too many sign-in attempts. Please try again later.',
+          error: "Too many sign-in attempts. Please try again later.",
         };
       }
 
@@ -51,7 +51,7 @@ export class EnhancedAuthService {
       if (!password || password.length < 1) {
         return {
           success: false,
-          error: 'Password is required',
+          error: "Password is required",
         };
       }
 
@@ -61,24 +61,26 @@ export class EnhancedAuthService {
       // Attempt sign in
       const userCredential = await auth.signInWithEmailAndPassword(
         sanitizedEmail,
-        password,
+        password
       );
 
       if (!userCredential.user) {
         return {
           success: false,
-          error: 'Sign in failed. Please check your credentials.',
+          error: "Sign in failed. Please check your credentials.",
         };
       }
 
-      // Check if email is verified
-      if (!userCredential.user.emailVerified) {
-        return {
-          success: false,
-          error: 'Please verify your email before signing in.',
-          requiresEmailVerification: true,
-        };
-      }
+      // Email verification is intentionally disabled app-wide (see
+      // services/users.tsx's convertFirebaseUserToRatsUser, which hardcodes
+      // `emailVerified: true` on every user record). A real Firebase
+      // account's actual emailVerified flag is not a reliable signal here —
+      // gating sign-in on it would incorrectly lock out real users whose
+      // accounts were never sent a verification email in the first place.
+      // This gate used to exist here and was removed 2026-07-04 as a
+      // fix, not a feature change — it was never actually reachable in
+      // production since this whole class was disconnected from the live
+      // login path until that same date.
 
       return {
         success: true,
@@ -89,35 +91,35 @@ export class EnhancedAuthService {
 
       // Handle specific Firebase errors
       switch (error.code) {
-        case 'auth/user-not-found':
+        case "auth/user-not-found":
           return {
             success: false,
-            error: 'No account found with this email address.',
+            error: "No account found with this email address.",
           };
-        case 'auth/wrong-password':
+        case "auth/wrong-password":
           return {
             success: false,
-            error: 'Incorrect password. Please try again.',
+            error: "Incorrect password. Please try again.",
           };
-        case 'auth/invalid-email':
+        case "auth/invalid-email":
           return {
             success: false,
-            error: 'Invalid email address format.',
+            error: "Invalid email address format.",
           };
-        case 'auth/user-disabled':
+        case "auth/user-disabled":
           return {
             success: false,
-            error: 'This account has been disabled. Please contact support.',
+            error: "This account has been disabled. Please contact support.",
           };
-        case 'auth/too-many-requests':
+        case "auth/too-many-requests":
           return {
             success: false,
-            error: 'Too many failed attempts. Please try again later.',
+            error: "Too many failed attempts. Please try again later.",
           };
         default:
           return {
             success: false,
-            error: 'Sign in failed. Please try again.',
+            error: "Sign in failed. Please try again.",
           };
       }
     }
@@ -133,12 +135,12 @@ export class EnhancedAuthService {
         !SimpleValidationService.checkRateLimit(
           `signup_${data.email}`,
           3,
-          300000,
+          300000
         )
       ) {
         return {
           success: false,
-          error: 'Too many sign-up attempts. Please try again later.',
+          error: "Too many sign-up attempts. Please try again later.",
         };
       }
 
@@ -154,20 +156,20 @@ export class EnhancedAuthService {
       if (!validation.isValid) {
         return {
           success: false,
-          error: validation.errors.join(', '),
+          error: validation.errors.join(", "),
         };
       }
 
       // Create user account
       const userCredential = await auth.createUserWithEmailAndPassword(
         validation.sanitized.email,
-        validation.sanitized.password,
+        validation.sanitized.password
       );
 
       if (!userCredential.user) {
         return {
           success: false,
-          error: 'Account creation failed. Please try again.',
+          error: "Account creation failed. Please try again.",
         };
       }
 
@@ -188,30 +190,30 @@ export class EnhancedAuthService {
 
       // Handle specific Firebase errors
       switch (error.code) {
-        case 'auth/email-already-in-use':
+        case "auth/email-already-in-use":
           return {
             success: false,
-            error: 'An account with this email already exists.',
+            error: "An account with this email already exists.",
           };
-        case 'auth/invalid-email':
+        case "auth/invalid-email":
           return {
             success: false,
-            error: 'Invalid email address format.',
+            error: "Invalid email address format.",
           };
-        case 'auth/weak-password':
+        case "auth/weak-password":
           return {
             success: false,
-            error: 'Password is too weak. Please choose a stronger password.',
+            error: "Password is too weak. Please choose a stronger password.",
           };
-        case 'auth/operation-not-allowed':
+        case "auth/operation-not-allowed":
           return {
             success: false,
-            error: 'Email/password accounts are not enabled.',
+            error: "Email/password accounts are not enabled.",
           };
         default:
           return {
             success: false,
-            error: 'Account creation failed. Please try again.',
+            error: "Account creation failed. Please try again.",
           };
       }
     }
@@ -224,11 +226,11 @@ export class EnhancedAuthService {
     try {
       // Rate limiting for anonymous sign in
       if (
-        !SimpleValidationService.checkRateLimit('anonymous_signin', 10, 60000)
+        !SimpleValidationService.checkRateLimit("anonymous_signin", 10, 60000)
       ) {
         return {
           success: false,
-          error: 'Too many anonymous sign-in attempts. Please try again later.',
+          error: "Too many anonymous sign-in attempts. Please try again later.",
         };
       }
 
@@ -237,7 +239,7 @@ export class EnhancedAuthService {
       if (!userCredential.user) {
         return {
           success: false,
-          error: 'Anonymous sign in failed. Please try again.',
+          error: "Anonymous sign in failed. Please try again.",
         };
       }
 
@@ -249,7 +251,7 @@ export class EnhancedAuthService {
       logException(error);
       return {
         success: false,
-        error: 'Anonymous sign in failed. Please try again.',
+        error: "Anonymous sign in failed. Please try again.",
       };
     }
   }
@@ -265,7 +267,7 @@ export class EnhancedAuthService {
       ) {
         return {
           success: false,
-          error: 'Too many password reset attempts. Please try again later.',
+          error: "Too many password reset attempts. Please try again later.",
         };
       }
 
@@ -290,20 +292,20 @@ export class EnhancedAuthService {
       logException(error);
 
       switch (error.code) {
-        case 'auth/user-not-found':
+        case "auth/user-not-found":
           return {
             success: false,
-            error: 'No account found with this email address.',
+            error: "No account found with this email address.",
           };
-        case 'auth/invalid-email':
+        case "auth/invalid-email":
           return {
             success: false,
-            error: 'Invalid email address format.',
+            error: "Invalid email address format.",
           };
         default:
           return {
             success: false,
-            error: 'Password reset failed. Please try again.',
+            error: "Password reset failed. Please try again.",
           };
       }
     }
@@ -332,7 +334,7 @@ export class EnhancedAuthService {
       logException(error);
       return {
         success: false,
-        error: 'Sign out failed. Please try again.',
+        error: "Sign out failed. Please try again.",
       };
     }
   }
@@ -382,7 +384,7 @@ export class EnhancedAuthService {
       if (!user) {
         return {
           success: false,
-          error: 'No user is currently signed in.',
+          error: "No user is currently signed in.",
         };
       }
 
@@ -395,7 +397,7 @@ export class EnhancedAuthService {
       logException(error);
       return {
         success: false,
-        error: 'Failed to reload user data.',
+        error: "Failed to reload user data.",
       };
     }
   }

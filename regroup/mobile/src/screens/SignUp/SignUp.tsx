@@ -1,34 +1,34 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { RatsText } from '../../components/rats-text';
-import styles from './SignUpStyles';
-import SignUpForm from './SignUpForm';
-import { ViewStyle, View, ActivityIndicator } from 'react-native';
-import { auth } from '../../../firebase-setup';
-import { logout, updateUser } from '../../state/slices/userSlice';
-import { User } from '../../entities/User';
-import RatsButton from '../../components/rats-button/rats-button';
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { RatsText } from "../../components/rats-text";
+import styles from "./SignUpStyles";
+import SignUpForm from "./SignUpForm";
+import { ViewStyle, View, ActivityIndicator } from "react-native";
+import { auth } from "../../../firebase-setup";
+import { logout, updateUser } from "../../state/slices/userSlice";
+import { User } from "../../entities/User";
+import RatsButton from "../../components/rats-button/rats-button";
 import {
   AuthStackParamList,
   RootStackParamList,
   Routes,
-} from '../../navigation/types';
+} from "../../navigation/types";
 import {
   navigateAuthStackRoute,
   navigateToMainTab,
-} from '../../navigation/authNavigation';
-import { normalize, fontSize, color, ROW } from '../../styles/theme';
-import RatsScrollView from '../../components/rats-scroll-view';
-import { onLink, getLinkType } from '../../services/native-deep-links';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { dayIsAfter, getTodaysDate } from '../../util/display';
-import SignUpWebView from './SignUpWebView';
-import { Role } from '../../entities/Roles';
-import { useAppSelector, useAppDispatch } from '../../state/store';
-import { initializeInvitation } from '../../state/slices/userSlice';
-import { peekInvitation } from '../../services/invitations';
-import { logException } from '../../util/logging';
-import { CompositeScreenProps } from '@react-navigation/native';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
+} from "../../navigation/authNavigation";
+import { normalize, fontSize, color, ROW } from "../../styles/theme";
+import RatsScrollView from "../../components/rats-scroll-view";
+import { onLink, getLinkType } from "../../services/native-deep-links";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { dayIsAfter, getTodaysDate } from "../../util/display";
+import SignUpWebView from "./SignUpWebView";
+import { Role } from "../../entities/Roles";
+import { useAppSelector, useAppDispatch } from "../../state/store";
+import { initializeInvitation } from "../../state/slices/userSlice";
+import { peekInvitation } from "../../services/invitations";
+import { logException } from "../../util/logging";
+import { CompositeScreenProps } from "@react-navigation/native";
+import { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 type SignUpScreenProps = CompositeScreenProps<
   NativeStackScreenProps<AuthStackParamList, Routes.Signup>,
@@ -53,7 +53,7 @@ type SignUpScreenProps = CompositeScreenProps<
  * - Updated 7 selectors to use state.user (removed 'as any' casts)
  * - Replaced 2 dispatch calls with RTK thunks (.unwrap() for error handling)
  */
-const SignUpScreen: React.FC<SignUpScreenProps> = props => {
+const SignUpScreen: React.FC<SignUpScreenProps> = (props) => {
   const {
     renderHeader,
     containerStyle,
@@ -64,14 +64,14 @@ const SignUpScreen: React.FC<SignUpScreenProps> = props => {
   } = props;
 
   const dispatch = useAppDispatch();
-  const creatingUser = useAppSelector(state => state.user.creatingUser);
-  const error = useAppSelector(state => state.user.error);
-  const user = useAppSelector(state => state.user.user);
-  const signUpRole = useAppSelector(state => state.user.signUpRole);
-  const updating = useAppSelector(state => state.user.updating);
-  const invitation = useAppSelector(state => state.user.invitation);
+  const creatingUser = useAppSelector((state) => state.user.creatingUser);
+  const error = useAppSelector((state) => state.user.error);
+  const user = useAppSelector((state) => state.user.user);
+  const signUpRole = useAppSelector((state) => state.user.signUpRole);
+  const updating = useAppSelector((state) => state.user.updating);
+  const invitation = useAppSelector((state) => state.user.invitation);
   const logging = useAppSelector(
-    state => state.user.loggingOut || state.user.loggingIn,
+    (state) => state.user.loggingOut || state.user.loggingIn
   );
 
   const [loggingOut, setLoggingOut] = useState(false);
@@ -99,7 +99,7 @@ const SignUpScreen: React.FC<SignUpScreenProps> = props => {
       invitation.expirationDate &&
       dayIsAfter(getTodaysDate(), invitation.expirationDate)
     ) {
-      setStateError({ message: 'This invitation has expired' });
+      setStateError({ message: "This invitation has expired" });
     }
   }, [invitation]);
 
@@ -151,7 +151,7 @@ const SignUpScreen: React.FC<SignUpScreenProps> = props => {
               updateUser({
                 user: user as any,
                 updates: { email: currentUser.email! },
-              }),
+              })
             );
             clearInterval(userSubscriptionRef.current);
           }
@@ -200,15 +200,15 @@ const SignUpScreen: React.FC<SignUpScreenProps> = props => {
             email: meta.invitedEmail,
             houseId: meta.houseId,
             type: meta.role,
-            initialPhase: meta.initialPhase ?? '',
-          }),
+            initialPhase: meta.initialPhase ?? "",
+          })
         );
       } catch (err) {
         logException(err);
         if (!cancelled) {
           setStateError({
             message:
-              'This invitation link is no longer valid. Ask your house admin to resend it.',
+              "This invitation link is no longer valid. Ask your house admin to resend it.",
           });
         }
       } finally {
@@ -224,17 +224,18 @@ const SignUpScreen: React.FC<SignUpScreenProps> = props => {
 
   if (logging || creatingUser || submitting || peekingInvitation) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
         <ActivityIndicator size="large" color={color.baby_blue} />
       </View>
     );
   }
   return (
     <SafeAreaView style={{ flex: 1 }} testID="signup-screen">
-      {signUpRole !== 'superAdmin' && (
+      {signUpRole !== "superAdmin" && (
         <RatsScrollView
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ flexGrow: 1 }}>
+          contentContainerStyle={{ flexGrow: 1 }}
+        >
           {renderHeaderContent()}
           <View style={{ paddingHorizontal: normalize(10) }}>
             <SignUpForm
@@ -248,9 +249,7 @@ const SignUpScreen: React.FC<SignUpScreenProps> = props => {
           </View>
         </RatsScrollView>
       )}
-      {signUpRole === 'superAdmin' && (
-        <SignUpWebView user={user as any} navigation={navigation} />
-      )}
+      {signUpRole === "superAdmin" && <SignUpWebView navigation={navigation} />}
     </SafeAreaView>
   );
 };

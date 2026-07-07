@@ -13,17 +13,40 @@
 // ─── useSelectedHouse mock ────────────────────────────────────────────────────
 const mockUseSelectedHouse = jest.fn();
 
-jest.mock('../../../hooks/useSelectedHouse', () => ({
+jest.mock("../../../hooks/useSelectedHouse", () => ({
   useSelectedHouse: () => mockUseSelectedHouse(),
 }));
 
+// ─── houseQueries mock (useUpdateHouse) ───────────────────────────────────────
+// Regression coverage for 2026-07-05: HouseSettings previously read house
+// update loading/success/error state from a `updateHouseSettings` Redux thunk
+// that didn't exist (masked by @ts-nocheck). It's now driven by the real
+// useUpdateHouse React Query mutation, so loading/error tests control this
+// mock directly instead of Redux `state.houses`.
+const mockUseUpdateHouse = jest.fn();
+const defaultUpdateHouseMutation = {
+  isPending: false,
+  isSuccess: false,
+  isError: false,
+  error: null,
+  mutateAsync: jest.fn(() => Promise.resolve()),
+};
+
+jest.mock("../../../state/queries/houseQueries", () => ({
+  houseKeys: {
+    detail: (id: string) => ["houses", "detail", id],
+    lists: () => ["houses", "list"],
+  },
+  useUpdateHouse: () => mockUseUpdateHouse(),
+}));
+
 // ─── Firebase mock ────────────────────────────────────────────────────────────
-jest.mock('../../../../firebase-setup', () => ({
+jest.mock("../../../../firebase-setup", () => ({
   firestore: {
     collection: jest.fn(() => ({
       doc: jest.fn(() => ({
         get: jest.fn(() =>
-          Promise.resolve({ exists: false, data: () => null }),
+          Promise.resolve({ exists: false, data: () => null })
         ),
         set: jest.fn(() => Promise.resolve()),
         update: jest.fn(() => Promise.resolve()),
@@ -44,28 +67,28 @@ jest.mock('../../../../firebase-setup', () => ({
   },
 }));
 
-jest.mock('@react-native-firebase/firestore', () => ({
+jest.mock("@react-native-firebase/firestore", () => ({
   firebase: {},
   FirebaseFirestoreTypes: {},
 }));
-jest.mock('@react-navigation/native-stack', () => ({}));
+jest.mock("@react-navigation/native-stack", () => ({}));
 
 // Stub useFocusEffect so the screen can run outside a NavigationContainer.
-jest.mock('@react-navigation/native', () => ({
+jest.mock("@react-navigation/native", () => ({
   useFocusEffect: jest.fn(),
   useNavigation: () => ({ navigate: jest.fn(), goBack: jest.fn() }),
 }));
 
 // ─── Service mocks ────────────────────────────────────────────────────────────
-jest.mock('../../../services/house', () => ({
+jest.mock("../../../services/house", () => ({
   getHouse: jest.fn(),
   houseCollection: {},
 }));
-jest.mock('../../../services/admin', () => ({
+jest.mock("../../../services/admin", () => ({
   getAdmins: jest.fn(() => Promise.resolve({})),
   adminCollection: {},
 }));
-jest.mock('../../../services/guest', () => ({
+jest.mock("../../../services/guest", () => ({
   getGuests: jest.fn(() => Promise.resolve({})),
   houseCollection: {},
 }));
@@ -75,7 +98,7 @@ const mockShowFormModal = jest.fn();
 const mockDismissFormModal = jest.fn();
 const mockSetLoadingModalState = jest.fn();
 
-jest.mock('../../../context', () => ({
+jest.mock("../../../context", () => ({
   useNotification: () => ({
     showPopover: jest.fn(),
     setPopoverRef: jest.fn(),
@@ -88,47 +111,47 @@ jest.mock('../../../context', () => ({
   }),
   useTheme: () => ({
     theme: {
-      primaryColor: '#000',
-      secondaryColor: '#fff',
-      backgroundColor: '#fff',
-      textColor: '#000',
-      primaryFontFamily: 'System',
-      secondaryFontFamily: 'System',
+      primaryColor: "#000",
+      secondaryColor: "#fff",
+      backgroundColor: "#fff",
+      textColor: "#000",
+      primaryFontFamily: "System",
+      secondaryFontFamily: "System",
     },
   }),
   useTranslation: () => ({
     t: (k: string) => k,
-    i18n: { language: 'en', changeLanguage: jest.fn() },
+    i18n: { language: "en", changeLanguage: jest.fn() },
   }),
 }));
 
 // ─── Heavy child component stubs ──────────────────────────────────────────────
-jest.mock('../../SetupWizards/HouseSetup', () => ({
+jest.mock("../../SetupWizards/HouseSetup", () => ({
   HouseSetup: (props: any) => null,
 }));
-jest.mock('../../SetupWizards/ChoreSetup', () => () => null);
-jest.mock('../../SetupWizards/PhaseSetup/PhaseConfigSetup', () => ({
+jest.mock("../../SetupWizards/ChoreSetup", () => () => null);
+jest.mock("../../SetupWizards/PhaseSetup/PhaseConfigSetup", () => ({
   PhaseConfigSetup: () => null,
 }));
-jest.mock('../../SetupWizards/GuestSetup', () => () => null);
-jest.mock('../../SetupWizards/ManagerSetupEntity', () => ({
+jest.mock("../../SetupWizards/GuestSetup", () => () => null);
+jest.mock("../../SetupWizards/ManagerSetupEntity", () => ({
   __esModule: true,
   default: {},
 }));
-jest.mock('../ManagerSettings', () => () => null);
-jest.mock('../AdminManagement', () => () => null);
+jest.mock("../ManagerSettings", () => () => null);
+jest.mock("../AdminManagement", () => () => null);
 
 // ─── Component stubs ──────────────────────────────────────────────────────────
-jest.mock('../../../components/screen-header', () => {
-  const React = require('react');
-  const { Text } = require('react-native');
+jest.mock("../../../components/screen-header", () => {
+  const React = require("react");
+  const { Text } = require("react-native");
   return ({ header }: { header: string }) =>
-    React.createElement(Text, { testID: 'screen-header' }, header);
+    React.createElement(Text, { testID: "screen-header" }, header);
 });
 
-jest.mock('../../../components/rats-interactable-section', () => {
-  const React = require('react');
-  const { TouchableOpacity, Text } = require('react-native');
+jest.mock("../../../components/rats-interactable-section", () => {
+  const React = require("react");
+  const { TouchableOpacity, Text } = require("react-native");
   return ({ name, onPress, testID }: any) =>
     React.createElement(
       TouchableOpacity,
@@ -137,87 +160,85 @@ jest.mock('../../../components/rats-interactable-section', () => {
         testID: testID || `section-${name}`,
         accessibilityLabel: name,
       },
-      React.createElement(Text, null, name),
+      React.createElement(Text, null, name)
     );
 });
 
-jest.mock('../../../components/rats-button/rats-button', () => {
-  const React = require('react');
-  const { TouchableOpacity, Text } = require('react-native');
+jest.mock("../../../components/rats-button/rats-button", () => {
+  const React = require("react");
+  const { TouchableOpacity, Text } = require("react-native");
   return ({ title, onPress, testID }: any) =>
     React.createElement(
       TouchableOpacity,
       { onPress, testID: testID || `button-${title}` },
-      React.createElement(Text, null, title),
+      React.createElement(Text, null, title)
     );
 });
 
-jest.mock('../../../components/containerized-button', () => ({
+jest.mock("../../../components/containerized-button", () => ({
   ContainerizedButton: () => null,
 }));
 
 // ─── React imports ────────────────────────────────────────────────────────────
-import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
-import { Provider } from 'react-redux';
-import { configureStore } from '@reduxjs/toolkit';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React from "react";
+import { render, fireEvent } from "@testing-library/react-native";
+import { Provider } from "react-redux";
+import { configureStore } from "@reduxjs/toolkit";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import housesReducer from '../../../state/slices/housesSlice';
-import guestsReducer from '../../../state/slices/guestsSlice';
-import userReducer from '../../../state/slices/userSlice';
-import adminReducer from '../../../state/slices/adminSlice';
-import uiReducer from '../../../state/slices/uiSlice';
-import authReducer from '../../../state/slices/authSlice';
-import themeReducer from '../../../state/slices/themeSlice';
-import navigationReducer from '../../../state/slices/navigationSlice';
-import chatReducer from '../../../state/slices/chatSlice';
-import setupReducer from '../../../state/slices/setupSlice';
-import notificationsReducer from '../../../state/slices/notificationsSlice';
-import meetingsReducer from '../../../state/slices/meetingsSlice';
+import housesReducer from "../../../state/slices/housesSlice";
+import guestsReducer from "../../../state/slices/guestsSlice";
+import userReducer from "../../../state/slices/userSlice";
+import adminReducer from "../../../state/slices/adminSlice";
+import authReducer from "../../../state/slices/authSlice";
+import themeReducer from "../../../state/slices/themeSlice";
+import chatReducer from "../../../state/slices/chatSlice";
+import setupReducer from "../../../state/slices/setupSlice";
+import notificationsReducer from "../../../state/slices/notificationsSlice";
+import meetingsReducer from "../../../state/slices/meetingsSlice";
 
-import HouseSettings from '../HouseSettings';
+import HouseSettings from "../HouseSettings";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
 const BASE_HOUSE: any = {
-  id: 'house-1',
-  name: 'Recovery House',
-  timezone: 'America/Chicago',
-  ownerId: 'owner-1',
-  adminIds: ['admin-1'],
+  id: "house-1",
+  name: "Recovery House",
+  timezone: "America/Chicago",
+  ownerId: "owner-1",
+  adminIds: ["admin-1"],
   superAdminIds: [],
   pendingAdminInvites: [],
   pendingGuestInvites: [],
   lat: 0,
   lng: 0,
-  geohash: '',
-  street: '1 Main St',
-  city: 'Springfield',
-  state: 'IL',
-  zip: '62701',
-  country: 'US',
+  geohash: "",
+  street: "1 Main St",
+  city: "Springfield",
+  state: "IL",
+  zip: "62701",
+  country: "US",
   health: {},
   monthlyRent: 1000,
   weeklyRent: 250,
   currentCapacity: 2,
   maximumCapacity: 5,
-  code: 'TEST01',
-  avatar: '',
-  imageUrl: '',
+  code: "TEST01",
+  avatar: "",
+  imageUrl: "",
   depositsAndFees: 0,
   certified: false,
-  phoneNumber: '5551234567',
-  rentFrequency: 'both',
-  subscriptionStatus: 'active',
+  phoneNumber: "5551234567",
+  rentFrequency: "both",
+  subscriptionStatus: "active",
   isDemoHouse: false,
-  houseType: 'traditional',
+  houseType: "traditional",
   seniorPeerEmails: [],
-  managerSetupType: 'operator-only',
+  managerSetupType: "operator-only",
   awaitingVerification: [],
-  chores: { Bathroom: { name: 'Bathroom', description: 'Clean it.' } },
+  chores: { Bathroom: { name: "Bathroom", description: "Clean it." } },
   phases: {},
-  gender: '',
+  gender: "",
   disputes: {},
   applications: {},
   complaints: {},
@@ -225,17 +246,13 @@ const BASE_HOUSE: any = {
   baths: 1,
   wifi: false,
   rating: 3,
-  createdDate: '2024-01-01',
-  lastUpdated: '2024-01-01',
+  createdDate: "2024-01-01",
+  lastUpdated: "2024-01-01",
 };
 
 // ─── Store factory ────────────────────────────────────────────────────────────
 
-function buildStore(
-  house: any = BASE_HOUSE,
-  loading = false,
-  error: string | null = null,
-) {
+function buildStore(house: any = BASE_HOUSE) {
   mockUseSelectedHouse.mockReturnValue({
     house,
     houseId: house?.id ?? null,
@@ -243,10 +260,8 @@ function buildStore(
   });
   return configureStore({
     reducer: {
-      ui: uiReducer,
       auth: authReducer,
       theme: themeReducer,
-      navigation: navigationReducer,
       user: userReducer,
       houses: housesReducer,
       guests: guestsReducer,
@@ -260,24 +275,10 @@ function buildStore(
       houses: {
         selectedHouse: house,
         houses: house ? { [house.id]: house } : {},
+        selectedHouseId: house?.id ?? null,
         searchedHouses: [],
-        loading,
-        error,
-        updateSuccess: !loading && !error,
-        requestingHouse: false,
-        requestingHouseFailed: false,
-        requestingHouses: false,
-        requestingHousesSuccessful: false,
-        requestingHousesFailed: false,
-        searchingHouses: false,
-        searchingHousesSuccessful: false,
-        searchingHousesFailed: false,
-        creatingHouse: false,
-        creatingHouseSuccessful: false,
-        creatingHouseFailed: false,
-        updatingHouse: false,
-        updatingHouseSuccessful: false,
-        updatingHouseFailed: false,
+        loading: false,
+        error: null,
       } as any,
       guests: {
         guests: {},
@@ -294,7 +295,7 @@ function buildStore(
         error: null,
       } as any,
       user: {
-        user: { id: 'user-1', firstName: 'Alice', lastName: 'Manager' },
+        user: { id: "user-1", firstName: "Alice", lastName: "Manager" },
         loading: false,
         error: null,
         loggedIn: true,
@@ -306,6 +307,12 @@ function buildStore(
       setup: {
         selectedHouse: house,
         selectedPhase: null,
+        // configureStore's preloadedState replaces (not merges with) the
+        // slice's own initialState — omitting `houses` here left it
+        // undefined, so updateHouseData's `state.houses[id]` throw only
+        // showed up once the HouseSettings.tsx import bug (dispatching a
+        // nonexistent action) was fixed and this reducer actually ran.
+        houses: house ? { [house.id]: house } : {},
       } as any,
     },
   });
@@ -320,7 +327,7 @@ const mockNavigation: any = {
 
 function renderScreen(
   store: ReturnType<typeof buildStore>,
-  navigation = mockNavigation,
+  navigation = mockNavigation
 ) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
@@ -330,169 +337,181 @@ function renderScreen(
       <Provider store={store}>
         <HouseSettings navigation={navigation} />
       </Provider>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe('HouseSettings', () => {
+describe("HouseSettings", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUseUpdateHouse.mockReturnValue({ ...defaultUpdateHouseMutation });
   });
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
-  describe('rendering', () => {
-    it('renders without crashing', () => {
+  describe("rendering", () => {
+    it("renders without crashing", () => {
       const store = buildStore();
       const { getByTestId } = renderScreen(store);
-      expect(getByTestId('house-settings-screen')).toBeTruthy();
+      expect(getByTestId("house-settings-screen")).toBeTruthy();
     });
 
-    it('renders the House Settings screen header', () => {
+    it("renders the House Settings screen header", () => {
       const store = buildStore();
       const { getByText } = renderScreen(store);
-      expect(getByText('House Settings')).toBeTruthy();
+      expect(getByText("House Settings")).toBeTruthy();
     });
 
-    it('renders the Details settings entry', () => {
+    it("renders the Details settings entry", () => {
       const store = buildStore();
       const { getByText } = renderScreen(store);
-      expect(getByText('Details')).toBeTruthy();
+      expect(getByText("Details")).toBeTruthy();
     });
 
-    it('renders the Chores settings entry', () => {
+    it("renders the Chores settings entry", () => {
       const store = buildStore();
       const { getByText } = renderScreen(store);
-      expect(getByText('Chores')).toBeTruthy();
+      expect(getByText("Chores")).toBeTruthy();
     });
 
-    it('renders the Managers settings entry', () => {
+    it("renders the Managers settings entry", () => {
       const store = buildStore();
       const { getByText } = renderScreen(store);
-      expect(getByText('Managers')).toBeTruthy();
+      expect(getByText("Managers")).toBeTruthy();
     });
 
-    it('renders the Admin Management settings entry', () => {
+    it("renders the Admin Management settings entry", () => {
       const store = buildStore();
       const { getByText } = renderScreen(store);
-      expect(getByText('Admin Management')).toBeTruthy();
+      expect(getByText("Admin Management")).toBeTruthy();
     });
 
-    it('renders the Phases settings entry', () => {
+    it("renders the Phases settings entry", () => {
       const store = buildStore();
       const { getByText } = renderScreen(store);
-      expect(getByText('Phases')).toBeTruthy();
+      expect(getByText("Phases")).toBeTruthy();
     });
 
-    it('renders the Guests settings entry', () => {
+    it("renders the Guests settings entry", () => {
       const store = buildStore();
       const { getByText } = renderScreen(store);
-      expect(getByText('Guests')).toBeTruthy();
+      expect(getByText("Guests")).toBeTruthy();
     });
 
-    it('renders the Payments settings entry', () => {
+    it("renders the Payments settings entry", () => {
       const store = buildStore();
       const { getByText } = renderScreen(store);
-      expect(getByText('Payments')).toBeTruthy();
+      expect(getByText("Payments")).toBeTruthy();
     });
 
-    it('renders the Payment Dashboard settings entry', () => {
+    it("renders the Payment Dashboard settings entry", () => {
       const store = buildStore();
       const { getByText } = renderScreen(store);
-      expect(getByText('Payment Dashboard')).toBeTruthy();
+      expect(getByText("Payment Dashboard")).toBeTruthy();
     });
 
-    it('renders the Done button', () => {
+    it("renders the Done button", () => {
       const store = buildStore();
       const { getByText } = renderScreen(store);
-      expect(getByText('Done')).toBeTruthy();
+      expect(getByText("Done")).toBeTruthy();
     });
   });
 
   // ─── Navigation ───────────────────────────────────────────────────────────
 
-  describe('navigation handlers', () => {
-    it('navigates to StripeSettings when Payments entry is pressed', () => {
+  describe("navigation handlers", () => {
+    it("navigates to StripeSettings when Payments entry is pressed", () => {
       const store = buildStore();
       const { getByText } = renderScreen(store);
-      fireEvent.press(getByText('Payments'));
-      expect(mockNavigation.navigate).toHaveBeenCalledWith('stripeSettings');
+      fireEvent.press(getByText("Payments"));
+      expect(mockNavigation.navigate).toHaveBeenCalledWith("stripeSettings");
     });
 
-    it('navigates to PaymentDashboard when Payment Dashboard entry is pressed', () => {
+    it("navigates to PaymentDashboard when Payment Dashboard entry is pressed", () => {
       const store = buildStore();
       const { getByText } = renderScreen(store);
-      fireEvent.press(getByText('Payment Dashboard'));
-      expect(mockNavigation.navigate).toHaveBeenCalledWith('paymentDashboard');
+      fireEvent.press(getByText("Payment Dashboard"));
+      expect(mockNavigation.navigate).toHaveBeenCalledWith("paymentDashboard");
     });
 
-    it('calls navigation.goBack when Done button is pressed', () => {
+    it("calls navigation.goBack when Done button is pressed", () => {
       const store = buildStore();
       const { getByText } = renderScreen(store);
-      fireEvent.press(getByText('Done'));
+      fireEvent.press(getByText("Done"));
       expect(mockNavigation.goBack).toHaveBeenCalled();
     });
   });
 
   // ─── Modal interactions ───────────────────────────────────────────────────
 
-  describe('modal interactions', () => {
-    it('opens a form modal when Details entry is pressed', () => {
+  describe("modal interactions", () => {
+    it("opens a form modal when Details entry is pressed", () => {
       const store = buildStore();
       const { getByText } = renderScreen(store);
-      fireEvent.press(getByText('Details'));
+      fireEvent.press(getByText("Details"));
       expect(mockShowFormModal).toHaveBeenCalled();
     });
 
-    it('opens a form modal when Chores entry is pressed', () => {
+    it("opens a form modal when Chores entry is pressed", () => {
       const store = buildStore();
       const { getByText } = renderScreen(store);
-      fireEvent.press(getByText('Chores'));
+      fireEvent.press(getByText("Chores"));
       expect(mockShowFormModal).toHaveBeenCalled();
     });
 
-    it('opens a form modal when Managers entry is pressed', () => {
+    it("opens a form modal when Managers entry is pressed", () => {
       const store = buildStore();
       const { getByTestId } = renderScreen(store);
-      fireEvent.press(getByTestId('managers-section'));
+      fireEvent.press(getByTestId("managers-section"));
       expect(mockShowFormModal).toHaveBeenCalled();
     });
 
-    it('opens a form modal when Admin Management entry is pressed', () => {
+    it("opens a form modal when Admin Management entry is pressed", () => {
       const store = buildStore();
       const { getByText } = renderScreen(store);
-      fireEvent.press(getByText('Admin Management'));
+      fireEvent.press(getByText("Admin Management"));
       expect(mockShowFormModal).toHaveBeenCalled();
     });
 
-    it('opens a form modal when Phases entry is pressed', () => {
+    it("opens a form modal when Phases entry is pressed", () => {
       const store = buildStore();
       const { getByText } = renderScreen(store);
-      fireEvent.press(getByText('Phases'));
+      fireEvent.press(getByText("Phases"));
       expect(mockShowFormModal).toHaveBeenCalled();
     });
 
-    it('opens a form modal when Guests entry is pressed', () => {
+    it("opens a form modal when Guests entry is pressed", () => {
       const store = buildStore();
       const { getByTestId } = renderScreen(store);
-      fireEvent.press(getByTestId('manage-guests-button'));
+      fireEvent.press(getByTestId("manage-guests-button"));
       expect(mockShowFormModal).toHaveBeenCalled();
     });
   });
 
   // ─── Loading state ────────────────────────────────────────────────────────
 
-  describe('loading / error state', () => {
-    it('calls setLoadingModalState when the house update loading state changes', () => {
-      const store = buildStore(BASE_HOUSE, true, null);
+  describe("loading / error state", () => {
+    it("calls setLoadingModalState when the house update mutation is pending", () => {
+      mockUseUpdateHouse.mockReturnValue({
+        ...defaultUpdateHouseMutation,
+        isPending: true,
+      });
+      const store = buildStore();
       renderScreen(store);
       expect(mockSetLoadingModalState).toHaveBeenCalled();
+      const callArgs = mockSetLoadingModalState.mock.calls[0];
+      expect(callArgs[0]).toBe(true);
     });
 
-    it('passes an error message to setLoadingModalState when there is an error', () => {
-      const store = buildStore(BASE_HOUSE, false, 'update failed');
+    it("passes an error message to setLoadingModalState when the mutation errors", () => {
+      mockUseUpdateHouse.mockReturnValue({
+        ...defaultUpdateHouseMutation,
+        isError: true,
+        error: new Error("update failed"),
+      });
+      const store = buildStore();
       renderScreen(store);
       // setLoadingModalState is called in a useEffect; verify it was called
       expect(mockSetLoadingModalState).toHaveBeenCalled();
@@ -501,11 +520,47 @@ describe('HouseSettings', () => {
       expect(callArgs[3]).toBeTruthy();
     });
 
-    it('passes null error to setLoadingModalState when there is no error', () => {
-      const store = buildStore(BASE_HOUSE, false, null);
+    it("passes null error to setLoadingModalState when there is no error", () => {
+      const store = buildStore();
       renderScreen(store);
       const callArgs = mockSetLoadingModalState.mock.calls[0];
       expect(callArgs[3]).toBeNull();
+    });
+  });
+
+  // ─── House submission ─────────────────────────────────────────────────────
+  // Regression coverage for 2026-07-05: handleHouseSubmission/handlePhaseSubmit
+  // previously dispatched a nonexistent `updateHouseSettings` thunk and threw
+  // at call time. showFormModal is mocked (it never mounts its children), so
+  // we read the real handleSubmit/handlePhaseSubmit off the JSX element it
+  // was called with instead of rendering the stubbed child component.
+  describe("house submission", () => {
+    it("calls the real update-house mutation instead of throwing", async () => {
+      const store = buildStore();
+      const { getByText } = renderScreen(store);
+      fireEvent.press(getByText("Details"));
+
+      const houseSetupElement = mockShowFormModal.mock.calls[0][0];
+      await houseSetupElement.props.handleSubmit(BASE_HOUSE);
+
+      expect(defaultUpdateHouseMutation.mutateAsync).toHaveBeenCalledWith({
+        houseId: BASE_HOUSE.id,
+        values: BASE_HOUSE,
+      });
+    });
+
+    it("submits phase updates through the real update-house mutation", async () => {
+      const store = buildStore();
+      const { getByText } = renderScreen(store);
+      fireEvent.press(getByText("Phases"));
+
+      const phaseConfigElement = mockShowFormModal.mock.calls[0][0];
+      await phaseConfigElement.props.handlePhaseSubmit();
+
+      expect(defaultUpdateHouseMutation.mutateAsync).toHaveBeenCalledWith({
+        houseId: BASE_HOUSE.id,
+        values: { phases: BASE_HOUSE.phases },
+      });
     });
   });
 });

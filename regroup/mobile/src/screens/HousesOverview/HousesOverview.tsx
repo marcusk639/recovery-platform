@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 /**
  * HousesOverview - Migrated to React Query + Redux Toolkit
  *
@@ -10,43 +10,44 @@ import React from 'react';
  */
 
 // Phase 3.3: Migrated from withPopover HOC to useNotification hook
-import { useNotification } from '../../context';
-import { StyleSheet, View } from 'react-native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../navigation/types';
+import { useNotification } from "../../context";
+import { StyleSheet, View } from "react-native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { RootStackParamList } from "../../navigation/types";
 
 // Hooks
-import { useHousesByAdmin } from '../../state/queries';
-import { useAppSelector, useAppDispatch } from '../../state/store';
+import { useHousesByAdmin } from "../../state/queries";
+import { useAppSelector, useAppDispatch } from "../../state/store";
+import { selectHouseById } from "../../state/slices/housesSlice";
 
 // Components
-import RatsLoadingIndicator from '../../components/rats-loading-indicator/rats-loading-indicator';
-import RatsScrollView from '../../components/rats-scroll-view';
-import ScreenHeader from '../../components/screen-header';
-import Section from '../../components/rats-interactable-section';
-import HelpIcon from '../../components/help-icon';
-import { RatsText } from '../../components/rats-text';
+import RatsLoadingIndicator from "../../components/rats-loading-indicator/rats-loading-indicator";
+import RatsScrollView from "../../components/rats-scroll-view";
+import ScreenHeader from "../../components/screen-header";
+import Section from "../../components/rats-interactable-section";
+import HelpIcon from "../../components/help-icon";
+import { RatsText } from "../../components/rats-text";
 import {
   WithPopoverProps,
   withPopover,
-} from '../../components/rats-hoc/withPopover';
+} from "../../components/rats-hoc/withPopover";
 
 // Types & Entities
-import Admin from '../../entities/Admin';
-import { User } from '../../entities/User';
+import Admin from "../../entities/Admin";
+import { User } from "../../entities/User";
 
 // Utils
-import { getHouseActionItems, countHouseActionItems } from '../../util/house';
-import { getAddressDisplay } from '../../util/address';
-import { ANDROID } from '../../util/platform';
-import { color, normalize, fontFamily } from '../../styles/theme';
+import { getHouseActionItems, countHouseActionItems } from "../../util/house";
+import { getAddressDisplay } from "../../util/address";
+import { ANDROID } from "../../util/platform";
+import { color, normalize, fontFamily } from "../../styles/theme";
 
 // Styles
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    justifyContent: 'flex-start',
-    alignItems: 'center',
+    justifyContent: "flex-start",
+    alignItems: "center",
     backgroundColor: color.light_grey,
   },
 });
@@ -79,7 +80,7 @@ const HousesOverview: React.FC<Props> = ({ navigation }) => {
     isLoading,
     isError,
     error,
-  } = useHousesByAdmin(user?.uid || '', !!user?.uid);
+  } = useHousesByAdmin(user?.uid || "", !!user?.uid);
 
   // Convert houses object to array for rendering
   const houses = housesData ? Object.values(housesData) : [];
@@ -88,20 +89,21 @@ const HousesOverview: React.FC<Props> = ({ navigation }) => {
   const selectHouse = (houseId: string) => {
     if (!housesData) return;
 
-    // Dispatch legacy Redux action to select house
-    // TODO: This can be simplified to navigation params once fully migrated
-    dispatch({
-      type: 'SELECT_HOUSE',
-      payload: { house: housesData[houseId] },
-    });
+    // Hardened 2026-07-06: this used to dispatch a raw {type: 'SELECT_HOUSE'}
+    // action that no reducer handled — a real dispatch, but a complete no-op
+    // for changing the selected house. useSelectedHouse() reads
+    // state.houses.selectedHouseId, which only the real selectHouseById
+    // reducer sets (same pattern HouseSearchScreen.tsx already uses
+    // correctly).
+    dispatch(selectHouseById(houseId));
     navigation.pop();
   };
 
   // Render help popover
   const handleSetPopover = () => {
     showPopover(
-      'HOUSE LIST',
-      'Select one of your houses to view and manage that house.',
+      "HOUSE LIST",
+      "Select one of your houses to view and manage that house."
     );
   };
 
@@ -109,7 +111,7 @@ const HousesOverview: React.FC<Props> = ({ navigation }) => {
   const renderHouseSections = () => {
     if (!housesData) return null;
 
-    return houses.map(house => {
+    return houses.map((house) => {
       const itemCount = countHouseActionItems(house);
       return (
         <Section
@@ -122,7 +124,7 @@ const HousesOverview: React.FC<Props> = ({ navigation }) => {
             house.street,
             house.city,
             house.state,
-            undefined,
+            undefined
           )}
           iconBackgroundColor={color.green_blue}
           onPress={() => selectHouse(house.id)}
@@ -136,11 +138,12 @@ const HousesOverview: React.FC<Props> = ({ navigation }) => {
                   borderRadius: normalize(12.5),
                   borderColor: color.red,
                   borderWidth: 1,
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  marginLeft: 'auto',
+                  justifyContent: "center",
+                  alignItems: "center",
+                  marginLeft: "auto",
                   paddingBottom: ANDROID ? normalize(2) : 0,
-                }}>
+                }}
+              >
                 <RatsText
                   text={itemCount}
                   style={{ color: color.white, fontFamily: fontFamily.bold }}
@@ -180,7 +183,8 @@ const HousesOverview: React.FC<Props> = ({ navigation }) => {
     <RatsScrollView
       testID="house-list-modal"
       contentContainerStyle={styles.container}
-      behavior="height">
+      behavior="height"
+    >
       {/******************************* HEADER *******************************/}
       <ScreenHeader
         renderBackButton

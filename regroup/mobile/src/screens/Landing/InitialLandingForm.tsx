@@ -1,32 +1,32 @@
-import React, { useState } from 'react';
-import { withFormik, Field, FormikProps } from 'formik';
-import { useNavigation } from '@react-navigation/native';
-import * as yup from 'yup';
-import { View, TouchableOpacity, TextStyle, ViewStyle } from 'react-native';
+import React, { useState } from "react";
+import { withFormik, Field, FormikProps } from "formik";
+import { useNavigation } from "@react-navigation/native";
+import * as yup from "yup";
+import { View, TouchableOpacity, TextStyle, ViewStyle } from "react-native";
 import {
   AuthScreenNavigationProp,
   AuthStackParamList,
   Routes,
-} from '../../navigation/types';
+} from "../../navigation/types";
 import {
   navigateAuthStackRoute,
   navigateToMain,
-} from '../../navigation/authNavigation';
-import RatsRadioButtonGroup from '../../components/rats-radio-button-group';
-import RatsButton from '../../components/rats-button/rats-button';
+} from "../../navigation/authNavigation";
+import RatsRadioButtonGroup from "../../components/rats-radio-button-group";
+import RatsButton from "../../components/rats-button/rats-button";
 import {
   color,
   fontFamily,
   fontSize,
   normalize,
   ROW,
-} from '../../styles/theme';
-import { RatsText } from '../../components/rats-text';
-import { login, initialSignUp } from '../../state/slices/userSlice';
-import { RatsHR } from '../../components/rats-horizontal-rule';
-import RatsLoadingIndicator from '../../components/rats-loading-indicator/rats-loading-indicator';
-import { useAppSelector, useAppDispatch } from '../../state/store';
-import { User } from '../../entities/User';
+} from "../../styles/theme";
+import { RatsText } from "../../components/rats-text";
+import { login, initialSignUp } from "../../state/slices/userSlice";
+import { RatsHR } from "../../components/rats-horizontal-rule";
+import RatsLoadingIndicator from "../../components/rats-loading-indicator/rats-loading-indicator";
+import { useAppSelector, useAppDispatch } from "../../state/store";
+import { User } from "../../entities/User";
 
 interface FormValues {
   potentialUserType: string;
@@ -42,7 +42,7 @@ const InitialLandingFormView = (props: FormViewProps) => {
 
   const potentialGuestLabel = "I'm looking to join a recovery home.";
   const potentialManagerLabel =
-    'I want to manage my recovery homes with this app.';
+    "I want to manage my recovery homes with this app.";
 
   const FORM: ViewStyle = {
     flex: 1,
@@ -51,7 +51,7 @@ const InitialLandingFormView = (props: FormViewProps) => {
 
   const ERROR_MESSAGE: TextStyle = {
     color: color.red,
-    textAlign: 'center',
+    textAlign: "center",
     fontSize: fontSize.medium,
     fontFamily: fontFamily.roboto,
   };
@@ -59,7 +59,7 @@ const InitialLandingFormView = (props: FormViewProps) => {
   const renderErrors = () => {
     const { errors, touched, submitCount } = props;
     return Object.keys(errors).map(
-      key =>
+      (key) =>
         submitCount > 0 &&
         (touched as Record<string, boolean>)[key] && (
           <RatsText
@@ -67,13 +67,13 @@ const InitialLandingFormView = (props: FormViewProps) => {
             style={ERROR_MESSAGE}
             text={(errors as Record<string, string>)[key]}
           />
-        ),
+        )
     );
   };
 
   const showDemo = async () => {
     setLoading(true);
-    await props.login('demo_user@appdemo.net', 'DemoUser1');
+    await props.login("demo_user@appdemo.net", "DemoUser1");
     setLoading(false);
     navigateToMain(navigation);
   };
@@ -91,7 +91,7 @@ const InitialLandingFormView = (props: FormViewProps) => {
             marginTop: normalize(20),
             marginLeft: normalize(0),
             marginBottom: normalize(10),
-            fontWeight: '600' as const,
+            fontWeight: "600" as const,
           }}
           text="How can we help?"
         />
@@ -104,13 +104,13 @@ const InitialLandingFormView = (props: FormViewProps) => {
           radioButtons={[
             {
               label: potentialGuestLabel,
-              value: 'guest',
-              testID: 'landing-role-guest',
+              value: "guest",
+              testID: "landing-role-guest",
             },
             {
               label: potentialManagerLabel,
-              value: 'superAdmin',
-              testID: 'landing-role-manager',
+              value: "superAdmin",
+              testID: "landing-role-manager",
             },
           ]}
         />
@@ -126,14 +126,15 @@ const InitialLandingFormView = (props: FormViewProps) => {
       <View
         style={[
           ROW,
-          { justifyContent: 'space-between', paddingVertical: normalize(30) },
-        ]}>
+          { justifyContent: "space-between", paddingVertical: normalize(30) },
+        ]}
+      >
         <RatsHR
-          style={{ width: '40%', borderBottomWidth: 2, alignSelf: 'center' }}
+          style={{ width: "40%", borderBottomWidth: 2, alignSelf: "center" }}
         />
         <RatsText text="OR" style={{ fontSize: fontSize.medium }} />
         <RatsHR
-          style={{ width: '40%', borderBottomWidth: 2, alignSelf: 'center' }}
+          style={{ width: "40%", borderBottomWidth: 2, alignSelf: "center" }}
         />
       </View>
       <View style={{ flex: 1 }}>
@@ -142,7 +143,7 @@ const InitialLandingFormView = (props: FormViewProps) => {
             fontSize: normalize(23),
             marginLeft: normalize(0),
             marginBottom: normalize(10),
-            fontWeight: '600' as const,
+            fontWeight: "600" as const,
           }}
           text="Have an account?"
         />
@@ -160,10 +161,11 @@ const InitialLandingFormView = (props: FormViewProps) => {
         <View
           style={{
             ...ROW,
-            justifyContent: 'center',
-            alignItems: 'flex-end',
+            justifyContent: "center",
+            alignItems: "flex-end",
             flex: 1,
-          }}>
+          }}
+        >
           <RatsText
             style={{
               fontFamily: fontFamily.roboto,
@@ -171,11 +173,7 @@ const InitialLandingFormView = (props: FormViewProps) => {
             }}
             text="Want to try it out?"
           />
-          <TouchableOpacity
-            testID="landing-demo-link"
-            onPress={() => {
-              navigation.navigate(Routes.Login);
-            }}>
+          <TouchableOpacity testID="landing-demo-link" onPress={showDemo}>
             <RatsText
               style={{
                 fontFamily: fontFamily.roboto,
@@ -193,16 +191,16 @@ const InitialLandingFormView = (props: FormViewProps) => {
 };
 
 const initialValues: FormValues = {
-  potentialUserType: '',
+  potentialUserType: "",
 };
 
 const determineInitialRoute = (
-  potentialUserType: string,
+  potentialUserType: string
 ): keyof AuthStackParamList | undefined => {
-  if (potentialUserType === 'superAdmin') {
+  if (potentialUserType === "superAdmin") {
     return Routes.Login;
   }
-  if (potentialUserType === 'guest') {
+  if (potentialUserType === "guest") {
     return Routes.HouseSearch;
   }
   return undefined;
@@ -226,7 +224,7 @@ const FormikForm = withFormik<any, FormValues>({
     }
   },
   validationSchema: yup.object().shape({
-    potentialUserType: yup.string().required('Please select an option.'),
+    potentialUserType: yup.string().required("Please select an option."),
   }),
 })(InitialLandingFormView);
 
@@ -243,7 +241,7 @@ const FormikForm = withFormik<any, FormValues>({
  */
 const InitialLandingForm = () => {
   const dispatch = useAppDispatch();
-  const user = useAppSelector(state => state.user.user);
+  const user = useAppSelector((state) => state.user.user);
   const navigation = useNavigation<AuthScreenNavigationProp>();
 
   const handleLogin = (email: string, password: string) =>

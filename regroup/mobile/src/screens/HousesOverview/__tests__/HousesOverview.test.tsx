@@ -11,50 +11,50 @@
  */
 
 // ─── Navigation mock ──────────────────────────────────────────────────────────
-jest.mock('@react-navigation/native-stack', () => ({}));
+jest.mock("@react-navigation/native-stack", () => ({}));
 
 // ─── Context mocks ────────────────────────────────────────────────────────────
 const mockShowPopover = jest.fn();
 const mockSetPopoverRef = jest.fn();
 
-jest.mock('../../../context', () => ({
+jest.mock("../../../context", () => ({
   useNotification: () => ({
     showPopover: mockShowPopover,
     setPopoverRef: mockSetPopoverRef,
   }),
   useTheme: () => ({
     theme: {
-      primaryFontFamily: 'System',
-      secondaryFontFamily: 'System',
-      primaryColor: '#000',
-      secondaryColor: '#fff',
-      tertiaryColor: '#ccc',
-      backgroundColor: '#fff',
-      textColor: '#000',
-      logoTintColor: '#fff',
+      primaryFontFamily: "System",
+      secondaryFontFamily: "System",
+      primaryColor: "#000",
+      secondaryColor: "#fff",
+      tertiaryColor: "#ccc",
+      backgroundColor: "#fff",
+      textColor: "#000",
+      logoTintColor: "#fff",
     },
   }),
   useTranslation: () => ({
     t: (key: string) => key,
-    i18n: { language: 'en', changeLanguage: jest.fn() },
+    i18n: { language: "en", changeLanguage: jest.fn() },
   }),
 }));
 
 // ─── React Query hooks mock ───────────────────────────────────────────────────
 const mockUseHousesByAdmin = jest.fn();
 
-jest.mock('../../../state/queries', () => ({
+jest.mock("../../../state/queries", () => ({
   useHousesByAdmin: (...args: any[]) => mockUseHousesByAdmin(...args),
 }));
 
 // ─── withPopover HOC mock (imported by source file but not used at runtime) ────
-jest.mock('../../../components/rats-hoc/withPopover', () => ({
+jest.mock("../../../components/rats-hoc/withPopover", () => ({
   withPopover: (Component: any) => Component,
 }));
 
 // ─── Component stubs ──────────────────────────────────────────────────────────
-jest.mock('../../../components/rats-scroll-view', () => {
-  const { ScrollView } = require('react-native');
+jest.mock("../../../components/rats-scroll-view", () => {
+  const { ScrollView } = require("react-native");
   return (props: any) => {
     const { testID, children, contentContainerStyle, behavior, ...rest } =
       props;
@@ -66,8 +66,8 @@ jest.mock('../../../components/rats-scroll-view', () => {
   };
 });
 
-jest.mock('../../../components/screen-header', () => {
-  const { View, Text } = require('react-native');
+jest.mock("../../../components/screen-header", () => {
+  const { View, Text } = require("react-native");
   return ({ header, icon }: any) => (
     <View testID="screen-header">
       <Text testID="screen-header-text">{header}</Text>
@@ -77,22 +77,22 @@ jest.mock('../../../components/screen-header', () => {
 });
 
 jest.mock(
-  '../../../components/rats-loading-indicator/rats-loading-indicator',
+  "../../../components/rats-loading-indicator/rats-loading-indicator",
   () => {
-    const { View } = require('react-native');
+    const { View } = require("react-native");
     return () => <View testID="loading-indicator" />;
-  },
+  }
 );
 
-jest.mock('../../../components/rats-text', () => ({
+jest.mock("../../../components/rats-text", () => ({
   RatsText: ({ text }: any) => {
-    const { Text } = require('react-native');
-    return <Text>{typeof text === 'number' ? String(text) : text || ''}</Text>;
+    const { Text } = require("react-native");
+    return <Text>{typeof text === "number" ? String(text) : text || ""}</Text>;
   },
 }));
 
-jest.mock('../../../components/rats-interactable-section', () => {
-  const { TouchableOpacity, Text } = require('react-native');
+jest.mock("../../../components/rats-interactable-section", () => {
+  const { TouchableOpacity, Text } = require("react-native");
   return ({ name, testID, onPress }: any) => (
     <TouchableOpacity testID={testID || `section-${name}`} onPress={onPress}>
       <Text>{name}</Text>
@@ -100,34 +100,32 @@ jest.mock('../../../components/rats-interactable-section', () => {
   );
 });
 
-jest.mock('../../../components/help-icon', () => {
-  const { TouchableOpacity } = require('react-native');
+jest.mock("../../../components/help-icon", () => {
+  const { TouchableOpacity } = require("react-native");
   return ({ helpFn }: any) => (
     <TouchableOpacity testID="help-icon" onPress={helpFn} />
   );
 });
 
 // ─── React imports (after mocks) ──────────────────────────────────────────────
-import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
-import { Provider } from 'react-redux';
-import { configureStore } from '@reduxjs/toolkit';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React from "react";
+import { render, fireEvent } from "@testing-library/react-native";
+import { Provider } from "react-redux";
+import { configureStore } from "@reduxjs/toolkit";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import housesReducer from '../../../state/slices/housesSlice';
-import guestsReducer from '../../../state/slices/guestsSlice';
-import userReducer from '../../../state/slices/userSlice';
-import adminReducer from '../../../state/slices/adminSlice';
-import uiReducer from '../../../state/slices/uiSlice';
-import authReducer from '../../../state/slices/authSlice';
-import themeReducer from '../../../state/slices/themeSlice';
-import navigationReducer from '../../../state/slices/navigationSlice';
-import chatReducer from '../../../state/slices/chatSlice';
-import setupReducer from '../../../state/slices/setupSlice';
-import notificationsReducer from '../../../state/slices/notificationsSlice';
-import meetingsReducer from '../../../state/slices/meetingsSlice';
+import housesReducer from "../../../state/slices/housesSlice";
+import guestsReducer from "../../../state/slices/guestsSlice";
+import userReducer from "../../../state/slices/userSlice";
+import adminReducer from "../../../state/slices/adminSlice";
+import authReducer from "../../../state/slices/authSlice";
+import themeReducer from "../../../state/slices/themeSlice";
+import chatReducer from "../../../state/slices/chatSlice";
+import setupReducer from "../../../state/slices/setupSlice";
+import notificationsReducer from "../../../state/slices/notificationsSlice";
+import meetingsReducer from "../../../state/slices/meetingsSlice";
 
-import HousesOverview from '../HousesOverview';
+import HousesOverview from "../HousesOverview";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -135,40 +133,40 @@ function makeHouse(id: string, name: string, overrides: any = {}): any {
   return {
     id,
     name,
-    adminIds: ['admin-1'],
+    adminIds: ["admin-1"],
     superAdminIds: [],
     pendingAdminInvites: [],
-    timezone: '',
-    ownerId: 'owner-1',
+    timezone: "",
+    ownerId: "owner-1",
     lat: 0,
     lng: 0,
-    geohash: '',
-    street: '1 Main St',
-    city: 'Springfield',
-    state: 'IL',
-    zip: '62701',
-    country: 'US',
+    geohash: "",
+    street: "1 Main St",
+    city: "Springfield",
+    state: "IL",
+    zip: "62701",
+    country: "US",
     health: {},
     monthlyRent: 1000,
     weeklyRent: 250,
     currentCapacity: 2,
     maximumCapacity: 5,
-    code: 'TEST01',
-    avatar: '',
-    imageUrl: '',
+    code: "TEST01",
+    avatar: "",
+    imageUrl: "",
     depositsAndFees: 0,
     certified: false,
-    phoneNumber: '5551234567',
-    rentFrequency: 'both',
-    subscriptionStatus: 'active',
+    phoneNumber: "5551234567",
+    rentFrequency: "both",
+    subscriptionStatus: "active",
     isDemoHouse: false,
-    houseType: 'traditional',
+    houseType: "traditional",
     seniorPeerEmails: [],
-    managerSetupType: 'operator-only',
+    managerSetupType: "operator-only",
     awaitingVerification: [],
     chores: {},
     phases: {},
-    gender: '',
+    gender: "",
     disputes: {},
     applications: {},
     complaints: {},
@@ -176,21 +174,21 @@ function makeHouse(id: string, name: string, overrides: any = {}): any {
     baths: 1,
     wifi: false,
     rating: 3,
-    createdDate: '2024-01-01',
-    lastUpdated: '2024-01-01',
+    createdDate: "2024-01-01",
+    lastUpdated: "2024-01-01",
     ...overrides,
   };
 }
 
-const HOUSE_1 = makeHouse('house-1', 'Recovery House Alpha');
-const HOUSE_2 = makeHouse('house-2', 'Recovery House Beta');
+const HOUSE_1 = makeHouse("house-1", "Recovery House Alpha");
+const HOUSE_2 = makeHouse("house-2", "Recovery House Beta");
 
 const BASE_USER: any = {
-  id: 'user-1',
-  uid: 'user-1',
-  firstName: 'Admin',
-  lastName: 'User',
-  email: 'admin@example.com',
+  id: "user-1",
+  uid: "user-1",
+  firstName: "Admin",
+  lastName: "User",
+  email: "admin@example.com",
   isAdmin: true,
 };
 
@@ -211,10 +209,8 @@ const actionCapture = (_storeApi: any) => (next: any) => (action: any) => {
 function buildStore({ user = BASE_USER }: BuildStoreOptions = {}) {
   return configureStore({
     reducer: {
-      ui: uiReducer,
       auth: authReducer,
       theme: themeReducer,
-      navigation: navigationReducer,
       user: userReducer,
       houses: housesReducer,
       guests: guestsReducer,
@@ -224,7 +220,7 @@ function buildStore({ user = BASE_USER }: BuildStoreOptions = {}) {
       setup: setupReducer,
       notifications: notificationsReducer,
     },
-    middleware: getDefaultMiddleware =>
+    middleware: (getDefaultMiddleware) =>
       getDefaultMiddleware().concat(actionCapture),
     preloadedState: {
       houses: {
@@ -252,12 +248,12 @@ function buildStore({ user = BASE_USER }: BuildStoreOptions = {}) {
         guests: {},
         selectedGuest: null,
         userAsGuest: null,
-        status: 'idle',
+        status: "idle",
         error: null,
-        updateStatus: 'idle',
-        createStatus: 'idle',
-        deleteStatus: 'idle',
-        customizePhaseStatus: 'idle',
+        updateStatus: "idle",
+        createStatus: "idle",
+        deleteStatus: "idle",
+        customizePhaseStatus: "idle",
       } as any,
       admin: {
         houseAdmins: {},
@@ -304,19 +300,19 @@ function renderScreen(storeOptions: BuildStoreOptions = {}) {
       <QueryClientProvider client={queryClient}>
         <HousesOverview navigation={mockNavigation} />
       </QueryClientProvider>
-    </Provider>,
+    </Provider>
   );
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe('HousesOverview', () => {
+describe("HousesOverview", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     dispatchedActions = [];
     // Default: query resolves with two houses, not loading
     mockUseHousesByAdmin.mockReturnValue({
-      data: { 'house-1': HOUSE_1, 'house-2': HOUSE_2 },
+      data: { "house-1": HOUSE_1, "house-2": HOUSE_2 },
       isLoading: false,
       isError: false,
       error: null,
@@ -324,28 +320,28 @@ describe('HousesOverview', () => {
   });
 
   // ─── Smoke test ─────────────────────────────────────────────────────────────
-  describe('render', () => {
-    it('renders without crashing', () => {
+  describe("render", () => {
+    it("renders without crashing", () => {
       const { getByTestId } = renderScreen();
-      expect(getByTestId('house-list-modal')).toBeTruthy();
+      expect(getByTestId("house-list-modal")).toBeTruthy();
     });
 
-    it('renders the screen header', () => {
+    it("renders the screen header", () => {
       const { getByTestId } = renderScreen();
-      expect(getByTestId('screen-header')).toBeTruthy();
+      expect(getByTestId("screen-header")).toBeTruthy();
     });
 
     it('renders "My Houses" header text', () => {
       const { getByTestId } = renderScreen();
-      expect(getByTestId('screen-header-text').props.children).toBe(
-        'My Houses',
+      expect(getByTestId("screen-header-text").props.children).toBe(
+        "My Houses"
       );
     });
   });
 
   // ─── Loading state ──────────────────────────────────────────────────────────
-  describe('loading state', () => {
-    it('renders loading indicator when isLoading is true', () => {
+  describe("loading state", () => {
+    it("renders loading indicator when isLoading is true", () => {
       mockUseHousesByAdmin.mockReturnValue({
         data: null,
         isLoading: true,
@@ -353,10 +349,10 @@ describe('HousesOverview', () => {
         error: null,
       });
       const { getByTestId } = renderScreen();
-      expect(getByTestId('loading-indicator')).toBeTruthy();
+      expect(getByTestId("loading-indicator")).toBeTruthy();
     });
 
-    it('renders loading indicator when user is null', () => {
+    it("renders loading indicator when user is null", () => {
       mockUseHousesByAdmin.mockReturnValue({
         data: null,
         isLoading: false,
@@ -364,10 +360,10 @@ describe('HousesOverview', () => {
         error: null,
       });
       const { getByTestId } = renderScreen({ user: null });
-      expect(getByTestId('loading-indicator')).toBeTruthy();
+      expect(getByTestId("loading-indicator")).toBeTruthy();
     });
 
-    it('does not render house list while loading', () => {
+    it("does not render house list while loading", () => {
       mockUseHousesByAdmin.mockReturnValue({
         data: null,
         isLoading: true,
@@ -375,40 +371,40 @@ describe('HousesOverview', () => {
         error: null,
       });
       const { queryByTestId } = renderScreen();
-      expect(queryByTestId('house-list-modal')).toBeNull();
+      expect(queryByTestId("house-list-modal")).toBeNull();
     });
   });
 
   // ─── House list ──────────────────────────────────────────────────────────────
-  describe('house list', () => {
-    it('renders a section for each house', () => {
+  describe("house list", () => {
+    it("renders a section for each house", () => {
       const { getByTestId } = renderScreen();
-      expect(getByTestId('house-option-house-1')).toBeTruthy();
-      expect(getByTestId('house-option-house-2')).toBeTruthy();
+      expect(getByTestId("house-option-house-1")).toBeTruthy();
+      expect(getByTestId("house-option-house-2")).toBeTruthy();
     });
 
-    it('renders house names', () => {
+    it("renders house names", () => {
       const { getByText } = renderScreen();
-      expect(getByText('Recovery House Alpha')).toBeTruthy();
-      expect(getByText('Recovery House Beta')).toBeTruthy();
+      expect(getByText("Recovery House Alpha")).toBeTruthy();
+      expect(getByText("Recovery House Beta")).toBeTruthy();
     });
 
-    it('renders a single house when only one house exists', () => {
+    it("renders a single house when only one house exists", () => {
       mockUseHousesByAdmin.mockReturnValue({
-        data: { 'house-1': HOUSE_1 },
+        data: { "house-1": HOUSE_1 },
         isLoading: false,
         isError: false,
         error: null,
       });
       const { getByTestId, queryByTestId } = renderScreen();
-      expect(getByTestId('house-option-house-1')).toBeTruthy();
-      expect(queryByTestId('house-option-house-2')).toBeNull();
+      expect(getByTestId("house-option-house-1")).toBeTruthy();
+      expect(queryByTestId("house-option-house-2")).toBeNull();
     });
   });
 
   // ─── Empty state ─────────────────────────────────────────────────────────────
-  describe('empty state', () => {
-    it('renders no house sections when there are no houses', () => {
+  describe("empty state", () => {
+    it("renders no house sections when there are no houses", () => {
       mockUseHousesByAdmin.mockReturnValue({
         data: {},
         isLoading: false,
@@ -416,10 +412,10 @@ describe('HousesOverview', () => {
         error: null,
       });
       const { queryByTestId } = renderScreen();
-      expect(queryByTestId('house-option-house-1')).toBeNull();
+      expect(queryByTestId("house-option-house-1")).toBeNull();
     });
 
-    it('renders the list container even when empty', () => {
+    it("renders the list container even when empty", () => {
       mockUseHousesByAdmin.mockReturnValue({
         data: {},
         isLoading: false,
@@ -427,10 +423,10 @@ describe('HousesOverview', () => {
         error: null,
       });
       const { getByTestId } = renderScreen();
-      expect(getByTestId('house-list-modal')).toBeTruthy();
+      expect(getByTestId("house-list-modal")).toBeTruthy();
     });
 
-    it('renders the list container when housesData is null', () => {
+    it("renders the list container when housesData is null", () => {
       mockUseHousesByAdmin.mockReturnValue({
         data: null,
         isLoading: false,
@@ -439,74 +435,78 @@ describe('HousesOverview', () => {
       });
       const { getByTestId } = renderScreen();
       // null data, not loading, user present → renders main view (empty list)
-      expect(getByTestId('house-list-modal')).toBeTruthy();
+      expect(getByTestId("house-list-modal")).toBeTruthy();
     });
   });
 
   // ─── House selection ─────────────────────────────────────────────────────────
-  describe('house selection', () => {
-    it('dispatches SELECT_HOUSE when a house row is pressed', () => {
+  describe("house selection", () => {
+    it("dispatches selectHouseById with the house id when a house row is pressed", () => {
       const { getByTestId } = renderScreen();
-      fireEvent.press(getByTestId('house-option-house-1'));
+      fireEvent.press(getByTestId("house-option-house-1"));
 
+      // Regression coverage for 2026-07-06: this used to assert a raw
+      // {type: 'SELECT_HOUSE'} action that no reducer handled — the test
+      // was written against the bug (house-switching was a complete no-op),
+      // which is why it shipped unnoticed.
       const selectAction = dispatchedActions.find(
-        a => a.type === 'SELECT_HOUSE',
+        (a) => a.type === "houses/selectHouseById"
       );
       expect(selectAction).toBeDefined();
-      expect(selectAction.payload.house).toEqual(HOUSE_1);
+      expect(selectAction.payload).toEqual(HOUSE_1.id);
     });
 
-    it('calls navigation.pop() after selecting a house', () => {
+    it("calls navigation.pop() after selecting a house", () => {
       const { getByTestId } = renderScreen();
-      fireEvent.press(getByTestId('house-option-house-1'));
+      fireEvent.press(getByTestId("house-option-house-1"));
       expect(mockNavigation.pop).toHaveBeenCalled();
     });
 
-    it('selects the correct house when house-2 is pressed', () => {
+    it("selects the correct house when house-2 is pressed", () => {
       const { getByTestId } = renderScreen();
-      fireEvent.press(getByTestId('house-option-house-2'));
+      fireEvent.press(getByTestId("house-option-house-2"));
 
       const selectAction = dispatchedActions.find(
-        a => a.type === 'SELECT_HOUSE',
+        (a) => a.type === "houses/selectHouseById"
       );
       expect(selectAction).toBeDefined();
-      expect(selectAction.payload.house).toEqual(HOUSE_2);
+      expect(selectAction.payload).toEqual(HOUSE_2.id);
     });
   });
 
   // ─── Error state ─────────────────────────────────────────────────────────────
-  describe('error state', () => {
-    it('renders error message when query fails', () => {
+  describe("error state", () => {
+    it("renders error message when query fails", () => {
       mockUseHousesByAdmin.mockReturnValue({
         data: null,
         isLoading: false,
         isError: true,
-        error: new Error('Network error'),
+        error: new Error("Network error"),
       });
       const { getByText } = renderScreen();
-      expect(getByText('Failed to load houses')).toBeTruthy();
+      expect(getByText("Failed to load houses")).toBeTruthy();
     });
 
-    it('does not render house sections in error state', () => {
+    it("does not render house sections in error state", () => {
       mockUseHousesByAdmin.mockReturnValue({
         data: null,
         isLoading: false,
         isError: true,
-        error: new Error('Network error'),
+        error: new Error("Network error"),
       });
       const { queryByTestId } = renderScreen();
-      expect(queryByTestId('house-option-house-1')).toBeNull();
+      expect(queryByTestId("house-option-house-1")).toBeNull();
     });
   });
 
   // ─── Help popover ─────────────────────────────────────────────────────────────
-  describe('help popover', () => {
-    it('calls showPopover when the help icon is pressed', () => {
+  describe("help popover", () => {
+    it("calls showPopover when the help icon is pressed", () => {
       const { getByTestId } = renderScreen();
-      fireEvent.press(getByTestId('help-icon'));
+      fireEvent.press(getByTestId("help-icon"));
       expect(mockShowPopover).toHaveBeenCalledWith(
-        'HOUSE LIST',
-        expect.any(String),
+        "HOUSE LIST",
+        expect.any(String)
       );
     });
   });
