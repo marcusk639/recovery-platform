@@ -151,4 +151,103 @@ describe("searchGroupsByLocation auth check (FH-3)", () => {
       (searchGroupsByLocation as Function)(authRequest),
     ).rejects.toMatchObject({ code: "invalid-argument" });
   });
+
+  it("does not leak internal fields (stripeCustomerId, admins, etc.) in search results", async () => {
+    jest.resetModules();
+    const rawGroupData = {
+      name: "Test Group",
+      type: "AA",
+      placeName: "Church Hall",
+      city: "Phoenix",
+      state: "AZ",
+      isClaimed: true,
+      lat: 33.45,
+      lng: -112.07,
+      geohash: "abc",
+      publicProfileEnabled: true,
+      stripeCustomerId: "cus_secret",
+      stripeSubscriptionId: "sub_secret",
+      admins: ["admin-uid"],
+      treasurers: ["treasurer-uid"],
+    };
+    mockCollection.mockImplementation((name: string) => {
+      if (name === "groups") {
+        return {
+          where: jest.fn().mockReturnThis(),
+          orderBy: jest.fn().mockReturnThis(),
+          startAt: jest.fn().mockReturnThis(),
+          endAt: jest.fn().mockReturnThis(),
+          get: jest.fn().mockResolvedValue({
+            docs: [{ id: "group-1", data: () => rawGroupData }],
+          }),
+        };
+      }
+      return {};
+    });
+    const { searchGroupsByLocation: fn } =
+      await import("../callable/searchGroupsByLocation");
+    const request = {
+      auth: { uid: "caller-uid" },
+      data: { lat: 33.45, lng: -112.07, radius: 10 },
+    };
+    const result = await (fn as any)(request);
+    expect(result).toHaveLength(1);
+    const leaked = [
+      "stripeCustomerId",
+      "stripeSubscriptionId",
+      "admins",
+      "treasurers",
+      "lat",
+      "lng",
+      "geohash",
+    ];
+    for (const field of leaked) {
+      expect(result[0]).not.toHaveProperty(field);
+    }
+    expect(result[0]).toMatchObject({
+      id: "group-1",
+      name: "Test Group",
+      type: "AA",
+      placeName: "Church Hall",
+      city: "Phoenix",
+      state: "AZ",
+      isClaimed: true,
+    });
+  });
+
+  it("excludes groups with publicProfileEnabled set to false", async () => {
+    jest.resetModules();
+    mockCollection.mockImplementation((name: string) => {
+      if (name === "groups") {
+        return {
+          where: jest.fn().mockReturnThis(),
+          orderBy: jest.fn().mockReturnThis(),
+          startAt: jest.fn().mockReturnThis(),
+          endAt: jest.fn().mockReturnThis(),
+          get: jest.fn().mockResolvedValue({
+            docs: [
+              {
+                id: "hidden-group",
+                data: () => ({
+                  name: "Hidden Group",
+                  lat: 33.45,
+                  lng: -112.07,
+                  publicProfileEnabled: false,
+                }),
+              },
+            ],
+          }),
+        };
+      }
+      return {};
+    });
+    const { searchGroupsByLocation: fn } =
+      await import("../callable/searchGroupsByLocation");
+    const request = {
+      auth: { uid: "caller-uid" },
+      data: { lat: 33.45, lng: -112.07, radius: 10 },
+    };
+    const result = await (fn as any)(request);
+    expect(result).toHaveLength(0);
+  });
 });
