@@ -1,10 +1,20 @@
 import { createHash } from "crypto";
 import { HttpsError } from "firebase-functions/v2/https";
-import type { Transaction } from "firebase-admin/firestore";
+import { Timestamp, type Transaction } from "firebase-admin/firestore";
 import { db } from "./firebase";
 
 const WINDOW_MS = 60_000;
 const MAX_REQUESTS_PER_WINDOW = 30;
+
+// TTL retention for `_rateLimits` documents. Deliberately independent of
+// WINDOW_MS (the 60s rate-limit window): retention must comfortably outlive
+// the active window so docs remain readable/updatable during their brief
+// active life, while still being garbage-collected well after they go
+// stale. This only sets the `expireAt` field on each doc — it does not by
+// itself enable TTL deletion. A TTL policy keyed on `expireAt` must still be
+// configured for the `_rateLimits` collection group in the Firebase Console
+// (or via `gcloud firestore fields ttls update`) as a separate ops step.
+const RATE_LIMIT_TTL_MS = 60 * 60 * 1000;
 
 /**
  * `key` often embeds caller-supplied data (e.g. an X-Forwarded-For header
@@ -37,8 +47,10 @@ export async function enforceRateLimit(key: string): Promise<void> {
     const windowStart: number | undefined = data?.windowStart;
     const count: number = data?.count ?? 0;
 
+    const expireAt = Timestamp.fromMillis(now + RATE_LIMIT_TTL_MS);
+
     if (windowStart === undefined || now - windowStart >= WINDOW_MS) {
-      tx.set(ref, { windowStart: now, count: 1 });
+      tx.set(ref, { windowStart: now, count: 1, expireAt });
       return;
     }
 
@@ -49,7 +61,7 @@ export async function enforceRateLimit(key: string): Promise<void> {
       );
     }
 
-    tx.set(ref, { windowStart, count: count + 1 });
+    tx.set(ref, { windowStart, count: count + 1, expireAt });
   });
 }
 

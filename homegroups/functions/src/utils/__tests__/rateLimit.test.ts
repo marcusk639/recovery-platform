@@ -15,6 +15,19 @@ jest.mock("../firebase", () => ({
   },
 }));
 
+// Minimal fake Timestamp so we can assert `expireAt` is a Timestamp-shaped
+// value without depending on the real firebase-admin SDK's internals.
+class FakeTimestamp {
+  constructor(public readonly millis: number) {}
+  static fromMillis(millis: number) {
+    return new FakeTimestamp(millis);
+  }
+}
+
+jest.mock("firebase-admin/firestore", () => ({
+  Timestamp: FakeTimestamp,
+}));
+
 import { enforceRateLimit, callerKey } from "../rateLimit";
 
 function snap(data: any, exists = true) {
@@ -34,7 +47,10 @@ describe("enforceRateLimit", () => {
     await expect(enforceRateLimit("test-key")).resolves.toBeUndefined();
     expect(mockSet).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ count: 1 }),
+      expect.objectContaining({
+        count: 1,
+        expireAt: expect.any(FakeTimestamp),
+      }),
     );
   });
 
@@ -44,7 +60,10 @@ describe("enforceRateLimit", () => {
     await expect(enforceRateLimit("test-key")).resolves.toBeUndefined();
     expect(mockSet).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ count: 6 }),
+      expect.objectContaining({
+        count: 6,
+        expireAt: expect.any(FakeTimestamp),
+      }),
     );
   });
 
@@ -65,8 +84,24 @@ describe("enforceRateLimit", () => {
     await expect(enforceRateLimit("test-key")).resolves.toBeUndefined();
     expect(mockSet).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ count: 1 }),
+      expect.objectContaining({
+        count: 1,
+        expireAt: expect.any(FakeTimestamp),
+      }),
     );
+  });
+
+  it("sets expireAt to now + 1 hour, independent of the 60s rate-limit window", async () => {
+    const nowSpy = jest.spyOn(Date, "now").mockReturnValue(1_000_000_000);
+    mockGet.mockResolvedValueOnce(snap(undefined, false));
+    await enforceRateLimit("test-key");
+    expect(mockSet).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        expireAt: new FakeTimestamp(1_000_000_000 + 60 * 60 * 1000),
+      }),
+    );
+    nowSpy.mockRestore();
   });
 
   it("hashes the key into a fixed-length, slash-free Firestore document ID", async () => {

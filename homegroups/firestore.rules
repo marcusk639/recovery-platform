@@ -927,6 +927,15 @@ service cloud.firestore {
     }
 
     // ============================================
+    // RATE LIMIT COUNTERS (server-side only)
+    // Written exclusively by enforceRateLimit() via the Admin SDK.
+    // No client reads or writes are permitted.
+    // ============================================
+    match /_rateLimits/{key} {
+      allow read, write: if false;
+    }
+
+    // ============================================
     // CATCH-ALL DENY RULE
     // Any collection not explicitly defined is denied
     // ============================================
