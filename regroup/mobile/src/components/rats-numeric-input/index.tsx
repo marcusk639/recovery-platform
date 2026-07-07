@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 import {
   View,
   TextStyle,
@@ -6,19 +6,20 @@ import {
   TextInput,
   TextInputProps,
   TouchableOpacity,
-} from 'react-native';
-import RatsLabel from '../rats-label/rats-label';
-import { fontSize, fontFamily, normalize, color } from '../../styles/theme';
-import { FieldProps } from 'formik';
-import RatsTextInput from '../rats-text-input/rats-text-input';
-import styles from '../rats-text-input/styles';
-import { RatsIcon } from '../rats-icon/rats-icon';
-import { IOS } from '../../util/platform';
+} from "react-native";
+import RatsLabel from "../rats-label/rats-label";
+import { fontSize, fontFamily, normalize, color } from "../../styles/theme";
+import RatsTextInput from "../rats-text-input/rats-text-input";
+import styles from "../rats-text-input/styles";
+import { RatsIcon } from "../rats-icon/rats-icon";
+import { IOS } from "../../util/platform";
 
 interface Props {
-  style: any;
-  disabled: boolean;
-  labelDisabled: boolean;
+  // style/disabled were declared required but never read in the component
+  // body — corrected to optional to match actual behavior.
+  style?: any;
+  disabled?: boolean;
+  labelDisabled?: boolean;
   minimumValue?: number;
   maximumValue?: number;
   label: string;
@@ -27,12 +28,25 @@ interface Props {
   containerStyle?: ViewStyle;
   textAlign?: any;
   inputView?: ViewStyle;
-  styleType: 'primary' | 'secondary';
+  styleType?: "primary" | "secondary";
+  // Non-Formik escape hatch, matching RatsTextInput/RatsPicker's convention —
+  // required so this component can be used outside a <Formik> provider.
+  customHandleChange?: (value: number) => void;
+  field?: Partial<{
+    name: string;
+    onBlur: () => void;
+    value: number;
+  }>;
+  form?: Partial<{
+    errors: Record<string, any>;
+    touched: Record<string, boolean>;
+    setFieldValue: (field: string, value: any, shouldValidate?: boolean) => any;
+  }>;
 }
 
 export const ARROW_BUTTON: ViewStyle = {
-  alignItems: 'center',
-  justifyContent: 'center',
+  alignItems: "center",
+  justifyContent: "center",
   paddingVertical: normalize(5),
   paddingHorizontal: normalize(8),
   borderColor: color.baby_blue,
@@ -44,10 +58,11 @@ const numberIsValid = (number: number, min: number, max: number) => {
   return number <= max && number >= min;
 };
 
-const RatsNumericInput = (props: Props & FieldProps & TextInputProps) => {
+const RatsNumericInput = (props: Props & TextInputProps) => {
   const {
-    field: { name, value = 0 },
-    form: { setFieldValue, errors, touched },
+    field: { name = "", value = 0 } = {},
+    form: { setFieldValue, errors = {}, touched = {} } = {},
+    customHandleChange,
     label,
     labelDisabled,
     minimumValue = 0,
@@ -57,8 +72,16 @@ const RatsNumericInput = (props: Props & FieldProps & TextInputProps) => {
     containerStyle,
     placeholder,
     textAlign,
-    styleType = 'secondary',
+    styleType = "secondary",
   } = props;
+
+  const handleChange = (newValue: number) => {
+    if (customHandleChange) {
+      customHandleChange(newValue);
+    } else {
+      setFieldValue?.(name, newValue);
+    }
+  };
   return (
     <View style={[{ marginVertical: normalize(10) }, containerStyle]}>
       {!labelDisabled && (
@@ -69,22 +92,21 @@ const RatsNumericInput = (props: Props & FieldProps & TextInputProps) => {
       )}
       <View
         style={{
-          flexDirection: 'row',
-          justifyContent: 'space-between',
+          flexDirection: "row",
+          justifyContent: "space-between",
           flex: 1,
-        }}>
+        }}
+      >
         <View style={[styles[styleType].inputView]}>
           <TextInput
             underlineColorAndroid="transparent"
             style={[
               styles[styleType].input,
-              IOS ? { paddingTop: 0, width: '75%' } : { width: '73%' },
+              IOS ? { paddingTop: 0, width: "75%" } : { width: "73%" },
             ]}
-            // onChangeText={customHandleChange ? text => customHandleChange(text) : onChange(name)}
-            onChangeText={text => {
-              const number = parseInt(text || '0');
-              // if (numberIsValid(number, minimumValue, maximumValue)) setFieldValue(name, number);
-              setFieldValue(name, number);
+            onChangeText={(text) => {
+              const number = parseInt(text || "0");
+              handleChange(number);
             }}
             placeholder={placeholder}
             value={`${value}`}
@@ -97,18 +119,20 @@ const RatsNumericInput = (props: Props & FieldProps & TextInputProps) => {
         </View>
         <View
           style={{
-            width: IOS ? '25%' : '27%',
-            flexDirection: 'row',
-            justifyContent: 'space-evenly',
-          }}>
+            width: IOS ? "25%" : "27%",
+            flexDirection: "row",
+            justifyContent: "space-evenly",
+          }}
+        >
           <TouchableOpacity
             style={ARROW_BUTTON}
             onPress={() => {
-              const integer = parseInt(value || 0);
+              const integer = value || 0;
               const newValue =
                 integer - 1 < minimumValue ? integer : integer - 1;
-              setFieldValue(name, newValue || minimumValue || 0);
-            }}>
+              handleChange(newValue || minimumValue || 0);
+            }}
+          >
             <RatsIcon
               name="arrow-down"
               style={{ color: color.baby_blue }}
@@ -118,11 +142,12 @@ const RatsNumericInput = (props: Props & FieldProps & TextInputProps) => {
           <TouchableOpacity
             style={ARROW_BUTTON}
             onPress={() => {
-              const integer = parseInt(value);
+              const integer = value;
               const newValue =
                 integer + 1 > maximumValue ? integer : integer + 1;
-              setFieldValue(name, newValue || minimumValue || 0);
-            }}>
+              handleChange(newValue || minimumValue || 0);
+            }}
+          >
             <RatsIcon
               name="arrow-up"
               style={{ color: color.baby_blue }}

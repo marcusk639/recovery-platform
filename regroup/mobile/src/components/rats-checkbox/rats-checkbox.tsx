@@ -1,10 +1,10 @@
-import React from 'react';
-import { View } from 'react-native';
-import CheckBox from '@react-native-community/checkbox';
-import styles from './styles';
-import RatsLabel from '../rats-label/rats-label';
-import { camelCaseToDisplayForm } from '../../util/display';
-import { normalize } from '../../styles/theme';
+import React from "react";
+import { View } from "react-native";
+import CheckBox from "@react-native-community/checkbox";
+import styles from "./styles";
+import RatsLabel from "../rats-label/rats-label";
+import { camelCaseToDisplayForm } from "../../util/display";
+import { normalize } from "../../styles/theme";
 
 interface Props {
   placeholder: string;
@@ -27,6 +27,7 @@ interface Props {
   suppressErrors: boolean;
   checkboxStyle?: any;
   labelStyle?: any;
+  testID?: string;
 }
 
 /**
@@ -34,24 +35,26 @@ interface Props {
  */
 const RatsCheckBox = (props: Props) => {
   const {
-    field: { name = '', value = '', onChange } = {
-      name: '',
-      value: '',
+    field: { name = "", value = "", onChange } = {
+      name: "",
+      value: "",
       onChange: null,
       onBlur: null,
     },
     form: { errors = {}, touched = {} } = { errors: {}, touched: {} },
     labelDisabled = false,
-    label = 'Default Label',
+    label = "Default Label",
     viewStyle = {},
     checkboxStyle = {},
     labelStyle = {},
     onValueChange = () => {},
     suppressErrors = false,
+    testID,
   } = props;
   return (
     <View style={[styles.view, viewStyle]}>
       <CheckBox
+        testID={testID}
         style={[styles.checkbox, checkboxStyle]}
         value={value}
         onValueChange={onChange ? onChange(name) : onValueChange}
