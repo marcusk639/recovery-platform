@@ -3,6 +3,7 @@ import {
   CallableRequest,
   HttpsError,
 } from "firebase-functions/v2/https";
+import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
 import { enforceRateLimit, callerKey } from "../utils/rateLimit";
 
@@ -105,6 +106,7 @@ async function getPublicGroupProfileHandler(
     return profile;
   } catch (err: any) {
     if (err instanceof HttpsError) throw err;
+    logger.error("getPublicGroupProfile failed", err);
     throw new HttpsError("internal", "Unable to load group profile.");
   }
 }
