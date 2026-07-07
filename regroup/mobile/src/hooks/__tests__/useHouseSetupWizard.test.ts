@@ -61,7 +61,7 @@ type TestStore = ReturnType<typeof makeStore>;
 function makeWrapper(store: TestStore) {
   // Return a stable component reference so renderHook does not remount
   const Wrapper = ({ children }: { children: React.ReactNode }) =>
-    React.createElement(Provider, { store }, children);
+    React.createElement(Provider, { store, children });
   return Wrapper;
 }
 
@@ -393,6 +393,24 @@ describe("useHouseSetupWizard", () => {
       expect(initializeHouses).not.toHaveBeenCalled();
     });
 
+    // Regression coverage for 2026-07-07: this guard used to throw before
+    // dispatching submitHouseSetup, so the thunk's rejected lifecycle never
+    // ran and submittingFailed stayed false — a screen gating a failure UI
+    // on that flag saw nothing.
+    it("sets submittingFailed so a gated failure UI actually shows", async () => {
+      const store = makeStore(null);
+      const { result } = renderHook(() => useHouseSetupWizard(), {
+        wrapper: makeWrapper(store),
+      });
+
+      await expect(result.current.submitHouse()).rejects.toThrow();
+
+      const { result: afterState } = renderHook(() => useHouseSetupWizard(), {
+        wrapper: makeWrapper(store),
+      });
+      expect(afterState.current.submittingFailed).toBe(true);
+    });
+
     it("calls initializeHouses with the wizard's houses and the signed-in user, and sets success flags", async () => {
       const store = makeStore({ id: "operator-1" });
       const house = { id: "h1", name: "Submit Me" } as any;
@@ -448,6 +466,33 @@ describe("useHouseSetupWizard", () => {
       expect(caught).toMatchObject({ message: "Failed to create houses." });
       expect(store.getState().setup.submittingFailed).toBe(true);
       expect(store.getState().setup.error).toBe("Failed to create houses.");
+    });
+  });
+
+  // Regression coverage for 2026-07-07: resetSetupState was exported from
+  // the slice but dispatched nowhere, so a completed operator re-entering
+  // the wizard could see stale selectedHouse/houses from a prior session.
+  describe("resetSetup", () => {
+    it("clears the wizard's staged state back to initial values", () => {
+      const store = makeStore({ id: "operator-1" });
+      store.dispatch(
+        setSelectedHouse({ id: "h1", name: "Stale House" } as any)
+      );
+
+      const { result } = renderHook(() => useHouseSetupWizard(), {
+        wrapper: makeWrapper(store),
+      });
+      expect(result.current.selectedHouse).toEqual({
+        id: "h1",
+        name: "Stale House",
+      });
+
+      act(() => {
+        result.current.resetSetup();
+      });
+
+      expect(store.getState().setup.selectedHouse).toBeNull();
+      expect(store.getState().setup.houses).toEqual({});
     });
   });
 });

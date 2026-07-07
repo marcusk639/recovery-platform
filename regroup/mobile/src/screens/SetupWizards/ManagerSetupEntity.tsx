@@ -1,12 +1,12 @@
-import { Houses, Guests } from '../../types';
-import { FormikProps } from 'formik';
-import { PhaseConfiguration } from '../../entities/Phase';
-import { House } from '../../entities/House';
-import Admin from '../../entities/Admin';
-import { SetupScreenNavigationProp } from '../../navigation/types';
+import { Houses, Guests } from "../../types";
+import { FormikProps } from "formik";
+import { PhaseConfiguration } from "../../entities/Phase";
+import { House } from "../../entities/House";
+import Admin from "../../entities/Admin";
+import { SetupScreenNavigationProp } from "../../navigation/types";
 
 class ManagerSetupEntity {
-  admin: Admin = new Admin('');
+  admin: Admin = new Admin("");
   houses: Houses = {};
 }
 
@@ -32,6 +32,7 @@ export default interface ManagerSetupProps {
   removeHouse?: (houseId?: string) => void;
   updateHouse?: (house: Partial<House> & { id: string }) => void;
   submitHouse?: () => void;
+  resetSetup?: () => void;
   setupHouse?: (house: House) => void;
   phase?: PhaseConfiguration;
   submitting?: boolean;

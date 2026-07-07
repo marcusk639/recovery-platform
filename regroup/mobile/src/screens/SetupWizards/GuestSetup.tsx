@@ -37,8 +37,14 @@ type GuestSetupFormViewProps = ManagerSetupWithForm &
   FormikProps<GuestSetupFormValues> &
   GuestSetupScreenProps;
 
+// Hardened 2026-07-07: this used to also call useHouseSetupWizard() here
+// and use it as a default-parameter fallback for selectedHouse/updateHouse
+// — redundant since the outer GuestSetup wrapper already resolves both via
+// the same hook (props.selectedHouse || setupWizard.selectedHouse ||
+// undefined) before this component ever renders. A second subscription to
+// the same Redux state here couldn't produce a different value; it just
+// obscured which component actually owns the read.
 const GuestSetupFormView: React.FC<GuestSetupFormViewProps> = (props) => {
-  const setupWizard = useHouseSetupWizard();
   const {
     values,
     setFieldValue,
@@ -48,8 +54,8 @@ const GuestSetupFormView: React.FC<GuestSetupFormViewProps> = (props) => {
     handleSubmit,
     onPrevPress,
     completeButtonText,
-    selectedHouse = setupWizard.selectedHouse,
-    updateHouse = setupWizard.updateHouse,
+    selectedHouse,
+    updateHouse,
     navigation,
   } = props;
 
@@ -173,7 +179,7 @@ const GuestSetupFormView: React.FC<GuestSetupFormViewProps> = (props) => {
 
   const removePendingEmail = useCallback(
     (email: string, index: number) => {
-      const house = selectedHouse ?? setupWizard.selectedHouse;
+      const house = selectedHouse;
       if (house?.pendingGuestInvites && house?.pendingGuestInvites.length) {
         const pendingGuestInvites = house.pendingGuestInvites.slice();
         pendingGuestInvites.splice(index, 1);
@@ -186,7 +192,7 @@ const GuestSetupFormView: React.FC<GuestSetupFormViewProps> = (props) => {
         }
       }
     },
-    [selectedHouse, setupWizard.selectedHouse, updateHouse]
+    [selectedHouse, updateHouse]
   );
 
   const renderPendingEmails = () => {

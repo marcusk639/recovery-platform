@@ -260,6 +260,11 @@ const OrgSetupForm = withFormik<ManagerSetupProps, Partial<Admin>>({
       if (formikBag.props.submitHouse) {
         await formikBag.props.submitHouse();
       }
+      // Hardened 2026-07-07: clear the wizard's staged Redux state now that
+      // it's been persisted, so a future re-entry into this wizard (e.g. via
+      // HouseSettings/ManagerSettings -> OperatorSetupWizard) doesn't start
+      // from a stale prior session's selectedHouse/houses.
+      formikBag.props.resetSetup?.();
       if (formikBag.props.navigation) {
         navigateToMainTab(formikBag.props.navigation, Routes.House);
       }
@@ -282,7 +287,11 @@ const OrgSetup: React.FC<ManagerSetupWithForm> = (props) => {
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={SCROLL_CONTAINER}
     >
-      <OrgSetupForm {...props} submitHouse={setupWizard.submitHouse} />
+      <OrgSetupForm
+        {...props}
+        submitHouse={setupWizard.submitHouse}
+        resetSetup={setupWizard.resetSetup}
+      />
     </RatsScrollView>
   );
 };

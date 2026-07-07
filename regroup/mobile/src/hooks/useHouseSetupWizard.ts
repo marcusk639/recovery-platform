@@ -28,6 +28,8 @@ import {
   startHouseSetup as startHouseSetupAction,
   setSelectedPhase,
   submitHouseSetup,
+  setSubmissionFailed,
+  resetSetupState,
 } from "../state/slices/setupSlice";
 
 export const useHouseSetupWizard = () => {
@@ -103,12 +105,30 @@ export const useHouseSetupWizard = () => {
    */
   const submitHouse = useCallback(async () => {
     if (!user?.id) {
-      throw new Error("Cannot submit house setup without a signed-in user.");
+      // Hardened 2026-07-07: this guard throws before the submitHouseSetup
+      // thunk is ever dispatched, so its pending/rejected lifecycle never
+      // runs and submittingFailed stayed false — any screen gating a
+      // failure UI on that flag (e.g. OrgSetup.tsx) saw nothing when this
+      // path was hit. Dispatch the same failure state every other
+      // submission path sets, so the UI actually surfaces it.
+      const message = "Cannot submit house setup without a signed-in user.";
+      dispatch(setSubmissionFailed(message));
+      throw new Error(message);
     }
     return dispatch(
       submitHouseSetup({ houses, operator: user as User, inApp })
     ).unwrap();
   }, [dispatch, houses, user, inApp]);
+
+  // Hardened 2026-07-07: resetSetupState was exported from the slice but
+  // dispatched nowhere. Since submitHouse() now actually persists (it used
+  // to be a no-op), an operator who completes setup and later re-enters the
+  // wizard (e.g. via HouseSettings/ManagerSettings -> OperatorSetupWizard)
+  // could see stale selectedHouse/houses from the prior session bleed into
+  // the new one. Callers invoke this after a successful submitHouse().
+  const resetSetup = useCallback(() => {
+    dispatch(resetSetupState());
+  }, [dispatch]);
 
   return {
     organization,
@@ -129,5 +149,6 @@ export const useHouseSetupWizard = () => {
     startHouseSetup,
     startPhaseSetup,
     submitHouse,
+    resetSetup,
   };
 };

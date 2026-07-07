@@ -66,6 +66,15 @@ const PhaseConfigComponent: React.FC<PhaseConfigProps> = (props) => {
   return (
     <PhaseConfigViewTyped
       {...managerProps}
+      // Hardened 2026-07-07: selectedHouse is destructured above for local
+      // use in setupPhases() but was never forwarded back down. Currently
+      // inert — PhaseConfigView has its own separate withHouseSetupWizard
+      // wrap that re-injects selectedHouse from Redux after this spread,
+      // so it always wins regardless — but that's an implicit,
+      // easy-to-break coincidence, not a guarantee. Forward it explicitly
+      // so this doesn't silently start dropping selectedHouse if
+      // PhaseConfigView's own HOC wrap is ever removed or refactored.
+      selectedHouse={selectedHouse}
       onPhaseButtonPress={onPhaseButtonPress}
       onNext={() => {
         // This can be empty or call onNextPress if it exists

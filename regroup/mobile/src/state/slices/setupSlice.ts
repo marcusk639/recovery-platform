@@ -215,6 +215,21 @@ const setupSlice = createSlice({
       state.error = null;
     },
 
+    // Hardened 2026-07-07: submitHouse (useHouseSetupWizard.ts) guards against
+    // submitting with no signed-in user by throwing before dispatching the
+    // submitHouseSetup thunk — correct, but that means the thunk's own
+    // pending/rejected lifecycle never runs, so submittingFailed was never
+    // set. Screens that gate a loading/error modal on these Redux flags (per
+    // OrgSetup.tsx) saw nothing: the thrown error was caught and swallowed
+    // with no user-visible failure state. This lets that guard surface a
+    // real failure through the same flags every other submission path uses.
+    setSubmissionFailed: (state, action: PayloadAction<string>) => {
+      state.submitting = false;
+      state.submittingSuccessful = false;
+      state.submittingFailed = true;
+      state.error = action.payload;
+    },
+
     // Clear error
     clearError: (state) => {
       state.error = null;
@@ -333,6 +348,7 @@ export const {
   setInApp,
   startHouseSetup,
   resetSubmissionState,
+  setSubmissionFailed,
   clearError,
   resetSetupState,
 } = setupSlice.actions;

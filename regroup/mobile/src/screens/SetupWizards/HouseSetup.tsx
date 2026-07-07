@@ -36,8 +36,13 @@ const labelColor = "black";
 
 type HouseSetupFormViewProps = ManagerSetupWithForm;
 
+// Hardened 2026-07-07: this used to also call useHouseSetupWizard() here and
+// fall back to its selectedHouse — redundant since the outer HouseSetup
+// wrapper already resolves selectedHouse via the same hook before this
+// component ever renders. A second subscription to the same Redux state
+// here couldn't produce a different value; it just obscured which
+// component actually owns the read.
 const HouseSetupFormView: React.FC<HouseSetupFormViewProps> = (props) => {
-  const setupWizard = useHouseSetupWizard();
   const {
     values,
     setFieldValue,
@@ -48,7 +53,7 @@ const HouseSetupFormView: React.FC<HouseSetupFormViewProps> = (props) => {
     onPrevPress,
     navigation,
   } = props;
-  const effectiveSelectedHouse = selectedHouse || setupWizard.selectedHouse;
+  const effectiveSelectedHouse = selectedHouse;
 
   const [height, setHeight] = useState(ANDROID ? normalize(95) : 0);
   const [focused, setFocused] = useState("");
