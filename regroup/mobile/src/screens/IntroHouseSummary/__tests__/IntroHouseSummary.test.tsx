@@ -22,14 +22,14 @@
 // ─── useSelectedHouse mock ────────────────────────────────────────────────────
 const mockUseSelectedHouse = jest.fn();
 
-jest.mock('../../../hooks/useSelectedHouse', () => ({
+jest.mock("../../../hooks/useSelectedHouse", () => ({
   useSelectedHouse: () => mockUseSelectedHouse(),
 }));
 
 // ─── Navigation mock ──────────────────────────────────────────────────────────
-jest.mock('@react-navigation/native-stack', () => ({}));
+jest.mock("@react-navigation/native-stack", () => ({}));
 
-jest.mock('@react-navigation/native', () => ({
+jest.mock("@react-navigation/native", () => ({
   useNavigation: jest.fn(() => ({
     navigate: jest.fn(),
     goBack: jest.fn(),
@@ -38,12 +38,12 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 // ─── firebase-setup mock ──────────────────────────────────────────────────────
-jest.mock('../../../../firebase-setup', () => ({
+jest.mock("../../../../firebase-setup", () => ({
   firestore: {
     collection: jest.fn(() => ({
       doc: jest.fn(() => ({
         get: jest.fn(() =>
-          Promise.resolve({ exists: false, data: () => null }),
+          Promise.resolve({ exists: false, data: () => null })
         ),
       })),
     })),
@@ -52,182 +52,180 @@ jest.mock('../../../../firebase-setup', () => ({
 }));
 
 // ─── Context mock ─────────────────────────────────────────────────────────────
-jest.mock('../../../context', () => ({
+jest.mock("../../../context", () => ({
   useTheme: () => ({
     theme: {
-      primaryFontFamily: 'System',
-      secondaryFontFamily: 'System',
-      primaryColor: '#000',
-      secondaryColor: '#fff',
-      backgroundColor: '#fff',
-      textColor: '#000',
+      primaryFontFamily: "System",
+      secondaryFontFamily: "System",
+      primaryColor: "#000",
+      secondaryColor: "#fff",
+      backgroundColor: "#fff",
+      textColor: "#000",
     },
   }),
   useTranslation: () => ({
     t: (key: string) => key,
-    i18n: { language: 'en', changeLanguage: jest.fn() },
+    i18n: { language: "en", changeLanguage: jest.fn() },
   }),
 }));
 
 // ─── Service mocks ────────────────────────────────────────────────────────────
-jest.mock('../../../services/house', () => ({
-  createHouseId: jest.fn(() => 'house-id'),
+jest.mock("../../../services/house", () => ({
+  createHouseId: jest.fn(() => "house-id"),
   getHouse: jest.fn(() => Promise.resolve(null)),
   updateHouse: jest.fn(() => Promise.resolve()),
 }));
 
-jest.mock('../../../util/phone', () => ({
+jest.mock("../../../util/phone", () => ({
   callNumber: jest.fn(),
 }));
 
-jest.mock('../../../util/address', () => ({
+jest.mock("../../../util/address", () => ({
   getAddressDisplay: jest.fn(
     (_street: string, city: string, state: string, zip: string) =>
-      `${city}, ${state} ${zip}`,
+      `${city}, ${state} ${zip}`
   ),
 }));
 
-jest.mock('../../../util/guest', () => ({
+jest.mock("../../../util/guest", () => ({
   HEALTH_ICON_MAP: {
-    good: 'smile',
-    fair: 'meh',
-    poor: 'frown',
-    unknown: 'question',
+    good: "smile",
+    fair: "meh",
+    poor: "frown",
+    unknown: "question",
   },
-  getHealthByPercentage: jest.fn(() => 'good'),
+  getHealthByPercentage: jest.fn(() => "good"),
   HEALTH_STATUS_MAP: {
-    good: 'Good',
-    fair: 'Fair',
-    poor: 'Poor',
-    unknown: 'Unknown',
+    good: "Good",
+    fair: "Fair",
+    poor: "Poor",
+    unknown: "Unknown",
   },
   mapUserToGuest: jest.fn(),
 }));
 
-jest.mock('../../../util/house', () => ({
+jest.mock("../../../util/house", () => ({
   calculateHouseHealth: jest.fn(() => 85),
 }));
 
-jest.mock('../../../util/display', () => ({
+jest.mock("../../../util/display", () => ({
   camelCaseToDisplayForm: jest.fn((s: string) => s),
   dayIsAfter: jest.fn(() => false),
-  getTodaysDate: jest.fn(() => '2026-02-22'),
+  getTodaysDate: jest.fn(() => "2026-02-22"),
 }));
 
 // ─── Component stubs ──────────────────────────────────────────────────────────
 
-jest.mock('../../../components/rats-text', () => ({
+jest.mock("../../../components/rats-text", () => ({
   RatsText: ({ text, testID }: any) => {
-    const { Text } = require('react-native');
-    return require('react').createElement(
+    const { Text } = require("react-native");
+    return require("react").createElement(
       Text,
       { testID },
-      text != null ? String(text) : '',
+      text != null ? String(text) : ""
     );
   },
 }));
 
-jest.mock('../../../components/rats-icon', () => ({
+jest.mock("../../../components/rats-icon", () => ({
   RatsIcon: ({ name, testID }: any) => {
-    const { View } = require('react-native');
-    return require('react').createElement(View, {
+    const { View } = require("react-native");
+    return require("react").createElement(View, {
       testID: testID || `icon-${name}`,
     });
   },
 }));
 
-jest.mock('../../../components/rats-scroll-view', () => {
-  const { ScrollView } = require('react-native');
+jest.mock("../../../components/rats-scroll-view", () => {
+  const { ScrollView } = require("react-native");
   return (props: any) => {
     const { testID, children, contentContainerStyle, ...rest } = props;
-    return require('react').createElement(
+    return require("react").createElement(
       ScrollView,
       { testID, ...rest },
-      children,
+      children
     );
   };
 });
 
-jest.mock('../../../components/rats-avatar', () => {
-  const { View } = require('react-native');
+jest.mock("../../../components/rats-avatar", () => {
+  const { View } = require("react-native");
   return ({ testID }: any) =>
-    require('react').createElement(View, { testID: testID || 'rats-avatar' });
+    require("react").createElement(View, { testID: testID || "rats-avatar" });
 });
 
-jest.mock('../../../components/image-header', () => {
-  const { View } = require('react-native');
+jest.mock("../../../components/image-header", () => {
+  const { View } = require("react-native");
   return ({ testID }: any) =>
-    require('react').createElement(View, { testID: testID || 'image-header' });
+    require("react").createElement(View, { testID: testID || "image-header" });
 });
 
-jest.mock('../../../components/week-stat-summary', () => {
-  const { View } = require('react-native');
+jest.mock("../../../components/week-stat-summary", () => {
+  const { View } = require("react-native");
   return ({ header, children, rightSideContent }: any) =>
-    require('react').createElement(
+    require("react").createElement(
       View,
-      { testID: 'week-stat-summary' },
-      require('react').createElement(
-        require('react-native').Text,
-        { testID: 'stat-summary-header' },
-        header,
+      { testID: "week-stat-summary" },
+      require("react").createElement(
+        require("react-native").Text,
+        { testID: "stat-summary-header" },
+        header
       ),
       rightSideContent || null,
-      children,
+      children
     );
 });
 
 // Mock the houseImage asset so RN doesn't fail on a missing image require
-jest.mock('../../../../assets/index', () => ({
+jest.mock("../../../../assets/index", () => ({
   houseImage: 1,
   appIcon: 1,
   circleLogo: 1,
 }));
 
 // ─── React imports (after mocks) ──────────────────────────────────────────────
-import React from 'react';
-import { render, fireEvent, act } from '@testing-library/react-native';
-import { Provider } from 'react-redux';
-import { configureStore } from '@reduxjs/toolkit';
+import React from "react";
+import { render, fireEvent, act } from "@testing-library/react-native";
+import { Provider } from "react-redux";
+import { configureStore } from "@reduxjs/toolkit";
 
-import userReducer from '../../../state/slices/userSlice';
-import housesReducer from '../../../state/slices/housesSlice';
-import guestsReducer from '../../../state/slices/guestsSlice';
-import adminReducer from '../../../state/slices/adminSlice';
-import uiReducer from '../../../state/slices/uiSlice';
-import authReducer from '../../../state/slices/authSlice';
-import themeReducer from '../../../state/slices/themeSlice';
-import navigationReducer from '../../../state/slices/navigationSlice';
-import chatReducer from '../../../state/slices/chatSlice';
-import setupReducer from '../../../state/slices/setupSlice';
-import notificationsReducer from '../../../state/slices/notificationsSlice';
-import meetingsReducer from '../../../state/slices/meetingsSlice';
+import userReducer from "../../../state/slices/userSlice";
+import housesReducer from "../../../state/slices/housesSlice";
+import guestsReducer from "../../../state/slices/guestsSlice";
+import adminReducer from "../../../state/slices/adminSlice";
+import authReducer from "../../../state/slices/authSlice";
+import themeReducer from "../../../state/slices/themeSlice";
+import chatReducer from "../../../state/slices/chatSlice";
+import setupReducer from "../../../state/slices/setupSlice";
+import notificationsReducer from "../../../state/slices/notificationsSlice";
+import meetingsReducer from "../../../state/slices/meetingsSlice";
 
-import IntroHouseSummary from '../IntroHouseSummary';
+import IntroHouseSummary from "../IntroHouseSummary";
 
 // ─── Test data ─────────────────────────────────────────────────────────────────
 
 function makeHouse(overrides: any = {}) {
   return {
-    id: 'house-1',
-    name: 'Serenity House',
-    street: '123 Main St',
-    city: 'Portland',
-    state: 'OR',
-    zip: '97201',
-    country: 'US',
+    id: "house-1",
+    name: "Serenity House",
+    street: "123 Main St",
+    city: "Portland",
+    state: "OR",
+    zip: "97201",
+    country: "US",
     monthlyRent: 800,
     weeklyRent: 200,
     depositsAndFees: 500,
     currentCapacity: 3,
     maximumCapacity: 8,
     certified: true,
-    gender: 'Male',
+    gender: "Male",
     rating: 4,
     baths: 2,
     wifi: true,
     rooms: { room1: { beds: 2 }, room2: { beds: 2 } },
     health: {},
-    phoneNumber: '503-555-1234',
+    phoneNumber: "503-555-1234",
     imageUrl: null,
     ...overrides,
   };
@@ -236,9 +234,9 @@ function makeHouse(overrides: any = {}) {
 function makeAdmin(id: string, overrides: any = {}) {
   return {
     id,
-    firstName: 'John',
-    lastName: 'Smith',
-    avatar: '',
+    firstName: "John",
+    lastName: "Smith",
+    avatar: "",
     superAdmin: false,
     ...overrides,
   };
@@ -258,10 +256,8 @@ function buildStore({
 
   return configureStore({
     reducer: {
-      ui: uiReducer,
       auth: authReducer,
       theme: themeReducer,
-      navigation: navigationReducer,
       user: userReducer,
       houses: housesReducer,
       guests: guestsReducer,
@@ -273,7 +269,7 @@ function buildStore({
     },
     preloadedState: {
       user: {
-        user: { uid: 'user-1', id: 'user-1' },
+        user: { uid: "user-1", id: "user-1" },
         loading: false,
         error: null,
         loggedIn: true,
@@ -304,151 +300,151 @@ const mockNavigation: any = {
 };
 
 function renderScreen(
-  storeOptions: { selectedHouse?: any; houseAdmins?: any } = {},
+  storeOptions: { selectedHouse?: any; houseAdmins?: any } = {}
 ) {
   const store = buildStore(storeOptions);
   return render(
     <Provider store={store}>
       <IntroHouseSummary navigation={mockNavigation} />
-    </Provider>,
+    </Provider>
   );
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe('IntroHouseSummary', () => {
+describe("IntroHouseSummary", () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
   // ─── Null house guard ────────────────────────────────────────────────────────
-  describe('null house guard', () => {
-    it('renders nothing (null) when selectedHouse is not set', () => {
+  describe("null house guard", () => {
+    it("renders nothing (null) when selectedHouse is not set", () => {
       const { toJSON } = renderScreen({ selectedHouse: null });
       expect(toJSON()).toBeNull();
     });
   });
 
   // ─── Smoke test ─────────────────────────────────────────────────────────────
-  describe('smoke test', () => {
-    it('renders without crashing when a house is provided', () => {
+  describe("smoke test", () => {
+    it("renders without crashing when a house is provided", () => {
       const { getByTestId } = renderScreen({ selectedHouse: makeHouse() });
-      expect(getByTestId('week-stat-summary')).toBeTruthy();
+      expect(getByTestId("week-stat-summary")).toBeTruthy();
     });
   });
 
   // ─── Subheader ───────────────────────────────────────────────────────────────
-  describe('subheader', () => {
-    it('displays the house name', () => {
+  describe("subheader", () => {
+    it("displays the house name", () => {
       const { getByText } = renderScreen({
-        selectedHouse: makeHouse({ name: 'Serenity House' }),
+        selectedHouse: makeHouse({ name: "Serenity House" }),
       });
-      expect(getByText('Serenity House')).toBeTruthy();
+      expect(getByText("Serenity House")).toBeTruthy();
     });
 
     it('shows "12 Step" program text', () => {
       const { getByText } = renderScreen({ selectedHouse: makeHouse() });
-      expect(getByText('12 Step')).toBeTruthy();
+      expect(getByText("12 Step")).toBeTruthy();
     });
   });
 
   // ─── Cost section ────────────────────────────────────────────────────────────
-  describe('cost section', () => {
-    it('shows the MONTHLY rent label', () => {
+  describe("cost section", () => {
+    it("shows the MONTHLY rent label", () => {
       const { getByText } = renderScreen({ selectedHouse: makeHouse() });
-      expect(getByText('MONTHLY')).toBeTruthy();
+      expect(getByText("MONTHLY")).toBeTruthy();
     });
 
-    it('shows the WEEKLY rent label', () => {
+    it("shows the WEEKLY rent label", () => {
       const { getByText } = renderScreen({ selectedHouse: makeHouse() });
-      expect(getByText('WEEKLY')).toBeTruthy();
+      expect(getByText("WEEKLY")).toBeTruthy();
     });
 
-    it('shows the DEPOSITS label', () => {
+    it("shows the DEPOSITS label", () => {
       const { getByText } = renderScreen({ selectedHouse: makeHouse() });
-      expect(getByText('DEPOSITS')).toBeTruthy();
+      expect(getByText("DEPOSITS")).toBeTruthy();
     });
 
-    it('renders the monthly rent value', () => {
+    it("renders the monthly rent value", () => {
       const { getByText } = renderScreen({
         selectedHouse: makeHouse({ monthlyRent: 800 }),
       });
-      expect(getByText('$800')).toBeTruthy();
+      expect(getByText("$800")).toBeTruthy();
     });
   });
 
   // ─── Location section ────────────────────────────────────────────────────────
-  describe('location section', () => {
-    it('shows the LOCATION label', () => {
+  describe("location section", () => {
+    it("shows the LOCATION label", () => {
       const { getByText } = renderScreen({ selectedHouse: makeHouse() });
-      expect(getByText('LOCATION')).toBeTruthy();
+      expect(getByText("LOCATION")).toBeTruthy();
     });
 
-    it('shows the house street address', () => {
+    it("shows the house street address", () => {
       const { getByText } = renderScreen({
-        selectedHouse: makeHouse({ street: '123 Main St' }),
+        selectedHouse: makeHouse({ street: "123 Main St" }),
       });
-      expect(getByText('123 Main St')).toBeTruthy();
+      expect(getByText("123 Main St")).toBeTruthy();
     });
 
-    it('shows the phone number when present', () => {
+    it("shows the phone number when present", () => {
       const { getByText } = renderScreen({
-        selectedHouse: makeHouse({ phoneNumber: '503-555-1234' }),
+        selectedHouse: makeHouse({ phoneNumber: "503-555-1234" }),
       });
-      expect(getByText('503-555-1234')).toBeTruthy();
+      expect(getByText("503-555-1234")).toBeTruthy();
     });
 
     it('shows "No Contact Info" when phone number is absent', () => {
       const { getByText } = renderScreen({
         selectedHouse: makeHouse({ phoneNumber: null }),
       });
-      expect(getByText('No Contact Info')).toBeTruthy();
+      expect(getByText("No Contact Info")).toBeTruthy();
     });
   });
 
   // ─── House health summary ─────────────────────────────────────────────────────
-  describe('house health summary', () => {
-    it('renders the HOUSE HEALTH stat summary', () => {
+  describe("house health summary", () => {
+    it("renders the HOUSE HEALTH stat summary", () => {
       const { getByTestId } = renderScreen({ selectedHouse: makeHouse() });
-      expect(getByTestId('week-stat-summary')).toBeTruthy();
+      expect(getByTestId("week-stat-summary")).toBeTruthy();
     });
 
     it('shows "HOUSE HEALTH" as the stat header', () => {
       const { getByText } = renderScreen({ selectedHouse: makeHouse() });
-      expect(getByText('HOUSE HEALTH')).toBeTruthy();
+      expect(getByText("HOUSE HEALTH")).toBeTruthy();
     });
   });
 
   // ─── Administrators section ───────────────────────────────────────────────────
-  describe('administrators section', () => {
-    it('shows the ADMINISTRATORS heading', () => {
+  describe("administrators section", () => {
+    it("shows the ADMINISTRATORS heading", () => {
       const { getByText } = renderScreen({ selectedHouse: makeHouse() });
-      expect(getByText('ADMINISTRATORS')).toBeTruthy();
+      expect(getByText("ADMINISTRATORS")).toBeTruthy();
     });
 
-    it('renders admin names when admins are present', () => {
+    it("renders admin names when admins are present", () => {
       const houseAdmins = {
-        'admin-1': makeAdmin('admin-1', {
-          firstName: 'Alice',
-          lastName: 'Walker',
+        "admin-1": makeAdmin("admin-1", {
+          firstName: "Alice",
+          lastName: "Walker",
         }),
       };
       const { getByText } = renderScreen({
         selectedHouse: makeHouse(),
         houseAdmins,
       });
-      expect(getByText('Alice Walker')).toBeTruthy();
+      expect(getByText("Alice Walker")).toBeTruthy();
     });
 
-    it('renders multiple admins correctly', () => {
+    it("renders multiple admins correctly", () => {
       const houseAdmins = {
-        'admin-1': makeAdmin('admin-1', {
-          firstName: 'Alice',
-          lastName: 'Walker',
+        "admin-1": makeAdmin("admin-1", {
+          firstName: "Alice",
+          lastName: "Walker",
         }),
-        'admin-2': makeAdmin('admin-2', {
-          firstName: 'Bob',
-          lastName: 'Jones',
+        "admin-2": makeAdmin("admin-2", {
+          firstName: "Bob",
+          lastName: "Jones",
           superAdmin: true,
         }),
       };
@@ -456,15 +452,15 @@ describe('IntroHouseSummary', () => {
         selectedHouse: makeHouse(),
         houseAdmins,
       });
-      expect(getByText('Alice Walker')).toBeTruthy();
-      expect(getByText('Bob Jones')).toBeTruthy();
+      expect(getByText("Alice Walker")).toBeTruthy();
+      expect(getByText("Bob Jones")).toBeTruthy();
     });
 
-    it('labels superAdmin as Operator', () => {
+    it("labels superAdmin as Operator", () => {
       const houseAdmins = {
-        'admin-1': makeAdmin('admin-1', {
-          firstName: 'Bob',
-          lastName: 'Jones',
+        "admin-1": makeAdmin("admin-1", {
+          firstName: "Bob",
+          lastName: "Jones",
           superAdmin: true,
         }),
       };
@@ -472,14 +468,14 @@ describe('IntroHouseSummary', () => {
         selectedHouse: makeHouse(),
         houseAdmins,
       });
-      expect(getByText('Operator')).toBeTruthy();
+      expect(getByText("Operator")).toBeTruthy();
     });
 
-    it('labels regular admin as Administrator', () => {
+    it("labels regular admin as Administrator", () => {
       const houseAdmins = {
-        'admin-1': makeAdmin('admin-1', {
-          firstName: 'Alice',
-          lastName: 'Walker',
+        "admin-1": makeAdmin("admin-1", {
+          firstName: "Alice",
+          lastName: "Walker",
           superAdmin: false,
         }),
       };
@@ -487,24 +483,64 @@ describe('IntroHouseSummary', () => {
         selectedHouse: makeHouse(),
         houseAdmins,
       });
-      expect(getByText('Administrator')).toBeTruthy();
+      expect(getByText("Administrator")).toBeTruthy();
     });
   });
 
   // ─── House attributes ─────────────────────────────────────────────────────────
-  describe('house attributes', () => {
-    it('renders the gender field', () => {
+  describe("house attributes", () => {
+    it("renders the gender field", () => {
       const { getByText } = renderScreen({
-        selectedHouse: makeHouse({ gender: 'Male' }),
+        selectedHouse: makeHouse({ gender: "Male" }),
       });
-      expect(getByText('Male')).toBeTruthy();
+      expect(getByText("Male")).toBeTruthy();
     });
 
-    it('renders CERTIFIED and SPOTS OPEN labels', () => {
+    it("renders CERTIFIED and SPOTS OPEN labels", () => {
       const { getByText } = renderScreen({ selectedHouse: makeHouse() });
-      expect(getByText('CERTIFIED')).toBeTruthy();
-      expect(getByText('SPOTS OPEN')).toBeTruthy();
-      expect(getByText('GENDER')).toBeTruthy();
+      expect(getByText("CERTIFIED")).toBeTruthy();
+      expect(getByText("SPOTS OPEN")).toBeTruthy();
+      expect(getByText("GENDER")).toBeTruthy();
+    });
+  });
+
+  // ─── Certified badge ──────────────────────────────────────────────────────────
+  // Regression coverage for 2026-07-05: this badge used to be driven by
+  // `Math.round(Math.random())` instead of `house.certified`, so it flipped
+  // between "Certified" and "Not Certified" on every render regardless of
+  // the house's actual certification status.
+  describe("certified badge", () => {
+    it('shows "Certified" for a certified house', () => {
+      const { getByText } = renderScreen({
+        selectedHouse: makeHouse({ certified: true }),
+      });
+      expect(getByText("Certified")).toBeTruthy();
+    });
+
+    it('shows "Not Certified" for a non-certified house', () => {
+      const { getByText } = renderScreen({
+        selectedHouse: makeHouse({ certified: false }),
+      });
+      expect(getByText("Not Certified")).toBeTruthy();
+    });
+  });
+
+  // ─── Apply button ─────────────────────────────────────────────────────────────
+  // Regression coverage for 2026-07-05: renderApplyButton used to be a
+  // commented-out stub that always returned null, so prospective residents
+  // had no way to start the sign-up flow from this screen.
+  describe("apply button", () => {
+    it("renders the APPLY button", () => {
+      const { getByTestId } = renderScreen({ selectedHouse: makeHouse() });
+      expect(getByTestId("apply-button")).toBeTruthy();
+    });
+
+    it("navigates to Signup when pressed", () => {
+      const { getByTestId } = renderScreen({
+        selectedHouse: makeHouse({ id: "house-1" }),
+      });
+      fireEvent.press(getByTestId("apply-button"));
+      expect(mockNavigation.navigate).toHaveBeenCalledWith("signup", {});
     });
   });
 });

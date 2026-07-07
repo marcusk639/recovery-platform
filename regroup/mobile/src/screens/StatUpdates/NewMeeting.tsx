@@ -1,52 +1,52 @@
 // Phase 3.3: Migrated from withLoadingModal to useModal hook
 // Phase 4.5: Migrated from Redux thunk props to React Query hooks (M3 completion)
-import React, { useState, useCallback, useEffect } from 'react';
-import { useModal } from '../../context';
+import React, { useState, useCallback, useEffect } from "react";
+import { useModal } from "../../context";
 import {
   RatsMeeting,
   DaysAndTimes,
   meetingTypeItems,
-} from '../../entities/Meeting';
-import { FormikProps, withFormik, Field } from 'formik';
-import { Alert, View, Dimensions, ViewStyle, TextStyle } from 'react-native';
-import RatsScrollView from '../../components/rats-scroll-view';
+} from "../../entities/Meeting";
+import { FormikProps, withFormik, Field } from "formik";
+import { Alert, View, Dimensions, ViewStyle, TextStyle } from "react-native";
+import RatsScrollView from "../../components/rats-scroll-view";
 import {
   SCROLL_CONTAINER,
   normalize,
   fontSize,
   color,
   CARD_STYLE,
-} from '../../styles/theme';
-import { renderField } from '../../util/form';
-import RatsTextInput from '../../components/rats-text-input/rats-text-input';
-import { House } from '../../entities/House';
-import { RatsText } from '../../components/rats-text';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { cloneDeep } from 'lodash';
-import { getCheckinInput } from '../../util/meeting';
-import { format } from 'date-fns';
+} from "../../styles/theme";
+import { renderField } from "../../util/form";
+import RatsTextInput from "../../components/rats-text-input/rats-text-input";
+import { House } from "../../entities/House";
+import { RatsText } from "../../components/rats-text";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { cloneDeep } from "lodash";
+import { getCheckinInput } from "../../util/meeting";
+import { format } from "date-fns";
 import {
   militaryTimeToDate,
   getFormattedTime,
   getPickerItems,
-} from '../../util/display';
-import { User } from '../../entities/User';
-import { WeekdayWithTime } from '../../components/weekdays';
-import { Weekdays, daysOfWeek } from '../../components/weekdays';
-import { Routes, RootStackParamList } from '../../navigation/types';
-import ScreenHeader from '../../components/screen-header';
-import ConfirmationButtons from '../../components/confirmation-buttons';
-import RatsPicker from '../../components/rats-picker/rats-picker';
-import HelpIcon from '../../components/help-icon';
-import DayTimeWidget from './DayTimeWidget';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAppSelector } from '../../state/store';
-import { useSelectedHouse } from '../../hooks/useSelectedHouse';
-import { useSelectedGuest } from '../../hooks/useSelectedGuest';
+} from "../../util/display";
+import { User } from "../../entities/User";
+import { WeekdayWithTime } from "../../components/weekdays";
+import { Weekdays, daysOfWeek } from "../../components/weekdays";
+import { Routes, RootStackParamList } from "../../navigation/types";
+import ScreenHeader from "../../components/screen-header";
+import ConfirmationButtons from "../../components/confirmation-buttons";
+import RatsPicker from "../../components/rats-picker/rats-picker";
+import HelpIcon from "../../components/help-icon";
+import DayTimeWidget from "./DayTimeWidget";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useAppSelector } from "../../state/store";
+import { useSelectedHouse } from "../../hooks/useSelectedHouse";
+import { useSelectedGuest } from "../../hooks/useSelectedGuest";
 import {
   useAddMeeting,
   useCheckIntoMeeting,
-} from '../../state/queries/meetingQueries';
+} from "../../state/queries/meetingQueries";
 
 interface Props {
   navigation: NativeStackNavigationProp<RootStackParamList>;
@@ -68,9 +68,9 @@ const NewMeeting: React.FC<Props> = ({ navigation }) => {
   const addMeetingMutation = useAddMeeting();
   const checkIntoMeetingMutation = useCheckIntoMeeting();
   const { house } = useSelectedHouse();
-  const user = useAppSelector(state => state.user.user);
+  const user = useAppSelector((state) => state.user.user);
   const { guest } = useSelectedGuest();
-  const userAsGuest = useAppSelector(state => state.guests.userAsGuest);
+  const userAsGuest = useAppSelector((state) => state.guests.userAsGuest);
 
   const addingMeeting = addMeetingMutation.isPending;
   const checkingIn = checkIntoMeetingMutation.isPending;
@@ -78,8 +78,8 @@ const NewMeeting: React.FC<Props> = ({ navigation }) => {
   useEffect(() => {
     const loading = addingMeeting || checkingIn;
     const message = addingMeeting
-      ? 'Adding meeting...'
-      : 'Checking into meeting...';
+      ? "Adding meeting..."
+      : "Checking into meeting...";
     if (loading) {
       showLoadingModal(message);
     } else {
@@ -90,14 +90,14 @@ const NewMeeting: React.FC<Props> = ({ navigation }) => {
   const handleAddMeeting = useCallback(
     (meeting: RatsMeeting, isGuest?: boolean) =>
       addMeetingMutation.mutateAsync({ meeting, isGuest: isGuest ?? false }),
-    [addMeetingMutation],
+    [addMeetingMutation]
   );
 
   const handleCheckIntoMeeting = useCallback(
     (checkInInput: any, meeting: RatsMeeting) => {
-      const guestId = (userAsGuest || guest)?.id ?? '';
-      const houseId = house?.id ?? '';
-      const userId = user?.id ?? '';
+      const guestId = (userAsGuest || guest)?.id ?? "";
+      const houseId = house?.id ?? "";
+      const userId = user?.id ?? "";
       return checkIntoMeetingMutation.mutateAsync({
         checkInInput,
         meeting,
@@ -106,7 +106,7 @@ const NewMeeting: React.FC<Props> = ({ navigation }) => {
         userId,
       });
     },
-    [checkIntoMeetingMutation, userAsGuest, guest, house, user],
+    [checkIntoMeetingMutation, userAsGuest, guest, house, user]
   );
 
   return (
@@ -130,7 +130,7 @@ const NewMeetingFormView: React.FC<
   FormikProps<RatsMeeting & { checkIn: boolean }> & {
     navigation: NativeStackNavigationProp<RootStackParamList>;
   }
-> = props => {
+> = (props) => {
   const { values, setFieldValue, handleSubmit, navigation } = props;
 
   const [show, setShow] = useState(false);
@@ -141,7 +141,7 @@ const NewMeetingFormView: React.FC<
   const [thursday, setThursday] = useState(false);
   const [friday, setFriday] = useState(false);
   const [saturday, setSaturday] = useState(false);
-  const [selectedDay, setSelectedDay] = useState('monday');
+  const [selectedDay, setSelectedDay] = useState("monday");
 
   const dayStateMap = {
     sunday,
@@ -165,16 +165,16 @@ const NewMeetingFormView: React.FC<
 
   const setTime = useCallback(
     (event: any, time: any) => {
-      if (event.type !== 'dismissed') {
+      if (event.type !== "dismissed") {
         setShow(false);
-        setFieldValue(`daysAndTimes[${selectedDay}]`, format(time, 'HH:mm'));
+        setFieldValue(`daysAndTimes[${selectedDay}]`, format(time, "HH:mm"));
       } else {
         setShow(false);
         const setter = (daySetterMap as Record<string, any>)[selectedDay];
         if (setter) setter(false);
       }
     },
-    [selectedDay, setFieldValue],
+    [selectedDay, setFieldValue]
   );
 
   const showTimepicker = useCallback(() => {
@@ -189,7 +189,7 @@ const NewMeetingFormView: React.FC<
   }, [values.time]);
 
   const setCheckIn = useCallback(() => {
-    setFieldValue('checkIn', !values.checkIn);
+    setFieldValue("checkIn", !values.checkIn);
   }, [setFieldValue, values.checkIn]);
 
   const onWeekdayPress = useCallback(
@@ -212,7 +212,7 @@ const NewMeetingFormView: React.FC<
       setSelectedDay(day);
       setShow(showPicker);
     },
-    [dayStateMap, setFieldValue],
+    [dayStateMap, setFieldValue]
   );
 
   const Weekday = useCallback(
@@ -221,20 +221,19 @@ const NewMeetingFormView: React.FC<
       const time = (daysAndTimes as Record<string, string>)[day.toLowerCase()];
       const formattedTime = time
         ? getFormattedTime(militaryTimeToDate(time))
-        : '';
+        : "";
       return (
         <WeekdayWithTime
           textStyle={{
             ...getWeekdayTextStyle(day),
             fontSize: fontSize.small,
           }}
-          time={formattedTime || ''}
+          time={formattedTime || ""}
           day={day}
-          value={time ? militaryTimeToDate(time) : new Date()}
         />
       );
     },
-    [values.daysAndTimes],
+    [values.daysAndTimes]
   );
 
   const getWeekdayContainerStyle = useCallback(
@@ -245,7 +244,7 @@ const NewMeetingFormView: React.FC<
       }
       return containerStyle;
     },
-    [dayStateMap],
+    [dayStateMap]
   );
 
   const getWeekdayTextStyle = useCallback(
@@ -256,12 +255,12 @@ const NewMeetingFormView: React.FC<
       }
       return textStyle;
     },
-    [dayStateMap],
+    [dayStateMap]
   );
 
   const renderWeekdays = useCallback(() => {
     const DAY_CONTAINER: ViewStyle = {
-      width: Dimensions.get('screen').width / 5,
+      width: Dimensions.get("screen").width / 5,
       height: normalize(45),
       borderColor: color.black,
       borderWidth: 1,
@@ -298,12 +297,12 @@ const NewMeetingFormView: React.FC<
     <RatsScrollView contentContainerStyle={[SCROLL_CONTAINER]}>
       <View style={CARD_STYLE}>
         {renderField(
-          'name',
-          'Meeting Name',
+          "name",
+          "Meeting Name",
           RatsTextInput,
           false,
-          'Name',
-          'string',
+          "Name",
+          "string"
         )}
         <Field
           component={RatsPicker}
@@ -312,12 +311,12 @@ const NewMeetingFormView: React.FC<
           items={getPickerItems(meetingTypeItems, undefined, true)}
         />
         {renderField(
-          'address',
-          'Address',
+          "address",
+          "Address",
           RatsTextInput,
           false,
-          'Address',
-          'string',
+          "Address",
+          "string"
         )}
         <Field
           label="Days & Times"
@@ -331,15 +330,16 @@ const NewMeetingFormView: React.FC<
           marginBottom: 0,
           paddingTop: normalize(15),
           paddingBottom: normalize(15),
-          marginTop: 'auto',
+          marginTop: "auto",
           shadowRadius: 50,
           shadowOffset: {
             height: 20,
             width: 10,
           },
           elevation: 10,
-        }}>
-        <SafeAreaView edges={['bottom']}>
+        }}
+      >
+        <SafeAreaView edges={["bottom"]}>
           <ConfirmationButtons
             cancel={navigation.goBack}
             confirm={handleSubmit}
@@ -351,17 +351,17 @@ const NewMeetingFormView: React.FC<
 };
 
 const initialValues: any = {
-  name: '',
-  type: 'AA',
+  name: "",
+  type: "AA",
   checkIn: false,
-  daysAndTimes: { monday: '17:00' },
+  daysAndTimes: { monday: "17:00" },
 };
 
 const NewMeetingForm = withFormik<
   FormProps,
   RatsMeeting & { checkIn: boolean }
 >({
-  mapPropsToValues: props =>
+  mapPropsToValues: (props) =>
     props.meeting
       ? props.meeting
       : {
@@ -378,7 +378,6 @@ const NewMeetingForm = withFormik<
       delete newMeeting.checkIn;
     }
     newMeeting.addedBy = `${user.firstName} ${user.lastName}`;
-    newMeeting.type = 'Custom';
     try {
       await addMeeting(newMeeting as RatsMeeting, user.isGuest);
       if (values.checkIn) {
@@ -389,7 +388,7 @@ const NewMeetingForm = withFormik<
       }
       navigation.navigate(Routes.MeetingSearch);
     } catch (error) {
-      Alert.alert('Failed to add meeting.');
+      Alert.alert("Failed to add meeting.");
     }
   },
   validationSchema: null,

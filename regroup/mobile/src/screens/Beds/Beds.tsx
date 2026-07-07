@@ -1,15 +1,15 @@
-import React, { Fragment, useCallback } from 'react';
-import { Guests, Admins } from '../../types';
-import { House } from '../../entities/House';
+import React, { Fragment, useCallback } from "react";
+import { Guests, Admins } from "../../types";
+import { House } from "../../entities/House";
 import {
   ListRenderItemInfo,
   View,
   Dimensions,
   TouchableOpacity,
   Alert,
-} from 'react-native';
-import { CardItem, ActivityItem } from '../../components/card-list/card-list';
-import { getCurrentTime } from '../../util/display';
+} from "react-native";
+import { CardItem, ActivityItem } from "../../components/card-list/card-list";
+import { getCurrentTime } from "../../util/display";
 import {
   color,
   normalize,
@@ -20,39 +20,39 @@ import {
   CARD_NO_ELEVATION,
   ROW,
   elevateStyle,
-} from '../../styles/theme';
-import { RatsFlatList } from '../../components/rats-flat-list';
-import { User } from '../../entities/User';
-import RatsScrollView from '../../components/rats-scroll-view';
-import ScreenHeader from '../../components/screen-header';
-import HelpIcon from '../../components/help-icon';
-import { filter, map, size, sortBy } from 'lodash';
+} from "../../styles/theme";
+import { RatsFlatList } from "../../components/rats-flat-list";
+import { User } from "../../entities/User";
+import RatsScrollView from "../../components/rats-scroll-view";
+import ScreenHeader from "../../components/screen-header";
+import HelpIcon from "../../components/help-icon";
+import { filter, map, size, sortBy } from "lodash";
 // Phase 3.3: Migrated from 3 HOC layers to Context hooks
 // Phase 4.1: Extracted business logic to useBedsManagement hook
 // Removed: withFormModal, withNotifier, withPopover
 // Added: useModal, useNotification hooks
-import { useBedsManagement, SelectedBed } from './hooks/useBedsManagement';
-import { Formik } from 'formik';
-import { renderField } from '../../util/form';
-import RatsTextInput from '../../components/rats-text-input/rats-text-input';
-import ConfirmationButtons from '../../components/confirmation-buttons';
-import RatsSearchBar from '../../components/rats-search-bar';
-import { Rooms, Room, Bed } from '../../entities/Room';
-import RatsButton from '../../components/rats-button/rats-button';
-import RoomForm from './RoomForm';
-import { Guest } from '../../entities/Guest';
-import { RatsText } from '../../components/rats-text';
-import { RatsPopover } from '../../components/rats-popover';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import AssignGuest from './AssignGuest';
-import { findGuestBed, countGuestsWithBeds } from '../../util/house';
-import { RatsIcon } from '../../components/rats-icon';
-import { stringToColour } from '../../components/rats-avatar';
-import { AuthConsumer } from '../../context/auth';
-import Can from '../../components/auth/can';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../navigation/types';
-import { useNotification } from '../../context';
+import { useBedsManagement, SelectedBed } from "./hooks/useBedsManagement";
+import { Formik } from "formik";
+import { renderField } from "../../util/form";
+import RatsTextInput from "../../components/rats-text-input/rats-text-input";
+import ConfirmationButtons from "../../components/confirmation-buttons";
+import RatsSearchBar from "../../components/rats-search-bar";
+import { Rooms, Room, Bed } from "../../entities/Room";
+import RatsButton from "../../components/rats-button/rats-button";
+import RoomForm from "./RoomForm";
+import { Guest } from "../../entities/Guest";
+import { RatsText } from "../../components/rats-text";
+import { RatsPopover } from "../../components/rats-popover";
+import { SafeAreaView } from "react-native-safe-area-context";
+import AssignGuest from "./AssignGuest";
+import { findGuestBed, countGuestsWithBeds } from "../../util/house";
+import { RatsIcon } from "../../components/rats-icon";
+import { stringToColour } from "../../components/rats-avatar";
+import { AuthConsumer } from "../../context/auth";
+import Can from "../../components/auth/can";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { RootStackParamList } from "../../navigation/types";
+import { useNotification } from "../../context";
 
 interface Props {
   navigation: NativeStackNavigationProp<RootStackParamList>;
@@ -122,7 +122,7 @@ const BedsScreen: React.FC<Props> = ({ navigation }) => {
           avatarName={
             bed.guestId && guests[bed.guestId]
               ? guests[bed.guestId].firstName +
-                ' ' +
+                " " +
                 guests[bed.guestId].lastName
               : undefined
           }
@@ -131,14 +131,14 @@ const BedsScreen: React.FC<Props> = ({ navigation }) => {
               ? guests[bed.guestId].avatar
               : undefined
           }
-          boxedIconName={!bed.guestId ? 'bed' : undefined}
+          boxedIconName={!bed.guestId ? "bed" : undefined}
           boxedIconBackground={!bed.guestId ? color.grey : undefined}
           descriptionHeader={
             bed.guestId && guests[bed.guestId]
               ? guests[bed.guestId].firstName +
-                ' ' +
+                " " +
                 guests[bed.guestId].lastName
-              : 'Empty'
+              : "Empty"
           }
           description={bed.id}
           content={content}
@@ -161,7 +161,7 @@ const BedsScreen: React.FC<Props> = ({ navigation }) => {
     (room: Room, selectedBed: SelectedBed) => {
       const numberOfBeds = size(room.beds);
       const numberOfBedsFilled = Object.values(room.beds).filter(
-        bed => bed.guestId && bed.guestId.length > 0,
+        (bed) => bed.guestId && bed.guestId.length > 0,
       ).length;
       return (
         <CardItem
@@ -204,9 +204,9 @@ const BedsScreen: React.FC<Props> = ({ navigation }) => {
           reassign={wrappedMoveGuest}
           assign={assignGuest}
           currentlyAssignedGuest={currentlyAssignedGuest!}
-          type={currentlyAssignedGuest ? 'Reassign' : 'Assign'}
+          type={currentlyAssignedGuest ? "Reassign" : "Assign"}
         />,
-        (currentlyAssignedGuest ? 'Reassign ' : 'Assign ') + 'Guest',
+        (currentlyAssignedGuest ? "Reassign " : "Assign ") + "Guest",
         true,
       );
     },
@@ -226,14 +226,15 @@ const BedsScreen: React.FC<Props> = ({ navigation }) => {
       const numberOfBeds = size(room.beds);
       const numberOfBedsFilled = filter(
         room.beds,
-        bed => bed.guestId != null,
+        (bed) => bed.guestId != null,
       ).length;
       return (
         //@ts-ignore
-        <View style={{ flex: 1, width: '100%' }}>
+        <View style={{ flex: 1, width: "100%" }}>
           <Formik
-            initialValues={{ id: '', roomId: room.id }}
-            onSubmit={handleBedSubmission}>
+            initialValues={{ id: "", roomId: room.id }}
+            onSubmit={handleBedSubmission}
+          >
             {({ handleSubmit, values }) => (
               <View style={{ flex: 1 }}>
                 <RatsScrollView contentContainerStyle={{}}>
@@ -245,7 +246,7 @@ const BedsScreen: React.FC<Props> = ({ navigation }) => {
                     activityItems={
                       <Fragment>
                         {room.beds &&
-                          map(room.beds, bed => (
+                          map(room.beds, (bed) => (
                             <ActivityItem
                               container={{
                                 marginBottom: normalize(10),
@@ -253,7 +254,7 @@ const BedsScreen: React.FC<Props> = ({ navigation }) => {
                               avatarName={
                                 bed.guestId && guests[bed.guestId]
                                   ? guests[bed.guestId].firstName +
-                                    ' ' +
+                                    " " +
                                     guests[bed.guestId].lastName
                                   : undefined
                               }
@@ -262,16 +263,16 @@ const BedsScreen: React.FC<Props> = ({ navigation }) => {
                                   ? guests[bed.guestId].avatar
                                   : undefined
                               }
-                              boxedIconName={!bed.guestId ? 'bed' : undefined}
+                              boxedIconName={!bed.guestId ? "bed" : undefined}
                               boxedIconBackground={
                                 !bed.guestId ? color.grey : undefined
                               }
                               description={
                                 bed.guestId && guests[bed.guestId]
                                   ? guests[bed.guestId].firstName +
-                                    ' ' +
+                                    " " +
                                     guests[bed.guestId].lastName
-                                  : 'Empty'
+                                  : "Empty"
                               }
                               descriptionHeader={bed.id}
                             />
@@ -281,19 +282,19 @@ const BedsScreen: React.FC<Props> = ({ navigation }) => {
                   />
                   <View style={[CARD_STYLE, { marginBottom: 2 }]}>
                     {renderField(
-                      'id',
-                      'Bed Name',
+                      "id",
+                      "Bed Name",
                       RatsTextInput,
                       false,
-                      'Bed Name',
-                      'string',
+                      "Bed Name",
+                      "string",
                     )}
                   </View>
                 </RatsScrollView>
                 <ConfirmationButtons
                   container={{
                     ...CARD_STYLE,
-                    marginTop: 'auto',
+                    marginTop: "auto",
                     marginBottom: 0,
                   }}
                   confirm={handleSubmit}
@@ -312,12 +313,12 @@ const BedsScreen: React.FC<Props> = ({ navigation }) => {
     (room?: Room) => {
       return (
         <RoomForm
-          action={room ? 'edit' : 'add'}
+          action={room ? "edit" : "add"}
           notify={notify}
           renderBedItem={(bed: Bed, room: Room, content?: JSX.Element) =>
             renderBedItem(bed, room, content)
           }
-          room={room || new Room('', {})}
+          room={room || new Room("", {})}
           dismissFormModal={dismissFormModal}
         />
       );
@@ -329,7 +330,7 @@ const BedsScreen: React.FC<Props> = ({ navigation }) => {
     (room?: Room) => {
       showFormModal(
         renderRoomForm(room),
-        room ? 'Edit Room' : 'Add Room',
+        room ? "Edit Room" : "Add Room",
         true,
         room ? (
           <TouchableOpacity onPress={() => promptForDeletion(room)}>
@@ -347,7 +348,7 @@ const BedsScreen: React.FC<Props> = ({ navigation }) => {
 
   const addBed = useCallback(
     (room: Room) => {
-      showFormModal(renderAddBedForm(room), 'Add Bed', true);
+      showFormModal(renderAddBedForm(room), "Add Bed", true);
     },
     [showFormModal, renderAddBedForm],
   );
@@ -357,7 +358,7 @@ const BedsScreen: React.FC<Props> = ({ navigation }) => {
       const room = info.item;
       const numberOfBeds = size(room.beds);
       const numberOfBedsFilled = Object.values(room.beds).filter(
-        bed => bed.guestId && bed.guestId.length > 0,
+        (bed) => bed.guestId && bed.guestId.length > 0,
       ).length;
       return (
         <AuthConsumer>
@@ -369,8 +370,8 @@ const BedsScreen: React.FC<Props> = ({ navigation }) => {
                   paddingBottom: normalize(5),
                 }}
                 onEdit={
-                  token.role[house?.id || ''] === 'admin' ||
-                  token.role[house?.id || ''] === 'superAdmin'
+                  token.role[house?.id || ""] === "admin" ||
+                  token.role[house?.id || ""] === "superAdmin"
                     ? () => addRoom(room)
                     : undefined
                 }
@@ -380,12 +381,12 @@ const BedsScreen: React.FC<Props> = ({ navigation }) => {
                 itemName={room.id}
                 activityItems={
                   <Fragment>
-                    {sortBy(room.beds, bed => bed.id).map(bed =>
+                    {sortBy(room.beds, (bed) => bed.id).map((bed) =>
                       renderBedItem(
                         bed,
                         room,
                         <Can
-                          role={token.role[house?.id || '']}
+                          role={token.role[house?.id || ""]}
                           no={() => null}
                           action="house:partial-edit"
                           yes={() => (
@@ -394,9 +395,10 @@ const BedsScreen: React.FC<Props> = ({ navigation }) => {
                                 ROW,
                                 {
                                   paddingTop: normalize(10),
-                                  justifyContent: 'space-between',
+                                  justifyContent: "space-between",
                                 },
-                              ]}>
+                              ]}
+                            >
                               {
                                 <RatsButton
                                   onPress={() =>
@@ -419,7 +421,7 @@ const BedsScreen: React.FC<Props> = ({ navigation }) => {
                                     flex: bed.guestId ? 0.49 : 1,
                                   }}
                                   title={
-                                    bed.guestId ? 'Reassign' : 'Assign Guest'
+                                    bed.guestId ? "Reassign" : "Assign Guest"
                                   }
                                 />
                               }
@@ -472,7 +474,7 @@ const BedsScreen: React.FC<Props> = ({ navigation }) => {
         <RatsFlatList<Room>
           scrollEnabled
           contentContainerStyle={{ backgroundColor: color.light_grey }}
-          renderItem={info => renderRoom(info, guestsWithBeds)}
+          renderItem={(info) => renderRoom(info, guestsWithBeds)}
           data={roomsList}
           keyExtractor={(item, index) => item.id}
           initialNumToRender={5}
@@ -502,7 +504,7 @@ const BedsScreen: React.FC<Props> = ({ navigation }) => {
           value={searchTerm}
           onChangeText={setSearchTermHandler}
           onFilter={openFilters}
-          placeholder={placeholder ? placeholder : 'Search beds...'}
+          placeholder={placeholder ? placeholder : "Search beds..."}
         />
       );
     },
@@ -513,15 +515,39 @@ const BedsScreen: React.FC<Props> = ({ navigation }) => {
     setFilters(newFilters);
   }, []);
 
+  // Hardened 2026-07-05: renderRooms() never referenced searchTerm at all —
+  // the search bar rendered but filtered nothing, matching room.id (the
+  // room's name) or the name of any guest currently assigned to a bed in it.
+  const roomMatchesSearchTerm = useCallback(
+    (room: Room) => {
+      if (!searchTerm) {
+        return true;
+      }
+      const term = searchTerm.toLowerCase();
+      if (room.id.toLowerCase().includes(term)) {
+        return true;
+      }
+      return Object.values(room.beds).some((bed) => {
+        const guest = bed.guestId ? guests[bed.guestId] : undefined;
+        if (!guest) return false;
+        return `${guest.firstName} ${guest.lastName}`
+          .toLowerCase()
+          .includes(term);
+      });
+    },
+    [searchTerm, guests],
+  );
+
   const renderRooms = useCallback(() => {
     if (!rooms) return null;
-    return renderRoomList(sortBy(Object.values(rooms), room => room.id));
-  }, [rooms, renderRoomList]);
+    const filteredRooms = Object.values(rooms).filter(roomMatchesSearchTerm);
+    return renderRoomList(sortBy(filteredRooms, (room) => room.id));
+  }, [rooms, renderRoomList, roomMatchesSearchTerm]);
 
   const renderHelp = useCallback(() => {
     showPopoverHelp(
-      'ROOMS AND BEDS',
-      'Here you can view all the rooms and beds in the house, as well as the residents that belong to them.\n\nAdministrators can assign residents to beds.',
+      "ROOMS AND BEDS",
+      "Here you can view all the rooms and beds in the house, as well as the residents that belong to them.\n\nAdministrators can assign residents to beds.",
     );
   }, [showPopoverHelp]);
 
@@ -533,24 +559,26 @@ const BedsScreen: React.FC<Props> = ({ navigation }) => {
         container={{ marginBottom: 2 }}
         header="Rooms"
       />
+      {renderSearch()}
       {renderRooms()}
       <AuthConsumer>
         {({ token }) => (
           <Can
-            role={token.role[house?.id || '']}
+            role={token.role[house?.id || ""]}
             action="house:partial-edit"
             no={() => null}
             yes={() => (
               <SafeAreaView
-                edges={['bottom', 'left', 'right']}
+                edges={["bottom", "left", "right"]}
                 style={[
                   CARD_STYLE,
                   {
                     ...elevateStyle,
-                    justifyContent: 'center',
+                    justifyContent: "center",
                     marginBottom: 0,
                   },
-                ]}>
+                ]}
+              >
                 <RatsButton
                   style={STAT_BUTTON_TEXT}
                   containerStyle={{ ...STAT_BUTTON }}

@@ -1,14 +1,18 @@
-import React from 'react';
-import { withFormik } from 'formik';
-import { useSelectedHouse } from '../../hooks/useSelectedHouse';
-import { useGuests } from '../../state/queries/guestQueries';
-import { addGuest } from '../../state/slices/guestsSlice';
+import React from "react";
+import { withFormik } from "formik";
+import { useSelectedHouse } from "../../hooks/useSelectedHouse";
+import { useGuests } from "../../state/queries/guestQueries";
+import { addGuest } from "../../state/slices/guestsSlice";
 // import CreateGuestFormView from './CreateGuestFormView';
-import GuestUpdateFormView from '../GuestUpdate/GuestUpdateFormView';
-import { guestSchema, Guest } from '../../entities/Guest';
-import { GuestUpdateProps } from '../GuestUpdate/GuestUpdateForm';
+import GuestUpdateFormView from "../GuestUpdate/GuestUpdateFormView";
+import { guestSchema, Guest } from "../../entities/Guest";
+import { GuestUpdateProps } from "../GuestUpdate/GuestUpdateForm";
 
-const CreateGuestForm = withFormik<GuestUpdateProps, Guest>({
+interface CreateGuestFormProps extends GuestUpdateProps {
+  houseId: string | null;
+}
+
+const CreateGuestForm = withFormik<CreateGuestFormProps, Guest>({
   enableReinitialize: true,
   mapPropsToValues: ({ guest }) => guest,
   handleSubmit: async (
@@ -17,12 +21,17 @@ const CreateGuestForm = withFormik<GuestUpdateProps, Guest>({
   ) => {
     setStatus({});
     setSubmitting(true);
+    if (!props.houseId) {
+      setStatus({ failed: true });
+      setSubmitting(false);
+      return;
+    }
     try {
-      values.houseId = 'oReUMPURqJqBAn3sNOjP';
+      values.houseId = props.houseId;
       await props.addGuest(values, props.guests);
       setStatus({ succeeded: true });
       setSubmitting(false);
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise((resolve) => setTimeout(resolve, 2000));
       resetForm(new Guest());
     } catch (err) {
       // console.log(err);
@@ -45,12 +54,19 @@ const CreateGuestForm = withFormik<GuestUpdateProps, Guest>({
  * - Updated selector to use state.guests (removed 'as any' cast)
  * - Removed spread of old actions, now passes RTK thunks directly
  */
-const CreateGuestFormWrapper: React.FC<any> = props => {
+const CreateGuestFormWrapper: React.FC<any> = (props) => {
   // React Query is the source of truth for guests; see .full-review [A2].
-  const { house } = useSelectedHouse();
-  const { data: guests = {} } = useGuests(house?.id ?? '');
+  const { house, houseId } = useSelectedHouse();
+  const { data: guests = {} } = useGuests(house?.id ?? "");
 
-  return <CreateGuestForm {...props} guests={guests} addGuest={addGuest} />;
+  return (
+    <CreateGuestForm
+      {...props}
+      guests={guests}
+      addGuest={addGuest}
+      houseId={houseId}
+    />
+  );
 };
 
 export default CreateGuestFormWrapper;

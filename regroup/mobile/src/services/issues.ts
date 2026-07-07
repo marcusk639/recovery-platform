@@ -1,16 +1,20 @@
-import * as crud from './crud';
-import { firestore } from '../../firebase-setup';
-import { HouseIssue, IssueStatus } from '../entities/Issue';
-import { House } from '../entities/House';
-import cloneDeep from 'lodash/cloneDeep';
+import * as crud from "./crud";
+import { firestore } from "../../firebase-setup";
+import { HouseIssue, IssueStatus } from "../entities/Issue";
+import { House } from "../entities/House";
+import cloneDeep from "lodash/cloneDeep";
 
-const issuesCollection = firestore.collection('issues');
-const houseCollection = firestore.collection('houses');
+const issuesCollection = firestore.collection("issues");
+const houseCollection = firestore.collection("houses");
 
 export const createIssue = (issue: HouseIssue) => {
   // Ensure new issues always start with an explicit OPEN status
   const issueWithStatus: HouseIssue = { ...issue, status: IssueStatus.OPEN };
-  return crud.create<HouseIssue>(issuesCollection, issueWithStatus, issueWithStatus.id);
+  return crud.create<HouseIssue>(
+    issuesCollection,
+    issueWithStatus,
+    issueWithStatus.id
+  );
 };
 
 export const removeIssue = async (_house: House, issue: HouseIssue) => {
@@ -18,8 +22,14 @@ export const removeIssue = async (_house: House, issue: HouseIssue) => {
   const issues = cloneDeep(_house.issues);
   delete issues[issue.id];
   const house: House = { ..._house, issues: { ...issues } };
-  batch.set(issuesCollection.doc(issue.id), issue);
-  batch.update(houseCollection.doc(house.id), house);
+  // Hardened 2026-07-05: batch.set() rewrote the same issue document back
+  // instead of deleting it — "Remove" disappeared the item from the house's
+  // embedded list view but the standalone collection doc persisted untouched.
+  // Also scoped the house update to just the changed field instead of
+  // blind-writing the full client-side house snapshot, which risked
+  // clobbering concurrent edits from other admins.
+  batch.delete(issuesCollection.doc(issue.id));
+  batch.update(houseCollection.doc(house.id), { issues: house.issues });
   await batch.commit();
   return house;
 };
@@ -34,7 +44,7 @@ export const updateIssueStatus = async (
   _house: House,
   issueId: string,
   status: IssueStatus,
-  resolution?: string,
+  resolution?: string
 ): Promise<House> => {
   const issues = cloneDeep(_house.issues);
   const existing = issues[issueId];
@@ -52,7 +62,7 @@ export const updateIssueStatus = async (
         ? resolution
         : status === IssueStatus.RESOLVED
         ? existing.resolution
-        : '',
+        : "",
   };
 
   issues[issueId] = updatedIssue;
@@ -65,12 +75,12 @@ export const updateIssueStatus = async (
 export const resolveIssue = (
   house: House,
   issueId: string,
-  resolution?: string,
+  resolution?: string
 ) => updateIssueStatus(house, issueId, IssueStatus.RESOLVED, resolution);
 
 /** Convenience wrapper: mark an issue as DISMISSED (replaces the invalid flag). */
 export const dismissIssue = (
   house: House,
   issueId: string,
-  explanation?: string,
+  explanation?: string
 ) => updateIssueStatus(house, issueId, IssueStatus.DISMISSED, explanation);

@@ -43,6 +43,7 @@
     "@firebase/rules-unit-testing": "^5.0.0",
     "@notifee/react-native": "^7.8.2",
     "@react-native-clipboard/clipboard": "^1.10.0",
+    "@react-native-community/checkbox": "^0.5.20",
     "@react-native-community/cli-platform-ios": "^11.3.2",
     "@react-native-community/cli-plugin-metro": "^10.2.0",
     "@react-native-community/datetimepicker": "7.6.2",

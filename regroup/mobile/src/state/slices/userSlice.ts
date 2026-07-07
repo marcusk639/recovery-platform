@@ -1,14 +1,14 @@
-import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { User } from '../../entities/User';
-import { Role } from '../../entities/Roles';
-import { Invitation } from '../../entities/Invite';
-import * as userService from '../../services/users';
-import { getFirebaseUserFromUserCredential } from '../../util/user';
-import { subscriptionStatus } from '../../util/subscription';
-import { FirebaseAuthTypes } from '@react-native-firebase/auth';
-import { navigationRef } from '../../navigation/service';
-import { CommonActions } from '@react-navigation/native';
-import { Routes } from '../../navigation/types';
+import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
+import { User } from "../../entities/User";
+import { Role } from "../../entities/Roles";
+import { Invitation } from "../../entities/Invite";
+import * as userService from "../../services/users";
+import { getFirebaseUserFromUserCredential } from "../../util/user";
+import { subscriptionStatus } from "../../util/subscription";
+import { FirebaseAuthTypes } from "@react-native-firebase/auth";
+import { navigationRef } from "../../navigation/service";
+import { CommonActions } from "@react-navigation/native";
+import { Routes } from "../../navigation/types";
 
 /**
  * User State Interface
@@ -66,10 +66,10 @@ const initialState: UserState = {
 
 // Async Thunks
 export const login = createAsyncThunk(
-  'user/login',
+  "user/login",
   async (
     { email, password }: { email: string; password: string },
-    { dispatch },
+    { dispatch }
   ) => {
     let user: any = await userService.signInWithEmail(email, password);
     user = getFirebaseUserFromUserCredential(user);
@@ -77,11 +77,11 @@ export const login = createAsyncThunk(
     const token = await userService.getAuthUser(true);
     dispatch(setSubscriptionStatus(subscriptionStatus(userEntity)));
     return { user: userEntity, token };
-  },
+  }
 );
 
 export const anonymouslyLogin = createAsyncThunk(
-  'user/anonymouslyLogin',
+  "user/anonymouslyLogin",
   async () => {
     let anonUser: any = await userService.anonymouslyLogin();
     anonUser = getFirebaseUserFromUserCredential(anonUser);
@@ -90,12 +90,12 @@ export const anonymouslyLogin = createAsyncThunk(
       userEntity = await userService.createAnonUser(anonUser);
     }
     return { user: userEntity };
-  },
+  }
 );
 
 export const autoLogin = createAsyncThunk(
-  'user/autoLogin',
-  async (signedInUser: FirebaseAuthTypes.User) => {
+  "user/autoLogin",
+  async (signedInUser: FirebaseAuthTypes.User, { dispatch }) => {
     let userEntity = await userService.getUser(signedInUser.uid);
     if (!userEntity) {
       // Convert Firebase user to our User entity
@@ -105,12 +105,18 @@ export const autoLogin = createAsyncThunk(
       userEntity = await userService.createAnonUser(convertedUser);
     }
     const token = await userService.getAuthUser(true);
+    // Hardened 2026-07-05: only the explicit email/password `login` thunk
+    // dispatched setSubscriptionStatus — autoLogin (the path virtually every
+    // returning user takes) never did, so state.user.subscriptionStatus
+    // stayed null until the user explicitly logged out and back in, breaking
+    // any paywall-gated UI reading this field.
+    dispatch(setSubscriptionStatus(subscriptionStatus(userEntity)));
     return { user: userEntity, token };
-  },
+  }
 );
 
 export const logout = createAsyncThunk(
-  'user/logout',
+  "user/logout",
   async (_, { dispatch }) => {
     await userService.signOut();
     const result = await dispatch(anonymouslyLogin()).unwrap();
@@ -122,33 +128,33 @@ export const logout = createAsyncThunk(
           CommonActions.reset({
             index: 0,
             routes: [{ name: Routes.InitialLanding }],
-          }),
+          })
         );
       }
     }, 100);
 
     return result;
-  },
+  }
 );
 
 export const updateUser = createAsyncThunk(
-  'user/updateUser',
+  "user/updateUser",
   async ({ user, updates }: { user: User; updates: Partial<User> }) => {
     const updatedUser = await userService.updateUser(user, updates);
     return updatedUser;
-  },
+  }
 );
 
 export const createUser = createAsyncThunk(
-  'user/createUser',
+  "user/createUser",
   async (userData: Partial<User>) => {
     const newUser = await userService.createUser(userData);
     return newUser;
-  },
+  }
 );
 
 export const initialSignUp = createAsyncThunk(
-  'user/initialSignUp',
+  "user/initialSignUp",
   async ({
     user,
     potentialUserType,
@@ -157,14 +163,14 @@ export const initialSignUp = createAsyncThunk(
     potentialUserType: string;
   }) => {
     const updatedUser = await userService.updateUser(user, {
-      isAdmin: potentialUserType !== 'guest',
+      isAdmin: potentialUserType !== "guest",
     });
     return updatedUser;
-  },
+  }
 );
 
 export const requestAccountVerification = createAsyncThunk(
-  'user/requestAccountVerification',
+  "user/requestAccountVerification",
   async ({
     houseCode,
     firstName,
@@ -180,18 +186,18 @@ export const requestAccountVerification = createAsyncThunk(
       houseCode,
       firstName,
       lastName,
-      userId,
+      userId
     );
     return { houseCode, firstName, lastName, userId };
-  },
+  }
 );
 
 // Slice
 const userSlice = createSlice({
-  name: 'user',
+  name: "user",
   initialState,
   reducers: {
-    loginFailed: state => {
+    loginFailed: (state) => {
       state.loginFailed = true;
       state.loading = false;
       state.loggingIn = false;
@@ -204,11 +210,11 @@ const userSlice = createSlice({
     },
     setSubscriptionStatus: (
       state,
-      action: PayloadAction<string | undefined>,
+      action: PayloadAction<string | undefined>
     ) => {
       state.subscriptionStatus = action.payload;
     },
-    clearError: state => {
+    clearError: (state) => {
       state.error = null;
       state.loginFailed = false;
       state.updatingFailed = false;
@@ -218,10 +224,10 @@ const userSlice = createSlice({
       return initialState;
     },
   },
-  extraReducers: builder => {
+  extraReducers: (builder) => {
     // Login
     builder
-      .addCase(login.pending, state => {
+      .addCase(login.pending, (state) => {
         state.loggingIn = true;
         state.loading = false;
         state.loginFailed = false;
@@ -246,7 +252,7 @@ const userSlice = createSlice({
 
     // Anonymous Login
     builder
-      .addCase(anonymouslyLogin.pending, state => {
+      .addCase(anonymouslyLogin.pending, (state) => {
         state.anonLoggingIn = true;
         state.loading = false;
       })
@@ -268,7 +274,7 @@ const userSlice = createSlice({
 
     // Auto Login
     builder
-      .addCase(autoLogin.pending, state => {
+      .addCase(autoLogin.pending, (state) => {
         state.autoLoggingIn = true;
         state.loading = false;
       })
@@ -290,7 +296,7 @@ const userSlice = createSlice({
 
     // Logout
     builder
-      .addCase(logout.pending, state => {
+      .addCase(logout.pending, (state) => {
         state.loggingOut = true;
         state.loggingOutSuccessful = false;
       })
@@ -309,7 +315,7 @@ const userSlice = createSlice({
 
     // Update User
     builder
-      .addCase(updateUser.pending, state => {
+      .addCase(updateUser.pending, (state) => {
         state.updating = true;
         state.updatingSuccessful = false;
         state.updatingFailed = false;
@@ -327,7 +333,7 @@ const userSlice = createSlice({
 
     // Create User
     builder
-      .addCase(createUser.pending, state => {
+      .addCase(createUser.pending, (state) => {
         state.creatingUser = true;
       })
       .addCase(createUser.fulfilled, (state, action) => {
@@ -342,10 +348,10 @@ const userSlice = createSlice({
 
     // Account Verification
     builder
-      .addCase(requestAccountVerification.pending, state => {
+      .addCase(requestAccountVerification.pending, (state) => {
         state.accountVerifyFailed = false;
       })
-      .addCase(requestAccountVerification.fulfilled, state => {
+      .addCase(requestAccountVerification.fulfilled, (state) => {
         state.accountVerifyFailed = false;
       })
       .addCase(requestAccountVerification.rejected, (state, action) => {

@@ -1,6 +1,6 @@
-import React, { useCallback, useMemo } from 'react';
-import { FlatList, ListRenderItemInfo, RefreshControl } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useMemo } from "react";
+import { FlatList, ListRenderItemInfo, RefreshControl } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 /**
  * GuestList - Migrated to React Query + Redux Toolkit
  *
@@ -13,82 +13,81 @@ import { useFocusEffect } from '@react-navigation/native';
  */
 
 // Phase 3.3: Migrated from withPopover HOC to useNotification hook
-import { useNotification } from '../../context';
-import FontAwesome5 from 'react-native-vector-icons/FontAwesome5';
+import { useNotification } from "../../context";
+import FontAwesome5 from "react-native-vector-icons/FontAwesome5";
 import {
   View,
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
-} from 'react-native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../navigation/types';
+} from "react-native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { RootStackParamList } from "../../navigation/types";
 
 // Compliance
-import { GuestComplianceDot } from '../../components/compliance-indicator';
-import { useCurrentWeek } from '../../hooks/activity/useCurrentWeek';
+import { GuestComplianceDot } from "../../components/compliance-indicator";
+import { useCurrentWeek } from "../../hooks/activity/useCurrentWeek";
 
 // Hooks
-import { useGuests } from '../../state/queries';
-import { useAppSelector, useAppDispatch } from '../../state/store';
-import { useSelectedHouse } from '../../hooks/useSelectedHouse';
-import { showToast } from '../../state/slices';
-import { selectGuestById } from '../../state/slices/guestsSlice';
+import { useGuests } from "../../state/queries";
+import { useAppSelector, useAppDispatch } from "../../state/store";
+import { useSelectedHouse } from "../../hooks/useSelectedHouse";
+import { selectGuestById } from "../../state/slices/guestsSlice";
 
 // Types & Entities
-import { House } from '../../entities/House';
-import { User } from '../../entities/User';
-import Admin from '../../entities/Admin';
-import { Guest } from '../../entities/Guest';
+import { House } from "../../entities/House";
+import { User } from "../../entities/User";
+import Admin from "../../entities/Admin";
+import { Guest } from "../../entities/Guest";
 
 // Components
-import Section from '../../components/rats-interactable-section';
-import RatsScrollView from '../../components/rats-scroll-view';
-import ScreenHeader from '../../components/screen-header';
-import HelpIcon from '../../components/help-icon';
-import { RatsText } from '../../components/rats-text';
+import Section from "../../components/rats-interactable-section";
+import RatsScrollView from "../../components/rats-scroll-view";
+import ScreenHeader from "../../components/screen-header";
+import HelpIcon from "../../components/help-icon";
+import { RatsText } from "../../components/rats-text";
 
 // Utils
-import { getTodaysDate, getDateAndTime } from '../../util/display';
+import { getTodaysDate, getDateAndTime } from "../../util/display";
 import {
   getHealthByPercentage,
   getOverallPercentage,
   HEALTH_ICON_MAP,
   HEALTH_COLOR_MAP,
-} from '../../util/guest';
-import { color } from '../../styles/theme';
+} from "../../util/guest";
+import { color } from "../../styles/theme";
 
 // Styles
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    justifyContent: 'flex-start',
-    alignItems: 'center',
+    justifyContent: "flex-start",
+    alignItems: "center",
     backgroundColor: color.light_grey,
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   errorContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: 20,
   },
   errorText: {
     color: color.dark_grey,
-    textAlign: 'center',
+    textAlign: "center",
     marginBottom: 16,
   },
   retryText: {
     color: color.baby_blue,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   emptyText: {
     color: color.dark_grey,
-    textAlign: 'center',
+    textAlign: "center",
     marginTop: 40,
   },
   activityIndicator: {
@@ -129,21 +128,21 @@ const GuestList: React.FC<Props> = ({ navigation }) => {
     error,
     isFetching,
     refetch,
-  } = useGuests(house?.id || '', !!house?.id);
+  } = useGuests(house?.id || "", !!house?.id);
 
   // Refetch on focus — the screen is a nav target reached from the
   // bottom tab, and RN has no window-focus bridge for RQ.
   useFocusEffect(
     useCallback(() => {
       refetch();
-    }, [refetch]),
+    }, [refetch])
   );
 
   // Memoize the derived array so children with React.memo can skip
   // re-renders when the underlying data is unchanged.
   const guests = useMemo(
     () => (guestsData ? Object.values(guestsData) : []),
-    [guestsData],
+    [guestsData]
   );
 
   // Handle guest selection — stable reference so Section rows memoize.
@@ -152,14 +151,14 @@ const GuestList: React.FC<Props> = ({ navigation }) => {
       dispatch(selectGuestById(guestId));
       navigation.goBack();
     },
-    [dispatch, navigation],
+    [dispatch, navigation]
   );
 
   // Render help popover
   const renderHelp = () => {
     showPopover(
-      'RESIDENT LIST',
-      'Here you can view and select any residents within the house.',
+      "RESIDENT LIST",
+      "Here you can view and select any residents within the house."
     );
   };
 
@@ -169,17 +168,17 @@ const GuestList: React.FC<Props> = ({ navigation }) => {
       if (!house) return null;
 
       const healthScore = getHealthByPercentage(
-        getOverallPercentage(guest, house, getTodaysDate()),
+        getOverallPercentage(guest, house, getTodaysDate())
       );
       return (
         <Section
           testID="guest-list-item"
           forceAvatar
           avatar={guest.avatar}
-          name={guest.firstName + ' ' + guest.lastName}
+          name={guest.firstName + " " + guest.lastName}
           description={getDateAndTime(
             guest.createdAt ?? guest.createdDate ?? new Date(),
-            false,
+            false
           )}
           iconBackgroundColor={color.green_blue}
           onPress={() => handleGuestSelect(guest.id)}
@@ -198,7 +197,7 @@ const GuestList: React.FC<Props> = ({ navigation }) => {
         />
       );
     },
-    [house, weekStart, handleGuestSelect],
+    [house, weekStart, handleGuestSelect]
   );
 
   const keyExtractor = useCallback((guest: Guest) => guest.id, []);
@@ -208,11 +207,12 @@ const GuestList: React.FC<Props> = ({ navigation }) => {
     return (
       <RatsScrollView
         contentContainerStyle={styles.loadingContainer}
-        testID="guest-list-loading">
+        testID="guest-list-loading"
+      >
         <ScreenHeader
           renderBackButton
           icon={<HelpIcon setRef={setPopoverRef} helpFn={renderHelp} />}
-          header={house ? `${house.name} Guests` : 'Loading...'}
+          header={house ? `${house.name} Guests` : "Loading..."}
         />
         <ActivityIndicator
           size="large"
@@ -228,11 +228,12 @@ const GuestList: React.FC<Props> = ({ navigation }) => {
     return (
       <RatsScrollView
         contentContainerStyle={styles.errorContainer}
-        testID="guest-list-error">
+        testID="guest-list-error"
+      >
         <ScreenHeader
           renderBackButton
           icon={<HelpIcon setRef={setPopoverRef} helpFn={renderHelp} />}
-          header={house ? `${house.name} Guests` : 'Error'}
+          header={house ? `${house.name} Guests` : "Error"}
         />
         <RatsText
           translate={false}
@@ -267,7 +268,7 @@ const GuestList: React.FC<Props> = ({ navigation }) => {
         <ScreenHeader
           renderBackButton
           icon={<HelpIcon setRef={setPopoverRef} helpFn={renderHelp} />}
-          header={house ? `${house.name} Guests` : 'Guests'}
+          header={house ? `${house.name} Guests` : "Guests"}
         />
       }
       ListEmptyComponent={

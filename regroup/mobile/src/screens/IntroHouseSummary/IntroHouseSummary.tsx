@@ -1,8 +1,8 @@
-import React, { useState, useCallback } from 'react';
-import { House } from '../../entities/House';
-import { View, ViewStyle, TouchableOpacity, TextStyle } from 'react-native';
-import RatsScrollView from '../../components/rats-scroll-view';
-import { RatsText } from '../../components/rats-text';
+import React, { useState, useCallback } from "react";
+import { House } from "../../entities/House";
+import { View, ViewStyle, TouchableOpacity, TextStyle } from "react-native";
+import RatsScrollView from "../../components/rats-scroll-view";
+import { RatsText } from "../../components/rats-text";
 import {
   fontSize,
   ROW,
@@ -10,31 +10,33 @@ import {
   normalize,
   color,
   fontFamily,
-} from '../../styles/theme';
-import { Routes, AuthStackNavigationProp } from '../../navigation/types';
-import Admin from '../../entities/Admin';
+} from "../../styles/theme";
+import { Routes, AuthStackNavigationProp } from "../../navigation/types";
+import Admin from "../../entities/Admin";
 import {
   initializeInvitation,
   setSignUpRole,
-} from '../../state/slices/userSlice';
-import { isNil, map, size } from 'lodash';
-import { Admins } from '../../types';
-import RatsAvatar from '../../components/rats-avatar';
-import { callNumber } from '../../util/phone';
-import ImageHeader from '../../components/image-header';
-import { getAddressDisplay } from '../../util/address';
-import { RatsIcon } from '../../components/rats-icon';
-import { houseImage } from '../../../assets/index';
-import WeekStatSummary from '../../components/week-stat-summary';
-import { camelCaseToDisplayForm } from '../../util/display';
+} from "../../state/slices/userSlice";
+import { isNil, map, size } from "lodash";
+import { Admins } from "../../types";
+import RatsAvatar from "../../components/rats-avatar";
+import RatsButton from "../../components/rats-button/rats-button";
+import { callNumber } from "../../util/phone";
+import ImageHeader from "../../components/image-header";
+import { getAddressDisplay } from "../../util/address";
+import { RatsIcon } from "../../components/rats-icon";
+import { houseImage } from "../../../assets/index";
+import WeekStatSummary from "../../components/week-stat-summary";
+import { camelCaseToDisplayForm } from "../../util/display";
 import {
   HEALTH_ICON_MAP,
   getHealthByPercentage,
   HEALTH_STATUS_MAP,
-} from '../../util/guest';
-import { calculateHouseHealth } from '../../util/house';
-import { useAppSelector, useAppDispatch } from '../../state/store';
-import { useSelectedHouse } from '../../hooks/useSelectedHouse';
+} from "../../util/guest";
+import { calculateHouseHealth } from "../../util/house";
+import { useAppSelector, useAppDispatch } from "../../state/store";
+import { useSelectedHouse } from "../../hooks/useSelectedHouse";
+import { STAT_BUTTON_TEXT } from "../../styles/theme";
 
 interface Props {
   navigation: AuthStackNavigationProp;
@@ -42,8 +44,8 @@ interface Props {
 
 const contentStyle: ViewStyle = {
   flexGrow: 1,
-  alignItems: 'center',
-  justifyContent: 'flex-start',
+  alignItems: "center",
+  justifyContent: "flex-start",
   backgroundColor: color.light_grey,
 };
 
@@ -67,33 +69,33 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
 
   // RTK Typed Selectors (no more 'as any')
   const { house } = useSelectedHouse();
-  const admins = useAppSelector(state => state.admin.houseAdmins);
+  const admins = useAppSelector((state) => state.admin.houseAdmins);
 
   const startSignUp = useCallback(() => {
     if (!house) return;
     // Create a minimal Invitation object - actual values will be set during signup
     const invitation = {
       houseId: house.id,
-      type: 'guest' as const,
-      inviterId: '',
-      email: '',
-      initialPhase: '',
+      type: "guest" as const,
+      inviterId: "",
+      email: "",
+      initialPhase: "",
       expirationDate: new Date(),
-      ownerId: '',
-      id: '',
+      ownerId: "",
+      id: "",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
     dispatch(initializeInvitation(invitation));
-    dispatch(setSignUpRole('guest'));
+    dispatch(setSignUpRole("guest"));
     navigation.navigate(Routes.Signup, {});
   }, [dispatch, house, navigation]);
 
   const toggleCollapsible = useCallback(
     (user: Admin) => () => {
-      setCollapsedUsers(prevState => {
+      setCollapsedUsers((prevState) => {
         const newCollapsedUsers: { [id: string]: boolean } = {};
-        Object.keys(prevState).forEach(key => {
+        Object.keys(prevState).forEach((key) => {
           if (newCollapsedUsers[key] && key !== user.id) {
             newCollapsedUsers[key] = false;
           }
@@ -107,14 +109,14 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
         return newCollapsedUsers;
       });
     },
-    [],
+    []
   );
 
   const renderAvatarItem = (user: Admin, description: string) => {
     return (
       <View style={[ROW]}>
         <RatsAvatar
-          name={user.firstName + ' ' + user.lastName}
+          name={user.firstName + " " + user.lastName}
           style={{
             height: normalize(45),
             width: normalize(45),
@@ -127,7 +129,7 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
         />
         <View>
           <RatsText
-            text={user.firstName + ' ' + user.lastName}
+            text={user.firstName + " " + user.lastName}
             translate={false}
             style={{ fontSize: fontSize.medium, fontFamily: fontFamily.bold }}
           />
@@ -145,12 +147,13 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
     return (
       <View
         key={user.id}
-        style={[ROW, CARD_STYLE, { marginBottom: 1, padding: normalize(15) }]}>
+        style={[ROW, CARD_STYLE, { marginBottom: 1, padding: normalize(15) }]}
+      >
         <View>
           <View>
             {renderAvatarItem(
               user,
-              user.superAdmin ? 'Operator' : 'Administrator',
+              user.superAdmin ? "Operator" : "Administrator"
             )}
           </View>
         </View>
@@ -161,9 +164,9 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
   const renderCollapsibles = () => {
     const Collapsibles: JSX.Element[] = [];
     Collapsibles.push(
-      ...map(admins, admin => {
+      ...map(admins, (admin) => {
         return renderUserCollapsible(admin);
-      }),
+      })
     );
     return Collapsibles;
   };
@@ -172,10 +175,8 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
     const number = isNil(house.rating) ? 3 : house.rating;
     return (
       <View
-        style={[
-          ROW,
-          { marginHorizontal: normalize(15), alignItems: 'center' },
-        ]}>
+        style={[ROW, { marginHorizontal: normalize(15), alignItems: "center" }]}
+      >
         <RatsIcon
           solid
           name="star"
@@ -183,7 +184,7 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
           style={{ color: color.yellow, marginRight: 2 }}
         />
         <RatsText
-          text={number + '.0'}
+          text={number + ".0"}
           translate={false}
           style={{ color: color.yellow }}
         />
@@ -196,16 +197,17 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
       <WeekStatSummary
         percentage={calculateHouseHealth(house.health)}
         header="HOUSE HEALTH"
-        rightSideContainer={{ justifyContent: 'flex-start' }}
+        rightSideContainer={{ justifyContent: "flex-start" }}
         rightSideContent={
           <View style={{ flex: 1 }}>
             <View style={{ ...ROW, flex: 1 }}>
               <View
                 style={{
                   flex: 0.6,
-                  justifyContent: 'space-between',
+                  justifyContent: "space-between",
                   marginRight: normalize(10),
-                }}>
+                }}
+              >
                 <RatsText text="CERTIFIED" style={{ color: color.dark_grey }} />
                 <RatsText
                   text="SPOTS OPEN"
@@ -213,9 +215,9 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
                 />
                 <RatsText text="GENDER" style={{ color: color.dark_grey }} />
               </View>
-              <View style={{ flex: 0.4, justifyContent: 'space-between' }}>
+              <View style={{ flex: 0.4, justifyContent: "space-between" }}>
                 <RatsIcon
-                  name={house.certified ? 'check' : 'times'}
+                  name={house.certified ? "check" : "times"}
                   size={20}
                   style={{ color: house.certified ? color.green : color.red }}
                 />
@@ -240,7 +242,8 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
               </View>
             </View>
           </View>
-        }>
+        }
+      >
         <View style={{ marginTop: normalize(15), marginBottom: normalize(5) }}>
           {renderApplyButton(house)}
         </View>
@@ -249,30 +252,37 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
   };
 
   const renderApplyButton = (house: House): JSX.Element | null => {
-    // return <RatsButton title="APPLY" onPress={() => { }} light style={STAT_BUTTON_TEXT} />;
-    return null;
+    return (
+      <RatsButton
+        testID="apply-button"
+        title="APPLY"
+        onPress={startSignUp}
+        light
+        style={STAT_BUTTON_TEXT}
+      />
+    );
   };
 
   const renderIconSection = (
     house: House,
-    value: 'rooms' | 'baths' | 'wifi' | 'beds' | 'health',
+    value: "rooms" | "baths" | "wifi" | "beds" | "health"
   ) => {
     const ATTRIBUTES = {
       rooms: {
-        icon: 'archive',
+        icon: "archive",
         text: size(house.rooms),
       },
       baths: {
-        icon: 'bath',
+        icon: "bath",
         text: house.baths,
       },
       wifi: {
-        icon: 'wifi',
+        icon: "wifi",
         text: house.wifi,
       },
       beds: {
-        icon: 'bed',
-        text: map(house.rooms, room => room.beds).length,
+        icon: "bed",
+        text: map(house.rooms, (room) => room.beds).length,
       },
       health: {
         icon: HEALTH_ICON_MAP[
@@ -285,13 +295,13 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
     };
     return (
       <View>
-        <View style={[ROW, { alignItems: 'center', justifyContent: 'center' }]}>
+        <View style={[ROW, { alignItems: "center", justifyContent: "center" }]}>
           <RatsIcon
             name={ATTRIBUTES[value].icon}
             size={normalize(25)}
             style={{ color: color.dark_grey, marginRight: normalize(5) }}
           />
-          {value !== 'health' && (
+          {value !== "health" && (
             <RatsText
               text={ATTRIBUTES[value].text}
               translate={false}
@@ -304,11 +314,11 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
           )}
         </View>
         <RatsText
-          style={{ alignSelf: 'center' as const, color: color.light_black }}
+          style={{ alignSelf: "center" as const, color: color.light_black }}
           text={
-            value === 'wifi'
-              ? 'WiFi'
-              : value === 'health'
+            value === "wifi"
+              ? "WiFi"
+              : value === "health"
               ? camelCaseToDisplayForm(ATTRIBUTES[value].text)
               : camelCaseToDisplayForm(value)
           }
@@ -323,13 +333,14 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
       fontSize: fontSize.regular,
       color: color.light_black,
     };
-    const number = Math.round(Math.random());
+    const certified = house.certified;
     return (
       <View
         style={[
           CARD_STYLE,
-          { marginBottom: 1, justifyContent: 'space-between' },
-        ]}>
+          { marginBottom: 1, justifyContent: "space-between" },
+        ]}
+      >
         <RatsText
           text={house.name}
           translate={false}
@@ -344,17 +355,17 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
           {renderStar(house)}
           <View style={ROW}>
             <RatsIcon
-              name={number ? 'check' : 'times'}
+              name={certified ? "check" : "times"}
               style={{
                 ...HOUSE_DESCRIPTION_TEXT,
-                color: number ? color.green : color.red,
+                color: certified ? color.green : color.red,
                 marginRight: normalize(5),
               }}
               size={20}
             />
             <RatsText
               style={HOUSE_DESCRIPTION_TEXT}
-              text={number ? 'Certified' : 'Not Certified'}
+              text={certified ? "Certified" : "Not Certified"}
             />
           </View>
         </View>
@@ -365,11 +376,11 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
 
   const renderCost = (house: House) => {
     const COST: ViewStyle = {
-      justifyContent: 'center',
-      alignItems: 'center',
+      justifyContent: "center",
+      alignItems: "center",
     };
     const COST_TEXT: TextStyle = {
-      color: '#f10c45',
+      color: "#f10c45",
       fontSize: fontSize.medium,
       fontFamily: fontFamily.bold,
     };
@@ -381,11 +392,12 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
           ROW,
           {
             marginBottom: 1,
-            justifyContent: 'space-between',
+            justifyContent: "space-between",
             paddingVertical: normalize(15),
             paddingHorizontal: normalize(30),
           },
-        ]}>
+        ]}
+      >
         <View style={COST}>
           <RatsText text={getCost(house.monthlyRent)} style={COST_TEXT} />
           <RatsText
@@ -423,9 +435,10 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
           {
             marginBottom: 1,
             padding: normalize(15),
-            justifyContent: 'space-between',
+            justifyContent: "space-between",
           },
-        ]}>
+        ]}
+      >
         <View>
           <RatsText
             style={{ color: color.dark_grey, marginBottom: normalize(3) }}
@@ -444,7 +457,7 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
               fontFamily: fontFamily.bold,
               fontSize: fontSize.regular_medium,
             }}
-            text={getAddressDisplay('', house.city, house.state, house.zip)}
+            text={getAddressDisplay("", house.city, house.state, house.zip)}
           />
         </View>
         <TouchableOpacity
@@ -453,17 +466,18 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
           }
           activeOpacity={house.phoneNumber ? 0.2 : 1.0}
           style={{
-            justifyContent: 'center',
+            justifyContent: "center",
             paddingRight: normalize(20),
-            alignItems: 'center',
-          }}>
+            alignItems: "center",
+          }}
+        >
           <RatsIcon
             name="phone"
             style={{ color: house.phoneNumber ? color.green : color.grey }}
             size={30}
           />
           <RatsText
-            text={house.phoneNumber ? house.phoneNumber : 'No Contact Info'}
+            text={house.phoneNumber ? house.phoneNumber : "No Contact Info"}
             style={{
               color: house.phoneNumber ? color.green : color.grey,
               fontSize: fontSize.small,
@@ -480,15 +494,16 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
         style={[
           ROW,
           {
-            justifyContent: 'space-between',
-            alignItems: 'center',
+            justifyContent: "space-between",
+            alignItems: "center",
             paddingTop: 20,
             paddingBottom: 5,
             paddingHorizontal: 5,
           },
-        ]}>
-        {['rooms', 'baths', 'wifi', 'beds'].map(v =>
-          renderIconSection(house, v as any),
+        ]}
+      >
+        {["rooms", "baths", "wifi", "beds"].map((v) =>
+          renderIconSection(house, v as any)
         )}
       </View>
     );

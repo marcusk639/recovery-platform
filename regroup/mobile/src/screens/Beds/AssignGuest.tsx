@@ -1,8 +1,8 @@
-import React, { Component, useState } from 'react';
-import { Guests } from '../../types';
-import { House } from '../../entities/House';
-import { each, map } from 'lodash';
-import { View, StyleSheet, TouchableOpacity, TextStyle } from 'react-native';
+import React, { Component, useState } from "react";
+import { Guests } from "../../types";
+import { House } from "../../entities/House";
+import { each, map } from "lodash";
+import { View, StyleSheet, TouchableOpacity, TextStyle } from "react-native";
 import {
   color,
   normalize,
@@ -11,24 +11,24 @@ import {
   CARD_STYLE,
   ROW,
   SAVE_BUTTON,
-} from '../../styles/theme';
-import { Guest } from '../../entities/Guest';
-import Section from '../../components/rats-interactable-section';
-import RatsScrollView from '../../components/rats-scroll-view';
-import { RatsText } from '../../components/rats-text';
-import { Room, Bed } from '../../entities/Room';
-import RatsButton from '../../components/rats-button/rats-button';
-import { SelectedBed } from './hooks/useBedsManagement';
-import RatsModal from '../../components/rats-modal';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAppSelector } from '../../state/store';
-import { findGuestBed } from '../../util/house';
-import { ANDROID } from '../../util/platform';
+} from "../../styles/theme";
+import { Guest } from "../../entities/Guest";
+import Section from "../../components/rats-interactable-section";
+import RatsScrollView from "../../components/rats-scroll-view";
+import { RatsText } from "../../components/rats-text";
+import { Room, Bed } from "../../entities/Room";
+import RatsButton from "../../components/rats-button/rats-button";
+import { SelectedBed } from "./hooks/useBedsManagement";
+import RatsModal from "../../components/rats-modal";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useAppSelector } from "../../state/store";
+import { findGuestBed } from "../../util/house";
+import { ANDROID } from "../../util/platform";
 
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    justifyContent: 'flex-start',
+    justifyContent: "flex-start",
     backgroundColor: color.light_grey,
   },
 });
@@ -44,7 +44,7 @@ interface Props {
   dismissModal: () => void;
   assign: (guest: Guest, selectedBed: SelectedBed) => Promise<void>;
   reassign: (bed1: SelectedBed, bed2: SelectedBed) => Promise<void>;
-  type: 'Reassign' | 'Assign';
+  type: "Reassign" | "Assign";
   currentlyAssignedGuest: Guest;
   bedItem?: JSX.Element;
   selectedBed?: SelectedBed;
@@ -53,8 +53,8 @@ interface Props {
     header: string,
     content: string,
     buttons?: NotificationButton[],
-    status?: 'fail' | 'succeed',
-    timedDismiss?: number,
+    status?: "fail" | "succeed",
+    timedDismiss?: number
   ) => void;
   // renderBedItem: (bed: Bed, room: Room, content?: JSX.Element) => void
 }
@@ -65,17 +65,17 @@ const AssignGuest = (props: Props) => {
   const [submitting, setSubmitting] = useState(false);
 
   // Get error from RTK slice
-  const errorFromState = useAppSelector(state => state.houses.error);
+  const errorFromState = useAppSelector((state) => state.houses.error);
 
   const guestsWithoutBeds: Guest[] = [];
   const guestsWithBeds: { [guestId: string]: SelectedBed } = {};
   const { house, guests, error: propError } = props;
   const error = propError || errorFromState;
   const { rooms } = house;
-  each(guests, guest => {
+  each(guests, (guest) => {
     let guestHasBed = false;
-    each(rooms, room => {
-      each(room.beds, bed => {
+    each(rooms, (room) => {
+      each(room.beds, (bed) => {
         if (bed.guestId === guest.id) {
           guestHasBed = true;
           guestsWithBeds[bed.guestId] = { bed, roomId: room.id };
@@ -93,12 +93,12 @@ const AssignGuest = (props: Props) => {
         forceAvatar
         container={{ paddingHorizontal: normalize(15) }}
         avatar={guest.avatar}
-        name={guest.firstName + ' ' + guest.lastName}
+        name={guest.firstName + " " + guest.lastName}
         description="Unassigned"
         iconBackgroundColor={color.green_blue}
         onPress={() => setSelected(selected === guest.id ? null : guest.id)}
         selected={selected === guest.id}
-        touchableContainer={{ alignItems: 'center' }}
+        touchableContainer={{ alignItems: "center" }}
       />
     );
   }
@@ -111,24 +111,24 @@ const AssignGuest = (props: Props) => {
         forceAvatar
         container={{ paddingHorizontal: normalize(15) }}
         avatar={guest.avatar}
-        name={guest.firstName + ' ' + guest.lastName}
+        name={guest.firstName + " " + guest.lastName}
         description={bedInfo.roomId}
         description2={bedInfo.bed.id}
         iconBackgroundColor={color.green_blue}
         selected={selected === guest.id}
         onPress={() => setSelected(selected === guest.id ? null : guest.id)}
-        touchableContainer={{ alignItems: 'center' }}
+        touchableContainer={{ alignItems: "center" }}
       />
     );
   }
 
   function renderGuestsWithoutBeds() {
-    return guestsWithoutBeds.map(guest => renderGuestSection(guest));
+    return guestsWithoutBeds.map((guest) => renderGuestSection(guest));
   }
 
   function renderGuestsWithBeds() {
     return map(guestsWithBeds, (bed, guestId) =>
-      renderSectionForGuestWithBed(guestId),
+      renderSectionForGuestWithBed(guestId)
     );
   }
 
@@ -143,40 +143,61 @@ const AssignGuest = (props: Props) => {
     if (selected === null) return;
 
     setSubmitting(true);
-    props.assign(guests[selected], props.selectedBed!);
-    setSubmitting(false);
-    props.dismissModal();
-    props.notify?.(
-      'Bed Assigned',
-      `Assigned ${guests[selected].firstName} to ${
-        props.selectedBed!.bed.id
-      } in ${props.house.rooms[props.selectedBed!.roomId].id}`,
-      [],
-      'succeed',
-    );
+    try {
+      await props.assign(guests[selected], props.selectedBed!);
+      setSubmitting(false);
+      props.dismissModal();
+      props.notify?.(
+        "Bed Assigned",
+        `Assigned ${guests[selected].firstName} to ${
+          props.selectedBed!.bed.id
+        } in ${props.house.rooms[props.selectedBed!.roomId].id}`,
+        [],
+        "succeed"
+      );
+    } catch (err) {
+      setSubmitting(false);
+      props.notify?.(
+        "Assignment Failed",
+        `Could not assign ${guests[selected].firstName} to a bed. Please try again.`,
+        [],
+        "fail"
+      );
+    }
   };
 
   const reassign = async () => {
     if (selected === null) return;
 
     setSubmitting(true);
-    props.reassign(guestsWithBeds[selected], props.selectedBed!);
-    setSubmitting(false);
-    setVisible(false);
-    props.dismissModal();
-    props.notify?.(
-      'Bed Reassigned',
-      `Reassigned ${guests[selected].firstName} to ${
-        props.selectedBed!.bed.id
-      } in ${props.house.rooms[props.selectedBed!.roomId].id}`,
-      [],
-      'succeed',
-    );
+    try {
+      await props.reassign(guestsWithBeds[selected], props.selectedBed!);
+      setSubmitting(false);
+      setVisible(false);
+      props.dismissModal();
+      props.notify?.(
+        "Bed Reassigned",
+        `Reassigned ${guests[selected].firstName} to ${
+          props.selectedBed!.bed.id
+        } in ${props.house.rooms[props.selectedBed!.roomId].id}`,
+        [],
+        "succeed"
+      );
+    } catch (err) {
+      setSubmitting(false);
+      setVisible(false);
+      props.notify?.(
+        "Reassignment Failed",
+        `Could not reassign ${guests[selected].firstName}. Please try again.`,
+        [],
+        "fail"
+      );
+    }
   };
 
   const submit = () => {
-    const guestCurrentBed = findGuestBed(selected || '', rooms);
-    if (props.type === 'Reassign' && guestCurrentBed) {
+    const guestCurrentBed = findGuestBed(selected || "", rooms);
+    if (props.type === "Reassign" && guestCurrentBed) {
       setVisible(true);
     } else {
       assign();
@@ -196,12 +217,13 @@ const AssignGuest = (props: Props) => {
           padding: 0,
           margin: 0,
           alignItems: undefined,
-          justifyContent: 'flex-end',
+          justifyContent: "flex-end",
         }}
         style={{ padding: 0, margin: 0, backgroundColor: color.light_grey }}
         isVisible={visible}
-        onBackdropPress={() => setVisible(false)}>
-        <SafeAreaView edges={['bottom']} style={[CARD_STYLE]}>
+        onBackdropPress={() => setVisible(false)}
+      >
+        <SafeAreaView edges={["bottom"]} style={[CARD_STYLE]}>
           <RatsText
             text={`${guest.firstName} is already assigned to a bed. Would you like to swap these guests or leave ${guest.firstName}'s bed empty?`}
             style={{ fontSize: fontSize.medium, marginVertical: normalize(5) }}
@@ -233,7 +255,8 @@ const AssignGuest = (props: Props) => {
       {props.bedItem}
       <RatsScrollView
         contentContainerStyle={styles.container}
-        behavior="padding">
+        behavior="padding"
+      >
         <RatsText text="NEEDS BED" style={HEADER} />
         {renderGuestsWithoutBeds()}
         <RatsText text="HAS BED" style={HEADER} />
@@ -245,10 +268,11 @@ const AssignGuest = (props: Props) => {
           CARD_STYLE,
           ROW,
           {
-            justifyContent: 'space-between',
+            justifyContent: "space-between",
             paddingBottom: ANDROID ? normalize(10) : normalize(20),
           },
-        ]}>
+        ]}
+      >
         <RatsButton
           title="Cancel"
           light

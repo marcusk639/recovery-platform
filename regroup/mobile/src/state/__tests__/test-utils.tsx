@@ -7,20 +7,19 @@
  * - Mock data
  */
 
-import React, { ReactElement } from 'react';
-import { render, RenderOptions } from '@testing-library/react-native';
-import { Provider } from 'react-redux';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { configureStore } from '@reduxjs/toolkit';
-import { NavigationContainer } from '@react-navigation/native';
+import React, { ReactElement } from "react";
+import { render, RenderOptions } from "@testing-library/react-native";
+import { Provider } from "react-redux";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { configureStore } from "@reduxjs/toolkit";
+import { NavigationContainer } from "@react-navigation/native";
 
 // Import reducers
-import uiReducer from '../slices/uiSlice';
-import authReducer from '../slices/authSlice';
-import themeReducer from '../slices/themeSlice';
+import authReducer from "../slices/authSlice";
+import themeReducer from "../slices/themeSlice";
 
 // Mock NotificationProvider to avoid requiring context setup in tests
-jest.mock('../../context/NotificationContext', () => ({
+jest.mock("../../context/NotificationContext", () => ({
   NotificationProvider: ({ children }: { children: React.ReactNode }) =>
     children,
   useNotification: () => ({
@@ -55,7 +54,6 @@ export function createTestQueryClient() {
 export function createTestStore(preloadedState = {}) {
   return configureStore({
     reducer: {
-      ui: uiReducer,
       auth: authReducer,
       theme: themeReducer,
       // Add mock reducers for old state if needed
@@ -83,7 +81,7 @@ export function createTestStore(preloadedState = {}) {
           updatingHouseSuccessful: false,
           updatingHouseFailed: false,
           error: null,
-        },
+        }
       ) => state,
       guests: (
         state: any = {
@@ -91,7 +89,7 @@ export function createTestStore(preloadedState = {}) {
           loading: false,
           error: null,
           requestingGuests: false,
-        },
+        }
       ) => state,
       user: (
         state: any = {
@@ -103,7 +101,7 @@ export function createTestStore(preloadedState = {}) {
           loggingInFailed: false,
           signingUp: false,
           signingUpFailed: false,
-        },
+        }
       ) => state,
     },
     preloadedState,
@@ -141,14 +139,14 @@ export function AllTheProviders({
 /**
  * Custom render function that wraps components with providers
  */
-interface CustomRenderOptions extends Omit<RenderOptions, 'wrapper'> {
+interface CustomRenderOptions extends Omit<RenderOptions, "wrapper"> {
   queryClient?: QueryClient;
   store?: any;
 }
 
 export function renderWithProviders(
   ui: ReactElement,
-  { queryClient, store, ...renderOptions }: CustomRenderOptions = {},
+  { queryClient, store, ...renderOptions }: CustomRenderOptions = {}
 ) {
   const Wrapper = ({ children }: { children: React.ReactNode }) => (
     <AllTheProviders queryClient={queryClient} store={store}>
@@ -167,8 +165,8 @@ export function renderWithProviders(
  * Wait for React Query to finish loading
  */
 export async function waitForLoadingToFinish() {
-  return new Promise(resolve => setTimeout(resolve, 0));
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 // Re-export everything from React Testing Library
-export * from '@testing-library/react-native';
+export * from "@testing-library/react-native";

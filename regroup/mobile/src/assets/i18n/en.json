@@ -50,6 +50,7 @@
       "pool.table": "Pool Table",
       "error.incorrect.password": "Incorrect Password",
       "error.generic": "Something went wrong. Please try again.",
+      "error.too.many.requests": "Too many attempts. Please wait a moment and try again.",
       "error.no.future.date": "Must not be a future date.",
       "error.terms.of.service": "Must accept terms of service.",
       "caucasian": "Caucasian",

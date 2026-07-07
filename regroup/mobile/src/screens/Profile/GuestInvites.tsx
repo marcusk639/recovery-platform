@@ -1,21 +1,22 @@
 // Phase 3.3: Migrated from withLoadingModal HOC to useModal hook
-import React, { useState, useCallback, useEffect } from 'react';
-import { useModal } from '../../context';
-import { GuestSetupForm } from '../SetupWizards/GuestSetup';
-import { extractGuestEmails } from '../../util/house';
-import { House } from '../../entities/House';
-import { sendAllInvites } from '../../services/setup-wizard';
-import { User } from '../../entities/User';
+import React, { useState, useCallback, useEffect } from "react";
+import { useModal } from "../../context";
+import { GuestSetupForm } from "../SetupWizards/GuestSetup";
+import { extractGuestEmails } from "../../util/house";
+import { House } from "../../entities/House";
+import { sendAllInvites } from "../../services/setup-wizard";
+import { User } from "../../entities/User";
 
-import { View } from 'react-native';
-import ScreenHeader from '../../components/screen-header';
-import { color } from '../../styles/theme';
-import { updateHouse } from '../../state/slices/housesSlice';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../navigation/types';
-import { useAppSelector, useAppDispatch } from '../../state/store';
-import { useSelectedHouse } from '../../hooks/useSelectedHouse';
+import { View } from "react-native";
+import ScreenHeader from "../../components/screen-header";
+import { color } from "../../styles/theme";
+import { useUpdateHouse } from "../../state/queries/houseQueries";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { RootStackParamList } from "../../navigation/types";
+import { useAppSelector } from "../../state/store";
+import { useSelectedHouse } from "../../hooks/useSelectedHouse";
+import { logException } from "../../util/logging";
 
 interface Props {
   navigation: NativeStackNavigationProp<RootStackParamList>;
@@ -38,9 +39,9 @@ interface Props {
 const GuestInvites: React.FC<Props> = ({ navigation }) => {
   const { setLoadingModalState } = useModal();
 
-  const dispatch = useAppDispatch();
+  const updateHouseMutation = useUpdateHouse();
   const { house } = useSelectedHouse();
-  const user = useAppSelector(state => state.user.user);
+  const user = useAppSelector((state) => state.user.user);
 
   const [sendingEmails, setSendingEmailsState] = useState(false);
   const [success, setSuccess] = useState<boolean | null>(null);
@@ -52,11 +53,11 @@ const GuestInvites: React.FC<Props> = ({ navigation }) => {
       setSuccess(successVal ?? null);
       setFailure(failureVal ?? null);
     },
-    [],
+    []
   );
 
   useEffect(() => {
-    setLoadingModalState(sendingEmails, success ?? false, 'Sending invites...');
+    setLoadingModalState(sendingEmails, success ?? false, "Sending invites...");
   }, [sendingEmails, success, setLoadingModalState]);
 
   return (
@@ -72,29 +73,36 @@ const GuestInvites: React.FC<Props> = ({ navigation }) => {
           setSendingEmails(true, undefined, undefined);
           const updatedHouse = extractGuestEmails(house, values.guestEmails);
           updatedHouse.pendingGuestInvites = Array.from(
-            new Set([...(updatedHouse.pendingGuestInvites || [])]),
-          );
-          dispatch(
-            updateHouse({ houseId: updatedHouse.id, updates: updatedHouse }),
+            new Set([...(updatedHouse.pendingGuestInvites || [])])
           );
           try {
+            // Hardened 2026-07-05: this dispatched a nonexistent
+            // `updateHouse` thunk (housesSlice.ts exports no such action) —
+            // TypeError: updateHouse is not a function, thrown synchronously
+            // and outside the try/catch below, so pressing "Send Invites"
+            // always crashed before ever calling sendAllInvites.
+            await updateHouseMutation.mutateAsync({
+              houseId: updatedHouse.id,
+              values: updatedHouse,
+            });
             await sendAllInvites(
               { [updatedHouse.id]: updatedHouse },
               user as User,
               true,
               false,
-              false,
+              false
             );
             setSendingEmails(false, true, false);
             navigation.goBack();
           } catch (error) {
+            logException(error, "Failed to send guest invites");
             setSendingEmails(false, false, true);
           }
         }}
       />
       <SafeAreaView
         style={{ backgroundColor: color.white }}
-        edges={['bottom']}
+        edges={["bottom"]}
       />
     </View>
   );

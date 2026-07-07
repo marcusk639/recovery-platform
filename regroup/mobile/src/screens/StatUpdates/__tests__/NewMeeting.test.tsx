@@ -12,13 +12,13 @@
  */
 
 // ─── Navigation mock ──────────────────────────────────────────────────────────
-jest.mock('@react-navigation/native-stack', () => ({}));
+jest.mock("@react-navigation/native-stack", () => ({}));
 
 // ─── Meeting query hooks ──────────────────────────────────────────────────────
 const mockAddMeetingMutateAsync = jest.fn(() => Promise.resolve());
 const mockCheckIntoMeetingMutateAsync = jest.fn(() => Promise.resolve());
 
-jest.mock('../../../state/queries/meetingQueries', () => ({
+jest.mock("../../../state/queries/meetingQueries", () => ({
   useAddMeeting: jest.fn(),
   useCheckIntoMeeting: jest.fn(),
 }));
@@ -29,7 +29,7 @@ const mockHideLoadingModal = jest.fn();
 const mockShowFormModal = jest.fn();
 const mockDismissFormModal = jest.fn();
 
-jest.mock('../../../context', () => ({
+jest.mock("../../../context", () => ({
   useModal: () => ({
     showLoadingModal: mockShowLoadingModal,
     hideLoadingModal: mockHideLoadingModal,
@@ -43,25 +43,25 @@ jest.mock('../../../context', () => ({
   }),
   useTheme: () => ({
     theme: {
-      primaryFontFamily: 'System',
-      secondaryFontFamily: 'System',
-      primaryColor: '#000',
-      secondaryColor: '#fff',
-      tertiaryColor: '#ccc',
-      backgroundColor: '#fff',
-      textColor: '#000',
-      logoTintColor: '#fff',
+      primaryFontFamily: "System",
+      secondaryFontFamily: "System",
+      primaryColor: "#000",
+      secondaryColor: "#fff",
+      tertiaryColor: "#ccc",
+      backgroundColor: "#fff",
+      textColor: "#000",
+      logoTintColor: "#fff",
     },
   }),
   useTranslation: () => ({
     t: (key: string) => key,
-    i18n: { language: 'en', changeLanguage: jest.fn() },
+    i18n: { language: "en", changeLanguage: jest.fn() },
   }),
 }));
 
 // ─── Component stubs ──────────────────────────────────────────────────────────
-jest.mock('../../../components/screen-header', () => {
-  const { View, Text } = require('react-native');
+jest.mock("../../../components/screen-header", () => {
+  const { View, Text } = require("react-native");
   return ({ header }: any) => (
     <View testID="screen-header">
       <Text testID="screen-header-text">{header}</Text>
@@ -70,37 +70,37 @@ jest.mock('../../../components/screen-header', () => {
 });
 
 jest.mock(
-  '../../../components/rats-loading-indicator/rats-loading-indicator',
+  "../../../components/rats-loading-indicator/rats-loading-indicator",
   () => {
-    const { View } = require('react-native');
+    const { View } = require("react-native");
     return () => <View testID="loading-indicator" />;
-  },
+  }
 );
 
-jest.mock('../../../components/rats-text', () => ({
+jest.mock("../../../components/rats-text", () => ({
   RatsText: ({ text }: any) => {
-    const { Text } = require('react-native');
-    return <Text>{typeof text === 'number' ? String(text) : text || ''}</Text>;
+    const { Text } = require("react-native");
+    return <Text>{typeof text === "number" ? String(text) : text || ""}</Text>;
   },
 }));
 
-jest.mock('../../../components/rats-scroll-view', () => {
-  const { ScrollView } = require('react-native');
+jest.mock("../../../components/rats-scroll-view", () => {
+  const { ScrollView } = require("react-native");
   return (props: any) => {
     const { children, contentContainerStyle, ...rest } = props;
     return <ScrollView {...rest}>{children}</ScrollView>;
   };
 });
 
-jest.mock('../../../components/rats-text-input/rats-text-input', () => {
-  const { TextInput } = require('react-native');
+jest.mock("../../../components/rats-text-input/rats-text-input", () => {
+  const { TextInput } = require("react-native");
   return (props: any) => (
-    <TextInput testID={`input-${props.name || 'field'}`} {...props} />
+    <TextInput testID={`input-${props.name || "field"}`} {...props} />
   );
 });
 
-jest.mock('../../../components/rats-picker/rats-picker', () => {
-  const { View, Text } = require('react-native');
+jest.mock("../../../components/rats-picker/rats-picker", () => {
+  const { View, Text } = require("react-native");
   return ({ label, name }: any) => (
     <View testID={`picker-${name}`}>
       <Text>{label}</Text>
@@ -108,8 +108,8 @@ jest.mock('../../../components/rats-picker/rats-picker', () => {
   );
 });
 
-jest.mock('../../../components/rats-button/rats-button', () => {
-  const { TouchableOpacity, Text } = require('react-native');
+jest.mock("../../../components/rats-button/rats-button", () => {
+  const { TouchableOpacity, Text } = require("react-native");
   return ({ title, onPress, testID }: any) => (
     <TouchableOpacity testID={testID || `btn-${title}`} onPress={onPress}>
       <Text>{title}</Text>
@@ -117,8 +117,8 @@ jest.mock('../../../components/rats-button/rats-button', () => {
   );
 });
 
-jest.mock('../../../components/confirmation-buttons', () => {
-  const { View, TouchableOpacity, Text } = require('react-native');
+jest.mock("../../../components/confirmation-buttons", () => {
+  const { View, TouchableOpacity, Text } = require("react-native");
   return ({ cancel, confirm }: any) => (
     <View testID="confirmation-buttons">
       <TouchableOpacity testID="cancel-button" onPress={cancel}>
@@ -131,37 +131,37 @@ jest.mock('../../../components/confirmation-buttons', () => {
   );
 });
 
-jest.mock('../../../components/help-icon', () => {
-  const { View } = require('react-native');
+jest.mock("../../../components/help-icon", () => {
+  const { View } = require("react-native");
   return () => <View testID="help-icon" />;
 });
 
-jest.mock('../../../components/weekdays', () => ({
+jest.mock("../../../components/weekdays", () => ({
   Weekdays: () => null,
   WeekdayWithTime: () => null,
   daysOfWeek: [
-    'Sunday',
-    'Monday',
-    'Tuesday',
-    'Wednesday',
-    'Thursday',
-    'Friday',
-    'Saturday',
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
   ],
 }));
 
-jest.mock('../DayTimeWidget', () => {
-  const { View } = require('react-native');
+jest.mock("../DayTimeWidget", () => {
+  const { View } = require("react-native");
   return () => <View testID="day-time-widget" />;
 });
 
-jest.mock('../../../components/rats-datepicker/rats-timepicker', () => ({
+jest.mock("../../../components/rats-datepicker/rats-timepicker", () => ({
   RatsTimePicker: () => null,
 }));
 
-jest.mock('../../../util/form', () => ({
+jest.mock("../../../util/form", () => ({
   renderField: (name: string, label: string) => {
-    const { View, Text } = require('react-native');
+    const { View, Text } = require("react-native");
     return (
       <View testID={`field-${name}`}>
         <Text>{label}</Text>
@@ -170,21 +170,21 @@ jest.mock('../../../util/form', () => ({
   },
 }));
 
-jest.mock('../../../util/meeting', () => ({
-  getCheckinInput: jest.fn(() => ({ meetingId: 'meeting-1' })),
+jest.mock("../../../util/meeting", () => ({
+  getCheckinInput: jest.fn(() => ({ meetingId: "meeting-1" })),
 }));
 
-jest.mock('../../../util/display', () => ({
+jest.mock("../../../util/display", () => ({
   militaryTimeToDate: jest.fn(() => new Date()),
-  getFormattedTime: jest.fn(() => '5:00 PM'),
+  getFormattedTime: jest.fn(() => "5:00 PM"),
   getPickerItems: jest.fn((items: any) =>
-    Object.keys(items).map(key => ({ label: key, value: items[key] })),
+    Object.keys(items).map((key) => ({ label: key, value: items[key] }))
   ),
 }));
 
 // ─── Formik stub ──────────────────────────────────────────────────────────────
-jest.mock('formik', () => {
-  const React = require('react');
+jest.mock("formik", () => {
+  const React = require("react");
   return {
     withFormik: (config: any) => (Component: any) => (props: any) => {
       const values = config.mapPropsToValues
@@ -210,7 +210,7 @@ jest.mock('formik', () => {
     Field: ({ component: Comp, ...rest }: any) => {
       if (!Comp) return null;
       return React.createElement(Comp, {
-        field: { name: rest.name, value: '' },
+        field: { name: rest.name, value: "" },
         ...rest,
       });
     },
@@ -219,69 +219,67 @@ jest.mock('formik', () => {
 });
 
 // ─── React imports (after mocks) ──────────────────────────────────────────────
-import React from 'react';
-import { render, fireEvent, act } from '@testing-library/react-native';
-import { Provider } from 'react-redux';
-import { configureStore } from '@reduxjs/toolkit';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React from "react";
+import { render, fireEvent, act } from "@testing-library/react-native";
+import { Provider } from "react-redux";
+import { configureStore } from "@reduxjs/toolkit";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import housesReducer from '../../../state/slices/housesSlice';
-import guestsReducer from '../../../state/slices/guestsSlice';
-import userReducer from '../../../state/slices/userSlice';
-import adminReducer from '../../../state/slices/adminSlice';
-import uiReducer from '../../../state/slices/uiSlice';
-import authReducer from '../../../state/slices/authSlice';
-import themeReducer from '../../../state/slices/themeSlice';
-import navigationReducer from '../../../state/slices/navigationSlice';
-import chatReducer from '../../../state/slices/chatSlice';
-import setupReducer from '../../../state/slices/setupSlice';
-import notificationsReducer from '../../../state/slices/notificationsSlice';
+import housesReducer from "../../../state/slices/housesSlice";
+import guestsReducer from "../../../state/slices/guestsSlice";
+import userReducer from "../../../state/slices/userSlice";
+import adminReducer from "../../../state/slices/adminSlice";
+import authReducer from "../../../state/slices/authSlice";
+import themeReducer from "../../../state/slices/themeSlice";
+import chatReducer from "../../../state/slices/chatSlice";
+import setupReducer from "../../../state/slices/setupSlice";
+import notificationsReducer from "../../../state/slices/notificationsSlice";
 
 import {
   useAddMeeting,
   useCheckIntoMeeting,
-} from '../../../state/queries/meetingQueries';
-import NewMeeting from '../NewMeeting';
+} from "../../../state/queries/meetingQueries";
+import NewMeeting from "../NewMeeting";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
 const BASE_HOUSE: any = {
-  id: 'house-1',
-  name: 'Test House',
-  street: '100 Main St',
-  city: 'Springfield',
-  state: 'IL',
-  zip: '62701',
+  id: "house-1",
+  name: "Test House",
+  street: "100 Main St",
+  city: "Springfield",
+  state: "IL",
+  zip: "62701",
   adminIds: [],
   superAdminIds: [],
   pendingAdminInvites: [],
-  timezone: '',
-  ownerId: 'owner-1',
+  timezone: "",
+  ownerId: "owner-1",
   lat: 0,
   lng: 0,
-  geohash: '',
-  country: 'US',
+  geohash: "",
+  country: "US",
   health: {},
   monthlyRent: 1000,
   weeklyRent: 250,
   currentCapacity: 2,
   maximumCapacity: 5,
-  code: 'TEST01',
-  avatar: '',
-  imageUrl: '',
+  code: "TEST01",
+  avatar: "",
+  imageUrl: "",
   depositsAndFees: 0,
   certified: false,
-  phoneNumber: '5551234567',
-  rentFrequency: 'both',
-  subscriptionStatus: 'active',
+  phoneNumber: "5551234567",
+  rentFrequency: "both",
+  subscriptionStatus: "active",
   isDemoHouse: false,
-  houseType: 'traditional',
+  houseType: "traditional",
   seniorPeerEmails: [],
-  managerSetupType: 'operator-only',
+  managerSetupType: "operator-only",
   awaitingVerification: [],
   chores: {},
   phases: {},
-  gender: '',
+  gender: "",
   disputes: {},
   applications: {},
   complaints: {},
@@ -289,16 +287,16 @@ const BASE_HOUSE: any = {
   baths: 1,
   wifi: false,
   rating: 3,
-  createdDate: '2024-01-01',
-  lastUpdated: '2024-01-01',
+  createdDate: "2024-01-01",
+  lastUpdated: "2024-01-01",
 };
 
 const BASE_USER: any = {
-  id: 'user-1',
-  uid: 'user-1',
-  firstName: 'Admin',
-  lastName: 'User',
-  email: 'admin@example.com',
+  id: "user-1",
+  uid: "user-1",
+  firstName: "Admin",
+  lastName: "User",
+  email: "admin@example.com",
   isAdmin: true,
   isGuest: false,
 };
@@ -316,10 +314,8 @@ function buildStore({
 }: BuildStoreOptions = {}) {
   return configureStore({
     reducer: {
-      ui: uiReducer,
       auth: authReducer,
       theme: themeReducer,
-      navigation: navigationReducer,
       user: userReducer,
       houses: housesReducer,
       guests: guestsReducer,
@@ -354,12 +350,12 @@ function buildStore({
         guests: {},
         selectedGuest: null,
         userAsGuest: null,
-        status: 'idle',
+        status: "idle",
         error: null,
-        updateStatus: 'idle',
-        createStatus: 'idle',
-        deleteStatus: 'idle',
-        customizePhaseStatus: 'idle',
+        updateStatus: "idle",
+        createStatus: "idle",
+        deleteStatus: "idle",
+        customizePhaseStatus: "idle",
       } as any,
       admin: {
         houseAdmins: {},
@@ -418,7 +414,7 @@ function setupMeetingQueryMocks({
 
 function renderScreen(
   storeOptions: BuildStoreOptions = {},
-  mutationOptions: { addingMeeting?: boolean; checkingIn?: boolean } = {},
+  mutationOptions: { addingMeeting?: boolean; checkingIn?: boolean } = {}
 ) {
   setupMeetingQueryMocks(mutationOptions);
   const store = buildStore(storeOptions);
@@ -428,103 +424,120 @@ function renderScreen(
       <QueryClientProvider client={queryClient}>
         <NewMeeting navigation={mockNavigation} />
       </QueryClientProvider>
-    </Provider>,
+    </Provider>
   );
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe('NewMeeting', () => {
+describe("NewMeeting", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     setupMeetingQueryMocks();
   });
 
   // ─── Smoke test ─────────────────────────────────────────────────────────────
-  describe('render', () => {
-    it('renders without crashing', () => {
+  describe("render", () => {
+    it("renders without crashing", () => {
       const { getByTestId } = renderScreen();
-      expect(getByTestId('screen-header')).toBeTruthy();
+      expect(getByTestId("screen-header")).toBeTruthy();
     });
 
     it('renders the "Create Meeting" header', () => {
       const { getByText } = renderScreen();
-      expect(getByText('Create Meeting')).toBeTruthy();
+      expect(getByText("Create Meeting")).toBeTruthy();
     });
 
-    it('renders the Meeting Name field', () => {
+    it("renders the Meeting Name field", () => {
       const { getByTestId } = renderScreen();
-      expect(getByTestId('field-name')).toBeTruthy();
+      expect(getByTestId("field-name")).toBeTruthy();
     });
 
-    it('renders the Type picker', () => {
+    it("renders the Type picker", () => {
       const { getByTestId } = renderScreen();
-      expect(getByTestId('picker-type')).toBeTruthy();
+      expect(getByTestId("picker-type")).toBeTruthy();
     });
 
-    it('renders the Address field', () => {
+    it("renders the Address field", () => {
       const { getByTestId } = renderScreen();
-      expect(getByTestId('field-address')).toBeTruthy();
+      expect(getByTestId("field-address")).toBeTruthy();
     });
 
-    it('renders confirmation buttons', () => {
+    it("renders confirmation buttons", () => {
       const { getByTestId } = renderScreen();
-      expect(getByTestId('confirmation-buttons')).toBeTruthy();
+      expect(getByTestId("confirmation-buttons")).toBeTruthy();
     });
 
-    it('renders cancel button', () => {
+    it("renders cancel button", () => {
       const { getByTestId } = renderScreen();
-      expect(getByTestId('cancel-button')).toBeTruthy();
+      expect(getByTestId("cancel-button")).toBeTruthy();
     });
 
-    it('renders confirm button', () => {
+    it("renders confirm button", () => {
       const { getByTestId } = renderScreen();
-      expect(getByTestId('confirm-button')).toBeTruthy();
+      expect(getByTestId("confirm-button")).toBeTruthy();
     });
   });
 
   // ─── Loading state ───────────────────────────────────────────────────────────
-  describe('loading state', () => {
-    it('calls showLoadingModal when addingMeeting is true', () => {
+  describe("loading state", () => {
+    it("calls showLoadingModal when addingMeeting is true", () => {
       renderScreen({}, { addingMeeting: true });
-      expect(mockShowLoadingModal).toHaveBeenCalledWith('Adding meeting...');
+      expect(mockShowLoadingModal).toHaveBeenCalledWith("Adding meeting...");
     });
 
-    it('calls hideLoadingModal when addingMeeting is false and no error', () => {
+    it("calls hideLoadingModal when addingMeeting is false and no error", () => {
       renderScreen({}, { addingMeeting: false });
       expect(mockHideLoadingModal).toHaveBeenCalled();
     });
 
-    it('does not call showLoadingModal when addingMeeting is false', () => {
+    it("does not call showLoadingModal when addingMeeting is false", () => {
       renderScreen({}, { addingMeeting: false });
       expect(mockShowLoadingModal).not.toHaveBeenCalled();
     });
   });
 
   // ─── Form field labels ───────────────────────────────────────────────────────
-  describe('form field labels', () => {
+  describe("form field labels", () => {
     it('renders "Meeting Name" label text', () => {
       const { getByText } = renderScreen();
-      expect(getByText('Meeting Name')).toBeTruthy();
+      expect(getByText("Meeting Name")).toBeTruthy();
     });
 
     it('renders "Type" label text', () => {
       const { getByText } = renderScreen();
-      expect(getByText('Type')).toBeTruthy();
+      expect(getByText("Type")).toBeTruthy();
     });
 
     it('renders "Address" label text', () => {
       const { getByText } = renderScreen();
-      expect(getByText('Address')).toBeTruthy();
+      expect(getByText("Address")).toBeTruthy();
     });
   });
 
   // ─── Confirmation buttons interaction ────────────────────────────────────────
-  describe('confirmation button interactions', () => {
-    it('calls navigation.goBack when Cancel is pressed', () => {
+  describe("confirmation button interactions", () => {
+    it("calls navigation.goBack when Cancel is pressed", () => {
       const { getByTestId } = renderScreen();
-      fireEvent.press(getByTestId('cancel-button'));
+      fireEvent.press(getByTestId("cancel-button"));
       expect(mockNavigation.goBack).toHaveBeenCalled();
+    });
+
+    // Regression coverage for 2026-07-05: handleSubmit used to hardcode
+    // `newMeeting.type = 'Custom'` after cloning the form values, silently
+    // discarding whatever the operator picked in the Type picker (NA/AA/IOP/
+    // Celebrate Recovery/Custom). Every meeting was created as "Custom"
+    // regardless of selection.
+    it("submits the meeting with the type selected in the form, not hardcoded to Custom", async () => {
+      const { getByTestId } = renderScreen();
+      await act(async () => {
+        fireEvent.press(getByTestId("confirm-button"));
+      });
+      expect(mockAddMeetingMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          meeting: expect.objectContaining({ type: "AA" }),
+        })
+      );
     });
   });
 });

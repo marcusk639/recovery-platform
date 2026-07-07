@@ -154,10 +154,8 @@ import { render } from '@testing-library/react-native';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
 
-import uiReducer from '../../../state/slices/uiSlice';
 import authReducer from '../../../state/slices/authSlice';
 import themeReducer from '../../../state/slices/themeSlice';
-import navigationReducer from '../../../state/slices/navigationSlice';
 import userReducer from '../../../state/slices/userSlice';
 import housesReducer from '../../../state/slices/housesSlice';
 import guestsReducer from '../../../state/slices/guestsSlice';
@@ -261,10 +259,8 @@ function buildStore(
 
   return configureStore({
     reducer: {
-      ui: uiReducer,
       auth: authReducer,
       theme: themeReducer,
-      navigation: navigationReducer,
       user: userReducer,
       houses: housesReducer,
       guests: guestsReducer,

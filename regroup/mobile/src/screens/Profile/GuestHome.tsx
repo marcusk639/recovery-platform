@@ -2,41 +2,41 @@
  * GuestHome - Main guest profile/overview screen
  */
 
-import React, { useState } from 'react';
-import { View, TouchableOpacity, Share, Alert } from 'react-native';
+import React, { useState } from "react";
+import { View, TouchableOpacity, Share, Alert } from "react-native";
 
 // Hooks
-import { useGuest, useGuests } from '../../state/queries';
-import { useAppSelector } from '../../state/store';
-import { useModal } from '../../context';
-import { useSelectedHouse } from '../../hooks/useSelectedHouse';
-import { useSelectedGuest } from '../../hooks/useSelectedGuest';
-import { useCurrentWeek } from '../../hooks/activity/useCurrentWeek';
+import { useGuest, useGuests } from "../../state/queries";
+import { useAppSelector } from "../../state/store";
+import { useModal } from "../../context";
+import { useSelectedHouse } from "../../hooks/useSelectedHouse";
+import { useSelectedGuest } from "../../hooks/useSelectedGuest";
+import { useCurrentWeek } from "../../hooks/activity/useCurrentWeek";
 import {
   useComplianceCheck,
   useWeekSummary,
-} from '../../state/queries/activityQueries';
+} from "../../state/queries/activityQueries";
 
 // Components
-import RatsScrollView from '../../components/rats-scroll-view';
-import { RatsText } from '../../components/rats-text';
-import RatsLoadingIndicator from '../../components/rats-loading-indicator/rats-loading-indicator';
-import ScreenHeader from '../../components/screen-header';
-import { RatsIcon, ClickableIcon } from '../../components/rats-icon';
-import WeekStatSummary from '../../components/week-stat-summary';
-import BoxedIcon from '../../components/rats-icon/boxed-icon';
-import EmptyScreen from '../../components/empty-screen';
-import { ComplianceBreakdown } from '../../components/compliance-indicator';
-import PhaseAdvancementBanner from '../../components/phase-advancement-banner/PhaseAdvancementBanner';
+import RatsScrollView from "../../components/rats-scroll-view";
+import { RatsText } from "../../components/rats-text";
+import RatsLoadingIndicator from "../../components/rats-loading-indicator/rats-loading-indicator";
+import ScreenHeader from "../../components/screen-header";
+import { RatsIcon, ClickableIcon } from "../../components/rats-icon";
+import WeekStatSummary from "../../components/week-stat-summary";
+import BoxedIcon from "../../components/rats-icon/boxed-icon";
+import EmptyScreen from "../../components/empty-screen";
+import { ComplianceBreakdown } from "../../components/compliance-indicator";
+import PhaseAdvancementBanner from "../../components/phase-advancement-banner/PhaseAdvancementBanner";
 
 // Types & Entities
-import { Guest, Stat } from '../../entities/Guest';
-import { ActivityType } from '../../entities/ActivityModel';
-import { House, StripeAccountStatus } from '../../entities/House';
-import { formatCurrency } from '../RentPayment/rentPaymentHelpers';
-import { User } from '../../entities/User';
-import { Guests } from '../../types';
-import { Health } from '../../constants/health';
+import { Guest, Stat } from "../../entities/Guest";
+import { ActivityType } from "../../entities/ActivityModel";
+import { House, StripeAccountStatus } from "../../entities/House";
+import { formatCentsAsCurrency } from "../RentPayment/rentPaymentHelpers";
+import { User } from "../../entities/User";
+import { Guests } from "../../types";
+import { Health } from "../../constants/health";
 
 // Utils
 import {
@@ -46,7 +46,7 @@ import {
   CARD_STYLE,
   ROW,
   fontFamily,
-} from '../../styles/theme';
+} from "../../styles/theme";
 import {
   getPhaseRule,
   HEALTH_COLOR_MAP,
@@ -54,29 +54,29 @@ import {
   getPercentage,
   HEALTH_ICON_MAP,
   HEALTH_STATUS_MAP,
-} from '../../util/guest';
-import { getTodaysDate, STAT_MAP } from '../../util/display';
-import { STAT_ROUTE } from '../../constants/routes';
+} from "../../util/guest";
+import { getTodaysDate, STAT_MAP } from "../../util/display";
+import { STAT_ROUTE } from "../../constants/routes";
 
 // Navigation
-import { Routes, RootStackParamList } from '../../navigation/types';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Routes, RootStackParamList } from "../../navigation/types";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 // Auth context for admin checks
-import { AuthConsumer } from '../../context/auth';
-import { isAdmin } from '../../util/roles';
+import { AuthConsumer } from "../../context/auth";
+import { isAdmin } from "../../util/roles";
 
 // Report export
-import { exportWeeklyReportPDF } from '../../services/reportExport';
+import { exportWeeklyReportPDF } from "../../services/reportExport";
 
 // Discharge modal
-import DischargeGuestModal from './DischargeGuestModal';
+import DischargeGuestModal from "./DischargeGuestModal";
 
 // Notifications
-import { scheduleRentReminder } from '../../services/notifications/rentReminder';
+import { scheduleRentReminder } from "../../services/notifications/rentReminder";
 
 // Styles
-import styles from './ProfileStyles';
+import styles from "./ProfileStyles";
 
 interface StatSectionProps {
   name: string;
@@ -101,11 +101,11 @@ interface Props {
 const StatSection: React.FC<StatSectionProps> = ({
   name,
   description,
-  iconName = '',
-  iconColor = '',
+  iconName = "",
+  iconColor = "",
   boxedIconName,
   iconBackgroundColor,
-  buttonText = '',
+  buttonText = "",
   onPress = null,
   locked = false,
   testID,
@@ -116,14 +116,15 @@ const StatSection: React.FC<StatSectionProps> = ({
         testID={testID}
         onPress={onPress ? onPress : () => {}}
         activeOpacity={onPress ? 0.2 : 1}
-        style={ROW}>
-        <View style={{ justifyContent: 'center', marginRight: normalize(10) }}>
+        style={ROW}
+      >
+        <View style={{ justifyContent: "center", marginRight: normalize(10) }}>
           <BoxedIcon
             name={boxedIconName}
             backgroundColor={iconBackgroundColor}
           />
         </View>
-        <View style={{ justifyContent: 'center' }}>
+        <View style={{ justifyContent: "center" }}>
           <RatsText
             translate={false}
             text={name}
@@ -144,7 +145,7 @@ const StatSection: React.FC<StatSectionProps> = ({
             name={iconName}
             solid
             size={normalize(20)}
-            style={{ color: iconColor, marginLeft: 'auto' }}
+            style={{ color: iconColor, marginLeft: "auto" }}
           />
         )}
         {locked && (
@@ -153,9 +154,9 @@ const StatSection: React.FC<StatSectionProps> = ({
             solid
             size={normalize(25)}
             style={{
-              alignSelf: 'center',
+              alignSelf: "center",
               color: color.dark_grey,
-              marginLeft: 'auto',
+              marginLeft: "auto",
             }}
           />
         )}
@@ -169,7 +170,7 @@ const StatSection: React.FC<StatSectionProps> = ({
  */
 const HealthDescription: React.FC<{ health: Health }> = ({ health }) => {
   return (
-    <View style={{ ...ROW, alignItems: 'center' }}>
+    <View style={{ ...ROW, alignItems: "center" }}>
       <RatsIcon
         name={HEALTH_ICON_MAP[health]}
         solid
@@ -218,7 +219,7 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
 
   // Optionally fetch guest via React Query so we always have the freshest
   // server copy for read-through scenarios.
-  const { data: queryGuest } = useGuest(guest?.id || '', !!guest?.id);
+  const { data: queryGuest } = useGuest(guest?.id || "", !!guest?.id);
 
   // Use the most up-to-date guest data
   const currentGuest = queryGuest || guest;
@@ -230,9 +231,9 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
   // letting the two state stores diverge. See .full-review [P2].
   const { startDate } = useCurrentWeek();
   const { data: summary = null } = useWeekSummary(
-    currentGuest?.id ?? '',
+    currentGuest?.id ?? "",
     startDate,
-    !!currentGuest?.id && !!startDate,
+    !!currentGuest?.id && !!startDate
   );
 
   // Schedule a rent reminder for guests with an outstanding balance.
@@ -251,10 +252,10 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
   const complianceEnabled = !!currentGuest && !!house;
   const { data: complianceResult, status: complianceStatus } =
     useComplianceCheck(
-      currentGuest || ({ id: '', phase: '' } as any),
+      currentGuest || ({ id: "", phase: "" } as any),
       startDate,
-      house || ({ id: '', phases: {} } as any),
-      complianceEnabled,
+      house || ({ id: "", phases: {} } as any),
+      complianceEnabled
     );
 
   // Resolve the guest's phase rules (needed by ComplianceBreakdown to know which rows to show)
@@ -288,11 +289,11 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
     switch (stat) {
       case ActivityType.MEETING:
         return summary.stats.meetingsAttended;
-      case 'hoursWorked':
+      case "hoursWorked":
         return summary.stats.hoursWorked;
-      case 'choreCompleted':
+      case "choreCompleted":
         return summary.stats.choresCompleted;
-      case 'metPrimarySupporter':
+      case "metPrimarySupporter":
         return summary.stats.primarySupporterMet > 0;
       case ActivityType.MEDICATION:
         return summary.stats.medicationTaken;
@@ -304,11 +305,11 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
   const overallPercentage = (() => {
     if (!summary) return 0;
     const statEntries: [Stat, number][] = [
-      ['meeting', summary.stats.meetingsAttended],
-      ['hoursWorked', summary.stats.hoursWorked],
-      ['choreCompleted', summary.stats.choresCompleted],
-      ['metPrimarySupporter', summary.stats.primarySupporterMet > 0 ? 1 : 0],
-      ['medication', summary.stats.medicationTaken],
+      ["meeting", summary.stats.meetingsAttended],
+      ["hoursWorked", summary.stats.hoursWorked],
+      ["choreCompleted", summary.stats.choresCompleted],
+      ["metPrimarySupporter", summary.stats.primarySupporterMet > 0 ? 1 : 0],
+      ["medication", summary.stats.medicationTaken],
     ];
     let total = 0,
       count = 0;
@@ -329,13 +330,13 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
     stat: Stat,
     suffix: string,
     description?: string,
-    testID?: string,
+    testID?: string
   ) => {
     const statValue = getStatValue(stat);
     const rule = getPhaseRule(house, currentGuest!, stat);
     const percentage = getPercentage(
-      typeof statValue === 'boolean' ? (statValue ? 1 : 0) : statValue,
-      rule,
+      typeof statValue === "boolean" ? (statValue ? 1 : 0) : statValue,
+      rule
     );
     const health = getHealthByPercentage(percentage);
 
@@ -360,8 +361,8 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
   const handleExportPDF = async () => {
     if (!currentGuest || !phaseRules || !summary) {
       Alert.alert(
-        'Export Error',
-        'Unable to generate report: missing guest or week data.',
+        "Export Error",
+        "Unable to generate report: missing guest or week data."
       );
       return;
     }
@@ -371,14 +372,14 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
         currentGuest,
         summary.stats,
         startDate,
-        phaseRules,
+        phaseRules
       );
       await Share.share({
         url: `file://${filePath}`,
-        title: 'Compliance Report',
+        title: "Compliance Report",
       });
     } catch (err: any) {
-      Alert.alert('Export Failed', err?.message || 'Could not generate PDF.');
+      Alert.alert("Export Failed", err?.message || "Could not generate PDF.");
     } finally {
       setExportingPDF(false);
     }
@@ -387,10 +388,11 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
   return (
     <RatsScrollView
       contentContainerStyle={styles.container}
-      testID="guest-overview-screen">
+      testID="guest-overview-screen"
+    >
       {/******************************* HEADER *******************************/}
       <ScreenHeader
-        header={firstName + (lastName ? ' ' + lastName[0] + '.' : '')}
+        header={firstName + (lastName ? " " + lastName[0] + "." : "")}
         icon={
           <ClickableIcon
             containerProps={{
@@ -398,7 +400,7 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
             }}
             iconProps={{
               size: normalize(25),
-              name: 'user-edit',
+              name: "user-edit",
               style: { color: color.baby_blue },
             }}
           />
@@ -423,11 +425,11 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
           percentage={overallPercentage}
           header="HEALTH SCORE"
           rightSideContainer={{
-            justifyContent: 'flex-start',
-            alignItems: 'center',
+            justifyContent: "flex-start",
+            alignItems: "center",
           }}
           rightSideContent={
-            <View style={{ flex: 1, justifyContent: 'space-between' }}>
+            <View style={{ flex: 1, justifyContent: "space-between" }}>
               <HealthDescription health="super happy" />
               <HealthDescription health="happy" />
               <HealthDescription health="neutral" />
@@ -438,33 +440,33 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
       </View>
 
       {/******************************* STAT SECTIONS *********************************/}
-      {renderStatSection('meeting', 'attended', undefined, 'meetings-card')}
+      {renderStatSection("meeting", "attended", undefined, "meetings-card")}
       {renderStatSection(
-        'hoursWorked',
-        'hours worked',
+        "hoursWorked",
+        "hours worked",
         undefined,
-        'job-status-card',
+        "job-status-card"
       )}
       {renderStatSection(
-        'choreCompleted',
-        'completed',
+        "choreCompleted",
+        "completed",
         undefined,
-        'chores-card',
+        "chores-card"
       )}
       {renderStatSection(
-        'metPrimarySupporter',
-        '',
+        "metPrimarySupporter",
+        "",
         `Step ${currentGuest!.step || 1}. ${
-          getStatValue('metPrimarySupporter')
-            ? 'You met your sponsor'
-            : 'You have not met your sponsor.'
+          getStatValue("metPrimarySupporter")
+            ? "You met your sponsor"
+            : "You have not met your sponsor."
         }`,
-        'sponsor-card',
+        "sponsor-card"
       )}
 
       {/******************************* COMPLIANCE BREAKDOWN *******************************/}
-      {complianceStatus !== 'loading' &&
-        complianceStatus !== 'incomplete-data' &&
+      {complianceStatus !== "loading" &&
+        complianceStatus !== "incomplete-data" &&
         complianceResult !== null &&
         phaseRules !== null && (
           <ComplianceBreakdown
@@ -482,14 +484,16 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
           !!house.stripeAccountId &&
           house.stripeStatus === StripeAccountStatus.ACTIVE;
         const description =
-          totalDue > 0 ? `${formatCurrency(totalDue)} due` : 'No balance due';
-        const iconName = totalDue > 0 ? 'exclamation-circle' : 'check-circle';
+          totalDue > 0
+            ? `${formatCentsAsCurrency(totalDue)} due`
+            : "No balance due";
+        const iconName = totalDue > 0 ? "exclamation-circle" : "check-circle";
         const iconColor = totalDue > 0 ? color.red : color.green;
         return (
           <StatSection
             name="Pay Rent"
             description={description}
-            iconName={stripeConnected ? iconName : 'lock'}
+            iconName={stripeConnected ? iconName : "lock"}
             iconColor={stripeConnected ? iconColor : color.dark_grey}
             boxedIconName="credit-card"
             iconBackgroundColor={color.main}
@@ -561,7 +565,7 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
           isAdmin(token, house!.id) ? (
             <StatSection
               name={
-                exportingPDF ? 'Generating PDF...' : 'Export Compliance Report'
+                exportingPDF ? "Generating PDF..." : "Export Compliance Report"
               }
               description="Download this week's PDF compliance report"
               iconName="file-pdf"
@@ -590,12 +594,12 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
               onPress={() =>
                 navigation.navigate(Routes.StaffNotes, {
                   houseId: house!.id,
-                  type: 'resident_note',
-                  guestId: currentGuest?.id ?? '',
+                  type: "resident_note",
+                  guestId: currentGuest?.id ?? "",
                   guestName:
                     currentGuest?.displayName ??
-                    `${currentGuest?.firstName ?? ''} ${
-                      currentGuest?.lastName ?? ''
+                    `${currentGuest?.firstName ?? ""} ${
+                      currentGuest?.lastName ?? ""
                     }`.trim() ??
                     undefined,
                 })
@@ -630,7 +634,7 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
           guestId={currentGuest.id}
           guestName={
             currentGuest.firstName +
-            (currentGuest.lastName ? ' ' + currentGuest.lastName : '')
+            (currentGuest.lastName ? " " + currentGuest.lastName : "")
           }
           onClose={() => setShowDischargeModal(false)}
           onSuccess={() => {

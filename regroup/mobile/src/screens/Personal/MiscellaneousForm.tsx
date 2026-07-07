@@ -1,10 +1,10 @@
-import React, { Fragment } from 'react';
-import { FormikProps, withFormik } from 'formik';
-import { View } from 'react-native';
-import { normalize, CARD_STYLE, color } from '../../styles/theme';
-import ConfirmationButtons from '../../components/confirmation-buttons';
-import RatsScrollView from '../../components/rats-scroll-view';
-import { IOS } from '../../util/platform';
+import React, { Fragment } from "react";
+import { FormikProps, withFormik } from "formik";
+import { View } from "react-native";
+import { normalize, CARD_STYLE, color } from "../../styles/theme";
+import ConfirmationButtons from "../../components/confirmation-buttons";
+import RatsScrollView from "../../components/rats-scroll-view";
+import { IOS } from "../../util/platform";
 
 export interface MiscellaneousFormProps {
   dismissModal: () => void;
@@ -16,26 +16,28 @@ const MiscellaneousForm = (
   initialValues: { [fieldName: string]: string },
   fields: any,
   outerProps: MiscellaneousFormProps,
-  cleanForm: any,
+  cleanForm: any
 ) => {
   const MiscellaneousFormView = (
-    props: FormikProps<any> & MiscellaneousFormProps,
+    props: FormikProps<any> & MiscellaneousFormProps
   ) => {
     return (
       // <View style={{ flex: 1 }}>
       <RatsScrollView
-        behavior={IOS ? 'padding' : null}
+        behavior={IOS ? "padding" : null}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ flexGrow: 1 }}>
+        contentContainerStyle={{ flexGrow: 1 }}
+      >
         <View style={[CARD_STYLE]}>{fields}</View>
 
         <View
           style={{
-            width: '100%',
-            marginTop: 'auto',
+            width: "100%",
+            marginTop: "auto",
             backgroundColor: color.white,
             padding: normalize(15),
-          }}>
+          }}
+        >
           <ConfirmationButtons
             confirm={props.handleSubmit}
             cancel={outerProps.dismissModal}
@@ -49,10 +51,14 @@ const MiscellaneousForm = (
 
   return withFormik<any, any>({
     // mapPropsToValues: props => ({ type: props.filters.type, guest: props.filters.guest, disputed: props.filters.disputed }),
-    mapPropsToValues: props => initialValues,
+    mapPropsToValues: (props) => initialValues,
     handleSubmit: async (values, formikBag) => {
+      // Hardened 2026-07-05: onSubmit was fired without awaiting it, so the
+      // modal closed immediately regardless of whether the submission (a
+      // real async Firestore/service write in every caller) had even
+      // started, let alone succeeded or failed.
       const { onSubmit, dismissModal } = outerProps;
-      onSubmit(values);
+      await onSubmit(values);
       dismissModal();
     },
     validationSchema: null,

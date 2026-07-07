@@ -5,14 +5,14 @@ import {
   addYears,
   addMonths,
   parseISO,
-} from 'date-fns';
-import { Guest, Stat, stats } from '../entities/Guest';
-import { WeekStats } from '../entities/WeekSummary';
+} from "date-fns";
+import { Guest, Stat, stats } from "../entities/Guest";
+import { WeekStats } from "../entities/WeekSummary";
 import {
   Activity,
   ActivityType,
   WorkActivityData,
-} from '../entities/ActivityModel';
+} from "../entities/ActivityModel";
 import {
   getDayOfWeek,
   dayIsAfter,
@@ -21,22 +21,20 @@ import {
   militaryTimeToFormatted,
   getStartOfWeek,
   getEndOfWeek,
-} from '../util/display';
-import { Guests } from '../types/index';
-import { House } from '../entities/House';
-import { User } from '../entities/User';
-import RatsListItem from '../components/rats-list-item';
-import { toAddress, getAddressDisplay } from './address';
-import { View } from 'react-native';
-import React from 'react';
-import Job from '../entities/Job';
-import { cloneDeep, each, isEqual, size } from 'lodash';
-import { color, fontFamily } from '../styles/theme';
-import { Field } from 'formik';
-import RatsNumericInput from '../components/rats-numeric-input';
-import HealthConstants, { Health } from '../constants/health';
-import { ActivityFilterFormValues } from '../screens/Activity/ActivityFilterForm';
-import { Dispute } from '../entities/Dispute';
+} from "../util/display";
+import { Guests } from "../types/index";
+import { House } from "../entities/House";
+import { User } from "../entities/User";
+import RatsListItem from "../components/rats-list-item";
+import { toAddress, getAddressDisplay } from "./address";
+import { View } from "react-native";
+import React from "react";
+import Job from "../entities/Job";
+import { cloneDeep, each, isEqual, size } from "lodash";
+import { color, fontFamily } from "../styles/theme";
+import HealthConstants, { Health } from "../constants/health";
+import { ActivityFilterFormValues } from "../screens/Activity/ActivityFilterForm";
+import { Dispute } from "../entities/Dispute";
 
 export const HEALTH_COLOR_MAP = {
   [HealthConstants.HAPPY]: color.green,
@@ -46,17 +44,17 @@ export const HEALTH_COLOR_MAP = {
 };
 
 export const HEALTH_ICON_MAP: Record<Health, string> = {
-  [HealthConstants.HAPPY]: 'laugh',
-  [HealthConstants.SUPER_HAPPY]: 'laugh-beam',
-  [HealthConstants.NEUTRAL]: 'meh',
-  [HealthConstants.SAD]: 'frown-open',
+  [HealthConstants.HAPPY]: "laugh",
+  [HealthConstants.SUPER_HAPPY]: "laugh-beam",
+  [HealthConstants.NEUTRAL]: "meh",
+  [HealthConstants.SAD]: "frown-open",
 } as Record<Health, string>;
 
 export const HEALTH_STATUS_MAP = {
-  [HealthConstants.HAPPY]: 'GREAT',
-  [HealthConstants.SUPER_HAPPY]: 'EXCELLENT',
-  [HealthConstants.NEUTRAL]: 'NEEDS WORK',
-  [HealthConstants.SAD]: 'NOT GOOD',
+  [HealthConstants.HAPPY]: "GREAT",
+  [HealthConstants.SUPER_HAPPY]: "EXCELLENT",
+  [HealthConstants.NEUTRAL]: "NEEDS WORK",
+  [HealthConstants.SAD]: "NOT GOOD",
 };
 
 export const getTimeSober = (sobrietyDate: string) => {
@@ -75,7 +73,7 @@ export const getTimeSober = (sobrietyDate: string) => {
 
 export const addObjectProperties = (object: { [key: string]: number }) => {
   let total = 0;
-  each(object, property => {
+  each(object, (property) => {
     total += property;
   });
   return total;
@@ -113,7 +111,7 @@ export const getHealthByPercentage = (percentage: number): Health => {
 };
 
 export const getPercentage = (done: number | boolean, required: number) => {
-  const amountDone = typeof done === 'number' ? done : done ? 1 : 0;
+  const amountDone = typeof done === "number" ? done : done ? 1 : 0;
   return required > 0 ? Math.ceil((amountDone / required) * 100) : 0;
 };
 
@@ -124,15 +122,15 @@ export const calculateWeeklyStatsFromActivities = (
   activities: Activity[],
   guestId: string,
   weekStartDate: string,
-  weekEndDate: string,
+  weekEndDate: string
 ) => {
-  const weekActivities = activities.filter(activity => {
+  const weekActivities = activities.filter((activity) => {
     const ts = activity.timestamp;
     if (!ts) return false;
     const activityDate =
-      typeof ts === 'string'
-        ? ts.split('T')[0]
-        : (ts as Date).toISOString().split('T')[0];
+      typeof ts === "string"
+        ? ts.split("T")[0]
+        : (ts as Date).toISOString().split("T")[0];
     return (
       activity.guestId === guestId &&
       activityDate >= weekStartDate &&
@@ -148,7 +146,7 @@ export const calculateWeeklyStatsFromActivities = (
     choreCompleted: 0,
   };
 
-  weekActivities.forEach(activity => {
+  weekActivities.forEach((activity) => {
     switch (activity.type) {
       case ActivityType.MEETING:
         stats.meeting += 1;
@@ -188,37 +186,37 @@ export const calculateDisputesForStat = (
   guestId: string,
   stat: Stat,
   weekStartDate?: string,
-  weekEndDate?: string,
+  weekEndDate?: string
 ) => {
   let filteredActivities = activities.filter(
-    activity =>
-      activity.guestId === guestId && (activity.underDispute ?? 0) > 0,
+    (activity) =>
+      activity.guestId === guestId && (activity.underDispute ?? 0) > 0
   );
 
   if (weekStartDate && weekEndDate) {
-    filteredActivities = filteredActivities.filter(activity => {
+    filteredActivities = filteredActivities.filter((activity) => {
       const ts = activity.timestamp;
       if (!ts) return false;
       const activityDate =
-        typeof ts === 'string'
-          ? ts.split('T')[0]
-          : (ts as Date).toISOString().split('T')[0];
+        typeof ts === "string"
+          ? ts.split("T")[0]
+          : (ts as Date).toISOString().split("T")[0];
       return activityDate >= weekStartDate && activityDate <= weekEndDate;
     });
   }
 
   // Map stat types to activity types (supporting both legacy and modern types)
   const statToActivityType: Record<Stat, string[]> = {
-    meeting: ['meeting_attended', 'meeting'],
-    medication: ['medication_taken', 'medication'],
-    metPrimarySupporter: ['supporter_met', 'primary_supporter'],
-    hoursWorked: ['hours_worked', 'work'],
-    choreCompleted: ['chore_completed', 'chore'],
+    meeting: ["meeting_attended", "meeting"],
+    medication: ["medication_taken", "medication"],
+    metPrimarySupporter: ["supporter_met", "primary_supporter"],
+    hoursWorked: ["hours_worked", "work"],
+    choreCompleted: ["chore_completed", "chore"],
   };
 
   const relevantActivityTypes = statToActivityType[stat];
-  return filteredActivities.filter(activity =>
-    relevantActivityTypes.includes(activity.type as string),
+  return filteredActivities.filter((activity) =>
+    relevantActivityTypes.includes(activity.type as string)
   ).length;
 };
 
@@ -228,7 +226,7 @@ export const calculateDisputesForStat = (
 export const getPhaseRuleForStat = (
   house: House,
   guest: Guest,
-  stat: Stat,
+  stat: Stat
 ): number => {
   const phase = house.phases[guest.phase];
   if (!phase || !phase.rules) {
@@ -241,11 +239,11 @@ export const getPhaseRuleForStat = (
       return rules.meetings || 0;
     case ActivityType.MEDICATION:
       return rules.medications ? 1 : 0;
-    case 'metPrimarySupporter':
+    case "metPrimarySupporter":
       return 1; // Boolean - just need to meet once
-    case 'hoursWorked':
+    case "hoursWorked":
       return rules.work || 0;
-    case 'choreCompleted':
+    case "choreCompleted":
       return rules.chore ? 1 : 0; // Boolean - just need to complete chore
     default:
       return 0;
@@ -257,11 +255,11 @@ export const getPhaseRule = (house: House, guest: Guest, stat: Stat) => {
 };
 
 const STAT_TO_WEEK_KEY: Record<Stat, keyof WeekStats> = {
-  meeting: 'meetingsAttended',
-  medication: 'medicationTaken',
-  metPrimarySupporter: 'primarySupporterMet',
-  hoursWorked: 'hoursWorked',
-  choreCompleted: 'choresCompleted',
+  meeting: "meetingsAttended",
+  medication: "medicationTaken",
+  metPrimarySupporter: "primarySupporterMet",
+  hoursWorked: "hoursWorked",
+  choreCompleted: "choresCompleted",
 };
 
 /**
@@ -273,7 +271,7 @@ export const getOverallPercentage = (
   house: House,
   date: string,
   stat?: Stat,
-  weekStats?: WeekStats,
+  weekStats?: WeekStats
 ): number => {
   if (!weekStats) {
     return 0;
@@ -291,12 +289,12 @@ export const getOverallPercentage = (
   }
 
   const activeStats = stats.filter(
-    s => getPhaseRuleForStat(house, guest, s) > 0,
+    (s) => getPhaseRuleForStat(house, guest, s) > 0
   );
   if (activeStats.length === 0) return 100;
   const total = activeStats.reduce(
     (sum, s) => sum + computeStatPercentage(s),
-    0,
+    0
   );
   return Math.round(total / activeStats.length);
 };
@@ -315,7 +313,7 @@ export const calculateHealthPercentage = (
   guest: Guest,
   house: House,
   date: string,
-  stat?: Stat,
+  stat?: Stat
 ): number => {
   return getOverallPercentage(guest, house, date, stat);
 };
@@ -327,14 +325,14 @@ export const calculateHealth = (
   guest: Guest,
   house: House,
   date: string,
-  stat?: Stat,
+  stat?: Stat
 ) => {
   const percentage = calculateHealthPercentage(guest, house, date, stat);
   return getHealthByPercentage(percentage);
 };
 
 export const getGuestsArray = (_guests: Guests): Guest[] =>
-  Object.keys(_guests).map(key => _guests[key]);
+  Object.keys(_guests).map((key) => _guests[key]);
 
 /**
  * Sorts the given guests array by sobriety date, and returns the newly sorted array
@@ -345,20 +343,20 @@ export const sortGuests = (_guests: Guests): Guest[] => {
   guestsArray.sort(
     (left, right) =>
       new Date(left.sobrietyDate).getTime() -
-      new Date(right.sobrietyDate).getTime(),
+      new Date(right.sobrietyDate).getTime()
   );
   return guestsArray;
 };
 
 export const getGuestByUserId = (guests: Guests, userId: string) => {
   const guestsArray = getGuestsArray(guests);
-  return guestsArray.find(guest => guest.userId === userId);
+  return guestsArray.find((guest) => guest.userId === userId);
 };
 
 export const dateIsInWeek = (
   date: string,
   weekBeginDate: string,
-  weekEndDate: string,
+  weekEndDate: string
 ) => {
   return !dayIsAfter(date, weekEndDate) && !dayIsBefore(date, weekBeginDate);
 };
@@ -384,10 +382,10 @@ export const mapGuestToUser = (user: Partial<User>, guest: Guest) => {
 export const renderGuestJobs = (
   guest: Guest,
   onJobPress: (job: Job) => void,
-  selectedJob: Job,
+  selectedJob: Job
 ) => {
   if (guest && guest.jobs && guest.jobs.length) {
-    return guest.jobs.map(j => {
+    return guest.jobs.map((j) => {
       const isSelectedJob = isEqual(selectedJob, j);
       return (
         <RatsListItem
@@ -396,11 +394,11 @@ export const renderGuestJobs = (
           key={j.employer}
           mainText={j.employer}
           mainTextStyle={{
-            color: isSelectedJob ? '#33b3a6' : color.black,
+            color: isSelectedJob ? "#33b3a6" : color.black,
             fontFamily: isSelectedJob ? fontFamily.bold : fontFamily.roboto,
           }}
           subTextStyle={{
-            color: isSelectedJob ? '#33b3a6' : color.grey,
+            color: isSelectedJob ? "#33b3a6" : color.grey,
             fontFamily: isSelectedJob ? fontFamily.bold : fontFamily.roboto,
           }}
           subText={getAddressDisplay(j.street, j.city, j.state, j.zip)}
@@ -411,26 +409,21 @@ export const renderGuestJobs = (
   return <View>{/* <RatsText text="None" /> */}</View>;
 };
 
-export const renderWorkHoursInput = (selectedJob: Job) => {
-  return (
-    <Field
-      name={`workHours.${selectedJob.employer}`}
-      label="Hours"
-      component={RatsNumericInput}
-      maximumValue={80}
-    />
-  );
-};
+// renderWorkHoursInput removed 2026-07-06: it rendered a bare Formik <Field>
+// with no <Formik> provider in its only call site (GuestWorkSummary's
+// showAddHoursModal, which renders form-modal content outside any Formik
+// context) — Formik's useField() throws in that situation, crashing the
+// whole app. Replaced there with a standalone local-state form component.
 
 export const filterActivities = (
   activities: Activity[],
   filters: ActivityFilterFormValues,
   guest?: Guest,
   searchTerm?: string,
-  type?: ActivityType | 'all',
-  disputesOnly?: boolean,
+  type?: ActivityType | "all",
+  disputesOnly?: boolean
 ) => {
-  return activities.filter(activity => {
+  return activities.filter((activity) => {
     let valid = true;
 
     // Filter by dispute status
@@ -447,7 +440,7 @@ export const filterActivities = (
       valid = valid && activity.guestId === filters.guest.id;
     }
 
-    if (filters.type && filters.type !== 'all') {
+    if (filters.type && filters.type !== "all") {
       valid =
         valid &&
         activity.type.toLowerCase().includes(filters.type.toLowerCase());
@@ -462,27 +455,27 @@ export const filterActivities = (
             d?.jobName?.includes(searchTerm) ||
             d?.supporterName?.includes(searchTerm) ||
             d?.choreName?.includes(searchTerm) ||
-            d?.medicationName?.includes(searchTerm),
+            d?.medicationName?.includes(searchTerm)
         );
     }
 
-    return valid && (type ? type === 'all' || activity.type === type : true);
+    return valid && (type ? type === "all" || activity.type === type : true);
   });
 };
 
 export const findGuestByName = (
   guests: Guests,
   firstName: string,
-  lastName: string,
+  lastName: string
 ): Guest | undefined => {
   return Object.values(guests).find(
-    guest => guest.firstName === firstName && guest.lastName === lastName,
+    (guest) => guest.firstName === firstName && guest.lastName === lastName
   );
 };
 
 export const amountOfDisputeProps = (house: House) => {
   let disputeCount = 0;
-  each(house.disputes, dispute => {
+  each(house.disputes, (dispute) => {
     // Since the new Dispute interface doesn't have challenges or messages arrays,
     // we'll count the dispute itself
     disputeCount += 1;
@@ -496,7 +489,7 @@ export function updateGuestStat(
   week: string,
   stat: string,
   value: any,
-  dispute: Dispute,
+  dispute: Dispute
 ): Guest {
   // This function updates guest stats after dispute resolution
   // For now, return a cloned guest - actual dispute logic is handled elsewhere

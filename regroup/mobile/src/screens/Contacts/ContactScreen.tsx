@@ -4,13 +4,13 @@ import React, {
   useCallback,
   useRef,
   Fragment,
-} from 'react';
-import { Guest } from '../../entities/Guest';
-import Admin from '../../entities/Admin';
-import { Guests, Admins } from '../../types';
-import { House } from '../../entities/House';
-import { User } from '../../entities/User';
-import { each, map } from 'lodash';
+} from "react";
+import { Guest } from "../../entities/Guest";
+import Admin from "../../entities/Admin";
+import { Guests, Admins } from "../../types";
+import { House } from "../../entities/House";
+import { User } from "../../entities/User";
+import { each, map } from "lodash";
 import {
   ROW,
   normalize,
@@ -19,41 +19,41 @@ import {
   CARD_STYLE,
   fontFamily,
   elevateStyle,
-} from '../../styles/theme';
-import { View, TouchableOpacity, TextStyle } from 'react-native';
-import Collapsible from 'react-native-collapsible';
-import RatsScrollView from '../../components/rats-scroll-view';
-import ScreenHeader from '../../components/screen-header';
-import { RatsIcon } from '../../components/rats-icon';
-import RatsAvatar from '../../components/rats-avatar';
-import { RatsText } from '../../components/rats-text';
-import BoxedIcon from '../../components/rats-icon/boxed-icon';
-import { callNumber } from '../../util/phone';
-import { Routes, RootStackParamList } from '../../navigation/types';
-import RatsSearchBar from '../../components/rats-search-bar';
+} from "../../styles/theme";
+import { View, TouchableOpacity, TextStyle } from "react-native";
+import Collapsible from "react-native-collapsible";
+import RatsScrollView from "../../components/rats-scroll-view";
+import ScreenHeader from "../../components/screen-header";
+import { RatsIcon } from "../../components/rats-icon";
+import RatsAvatar from "../../components/rats-avatar";
+import { RatsText } from "../../components/rats-text";
+import BoxedIcon from "../../components/rats-icon/boxed-icon";
+import { callNumber } from "../../util/phone";
+import { Routes, RootStackParamList } from "../../navigation/types";
+import RatsSearchBar from "../../components/rats-search-bar";
 // Phase 3.3: Migrated from 2 HOC layers to Context hooks
 // Removed: withFormModal, withPopover
 // Added: useModal, useNotification hooks
-import { useModal, useNotification } from '../../context';
-import { ContactFilterForm, ContactFilterFormValues } from './ContactForm';
-import { IOS } from '../../util/platform';
+import { useModal, useNotification } from "../../context";
+import { ContactFilterForm, ContactFilterFormValues } from "./ContactForm";
+import { IOS } from "../../util/platform";
 import {
   subscribeToDirectChat,
   CHAT_ID,
   unsubscribeFromDirectChat,
-} from '../../services/message';
-import { Message } from '../../entities/Message';
-import { Conversations } from '../../entities/DirectConversation';
+} from "../../services/message";
+import { Message } from "../../entities/Message";
+import { Conversations } from "../../entities/DirectConversation";
 
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useAppSelector, useAppDispatch } from '../../state/store';
-import { useSelectedHouse } from '../../hooks/useSelectedHouse';
-import { useGuests } from '../../state/queries/guestQueries';
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useAppSelector, useAppDispatch } from "../../state/store";
+import { useSelectedHouse } from "../../hooks/useSelectedHouse";
+import { useGuests } from "../../state/queries/guestQueries";
 import {
   setActiveConversation,
   setRecipient,
   addMessageToConversation,
-} from '../../state/slices/chatSlice';
+} from "../../state/slices/chatSlice";
 
 interface Props {
   navigation: NativeStackNavigationProp<RootStackParamList>;
@@ -77,7 +77,7 @@ const ContactScreen: React.FC<Props> = ({ navigation }) => {
   const [collapsedUsers, setCollapsedUsers] = useState<{
     [id: string]: boolean;
   }>({});
-  const [searchTerm, setSearchTermState] = useState('');
+  const [searchTerm, setSearchTermState] = useState("");
   const [filters, setFilters] = useState<ContactFilterFormValues>(
     new ContactFilterFormValues(),
   );
@@ -85,12 +85,12 @@ const ContactScreen: React.FC<Props> = ({ navigation }) => {
   const dispatch = useAppDispatch();
 
   // RTK Typed Selectors (no more 'as any')
-  const user = useAppSelector(state => state.user.user);
+  const user = useAppSelector((state) => state.user.user);
   const { house } = useSelectedHouse();
   // React Query is the source of truth for guests; see .full-review [A2].
-  const { data: guests = {} } = useGuests(house?.id ?? '');
-  const admins = useAppSelector(state => state.admin.houseAdmins || {});
-  const conversations = useAppSelector(state => state.chat.conversations);
+  const { data: guests = {} } = useGuests(house?.id ?? "");
+  const admins = useAppSelector((state) => state.admin.houseAdmins || {});
+  const conversations = useAppSelector((state) => state.chat.conversations);
   // Phase C removed the admin/guest async thunks that wrote to
   // state.admin.loading and state.guests.status, so those reads are
   // permanently falsy. Since both participant lists now come directly
@@ -98,12 +98,12 @@ const ContactScreen: React.FC<Props> = ({ navigation }) => {
   // (no async fetch on this screen), treat this as "not requesting"
   // — the loading branch was always a no-op after Phase C.
   const requestingChatParticipants = false;
-  const loggingOut = useAppSelector(state => state.user.loggingOut);
+  const loggingOut = useAppSelector((state) => state.user.loggingOut);
 
   // Redux actions
   const addDirectMessage = useCallback(
     (messages: Message[], chatId: string) => {
-      messages.forEach(message => {
+      messages.forEach((message) => {
         dispatch(addMessageToConversation({ conversationId: chatId, message }));
       });
     },
@@ -136,7 +136,7 @@ const ContactScreen: React.FC<Props> = ({ navigation }) => {
     const userParticipantId = user.adminId || user.guestId;
     if (!userParticipantId) return;
     const subs: Array<() => void> = [];
-    each(guests, guest => {
+    each(guests, (guest) => {
       subs.push(
         subscribeToDirectChat(
           [userParticipantId, guest.id],
@@ -148,7 +148,7 @@ const ContactScreen: React.FC<Props> = ({ navigation }) => {
         ),
       );
     });
-    each(admins, admin => {
+    each(admins, (admin) => {
       subs.push(
         subscribeToDirectChat(
           [userParticipantId, admin.id],
@@ -164,10 +164,10 @@ const ContactScreen: React.FC<Props> = ({ navigation }) => {
   }, [user, guests, admins, addDirectMessage]);
 
   const unsubscribeAll = useCallback(() => {
-    unsubscribesRef.current.forEach(unsub => {
+    unsubscribesRef.current.forEach((unsub) => {
       // Defensive: old or mocked subscribe paths may not return a
       // function — don't throw during cleanup.
-      if (typeof unsub === 'function') {
+      if (typeof unsub === "function") {
         unsub();
       }
     });
@@ -186,9 +186,9 @@ const ContactScreen: React.FC<Props> = ({ navigation }) => {
 
   const toggleCollapsible = useCallback(
     (user: Guest | Admin) => () => {
-      setCollapsedUsers(prevState => {
+      setCollapsedUsers((prevState) => {
         const newCollapsedUsers: { [id: string]: boolean } = {};
-        Object.keys(prevState).forEach(key => {
+        Object.keys(prevState).forEach((key) => {
           if (prevState[key] && key !== user.id) {
             newCollapsedUsers[key] = false;
           }
@@ -221,16 +221,16 @@ const ContactScreen: React.FC<Props> = ({ navigation }) => {
     [conversations, user],
   );
 
-  const renderAvatarItem = (user: Guest | Admin, type: 'Guest' | 'Admin') => {
+  const renderAvatarItem = (user: Guest | Admin, type: "Guest" | "Admin") => {
     const message = latestMessage(user);
     const isFromUser = message ? message.senderId === user.uid : false;
     const read = message ? message.read : true;
-    const text = (message && message.text) || 'No messages...';
+    const text = (message && message.text) || "No messages...";
     const { firstName, lastName } = user;
     return (
       <View style={[ROW]}>
         <RatsAvatar
-          name={firstName + ' ' + lastName}
+          name={firstName + " " + lastName}
           style={{
             height: normalize(45),
             width: normalize(45),
@@ -241,9 +241,9 @@ const ContactScreen: React.FC<Props> = ({ navigation }) => {
           resizeMethod="resize"
           resizeMode="cover"
         />
-        <View style={{ width: '85%' }}>
+        <View style={{ width: "85%" }}>
           <RatsText
-            text={firstName + ' ' + lastName}
+            text={firstName + " " + lastName}
             translate={false}
             style={{
               fontSize: fontSize.medium,
@@ -259,7 +259,7 @@ const ContactScreen: React.FC<Props> = ({ navigation }) => {
               color: color.dark_grey,
               fontFamily:
                 read || isFromUser ? fontFamily.roboto : fontFamily.bold,
-              width: '95%',
+              width: "95%",
             }}
             {...({ numberOfLines: 1 } as any)}
           />
@@ -282,7 +282,7 @@ const ContactScreen: React.FC<Props> = ({ navigation }) => {
       <View style={[ROW]}>
         <BoxedIcon
           iconSize={iconSize}
-          onPress={() => callNumber(_user.phoneNumber ?? '')}
+          onPress={() => callNumber(_user.phoneNumber ?? "")}
           container={container}
           name="phone"
           backgroundColor={color.green}
@@ -302,22 +302,36 @@ const ContactScreen: React.FC<Props> = ({ navigation }) => {
     );
   };
 
-  const shouldShowUser = useCallback(
+  const nameMatchesSearchTerm = useCallback(
     (user: Guest | Admin) => {
-      if (filters.type === 'all') {
+      if (!searchTerm) {
         return true;
       }
-      if (filters.type === 'admin') {
+      const name = `${user.firstName} ${user.lastName}`;
+      return name.toLowerCase().includes(searchTerm.toLowerCase());
+    },
+    [searchTerm],
+  );
+
+  const shouldShowUser = useCallback(
+    (user: Guest | Admin) => {
+      if (!nameMatchesSearchTerm(user)) {
+        return false;
+      }
+      if (filters.type === "all") {
+        return true;
+      }
+      if (filters.type === "admin") {
         return user instanceof Admin;
       }
-      if (filters.type === 'guest') {
+      if (filters.type === "guest") {
         return user instanceof Guest;
       }
-      if (filters.type === 'operator') {
+      if (filters.type === "operator") {
         return user instanceof Admin && user.superAdmin;
       }
     },
-    [filters],
+    [filters, nameMatchesSearchTerm],
   );
 
   const renderUserCollapsible = (_user: Guest | Admin) => {
@@ -327,15 +341,17 @@ const ContactScreen: React.FC<Props> = ({ navigation }) => {
     return (
       <View
         key={_user.id}
-        style={[ROW, CARD_STYLE, { marginBottom: 1, padding: normalize(15) }]}>
+        style={[ROW, CARD_STYLE, { marginBottom: 1, padding: normalize(15) }]}
+      >
         <View>
           <TouchableOpacity
             onPress={() => {
               setChatRecipient(_user);
               startConversation(CHAT_ID([userParticipantId, _user.id]));
               navigation.navigate(Routes.DirectMessage);
-            }}>
-            {renderAvatarItem(_user, (_user as any).phase ? 'Guest' : 'Admin')}
+            }}
+          >
+            {renderAvatarItem(_user, (_user as any).phase ? "Guest" : "Admin")}
           </TouchableOpacity>
           <Collapsible
             style={{
@@ -343,7 +359,8 @@ const ContactScreen: React.FC<Props> = ({ navigation }) => {
               paddingTop: normalize(10),
               flex: 1,
             }}
-            collapsed={collapsedUsers[_user.id]}>
+            collapsed={collapsedUsers[_user.id]}
+          >
             {renderContent(_user)}
           </Collapsible>
         </View>
@@ -362,7 +379,7 @@ const ContactScreen: React.FC<Props> = ({ navigation }) => {
     Collapsibles.push(
       <Fragment key={1}>
         <RatsText text="ADMIN" style={HEADER} />
-        {map(admins, admin => {
+        {map(admins, (admin) => {
           return shouldShowUser(admin) && renderUserCollapsible(admin);
         })}
       </Fragment>,
@@ -370,7 +387,7 @@ const ContactScreen: React.FC<Props> = ({ navigation }) => {
     Collapsibles.push(
       <Fragment key={2}>
         <RatsText text="GUEST" style={HEADER} />
-        {map(guests, guest => {
+        {map(guests, (guest) => {
           return shouldShowUser(guest) && renderUserCollapsible(guest);
         })}
       </Fragment>,
@@ -413,8 +430,8 @@ const ContactScreen: React.FC<Props> = ({ navigation }) => {
 
   const renderHelp = useCallback(() => {
     showPopover(
-      'HOUSE MEMBERS',
-      'Here you can view a list of house administrators and residents. Select someone to begin chatting with them.',
+      "HOUSE MEMBERS",
+      "Here you can view a list of house administrators and residents. Select someone to begin chatting with them.",
     );
   }, [showPopover]);
 
@@ -428,8 +445,9 @@ const ContactScreen: React.FC<Props> = ({ navigation }) => {
         container={{ marginBottom: 1, ...elevateStyle }}
         icon={
           <TouchableOpacity
-            ref={ref => setPopoverRef(ref)}
-            onPress={renderHelp}>
+            ref={(ref) => setPopoverRef(ref)}
+            onPress={renderHelp}
+          >
             <RatsIcon
               name="question-circle"
               solid
@@ -440,6 +458,7 @@ const ContactScreen: React.FC<Props> = ({ navigation }) => {
         }
         header="House Members"
       />
+      {renderSearch()}
       <RatsScrollView contentContainerStyle={{}}>
         {renderCollapsibles()}
       </RatsScrollView>
