@@ -25,9 +25,19 @@ jest.mock("../../../state/hooks", () => ({
 jest.mock("../../../util/platform", () => ({ IOS: false }));
 
 import React from "react";
-import { render } from "@testing-library/react-native";
+import { render, cleanup } from "@testing-library/react-native";
 import { Formik } from "formik";
 import SignUpFormView from "../SignUpFormView";
+
+// Hardened 2026-07-07: without an explicit unmount between tests, a
+// component in this tree (react-native's Animated, per the stack trace)
+// leaves a timer scheduled past this file's own teardown, surfacing as
+// "You are trying to access a property or method of the Jest environment
+// after it has been torn down." The suite still passed, but this is exactly
+// the kind of leak that starts flaking in CI once enough of it accumulates.
+afterEach(() => {
+  cleanup();
+});
 
 const baseValues = {
   email: "",

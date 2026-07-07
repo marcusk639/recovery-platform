@@ -15,12 +15,12 @@
  */
 
 // ─── Firebase / native module mocks ────────────────────────────────────────
-jest.mock('../../../../firebase-setup', () => ({
+jest.mock("../../../../firebase-setup", () => ({
   firestore: {
     collection: jest.fn(() => ({
       doc: jest.fn(() => ({
         get: jest.fn(() =>
-          Promise.resolve({ exists: false, data: () => null }),
+          Promise.resolve({ exists: false, data: () => null })
         ),
         set: jest.fn(() => Promise.resolve()),
         update: jest.fn(() => Promise.resolve()),
@@ -41,8 +41,8 @@ jest.mock('../../../../firebase-setup', () => ({
 }));
 
 // ─── Service mocks ───────────────────────────────────────────────────────────
-jest.mock('../../../services/guest', () => ({
-  createGuestId: jest.fn(() => 'mock-guest-id'),
+jest.mock("../../../services/guest", () => ({
+  createGuestId: jest.fn(() => "mock-guest-id"),
   getGuests: jest.fn(() => Promise.resolve({})),
   createGuest: jest.fn(() => Promise.resolve()),
   updateGuest: jest.fn(() => Promise.resolve()),
@@ -50,8 +50,8 @@ jest.mock('../../../services/guest', () => ({
   archiveGuest: jest.fn(() => Promise.resolve()),
 }));
 
-jest.mock('../../../services/house', () => ({
-  createHouseId: jest.fn(() => 'mock-house-id'),
+jest.mock("../../../services/house", () => ({
+  createHouseId: jest.fn(() => "mock-house-id"),
   getHouse: jest.fn(),
   getHouses: jest.fn(),
   createHouse: jest.fn(),
@@ -59,17 +59,17 @@ jest.mock('../../../services/house', () => ({
   houseCollection: {},
 }));
 
-jest.mock('../../../services/issues', () => ({
+jest.mock("../../../services/issues", () => ({
   createIssue: jest.fn(),
   removeIssue: jest.fn(),
   updateIssueStatus: jest.fn(),
 }));
 
 // ─── Navigation mock ──────────────────────────────────────────────────────────
-jest.mock('@react-navigation/native-stack', () => ({}));
+jest.mock("@react-navigation/native-stack", () => ({}));
 
 // ─── Context mock ─────────────────────────────────────────────────────────────
-jest.mock('../../../context', () => ({
+jest.mock("../../../context", () => ({
   useNotification: () => ({
     showPopover: jest.fn(),
     setPopoverRef: jest.fn(),
@@ -82,88 +82,98 @@ jest.mock('../../../context', () => ({
   }),
   useTheme: () => ({
     theme: {
-      primaryColor: '#000',
-      secondaryColor: '#fff',
-      backgroundColor: '#fff',
-      textColor: '#000',
-      primaryFontFamily: 'System',
-      secondaryFontFamily: 'System',
-      tertiaryColor: '#ccc',
-      logoTintColor: '#fff',
+      primaryColor: "#000",
+      secondaryColor: "#fff",
+      backgroundColor: "#fff",
+      textColor: "#000",
+      primaryFontFamily: "System",
+      secondaryFontFamily: "System",
+      tertiaryColor: "#ccc",
+      logoTintColor: "#fff",
     },
   }),
   useTranslation: () => ({
     t: (k: string) => k,
-    i18n: { language: 'en', changeLanguage: jest.fn() },
+    i18n: { language: "en", changeLanguage: jest.fn() },
   }),
 }));
 
 // ─── Component stubs ──────────────────────────────────────────────────────────
 jest.mock(
-  '../../../components/rats-loading-indicator/rats-loading-indicator',
+  "../../../components/rats-loading-indicator/rats-loading-indicator",
   () => {
-    const { View } = require('react-native');
+    const { View } = require("react-native");
     return () => <View testID="loading-indicator" />;
-  },
+  }
 );
 
-jest.mock('../../../components/rats-loading-modal', () => {
-  const { View } = require('react-native');
+jest.mock("../../../components/rats-loading-modal", () => {
+  const { View } = require("react-native");
   return ({ isVisible }: any) =>
     isVisible ? <View testID="loading-modal" /> : null;
 });
 
-jest.mock('../../../components/rats-text', () => ({
+jest.mock("../../../components/rats-text", () => ({
   RatsText: ({ text }: any) => {
-    const { Text } = require('react-native');
-    return <Text>{text || ''}</Text>;
+    const { Text } = require("react-native");
+    return <Text>{text || ""}</Text>;
   },
 }));
 
 // ─── Keyboard-aware scroll view ───────────────────────────────────────────────
-jest.mock('react-native-keyboard-aware-scroll-view', () => {
-  const { ScrollView } = require('react-native');
+jest.mock("react-native-keyboard-aware-scroll-view", () => {
+  const { ScrollView } = require("react-native");
   return {
     KeyboardAwareScrollView: (props: any) => <ScrollView {...props} />,
   };
 });
 
 // ─── Formik stub — renders children with standard helpers ─────────────────────
-jest.mock('formik', () => {
-  const React = require('react');
+// Captures the real withFormik config so tests can invoke its handleSubmit
+// directly — the stubbed InnerComponent below only ever receives a no-op
+// handleSubmit={jest.fn()}, so the real submission guard logic (e.g. the
+// !props.houseId check) is otherwise never exercised by pressing "Submit"
+// in these tests.
+let capturedCreateGuestFormikConfig: any;
+jest.mock("formik", () => {
+  const React = require("react");
   return {
-    withFormik: (config: any) => (InnerComponent: any) => {
-      return (props: any) => {
-        const values = config.mapPropsToValues
-          ? config.mapPropsToValues(props)
-          : {};
-        return (
-          <InnerComponent
-            {...props}
-            values={values}
-            handleSubmit={jest.fn()}
-            isSubmitting={false}
-            status={{}}
-            guest={props.guest || values}
-          />
-        );
+    withFormik: (config: any) => {
+      capturedCreateGuestFormikConfig = config;
+      return (InnerComponent: any) => {
+        return (props: any) => {
+          const values = config.mapPropsToValues
+            ? config.mapPropsToValues(props)
+            : {};
+          return (
+            <InnerComponent
+              {...props}
+              values={values}
+              handleSubmit={jest.fn()}
+              isSubmitting={false}
+              status={{}}
+              guest={props.guest || values}
+            />
+          );
+        };
       };
     },
     Field: ({ component: Comp, name, placeholder, disabled, testID }: any) => {
-      const { View } = require('react-native');
+      const { View } = require("react-native");
       return <View testID={testID || `field-${name}`} />;
     },
   };
 });
 
 // ─── RatsButton stub ──────────────────────────────────────────────────────────
-jest.mock('../../../components/rats-button/rats-button', () => {
-  const { TouchableOpacity, Text } = require('react-native');
+jest.mock("../../../components/rats-button/rats-button", () => {
+  const { TouchableOpacity, Text } = require("react-native");
   return ({ onPress, title, testID, disabled }: any) => (
     <TouchableOpacity
       testID={testID || `button-${title}`}
       onPress={onPress}
-      disabled={disabled}>
+      disabled={disabled}
+    >
       <Text>{title}</Text>
     </TouchableOpacity>
   );
@@ -171,26 +181,26 @@ jest.mock('../../../components/rats-button/rats-button', () => {
 
 // ─── Misc component stubs ──────────────────────────────────────────────────────
 jest.mock(
-  '../../../components/rats-text-input/rats-text-input',
-  () => 'RatsTextInput',
+  "../../../components/rats-text-input/rats-text-input",
+  () => "RatsTextInput"
 );
 jest.mock(
-  '../../../components/rats-checkbox/rats-checkbox',
-  () => 'RatsCheckBox',
+  "../../../components/rats-checkbox/rats-checkbox",
+  () => "RatsCheckBox"
 );
 jest.mock(
-  '../../../components/rats-datepicker/rats-datepicker',
-  () => 'RatsDatePicker',
+  "../../../components/rats-datepicker/rats-datepicker",
+  () => "RatsDatePicker"
 );
 
 // ─── useSelectedHouse mock (A2 migration) ─────────────────────────────────────
 // After A2, CreateGuestFormWrapper calls useSelectedHouse() which internally
 // uses React Query (via useHouse). This test has no QueryClientProvider, so
 // stub the hook with a fixed house. See .full-review [A2].
-jest.mock('../../../hooks/useSelectedHouse', () => ({
+jest.mock("../../../hooks/useSelectedHouse", () => ({
   useSelectedHouse: () => ({
-    house: { id: 'house-1' },
-    houseId: 'house-1',
+    house: { id: "house-1" },
+    houseId: "house-1",
     isLoading: false,
   }),
 }));
@@ -206,7 +216,7 @@ const mockUseGuestsForCreateGuest = jest.fn(() => ({
   isLoading: false,
   isError: false,
 }));
-jest.mock('../../../state/queries/guestQueries', () => ({
+jest.mock("../../../state/queries/guestQueries", () => ({
   useGuests: (...args: any[]) => mockUseGuestsForCreateGuest(...args),
   useGuestsBlocking: () => ({ data: {}, isLoading: false }),
   useGuest: () => ({ data: null, isLoading: false }),
@@ -214,53 +224,53 @@ jest.mock('../../../state/queries/guestQueries', () => ({
   useCreateGuest: () => ({ mutateAsync: jest.fn(), isPending: false }),
   useDeleteGuest: () => ({ mutateAsync: jest.fn(), isPending: false }),
   guestKeys: {
-    all: ['guests'],
-    lists: () => ['guests', 'list'],
-    list: (id: string) => ['guests', 'list', id],
-    details: () => ['guests', 'detail'],
-    detail: (id: string) => ['guests', 'detail', id],
+    all: ["guests"],
+    lists: () => ["guests", "list"],
+    list: (id: string) => ["guests", "list", id],
+    details: () => ["guests", "detail"],
+    detail: (id: string) => ["guests", "detail", id],
   },
 }));
 
 // ─── Display util ─────────────────────────────────────────────────────────────
-jest.mock('../../../util/display', () => ({
-  getCurrentTime: jest.fn(() => '2024-01-01T00:00:00.000Z'),
-  getTodaysDate: jest.fn(() => '2024-01-01'),
-  getDateAndTime: jest.fn(() => 'Jan 1, 2024'),
+jest.mock("../../../util/display", () => ({
+  getCurrentTime: jest.fn(() => "2024-01-01T00:00:00.000Z"),
+  getTodaysDate: jest.fn(() => "2024-01-01"),
+  getDateAndTime: jest.fn(() => "Jan 1, 2024"),
 }));
 
 // ─── React imports (after mocks) ───────────────────────────────────────────────
-import React from 'react';
-import { render } from '@testing-library/react-native';
-import { Provider } from 'react-redux';
-import { configureStore } from '@reduxjs/toolkit';
+import React from "react";
+import { render } from "@testing-library/react-native";
+import { Provider } from "react-redux";
+import { configureStore } from "@reduxjs/toolkit";
 
-import authReducer from '../../../state/slices/authSlice';
-import themeReducer from '../../../state/slices/themeSlice';
-import userReducer from '../../../state/slices/userSlice';
-import housesReducer from '../../../state/slices/housesSlice';
-import guestsReducer from '../../../state/slices/guestsSlice';
-import meetingsReducer from '../../../state/slices/meetingsSlice';
-import adminReducer from '../../../state/slices/adminSlice';
-import chatReducer from '../../../state/slices/chatSlice';
-import setupReducer from '../../../state/slices/setupSlice';
-import notificationsReducer from '../../../state/slices/notificationsSlice';
+import authReducer from "../../../state/slices/authSlice";
+import themeReducer from "../../../state/slices/themeSlice";
+import userReducer from "../../../state/slices/userSlice";
+import housesReducer from "../../../state/slices/housesSlice";
+import guestsReducer from "../../../state/slices/guestsSlice";
+import meetingsReducer from "../../../state/slices/meetingsSlice";
+import adminReducer from "../../../state/slices/adminSlice";
+import chatReducer from "../../../state/slices/chatSlice";
+import setupReducer from "../../../state/slices/setupSlice";
+import notificationsReducer from "../../../state/slices/notificationsSlice";
 
-import CreateGuestScreen from '../CreateGuest';
+import CreateGuestScreen from "../CreateGuest";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
 const BASE_GUEST: any = {
-  id: 'guest-1',
-  firstName: 'John',
-  lastName: 'Doe',
-  email: 'john@example.com',
-  houseId: 'house-1',
-  sobrietyDate: '2020-01-01',
-  drugOfChoice: 'Alcohol',
-  phase: 'default',
+  id: "guest-1",
+  firstName: "John",
+  lastName: "Doe",
+  email: "john@example.com",
+  houseId: "house-1",
+  sobrietyDate: "2020-01-01",
+  drugOfChoice: "Alcohol",
+  phase: "default",
   step: 1,
-  status: 'active',
+  status: "active",
   isAdmin: false,
   infoEntered: false,
   hasJob: false,
@@ -270,13 +280,13 @@ const BASE_GUEST: any = {
   supporters: [],
   jobs: [],
   version: 0,
-  createdDate: '2024-01-01T00:00:00.000Z',
-  lastUpdated: '2024-01-01T00:00:00.000Z',
+  createdDate: "2024-01-01T00:00:00.000Z",
+  lastUpdated: "2024-01-01T00:00:00.000Z",
 };
 
 const BASE_HOUSE: any = {
-  id: 'house-1',
-  name: 'Test House',
+  id: "house-1",
+  name: "Test House",
   adminIds: [],
   superAdminIds: [],
   pendingAdminInvites: [],
@@ -288,40 +298,40 @@ const BASE_HOUSE: any = {
   chores: {},
   phases: {},
   health: {},
-  timezone: '',
-  ownerId: '',
+  timezone: "",
+  ownerId: "",
   lat: 0,
   lng: 0,
-  geohash: '',
-  street: '1 Main St',
-  city: 'Springfield',
-  state: 'IL',
-  zip: '62701',
-  country: 'US',
+  geohash: "",
+  street: "1 Main St",
+  city: "Springfield",
+  state: "IL",
+  zip: "62701",
+  country: "US",
   monthlyRent: 1000,
   weeklyRent: 250,
   currentCapacity: 2,
   maximumCapacity: 5,
-  code: 'TEST01',
-  avatar: '',
-  imageUrl: '',
+  code: "TEST01",
+  avatar: "",
+  imageUrl: "",
   depositsAndFees: 0,
   certified: false,
-  phoneNumber: '5551234567',
-  rentFrequency: 'both',
-  subscriptionStatus: 'active',
+  phoneNumber: "5551234567",
+  rentFrequency: "both",
+  subscriptionStatus: "active",
   isDemoHouse: false,
-  houseType: 'traditional',
+  houseType: "traditional",
   seniorPeerEmails: [],
-  managerSetupType: 'operator-only',
+  managerSetupType: "operator-only",
   awaitingVerification: [],
-  gender: '',
+  gender: "",
   baths: 1,
   wifi: false,
   rating: 3,
-  stripeStatus: 'not_connected',
-  createdDate: '2024-01-01T00:00:00.000Z',
-  lastUpdated: '2024-01-01T00:00:00.000Z',
+  stripeStatus: "not_connected",
+  createdDate: "2024-01-01T00:00:00.000Z",
+  lastUpdated: "2024-01-01T00:00:00.000Z",
 };
 
 // ─── Store builder ─────────────────────────────────────────────────────────────
@@ -343,7 +353,7 @@ function buildStore(overrides: { guests?: any; house?: any } = {}) {
     preloadedState: {
       houses: {
         selectedHouse: overrides.house ?? BASE_HOUSE,
-        houses: { 'house-1': overrides.house ?? BASE_HOUSE },
+        houses: { "house-1": overrides.house ?? BASE_HOUSE },
         searchedHouses: [],
         requestingHouse: false,
         requestingHouseFailed: false,
@@ -362,7 +372,7 @@ function buildStore(overrides: { guests?: any; house?: any } = {}) {
         error: null,
       } as any,
       guests: {
-        guests: overrides.guests ?? { 'guest-1': BASE_GUEST },
+        guests: overrides.guests ?? { "guest-1": BASE_GUEST },
         selectedGuest: BASE_GUEST,
         loading: false,
         error: null,
@@ -380,7 +390,7 @@ function buildStore(overrides: { guests?: any; house?: any } = {}) {
         deletingGuestFailed: false,
       } as any,
       user: {
-        user: { id: 'user-1', firstName: 'Admin', lastName: 'User' },
+        user: { id: "user-1", firstName: "Admin", lastName: "User" },
         loading: false,
         error: null,
         loggedIn: true,
@@ -398,102 +408,174 @@ function renderScreen(storeOverrides: { guests?: any; house?: any } = {}) {
   // A2 migration: feed the same fixture through useGuests so CreateGuestForm
   // sees the data it used to read from state.guests.guests.
   mockUseGuestsForCreateGuest.mockReturnValue({
-    data: storeOverrides.guests ?? { 'guest-1': BASE_GUEST },
+    data: storeOverrides.guests ?? { "guest-1": BASE_GUEST },
     isLoading: false,
     isError: false,
   });
   return render(
     <Provider store={store}>
       <CreateGuestScreen />
-    </Provider>,
+    </Provider>
   );
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe('CreateGuestScreen', () => {
+describe("CreateGuestScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  describe('Rendering', () => {
-    it('renders without crashing', () => {
+  describe("Rendering", () => {
+    it("renders without crashing", () => {
       const { getByTestId } = renderScreen();
-      expect(getByTestId('create-guest-screen')).toBeTruthy();
+      expect(getByTestId("create-guest-screen")).toBeTruthy();
     });
 
     it('renders the top-level container with testID "create-guest-screen"', () => {
       const { getByTestId } = renderScreen();
-      expect(getByTestId('create-guest-screen')).toBeDefined();
+      expect(getByTestId("create-guest-screen")).toBeDefined();
     });
 
-    it('renders the submit button', () => {
+    it("renders the submit button", () => {
       const { getByTestId } = renderScreen();
-      expect(getByTestId('create-guest-button')).toBeTruthy();
+      expect(getByTestId("create-guest-button")).toBeTruthy();
     });
 
     it('renders submit button with title "Submit"', () => {
       const { getByText } = renderScreen();
-      expect(getByText('Submit')).toBeTruthy();
+      expect(getByText("Submit")).toBeTruthy();
     });
 
-    it('renders the firstName field', () => {
+    it("renders the firstName field", () => {
       const { getByTestId } = renderScreen();
-      expect(getByTestId('guest-firstname-input')).toBeTruthy();
+      expect(getByTestId("guest-firstname-input")).toBeTruthy();
     });
 
-    it('renders the lastName field', () => {
+    it("renders the lastName field", () => {
       const { getByTestId } = renderScreen();
-      expect(getByTestId('guest-lastname-input')).toBeTruthy();
+      expect(getByTestId("guest-lastname-input")).toBeTruthy();
     });
 
-    it('renders the email field', () => {
+    it("renders the email field", () => {
       const { getByTestId } = renderScreen();
-      expect(getByTestId('guest-email-input')).toBeTruthy();
+      expect(getByTestId("guest-email-input")).toBeTruthy();
     });
 
-    it('renders the sobrietyDate field', () => {
+    it("renders the sobrietyDate field", () => {
       const { getByTestId } = renderScreen();
       // fieldName.toLowerCase() first strips case, so no hyphens injected: "sobrietydate"
-      expect(getByTestId('guest-sobrietydate-input')).toBeTruthy();
+      expect(getByTestId("guest-sobrietydate-input")).toBeTruthy();
     });
 
-    it('renders the drugOfChoice field', () => {
+    it("renders the drugOfChoice field", () => {
       const { getByTestId } = renderScreen();
       // fieldName.toLowerCase() first strips case, so no hyphens injected: "drugofchoice"
-      expect(getByTestId('guest-drugofchoice-input')).toBeTruthy();
+      expect(getByTestId("guest-drugofchoice-input")).toBeTruthy();
     });
 
-    it('renders the phase field', () => {
+    it("renders the phase field", () => {
       const { getByTestId } = renderScreen();
-      expect(getByTestId('guest-phase-input')).toBeTruthy();
+      expect(getByTestId("guest-phase-input")).toBeTruthy();
     });
   });
 
-  describe('State', () => {
-    it('renders correctly when guest list is empty', () => {
+  describe("State", () => {
+    it("renders correctly when guest list is empty", () => {
       const { getByTestId } = renderScreen({ guests: {} });
-      expect(getByTestId('create-guest-screen')).toBeTruthy();
+      expect(getByTestId("create-guest-screen")).toBeTruthy();
     });
 
-    it('renders correctly when no house is selected', () => {
+    it("renders correctly when no house is selected", () => {
       const { getByTestId } = renderScreen({ house: null });
-      expect(getByTestId('create-guest-screen')).toBeTruthy();
+      expect(getByTestId("create-guest-screen")).toBeTruthy();
     });
 
-    it('re-renders without error', () => {
+    it("re-renders without error", () => {
       const store = buildStore();
       const { rerender, getByTestId } = render(
         <Provider store={store}>
           <CreateGuestScreen />
-        </Provider>,
+        </Provider>
       );
       rerender(
         <Provider store={store}>
           <CreateGuestScreen />
-        </Provider>,
+        </Provider>
       );
-      expect(getByTestId('create-guest-screen')).toBeTruthy();
+      expect(getByTestId("create-guest-screen")).toBeTruthy();
+    });
+  });
+
+  // Regression coverage for 2026-07-06: CreateGuestForm previously
+  // hardcoded values.houseId to one specific house ID for every new guest,
+  // regardless of which house the operator was actually working in. The
+  // fix reads the real houseId from useSelectedHouse() and, since that can
+  // legitimately be unavailable (no house selected / still loading), added
+  // an early-return guard so a guest is never created with a wrong or
+  // missing houseId. The formik mock above always no-ops handleSubmit, so
+  // pressing "Submit" in a rendered test never exercises this guard —
+  // invoke the real captured handleSubmit config directly instead.
+  describe("submit guard when no house is selected", () => {
+    it("does not call addGuest and marks the submission failed when houseId is missing", async () => {
+      renderScreen();
+      expect(capturedCreateGuestFormikConfig).toBeDefined();
+
+      const addGuest = jest.fn();
+      const setStatus = jest.fn();
+      const setSubmitting = jest.fn();
+      const resetForm = jest.fn();
+      const values: any = { firstName: "Alice" };
+
+      await capturedCreateGuestFormikConfig.handleSubmit(values, {
+        props: { houseId: null, addGuest, guests: {} },
+        setStatus,
+        setSubmitting,
+        resetForm,
+      });
+
+      expect(addGuest).not.toHaveBeenCalled();
+      expect(setStatus).toHaveBeenCalledWith({ failed: true });
+      expect(setSubmitting).toHaveBeenLastCalledWith(false);
+      expect(resetForm).not.toHaveBeenCalled();
+    });
+
+    it("calls addGuest with the real houseId when a house is selected", async () => {
+      jest.useFakeTimers();
+      try {
+        renderScreen();
+        expect(capturedCreateGuestFormikConfig).toBeDefined();
+
+        const addGuest = jest.fn().mockResolvedValue(undefined);
+        const setStatus = jest.fn();
+        const setSubmitting = jest.fn();
+        const resetForm = jest.fn();
+        const values: any = { firstName: "Alice" };
+
+        const submitPromise = capturedCreateGuestFormikConfig.handleSubmit(
+          values,
+          {
+            props: { houseId: "house-1", addGuest, guests: {} },
+            setStatus,
+            setSubmitting,
+            resetForm,
+          }
+        );
+        // handleSubmit awaits addGuest, then a 2s setTimeout, before
+        // resetForm — flush the microtask queue first so addGuest's own
+        // resolved promise settles, then advance the fake timer.
+        await Promise.resolve();
+        await Promise.resolve();
+        jest.advanceTimersByTime(2000);
+        await submitPromise;
+
+        expect(values.houseId).toBe("house-1");
+        expect(addGuest).toHaveBeenCalledWith(values, {});
+        expect(setStatus).toHaveBeenCalledWith({ succeeded: true });
+        expect(resetForm).toHaveBeenCalled();
+      } finally {
+        jest.useRealTimers();
+      }
     });
   });
 });
