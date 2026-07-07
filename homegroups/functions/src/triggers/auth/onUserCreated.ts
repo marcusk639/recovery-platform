@@ -24,9 +24,7 @@ export const onUserCreated = functionsV1.auth.user().onCreate(async (user) => {
   const groupRef = db.collection("groups").doc(autoJoinGroupId);
   const groupSnap = await groupRef.get();
   if (!groupSnap.exists) {
-    console.warn(
-      `SSO auto-join: group ${autoJoinGroupId} not found for domain ${domain}`,
-    );
+    console.warn(`SSO auto-join: group ${autoJoinGroupId} not found`);
     return;
   }
 
