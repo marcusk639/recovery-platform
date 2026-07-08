@@ -24,7 +24,7 @@ Firebase modules are mocked in `jest.setup.js`.
 Three layers under `src/`:
 
 - **Models** (`src/models/`, 16 models): Firestore data-access layer (`GroupModel`, `UserModel`, etc.). All direct Firestore reads/writes go through here.
-- **Store slices** (`src/store/slices/`, 26 slices): Redux Toolkit slices with entity adapters. Slices call models via `createAsyncThunk` — never call Firestore directly from a slice.
+- **Store slices** (`src/store/slices/`, 26 slices): Redux Toolkit slices with entity adapters. Slices call models via `createAsyncThunk` — never call Firestore directly from a slice. **Known drift:** ~12 slices and ~30 screens currently bypass this and call Firestore directly (tracked in the 2026-07-07 codebase review); treat this as the target pattern for new code, not a universally-enforced invariant yet.
 - **Screens** (`src/screens/`): UI organized by domain (`auth/`, `homegroup/`, `intergroup/`, `meetings/`, `messages/`, `moderation/`, `onboarding/`, `profile/`, `sponsorship/`, `subscription/`, `announcements/`, `admin/`).
 
 Other directories: `navigation/`, `types/` (`schema.ts` = Firestore doc shapes), `theme/`, `utils/`.

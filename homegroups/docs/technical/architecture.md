@@ -3,7 +3,7 @@
 Comprehensive breakdown of the mobile app and Cloud Functions implementations.
 
 **Last updated**: 2026-05-25
-**Codebase stats**: 26 Redux slice files (24 registered; 2 dead — see ROADMAP D-1) · 16 models · 90 callable functions · 16 active Firestore triggers (+ 1 commented out: `onGroupAdminUpdate`) · 14 Pub/Sub schedulers · 106 mobile screens
+**Codebase stats**: 26 Redux slice files (all registered) · 15 models · 90 callable functions · 16 active Firestore triggers (+ 1 commented out: `onGroupAdminUpdate`) · 14 Pub/Sub schedulers · 106 mobile screens
 
 ---
 
@@ -137,7 +137,7 @@ AppNavigator
 
 ## 3. Mobile App — State Management
 
-27 Redux Toolkit slices with entity adapters for normalized state. Organized by domain:
+26 Redux Toolkit slices with entity adapters for normalized state. Organized by domain:
 
 ### Core (auth, groups, members)
 
@@ -308,7 +308,7 @@ AppNavigator
 #### intergroupSlice
 
 - **State**: intergroup organization data
-- **Thunks**: `fetchIntergroupData`, `submitIntergroupReport`, `fetchAffiliatedGroups`
+- **Thunks**: `loadIntergroup`, `loadAffiliatedGroups`, `affiliateGroup`, `deaffiliateGroup`
 
 #### brandingSlice
 
@@ -333,7 +333,7 @@ AppNavigator
 
 ## 4. Mobile App — Data Access (Models)
 
-16 model classes handling Firestore CRUD, timestamp conversions, and real-time listeners. All models follow the same pattern: static methods that call Firestore directly, returning typed documents.
+15 model classes handling Firestore CRUD, timestamp conversions, and real-time listeners. All models follow the same pattern: static methods that call Firestore directly, returning typed documents.
 
 ### UserModel
 
@@ -431,6 +431,18 @@ AppNavigator
 - **Settings**: `updateSponsorSettings`
 - **Queries**: `getUserSponsorships`, `getSponsorees`
 - **Listeners**: `onSponsorshipRequested`, `onSponsorshipConfirmed`
+
+### IntergroupModel (V4.4)
+
+- **Collection**: `intergroups/`
+- **CRUD**: `getIntergroup`, `getMyIntergroups`
+- **Status**: Stub — both methods are unimplemented placeholders (`getIntergroup` always returns `null`, `getMyIntergroups` always returns `[]`). Most intergroup reads currently go through `intergroupSlice` thunks instead of this model. It exists to centralize the intended interface and is the future home for direct Firestore access, following the same static-class pattern as `GroupModel`, once implemented.
+
+### MeetingInstanceModel
+
+- **Collection**: `meetingInstances/`
+- **Listeners**: `subscribeTodayInstanceForMeeting` — subscribes to today's meeting instance for a given meeting (filtered by `meetingId` and a `scheduledAt` range for the current day), returning the matching instance (or `null` if none exists yet) and an unsubscribe function
+- **Usage**: Backs the QR check-in screen's live attendee-count display (see `mobile/CLAUDE.md`'s QR Code Meeting Check-In section)
 
 ---
 
@@ -723,11 +735,11 @@ SSO auto-join flow:
 | `generateDailyMeetingInstances`   | `0 2 * * *` (2 AM UTC)           | Generates meeting instances for next 7 days for all groups. Accounts for group timezone                                                                                 |
 | `scheduledMeetingReminders`       | `0 * * * *` (hourly)             | Finds meetings starting within 60 min, sends FCM to users who favorited them. Batches in groups of 500                                                                  |
 | `scheduledMilestoneCheck`         | `0 9 * * *` (9 AM UTC)           | Checks for due milestones, notifies admins                                                                                                                              |
-| `scheduledMilestoneReminders`     | `0 6 * * *` (6 AM UTC)           | Finds milestones due within 3 days, sends FCM to group admins. Uses collectionGroup query                                                                               |
+| `scheduledMilestoneReminders`     | `0 6 * * *` (6 AM UTC)           | Finds milestones due within 3 days, sends FCM to group admins. Uses collectionGroup query (required a Firestore composite-index field-order fix, 2026-07-07)            |
 | `scheduledRecurringTransactions`  | `30 0 * * *` (00:30 UTC)         | Processes active recurring transactions where `nextDate <= today`. Creates transaction, advances nextDate by frequency. Balance updated by `onTransactionWrite` trigger |
 | `scheduledAdminRequestProcessor`  | `every 1 hours`                  | Processes/expires pending admin access requests                                                                                                                         |
 | `scheduledAdminRemovalExpiry`     | `0 1 * * *` (1 AM UTC)           | Expires concluded admin removal voting processes                                                                                                                        |
-| `scheduledPositionReminders`      | `0 9 * * *` (9 AM UTC)           | Reminds service position holders of upcoming term end                                                                                                                   |
+| `scheduledPositionReminders`      | `0 9 * * *` (9 AM UTC)           | Reminds service position holders of upcoming term end (required a Firestore collection-group index fix, 2026-07-07)                                                     |
 | `scheduledTrialReminders`         | `0 10 * * *` (10 AM UTC)         | Day 5 (2–3 days remaining) and Day 7 (0–1 days remaining) trial ending reminders via FCM                                                                                |
 | `scheduledRenewalReminders`       | `0 10 * * *` (10 AM UTC)         | 30-day and 7-day pre-renewal reminders for active/trialing subscriptions via FCM                                                                                        |
 | `scheduledSubscriptionReconciler` | `0 2 * * *` (2 AM UTC)           | Syncs stale `trialing`/`active` Firestore subscription status against Stripe for groups past `subscriptionExpiresAt`                                                    |
