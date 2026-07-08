@@ -2,7 +2,7 @@ import firestore from '@react-native-firebase/firestore';
 import {GroupMember, User} from '../types';
 import {GroupMemberDocument} from '../types/schema';
 import auth from '@react-native-firebase/auth';
-import {refreshAuthToken} from '../services/firebase/auth';
+import {getRequiredDoc, scheduleTokenRefresh} from './modelHelpers';
 
 /**
  * Member model for managing group membership data in top-level collection
@@ -184,17 +184,11 @@ export class MemberModel {
         });
 
       // If the current user joined the group, refresh their token to get new claims
-      const currentUser = auth().currentUser;
-      if (currentUser && currentUser.uid === userId) {
-        // Allow Cloud Function time to sync claims before refreshing
-        setTimeout(async () => {
-          try {
-            await refreshAuthToken();
-          } catch (e) {
-            console.warn('Token refresh after joining group:', e);
-          }
-        }, 2000);
-      }
+      scheduleTokenRefresh(
+        userId,
+        auth().currentUser?.uid,
+        'Token refresh after joining group',
+      );
     } catch (error) {
       console.error('Error adding group member:', error);
       throw error;
@@ -211,11 +205,11 @@ export class MemberModel {
         .collection('members')
         .doc(`${groupId}_${userId}`);
 
-      const memberDoc = await memberDocRef.get();
-
-      if (!memberDoc.exists) {
-        throw new Error('Member not found in this group');
-      }
+      const memberDoc = await getRequiredDoc(
+        'members',
+        `${groupId}_${userId}`,
+        'Member not found in this group',
+      );
 
       const memberData = memberDoc.data() as GroupMemberDocument;
 
@@ -268,17 +262,11 @@ export class MemberModel {
         });
 
       // If the current user left the group, refresh their token to remove claims
-      const currentUser = auth().currentUser;
-      if (currentUser && currentUser.uid === userId) {
-        // Allow Cloud Function time to sync claims before refreshing
-        setTimeout(async () => {
-          try {
-            await refreshAuthToken();
-          } catch (e) {
-            console.warn('Token refresh after leaving group:', e);
-          }
-        }, 2000);
-      }
+      scheduleTokenRefresh(
+        userId,
+        auth().currentUser?.uid,
+        'Token refresh after leaving group',
+      );
     } catch (error) {
       console.error('Error removing group member:', error);
       throw error;
@@ -294,11 +282,11 @@ export class MemberModel {
         .collection('members')
         .doc(`${groupId}_${userId}`);
 
-      const memberDoc = await memberDocRef.get();
-
-      if (!memberDoc.exists) {
-        throw new Error('Member not found in this group');
-      }
+      await getRequiredDoc(
+        'members',
+        `${groupId}_${userId}`,
+        'Member not found in this group',
+      );
 
       const groupRef = firestore().collection('groups').doc(groupId);
       const groupDoc = await groupRef.get();
@@ -329,17 +317,11 @@ export class MemberModel {
       });
 
       // If the current user was made admin, refresh their token to get new claims
-      const currentUser = auth().currentUser;
-      if (currentUser && currentUser.uid === userId) {
-        // Allow Cloud Function time to sync claims before refreshing
-        setTimeout(async () => {
-          try {
-            await refreshAuthToken();
-          } catch (e) {
-            console.warn('Token refresh after admin change:', e);
-          }
-        }, 2000);
-      }
+      scheduleTokenRefresh(
+        userId,
+        auth().currentUser?.uid,
+        'Token refresh after admin change',
+      );
     } catch (error) {
       console.error('Error making user admin:', error);
       throw error;
@@ -355,11 +337,11 @@ export class MemberModel {
         .collection('members')
         .doc(`${groupId}_${userId}`);
 
-      const memberDoc = await memberDocRef.get();
-
-      if (!memberDoc.exists) {
-        throw new Error('Member not found in this group');
-      }
+      await getRequiredDoc(
+        'members',
+        `${groupId}_${userId}`,
+        'Member not found in this group',
+      );
 
       const groupRef = firestore().collection('groups').doc(groupId);
       const groupDoc = await groupRef.get();
@@ -395,16 +377,11 @@ export class MemberModel {
       });
 
       // If the current user lost admin, refresh their token to get new claims
-      const currentUser = auth().currentUser;
-      if (currentUser && currentUser.uid === userId) {
-        setTimeout(async () => {
-          try {
-            await refreshAuthToken();
-          } catch (e) {
-            console.warn('Token refresh after admin removal:', e);
-          }
-        }, 2000);
-      }
+      scheduleTokenRefresh(
+        userId,
+        auth().currentUser?.uid,
+        'Token refresh after admin removal',
+      );
     } catch (error) {
       console.error('Error removing user as admin:', error);
       throw error;
@@ -424,11 +401,11 @@ export class MemberModel {
         .collection('members')
         .doc(`${groupId}_${userId}`);
 
-      const memberDoc = await memberDocRef.get();
-
-      if (!memberDoc.exists) {
-        throw new Error('Member not found in this group');
-      }
+      await getRequiredDoc(
+        'members',
+        `${groupId}_${userId}`,
+        'Member not found in this group',
+      );
 
       // Update treasurer status and roles
       if (isTreasurer) {
@@ -444,16 +421,11 @@ export class MemberModel {
       }
 
       // If the current user's treasurer status changed, refresh their token
-      const currentUser = auth().currentUser;
-      if (currentUser && currentUser.uid === userId) {
-        setTimeout(async () => {
-          try {
-            await refreshAuthToken();
-          } catch (e) {
-            console.warn('Token refresh after treasurer change:', e);
-          }
-        }, 2000);
-      }
+      scheduleTokenRefresh(
+        userId,
+        auth().currentUser?.uid,
+        'Token refresh after treasurer change',
+      );
     } catch (error) {
       console.error('Error updating treasurer status:', error);
       throw error;
@@ -515,11 +487,11 @@ export class MemberModel {
         .collection('members')
         .doc(`${groupId}_${userId}`);
 
-      const memberDoc = await memberDocRef.get();
-
-      if (!memberDoc.exists) {
-        throw new Error('Member not found in this group');
-      }
+      await getRequiredDoc(
+        'members',
+        `${groupId}_${userId}`,
+        'Member not found in this group',
+      );
 
       // Update member position
       await memberDocRef.update({
@@ -544,11 +516,11 @@ export class MemberModel {
         .collection('members')
         .doc(`${groupId}_${userId}`);
 
-      const memberDoc = await memberDocRef.get();
-
-      if (!memberDoc.exists) {
-        throw new Error('Member not found in this group');
-      }
+      await getRequiredDoc(
+        'members',
+        `${groupId}_${userId}`,
+        'Member not found in this group',
+      );
 
       // Update sobriety date visibility
       await memberDocRef.update({
@@ -815,11 +787,11 @@ export class MemberModel {
         .collection('members')
         .doc(`${groupId}_${userId}`);
 
-      const memberDoc = await memberDocRef.get();
-
-      if (!memberDoc.exists) {
-        throw new Error('Member not found in this group');
-      }
+      await getRequiredDoc(
+        'members',
+        `${groupId}_${userId}`,
+        'Member not found in this group',
+      );
 
       // Update phone number visibility
       await memberDocRef.update({
