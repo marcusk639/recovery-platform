@@ -16,7 +16,9 @@ import {
 interface RequestAdminAccessWithSubscriptionData {
   groupId: string;
   message?: string;
-  paymentMethodId?: string; // For in-app payment (Android)
+  paymentMethodId?: string; // For in-app payment (Android). Required at runtime
+  // when creating a new subscription (i.e. when subscriptionId is not
+  // already supplied) — see the guard in the handler body.
   subscriptionId?: string; // For web-based payment (iOS) - subscription already created
   userId?: string;
   email?: string; // Optional email from web flow
@@ -38,7 +40,7 @@ export const requestAdminAccessWithSubscription = onCall(
     if (!productIdGroup) {
       throw new HttpsError(
         "failed-precondition",
-        "Stripe product ID for groups is not configured.",
+        "Stripe product ID for groups is not configured."
       );
     }
 
@@ -57,7 +59,7 @@ export const requestAdminAccessWithSubscription = onCall(
       if (groupData.admins?.includes(userId)) {
         throw new HttpsError(
           "already-exists",
-          "User is already an admin of this group.",
+          "User is already an admin of this group."
         );
       }
       // Guard against double-claim race: a concurrent claimer succeeded while
@@ -67,7 +69,7 @@ export const requestAdminAccessWithSubscription = onCall(
       if (groupData.isClaimed === true) {
         throw new HttpsError(
           "failed-precondition",
-          "This group has already been claimed by another admin.",
+          "This group has already been claimed by another admin."
         );
       }
       if (
@@ -75,7 +77,7 @@ export const requestAdminAccessWithSubscription = onCall(
       ) {
         throw new HttpsError(
           "already-exists",
-          "User already has a pending admin request for this group.",
+          "User already has a pending admin request for this group."
         );
       }
 
@@ -93,17 +95,18 @@ export const requestAdminAccessWithSubscription = onCall(
       // If subscriptionId is provided (from web payment), verify and use it
       if (subscriptionId) {
         logger.info(
-          `Subscription provided from web payment, verifying for group ${groupId}`,
+          `Subscription provided from web payment, verifying for group ${groupId}`
         );
         try {
-          const existingSubscription =
-            await stripe.subscriptions.retrieve(subscriptionId);
+          const existingSubscription = await stripe.subscriptions.retrieve(
+            subscriptionId
+          );
 
           // Verify the subscription belongs to this group to prevent cross-group hijacking
           if (existingSubscription.metadata?.groupId !== groupId) {
             throw new HttpsError(
               "permission-denied",
-              "Subscription does not belong to this group.",
+              "Subscription does not belong to this group."
             );
           }
 
@@ -130,18 +133,18 @@ export const requestAdminAccessWithSubscription = onCall(
           } else {
             throw new HttpsError(
               "failed-precondition",
-              `Subscription is not active. Status: ${existingSubscription.status}`,
+              `Subscription is not active. Status: ${existingSubscription.status}`
             );
           }
         } catch (err: any) {
           logger.error(
             `Error verifying subscription for group ${groupId}:`,
-            err,
+            err
           );
           if (err instanceof HttpsError) throw err;
           throw new HttpsError(
             "invalid-argument",
-            "Invalid or inactive subscription ID provided.",
+            "Invalid or inactive subscription ID provided."
           );
         }
       } else {
@@ -162,7 +165,7 @@ export const requestAdminAccessWithSubscription = onCall(
           if (!userEmail) {
             throw new HttpsError(
               "failed-precondition",
-              "User email is required to create a Stripe customer.",
+              "User email is required to create a Stripe customer."
             );
           }
 
@@ -176,12 +179,12 @@ export const requestAdminAccessWithSubscription = onCall(
                 default_payment_method: paymentMethodId,
               },
             },
-            { idempotencyKey: `req-admin-${userId}-${groupId}-customer` },
+            { idempotencyKey: `req-admin-${userId}-${groupId}-customer` }
           );
           stripeCustomerId = customer.id;
           await groupRef.update({ stripeCustomerId });
           logger.info(
-            `Stripe customer ${stripeCustomerId} created for user ${userId} and group ${groupId}`,
+            `Stripe customer ${stripeCustomerId} created for user ${userId} and group ${groupId}`
           );
         } else if (paymentMethodId) {
           // If customer exists but new payment method is provided, attach it and set as default
@@ -194,7 +197,7 @@ export const requestAdminAccessWithSubscription = onCall(
             },
           });
           logger.info(
-            `Attached new payment method ${paymentMethodId} to customer ${stripeCustomerId}`,
+            `Attached new payment method ${paymentMethodId} to customer ${stripeCustomerId}`
           );
         }
 
@@ -205,10 +208,17 @@ export const requestAdminAccessWithSubscription = onCall(
           subscriptionStatus === "incomplete" ||
           subscriptionStatus === "past_due"
         ) {
+          if (!paymentMethodId) {
+            throw new HttpsError(
+              "invalid-argument",
+              "A payment method is required to request admin access for this group."
+            );
+          }
+
           // Get the default price for the group product
           const groupPriceId = await getDefaultPriceForProduct(productIdGroup);
           logger.info(
-            `Using group price ${groupPriceId} from product ${productIdGroup}`,
+            `Using group price ${groupPriceId} from product ${productIdGroup}`
           );
 
           const subscription = await stripe.subscriptions.create(
@@ -225,7 +235,7 @@ export const requestAdminAccessWithSubscription = onCall(
               metadata: { groupId, userId },
               default_payment_method: paymentMethodId, // Set default payment method for the subscription
             },
-            { idempotencyKey: `req-admin-${userId}-${groupId}-subscription` },
+            { idempotencyKey: `req-admin-${userId}-${groupId}-subscription` }
           );
           stripeSubscriptionId = subscription.id;
           subscriptionStatus = subscription.status;
@@ -242,7 +252,7 @@ export const requestAdminAccessWithSubscription = onCall(
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           });
           logger.info(
-            `Stripe subscription ${stripeSubscriptionId} created for group ${groupId} with status ${subscriptionStatus}`,
+            `Stripe subscription ${stripeSubscriptionId} created for group ${groupId} with status ${subscriptionStatus}`
           );
         }
       }
@@ -254,7 +264,7 @@ export const requestAdminAccessWithSubscription = onCall(
       ) {
         throw new HttpsError(
           "failed-precondition",
-          `Cannot grant admin access: subscription status is '${subscriptionStatus}'. A valid subscription is required.`,
+          `Cannot grant admin access: subscription status is '${subscriptionStatus}'. A valid subscription is required.`
         );
       }
 
@@ -270,7 +280,7 @@ export const requestAdminAccessWithSubscription = onCall(
           if (txGroupData?.isClaimed === true) {
             throw new HttpsError(
               "failed-precondition",
-              "This group has already been claimed by another admin.",
+              "This group has already been claimed by another admin."
             );
           }
           tx.update(groupRef, {
@@ -290,12 +300,12 @@ export const requestAdminAccessWithSubscription = onCall(
           try {
             await stripe.subscriptions.cancel(stripeSubscriptionId);
             logger.warn(
-              `Compensating: Canceled Stripe subscription ${stripeSubscriptionId} after claim transaction failed for group ${groupId} by user ${userId}.`,
+              `Compensating: Canceled Stripe subscription ${stripeSubscriptionId} after claim transaction failed for group ${groupId} by user ${userId}.`
             );
           } catch (stripeCancelError) {
             logger.error(
               `Error canceling Stripe subscription ${stripeSubscriptionId} in compensation:`,
-              stripeCancelError,
+              stripeCancelError
             );
           }
         }
@@ -316,7 +326,7 @@ export const requestAdminAccessWithSubscription = onCall(
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
         logger.info(
-          `Updated member document ${groupId}_${userId} to set isAdmin = true`,
+          `Updated member document ${groupId}_${userId} to set isAdmin = true`
         );
       } else {
         // Fetch user profile data to populate the new member doc.
@@ -338,7 +348,7 @@ export const requestAdminAccessWithSubscription = onCall(
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
         logger.info(
-          `Created member document ${groupId}_${userId} with isAdmin = true for web-claim user`,
+          `Created member document ${groupId}_${userId} with isAdmin = true for web-claim user`
         );
       }
 
@@ -355,13 +365,13 @@ export const requestAdminAccessWithSubscription = onCall(
     } catch (error: any) {
       logger.error(
         `Error requesting admin access with subscription for group ${groupId} by user ${userId}:`,
-        error,
+        error
       );
       if (error instanceof HttpsError) throw error;
       throw new HttpsError(
         "internal",
-        "Failed to process admin access request with subscription.",
+        "Failed to process admin access request with subscription."
       );
     }
-  },
+  }
 );
