@@ -82,7 +82,7 @@ Each subproject documents its own architecture in its CLAUDE.md (see [Subproject
 
 ### Stripe / Subscriptions
 
-- Group admin subscriptions are **$12/year flat rate**.
+- Group admin subscriptions are **$12/year flat rate** (shipped default; `docs/go-to-market/monetization.md` D-1 resolves the launch price to $24/year — activation in progress, see that doc for status).
 - Stripe product ID is exported as `productIdGroup` from `functions/src/utils/stripe.ts` (env: `STRIPE_PRODUCT_ID_GROUP`). Price ID is fetched at runtime via `getDefaultPriceForProduct()` — never hardcode it.
 - Firestore `groups` document stores `stripeProductIdGroup` (product ID, e.g. `prod_xxx`) and `stripePriceIdGroup` (price ID, e.g. `price_xxx`). These are distinct fields — do not conflate them.
 - `SubscriptionStatus` type uses Stripe's spelling: `'canceled'` (one L). Non-Stripe statuses (e.g. business meeting handoffs) use `'cancelled'` (two L's).
@@ -132,15 +132,11 @@ Each subproject documents its own architecture in its CLAUDE.md (see [Subproject
 - **PostToolUse**: Auto-formats `.ts`, `.tsx`, `.js`, `.jsx`, `.json`, `.css`, `.scss`, `.md` with Prettier after every edit
 - **PostToolUse**: Runs `tsc --noEmit` after edits to any file under `functions/src/` (errors stream to stderr, first 20 lines shown)
 
-> ⚠️ **Known portability issue**: PostToolUse hooks `cd` into a hard-coded absolute path (`/Users/marcusklein/dev/RecoveryConnect/` — a legacy local checkout path; this repo now lives at `recovery-platform/homegroups/`) which won't exist on other machines or under different usernames. If you find the formatter/type-check is silently failing, this is why. Fix is a per-user concern, not a doc fix.
-
 ### MCP Servers (`.mcp.json`)
 
 - **detox**: Detox E2E testing integration
 - **firebase**: Firebase CLI tools (emulators, deploy, auth, Firestore)
 - **context7**: Live documentation lookup for project dependencies
-
-> ⚠️ **Known issue with `.mcp.json`**: The `detox` and `firebase` entries hard-code an absolute path (`/Users/marcusklein/dev/RecoveryConnect/`, a legacy local checkout path) that won't exist on other machines. Update the path to match your local checkout before using these MCP servers.
 
 ### Skills (`.claude/skills/`)
 

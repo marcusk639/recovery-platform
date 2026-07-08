@@ -86,6 +86,7 @@ These rules apply to all products in the monorepo without exception.
 - Firestore: `8080`
 - Functions: `5001`
 - Auth: `9099`
+- Storage: `9199`
 - Do not run two products' emulators simultaneously — port conflicts will occur.
 
 **Data isolation**

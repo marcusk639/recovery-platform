@@ -4,6 +4,7 @@
 **Product:** Homegroups
 
 This document is the canonical product-level MVP scope and replaces older overlapping drafts:
+
 - `docs/spec.md`
 - `docs/mvp-reqs.md`
 - `docs/llm-context.md`
@@ -14,6 +15,7 @@ This document is the canonical product-level MVP scope and replaces older overla
 ## Goal
 
 Provide a privacy-first, group-centric mobile app that helps 12-step homegroups run smoothly:
+
 - keep meeting info accurate
 - communicate reliably (announcements + messaging)
 - manage group treasury with continuity across rotating service positions
@@ -41,15 +43,18 @@ Provide a privacy-first, group-centric mobile app that helps 12-step homegroups 
 ## MVP scope (capabilities)
 
 ### Meetings
+
 - Search/browse meetings and view details (location, time, format, directions)
 - Personal meeting favorites / schedule (MVP or fast-follow depending on readiness)
 
 ### Groups
+
 - Create/join groups
 - Member directory with role labels and privacy controls
 - Group meeting schedule + meeting detail visibility for members
 
 ### Communication
+
 - **Announcements**: admin-only posting, member read access, push notifications
 - **Messaging**:
   - Group chat (group-scoped)
@@ -57,12 +62,14 @@ Provide a privacy-first, group-centric mobile app that helps 12-step homegroups 
   - Attachments, reactions, reply (as supported)
 
 ### Treasury (group subscription value driver)
+
 - Income/expense entry with categories
 - Current balance + prudent reserve visibility
 - Report generation suitable for business meetings
 - Treasurer handoff / continuity tooling
 
 ### Safety & governance
+
 - Content/user reporting + moderation actions (ban/warn/remove admin, etc.)
 - Admin governance escalation flow (MVP manual CS resolution)
 
@@ -71,7 +78,7 @@ Provide a privacy-first, group-centric mobile app that helps 12-step homegroups 
 ## Monetization
 
 - **Free tier**: members (non-admin) can use core meeting/group participation features.
-- **Group subscription**: **$12/year per group** for admin tooling + operational features.
+- **Group subscription**: **$12/year per group** for admin tooling + operational features (see `docs/go-to-market/monetization.md` D-1 for the approved $24/year launch price — activation in progress).
 
 See `docs/PRICING_MODEL.md` and `docs/BILLING_AND_PAYMENTS.md`.
 
@@ -83,4 +90,3 @@ See `docs/PRICING_MODEL.md` and `docs/BILLING_AND_PAYMENTS.md`.
 - Sophisticated tiering / per-member pricing
 - Full end-to-end encrypted messaging (only claim what’s implemented)
 - Marketplace-style donations provider swaps (e.g., Braintree) unless explicitly prioritized
-
