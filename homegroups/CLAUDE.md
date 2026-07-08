@@ -121,6 +121,7 @@ Each subproject documents its own architecture in its CLAUDE.md (see [Subproject
 | `docs/SECURITY_RULES.md`       | Firestore rules explanation                                                        |
 | `docs/BILLING_AND_PAYMENTS.md` | Stripe payment system design                                                       |
 | `firestore.rules`              | Deployed security rules — changes require `firebase deploy --only firestore:rules` |
+| `storage.rules`                | Deployed security rules — changes require `firebase deploy --only storage:rules`   |
 
 ---
 

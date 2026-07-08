@@ -40,7 +40,7 @@ service firebase.storage {
     // Only group admins may upload; group members may read.
     // Max file size: 10 MB per upload.
     // ============================================================
-    match /groups/{groupId}/resources/{fileName} {
+    match /groups/{groupId}/resources/{fileName=**} {
       // Only group members (via custom JWT claims) can download resources.
       allow read: if isGroupMember(groupId);
 

@@ -17,7 +17,7 @@ import * as path from "path";
 let testEnv: RulesTestEnvironment;
 
 const groupId = "group1";
-const filePath = `groups/${groupId}/resources/handbook.pdf`;
+const filePath = `groups/${groupId}/resources/res123/handbook.pdf`;
 
 function getAuthenticatedContext(
   uid: string,
