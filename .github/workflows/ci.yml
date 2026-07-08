@@ -65,6 +65,27 @@ jobs:
       - name: Run Firestore rules tests
         run: cd homegroups/functions && npm run test:rules
 
+  homegroups-storage-rules:
+    name: homegroups/functions — Storage security rules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: homegroups/functions/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "21"
+      - name: Install dependencies
+        run: cd homegroups/functions && npm ci
+      - name: Install firebase-tools
+        run: npm install -g firebase-tools
+      - name: Run Storage rules tests
+        run: cd homegroups/functions && npm run test:rules:storage
+
   homegroups-mobile:
     name: homegroups/mobile — test
     runs-on: ubuntu-latest
