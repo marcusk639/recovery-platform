@@ -268,7 +268,7 @@ const BASE_MEETINGS = [
     type: "AA",
     day: "Monday",
     time: "7:00 PM",
-    isOnline: false,
+    online: false,
     verified: false,
     groupId: "",
   },
@@ -745,5 +745,66 @@ describe("createGroupWithSubscription", () => {
     await expect(handler(request)).rejects.toMatchObject({
       code: "invalid-argument",
     });
+  });
+
+  // ------------------------------------------------------------------
+  // Regression: meetingDataSchema must match the real mobile client
+  // payload shape (mobile/src/screens/homegroup/CreateGroupScreen.tsx
+  // `addMeeting()`, which builds `newMeeting` with `online`/`link`
+  // fields — never `isOnline`/`onlineLink`). Previously the schema
+  // required `isOnline` and never accepted `online`/`link`, so every
+  // real group-creation call from the app failed with
+  // "isOnline: Required" and, if online, would have silently dropped
+  // the meeting's online flag and join link.
+  // ------------------------------------------------------------------
+
+  it("accepts and persists a meeting shaped exactly like CreateGroupScreen's real payload (online/link, not isOnline/onlineLink)", async () => {
+    const handler = createGroupWithSubscription as unknown as (
+      req: any
+    ) => Promise<{ success: boolean; groupId: string }>;
+
+    // Mirrors the `newMeeting` object built in CreateGroupScreen.tsx's
+    // addMeeting() (mobile/src/screens/homegroup/CreateGroupScreen.tsx).
+    const createGroupScreenMeeting = {
+      id: "meeting-cgs-1",
+      name: "Test Recovery Group",
+      day: "Monday",
+      time: "7:00 PM",
+      format: "Open Discussion",
+      online: true,
+      location: "",
+      address: "",
+      city: "",
+      state: "",
+      zip: "",
+      link: "https://zoom.us/j/123456789",
+      type: "AA",
+    };
+
+    const result = await handler(
+      makeRequest(USER_ID, {
+        groupData: BASE_GROUP_DATA,
+        meetings: [createGroupScreenMeeting],
+        paymentMethodId: PAYMENT_METHOD_ID,
+      })
+    );
+
+    expect(result.success).toBe(true);
+
+    const meetingWriteCall = mockBatchSet.mock.calls.find(
+      (call: any[]) =>
+        typeof call[0]?.path === "string" && call[0].path.includes("meetings/")
+    );
+
+    expect(meetingWriteCall).toBeDefined();
+    const writtenMeeting = meetingWriteCall![1] as Record<string, unknown>;
+
+    // The real field names must survive validation and be persisted.
+    expect(writtenMeeting.online).toBe(true);
+    expect(writtenMeeting.link).toBe("https://zoom.us/j/123456789");
+
+    // The old (wrong) field names must never appear on the written doc.
+    expect(writtenMeeting.isOnline).toBeUndefined();
+    expect(writtenMeeting.onlineLink).toBeUndefined();
   });
 });
