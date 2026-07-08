@@ -362,3 +362,36 @@ describe("stripeWebhook — intergroup handler wiring (C8)", () => {
     expect(mockHandleIntergroupSubscriptionUpdated).not.toHaveBeenCalled();
   });
 });
+
+describe("stripeWebhook — fails closed when secret is missing", () => {
+  let handleWebhookViaRequest: Function;
+
+  beforeAll(async () => {
+    jest.resetModules();
+    const mod = await import("../http/stripeWebhook");
+    handleWebhookViaRequest = mod.stripeWebhook as unknown as Function;
+  });
+
+  it("returns 500, not 200, when the webhook secret is not configured", async () => {
+    // Re-mock ../utils/stripe with an undefined webhookSecret for this test only.
+    jest.resetModules();
+    jest.doMock("../utils/stripe", () => ({
+      stripe: { webhooks: { constructEvent: mockConstructEvent } },
+      webhookSecret: undefined,
+      connectWebhookSecret: "whsec_connect_test",
+      NonRetriableError: class NonRetriableError extends Error {},
+    }));
+    const mod = await import("../http/stripeWebhook");
+    const stripeWebhookHandler = mod.stripeWebhook as unknown as Function;
+
+    const req = makeReq(makeEvent("checkout.session.completed", {}));
+    const res = makeRes();
+
+    await stripeWebhookHandler(req, res);
+
+    expect(res.statusCode).toBe(500);
+    expect(res.body).toMatchObject({ processed: false });
+
+    jest.dontMock("../utils/stripe");
+  });
+});

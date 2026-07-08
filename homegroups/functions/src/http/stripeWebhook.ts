@@ -70,8 +70,8 @@ async function handleWebhook(
     functions.logger.error(
       `CRITICAL: Stripe ${webhookType} webhook secret not configured.`,
     );
-    res.status(200).send({
-      received: true,
+    res.status(500).send({
+      received: false,
       error: `${webhookType} webhook secret not configured`,
       processed: false,
     });
@@ -80,8 +80,7 @@ async function handleWebhook(
 
   const sig = req.headers["stripe-signature"] as string;
   const connectedAccountId = req.headers["stripe-account"] as
-    | string
-    | undefined;
+    string | undefined;
 
   let event: Stripe.Event;
 
