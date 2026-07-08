@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  SafeAreaView,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -15,6 +14,7 @@ import {
   Image,
   Linking,
 } from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
 import {StackNavigationProp} from '@react-navigation/stack';
 import {registerWithEmail} from '../../services/firebase/auth';
 import {

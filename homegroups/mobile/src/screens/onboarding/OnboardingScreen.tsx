@@ -6,7 +6,6 @@ import {
   Dimensions,
   FlatList,
   TouchableOpacity,
-  SafeAreaView,
   StatusBar,
   NativeSyntheticEvent,
   NativeScrollEvent,
@@ -14,6 +13,7 @@ import {
   Share,
   Alert,
 } from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 

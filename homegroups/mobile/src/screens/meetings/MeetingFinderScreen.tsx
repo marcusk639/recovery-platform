@@ -21,7 +21,6 @@ import {
   FlatList,
   TouchableOpacity,
   TextInput,
-  SafeAreaView,
   ActivityIndicator,
   Platform,
   PermissionsAndroid,
@@ -29,6 +28,7 @@ import {
   Alert,
   Linking,
 } from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
 import Geolocation from '@react-native-community/geolocation';
 import MapView, {Marker, Region} from 'react-native-maps';
 import {useNavigation} from '@react-navigation/native';

@@ -5,7 +5,6 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   TouchableOpacity,
   Alert,
@@ -18,6 +17,7 @@ import {
   TextInput,
   Modal,
 } from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
 import {StackNavigationProp} from '@react-navigation/stack';
 import {useNavigation} from '@react-navigation/native';
 import auth from '@react-native-firebase/auth';

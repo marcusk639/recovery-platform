@@ -20,6 +20,7 @@ import auth, {FirebaseAuthTypes} from '@react-native-firebase/auth';
 import crashlytics from '@react-native-firebase/crashlytics';
 import {RootStackParamList} from './src/types/navigation';
 import {initStripe, StripeProvider} from '@stripe/stripe-react-native';
+import {SafeAreaProvider} from 'react-native-safe-area-context';
 import NetInfo from '@react-native-community/netinfo';
 import {parseDeepLinkUrl} from './src/utils/url';
 import {
@@ -470,15 +471,17 @@ const App = () => {
   const stripePublishableKey = process.env
     .STRIPE_TEST_PUBLISHABLE_KEY as string;
   return (
-    <Provider store={store}>
-      <StripeProvider
-        publishableKey={stripePublishableKey}
-        // merchantIdentifier="merchant.com.your-app-identifier" // Required for Apple Pay
-        // urlScheme="your-url-scheme" // Required for some payment methods
-      >
-        <AppContent />
-      </StripeProvider>
-    </Provider>
+    <SafeAreaProvider>
+      <Provider store={store}>
+        <StripeProvider
+          publishableKey={stripePublishableKey}
+          // merchantIdentifier="merchant.com.your-app-identifier" // Required for Apple Pay
+          // urlScheme="your-url-scheme" // Required for some payment methods
+        >
+          <AppContent />
+        </StripeProvider>
+      </Provider>
+    </SafeAreaProvider>
   );
 };
 

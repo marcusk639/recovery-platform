@@ -14,9 +14,9 @@ import {
   Alert,
   ScrollView,
   ActivityIndicator,
-  SafeAreaView,
   Platform,
 } from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {useNavigation, useRoute, RouteProp} from '@react-navigation/native';
 import {StackNavigationProp} from '@react-navigation/stack';

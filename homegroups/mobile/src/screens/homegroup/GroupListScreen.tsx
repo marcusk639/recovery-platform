@@ -6,13 +6,13 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-  SafeAreaView,
   Alert,
   FlatList,
   ActivityIndicator,
   Dimensions,
   Button,
 } from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import {useNavigation} from '@react-navigation/native';

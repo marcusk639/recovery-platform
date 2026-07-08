@@ -4,7 +4,6 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   TextInput,
   TouchableOpacity,
@@ -13,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
 import {RouteProp, useRoute, useNavigation} from '@react-navigation/native';
 import {GroupStackParamList} from '../../types/navigation';
 import functions from '@react-native-firebase/functions';

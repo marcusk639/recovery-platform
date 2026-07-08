@@ -5,13 +5,13 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  SafeAreaView,
   KeyboardAvoidingView,
   Platform,
   Alert,
   ActivityIndicator,
   Switch,
 } from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
 import {StackNavigationProp} from '@react-navigation/stack';
 import {RouteProp, useNavigation, useRoute} from '@react-navigation/native';
 import {MainStackParamList, Meeting, MeetingType, HomeGroup} from '../../types';

@@ -6,11 +6,10 @@ import {
   Text,
   StyleSheet,
   Modal,
-  SafeAreaView,
   Alert,
 } from 'react-native';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
-import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {CommonActions, useNavigation} from '@react-navigation/native';
 

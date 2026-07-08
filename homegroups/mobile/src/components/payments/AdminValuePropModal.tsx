@@ -6,8 +6,8 @@ import {
   ScrollView,
   TouchableOpacity,
   Modal,
-  SafeAreaView,
 } from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {theme} from '../../theme/theme';
 

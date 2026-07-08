@@ -6,10 +6,10 @@ import {
   TouchableOpacity,
   Text,
   ActivityIndicator,
-  SafeAreaView,
   StatusBar,
   Platform,
 } from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
 import {WebView} from 'react-native-webview';
 import type {WebViewNavigation} from 'react-native-webview';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';

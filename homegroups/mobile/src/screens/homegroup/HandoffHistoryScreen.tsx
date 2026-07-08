@@ -6,9 +6,9 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
-  SafeAreaView,
   RefreshControl,
 } from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
 import {useRoute, RouteProp} from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {format} from 'date-fns';

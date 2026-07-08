@@ -1,5 +1,6 @@
 import React, {useState, useEffect} from 'react';
-import {SafeAreaView, StyleSheet, Alert} from 'react-native';
+import {StyleSheet, Alert} from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
 import AnnouncementList from '../../components/announcement/AnnouncementList';
 import AnnouncementDetail from '../../components/announcement/AnnouncementDetail';
 import auth from '@react-native-firebase/auth';

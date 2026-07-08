@@ -10,8 +10,8 @@ import {
   Switch,
   Alert,
   ActivityIndicator,
-  SafeAreaView,
 } from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import functions from '@react-native-firebase/functions';
 import auth from '@react-native-firebase/auth';

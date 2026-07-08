@@ -14,12 +14,12 @@ import {
   Animated,
   Keyboard,
   Pressable,
-  SafeAreaView,
   StatusBar,
   Linking,
   Modal,
   Dimensions,
 } from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
 import {
   RouteProp,
   useRoute,

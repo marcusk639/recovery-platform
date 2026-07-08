@@ -1,22 +1,57 @@
+// Mock react-native-safe-area-context. The package's own official Jest mock
+// (react-native-safe-area-context/jest/mock) calls jest.requireActual() on
+// the real module internally, which pulls in its TurboModule spec
+// (NativeSafeAreaContext) — that crashes under this project's RN 0.72 Jest
+// setup because TurboModuleRegistry isn't available in this environment.
+// A hand-rolled mock (matching the pattern used for every other native
+// module in this file) avoids that native module code path entirely.
+jest.mock('react-native-safe-area-context', () => {
+  const React = require('react');
+  const {View} = require('react-native');
+  const MOCK_INSETS = {top: 0, right: 0, bottom: 0, left: 0};
+  const MOCK_FRAME = {x: 0, y: 0, width: 320, height: 640};
+  return {
+    SafeAreaProvider: ({children}) =>
+      React.createElement(React.Fragment, null, children),
+    SafeAreaView: React.forwardRef((props, ref) =>
+      React.createElement(View, {...props, ref}),
+    ),
+    SafeAreaInsetsContext: React.createContext(MOCK_INSETS),
+    SafeAreaFrameContext: React.createContext(MOCK_FRAME),
+    useSafeAreaInsets: () => MOCK_INSETS,
+    useSafeAreaFrame: () => MOCK_FRAME,
+    initialWindowMetrics: {insets: MOCK_INSETS, frame: MOCK_FRAME},
+  };
+});
+
 // Mock all @react-navigation packages to avoid BackHandler and native navigation issues
 const mockNavigator = () => {
   const React = require('react');
   const {View} = require('react-native');
   const Navigator = ({children}) => React.createElement(View, null, children);
   const Screen = ({component: Component, ...props}) =>
-    Component ? React.createElement(Component, props) : React.createElement(View);
+    Component
+      ? React.createElement(Component, props)
+      : React.createElement(View);
   Navigator.Screen = Screen;
-  Navigator.Group = ({children}) => React.createElement(React.Fragment, null, children);
+  Navigator.Group = ({children}) =>
+    React.createElement(React.Fragment, null, children);
   return {Navigator, Screen, Group: Navigator.Group};
 };
 
 jest.mock('@react-navigation/native', () => {
   const React = require('react');
   return {
-    NavigationContainer: ({children}) => React.createElement(React.Fragment, null, children),
-    useNavigation: jest.fn(() => ({navigate: jest.fn(), goBack: jest.fn(), dispatch: jest.fn(), setOptions: jest.fn()})),
+    NavigationContainer: ({children}) =>
+      React.createElement(React.Fragment, null, children),
+    useNavigation: jest.fn(() => ({
+      navigate: jest.fn(),
+      goBack: jest.fn(),
+      dispatch: jest.fn(),
+      setOptions: jest.fn(),
+    })),
     useRoute: jest.fn(() => ({params: {}, name: 'MockRoute'})),
-    useFocusEffect: jest.fn((cb) => cb()),
+    useFocusEffect: jest.fn(cb => cb()),
     useIsFocused: jest.fn(() => true),
     useNavigationState: jest.fn(() => null),
     CommonActions: {navigate: jest.fn(), goBack: jest.fn(), reset: jest.fn()},
@@ -50,12 +85,18 @@ jest.mock('@react-native-firebase/app', () => ({
 jest.mock('@react-native-firebase/auth', () => {
   const mockAuth = {
     onAuthStateChanged: jest.fn(() => jest.fn()),
-    signInWithEmailAndPassword: jest.fn(() => Promise.resolve({user: {uid: 'test-uid'}})),
+    signInWithEmailAndPassword: jest.fn(() =>
+      Promise.resolve({user: {uid: 'test-uid'}}),
+    ),
     signOut: jest.fn(() => Promise.resolve()),
     currentUser: null,
-    createUserWithEmailAndPassword: jest.fn(() => Promise.resolve({user: {uid: 'test-uid'}})),
+    createUserWithEmailAndPassword: jest.fn(() =>
+      Promise.resolve({user: {uid: 'test-uid'}}),
+    ),
     sendPasswordResetEmail: jest.fn(() => Promise.resolve()),
-    signInWithCredential: jest.fn(() => Promise.resolve({user: {uid: 'test-uid'}})),
+    signInWithCredential: jest.fn(() =>
+      Promise.resolve({user: {uid: 'test-uid'}}),
+    ),
   };
   return () => mockAuth;
 });
@@ -96,14 +137,17 @@ jest.mock('@react-native-firebase/firestore', () => {
     runTransaction: jest.fn(() => Promise.resolve()),
     settings: jest.fn(),
     Timestamp: {
-      now: jest.fn(() => ({toDate: () => new Date(), toMillis: () => Date.now()})),
-      fromDate: jest.fn((d) => ({toDate: () => d, toMillis: () => d.getTime()})),
+      now: jest.fn(() => ({
+        toDate: () => new Date(),
+        toMillis: () => Date.now(),
+      })),
+      fromDate: jest.fn(d => ({toDate: () => d, toMillis: () => d.getTime()})),
     },
     FieldValue: {
       serverTimestamp: jest.fn(() => ({})),
       arrayUnion: jest.fn((...args) => args),
       arrayRemove: jest.fn((...args) => args),
-      increment: jest.fn((n) => n),
+      increment: jest.fn(n => n),
       delete: jest.fn(() => ({})),
     },
   };
@@ -132,7 +176,12 @@ jest.mock('@react-native-firebase/messaging', () => {
     setBackgroundMessageHandler: jest.fn(),
     subscribeToTopic: jest.fn(() => Promise.resolve()),
     unsubscribeFromTopic: jest.fn(() => Promise.resolve()),
-    AuthorizationStatus: {AUTHORIZED: 1, PROVISIONAL: 2, NOT_DETERMINED: -1, DENIED: 0},
+    AuthorizationStatus: {
+      AUTHORIZED: 1,
+      PROVISIONAL: 2,
+      NOT_DETERMINED: -1,
+      DENIED: 0,
+    },
   };
   return () => mockMessaging;
 });
@@ -141,7 +190,9 @@ jest.mock('@react-native-firebase/storage', () => {
   const mockStorage = {
     ref: jest.fn(() => ({
       putFile: jest.fn(() => ({on: jest.fn(), then: jest.fn()})),
-      getDownloadURL: jest.fn(() => Promise.resolve('https://mock-url.com/file')),
+      getDownloadURL: jest.fn(() =>
+        Promise.resolve('https://mock-url.com/file'),
+      ),
       delete: jest.fn(() => Promise.resolve()),
     })),
   };
@@ -167,11 +218,15 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 // Mock @react-native-community/netinfo
 jest.mock('@react-native-community/netinfo', () => ({
   default: {
-    fetch: jest.fn(() => Promise.resolve({isConnected: true, isInternetReachable: true})),
+    fetch: jest.fn(() =>
+      Promise.resolve({isConnected: true, isInternetReachable: true}),
+    ),
     addEventListener: jest.fn(() => jest.fn()),
   },
   addEventListener: jest.fn(() => jest.fn()),
-  fetch: jest.fn(() => Promise.resolve({isConnected: true, isInternetReachable: true})),
+  fetch: jest.fn(() =>
+    Promise.resolve({isConnected: true, isInternetReachable: true}),
+  ),
 }));
 
 // Mock @stripe/stripe-react-native
@@ -189,10 +244,21 @@ jest.mock('@stripe/stripe-react-native', () => ({
 jest.mock('react-native-fast-image', () => {
   const React = require('react');
   const {Image} = require('react-native');
-  const FastImage = React.forwardRef((props, ref) => React.createElement(Image, {...props, ref}));
-  FastImage.resizeMode = {contain: 'contain', cover: 'cover', stretch: 'stretch', center: 'center'};
+  const FastImage = React.forwardRef((props, ref) =>
+    React.createElement(Image, {...props, ref}),
+  );
+  FastImage.resizeMode = {
+    contain: 'contain',
+    cover: 'cover',
+    stretch: 'stretch',
+    center: 'center',
+  };
   FastImage.priority = {low: 'low', normal: 'normal', high: 'high'};
-  FastImage.cacheControl = {immutable: 'immutable', web: 'web', cacheOnly: 'cacheOnly'};
+  FastImage.cacheControl = {
+    immutable: 'immutable',
+    web: 'web',
+    cacheOnly: 'cacheOnly',
+  };
   FastImage.preload = jest.fn();
   return FastImage;
 });
@@ -216,14 +282,23 @@ jest.mock('@react-native-google-signin/google-signin', () => ({
     signIn: jest.fn(() => Promise.resolve({idToken: 'mock-token'})),
     signOut: jest.fn(() => Promise.resolve()),
     isSignedIn: jest.fn(() => Promise.resolve(false)),
-    getTokens: jest.fn(() => Promise.resolve({accessToken: 'mock-access', idToken: 'mock-id'})),
+    getTokens: jest.fn(() =>
+      Promise.resolve({accessToken: 'mock-access', idToken: 'mock-id'}),
+    ),
   },
-  statusCodes: {SIGN_IN_CANCELLED: 0, IN_PROGRESS: 1, PLAY_SERVICES_NOT_AVAILABLE: 2, SIGN_IN_REQUIRED: 3},
+  statusCodes: {
+    SIGN_IN_CANCELLED: 0,
+    IN_PROGRESS: 1,
+    PLAY_SERVICES_NOT_AVAILABLE: 2,
+    SIGN_IN_REQUIRED: 3,
+  },
 }));
 
 jest.mock('@invertase/react-native-apple-authentication', () => ({
   appleAuth: {
-    performRequest: jest.fn(() => Promise.resolve({identityToken: 'mock-token', nonce: 'mock-nonce'})),
+    performRequest: jest.fn(() =>
+      Promise.resolve({identityToken: 'mock-token', nonce: 'mock-nonce'}),
+    ),
     onCredentialRevoked: jest.fn(() => jest.fn()),
     isSupported: true,
     AppleAuthRequestOperation: {LOGIN: 0},
@@ -237,43 +312,60 @@ jest.mock('react-native-fbsdk-next', () => ({
     logOut: jest.fn(),
   },
   AccessToken: {
-    getCurrentAccessToken: jest.fn(() => Promise.resolve({accessToken: 'mock-fb-token'})),
+    getCurrentAccessToken: jest.fn(() =>
+      Promise.resolve({accessToken: 'mock-fb-token'}),
+    ),
   },
   GraphRequest: jest.fn(),
-  GraphRequestManager: jest.fn(() => ({addRequest: jest.fn().mockReturnThis(), start: jest.fn()})),
+  GraphRequestManager: jest.fn(() => ({
+    addRequest: jest.fn().mockReturnThis(),
+    start: jest.fn(),
+  })),
 }));
 
 // Mock react-native-webview
 jest.mock('react-native-webview', () => {
   const React = require('react');
   const {View} = require('react-native');
-  const WebView = React.forwardRef((props, ref) => React.createElement(View, {...props, ref}));
+  const WebView = React.forwardRef((props, ref) =>
+    React.createElement(View, {...props, ref}),
+  );
   return {WebView, default: WebView};
 });
 
 // Mock clipboard packages
 jest.mock('@react-native-clipboard/clipboard', () => ({
-  default: {getString: jest.fn(() => Promise.resolve('')), setString: jest.fn()},
+  default: {
+    getString: jest.fn(() => Promise.resolve('')),
+    setString: jest.fn(),
+  },
 }));
 jest.mock('@react-native-community/clipboard', () => ({
-  default: {getString: jest.fn(() => Promise.resolve('')), setString: jest.fn()},
+  default: {
+    getString: jest.fn(() => Promise.resolve('')),
+    setString: jest.fn(),
+  },
 }));
 
 // Mock date/time picker packages
 jest.mock('@react-native-community/datetimepicker', () => {
   const React = require('react');
   const {View} = require('react-native');
-  return {default: (props) => React.createElement(View, props)};
+  return {default: props => React.createElement(View, props)};
 });
 jest.mock('react-native-modal-datetime-picker', () => {
   const React = require('react');
   const {View} = require('react-native');
-  return {default: (props) => React.createElement(View, props)};
+  return {default: props => React.createElement(View, props)};
 });
 
 // Mock geolocation and slider
 jest.mock('@react-native-community/geolocation', () => ({
-  default: {getCurrentPosition: jest.fn(), watchPosition: jest.fn(), clearWatch: jest.fn()},
+  default: {
+    getCurrentPosition: jest.fn(),
+    watchPosition: jest.fn(),
+    clearWatch: jest.fn(),
+  },
   getCurrentPosition: jest.fn(),
   watchPosition: jest.fn(),
   clearWatch: jest.fn(),
@@ -281,15 +373,19 @@ jest.mock('@react-native-community/geolocation', () => ({
 jest.mock('@react-native-community/slider', () => {
   const React = require('react');
   const {View} = require('react-native');
-  return {default: React.forwardRef((props, ref) => React.createElement(View, {...props, ref}))};
+  return {
+    default: React.forwardRef((props, ref) =>
+      React.createElement(View, {...props, ref}),
+    ),
+  };
 });
 
 // Mock picker
 jest.mock('@react-native-picker/picker', () => {
   const React = require('react');
   const {View} = require('react-native');
-  const Picker = (props) => React.createElement(View, props);
-  Picker.Item = (props) => React.createElement(View, props);
+  const Picker = props => React.createElement(View, props);
+  Picker.Item = props => React.createElement(View, props);
   return {Picker, default: Picker};
 });
 
@@ -303,8 +399,18 @@ jest.mock('react-native-image-picker', () => ({
 
 // Mock react-native-document-picker
 jest.mock('react-native-document-picker', () => ({
-  default: {pick: jest.fn(() => Promise.resolve([{uri: 'mock://file.pdf', name: 'file.pdf', type: 'application/pdf'}]))},
-  pick: jest.fn(() => Promise.resolve([{uri: 'mock://file.pdf', name: 'file.pdf', type: 'application/pdf'}])),
+  default: {
+    pick: jest.fn(() =>
+      Promise.resolve([
+        {uri: 'mock://file.pdf', name: 'file.pdf', type: 'application/pdf'},
+      ]),
+    ),
+  },
+  pick: jest.fn(() =>
+    Promise.resolve([
+      {uri: 'mock://file.pdf', name: 'file.pdf', type: 'application/pdf'},
+    ]),
+  ),
   isCancel: jest.fn(() => false),
   types: {pdf: 'application/pdf', images: 'image/*', allFiles: '*/*'},
 }));
@@ -313,9 +419,11 @@ jest.mock('react-native-document-picker', () => ({
 jest.mock('react-native-maps', () => {
   const React = require('react');
   const {View} = require('react-native');
-  const MapView = React.forwardRef((props, ref) => React.createElement(View, {...props, ref}));
-  MapView.Marker = (props) => React.createElement(View, props);
-  MapView.Callout = (props) => React.createElement(View, props);
+  const MapView = React.forwardRef((props, ref) =>
+    React.createElement(View, {...props, ref}),
+  );
+  MapView.Marker = props => React.createElement(View, props);
+  MapView.Callout = props => React.createElement(View, props);
   return {default: MapView, Marker: MapView.Marker, Callout: MapView.Callout};
 });
 
@@ -324,14 +432,27 @@ jest.mock('react-native-google-places-autocomplete', () => {
   const React = require('react');
   const {View} = require('react-native');
   return {
-    GooglePlacesAutocomplete: React.forwardRef((props, ref) => React.createElement(View, {...props, ref})),
+    GooglePlacesAutocomplete: React.forwardRef((props, ref) =>
+      React.createElement(View, {...props, ref}),
+    ),
   };
 });
 
 // Mock react-native-permissions
 jest.mock('react-native-permissions', () => ({
-  PERMISSIONS: {IOS: {CAMERA: 'ios.permission.CAMERA', PHOTO_LIBRARY: 'ios.permission.PHOTO_LIBRARY'}, ANDROID: {}},
-  RESULTS: {GRANTED: 'granted', DENIED: 'denied', BLOCKED: 'blocked', UNAVAILABLE: 'unavailable'},
+  PERMISSIONS: {
+    IOS: {
+      CAMERA: 'ios.permission.CAMERA',
+      PHOTO_LIBRARY: 'ios.permission.PHOTO_LIBRARY',
+    },
+    ANDROID: {},
+  },
+  RESULTS: {
+    GRANTED: 'granted',
+    DENIED: 'denied',
+    BLOCKED: 'blocked',
+    UNAVAILABLE: 'unavailable',
+  },
   check: jest.fn(() => Promise.resolve('granted')),
   request: jest.fn(() => Promise.resolve('granted')),
 }));
