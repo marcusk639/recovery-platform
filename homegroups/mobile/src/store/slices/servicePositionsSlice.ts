@@ -7,6 +7,7 @@ import {
 import {RootState} from '../types';
 import {ServicePosition} from '../../types';
 import {ServicePositionModel} from '../../models/ServicePositionModel';
+import {extractError} from '../thunkHelpers';
 
 // Define proper entity type
 export interface ServicePositionEntity extends ServicePosition {
@@ -41,13 +42,19 @@ const initialState: ServicePositionsState = {
 
 // --- Async Thunks ---
 
-export const fetchServicePositionsForGroup = createAsyncThunk(
+export const fetchServicePositionsForGroup = createAsyncThunk<
+  ServicePosition[],
+  string,
+  {state: RootState; rejectValue: string}
+>(
   'servicePositions/fetchForGroup',
-  async (groupId: string) => {
+  async (groupId, {rejectWithValue}) => {
     try {
       return await ServicePositionModel.getPositionsForGroup(groupId);
-    } catch (error: any) {
-      throw new Error(error.message || 'Failed to fetch service positions');
+    } catch (error: unknown) {
+      return rejectWithValue(
+        extractError(error, 'Failed to fetch service positions'),
+      );
     }
   },
   {
@@ -61,23 +68,23 @@ export const fetchServicePositionsForGroup = createAsyncThunk(
   },
 );
 
-export const createServicePosition = createAsyncThunk(
-  'servicePositions/create',
-  async ({
-    groupId,
-    name,
-    description,
-    commitmentLength,
-    termStartDate,
-    termEndDate,
-  }: {
+export const createServicePosition = createAsyncThunk<
+  ServicePosition,
+  {
     groupId: string;
     name: string;
     description?: string;
     commitmentLength?: number;
     termStartDate?: Date;
     termEndDate?: Date;
-  }) => {
+  },
+  {rejectValue: string}
+>(
+  'servicePositions/create',
+  async (
+    {groupId, name, description, commitmentLength, termStartDate, termEndDate},
+    {rejectWithValue},
+  ) => {
     try {
       return await ServicePositionModel.createPosition(groupId, {
         name,
@@ -86,31 +93,35 @@ export const createServicePosition = createAsyncThunk(
         termStartDate,
         termEndDate,
       });
-    } catch (error: any) {
-      throw new Error(error.message || 'Failed to create service position');
+    } catch (error: unknown) {
+      return rejectWithValue(
+        extractError(error, 'Failed to create service position'),
+      );
     }
   },
 );
 
-export const updateServicePosition = createAsyncThunk(
-  'servicePositions/update',
-  async ({
-    groupId,
-    positionId,
-    updateData,
-  }: {
+export const updateServicePosition = createAsyncThunk<
+  ServicePosition,
+  {
     groupId: string;
     positionId: string;
     updateData: Partial<Omit<ServicePosition, 'id' | 'groupId' | 'createdAt'>>;
-  }) => {
+  },
+  {rejectValue: string}
+>(
+  'servicePositions/update',
+  async ({groupId, positionId, updateData}, {rejectWithValue}) => {
     try {
       return await ServicePositionModel.updatePosition(
         groupId,
         positionId,
         updateData,
       );
-    } catch (error: any) {
-      throw new Error(error.message || 'Failed to update service position');
+    } catch (error: unknown) {
+      return rejectWithValue(
+        extractError(error, 'Failed to update service position'),
+      );
     }
   },
 );
@@ -125,8 +136,8 @@ export const deleteServicePosition = createAsyncThunk<
     try {
       await ServicePositionModel.deletePosition(groupId, positionId);
       return {groupId, positionId};
-    } catch (error: any) {
-      return rejectWithValue(error.message || 'Failed to delete position');
+    } catch (error: unknown) {
+      return rejectWithValue(extractError(error, 'Failed to delete position'));
     }
   },
 );
@@ -193,8 +204,7 @@ const servicePositionsSlice = createSlice({
       })
       .addCase(fetchServicePositionsForGroup.rejected, (state, action) => {
         state.status = 'failed';
-        state.error =
-          action.error.message || 'Failed to fetch service positions';
+        state.error = action.payload as string;
       })
       // Create Position
       .addCase(createServicePosition.pending, state => {
@@ -212,8 +222,7 @@ const servicePositionsSlice = createSlice({
       })
       .addCase(createServicePosition.rejected, (state, action) => {
         state.status = 'failed';
-        state.error =
-          action.error.message || 'Failed to create service position';
+        state.error = action.payload as string;
       })
       // Update Position
       .addCase(updateServicePosition.pending, state => {
@@ -267,8 +276,7 @@ const servicePositionsSlice = createSlice({
       })
       .addCase(updateServicePosition.rejected, (state, action) => {
         state.status = 'failed';
-        state.error =
-          action.error.message || 'Failed to update service position';
+        state.error = action.payload as string;
       })
       // Delete Position
       .addCase(deleteServicePosition.pending, state => {

@@ -13,8 +13,11 @@ import {
 } from '../../types/sponsorship';
 import {RootState} from '../types';
 import {Timestamp} from '../../types/schema';
-import firestore from '@react-native-firebase/firestore';
+import firestore, {
+  FirebaseFirestoreTypes,
+} from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
+import {extractError} from '../thunkHelpers';
 
 // Define proper entity types
 export interface SponsorshipEntity {
@@ -112,9 +115,12 @@ const convertToSponsorshipEntity = (
   updatedAt: sponsorship.updatedAt.toISOString(),
 });
 
-export const fetchGroupSponsorships = createAsyncThunk(
-  'sponsorship/fetchGroupSponsorships',
-  async (groupId: string) => {
+export const fetchGroupSponsorships = createAsyncThunk<
+  Sponsorship[],
+  string,
+  {rejectValue: string}
+>('sponsorship/fetchGroupSponsorships', async (groupId, {rejectWithValue}) => {
+  try {
     const snapshot = await firestore()
       .collection('sponsorships')
       .where('groupId', '==', groupId)
@@ -124,12 +130,17 @@ export const fetchGroupSponsorships = createAsyncThunk(
       id: doc.id,
       ...doc.data(),
     })) as Sponsorship[];
-  },
-);
+  } catch (error: unknown) {
+    return rejectWithValue(extractError(error, 'Failed to fetch sponsorships'));
+  }
+});
 
-export const fetchSponsorshipAnalytics = createAsyncThunk(
-  'sponsorship/fetchAnalytics',
-  async (groupId: string) => {
+export const fetchSponsorshipAnalytics = createAsyncThunk<
+  SponsorshipAnalytics,
+  string,
+  {rejectValue: string}
+>('sponsorship/fetchAnalytics', async (groupId, {rejectWithValue}) => {
+  try {
     const sponsorshipsRef = firestore()
       .collection('sponsorships')
       .where('groupId', '==', groupId);
@@ -193,31 +204,39 @@ export const fetchSponsorshipAnalytics = createAsyncThunk(
       commonChallenges,
       solutions: solutionSuccessRates,
     };
-  },
-);
+  } catch (error: unknown) {
+    return rejectWithValue(extractError(error, 'Failed to fetch analytics'));
+  }
+});
 
-export const createNewSponsorship = createAsyncThunk(
-  'sponsorship/create',
-  async ({
-    groupId,
-    sponsorId,
-    sponseeId,
-  }: {
+export const createNewSponsorship = createAsyncThunk<
+  string,
+  {
     groupId: string;
     sponsorId: string;
     sponseeId: string;
-  }) => {
-    const docRef = await firestore().collection('sponsorships').add({
-      groupId,
-      sponsorId,
-      sponseeId,
-      status: 'active',
-      startDate: firestore.FieldValue.serverTimestamp(),
-      createdAt: firestore.FieldValue.serverTimestamp(),
-      updatedAt: firestore.FieldValue.serverTimestamp(),
-    });
+  },
+  {rejectValue: string}
+>(
+  'sponsorship/create',
+  async ({groupId, sponsorId, sponseeId}, {rejectWithValue}) => {
+    try {
+      const docRef = await firestore().collection('sponsorships').add({
+        groupId,
+        sponsorId,
+        sponseeId,
+        status: 'active',
+        startDate: firestore.FieldValue.serverTimestamp(),
+        createdAt: firestore.FieldValue.serverTimestamp(),
+        updatedAt: firestore.FieldValue.serverTimestamp(),
+      });
 
-    return docRef.id;
+      return docRef.id;
+    } catch (error: unknown) {
+      return rejectWithValue(
+        extractError(error, 'Failed to create sponsorship'),
+      );
+    }
   },
 );
 
@@ -308,9 +327,12 @@ export const sendSponsorChatMessage = createAsyncThunk(
   },
 );
 
-export const fetchGroupSponsors = createAsyncThunk(
-  'sponsorship/fetchGroupSponsors',
-  async (groupId: string) => {
+export const fetchGroupSponsors = createAsyncThunk<
+  SponsorEntity[],
+  string,
+  {rejectValue: string}
+>('sponsorship/fetchGroupSponsors', async (groupId, {rejectWithValue}) => {
+  try {
     const members = await MemberModel.getGroupMembers(groupId);
     return members
       .filter(member => member.sponsorSettings?.isAvailable)
@@ -321,181 +343,249 @@ export const fetchGroupSponsors = createAsyncThunk(
         requirements: member.sponsorSettings?.requirements || [],
         bio: member.sponsorSettings?.bio || '',
       }));
-  },
-);
+  } catch (error: unknown) {
+    return rejectWithValue(extractError(error, 'Failed to fetch sponsors'));
+  }
+});
 
-export const requestSponsorship = createAsyncThunk(
-  'sponsorship/request',
-  async ({
-    groupId,
-    sponsorId,
-    message,
-  }: {
+export const requestSponsorship = createAsyncThunk<
+  {
+    groupId: string;
+    sponsorId: string;
+    request: {
+      id: string;
+      sponsorId: string;
+      sponseeId: string;
+      sponseeName: string;
+      message: string;
+      status: string;
+      createdAt: Timestamp;
+    };
+  },
+  {
     groupId: string;
     sponsorId: string;
     message: string;
-  }) => {
-    const currentUser = auth().currentUser;
-    if (!currentUser) throw new Error('User not authenticated');
+  },
+  {rejectValue: string}
+>(
+  'sponsorship/request',
+  async ({groupId, sponsorId, message}, {rejectWithValue}) => {
+    try {
+      const currentUser = auth().currentUser;
+      if (!currentUser) return rejectWithValue('User not authenticated');
 
-    const [activeSponsorship, pendingRequest] = await Promise.all([
-      firestore()
-        .collection('sponsorships')
-        .where('groupId', '==', groupId)
-        .where('sponseeId', '==', currentUser.uid)
-        .where('status', '==', 'active')
-        .get(),
-      firestore()
+      const [activeSponsorship, pendingRequest] = await Promise.all([
+        firestore()
+          .collection('sponsorships')
+          .where('groupId', '==', groupId)
+          .where('sponseeId', '==', currentUser.uid)
+          .where('status', '==', 'active')
+          .get(),
+        firestore()
+          .collection('groups')
+          .doc(groupId)
+          .collection('sponsorshipRequests')
+          .where('sponseeId', '==', currentUser.uid)
+          .where('status', '==', 'pending')
+          .get(),
+      ]);
+
+      if (!activeSponsorship.empty) {
+        return rejectWithValue('You already have an active sponsor');
+      }
+
+      if (!pendingRequest.empty) {
+        return rejectWithValue(
+          'You already have a pending sponsorship request',
+        );
+      }
+
+      const requestRef = firestore()
         .collection('groups')
         .doc(groupId)
         .collection('sponsorshipRequests')
-        .where('sponseeId', '==', currentUser.uid)
-        .where('status', '==', 'pending')
-        .get(),
-    ]);
+        .doc();
 
-    if (!activeSponsorship.empty) {
-      throw new Error('You already have an active sponsor');
+      const request = {
+        id: requestRef.id,
+        sponsorId, // Include the target sponsor's ID
+        sponseeId: currentUser.uid,
+        sponseeName: currentUser.displayName || 'Anonymous',
+        message,
+        status: 'pending',
+        createdAt: firestore.FieldValue.serverTimestamp(),
+      };
+
+      await requestRef.set(request);
+
+      const createdDoc = await requestRef.get();
+      const requestData = createdDoc.data();
+      if (!requestData) return rejectWithValue('Failed to create request');
+
+      return {
+        groupId,
+        sponsorId,
+        request: {
+          id: createdDoc.id,
+          sponsorId: requestData.sponsorId,
+          sponseeId: requestData.sponseeId,
+          sponseeName: requestData.sponseeName,
+          message: requestData.message,
+          status: requestData.status,
+          createdAt: requestData.createdAt,
+        },
+      };
+    } catch (error: unknown) {
+      return rejectWithValue(
+        extractError(error, 'Failed to request sponsorship'),
+      );
     }
-
-    if (!pendingRequest.empty) {
-      throw new Error('You already have a pending sponsorship request');
-    }
-
-    const requestRef = firestore()
-      .collection('groups')
-      .doc(groupId)
-      .collection('sponsorshipRequests')
-      .doc();
-
-    const request = {
-      id: requestRef.id,
-      sponsorId, // Include the target sponsor's ID
-      sponseeId: currentUser.uid,
-      sponseeName: currentUser.displayName || 'Anonymous',
-      message,
-      status: 'pending',
-      createdAt: firestore.FieldValue.serverTimestamp(),
-    };
-
-    await requestRef.set(request);
-
-    const createdDoc = await requestRef.get();
-    const requestData = createdDoc.data();
-    if (!requestData) throw new Error('Failed to create request');
-
-    return {
-      groupId,
-      sponsorId,
-      request: {
-        id: createdDoc.id,
-        sponsorId: requestData.sponsorId,
-        sponseeId: requestData.sponseeId,
-        sponseeName: requestData.sponseeName,
-        message: requestData.message,
-        status: requestData.status,
-        createdAt: requestData.createdAt,
-      },
-    };
   },
 );
 
-export const acceptSponsorshipRequest = createAsyncThunk(
+export const acceptSponsorshipRequest = createAsyncThunk<
+  {
+    groupId: string;
+    requestId: string;
+    sponsorship: {
+      id: string;
+      groupId: string;
+      sponsorId: string;
+      sponsorName: string;
+      sponseeId: string;
+      sponseeName: string;
+      status: string;
+      startDate: FirebaseFirestoreTypes.FieldValue;
+      createdAt: FirebaseFirestoreTypes.FieldValue;
+      updatedAt: FirebaseFirestoreTypes.FieldValue;
+    };
+  },
+  {groupId: string; requestId: string},
+  {rejectValue: string}
+>(
   'sponsorship/acceptRequest',
-  async ({groupId, requestId}: {groupId: string; requestId: string}) => {
-    const currentUser = auth().currentUser;
-    if (!currentUser) throw new Error('User not authenticated');
+  async ({groupId, requestId}, {rejectWithValue}) => {
+    try {
+      const currentUser = auth().currentUser;
+      if (!currentUser) return rejectWithValue('User not authenticated');
 
-    const requestRef = firestore()
-      .collection('groups')
-      .doc(groupId)
-      .collection('sponsorshipRequests')
-      .doc(requestId);
+      const requestRef = firestore()
+        .collection('groups')
+        .doc(groupId)
+        .collection('sponsorshipRequests')
+        .doc(requestId);
 
-    const requestDoc = await requestRef.get();
-    const request = requestDoc.data();
+      const requestDoc = await requestRef.get();
+      const request = requestDoc.data();
 
-    if (!request) throw new Error('Request not found');
-    if (request.status !== 'pending')
-      throw new Error('Request already processed');
+      if (!request) return rejectWithValue('Request not found');
+      if (request.status !== 'pending')
+        return rejectWithValue('Request already processed');
 
-    // Get sponsor (current user) name
-    const sponsorDoc = await firestore()
-      .collection('users')
-      .doc(currentUser.uid)
-      .get();
-    const sponsorData = sponsorDoc.data();
-    const sponsorName = sponsorData?.displayName || currentUser.displayName || 'Unknown';
+      // Get sponsor (current user) name
+      const sponsorDoc = await firestore()
+        .collection('users')
+        .doc(currentUser.uid)
+        .get();
+      const sponsorData = sponsorDoc.data();
+      const sponsorName =
+        sponsorData?.displayName || currentUser.displayName || 'Unknown';
 
-    await requestRef.update({status: 'accepted'});
+      await requestRef.update({status: 'accepted'});
 
-    const sponsorshipRef = firestore().collection('sponsorships').doc();
+      const sponsorshipRef = firestore().collection('sponsorships').doc();
 
-    const sponsorship = {
-      id: sponsorshipRef.id,
-      groupId,
-      sponsorId: currentUser.uid, // The person accepting is the sponsor
-      sponsorName,
-      sponseeId: request.sponseeId, // The person who made the request is the sponsee
-      sponseeName: request.sponseeName,
-      status: 'active',
-      startDate: firestore.FieldValue.serverTimestamp(),
-      createdAt: firestore.FieldValue.serverTimestamp(),
-      updatedAt: firestore.FieldValue.serverTimestamp(),
-    };
+      const sponsorship = {
+        id: sponsorshipRef.id,
+        groupId,
+        sponsorId: currentUser.uid, // The person accepting is the sponsor
+        sponsorName,
+        sponseeId: request.sponseeId, // The person who made the request is the sponsee
+        sponseeName: request.sponseeName,
+        status: 'active',
+        startDate: firestore.FieldValue.serverTimestamp(),
+        createdAt: firestore.FieldValue.serverTimestamp(),
+        updatedAt: firestore.FieldValue.serverTimestamp(),
+      };
 
-    await sponsorshipRef.set(sponsorship);
-    return {groupId, requestId, sponsorship};
+      await sponsorshipRef.set(sponsorship);
+      return {groupId, requestId, sponsorship};
+    } catch (error: unknown) {
+      return rejectWithValue(
+        extractError(error, 'Failed to accept sponsorship request'),
+      );
+    }
   },
 );
 
-export const rejectSponsorshipRequest = createAsyncThunk(
+export const rejectSponsorshipRequest = createAsyncThunk<
+  {groupId: string; requestId: string},
+  {groupId: string; requestId: string},
+  {rejectValue: string}
+>(
   'sponsorship/rejectRequest',
-  async ({groupId, requestId}: {groupId: string; requestId: string}) => {
-    const requestRef = firestore()
-      .collection('groups')
-      .doc(groupId)
-      .collection('sponsorshipRequests')
-      .doc(requestId);
+  async ({groupId, requestId}, {rejectWithValue}) => {
+    try {
+      const requestRef = firestore()
+        .collection('groups')
+        .doc(groupId)
+        .collection('sponsorshipRequests')
+        .doc(requestId);
 
-    const requestDoc = await requestRef.get();
-    const request = requestDoc.data();
+      const requestDoc = await requestRef.get();
+      const request = requestDoc.data();
 
-    if (!request) throw new Error('Request not found');
-    if (request.status !== 'pending')
-      throw new Error('Request already processed');
+      if (!request) return rejectWithValue('Request not found');
+      if (request.status !== 'pending')
+        return rejectWithValue('Request already processed');
 
-    await requestRef.update({status: 'rejected'});
-    return {groupId, requestId};
+      await requestRef.update({status: 'rejected'});
+      return {groupId, requestId};
+    } catch (error: unknown) {
+      return rejectWithValue(
+        extractError(error, 'Failed to reject sponsorship request'),
+      );
+    }
   },
 );
 
-export const updateSponsorAvailability = createAsyncThunk(
+export const updateSponsorAvailability = createAsyncThunk<
+  {groupId: string; isAvailable: boolean},
+  {groupId: string; isAvailable: boolean},
+  {rejectValue: string}
+>(
   'sponsorship/updateAvailability',
-  async ({groupId, isAvailable}: {groupId: string; isAvailable: boolean}) => {
-    const currentUser = auth().currentUser;
-    if (!currentUser) throw new Error('User not authenticated');
+  async ({groupId, isAvailable}, {rejectWithValue}) => {
+    try {
+      const currentUser = auth().currentUser;
+      if (!currentUser) return rejectWithValue('User not authenticated');
 
-    const userRef = firestore().collection('users').doc(currentUser.uid);
-    const userDoc = await userRef.get();
-    const userData = userDoc.data();
+      const userRef = firestore().collection('users').doc(currentUser.uid);
+      const userDoc = await userRef.get();
+      const userData = userDoc.data();
 
-    if (!userData) throw new Error('User data not found');
+      if (!userData) return rejectWithValue('User data not found');
 
-    const currentSettings: SponsorSettings = userData.sponsorSettings || {
-      isAvailable: false,
-      maxSponsees: 3,
-      requirements: [],
-      bio: '',
-    };
+      const currentSettings: SponsorSettings = userData.sponsorSettings || {
+        isAvailable: false,
+        maxSponsees: 3,
+        requirements: [],
+        bio: '',
+      };
 
-    const updatedSettings: SponsorSettings = {
-      ...currentSettings,
-      isAvailable,
-    };
+      const updatedSettings: SponsorSettings = {
+        ...currentSettings,
+        isAvailable,
+      };
 
-    await userRef.update({sponsorSettings: updatedSettings});
-    return {groupId, isAvailable};
+      await userRef.update({sponsorSettings: updatedSettings});
+      return {groupId, isAvailable};
+    } catch (error: unknown) {
+      return rejectWithValue(
+        extractError(error, 'Failed to update sponsor availability'),
+      );
+    }
   },
 );
 
@@ -529,7 +619,8 @@ const sponsorshipSlice = createSlice({
       })
       .addCase(fetchGroupSponsorships.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.error.message || 'Failed to fetch sponsorships';
+        state.error =
+          (action.payload as string) || 'Failed to fetch sponsorships';
       })
       // Fetch Analytics
       .addCase(fetchSponsorshipAnalytics.pending, state => {
@@ -542,7 +633,7 @@ const sponsorshipSlice = createSlice({
       })
       .addCase(fetchSponsorshipAnalytics.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.error.message || 'Failed to fetch analytics';
+        state.error = (action.payload as string) || 'Failed to fetch analytics';
       })
       // Create Sponsorship
       .addCase(createNewSponsorship.fulfilled, (state, action) => {
@@ -550,7 +641,8 @@ const sponsorshipSlice = createSlice({
       })
       .addCase(createNewSponsorship.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.error.message || 'Failed to create sponsorship';
+        state.error =
+          (action.payload as string) || 'Failed to create sponsorship';
       })
       // Update Status
       .addCase(updateSponsorshipStatus.fulfilled, (state, action) => {
@@ -610,7 +702,7 @@ const sponsorshipSlice = createSlice({
       })
       .addCase(fetchGroupSponsors.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.error.message || 'Failed to fetch sponsors';
+        state.error = (action.payload as string) || 'Failed to fetch sponsors';
       })
       // Request Sponsorship
       .addCase(requestSponsorship.pending, state => {
@@ -636,7 +728,8 @@ const sponsorshipSlice = createSlice({
       })
       .addCase(requestSponsorship.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.error.message || 'Failed to request sponsorship';
+        state.error =
+          (action.payload as string) || 'Failed to request sponsorship';
       })
       // Accept Sponsorship Request
       .addCase(acceptSponsorshipRequest.pending, state => {
@@ -659,7 +752,7 @@ const sponsorshipSlice = createSlice({
       .addCase(acceptSponsorshipRequest.rejected, (state, action) => {
         state.loading = false;
         state.error =
-          action.error.message || 'Failed to accept sponsorship request';
+          (action.payload as string) || 'Failed to accept sponsorship request';
       })
       // Reject Sponsorship Request
       .addCase(rejectSponsorshipRequest.pending, state => {
@@ -682,7 +775,7 @@ const sponsorshipSlice = createSlice({
       .addCase(rejectSponsorshipRequest.rejected, (state, action) => {
         state.loading = false;
         state.error =
-          action.error.message || 'Failed to reject sponsorship request';
+          (action.payload as string) || 'Failed to reject sponsorship request';
       })
       // Update Sponsor Availability
       .addCase(updateSponsorAvailability.pending, state => {
@@ -698,7 +791,7 @@ const sponsorshipSlice = createSlice({
       .addCase(updateSponsorAvailability.rejected, (state, action) => {
         state.loading = false;
         state.error =
-          action.error.message || 'Failed to update sponsor availability';
+          (action.payload as string) || 'Failed to update sponsor availability';
       });
   },
 });
