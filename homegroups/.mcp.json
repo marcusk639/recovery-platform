@@ -4,17 +4,12 @@
       "command": "npx",
       "args": ["detox-mcp"],
       "env": {
-        "DETOX_PROJECT_PATH": "/Users/marcusklein/dev/RecoveryConnect/mobile"
+        "DETOX_PROJECT_PATH": "${CLAUDE_PROJECT_DIR}/mobile"
       }
     },
     "firebase": {
-      "command": "/Users/marcusklein/.nvm/versions/node/v20.19.5/bin/node",
-      "args": [
-        "/usr/local/lib/node_modules/firebase-tools/lib/bin/firebase.js",
-        "mcp",
-        "--dir",
-        "/Users/marcusklein/dev/RecoveryConnect"
-      ]
+      "command": "npx",
+      "args": ["-y", "firebase-tools", "mcp", "--dir", "${CLAUDE_PROJECT_DIR}"]
     },
     "context7": {
       "command": "npx",
