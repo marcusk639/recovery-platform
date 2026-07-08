@@ -5,6 +5,7 @@ import {
 } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
+import { z } from "zod";
 import { db } from "../utils/firebase";
 import {
   stripe,
@@ -12,6 +13,7 @@ import {
   getDefaultPriceForProduct,
   TRIAL_PERIOD_DAYS,
 } from "../utils/stripe";
+import { validateData } from "../utils/callableWrapper";
 import { HomeGroup } from "../entities/Group";
 import { MeetingDocument as Meeting } from "../entities/Meeting";
 
@@ -20,6 +22,57 @@ interface CreateGroupWithSubscriptionData {
   meetings: Meeting[];
   paymentMethodId?: string;
 }
+
+// Allow-list of client-settable fields on group creation. Excludes the 11
+// server-controlled fields (id, createdAt, updatedAt, admins, memberCount,
+// stripeCustomerId, stripeSubscriptionId, subscriptionStatus,
+// stripeSubscriptionItemId, stripePriceIdGroup, stripeProductIdGroup) and
+// fields that shouldn't be client-settable at creation time regardless
+// (isClaimed, pendingAdminRequests, treasury, meetings — meetings validated
+// separately below).
+const groupDataSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().optional(),
+  location: z.string().optional(),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  zip: z.string().optional(),
+  lat: z.number().optional(),
+  lng: z.number().optional(),
+  foundedDate: z.string().optional(),
+  placeName: z.string().optional(),
+  type: z.string().optional(),
+  publicProfileEnabled: z.boolean().optional(),
+});
+
+// Allow-list for each client-supplied meeting. Excludes the 4
+// server-controlled fields (id, groupId, createdAt, updatedAt).
+const meetingDataSchema = z.object({
+  name: z.string().min(1),
+  type: z.string(),
+  day: z.string(),
+  time: z.string(),
+  country: z.string().optional(),
+  street: z.string().optional(),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  zip: z.string().optional(),
+  lat: z.number().optional(),
+  lng: z.number().optional(),
+  location: z.string().optional(),
+  isOnline: z.boolean(),
+  onlineLink: z.string().optional(),
+  onlineNotes: z.string().optional(),
+  verified: z.boolean().optional(),
+  addedBy: z.string().optional(),
+  format: z.string().optional(),
+  locationName: z.string().optional(),
+  geohash: z.string().optional(),
+  temporaryNotice: z.string().nullable().optional(),
+  isCancelledTemporarily: z.boolean().optional(),
+});
 
 export const createGroupWithSubscription = onCall(
   {
@@ -41,21 +94,26 @@ export const createGroupWithSubscription = onCall(
     if (!meetings || meetings.length === 0) {
       throw new HttpsError(
         "invalid-argument",
-        "At least one meeting is required.",
+        "At least one meeting is required."
       );
     }
     if (!paymentMethodId) {
       throw new HttpsError(
         "invalid-argument",
-        "Payment method ID is required.",
+        "Payment method ID is required."
       );
     }
     if (!productIdGroup) {
       throw new HttpsError(
         "failed-precondition",
-        "Stripe product ID for groups is not configured.",
+        "Stripe product ID for groups is not configured."
       );
     }
+
+    const validatedGroupData = validateData(groupDataSchema, groupData);
+    const validatedMeetings = meetings.map((m) =>
+      validateData(meetingDataSchema, m)
+    );
 
     let stripeSubscriptionId: string | undefined;
 
@@ -77,7 +135,7 @@ export const createGroupWithSubscription = onCall(
       if (!userEmail) {
         throw new HttpsError(
           "failed-precondition",
-          "User email is required to create a Stripe customer.",
+          "User email is required to create a Stripe customer."
         );
       }
 
@@ -96,11 +154,11 @@ export const createGroupWithSubscription = onCall(
               default_payment_method: paymentMethodId,
             },
           },
-          { idempotencyKey: `grp-${groupId}-customer` },
+          { idempotencyKey: `grp-${groupId}-customer` }
         );
         stripeCustomerId = customer.id;
         logger.info(
-          `Stripe customer ${stripeCustomerId} created for user ${userId}`,
+          `Stripe customer ${stripeCustomerId} created for user ${userId}`
         );
       } catch (customerError: any) {
         logger.error(`Failed to create Stripe customer:`, customerError);
@@ -110,12 +168,12 @@ export const createGroupWithSubscription = onCall(
         ) {
           throw new HttpsError(
             "invalid-argument",
-            "The provided payment method is invalid or has been deleted. Please add a new payment method and try again.",
+            "The provided payment method is invalid or has been deleted. Please add a new payment method and try again."
           );
         }
         throw new HttpsError(
           "internal",
-          `Failed to create Stripe customer: ${customerError.message}`,
+          `Failed to create Stripe customer: ${customerError.message}`
         );
       }
 
@@ -125,11 +183,11 @@ export const createGroupWithSubscription = onCall(
       // Get the default price for the group product
       const groupPriceId = await getDefaultPriceForProduct(productIdGroup);
       logger.info(
-        `Using group price ${groupPriceId} from product ${productIdGroup}`,
+        `Using group price ${groupPriceId} from product ${productIdGroup}`
       );
 
       logger.info(
-        `Creating Stripe subscription for user ${userId} (flat rate)`,
+        `Creating Stripe subscription for user ${userId} (flat rate)`
       );
       const subscription = await stripe.subscriptions.create(
         {
@@ -145,18 +203,18 @@ export const createGroupWithSubscription = onCall(
           metadata: { groupId, userId },
           default_payment_method: paymentMethodId, // Set default payment method for the subscription
         },
-        { idempotencyKey: `grp-${groupId}-subscription` },
+        { idempotencyKey: `grp-${groupId}-subscription` }
       );
 
       logger.info(
-        `Stripe subscription ${subscription.id} created with status ${subscription.status}`,
+        `Stripe subscription ${subscription.id} created with status ${subscription.status}`
       );
       stripeSubscriptionId = subscription.id;
       const subscriptionStatus = subscription.status;
       const subscriptionItemId = subscription.items.data[0].id;
 
       logger.info(
-        `Stripe subscription ${stripeSubscriptionId} created with status ${subscriptionStatus} for user ${userId}`,
+        `Stripe subscription ${stripeSubscriptionId} created with status ${subscriptionStatus} for user ${userId}`
       );
 
       // 3. Prepare Group Document and Meetings in a single Firestore batch
@@ -164,7 +222,7 @@ export const createGroupWithSubscription = onCall(
       const firestoreBatch = db.batch();
       // groupRef was pre-generated above so its ID could seed Stripe idempotency keys.
       const newGroup: Partial<HomeGroup> = {
-        ...groupData,
+        ...validatedGroupData,
         id: groupRef.id, // Assign the auto-generated ID
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -200,15 +258,17 @@ export const createGroupWithSubscription = onCall(
         showPhoneNumber: userData?.showPhoneNumber ?? false,
       };
       logger.info(
-        `Adding creator member document ${memberDocId} to Firestore batch`,
+        `Adding creator member document ${memberDocId} to Firestore batch`
       );
       firestoreBatch.set(memberRef, memberDoc);
 
-      for (const meeting of meetings) {
+      for (let i = 0; i < meetings.length; i++) {
+        const meeting = meetings[i];
+        const validatedMeeting = validatedMeetings[i];
         const meetingId = meeting.id || db.collection("meetings").doc().id; // Ensure meeting has an ID
         logger.info(`Adding meeting ${meetingId} to Firestore batch`);
         firestoreBatch.set(db.collection("meetings").doc(meetingId), {
-          ...meeting,
+          ...validatedMeeting,
           id: meetingId,
           groupId: groupRef.id,
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -219,7 +279,7 @@ export const createGroupWithSubscription = onCall(
       // Commit the Firestore batch (group + meetings)
       await firestoreBatch.commit();
       logger.info(
-        `Group ${groupRef.id} and ${meetings.length} meetings created successfully in a single batch.`,
+        `Group ${groupRef.id} and ${meetings.length} meetings created successfully in a single batch.`
       );
 
       // 3.5. Create predefined service positions (Treasurer and Secretary)
@@ -252,13 +312,13 @@ export const createGroupWithSubscription = onCall(
           updatedAt: now,
         });
         logger.info(
-          `Added ${position.name} service position to batch for group ${groupRef.id}`,
+          `Added ${position.name} service position to batch for group ${groupRef.id}`
         );
       }
 
       await servicePositionsBatch.commit();
       logger.info(
-        `Created ${predefinedPositions.length} predefined service positions for group ${groupRef.id}`,
+        `Created ${predefinedPositions.length} predefined service positions for group ${groupRef.id}`
       );
 
       // 4. Stripe customer + subscription metadata were seeded with the
@@ -281,7 +341,7 @@ export const createGroupWithSubscription = onCall(
       }
       logger.error(
         `Error creating group with subscription for user ${userId}:`,
-        error,
+        error
       );
 
       // Attempt to delete the Stripe subscription if Firestore creation failed
@@ -289,20 +349,20 @@ export const createGroupWithSubscription = onCall(
         try {
           await stripe.subscriptions.cancel(stripeSubscriptionId); // Corrected to cancel
           logger.warn(
-            `Compensating: Canceled Stripe subscription ${stripeSubscriptionId} due to Firestore error.`,
+            `Compensating: Canceled Stripe subscription ${stripeSubscriptionId} due to Firestore error.`
           );
         } catch (stripeDelError) {
           logger.error(
             `Error canceling Stripe subscription ${stripeSubscriptionId} in compensation:`,
-            stripeDelError,
+            stripeDelError
           );
         }
       }
 
       throw new HttpsError(
         "internal",
-        "Failed to create group and subscription.",
+        "Failed to create group and subscription."
       );
     }
-  },
+  }
 );

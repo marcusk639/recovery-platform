@@ -168,6 +168,7 @@ function buildDocRef(collPath: string, docId: string): any {
   const fullPath = `${collPath}/${docId}`;
   return {
     id: docId,
+    path: fullPath,
     collection: (subColl: string) =>
       buildCollectionRef(`${collPath}/${docId}/${subColl}`),
     get: jest.fn().mockImplementation(async () => {
@@ -246,7 +247,7 @@ function setDoc(path: string, data: Record<string, unknown> | null) {
 
 function makeRequest(
   uid: string | null,
-  data: Record<string, unknown> = {},
+  data: Record<string, unknown> = {}
 ): any {
   return {
     auth: uid ? { uid, token: {} } : null,
@@ -264,6 +265,7 @@ const BASE_MEETINGS = [
   {
     id: "meeting-1",
     name: "Monday Meeting",
+    type: "AA",
     day: "Monday",
     time: "7:00 PM",
     isOnline: false,
@@ -352,7 +354,7 @@ describe("createGroupWithSubscription", () => {
 
   it("throws unauthenticated if no auth", async () => {
     const handler = createGroupWithSubscription as unknown as (
-      req: any,
+      req: any
     ) => Promise<unknown>;
 
     await expect(
@@ -361,8 +363,8 @@ describe("createGroupWithSubscription", () => {
           groupData: BASE_GROUP_DATA,
           meetings: BASE_MEETINGS,
           paymentMethodId: PAYMENT_METHOD_ID,
-        }),
-      ),
+        })
+      )
     ).rejects.toMatchObject({ code: "unauthenticated" });
   });
 
@@ -372,7 +374,7 @@ describe("createGroupWithSubscription", () => {
 
   it("throws invalid-argument if group name is missing", async () => {
     const handler = createGroupWithSubscription as unknown as (
-      req: any,
+      req: any
     ) => Promise<unknown>;
 
     await expect(
@@ -381,14 +383,14 @@ describe("createGroupWithSubscription", () => {
           groupData: { description: "No name" },
           meetings: BASE_MEETINGS,
           paymentMethodId: PAYMENT_METHOD_ID,
-        }),
-      ),
+        })
+      )
     ).rejects.toMatchObject({ code: "invalid-argument" });
   });
 
   it("throws invalid-argument if meetings array is empty", async () => {
     const handler = createGroupWithSubscription as unknown as (
-      req: any,
+      req: any
     ) => Promise<unknown>;
 
     await expect(
@@ -397,14 +399,14 @@ describe("createGroupWithSubscription", () => {
           groupData: BASE_GROUP_DATA,
           meetings: [],
           paymentMethodId: PAYMENT_METHOD_ID,
-        }),
-      ),
+        })
+      )
     ).rejects.toMatchObject({ code: "invalid-argument" });
   });
 
   it("throws invalid-argument if paymentMethodId is missing", async () => {
     const handler = createGroupWithSubscription as unknown as (
-      req: any,
+      req: any
     ) => Promise<unknown>;
 
     await expect(
@@ -412,8 +414,8 @@ describe("createGroupWithSubscription", () => {
         makeRequest(USER_ID, {
           groupData: BASE_GROUP_DATA,
           meetings: BASE_MEETINGS,
-        }),
-      ),
+        })
+      )
     ).rejects.toMatchObject({ code: "invalid-argument" });
   });
 
@@ -425,7 +427,7 @@ describe("createGroupWithSubscription", () => {
     });
 
     const handler = createGroupWithSubscription as unknown as (
-      req: any,
+      req: any
     ) => Promise<unknown>;
 
     // The function's outer catch block re-wraps internal HttpsErrors as "internal",
@@ -436,8 +438,8 @@ describe("createGroupWithSubscription", () => {
           groupData: BASE_GROUP_DATA,
           meetings: BASE_MEETINGS,
           paymentMethodId: PAYMENT_METHOD_ID,
-        }),
-      ),
+        })
+      )
     ).rejects.toThrow();
 
     // No Stripe customer or subscription should be created
@@ -451,7 +453,7 @@ describe("createGroupWithSubscription", () => {
 
   it("creates a member document for the creator in the same batch as the group", async () => {
     const handler = createGroupWithSubscription as unknown as (
-      req: any,
+      req: any
     ) => Promise<{ success: boolean; groupId: string }>;
 
     const result = await handler(
@@ -459,7 +461,7 @@ describe("createGroupWithSubscription", () => {
         groupData: BASE_GROUP_DATA,
         meetings: BASE_MEETINGS,
         paymentMethodId: PAYMENT_METHOD_ID,
-      }),
+      })
     );
 
     expect(result.success).toBe(true);
@@ -479,7 +481,7 @@ describe("createGroupWithSubscription", () => {
 
   it("creator member document has isAdmin: true", async () => {
     const handler = createGroupWithSubscription as unknown as (
-      req: any,
+      req: any
     ) => Promise<unknown>;
 
     await handler(
@@ -487,7 +489,7 @@ describe("createGroupWithSubscription", () => {
         groupData: BASE_GROUP_DATA,
         meetings: BASE_MEETINGS,
         paymentMethodId: PAYMENT_METHOD_ID,
-      }),
+      })
     );
 
     const memberSetCall = mockBatchSet.mock.calls.find((call: unknown[]) => {
@@ -502,7 +504,7 @@ describe("createGroupWithSubscription", () => {
 
   it("creator member document has isTreasurer: false", async () => {
     const handler = createGroupWithSubscription as unknown as (
-      req: any,
+      req: any
     ) => Promise<unknown>;
 
     await handler(
@@ -510,7 +512,7 @@ describe("createGroupWithSubscription", () => {
         groupData: BASE_GROUP_DATA,
         meetings: BASE_MEETINGS,
         paymentMethodId: PAYMENT_METHOD_ID,
-      }),
+      })
     );
 
     const memberSetCall = mockBatchSet.mock.calls.find((call: unknown[]) => {
@@ -525,7 +527,7 @@ describe("createGroupWithSubscription", () => {
 
   it("creator member document has roles containing 'admin'", async () => {
     const handler = createGroupWithSubscription as unknown as (
-      req: any,
+      req: any
     ) => Promise<unknown>;
 
     await handler(
@@ -533,7 +535,7 @@ describe("createGroupWithSubscription", () => {
         groupData: BASE_GROUP_DATA,
         meetings: BASE_MEETINGS,
         paymentMethodId: PAYMENT_METHOD_ID,
-      }),
+      })
     );
 
     const memberSetCall = mockBatchSet.mock.calls.find((call: unknown[]) => {
@@ -549,7 +551,7 @@ describe("createGroupWithSubscription", () => {
 
   it("creator member document groupId matches the created group id", async () => {
     const handler = createGroupWithSubscription as unknown as (
-      req: any,
+      req: any
     ) => Promise<{ success: boolean; groupId: string }>;
 
     const result = await handler(
@@ -557,7 +559,7 @@ describe("createGroupWithSubscription", () => {
         groupData: BASE_GROUP_DATA,
         meetings: BASE_MEETINGS,
         paymentMethodId: PAYMENT_METHOD_ID,
-      }),
+      })
     );
 
     const memberSetCall = mockBatchSet.mock.calls.find((call: unknown[]) => {
@@ -572,7 +574,7 @@ describe("createGroupWithSubscription", () => {
 
   it("creator member document ref id follows format {groupId}_{userId}", async () => {
     const handler = createGroupWithSubscription as unknown as (
-      req: any,
+      req: any
     ) => Promise<{ success: boolean; groupId: string }>;
 
     const result = await handler(
@@ -580,7 +582,7 @@ describe("createGroupWithSubscription", () => {
         groupData: BASE_GROUP_DATA,
         meetings: BASE_MEETINGS,
         paymentMethodId: PAYMENT_METHOD_ID,
-      }),
+      })
     );
 
     // The ref passed as first argument to batch.set should have id = {groupId}_{userId}
@@ -596,7 +598,7 @@ describe("createGroupWithSubscription", () => {
 
   it("creator member document includes displayName from user profile", async () => {
     const handler = createGroupWithSubscription as unknown as (
-      req: any,
+      req: any
     ) => Promise<unknown>;
 
     await handler(
@@ -604,7 +606,7 @@ describe("createGroupWithSubscription", () => {
         groupData: BASE_GROUP_DATA,
         meetings: BASE_MEETINGS,
         paymentMethodId: PAYMENT_METHOD_ID,
-      }),
+      })
     );
 
     const memberSetCall = mockBatchSet.mock.calls.find((call: unknown[]) => {
@@ -620,7 +622,7 @@ describe("createGroupWithSubscription", () => {
 
   it("creator member document has joinedAt field set", async () => {
     const handler = createGroupWithSubscription as unknown as (
-      req: any,
+      req: any
     ) => Promise<unknown>;
 
     await handler(
@@ -628,7 +630,7 @@ describe("createGroupWithSubscription", () => {
         groupData: BASE_GROUP_DATA,
         meetings: BASE_MEETINGS,
         paymentMethodId: PAYMENT_METHOD_ID,
-      }),
+      })
     );
 
     const memberSetCall = mockBatchSet.mock.calls.find((call: unknown[]) => {
@@ -649,7 +651,7 @@ describe("createGroupWithSubscription", () => {
 
   it("returns success: true and subscriptionId on success", async () => {
     const handler = createGroupWithSubscription as unknown as (
-      req: any,
+      req: any
     ) => Promise<{
       success: boolean;
       groupId: string;
@@ -662,12 +664,86 @@ describe("createGroupWithSubscription", () => {
         groupData: BASE_GROUP_DATA,
         meetings: BASE_MEETINGS,
         paymentMethodId: PAYMENT_METHOD_ID,
-      }),
+      })
     );
 
     expect(result.success).toBe(true);
     expect(result.groupId).toBeDefined();
     expect(result.subscriptionId).toBe("sub_test_123");
     expect(result.subscriptionStatus).toBe("trialing");
+  });
+
+  // ------------------------------------------------------------------
+  // Mass-assignment protection: groupData / meetings allow-list
+  // ------------------------------------------------------------------
+
+  it("strips unvalidated/dangerous fields from client-supplied groupData before writing", async () => {
+    const handler = createGroupWithSubscription as unknown as (
+      req: any
+    ) => Promise<unknown>;
+
+    const request = makeRequest(USER_ID, {
+      groupData: {
+        ...BASE_GROUP_DATA,
+        admins: ["attacker-uid"], // should be overwritten by server logic regardless
+        stripeCustomerId: "cus_injected", // should be stripped by validation before even reaching the overwrite step
+        arbitraryField: "should not survive", // should be stripped
+      },
+      meetings: BASE_MEETINGS,
+      paymentMethodId: PAYMENT_METHOD_ID,
+    });
+
+    await handler(request);
+
+    const groupWriteCall = mockBatchSet.mock.calls.find(
+      (call: any[]) =>
+        typeof call[0]?.path === "string" && call[0].path.includes("groups/")
+    );
+
+    expect(groupWriteCall).toBeDefined();
+    const writtenGroup = groupWriteCall![1] as Record<string, unknown>;
+    expect(writtenGroup.arbitraryField).toBeUndefined();
+    expect(writtenGroup.admins).toEqual([USER_ID]); // server-controlled value wins, not the injected one
+  });
+
+  it("strips unvalidated fields from each client-supplied meeting before writing", async () => {
+    const handler = createGroupWithSubscription as unknown as (
+      req: any
+    ) => Promise<unknown>;
+
+    const request = makeRequest(USER_ID, {
+      groupData: BASE_GROUP_DATA,
+      meetings: [
+        { ...BASE_MEETINGS[0], arbitraryMeetingField: "should not survive" },
+      ],
+      paymentMethodId: PAYMENT_METHOD_ID,
+    });
+
+    await handler(request);
+
+    const meetingWriteCall = mockBatchSet.mock.calls.find(
+      (call: any[]) =>
+        typeof call[0]?.path === "string" && call[0].path.includes("meetings/")
+    );
+
+    expect(meetingWriteCall).toBeDefined();
+    const writtenMeeting = meetingWriteCall![1] as Record<string, unknown>;
+    expect(writtenMeeting.arbitraryMeetingField).toBeUndefined();
+  });
+
+  it("still rejects when groupData.name is missing (existing validation preserved)", async () => {
+    const handler = createGroupWithSubscription as unknown as (
+      req: any
+    ) => Promise<unknown>;
+
+    const request = makeRequest(USER_ID, {
+      groupData: { ...BASE_GROUP_DATA, name: undefined },
+      meetings: BASE_MEETINGS,
+      paymentMethodId: PAYMENT_METHOD_ID,
+    });
+
+    await expect(handler(request)).rejects.toMatchObject({
+      code: "invalid-argument",
+    });
   });
 });
