@@ -16,5 +16,8 @@ module.exports = {
     "/node_modules/",
     "/lib/",
     ...(process.env.FIRESTORE_EMULATOR_HOST ? [] : ["security-rules.test.ts"]), // requires Firestore emulator on port 8080
+    ...(process.env.FIREBASE_STORAGE_EMULATOR_HOST
+      ? []
+      : ["security-rules-storage.test.ts"]), // requires Storage emulator on port 9199
   ],
 };

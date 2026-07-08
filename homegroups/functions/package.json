@@ -15,7 +15,8 @@
     "deploy:from": "npm run build && bash ../scripts/deploy-functions.sh --from",
     "logs": "firebase functions:log",
     "test": "jest --detectOpenHandles",
-    "test:rules": "firebase emulators:exec --only firestore 'npm run test'"
+    "test:rules": "firebase emulators:exec --only firestore 'npm run test'",
+    "test:rules:storage": "firebase emulators:exec --only storage 'npm run test'"
   },
   "engines": {
     "node": "22"

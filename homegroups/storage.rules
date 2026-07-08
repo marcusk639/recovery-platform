@@ -25,14 +25,24 @@ service firebase.storage {
       );
     }
 
+    // Check if the authenticated user is a member of the given group
+    // using custom JWT claims set by onMemberWrite trigger.
+    function isGroupMember(groupId) {
+      return isSignedIn() && (
+        isSuperAdmin() ||
+        (request.auth.token.memberGroups != null &&
+          groupId in request.auth.token.memberGroups)
+      );
+    }
+
     // ============================================================
     // GROUP RESOURCE UPLOADS
-    // Only group admins may upload; all authenticated users may read.
+    // Only group admins may upload; group members may read.
     // Max file size: 10 MB per upload.
     // ============================================================
     match /groups/{groupId}/resources/{fileName} {
-      // Any authenticated group member can download resources.
-      allow read: if isSignedIn();
+      // Only group members (via custom JWT claims) can download resources.
+      allow read: if isGroupMember(groupId);
 
       // Only group admins (via custom JWT claims) may upload or overwrite.
       // Size guard prevents excessively large uploads.
