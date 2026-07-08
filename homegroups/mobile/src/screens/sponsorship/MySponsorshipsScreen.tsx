@@ -232,10 +232,11 @@ const MySponsorshipsScreen: React.FC = () => {
               );
               loadSponsorshipData();
             } catch (error: any) {
-              Alert.alert(
-                'Error',
-                error.message || 'Failed to accept request.',
-              );
+              const message =
+                typeof error === 'string'
+                  ? error
+                  : error?.message || 'Failed to accept request.';
+              Alert.alert('Error', message);
             } finally {
               setProcessingRequest(null);
             }
@@ -269,10 +270,11 @@ const MySponsorshipsScreen: React.FC = () => {
               );
               loadSponsorshipData();
             } catch (error: any) {
-              Alert.alert(
-                'Error',
-                error.message || 'Failed to decline request.',
-              );
+              const message =
+                typeof error === 'string'
+                  ? error
+                  : error?.message || 'Failed to decline request.';
+              Alert.alert('Error', message);
             } finally {
               setProcessingRequest(null);
             }

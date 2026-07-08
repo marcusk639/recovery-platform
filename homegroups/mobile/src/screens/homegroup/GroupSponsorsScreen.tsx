@@ -192,11 +192,12 @@ const GroupSponsorsScreen = () => {
         `Your sponsorship request has been sent to ${selectedSponsor.name}. They will be notified and can accept or decline your request.`,
       );
     } catch (error: any) {
-      Alert.alert(
-        'Request Failed',
-        error.message ||
-          'Failed to send sponsorship request. Please try again.',
-      );
+      const message =
+        typeof error === 'string'
+          ? error
+          : error?.message ||
+            'Failed to send sponsorship request. Please try again.';
+      Alert.alert('Request Failed', message);
     } finally {
       setSubmitting(false);
     }
