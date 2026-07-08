@@ -139,7 +139,19 @@ firebase init
 # Use TypeScript for functions
 ```
 
-### 2. Setup Cloud Functions
+### 2. Configure Environment Variables
+
+Cloud Functions needs Stripe API keys and a few other secrets at runtime. Copy the template and fill in real values (get them from the shared Stripe dashboard or 1Password — never commit real keys):
+
+```bash
+cd functions
+cp .env.example .env
+# Edit .env and fill in STRIPE_TEST_* keys for local/emulator work
+```
+
+`functions/.env` is gitignored. In production these same variable names are bound via Firebase Secret Manager (`defineSecret()` in `functions/src/utils/stripe.ts`), not `.env` — the file is for local/emulator development only.
+
+### 3. Setup Cloud Functions
 
 ```bash
 cd functions
@@ -157,7 +169,7 @@ npm test
 npm run deploy
 ```
 
-### 3. Start Firebase Emulator Suite
+### 4. Start Firebase Emulator Suite
 
 For local development without using live Firebase:
 
@@ -166,6 +178,7 @@ firebase emulators:start
 ```
 
 This starts:
+
 - **Firestore Emulator** at `localhost:8080`
 - **Firebase Functions** at `localhost:5001`
 - **Firebase Hosting** at `localhost:5000`
@@ -198,6 +211,7 @@ cd ..
 The mobile app needs to know which Firebase project to use.
 
 **Check configuration:**
+
 ```bash
 # This file should already be configured
 ls -la google-services.json      # Android
@@ -205,6 +219,7 @@ ls -la GoogleService-Info.plist  # iOS
 ```
 
 If files don't exist, download from Firebase Console:
+
 1. Go to Firebase Console → Project Settings
 2. Download `google-services.json` (Android)
 3. Download `GoogleService-Info.plist` (iOS)
@@ -219,8 +234,8 @@ Edit `mobile/src/services/firebase/config.ts`:
 const db = getFirestore(app);
 
 if (__DEV__) {
-  connectFirestoreEmulator(db, 'localhost', 8080);
-  connectFunctionsEmulator(getFunctions(app), 'localhost', 5001);
+  connectFirestoreEmulator(db, "localhost", 8080);
+  connectFunctionsEmulator(getFunctions(app), "localhost", 5001);
 }
 ```
 
@@ -266,6 +281,7 @@ npm run android
 ### 6. Mobile App Hot Reload
 
 While the Metro server is running:
+
 - **iOS**: Press `Cmd + R` in Simulator to reload
 - **Android**: Press `R` twice in Emulator, or select "Reload" from dev menu
 
@@ -309,18 +325,21 @@ firebase deploy --only hosting
 ### Full Local Development Stack
 
 **Terminal 1 - Firebase Emulators:**
+
 ```bash
 firebase emulators:start
 # Outputs emulator URLs, note them for next step
 ```
 
 **Terminal 2 - Metro Bundler (Mobile):**
+
 ```bash
 cd mobile
 npm start
 ```
 
 **Terminal 3 - Mobile App:**
+
 ```bash
 cd mobile
 npm run ios
@@ -329,6 +348,7 @@ npm run android
 ```
 
 **Terminal 4 (Optional) - Web App:**
+
 ```bash
 cd web
 npm start
@@ -336,6 +356,7 @@ npm start
 ```
 
 Now you have:
+
 - Mobile app on Simulator/Emulator (connected to local Firebase)
 - Web app on `http://localhost:3000` (connected to local Firebase)
 - Firebase Emulator UI on `http://localhost:4000` (inspect your data)
@@ -358,6 +379,7 @@ If you need to test against actual Firebase (not emulators):
 **Problem**: Metro won't start, or says port 8081 is in use
 
 **Solution:**
+
 ```bash
 # Kill process on port 8081
 lsof -ti:8081 | xargs kill -9
@@ -372,6 +394,7 @@ npm start -- --reset-cache
 **Problem**: Emulator won't start, error about port 8080
 
 **Solution:**
+
 ```bash
 # Kill process on port 8080
 lsof -ti:8080 | xargs kill -9
@@ -385,6 +408,7 @@ firebase emulators:start --import=./backup --export-on-exit
 **Problem**: Xcode build failures, especially "pod" errors
 
 **Solution:**
+
 ```bash
 cd mobile/ios
 rm -rf Pods
@@ -399,6 +423,7 @@ npm run ios
 **Problem**: Gradle build failures
 
 **Solution:**
+
 ```bash
 cd mobile
 # Clear Android build cache
@@ -413,12 +438,13 @@ npm run android
 **Problem**: App can't reach Firestore emulator at localhost:8080
 
 **Solution:**
+
 - Make sure emulators are actually running: `firebase emulators:start`
 - Check `mobile/src/services/firebase/config.ts` has correct emulator addresses
 - On Android Emulator (not physical device), localhost might not work:
   ```typescript
   // Use 10.0.2.2 on Android Emulator instead of localhost
-  const host = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
+  const host = Platform.OS === "android" ? "10.0.2.2" : "localhost";
   connectFirestoreEmulator(db, host, 8080);
   ```
 
@@ -427,6 +453,7 @@ npm run android
 **Problem**: TypeScript compilation errors
 
 **Solution:**
+
 ```bash
 # Rebuild TypeScript
 npm run build
@@ -442,6 +469,7 @@ npx tsc --noEmit
 ### Adding a New Feature
 
 1. **Create component or screen**
+
    ```bash
    # In mobile/src/screens or mobile/src/components
    touch NewFeature.tsx
@@ -471,16 +499,19 @@ See [Security Rules Quick Reference](./SECURITY_RULES_QUICKREF.md) for deploymen
 ### Adding a Cloud Function
 
 1. Create file in `functions/src/` (callable or trigger)
+
    ```bash
    touch functions/src/callable/myFunction.ts
    ```
 
 2. Export from `functions/src/index.ts`
+
    ```typescript
-   export { myFunction } from './callable/myFunction';
+   export { myFunction } from "./callable/myFunction";
    ```
 
 3. Build and test
+
    ```bash
    cd functions
    npm run build
@@ -495,12 +526,14 @@ See [Security Rules Quick Reference](./SECURITY_RULES_QUICKREF.md) for deploymen
 ### Debugging Firebase Functions
 
 **View logs:**
+
 ```bash
 firebase functions:log
 firebase functions:log --only myFunctionName
 ```
 
 **Attach debugger:**
+
 ```bash
 firebase emulators:start --inspect-functions
 # Then in Chrome: `chrome://inspect`
@@ -509,12 +542,14 @@ firebase emulators:start --inspect-functions
 ### Running Tests
 
 **Mobile tests:**
+
 ```bash
 cd mobile
 npm test
 ```
 
 **Cloud Functions tests:**
+
 ```bash
 cd functions
 npm test
