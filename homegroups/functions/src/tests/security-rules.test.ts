@@ -502,6 +502,7 @@ describe("Transactions Collection", () => {
         type: "expense",
         amount: 50,
         description: "Rent",
+        category: "rent",
         createdBy: treasurerId,
         createdAt: new Date(),
       }),
