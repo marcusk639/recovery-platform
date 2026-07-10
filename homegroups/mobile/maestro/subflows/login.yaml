@@ -1,6 +1,12 @@
-# Reusable login subflow. Walks LandingScreen -> LoginScreen -> authenticated
-# GroupsListScreen. Selector path ported from e2e/helpers.js `login()` (Detox) and
-# cross-checked against e2e/screens/auth/auth.spec.js `goToLogin()`.
+# Reusable login subflow. Walks fresh launch -> Onboarding welcome (skip) -> Main limited-mode
+# Home tab -> AuthModal (Login tab) -> authenticated GroupStackNavigator.
+#
+# CORRECTED 2026-07-10: the original version of this file targeted LandingScreen/LoginScreen
+# via AuthNavigator, which AppNavigator.tsx never mounts (dead code — confirmed by reading
+# AppNavigator.tsx, which only ever renders Onboarding or Main). The real, live auth UI is
+# AuthModal.tsx, reached via MainTabNavigator's limited-mode "Sign in" trigger. See
+# OnboardingScreen.tsx (skipOnboarding), MainTabNavigator.tsx (showAuthPrompt, AuthModal
+# render), and AuthModal.tsx (login tab fields) for the full traced path.
 #
 # Parameterize the persona via env:
 #   - runFlow:
@@ -8,34 +14,39 @@
 #       env:
 #         EMAIL: test-admin@homegroups-e2e.com
 #         PASSWORD: TestPassword123!
-#
-# NOTE: unlike regroup/mobile, homegroups has NO "IS_E2E_TEST" launch argument anywhere in
-# src/ — there is no emulator-routing launch flag. EMAIL/PASSWORD must be real credentials
-# for a Firebase Auth user in whichever project/emulator this build points at (see
-# e2e/.env.e2e.example / e2e/env.js for the existing Detox convention).
 appId: org.recoveryconnect
 ---
 - launchApp:
     clearState: true
+# Onboarding welcome step — Skip button has no testID, text-only selector.
 - extendedWaitUntil:
     visible:
-      id: "landing-screen"
+      text: "Skip"
     timeout: 30000
-- tapOn:
-    id: "landing-signin-button"
+- tapOn: "Skip"
+# Lands in Main, limited mode, Home tab (LimitedHomeScreen). Neither CTA has a testID —
+# "Create Account" and "Sign in" both open the same AuthModal instance.
 - extendedWaitUntil:
     visible:
-      id: "login-screen"
-    timeout: 15000
+      text: "Sign in"
+    timeout: 20000
+- tapOn: "Sign in"
+# AuthModal opens defaulting to the Signup tab — switch to Login.
+- extendedWaitUntil:
+    visible:
+      text: "Login"
+    timeout: 10000
+- tapOn: "Login"
 - tapOn:
-    id: "login-email-input"
+    id: "auth-modal-login-email-input"
 - inputText: ${EMAIL}
 - hideKeyboard
 - tapOn:
-    id: "login-password-input"
+    id: "auth-modal-login-password-input"
 - inputText: ${PASSWORD}
 - tapOn:
-    id: "login-signin-button"
+    id: "auth-modal-login-button"
+# On success, isAuthenticated flips true and the Home tab re-renders as GroupStackNavigator.
 - extendedWaitUntil:
     visible:
       id: "group-list-screen"
