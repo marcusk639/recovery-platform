@@ -1,0 +1,42 @@
+# Reusable login subflow. Walks LandingScreen -> LoginScreen -> authenticated
+# GroupsListScreen. Selector path ported from e2e/helpers.js `login()` (Detox) and
+# cross-checked against e2e/screens/auth/auth.spec.js `goToLogin()`.
+#
+# Parameterize the persona via env:
+#   - runFlow:
+#       file: ../subflows/login.yaml
+#       env:
+#         EMAIL: test-admin@homegroups-e2e.com
+#         PASSWORD: TestPassword123!
+#
+# NOTE: unlike regroup/mobile, homegroups has NO "IS_E2E_TEST" launch argument anywhere in
+# src/ — there is no emulator-routing launch flag. EMAIL/PASSWORD must be real credentials
+# for a Firebase Auth user in whichever project/emulator this build points at (see
+# e2e/.env.e2e.example / e2e/env.js for the existing Detox convention).
+appId: org.recoveryconnect
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: "landing-screen"
+    timeout: 30000
+- tapOn:
+    id: "landing-signin-button"
+- extendedWaitUntil:
+    visible:
+      id: "login-screen"
+    timeout: 15000
+- tapOn:
+    id: "login-email-input"
+- inputText: ${EMAIL}
+- hideKeyboard
+- tapOn:
+    id: "login-password-input"
+- inputText: ${PASSWORD}
+- tapOn:
+    id: "login-signin-button"
+- extendedWaitUntil:
+    visible:
+      id: "group-list-screen"
+    timeout: 60000

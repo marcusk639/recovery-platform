@@ -1,0 +1,20 @@
+# Maestro workspace configuration for the Homegroups mobile E2E suite.
+# Mirrors regroup/mobile/maestro/config.yaml. Docs: https://docs.maestro.dev/advanced/configuring-maestro-workspace
+#
+# NOTE: this is a second Maestro location alongside the existing scaffold at
+# e2e-maestro/homegroups/ (same appId: org.recoveryconnect) — mirrors how
+# regroup/mobile/maestro/ coexists with e2e-maestro/regroup/. Consolidate once one
+# location is chosen as canonical (tracked in the plan's Task 10).
+flows:
+  - flows/*
+
+platform:
+  ios:
+    disableAnimations: true
+  android:
+    disableAnimations: true
+
+executionOrder:
+  continueOnFailure: false
+
+testOutputDir: maestro/output
