@@ -1,0 +1,39 @@
+appId: org.recoveryconnect
+---
+# Flow: User joins a group via a 6-character invite code.
+# Entry point testID proven in e2e/screens/homegroup/groups.spec.js:
+# "group-list-invite-code-button" -> EnterInviteCodeModal.
+# Run: maestro test homegroups/mobile/maestro/flows/invite-code-join.yaml
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-admin@homegroups-e2e.com
+      PASSWORD: TestPassword123!
+- tapOn: "Home"
+- extendedWaitUntil:
+    visible:
+      id: "group-list-screen"
+    timeout: 15000
+- assertVisible:
+    id: "group-list-invite-code-button"
+- tapOn:
+    id: "group-list-invite-code-button"
+- assertVisible: "Enter Invite Code"
+- tapOn:
+    id: "invite-code-input"
+# NEEDS LIVE VERIFICATION: a real, unused 6-char invite code must exist server-side for
+# the success branch to be exercised. Seed one before trusting this flow in CI.
+- inputText: "ABC123"
+- hideKeyboard
+- tapOn:
+    id: "invite-code-submit-button"
+# Success path: native Alert('Success!', "You've joined {groupName}!", [{text:'View Group'}])
+# Failure path: native Alert('Unable to Join', message)
+- tapOn:
+    text: "View Group"
+    optional: true
+- tapOn:
+    text: "OK"
+    optional: true
+- runFlow:
+    file: ../subflows/logout.yaml
