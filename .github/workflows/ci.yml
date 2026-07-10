@@ -101,6 +101,21 @@ jobs:
       - name: Test
         run: cd homegroups/mobile && npm test -- --ci
 
+  homegroups-web:
+    name: homegroups/web — test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: homegroups/web/package-lock.json
+      - name: Install dependencies
+        run: cd homegroups/web && npm ci
+      - name: Test
+        run: cd homegroups/web && CI=true npm test -- --watchAll=false
+
   regroup-functions:
     name: regroup/functions — typecheck + test
     runs-on: ubuntu-latest
