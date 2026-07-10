@@ -66,21 +66,17 @@ const EnterInviteCodeModal: React.FC<EnterInviteCodeModalProps> = ({
       if (success && groupId) {
         setCode('');
         onClose();
-        Alert.alert(
-          'Success!',
-          `You've joined ${groupName || 'the group'}!`,
-          [
-            {
-              text: 'View Group',
-              onPress: () => {
-                navigation.navigate('GroupOverview', {
-                  groupId,
-                  groupName: groupName || 'Group',
-                });
-              },
+        Alert.alert('Success!', `You've joined ${groupName || 'the group'}!`, [
+          {
+            text: 'View Group',
+            onPress: () => {
+              navigation.navigate('GroupOverview', {
+                groupId,
+                groupName: groupName || 'Group',
+              });
             },
-          ],
-        );
+          },
+        ]);
       } else {
         Alert.alert('Unable to Join', message || 'Could not join the group.');
       }
@@ -101,7 +97,10 @@ const EnterInviteCodeModal: React.FC<EnterInviteCodeModalProps> = ({
 
   const formatCode = (text: string) => {
     // Remove non-alphanumeric characters and uppercase
-    return text.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 6);
+    return text
+      .replace(/[^A-Za-z0-9]/g, '')
+      .toUpperCase()
+      .slice(0, 6);
   };
 
   return (
@@ -137,13 +136,15 @@ const EnterInviteCodeModal: React.FC<EnterInviteCodeModalProps> = ({
             keyboardType="default"
             editable={!loading}
             autoFocus={true}
+            testID="invite-code-input"
           />
 
           <View style={styles.buttonContainer}>
             <TouchableOpacity
               style={styles.cancelButton}
               onPress={handleClose}
-              disabled={loading}>
+              disabled={loading}
+              testID="invite-code-cancel-button">
               <Text style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
 
@@ -153,7 +154,8 @@ const EnterInviteCodeModal: React.FC<EnterInviteCodeModalProps> = ({
                 (!code.trim() || code.length !== 6) && styles.disabledButton,
               ]}
               onPress={handleSubmit}
-              disabled={loading || !code.trim() || code.length !== 6}>
+              disabled={loading || !code.trim() || code.length !== 6}
+              testID="invite-code-submit-button">
               {loading ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
@@ -286,4 +288,3 @@ const styles = StyleSheet.create({
 });
 
 export default EnterInviteCodeModal;
-
