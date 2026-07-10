@@ -1,0 +1,54 @@
+appId: org.recoveryconnect
+---
+# Flow: Non-admin member claims an unclaimed group and starts the paid admin subscription,
+# stopping at the in-app Stripe WebView boundary (do NOT complete payment here).
+# Run: maestro test homegroups/mobile/maestro/flows/group-admin-claim-and-pay.yaml
+#
+# Requires a persona that is a MEMBER (not admin) of an UNCLAIMED group — i.e.
+# GroupOverviewScreen.shouldShowClaimGroupButton() (isGroupUnclaimed() &&
+# !isCurrentUserAdmin()) must be true. NEEDS LIVE VERIFICATION: seed this pairing — the
+# shared Detox TEST_EMAIL account is already a group admin, so a separate persona is
+# required (see maestro/README.md's test-account table).
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-unclaimed-member@homegroups-e2e.com
+      PASSWORD: TestPassword123!
+- tapOn: "Home"
+- extendedWaitUntil:
+    visible:
+      id: "group-list-screen"
+    timeout: 15000
+- tapOn:
+    id: "group-list"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: "group-info-section"
+    timeout: 15000
+- assertVisible:
+    id: "group-overview-claim-button"
+- tapOn:
+    id: "group-overview-claim-button"
+- assertVisible:
+    id: "group-claim-modal"
+- tapOn:
+    id: "group-claim-message-input"
+- inputText: "I am the group secretary and help run our weekly meeting."
+- hideKeyboard
+- tapOn:
+    id: "group-claim-submit-button"
+# Closes the request modal, opens AdminValuePropModal (now instrumented per Task 1).
+- assertVisible:
+    id: "admin-value-prop-modal"
+- assertVisible: "$12"
+- tapOn:
+    id: "admin-value-prop-start-trial-button"
+# Opens SubscriptionWebView — an in-app WebView loading a real Stripe Checkout session at
+# recovery-connect-cad4b.web.app/subscribe. It has no testIDs (external content); the
+# "Secure" badge text is the one static, always-visible string.
+- assertVisible: "Secure"
+# STRIPE BOUNDARY: do not interact further inside the WebView — a real Stripe test-key
+# checkout is out of Maestro's reliable-selector territory (third-party page).
+- runFlow:
+    file: ../subflows/logout.yaml
