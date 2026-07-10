@@ -1,0 +1,60 @@
+appId: org.recoveryconnect
+---
+# Flow: Admin creates a new group via the 4-step CreateGroupScreen wizard, stopping at the
+# Stripe CardForm on step 4 (payment boundary — do NOT submit real card details).
+# Entry testID proven in e2e/screens/homegroup/groups.spec.js: "group-list-create-button".
+# Run: maestro test homegroups/mobile/maestro/flows/group-creation.yaml
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-admin@homegroups-e2e.com
+      PASSWORD: TestPassword123!
+- tapOn: "Home"
+- extendedWaitUntil:
+    visible:
+      id: "group-list-screen"
+    timeout: 15000
+- assertVisible:
+    id: "group-list-create-button"
+- tapOn:
+    id: "group-list-create-button"
+- extendedWaitUntil:
+    visible:
+      text: "Group Information"
+    timeout: 15000
+# Step 1 — group basics (testIDs added in Task 1)
+- tapOn:
+    id: "create-group-name-input"
+- inputText: "E2E Test Homegroup"
+- hideKeyboard
+- tapOn:
+    id: "create-group-description-input"
+- inputText: "Created by an automated Maestro flow."
+- hideKeyboard
+- tapOn:
+    id: "create-group-next-button"
+# Step 2 — meeting details. Required-ness of fields past name/format was not traced
+# end-to-end from source; treat as best-effort. NEEDS LIVE VERIFICATION.
+- tapOn:
+    id: "create-group-meeting-name-input"
+    optional: true
+- inputText: "Weekly Meeting"
+- hideKeyboard
+- tapOn:
+    id: "create-group-next-button"
+# Step 3 — location
+- tapOn:
+    id: "create-group-location-input"
+    optional: true
+- inputText: "Community Center"
+- hideKeyboard
+- tapOn:
+    id: "create-group-next-button"
+# Step 4 — payment (Stripe CardForm, in-app native card element)
+- assertVisible:
+    id: "create-group-card-form"
+- assertVisible: "$12"
+# STRIPE BOUNDARY: do not fill card details or tap the (now "Create Group"-labeled)
+# create-group-next-button — this would submit a real Stripe PaymentMethod.
+- runFlow:
+    file: ../subflows/logout.yaml
