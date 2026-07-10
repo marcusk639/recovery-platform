@@ -53,22 +53,40 @@ appId: org.recoveryconnect
 # NEEDS LIVE VERIFICATION: attempt the address search manually first to confirm whether
 # LocationPicker's TextInput is reachable by placeholder text ("Search for a location") and
 # whether a suggestion can be selected by index before scripting it here.
-- tapOn:
-    text: "Search for a location"
-    optional: true
-- inputText: "123 Main St, Springfield"
-- extendedWaitUntil:
-    visible:
-      text: "Springfield"
-    timeout: 8000
-    optional: true
-- tapOn:
-    text: "Springfield"
-    index: 0
-    optional: true
-# If the address suggestion above didn't resolve (optional steps skipped/failed silently),
-# the wizard will still be on step 2 and the assertions below will correctly fail loudly —
-# that's the honest outcome until this is live-verified, rather than a false pass.
+# AMBIGUOUS FAILURE ZONE: everything from here through the address-suggestion tap below is
+# flaky/network-dependent (live Google Places Autocomplete, no testID). If the flow goes red
+# at or after this point, it does NOT necessarily mean an app regression — check Places-proxy
+# health and network status first before assuming the $12/copy/day-time assertions below it
+# broke.
+# Note: Maestro's `inputText` command does not reliably honor `optional: true` (as of the
+# Maestro version this flow targets, the object-form parser silently drops the `optional` key
+# for inputText), so making it optional in isolation cannot be trusted to fail gracefully. The
+# whole tap+type+suggestion sequence is instead wrapped in a single `when`-guarded runFlow:
+# if the search field isn't visible, the entire block is skipped (no tap, no inputText, so
+# there's no chance of the confusing "no focused view" error); only the suggestion tap inside
+# stays independently optional since the suggestion list is genuinely network-dependent even
+# when the search field itself is present.
+- runFlow:
+    when:
+      visible:
+        text: "Search for a location"
+    commands:
+      - tapOn:
+          text: "Search for a location"
+      - inputText: "123 Main St, Springfield"
+      - extendedWaitUntil:
+          visible:
+            text: "Springfield"
+          timeout: 8000
+          optional: true
+      - tapOn:
+          text: "Springfield"
+          index: 0
+          optional: true
+# If the address suggestion above didn't resolve (search field wasn't visible, or the
+# suggestion never appeared), the wizard will still be on step 2 and the assertions below
+# will correctly fail loudly — that's the honest outcome until this is live-verified, rather
+# than a false pass.
 - tapOn:
     id: "create-group-next-button"
 - extendedWaitUntil:
