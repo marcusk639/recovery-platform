@@ -1,26 +1,39 @@
-appId: org.recoveryconnect
----
-# Flow: New user completes the 3-step RegisterScreen signup wizard, stopping right after
-# "Create Account" is tapped.
+# Flow: New user completes signup via AuthModal (Signup tab, the default), reaching
+# group-list-screen on success.
 # Run: maestro test homegroups/mobile/maestro/flows/registration-signup.yaml
 #
-# Uses LandingScreen's direct "landing-register-button" (skips the login screen entirely —
-# a shorter proven path than login-register-link).
+# CORRECTED: the original version of this file targeted LandingScreen/RegisterScreen via
+# AuthNavigator, which AppNavigator.tsx never mounts (same dead-code trap subflows/login.yaml
+# had — see that file's header comment for the full traced path). AuthModal's Signup tab is
+# the default tab (no tab-switch needed here, unlike login's flow which must switch away from
+# it). On success, handleSignup calls onAuthSuccess() directly (AuthModal.tsx:146-172) — same
+# mechanism as login — landing on group-list-screen via the Home tab. setActiveTab('login') in
+# AuthModal only fires on an "email-already-in-use" ERROR, not on success.
+appId: org.recoveryconnect
+---
 - launchApp:
     clearState: true
 - extendedWaitUntil:
     visible:
-      id: "landing-screen"
+      text: "Skip"
     timeout: 30000
-- tapOn:
-    id: "landing-register-button"
+- tapOn: "Skip"
 - extendedWaitUntil:
     visible:
-      id: "register-screen"
-    timeout: 15000
-# Step 1 — account credentials
+      text: "Sign in"
+    timeout: 20000
+- tapOn: "Sign in"
+# AuthModal opens on the Signup tab by default — no tab switch needed.
+- extendedWaitUntil:
+    visible:
+      id: "auth-modal-name-input"
+    timeout: 10000
 - tapOn:
-    id: "register-email-input"
+    id: "auth-modal-name-input"
+- inputText: "E2E Tester"
+- hideKeyboard
+- tapOn:
+    id: "auth-modal-email-input"
 # NEEDS LIVE VERIFICATION: Firebase will reject a duplicate email on repeat runs — this
 # static address collides after the first successful run. Pass a unique EMAIL via
 # `maestro test --env EMAIL=e2e-signup-$(date +%s)@homegroups-e2e.com ...` or add a
@@ -28,34 +41,15 @@ appId: org.recoveryconnect
 - inputText: "e2e-signup-000@homegroups-e2e.com"
 - hideKeyboard
 - tapOn:
-    id: "register-password-input"
+    id: "auth-modal-password-input"
 - inputText: "TestPassword123!"
 - hideKeyboard
 - tapOn:
-    id: "register-confirm-password-input"
+    id: "auth-modal-confirm-password-input"
 - inputText: "TestPassword123!"
 - hideKeyboard
 - tapOn:
-    id: "register-next-button"
-# Step 2 — profile
-- tapOn:
-    id: "register-displayname-input"
-- inputText: "E2E Tester"
-- hideKeyboard
-- tapOn:
-    id: "register-continue-button"
-# Step 3 — terms. Only the Terms checkbox has a testID; the Privacy Policy checkbox has
-# none. Both must be checked for "register-create-account-button" to pass validation.
-# Disambiguated via Maestro's `index` on the shared text "I agree to the" (appears on both
-# checkboxes). NEEDS LIVE VERIFICATION.
-- tapOn:
-    id: "register-terms-checkbox"
-- tapOn:
-    text: "I agree to the"
-    index: 1
-    optional: true
-- tapOn:
-    id: "register-create-account-button"
+    id: "auth-modal-signup-button"
 - extendedWaitUntil:
     visible:
       id: "group-list-screen"

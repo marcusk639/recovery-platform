@@ -50,5 +50,12 @@ appId: org.recoveryconnect
 - assertVisible: "Secure"
 # STRIPE BOUNDARY: do not interact further inside the WebView — a real Stripe test-key
 # checkout is out of Maestro's reliable-selector territory (third-party page).
-- runFlow:
-    file: ../subflows/logout.yaml
+#
+# NOTE: unlike every other flow in this suite, this flow does NOT end with
+# ../subflows/logout.yaml. SubscriptionWebView renders inside a full-screen React Native
+# <Modal> (SubscriptionWebView.tsx:228) that covers the bottom tab bar, and logout.yaml's
+# first step (tapOn: "Profile") targets that tab bar. With the modal still open over the
+# Stripe checkout, "Profile" is not tappable, so logout would fail here. This flow's coverage
+# goal — reaching the Stripe boundary — is already achieved by the assertion above; there is
+# no in-scope way back out of the modal to reach Profile/Sign Out. Do not re-add the logout
+# call.
