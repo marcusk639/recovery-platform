@@ -1,0 +1,71 @@
+appId: org.recoveryconnect
+---
+# Flow: Treasurer initiates a role handoff to another member, through both native confirm
+# alerts. Full "completion" (new treasurer accepting, then the original treasurer
+# confirming via HandoffConfirmationScreen — which has NO testIDs at all) is a two-account,
+# multi-session flow that cannot be exercised end-to-end from a single Maestro run; this
+# flow covers everything a single session can prove.
+# Navigation base proven in e2e/screens/homegroup/treasury-handoff.spec.js.
+# Run: maestro test homegroups/mobile/maestro/flows/treasurer-handoff-completion.yaml
+#
+# Requires the logged-in account to hold the Treasurer role in the target group
+# (InitiateHandoffScreen gates the initiate button on this; treasury-handoff.spec.js
+# itself "skips gracefully" if the test account isn't treasurer — same caveat applies here.
+# NEEDS LIVE VERIFICATION: seed the test-treasurer persona, see maestro/README.md).
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-treasurer@homegroups-e2e.com
+      PASSWORD: TestPassword123!
+- tapOn: "Home"
+- extendedWaitUntil:
+    visible:
+      id: "group-list-screen"
+    timeout: 15000
+- tapOn:
+    id: "group-list"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: "group-info-section"
+    timeout: 15000
+- tapOn:
+    id: "group-overview-treasury-tile"
+- extendedWaitUntil:
+    visible:
+      id: "treasury-summary-section"
+    timeout: 15000
+- assertVisible:
+    id: "treasury-initiate-handoff-button"
+- tapOn:
+    id: "treasury-initiate-handoff-button"
+- extendedWaitUntil:
+    visible:
+      text: "Transfer Treasurer Role"
+    timeout: 15000
+- assertVisible:
+    id: "handoff-member-list"
+# Member rows have NO testID — selecting by list position. NEEDS LIVE VERIFICATION:
+# confirm the group has at least one other member eligible for handoff, and that index 0
+# is a real row (not the empty state).
+- tapOn:
+    id: "handoff-member-list"
+    index: 0
+# Bottom action button (text "Initiate Handoff") triggers
+# Alert.alert('Confirm Handoff', ..., [Cancel, {text:'Initiate Handoff'}]). The two taps
+# below hit the screen button then the alert's confirm button, which share the same text.
+- tapOn: "Initiate Handoff"
+- tapOn:
+    text: "Initiate Handoff"
+    optional: true
+# Success Alert.alert('Handoff Initiated', ...) with a single "OK" button, then
+# navigation.goBack() returns to Treasury.
+- tapOn:
+    text: "OK"
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: "treasury-summary-section"
+    timeout: 15000
+- runFlow:
+    file: ../subflows/logout.yaml

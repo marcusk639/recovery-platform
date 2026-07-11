@@ -1,0 +1,63 @@
+appId: org.recoveryconnect
+---
+# Flow: Admin creates a new group-conscience vote and casts a vote on it.
+# Navigation base proven in e2e/screens/homegroup/group-conscience.spec.js
+# ("group-overview-conscience-tile" -> "Group Conscience" -> "new-vote-button").
+# Run: maestro test homegroups/mobile/maestro/flows/conscience-vote-create-and-cast.yaml
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-admin@homegroups-e2e.com
+      PASSWORD: TestPassword123!
+- tapOn: "Home"
+- extendedWaitUntil:
+    visible:
+      id: "group-list-screen"
+    timeout: 15000
+- tapOn:
+    id: "group-list"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: "group-info-section"
+    timeout: 15000
+- tapOn:
+    id: "group-overview-conscience-tile"
+- extendedWaitUntil:
+    visible:
+      text: "Group Conscience"
+    timeout: 15000
+- assertVisible:
+    id: "new-vote-button"
+- tapOn:
+    id: "new-vote-button"
+- extendedWaitUntil:
+    visible:
+      id: "create-conscience-vote-screen"
+    timeout: 15000
+- tapOn:
+    id: "vote-title-input"
+- inputText: "E2E Test Motion - Change meeting day?"
+- hideKeyboard
+- tapOn:
+    id: "vote-description-input"
+- inputText: "Automated Maestro flow - safe to ignore/close."
+- hideKeyboard
+# Vote options default to ["Yes", "No", "Abstain"] — leaving them unedited is intentional.
+- tapOn:
+    id: "create-vote-submit-button"
+- extendedWaitUntil:
+    visible:
+      text: "Group Conscience"
+    timeout: 15000
+# Cast a vote on the "Yes" option. Real testID is `option-${vote.id}-${option}` — vote.id
+# is an unknown Firestore doc ID at authoring time. NEEDS LIVE VERIFICATION: if the group
+# already has another open vote with a "Yes" option, this text match is ambiguous;
+# index:0 assumes newest-first ordering, typical but not confirmed from source alone.
+- assertVisible: "E2E Test Motion - Change meeting day?"
+- tapOn:
+    text: "Yes"
+    index: 0
+- assertVisible: "Your vote:"
+- runFlow:
+    file: ../subflows/logout.yaml
