@@ -12,6 +12,13 @@ appId: org.recoveryconnect
 # (InitiateHandoffScreen gates the initiate button on this; treasury-handoff.spec.js
 # itself "skips gracefully" if the test account isn't treasurer — same caveat applies here.
 # NEEDS LIVE VERIFICATION: seed the test-treasurer persona, see maestro/README.md).
+#
+# ADDITIONAL GATE: GroupOverviewScreen.tsx:283-289's navigateToGroupTreasury() redirects to
+# SubscriptionUpgrade instead of the treasury screen when the current user is BOTH a group
+# admin AND the group lacks an active subscription/trial. This is separate from (and earlier
+# than) the treasurer-role gate above. The test-treasurer persona must NOT also be a group
+# admin on a non-subscribed/non-trial group, or this flow will be redirected to
+# SubscriptionUpgrade instead of reaching treasury-summary-section.
 - runFlow:
     file: ../subflows/login.yaml
     env:
@@ -45,9 +52,15 @@ appId: org.recoveryconnect
     timeout: 15000
 - assertVisible:
     id: "handoff-member-list"
-# Member rows have NO testID — selecting by list position. NEEDS LIVE VERIFICATION:
-# confirm the group has at least one other member eligible for handoff, and that index 0
-# is a real row (not the empty state).
+# InitiateHandoffScreen.tsx:221's handoff-member-list is a single, un-repeated container
+# View wrapping multiple untagged member rows — not a FlatList with per-item testIDs. This
+# is NOT indexed-row-selection: Maestro resolves the one testID match by tapping the center
+# of its bounding box, landing on whichever row sits at the visual midpoint (not "row 0").
+# Likely harmless since the flow doesn't care which member is picked, but a future
+# improvement would be adding per-row testIDs (e.g. handoff-member-{userId}) to
+# InitiateHandoffScreen.tsx for intentional selection. NEEDS LIVE VERIFICATION: confirm the
+# group has at least one other member eligible for handoff (i.e. the container isn't
+# showing only the empty state).
 - tapOn:
     id: "handoff-member-list"
     index: 0

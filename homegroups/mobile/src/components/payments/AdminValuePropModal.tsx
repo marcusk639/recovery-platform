@@ -83,13 +83,14 @@ const AdminValuePropModal: React.FC<AdminValuePropModalProps> = ({
       animationType="slide"
       presentationStyle="pageSheet"
       onRequestClose={onClose}>
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} testID="admin-value-prop-modal">
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.closeButton}
             onPress={onClose}
-            hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
+            hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
+            testID="admin-value-prop-close-button">
             <Icon name="close" size={24} color={theme.colors.neutral.grey800} />
           </TouchableOpacity>
           <TouchableOpacity onPress={onContinue}>
@@ -146,7 +147,8 @@ const AdminValuePropModal: React.FC<AdminValuePropModalProps> = ({
           <TouchableOpacity
             style={styles.ctaButton}
             onPress={onContinue}
-            activeOpacity={0.8}>
+            activeOpacity={0.8}
+            testID="admin-value-prop-start-trial-button">
             <Text style={styles.ctaText}>Start Free Trial</Text>
             <Icon
               name="arrow-right"

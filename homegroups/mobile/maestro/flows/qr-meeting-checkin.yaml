@@ -1,0 +1,55 @@
+appId: org.recoveryconnect
+---
+# Flow: Group admin opens a meeting's QR check-in code from the schedule screen.
+# Navigation base (Home -> group-list -> group-info-section) proven in
+# e2e/screens/homegroup/secretary-toolkit.spec.js; the schedule -> QR path itself was
+# traced through GroupScheduleScreen.tsx and MeetingQRCodeScreen.tsx source (not covered
+# by any existing Detox spec).
+# Run: maestro test homegroups/mobile/maestro/flows/qr-meeting-checkin.yaml
+#
+# Requires the account to be a group ADMIN (the QR icon only renders when
+# isCurrentUserAdmin is true, GroupScheduleScreen.tsx) and the group to have at least one
+# meeting row.
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-admin@homegroups-e2e.com
+      PASSWORD: TestPassword123!
+- tapOn: "Home"
+- extendedWaitUntil:
+    visible:
+      id: "group-list-screen"
+    timeout: 15000
+- tapOn:
+    id: "group-list"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: "group-info-section"
+    timeout: 15000
+- tapOn:
+    id: "group-overview-view-schedule-button"
+# GroupScheduleScreen has no screen-level testID; wait on the first meeting row instead.
+# NEEDS LIVE VERIFICATION: confirm regex `id` matching is supported by the installed
+# Maestro CLI version.
+- extendedWaitUntil:
+    visible:
+      id: "meeting-item-.*"
+    timeout: 15000
+# The QR TouchableOpacity has NO testID — only accessibilityLabel="Show QR code".
+# NEEDS LIVE VERIFICATION: Maestro's text matcher generally also matches
+# accessibilityLabel/content-description; confirm on-device.
+- tapOn:
+    text: "Show QR code"
+- extendedWaitUntil:
+    visible:
+      id: "qr-code-screen"
+    timeout: 15000
+- assertVisible:
+    id: "checkin-url"
+- assertVisible:
+    id: "share-btn"
+- assertVisible:
+    id: "copy-btn"
+- runFlow:
+    file: ../subflows/logout.yaml

@@ -1,0 +1,27 @@
+# Reusable logout subflow. Assumes an authenticated session (group-list-screen visible).
+#
+# IMPORTANT — this does NOT end on landing-screen/login-screen like regroup's logout does.
+# MainTabNavigator.tsx swaps the Profile tab's component to LimitedProfileScreen (title
+# "Your Profile", CTA "Create Account") once isAuthenticated flips false; the app stays
+# mounted on the Main tab navigator rather than routing back through AppNavigator's auth
+# gate. Confirmed by reading MainTabNavigator.tsx (isLimitedMode / LimitedProfileScreen).
+appId: org.recoveryconnect
+---
+- tapOn:
+    text: "Profile"
+- assertVisible:
+    id: "profile-screen"
+- tapOn:
+    id: "profile-sign-out-button"
+# Native Alert.alert('Sign Out', 'Are you sure...', [Cancel, {text:'Sign Out', destructive}])
+# — ProfileScreen.tsx confirmSignOut(). NEEDS LIVE VERIFICATION: confirm Maestro can target
+# the native alert's destructive button by text on both iOS and Android.
+- tapOn:
+    text: "Sign Out"
+    optional: true
+- extendedWaitUntil:
+    visible:
+      text: "Your Profile"
+    timeout: 15000
+- assertVisible:
+    text: "Create Account"

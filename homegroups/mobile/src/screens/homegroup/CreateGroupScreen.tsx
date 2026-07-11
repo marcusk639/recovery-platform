@@ -676,6 +676,7 @@ const CreateGroupScreen: React.FC = () => {
         onChangeText={setGroupName}
         error={errors.groupName}
         placeholder="Enter group name"
+        testID="create-group-name-input"
       />
       <Input
         label="Description"
@@ -685,6 +686,7 @@ const CreateGroupScreen: React.FC = () => {
         placeholder="Enter group description"
         multiline
         numberOfLines={3}
+        testID="create-group-description-input"
       />
 
       {/* Group Type Selector */}
@@ -889,6 +891,7 @@ const CreateGroupScreen: React.FC = () => {
               value={currentMeeting.name}
               onChangeText={value => updateCurrentMeeting('name', value)}
               placeholder="Enter meeting name"
+              testID="create-group-meeting-name-input"
             />
 
             <DayPicker
@@ -951,6 +954,7 @@ const CreateGroupScreen: React.FC = () => {
                   }
                   error={errors.location}
                   placeholder="Enter location name"
+                  testID="create-group-location-input"
                 />
 
                 <LocationPicker
@@ -1260,6 +1264,7 @@ const CreateGroupScreen: React.FC = () => {
                 onPress={prevStep}
                 variant="secondary"
                 disabled={isLoading}
+                testID="create-group-back-button"
               />
             )}
             <Button
@@ -1271,6 +1276,7 @@ const CreateGroupScreen: React.FC = () => {
               } // Disable if card details incomplete on step 4
               size="medium"
               fullWidth={false}
+              testID="create-group-next-button"
             />
           </View>
 

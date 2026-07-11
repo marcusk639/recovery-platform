@@ -1,0 +1,110 @@
+appId: org.recoveryconnect
+---
+# Flow: Admin creates a new group via the 4-step CreateGroupScreen wizard, stopping at the
+# Stripe CardForm on step 4 (payment boundary — do NOT submit real card details).
+# Entry testID proven in e2e/screens/homegroup/groups.spec.js: "group-list-create-button".
+# Run: maestro test homegroups/mobile/maestro/flows/group-creation.yaml
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-admin@homegroups-e2e.com
+      PASSWORD: TestPassword123!
+- tapOn: "Home"
+- extendedWaitUntil:
+    visible:
+      id: "group-list-screen"
+    timeout: 15000
+- assertVisible:
+    id: "group-list-create-button"
+- tapOn:
+    id: "group-list-create-button"
+- extendedWaitUntil:
+    visible:
+      text: "Group Information"
+    timeout: 15000
+# Step 1 — group basics (testIDs added in Task 1)
+- tapOn:
+    id: "create-group-name-input"
+- inputText: "E2E Test Homegroup"
+- hideKeyboard
+- tapOn:
+    id: "create-group-description-input"
+- inputText: "Created by an automated Maestro flow."
+- hideKeyboard
+- tapOn:
+    id: "create-group-next-button"
+# Step 2 — meeting details (day/time are required by validateStep2; format is optional)
+- tapOn: "Wed"
+- tapOn: "7:00 PM"
+- tapOn:
+    id: "create-group-meeting-name-input"
+- inputText: "Weekly Meeting"
+- hideKeyboard
+# Meeting Location subsection (still step 2). Online toggle defaults to "No" (in-person) —
+# leave it as-is since that's the path this flow is built for.
+- tapOn:
+    id: "create-group-location-input"
+- inputText: "Community Center"
+- hideKeyboard
+# STOPPING POINT: currentMeeting.address is also required by validateStep2, and can only be
+# set via LocationPicker's live Google Places Autocomplete (network-dependent, no testID on
+# its internal input or suggestion list — third-party library internals). This is not
+# reliably automatable without adding a testID upstream and accepting real-network flakiness.
+# NEEDS LIVE VERIFICATION: attempt the address search manually first to confirm whether
+# LocationPicker's TextInput is reachable by placeholder text ("Search for a location") and
+# whether a suggestion can be selected by index before scripting it here.
+# AMBIGUOUS FAILURE ZONE: everything from here through the address-suggestion tap below is
+# flaky/network-dependent (live Google Places Autocomplete, no testID). If the flow goes red
+# at or after this point, it does NOT necessarily mean an app regression — check Places-proxy
+# health and network status first before assuming the $12/copy/day-time assertions below it
+# broke.
+# Note: Maestro's `inputText` command does not reliably honor `optional: true` (as of the
+# Maestro version this flow targets, the object-form parser silently drops the `optional` key
+# for inputText), so making it optional in isolation cannot be trusted to fail gracefully. The
+# whole tap+type+suggestion sequence is instead wrapped in a single `when`-guarded runFlow:
+# if the search field isn't visible, the entire block is skipped (no tap, no inputText, so
+# there's no chance of the confusing "no focused view" error); only the suggestion tap inside
+# stays independently optional since the suggestion list is genuinely network-dependent even
+# when the search field itself is present.
+- runFlow:
+    when:
+      visible:
+        text: "Search for a location"
+    commands:
+      - tapOn:
+          text: "Search for a location"
+      - inputText: "123 Main St, Springfield"
+      - extendedWaitUntil:
+          visible:
+            text: "Springfield"
+          timeout: 8000
+          optional: true
+      - tapOn:
+          text: "Springfield"
+          index: 0
+          optional: true
+# If the address suggestion above didn't resolve (search field wasn't visible, or the
+# suggestion never appeared), the wizard will still be on step 2 and the assertions below
+# will correctly fail loudly — that's the honest outcome until this is live-verified, rather
+# than a false pass.
+- tapOn:
+    id: "create-group-next-button"
+- extendedWaitUntil:
+    visible:
+      text: "Group Location"
+    timeout: 10000
+# Step 3 — group location (real step, distinct from step 2's meeting location above).
+# CreateGroupScreen.tsx:1102-1186 — only rendered when useCustomGroupLocation is toggled on;
+# defaults to reusing the meeting location otherwise. Advancing without toggling it should
+# reuse the meeting location and proceed directly.
+- tapOn:
+    id: "create-group-next-button"
+# Step 4 — payment info. Non-multi-group-user copy confirmed via CreateGroupScreen.tsx:1190-1211
+# (no "$12" in this branch — that string only appears for existing multi-group admins).
+- assertVisible:
+    id: "create-group-card-form"
+- assertVisible: "A subscription is required to create a new group"
+# STRIPE BOUNDARY: do not fill card details or tap create-group-next-button again on this
+# step — title flips to "Create Group" here and would submit a real Stripe PaymentMethod.
+- runFlow:
+    file: ../subflows/logout.yaml

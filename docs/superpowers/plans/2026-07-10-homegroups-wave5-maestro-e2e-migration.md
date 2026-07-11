@@ -213,7 +213,6 @@ Maestro flows for the Homegroups mobile app (`appId: org.recoveryconnect`).
 ```bash
 maestro test homegroups/mobile/maestro/flows/invite-code-join.yaml
 ```
-````
 
 ## Run the whole suite
 
@@ -247,7 +246,6 @@ before removing `continue-on-error: true` from the CI job.
 Detox (`homegroups/mobile/e2e/`) is not being removed. Per `e2e-maestro/README.md`,
 both frameworks coexist; migrate a Detox spec's coverage to Maestro only once the
 equivalent Maestro flow is proven reliable in CI.
-
 ````
 
 - [ ] **Step 5: Commit**
@@ -255,7 +253,7 @@ equivalent Maestro flow is proven reliable in CI.
 ```bash
 git add homegroups/mobile/maestro/config.yaml homegroups/mobile/maestro/subflows/login.yaml homegroups/mobile/maestro/subflows/logout.yaml homegroups/mobile/maestro/README.md
 git commit -m "test(homegroups-mobile): scaffold Maestro workspace with shared login/logout subflows"
-````
+```
 
 ---
 

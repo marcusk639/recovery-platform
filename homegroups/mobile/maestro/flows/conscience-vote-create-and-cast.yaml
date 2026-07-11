@@ -46,10 +46,25 @@ appId: org.recoveryconnect
 # Vote options default to ["Yes", "No", "Abstain"] — leaving them unedited is intentional.
 - tapOn:
     id: "create-vote-submit-button"
+# CreateConscienceVoteScreen.tsx:86-95 shows a blocking native
+# Alert.alert('Vote Created', ..., [{text: 'OK', onPress: () => navigation.goBack()}]) —
+# navigation.goBack() only fires once "OK" is tapped. optional:true since native alert
+# button-matching can be platform-variable (matches this plan's established pattern elsewhere).
+- tapOn:
+    text: "OK"
+    optional: true
 - extendedWaitUntil:
     visible:
       text: "Group Conscience"
     timeout: 15000
+# GroupConscienceScreen.tsx has no focus-listener/useFocusEffect — only a mount-time
+# useEffect that fetches votes once (confirmed by source read). The screen instance we
+# land back on via navigation.goBack() is the same stale mount, so it won't include the
+# vote just created. Pull-to-refresh forces a refetch. Do NOT remove this step to "clean
+# up" the flow — it is covering a real app-code gap, not a flow-authoring choice.
+- swipe:
+    direction: DOWN
+    duration: 500
 # Cast a vote on the "Yes" option. Real testID is `option-${vote.id}-${option}` — vote.id
 # is an unknown Firestore doc ID at authoring time. NEEDS LIVE VERIFICATION: if the group
 # already has another open vote with a "Yes" option, this text match is ambiguous;
