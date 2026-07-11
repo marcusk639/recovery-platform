@@ -189,3 +189,42 @@ jobs:
           api-key: ${{ secrets.MAESTRO_CLOUD_API_KEY }}
           app-file: regroup/mobile/android/app/build/outputs/apk/debug/app-debug.apk
           flow-file: e2e-maestro/regroup/login-and-view-dashboard.yaml
+
+  homegroups-maestro-smoke:
+    name: Maestro Cloud — smoke tests (homegroups Android)
+    needs: [recovery-api, homegroups-functions, regroup-functions, detox-recovery]
+    runs-on: ubuntu-latest
+    # Only run on PRs — see the comment on the regroup maestro-smoke job above for why
+    # this check happens at the step level via `if:`, not the job level.
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: homegroups/mobile/package-lock.json
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install homegroups/mobile dependencies
+        run: cd homegroups/mobile && npm ci
+
+      - name: Build homegroups Android debug APK
+        run: cd homegroups/mobile/android && ./gradlew assembleDebug --no-daemon
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx4g"
+
+      - name: Maestro smoke — homegroups (invite-code-join)
+        continue-on-error: true
+        uses: mobile-dev-inc/action-maestro-cloud@v1
+        with:
+          api-key: ${{ secrets.MAESTRO_CLOUD_API_KEY }}
+          app-file: homegroups/mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          flow-file: homegroups/mobile/maestro/flows/invite-code-join.yaml
