@@ -19,7 +19,7 @@ npm run deploy:list               # List functions that would be deployed
 
 Two function categories live under `src/`:
 
-- **Callable** (`src/callable/`, 90 total): invoked directly by mobile and web clients via `firebase.functions().httpsCallable(name)`.
+- **Callable** (`src/callable/`, 91 total): invoked directly by mobile and web clients via `firebase.functions().httpsCallable(name)`.
 - **Triggers** (`src/triggers/`): event-driven — Firestore document writes (`firestore/`, 17 active + 2 commented out: onGroupAdminUpdate, onGroupCreateFetchMeetings), auth events (`auth/onUserCreated.ts`), Pub/Sub scheduled crons (`pubsub/`, 14 jobs), and one legacy `scheduled/scheduledAnnouncementPublisher.ts`.
 
 HTTP-only functions live in `src/http/` and are NOT callables:
@@ -28,6 +28,10 @@ HTTP-only functions live in `src/http/` and are NOT callables:
 - `stripeWebhook.ts` — exports both `stripeWebhook` and `stripeConnectWebhook`; authenticated via Stripe signature verification.
 
 Shared utilities live in `src/utils/`: `firebase.ts`, `stripe.ts`, `stripeUtils.ts`, `location.ts`. All exports are wired through `src/index.ts`.
+
+### Callable auth/validation
+
+All callables use the shared `requireAuth`/`validateData` wrapper from `src/utils/callableWrapper.ts` (rolled out in Wave 6) for the base "is there a signed-in caller" check and, where client input is written to Firestore, Zod schema validation. Group-admin, role, ownership, and custom-claim checks remain individual per-callable business logic — the wrapper does not attempt to unify those. `getPublicGroupProfile.ts` and `submitPartnershipLead.ts` are intentionally unauthenticated by design and do not use `requireAuth`.
 
 ## Domain Rules
 
