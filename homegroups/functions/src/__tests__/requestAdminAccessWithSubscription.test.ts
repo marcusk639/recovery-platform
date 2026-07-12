@@ -196,7 +196,7 @@ function setDoc(path: string, data: Record<string, unknown> | null) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function makeRequest(
   uid: string | null,
-  data: Record<string, unknown> = {}
+  data: Record<string, unknown> = {},
 ): any {
   return {
     auth: uid ? { uid, token: {} } : null,
@@ -268,7 +268,7 @@ describe("requestAdminAccessWithSubscription — payment method requirement", ()
     });
 
     await expect(
-      (requestAdminAccessWithSubscription as any)(request) // eslint-disable-line @typescript-eslint/no-explicit-any
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
     ).rejects.toMatchObject({ code: "invalid-argument" });
 
     // The vulnerability this guards against: no subscription should ever
@@ -284,13 +284,13 @@ describe("requestAdminAccessWithSubscription — payment method requirement", ()
 
     const result = await (requestAdminAccessWithSubscription as any)(
       // eslint-disable-line @typescript-eslint/no-explicit-any
-      request
+      request,
     );
 
     expect(result).toMatchObject({ success: true });
     expect(mockStripeSubscriptionsCreate).toHaveBeenCalledWith(
       expect.objectContaining({ default_payment_method: PAYMENT_METHOD_ID }),
-      expect.anything()
+      expect.anything(),
     );
   });
 
@@ -310,10 +310,130 @@ describe("requestAdminAccessWithSubscription — payment method requirement", ()
     });
 
     await expect(
-      (requestAdminAccessWithSubscription as any)(request) // eslint-disable-line @typescript-eslint/no-explicit-any
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
     ).resolves.toMatchObject({ success: true });
 
     // Confirms this path truly skips new-subscription creation.
     expect(mockStripeSubscriptionsCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe("requestAdminAccessWithSubscription — compensating-cancellation on transaction failure", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    docStore = {};
+    mockDb = buildMockDb();
+    setupDefaults();
+  });
+
+  it("on a genuine already-claimed race loss: cancels the subscription, reverts the stale group-doc Stripe fields, and rethrows the original error", async () => {
+    // Force the transaction to behave as if another caller claimed the
+    // group first, by overriding runTransaction to simulate the real
+    // isClaimed-check-then-throw behavior after the group doc has been
+    // externally marked claimed between this call's step 2 write and the
+    // transaction running.
+    const originalRunTransaction = mockDb.runTransaction;
+    let transactionAttempt = 0;
+    mockDb.runTransaction = (async (fn: (tx: any) => Promise<unknown>) => {
+      transactionAttempt++;
+      if (transactionAttempt === 1) {
+        // Simulate a concurrent winner claiming the group with its own
+        // Stripe subscription just before this call's transaction reads it.
+        docStore[`groups/${GROUP_ID}`] = {
+          ...docStore[`groups/${GROUP_ID}`],
+          isClaimed: true,
+          admins: ["winner-user"],
+          stripeSubscriptionId: "sub_winner", // winner's own write already landed
+          subscriptionStatus: "trialing",
+        };
+      }
+      return originalRunTransaction(fn);
+    }) as typeof mockDb.runTransaction;
+
+    mockStripeSubscriptionsCancel.mockResolvedValue({});
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      paymentMethodId: PAYMENT_METHOD_ID,
+    });
+
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+
+    // This call's freshly-created subscription was canceled.
+    expect(mockStripeSubscriptionsCancel).toHaveBeenCalledWith("sub_test");
+
+    // The winner's Stripe fields were NOT clobbered — the doc still shows
+    // the winner's subscription, not reverted/nulled.
+    const finalGroup = docStore[`groups/${GROUP_ID}`] as Record<
+      string,
+      unknown
+    >;
+    expect(finalGroup.stripeSubscriptionId).toBe("sub_winner");
+    expect(finalGroup.admins).toEqual(["winner-user"]);
+  });
+
+  it("on an unexpected (non-race) transaction failure: cancels the subscription, reverts THIS call's own stale group-doc Stripe fields, and throws a generic internal error instead of leaking the raw error", async () => {
+    mockDb.runTransaction = (async () => {
+      throw new Error("DEADLINE_EXCEEDED: transaction timed out");
+    }) as typeof mockDb.runTransaction;
+
+    mockStripeSubscriptionsCancel.mockResolvedValue({});
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      paymentMethodId: PAYMENT_METHOD_ID,
+    });
+
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).rejects.toMatchObject({ code: "internal" });
+
+    expect(mockStripeSubscriptionsCancel).toHaveBeenCalledWith("sub_test");
+
+    // This call's own stale Stripe fields were reverted, not left trusting
+    // a subscription that no longer exists.
+    const finalGroup = docStore[`groups/${GROUP_ID}`] as Record<
+      string,
+      unknown
+    >;
+    expect(finalGroup.stripeSubscriptionId).toBeNull();
+    expect(finalGroup.subscriptionStatus).toBeNull();
+  });
+
+  it("retry after an unexpected transaction failure creates a fresh subscription rather than trusting stale data", async () => {
+    mockDb.runTransaction = (async () => {
+      throw new Error("DEADLINE_EXCEEDED: transaction timed out");
+    }) as typeof mockDb.runTransaction;
+    mockStripeSubscriptionsCancel.mockResolvedValue({});
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      paymentMethodId: PAYMENT_METHOD_ID,
+    });
+
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).rejects.toMatchObject({ code: "internal" });
+
+    // Now let the retry succeed normally.
+    mockDb.runTransaction = buildMockDb().runTransaction;
+    mockStripeSubscriptionsCreate.mockResolvedValue({
+      id: "sub_retry",
+      status: "trialing",
+      items: { data: [{ id: "si_retry" }] },
+      latest_invoice: { payment_intent: {} },
+    });
+
+    const retryResult = await (requestAdminAccessWithSubscription as any)(
+      // eslint-disable-line @typescript-eslint/no-explicit-any
+      request,
+    );
+
+    expect(retryResult).toMatchObject({ success: true });
+    // A NEW subscription was created on retry — proves the retry did not
+    // treat the reverted (canceled) subscription as still valid.
+    expect(mockStripeSubscriptionsCreate).toHaveBeenCalledTimes(2); // once in the failed attempt, once on retry
   });
 });
