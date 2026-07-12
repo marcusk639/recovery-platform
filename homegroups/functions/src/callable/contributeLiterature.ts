@@ -6,6 +6,7 @@ import {
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { db } from "../utils/firebase";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface ContributeLiteratureInput {
   title: string;
@@ -35,12 +36,8 @@ export const contributeLiterature = onCall(
   async (
     request: CallableRequest<ContributeLiteratureInput>,
   ): Promise<ContributeLiteratureOutput> => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Must be authenticated.");
-    }
-
     const { data } = request;
-    const callerId = request.auth.uid;
+    const callerId = requireAuth(request);
 
     if (!data.title || !data.title.trim()) {
       throw new HttpsError("invalid-argument", "title is required.");

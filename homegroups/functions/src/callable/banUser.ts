@@ -7,6 +7,7 @@ import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
 import * as admin from "firebase-admin";
 import { assertGroupActive } from "../utils/subscriptionGuard";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface BanUserData {
   userId: string;
@@ -30,17 +31,7 @@ interface BanUserResult {
 export const banUser = onCall(
   async (request: CallableRequest<BanUserData>): Promise<BanUserResult> => {
     const data = request.data;
-    const context = request.auth;
-
-    // Verify caller is authenticated
-    if (!context) {
-      throw new HttpsError(
-        "unauthenticated",
-        "User must be authenticated to ban users.",
-      );
-    }
-
-    const callerId = context.uid;
+    const callerId = requireAuth(request);
 
     // Validate required fields
     if (!data.userId || !data.userName || !data.reason) {
