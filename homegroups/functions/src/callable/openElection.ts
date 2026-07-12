@@ -7,6 +7,7 @@ import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { db, messaging } from "../utils/firebase";
 import { assertGroupActive } from "../utils/subscriptionGuard";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface OpenElectionData {
   groupId: string;
@@ -29,14 +30,10 @@ export const openElection = onCall(
   async (
     request: CallableRequest<OpenElectionData>,
   ): Promise<OpenElectionResult> => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Must be authenticated.");
-    }
-
     const { data } = request;
-    const callerId = request.auth.uid;
+    const callerId = requireAuth(request);
     const callerName =
-      request.auth.token.name || request.auth.token.email || "Admin";
+      request.auth?.token?.name || request.auth?.token?.email || "Admin";
 
     if (!data.groupId) {
       throw new HttpsError("invalid-argument", "groupId is required.");

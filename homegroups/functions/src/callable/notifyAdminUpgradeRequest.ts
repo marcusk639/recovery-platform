@@ -7,6 +7,7 @@ import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
 import { getMessaging } from "firebase-admin/messaging";
 import * as admin from "firebase-admin";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface NotifyAdminUpgradeRequestData {
   groupId: string;
@@ -18,11 +19,8 @@ const RATE_LIMIT_HOURS = 24;
 export const notifyAdminUpgradeRequest = onCall(
   async (request: CallableRequest<NotifyAdminUpgradeRequestData>) => {
     const { groupId, featureName } = request.data;
-    const userId = request.auth?.uid;
+    const userId = requireAuth(request);
 
-    if (!userId) {
-      throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
     if (!groupId) {
       throw new HttpsError("invalid-argument", "groupId is required.");
     }

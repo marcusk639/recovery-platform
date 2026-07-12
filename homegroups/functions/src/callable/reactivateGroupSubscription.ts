@@ -11,6 +11,7 @@ import {
   getDefaultPriceForProduct,
 } from "../utils/stripe";
 import * as admin from "firebase-admin";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface ReactivateSubscriptionData {
   groupId: string;
@@ -31,11 +32,8 @@ export const reactivateGroupSubscription = onCall(
   },
   async (request: CallableRequest<ReactivateSubscriptionData>) => {
     const { groupId, paymentMethodId } = request.data;
-    const userId = request.auth?.uid;
+    const userId = requireAuth(request);
 
-    if (!userId) {
-      throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
     if (!groupId) {
       throw new HttpsError("invalid-argument", "Group ID is required.");
     }
