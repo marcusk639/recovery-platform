@@ -6,6 +6,7 @@ import {
 import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
 import * as admin from "firebase-admin";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface GrantSponsorStepAccessData {
   sponsorId: string;
@@ -23,11 +24,7 @@ interface GrantSponsorStepAccessData {
 export async function grantSponsorStepAccessHandler(
   request: CallableRequest<GrantSponsorStepAccessData>,
 ): Promise<{ success: boolean }> {
-  const uid = request.auth?.uid;
-
-  if (!uid) {
-    throw new HttpsError("unauthenticated", "User must be logged in.");
-  }
+  const uid = requireAuth(request);
 
   const { sponsorId, allow } = request.data;
 

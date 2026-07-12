@@ -170,7 +170,7 @@ describe("joinGroupByInviteCode — D-10 v2 migration", () => {
         auth: undefined,
         data: { code: VALID_CODE },
       }),
-    ).rejects.toThrow(/log(ged)? in/i);
+    ).rejects.toMatchObject({ code: "unauthenticated" });
   });
 
   // ---- Input validation ----

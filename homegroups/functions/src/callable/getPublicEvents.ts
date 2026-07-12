@@ -5,6 +5,7 @@ import {
 } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { db } from "../utils/firebase";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface GetPublicEventsData {
   // Optional: if provided, we could filter by radius; omitted for simplified scope
@@ -47,9 +48,7 @@ export const getPublicEvents = onCall(
   async (
     request: CallableRequest<GetPublicEventsData>,
   ): Promise<GetPublicEventsResult> => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Must be authenticated.");
-    }
+    requireAuth(request);
 
     const now = admin.firestore.Timestamp.now();
     const thirtyDaysFromNow = admin.firestore.Timestamp.fromDate(

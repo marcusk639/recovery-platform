@@ -7,6 +7,7 @@ import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { db, messaging } from "../utils/firebase";
 import { assertGroupActive } from "../utils/subscriptionGuard";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface InitiateRemovalData {
   groupId: string;
@@ -23,13 +24,8 @@ export const initiateAdminRemoval = onCall(
   async (
     request: CallableRequest<InitiateRemovalData>,
   ): Promise<InitiateRemovalResult> => {
-    const { data, auth: context } = request;
-
-    if (!context) {
-      throw new HttpsError("unauthenticated", "Must be authenticated.");
-    }
-
-    const callerId = context.uid;
+    const { data } = request;
+    const callerId = requireAuth(request);
 
     if (!data.groupId || !data.targetAdminId || !data.reason?.trim()) {
       throw new HttpsError(
