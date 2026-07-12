@@ -1,6 +1,11 @@
-import { onCall, CallableRequest, HttpsError } from "firebase-functions/v2/https";
+import {
+  onCall,
+  CallableRequest,
+  HttpsError,
+} from "firebase-functions/v2/https";
 import { db } from "../utils/firebase";
 import * as admin from "firebase-admin";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface DeaffiliateGroupData {
   intergroupId: string;
@@ -13,15 +18,18 @@ interface DeaffiliateGroupResult {
 
 export const deaffiliateGroupFromIntergroup = onCall(
   { region: "us-central1" },
-  async (request: CallableRequest<DeaffiliateGroupData>): Promise<DeaffiliateGroupResult> => {
-    if (!request.auth) throw new HttpsError("unauthenticated", "Must be signed in");
+  async (
+    request: CallableRequest<DeaffiliateGroupData>,
+  ): Promise<DeaffiliateGroupResult> => {
+    const uid = requireAuth(request);
 
     const { intergroupId, groupId } = request.data;
     if (!intergroupId || !groupId) {
-      throw new HttpsError("invalid-argument", "intergroupId and groupId are required");
+      throw new HttpsError(
+        "invalid-argument",
+        "intergroupId and groupId are required",
+      );
     }
-
-    const uid = request.auth.uid;
 
     // Load intergroup — only owner can deaffiliate
     const intergroupRef = db.collection("intergroups").doc(intergroupId);
@@ -32,9 +40,15 @@ export const deaffiliateGroupFromIntergroup = onCall(
     const intergroupData = intergroupSnap.data()!;
 
     // Check ownership via members subcollection
-    const ownerMemberSnap = await intergroupRef.collection("members").doc(uid).get();
-    if (!ownerMemberSnap.exists || ownerMemberSnap.data()?.role !== 'owner') {
-      throw new HttpsError("permission-denied", "Only the intergroup owner can remove affiliated groups");
+    const ownerMemberSnap = await intergroupRef
+      .collection("members")
+      .doc(uid)
+      .get();
+    if (!ownerMemberSnap.exists || ownerMemberSnap.data()?.role !== "owner") {
+      throw new HttpsError(
+        "permission-denied",
+        "Only the intergroup owner can remove affiliated groups",
+      );
     }
 
     // Remove groupId from affiliatedGroupIds
@@ -50,7 +64,9 @@ export const deaffiliateGroupFromIntergroup = onCall(
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    console.log(`Group ${groupId} deaffiliated from intergroup ${intergroupId}`);
+    console.log(
+      `Group ${groupId} deaffiliated from intergroup ${intergroupId}`,
+    );
     return { success: true };
-  }
+  },
 );

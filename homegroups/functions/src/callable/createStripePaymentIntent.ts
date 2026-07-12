@@ -8,6 +8,7 @@ import { db } from "../utils/firebase";
 import { stripe, PLATFORM_FEE_PERCENT } from "../utils/stripe";
 import * as admin from "firebase-admin";
 import { Donation } from "../entities/Group";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface PaymentIntentData {
   groupId: string;
@@ -22,8 +23,6 @@ const MAX_DONATION_CENTS = 100_000; // $1,000
 export const createStripePaymentIntent = onCall(
   async (request: CallableRequest<PaymentIntentData>) => {
     const { groupId, amount } = request.data;
-    const userId = request.auth?.uid;
-    const userEmail = request.auth?.token.email;
 
     if (!stripe) {
       throw new HttpsError(
@@ -31,12 +30,8 @@ export const createStripePaymentIntent = onCall(
         "Stripe configuration missing on the server.",
       );
     }
-    if (!userId) {
-      throw new HttpsError(
-        "unauthenticated",
-        "User must be logged in to donate.",
-      );
-    }
+    const userId = requireAuth(request);
+    const userEmail = request.auth?.token.email;
     if (
       !groupId ||
       typeof amount !== "number" ||

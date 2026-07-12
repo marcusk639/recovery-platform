@@ -13,10 +13,10 @@ import {
   assertGroupPriceIsAnnual,
 } from "../utils/stripe";
 import * as admin from "firebase-admin"; // For FieldValue
+import { requireAuth } from "../utils/callableWrapper";
 
 // Hardcoded redirect URLs — never accept these from the client to prevent open redirect attacks.
-const SUCCESS_URL =
-  `${APP_BASE_URL}/subscription/success?session_id={CHECKOUT_SESSION_ID}`;
+const SUCCESS_URL = `${APP_BASE_URL}/subscription/success?session_id={CHECKOUT_SESSION_ID}`;
 const CANCEL_URL = `${APP_BASE_URL}/subscription/cancel`;
 
 interface CreateCheckoutData {
@@ -32,11 +32,8 @@ export const createStripeCheckoutSession = onCall(
   },
   async (request: CallableRequest<CreateCheckoutData>) => {
     const { groupId } = request.data;
-    const userId = request.auth?.uid;
+    const userId = requireAuth(request);
 
-    if (!userId) {
-      throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
     if (!groupId) {
       throw new HttpsError("invalid-argument", "Missing required parameters.");
     }

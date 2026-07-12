@@ -13,6 +13,7 @@ import {
   getDefaultPriceForProduct,
 } from "../utils/stripe";
 import * as admin from "firebase-admin";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface CreateIntergroupData {
   name: string;
@@ -50,8 +51,7 @@ export const createIntergroup = onCall(
   async (
     request: CallableRequest<CreateIntergroupData>,
   ): Promise<CreateIntergroupResult> => {
-    if (!request.auth)
-      throw new HttpsError("unauthenticated", "Must be signed in");
+    const uid = requireAuth(request);
 
     const {
       name,
@@ -108,7 +108,6 @@ export const createIntergroup = onCall(
     if (!isAllowedUrl(successUrl) || !isAllowedUrl(cancelUrl))
       throw new HttpsError("invalid-argument", "Invalid redirect URL");
 
-    const uid = request.auth.uid;
     const productId =
       tier === "tier_a" ? productIdIntergroupA : productIdIntergroupB;
     if (!productId)
@@ -131,8 +130,7 @@ export const createIntergroup = onCall(
       const pendingDoc = pendingQuery.docs[0];
       const pendingData = pendingDoc.data();
       const pendingSessionId = pendingData?.pendingCheckoutSessionId as
-        | string
-        | undefined;
+        string | undefined;
 
       if (pendingSessionId) {
         try {
