@@ -19,7 +19,7 @@ interface GetStripeAccountDetailsData {
 
 export const getStripeAccountDetails = onCall(
   async (request: CallableRequest<GetStripeAccountDetailsData>) => {
-    const userId = requireAuth(request);
+    requireAuth(request);
     const {
       accountId,
       includeBalance = true,

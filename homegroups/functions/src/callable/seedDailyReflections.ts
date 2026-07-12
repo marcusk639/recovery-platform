@@ -27,7 +27,7 @@ interface SeedOutput {
  */
 export const seedDailyReflections = onCall(
   async (request: CallableRequest<SeedInput>): Promise<SeedOutput> => {
-    const uid = requireAuth(request);
+    requireAuth(request);
 
     // Only super admins can seed. Check the superAdmin JWT claim (the
     // authoritative privilege source) rather than the mutable users/{uid}.role

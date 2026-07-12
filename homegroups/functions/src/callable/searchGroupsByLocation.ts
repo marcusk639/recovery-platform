@@ -65,7 +65,7 @@ function calculateDistanceMeters(
 export const searchGroupsByLocation = onCall(
   async (request: CallableRequest<SearchGroupsData>) => {
     const { lat, lng, radius, type } = request.data;
-    const userId = requireAuth(request); // Authenticated user ID
+    requireAuth(request);
 
     // Validate required parameters
     if (lat === undefined || lng === undefined || radius === undefined) {

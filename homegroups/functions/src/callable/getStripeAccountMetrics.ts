@@ -21,7 +21,7 @@ export const getStripeAccountMetrics = onCall(
     region: "us-central1",
   },
   async (request: CallableRequest<GetStripeAccountMetricsData>) => {
-    const userId = requireAuth(request);
+    requireAuth(request);
     const { accountId, startDate, endDate } = request.data;
 
     if (request.auth?.token?.superAdmin !== true) {

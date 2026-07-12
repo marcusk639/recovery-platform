@@ -1,8 +1,4 @@
-import {
-  onCall,
-  CallableRequest,
-  HttpsError,
-} from "firebase-functions/v2/https";
+import { onCall, CallableRequest } from "firebase-functions/v2/https";
 import { db } from "../utils/firebase";
 import { requireAuth } from "../utils/callableWrapper";
 
