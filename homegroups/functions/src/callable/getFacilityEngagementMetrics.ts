@@ -6,6 +6,7 @@ import {
 import * as functions from "firebase-functions";
 import { db } from "../utils/firebase";
 import * as admin from "firebase-admin";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface GetFacilityEngagementMetricsData {
   intergroupId: string;
@@ -37,9 +38,7 @@ const FIRESTORE_IN_BATCH_SIZE = 30;
 export async function getFacilityEngagementMetricsHandler(
   request: CallableRequest<GetFacilityEngagementMetricsData>,
 ): Promise<FacilityEngagementMetrics> {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "Must be signed in");
-  }
+  const uid = requireAuth(request);
 
   const { intergroupId } = request.data ?? {};
   if (!intergroupId || typeof intergroupId !== "string") {
@@ -55,7 +54,7 @@ export async function getFacilityEngagementMetricsHandler(
   }
 
   const ig = intergroupSnap.data()!;
-  if (!ig.adminUids?.includes(request.auth.uid)) {
+  if (!ig.adminUids?.includes(uid)) {
     throw new HttpsError("permission-denied", "Must be a facility admin");
   }
   if (ig.type !== "treatment_center") {

@@ -13,6 +13,7 @@ import { Meeting, MeetingSearchCriteria } from "../entities/Meeting";
 import { fetchDirectoryMeetings } from "../api/recoveryApi";
 import { mapDirectoryToSerialized } from "../utils/directoryMapping";
 import { daysOfWeek } from "../utils/date";
+import { requireAuth } from "../utils/callableWrapper";
 
 // recovery-api service key. The non-secret base URL is read from the
 // RECOVERY_API_BASE_URL env var inside the recoveryApi client.
@@ -259,9 +260,7 @@ function resolveDirectoryDay(dayFilter?: string): number | undefined {
 export const findMeetings = onCall(
   { secrets: [RECOVERY_PLATFORM_API_KEY] },
   async (request: CallableRequest) => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Must be authenticated.");
-    }
+    const uid = requireAuth(request);
 
     // Validate before the try block so invalid-argument is not rewrapped as internal.
     const meetingInput = validateFindMeetingsInput(request.data);
@@ -333,8 +332,8 @@ export const findMeetings = onCall(
               ...(directoryDay !== undefined ? { day: directoryDay } : {}),
             },
             {
-              uid: request.auth.uid,
-              email: request.auth.token?.email,
+              uid,
+              email: request.auth?.token?.email,
             },
             { apiKey: RECOVERY_PLATFORM_API_KEY.value() },
           )

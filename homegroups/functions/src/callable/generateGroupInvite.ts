@@ -7,6 +7,7 @@ import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
 import { APP_BASE_URL } from "../utils/appConfig";
 import * as admin from "firebase-admin";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface GenerateInviteData {
   groupId: string;
@@ -37,11 +38,8 @@ function generateRandomCode(): string {
 export const generateGroupInvite = onCall(
   async (request: CallableRequest<GenerateInviteData>) => {
     const { groupId } = request.data;
-    const inviterUid = request.auth?.uid;
+    const inviterUid = requireAuth(request);
 
-    if (!inviterUid) {
-      throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
     if (!groupId) {
       throw new HttpsError("invalid-argument", "Group ID is required.");
     }

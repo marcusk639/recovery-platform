@@ -4,6 +4,7 @@ import {
   HttpsError,
 } from "firebase-functions/v2/https";
 import { db } from "../utils/firebase";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface SponsorResult {
   userId: string;
@@ -33,11 +34,7 @@ export const getCrossGroupSponsors = onCall(
   async (
     request: CallableRequest<Record<string, never>>,
   ): Promise<GetCrossGroupSponsorsResult> => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Must be authenticated.");
-    }
-
-    const callerId = request.auth.uid;
+    const callerId = requireAuth(request);
 
     // 1. Find all groups the caller is a member of
     const memberDocsSnapshot = await db
