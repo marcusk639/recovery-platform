@@ -7,6 +7,7 @@ import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
 // Note: Removed updateSubscriptionQuantity import - using flat rate pricing, member count doesn't affect subscription cost
 import * as admin from "firebase-admin";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface UpdateMemberCountData {
   groupId: string;
@@ -16,11 +17,8 @@ interface UpdateMemberCountData {
 export const updateGroupMemberCount = onCall(
   async (request: CallableRequest<UpdateMemberCountData>) => {
     const { groupId, newMemberCount } = request.data;
-    const userId = request.auth?.uid;
+    const userId = requireAuth(request);
 
-    if (!userId) {
-      throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
     if (!groupId || newMemberCount === undefined || newMemberCount < 0) {
       throw new HttpsError(
         "invalid-argument",

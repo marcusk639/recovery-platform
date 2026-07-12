@@ -136,7 +136,7 @@ describe("sendAnnouncementNotification — D-2 auth check", () => {
         auth: undefined,
         data: validData,
       }),
-    ).rejects.toThrow(/sign(ed)? in/i);
+    ).rejects.toThrow(/must be authenticated/i);
 
     // And critically: no FCM was sent.
     expect(sanMulticastCalls).toHaveLength(0);

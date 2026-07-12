@@ -6,6 +6,7 @@ import {
 import * as logger from "firebase-functions/logger";
 import { db, messaging } from "../utils/firebase";
 import { pruneStaleTokens } from "../utils/fcm";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface SendAnnouncementNotificationData {
   groupId: string;
@@ -44,18 +45,11 @@ export const sendAnnouncementNotification = onCall(
       );
     }
 
-    // Require authentication
-    if (!request.auth) {
-      throw new HttpsError(
-        "unauthenticated",
-        "You must be signed in to send announcement notifications.",
-      );
-    }
+    // Require authentication. Use the verified auth UID, not the
+    // client-supplied authorId, as the source of truth for who's posting.
+    const authorId = requireAuth(request);
 
     const { groupId, announcementId, title, body } = data;
-    // Use the verified auth UID, not the client-supplied authorId, as the
-    // source of truth for who's posting.
-    const authorId = request.auth.uid;
 
     logger.info(
       `Sending announcement notification for group ${groupId}, announcement ${announcementId}`,

@@ -12,6 +12,7 @@ import {
   getDefaultPriceForProduct,
 } from "../utils/stripe";
 import { logger } from "firebase-functions/v2";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface UpgradeIntergroupTierData {
   intergroupId: string;
@@ -21,10 +22,7 @@ interface UpgradeIntergroupTierData {
 export async function upgradeIntergroupTierHandler(
   request: CallableRequest<UpgradeIntergroupTierData>,
 ): Promise<{ checkoutUrl: string }> {
-  const userId = request.auth?.uid;
-  if (!userId) {
-    throw new HttpsError("unauthenticated", "Must be authenticated.");
-  }
+  const userId = requireAuth(request);
 
   const { intergroupId, pendingUpgradeSessionId } = request.data ?? {};
   if (!intergroupId || typeof intergroupId !== "string") {

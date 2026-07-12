@@ -7,6 +7,7 @@ import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { db } from "../utils/firebase";
 import { REFLECTIONS_365 } from "../utils/reflectionsLibrary";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface SeedInput {
   force?: boolean;
@@ -26,15 +27,13 @@ interface SeedOutput {
  */
 export const seedDailyReflections = onCall(
   async (request: CallableRequest<SeedInput>): Promise<SeedOutput> => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Must be authenticated.");
-    }
+    const uid = requireAuth(request);
 
     // Only super admins can seed. Check the superAdmin JWT claim (the
     // authoritative privilege source) rather than the mutable users/{uid}.role
     // field — setUserAsSuperAdmin writes role:"superAdmin", so the old
     // role==="admin" comparison locked out every real super admin.
-    if (!request.auth.token.superAdmin) {
+    if (!request.auth?.token?.superAdmin) {
       throw new HttpsError(
         "permission-denied",
         "Only super admins can seed daily reflections.",

@@ -6,6 +6,7 @@ import {
 import * as logger from "firebase-functions/logger";
 import { db, auth } from "../utils/firebase";
 import * as admin from "firebase-admin";
+import { requireAuth } from "../utils/callableWrapper";
 
 // Define the expected data type for the request
 interface SetAdminData {
@@ -16,12 +17,9 @@ interface SetAdminData {
 export const setUserAsSuperAdmin = onCall(
   async (request: CallableRequest<SetAdminData>) => {
     // Use request.auth for v2 callable functions signature
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Unauthorized");
-    }
+    const callerUid = requireAuth(request);
 
     // Verify the caller has permission
-    const callerUid = request.auth.uid;
     const callerSnapshot = await auth.getUser(callerUid);
     const callerCustomClaims = callerSnapshot.customClaims || {};
 

@@ -1,12 +1,17 @@
-import { onCall, CallableRequest, HttpsError } from "firebase-functions/v2/https";
+import {
+  onCall,
+  CallableRequest,
+  HttpsError,
+} from "firebase-functions/v2/https";
 import { db, messaging } from "../utils/firebase";
 import * as admin from "firebase-admin";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface SendIntergroupAnnouncementData {
   intergroupId: string;
   title: string;
   content: string;
-  targetGroupIds?: string[];  // Optional subset; defaults to all affiliated groups
+  targetGroupIds?: string[]; // Optional subset; defaults to all affiliated groups
 }
 
 interface SendIntergroupAnnouncementResult {
@@ -16,18 +21,24 @@ interface SendIntergroupAnnouncementResult {
 
 export const sendIntergroupAnnouncement = onCall(
   { region: "us-central1" },
-  async (request: CallableRequest<SendIntergroupAnnouncementData>): Promise<SendIntergroupAnnouncementResult> => {
-    if (!request.auth) throw new HttpsError("unauthenticated", "Must be signed in");
+  async (
+    request: CallableRequest<SendIntergroupAnnouncementData>,
+  ): Promise<SendIntergroupAnnouncementResult> => {
+    const uid = requireAuth(request);
 
     const { intergroupId, title, content, targetGroupIds } = request.data;
     if (!intergroupId || !title || !content) {
-      throw new HttpsError("invalid-argument", "intergroupId, title, and content are required");
+      throw new HttpsError(
+        "invalid-argument",
+        "intergroupId, title, and content are required",
+      );
     }
 
-    const uid = request.auth.uid;
-
     // Load intergroup
-    const intergroupSnap = await db.collection("intergroups").doc(intergroupId).get();
+    const intergroupSnap = await db
+      .collection("intergroups")
+      .doc(intergroupId)
+      .get();
     if (!intergroupSnap.exists) {
       throw new HttpsError("not-found", "Intergroup not found");
     }
@@ -39,11 +50,15 @@ export const sendIntergroupAnnouncement = onCall(
     }
 
     // Subscription must be active
-    if (intergroupData.subscriptionStatus !== 'active') {
-      throw new HttpsError("failed-precondition", "Intergroup subscription must be active to send announcements");
+    if (intergroupData.subscriptionStatus !== "active") {
+      throw new HttpsError(
+        "failed-precondition",
+        "Intergroup subscription must be active to send announcements",
+      );
     }
 
-    const affiliatedGroupIds: string[] = intergroupData.affiliatedGroupIds || [];
+    const affiliatedGroupIds: string[] =
+      intergroupData.affiliatedGroupIds || [];
     const groupIdsToNotify = targetGroupIds
       ? targetGroupIds.filter((id: string) => affiliatedGroupIds.includes(id))
       : affiliatedGroupIds;
@@ -70,14 +85,14 @@ export const sendIntergroupAnnouncement = onCall(
         isPinned: false,
         createdAt: now,
         updatedAt: now,
-        createdBy: intergroupId,  // Attribution to intergroup
+        createdBy: intergroupId, // Attribution to intergroup
         authorName: intergroupData.name,
         groupId,
         userId: uid,
         memberId: uid,
         readBy: [],
         readCount: 0,
-        status: 'published',
+        status: "published",
       });
 
       // Collect FCM tokens for group members
@@ -87,7 +102,7 @@ export const sendIntergroupAnnouncement = onCall(
         .get();
 
       const memberUserIds = membersSnap.docs
-        .map(doc => doc.data().userId as string)
+        .map((doc) => doc.data().userId as string)
         .filter(Boolean);
 
       const tokens: string[] = [];
@@ -97,9 +112,10 @@ export const sendIntergroupAnnouncement = onCall(
           .collection("users")
           .where("__name__", "in", batch)
           .get();
-        usersSnap.docs.forEach(doc => {
+        usersSnap.docs.forEach((doc) => {
           const userData = doc.data();
-          const pushEnabled = userData.notificationSettings?.allowPushNotifications !== false;
+          const pushEnabled =
+            userData.notificationSettings?.allowPushNotifications !== false;
           if (pushEnabled && userData.fcmTokens?.length) {
             tokens.push(...userData.fcmTokens);
           }
@@ -130,5 +146,5 @@ export const sendIntergroupAnnouncement = onCall(
     }
 
     return { sentToGroupCount: groupIdsToNotify.length, notificationsSent };
-  }
+  },
 );
