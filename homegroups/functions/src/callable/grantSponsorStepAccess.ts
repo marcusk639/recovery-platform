@@ -6,12 +6,18 @@ import {
 import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
 import * as admin from "firebase-admin";
-import { requireAuth } from "../utils/callableWrapper";
+import { z } from "zod";
+import { requireAuth, validateData } from "../utils/callableWrapper";
 
 interface GrantSponsorStepAccessData {
   sponsorId: string;
   allow: boolean;
 }
+
+const grantSponsorStepAccessSchema = z.object({
+  sponsorId: z.string().min(1),
+  allow: z.boolean(),
+});
 
 /**
  * Inner handler — exported separately so tests can call it directly without
@@ -26,15 +32,12 @@ export async function grantSponsorStepAccessHandler(
 ): Promise<{ success: boolean }> {
   const uid = requireAuth(request);
 
-  const { sponsorId, allow } = request.data;
-
-  if (!sponsorId) {
-    throw new HttpsError("invalid-argument", "sponsorId is required.");
-  }
-
-  if (typeof allow !== "boolean") {
-    throw new HttpsError("invalid-argument", "allow must be a boolean.");
-  }
+  // sponsorId presence and allow's boolean type are now enforced by
+  // grantSponsorStepAccessSchema; the manual checks they replaced are gone.
+  const { sponsorId, allow } = validateData(
+    grantSponsorStepAccessSchema,
+    request.data,
+  );
 
   // Verify an active sponsorship relationship exists before allowing access changes
   const sponsorshipSnap = await db

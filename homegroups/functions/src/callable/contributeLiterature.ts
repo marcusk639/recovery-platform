@@ -5,8 +5,9 @@ import {
 } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
+import { z } from "zod";
 import { db } from "../utils/firebase";
-import { requireAuth } from "../utils/callableWrapper";
+import { requireAuth, validateData } from "../utils/callableWrapper";
 
 interface ContributeLiteratureInput {
   title: string;
@@ -28,6 +29,27 @@ interface ContributeLiteratureOutput {
   itemId: string;
 }
 
+// .trim() runs before the length/url checks so whitespace-only titles and
+// summaries are rejected (matching the previous `data.title.trim()` /
+// `data.summary.trim().length > 500` checks) and validated.* comes back
+// pre-trimmed for direct use in the Firestore write.
+const contributeLiteratureSchema = z.object({
+  title: z.string().trim().min(1),
+  author: z.string().trim().optional(),
+  type: z.enum([
+    "article",
+    "guide",
+    "pamphlet",
+    "meditation",
+    "prayer",
+    "external_link",
+  ]),
+  summary: z.string().trim().min(1).max(500),
+  externalUrl: z.string().trim().url().optional(),
+  tags: z.array(z.string()).optional(),
+  program: z.string().optional(),
+});
+
 /**
  * contributeLiterature — Any authenticated user can contribute
  * Item is created with isApproved: false until admin review
@@ -36,25 +58,12 @@ export const contributeLiterature = onCall(
   async (
     request: CallableRequest<ContributeLiteratureInput>,
   ): Promise<ContributeLiteratureOutput> => {
-    const { data } = request;
     const callerId = requireAuth(request);
+    const validated = validateData(contributeLiteratureSchema, request.data);
 
-    if (!data.title || !data.title.trim()) {
-      throw new HttpsError("invalid-argument", "title is required.");
-    }
-    if (!data.summary || !data.summary.trim()) {
-      throw new HttpsError("invalid-argument", "summary is required.");
-    }
-    if (data.summary.trim().length > 500) {
-      throw new HttpsError(
-        "invalid-argument",
-        "summary must be 500 characters or fewer.",
-      );
-    }
-    if (!data.type) {
-      throw new HttpsError("invalid-argument", "type is required.");
-    }
-    if (data.type === "external_link" && !data.externalUrl) {
+    // Cross-field validation — Zod's per-field schema can't express "required
+    // only when type === external_link", so this stays as its own check.
+    if (validated.type === "external_link" && !validated.externalUrl) {
       throw new HttpsError(
         "invalid-argument",
         "externalUrl is required for external_link type.",
@@ -66,11 +75,11 @@ export const contributeLiterature = onCall(
 
     const itemData: Record<string, any> = {
       id: itemRef.id,
-      title: data.title.trim(),
-      type: data.type,
+      title: validated.title,
+      type: validated.type,
       source: "contributed",
-      summary: data.summary.trim(),
-      tags: data.tags || [],
+      summary: validated.summary,
+      tags: validated.tags || [],
       contributedBy: callerId,
       isApproved: false,
       saveCount: 0,
@@ -78,9 +87,9 @@ export const contributeLiterature = onCall(
       updatedAt: now,
     };
 
-    if (data.author) itemData.author = data.author.trim();
-    if (data.externalUrl) itemData.externalUrl = data.externalUrl.trim();
-    if (data.program) itemData.program = data.program;
+    if (validated.author) itemData.author = validated.author;
+    if (validated.externalUrl) itemData.externalUrl = validated.externalUrl;
+    if (validated.program) itemData.program = validated.program;
 
     await itemRef.set(itemData);
 

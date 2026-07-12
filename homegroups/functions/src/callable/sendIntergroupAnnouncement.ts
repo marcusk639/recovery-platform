@@ -5,7 +5,8 @@ import {
 } from "firebase-functions/v2/https";
 import { db, messaging } from "../utils/firebase";
 import * as admin from "firebase-admin";
-import { requireAuth } from "../utils/callableWrapper";
+import { z } from "zod";
+import { requireAuth, validateData } from "../utils/callableWrapper";
 
 interface SendIntergroupAnnouncementData {
   intergroupId: string;
@@ -19,6 +20,13 @@ interface SendIntergroupAnnouncementResult {
   notificationsSent: number;
 }
 
+const sendIntergroupAnnouncementSchema = z.object({
+  intergroupId: z.string().min(1),
+  title: z.string().min(1).max(200),
+  content: z.string().min(1).max(2000),
+  targetGroupIds: z.array(z.string()).optional(),
+});
+
 export const sendIntergroupAnnouncement = onCall(
   { region: "us-central1" },
   async (
@@ -26,13 +34,13 @@ export const sendIntergroupAnnouncement = onCall(
   ): Promise<SendIntergroupAnnouncementResult> => {
     const uid = requireAuth(request);
 
-    const { intergroupId, title, content, targetGroupIds } = request.data;
-    if (!intergroupId || !title || !content) {
-      throw new HttpsError(
-        "invalid-argument",
-        "intergroupId, title, and content are required",
-      );
-    }
+    // intergroupId/title/content presence, plus the new title (200 char) and
+    // content (2000 char) length caps, are now enforced by
+    // sendIntergroupAnnouncementSchema.
+    const { intergroupId, title, content, targetGroupIds } = validateData(
+      sendIntergroupAnnouncementSchema,
+      request.data,
+    );
 
     // Load intergroup
     const intergroupSnap = await db

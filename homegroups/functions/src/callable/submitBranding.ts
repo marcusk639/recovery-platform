@@ -5,7 +5,8 @@ import {
 } from "firebase-functions/v2/https";
 import { db } from "../utils/firebase";
 import * as admin from "firebase-admin";
-import { requireAuth } from "../utils/callableWrapper";
+import { z } from "zod";
+import { requireAuth, validateData } from "../utils/callableWrapper";
 
 interface SubmitBrandingData {
   intergroupId: string;
@@ -25,6 +26,23 @@ interface SubmitBrandingResult {
 
 const HEX_COLOR_REGEX = /^#[0-9A-Fa-f]{6}$/;
 
+const submitBrandingSchema = z.object({
+  intergroupId: z.string().min(1),
+  orgName: z.string().min(1),
+  primaryColor: z.string().regex(HEX_COLOR_REGEX, "Must be a valid hex color"),
+  accentColor: z.string().regex(HEX_COLOR_REGEX, "Must be a valid hex color"),
+  backgroundColor: z
+    .string()
+    .regex(HEX_COLOR_REGEX, "Must be a valid hex color")
+    .optional(),
+  headerTextColor: z
+    .string()
+    .regex(HEX_COLOR_REGEX, "Must be a valid hex color")
+    .optional(),
+  welcomeMessage: z.string().max(140).optional(),
+  logoUrl: z.string().url().optional(),
+});
+
 export const submitBranding = onCall(
   { region: "us-central1" },
   async (
@@ -32,6 +50,10 @@ export const submitBranding = onCall(
   ): Promise<SubmitBrandingResult> => {
     const uid = requireAuth(request);
 
+    // intergroupId/orgName/primaryColor/accentColor presence, hex-color
+    // format, and welcomeMessage length are now enforced by
+    // submitBrandingSchema; the manual regex/length checks they replaced are
+    // gone.
     const {
       intergroupId,
       orgName,
@@ -41,45 +63,7 @@ export const submitBranding = onCall(
       headerTextColor,
       welcomeMessage,
       logoUrl,
-    } = request.data;
-    if (!intergroupId || !orgName || !primaryColor || !accentColor) {
-      throw new HttpsError(
-        "invalid-argument",
-        "intergroupId, orgName, primaryColor, and accentColor are required",
-      );
-    }
-
-    // Validate hex colors
-    if (!HEX_COLOR_REGEX.test(primaryColor)) {
-      throw new HttpsError(
-        "invalid-argument",
-        "primaryColor must be a valid hex color (e.g., #1A73E8)",
-      );
-    }
-    if (!HEX_COLOR_REGEX.test(accentColor)) {
-      throw new HttpsError(
-        "invalid-argument",
-        "accentColor must be a valid hex color",
-      );
-    }
-    if (backgroundColor && !HEX_COLOR_REGEX.test(backgroundColor)) {
-      throw new HttpsError(
-        "invalid-argument",
-        "backgroundColor must be a valid hex color",
-      );
-    }
-    if (headerTextColor && !HEX_COLOR_REGEX.test(headerTextColor)) {
-      throw new HttpsError(
-        "invalid-argument",
-        "headerTextColor must be a valid hex color",
-      );
-    }
-    if (welcomeMessage && welcomeMessage.length > 140) {
-      throw new HttpsError(
-        "invalid-argument",
-        "welcomeMessage must be 140 characters or fewer",
-      );
-    }
+    } = validateData(submitBrandingSchema, request.data);
 
     // Load intergroup — must be owner AND active subscription
     const intergroupRef = db.collection("intergroups").doc(intergroupId);

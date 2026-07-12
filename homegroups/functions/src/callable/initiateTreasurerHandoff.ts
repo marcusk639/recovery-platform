@@ -6,7 +6,8 @@ import {
 import * as logger from "firebase-functions/logger";
 import { db, messaging } from "../utils/firebase";
 import * as admin from "firebase-admin";
-import { requireAuth } from "../utils/callableWrapper";
+import { z } from "zod";
+import { requireAuth, validateData } from "../utils/callableWrapper";
 
 interface InitiateTreasurerHandoffData {
   groupId: string;
@@ -14,24 +15,28 @@ interface InitiateTreasurerHandoffData {
   message?: string;
 }
 
+const initiateTreasurerHandoffSchema = z.object({
+  groupId: z.string().min(1),
+  toUserId: z.string().min(1),
+  message: z.string().max(1000).optional(),
+});
+
 /**
  * Cloud function to initiate a treasurer handoff.
  * Only the current treasurer can initiate a handoff.
  */
 export const initiateTreasurerHandoff = onCall(
   async (request: CallableRequest<InitiateTreasurerHandoffData>) => {
-    const data = request.data;
     const fromUserId = requireAuth(request);
-
-    // Validate input
-    if (!data || !data.groupId || !data.toUserId) {
-      throw new HttpsError(
-        "invalid-argument",
-        "Missing required data (groupId, toUserId).",
-      );
-    }
-
-    const { groupId, toUserId, message } = data;
+    // groupId/toUserId presence is now enforced by
+    // initiateTreasurerHandoffSchema; the manual truthy check it replaced is
+    // gone. This also closes the gap where `message` had zero type or length
+    // validation before being written into pendingTreasurerHandoff.message.
+    const validated = validateData(
+      initiateTreasurerHandoffSchema,
+      request.data,
+    );
+    const { groupId, toUserId, message } = validated;
 
     // Cannot transfer to yourself
     if (fromUserId === toUserId) {

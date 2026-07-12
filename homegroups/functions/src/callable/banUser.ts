@@ -6,8 +6,9 @@ import {
 import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
 import * as admin from "firebase-admin";
+import { z } from "zod";
 import { assertGroupActive } from "../utils/subscriptionGuard";
-import { requireAuth } from "../utils/callableWrapper";
+import { requireAuth, validateData } from "../utils/callableWrapper";
 
 interface BanUserData {
   userId: string;
@@ -24,22 +25,25 @@ interface BanUserResult {
   message: string;
 }
 
+const banUserSchema = z.object({
+  userId: z.string().min(1),
+  userName: z.string().min(1),
+  reason: z.string().min(1).max(1000),
+  durationDays: z.number().int().positive().max(3650).optional(),
+  reportId: z.string().optional(),
+  groupId: z.string().optional(),
+});
+
 /**
  * Cloud function to ban a user from a group or the entire platform
  * Only group admins (for group bans) or super admins (for platform bans) can call this
  */
 export const banUser = onCall(
   async (request: CallableRequest<BanUserData>): Promise<BanUserResult> => {
-    const data = request.data;
     const callerId = requireAuth(request);
-
-    // Validate required fields
-    if (!data.userId || !data.userName || !data.reason) {
-      throw new HttpsError(
-        "invalid-argument",
-        "Missing required fields: userId, userName, and reason are required.",
-      );
-    }
+    // userId/userName/reason presence and length are now enforced by
+    // banUserSchema; the manual truthy check it replaced is gone.
+    const data = validateData(banUserSchema, request.data);
 
     // Prevent self-ban
     if (data.userId === callerId) {
