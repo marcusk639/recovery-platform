@@ -313,8 +313,10 @@ export const requestAdminAccessWithSubscription = onCall(
         // orphaned live subscription is the wrong default. Mirrors the
         // rollback pattern in createGroupWithSubscription.ts.
         if (subscriptionCreatedThisCall && stripeSubscriptionId) {
+          let cancelSucceeded = false;
           try {
             await stripe.subscriptions.cancel(stripeSubscriptionId);
+            cancelSucceeded = true;
             logger.warn(
               `Compensating: Canceled Stripe subscription ${stripeSubscriptionId} after claim transaction ${
                 isRaceLoss ? "lost the claim race" : "failed unexpectedly"
@@ -331,7 +333,12 @@ export const requestAdminAccessWithSubscription = onCall(
           // — but only if the doc still points at this call's own
           // subscription. A genuine race winner's later write must never be
           // clobbered by the loser's cleanup; comparing against the current
-          // stripeSubscriptionId value is the guard.
+          // stripeSubscriptionId value is the guard. Only bump the
+          // idempotency-key attempt counter when the cancel actually
+          // succeeded — if cancel failed, the subscription is still live,
+          // and incrementing the counter here would cause a retry to mint a
+          // fresh idempotency key and create a SECOND live subscription
+          // instead of correctly replaying the still-valid original.
           try {
             const staleSnap = await groupRef.get();
             const staleData = staleSnap.data();
@@ -342,8 +349,12 @@ export const requestAdminAccessWithSubscription = onCall(
                 subscriptionStatus: null,
                 stripePriceIdGroup: null,
                 stripeProductIdGroup: null,
-                stripeSubscriptionAttempt:
-                  admin.firestore.FieldValue.increment(1),
+                ...(cancelSucceeded
+                  ? {
+                      stripeSubscriptionAttempt:
+                        admin.firestore.FieldValue.increment(1),
+                    }
+                  : {}),
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
               });
             }

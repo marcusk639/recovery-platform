@@ -545,4 +545,65 @@ describe("requestAdminAccessWithSubscription — idempotency-key replay after co
       `req-admin-${USER_ID}-${GROUP_ID}-subscription-0`,
     );
   });
+
+  it("does not advance the attempt counter when the compensating Stripe cancel itself fails, so a retry replays the SAME idempotency key", async () => {
+    // First attempt: transaction fails for a non-race reason, but the
+    // compensating stripe.subscriptions.cancel() call ALSO fails (e.g. a
+    // transient Stripe/network error). The subscription created in this
+    // call therefore stays live — the attempt counter must NOT advance,
+    // otherwise a retry would mint a fresh idempotency key and create a
+    // SECOND live subscription instead of correctly replaying the first.
+    mockDb.runTransaction = (async () => {
+      throw new Error("DEADLINE_EXCEEDED: transaction timed out");
+    }) as typeof mockDb.runTransaction;
+    mockStripeSubscriptionsCancel.mockRejectedValue(
+      new Error("Stripe API error: could not cancel subscription"),
+    );
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      paymentMethodId: PAYMENT_METHOD_ID,
+    });
+
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).rejects.toMatchObject({ code: "internal" });
+
+    const firstCallArgs = mockStripeSubscriptionsCreate.mock.calls[0];
+    const firstIdempotencyKey = firstCallArgs[1].idempotencyKey;
+
+    // The attempt counter must NOT have advanced — the cancel failed, so
+    // the subscription this call created is still live.
+    const afterFirstAttempt = docStore[`groups/${GROUP_ID}`] as Record<
+      string,
+      unknown
+    >;
+    expect(afterFirstAttempt.stripeSubscriptionAttempt).toBeUndefined();
+
+    // Retry: transaction and cancel both succeed this time (irrelevant to
+    // the retry's OWN create call, but keeps the mock realistic).
+    mockDb.runTransaction = buildMockDb().runTransaction;
+    mockStripeSubscriptionsCreate.mockResolvedValue({
+      id: "sub_retry",
+      status: "trialing",
+      items: { data: [{ id: "si_retry" }] },
+      latest_invoice: { payment_intent: {} },
+    });
+
+    const retryResult = await (requestAdminAccessWithSubscription as any)(
+      // eslint-disable-line @typescript-eslint/no-explicit-any
+      request,
+    );
+
+    expect(retryResult).toMatchObject({ success: true });
+
+    const secondCallArgs = mockStripeSubscriptionsCreate.mock.calls[1];
+    const secondIdempotencyKey = secondCallArgs[1].idempotencyKey;
+
+    // The critical assertion: the retry reuses the SAME idempotency key as
+    // the first attempt, because the counter never advanced. Stripe will
+    // correctly replay the still-live sub_test's cached response instead of
+    // creating an orphaned second subscription.
+    expect(secondIdempotencyKey).toBe(firstIdempotencyKey);
+  });
 });
