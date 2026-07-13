@@ -352,7 +352,7 @@ describe("requestAdminAccessWithSubscription — compensating-cancellation on tr
     setupDefaults();
   });
 
-  it("on a genuine already-claimed race loss: cancels the subscription, reverts the stale group-doc Stripe fields, and rethrows the original error", async () => {
+  it("on a genuine already-claimed race loss: cancels the subscription, does NOT revert the winner's group-doc Stripe fields, and rethrows the original error", async () => {
     // Force the transaction to behave as if another caller claimed the
     // group first, by overriding runTransaction to simulate the real
     // isClaimed-check-then-throw behavior after the group doc has been
@@ -528,9 +528,16 @@ describe("requestAdminAccessWithSubscription — idempotency-key replay after co
   });
 
   it("reuses the same idempotency key across calls when no compensation has occurred (preserves legitimate client-retry dedup)", async () => {
-    // No transaction failure this time — a plain successful call followed
-    // by a second call before anything was ever compensated should still
-    // read attempt=0 both times (nothing incremented it).
+    // No transaction failure this time — call the handler once, then
+    // simulate a plain client-side retry of the same still-unanswered
+    // request (e.g. the client's connection dropped before it received
+    // the first attempt's response, so it never observed success or
+    // failure and retries with identical arguments). From the retry's
+    // perspective the group doc looks exactly like it did before the
+    // first attempt — nothing was ever compensated, so the attempt
+    // counter must stay at 0 and Stripe must see the SAME idempotency
+    // key both times so it correctly dedupes rather than creating a
+    // second subscription.
     const request = makeRequest(USER_ID, {
       groupId: GROUP_ID,
       paymentMethodId: PAYMENT_METHOD_ID,
@@ -544,6 +551,24 @@ describe("requestAdminAccessWithSubscription — idempotency-key replay after co
     expect(firstIdempotencyKey).toBe(
       `req-admin-${USER_ID}-${GROUP_ID}-subscription-0`,
     );
+
+    // Reset Firestore state to what the retry would actually observe: an
+    // unclaimed group with no Stripe fields set yet (the retry never saw
+    // the first attempt's writes land) — but keep the Stripe mock's call
+    // history so the two idempotency keys can be compared below.
+    docStore = {};
+    mockDb = buildMockDb();
+    setupDefaults();
+
+    await (requestAdminAccessWithSubscription as any)(request); // eslint-disable-line @typescript-eslint/no-explicit-any
+
+    const secondCallArgs = mockStripeSubscriptionsCreate.mock.calls[1];
+    const secondIdempotencyKey = secondCallArgs[1].idempotencyKey;
+
+    // The invariant this test previously never actually verified: a
+    // plain retry with no compensation reuses the SAME key, so Stripe
+    // dedupes it instead of creating a second subscription.
+    expect(secondIdempotencyKey).toBe(firstIdempotencyKey);
   });
 
   it("does not advance the attempt counter when the compensating Stripe cancel itself fails, so a retry replays the SAME idempotency key", async () => {
