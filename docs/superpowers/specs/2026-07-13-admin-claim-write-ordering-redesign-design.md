@@ -12,7 +12,7 @@
 
 **Pre-implementation verification already done for this revision:** checked both call sites of this callable (`homegroups/mobile/src/store/slices/groupsSlice.ts`, `homegroups/web/src/pages/ClaimGroupPage.js`, `homegroups/web/src/pages/SubscribePage.js`) — neither sets up a Firestore listener on the group document's Stripe fields during the claim flow; both simply `await` the callable's own response. Removing the speculative pre-transaction writes (§1) has no client-side impact — nothing currently depends on those fields appearing before the callable resolves.
 
-**Revision note:** this spec was revised after an adversarial `/plan-review` pass found a real correctness gap in the first draft (§3/§4 below now address it) and an unhandled-error path in the ack-ambiguity check. Both are incorporated below, not deferred.
+**Revision note:** this spec went through two `/plan-review` passes. The first found a real correctness gap (a same-user concurrent double-request could have its compensation logic cancel a subscription a concurrent win depended on) and an unhandled-error path in the ack-ambiguity re-read — both addressed in §3. The second review traced the fix for the first issue and found the added "concurrent-owner" check was itself unreachable dead code — the ack-ambiguity check alone already provably closes that gap, given this callable's idempotency keys are `userId`-scoped. §3 below reflects the simplified, final design; the discarded intermediate version is visible in this file's git history if useful context.
 
 ---
 
@@ -63,11 +63,13 @@ This is the choke point that makes acting on stale _create()_ data impossible re
 
 **Cost tradeoff, stated explicitly:** this adds one Stripe API round-trip to every successful new-subscription claim (not just failure/retry paths). Given this callable is called rarely per user (an admin-claim action, not a hot path), the added latency is judged acceptable in exchange for closing the staleness question outright — noted here as a conscious tradeoff, not a silent side effect.
 
-### 3. Compensation: safety check, then ack-ambiguity-aware cancellation
+### 3. Compensation: ack-ambiguity recovery, then cancellation
 
-The original draft of this spec canceled the subscription unconditionally whenever `subscriptionCreatedThisCall` was true. An adversarial review pass found this was wrong in one specific case: **a same-user concurrent double-request** (double-tap, or a client retrying before it ever saw a response) shares the _same_ Stripe idempotency key, so both requests receive the _identical_ subscription object from Stripe — not two separate ones. If one of those two requests wins the claim transaction and the other loses, the loser's "cancel my own created subscription" logic would cancel the _same_ object the winner's now-committed claim depends on, breaking a legitimate admin's subscription through a path distinct from (but just as damaging as) the original write-ordering bug.
+The original draft of this spec canceled the subscription unconditionally whenever `subscriptionCreatedThisCall` was true. An adversarial review pass initially flagged this as wrong for **a same-user concurrent double-request** (double-tap, or a client retrying before it ever saw a response): such requests share the _same_ Stripe idempotency key, so both receive the _identical_ subscription object from Stripe. If one wins the claim transaction and the other loses, the loser's "cancel my own created subscription" logic would seem to risk canceling the object the winner's now-committed claim depends on.
 
-The fix: before canceling anything, re-read the group document once and use it for **two** checks — reusing a single Firestore read for both, rather than two separate reads:
+**A second look showed this is already fully closed by the ack-ambiguity check below, with no additional logic needed.** The only way two requests could ever share a subscription object is via a shared idempotency key, and this callable's subscription idempotency key is `` `req-admin-${userId}-${groupId}-subscription-${subscriptionAttempt}` `` — scoped to a specific `userId`. Two requests can only collide on the same key (and thus the same Stripe object) if they carry the _same_ `userId`. But if that's true, then whichever of the two requests' transactions commits calls `arrayUnion(userId)` with that _same_ `userId` — so the ack-ambiguity check (`postTxData?.admins?.includes(userId)`), evaluated by _either_ request, is guaranteed to see its own `userId` in `admins` once either commits, and returns early before any cancellation logic runs. There is no scenario where a same-user concurrent loser reaches the cancellation branch while a same-user concurrent winner's claim depends on the shared object — the invariant "idempotency key collision implies `userId` match implies the ack-ambiguity check already catches it" makes a separate ownership check redundant. (An earlier revision of this spec included such a check; it was removed after tracing through this invariant showed it could never actually execute — see git history on this file for the discarded version if useful context.)
+
+**This invariant is load-bearing and worth restating if the idempotency-key scheme ever changes**: if a future change made the subscription idempotency key _not_ scoped to `userId` (e.g., scoped only to `groupId`), this reasoning would break silently. Any such change should re-examine this compensation logic.
 
 ```ts
 catch (txError: any) {
@@ -86,32 +88,22 @@ catch (txError: any) {
     );
   }
 
-  // Check 1 (ack-ambiguity recovery): did THIS call's own transaction
-  // actually commit, despite the client observing an error?
+  // Ack-ambiguity recovery: did THIS call's own transaction actually commit,
+  // despite the client observing an error? Relies on the invariant that this
+  // callable's subscription idempotency key is scoped to `userId` (see the
+  // design doc for the full argument) — that's what makes this single check
+  // sufficient even for a same-user concurrent double-request sharing one
+  // Stripe subscription object; no separate "does someone else own this
+  // subscription" check is needed.
   if (postTxData?.admins?.includes(userId)) {
     return buildAdminAccessResponse(groupId, stripeSubscriptionId, subscriptionStatus, postTxData);
   }
 
-  // Check 2 (concurrent-owner protection): is the subscription this call is
-  // about to cancel now backing SOMEONE's committed claim? Because Stripe's
-  // idempotency key is shared across concurrent same-user requests, "someone"
-  // here is necessarily this same user's other concurrent request — no other
-  // user's idempotency key could ever collide with this one. If the doc's
-  // current stripeSubscriptionId matches what we're about to cancel AND the
-  // group is now claimed, back off — canceling would break that commit.
-  const subscriptionNowOwnedBySomeone =
-    subscriptionCreatedThisCall &&
-    stripeSubscriptionId &&
-    postTxData?.isClaimed === true &&
-    postTxData?.stripeSubscriptionId === stripeSubscriptionId;
-
-  if (
-    subscriptionCreatedThisCall &&
-    stripeSubscriptionId &&
-    !subscriptionNowOwnedBySomeone &&
-    !postTxReadFailed
-  ) {
-    // Safe to cancel: nobody's committed claim depends on this object.
+  if (subscriptionCreatedThisCall && stripeSubscriptionId && !postTxReadFailed) {
+    // Genuine race loss (or unexpected failure) and nobody's relying on
+    // this subscription (the only party who could is this same user's own
+    // request, already excluded by the ack-ambiguity check above) — safe
+    // to cancel.
     let cancelConfirmed = false;
     try {
       await stripe.subscriptions.cancel(stripeSubscriptionId);
@@ -139,17 +131,14 @@ catch (txError: any) {
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
     }
-  } else if (subscriptionNowOwnedBySomeone) {
-    logger.warn(
-      `Skipping compensation: subscription ${stripeSubscriptionId} now backs a committed claim for group ${groupId} (likely this user's own concurrent request) — not canceling.`,
-    );
   } else if (postTxReadFailed && subscriptionCreatedThisCall) {
-    // Conservative default when we can't confirm safety: an orphaned live
-    // subscription (caught later by the reconciler/audit query) is a much
-    // smaller harm than canceling a subscription someone else now depends
-    // on for admin access. Do not cancel when uncertain.
+    // Conservative default when we can't confirm the ack-ambiguity state:
+    // an orphaned live subscription (caught later by the reconciler/audit
+    // query) is a much smaller harm than canceling a subscription that
+    // this same user's other concurrent request now depends on. Do not
+    // cancel when uncertain.
     logger.warn(
-      `Skipping compensation for subscription ${stripeSubscriptionId}: could not confirm safety after a failed re-read — erring toward not canceling.`,
+      `Skipping compensation for subscription ${stripeSubscriptionId}: could not confirm ack-ambiguity state after a failed re-read — erring toward not canceling.`,
     );
   }
 
@@ -169,7 +158,7 @@ catch (txError: any) {
 
 `buildAdminAccessResponse(...)` is a small shared helper extracted from the happy path's existing return-construction (currently only built once, inline, at the end of the happy path) so the ack-ambiguity recovery branch and the normal-completion return use identical logic rather than duplicating the response shape.
 
-Note the ordering: the ack-ambiguity check (did _I_ win?) and the concurrent-owner check (does _someone_ — necessarily this same user's other request — now own this subscription?) both read from the _same_ `postTxData` snapshot, so there's no additional Firestore round-trip beyond what the original draft already required, and no new TOCTOU window: Firestore's transaction consistency guarantees that if `txError`'s `isClaimed`-check-failed branch fired, some commit already happened _before_ this read, and that commit's own `tx.update()` (per §1) already wrote its own Stripe fields atomically — so this read is guaranteed to reflect that commit's true state, not a stale snapshot racing it.
+There's no new TOCTOU window introduced by this design: Firestore's transaction consistency guarantees that if `txError`'s `isClaimed`-check-failed branch fired, some commit already happened _before_ this read, and that commit's own `tx.update()` (per §1) already wrote its own Stripe fields — including `admins` — atomically in one write. So this read is guaranteed to reflect that commit's true state, not a stale snapshot racing it.
 
 ---
 
@@ -210,7 +199,7 @@ New test scenarios required:
 
 - **Concurrent-claimant test:** two callers racing to claim the same never-before-claimed group — verify only the actual transaction winner's Stripe fields ever appear in Firestore, at any point, transiently or otherwise.
 - **Ack-ambiguity recovery (§3):** mock the transaction to throw while having actually applied its write — verify the catch block's re-read detects this and returns the identical success shape, with no compensation attempted.
-- **Concurrent-owner protection (§3) — the scenario the plan-review pass found missing from the first draft:** simulate two same-user concurrent requests sharing one Stripe subscription object (identical idempotency key → identical mocked `create()` response for both); one call's transaction commits, the other's fails. Verify the losing call's compensation does **NOT** cancel the shared subscription, and verify a subsequent read shows the winning call's admin grant still backed by a live, uncanceled subscription.
+- **Same-user concurrent double-request, shared subscription (§3):** simulate two same-user concurrent requests sharing one Stripe subscription object (identical idempotency key → identical mocked `create()` response for both); one call's transaction commits, the other's fails. Verify the losing call's ack-ambiguity check catches this (via `admins.includes(userId)`, since both requests carry the same `userId`) and returns success without attempting any cancellation — confirming the invariant in §3's design note, not a separate code path.
 - **Cancel-ack-ambiguity, both directions (§3):** `cancel()` rejects but `retrieve()` confirms canceled → counter advances; `cancel()` rejects and `retrieve()` shows still-active → counter does not advance, retry reuses the same key.
 - **Compensation re-read failure (§3):** mock `groupRef.get()` inside the catch block to reject — verify compensation is skipped entirely (no cancel attempted) rather than throwing an unhandled/raw error, and the function still returns the intended `internal` error to the client.
 - **Final live-status gate (§2):** a stale "trialing" value present in local state (via a replayed `create()` response), but `retrieve()` reports "canceled" — verify the grant guard correctly rejects using the live value, not the stale one.
