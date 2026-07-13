@@ -8,7 +8,11 @@
 
 **Priority:** Important, not launch-blocking. Scheduled as its own wave once this spec is approved and planned.
 
-**Dependency:** This spec assumes Wave 6's `requireAuth` migration (currently open as PR #46, unmerged as of this writing) has landed by the time this work is implemented — line references below to the auth guard assume `const uid = requireAuth(request);` rather than the raw `if (!userId) throw ...` check still present in `main` today. If PR #46 hasn't merged yet when this is implemented, adapt the guard reference accordingly; nothing else in this spec depends on that migration.
+**Dependency:** This spec assumes Wave 6's `requireAuth` migration (PR #46 — confirmed as of this revision: `state: OPEN`, `mergeable: MERGEABLE`, `mergeStateStatus: UNSTABLE`, i.e. open and mergeable but with a pending/failing check, not yet merged) has landed by the time this work is implemented — line references below to the auth guard assume `const uid = requireAuth(request);` rather than the raw `if (!userId) throw ...` check still present in `main` today. If PR #46 hasn't merged yet when this is implemented, adapt the guard reference accordingly; nothing else in this spec depends on that migration.
+
+**Pre-implementation verification already done for this revision:** checked both call sites of this callable (`homegroups/mobile/src/store/slices/groupsSlice.ts`, `homegroups/web/src/pages/ClaimGroupPage.js`, `homegroups/web/src/pages/SubscribePage.js`) — neither sets up a Firestore listener on the group document's Stripe fields during the claim flow; both simply `await` the callable's own response. Removing the speculative pre-transaction writes (§1) has no client-side impact — nothing currently depends on those fields appearing before the callable resolves.
+
+**Revision note:** this spec was revised after an adversarial `/plan-review` pass found a real correctness gap in the first draft (§3/§4 below now address it) and an unhandled-error path in the ack-ambiguity check. Both are incorporated below, not deferred.
 
 ---
 
@@ -42,72 +46,130 @@ One atomic write; no additional Firestore round-trip. A losing caller's Stripe i
 
 Compensation on failure shrinks to: cancel the Stripe subscription if this call created one (`subscriptionCreatedThisCall && stripeSubscriptionId`, unchanged from today), decide via live re-verification (see §3) whether to advance the retry-safe attempt counter, rethrow. No group-doc revert step.
 
-**Web-checkout (`subscriptionId` supplied) path — new failure handling, previously absent.** Today this path has zero compensation logic (`subscriptionCreatedThisCall` is never set `true` here, so the whole compensation block is skipped even on failure). Under this design, if this path's caller loses the claim transaction, they hold a real, already-billed Stripe subscription with no group attached. Auto-canceling isn't safe (potential refund implications the backend can't resolve unilaterally) and a blind retry won't help (the subscription is real and valid, the _group_ is what's unavailable). This case gets its own distinct error — see §4, item 6.
+**Web-checkout (`subscriptionId` supplied) path — new failure handling, previously absent.** Today this path has zero compensation logic (`subscriptionCreatedThisCall` is never set `true` here, so the whole compensation block is skipped even on failure). Under this design, if this path's caller loses the claim transaction, they hold a real, already-billed Stripe subscription with no group attached. Auto-canceling isn't safe (potential refund implications the backend can't resolve unilaterally) and a blind retry won't help (the subscription is real and valid, the _group_ is what's unavailable). This case gets its own distinct error — see the error contract table below, row 17.
 
 ### 2. Final live-status check (closes the "was this a stale/replayed value?" question generally)
 
-Immediately before the "grant admin only if active/trialing" guard, replace trust in whatever `subscriptionStatus` value is currently held (from a fresh `create()`, an idempotent replay of a prior `create()`, or the web-checkout `retrieve()`) with one authoritative re-check:
+Immediately before the "grant admin only if active/trialing" guard, replace trust in whatever `subscriptionStatus` value is currently held (from a fresh `create()` or an idempotent replay of a prior `create()`) with one authoritative re-check:
 
 ```ts
 subscriptionStatus = (await stripe.subscriptions.retrieve(stripeSubscriptionId))
   .status;
 ```
 
-This is the single choke point that makes acting on stale data impossible regardless of which code path produced the value in hand — it closes both the general idempotency-replay-staleness question and (per §3) the cancel-ack-ambiguity path, in one place, as the review's payment-integration pass recommended.
+**Skip this specific re-check for the web-checkout (`subscriptionId`-supplied) path** — that branch already did its own fresh `retrieve()` moments earlier at verify time with no Stripe calls in between, so a second one is a pure-waste extra round-trip with no correctness benefit. Only the create-new-subscription path needs this, since its local `subscriptionStatus` can genuinely come from an idempotent replay whose cached response predates a later cancellation.
 
-### 3. Cancel-ack-ambiguity fix
+This is the choke point that makes acting on stale _create()_ data impossible regardless of whether the value in hand is a fresh response or a replay — it closes the general idempotency-replay-staleness question and (per §3) feeds into the cancel-ack-ambiguity path, in one place, as the review's payment-integration pass recommended.
 
-When compensating (cancel the subscription this call created), don't infer success/failure purely from whether the `cancel()` promise resolves. After the `cancel()` call (whether it resolved or threw), re-verify actual state:
+**Cost tradeoff, stated explicitly:** this adds one Stripe API round-trip to every successful new-subscription claim (not just failure/retry paths). Given this callable is called rarely per user (an admin-claim action, not a hot path), the added latency is judged acceptable in exchange for closing the staleness question outright — noted here as a conscious tradeoff, not a silent side effect.
 
-```ts
-let cancelConfirmed = false;
-try {
-  await stripe.subscriptions.cancel(stripeSubscriptionId);
-} catch (stripeCancelError) {
-  logger.error(
-    `Error canceling Stripe subscription ${stripeSubscriptionId} in compensation:`,
-    stripeCancelError,
-  );
-}
-try {
-  const currentState =
-    await stripe.subscriptions.retrieve(stripeSubscriptionId);
-  cancelConfirmed = currentState.status === "canceled";
-} catch (retrieveError) {
-  logger.error(
-    `Error verifying cancellation state for ${stripeSubscriptionId}:`,
-    retrieveError,
-  );
-}
-```
+### 3. Compensation: safety check, then ack-ambiguity-aware cancellation
 
-Advance the `stripeSubscriptionAttempt` counter (still via `FieldValue.increment(1)`, still safe under concurrent access since increments commute) only when `cancelConfirmed === true` — i.e., driven by Stripe's actual reported state, not by whether the `cancel()` call itself appeared to succeed. If the cancel didn't actually happen (confirmed via retrieve), the counter stays put and a retry correctly reuses the same idempotency key, replaying the still-valid original subscription rather than minting a wasteful second one.
+The original draft of this spec canceled the subscription unconditionally whenever `subscriptionCreatedThisCall` was true. An adversarial review pass found this was wrong in one specific case: **a same-user concurrent double-request** (double-tap, or a client retrying before it ever saw a response) shares the _same_ Stripe idempotency key, so both requests receive the _identical_ subscription object from Stripe — not two separate ones. If one of those two requests wins the claim transaction and the other loses, the loser's "cancel my own created subscription" logic would cancel the _same_ object the winner's now-committed claim depends on, breaking a legitimate admin's subscription through a path distinct from (but just as damaging as) the original write-ordering bug.
 
-### 4. Transaction-ack-ambiguity fix
-
-In the transaction's `catch` block, before running any compensation, re-read the group document and check whether `admins` already includes this caller's own `userId`:
+The fix: before canceling anything, re-read the group document once and use it for **two** checks — reusing a single Firestore read for both, rather than two separate reads:
 
 ```ts
 catch (txError: any) {
-  const postTxSnap = await groupRef.get();
-  const postTxData = postTxSnap.data();
-  if (postTxData?.admins?.includes(userId)) {
-    // The transaction actually committed; the client only failed to receive
-    // the acknowledgment. Treat as a win, not a failure — do NOT compensate.
-    return {
-      success: true,
-      groupId,
-      subscriptionId: stripeSubscriptionId,
-      subscriptionStatus,
-      group: postTxData,
-    };
+  const isRaceLoss =
+    txError instanceof HttpsError && txError.code === "failed-precondition";
+
+  let postTxData: FirebaseFirestore.DocumentData | undefined;
+  let postTxReadFailed = false;
+  try {
+    postTxData = (await groupRef.get()).data();
+  } catch (postTxReadError) {
+    postTxReadFailed = true;
+    logger.error(
+      `Error re-reading group ${groupId} after transaction failure:`,
+      postTxReadError,
+    );
   }
-  // ... existing race-loss / unexpected-error handling, now compensation-only
-  // (no revert step, per §1) ...
+
+  // Check 1 (ack-ambiguity recovery): did THIS call's own transaction
+  // actually commit, despite the client observing an error?
+  if (postTxData?.admins?.includes(userId)) {
+    return buildAdminAccessResponse(groupId, stripeSubscriptionId, subscriptionStatus, postTxData);
+  }
+
+  // Check 2 (concurrent-owner protection): is the subscription this call is
+  // about to cancel now backing SOMEONE's committed claim? Because Stripe's
+  // idempotency key is shared across concurrent same-user requests, "someone"
+  // here is necessarily this same user's other concurrent request — no other
+  // user's idempotency key could ever collide with this one. If the doc's
+  // current stripeSubscriptionId matches what we're about to cancel AND the
+  // group is now claimed, back off — canceling would break that commit.
+  const subscriptionNowOwnedBySomeone =
+    subscriptionCreatedThisCall &&
+    stripeSubscriptionId &&
+    postTxData?.isClaimed === true &&
+    postTxData?.stripeSubscriptionId === stripeSubscriptionId;
+
+  if (
+    subscriptionCreatedThisCall &&
+    stripeSubscriptionId &&
+    !subscriptionNowOwnedBySomeone &&
+    !postTxReadFailed
+  ) {
+    // Safe to cancel: nobody's committed claim depends on this object.
+    let cancelConfirmed = false;
+    try {
+      await stripe.subscriptions.cancel(stripeSubscriptionId);
+    } catch (stripeCancelError) {
+      logger.error(
+        `Error canceling Stripe subscription ${stripeSubscriptionId} in compensation:`,
+        stripeCancelError,
+      );
+    }
+    try {
+      const currentState =
+        await stripe.subscriptions.retrieve(stripeSubscriptionId);
+      cancelConfirmed = currentState.status === "canceled";
+    } catch (retrieveError) {
+      logger.error(
+        `Error verifying cancellation state for ${stripeSubscriptionId}:`,
+        retrieveError,
+      );
+    }
+    if (cancelConfirmed) {
+      // Standalone increment, no other fields — safe under concurrent
+      // writes regardless of anything else happening to this document.
+      await groupRef.update({
+        stripeSubscriptionAttempt: admin.firestore.FieldValue.increment(1),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+  } else if (subscriptionNowOwnedBySomeone) {
+    logger.warn(
+      `Skipping compensation: subscription ${stripeSubscriptionId} now backs a committed claim for group ${groupId} (likely this user's own concurrent request) — not canceling.`,
+    );
+  } else if (postTxReadFailed && subscriptionCreatedThisCall) {
+    // Conservative default when we can't confirm safety: an orphaned live
+    // subscription (caught later by the reconciler/audit query) is a much
+    // smaller harm than canceling a subscription someone else now depends
+    // on for admin access. Do not cancel when uncertain.
+    logger.warn(
+      `Skipping compensation for subscription ${stripeSubscriptionId}: could not confirm safety after a failed re-read — erring toward not canceling.`,
+    );
+  }
+
+  if (isRaceLoss) {
+    throw txError;
+  }
+  logger.error(
+    `Unexpected error in claim transaction for group ${groupId} by user ${userId}:`,
+    txError,
+  );
+  throw new HttpsError(
+    "internal",
+    "Failed to process admin access request due to an unexpected error. Please try again.",
+  );
 }
 ```
 
-Extract the success-response construction (currently only built once, at the end of the happy path) into a small shared helper so this recovery branch and the normal-completion return use identical logic rather than duplicating the response shape.
+`buildAdminAccessResponse(...)` is a small shared helper extracted from the happy path's existing return-construction (currently only built once, inline, at the end of the happy path) so the ack-ambiguity recovery branch and the normal-completion return use identical logic rather than duplicating the response shape.
+
+Note the ordering: the ack-ambiguity check (did _I_ win?) and the concurrent-owner check (does _someone_ — necessarily this same user's other request — now own this subscription?) both read from the _same_ `postTxData` snapshot, so there's no additional Firestore round-trip beyond what the original draft already required, and no new TOCTOU window: Firestore's transaction consistency guarantees that if `txError`'s `isClaimed`-check-failed branch fired, some commit already happened _before_ this read, and that commit's own `tx.update()` (per §1) already wrote its own Stripe fields atomically — so this read is guaranteed to reflect that commit's true state, not a stale snapshot racing it.
 
 ---
 
@@ -131,7 +193,7 @@ This table is the complete, precise input for whoever designs the mobile/web UI 
 | 12  | New subscription requested with no payment method                                                       | `invalid-argument`               | "A payment method is required to request admin access for this group."                                                                                                                      | Unchanged (pre-existing security fix, untouched by this design)                                                                                                                 |
 | 13  | **Subscription genuinely not active/trialing at the live-verified moment of grant**                     | `failed-precondition`            | "Cannot grant admin access: subscription status is '{status}'. A valid subscription is required."                                                                                           | **Same message, now driven by a fresh `retrieve()` instead of a potentially-stale local value (§2) — behaviorally more reliable, not client-visibly different.**                |
 | 14  | Genuine race loss (transaction's own `isClaimed` throw)                                                 | `failed-precondition`            | "This group has already been claimed by another admin."                                                                                                                                     | Unchanged                                                                                                                                                                       |
-| 15  | **Transaction actually committed despite a thrown/observed error (§4)**                                 | _(none — returns success)_       | _(none — identical success response shape to the happy path)_                                                                                                                               | **New recovery path. Fully transparent to the client — no new UI needed.**                                                                                                      |
+| 15  | **Transaction actually committed despite a thrown/observed error (§3)**                                 | _(none — returns success)_       | _(none — identical success response shape to the happy path)_                                                                                                                               | **New recovery path. Fully transparent to the client — no new UI needed.**                                                                                                      |
 | 16  | Unexpected/transient failure, non-race, nothing was written (§1 makes this retry-safe)                  | `internal`                       | Current: "Failed to process admin access request due to an unexpected error. Please try again." Proposed: **"A temporary issue occurred and no charge was made — it's safe to try again."** | **Message content is a proposal, not final — the guarantee it communicates (safe to retry) is new and real under this design; exact wording is the downstream UX spec's call.** |
 | 17  | **Web-checkout path: caller loses the claim after their subscription was already verified/billed (§1)** | `failed-precondition` (proposed) | Proposed: **"Your payment was processed, but this group was claimed by someone else before your request completed. Contact support to arrange a refund or transfer."**                      | **New. Needs a distinct client treatment (support-contact flow), NOT a retry button — retrying will not help and the backend will not auto-cancel this subscription.**          |
 | 18  | Outer catch-all (truly unexpected, no more specific error applied)                                      | `internal`                       | "Failed to process admin access request with subscription."                                                                                                                                 | Unchanged                                                                                                                                                                       |
@@ -147,14 +209,24 @@ Most of Wave 7's compensation/revert test suite (`homegroups/functions/src/__tes
 New test scenarios required:
 
 - **Concurrent-claimant test:** two callers racing to claim the same never-before-claimed group — verify only the actual transaction winner's Stripe fields ever appear in Firestore, at any point, transiently or otherwise.
-- **Ack-ambiguity recovery (§4):** mock the transaction to throw while having actually applied its write — verify the catch block's re-read detects this and returns the identical success shape, with no compensation attempted.
+- **Ack-ambiguity recovery (§3):** mock the transaction to throw while having actually applied its write — verify the catch block's re-read detects this and returns the identical success shape, with no compensation attempted.
+- **Concurrent-owner protection (§3) — the scenario the plan-review pass found missing from the first draft:** simulate two same-user concurrent requests sharing one Stripe subscription object (identical idempotency key → identical mocked `create()` response for both); one call's transaction commits, the other's fails. Verify the losing call's compensation does **NOT** cancel the shared subscription, and verify a subsequent read shows the winning call's admin grant still backed by a live, uncanceled subscription.
 - **Cancel-ack-ambiguity, both directions (§3):** `cancel()` rejects but `retrieve()` confirms canceled → counter advances; `cancel()` rejects and `retrieve()` shows still-active → counter does not advance, retry reuses the same key.
+- **Compensation re-read failure (§3):** mock `groupRef.get()` inside the catch block to reject — verify compensation is skipped entirely (no cancel attempted) rather than throwing an unhandled/raw error, and the function still returns the intended `internal` error to the client.
 - **Final live-status gate (§2):** a stale "trialing" value present in local state (via a replayed `create()` response), but `retrieve()` reports "canceled" — verify the grant guard correctly rejects using the live value, not the stale one.
 - **Web-checkout residual case (§1, row 17):** losing caller in the `subscriptionId`-supplied path receives the new distinct error, not a generic `internal` error and not silent cancellation.
 
 ## Rollout
 
-No data migration or backfill required — this changes write _behavior_ going forward, not the Firestore schema. Recommended one-off, separate from the code deploy: an audit query for any existing group already showing the corruption signature (`isClaimed: true`, `admins` non-empty, `stripeSubscriptionId: null`) from before this fix ships, since this design prevents future occurrences but doesn't retroactively repair ones that already happened.
+No data migration or backfill required — this changes write _behavior_ going forward, not the Firestore schema.
+
+**Required task, not optional:** a one-off audit query, run once shortly after deploy, for any existing group already showing the corruption signature (`isClaimed: true`, `admins` non-empty, `stripeSubscriptionId: null`) from before this fix shipped — this design prevents future occurrences but doesn't retroactively repair ones that already happened. This should be an explicit task in the implementation plan (not a passing mention), even if the remediation itself ends up manual (e.g., look up each affected admin's Stripe customer by `userId`/email and manually relink).
+
+**Rollback:** standard Cloud Function redeploy of the previous version if a defect surfaces post-deploy — no data-shape changes mean rolling back is a plain code revert, no compensating migration needed.
+
+## Cross-Functional Dependency
+
+**Row 17 of the error contract (web-checkout residual, "contact support") needs an operational path to exist before or alongside shipping it.** Emitting a "contact support for a refund or transfer" error with no runbook behind it just relocates the problem to an unprepared support inbox. Confirm (or create) a support process for this specific scenario as part of planning this work — this is a cross-functional dependency, not a pure engineering task, and should be tracked as its own item rather than assumed to already exist.
 
 ## Explicitly Out of Scope for This Spec
 
