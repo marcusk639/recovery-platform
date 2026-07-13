@@ -121,6 +121,27 @@ interface DocStore {
 
 let docStore: DocStore = {};
 
+// Resolves a single field's incoming write value against its current stored
+// value. Most fields (including arrayUnion/arrayRemove sentinels) are stored
+// verbatim, matching this codebase's other Firestore mocks — tests that care
+// about those only assert the sentinel object was passed to `.update()`.
+// `FieldValue.increment(n)` is the one sentinel this mock DOES resolve to a
+// real number, because Task 2's regression tests assert the persisted
+// `stripeSubscriptionAttempt` count across sequential calls, not just that
+// an increment sentinel was passed.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function resolveFieldValue(current: unknown, incoming: any): unknown {
+  if (
+    incoming &&
+    typeof incoming === "object" &&
+    Object.prototype.hasOwnProperty.call(incoming, "__increment")
+  ) {
+    const base = typeof current === "number" ? current : 0;
+    return base + (incoming.__increment as number);
+  }
+  return incoming;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function buildDocRef(collPath: string, docId: string): any {
   const fullPath = `${collPath}/${docId}`;
@@ -143,7 +164,12 @@ function buildDocRef(collPath: string, docId: string): any {
     update: jest
       .fn()
       .mockImplementation(async (data: Record<string, unknown>) => {
-        docStore[fullPath] = { ...(docStore[fullPath] || {}), ...data };
+        const existing = (docStore[fullPath] || {}) as Record<string, unknown>;
+        const merged: Record<string, unknown> = { ...existing };
+        for (const [key, value] of Object.entries(data)) {
+          merged[key] = resolveFieldValue(existing[key], value);
+        }
+        docStore[fullPath] = merged;
       }),
   };
 }
@@ -432,8 +458,91 @@ describe("requestAdminAccessWithSubscription — compensating-cancellation on tr
     );
 
     expect(retryResult).toMatchObject({ success: true });
-    // A NEW subscription was created on retry — proves the retry did not
-    // treat the reverted (canceled) subscription as still valid.
+    // A NEW subscription was created on retry, backed by a genuinely fresh
+    // Stripe idempotency key (see the "idempotency-key replay after
+    // compensation" describe block below) rather than a cached response —
+    // it does not treat the reverted (canceled) subscription as still
+    // valid, at either the Firestore-staleness or Stripe-replay layer.
     expect(mockStripeSubscriptionsCreate).toHaveBeenCalledTimes(2); // once in the failed attempt, once on retry
+  });
+});
+
+describe("requestAdminAccessWithSubscription — idempotency-key replay after compensation", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    docStore = {};
+    mockDb = buildMockDb();
+    setupDefaults();
+  });
+
+  it("uses a different Stripe idempotency key on a retry after the prior attempt's subscription was compensated", async () => {
+    // First attempt: transaction fails for a non-race reason, subscription
+    // gets created then compensated (canceled + reverted) per Task 1.
+    mockDb.runTransaction = (async () => {
+      throw new Error("DEADLINE_EXCEEDED: transaction timed out");
+    }) as typeof mockDb.runTransaction;
+    mockStripeSubscriptionsCancel.mockResolvedValue({});
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      paymentMethodId: PAYMENT_METHOD_ID,
+    });
+
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).rejects.toMatchObject({ code: "internal" });
+
+    const firstCallArgs = mockStripeSubscriptionsCreate.mock.calls[0];
+    const firstIdempotencyKey = firstCallArgs[1].idempotencyKey;
+
+    // The attempt counter must have persisted to the group doc so the next
+    // call reads a different value.
+    const afterFirstAttempt = docStore[`groups/${GROUP_ID}`] as Record<
+      string,
+      unknown
+    >;
+    expect(afterFirstAttempt.stripeSubscriptionAttempt).toBe(1);
+
+    // Retry: let the transaction succeed this time.
+    mockDb.runTransaction = buildMockDb().runTransaction;
+    mockStripeSubscriptionsCreate.mockResolvedValue({
+      id: "sub_retry",
+      status: "trialing",
+      items: { data: [{ id: "si_retry" }] },
+      latest_invoice: { payment_intent: {} },
+    });
+
+    const retryResult = await (requestAdminAccessWithSubscription as any)(
+      // eslint-disable-line @typescript-eslint/no-explicit-any
+      request,
+    );
+
+    expect(retryResult).toMatchObject({ success: true });
+
+    const secondCallArgs = mockStripeSubscriptionsCreate.mock.calls[1];
+    const secondIdempotencyKey = secondCallArgs[1].idempotencyKey;
+
+    // The critical assertion: different idempotency keys mean Stripe will
+    // NOT replay the first (canceled) subscription's cached response.
+    expect(secondIdempotencyKey).not.toBe(firstIdempotencyKey);
+  });
+
+  it("reuses the same idempotency key across calls when no compensation has occurred (preserves legitimate client-retry dedup)", async () => {
+    // No transaction failure this time — a plain successful call followed
+    // by a second call before anything was ever compensated should still
+    // read attempt=0 both times (nothing incremented it).
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      paymentMethodId: PAYMENT_METHOD_ID,
+    });
+
+    await (requestAdminAccessWithSubscription as any)(request); // eslint-disable-line @typescript-eslint/no-explicit-any
+
+    const firstCallArgs = mockStripeSubscriptionsCreate.mock.calls[0];
+    const firstIdempotencyKey = firstCallArgs[1].idempotencyKey;
+
+    expect(firstIdempotencyKey).toBe(
+      `req-admin-${USER_ID}-${GROUP_ID}-subscription-0`,
+    );
   });
 });

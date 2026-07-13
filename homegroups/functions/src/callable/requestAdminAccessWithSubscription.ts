@@ -85,6 +85,15 @@ export const requestAdminAccessWithSubscription = onCall(
       let stripeSubscriptionId: string | undefined =
         groupData.stripeSubscriptionId;
       let subscriptionStatus: string | undefined = groupData.subscriptionStatus;
+      // Fed into the subscription's idempotency key below. Only incremented
+      // by the compensation/revert block after a real cancellation — a
+      // plain client-side retry of an unanswered call (no compensation yet)
+      // must keep hitting the SAME idempotency key so Stripe still dedupes
+      // it; only a retry that follows an actual cancellation should mint a
+      // fresh key so Stripe creates a genuinely new subscription instead of
+      // replaying the canceled one's cached response.
+      const subscriptionAttempt: number =
+        groupData.stripeSubscriptionAttempt || 0;
       // Tracks whether THIS call created a fresh Stripe subscription. If the
       // downstream Firestore transaction loses a race (another caller claimed
       // the group first), we must cancel that subscription so the losing
@@ -234,7 +243,9 @@ export const requestAdminAccessWithSubscription = onCall(
               metadata: { groupId, userId },
               default_payment_method: paymentMethodId, // Set default payment method for the subscription
             },
-            { idempotencyKey: `req-admin-${userId}-${groupId}-subscription` },
+            {
+              idempotencyKey: `req-admin-${userId}-${groupId}-subscription-${subscriptionAttempt}`,
+            },
           );
           stripeSubscriptionId = subscription.id;
           subscriptionStatus = subscription.status;
@@ -331,6 +342,8 @@ export const requestAdminAccessWithSubscription = onCall(
                 subscriptionStatus: null,
                 stripePriceIdGroup: null,
                 stripeProductIdGroup: null,
+                stripeSubscriptionAttempt:
+                  admin.firestore.FieldValue.increment(1),
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
               });
             }
