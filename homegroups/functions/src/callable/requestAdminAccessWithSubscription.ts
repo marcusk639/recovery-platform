@@ -487,7 +487,10 @@ export const requestAdminAccessWithSubscription = onCall(
         // state; asserting "claimed by someone else, contact support for a
         // refund" in that case would be a confident, specific, and possibly
         // false narrative (this caller could in fact already be the admin).
-        // Fall through to the generic retriable error below instead.
+        // Fall through instead to the normal race-loss/unexpected-error
+        // handling below, which rethrows the original txError as-is (the
+        // actual, uncertain state) rather than asserting a specific and
+        // possibly wrong one.
         if (usedWebCheckoutVerify && !postTxReadFailed) {
           throw new HttpsError(
             "failed-precondition",
