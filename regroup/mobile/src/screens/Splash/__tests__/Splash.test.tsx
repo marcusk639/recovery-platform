@@ -58,9 +58,8 @@ jest.mock("@react-native-firebase/auth", () => {
 });
 
 // ─── @react-native-firebase/messaging mock ────────────────────────────────────
-jest.mock("@react-native-firebase/messaging", () => ({
-  __esModule: true,
-  default: () => ({
+jest.mock("@react-native-firebase/messaging", () => {
+  const mockMessagingDefault: any = () => ({
     get requestPermission() {
       return (global as any).__splashTestRequestPermission;
     },
@@ -82,8 +81,18 @@ jest.mock("@react-native-firebase/messaging", () => ({
     get onTokenRefresh() {
       return (global as any).__splashTestOnTokenRefresh;
     },
-  }),
-}));
+  });
+  // Static namespace member on the default export function itself, matching
+  // the real SDK's shape (see @react-native-firebase/messaging/lib/index.d.ts).
+  mockMessagingDefault.AuthorizationStatus = {
+    NOT_DETERMINED: -1,
+    DENIED: 0,
+    AUTHORIZED: 1,
+    PROVISIONAL: 2,
+    EPHEMERAL: 3,
+  };
+  return { __esModule: true, default: mockMessagingDefault };
+});
 
 // ─── @react-native-firebase/firestore mock ────────────────────────────────────
 jest.mock("@react-native-firebase/firestore", () => ({
@@ -226,6 +235,7 @@ import { View, Text } from "react-native";
 import { render, act } from "@testing-library/react-native";
 
 import { withSplash } from "../Splash";
+import { logException } from "../../../util/logging";
 
 // ─── Mock implementations (assigned as globals so lazy getters can access them)
 
@@ -307,7 +317,7 @@ const WrappedContent = () =>
   React.createElement(
     View,
     { testID: "wrapped-component" },
-    React.createElement(Text, null, "Authenticated Content")
+    React.createElement(Text, null, "Authenticated Content"),
   );
 
 const SplashHOC = withSplash(WrappedContent);
@@ -479,6 +489,53 @@ describe("Splash (withSplash HOC)", () => {
       expect(mockRequestPermission).not.toHaveBeenCalled();
     });
 
+    // Regression coverage: the permission request result (granted/denied) was
+    // never checked and the call was unguarded by try/catch, so a denial or
+    // a thrown error would either silently fetch a token anyway or crash the
+    // splash flow uncaught.
+    describe("messaging permission result handling", () => {
+      it("does not fetch an FCM token when permission is denied", async () => {
+        mockRequestPermission.mockResolvedValueOnce(0); // AuthorizationStatus.DENIED
+        renderSplash({
+          user: { uid: "user-123", email: "test@example.com" } as any,
+        });
+        await act(async () => {});
+
+        expect(mockGetToken).not.toHaveBeenCalled();
+      });
+
+      it("logs via logException when permission is denied", async () => {
+        mockRequestPermission.mockResolvedValueOnce(0); // AuthorizationStatus.DENIED
+        renderSplash({
+          user: { uid: "user-123", email: "test@example.com" } as any,
+        });
+        await act(async () => {});
+
+        expect(logException).toHaveBeenCalled();
+      });
+
+      it("still fetches an FCM token when permission is provisional", async () => {
+        mockRequestPermission.mockResolvedValueOnce(2); // AuthorizationStatus.PROVISIONAL
+        renderSplash({
+          user: { uid: "user-123", email: "test@example.com" } as any,
+        });
+        await act(async () => {});
+
+        expect(mockGetToken).toHaveBeenCalledTimes(1);
+      });
+
+      it("logs via logException instead of throwing when requestPermission rejects", async () => {
+        mockRequestPermission.mockRejectedValueOnce(new Error("boom"));
+        renderSplash({
+          user: { uid: "user-123", email: "test@example.com" } as any,
+        });
+        await act(async () => {});
+
+        expect(logException).toHaveBeenCalled();
+        expect(mockGetToken).not.toHaveBeenCalled();
+      });
+    });
+
     // Regression coverage for 2026-07-05: updateTokenIfNecessary had both its
     // branches commented out with a stale "should be imported if available"
     // note, so no messaging token was ever persisted anywhere — push
@@ -601,7 +658,7 @@ describe("Splash (withSplash HOC)", () => {
       expect(mockCreateInvitationFromLink).toHaveBeenCalledWith(invitationLink);
       expect(mockInitInvitation).toHaveBeenCalledTimes(1);
       expect(mockDispatch).toHaveBeenCalledWith(
-        expect.objectContaining({ type: "user/initializeInvitation" })
+        expect.objectContaining({ type: "user/initializeInvitation" }),
       );
     });
   });

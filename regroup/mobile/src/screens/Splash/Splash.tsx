@@ -56,7 +56,7 @@ interface SplashProps {
  * - Added comments for missing thunks (updateUser, setSubscriptionStatus)
  */
 export const withSplash = <P extends object>(
-  WrappedComponent: React.ComponentType<P>
+  WrappedComponent: React.ComponentType<P>,
 ) => {
   /**
    * Shows Splash screen then navigates
@@ -78,7 +78,7 @@ export const withSplash = <P extends object>(
     const onMessage = messaging().onMessage(async (message) => {
       if (message?.data?.notifee) {
         const res = await notifee.displayNotification(
-          JSON.parse(message.data.notifee as string)
+          JSON.parse(message.data.notifee as string),
         );
       }
     });
@@ -93,9 +93,27 @@ export const withSplash = <P extends object>(
     }, []);
 
     const handleMessagingToken = useCallback(async () => {
-      await messaging().requestPermission();
-      const messagingToken = await messaging().getToken();
-      updateTokenIfNecessary(messagingToken);
+      try {
+        const authStatus = await messaging().requestPermission();
+        const granted =
+          authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+          authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+        if (!granted) {
+          logException(
+            new Error("FCM permission denied"),
+            "Splash - push notification permission denied",
+          );
+          return;
+        }
+        const messagingToken = await messaging().getToken();
+        updateTokenIfNecessary(messagingToken);
+      } catch (error) {
+        logException(error, "Splash - failed to request FCM permission");
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- matches the
+      // pre-existing pattern in this file (updateTokenIfNecessary is declared
+      // below and referencing it here would be a TDZ error at module-eval
+      // time); the callback body still calls the latest closed-over version.
     }, []);
 
     const listenToLink = useCallback(() => {
@@ -120,7 +138,7 @@ export const withSplash = <P extends object>(
             } else {
               reject("Could not log in");
             }
-          }
+          },
         );
       });
     }, []);
@@ -140,12 +158,12 @@ export const withSplash = <P extends object>(
               updateUser({
                 user: user as User,
                 updates: { messagingToken: _nextTokens },
-              })
+              }),
             ).unwrap();
           } catch (error) {
             logException(error, "Failed to persist refreshed messaging token");
           }
-        }
+        },
       );
     }, [userState, dispatch]);
 
@@ -176,21 +194,21 @@ export const withSplash = <P extends object>(
               updateUser({
                 user: user as User,
                 updates: { messagingToken: [fcmToken] },
-              })
+              }),
             ).unwrap();
           } else if (!updating && !token!.includes(fcmToken)) {
             await dispatch(
               updateUser({
                 user: user as User,
                 updates: { messagingToken: [...token!, fcmToken] },
-              })
+              }),
             ).unwrap();
           }
         } catch (error) {
           logException(error, "Failed to persist messaging token");
         }
       },
-      [userState, dispatch]
+      [userState, dispatch],
     );
 
     const checkSubscriptionStatus = useCallback(() => {
@@ -241,13 +259,13 @@ export const withSplash = <P extends object>(
         // This ensures invitation is in Redux state before initial route is determined
         if (!invitation) {
           logDebug(
-            "Splash - No invitation in state, checking for initial deep link"
+            "Splash - No invitation in state, checking for initial deep link",
           );
           const initialLink = await getInitialLink();
           if (initialLink) {
             logDebug(
               "Splash - Found initial link, initializing invitation:",
-              initialLink
+              initialLink,
             );
             const linkType = getLinkType(initialLink);
             if (linkType === "invitation") {
