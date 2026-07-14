@@ -25,7 +25,11 @@ import AddManager from "./AddManager";
 import ConfirmationButtons from "../../components/confirmation-buttons";
 import { Guest } from "../../entities/Guest";
 import Admin from "../../entities/Admin";
-import { updateHouseData, setGuests } from "../../state/slices/setupSlice";
+import {
+  updateHouseData,
+  setGuests,
+  setAdmins,
+} from "../../state/slices/setupSlice";
 import {
   removeAdminPrivilegesForGuests,
   removeAdminPrivileges,
@@ -113,10 +117,10 @@ const ManagerSettings: React.FC<Props> = (props) => {
         const _house = cloneDeep(house);
         const _admin = _admins[admin.id];
         const index = _admin.houseIds.findIndex(
-          (houseId) => houseId === house.id
+          (houseId) => houseId === house.id,
         );
         const houseIndex = house.adminIds.findIndex(
-          (adminId) => adminId === admin.id
+          (adminId) => adminId === admin.id,
         );
         if (index > -1) {
           _admin.houseIds.splice(index, 1);
@@ -147,13 +151,14 @@ const ManagerSettings: React.FC<Props> = (props) => {
           await removeAdminPrivileges(
             admin as Admin,
             wasSuperAdmin ? [] : [house.id],
-            wasSuperAdmin ? [house.id] : []
+            wasSuperAdmin ? [house.id] : [],
           );
           await updateHouseMutation.mutateAsync({
             houseId: _house.id,
             values: _house,
           });
           dispatch(updateHouseData(_house));
+          dispatch(setAdmins(_admins));
         } catch (error) {
           logException(error, "Failed to remove administrator");
         }
@@ -166,7 +171,7 @@ const ManagerSettings: React.FC<Props> = (props) => {
       dispatch,
       updateGuestMutation,
       updateHouseMutation,
-    ]
+    ],
   );
 
   const renderAdmins = useCallback(() => {
@@ -180,8 +185,8 @@ const ManagerSettings: React.FC<Props> = (props) => {
           const description = isSuperAdmin(admin, house?.id)
             ? "Operator"
             : i > adminLength - 1
-            ? "Guest Administrator"
-            : "Administrator";
+              ? "Guest Administrator"
+              : "Administrator";
           i++;
           return (
             <ActivityItemWithButtons
@@ -229,7 +234,7 @@ const ManagerSettings: React.FC<Props> = (props) => {
         addAdminEmail={addAdminEmail}
       />,
       "Add Manager",
-      true
+      true,
     );
   }, [showFormModal, house, dismissFormModal, allGuests, addAdminEmail]);
 
@@ -252,11 +257,11 @@ const ManagerSettings: React.FC<Props> = (props) => {
       if (
         house.pendingAdminInvites &&
         house.pendingAdminInvites.findIndex(
-          (inviteEmail) => inviteEmail.toLowerCase() === email.toLowerCase()
+          (inviteEmail) => inviteEmail.toLowerCase() === email.toLowerCase(),
         ) > -1
       ) {
         const inviteIndex = house.pendingAdminInvites.findIndex(
-          (inviteEmail) => inviteEmail.toLowerCase() === email.toLowerCase()
+          (inviteEmail) => inviteEmail.toLowerCase() === email.toLowerCase(),
         );
         const pendingAdminInvites = house.pendingAdminInvites.slice();
         pendingAdminInvites.splice(inviteIndex, 1);
@@ -267,7 +272,7 @@ const ManagerSettings: React.FC<Props> = (props) => {
         setNewAdminEmails(emails);
       }
     },
-    [house, newAdminEmails, dispatch]
+    [house, newAdminEmails, dispatch],
   );
 
   const renderNewInvites = useCallback(() => {

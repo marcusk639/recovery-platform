@@ -20,11 +20,11 @@ jest.mock("../../../state/store", () => ({
 }));
 
 const mockRemoveAdminPrivilegesForGuests = jest.fn((_guests: any) =>
-  Promise.resolve("success")
+  Promise.resolve("success"),
 );
 const mockRemoveAdminPrivileges = jest.fn(
   (_admin: any, _adminHouseIds: string[], _superAdminHouseIds: string[]) =>
-    Promise.resolve("success")
+    Promise.resolve("success"),
 );
 jest.mock("../../../services/house", () => ({
   removeAdminPrivilegesForGuests: (guests: any) =>
@@ -32,7 +32,7 @@ jest.mock("../../../services/house", () => ({
   removeAdminPrivileges: (
     admin: any,
     adminHouseIds: any,
-    superAdminHouseIds: any
+    superAdminHouseIds: any,
   ) => mockRemoveAdminPrivileges(admin, adminHouseIds, superAdminHouseIds),
 }));
 
@@ -74,7 +74,7 @@ jest.mock("../../../components/card-list/card-list", () => ({
         testID: `remove-${props.descriptionHeader}`,
         onPress: props.leftButtonAction,
       },
-      react.createElement(Text, null, props.descriptionHeader)
+      react.createElement(Text, null, props.descriptionHeader),
     );
   },
 }));
@@ -97,6 +97,7 @@ jest.mock("../../../components/rats-scroll-view", () => {
 import React from "react";
 import { render, fireEvent, waitFor, act } from "@testing-library/react-native";
 import ManagerSettings from "../ManagerSettings";
+import { setAdmins } from "../../../state/slices/setupSlice";
 
 const GUEST_ADMIN = {
   id: "guest-1",
@@ -120,7 +121,7 @@ const HOUSE = { id: "house-1", adminIds: ["admin-1"], superAdminIds: [] };
 
 function renderScreen(
   admins: Record<string, any> = {},
-  handleSubmit = jest.fn()
+  handleSubmit = jest.fn(),
 ) {
   mockState = {
     setup: {
@@ -155,7 +156,7 @@ describe("ManagerSettings", () => {
       await waitFor(() =>
         expect(mockRemoveAdminPrivilegesForGuests).toHaveBeenCalledWith([
           { ...GUEST_ADMIN, isAdmin: false },
-        ])
+        ]),
       );
       expect(mockMutateAsync).toHaveBeenCalledWith({
         guest: { ...GUEST_ADMIN, isAdmin: false },
@@ -166,7 +167,7 @@ describe("ManagerSettings", () => {
 
     it("logs the error without throwing when the claim revoke fails", async () => {
       mockRemoveAdminPrivilegesForGuests.mockRejectedValue(
-        new Error("permission-denied")
+        new Error("permission-denied"),
       );
       const { getByTestId } = renderScreen();
 
@@ -204,8 +205,8 @@ describe("ManagerSettings", () => {
         expect(mockRemoveAdminPrivileges).toHaveBeenCalledWith(
           REAL_ADMIN,
           ["house-1"],
-          []
-        )
+          [],
+        ),
       );
       expect(mockUpdateHouseMutateAsync).toHaveBeenCalledWith({
         houseId: "house-1",
@@ -213,6 +214,32 @@ describe("ManagerSettings", () => {
       });
       expect(handleSubmit).not.toHaveBeenCalled();
       expect(mockDispatch).toHaveBeenCalled();
+    });
+
+    // Regression coverage: removeAdmin's real-Admin branch spliced the
+    // removed admin's houseIds on a cloned `_admins` map but never
+    // dispatched it back to Redux (unlike the guest-admin branch above,
+    // which dispatches setGuests). Without this dispatch, state.setup.admins
+    // still contains the removed admin after a successful removal, so the
+    // manager list keeps showing them until the screen is remounted.
+    it("dispatches setAdmins with the removed admin's houseIds cleared", async () => {
+      const { getByTestId } = renderScreen({
+        "admin-1": REAL_ADMIN,
+      });
+
+      await act(async () => {
+        fireEvent.press(getByTestId("remove-Pat Manager"));
+      });
+
+      await waitFor(() =>
+        expect(mockUpdateHouseMutateAsync).toHaveBeenCalled(),
+      );
+
+      expect(mockDispatch).toHaveBeenCalledWith(
+        setAdmins({
+          "admin-1": { ...REAL_ADMIN, houseIds: [] },
+        }),
+      );
     });
 
     it("revokes the superAdmin claim instead when the admin is a super admin for this house", async () => {
@@ -227,14 +254,14 @@ describe("ManagerSettings", () => {
         expect(mockRemoveAdminPrivileges).toHaveBeenCalledWith(
           superAdmin,
           [],
-          ["house-1"]
-        )
+          ["house-1"],
+        ),
       );
     });
 
     it("logs the error without persisting when the claim revoke fails", async () => {
       mockRemoveAdminPrivileges.mockRejectedValueOnce(
-        new Error("permission-denied")
+        new Error("permission-denied"),
       );
       const { getByTestId, handleSubmit } = renderScreen({
         "admin-1": REAL_ADMIN,
