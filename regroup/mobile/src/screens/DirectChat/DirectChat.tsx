@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 // Phase 3.3: Removed withRats HOC (translation/theme available globally via useTranslation and ThemeProvider)
 import { useAppSelector, useAppDispatch } from "../../state/store";
 import { useSelectedHouse } from "../../hooks/useSelectedHouse";
@@ -6,7 +6,7 @@ import { useSelectedGuest } from "../../hooks/useSelectedGuest";
 import { useGuests } from "../../state/queries/guestQueries";
 import { Message } from "../../entities/Message";
 
-import { loadDirectChat } from "../../services/message";
+import { loadDirectChat, subscribeToDirectChat } from "../../services/message";
 import {
   sendDirectMessage as sendDirectMessageThunk,
   addMessageToConversation,
@@ -85,7 +85,7 @@ const DirectChatInner: React.FC<ChatProps> = (props) => {
     (msgs: Message[], chatId: string, loading: boolean = false) => {
       props.addDirectMessage(msgs, chatId, loading);
     },
-    [props.addDirectMessage]
+    [props.addDirectMessage],
   );
 
   const markLatestMessageRead = useCallback(
@@ -94,7 +94,7 @@ const DirectChatInner: React.FC<ChatProps> = (props) => {
         props.markMessageRead(props.conversationId, msgs[0].key);
       }
     },
-    [props.markMessageRead, props.conversationId]
+    [props.markMessageRead, props.conversationId],
   );
 
   useEffect(() => {
@@ -102,7 +102,7 @@ const DirectChatInner: React.FC<ChatProps> = (props) => {
       setLoadingNewConversation(true);
       const msgs = await loadDirectChat(
         props.conversationId,
-        receiveMessages as any
+        receiveMessages as any,
       );
       markLatestMessageRead(msgs);
       setLoadingNewConversation(false);
@@ -110,6 +110,46 @@ const DirectChatInner: React.FC<ChatProps> = (props) => {
 
     initChat();
   }, [props.conversationId, receiveMessages, markLatestMessageRead]);
+
+  // Hold the real Firestore unsubscribe function returned by
+  // subscribeToDirectChat, mirroring the pattern already used by HouseChat.
+  // Without this, DirectChat only ever fetches messages once via
+  // loadDirectChat above. That's invisible when ContactScreen happens to
+  // stay mounted underneath (it subscribes to every conversation itself),
+  // but `chat/:userId` is also a registered deep link route — opening a DM
+  // from a push notification mounts DirectChat standalone, with nothing
+  // else in the stack keeping a listener alive, so new messages would
+  // never appear without a manual remount.
+  const unsubscribeRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    const { user, userAsAdmin: admin, guest, recipient } = props;
+    const userParticipantId = user?.isAdmin ? admin?.id : guest?.id;
+    const recipientId = recipient?.id;
+
+    unsubscribeRef.current?.();
+    unsubscribeRef.current = null;
+
+    if (!userParticipantId || !recipientId) {
+      return;
+    }
+
+    unsubscribeRef.current = subscribeToDirectChat(
+      [userParticipantId, recipientId],
+      receiveMessages as any,
+    );
+
+    return () => {
+      unsubscribeRef.current?.();
+      unsubscribeRef.current = null;
+    };
+  }, [
+    props.user?.isAdmin,
+    props.userAsAdmin?.id,
+    props.guest?.id,
+    props.recipient?.id,
+    receiveMessages,
+  ]);
 
   useEffect(() => {
     if (props.messages && props.messages.length) {
@@ -125,11 +165,11 @@ const DirectChatInner: React.FC<ChatProps> = (props) => {
         await loadDirectChat(
           props.conversationId,
           receiveMessages as any,
-          lastMessageId
+          lastMessageId,
         );
       }
     },
-    [props.conversationId, receiveMessages]
+    [props.conversationId, receiveMessages],
   );
 
   const createMessage = useCallback(
@@ -169,7 +209,7 @@ const DirectChatInner: React.FC<ChatProps> = (props) => {
 
       return [message];
     },
-    [props]
+    [props],
   );
 
   const onSend = useCallback(
@@ -186,11 +226,11 @@ const DirectChatInner: React.FC<ChatProps> = (props) => {
         // typed message, which they had to retype from memory. Restore it.
         setText(messageText);
         Alert.alert(
-          "Failed to send the message! Please check your network connection and try again."
+          "Failed to send the message! Please check your network connection and try again.",
         );
       }
     },
-    [props.sendDirectMessage, props.conversationId, createMessage]
+    [props.sendDirectMessage, props.conversationId, createMessage],
   );
 
   const renderMessage = useCallback(
@@ -251,14 +291,14 @@ const DirectChatInner: React.FC<ChatProps> = (props) => {
         </View>
       );
     },
-    [props.user]
+    [props.user],
   );
 
   // Stable renderItem for the FlatList so cell memoization isn't
   // invalidated on every parent re-render by an inline arrow.
   const renderItem = useCallback(
     (info: { item: Message }) => renderMessage(info.item),
-    [renderMessage]
+    [renderMessage],
   );
 
   const renderHeader = useCallback(() => {
@@ -469,11 +509,11 @@ const DirectChat: React.FC<any> = (props) => {
   const admins = useAppSelector((state) => state.admin.houseAdmins);
   const userAsAdmin = useAppSelector((state) => state.admin.userAsAdmin);
   const conversationId = useAppSelector(
-    (state) => state.chat.activeConversationId
+    (state) => state.chat.activeConversationId,
   );
   const recipient = useAppSelector((state) => state.chat.recipient);
   const messages = useAppSelector((state) =>
-    conversationId ? state.chat.conversations[conversationId] : []
+    conversationId ? state.chat.conversations[conversationId] : [],
   );
 
   return (
@@ -491,18 +531,18 @@ const DirectChat: React.FC<any> = (props) => {
       addDirectMessage={(
         messages: Message[],
         chatId: string,
-        loading?: boolean
+        loading?: boolean,
       ) => {
         // Add each message to conversation
         messages.forEach((message) => {
           dispatch(
-            addMessageToConversation({ conversationId: chatId, message })
+            addMessageToConversation({ conversationId: chatId, message }),
           );
         });
       }}
       sendDirectMessage={async (
         conversationId: string,
-        messages: DirectMessage[]
+        messages: DirectMessage[],
       ) => {
         // Send the first message (typically only one message per send)
         const message = messages[0];
@@ -519,7 +559,7 @@ const DirectChat: React.FC<any> = (props) => {
               senderName: message.senderName,
               recipientId: message.recipientId || "",
               houseId: message.houseId,
-            })
+            }),
           ).unwrap();
         }
       }}
@@ -536,7 +576,7 @@ const DirectChat: React.FC<any> = (props) => {
             addMessageToConversation({
               conversationId: conversationId || "",
               message,
-            })
+            }),
           );
         });
       }}
@@ -552,7 +592,7 @@ const DirectChat: React.FC<any> = (props) => {
               senderName: message.senderName || "",
               recipientId: message.recipientId || "",
               houseId: message.houseId || "",
-            })
+            }),
           ).unwrap();
         }
       }}
@@ -562,7 +602,7 @@ const DirectChat: React.FC<any> = (props) => {
       }}
       markMessageRead={(conversationId: string, messageKey: string) =>
         dispatch(
-          markMessagesAsRead({ conversationId, messageIds: [messageKey] })
+          markMessagesAsRead({ conversationId, messageIds: [messageKey] }),
         )
       }
       conversations={{}}
