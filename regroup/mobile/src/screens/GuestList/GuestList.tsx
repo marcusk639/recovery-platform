@@ -135,14 +135,21 @@ const GuestList: React.FC<Props> = ({ navigation }) => {
   useFocusEffect(
     useCallback(() => {
       refetch();
-    }, [refetch])
+    }, [refetch]),
   );
 
   // Memoize the derived array so children with React.memo can skip
-  // re-renders when the underlying data is unchanged.
+  // re-renders when the underlying data is unchanged. Discharged residents
+  // are excluded — they've completed/left the program and no longer belong
+  // in the active-resident list (their record is retained, not deleted).
   const guests = useMemo(
-    () => (guestsData ? Object.values(guestsData) : []),
-    [guestsData]
+    () =>
+      guestsData
+        ? Object.values(guestsData).filter(
+            (guest) => guest.status !== "discharged",
+          )
+        : [],
+    [guestsData],
   );
 
   // Handle guest selection — stable reference so Section rows memoize.
@@ -151,14 +158,14 @@ const GuestList: React.FC<Props> = ({ navigation }) => {
       dispatch(selectGuestById(guestId));
       navigation.goBack();
     },
-    [dispatch, navigation]
+    [dispatch, navigation],
   );
 
   // Render help popover
   const renderHelp = () => {
     showPopover(
       "RESIDENT LIST",
-      "Here you can view and select any residents within the house."
+      "Here you can view and select any residents within the house.",
     );
   };
 
@@ -168,7 +175,7 @@ const GuestList: React.FC<Props> = ({ navigation }) => {
       if (!house) return null;
 
       const healthScore = getHealthByPercentage(
-        getOverallPercentage(guest, house, getTodaysDate())
+        getOverallPercentage(guest, house, getTodaysDate()),
       );
       return (
         <Section
@@ -178,7 +185,7 @@ const GuestList: React.FC<Props> = ({ navigation }) => {
           name={guest.firstName + " " + guest.lastName}
           description={getDateAndTime(
             guest.createdAt ?? guest.createdDate ?? new Date(),
-            false
+            false,
           )}
           iconBackgroundColor={color.green_blue}
           onPress={() => handleGuestSelect(guest.id)}
@@ -197,7 +204,7 @@ const GuestList: React.FC<Props> = ({ navigation }) => {
         />
       );
     },
-    [house, weekStart, handleGuestSelect]
+    [house, weekStart, handleGuestSelect],
   );
 
   const keyExtractor = useCallback((guest: Guest) => guest.id, []);
