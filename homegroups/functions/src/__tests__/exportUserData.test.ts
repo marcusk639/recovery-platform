@@ -103,7 +103,7 @@ describe("exportUserData — collection-name regression", () => {
   it("throws unauthenticated when no auth context", async () => {
     await expect(
       (exportUserData as unknown as Function)({ auth: undefined, data: {} }),
-    ).rejects.toThrow(/sign(ed)? in/i);
+    ).rejects.toMatchObject({ code: "unauthenticated" });
   });
 
   it("queries direct_message_threads (not directMessages) with the participants field", async () => {

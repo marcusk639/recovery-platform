@@ -6,6 +6,7 @@ import {
 import * as logger from "firebase-functions/logger";
 import { db, messaging } from "../utils/firebase";
 import * as admin from "firebase-admin";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface CompleteTreasurerHandoffData {
   groupId: string;
@@ -18,12 +19,7 @@ interface CompleteTreasurerHandoffData {
 export const completeTreasurerHandoff = onCall(
   async (request: CallableRequest<CompleteTreasurerHandoffData>) => {
     const data = request.data;
-    const auth = request.auth;
-
-    // Validate authentication
-    if (!auth) {
-      throw new HttpsError("unauthenticated", "User must be authenticated.");
-    }
+    const currentUserId = requireAuth(request);
 
     // Validate input
     if (!data || !data.groupId) {
@@ -31,7 +27,6 @@ export const completeTreasurerHandoff = onCall(
     }
 
     const { groupId } = data;
-    const currentUserId = auth.uid;
 
     logger.info(
       `Completing treasurer handoff for group ${groupId} by user ${currentUserId}`,

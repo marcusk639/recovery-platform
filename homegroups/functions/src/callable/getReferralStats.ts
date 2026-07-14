@@ -5,14 +5,11 @@ import {
 } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
+import { requireAuth } from "../utils/callableWrapper";
 
 export const getReferralStats = onCall(
   async (request: CallableRequest<Record<string, never>>) => {
-    const userId = request.auth?.uid;
-
-    if (!userId) {
-      throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
+    const userId = requireAuth(request);
 
     try {
       // Fetch user doc to get code

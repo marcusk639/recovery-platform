@@ -6,6 +6,7 @@ import {
 import { db } from "../utils/firebase";
 import * as admin from "firebase-admin";
 import { assertGroupActive } from "../utils/subscriptionGuard";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface AffiliateGroupData {
   intergroupId: string;
@@ -21,8 +22,7 @@ export const affiliateGroupToIntergroup = onCall(
   async (
     request: CallableRequest<AffiliateGroupData>,
   ): Promise<AffiliateGroupResult> => {
-    if (!request.auth)
-      throw new HttpsError("unauthenticated", "Must be signed in");
+    const uid = requireAuth(request);
 
     const { intergroupId, groupId } = request.data;
     if (!intergroupId || !groupId) {
@@ -31,8 +31,6 @@ export const affiliateGroupToIntergroup = onCall(
         "intergroupId and groupId are required",
       );
     }
-
-    const uid = request.auth.uid;
 
     // Load intergroup document
     const intergroupRef = db.collection("intergroups").doc(intergroupId);

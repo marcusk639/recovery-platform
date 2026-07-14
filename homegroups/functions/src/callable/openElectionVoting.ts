@@ -7,6 +7,7 @@ import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { db, messaging } from "../utils/firebase";
 import { assertGroupActive } from "../utils/subscriptionGuard";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface OpenElectionVotingData {
   electionId: string;
@@ -29,12 +30,8 @@ export const openElectionVoting = onCall(
   async (
     request: CallableRequest<OpenElectionVotingData>,
   ): Promise<OpenElectionVotingResult> => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Must be authenticated.");
-    }
-
     const { data } = request;
-    const callerId = request.auth.uid;
+    const callerId = requireAuth(request);
 
     if (!data.electionId) {
       throw new HttpsError("invalid-argument", "electionId is required.");

@@ -1,6 +1,7 @@
 import * as functions from "firebase-functions";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { db, auth } from "../utils/firebase";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface MemberData {
   userId: string;
@@ -35,17 +36,13 @@ export const syncUserClaims = onCall<SyncClaimsRequest>(
   { cors: true },
   async (request): Promise<SyncClaimsResponse> => {
     // Ensure user is authenticated
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "User must be authenticated");
-    }
-
-    const callerUid = request.auth.uid;
+    const callerUid = requireAuth(request);
     const targetUserId = request.data?.targetUserId || callerUid;
 
     // If targeting a different user, caller must be a super admin
     if (targetUserId !== callerUid) {
-      const callerToken = request.auth.token;
-      if (!callerToken.superAdmin) {
+      const callerToken = request.auth?.token;
+      if (!callerToken?.superAdmin) {
         throw new HttpsError(
           "permission-denied",
           "Only super admins can sync claims for other users",

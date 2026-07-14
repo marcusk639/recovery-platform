@@ -5,6 +5,7 @@ import {
 } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { stripe } from "../utils/stripe";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface GetStripeAccountDetailsData {
   accountId?: string; // Optional: for connected accounts
@@ -18,7 +19,7 @@ interface GetStripeAccountDetailsData {
 
 export const getStripeAccountDetails = onCall(
   async (request: CallableRequest<GetStripeAccountDetailsData>) => {
-    const userId = request.auth?.uid;
+    requireAuth(request);
     const {
       accountId,
       includeBalance = true,
@@ -28,10 +29,6 @@ export const getStripeAccountDetails = onCall(
       includeProducts = false,
       includePrices = false,
     } = request.data;
-
-    if (!userId) {
-      throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
 
     if (request.auth?.token?.superAdmin !== true) {
       throw new HttpsError("permission-denied", "Requires super admin access.");

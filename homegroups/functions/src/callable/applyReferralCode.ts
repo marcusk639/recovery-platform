@@ -7,6 +7,7 @@ import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
 import * as admin from "firebase-admin";
 import { stripe } from "../utils/stripe";
+import { requireAuth } from "../utils/callableWrapper";
 
 // Referred groups receive a 90-day extended trial instead of the standard trial
 const REFERRAL_TRIAL_DAYS = 90;
@@ -19,11 +20,8 @@ interface ApplyReferralCodeData {
 export const applyReferralCode = onCall(
   async (request: CallableRequest<ApplyReferralCodeData>) => {
     const { code, groupId } = request.data;
-    const userId = request.auth?.uid;
+    const userId = requireAuth(request);
 
-    if (!userId) {
-      throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
     if (!code || typeof code !== "string") {
       throw new HttpsError("invalid-argument", "Referral code is required.");
     }
@@ -119,8 +117,7 @@ export const applyReferralCode = onCall(
       const groupSnap2 = await db.collection("groups").doc(groupId).get();
       const groupData2 = groupSnap2.data();
       const stripeSubscriptionId = groupData2?.stripeSubscriptionId as
-        | string
-        | undefined;
+        string | undefined;
 
       if (stripeSubscriptionId) {
         try {

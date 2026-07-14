@@ -1,14 +1,19 @@
-import { onCall, CallableRequest, HttpsError } from "firebase-functions/v2/https";
+import {
+  onCall,
+  CallableRequest,
+  HttpsError,
+} from "firebase-functions/v2/https";
 import { db } from "../utils/firebase";
 import * as admin from "firebase-admin";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface ExportFacilityComplianceReportData {
   intergroupId: string;
   reportPeriod: {
-    startDate: string;  // ISO date YYYY-MM-DD
+    startDate: string; // ISO date YYYY-MM-DD
     endDate: string;
   };
-  format: 'csv';
+  format: "csv";
   includeAttendance: boolean;
   includeMilestones: boolean;
   includeMeetingSchedule: boolean;
@@ -22,35 +27,58 @@ interface ExportFacilityComplianceReportResult {
 
 export const exportFacilityComplianceReport = onCall(
   { region: "us-central1" },
-  async (request: CallableRequest<ExportFacilityComplianceReportData>): Promise<ExportFacilityComplianceReportResult> => {
-    if (!request.auth) throw new HttpsError("unauthenticated", "Must be signed in");
+  async (
+    request: CallableRequest<ExportFacilityComplianceReportData>,
+  ): Promise<ExportFacilityComplianceReportResult> => {
+    const uid = requireAuth(request);
 
-    const { intergroupId, reportPeriod, format, includeAttendance, includeMilestones, includeMeetingSchedule } = request.data;
+    const {
+      intergroupId,
+      reportPeriod,
+      format,
+      includeAttendance,
+      includeMilestones,
+      includeMeetingSchedule,
+    } = request.data;
     if (!intergroupId || !reportPeriod?.startDate || !reportPeriod?.endDate) {
-      throw new HttpsError("invalid-argument", "intergroupId and reportPeriod are required");
+      throw new HttpsError(
+        "invalid-argument",
+        "intergroupId and reportPeriod are required",
+      );
     }
 
-    if ((format as string) === 'pdf') {
-      throw new HttpsError('invalid-argument', "PDF format is not supported. Use 'txt' or 'csv'.");
+    if ((format as string) === "pdf") {
+      throw new HttpsError(
+        "invalid-argument",
+        "PDF format is not supported. Use 'txt' or 'csv'.",
+      );
     }
-
-    const uid = request.auth.uid;
 
     // Load intergroup
-    const intergroupSnap = await db.collection("intergroups").doc(intergroupId).get();
-    if (!intergroupSnap.exists) throw new HttpsError("not-found", "Intergroup not found");
+    const intergroupSnap = await db
+      .collection("intergroups")
+      .doc(intergroupId)
+      .get();
+    if (!intergroupSnap.exists)
+      throw new HttpsError("not-found", "Intergroup not found");
     const intergroupData = intergroupSnap.data()!;
 
     // Must be admin of treatment center
     if (!intergroupData.adminUids?.includes(uid)) {
       throw new HttpsError("permission-denied", "Must be an intergroup admin");
     }
-    if (intergroupData.type !== 'treatment_center') {
-      throw new HttpsError("failed-precondition", "Compliance reports only available for treatment centers");
+    if (intergroupData.type !== "treatment_center") {
+      throw new HttpsError(
+        "failed-precondition",
+        "Compliance reports only available for treatment centers",
+      );
     }
 
-    if (intergroupData.subscriptionStatus !== 'active') {
-      throw new HttpsError('failed-precondition', 'Active subscription required to export compliance reports.');
+    if (intergroupData.subscriptionStatus !== "active") {
+      throw new HttpsError(
+        "failed-precondition",
+        "Active subscription required to export compliance reports.",
+      );
     }
 
     // Load facility stats
@@ -63,8 +91,9 @@ export const exportFacilityComplianceReport = onCall(
     const stats = statsSnap.data() ?? {};
 
     // Generate report content
-    const reportId = db.collection("_").doc().id;  // Generate ID
-    const affiliatedGroupIds: string[] = intergroupData.affiliatedGroupIds || [];
+    const reportId = db.collection("_").doc().id; // Generate ID
+    const affiliatedGroupIds: string[] =
+      intergroupData.affiliatedGroupIds || [];
 
     // Build a simple CSV or text report (PDF would require a PDF library)
     const reportContent = generateReportContent({
@@ -85,7 +114,7 @@ export const exportFacilityComplianceReport = onCall(
     const file = bucket.file(fileName);
 
     await file.save(reportContent, {
-      contentType: 'text/csv',
+      contentType: "text/csv",
       metadata: {
         metadata: {
           intergroupId,
@@ -99,7 +128,7 @@ export const exportFacilityComplianceReport = onCall(
     // Generate signed URL valid for 1 hour
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
     const [signedUrl] = await file.getSignedUrl({
-      action: 'read',
+      action: "read",
       expires: expiresAt,
     });
 
@@ -126,7 +155,7 @@ export const exportFacilityComplianceReport = onCall(
       expiresAt: expiresAt.toISOString(),
       reportId,
     };
-  }
+  },
 );
 
 function generateReportContent(params: {
@@ -143,7 +172,7 @@ function generateReportContent(params: {
   const { intergroupName, reportPeriod, stats, reportId } = params;
   const generatedAt = new Date().toISOString();
 
-  if (params.format === 'csv') {
+  if (params.format === "csv") {
     const lines = [
       `Facility Name,${intergroupName}`,
       `Report Period,${reportPeriod.startDate} to ${reportPeriod.endDate}`,
@@ -175,7 +204,7 @@ function generateReportContent(params: {
       ``,
       `Footer: Report ID ${reportId} | Generated by Homegroups | Not a clinical assessment`,
     ];
-    return lines.join('\n');
+    return lines.join("\n");
   }
 
   // Text-based "PDF" content

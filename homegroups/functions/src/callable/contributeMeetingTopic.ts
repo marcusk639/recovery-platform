@@ -6,6 +6,7 @@ import {
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { db } from "../utils/firebase";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface ContributeTopicInput {
   title: string;
@@ -32,12 +33,8 @@ export const contributeMeetingTopic = onCall(
   async (
     request: CallableRequest<ContributeTopicInput>,
   ): Promise<ContributeTopicOutput> => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Must be authenticated.");
-    }
-
     const { data } = request;
-    const callerId = request.auth.uid;
+    const callerId = requireAuth(request);
     const callerName =
       request.auth.token.name || request.auth.token.email || "Member";
 

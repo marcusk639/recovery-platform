@@ -5,8 +5,10 @@ import {
 } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
+import { z } from "zod";
 import { db, messaging } from "../utils/firebase";
 import { assertGroupActive } from "../utils/subscriptionGuard";
+import { requireAuth, validateData } from "../utils/callableWrapper";
 
 interface InitiateRemovalData {
   groupId: string;
@@ -19,24 +21,23 @@ interface InitiateRemovalResult {
   requestId: string;
 }
 
+// reason is trimmed before the min-length check so a whitespace-only reason
+// is still rejected, matching the previous `!data.reason?.trim()` check.
+const initiateAdminRemovalSchema = z.object({
+  groupId: z.string().min(1),
+  targetAdminId: z.string().min(1),
+  targetAdminName: z.string().min(1).max(200),
+  reason: z.string().trim().min(1).max(1000),
+});
+
 export const initiateAdminRemoval = onCall(
   async (
     request: CallableRequest<InitiateRemovalData>,
   ): Promise<InitiateRemovalResult> => {
-    const { data, auth: context } = request;
-
-    if (!context) {
-      throw new HttpsError("unauthenticated", "Must be authenticated.");
-    }
-
-    const callerId = context.uid;
-
-    if (!data.groupId || !data.targetAdminId || !data.reason?.trim()) {
-      throw new HttpsError(
-        "invalid-argument",
-        "groupId, targetAdminId, and reason are required.",
-      );
-    }
+    const callerId = requireAuth(request);
+    // groupId/targetAdminId/reason presence is now enforced by
+    // initiateAdminRemovalSchema; the manual truthy check it replaced is gone.
+    const data = validateData(initiateAdminRemovalSchema, request.data);
 
     if (callerId === data.targetAdminId) {
       throw new HttpsError(

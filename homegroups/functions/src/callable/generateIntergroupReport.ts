@@ -7,6 +7,7 @@ import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { db } from "../utils/firebase";
 import { assertGroupActive } from "../utils/subscriptionGuard";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface GenerateReportData {
   groupId: string;
@@ -35,12 +36,8 @@ export const generateIntergroupReport = onCall(
   async (
     request: CallableRequest<GenerateReportData>,
   ): Promise<GenerateReportResult> => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Must be authenticated.");
-    }
-
     const { data } = request;
-    const callerId = request.auth.uid;
+    const callerId = requireAuth(request);
 
     if (!data.groupId) {
       throw new HttpsError("invalid-argument", "groupId is required.");

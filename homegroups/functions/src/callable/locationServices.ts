@@ -5,6 +5,7 @@ import {
 } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import Axios from "axios";
+import { requireAuth } from "../utils/callableWrapper";
 
 // Reverse-geocode proxy callable.
 //
@@ -32,9 +33,7 @@ interface ReverseGeocodeData {
 
 export const reverseGeocodeLocation = onCall(
   async (request: CallableRequest<ReverseGeocodeData>) => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Must be authenticated.");
-    }
+    requireAuth(request);
 
     const { latitude, longitude } = request.data || ({} as ReverseGeocodeData);
     if (typeof latitude !== "number" || typeof longitude !== "number") {

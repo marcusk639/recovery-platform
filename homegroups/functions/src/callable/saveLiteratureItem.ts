@@ -6,6 +6,7 @@ import {
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { db } from "../utils/firebase";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface SaveLiteratureInput {
   literatureId: string;
@@ -27,12 +28,8 @@ export const saveLiteratureItem = onCall(
   async (
     request: CallableRequest<SaveLiteratureInput>,
   ): Promise<SaveLiteratureOutput> => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Must be authenticated.");
-    }
-
     const { data } = request;
-    const callerId = request.auth.uid;
+    const callerId = requireAuth(request);
 
     if (!data.literatureId) {
       throw new HttpsError("invalid-argument", "literatureId is required.");

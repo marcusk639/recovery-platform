@@ -1180,11 +1180,24 @@ describe("saveMeetingMinutes", () => {
 
   test("throws permission-denied if user is not secretary or admin", async () => {
     setupAdminMembersCollection("regular_user", ["member"]);
+    // minutesPayload needs every field meetingMinutesSchema now requires
+    // (Task 7) so this request clears validation and actually exercises the
+    // permission check the test is targeting, rather than failing earlier
+    // with invalid-argument.
     const req = makeRequest(
       {
         businessMeetingId: "meeting123",
         groupId: "group123",
-        minutes: { chair: "Jane" },
+        minutes: {
+          chair: "Jane",
+          secretary: "Bob M.",
+          attendanceCount: 12,
+          memberQuorum: true,
+          openingPrayer: true,
+          closingPrayer: true,
+          agendaItems: [],
+          decisions: [],
+        },
       },
       "regular_user",
     );
