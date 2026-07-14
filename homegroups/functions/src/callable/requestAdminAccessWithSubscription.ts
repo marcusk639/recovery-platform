@@ -343,20 +343,82 @@ export const requestAdminAccessWithSubscription = onCall(
           txError instanceof HttpsError &&
           txError.code === "failed-precondition";
 
-        if (subscriptionCreatedThisCall && stripeSubscriptionId) {
+        let postTxData: any;
+        let postTxReadFailed = false;
+        try {
+          postTxData = (await groupRef.get()).data();
+        } catch (postTxReadError) {
+          postTxReadFailed = true;
+          logger.error(
+            `Error re-reading group ${groupId} after transaction failure:`,
+            postTxReadError,
+          );
+        }
+
+        // Ack-ambiguity recovery: did THIS call's own transaction actually
+        // commit, despite the client observing an error? Relies on this
+        // callable's subscription idempotency key being scoped to `userId`
+        // — that's what makes this single check sufficient even for a
+        // same-user concurrent double-request sharing one Stripe
+        // subscription object; see the design spec for the full argument.
+        // No separate "does someone else own this subscription" check is
+        // needed.
+        if (postTxData?.admins?.includes(userId)) {
+          const updatedGroupSnap = await groupRef.get();
+          return {
+            success: true,
+            groupId,
+            subscriptionId: stripeSubscriptionId,
+            subscriptionStatus,
+            group: updatedGroupSnap.data(),
+          };
+        }
+
+        if (
+          subscriptionCreatedThisCall &&
+          stripeSubscriptionId &&
+          !postTxReadFailed
+        ) {
+          let cancelConfirmed = false;
           try {
             await stripe.subscriptions.cancel(stripeSubscriptionId);
-            logger.warn(
-              `Compensating: Canceled Stripe subscription ${stripeSubscriptionId} after claim transaction ${
-                isRaceLoss ? "lost the claim race" : "failed unexpectedly"
-              } for group ${groupId} by user ${userId}.`,
-            );
           } catch (stripeCancelError) {
             logger.error(
               `Error canceling Stripe subscription ${stripeSubscriptionId} in compensation:`,
               stripeCancelError,
             );
           }
+          try {
+            const currentState =
+              await stripe.subscriptions.retrieve(stripeSubscriptionId);
+            cancelConfirmed = currentState.status === "canceled";
+          } catch (retrieveError) {
+            logger.error(
+              `Error verifying cancellation state for ${stripeSubscriptionId}:`,
+              retrieveError,
+            );
+          }
+          if (cancelConfirmed) {
+            await groupRef.update({
+              stripeSubscriptionAttempt:
+                admin.firestore.FieldValue.increment(1),
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+          }
+          logger.warn(
+            `Compensating: Canceled Stripe subscription ${stripeSubscriptionId} after claim transaction ${
+              isRaceLoss ? "lost the claim race" : "failed unexpectedly"
+            } for group ${groupId} by user ${userId}. Confirmed canceled: ${cancelConfirmed}.`,
+          );
+        } else if (postTxReadFailed && subscriptionCreatedThisCall) {
+          // Conservative default when we can't confirm the ack-ambiguity
+          // state: an orphaned live subscription (caught later by the
+          // reconciler/audit query) is a much smaller harm than canceling a
+          // subscription that this same user's other concurrent request now
+          // depends on. Do not cancel when uncertain.
+          logger.warn(
+            `Skipping compensation for subscription ${stripeSubscriptionId}: could not confirm ack-ambiguity state after a failed re-read — erring toward not canceling.`,
+          );
         }
 
         if (isRaceLoss) {

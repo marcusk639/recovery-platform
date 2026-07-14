@@ -499,3 +499,248 @@ describe("requestAdminAccessWithSubscription — final live-status re-check befo
     expect(mockStripeSubscriptionsRetrieve).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("requestAdminAccessWithSubscription — ack-ambiguity-aware compensation", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    docStore = {};
+    mockDb = buildMockDb();
+    setupDefaults();
+  });
+
+  it("treats a transaction that actually committed (despite a thrown error) as a win, not a failure", async () => {
+    // Simulate the ack-ambiguity scenario: the transaction's write goes
+    // through (docStore reflects it), but the client-observed call still
+    // throws (e.g. the ack itself was lost to a network error).
+    //
+    // ADAPTATION: this test's custom `tx.update` needs to resolve the
+    // `arrayUnion` sentinel into a real array (rather than storing it
+    // verbatim, as this file's other mocks do by documented convention —
+    // see `resolveFieldValue` and the write-ordering describe block's
+    // comment above) because the production ack-ambiguity check does
+    // `postTxData?.admins?.includes(userId)`, which requires a real array
+    // to behave meaningfully — exactly as real Firestore would actually
+    // resolve `arrayUnion` on commit. Using the verbatim-sentinel
+    // convention here would make `admins` an object with no `.includes`
+    // method and throw, which isn't the scenario this test is targeting.
+    mockDb.runTransaction = (async (fn: (tx: any) => Promise<unknown>) => {
+      const tx = {
+        get: async (ref: any) => ref.get(),
+        update: (ref: any, data: Record<string, unknown>) => {
+          const existing = (docStore[ref.path] || {}) as Record<
+            string,
+            unknown
+          >;
+          const merged: Record<string, unknown> = { ...existing };
+          for (const [key, value] of Object.entries(data)) {
+            if (
+              value &&
+              typeof value === "object" &&
+              Object.prototype.hasOwnProperty.call(value, "__arrayUnion")
+            ) {
+              const base = Array.isArray(existing[key])
+                ? (existing[key] as unknown[])
+                : [];
+              const toAdd = (value as { __arrayUnion: unknown[] }).__arrayUnion;
+              merged[key] = Array.from(new Set([...base, ...toAdd]));
+            } else if (
+              value &&
+              typeof value === "object" &&
+              Object.prototype.hasOwnProperty.call(value, "__arrayRemove")
+            ) {
+              const base = Array.isArray(existing[key])
+                ? (existing[key] as unknown[])
+                : [];
+              const toRemove = (value as { __arrayRemove: unknown[] })
+                .__arrayRemove;
+              merged[key] = base.filter((item) => !toRemove.includes(item));
+            } else {
+              merged[key] = value;
+            }
+          }
+          docStore[ref.path] = merged;
+        },
+      };
+      await fn(tx); // the write actually happens
+      throw new Error("DEADLINE_EXCEEDED: ack lost"); // but the client sees an error
+    }) as typeof mockDb.runTransaction;
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      paymentMethodId: PAYMENT_METHOD_ID,
+    });
+
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).resolves.toMatchObject({ success: true });
+
+    // No compensation ran — the subscription this call created is still
+    // live, because the claim genuinely succeeded.
+    expect(mockStripeSubscriptionsCancel).not.toHaveBeenCalled();
+
+    const finalGroup = docStore[`groups/${GROUP_ID}`] as Record<
+      string,
+      unknown
+    >;
+    expect(finalGroup.admins).toEqual([USER_ID]);
+    expect(finalGroup.stripeSubscriptionId).toBe("sub_test");
+  });
+
+  it("a same-user concurrent double-request sharing one subscription object: the loser's ack-ambiguity check catches it, no cancellation attempted", async () => {
+    // Both "concurrent" calls in this test use the SAME idempotency key
+    // (subscriptionAttempt reads as 0 for both, since neither has
+    // triggered a compensation), so the mock returns the identical
+    // subscription object for both — this IS the scenario the design
+    // spec's invariant argument is about.
+    const originalRunTransaction = mockDb.runTransaction;
+    let transactionAttempt = 0;
+    mockDb.runTransaction = (async (fn: (tx: any) => Promise<unknown>) => {
+      transactionAttempt++;
+      if (transactionAttempt === 1) {
+        // Simulate this exact user's OTHER concurrent request having
+        // already committed with the shared subscription object.
+        docStore[`groups/${GROUP_ID}`] = {
+          ...docStore[`groups/${GROUP_ID}`],
+          isClaimed: true,
+          admins: [USER_ID], // same user, not a different one
+          stripeSubscriptionId: "sub_test", // the SAME object this call also holds
+          subscriptionStatus: "trialing",
+        };
+      }
+      return originalRunTransaction(fn);
+    }) as typeof mockDb.runTransaction;
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      paymentMethodId: PAYMENT_METHOD_ID,
+    });
+
+    // This call's OWN transaction attempt fails (isClaimed already true),
+    // but since admins already includes THIS SAME userId, the
+    // ack-ambiguity check must catch it and return success.
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).resolves.toMatchObject({ success: true });
+
+    expect(mockStripeSubscriptionsCancel).not.toHaveBeenCalled();
+  });
+
+  it("cancel-ack-ambiguity: cancel() rejects but retrieve() confirms canceled — advances the attempt counter", async () => {
+    mockDb.runTransaction = (async () => {
+      throw new Error("DEADLINE_EXCEEDED: transaction timed out");
+    }) as typeof mockDb.runTransaction;
+    mockStripeSubscriptionsCancel.mockRejectedValue(
+      new Error("Stripe API error: ack lost, but cancellation went through"),
+    );
+    // ADAPTATION: `retrieve()` is called twice in this flow — once by
+    // Task 2's pre-transaction live-status re-check (must see "trialing"
+    // so that guard doesn't reject before the transaction ever runs) and
+    // once by this compensation block's post-cancel confirmation (the
+    // thing actually under test here). A single blanket `mockResolvedValue`
+    // of "canceled" would make the FIRST call see "canceled" too, tripping
+    // the earlier guard and masking the scenario this test targets.
+    mockStripeSubscriptionsRetrieve.mockResolvedValueOnce({
+      status: "trialing",
+    });
+    mockStripeSubscriptionsRetrieve.mockResolvedValueOnce({
+      status: "canceled",
+    });
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      paymentMethodId: PAYMENT_METHOD_ID,
+    });
+
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).rejects.toMatchObject({ code: "internal" });
+
+    const afterFirstAttempt = docStore[`groups/${GROUP_ID}`] as Record<
+      string,
+      unknown
+    >;
+    expect(afterFirstAttempt.stripeSubscriptionAttempt).toBe(1);
+  });
+
+  it("cancel-ack-ambiguity: cancel() rejects and retrieve() shows still-active — does NOT advance the counter", async () => {
+    mockDb.runTransaction = (async () => {
+      throw new Error("DEADLINE_EXCEEDED: transaction timed out");
+    }) as typeof mockDb.runTransaction;
+    mockStripeSubscriptionsCancel.mockRejectedValue(
+      new Error("Stripe API error: cancellation genuinely failed"),
+    );
+    mockStripeSubscriptionsRetrieve.mockResolvedValue({ status: "trialing" });
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      paymentMethodId: PAYMENT_METHOD_ID,
+    });
+
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).rejects.toMatchObject({ code: "internal" });
+
+    const afterFirstAttempt = docStore[`groups/${GROUP_ID}`] as Record<
+      string,
+      unknown
+    >;
+    expect(afterFirstAttempt.stripeSubscriptionAttempt).toBeUndefined();
+  });
+
+  it("a failed re-read during compensation skips cancellation entirely rather than throwing unhandled", async () => {
+    mockDb.runTransaction = (async () => {
+      throw new Error("DEADLINE_EXCEEDED: transaction timed out");
+    }) as typeof mockDb.runTransaction;
+
+    // ADAPTATION: the illustrative brief test grabbed a docRef via
+    // `mockDb.collection("groups").doc(GROUP_ID)` and called
+    // `.get.mockRejectedValueOnce(...)` on it directly. That doesn't work
+    // against this file's actual `buildDocRef()`: every `.doc(docId)` call
+    // mints a brand-new object with its own fresh `jest.fn()`s (see
+    // `buildCollectionRef` above), and the SUT creates its OWN `groupRef`
+    // internally (`db.collection("groups").doc(groupId)`, called once, at
+    // the top of the handler) — a completely different object instance
+    // than anything grabbed from the test before invoking the SUT. Stubbing
+    // a test-side instance would never affect the SUT's own calls.
+    //
+    // Instead, wrap `mockDb.collection` so that whichever docRef instance
+    // the SUT ends up creating for `groups/{GROUP_ID}` has a `.get()` that
+    // fails on exactly its SECOND invocation (the initial fetch at the top
+    // of the handler must succeed; the post-transaction-failure re-read
+    // inside the catch block is the one under test) and behaves normally
+    // otherwise.
+    const originalCollection = mockDb.collection;
+    let groupGetCallCount = 0;
+    mockDb.collection = ((collPath: string) => {
+      const collRef = originalCollection(collPath);
+      if (collPath !== "groups") return collRef;
+      return {
+        ...collRef,
+        doc: (docId: string) => {
+          const docRef = collRef.doc(docId);
+          if (docId !== GROUP_ID) return docRef;
+          const originalGet = docRef.get;
+          docRef.get = jest.fn().mockImplementation(async () => {
+            groupGetCallCount++;
+            if (groupGetCallCount === 2) {
+              throw new Error("Firestore unavailable during re-read");
+            }
+            return originalGet();
+          });
+          return docRef;
+        },
+      };
+    }) as typeof mockDb.collection;
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      paymentMethodId: PAYMENT_METHOD_ID,
+    });
+
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).rejects.toMatchObject({ code: "internal" });
+
+    expect(mockStripeSubscriptionsCancel).not.toHaveBeenCalled();
+  });
+});
