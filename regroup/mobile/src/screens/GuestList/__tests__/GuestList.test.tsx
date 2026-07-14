@@ -80,6 +80,11 @@ const mockUseGuests = jest.fn();
 jest.mock("../../../state/queries", () => ({
   useGuests: (...args: any[]) => mockUseGuests(...args),
   useGuest: jest.fn(() => ({ data: null, isLoading: false, error: null })),
+  useWeekSummary: jest.fn(() => ({
+    data: undefined,
+    isLoading: false,
+    error: null,
+  })),
 }));
 
 // ─── Compliance indicator stub ────────────────────────────────────────────────

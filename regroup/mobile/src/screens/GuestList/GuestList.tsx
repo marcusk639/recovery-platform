@@ -29,7 +29,7 @@ import { GuestComplianceDot } from "../../components/compliance-indicator";
 import { useCurrentWeek } from "../../hooks/activity/useCurrentWeek";
 
 // Hooks
-import { useGuests } from "../../state/queries";
+import { useGuests, useWeekSummary } from "../../state/queries";
 import { useAppSelector, useAppDispatch } from "../../state/store";
 import { useSelectedHouse } from "../../hooks/useSelectedHouse";
 import { selectGuestById } from "../../state/slices/guestsSlice";
@@ -98,6 +98,70 @@ const styles = StyleSheet.create({
 interface Props {
   navigation: NativeStackNavigationProp<RootStackParamList>;
 }
+
+interface GuestListRowProps {
+  guest: Guest;
+  house: House;
+  weekStart: string;
+  onPress: () => void;
+}
+
+/**
+ * GuestListRow - Renders a single guest row, including its health icon.
+ *
+ * FlatList's renderItem is called as a plain function (not rendered as a
+ * component by React), so hooks cannot be called inside it directly. A real
+ * health percentage requires each guest's weekStats (from useWeekSummary),
+ * so — mirroring GuestComplianceDot's pattern for the compliance dot — that
+ * per-guest query lives in its own row component instead.
+ */
+const GuestListRow: React.FC<GuestListRowProps> = ({
+  guest,
+  house,
+  weekStart,
+  onPress,
+}) => {
+  const { data: weekSummary } = useWeekSummary(
+    guest.id,
+    weekStart,
+    !!guest.id && !!weekStart,
+  );
+
+  const healthScore = getHealthByPercentage(
+    getOverallPercentage(
+      guest,
+      house,
+      getTodaysDate(),
+      undefined,
+      weekSummary?.stats,
+    ),
+  );
+
+  return (
+    <Section
+      testID="guest-list-item"
+      forceAvatar
+      avatar={guest.avatar}
+      name={guest.firstName + " " + guest.lastName}
+      description={getDateAndTime(
+        guest.createdAt ?? guest.createdDate ?? new Date(),
+        false,
+      )}
+      iconBackgroundColor={color.green_blue}
+      onPress={onPress}
+      iconName={HEALTH_ICON_MAP[healthScore]}
+      iconColor={HEALTH_COLOR_MAP[healthScore]}
+      icon={
+        <GuestComplianceDot
+          guest={guest}
+          house={house}
+          weekStart={weekStart}
+          testID={`compliance-dot-${guest.id}`}
+        />
+      }
+    />
+  );
+};
 
 /**
  * GuestList Component - Displays list of guests in a house
@@ -169,38 +233,19 @@ const GuestList: React.FC<Props> = ({ navigation }) => {
     );
   };
 
-  // Render an individual guest row for the virtualized list
+  // Render an individual guest row for the virtualized list. The per-guest
+  // weekStats query (needed for a real health percentage) lives inside
+  // GuestListRow — see its docstring for why it can't live in this callback.
   const renderGuestItem = useCallback(
     ({ item: guest }: ListRenderItemInfo<Guest>) => {
       if (!house) return null;
 
-      const healthScore = getHealthByPercentage(
-        getOverallPercentage(guest, house, getTodaysDate()),
-      );
       return (
-        <Section
-          testID="guest-list-item"
-          forceAvatar
-          avatar={guest.avatar}
-          name={guest.firstName + " " + guest.lastName}
-          description={getDateAndTime(
-            guest.createdAt ?? guest.createdDate ?? new Date(),
-            false,
-          )}
-          iconBackgroundColor={color.green_blue}
+        <GuestListRow
+          guest={guest}
+          house={house}
+          weekStart={weekStart}
           onPress={() => handleGuestSelect(guest.id)}
-          iconName={HEALTH_ICON_MAP[healthScore]}
-          iconColor={HEALTH_COLOR_MAP[healthScore]}
-          icon={
-            house ? (
-              <GuestComplianceDot
-                guest={guest}
-                house={house}
-                weekStart={weekStart}
-                testID={`compliance-dot-${guest.id}`}
-              />
-            ) : null
-          }
         />
       );
     },
