@@ -35,7 +35,7 @@ src/
     meetings.ts     Meeting management
     payments.ts     Payment initiation (house/guest payments)
     subscriptions.ts  Stripe subscriptions + Connect account management;
-                      sendInviteEmails, sendConfirmationEmail
+                      sendConfirmationEmail
     oxford.ts       Oxford House management callables
     invitations.ts  createInvitation, peekInvitation, redeemInvitation
   triggers/

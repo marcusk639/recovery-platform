@@ -90,10 +90,6 @@ jest.mock("../../util/email", () => ({
   regroupEmail: "admin@regroup-app.com",
 }));
 
-jest.mock("../../util/invite", () => ({
-  notifyAdminsIfTheyExist: jest.fn(),
-}));
-
 jest.mock("firebase-admin", () => ({
   firestore: Object.assign(
     jest.fn(() => ({})),
@@ -113,7 +109,6 @@ import {
   updateSubscriptionGuests,
   updateSubscriptionHouses,
   applyBundleDiscount,
-  sendInviteEmails,
   sendConfirmationEmail,
 } from "../../callable/subscriptions";
 
@@ -685,46 +680,6 @@ describe("updateSubscriptionHouses — input validation", () => {
         houseIds: ["h1"],
       }),
     ).rejects.toMatchObject({ code: "invalid-argument" });
-  });
-});
-
-describe("sendInviteEmails — input validation", () => {
-  // sendInviteEmails requires the caller to be a house operator (admin claim)
-  // before input is processed.
-  const operatorAuth = { uid: "user-1", token: { admin: { "house-1": true } } };
-
-  it("throws invalid-argument when payload is not an array", async () => {
-    await expect(
-      callFn(sendInviteEmails, { email: "not-an-array" }, operatorAuth),
-    ).rejects.toMatchObject({ code: "invalid-argument" });
-  });
-
-  it("throws invalid-argument when email.to is not a valid email", async () => {
-    await expect(
-      callFn(
-        sendInviteEmails,
-        [
-          {
-            email: { to: "bad-email", from: "a", subject: "s", text: "t" },
-            dynamicLink: "https://example.com",
-            type: "guest",
-          },
-        ],
-        operatorAuth,
-      ),
-    ).rejects.toMatchObject({ code: "invalid-argument" });
-  });
-
-  it("throws permission-denied when caller is not a house operator", async () => {
-    await expect(
-      callFn(sendInviteEmails, [
-        {
-          email: { to: "a@b.com", from: "a", subject: "s", text: "t" },
-          dynamicLink: "https://regroup-app.com/x",
-          type: "guest",
-        },
-      ]),
-    ).rejects.toMatchObject({ code: "permission-denied" });
   });
 });
 
