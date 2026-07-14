@@ -6,6 +6,7 @@ import {
 import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
 import { assertGroupActive } from "../utils/subscriptionGuard";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface GetGroupHealthTimeSeriesData {
   groupId: string;
@@ -47,10 +48,7 @@ function generateMonthBuckets(
 
 export const getGroupHealthTimeSeries = onCall(
   async (request: CallableRequest<GetGroupHealthTimeSeriesData>) => {
-    const userId = request.auth?.uid;
-    if (!userId) {
-      throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
+    const userId = requireAuth(request);
 
     const { groupId, months } = request.data;
     if (!groupId) {

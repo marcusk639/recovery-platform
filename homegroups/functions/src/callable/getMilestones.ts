@@ -5,6 +5,7 @@ import {
 } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface GetMilestonesData {
   groupId: string;
@@ -51,11 +52,7 @@ interface GetMilestonesResult {
 export async function getMilestonesHandler(
   request: CallableRequest<GetMilestonesData>,
 ): Promise<GetMilestonesResult> {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "Must be authenticated.");
-  }
-
-  const callerId = request.auth.uid;
+  const callerId = requireAuth(request);
   const { data } = request;
 
   if (!data.groupId) {

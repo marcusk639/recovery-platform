@@ -7,28 +7,31 @@ import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
 import { getMessaging } from "firebase-admin/messaging";
 import * as admin from "firebase-admin";
+import { z } from "zod";
+import { requireAuth, validateData } from "../utils/callableWrapper";
 
 interface NotifyAdminUpgradeRequestData {
   groupId: string;
   featureName: string;
 }
 
+const notifyAdminUpgradeRequestSchema = z.object({
+  groupId: z.string().min(1),
+  featureName: z.string().min(1).max(100),
+});
+
 const RATE_LIMIT_HOURS = 24;
 
 export const notifyAdminUpgradeRequest = onCall(
   async (request: CallableRequest<NotifyAdminUpgradeRequestData>) => {
-    const { groupId, featureName } = request.data;
-    const userId = request.auth?.uid;
-
-    if (!userId) {
-      throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
-    if (!groupId) {
-      throw new HttpsError("invalid-argument", "groupId is required.");
-    }
-    if (!featureName) {
-      throw new HttpsError("invalid-argument", "featureName is required.");
-    }
+    const userId = requireAuth(request);
+    // groupId/featureName presence (plus a new featureName length cap) are
+    // now enforced by notifyAdminUpgradeRequestSchema; the manual truthy
+    // checks they replaced are gone. Rate-limit logic below is untouched.
+    const { groupId, featureName } = validateData(
+      notifyAdminUpgradeRequestSchema,
+      request.data,
+    );
 
     try {
       // Verify caller is a member of the group

@@ -6,6 +6,7 @@ import {
 import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
 import { assertGroupActive } from "../utils/subscriptionGuard";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface GetGroupDashboardMetricsData {
   groupId: string;
@@ -15,11 +16,8 @@ interface GetGroupDashboardMetricsData {
 export const getGroupDashboardMetrics = onCall(
   async (request: CallableRequest<GetGroupDashboardMetricsData>) => {
     const { groupId, period } = request.data;
-    const userId = request.auth?.uid;
+    const userId = requireAuth(request);
 
-    if (!userId) {
-      throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
     if (!groupId) {
       throw new HttpsError("invalid-argument", "Group ID is required.");
     }

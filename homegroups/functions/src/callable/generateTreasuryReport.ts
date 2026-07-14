@@ -7,6 +7,7 @@ import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
 import * as admin from "firebase-admin";
 import PDFDocument from "pdfkit";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface GenerateTreasuryReportData {
   groupId: string;
@@ -52,10 +53,7 @@ export const generateTreasuryReport = onCall(
     const { groupId, startDate, endDate } = data;
 
     // Validate user is authenticated
-    const auth = request.auth;
-    if (!auth) {
-      throw new HttpsError("unauthenticated", "User must be authenticated.");
-    }
+    const uid = requireAuth(request);
 
     logger.info(
       `Generating treasury report for group ${groupId} from ${startDate} to ${endDate}`,
@@ -73,8 +71,8 @@ export const generateTreasuryReport = onCall(
       // Authorization: only admins or treasurers may generate the treasury
       // report. Plain members can read transactions for transparency but
       // should not be able to download the full financial-PII PDF.
-      const isAdmin = groupData?.admins?.includes(auth.uid) === true;
-      const isTreasurer = groupData?.treasurers?.includes(auth.uid) === true;
+      const isAdmin = groupData?.admins?.includes(uid) === true;
+      const isTreasurer = groupData?.treasurers?.includes(uid) === true;
 
       // Fallback to members collection for the role flags (members docs are
       // the canonical store; group-doc arrays are denormalized/legacy).
@@ -83,7 +81,7 @@ export const generateTreasuryReport = onCall(
       if (!isAdmin && !isTreasurer) {
         const memberSnap = await db
           .collection("members")
-          .doc(`${groupId}_${auth.uid}`)
+          .doc(`${groupId}_${uid}`)
           .get();
         if (memberSnap.exists) {
           const m = memberSnap.data();
@@ -198,7 +196,7 @@ export const generateTreasuryReport = onCall(
             groupId,
             startDate,
             endDate,
-            generatedBy: auth.uid,
+            generatedBy: uid,
             generatedAt: new Date().toISOString(),
           },
         },

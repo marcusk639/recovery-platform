@@ -7,6 +7,7 @@ import {
 } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
+import { requireAuth } from "../utils/callableWrapper";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -154,9 +155,7 @@ export const exportMeetingGuideFormat = onCall(
     request: CallableRequest<ExportMeetingGuideInput>,
   ): Promise<ExportMeetingGuideResult> => {
     // Auth check
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Must be authenticated.");
-    }
+    const userId = requireAuth(request);
 
     const { groupId } = request.data ?? {};
 
@@ -166,8 +165,6 @@ export const exportMeetingGuideFormat = onCall(
         "groupId is required and must be a string.",
       );
     }
-
-    const userId = request.auth.uid;
 
     // Membership check — only members of the group can export
     const memberDocId = `${groupId}_${userId}`;

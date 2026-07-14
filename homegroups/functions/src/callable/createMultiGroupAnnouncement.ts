@@ -6,6 +6,7 @@ import {
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { db } from "../utils/firebase";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface CreateMultiGroupAnnouncementData {
   groupIds: string[];
@@ -35,12 +36,8 @@ export const createMultiGroupAnnouncement = onCall(
   async (
     request: CallableRequest<CreateMultiGroupAnnouncementData>,
   ): Promise<CreateMultiGroupAnnouncementResult> => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Must be authenticated.");
-    }
-
     const { data } = request;
-    const callerId = request.auth.uid;
+    const callerId = requireAuth(request);
     const callerName =
       request.auth.token.name || request.auth.token.email || "Admin";
 

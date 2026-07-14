@@ -8,6 +8,7 @@ import { db } from "../utils/firebase";
 import * as admin from "firebase-admin";
 import { sendEmail } from "../utils/email";
 import { APP_BASE_URL } from "../utils/appConfig";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface SendInviteEmailData {
   groupId: string;
@@ -24,11 +25,8 @@ export const sendGroupInviteEmail = onCall(
   },
   async (request: CallableRequest<SendInviteEmailData>) => {
     const { groupId, inviteeEmail, inviteCode } = request.data;
-    const inviterUid = request.auth?.uid;
+    const inviterUid = requireAuth(request);
 
-    if (!inviterUid) {
-      throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
     if (!groupId || !inviteeEmail || !inviteCode) {
       throw new HttpsError("invalid-argument", "Missing required fields.");
     }

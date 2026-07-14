@@ -5,6 +5,7 @@ import {
 } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface ExportUserDataRequest {
   // No additional parameters needed - uses auth context
@@ -65,15 +66,8 @@ export const exportUserData = onCall(
     request: CallableRequest<ExportUserDataRequest>,
   ): Promise<ExportUserDataResponse> => {
     // Verify authentication
-    const userId = request.auth?.uid;
+    const userId = requireAuth(request);
     const userEmail = request.auth?.token.email;
-
-    if (!userId) {
-      throw new HttpsError(
-        "unauthenticated",
-        "You must be signed in to export your data.",
-      );
-    }
 
     try {
       // 1. Get user document

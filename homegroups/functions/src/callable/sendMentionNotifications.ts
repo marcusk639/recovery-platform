@@ -6,6 +6,7 @@ import {
 import * as logger from "firebase-functions/logger";
 import { db, messaging } from "../utils/firebase"; // Import db and messaging
 import * as admin from "firebase-admin";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface ChatMessage {
   id: string;
@@ -25,10 +26,7 @@ interface SendMentionData {
 
 export const sendMentionNotifications = onCall(
   async (request: CallableRequest<SendMentionData>) => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Must be authenticated.");
-    }
-    const callerId = request.auth.uid;
+    const callerId = requireAuth(request);
 
     const snap = request.data;
     if (!snap || !snap.groupId || !snap.messageId || !snap.message) {

@@ -7,6 +7,7 @@ import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
 import { assertGroupActive } from "../utils/subscriptionGuard";
 import * as admin from "firebase-admin";
+import { requireAuth } from "../utils/callableWrapper";
 
 // Characters for code generation (excludes confusing chars: I, O, 0, 1, L)
 const CODE_CHARACTERS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -45,11 +46,8 @@ interface GenerateReferralCodeData {
 export const generateReferralCode = onCall(
   async (request: CallableRequest<GenerateReferralCodeData>) => {
     const { groupId } = request.data;
-    const userId = request.auth?.uid;
+    const userId = requireAuth(request);
 
-    if (!userId) {
-      throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
     if (!groupId) {
       throw new HttpsError("invalid-argument", "Valid Group ID is required.");
     }

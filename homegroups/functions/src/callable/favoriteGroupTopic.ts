@@ -6,6 +6,7 @@ import {
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { db } from "../utils/firebase";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface FavoriteTopicInput {
   groupId: string;
@@ -27,12 +28,8 @@ export const favoriteGroupTopic = onCall(
   async (
     request: CallableRequest<FavoriteTopicInput>,
   ): Promise<FavoriteTopicOutput> => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Must be authenticated.");
-    }
-
     const { data } = request;
-    const callerId = request.auth.uid;
+    const callerId = requireAuth(request);
 
     if (!data.groupId) {
       throw new HttpsError("invalid-argument", "groupId is required.");

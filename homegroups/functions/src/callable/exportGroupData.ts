@@ -6,6 +6,7 @@ import {
 import { db } from "../utils/firebase";
 import * as admin from "firebase-admin";
 import { assertGroupActive } from "../utils/subscriptionGuard";
+import { requireAuth } from "../utils/callableWrapper";
 
 type ExportSection =
   | "members"
@@ -36,8 +37,7 @@ export const exportGroupData = onCall(
   async (
     request: CallableRequest<ExportGroupDataData>,
   ): Promise<ExportGroupDataResult> => {
-    if (!request.auth)
-      throw new HttpsError("unauthenticated", "Must be signed in");
+    const uid = requireAuth(request);
 
     const { groupId, format, sections } = request.data;
     if (!groupId || !format || !sections || sections.length === 0) {
@@ -46,8 +46,6 @@ export const exportGroupData = onCall(
         "groupId, format, and sections are required",
       );
     }
-
-    const uid = request.auth.uid;
 
     // Check group exists and caller is admin with active subscription
     const groupSnap = await db.collection("groups").doc(groupId).get();

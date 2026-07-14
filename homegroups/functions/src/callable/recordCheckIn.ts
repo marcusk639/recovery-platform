@@ -7,6 +7,7 @@ import {
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { db } from "../utils/firebase";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface CheckInResult {
   currentStreak: number;
@@ -17,11 +18,7 @@ interface CheckInResult {
 
 export const recordCheckIn = onCall(
   async (request: CallableRequest): Promise<CheckInResult> => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Must be authenticated.");
-    }
-
-    const userId = request.auth.uid;
+    const userId = requireAuth(request);
     const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD in UTC
 
     const userRef = db.collection("users").doc(userId);

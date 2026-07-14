@@ -7,6 +7,7 @@ import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
 import { stripe } from "../utils/stripe";
 import { APP_BASE_URL } from "../utils/appConfig";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface CreatePortalSessionData {
   groupId: string;
@@ -25,11 +26,8 @@ export const createCustomerPortalSession = onCall(
   },
   async (request: CallableRequest<CreatePortalSessionData>) => {
     const { groupId } = request.data;
-    const userId = request.auth?.uid;
+    const userId = requireAuth(request);
 
-    if (!userId) {
-      throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
     if (!groupId) {
       throw new HttpsError("invalid-argument", "Group ID is required.");
     }
@@ -85,7 +83,10 @@ export const createCustomerPortalSession = onCall(
         error,
       );
 
-      throw new HttpsError("internal", "Failed to create billing portal session.");
+      throw new HttpsError(
+        "internal",
+        "Failed to create billing portal session.",
+      );
     }
   },
 );

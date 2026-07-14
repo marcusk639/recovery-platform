@@ -6,6 +6,7 @@ import {
 import * as logger from "firebase-functions/logger";
 import { db, messaging } from "../utils/firebase";
 import * as admin from "firebase-admin";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface CancelTreasurerHandoffData {
   groupId: string;
@@ -18,12 +19,7 @@ interface CancelTreasurerHandoffData {
 export const cancelTreasurerHandoff = onCall(
   async (request: CallableRequest<CancelTreasurerHandoffData>) => {
     const data = request.data;
-    const auth = request.auth;
-
-    // Validate authentication
-    if (!auth) {
-      throw new HttpsError("unauthenticated", "User must be authenticated.");
-    }
+    const currentUserId = requireAuth(request);
 
     // Validate input
     if (!data || !data.groupId) {
@@ -31,7 +27,6 @@ export const cancelTreasurerHandoff = onCall(
     }
 
     const { groupId } = data;
-    const currentUserId = auth.uid;
 
     logger.info(
       `Cancelling treasurer handoff for group ${groupId} by user ${currentUserId}`,

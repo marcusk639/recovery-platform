@@ -178,7 +178,7 @@ describe("sendGroupInviteEmail — D-10 v2 migration", () => {
         auth: undefined,
         data: VALID_DATA,
       }),
-    ).rejects.toThrow(/log(ged)? in/i);
+    ).rejects.toThrow(/must be authenticated/i);
     expect(mockSendEmail).not.toHaveBeenCalled();
   });
 

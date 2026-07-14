@@ -47,7 +47,7 @@ Known blockers confirmed before writing this plan:
 | 5   | No `maestro:suite:android` npm script                                                                                                                                        | Can't run Maestro suite against Android       |
 | 6   | No Android Play Store screenshots                                                                                                                                            | Cannot submit to Play Store                   |
 | 7   | Signed release AAB never verified post-refactor                                                                                                                              | Unknown if production build even works        |
-| 8   | `gradle.properties` has hardcoded keystore password (`1qaz!QAZ`)                                                                                                             | Security risk if file is ever committed       |
+| 8   | `gradle.properties` has hardcoded keystore password (`REDACTED_WAS_A_REAL_PLAINTEXT_PASSWORD`)                                                                               | Security risk if file is ever committed       |
 
 ---
 
@@ -304,8 +304,8 @@ Note the line number where `secureTextEntry` or the password TextInput is define
 In `LoginFormView.tsx`, find the email input. It should already have:
 
 ```tsx
-testID = 'email-input';
-accessibilityLabel = 'email-input';
+testID = "email-input";
+accessibilityLabel = "email-input";
 ```
 
 or it's wrapped in a `RatsTextInput` with `testID`. Note the exact prop names used for email — replicate the same pattern for password.
@@ -341,7 +341,7 @@ Edit `regroup/mobile/maestro/subflows/login.yaml`. Replace:
 
 ```yaml
 - tapOn:
-    text: 'Password'
+    text: "Password"
 - inputText: ${PASSWORD}
 ```
 
@@ -349,7 +349,7 @@ with:
 
 ```yaml
 - tapOn:
-    id: 'password-input'
+    id: "password-input"
 - inputText: ${PASSWORD}
 ```
 
@@ -451,7 +451,15 @@ git commit -m "feat(e2e): add maestro:suite:android and maestro:smoke:android np
 
 ## Task 6: Secure Keystore Credentials
 
-`gradle.properties` has `MYAPP_UPLOAD_STORE_PASSWORD=1qaz!QAZ` and `MYAPP_UPLOAD_KEY_PASSWORD=1qaz!QAZ` hardcoded. If this file is ever committed (it currently appears to be, given it shows up in `ls`), the keystore password is exposed. Move the sensitive values to local env or a gitignored file.
+> **Superseded:** this task's plaintext password examples were redacted after
+> the fact — this plan was never executed and the hardcoded values sat in git
+> history until a later fix removed them from `gradle.properties` entirely
+> (no `local.properties` migration; the properties are simply absent unless a
+> real release keystore exists, with a gitignored `android/keystore.properties`
+> as the intended real-value location). Kept below for historical context only
+> — don't follow these steps as written.
+
+`gradle.properties` has `MYAPP_UPLOAD_STORE_PASSWORD=REDACTED_WAS_A_REAL_PLAINTEXT_PASSWORD` and `MYAPP_UPLOAD_KEY_PASSWORD=REDACTED_WAS_A_REAL_PLAINTEXT_PASSWORD` hardcoded. If this file is ever committed (it currently appears to be, given it shows up in `ls`), the keystore password is exposed. Move the sensitive values to local env or a gitignored file.
 
 **Files:**
 
@@ -484,8 +492,8 @@ cat regroup/mobile/android/.gitignore | grep -E "local.properties|keystore" | he
 Create (or append to) `regroup/mobile/android/local.properties`:
 
 ```
-MYAPP_UPLOAD_STORE_PASSWORD=1qaz!QAZ
-MYAPP_UPLOAD_KEY_PASSWORD=1qaz!QAZ
+MYAPP_UPLOAD_STORE_PASSWORD=REDACTED_WAS_A_REAL_PLAINTEXT_PASSWORD
+MYAPP_UPLOAD_KEY_PASSWORD=REDACTED_WAS_A_REAL_PLAINTEXT_PASSWORD
 ```
 
 - [ ] **Step 4: Update android/gradle.properties to remove hardcoded values**
@@ -493,8 +501,8 @@ MYAPP_UPLOAD_KEY_PASSWORD=1qaz!QAZ
 Edit `regroup/mobile/android/gradle.properties`. Remove these two lines:
 
 ```
-MYAPP_UPLOAD_STORE_PASSWORD=1qaz!QAZ
-MYAPP_UPLOAD_KEY_PASSWORD=1qaz!QAZ
+MYAPP_UPLOAD_STORE_PASSWORD=REDACTED_WAS_A_REAL_PLAINTEXT_PASSWORD
+MYAPP_UPLOAD_KEY_PASSWORD=REDACTED_WAS_A_REAL_PLAINTEXT_PASSWORD
 ```
 
 Keep the non-secret values:

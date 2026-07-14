@@ -7,6 +7,7 @@ import * as logger from "firebase-functions/logger";
 import { db, auth } from "../utils/firebase";
 import { stripe } from "../utils/stripe";
 import * as admin from "firebase-admin";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface DeleteAccountRequest {
   confirmEmail: string; // User must confirm their email to delete
@@ -42,16 +43,9 @@ export const deleteUserAccount = onCall(
     request: CallableRequest<DeleteAccountRequest>,
   ): Promise<DeleteAccountResponse> => {
     // Verify authentication
-    const userId = request.auth?.uid;
+    const userId = requireAuth(request);
     const userEmail = request.auth?.token.email;
     const data = request.data;
-
-    if (!userId) {
-      throw new HttpsError(
-        "unauthenticated",
-        "You must be signed in to delete your account.",
-      );
-    }
 
     // Verify email confirmation matches
     if (

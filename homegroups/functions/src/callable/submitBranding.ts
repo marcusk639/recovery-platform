@@ -1,6 +1,12 @@
-import { onCall, CallableRequest, HttpsError } from "firebase-functions/v2/https";
+import {
+  onCall,
+  CallableRequest,
+  HttpsError,
+} from "firebase-functions/v2/https";
 import { db } from "../utils/firebase";
 import * as admin from "firebase-admin";
+import { z } from "zod";
+import { requireAuth, validateData } from "../utils/callableWrapper";
 
 interface SubmitBrandingData {
   intergroupId: string;
@@ -15,54 +21,74 @@ interface SubmitBrandingData {
 
 interface SubmitBrandingResult {
   brandingId: string;
-  status: 'pending';
+  status: "pending";
 }
 
 const HEX_COLOR_REGEX = /^#[0-9A-Fa-f]{6}$/;
 
+const submitBrandingSchema = z.object({
+  intergroupId: z.string().min(1),
+  orgName: z.string().min(1),
+  primaryColor: z.string().regex(HEX_COLOR_REGEX, "Must be a valid hex color"),
+  accentColor: z.string().regex(HEX_COLOR_REGEX, "Must be a valid hex color"),
+  backgroundColor: z
+    .string()
+    .regex(HEX_COLOR_REGEX, "Must be a valid hex color")
+    .optional(),
+  headerTextColor: z
+    .string()
+    .regex(HEX_COLOR_REGEX, "Must be a valid hex color")
+    .optional(),
+  welcomeMessage: z.string().max(140).optional(),
+  logoUrl: z.string().url().optional(),
+});
+
 export const submitBranding = onCall(
   { region: "us-central1" },
-  async (request: CallableRequest<SubmitBrandingData>): Promise<SubmitBrandingResult> => {
-    if (!request.auth) throw new HttpsError("unauthenticated", "Must be signed in");
+  async (
+    request: CallableRequest<SubmitBrandingData>,
+  ): Promise<SubmitBrandingResult> => {
+    const uid = requireAuth(request);
 
-    const { intergroupId, orgName, primaryColor, accentColor, backgroundColor, headerTextColor, welcomeMessage, logoUrl } = request.data;
-    if (!intergroupId || !orgName || !primaryColor || !accentColor) {
-      throw new HttpsError("invalid-argument", "intergroupId, orgName, primaryColor, and accentColor are required");
-    }
-
-    // Validate hex colors
-    if (!HEX_COLOR_REGEX.test(primaryColor)) {
-      throw new HttpsError("invalid-argument", "primaryColor must be a valid hex color (e.g., #1A73E8)");
-    }
-    if (!HEX_COLOR_REGEX.test(accentColor)) {
-      throw new HttpsError("invalid-argument", "accentColor must be a valid hex color");
-    }
-    if (backgroundColor && !HEX_COLOR_REGEX.test(backgroundColor)) {
-      throw new HttpsError("invalid-argument", "backgroundColor must be a valid hex color");
-    }
-    if (headerTextColor && !HEX_COLOR_REGEX.test(headerTextColor)) {
-      throw new HttpsError("invalid-argument", "headerTextColor must be a valid hex color");
-    }
-    if (welcomeMessage && welcomeMessage.length > 140) {
-      throw new HttpsError("invalid-argument", "welcomeMessage must be 140 characters or fewer");
-    }
-
-    const uid = request.auth.uid;
+    // intergroupId/orgName/primaryColor/accentColor presence, hex-color
+    // format, and welcomeMessage length are now enforced by
+    // submitBrandingSchema; the manual regex/length checks they replaced are
+    // gone.
+    const {
+      intergroupId,
+      orgName,
+      primaryColor,
+      accentColor,
+      backgroundColor,
+      headerTextColor,
+      welcomeMessage,
+      logoUrl,
+    } = validateData(submitBrandingSchema, request.data);
 
     // Load intergroup — must be owner AND active subscription
     const intergroupRef = db.collection("intergroups").doc(intergroupId);
     const intergroupSnap = await intergroupRef.get();
-    if (!intergroupSnap.exists) throw new HttpsError("not-found", "Intergroup not found");
+    if (!intergroupSnap.exists)
+      throw new HttpsError("not-found", "Intergroup not found");
     const intergroupData = intergroupSnap.data()!;
 
     // Check ownership
-    const ownerMemberSnap = await intergroupRef.collection("members").doc(uid).get();
-    if (!ownerMemberSnap.exists || ownerMemberSnap.data()?.role !== 'owner') {
-      throw new HttpsError("permission-denied", "Only the intergroup owner can submit branding");
+    const ownerMemberSnap = await intergroupRef
+      .collection("members")
+      .doc(uid)
+      .get();
+    if (!ownerMemberSnap.exists || ownerMemberSnap.data()?.role !== "owner") {
+      throw new HttpsError(
+        "permission-denied",
+        "Only the intergroup owner can submit branding",
+      );
     }
 
-    if (intergroupData.subscriptionStatus !== 'active') {
-      throw new HttpsError("failed-precondition", "Intergroup subscription must be active to submit branding");
+    if (intergroupData.subscriptionStatus !== "active") {
+      throw new HttpsError(
+        "failed-precondition",
+        "Intergroup subscription must be active to submit branding",
+      );
     }
 
     const now = admin.firestore.FieldValue.serverTimestamp();
@@ -77,7 +103,7 @@ export const submitBranding = onCall(
       orgName,
       primaryColor,
       accentColor,
-      status: 'pending',
+      status: "pending",
       submittedAt: now,
       createdAt: now,
       updatedAt: now,
@@ -97,7 +123,7 @@ export const submitBranding = onCall(
 
     // Notify platform super admins (write to admin_notifications collection)
     await db.collection("admin_notifications").add({
-      type: 'branding_submission',
+      type: "branding_submission",
       brandingId,
       intergroupId,
       intergroupName: intergroupData.name,
@@ -106,6 +132,6 @@ export const submitBranding = onCall(
       resolved: false,
     });
 
-    return { brandingId, status: 'pending' };
-  }
+    return { brandingId, status: "pending" };
+  },
 );

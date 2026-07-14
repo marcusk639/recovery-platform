@@ -6,6 +6,7 @@ import {
 import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
 import { assertGroupActive } from "../utils/subscriptionGuard";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface GetMemberEngagementMetricsData {
   groupId: string;
@@ -30,10 +31,7 @@ const MAX_MEMBERS = 500;
 
 export const getMemberEngagementMetrics = onCall(
   async (request: CallableRequest<GetMemberEngagementMetricsData>) => {
-    const userId = request.auth?.uid;
-    if (!userId) {
-      throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
+    const userId = requireAuth(request);
 
     const { groupId } = request.data;
     if (!groupId) {

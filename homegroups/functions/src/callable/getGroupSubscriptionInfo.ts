@@ -7,6 +7,7 @@ import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
 import { stripe } from "../utils/stripe";
 import { getSubscriptionCost } from "../utils/stripeUtils";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface GetSubscriptionInfoData {
   groupId: string;
@@ -15,11 +16,8 @@ interface GetSubscriptionInfoData {
 export const getGroupSubscriptionInfo = onCall(
   async (request: CallableRequest<GetSubscriptionInfoData>) => {
     const { groupId } = request.data;
-    const userId = request.auth?.uid;
+    const userId = requireAuth(request);
 
-    if (!userId) {
-      throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
     if (!groupId) {
       throw new HttpsError("invalid-argument", "Group ID is required.");
     }
@@ -131,7 +129,10 @@ export const getGroupSubscriptionInfo = onCall(
         error,
       );
 
-      throw new HttpsError("internal", "Failed to get subscription information.");
+      throw new HttpsError(
+        "internal",
+        "Failed to get subscription information.",
+      );
     }
   },
 );

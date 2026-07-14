@@ -7,6 +7,7 @@ import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { db } from "../utils/firebase";
 import { assertGroupActive } from "../utils/subscriptionGuard";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface PostThoughtInput {
   groupId: string;
@@ -29,12 +30,8 @@ export const postGroupDailyThought = onCall(
   async (
     request: CallableRequest<PostThoughtInput>,
   ): Promise<PostThoughtOutput> => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Must be authenticated.");
-    }
-
     const { data } = request;
-    const callerId = request.auth.uid;
+    const callerId = requireAuth(request);
 
     if (!data.groupId) {
       throw new HttpsError("invalid-argument", "groupId is required.");
@@ -95,7 +92,7 @@ export const postGroupDailyThought = onCall(
 
     // Get caller name
     const callerName =
-      request.auth.token.name || request.auth.token.email || "Admin";
+      request.auth?.token?.name || request.auth?.token?.email || "Admin";
 
     const thoughtRef = db
       .collection("groups")
