@@ -441,10 +441,29 @@ export const requestAdminAccessWithSubscription = onCall(
           postTxData?.admins?.includes(userId) &&
           postTxData?.stripeSubscriptionId === stripeSubscriptionId
         ) {
-          return await grantMemberAdminAndBuildResponse(
-            stripeSubscriptionId,
-            subscriptionStatus,
-          );
+          try {
+            return await grantMemberAdminAndBuildResponse(
+              stripeSubscriptionId,
+              subscriptionStatus,
+            );
+          } catch (memberSyncError) {
+            // The claim transaction is CONFIRMED committed — this user is
+            // already in group.admins. Losing that context here (falling
+            // through to the generic outer-catch log) would leave an
+            // on-call engineer looking at "unexpected error" with no hint
+            // that the real state is "claim succeeded, only the member-doc/
+            // JWT-claims sync failed" — a distinct, narrower problem than a
+            // failed claim. A client retry will hit the already-exists
+            // guard above and get stuck without this being surfaced.
+            logger.error(
+              `Claim transaction for group ${groupId} by user ${userId} committed successfully (confirmed via ack-ambiguity recovery), but syncing the member doc/JWT claims failed — user is in group.admins but may not have admin claims yet:`,
+              memberSyncError,
+            );
+            throw new HttpsError(
+              "internal",
+              "Your admin access was granted, but finishing setup failed. Please contact support.",
+            );
+          }
         }
 
         // Web-checkout residual case: this caller supplied an already-billed
@@ -461,7 +480,15 @@ export const requestAdminAccessWithSubscription = onCall(
         // so the compensation block below would never fire for this caller
         // anyway — this check exits first regardless, rather than relying on
         // that invariant implicitly.
-        if (usedWebCheckoutVerify) {
+        //
+        // Only assert this when the post-tx re-read actually succeeded and
+        // ruled out "this call's own transaction committed" — a re-read
+        // FAILURE (postTxReadFailed) means we don't actually know the true
+        // state; asserting "claimed by someone else, contact support for a
+        // refund" in that case would be a confident, specific, and possibly
+        // false narrative (this caller could in fact already be the admin).
+        // Fall through to the generic retriable error below instead.
+        if (usedWebCheckoutVerify && !postTxReadFailed) {
           throw new HttpsError(
             "failed-precondition",
             "Your payment was processed, but this group was claimed by someone else before your request completed. Contact support to arrange a refund or transfer.",
@@ -493,11 +520,25 @@ export const requestAdminAccessWithSubscription = onCall(
             );
           }
           if (cancelConfirmed) {
-            await groupRef.update({
-              stripeSubscriptionAttempt:
-                admin.firestore.FieldValue.increment(1),
-              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            });
+            // Guarded separately from the cancellation logic above: a
+            // failure here must not shadow the isRaceLoss classification or
+            // audit-trail log below, and must not go unlogged. Without this
+            // guard, a Firestore blip on this single write would silently
+            // strand the user — the confirmed-canceled subscription's
+            // idempotency key would never rotate, so every future retry
+            // replays the same dead subscription object forever.
+            try {
+              await groupRef.update({
+                stripeSubscriptionAttempt:
+                  admin.firestore.FieldValue.increment(1),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              });
+            } catch (counterUpdateError) {
+              logger.error(
+                `Error advancing stripeSubscriptionAttempt for group ${groupId} after confirming Stripe subscription ${stripeSubscriptionId} canceled — next retry will reuse the same idempotency key against this dead subscription:`,
+                counterUpdateError,
+              );
+            }
           }
           logger.warn(
             `Compensating: Canceled Stripe subscription ${stripeSubscriptionId} after claim transaction ${

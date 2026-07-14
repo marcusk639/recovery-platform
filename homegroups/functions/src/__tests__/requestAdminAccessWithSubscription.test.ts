@@ -774,6 +774,41 @@ describe("requestAdminAccessWithSubscription — ack-ambiguity-aware compensatio
     expect(afterFirstAttempt.stripeSubscriptionAttempt).toBeUndefined();
   });
 
+  it("cancel-ack-ambiguity: cancel() RESOLVES but retrieve() still shows active — does NOT advance the counter", async () => {
+    // Distinct from the two tests above (both have cancel() REJECT): this
+    // covers cancel() succeeding while the post-cancel retrieve() somehow
+    // still reports a non-canceled status. cancel()'s own resolution must
+    // never be trusted as sufficient confirmation on its own — only a live
+    // retrieve() showing "canceled" may advance the attempt counter.
+    mockDb.runTransaction = (async () => {
+      throw new Error("DEADLINE_EXCEEDED: transaction timed out");
+    }) as typeof mockDb.runTransaction;
+    mockStripeSubscriptionsCancel.mockResolvedValue({});
+    // First retrieve() call is the pre-transaction live-status re-check
+    // (must see an active/trialing status or the grant guard rejects
+    // before the transaction ever runs); second is the post-cancel
+    // confirmation read, which here reports the subscription as still
+    // active despite cancel() having resolved without error.
+    mockStripeSubscriptionsRetrieve
+      .mockResolvedValueOnce({ status: "trialing" })
+      .mockResolvedValueOnce({ status: "active" });
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      paymentMethodId: PAYMENT_METHOD_ID,
+    });
+
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).rejects.toMatchObject({ code: "internal" });
+
+    const afterFirstAttempt = docStore[`groups/${GROUP_ID}`] as Record<
+      string,
+      unknown
+    >;
+    expect(afterFirstAttempt.stripeSubscriptionAttempt).toBeUndefined();
+  });
+
   it("a failed re-read during compensation skips cancellation entirely rather than throwing unhandled", async () => {
     mockDb.runTransaction = (async () => {
       throw new Error("DEADLINE_EXCEEDED: transaction timed out");
