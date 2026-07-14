@@ -126,7 +126,7 @@ jest.mock(
   () => {
     const { View } = require("react-native");
     return () => <View testID="loading-indicator" />;
-  }
+  },
 );
 
 jest.mock("../../../components/rats-text", () => ({
@@ -188,6 +188,7 @@ import notificationsReducer from "../../../state/slices/notificationsSlice";
 import meetingsReducer from "../../../state/slices/meetingsSlice";
 
 import DirectChat from "../DirectChat";
+import { subscribeToDirectChat } from "../../../services/message";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -289,7 +290,7 @@ const CONVERSATION_ID = "convo-abc";
 function makeMessage(
   id: string,
   text: string,
-  senderId: string = "user-1"
+  senderId: string = "user-1",
 ): any {
   return {
     id,
@@ -433,7 +434,7 @@ function renderScreen(storeOptions: BuildStoreOptions = {}) {
   return render(
     <Provider store={store}>
       <DirectChat navigation={mockNavigation} />
-    </Provider>
+    </Provider>,
   );
 }
 
@@ -515,7 +516,7 @@ describe("DirectChat", () => {
 
     it("renders without crashing when multiple messages are in Redux state", async () => {
       const msgs = Array.from({ length: 5 }, (_, i) =>
-        makeMessage(`m-${i}`, `Message ${i}`)
+        makeMessage(`m-${i}`, `Message ${i}`),
       );
       const { getByPlaceholderText } = renderScreen({ messages: msgs });
       await waitFor(() => {
@@ -545,7 +546,7 @@ describe("DirectChat", () => {
       await act(async () => {
         fireEvent.changeText(
           getByPlaceholderText("Type a message"),
-          "Hello there!"
+          "Hello there!",
         );
       });
       await act(async () => {
@@ -570,7 +571,7 @@ describe("DirectChat", () => {
       await act(async () => {
         fireEvent.changeText(
           getByPlaceholderText("Type a message"),
-          "This should not be lost"
+          "This should not be lost",
         );
       });
       await act(async () => {
@@ -581,7 +582,7 @@ describe("DirectChat", () => {
         expect(alertSpy).toHaveBeenCalled();
       });
       expect(getByPlaceholderText("Type a message").props.value).toBe(
-        "This should not be lost"
+        "This should not be lost",
       );
 
       alertSpy.mockRestore();
@@ -646,6 +647,81 @@ describe("DirectChat", () => {
         fireEvent.press(phoneTouchable!);
       });
       expect(mockCallNumber).toHaveBeenCalledWith(RECIPIENT_GUEST.phoneNumber);
+    });
+  });
+
+  // ─── Real-time subscription ───────────────────────────────────────────────
+  // Regression coverage for the deep-link bug: when DirectChat is mounted
+  // standalone (e.g. via `chat/:userId` push notification / deep link, with
+  // no ContactScreen underneath keeping a subscribeToDirectChat listener
+  // alive), the screen must own its own real-time Firestore listener.
+  // Previously it only called loadDirectChat once on mount, so new messages
+  // never appeared without a manual remount.
+  describe("real-time message subscription", () => {
+    it("subscribes to live updates via subscribeToDirectChat on mount", async () => {
+      const mockUnsubscribe = jest.fn();
+      (subscribeToDirectChat as jest.Mock).mockReturnValue(mockUnsubscribe);
+
+      const { getByPlaceholderText } = renderScreen();
+      await waitFor(() => {
+        expect(getByPlaceholderText("Type a message")).toBeTruthy();
+      });
+
+      expect(subscribeToDirectChat).toHaveBeenCalled();
+    });
+
+    it("updates the conversation in Redux state when a new message arrives via the live subscription, without requiring a remount", async () => {
+      let capturedHandler: ((msgs: any[], chatId?: string) => void) | undefined;
+      const mockUnsubscribe = jest.fn();
+      (subscribeToDirectChat as jest.Mock).mockImplementation(
+        (_ids: string[], handler: any) => {
+          capturedHandler = handler;
+          return mockUnsubscribe;
+        },
+      );
+
+      const store = buildStore();
+      const { getByPlaceholderText } = render(
+        <Provider store={store}>
+          <DirectChat navigation={mockNavigation} />
+        </Provider>,
+      );
+
+      await waitFor(() => {
+        expect(getByPlaceholderText("Type a message")).toBeTruthy();
+      });
+
+      expect(capturedHandler).toBeDefined();
+
+      const liveMessage = makeMessage(
+        "live-1",
+        "New live message",
+        "user-guest-1",
+      );
+
+      act(() => {
+        capturedHandler!([liveMessage], CONVERSATION_ID);
+      });
+
+      await waitFor(() => {
+        const conv = store.getState().chat.conversations[CONVERSATION_ID] || [];
+        expect(conv.some((m: any) => m.id === "live-1")).toBe(true);
+      });
+    });
+
+    it("unsubscribes the live listener on unmount (no leaked Firestore listener)", async () => {
+      const mockUnsubscribe = jest.fn();
+      (subscribeToDirectChat as jest.Mock).mockReturnValue(mockUnsubscribe);
+
+      const { getByPlaceholderText, unmount } = renderScreen();
+      await waitFor(() => {
+        expect(getByPlaceholderText("Type a message")).toBeTruthy();
+      });
+      expect(subscribeToDirectChat).toHaveBeenCalled();
+
+      unmount();
+
+      expect(mockUnsubscribe).toHaveBeenCalled();
     });
   });
 });
