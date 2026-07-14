@@ -49,10 +49,10 @@ jest.mock("../../../firebase-setup", () => {
       runTransaction: jest.fn((fn: any) =>
         fn({
           get: jest.fn(() =>
-            Promise.resolve({ exists: true, data: () => ({}) })
+            Promise.resolve({ exists: true, data: () => ({}) }),
           ),
           update: jest.fn(),
-        })
+        }),
       ),
     },
   };
@@ -79,6 +79,7 @@ import {
   getFinancialRecords,
   createFinancialRecord,
 } from "../oxford";
+import { firestore } from "../../../firebase-setup";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -179,12 +180,61 @@ describe("Oxford Service", () => {
       expect(result.role).toBe("president");
       expect(result.id).toBeDefined();
     });
+
+    it("deactivates an existing active officer holding the same role instead of leaving two officers active simultaneously", async () => {
+      // Bug: OfficerManagement.tsx -> useCreateOfficer -> this createOfficer
+      // was the *only* live officer-creation path, and it just wrote a new
+      // doc with isActive: true without ever touching the incumbent —
+      // meaning two people could simultaneously hold isActive: true for the
+      // same role (e.g. two active Treasurers). There was a separate,
+      // correctly-batched deactivate-then-create implementation in
+      // services/oxford/officers.ts (setOfficer), but it had zero callers.
+      const incumbentRef = { id: "incumbent-officer-id" };
+      const incumbentDoc = {
+        id: "incumbent-officer-id",
+        ref: incumbentRef,
+        data: () => ({
+          role: "treasurer",
+          isActive: true,
+          houseId: "h1",
+        }),
+      };
+
+      // The next `.get()` call (the query for existing active officers of
+      // this role) resolves with the incumbent.
+      (
+        firestore.collection("houses").doc("h1").collection("officers")
+          .get as jest.Mock
+      ).mockResolvedValueOnce({
+        docs: [incumbentDoc],
+      });
+
+      const batchUpdate = jest.fn();
+      const batchSet = jest.fn();
+      const batchCommit = jest.fn(() => Promise.resolve());
+      (firestore.batch as jest.Mock).mockImplementationOnce(() => ({
+        update: batchUpdate,
+        set: batchSet,
+        commit: batchCommit,
+      }));
+
+      await createOfficer(makeOfficer({ role: "treasurer" }));
+
+      // The incumbent must be deactivated in the same batch as the new
+      // officer's creation — this is what closes the two-active-officers
+      // race/bug.
+      expect(batchUpdate).toHaveBeenCalledWith(incumbentRef, {
+        isActive: false,
+      });
+      expect(batchSet).toHaveBeenCalled();
+      expect(batchCommit).toHaveBeenCalled();
+    });
   });
 
   describe("updateOfficer", () => {
     it("calls update on the officer document", async () => {
       await expect(
-        updateOfficer("officer-1", { isActive: false, houseId: "h1" })
+        updateOfficer("officer-1", { isActive: false, houseId: "h1" }),
       ).resolves.not.toThrow();
     });
   });
@@ -222,7 +272,7 @@ describe("Oxford Service", () => {
   describe("updateBusinessMeeting", () => {
     it("does not throw when updating a meeting", async () => {
       await expect(
-        updateBusinessMeeting("meeting-1", { quorumMet: true, houseId: "h1" })
+        updateBusinessMeeting("meeting-1", { quorumMet: true, houseId: "h1" }),
       ).resolves.not.toThrow();
     });
   });
@@ -230,7 +280,7 @@ describe("Oxford Service", () => {
   describe("deleteBusinessMeeting", () => {
     it("does not throw when deleting a meeting", async () => {
       await expect(
-        deleteBusinessMeeting("meeting-1", "h1")
+        deleteBusinessMeeting("meeting-1", "h1"),
       ).resolves.not.toThrow();
     });
   });
@@ -271,7 +321,7 @@ describe("Oxford Service", () => {
   describe("updateElection", () => {
     it("does not throw when updating an election", async () => {
       await expect(
-        updateElection("election-1", { winnerId: "u1", houseId: "h1" })
+        updateElection("election-1", { winnerId: "u1", houseId: "h1" }),
       ).resolves.not.toThrow();
     });
   });
