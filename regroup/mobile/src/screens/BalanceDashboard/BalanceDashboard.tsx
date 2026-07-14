@@ -1,24 +1,24 @@
-import React, { useMemo } from 'react';
-import { View, FlatList, ActivityIndicator, StyleSheet } from 'react-native';
-import { format, parseISO } from 'date-fns';
+import React, { useMemo } from "react";
+import { View, FlatList, ActivityIndicator, StyleSheet } from "react-native";
+import { format, parseISO } from "date-fns";
 
-import ScreenHeader from '../../components/screen-header';
-import { RatsText } from '../../components/rats-text';
+import ScreenHeader from "../../components/screen-header";
+import { RatsText } from "../../components/rats-text";
 
-import { useData } from '../../context/DataContext';
+import { useData } from "../../context/DataContext";
 import {
   useGuestBalances,
   GuestBalance,
-} from '../../state/queries/paymentQueries';
-import { useGuests } from '../../state/queries/guestQueries';
-import BalanceAgingView, { AgingRow } from './BalanceAgingView';
+} from "../../state/queries/paymentQueries";
+import { useGuests } from "../../state/queries/guestQueries";
+import BalanceAgingView, { AgingRow } from "./BalanceAgingView";
 import {
   color,
   normalize,
   fontSize,
   CARD_STYLE,
   fontFamily,
-} from '../../styles/theme';
+} from "../../styles/theme";
 
 // ─── Balance Row ─────────────────────────────────────────────────────────────
 
@@ -27,7 +27,7 @@ interface BalanceRowProps {
 }
 
 const BalanceRow: React.FC<BalanceRowProps> = ({ item }) => {
-  const isOverdue = item.status === 'overdue';
+  const isOverdue = item.status === "overdue";
   return (
     <View
       style={[
@@ -35,7 +35,8 @@ const BalanceRow: React.FC<BalanceRowProps> = ({ item }) => {
         styles.row,
         { borderLeftColor: isOverdue ? color.red : color.green },
       ]}
-      testID={`balance-row-${item.guestId}`}>
+      testID={`balance-row-${item.guestId}`}
+    >
       <View style={{ flex: 1 }}>
         <RatsText
           translate={false}
@@ -48,9 +49,9 @@ const BalanceRow: React.FC<BalanceRowProps> = ({ item }) => {
             item.lastPaymentDate
               ? `Last payment: ${format(
                   parseISO(item.lastPaymentDate),
-                  'MMM d, yyyy',
+                  "MMM d, yyyy",
                 )}`
-              : 'No payments'
+              : "No payments"
           }
           style={styles.dateText}
         />
@@ -65,10 +66,11 @@ const BalanceRow: React.FC<BalanceRowProps> = ({ item }) => {
           style={[
             styles.statusBadge,
             { backgroundColor: isOverdue ? color.red : color.green },
-          ]}>
+          ]}
+        >
           <RatsText
             translate={false}
-            text={isOverdue ? 'Overdue' : 'Current'}
+            text={isOverdue ? "Overdue" : "Current"}
             style={styles.statusText}
           />
         </View>
@@ -82,11 +84,11 @@ const BalanceRow: React.FC<BalanceRowProps> = ({ item }) => {
 const BalanceDashboard: React.FC = () => {
   const { currentHouse } = useData();
   // React Query is the source of truth for guests; see .full-review [A2].
-  const { data: guests = {} } = useGuests(currentHouse?.id ?? '');
+  const { data: guests = {} } = useGuests(currentHouse?.id ?? "");
   const guestList = useMemo(() => Object.values(guests), [guests]);
 
   const { data: balances = [], isLoading } = useGuestBalances(
-    currentHouse?.id ?? '',
+    currentHouse?.id ?? "",
     guestList,
   );
 
@@ -105,11 +107,14 @@ const BalanceDashboard: React.FC = () => {
   const agingRows: AgingRow[] = useMemo(
     () =>
       sorted
-        .filter(b => b.totalBalance > 0)
-        .map(b => ({
+        .filter((b) => b.totalBalance > 0)
+        .map((b) => ({
           guestId: b.guestId,
           guestName: b.guestName,
-          totalOwed: Math.round(b.totalBalance / 100),
+          // Keep totalOwed in cents (matching GuestBalance.totalBalance) so
+          // the aging view can render the same cents-precision amount shown
+          // in the balance row above it, instead of a whole-dollar rounding.
+          totalOwed: b.totalBalance,
           lastPaymentDate: b.lastPaymentDate,
         })),
     [sorted],
@@ -126,13 +131,14 @@ const BalanceDashboard: React.FC = () => {
       ) : (
         <FlatList
           data={sorted}
-          keyExtractor={item => item.guestId}
+          keyExtractor={(item) => item.guestId}
           contentContainerStyle={styles.listContent}
           ListHeaderComponent={
             <>
               <View
                 style={[CARD_STYLE, styles.statsCard]}
-                testID="balance-stats-card">
+                testID="balance-stats-card"
+              >
                 <View style={styles.statRow}>
                   <View style={styles.stat}>
                     <RatsText
@@ -174,7 +180,8 @@ const BalanceDashboard: React.FC = () => {
               </View>
               <View
                 style={[CARD_STYLE, styles.agingCard]}
-                testID="balance-aging-section">
+                testID="balance-aging-section"
+              >
                 <RatsText
                   translate={false}
                   text="Outstanding Balances"
@@ -206,24 +213,24 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: color.light_grey },
   centered: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: normalize(20),
   },
   listContent: { padding: normalize(12), paddingBottom: normalize(32) },
   statsCard: { marginBottom: normalize(12), padding: normalize(16) },
-  statRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  stat: { alignItems: 'center', flex: 1 },
+  statRow: { flexDirection: "row", justifyContent: "space-between" },
+  stat: { alignItems: "center", flex: 1 },
   statLabel: {
     fontSize: fontSize.small,
     color: color.dark_grey,
     marginBottom: normalize(4),
-    textAlign: 'center',
+    textAlign: "center",
   },
   statValue: { fontSize: fontSize.large, fontFamily: fontFamily.bold },
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: normalize(8),
     borderRadius: 8,
     borderLeftWidth: 4,
@@ -240,7 +247,7 @@ const styles = StyleSheet.create({
     color: color.dark_grey,
     marginTop: normalize(2),
   },
-  rightColumn: { alignItems: 'flex-end' },
+  rightColumn: { alignItems: "flex-end" },
   balanceAmount: {
     fontSize: fontSize.medium,
     color: color.black,
@@ -261,15 +268,15 @@ const styles = StyleSheet.create({
     marginBottom: normalize(8),
   },
   emptyContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: normalize(20),
     minHeight: normalize(100),
   },
   emptyText: {
     color: color.dark_grey,
     fontSize: fontSize.regular,
-    textAlign: 'center',
+    textAlign: "center",
   },
 });
 

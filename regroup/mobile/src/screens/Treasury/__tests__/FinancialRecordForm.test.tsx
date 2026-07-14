@@ -2,13 +2,13 @@
 
 const mockGoBack = jest.fn();
 const mockUseRoute = jest.fn();
-jest.mock('@react-navigation/native', () => ({
+jest.mock("@react-navigation/native", () => ({
   useRoute: () => mockUseRoute(),
   useNavigation: () => ({ goBack: mockGoBack }),
 }));
 
 const mockUseData = jest.fn();
-jest.mock('../../../context/DataContext', () => ({
+jest.mock("../../../context/DataContext", () => ({
   useData: () => mockUseData(),
 }));
 
@@ -16,24 +16,24 @@ const mockUsePreviousWeekRecord = jest.fn();
 const mockUseEESIncomeForWeek = jest.fn();
 const mockUseCreateFinancialRecord = jest.fn();
 const mockUseUpdateFinancialRecord = jest.fn();
-jest.mock('../../../state/queries/treasuryQueries', () => ({
+jest.mock("../../../state/queries/treasuryQueries", () => ({
   usePreviousWeekRecord: () => mockUsePreviousWeekRecord(),
   useEESIncomeForWeek: () => mockUseEESIncomeForWeek(),
   useCreateFinancialRecord: () => mockUseCreateFinancialRecord(),
   useUpdateFinancialRecord: () => mockUseUpdateFinancialRecord(),
 }));
 
-jest.mock('../../../services/treasury', () => ({
+jest.mock("../../../services/treasury", () => ({
   getFinancialRecord: jest.fn().mockResolvedValue(null),
 }));
 
-jest.mock('../../../components/rats-text/rats-text', () => {
-  const { Text } = require('react-native');
-  return ({ text }: any) => <Text>{String(text ?? '')}</Text>;
+jest.mock("../../../components/rats-text/rats-text", () => {
+  const { Text } = require("react-native");
+  return ({ text }: any) => <Text>{String(text ?? "")}</Text>;
 });
 
-jest.mock('../../../components/screen-header/screen-header', () => {
-  const { View, Text } = require('react-native');
+jest.mock("../../../components/screen-header/screen-header", () => {
+  const { View, Text } = require("react-native");
   return ({ header }: any) => (
     <View>
       <Text>{header}</Text>
@@ -41,17 +41,17 @@ jest.mock('../../../components/screen-header/screen-header', () => {
   );
 });
 
-jest.mock('../../../context', () => ({
+jest.mock("../../../context", () => ({
   useTheme: () => ({
     theme: {
-      primaryColor: '#638BFA',
-      secondaryColor: '#d2d8ef',
-      tertiaryColor: '#969696',
-      backgroundColor: '#FAFAFA',
-      textColor: 'black',
-      primaryFontFamily: 'Quicksand-Medium',
-      secondaryFontFamily: 'Quicksand-Medium',
-      logoTintColor: '#ffffff',
+      primaryColor: "#638BFA",
+      secondaryColor: "#d2d8ef",
+      tertiaryColor: "#969696",
+      backgroundColor: "#FAFAFA",
+      textColor: "black",
+      primaryFontFamily: "Quicksand-Medium",
+      secondaryFontFamily: "Quicksand-Medium",
+      logoTintColor: "#ffffff",
     },
   }),
   useTranslation: () => ({ t: (k: string) => k }),
@@ -59,10 +59,10 @@ jest.mock('../../../context', () => ({
 
 // ─── Imports ──────────────────────────────────────────────────────────────────
 
-import React from 'react';
-import { render, fireEvent, act } from '@testing-library/react-native';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import FinancialRecordForm from '../FinancialRecordForm';
+import React from "react";
+import { render, fireEvent, act } from "@testing-library/react-native";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import FinancialRecordForm from "../FinancialRecordForm";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -75,13 +75,13 @@ const makeWrapper = () => {
 
 const mockMutateAsync = jest
   .fn()
-  .mockResolvedValue({ id: 'new-rec', houseId: 'house-1' });
+  .mockResolvedValue({ id: "new-rec", houseId: "house-1" });
 
 const setupDefaults = (overrides: Record<string, any> = {}) => {
   mockUseRoute.mockReturnValue({
-    params: { houseId: 'house-1', ...overrides },
+    params: { houseId: "house-1", ...overrides },
   });
-  mockUseData.mockReturnValue({ currentUser: { id: 'user-1' } });
+  mockUseData.mockReturnValue({ currentUser: { id: "user-1" } });
   mockUsePreviousWeekRecord.mockReturnValue({ data: null, isLoading: false });
   mockUseEESIncomeForWeek.mockReturnValue({ data: 0, isLoading: false });
   mockUseCreateFinancialRecord.mockReturnValue({
@@ -99,22 +99,22 @@ const renderScreen = () =>
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe('FinancialRecordForm', () => {
+describe("FinancialRecordForm", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     setupDefaults();
   });
 
-  it('renders income and expense section headers', () => {
+  it("renders income and expense section headers", () => {
     const { getByText } = renderScreen();
-    expect(getByText('Cash & Receipts from Members')).toBeTruthy();
-    expect(getByText('Amount Paid Out')).toBeTruthy();
+    expect(getByText("Cash & Receipts from Members")).toBeTruthy();
+    expect(getByText("Amount Paid Out")).toBeTruthy();
   });
 
   it('"Add Income Line" button adds a row', () => {
     const { getByTestId, getAllByTestId } = renderScreen();
 
-    const addBtn = getByTestId('btn-add-income');
+    const addBtn = getByTestId("btn-add-income");
     fireEvent.press(addBtn);
 
     expect(getAllByTestId(/^income-row-/)).toHaveLength(2);
@@ -123,44 +123,44 @@ describe('FinancialRecordForm', () => {
   it('"Add Expense Line" button adds a row', () => {
     const { getByTestId, getAllByTestId } = renderScreen();
 
-    const addBtn = getByTestId('btn-add-expense');
+    const addBtn = getByTestId("btn-add-expense");
     fireEvent.press(addBtn);
 
     expect(getAllByTestId(/^expense-row-/)).toHaveLength(2);
   });
 
-  it('summary footer auto-calculates totals', () => {
+  it("summary footer auto-calculates totals", () => {
     const { getByTestId, getByText } = renderScreen();
 
     // Enter $100.00 into first income amount
-    fireEvent.changeText(getByTestId('income-amount-0'), '100.00');
+    fireEvent.changeText(getByTestId("income-amount-0"), "100.00");
     // Enter $40.00 into first expense amount
-    fireEvent.changeText(getByTestId('expense-amount-0'), '40.00');
+    fireEvent.changeText(getByTestId("expense-amount-0"), "40.00");
 
     // Ending balance = 0 beginning + 10000 income - 4000 expenses = 6000 cents = $60.00
-    expect(getByText('$60.00')).toBeTruthy();
+    expect(getByText("$60.00")).toBeTruthy();
   });
 
   it('"Save Draft" calls createFinancialRecord with status="draft"', async () => {
     const { getByTestId } = renderScreen();
 
     await act(async () => {
-      fireEvent.press(getByTestId('btn-save-draft'));
+      fireEvent.press(getByTestId("btn-save-draft"));
     });
 
     expect(mockMutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({
-        houseId: 'house-1',
-        record: expect.objectContaining({ status: 'draft' }),
+        houseId: "house-1",
+        record: expect.objectContaining({ status: "draft" }),
       }),
     );
   });
 
-  it('EES pre-fill banner is shown when EES data exists', () => {
+  it("EES pre-fill banner is shown when EES data exists", () => {
     mockUseEESIncomeForWeek.mockReturnValue({ data: 5000, isLoading: false });
 
     const { getByTestId } = renderScreen();
-    expect(getByTestId('ees-banner')).toBeTruthy();
+    expect(getByTestId("ees-banner")).toBeTruthy();
   });
 
   it('pressing "Add" in EES banner inserts an EES income line', () => {
@@ -169,12 +169,12 @@ describe('FinancialRecordForm', () => {
     const { getByTestId, getAllByTestId } = renderScreen();
     const countBefore = getAllByTestId(/^income-row-/).length;
 
-    fireEvent.press(getByTestId('btn-ees-add'));
+    fireEvent.press(getByTestId("btn-ees-add"));
 
     expect(getAllByTestId(/^income-row-/).length).toBe(countBefore + 1);
   });
 
-  it('pre-fills beginning balance from previous week ending balance', () => {
+  it("pre-fills beginning balance from previous week ending balance", () => {
     mockUsePreviousWeekRecord.mockReturnValue({
       data: { endingCheckingBalance: 25000 },
       isLoading: false,
@@ -182,6 +182,53 @@ describe('FinancialRecordForm', () => {
 
     const { getByTestId } = renderScreen();
     // 25000 cents = $250.00
-    expect(getByTestId('input-beginning-balance').props.value).toBe('250.00');
+    expect(getByTestId("input-beginning-balance").props.value).toBe("250.00");
+  });
+
+  it("resubmitting a rejected record preserves its original period instead of the current week", async () => {
+    const { getFinancialRecord } = require("../../../services/treasury");
+    const originalPeriod = "2020-01-06"; // guaranteed to differ from "today"
+    (getFinancialRecord as jest.Mock).mockResolvedValueOnce({
+      id: "rec-1",
+      houseId: "house-1",
+      period: originalPeriod,
+      totalIncome: 10000,
+      totalExpenses: 4000,
+      balance: 6000,
+      breakdown: [],
+      submittedBy: "user-1",
+      submittedAt: "2020-01-06T00:00:00.000Z",
+      approvedByVote: false,
+      status: "rejected",
+      incomeLines: [{ category: "Other Income", amount: 10000 }],
+      expenseLines: [{ category: "Food", amount: 4000 }],
+      beginningCheckingBalance: 0,
+      endingCheckingBalance: 6000,
+      billsDue: [],
+    });
+
+    setupDefaults({ recordId: "rec-1" });
+    const mockUpdateMutateAsync = jest.fn().mockResolvedValue({});
+    mockUseUpdateFinancialRecord.mockReturnValue({
+      mutateAsync: mockUpdateMutateAsync,
+      isPending: false,
+    });
+
+    const { getByTestId } = renderScreen();
+
+    // flush the getFinancialRecord() promise so the loaded record populates state
+    await act(async () => {});
+
+    await act(async () => {
+      fireEvent.press(getByTestId("btn-submit"));
+    });
+
+    expect(mockUpdateMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        houseId: "house-1",
+        recordId: "rec-1",
+        data: expect.objectContaining({ period: originalPeriod }),
+      }),
+    );
   });
 });

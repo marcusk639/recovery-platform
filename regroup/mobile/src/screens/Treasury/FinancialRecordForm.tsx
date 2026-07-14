@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   ScrollView,
@@ -6,17 +6,17 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-} from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
-import { useData } from '../../context/DataContext';
-import { logException } from '../../util/logging';
+} from "react-native";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import { useData } from "../../context/DataContext";
+import { logException } from "../../util/logging";
 import {
   useCreateFinancialRecord,
   useEESIncomeForWeek,
   usePreviousWeekRecord,
   useUpdateFinancialRecord,
-} from '../../state/queries/treasuryQueries';
-import { getFinancialRecord } from '../../services/treasury';
+} from "../../state/queries/treasuryQueries";
+import { getFinancialRecord } from "../../services/treasury";
 import {
   BillDue,
   EXPENSE_CATEGORIES,
@@ -25,16 +25,16 @@ import {
   computeTotals,
   createEmptyBillDue,
   createEmptyLineItem,
-} from '../../entities/oxford/FinancialRecord';
-import RatsText from '../../components/rats-text/rats-text';
-import ScreenHeader from '../../components/screen-header/screen-header';
+} from "../../entities/oxford/FinancialRecord";
+import RatsText from "../../components/rats-text/rats-text";
+import ScreenHeader from "../../components/screen-header/screen-header";
 import {
   CARD_STYLE,
   color,
   fontSize,
   fontFamily,
   normalize,
-} from '../../styles/theme';
+} from "../../styles/theme";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -59,11 +59,11 @@ function getCurrentWeekPeriod(): string {
 }
 
 function formatWeekRange(periodStart: string): string {
-  const start = new Date(periodStart + 'T00:00:00');
+  const start = new Date(periodStart + "T00:00:00");
   const end = new Date(start);
   end.setDate(start.getDate() + 6);
   const fmt = (d: Date) =>
-    d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   return `${fmt(start)} – ${fmt(end)}`;
 }
 
@@ -77,7 +77,11 @@ const FinancialRecordForm: React.FC = () => {
   const { houseId, recordId } = params;
   const { currentUser } = useData();
 
-  const period = getCurrentWeekPeriod();
+  // Defaults to the current week for a brand-new report. When editing an
+  // existing record (e.g. resubmitting a rejected report), this is
+  // overwritten below with the record's original period so resubmission
+  // doesn't silently reassign the report to the current week.
+  const [period, setPeriod] = useState(getCurrentWeekPeriod());
 
   const { data: previousWeek } = usePreviousWeekRecord(houseId);
   const { data: eesTotal = 0 } = useEESIncomeForWeek(houseId, period);
@@ -86,8 +90,8 @@ const FinancialRecordForm: React.FC = () => {
 
   // ─── Form state ────────────────────────────────────────────────────────────
 
-  const [beginningBalance, setBeginningBalance] = useState('0.00');
-  const [savingsBalance, setSavingsBalance] = useState('');
+  const [beginningBalance, setBeginningBalance] = useState("0.00");
+  const [savingsBalance, setSavingsBalance] = useState("");
   const [incomeLines, setIncomeLines] = useState<FinancialLineItem[]>([
     createEmptyLineItem(),
   ]);
@@ -110,10 +114,11 @@ const FinancialRecordForm: React.FC = () => {
     if (!recordId) {
       return;
     }
-    getFinancialRecord(houseId, recordId).then(rec => {
+    getFinancialRecord(houseId, recordId).then((rec) => {
       if (!rec) {
         return;
       }
+      setPeriod(rec.period);
       setBeginningBalance(centsToDollars(rec.beginningCheckingBalance));
       if (rec.savingsBalance != null) {
         setSavingsBalance(centsToDollars(rec.savingsBalance));
@@ -144,48 +149,48 @@ const FinancialRecordForm: React.FC = () => {
   // ─── Income line handlers ──────────────────────────────────────────────────
 
   const addIncomeLine = () =>
-    setIncomeLines(prev => [...prev, createEmptyLineItem()]);
+    setIncomeLines((prev) => [...prev, createEmptyLineItem()]);
 
   const updateIncomeLine = (
     index: number,
     field: keyof FinancialLineItem,
     value: string | number,
   ) =>
-    setIncomeLines(prev =>
+    setIncomeLines((prev) =>
       prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)),
     );
 
   // ─── Expense line handlers ─────────────────────────────────────────────────
 
   const addExpenseLine = () =>
-    setExpenseLines(prev => [...prev, createEmptyLineItem()]);
+    setExpenseLines((prev) => [...prev, createEmptyLineItem()]);
 
   const updateExpenseLine = (
     index: number,
     field: keyof FinancialLineItem,
     value: string | number,
   ) =>
-    setExpenseLines(prev =>
+    setExpenseLines((prev) =>
       prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)),
     );
 
   // ─── Bills due handlers ────────────────────────────────────────────────────
 
-  const addBill = () => setBillsDue(prev => [...prev, createEmptyBillDue()]);
+  const addBill = () => setBillsDue((prev) => [...prev, createEmptyBillDue()]);
 
   const updateBill = (
     index: number,
     field: keyof BillDue,
     value: string | number,
   ) =>
-    setBillsDue(prev =>
+    setBillsDue((prev) =>
       prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)),
     );
 
   // ─── EES pre-fill ──────────────────────────────────────────────────────────
 
   const addEESLine = () => {
-    setIncomeLines(prev => [
+    setIncomeLines((prev) => [
       ...prev,
       { category: INCOME_CATEGORIES[0], amount: eesTotal },
     ]);
@@ -193,7 +198,7 @@ const FinancialRecordForm: React.FC = () => {
 
   // ─── Submit ────────────────────────────────────────────────────────────────
 
-  const buildRecord = (status: 'draft' | 'submitted') => ({
+  const buildRecord = (status: "draft" | "submitted") => ({
     houseId,
     period,
     status,
@@ -207,19 +212,20 @@ const FinancialRecordForm: React.FC = () => {
     totalExpenses,
     balance: totalIncome - totalExpenses,
     breakdown: [...incomeLines, ...expenseLines],
-    submittedBy: currentUser?.id ?? '',
+    submittedBy: currentUser?.id ?? "",
     submittedAt: new Date().toISOString(),
     approvedByVote: false,
   });
 
   const hasLineItems =
-    incomeLines.some(l => l.amount > 0) || expenseLines.some(l => l.amount > 0);
+    incomeLines.some((l) => l.amount > 0) ||
+    expenseLines.some((l) => l.amount > 0);
 
-  const handleSave = async (status: 'draft' | 'submitted') => {
-    if (status === 'submitted' && !hasLineItems) {
+  const handleSave = async (status: "draft" | "submitted") => {
+    if (status === "submitted" && !hasLineItems) {
       Alert.alert(
-        'Required',
-        'Add at least one income or expense line before submitting.',
+        "Required",
+        "Add at least one income or expense line before submitting.",
       );
       return;
     }
@@ -234,8 +240,8 @@ const FinancialRecordForm: React.FC = () => {
     } catch (error) {
       logException(error);
       Alert.alert(
-        'Error',
-        'Failed to save financial record. Please try again.',
+        "Error",
+        "Failed to save financial record. Please try again.",
       );
     }
   };
@@ -309,7 +315,8 @@ const FinancialRecordForm: React.FC = () => {
             <TouchableOpacity
               testID="btn-ees-add"
               onPress={addEESLine}
-              style={styles.eesBannerButton}>
+              style={styles.eesBannerButton}
+            >
               <RatsText
                 translate={false}
                 text="Add"
@@ -330,20 +337,21 @@ const FinancialRecordForm: React.FC = () => {
             <View
               key={index}
               testID={`income-row-${index}`}
-              style={styles.lineItem}>
+              style={styles.lineItem}
+            >
               <TextInput
                 testID={`income-category-${index}`}
                 style={styles.categoryInput}
                 value={line.category}
-                onChangeText={val => updateIncomeLine(index, 'category', val)}
-                placeholder={INCOME_CATEGORIES.join(' / ')}
+                onChangeText={(val) => updateIncomeLine(index, "category", val)}
+                placeholder={INCOME_CATEGORIES.join(" / ")}
               />
               <TextInput
                 testID={`income-amount-${index}`}
                 style={styles.amountInput}
-                value={line.amount > 0 ? centsToDollars(line.amount) : ''}
-                onChangeText={val =>
-                  updateIncomeLine(index, 'amount', dollarsToCents(val))
+                value={line.amount > 0 ? centsToDollars(line.amount) : ""}
+                onChangeText={(val) =>
+                  updateIncomeLine(index, "amount", dollarsToCents(val))
                 }
                 keyboardType="decimal-pad"
                 placeholder="0.00"
@@ -351,9 +359,9 @@ const FinancialRecordForm: React.FC = () => {
               <TextInput
                 testID={`income-description-${index}`}
                 style={styles.descriptionInput}
-                value={line.description ?? ''}
-                onChangeText={val =>
-                  updateIncomeLine(index, 'description', val)
+                value={line.description ?? ""}
+                onChangeText={(val) =>
+                  updateIncomeLine(index, "description", val)
                 }
                 placeholder="Description (optional)"
               />
@@ -362,7 +370,8 @@ const FinancialRecordForm: React.FC = () => {
           <TouchableOpacity
             testID="btn-add-income"
             onPress={addIncomeLine}
-            style={styles.addButton}>
+            style={styles.addButton}
+          >
             <RatsText
               translate={false}
               text="+ Add Income Line"
@@ -382,20 +391,23 @@ const FinancialRecordForm: React.FC = () => {
             <View
               key={index}
               testID={`expense-row-${index}`}
-              style={styles.lineItem}>
+              style={styles.lineItem}
+            >
               <TextInput
                 testID={`expense-category-${index}`}
                 style={styles.categoryInput}
                 value={line.category}
-                onChangeText={val => updateExpenseLine(index, 'category', val)}
+                onChangeText={(val) =>
+                  updateExpenseLine(index, "category", val)
+                }
                 placeholder={EXPENSE_CATEGORIES[0]}
               />
               <TextInput
                 testID={`expense-amount-${index}`}
                 style={styles.amountInput}
-                value={line.amount > 0 ? centsToDollars(line.amount) : ''}
-                onChangeText={val =>
-                  updateExpenseLine(index, 'amount', dollarsToCents(val))
+                value={line.amount > 0 ? centsToDollars(line.amount) : ""}
+                onChangeText={(val) =>
+                  updateExpenseLine(index, "amount", dollarsToCents(val))
                 }
                 keyboardType="decimal-pad"
                 placeholder="0.00"
@@ -403,16 +415,16 @@ const FinancialRecordForm: React.FC = () => {
               <TextInput
                 testID={`expense-payee-${index}`}
                 style={styles.descriptionInput}
-                value={line.payee ?? ''}
-                onChangeText={val => updateExpenseLine(index, 'payee', val)}
+                value={line.payee ?? ""}
+                onChangeText={(val) => updateExpenseLine(index, "payee", val)}
                 placeholder="Payee"
               />
               <TextInput
                 testID={`expense-check-${index}`}
                 style={styles.descriptionInput}
-                value={line.checkNumber ?? ''}
-                onChangeText={val =>
-                  updateExpenseLine(index, 'checkNumber', val)
+                value={line.checkNumber ?? ""}
+                onChangeText={(val) =>
+                  updateExpenseLine(index, "checkNumber", val)
                 }
                 placeholder="Check #"
                 keyboardType="number-pad"
@@ -420,9 +432,9 @@ const FinancialRecordForm: React.FC = () => {
               <TextInput
                 testID={`expense-description-${index}`}
                 style={styles.descriptionInput}
-                value={line.description ?? ''}
-                onChangeText={val =>
-                  updateExpenseLine(index, 'description', val)
+                value={line.description ?? ""}
+                onChangeText={(val) =>
+                  updateExpenseLine(index, "description", val)
                 }
                 placeholder="Description (optional)"
               />
@@ -431,7 +443,8 @@ const FinancialRecordForm: React.FC = () => {
           <TouchableOpacity
             testID="btn-add-expense"
             onPress={addExpenseLine}
-            style={styles.addButton}>
+            style={styles.addButton}
+          >
             <RatsText
               translate={false}
               text="+ Add Expense Line"
@@ -451,20 +464,21 @@ const FinancialRecordForm: React.FC = () => {
             <View
               key={index}
               testID={`bill-row-${index}`}
-              style={styles.lineItem}>
+              style={styles.lineItem}
+            >
               <TextInput
                 testID={`bill-description-${index}`}
                 style={styles.categoryInput}
                 value={bill.description}
-                onChangeText={val => updateBill(index, 'description', val)}
+                onChangeText={(val) => updateBill(index, "description", val)}
                 placeholder="Description"
               />
               <TextInput
                 testID={`bill-amount-${index}`}
                 style={styles.amountInput}
-                value={bill.amount > 0 ? centsToDollars(bill.amount) : ''}
-                onChangeText={val =>
-                  updateBill(index, 'amount', dollarsToCents(val))
+                value={bill.amount > 0 ? centsToDollars(bill.amount) : ""}
+                onChangeText={(val) =>
+                  updateBill(index, "amount", dollarsToCents(val))
                 }
                 keyboardType="decimal-pad"
                 placeholder="0.00"
@@ -473,7 +487,7 @@ const FinancialRecordForm: React.FC = () => {
                 testID={`bill-due-date-${index}`}
                 style={styles.descriptionInput}
                 value={bill.dueDate}
-                onChangeText={val => updateBill(index, 'dueDate', val)}
+                onChangeText={(val) => updateBill(index, "dueDate", val)}
                 placeholder="Due date (YYYY-MM-DD)"
               />
             </View>
@@ -481,7 +495,8 @@ const FinancialRecordForm: React.FC = () => {
           <TouchableOpacity
             testID="btn-add-bill"
             onPress={addBill}
-            style={styles.addButton}>
+            style={styles.addButton}
+          >
             <RatsText
               translate={false}
               text="+ Add Bill"
@@ -555,8 +570,9 @@ const FinancialRecordForm: React.FC = () => {
           <TouchableOpacity
             testID="btn-save-draft"
             style={[styles.actionButton, styles.draftButton]}
-            onPress={() => handleSave('draft')}
-            disabled={isPending}>
+            onPress={() => handleSave("draft")}
+            disabled={isPending}
+          >
             <RatsText
               translate={false}
               text="Save Draft"
@@ -566,8 +582,9 @@ const FinancialRecordForm: React.FC = () => {
           <TouchableOpacity
             testID="btn-submit"
             style={[styles.actionButton, styles.submitButton]}
-            onPress={() => handleSave('submitted')}
-            disabled={isPending}>
+            onPress={() => handleSave("submitted")}
+            disabled={isPending}
+          >
             <RatsText
               translate={false}
               text="Submit for Approval"
@@ -591,7 +608,7 @@ const styles = StyleSheet.create({
   periodText: {
     fontSize: fontSize.regular,
     color: color.dark_grey,
-    textAlign: 'center',
+    textAlign: "center",
   },
 
   sectionHeader: {
@@ -602,8 +619,8 @@ const styles = StyleSheet.create({
   },
 
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: normalize(8),
   },
 
@@ -653,11 +670,11 @@ const styles = StyleSheet.create({
   },
 
   eesBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#EFF6FF',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#EFF6FF",
     borderWidth: 1,
-    borderColor: '#BFDBFE',
+    borderColor: "#BFDBFE",
     borderRadius: normalize(8),
     padding: normalize(10),
     marginBottom: normalize(12),
@@ -666,11 +683,11 @@ const styles = StyleSheet.create({
   eesBannerText: {
     flex: 1,
     fontSize: fontSize.small,
-    color: '#1D4ED8',
+    color: "#1D4ED8",
   },
 
   eesBannerButton: {
-    backgroundColor: '#2563EB',
+    backgroundColor: "#2563EB",
     borderRadius: normalize(4),
     paddingHorizontal: normalize(10),
     paddingVertical: normalize(6),
@@ -683,8 +700,8 @@ const styles = StyleSheet.create({
   },
 
   summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginBottom: normalize(6),
   },
 
@@ -715,7 +732,7 @@ const styles = StyleSheet.create({
   },
 
   actionRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: normalize(10),
     marginBottom: normalize(20),
   },
@@ -724,7 +741,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: normalize(12),
     borderRadius: normalize(8),
-    alignItems: 'center',
+    alignItems: "center",
   },
 
   draftButton: { backgroundColor: color.dark_grey },
