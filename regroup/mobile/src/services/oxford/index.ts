@@ -34,7 +34,7 @@ export async function getOfficers(houseId: string): Promise<Officer[]> {
       .collection("officers")
       .get();
     return snapshot.docs.map(
-      (doc) => ({ ...doc.data(), id: doc.id } as Officer)
+      (doc) => ({ ...doc.data(), id: doc.id }) as Officer,
     );
   } catch (error) {
     logException(error);
@@ -51,7 +51,7 @@ export async function getActiveOfficers(houseId: string): Promise<Officer[]> {
       .where("isActive", "==", true)
       .get();
     return snapshot.docs.map(
-      (doc) => ({ ...doc.data(), id: doc.id } as Officer)
+      (doc) => ({ ...doc.data(), id: doc.id }) as Officer,
     );
   } catch (error) {
     logException(error);
@@ -60,16 +60,33 @@ export async function getActiveOfficers(houseId: string): Promise<Officer[]> {
 }
 
 export async function createOfficer(
-  officer: Omit<Officer, "id">
+  officer: Omit<Officer, "id">,
 ): Promise<Officer> {
   try {
-    const ref = firestore
+    const officersRef = firestore
       .collection("houses")
       .doc(officer.houseId)
-      .collection("officers")
-      .doc();
+      .collection("officers");
+
+    // Deactivate any existing active officer holding this role first, so
+    // creating a new officer never leaves two people simultaneously active
+    // for the same office (e.g. two active Treasurers).
+    const existingActive = await officersRef
+      .where("role", "==", officer.role)
+      .where("isActive", "==", true)
+      .get();
+
+    const batch = firestore.batch();
+
+    existingActive.docs.forEach((doc) => {
+      batch.update(doc.ref, { isActive: false });
+    });
+
+    const ref = officersRef.doc();
     const newOfficer: Officer = { ...officer, id: ref.id };
-    await ref.set(newOfficer);
+    batch.set(ref, newOfficer);
+
+    await batch.commit();
     return newOfficer;
   } catch (error) {
     logException(error);
@@ -79,7 +96,7 @@ export async function createOfficer(
 
 export async function updateOfficer(
   id: string,
-  updates: Partial<Officer> & { houseId?: string }
+  updates: Partial<Officer> & { houseId?: string },
 ): Promise<void> {
   const houseId = updates.houseId;
   if (!houseId) {
@@ -100,7 +117,7 @@ export async function updateOfficer(
 
 export async function removeOfficer(
   id: string,
-  houseId?: string
+  houseId?: string,
 ): Promise<void> {
   if (!houseId) {
     throw new Error("houseId required to remove officer from subcollection");
@@ -122,7 +139,7 @@ export async function removeOfficer(
 
 export async function getBusinessMeetings(
   houseId: string,
-  limit?: number
+  limit?: number,
 ): Promise<BusinessMeeting[]> {
   try {
     let query: any = firestore
@@ -133,7 +150,7 @@ export async function getBusinessMeetings(
     if (limit) query = query.limit(limit);
     const result = await query.get();
     return result.docs.map(
-      (doc: any) => ({ ...doc.data(), id: doc.id } as BusinessMeeting)
+      (doc: any) => ({ ...doc.data(), id: doc.id }) as BusinessMeeting,
     );
   } catch (error) {
     logException(error);
@@ -142,7 +159,7 @@ export async function getBusinessMeetings(
 }
 
 export async function createBusinessMeeting(
-  meeting: Omit<BusinessMeeting, "id">
+  meeting: Omit<BusinessMeeting, "id">,
 ): Promise<BusinessMeeting> {
   try {
     const ref = firestore
@@ -161,12 +178,12 @@ export async function createBusinessMeeting(
 
 export async function updateBusinessMeeting(
   id: string,
-  updates: Partial<BusinessMeeting> & { houseId?: string }
+  updates: Partial<BusinessMeeting> & { houseId?: string },
 ): Promise<void> {
   const houseId = updates.houseId;
   if (!houseId) {
     throw new Error(
-      "houseId required to update business meeting in subcollection"
+      "houseId required to update business meeting in subcollection",
     );
   }
   try {
@@ -184,11 +201,11 @@ export async function updateBusinessMeeting(
 
 export async function deleteBusinessMeeting(
   id: string,
-  houseId?: string
+  houseId?: string,
 ): Promise<void> {
   if (!houseId) {
     throw new Error(
-      "houseId required to delete business meeting from subcollection"
+      "houseId required to delete business meeting from subcollection",
     );
   }
   try {
@@ -222,7 +239,7 @@ export async function deleteBusinessMeeting(
 
 export async function getVotesForMeeting(
   meetingId: string,
-  houseId?: string
+  houseId?: string,
 ): Promise<Vote[]> {
   if (!houseId) {
     // Fallback: search across all houses (less efficient but backward compatible)
@@ -236,33 +253,20 @@ export async function getVotesForMeeting(
       .collection("votes")
       .where("meetingId", "==", meetingId)
       .get();
-    return snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id } as Vote));
+    return snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id }) as Vote);
   } catch (error) {
     logException(error);
     throw new Error("Failed to load votes");
   }
 }
 
-export async function updateVote(
-  id: string,
-  updates: Partial<Vote> & { houseId?: string }
-): Promise<void> {
-  const houseId = updates.houseId;
-  if (!houseId) {
-    throw new Error("houseId required to update vote in subcollection");
-  }
-  try {
-    await firestore
-      .collection("houses")
-      .doc(houseId)
-      .collection("votes")
-      .doc(id)
-      .update(updates);
-  } catch (error) {
-    logException(error);
-    throw new Error("Failed to update vote");
-  }
-}
+// NOTE: there used to be an `updateVote(id, updates)` here too. It had zero
+// callers anywhere in src/ or in regroup/functions/src (confirmed by
+// grepping every call site — only this file's own definition and a
+// defensive barrel mock in BusinessMeetings.test.tsx referenced the name).
+// The real security fix that mattered was tightening the Firestore rule for
+// `votes/{voteId}` to deny all direct client writes — this function was
+// just dead code sitting next to it. Removed 2026-07-14.
 
 // ─── Elections (subcollection path) ─────────────────────────────────────────
 
@@ -275,7 +279,7 @@ export async function getElections(houseId: string): Promise<Election[]> {
       .orderBy("conductedAt", "desc")
       .get();
     return snapshot.docs.map(
-      (doc) => ({ ...doc.data(), id: doc.id } as Election)
+      (doc) => ({ ...doc.data(), id: doc.id }) as Election,
     );
   } catch (error) {
     logException(error);
@@ -284,7 +288,7 @@ export async function getElections(houseId: string): Promise<Election[]> {
 }
 
 export async function createElection(
-  election: Omit<Election, "id">
+  election: Omit<Election, "id">,
 ): Promise<Election> {
   try {
     const ref = firestore
@@ -303,7 +307,7 @@ export async function createElection(
 
 export async function updateElection(
   id: string,
-  updates: Partial<Election> & { houseId?: string }
+  updates: Partial<Election> & { houseId?: string },
 ): Promise<void> {
   const houseId = updates.houseId;
   if (!houseId) {
@@ -325,7 +329,7 @@ export async function updateElection(
 // ─── EES Transactions (uses top-level ees-records — matches existing rules) ─
 
 export async function getEESTransactions(
-  houseId: string
+  houseId: string,
 ): Promise<EESTransaction[]> {
   try {
     const snapshot = await firestore
@@ -334,7 +338,7 @@ export async function getEESTransactions(
       .orderBy("createdAt", "desc")
       .get();
     return snapshot.docs.map(
-      (doc) => ({ ...doc.data(), id: doc.id } as EESTransaction)
+      (doc) => ({ ...doc.data(), id: doc.id }) as EESTransaction,
     );
   } catch (error) {
     logException(error);
@@ -343,7 +347,7 @@ export async function getEESTransactions(
 }
 
 export async function createEESTransaction(
-  tx: Omit<EESTransaction, "id">
+  tx: Omit<EESTransaction, "id">,
 ): Promise<EESTransaction> {
   try {
     const ref = firestore.collection("ees-records").doc();
@@ -359,7 +363,7 @@ export async function createEESTransaction(
 // ─── Financial Records (subcollection path) ─────────────────────────────────
 
 export async function getFinancialRecords(
-  houseId: string
+  houseId: string,
 ): Promise<FinancialRecord[]> {
   try {
     const snapshot = await firestore
@@ -369,7 +373,7 @@ export async function getFinancialRecords(
       .orderBy("period", "desc")
       .get();
     return snapshot.docs.map(
-      (doc) => ({ ...doc.data(), id: doc.id } as FinancialRecord)
+      (doc) => ({ ...doc.data(), id: doc.id }) as FinancialRecord,
     );
   } catch (error) {
     logException(error);
@@ -378,7 +382,7 @@ export async function getFinancialRecords(
 }
 
 export async function createFinancialRecord(
-  record: Omit<FinancialRecord, "id">
+  record: Omit<FinancialRecord, "id">,
 ): Promise<FinancialRecord> {
   try {
     const ref = firestore
