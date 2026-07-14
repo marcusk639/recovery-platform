@@ -42,8 +42,75 @@ export const requestAdminAccessWithSubscription = onCall(
       );
     }
 
+    const groupRef = db.collection("groups").doc(groupId);
+
+    // Ensures the member document reflects isAdmin = true — consistent with
+    // group.admins — and builds the success response, from a single place.
+    // Web-claim users (signed up on the web without ever using the mobile
+    // app) have no member doc yet — create it so admin privileges actually
+    // take effect. The onMemberWrite trigger syncs custom JWT claims FROM
+    // this member document, not from group.admins directly, so every
+    // success-return path (the normal happy path AND the ack-ambiguity
+    // recovery path below) MUST go through this helper — skipping it leaves
+    // a user listed as an admin in Firestore but with claims never synced.
+    async function grantMemberAdminAndBuildResponse(
+      currentStripeSubscriptionId: string | undefined,
+      currentSubscriptionStatus: string | undefined,
+    ): Promise<{
+      success: true;
+      groupId: string;
+      subscriptionId: string | undefined;
+      subscriptionStatus: string | undefined;
+      group: FirebaseFirestore.DocumentData | undefined;
+    }> {
+      const memberRef = db.collection("members").doc(`${groupId}_${userId}`);
+      const memberSnap = await memberRef.get();
+
+      if (memberSnap.exists) {
+        await memberRef.update({
+          isAdmin: true,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        logger.info(
+          `Updated member document ${groupId}_${userId} to set isAdmin = true`,
+        );
+      } else {
+        // Fetch user profile data to populate the new member doc.
+        const userSnap = await db.collection("users").doc(userId).get();
+        const userData = userSnap.data() || {};
+        const displayName =
+          userData.displayName || request.auth?.token?.name || name || "Member";
+
+        await memberRef.set({
+          id: `${groupId}_${userId}`,
+          userId,
+          groupId,
+          displayName,
+          isAdmin: true,
+          // Privacy defaults match UserModel (opt-in sharing).
+          showSobrietyDate: false,
+          showPhoneNumber: false,
+          joinedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        logger.info(
+          `Created member document ${groupId}_${userId} with isAdmin = true for web-claim user`,
+        );
+      }
+
+      // Fetch the updated group data to return
+      const updatedGroupSnap = await groupRef.get();
+
+      return {
+        success: true,
+        groupId,
+        subscriptionId: currentStripeSubscriptionId,
+        subscriptionStatus: currentSubscriptionStatus,
+        group: updatedGroupSnap.data(),
+      };
+    }
+
     try {
-      const groupRef = db.collection("groups").doc(groupId);
       const groupSnap = await groupRef.get();
 
       if (!groupSnap.exists) {
@@ -83,6 +150,13 @@ export const requestAdminAccessWithSubscription = onCall(
       let stripeSubscriptionId: string | undefined =
         groupData.stripeSubscriptionId;
       let subscriptionStatus: string | undefined = groupData.subscriptionStatus;
+      // These three are only ever assigned when this call actually creates or
+      // verifies a subscription (see the branches below). Kept in scope here
+      // so the claimStripeFields assembly (right before the transaction) can
+      // see whichever branch actually ran, without re-deriving them.
+      let stripeSubscriptionItemId: string | undefined;
+      let stripePriceIdGroup: string | undefined;
+      let stripeProductIdGroup: string | undefined;
       // Fed into the subscription's idempotency key below. Only incremented
       // by the compensation/revert block after a real cancellation — a
       // plain client-side retry of an unanswered call (no compensation yet)
@@ -98,6 +172,13 @@ export const requestAdminAccessWithSubscription = onCall(
       // claimant isn't billed. Pre-existing subscriptions (from a prior call
       // or the web-payment verify branch) are NOT rolled back.
       let subscriptionCreatedThisCall = false;
+
+      // Distinguishes which branch below actually ran. Used immediately
+      // before the grant guard to decide whether a fresh live re-check of
+      // subscriptionStatus is needed (create-new path) or would be a
+      // pure-waste duplicate Stripe call (web-checkout path, which just
+      // did its own fresh retrieve() above).
+      const usedWebCheckoutVerify = Boolean(subscriptionId);
 
       // If subscriptionId is provided (from web payment), verify and use it
       if (subscriptionId) {
@@ -126,15 +207,8 @@ export const requestAdminAccessWithSubscription = onCall(
                 ? existingSubscription.customer
                 : existingSubscription.customer.id;
             subscriptionStatus = existingSubscription.status;
-            const subscriptionItemId = existingSubscription.items.data[0]?.id;
+            stripeSubscriptionItemId = existingSubscription.items.data[0]?.id;
 
-            await groupRef.update({
-              stripeCustomerId,
-              stripeSubscriptionId,
-              subscriptionStatus,
-              stripeSubscriptionItemId: subscriptionItemId,
-              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            });
             logger.info(`Verified subscription for group ${groupId}`);
           } else {
             throw new HttpsError(
@@ -188,7 +262,6 @@ export const requestAdminAccessWithSubscription = onCall(
             { idempotencyKey: `req-admin-${userId}-${groupId}-customer` },
           );
           stripeCustomerId = customer.id;
-          await groupRef.update({ stripeCustomerId });
           logger.info(
             `Stripe customer ${stripeCustomerId} created for user ${userId} and group ${groupId}`,
           );
@@ -248,21 +321,27 @@ export const requestAdminAccessWithSubscription = onCall(
           stripeSubscriptionId = subscription.id;
           subscriptionStatus = subscription.status;
           subscriptionCreatedThisCall = true;
-          const subscriptionItemId = subscription.items.data[0].id;
-
-          await groupRef.update({
-            stripeCustomerId,
-            stripeSubscriptionId,
-            subscriptionStatus,
-            stripeSubscriptionItemId: subscriptionItemId,
-            stripePriceIdGroup: groupPriceId,
-            stripeProductIdGroup: productIdGroup,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
+          stripeSubscriptionItemId = subscription.items.data[0].id;
+          stripePriceIdGroup = groupPriceId;
+          stripeProductIdGroup = productIdGroup;
           logger.info(
             `Stripe subscription ${stripeSubscriptionId} created for group ${groupId} with status ${subscriptionStatus}`,
           );
         }
+      }
+
+      // Final live-status re-check: the subscriptionStatus in scope here may
+      // be a stale idempotent replay of an earlier create() call (its cached
+      // response predates a later cancellation) for the create-new-subscription
+      // path. Re-derive from a live Stripe call immediately before the guard
+      // so a stale/replayed value can never grant admin. Skipped for the
+      // web-checkout path — it already did its own fresh retrieve() moments
+      // earlier at verify time with no Stripe calls in between, so a second
+      // one here would be a pure-waste extra round-trip.
+      if (!usedWebCheckoutVerify && stripeSubscriptionId) {
+        subscriptionStatus = (
+          await stripe.subscriptions.retrieve(stripeSubscriptionId)
+        ).status;
       }
 
       // Guard: only grant admin if subscription is active or trialing
@@ -276,11 +355,35 @@ export const requestAdminAccessWithSubscription = onCall(
         );
       }
 
+      // Assemble exactly once, from whichever branch above actually ran.
+      // Firestore rejects literal `undefined` — omit absent fields rather than
+      // setting them to undefined.
+      const claimStripeFields: Record<string, unknown> = { stripeCustomerId };
+      if (stripeSubscriptionId !== undefined) {
+        claimStripeFields.stripeSubscriptionId = stripeSubscriptionId;
+      }
+      if (subscriptionStatus !== undefined) {
+        claimStripeFields.subscriptionStatus = subscriptionStatus;
+      }
+      if (stripeSubscriptionItemId !== undefined) {
+        claimStripeFields.stripeSubscriptionItemId = stripeSubscriptionItemId;
+      }
+      if (stripePriceIdGroup !== undefined) {
+        claimStripeFields.stripePriceIdGroup = stripePriceIdGroup;
+      }
+      if (stripeProductIdGroup !== undefined) {
+        claimStripeFields.stripeProductIdGroup = stripeProductIdGroup;
+      }
+
       // 3. Atomically claim the group + grant admin via a Firestore transaction
       // so two concurrent callers can't both pass the pre-Stripe `isClaimed`
       // check and both end up in `admins`. Stripe ops happen OUTSIDE the
       // transaction (external calls + transactions must be fast), so on
       // contention failure we roll back any subscription created in THIS call.
+      // Stripe fields are only ever written here, inside the same atomic
+      // tx.update() that grants the claim — a losing caller's Stripe
+      // identifiers are never written anywhere, so there is nothing to
+      // corrupt and nothing to revert on failure.
       try {
         await db.runTransaction(async (tx) => {
           const txGroupSnap = await tx.get(groupRef);
@@ -297,6 +400,7 @@ export const requestAdminAccessWithSubscription = onCall(
             pendingAdminRequests:
               admin.firestore.FieldValue.arrayRemove(userId),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            ...claimStripeFields,
           });
         });
       } catch (txError: any) {
@@ -304,64 +408,153 @@ export const requestAdminAccessWithSubscription = onCall(
           txError instanceof HttpsError &&
           txError.code === "failed-precondition";
 
-        // Compensating action: if THIS call freshly created a Stripe
-        // subscription, cancel it regardless of whether the transaction
-        // failed due to a genuine claim-race loss or an unrelated error —
-        // in both cases we don't know the admin grant went through, so an
-        // orphaned live subscription is the wrong default. Mirrors the
-        // rollback pattern in createGroupWithSubscription.ts.
-        if (subscriptionCreatedThisCall && stripeSubscriptionId) {
-          let cancelSucceeded = false;
+        let postTxData: any;
+        let postTxReadFailed = false;
+        try {
+          postTxData = (await groupRef.get()).data();
+        } catch (postTxReadError) {
+          postTxReadFailed = true;
+          logger.error(
+            `Error re-reading group ${groupId} after transaction failure:`,
+            postTxReadError,
+          );
+        }
+
+        // Ack-ambiguity recovery: did THIS call's own transaction actually
+        // commit, despite the client observing an error? `admins.includes`
+        // alone isn't sufficient — this same userId can win via a DIFFERENT
+        // concurrent request of theirs (e.g. a web-checkout call and an
+        // in-app-payment call racing on the same group), which would commit
+        // a different Stripe subscription than the one this call is
+        // holding. The idempotency-key-scoped-to-userId argument (see the
+        // design spec) only guarantees identical Stripe objects when both
+        // requests take the SAME branch with the SAME idempotency key — it
+        // does not hold across branches. Comparing stripeSubscriptionId
+        // confirms this call's own attempt (not some other concurrent
+        // request of the same user's) is what committed, so a genuinely-
+        // orphaned subscription from a losing cross-branch request still
+        // falls through to compensation below instead of being silently
+        // left uncanceled.
+        if (
+          postTxData?.admins?.includes(userId) &&
+          postTxData?.stripeSubscriptionId === stripeSubscriptionId
+        ) {
+          try {
+            return await grantMemberAdminAndBuildResponse(
+              stripeSubscriptionId,
+              subscriptionStatus,
+            );
+          } catch (memberSyncError) {
+            // The claim transaction is CONFIRMED committed — this user is
+            // already in group.admins. Losing that context here (falling
+            // through to the generic outer-catch log) would leave an
+            // on-call engineer looking at "unexpected error" with no hint
+            // that the real state is "claim succeeded, only the member-doc/
+            // JWT-claims sync failed" — a distinct, narrower problem than a
+            // failed claim. A client retry will hit the already-exists
+            // guard above and get stuck without this being surfaced.
+            logger.error(
+              `Claim transaction for group ${groupId} by user ${userId} committed successfully (confirmed via ack-ambiguity recovery), but syncing the member doc/JWT claims failed — user is in group.admins but may not have admin claims yet:`,
+              memberSyncError,
+            );
+            throw new HttpsError(
+              "internal",
+              "Your admin access was granted, but finishing setup failed. Please contact support.",
+            );
+          }
+        }
+
+        // Web-checkout residual case: this caller supplied an already-billed
+        // `subscriptionId` (verified above) and then genuinely lost the claim
+        // — the ack-ambiguity check just ruled out "actually committed", so
+        // this caller holds a real, live Stripe subscription with no group
+        // attached. Auto-canceling isn't safe (refund implications the
+        // backend can't resolve unilaterally) and a blind retry won't help
+        // (the subscription is fine; the group is what's unavailable), so
+        // this gets its own distinct error pointing toward support instead
+        // of either the generic "already claimed" race-loss message or the
+        // generic `internal` fallthrough below. `subscriptionCreatedThisCall`
+        // is always false on this path (only the create-new branch sets it),
+        // so the compensation block below would never fire for this caller
+        // anyway — this check exits first regardless, rather than relying on
+        // that invariant implicitly.
+        //
+        // Only assert this when the post-tx re-read actually succeeded and
+        // ruled out "this call's own transaction committed" — a re-read
+        // FAILURE (postTxReadFailed) means we don't actually know the true
+        // state; asserting "claimed by someone else, contact support for a
+        // refund" in that case would be a confident, specific, and possibly
+        // false narrative (this caller could in fact already be the admin).
+        // Fall through instead to the normal race-loss/unexpected-error
+        // handling below, which rethrows the original txError as-is (the
+        // actual, uncertain state) rather than asserting a specific and
+        // possibly wrong one.
+        if (usedWebCheckoutVerify && !postTxReadFailed) {
+          throw new HttpsError(
+            "failed-precondition",
+            "Your payment was processed, but this group was claimed by someone else before your request completed. Contact support to arrange a refund or transfer.",
+          );
+        }
+
+        if (
+          subscriptionCreatedThisCall &&
+          stripeSubscriptionId &&
+          !postTxReadFailed
+        ) {
+          let cancelConfirmed = false;
           try {
             await stripe.subscriptions.cancel(stripeSubscriptionId);
-            cancelSucceeded = true;
-            logger.warn(
-              `Compensating: Canceled Stripe subscription ${stripeSubscriptionId} after claim transaction ${
-                isRaceLoss ? "lost the claim race" : "failed unexpectedly"
-              } for group ${groupId} by user ${userId}.`,
-            );
           } catch (stripeCancelError) {
             logger.error(
               `Error canceling Stripe subscription ${stripeSubscriptionId} in compensation:`,
               stripeCancelError,
             );
           }
-
-          // Revert the group doc's Stripe fields THIS call wrote in step 2
-          // — but only if the doc still points at this call's own
-          // subscription. A genuine race winner's later write must never be
-          // clobbered by the loser's cleanup; comparing against the current
-          // stripeSubscriptionId value is the guard. Only bump the
-          // idempotency-key attempt counter when the cancel actually
-          // succeeded — if cancel failed, the subscription is still live,
-          // and incrementing the counter here would cause a retry to mint a
-          // fresh idempotency key and create a SECOND live subscription
-          // instead of correctly replaying the still-valid original.
           try {
-            const staleSnap = await groupRef.get();
-            const staleData = staleSnap.data();
-            if (staleData?.stripeSubscriptionId === stripeSubscriptionId) {
-              await groupRef.update({
-                stripeSubscriptionId: null,
-                stripeSubscriptionItemId: null,
-                subscriptionStatus: null,
-                stripePriceIdGroup: null,
-                stripeProductIdGroup: null,
-                ...(cancelSucceeded
-                  ? {
-                      stripeSubscriptionAttempt:
-                        admin.firestore.FieldValue.increment(1),
-                    }
-                  : {}),
-                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-              });
-            }
-          } catch (revertError) {
+            const currentState =
+              await stripe.subscriptions.retrieve(stripeSubscriptionId);
+            cancelConfirmed = currentState.status === "canceled";
+          } catch (retrieveError) {
             logger.error(
-              `Error reverting stale group doc Stripe fields after compensation for group ${groupId}:`,
-              revertError,
+              `Error verifying cancellation state for ${stripeSubscriptionId}:`,
+              retrieveError,
             );
           }
+          if (cancelConfirmed) {
+            // Guarded separately from the cancellation logic above: a
+            // failure here must not shadow the isRaceLoss classification or
+            // audit-trail log below, and must not go unlogged. Without this
+            // guard, a Firestore blip on this single write would silently
+            // strand the user — the confirmed-canceled subscription's
+            // idempotency key would never rotate, so every future retry
+            // replays the same dead subscription object forever.
+            try {
+              await groupRef.update({
+                stripeSubscriptionAttempt:
+                  admin.firestore.FieldValue.increment(1),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              });
+            } catch (counterUpdateError) {
+              logger.error(
+                `Error advancing stripeSubscriptionAttempt for group ${groupId} after confirming Stripe subscription ${stripeSubscriptionId} canceled — next retry will reuse the same idempotency key against this dead subscription:`,
+                counterUpdateError,
+              );
+            }
+          }
+          logger.warn(
+            `Compensating: Canceled Stripe subscription ${stripeSubscriptionId} after claim transaction ${
+              isRaceLoss ? "lost the claim race" : "failed unexpectedly"
+            } for group ${groupId} by user ${userId}. Confirmed canceled: ${cancelConfirmed}.`,
+          );
+        } else if (postTxReadFailed && subscriptionCreatedThisCall) {
+          // Conservative default when we can't confirm the ack-ambiguity
+          // state: an orphaned live subscription (caught later by the
+          // reconciler/audit query) is a much smaller harm than canceling a
+          // subscription that this same user's other concurrent request now
+          // depends on. Do not cancel when uncertain.
+          logger.warn(
+            `Skipping compensation for subscription ${stripeSubscriptionId}: could not confirm ack-ambiguity state after a failed re-read — erring toward not canceling.`,
+          );
         }
 
         if (isRaceLoss) {
@@ -378,55 +571,12 @@ export const requestAdminAccessWithSubscription = onCall(
       }
 
       // 4. Update or create the member document so isAdmin is consistent with
-      // group.admins and the onMemberWrite trigger can sync custom JWT claims.
-      // Web-claim users (signed up on the web without ever using the mobile
-      // app) have no member doc yet — create it so admin privileges actually
-      // take effect.
-      const memberRef = db.collection("members").doc(`${groupId}_${userId}`);
-      const memberSnap = await memberRef.get();
-
-      if (memberSnap.exists) {
-        await memberRef.update({
-          isAdmin: true,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-        logger.info(
-          `Updated member document ${groupId}_${userId} to set isAdmin = true`,
-        );
-      } else {
-        // Fetch user profile data to populate the new member doc.
-        const userSnap = await db.collection("users").doc(userId).get();
-        const userData = userSnap.data() || {};
-        const displayName =
-          userData.displayName || request.auth?.token?.name || name || "Member";
-
-        await memberRef.set({
-          id: `${groupId}_${userId}`,
-          userId,
-          groupId,
-          displayName,
-          isAdmin: true,
-          // Privacy defaults match UserModel (opt-in sharing).
-          showSobrietyDate: false,
-          showPhoneNumber: false,
-          joinedAt: admin.firestore.FieldValue.serverTimestamp(),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-        logger.info(
-          `Created member document ${groupId}_${userId} with isAdmin = true for web-claim user`,
-        );
-      }
-
-      // Fetch the updated group data to return
-      const updatedGroupSnap = await groupRef.get();
-
-      return {
-        success: true,
-        groupId,
-        subscriptionId: stripeSubscriptionId,
-        subscriptionStatus: subscriptionStatus,
-        group: updatedGroupSnap.data(),
-      };
+      // group.admins and the onMemberWrite trigger can sync custom JWT claims,
+      // then build the response.
+      return await grantMemberAdminAndBuildResponse(
+        stripeSubscriptionId,
+        subscriptionStatus,
+      );
     } catch (error: any) {
       logger.error(
         `Error requesting admin access with subscription for group ${groupId} by user ${userId}:`,

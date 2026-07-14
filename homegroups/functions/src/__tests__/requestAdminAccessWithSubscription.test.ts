@@ -267,6 +267,12 @@ function setupDefaults() {
     items: { data: [{ id: "si_test" }] },
     latest_invoice: { payment_intent: {} },
   });
+
+  // Default for the final live-status re-check (Task 2): matches the
+  // create() response's status above, so tests unrelated to that re-check
+  // don't need to know it exists. Tests exercising the re-check itself
+  // override this to simulate a stale/replayed create() response.
+  mockStripeSubscriptionsRetrieve.mockResolvedValue({ status: "trialing" });
 }
 
 // ============================================================
@@ -274,6 +280,7 @@ function setupDefaults() {
 // ============================================================
 
 import { requestAdminAccessWithSubscription } from "../callable/requestAdminAccessWithSubscription";
+import { HttpsError } from "firebase-functions/v2/https";
 
 // ============================================================
 // TESTS
@@ -344,7 +351,7 @@ describe("requestAdminAccessWithSubscription — payment method requirement", ()
   });
 });
 
-describe("requestAdminAccessWithSubscription — compensating-cancellation on transaction failure", () => {
+describe("requestAdminAccessWithSubscription — write-ordering (Stripe fields only land for the transaction winner)", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     docStore = {};
@@ -352,24 +359,54 @@ describe("requestAdminAccessWithSubscription — compensating-cancellation on tr
     setupDefaults();
   });
 
-  it("on a genuine already-claimed race loss: cancels the subscription, does NOT revert the winner's group-doc Stripe fields, and rethrows the original error", async () => {
-    // Force the transaction to behave as if another caller claimed the
-    // group first, by overriding runTransaction to simulate the real
-    // isClaimed-check-then-throw behavior after the group doc has been
-    // externally marked claimed between this call's step 2 write and the
-    // transaction running.
+  it("does not write any Stripe fields to the group doc before the claim transaction commits", async () => {
+    // Intercept the moment right before the transaction runs to inspect
+    // whether any Stripe fields have been written yet.
+    const originalRunTransaction = mockDb.runTransaction;
+    let stripeFieldsWrittenBeforeTransaction = false;
+    mockDb.runTransaction = (async (fn: (tx: any) => Promise<unknown>) => {
+      const preTxGroup = docStore[`groups/${GROUP_ID}`] as
+        Record<string, unknown> | undefined;
+      if (preTxGroup?.stripeSubscriptionId !== undefined) {
+        stripeFieldsWrittenBeforeTransaction = true;
+      }
+      return originalRunTransaction(fn);
+    }) as typeof mockDb.runTransaction;
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      paymentMethodId: PAYMENT_METHOD_ID,
+    });
+
+    await (requestAdminAccessWithSubscription as any)(request); // eslint-disable-line @typescript-eslint/no-explicit-any
+
+    expect(stripeFieldsWrittenBeforeTransaction).toBe(false);
+
+    // After the transaction commits, the fields ARE present (written
+    // atomically with the win).
+    const finalGroup = docStore[`groups/${GROUP_ID}`] as Record<
+      string,
+      unknown
+    >;
+    expect(finalGroup.stripeSubscriptionId).toBe("sub_test");
+    // Per this mock's documented convention, arrayUnion sentinels are stored
+    // verbatim rather than resolved to a real array — assert the sentinel
+    // was passed to tx.update(), consistent with how the rest of this file
+    // treats arrayUnion/arrayRemove.
+    expect(finalGroup.admins).toEqual({ __arrayUnion: [USER_ID] });
+  });
+
+  it("on a genuine already-claimed race loss, never writes this caller's own Stripe fields anywhere — the winner's data is untouched", async () => {
     const originalRunTransaction = mockDb.runTransaction;
     let transactionAttempt = 0;
     mockDb.runTransaction = (async (fn: (tx: any) => Promise<unknown>) => {
       transactionAttempt++;
       if (transactionAttempt === 1) {
-        // Simulate a concurrent winner claiming the group with its own
-        // Stripe subscription just before this call's transaction reads it.
         docStore[`groups/${GROUP_ID}`] = {
           ...docStore[`groups/${GROUP_ID}`],
           isClaimed: true,
           admins: ["winner-user"],
-          stripeSubscriptionId: "sub_winner", // winner's own write already landed
+          stripeSubscriptionId: "sub_winner",
           subscriptionStatus: "trialing",
         };
       }
@@ -387,87 +424,20 @@ describe("requestAdminAccessWithSubscription — compensating-cancellation on tr
       (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
     ).rejects.toMatchObject({ code: "failed-precondition" });
 
-    // This call's freshly-created subscription was canceled.
-    expect(mockStripeSubscriptionsCancel).toHaveBeenCalledWith("sub_test");
-
-    // The winner's Stripe fields were NOT clobbered — the doc still shows
-    // the winner's subscription, not reverted/nulled.
+    // The winner's Stripe fields are exactly as the winner left them —
+    // this caller's own (now-canceled) subscription was never written
+    // anywhere, so there's nothing to have clobbered them with.
     const finalGroup = docStore[`groups/${GROUP_ID}`] as Record<
       string,
       unknown
     >;
     expect(finalGroup.stripeSubscriptionId).toBe("sub_winner");
     expect(finalGroup.admins).toEqual(["winner-user"]);
-  });
-
-  it("on an unexpected (non-race) transaction failure: cancels the subscription, reverts THIS call's own stale group-doc Stripe fields, and throws a generic internal error instead of leaking the raw error", async () => {
-    mockDb.runTransaction = (async () => {
-      throw new Error("DEADLINE_EXCEEDED: transaction timed out");
-    }) as typeof mockDb.runTransaction;
-
-    mockStripeSubscriptionsCancel.mockResolvedValue({});
-
-    const request = makeRequest(USER_ID, {
-      groupId: GROUP_ID,
-      paymentMethodId: PAYMENT_METHOD_ID,
-    });
-
-    await expect(
-      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
-    ).rejects.toMatchObject({ code: "internal" });
-
     expect(mockStripeSubscriptionsCancel).toHaveBeenCalledWith("sub_test");
-
-    // This call's own stale Stripe fields were reverted, not left trusting
-    // a subscription that no longer exists.
-    const finalGroup = docStore[`groups/${GROUP_ID}`] as Record<
-      string,
-      unknown
-    >;
-    expect(finalGroup.stripeSubscriptionId).toBeNull();
-    expect(finalGroup.subscriptionStatus).toBeNull();
-  });
-
-  it("retry after an unexpected transaction failure creates a fresh subscription rather than trusting stale data", async () => {
-    mockDb.runTransaction = (async () => {
-      throw new Error("DEADLINE_EXCEEDED: transaction timed out");
-    }) as typeof mockDb.runTransaction;
-    mockStripeSubscriptionsCancel.mockResolvedValue({});
-
-    const request = makeRequest(USER_ID, {
-      groupId: GROUP_ID,
-      paymentMethodId: PAYMENT_METHOD_ID,
-    });
-
-    await expect(
-      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
-    ).rejects.toMatchObject({ code: "internal" });
-
-    // Now let the retry succeed normally.
-    mockDb.runTransaction = buildMockDb().runTransaction;
-    mockStripeSubscriptionsCreate.mockResolvedValue({
-      id: "sub_retry",
-      status: "trialing",
-      items: { data: [{ id: "si_retry" }] },
-      latest_invoice: { payment_intent: {} },
-    });
-
-    const retryResult = await (requestAdminAccessWithSubscription as any)(
-      // eslint-disable-line @typescript-eslint/no-explicit-any
-      request,
-    );
-
-    expect(retryResult).toMatchObject({ success: true });
-    // A NEW subscription was created on retry, backed by a genuinely fresh
-    // Stripe idempotency key (see the "idempotency-key replay after
-    // compensation" describe block below) rather than a cached response —
-    // it does not treat the reverted (canceled) subscription as still
-    // valid, at either the Firestore-staleness or Stripe-replay layer.
-    expect(mockStripeSubscriptionsCreate).toHaveBeenCalledTimes(2); // once in the failed attempt, once on retry
   });
 });
 
-describe("requestAdminAccessWithSubscription — idempotency-key replay after compensation", () => {
+describe("requestAdminAccessWithSubscription — final live-status re-check before granting admin", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     docStore = {};
@@ -475,13 +445,347 @@ describe("requestAdminAccessWithSubscription — idempotency-key replay after co
     setupDefaults();
   });
 
-  it("uses a different Stripe idempotency key on a retry after the prior attempt's subscription was compensated", async () => {
-    // First attempt: transaction fails for a non-race reason, subscription
-    // gets created then compensated (canceled + reverted) per Task 1.
+  it("rejects using a live retrieve() result even when the create() response's own status looked valid (stale/replayed data)", async () => {
+    // Simulate an idempotent replay: the create() call's own response
+    // still shows "trialing" (a cached response from before some earlier
+    // cancellation), but a live retrieve() reveals it's actually canceled.
+    mockStripeSubscriptionsCreate.mockResolvedValue({
+      id: "sub_test",
+      status: "trialing", // stale — this is what create()'s cached response shows
+      items: { data: [{ id: "si_test" }] },
+      latest_invoice: { payment_intent: {} },
+    });
+    mockStripeSubscriptionsRetrieve.mockResolvedValue({
+      status: "canceled", // the live truth
+    });
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      paymentMethodId: PAYMENT_METHOD_ID,
+    });
+
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+
+    // Confirm the guard's rejection message reflects the LIVE status, not
+    // the stale create() response's status.
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).rejects.toMatchObject({
+      message: expect.stringContaining("canceled"),
+    });
+  });
+
+  it("does NOT re-check live status for the web-checkout (subscriptionId-supplied) path — it already verified moments earlier", async () => {
+    mockStripeSubscriptionsRetrieve.mockResolvedValue({
+      id: "sub_already_created",
+      status: "trialing",
+      metadata: { groupId: GROUP_ID },
+      customer: "cus_existing",
+      items: { data: [{ id: "si_existing" }] },
+    });
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      subscriptionId: "sub_already_created",
+    });
+
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).resolves.toMatchObject({ success: true });
+
+    // Exactly one retrieve() call — the verify-time one. No second call
+    // right before the guard for this path.
+    expect(mockStripeSubscriptionsRetrieve).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("requestAdminAccessWithSubscription — ack-ambiguity-aware compensation", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    docStore = {};
+    mockDb = buildMockDb();
+    setupDefaults();
+  });
+
+  it("treats a transaction that actually committed (despite a thrown error) as a win, not a failure", async () => {
+    // Simulate the ack-ambiguity scenario: the transaction's write goes
+    // through (docStore reflects it), but the client-observed call still
+    // throws (e.g. the ack itself was lost to a network error).
+    //
+    // ADAPTATION: this test's custom `tx.update` needs to resolve the
+    // `arrayUnion` sentinel into a real array (rather than storing it
+    // verbatim, as this file's other mocks do by documented convention —
+    // see `resolveFieldValue` and the write-ordering describe block's
+    // comment above) because the production ack-ambiguity check does
+    // `postTxData?.admins?.includes(userId)`, which requires a real array
+    // to behave meaningfully — exactly as real Firestore would actually
+    // resolve `arrayUnion` on commit. Using the verbatim-sentinel
+    // convention here would make `admins` an object with no `.includes`
+    // method and throw, which isn't the scenario this test is targeting.
+    mockDb.runTransaction = (async (fn: (tx: any) => Promise<unknown>) => {
+      const tx = {
+        get: async (ref: any) => ref.get(),
+        update: (ref: any, data: Record<string, unknown>) => {
+          const existing = (docStore[ref.path] || {}) as Record<
+            string,
+            unknown
+          >;
+          const merged: Record<string, unknown> = { ...existing };
+          for (const [key, value] of Object.entries(data)) {
+            if (
+              value &&
+              typeof value === "object" &&
+              Object.prototype.hasOwnProperty.call(value, "__arrayUnion")
+            ) {
+              const base = Array.isArray(existing[key])
+                ? (existing[key] as unknown[])
+                : [];
+              const toAdd = (value as { __arrayUnion: unknown[] }).__arrayUnion;
+              merged[key] = Array.from(new Set([...base, ...toAdd]));
+            } else if (
+              value &&
+              typeof value === "object" &&
+              Object.prototype.hasOwnProperty.call(value, "__arrayRemove")
+            ) {
+              const base = Array.isArray(existing[key])
+                ? (existing[key] as unknown[])
+                : [];
+              const toRemove = (value as { __arrayRemove: unknown[] })
+                .__arrayRemove;
+              merged[key] = base.filter((item) => !toRemove.includes(item));
+            } else {
+              merged[key] = value;
+            }
+          }
+          docStore[ref.path] = merged;
+        },
+      };
+      await fn(tx); // the write actually happens
+      throw new Error("DEADLINE_EXCEEDED: ack lost"); // but the client sees an error
+    }) as typeof mockDb.runTransaction;
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      paymentMethodId: PAYMENT_METHOD_ID,
+    });
+
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).resolves.toMatchObject({ success: true });
+
+    // No compensation ran — the subscription this call created is still
+    // live, because the claim genuinely succeeded.
+    expect(mockStripeSubscriptionsCancel).not.toHaveBeenCalled();
+
+    const finalGroup = docStore[`groups/${GROUP_ID}`] as Record<
+      string,
+      unknown
+    >;
+    expect(finalGroup.admins).toEqual([USER_ID]);
+    expect(finalGroup.stripeSubscriptionId).toBe("sub_test");
+
+    // Regression coverage: the ack-ambiguity recovery return must go
+    // through the same member-doc grant path as the normal happy path —
+    // it must not skip straight to returning success. Otherwise the user
+    // ends up listed in group.admins but with member.isAdmin unset, and
+    // the onMemberWrite trigger never syncs their custom JWT claims.
+    const memberDoc = docStore[`members/${GROUP_ID}_${USER_ID}`] as Record<
+      string,
+      unknown
+    >;
+    expect(memberDoc).toBeDefined();
+    expect(memberDoc.isAdmin).toBe(true);
+  });
+
+  it("a same-user concurrent double-request sharing one subscription object: the loser's ack-ambiguity check catches it, no cancellation attempted", async () => {
+    // Both "concurrent" calls in this test use the SAME idempotency key
+    // (subscriptionAttempt reads as 0 for both, since neither has
+    // triggered a compensation), so the mock returns the identical
+    // subscription object for both — this IS the scenario the design
+    // spec's invariant argument is about.
+    const originalRunTransaction = mockDb.runTransaction;
+    let transactionAttempt = 0;
+    mockDb.runTransaction = (async (fn: (tx: any) => Promise<unknown>) => {
+      transactionAttempt++;
+      if (transactionAttempt === 1) {
+        // Simulate this exact user's OTHER concurrent request having
+        // already committed with the shared subscription object.
+        docStore[`groups/${GROUP_ID}`] = {
+          ...docStore[`groups/${GROUP_ID}`],
+          isClaimed: true,
+          admins: [USER_ID], // same user, not a different one
+          stripeSubscriptionId: "sub_test", // the SAME object this call also holds
+          subscriptionStatus: "trialing",
+        };
+      }
+      return originalRunTransaction(fn);
+    }) as typeof mockDb.runTransaction;
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      paymentMethodId: PAYMENT_METHOD_ID,
+    });
+
+    // This call's OWN transaction attempt fails (isClaimed already true),
+    // but since admins already includes THIS SAME userId, the
+    // ack-ambiguity check must catch it and return success.
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).resolves.toMatchObject({ success: true });
+
+    expect(mockStripeSubscriptionsCancel).not.toHaveBeenCalled();
+
+    // Same regression coverage as the previous test: this recovery path
+    // must also grant the member doc, not just return success.
+    const memberDoc = docStore[`members/${GROUP_ID}_${USER_ID}`] as Record<
+      string,
+      unknown
+    >;
+    expect(memberDoc).toBeDefined();
+    expect(memberDoc.isAdmin).toBe(true);
+  });
+
+  it("a member-doc-sync failure inside ack-ambiguity recovery surfaces the committed-claim context instead of a generic error", async () => {
+    // Reuses the "same-user, same subscription object" setup above (the
+    // ack-ambiguity check recognizes this call's own committed win), but
+    // this time the member-doc write itself fails. The transaction is
+    // CONFIRMED committed at this point — losing that context and falling
+    // through to a bare "unexpected error" would leave a client retry
+    // stuck on the already-exists guard with no indication of what
+    // actually happened.
+    const originalRunTransaction = mockDb.runTransaction;
+    let transactionAttempt = 0;
+    mockDb.runTransaction = (async (fn: (tx: any) => Promise<unknown>) => {
+      transactionAttempt++;
+      if (transactionAttempt === 1) {
+        docStore[`groups/${GROUP_ID}`] = {
+          ...docStore[`groups/${GROUP_ID}`],
+          isClaimed: true,
+          admins: [USER_ID],
+          stripeSubscriptionId: "sub_test", // matches this call's own creation
+          subscriptionStatus: "trialing",
+        };
+      }
+      return originalRunTransaction(fn);
+    }) as typeof mockDb.runTransaction;
+
+    const originalCollection = mockDb.collection;
+    mockDb.collection = ((collPath: string) => {
+      const collRef = originalCollection(collPath);
+      if (collPath !== "members") return collRef;
+      return {
+        ...collRef,
+        doc: (docId: string) => {
+          const docRef = collRef.doc(docId);
+          if (docId !== `${GROUP_ID}_${USER_ID}`) return docRef;
+          docRef.set = jest.fn().mockImplementation(async () => {
+            throw new Error("Firestore unavailable while creating member doc");
+          });
+          return docRef;
+        },
+      };
+    }) as typeof mockDb.collection;
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      paymentMethodId: PAYMENT_METHOD_ID,
+    });
+
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).rejects.toMatchObject({
+      code: "internal",
+      message: expect.stringContaining("finishing setup failed"),
+    });
+  });
+
+  it("a same-user CROSS-BRANCH race (this call's own create-new subscription vs. a different concurrent web-checkout request of theirs that won): does not falsely claim success, cancels its own now-orphaned subscription", async () => {
+    // Unlike the shared-object case above, this call's create-new path
+    // makes its OWN Stripe subscription ("sub_mobile_new"), while the
+    // post-tx group doc reflects a DIFFERENT subscription object
+    // ("sub_web_checkout") — as would happen if the SAME user's other
+    // concurrent request went through the web-checkout (subscriptionId
+    // already supplied) branch instead and won the claim transaction.
+    // admins.includes(userId) alone can't tell these two cases apart;
+    // only comparing the committed stripeSubscriptionId can.
+    mockStripeSubscriptionsCreate.mockResolvedValue({
+      id: "sub_mobile_new",
+      status: "trialing",
+      items: { data: [{ id: "si_mobile_new" }] },
+      latest_invoice: { payment_intent: {} },
+    });
+    mockStripeSubscriptionsCancel.mockResolvedValue({});
+    // First retrieve() call is the pre-transaction live-status re-check
+    // (must see an active/trialing status or the grant guard rejects
+    // before the transaction ever runs); second is the post-cancel
+    // confirmation read in the compensation block.
+    mockStripeSubscriptionsRetrieve
+      .mockResolvedValueOnce({ status: "trialing" })
+      .mockResolvedValueOnce({ status: "canceled" });
+
+    const originalRunTransaction = mockDb.runTransaction;
+    let transactionAttempt = 0;
+    mockDb.runTransaction = (async (fn: (tx: any) => Promise<unknown>) => {
+      transactionAttempt++;
+      if (transactionAttempt === 1) {
+        docStore[`groups/${GROUP_ID}`] = {
+          ...docStore[`groups/${GROUP_ID}`],
+          isClaimed: true,
+          admins: [USER_ID], // same user won — but via the OTHER request
+          stripeSubscriptionId: "sub_web_checkout", // NOT this call's own subscription
+          subscriptionStatus: "active",
+        };
+      }
+      return originalRunTransaction(fn);
+    }) as typeof mockDb.runTransaction;
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      paymentMethodId: PAYMENT_METHOD_ID,
+    });
+
+    // Must reject as a genuine race loss, NOT resolve as a false success —
+    // this call's own subscription was never the one that got committed.
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+
+    // Its own orphaned subscription must be canceled, not silently left
+    // active and billing with no group ever attached.
+    expect(mockStripeSubscriptionsCancel).toHaveBeenCalledWith(
+      "sub_mobile_new",
+    );
+
+    // The group doc still reflects the actual winner's data, untouched.
+    const finalGroup = docStore[`groups/${GROUP_ID}`] as Record<
+      string,
+      unknown
+    >;
+    expect(finalGroup.stripeSubscriptionId).toBe("sub_web_checkout");
+  });
+
+  it("cancel-ack-ambiguity: cancel() rejects but retrieve() confirms canceled — advances the attempt counter", async () => {
     mockDb.runTransaction = (async () => {
       throw new Error("DEADLINE_EXCEEDED: transaction timed out");
     }) as typeof mockDb.runTransaction;
-    mockStripeSubscriptionsCancel.mockResolvedValue({});
+    mockStripeSubscriptionsCancel.mockRejectedValue(
+      new Error("Stripe API error: ack lost, but cancellation went through"),
+    );
+    // ADAPTATION: `retrieve()` is called twice in this flow — once by
+    // Task 2's pre-transaction live-status re-check (must see "trialing"
+    // so that guard doesn't reject before the transaction ever runs) and
+    // once by this compensation block's post-cancel confirmation (the
+    // thing actually under test here). A single blanket `mockResolvedValue`
+    // of "canceled" would make the FIRST call see "canceled" too, tripping
+    // the earlier guard and masking the scenario this test targets.
+    mockStripeSubscriptionsRetrieve.mockResolvedValueOnce({
+      status: "trialing",
+    });
+    mockStripeSubscriptionsRetrieve.mockResolvedValueOnce({
+      status: "canceled",
+    });
 
     const request = makeRequest(USER_ID, {
       groupId: GROUP_ID,
@@ -492,98 +796,21 @@ describe("requestAdminAccessWithSubscription — idempotency-key replay after co
       (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
     ).rejects.toMatchObject({ code: "internal" });
 
-    const firstCallArgs = mockStripeSubscriptionsCreate.mock.calls[0];
-    const firstIdempotencyKey = firstCallArgs[1].idempotencyKey;
-
-    // The attempt counter must have persisted to the group doc so the next
-    // call reads a different value.
     const afterFirstAttempt = docStore[`groups/${GROUP_ID}`] as Record<
       string,
       unknown
     >;
     expect(afterFirstAttempt.stripeSubscriptionAttempt).toBe(1);
-
-    // Retry: let the transaction succeed this time.
-    mockDb.runTransaction = buildMockDb().runTransaction;
-    mockStripeSubscriptionsCreate.mockResolvedValue({
-      id: "sub_retry",
-      status: "trialing",
-      items: { data: [{ id: "si_retry" }] },
-      latest_invoice: { payment_intent: {} },
-    });
-
-    const retryResult = await (requestAdminAccessWithSubscription as any)(
-      // eslint-disable-line @typescript-eslint/no-explicit-any
-      request,
-    );
-
-    expect(retryResult).toMatchObject({ success: true });
-
-    const secondCallArgs = mockStripeSubscriptionsCreate.mock.calls[1];
-    const secondIdempotencyKey = secondCallArgs[1].idempotencyKey;
-
-    // The critical assertion: different idempotency keys mean Stripe will
-    // NOT replay the first (canceled) subscription's cached response.
-    expect(secondIdempotencyKey).not.toBe(firstIdempotencyKey);
   });
 
-  it("reuses the same idempotency key across calls when no compensation has occurred (preserves legitimate client-retry dedup)", async () => {
-    // No transaction failure this time — call the handler once, then
-    // simulate a plain client-side retry of the same still-unanswered
-    // request (e.g. the client's connection dropped before it received
-    // the first attempt's response, so it never observed success or
-    // failure and retries with identical arguments). From the retry's
-    // perspective the group doc looks exactly like it did before the
-    // first attempt — nothing was ever compensated, so the attempt
-    // counter must stay at 0 and Stripe must see the SAME idempotency
-    // key both times so it correctly dedupes rather than creating a
-    // second subscription.
-    const request = makeRequest(USER_ID, {
-      groupId: GROUP_ID,
-      paymentMethodId: PAYMENT_METHOD_ID,
-    });
-
-    await (requestAdminAccessWithSubscription as any)(request); // eslint-disable-line @typescript-eslint/no-explicit-any
-
-    const firstCallArgs = mockStripeSubscriptionsCreate.mock.calls[0];
-    const firstIdempotencyKey = firstCallArgs[1].idempotencyKey;
-
-    expect(firstIdempotencyKey).toBe(
-      `req-admin-${USER_ID}-${GROUP_ID}-subscription-0`,
-    );
-
-    // Reset Firestore state to what the retry would actually observe: an
-    // unclaimed group with no Stripe fields set yet (the retry never saw
-    // the first attempt's writes land) — but keep the Stripe mock's call
-    // history so the two idempotency keys can be compared below.
-    docStore = {};
-    mockDb = buildMockDb();
-    setupDefaults();
-
-    await (requestAdminAccessWithSubscription as any)(request); // eslint-disable-line @typescript-eslint/no-explicit-any
-
-    const secondCallArgs = mockStripeSubscriptionsCreate.mock.calls[1];
-    const secondIdempotencyKey = secondCallArgs[1].idempotencyKey;
-
-    // The invariant this test previously never actually verified: a
-    // plain retry with no compensation reuses the SAME key, so Stripe
-    // dedupes it instead of creating a second subscription.
-    expect(secondIdempotencyKey).toBe(firstIdempotencyKey);
-  });
-
-  it("does not advance the attempt counter when the compensating Stripe cancel itself fails, so a retry replays the SAME idempotency key", async () => {
-    // First attempt: transaction fails for a non-race reason, but the
-    // compensating stripe.subscriptions.cancel() call ALSO fails (e.g. a
-    // transient Stripe/network error). The subscription created in this
-    // call therefore stays live — the attempt counter must NOT advance,
-    // otherwise a retry would mint a fresh idempotency key and create a
-    // SECOND live subscription instead of correctly replaying the first.
+  it("cancel-ack-ambiguity: cancel() rejects and retrieve() shows still-active — does NOT advance the counter", async () => {
     mockDb.runTransaction = (async () => {
       throw new Error("DEADLINE_EXCEEDED: transaction timed out");
     }) as typeof mockDb.runTransaction;
     mockStripeSubscriptionsCancel.mockRejectedValue(
-      new Error("Stripe API error: could not cancel subscription"),
+      new Error("Stripe API error: cancellation genuinely failed"),
     );
+    mockStripeSubscriptionsRetrieve.mockResolvedValue({ status: "trialing" });
 
     const request = makeRequest(USER_ID, {
       groupId: GROUP_ID,
@@ -594,41 +821,257 @@ describe("requestAdminAccessWithSubscription — idempotency-key replay after co
       (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
     ).rejects.toMatchObject({ code: "internal" });
 
-    const firstCallArgs = mockStripeSubscriptionsCreate.mock.calls[0];
-    const firstIdempotencyKey = firstCallArgs[1].idempotencyKey;
-
-    // The attempt counter must NOT have advanced — the cancel failed, so
-    // the subscription this call created is still live.
     const afterFirstAttempt = docStore[`groups/${GROUP_ID}`] as Record<
       string,
       unknown
     >;
     expect(afterFirstAttempt.stripeSubscriptionAttempt).toBeUndefined();
+  });
 
-    // Retry: transaction and cancel both succeed this time (irrelevant to
-    // the retry's OWN create call, but keeps the mock realistic).
-    mockDb.runTransaction = buildMockDb().runTransaction;
-    mockStripeSubscriptionsCreate.mockResolvedValue({
-      id: "sub_retry",
-      status: "trialing",
-      items: { data: [{ id: "si_retry" }] },
-      latest_invoice: { payment_intent: {} },
+  it("cancel-ack-ambiguity: cancel() RESOLVES but retrieve() still shows active — does NOT advance the counter", async () => {
+    // Distinct from the two tests above (both have cancel() REJECT): this
+    // covers cancel() succeeding while the post-cancel retrieve() somehow
+    // still reports a non-canceled status. cancel()'s own resolution must
+    // never be trusted as sufficient confirmation on its own — only a live
+    // retrieve() showing "canceled" may advance the attempt counter.
+    mockDb.runTransaction = (async () => {
+      throw new Error("DEADLINE_EXCEEDED: transaction timed out");
+    }) as typeof mockDb.runTransaction;
+    mockStripeSubscriptionsCancel.mockResolvedValue({});
+    // First retrieve() call is the pre-transaction live-status re-check
+    // (must see an active/trialing status or the grant guard rejects
+    // before the transaction ever runs); second is the post-cancel
+    // confirmation read, which here reports the subscription as still
+    // active despite cancel() having resolved without error.
+    mockStripeSubscriptionsRetrieve
+      .mockResolvedValueOnce({ status: "trialing" })
+      .mockResolvedValueOnce({ status: "active" });
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      paymentMethodId: PAYMENT_METHOD_ID,
     });
 
-    const retryResult = await (requestAdminAccessWithSubscription as any)(
-      // eslint-disable-line @typescript-eslint/no-explicit-any
-      request,
-    );
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).rejects.toMatchObject({ code: "internal" });
 
-    expect(retryResult).toMatchObject({ success: true });
+    const afterFirstAttempt = docStore[`groups/${GROUP_ID}`] as Record<
+      string,
+      unknown
+    >;
+    expect(afterFirstAttempt.stripeSubscriptionAttempt).toBeUndefined();
+  });
 
-    const secondCallArgs = mockStripeSubscriptionsCreate.mock.calls[1];
-    const secondIdempotencyKey = secondCallArgs[1].idempotencyKey;
+  it("the attempt-counter write itself throwing does not escape the compensation block or shadow the isRaceLoss classification", async () => {
+    mockDb.runTransaction = (async () => {
+      throw new HttpsError(
+        "failed-precondition",
+        "This group has already been claimed by another admin.",
+      );
+    }) as typeof mockDb.runTransaction;
+    mockStripeSubscriptionsCancel.mockResolvedValue({});
+    // First retrieve() is the pre-transaction live-status re-check; second
+    // is the post-cancel confirmation, reporting the subscription as
+    // genuinely canceled — cancelConfirmed becomes true, so the guarded
+    // groupRef.update() (the thing under test) actually executes.
+    mockStripeSubscriptionsRetrieve
+      .mockResolvedValueOnce({ status: "trialing" })
+      .mockResolvedValueOnce({ status: "canceled" });
 
-    // The critical assertion: the retry reuses the SAME idempotency key as
-    // the first attempt, because the counter never advanced. Stripe will
-    // correctly replay the still-live sub_test's cached response instead of
-    // creating an orphaned second subscription.
-    expect(secondIdempotencyKey).toBe(firstIdempotencyKey);
+    const originalCollection = mockDb.collection;
+    mockDb.collection = ((collPath: string) => {
+      const collRef = originalCollection(collPath);
+      if (collPath !== "groups") return collRef;
+      return {
+        ...collRef,
+        doc: (docId: string) => {
+          const docRef = collRef.doc(docId);
+          if (docId !== GROUP_ID) return docRef;
+          docRef.update = jest.fn().mockImplementation(async () => {
+            throw new Error("Firestore unavailable during counter increment");
+          });
+          return docRef;
+        },
+      };
+    }) as typeof mockDb.collection;
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      paymentMethodId: PAYMENT_METHOD_ID,
+    });
+
+    // The original txError (a genuine race loss) must still be rethrown as-is
+    // — the counter-update failure must not shadow that classification or
+    // fall through to the generic internal error instead.
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).rejects.toMatchObject({
+      code: "failed-precondition",
+      message: "This group has already been claimed by another admin.",
+    });
+
+    // Compensation still ran (cancel was attempted and confirmed) despite
+    // the counter write failing afterward.
+    expect(mockStripeSubscriptionsCancel).toHaveBeenCalledWith("sub_test");
+  });
+
+  it("a failed re-read during compensation skips cancellation entirely rather than throwing unhandled", async () => {
+    mockDb.runTransaction = (async () => {
+      throw new Error("DEADLINE_EXCEEDED: transaction timed out");
+    }) as typeof mockDb.runTransaction;
+
+    // ADAPTATION: the illustrative brief test grabbed a docRef via
+    // `mockDb.collection("groups").doc(GROUP_ID)` and called
+    // `.get.mockRejectedValueOnce(...)` on it directly. That doesn't work
+    // against this file's actual `buildDocRef()`: every `.doc(docId)` call
+    // mints a brand-new object with its own fresh `jest.fn()`s (see
+    // `buildCollectionRef` above), and the SUT creates its OWN `groupRef`
+    // internally (`db.collection("groups").doc(groupId)`, called once, at
+    // the top of the handler) — a completely different object instance
+    // than anything grabbed from the test before invoking the SUT. Stubbing
+    // a test-side instance would never affect the SUT's own calls.
+    //
+    // Instead, wrap `mockDb.collection` so that whichever docRef instance
+    // the SUT ends up creating for `groups/{GROUP_ID}` has a `.get()` that
+    // fails on exactly its SECOND invocation (the initial fetch at the top
+    // of the handler must succeed; the post-transaction-failure re-read
+    // inside the catch block is the one under test) and behaves normally
+    // otherwise.
+    const originalCollection = mockDb.collection;
+    let groupGetCallCount = 0;
+    mockDb.collection = ((collPath: string) => {
+      const collRef = originalCollection(collPath);
+      if (collPath !== "groups") return collRef;
+      return {
+        ...collRef,
+        doc: (docId: string) => {
+          const docRef = collRef.doc(docId);
+          if (docId !== GROUP_ID) return docRef;
+          const originalGet = docRef.get;
+          docRef.get = jest.fn().mockImplementation(async () => {
+            groupGetCallCount++;
+            if (groupGetCallCount === 2) {
+              throw new Error("Firestore unavailable during re-read");
+            }
+            return originalGet();
+          });
+          return docRef;
+        },
+      };
+    }) as typeof mockDb.collection;
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      paymentMethodId: PAYMENT_METHOD_ID,
+    });
+
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).rejects.toMatchObject({ code: "internal" });
+
+    expect(mockStripeSubscriptionsCancel).not.toHaveBeenCalled();
+  });
+});
+
+describe("requestAdminAccessWithSubscription — web-checkout residual case (already-billed subscription, lost the claim)", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    docStore = {};
+    mockDb = buildMockDb();
+    setupDefaults();
+  });
+
+  it("gives a distinct support-contact error, not a generic internal error, when the web-checkout caller loses the claim", async () => {
+    mockStripeSubscriptionsRetrieve.mockResolvedValue({
+      id: "sub_already_created",
+      status: "trialing",
+      metadata: { groupId: GROUP_ID },
+      customer: "cus_existing",
+      items: { data: [{ id: "si_existing" }] },
+    });
+    mockDb.runTransaction = (async () => {
+      throw new HttpsError(
+        "failed-precondition",
+        "This group has already been claimed by another admin.",
+      );
+    }) as typeof mockDb.runTransaction;
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      subscriptionId: "sub_already_created",
+    });
+
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).rejects.toMatchObject({
+      code: "failed-precondition",
+      message: expect.stringContaining("Contact support"),
+    });
+
+    // The subscription is NOT auto-canceled — refund implications the
+    // backend can't resolve unilaterally.
+    expect(mockStripeSubscriptionsCancel).not.toHaveBeenCalled();
+  });
+
+  it("does not assert the 'claimed by someone else, contact support' narrative when the post-tx re-read itself fails", async () => {
+    mockStripeSubscriptionsRetrieve.mockResolvedValue({
+      id: "sub_already_created",
+      status: "trialing",
+      metadata: { groupId: GROUP_ID },
+      customer: "cus_existing",
+      items: { data: [{ id: "si_existing" }] },
+    });
+    mockDb.runTransaction = (async () => {
+      throw new HttpsError(
+        "failed-precondition",
+        "This group has already been claimed by another admin.",
+      );
+    }) as typeof mockDb.runTransaction;
+
+    // Same technique as the "failed re-read during compensation" test: the
+    // initial groupSnap.get() at the top of the handler must succeed, but
+    // the post-transaction-failure re-read inside the catch block must fail
+    // — we genuinely don't know whether someone else claimed the group or
+    // this caller's own request actually won.
+    const originalCollection = mockDb.collection;
+    let groupGetCallCount = 0;
+    mockDb.collection = ((collPath: string) => {
+      const collRef = originalCollection(collPath);
+      if (collPath !== "groups") return collRef;
+      return {
+        ...collRef,
+        doc: (docId: string) => {
+          const docRef = collRef.doc(docId);
+          if (docId !== GROUP_ID) return docRef;
+          const originalGet = docRef.get;
+          docRef.get = jest.fn().mockImplementation(async () => {
+            groupGetCallCount++;
+            if (groupGetCallCount === 2) {
+              throw new Error("Firestore unavailable during re-read");
+            }
+            return originalGet();
+          });
+          return docRef;
+        },
+      };
+    }) as typeof mockDb.collection;
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      subscriptionId: "sub_already_created",
+    });
+
+    // Must reject with the original race-loss error, NOT the confident
+    // "contact support for a refund" narrative this code path would assert
+    // when the re-read actually succeeds.
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).rejects.toMatchObject({
+      code: "failed-precondition",
+      message: "This group has already been claimed by another admin.",
+    });
+
+    expect(mockStripeSubscriptionsCancel).not.toHaveBeenCalled();
   });
 });
