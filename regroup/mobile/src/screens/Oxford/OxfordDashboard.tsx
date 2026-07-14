@@ -50,7 +50,7 @@ const ROLE_LABELS: Record<string, string> = {
 const OxfordDashboard: React.FC<Props> = ({ navigation }) => {
   const { house } = useSelectedHouse();
   const subscriptionMetadata = useAppSelector(
-    (state) => state.user.user?.subscriptionMetadata
+    (state) => state.user.user?.subscriptionMetadata,
   );
 
   const houseId = house?.id ?? "";
@@ -70,16 +70,17 @@ const OxfordDashboard: React.FC<Props> = ({ navigation }) => {
   }, [guests]);
 
   const getGuestName = useCallback(
-    (userId: string): string => {
-      const guest = guestByUserId[userId];
-      if (!guest) {
-        return "Unknown";
-      }
-      return (
-        `${guest.firstName || ""} ${guest.lastName || ""}`.trim() || "Unknown"
-      );
+    (userId: string | undefined, fallbackName?: string): string => {
+      const guest = userId ? guestByUserId[userId] : undefined;
+      const guestName = guest
+        ? `${guest.firstName || ""} ${guest.lastName || ""}`.trim()
+        : "";
+      // Officers created during onboarding (oxfordOnboardingMutations.ts)
+      // have no userId and are never linked to a guest account — fall back
+      // to the name captured at onboarding time before giving up.
+      return guestName || fallbackName || "Unknown";
     },
-    [guestByUserId]
+    [guestByUserId],
   );
 
   const officersQuery = useOfficers(houseId, !!houseId);
@@ -93,15 +94,15 @@ const OxfordDashboard: React.FC<Props> = ({ navigation }) => {
   // (including renders caused by the other two queries refetching).
   const activeOfficers = useMemo(
     () => (officersQuery.data ?? []).filter((o) => o.isActive).slice(0, 4),
-    [officersQuery.data]
+    [officersQuery.data],
   );
   const upcomingMeetings = useMemo(
     () => (meetingsQuery.data ?? []).filter((m) => !m.actualDate).slice(0, 3),
-    [meetingsQuery.data]
+    [meetingsQuery.data],
   );
   const recentTransactions = useMemo(
     () => (transactionsQuery.data ?? []).slice(0, 5),
-    [transactionsQuery.data]
+    [transactionsQuery.data],
   );
 
   // Guard against firing before `house` arrives from Firestore: when house is
@@ -234,7 +235,7 @@ const OxfordDashboard: React.FC<Props> = ({ navigation }) => {
     title: string,
     content: React.ReactNode,
     onPress: () => void,
-    testID?: string
+    testID?: string,
   ) => (
     <TouchableOpacity
       testID={testID}
@@ -275,7 +276,7 @@ const OxfordDashboard: React.FC<Props> = ({ navigation }) => {
               />
             </View>
             <RatsText
-              text={getGuestName(officer.userId)}
+              text={getGuestName(officer.userId, officer.name)}
               style={styles.listRowText}
               translate={false}
             />
@@ -405,7 +406,7 @@ const OxfordDashboard: React.FC<Props> = ({ navigation }) => {
           "Current Officers",
           renderOfficerContent(),
           () => navigation.navigate(Routes.OfficerManagement),
-          "oxford-officers-card"
+          "oxford-officers-card",
         )}
 
         {/* Treasury Summary */}
@@ -452,7 +453,7 @@ const OxfordDashboard: React.FC<Props> = ({ navigation }) => {
           "Upcoming Meetings",
           renderMeetingsContent(),
           () => navigation.navigate(Routes.BusinessMeetings),
-          "oxford-meetings-card"
+          "oxford-meetings-card",
         )}
 
         {/* Recent EES Transactions */}
@@ -460,7 +461,7 @@ const OxfordDashboard: React.FC<Props> = ({ navigation }) => {
           "Recent EES Transactions",
           renderTransactionsContent(),
           () => navigation.navigate(Routes.EESTracker),
-          "oxford-transactions-card"
+          "oxford-transactions-card",
         )}
 
         {/* Quick Links */}
