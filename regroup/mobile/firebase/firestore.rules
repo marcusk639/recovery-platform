@@ -13,16 +13,22 @@ service cloud.firestore {
       return request.auth.token[role] != null;
     }
     
+    // Currently unused (zero call sites in this file). Would need the same
+    // isDemoScopedHouses([houseId]) treatment as isAdmin/isGuest below if
+    // ever wired up.
     function isHouseAdmin(houseId) {
       return 'admin' in request.auth.token && houseId in request.auth.token.admin;
     }
-    
+
+    // Currently unused (zero call sites in this file). Would need the same
+    // isDemoScopedHouses([houseId]) treatment as isAdmin/isGuest below if
+    // ever wired up.
     function isHouseSuperAdmin(houseId) {
       return hasHouseRole() && houseId in request.auth.token.superAdmin
     }
-    
+
     function isHouseGuest(houseId) {
-      return hasHouseRole() && houseId in request.auth.token.guest;
+      return hasHouseRole() && houseId in request.auth.token.guest && isDemoScopedHouses([houseId]);
     }
     
     function isPotentialSuperAdmin() {
@@ -46,11 +52,11 @@ service cloud.firestore {
     }
     
     function isGuest(houseIds) {
-      return hasGuestRoleInHouse(houseIds);
+      return hasGuestRoleInHouse(houseIds) && isDemoScopedHouses(houseIds);
     }
-    
+
     function isAdmin(houseIds) {
-      return hasAdminRoleInHouse(houseIds) || hasSuperAdminRoleInHouse(houseIds);
+      return (hasAdminRoleInHouse(houseIds) || hasSuperAdminRoleInHouse(houseIds)) && isDemoScopedHouses(houseIds);
     }
     
     function isSameUser(userId) {
@@ -65,6 +71,28 @@ service cloud.firestore {
       let h = get(/databases/$(database)/documents/houses/$(houseId)).data;
       return h.oxfordEnabled == true &&
         (h.subscriptionStatus == 'active' || h.subscriptionStatus == 'trialing');
+    }
+
+    function isDemoAccount() {
+      // 'email' in request.auth.token is required: Firestore Rules throws
+      // (rather than returning null/undefined, unlike JS) when dot-accessing
+      // an absent map key, so any token without an email claim (e.g.
+      // phone-only auth) would otherwise error out of every house-role check.
+      return signedIn() && 'email' in request.auth.token && request.auth.token.email == 'demo_user@appdemo.net';
+    }
+
+    // Defense-in-depth: whenever the caller is the public demo account, further
+    // restrict house-role checks to houses explicitly flagged isDemoHouse: true,
+    // regardless of what custom claims the account happens to hold. Non-demo
+    // accounts are completely unaffected (short-circuits to true immediately).
+    // Deliberately fails CLOSED (denies) if houseIds isn't exactly one house —
+    // the demo account should never legitimately need multi-house scope; the
+    // one real multi-house caller (admins/{adminId}'s houseIds field) is
+    // intentionally denied to the demo account rather than partially matched.
+    function isDemoScopedHouses(houseIds) {
+      return !isDemoAccount() ||
+        (houseIds.size() == 1 &&
+         get(/databases/$(database)/documents/houses/$(houseIds[0])).data.isDemoHouse == true);
     }
 
   // match /{document=**} {
