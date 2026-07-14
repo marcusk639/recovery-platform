@@ -2073,3 +2073,292 @@ describe("houses/{houseId} — update: sensitive fields restricted to superAdmin
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Demo account house-scoping (isDemoHouse gate)
+//
+// InitialLandingForm.tsx wires a "Use the demo" button to hardcoded credentials
+// for demo_user@appdemo.net — reachable via raw Firestore/Auth REST calls,
+// bypassing the app UI entirely. isDemoScopedHouses() restricts this specific
+// account's house-role claims (however they were granted) to only houses
+// explicitly flagged isDemoHouse: true, regardless of what custom claims the
+// account happens to hold. Non-demo accounts must be completely unaffected.
+// ---------------------------------------------------------------------------
+describe("Demo account house-scoping (isDemoHouse gate)", () => {
+  const DEMO_EMAIL = "demo_user@appdemo.net";
+  const DEMO_UID = "demoAccountUid";
+  const DEMO_HOUSE_ID = "demoHouse123"; // will be seeded with isDemoHouse: true
+  const NON_DEMO_HOUSE_ID = HOUSE_ID; // reused; seeded per-test with isDemoHouse: false or absent
+
+  function authDemoAdmin(houseId: string) {
+    return { ...authHouseAdmin(DEMO_UID, houseId), email: DEMO_EMAIL };
+  }
+
+  function authDemoGuest(houseId: string) {
+    return { ...authHouseGuest(DEMO_UID, houseId), email: DEMO_EMAIL };
+  }
+
+  async function seedHouseWithFlag(
+    houseId: string,
+    isDemoHouse: boolean | undefined,
+  ) {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const data: Record<string, unknown> = { id: houseId, name: "Test House" };
+      if (isDemoHouse !== undefined) {
+        data.isDemoHouse = isDemoHouse;
+      }
+      await context.firestore().doc(`houses/${houseId}`).set(data);
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // houses/{houseId}
+  // -------------------------------------------------------------------------
+  describe("houses/{houseId}", () => {
+    function houseRef(
+      ctx: ReturnType<RulesTestEnvironment["authenticatedContext"]>,
+      houseId: string,
+    ) {
+      return doc(ctx.firestore(), `houses/${houseId}`);
+    }
+
+    test("ALLOW demo account (admin claim) to read a house flagged isDemoHouse: true", async () => {
+      await seedHouseWithFlag(DEMO_HOUSE_ID, true);
+      const ctx = testEnv.authenticatedContext(
+        DEMO_UID,
+        authDemoAdmin(DEMO_HOUSE_ID),
+      );
+      await assertSucceeds(getDoc(houseRef(ctx, DEMO_HOUSE_ID)));
+    });
+
+    test("ALLOW demo account (admin claim) to update a house flagged isDemoHouse: true", async () => {
+      await seedHouseWithFlag(DEMO_HOUSE_ID, true);
+      const ctx = testEnv.authenticatedContext(
+        DEMO_UID,
+        authDemoAdmin(DEMO_HOUSE_ID),
+      );
+      await assertSucceeds(
+        updateDoc(houseRef(ctx, DEMO_HOUSE_ID), { name: "Updated Name" }),
+      );
+    });
+
+    test("DENY demo account (admin claim) reading a house flagged isDemoHouse: false, despite holding an admin claim for it", async () => {
+      await seedHouseWithFlag(NON_DEMO_HOUSE_ID, false);
+      const ctx = testEnv.authenticatedContext(
+        DEMO_UID,
+        authDemoAdmin(NON_DEMO_HOUSE_ID),
+      );
+      await assertFails(getDoc(houseRef(ctx, NON_DEMO_HOUSE_ID)));
+    });
+
+    test("DENY demo account (admin claim) reading a house whose isDemoHouse field is absent", async () => {
+      await seedHouseWithFlag(NON_DEMO_HOUSE_ID, undefined);
+      const ctx = testEnv.authenticatedContext(
+        DEMO_UID,
+        authDemoAdmin(NON_DEMO_HOUSE_ID),
+      );
+      await assertFails(getDoc(houseRef(ctx, NON_DEMO_HOUSE_ID)));
+    });
+
+    test("DENY demo account (admin claim) updating a house flagged isDemoHouse: false", async () => {
+      await seedHouseWithFlag(NON_DEMO_HOUSE_ID, false);
+      const ctx = testEnv.authenticatedContext(
+        DEMO_UID,
+        authDemoAdmin(NON_DEMO_HOUSE_ID),
+      );
+      await assertFails(
+        updateDoc(houseRef(ctx, NON_DEMO_HOUSE_ID), { name: "Updated Name" }),
+      );
+    });
+
+    test("ALLOW a non-demo admin to read a house flagged isDemoHouse: true (unaffected by the gate)", async () => {
+      await seedHouseWithFlag(DEMO_HOUSE_ID, true);
+      const ctx = testEnv.authenticatedContext(
+        ADMIN_UID,
+        authHouseAdmin(ADMIN_UID, DEMO_HOUSE_ID),
+      );
+      await assertSucceeds(getDoc(houseRef(ctx, DEMO_HOUSE_ID)));
+    });
+
+    test("ALLOW a non-demo admin to read/update a house flagged isDemoHouse: false (unaffected by the gate)", async () => {
+      await seedHouseWithFlag(NON_DEMO_HOUSE_ID, false);
+      const ctx = testEnv.authenticatedContext(
+        ADMIN_UID,
+        authHouseAdmin(ADMIN_UID, NON_DEMO_HOUSE_ID),
+      );
+      await assertSucceeds(getDoc(houseRef(ctx, NON_DEMO_HOUSE_ID)));
+      await assertSucceeds(
+        updateDoc(houseRef(ctx, NON_DEMO_HOUSE_ID), { name: "Updated Name" }),
+      );
+    });
+
+    test("DENY a non-demo admin of a DIFFERENT house reading a house flagged isDemoHouse: true (unaffected by the gate — ordinary house-role scoping still applies)", async () => {
+      await seedHouseWithFlag(DEMO_HOUSE_ID, true);
+      const ctx = testEnv.authenticatedContext(
+        ADMIN_UID,
+        authHouseAdmin(ADMIN_UID, HOUSE_ID_OTHER),
+      );
+      await assertFails(getDoc(houseRef(ctx, DEMO_HOUSE_ID)));
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // guests/{guestId}
+  // -------------------------------------------------------------------------
+  describe("guests/{guestId}", () => {
+    const DEMO_GUEST_DOC_ID = "demoGuestDoc";
+
+    async function seedGuest(guestDocId: string, houseId: string) {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await context.firestore().doc(`guests/${guestDocId}`).set({
+          userId: "someGuestAuthUid",
+          houseId,
+        });
+      });
+    }
+
+    function guestRef(
+      ctx: ReturnType<RulesTestEnvironment["authenticatedContext"]>,
+      guestDocId: string,
+    ) {
+      return doc(ctx.firestore(), `guests/${guestDocId}`);
+    }
+
+    test("ALLOW demo account (admin claim) to read a guest under a house flagged isDemoHouse: true", async () => {
+      await seedHouseWithFlag(DEMO_HOUSE_ID, true);
+      await seedGuest(DEMO_GUEST_DOC_ID, DEMO_HOUSE_ID);
+      const ctx = testEnv.authenticatedContext(
+        DEMO_UID,
+        authDemoAdmin(DEMO_HOUSE_ID),
+      );
+      await assertSucceeds(getDoc(guestRef(ctx, DEMO_GUEST_DOC_ID)));
+    });
+
+    test("ALLOW demo account (admin claim) to create a guest under a house flagged isDemoHouse: true", async () => {
+      await seedHouseWithFlag(DEMO_HOUSE_ID, true);
+      const ctx = testEnv.authenticatedContext(
+        DEMO_UID,
+        authDemoAdmin(DEMO_HOUSE_ID),
+      );
+      await assertSucceeds(
+        setDoc(guestRef(ctx, "newDemoGuest"), {
+          userId: "newGuestAuthUid",
+          houseId: DEMO_HOUSE_ID,
+        }),
+      );
+    });
+
+    test("DENY demo account (admin claim) reading a guest under a house flagged isDemoHouse: false, despite holding an admin claim for it", async () => {
+      await seedHouseWithFlag(NON_DEMO_HOUSE_ID, false);
+      await seedGuest(DEMO_GUEST_DOC_ID, NON_DEMO_HOUSE_ID);
+      const ctx = testEnv.authenticatedContext(
+        DEMO_UID,
+        authDemoAdmin(NON_DEMO_HOUSE_ID),
+      );
+      await assertFails(getDoc(guestRef(ctx, DEMO_GUEST_DOC_ID)));
+    });
+
+    test("DENY demo account (admin claim) creating a guest under a house flagged isDemoHouse: false", async () => {
+      await seedHouseWithFlag(NON_DEMO_HOUSE_ID, false);
+      const ctx = testEnv.authenticatedContext(
+        DEMO_UID,
+        authDemoAdmin(NON_DEMO_HOUSE_ID),
+      );
+      await assertFails(
+        setDoc(guestRef(ctx, "newDemoGuest"), {
+          userId: "newGuestAuthUid",
+          houseId: NON_DEMO_HOUSE_ID,
+        }),
+      );
+    });
+
+    test("ALLOW a non-demo admin to read a guest under a house flagged isDemoHouse: true (unaffected by the gate)", async () => {
+      await seedHouseWithFlag(DEMO_HOUSE_ID, true);
+      await seedGuest(DEMO_GUEST_DOC_ID, DEMO_HOUSE_ID);
+      const ctx = testEnv.authenticatedContext(
+        ADMIN_UID,
+        authHouseAdmin(ADMIN_UID, DEMO_HOUSE_ID),
+      );
+      await assertSucceeds(getDoc(guestRef(ctx, DEMO_GUEST_DOC_ID)));
+    });
+
+    test("ALLOW a non-demo admin to read a guest under a house flagged isDemoHouse: false (unaffected by the gate)", async () => {
+      await seedHouseWithFlag(NON_DEMO_HOUSE_ID, false);
+      await seedGuest(DEMO_GUEST_DOC_ID, NON_DEMO_HOUSE_ID);
+      const ctx = testEnv.authenticatedContext(
+        ADMIN_UID,
+        authHouseAdmin(ADMIN_UID, NON_DEMO_HOUSE_ID),
+      );
+      await assertSucceeds(getDoc(guestRef(ctx, DEMO_GUEST_DOC_ID)));
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // houses/{houseId}/chat/{chatId}
+  // -------------------------------------------------------------------------
+  describe("houses/{houseId}/chat/{chatId}", () => {
+    const CHAT_ID = "chatMsg1";
+
+    function chatRef(
+      ctx: ReturnType<RulesTestEnvironment["authenticatedContext"]>,
+      houseId: string,
+    ) {
+      return doc(ctx.firestore(), `houses/${houseId}/chat/${CHAT_ID}`);
+    }
+
+    test("ALLOW demo account (guest claim) to read and write chat under a house flagged isDemoHouse: true", async () => {
+      await seedHouseWithFlag(DEMO_HOUSE_ID, true);
+      const ctx = testEnv.authenticatedContext(
+        DEMO_UID,
+        authDemoGuest(DEMO_HOUSE_ID),
+      );
+      await assertSucceeds(
+        setDoc(chatRef(ctx, DEMO_HOUSE_ID), { text: "hi", senderId: DEMO_UID }),
+      );
+      await assertSucceeds(getDoc(chatRef(ctx, DEMO_HOUSE_ID)));
+    });
+
+    test("DENY demo account (guest claim) reading and writing chat under a house flagged isDemoHouse: false, despite holding a guest claim for it", async () => {
+      await seedHouseWithFlag(NON_DEMO_HOUSE_ID, false);
+      const ctx = testEnv.authenticatedContext(
+        DEMO_UID,
+        authDemoGuest(NON_DEMO_HOUSE_ID),
+      );
+      await assertFails(
+        setDoc(chatRef(ctx, NON_DEMO_HOUSE_ID), {
+          text: "hi",
+          senderId: DEMO_UID,
+        }),
+      );
+      await assertFails(getDoc(chatRef(ctx, NON_DEMO_HOUSE_ID)));
+    });
+
+    test("ALLOW a non-demo guest to read and write chat under a house flagged isDemoHouse: true (unaffected by the gate)", async () => {
+      await seedHouseWithFlag(DEMO_HOUSE_ID, true);
+      const ctx = testEnv.authenticatedContext(
+        GUEST_UID,
+        authHouseGuest(GUEST_UID, DEMO_HOUSE_ID),
+      );
+      await assertSucceeds(
+        setDoc(chatRef(ctx, DEMO_HOUSE_ID), {
+          text: "hi",
+          senderId: GUEST_UID,
+        }),
+      );
+    });
+
+    test("ALLOW a non-demo guest to read and write chat under a house flagged isDemoHouse: false (unaffected by the gate)", async () => {
+      await seedHouseWithFlag(NON_DEMO_HOUSE_ID, false);
+      const ctx = testEnv.authenticatedContext(
+        GUEST_UID,
+        authHouseGuest(GUEST_UID, NON_DEMO_HOUSE_ID),
+      );
+      await assertSucceeds(
+        setDoc(chatRef(ctx, NON_DEMO_HOUSE_ID), {
+          text: "hi",
+          senderId: GUEST_UID,
+        }),
+      );
+    });
+  });
+});
