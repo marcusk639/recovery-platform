@@ -27,15 +27,15 @@
  *   node lib/scripts/migrateGuestWeeks.js --limit 10       # test on 10 guests
  */
 
-import { ratsFirestore } from '../api/firestore';
+import { ratsFirestore } from "../api/firestore";
 
 // ---------------------------------------------------------------------------
 // CLI flags
 // ---------------------------------------------------------------------------
 
 const args = process.argv.slice(2);
-const DRY_RUN = args.includes('--dry-run');
-const LIMIT_IDX = args.indexOf('--limit');
+const DRY_RUN = args.includes("--dry-run");
+const LIMIT_IDX = args.indexOf("--limit");
 const LIMIT = LIMIT_IDX !== -1 ? parseInt(args[LIMIT_IDX + 1], 10) : Infinity;
 
 // Each guest requires 2 Firestore ops (update guest + set week-summary).
@@ -52,13 +52,13 @@ function getCurrentWeekStart(): string {
   const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
   const monday = new Date(now);
   monday.setUTCDate(now.getUTCDate() - daysToMonday);
-  return monday.toISOString().split('T')[0];
+  return monday.toISOString().split("T")[0];
 }
 
 function getWeekEnd(weekStart: string): string {
-  const date = new Date(weekStart + 'T00:00:00Z');
+  const date = new Date(weekStart + "T00:00:00Z");
   date.setUTCDate(date.getUTCDate() + 6);
-  return date.toISOString().split('T')[0];
+  return date.toISOString().split("T")[0];
 }
 
 function buildWeekId(guestId: string, weekStart: string): string {
@@ -93,14 +93,14 @@ function extractStatsFromLegacyWeek(currentWeek: any): WeekStats {
     medicationTaken: 0,
   };
 
-  if (!currentWeek || typeof currentWeek !== 'object') return stats;
+  if (!currentWeek || typeof currentWeek !== "object") return stats;
 
   const days = currentWeek.days;
-  if (!days || typeof days !== 'object') return stats;
+  if (!days || typeof days !== "object") return stats;
 
   for (const dateKey of Object.keys(days)) {
     const day = days[dateKey];
-    if (!day || typeof day !== 'object') continue;
+    if (!day || typeof day !== "object") continue;
 
     // Meetings: array of RatsMeeting objects
     if (Array.isArray(day.meeting)) {
@@ -113,9 +113,9 @@ function extractStatsFromLegacyWeek(currentWeek: any): WeekStats {
     }
 
     // Hours worked: { [jobName]: number }
-    if (day.hoursWorked && typeof day.hoursWorked === 'object') {
+    if (day.hoursWorked && typeof day.hoursWorked === "object") {
       for (const hours of Object.values(day.hoursWorked)) {
-        if (typeof hours === 'number' && hours > 0) {
+        if (typeof hours === "number" && hours > 0) {
           stats.hoursWorked += hours;
         }
       }
@@ -154,15 +154,19 @@ async function migrate(): Promise<void> {
   const currentWeekStart = getCurrentWeekStart();
   const currentWeekEnd = getWeekEnd(currentWeekStart);
 
-  console.log('');
-  console.log('=== Guest Week Migration ===');
+  console.log("");
+  console.log("=== Guest Week Migration ===");
   console.log(`Current week: ${currentWeekStart} → ${currentWeekEnd}`);
-  console.log(DRY_RUN ? '  Mode: DRY RUN (no writes)' : '  Mode: LIVE (writing to Firestore)');
+  console.log(
+    DRY_RUN
+      ? "  Mode: DRY RUN (no writes)"
+      : "  Mode: LIVE (writing to Firestore)",
+  );
   if (LIMIT !== Infinity) console.log(`  Limit: ${LIMIT} guests`);
-  console.log('');
+  console.log("");
 
-  console.log('Fetching all guest documents...');
-  const guestsSnap = await ratsFirestore.collection('guests').get();
+  console.log("Fetching all guest documents...");
+  const guestsSnap = await ratsFirestore.collection("guests").get();
   console.log(`  Total guests in Firestore: ${guestsSnap.size}`);
 
   // Classify
@@ -177,7 +181,7 @@ async function migrate(): Promise<void> {
     } else {
       const guest: GuestDoc = {
         id: doc.id,
-        houseId: data.houseId || '',
+        houseId: data.houseId || "",
         firstName: data.firstName,
         lastName: data.lastName,
         currentWeek: data.currentWeek,
@@ -190,18 +194,24 @@ async function migrate(): Promise<void> {
   console.log(`  Already migrated:          ${alreadyMigrated}`);
   console.log(`  Needs migration:           ${toProcess.length}`);
   console.log(`    └─ with legacy week data: ${hasLegacyStats}`);
-  console.log(`    └─ no embedded week:      ${toProcess.length - hasLegacyStats}`);
-  console.log('');
+  console.log(
+    `    └─ no embedded week:      ${toProcess.length - hasLegacyStats}`,
+  );
+  console.log("");
 
   if (toProcess.length === 0) {
-    console.log('Nothing to migrate — all guests already have week references.');
+    console.log(
+      "Nothing to migrate — all guests already have week references.",
+    );
     return;
   }
 
   // Apply --limit
   const limited = toProcess.slice(0, LIMIT === Infinity ? undefined : LIMIT);
   if (limited.length < toProcess.length) {
-    console.log(`  (Processing first ${limited.length} of ${toProcess.length} due to --limit)\n`);
+    console.log(
+      `  (Processing first ${limited.length} of ${toProcess.length} due to --limit)\n`,
+    );
   }
 
   let totalProcessed = 0;
@@ -217,12 +227,13 @@ async function migrate(): Promise<void> {
 
     for (const guest of chunk) {
       const weekId = buildWeekId(guest.id, currentWeekStart);
-      const name = [guest.firstName, guest.lastName].filter(Boolean).join(' ') || guest.id;
       const stats = extractStatsFromLegacyWeek(guest.currentWeek);
-      const hasStats = Object.values(stats).some(v => v > 0);
+      const hasStats = Object.values(stats).some((v) => v > 0);
 
       if (DRY_RUN) {
-        console.log(`  [DRY RUN] ${name}`);
+        // Log the Firestore doc ID, never the guest's name — PII must not
+        // reach script/console output (see root CLAUDE.md "Never log PII").
+        console.log(`  [DRY RUN] ${guest.id}`);
         console.log(`            currentWeekId = ${weekId}`);
         if (hasStats) {
           console.log(`            stats from legacy week:`);
@@ -238,7 +249,7 @@ async function migrate(): Promise<void> {
       }
 
       // 1. Update the guest document
-      batch!.update(ratsFirestore.collection('guests').doc(guest.id), {
+      batch!.update(ratsFirestore.collection("guests").doc(guest.id), {
         currentWeekId: weekId,
         currentWeekStartDate: currentWeekStart,
         lastUpdated: new Date().toISOString(),
@@ -247,7 +258,7 @@ async function migrate(): Promise<void> {
       // 2. Create week-summary seeded with migrated stats.
       //    merge:true means we never overwrite a doc that already exists.
       batch!.set(
-        ratsFirestore.collection('week-summaries').doc(weekId),
+        ratsFirestore.collection("week-summaries").doc(weekId),
         {
           id: weekId,
           guestId: guest.id,
@@ -262,12 +273,14 @@ async function migrate(): Promise<void> {
         { merge: true },
       );
 
-      console.log(`  Queued: ${name} → ${weekId}${hasStats ? ' (with migrated stats)' : ''}`);
+      console.log(
+        `  Queued: ${guest.id} → ${weekId}${hasStats ? " (with migrated stats)" : ""}`,
+      );
     }
 
     if (DRY_RUN) {
       totalProcessed += chunk.length;
-      console.log('');
+      console.log("");
       continue;
     }
 
@@ -278,29 +291,33 @@ async function migrate(): Promise<void> {
     } catch (err: any) {
       totalErrors += chunk.length;
       console.error(`  ERROR in batch ${batchNum}: ${err.message}`);
-      console.error('  Affected guest IDs:', chunk.map(g => g.id).join(', '));
+      console.error("  Affected guest IDs:", chunk.map((g) => g.id).join(", "));
     }
 
-    console.log('');
+    console.log("");
   }
 
   // Summary
-  console.log('=== Summary ===');
+  console.log("=== Summary ===");
   console.log(`Total guests:          ${guestsSnap.size}`);
   console.log(`Already had week refs: ${alreadyMigrated}`);
   console.log(`Processed this run:    ${totalProcessed}`);
   if (totalErrors > 0) {
     console.log(`Errors:                ${totalErrors} — re-run to retry`);
   }
-  console.log('');
+  console.log("");
   if (DRY_RUN) {
-    console.log('Dry run complete. Re-run without --dry-run to apply.');
+    console.log("Dry run complete. Re-run without --dry-run to apply.");
   } else {
-    console.log(totalErrors === 0 ? 'Migration complete.' : 'Migration finished with errors (see above).');
+    console.log(
+      totalErrors === 0
+        ? "Migration complete."
+        : "Migration finished with errors (see above).",
+    );
   }
 }
 
-migrate().catch(err => {
-  console.error('Fatal error:', err);
+migrate().catch((err) => {
+  console.error("Fatal error:", err);
   process.exit(1);
 });

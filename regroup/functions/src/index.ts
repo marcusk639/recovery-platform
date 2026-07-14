@@ -13,7 +13,7 @@ export * from "./callable/meetings";
 export * from "./callable/payments";
 
 // Callable functions — subscriptions (includes Stripe Connect account management,
-// sendInviteEmails, sendConfirmationEmail)
+// sendConfirmationEmail)
 export * from "./callable/subscriptions";
 
 // Callable functions — Oxford House management

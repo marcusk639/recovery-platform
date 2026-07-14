@@ -13,13 +13,8 @@ import {
 } from "../config";
 import { User } from "../entities/User";
 import OperatorSubscription from "../entities/OperatorSubscription";
-import {
-  InviteEmailPayload,
-  EmailConfirmationPayload,
-} from "../entities/Email";
+import { EmailConfirmationPayload } from "../entities/Email";
 import { sendEmail, regroupEmail } from "../util/email";
-import { sendOneInviteEmail } from "../util/inviteEmails";
-import { notifyAdminsIfTheyExist } from "../util/invite";
 import {
   initializeCustomer,
   initializeTierCustomer,
@@ -147,19 +142,6 @@ const applyBundleDiscountSchema = z.object({
 const createBillingPortalSessionSchema = z.object({
   returnUrl: safeReturnUrlSchema,
 });
-
-const inviteEmailSchema = z.array(
-  z.object({
-    email: z.object({
-      to: z.string().email(),
-      from: z.string(),
-      subject: z.string(),
-      text: z.string(),
-    }),
-    dynamicLink: safeUrlSchema,
-    type: z.enum(["guest", "admin", "superAdmin", "supporter"]),
-  }),
-);
 
 const sendConfirmationEmailSchema = z.object({
   email: z.string().email(),
@@ -834,77 +816,6 @@ export const createBillingPortalSession = onCall(
     });
 
     return { url: session.url };
-  },
-);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// sendInviteEmails
-// ─────────────────────────────────────────────────────────────────────────────
-export const sendInviteEmails = onCall(
-  { secrets: [SENDGRID_API_KEY] },
-  async (request) => {
-    if (!request.auth)
-      throw new HttpsError("unauthenticated", "Login required");
-    // Only house operators (admin/superAdmin of at least one house) may send
-    // invites — prevents any authenticated user from abusing the SendGrid
-    // sender to email arbitrary addresses.
-    const token = (request.auth.token ?? {}) as Record<string, unknown>;
-    const isOperator =
-      (token.admin && Object.keys(token.admin as object).length > 0) ||
-      (token.superAdmin && Object.keys(token.superAdmin as object).length > 0);
-    if (!isOperator) {
-      throw new HttpsError(
-        "permission-denied",
-        "Only house administrators can send invitations",
-      );
-    }
-    const data = parseInput(
-      inviteEmailSchema,
-      request.data,
-    ) as InviteEmailPayload[];
-    const ALLOWED_LINK_PREFIXES = [
-      "regroup-app://",
-      "com.rats.dev://",
-      "https://regroup-app.com/",
-      "https://regroup-app.page.link/",
-    ];
-    const isAllowedLink = (url: string) =>
-      ALLOWED_LINK_PREFIXES.some((prefix) => url.startsWith(prefix));
-    if (data.some((d) => !isAllowedLink(d.dynamicLink))) {
-      throw new HttpsError("invalid-argument", "Disallowed link domain");
-    }
-    const adminEmails = data
-      .filter((emailPayload) => emailPayload.type === "admin")
-      .map((adminEmailPayload) => adminEmailPayload.email.to);
-    const promises = [];
-    logger.info("Notifying previously existing admins of the invitation...");
-    promises.push(notifyAdminsIfTheyExist(adminEmails, data));
-    logger.info("Sending invite email...");
-    data.forEach((emailPayload) => {
-      promises.push(
-        sendOneInviteEmail({
-          toEmail: emailPayload.email.to,
-          inviteLink: emailPayload.dynamicLink,
-          role: emailPayload.type,
-        }),
-      );
-    });
-    // Use allSettled so one failed recipient doesn't hide the others, and so
-    // the caller is told when delivery failed instead of seeing a false success.
-    const results = await Promise.allSettled(promises);
-    const failed = results.filter((r) => r.status === "rejected");
-    if (failed.length > 0) {
-      // Sanitized: never echo the raw SendGrid error (can contain recipient PII).
-      logger.error("sendInviteEmails: email delivery failed", {
-        failedCount: failed.length,
-        totalCount: results.length,
-      });
-      throw new HttpsError(
-        "unavailable",
-        `${failed.length} of ${results.length} invite emails failed to send`,
-      );
-    }
-    logger.info("Invite emails sent!");
   },
 );
 
