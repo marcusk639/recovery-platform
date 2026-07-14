@@ -1,8 +1,8 @@
 /**
  * One-off audit: find groups showing the write-ordering corruption
  * signature from before the Wave 8 fix — isClaimed true, admins
- * non-empty, but stripeSubscriptionId null. Read-only; does not
- * repair anything (this is a detection tool, not a migration).
+ * non-empty, but stripeSubscriptionId missing or null. Read-only; does
+ * not repair anything (this is a detection tool, not a migration).
  *
  * Background: prior to the Wave 8 fix, requestAdminAccessWithSubscription
  * could grant admins/isClaimed and only later (non-atomically) write the
@@ -36,33 +36,38 @@ async function auditCorruptedGroupClaims() {
 
   const groupsRef = db.collection(CONFIG.GROUPS_COLLECTION);
 
-  console.log(
-    "Querying groups where isClaimed=true and stripeSubscriptionId=null...",
-  );
+  console.log("Querying groups where isClaimed=true...");
 
-  const snapshot = await groupsRef
-    .where("isClaimed", "==", true)
-    .where("stripeSubscriptionId", "==", null)
-    .get();
+  // Firestore's `== null` filter matches only documents where the field is
+  // EXPLICITLY set to null — it does NOT match documents where the field is
+  // absent entirely. The corruption this script hunts for (a crash between
+  // the "grant admin" write and the "write Stripe fields" write, back when
+  // those were separate) leaves stripeSubscriptionId ABSENT, not null — so
+  // a `.where("stripeSubscriptionId", "==", null)` filter would silently
+  // return zero of the actual target documents. Query on isClaimed alone
+  // and filter both stripeSubscriptionId-missing and admins-non-empty
+  // client-side instead.
+  const snapshot = await groupsRef.where("isClaimed", "==", true).get();
 
   if (snapshot.empty) {
-    console.log("No groups found matching the corruption signature.");
+    console.log("No claimed groups found.");
     return;
   }
 
-  // Firestore has no native "array non-empty" query, so filter admins
-  // client-side to exclude groups that are legitimately mid-flight on a
-  // first claim attempt (isClaimed could theoretically be true with no
-  // admins yet in some transitional states — filter those out here).
   const corruptedGroups = snapshot.docs.filter((doc) => {
-    const admins = doc.data().admins;
-    return Array.isArray(admins) && admins.length > 0;
+    const data = doc.data();
+    const admins = data.admins;
+    const hasNoSubscription =
+      data.stripeSubscriptionId === null ||
+      data.stripeSubscriptionId === undefined;
+    return hasNoSubscription && Array.isArray(admins) && admins.length > 0;
   });
 
   if (corruptedGroups.length === 0) {
     console.log(
-      `Found ${snapshot.size} group(s) with isClaimed=true, stripeSubscriptionId=null, ` +
-        "but none had a non-empty admins array. No corruption signature detected.",
+      `Found ${snapshot.size} claimed group(s), but none matched the corruption ` +
+        "signature (missing/null stripeSubscriptionId with a non-empty admins array). " +
+        "No corruption signature detected.",
     );
     return;
   }
