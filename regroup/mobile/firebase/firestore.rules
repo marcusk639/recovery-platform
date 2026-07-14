@@ -175,9 +175,19 @@ service cloud.firestore {
       // update, read all use isAdmin([houseId]), which also grants
       // superAdmin) — a superAdmin who can edit a house couldn't delete it.
       allow delete: if isAdmin([houseId]);
-      // Admins can update anything; guests cannot modify sensitive fields
-      allow update: if isAdmin([houseId]) ||
-        (isGuest([houseId]) && !request.resource.data.diff(resource.data).affectedKeys()
+      // Hardened 2026-07-14: this used to let ANY admin (not just
+      // superAdmin) write financial/ownership fields (stripeAccountId,
+      // stripeStatus, monthlyRent, weeklyRent, adminIds, ownerId) — only
+      // guests were held to the sensitive-field allowlist. That contradicted
+      // the app's own permission model (src/context/rules.ts), which grants
+      // regular admin only 'house:partial-edit' and reserves
+      // 'house:full-edit' (the action gating these exact fields in
+      // HouseSummary.tsx) for superAdmin alone. A regular admin could bypass
+      // the UI-only restriction via a direct write. superAdmin can update
+      // anything; regular admins and guests share the same sensitive-field
+      // restriction.
+      allow update: if hasSuperAdminRoleInHouse([houseId]) ||
+        ((hasAdminRoleInHouse([houseId]) || isGuest([houseId])) && !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny(['stripeAccountId', 'stripeStatus', 'monthlyRent', 'weeklyRent', 'adminIds', 'ownerId']));
       
       match /chat/{chatId} {

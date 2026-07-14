@@ -88,17 +88,17 @@ afterEach(async () => {
 function pmDoc(ctx: ReturnType<RulesTestEnvironment["authenticatedContext"]>) {
   return doc(
     ctx.firestore(),
-    `houses/${HOUSE_ID}/guests/${GUEST_ID}/paymentMethods/${PM_ID}`
+    `houses/${HOUSE_ID}/guests/${GUEST_ID}/paymentMethods/${PM_ID}`,
   );
 }
 
 function pmDocForGuest(
   ctx: ReturnType<RulesTestEnvironment["authenticatedContext"]>,
-  guestId: string
+  guestId: string,
 ) {
   return doc(
     ctx.firestore(),
-    `houses/${HOUSE_ID}/guests/${guestId}/paymentMethods/${PM_ID}`
+    `houses/${HOUSE_ID}/guests/${guestId}/paymentMethods/${PM_ID}`,
   );
 }
 
@@ -113,7 +113,7 @@ describe("paymentMethods — admin read access", () => {
   test("ALLOW house admin to read a payment method", async () => {
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, HOUSE_ID)
+      authHouseAdmin(ADMIN_UID, HOUSE_ID),
     );
     await assertSucceeds(getDoc(pmDoc(ctx)));
   });
@@ -121,7 +121,7 @@ describe("paymentMethods — admin read access", () => {
   test("ALLOW house superAdmin to read a payment method", async () => {
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseSuperAdmin(ADMIN_UID, HOUSE_ID)
+      authHouseSuperAdmin(ADMIN_UID, HOUSE_ID),
     );
     await assertSucceeds(getDoc(pmDoc(ctx)));
   });
@@ -129,7 +129,7 @@ describe("paymentMethods — admin read access", () => {
   test("DENY admin of a DIFFERENT house reading payment method", async () => {
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, HOUSE_ID_OTHER)
+      authHouseAdmin(ADMIN_UID, HOUSE_ID_OTHER),
     );
     await assertFails(getDoc(pmDoc(ctx)));
   });
@@ -158,7 +158,7 @@ describe("paymentMethods — guest self-read access", () => {
 
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
-      authHouseGuest(GUEST_UID, HOUSE_ID)
+      authHouseGuest(GUEST_UID, HOUSE_ID),
     );
     await assertSucceeds(getDoc(pmDoc(ctx)));
   });
@@ -179,7 +179,7 @@ describe("paymentMethods — guest self-read access", () => {
 
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
-      authHouseGuest(GUEST_UID, HOUSE_ID)
+      authHouseGuest(GUEST_UID, HOUSE_ID),
     );
     await assertFails(getDoc(pmDocForGuest(ctx, otherGuestId)));
   });
@@ -197,7 +197,7 @@ describe("paymentMethods — unauthorized read access", () => {
   test("DENY authenticated user with no house role reading payment method", async () => {
     const ctx = testEnv.authenticatedContext(
       OTHER_UID,
-      authUserOnly(OTHER_UID)
+      authUserOnly(OTHER_UID),
     );
     await assertFails(getDoc(pmDoc(ctx)));
   });
@@ -205,7 +205,7 @@ describe("paymentMethods — unauthorized read access", () => {
   test("DENY guest of a DIFFERENT house reading payment method", async () => {
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
-      authHouseGuest(GUEST_UID, HOUSE_ID_OTHER)
+      authHouseGuest(GUEST_UID, HOUSE_ID_OTHER),
     );
     await assertFails(getDoc(pmDoc(ctx)));
   });
@@ -223,7 +223,7 @@ describe("paymentMethods — client write access always denied", () => {
   test("DENY admin writing (creating) a payment method from the client", async () => {
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, HOUSE_ID)
+      authHouseAdmin(ADMIN_UID, HOUSE_ID),
     );
     await assertFails(setDoc(pmDoc(ctx), paymentMethodData));
   });
@@ -231,7 +231,7 @@ describe("paymentMethods — client write access always denied", () => {
   test("DENY guest writing (creating) their own payment method from the client", async () => {
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
-      authHouseGuest(GUEST_UID, HOUSE_ID)
+      authHouseGuest(GUEST_UID, HOUSE_ID),
     );
     await assertFails(setDoc(pmDoc(ctx), paymentMethodData));
   });
@@ -239,7 +239,7 @@ describe("paymentMethods — client write access always denied", () => {
   test("DENY admin deleting a payment method from the client", async () => {
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, HOUSE_ID)
+      authHouseAdmin(ADMIN_UID, HOUSE_ID),
     );
     await assertFails(deleteDoc(pmDoc(ctx)));
   });
@@ -252,7 +252,7 @@ describe("paymentMethods — client write access always denied", () => {
   test("DENY plain authenticated user writing a payment method", async () => {
     const ctx = testEnv.authenticatedContext(
       OTHER_UID,
-      authUserOnly(OTHER_UID)
+      authUserOnly(OTHER_UID),
     );
     await assertFails(setDoc(pmDoc(ctx), paymentMethodData));
   });
@@ -268,7 +268,7 @@ describe("Oxford officers — write gate", () => {
   test("DENY admin write when oxfordEnabled=true but subscriptionStatus=canceled", async () => {
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, OXFORD_HOUSE_ID)
+      authHouseAdmin(ADMIN_UID, OXFORD_HOUSE_ID),
     );
     await testEnv.withSecurityRulesDisabled(async (adminCtx) => {
       await setDoc(doc(adminCtx.firestore(), `houses/${OXFORD_HOUSE_ID}`), {
@@ -280,14 +280,14 @@ describe("Oxford officers — write gate", () => {
       setDoc(doc(ctx.firestore(), `houses/${OXFORD_HOUSE_ID}/officers/o1`), {
         name: "President",
         userId: ADMIN_UID,
-      })
+      }),
     );
   });
 
   test("DENY admin write when subscriptionStatus=active but oxfordEnabled=false", async () => {
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, OXFORD_HOUSE_ID)
+      authHouseAdmin(ADMIN_UID, OXFORD_HOUSE_ID),
     );
     await testEnv.withSecurityRulesDisabled(async (adminCtx) => {
       await setDoc(doc(adminCtx.firestore(), `houses/${OXFORD_HOUSE_ID}`), {
@@ -299,14 +299,14 @@ describe("Oxford officers — write gate", () => {
       setDoc(doc(ctx.firestore(), `houses/${OXFORD_HOUSE_ID}/officers/o1`), {
         name: "President",
         userId: ADMIN_UID,
-      })
+      }),
     );
   });
 
   test("ALLOW admin write when oxfordEnabled=true and subscriptionStatus=active", async () => {
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, OXFORD_HOUSE_ID)
+      authHouseAdmin(ADMIN_UID, OXFORD_HOUSE_ID),
     );
     await testEnv.withSecurityRulesDisabled(async (adminCtx) => {
       await setDoc(doc(adminCtx.firestore(), `houses/${OXFORD_HOUSE_ID}`), {
@@ -318,14 +318,14 @@ describe("Oxford officers — write gate", () => {
       setDoc(doc(ctx.firestore(), `houses/${OXFORD_HOUSE_ID}/officers/o1`), {
         name: "President",
         userId: ADMIN_UID,
-      })
+      }),
     );
   });
 
   test("ALLOW admin write when oxfordEnabled=true and subscriptionStatus=trialing", async () => {
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, OXFORD_HOUSE_ID)
+      authHouseAdmin(ADMIN_UID, OXFORD_HOUSE_ID),
     );
     await testEnv.withSecurityRulesDisabled(async (adminCtx) => {
       await setDoc(doc(adminCtx.firestore(), `houses/${OXFORD_HOUSE_ID}`), {
@@ -337,14 +337,14 @@ describe("Oxford officers — write gate", () => {
       setDoc(doc(ctx.firestore(), `houses/${OXFORD_HOUSE_ID}/officers/o1`), {
         name: "President",
         userId: ADMIN_UID,
-      })
+      }),
     );
   });
 
   test("ALLOW admin read of officers even when subscription canceled", async () => {
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, OXFORD_HOUSE_ID)
+      authHouseAdmin(ADMIN_UID, OXFORD_HOUSE_ID),
     );
     await testEnv.withSecurityRulesDisabled(async (adminCtx) => {
       await setDoc(doc(adminCtx.firestore(), `houses/${OXFORD_HOUSE_ID}`), {
@@ -353,11 +353,11 @@ describe("Oxford officers — write gate", () => {
       });
       await setDoc(
         doc(adminCtx.firestore(), `houses/${OXFORD_HOUSE_ID}/officers/o1`),
-        { name: "President", userId: ADMIN_UID }
+        { name: "President", userId: ADMIN_UID },
       );
     });
     await assertSucceeds(
-      getDoc(doc(ctx.firestore(), `houses/${OXFORD_HOUSE_ID}/officers/o1`))
+      getDoc(doc(ctx.firestore(), `houses/${OXFORD_HOUSE_ID}/officers/o1`)),
     );
   });
 });
@@ -393,7 +393,7 @@ describe("houses/{houseId}/applications/{appId}", () => {
           applicantName: "Alice",
           applicantEmail: "alice@example.com",
           createdAt: new Date().toISOString(),
-        })
+        }),
       );
     });
 
@@ -407,7 +407,7 @@ describe("houses/{houseId}/applications/{appId}", () => {
           applicantName: "Alice",
           applicantEmail: "alice@example.com",
           createdAt: new Date().toISOString(),
-        })
+        }),
       );
     });
 
@@ -417,7 +417,7 @@ describe("houses/{houseId}/applications/{appId}", () => {
         setDoc(appDoc(ctx as any), {
           applicantUid: "anyone",
           status: "pending",
-        })
+        }),
       );
     });
   });
@@ -433,7 +433,7 @@ describe("houses/{houseId}/applications/{appId}", () => {
             status: "pending",
             applicantName: "Alice",
             applicantEmail: "alice@example.com",
-          }
+          },
         );
       });
     });
@@ -465,7 +465,7 @@ describe("houses/{houseId}/applications/{appId}", () => {
             applicantUid: APPLICANT_UID,
             houseId: HOUSE_ID,
             status: "pending",
-          }
+          },
         );
       });
     });
@@ -475,14 +475,14 @@ describe("houses/{houseId}/applications/{appId}", () => {
         admin: { [HOUSE_ID]: true },
       });
       await assertSucceeds(
-        setDoc(appDoc(ctx), { status: "approved" }, { merge: true })
+        setDoc(appDoc(ctx), { status: "approved" }, { merge: true }),
       );
     });
 
     it("denies applicant from updating their own application after submission", async () => {
       const ctx = testEnv.authenticatedContext(APPLICANT_UID, {});
       await assertFails(
-        setDoc(appDoc(ctx), { status: "approved" }, { merge: true })
+        setDoc(appDoc(ctx), { status: "approved" }, { merge: true }),
       );
     });
   });
@@ -492,7 +492,7 @@ describe("Oxford votes — write gate", () => {
   test("DENY admin vote create when subscription canceled", async () => {
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, OXFORD_HOUSE_ID)
+      authHouseAdmin(ADMIN_UID, OXFORD_HOUSE_ID),
     );
     await testEnv.withSecurityRulesDisabled(async (adminCtx) => {
       await setDoc(doc(adminCtx.firestore(), `houses/${OXFORD_HOUSE_ID}`), {
@@ -504,14 +504,14 @@ describe("Oxford votes — write gate", () => {
       setDoc(doc(ctx.firestore(), `houses/${OXFORD_HOUSE_ID}/votes/v1`), {
         question: "Approve budget?",
         createdBy: ADMIN_UID,
-      })
+      }),
     );
   });
 
   test("DENY guest vote cast when subscription canceled", async () => {
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
-      authHouseGuest(GUEST_UID, OXFORD_HOUSE_ID)
+      authHouseGuest(GUEST_UID, OXFORD_HOUSE_ID),
     );
     await testEnv.withSecurityRulesDisabled(async (adminCtx) => {
       await setDoc(doc(adminCtx.firestore(), `houses/${OXFORD_HOUSE_ID}`), {
@@ -520,14 +520,14 @@ describe("Oxford votes — write gate", () => {
       });
       await setDoc(
         doc(adminCtx.firestore(), `houses/${OXFORD_HOUSE_ID}/votes/v1`),
-        { question: "Approve budget?" }
+        { question: "Approve budget?" },
       );
     });
     await assertFails(
       setDoc(doc(ctx.firestore(), `houses/${OXFORD_HOUSE_ID}/votes/v1`), {
         question: "Approve budget?",
         vote: "yes",
-      })
+      }),
     );
   });
 
@@ -553,7 +553,7 @@ describe("Oxford votes — write gate", () => {
             voterIds: ["someGuest"],
             individualVotes: {},
             isAnonymous: true,
-          }
+          },
         );
       });
     });
@@ -561,42 +561,42 @@ describe("Oxford votes — write gate", () => {
     test("DENY guest updating a vote doc directly, even with active Oxford", async () => {
       const ctx = testEnv.authenticatedContext(
         GUEST_UID,
-        authHouseGuest(GUEST_UID, OXFORD_HOUSE_ID)
+        authHouseGuest(GUEST_UID, OXFORD_HOUSE_ID),
       );
       await assertFails(
         setDoc(
           doc(ctx.firestore(), `houses/${OXFORD_HOUSE_ID}/votes/v1`),
           { results: { yes: 99, no: 0, abstain: 0 } },
-          { merge: true }
-        )
+          { merge: true },
+        ),
       );
     });
 
     test("DENY admin updating a vote doc directly, even with active Oxford", async () => {
       const ctx = testEnv.authenticatedContext(
         ADMIN_UID,
-        authHouseAdmin(ADMIN_UID, OXFORD_HOUSE_ID)
+        authHouseAdmin(ADMIN_UID, OXFORD_HOUSE_ID),
       );
       await assertFails(
         setDoc(
           doc(ctx.firestore(), `houses/${OXFORD_HOUSE_ID}/votes/v1`),
           { results: { yes: 99, no: 0, abstain: 0 } },
-          { merge: true }
-        )
+          { merge: true },
+        ),
       );
     });
 
     test("DENY guest clearing their own id out of voterIds to re-vote", async () => {
       const ctx = testEnv.authenticatedContext(
         GUEST_UID,
-        authHouseGuest(GUEST_UID, OXFORD_HOUSE_ID)
+        authHouseGuest(GUEST_UID, OXFORD_HOUSE_ID),
       );
       await assertFails(
         setDoc(
           doc(ctx.firestore(), `houses/${OXFORD_HOUSE_ID}/votes/v1`),
           { voterIds: [] },
-          { merge: true }
-        )
+          { merge: true },
+        ),
       );
     });
   });
@@ -637,13 +637,13 @@ async function seedGuestDoc() {
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     await setDoc(
       doc(ctx.firestore(), `guests/${GUEST_DOC_ID}`),
-      BASELINE_GUEST
+      BASELINE_GUEST,
     );
   });
 }
 
 function guestDocRef(
-  ctx: ReturnType<RulesTestEnvironment["authenticatedContext"]>
+  ctx: ReturnType<RulesTestEnvironment["authenticatedContext"]>,
 ) {
   return doc(ctx.firestore(), `guests/${GUEST_DOC_ID}`);
 }
@@ -654,10 +654,10 @@ describe("guests/{guestId} — self-edit field guard (S1)", () => {
       await seedGuestDoc();
       const ctx = testEnv.authenticatedContext(
         GUEST_UID,
-        authHouseGuest(GUEST_UID, HOUSE_ID)
+        authHouseGuest(GUEST_UID, HOUSE_ID),
       );
       await assertSucceeds(
-        updateDoc(guestDocRef(ctx), { firstName: "Alicia" })
+        updateDoc(guestDocRef(ctx), { firstName: "Alicia" }),
       );
     });
 
@@ -665,13 +665,13 @@ describe("guests/{guestId} — self-edit field guard (S1)", () => {
       await seedGuestDoc();
       const ctx = testEnv.authenticatedContext(
         GUEST_UID,
-        authHouseGuest(GUEST_UID, HOUSE_ID)
+        authHouseGuest(GUEST_UID, HOUSE_ID),
       );
       await assertSucceeds(
         updateDoc(guestDocRef(ctx), {
           phoneNumber: "555-0100",
           emergencyContactName: "Bob",
-        })
+        }),
       );
     });
 
@@ -679,10 +679,10 @@ describe("guests/{guestId} — self-edit field guard (S1)", () => {
       await seedGuestDoc();
       const ctx = testEnv.authenticatedContext(
         GUEST_UID,
-        authHouseGuest(GUEST_UID, HOUSE_ID)
+        authHouseGuest(GUEST_UID, HOUSE_ID),
       );
       await assertSucceeds(
-        updateDoc(guestDocRef(ctx), { autoPayEnabled: true })
+        updateDoc(guestDocRef(ctx), { autoPayEnabled: true }),
       );
     });
 
@@ -690,14 +690,14 @@ describe("guests/{guestId} — self-edit field guard (S1)", () => {
       await seedGuestDoc();
       const ctx = testEnv.authenticatedContext(
         GUEST_UID,
-        authHouseGuest(GUEST_UID, HOUSE_ID)
+        authHouseGuest(GUEST_UID, HOUSE_ID),
       );
       await assertSucceeds(
         updateDoc(guestDocRef(ctx), {
           firstName: "Alicia",
           version: 4,
           updatedAt: new Date().toISOString(),
-        })
+        }),
       );
     });
   });
@@ -707,7 +707,7 @@ describe("guests/{guestId} — self-edit field guard (S1)", () => {
       await seedGuestDoc();
       const ctx = testEnv.authenticatedContext(
         GUEST_UID,
-        authHouseGuest(GUEST_UID, HOUSE_ID)
+        authHouseGuest(GUEST_UID, HOUSE_ID),
       );
       await assertFails(updateDoc(guestDocRef(ctx), { rentOwed: 0 }));
     });
@@ -716,7 +716,7 @@ describe("guests/{guestId} — self-edit field guard (S1)", () => {
       await seedGuestDoc();
       const ctx = testEnv.authenticatedContext(
         GUEST_UID,
-        authHouseGuest(GUEST_UID, HOUSE_ID)
+        authHouseGuest(GUEST_UID, HOUSE_ID),
       );
       await assertFails(updateDoc(guestDocRef(ctx), { choreFees: 0 }));
     });
@@ -727,7 +727,7 @@ describe("guests/{guestId} — self-edit field guard (S1)", () => {
       await seedGuestDoc();
       const ctx = testEnv.authenticatedContext(
         GUEST_UID,
-        authHouseGuest(GUEST_UID, HOUSE_ID)
+        authHouseGuest(GUEST_UID, HOUSE_ID),
       );
       await assertFails(updateDoc(guestDocRef(ctx), { phase: 5 }));
     });
@@ -736,7 +736,7 @@ describe("guests/{guestId} — self-edit field guard (S1)", () => {
       await seedGuestDoc();
       const ctx = testEnv.authenticatedContext(
         GUEST_UID,
-        authHouseGuest(GUEST_UID, HOUSE_ID)
+        authHouseGuest(GUEST_UID, HOUSE_ID),
       );
       await assertFails(updateDoc(guestDocRef(ctx), { step: 10 }));
     });
@@ -745,7 +745,7 @@ describe("guests/{guestId} — self-edit field guard (S1)", () => {
       await seedGuestDoc();
       const ctx = testEnv.authenticatedContext(
         GUEST_UID,
-        authHouseGuest(GUEST_UID, HOUSE_ID)
+        authHouseGuest(GUEST_UID, HOUSE_ID),
       );
       await assertFails(updateDoc(guestDocRef(ctx), { isAdmin: true }));
     });
@@ -754,10 +754,10 @@ describe("guests/{guestId} — self-edit field guard (S1)", () => {
       await seedGuestDoc();
       const ctx = testEnv.authenticatedContext(
         GUEST_UID,
-        authHouseGuest(GUEST_UID, HOUSE_ID)
+        authHouseGuest(GUEST_UID, HOUSE_ID),
       );
       await assertFails(
-        updateDoc(guestDocRef(ctx), { roles: { admin: true } })
+        updateDoc(guestDocRef(ctx), { roles: { admin: true } }),
       );
     });
 
@@ -765,7 +765,7 @@ describe("guests/{guestId} — self-edit field guard (S1)", () => {
       await seedGuestDoc();
       const ctx = testEnv.authenticatedContext(
         GUEST_UID,
-        authHouseGuest(GUEST_UID, HOUSE_ID)
+        authHouseGuest(GUEST_UID, HOUSE_ID),
       );
       await assertFails(updateDoc(guestDocRef(ctx), { status: "discharged" }));
     });
@@ -776,10 +776,10 @@ describe("guests/{guestId} — self-edit field guard (S1)", () => {
       await seedGuestDoc();
       const ctx = testEnv.authenticatedContext(
         GUEST_UID,
-        authHouseGuest(GUEST_UID, HOUSE_ID)
+        authHouseGuest(GUEST_UID, HOUSE_ID),
       );
       await assertFails(
-        updateDoc(guestDocRef(ctx), { userId: "someoneElseUid" })
+        updateDoc(guestDocRef(ctx), { userId: "someoneElseUid" }),
       );
     });
 
@@ -787,10 +787,10 @@ describe("guests/{guestId} — self-edit field guard (S1)", () => {
       await seedGuestDoc();
       const ctx = testEnv.authenticatedContext(
         GUEST_UID,
-        authHouseGuest(GUEST_UID, HOUSE_ID)
+        authHouseGuest(GUEST_UID, HOUSE_ID),
       );
       await assertFails(
-        updateDoc(guestDocRef(ctx), { houseId: HOUSE_ID_OTHER })
+        updateDoc(guestDocRef(ctx), { houseId: HOUSE_ID_OTHER }),
       );
     });
   });
@@ -800,7 +800,7 @@ describe("guests/{guestId} — self-edit field guard (S1)", () => {
       await seedGuestDoc();
       const ctx = testEnv.authenticatedContext(
         GUEST_UID,
-        authHouseGuest(GUEST_UID, HOUSE_ID)
+        authHouseGuest(GUEST_UID, HOUSE_ID),
       );
       // hasOnly is all-or-nothing: any field outside the allowlist denies the
       // whole write, preventing attacks that hide a privileged change inside
@@ -809,7 +809,7 @@ describe("guests/{guestId} — self-edit field guard (S1)", () => {
         updateDoc(guestDocRef(ctx), {
           firstName: "Alicia",
           rentOwed: 0,
-        })
+        }),
       );
     });
   });
@@ -819,7 +819,7 @@ describe("guests/{guestId} — self-edit field guard (S1)", () => {
       await seedGuestDoc();
       const ctx = testEnv.authenticatedContext(
         ADMIN_UID,
-        authHouseAdmin(ADMIN_UID, HOUSE_ID)
+        authHouseAdmin(ADMIN_UID, HOUSE_ID),
       );
       await assertSucceeds(updateDoc(guestDocRef(ctx), { rentOwed: 200 }));
     });
@@ -828,7 +828,7 @@ describe("guests/{guestId} — self-edit field guard (S1)", () => {
       await seedGuestDoc();
       const ctx = testEnv.authenticatedContext(
         ADMIN_UID,
-        authHouseAdmin(ADMIN_UID, HOUSE_ID)
+        authHouseAdmin(ADMIN_UID, HOUSE_ID),
       );
       await assertSucceeds(updateDoc(guestDocRef(ctx), { phase: 5 }));
     });
@@ -837,7 +837,7 @@ describe("guests/{guestId} — self-edit field guard (S1)", () => {
       await seedGuestDoc();
       const ctx = testEnv.authenticatedContext(
         ADMIN_UID,
-        authHouseAdmin(ADMIN_UID, HOUSE_ID_OTHER)
+        authHouseAdmin(ADMIN_UID, HOUSE_ID_OTHER),
       );
       await assertFails(updateDoc(guestDocRef(ctx), { rentOwed: 0 }));
     });
@@ -848,7 +848,7 @@ describe("guests/{guestId} — self-edit field guard (S1)", () => {
       await seedGuestDoc();
       const ctx = testEnv.authenticatedContext(
         OTHER_UID,
-        authHouseGuest(OTHER_UID, HOUSE_ID)
+        authHouseGuest(OTHER_UID, HOUSE_ID),
       );
       // OTHER_UID is in the same house but is not the guest's userId.
       // The self-branch fails (userId mismatch); admin branch fails
@@ -869,14 +869,14 @@ describe("invitations/{token} — all client access denied (server-only)", () =>
   test("DENY unauthenticated client write", async () => {
     const ctx = testEnv.unauthenticatedContext();
     await assertFails(
-      setDoc(doc(ctx.firestore(), `invitations/${TOKEN}`), { x: 1 })
+      setDoc(doc(ctx.firestore(), `invitations/${TOKEN}`), { x: 1 }),
     );
   });
 
   test("DENY signed-in user read", async () => {
     const ctx = testEnv.authenticatedContext(
       OTHER_UID,
-      authUserOnly(OTHER_UID)
+      authUserOnly(OTHER_UID),
     );
     await assertFails(getDoc(doc(ctx.firestore(), `invitations/${TOKEN}`)));
   });
@@ -884,7 +884,7 @@ describe("invitations/{token} — all client access denied (server-only)", () =>
   test("DENY admin of any house writing an invitation directly", async () => {
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, HOUSE_ID)
+      authHouseAdmin(ADMIN_UID, HOUSE_ID),
     );
     await assertFails(
       setDoc(doc(ctx.firestore(), `invitations/${TOKEN}`), {
@@ -895,7 +895,7 @@ describe("invitations/{token} — all client access denied (server-only)", () =>
         invitedEmail: "x@x.com",
         expiresAt: new Date(Date.now() + 86400000).toISOString(),
         createdAt: new Date().toISOString(),
-      })
+      }),
     );
   });
 
@@ -903,14 +903,14 @@ describe("invitations/{token} — all client access denied (server-only)", () =>
     // Even if the doc existed somehow, a client cannot mark it redeemed.
     const ctx = testEnv.authenticatedContext(
       OTHER_UID,
-      authUserOnly(OTHER_UID)
+      authUserOnly(OTHER_UID),
     );
     await assertFails(
       setDoc(
         doc(ctx.firestore(), `invitations/${TOKEN}`),
         { redeemedAt: new Date().toISOString(), redeemedByUid: OTHER_UID },
-        { merge: true }
-      )
+        { merge: true },
+      ),
     );
   });
 });
@@ -937,13 +937,13 @@ async function seedArchiveDoc() {
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     await setDoc(
       doc(ctx.firestore(), `guest-archive/${ARCHIVE_DOC_ID}`),
-      BASELINE_ARCHIVE
+      BASELINE_ARCHIVE,
     );
   });
 }
 
 function archiveDocRef(
-  ctx: ReturnType<RulesTestEnvironment["authenticatedContext"]>
+  ctx: ReturnType<RulesTestEnvironment["authenticatedContext"]>,
 ) {
   return doc(ctx.firestore(), `guest-archive/${ARCHIVE_DOC_ID}`);
 }
@@ -953,7 +953,7 @@ describe("guest-archive/{guestId} — admin-only write guard (C5)", () => {
     await seedArchiveDoc();
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
-      authHouseGuest(GUEST_UID, HOUSE_ID)
+      authHouseGuest(GUEST_UID, HOUSE_ID),
     );
     await assertSucceeds(getDoc(archiveDocRef(ctx)));
   });
@@ -961,7 +961,7 @@ describe("guest-archive/{guestId} — admin-only write guard (C5)", () => {
   test("ALLOW admin creating an archive record", async () => {
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, HOUSE_ID)
+      authHouseAdmin(ADMIN_UID, HOUSE_ID),
     );
     await assertSucceeds(setDoc(archiveDocRef(ctx), BASELINE_ARCHIVE));
   });
@@ -970,7 +970,7 @@ describe("guest-archive/{guestId} — admin-only write guard (C5)", () => {
     await seedArchiveDoc();
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, HOUSE_ID)
+      authHouseAdmin(ADMIN_UID, HOUSE_ID),
     );
     await assertSucceeds(updateDoc(archiveDocRef(ctx), { rentOwed: 0 }));
   });
@@ -979,7 +979,7 @@ describe("guest-archive/{guestId} — admin-only write guard (C5)", () => {
     await seedArchiveDoc();
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, HOUSE_ID)
+      authHouseAdmin(ADMIN_UID, HOUSE_ID),
     );
     await assertSucceeds(deleteDoc(archiveDocRef(ctx)));
   });
@@ -987,7 +987,7 @@ describe("guest-archive/{guestId} — admin-only write guard (C5)", () => {
   test("DENY guest creating an archive record", async () => {
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
-      authHouseGuest(GUEST_UID, HOUSE_ID)
+      authHouseGuest(GUEST_UID, HOUSE_ID),
     );
     await assertFails(setDoc(archiveDocRef(ctx), BASELINE_ARCHIVE));
   });
@@ -996,7 +996,7 @@ describe("guest-archive/{guestId} — admin-only write guard (C5)", () => {
     await seedArchiveDoc();
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
-      authHouseGuest(GUEST_UID, HOUSE_ID)
+      authHouseGuest(GUEST_UID, HOUSE_ID),
     );
     await assertFails(updateDoc(archiveDocRef(ctx), { rentOwed: 0 }));
   });
@@ -1005,7 +1005,7 @@ describe("guest-archive/{guestId} — admin-only write guard (C5)", () => {
     await seedArchiveDoc();
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
-      authHouseGuest(GUEST_UID, HOUSE_ID)
+      authHouseGuest(GUEST_UID, HOUSE_ID),
     );
     await assertFails(deleteDoc(archiveDocRef(ctx)));
   });
@@ -1044,7 +1044,7 @@ describe("bugs/{bugId} — reporter-scoped access (H-sec-3)", () => {
   test("ALLOW reporter creating their own bug report", async () => {
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
-      authUserOnly(GUEST_UID)
+      authUserOnly(GUEST_UID),
     );
     await assertSucceeds(setDoc(bugRef(ctx), BUG_DOC));
   });
@@ -1052,7 +1052,7 @@ describe("bugs/{bugId} — reporter-scoped access (H-sec-3)", () => {
   test("DENY creating a bug report attributed to another user", async () => {
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
-      authUserOnly(GUEST_UID)
+      authUserOnly(GUEST_UID),
     );
     await assertFails(setDoc(bugRef(ctx), { ...BUG_DOC, reporter: OTHER_UID }));
   });
@@ -1066,7 +1066,7 @@ describe("bugs/{bugId} — reporter-scoped access (H-sec-3)", () => {
     await seedBug();
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
-      authUserOnly(GUEST_UID)
+      authUserOnly(GUEST_UID),
     );
     await assertSucceeds(getDoc(bugRef(ctx)));
   });
@@ -1075,7 +1075,7 @@ describe("bugs/{bugId} — reporter-scoped access (H-sec-3)", () => {
     await seedBug();
     const ctx = testEnv.authenticatedContext(
       OTHER_UID,
-      authUserOnly(OTHER_UID)
+      authUserOnly(OTHER_UID),
     );
     await assertFails(getDoc(bugRef(ctx)));
   });
@@ -1084,10 +1084,10 @@ describe("bugs/{bugId} — reporter-scoped access (H-sec-3)", () => {
     await seedBug();
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
-      authUserOnly(GUEST_UID)
+      authUserOnly(GUEST_UID),
     );
     await assertSucceeds(
-      updateDoc(bugRef(ctx), { description: "more detail" })
+      updateDoc(bugRef(ctx), { description: "more detail" }),
     );
   });
 
@@ -1095,7 +1095,7 @@ describe("bugs/{bugId} — reporter-scoped access (H-sec-3)", () => {
     await seedBug();
     const ctx = testEnv.authenticatedContext(
       OTHER_UID,
-      authUserOnly(OTHER_UID)
+      authUserOnly(OTHER_UID),
     );
     await assertFails(updateDoc(bugRef(ctx), { description: "tamper" }));
   });
@@ -1104,7 +1104,7 @@ describe("bugs/{bugId} — reporter-scoped access (H-sec-3)", () => {
     await seedBug();
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
-      authUserOnly(GUEST_UID)
+      authUserOnly(GUEST_UID),
     );
     await assertSucceeds(deleteDoc(bugRef(ctx)));
   });
@@ -1113,7 +1113,7 @@ describe("bugs/{bugId} — reporter-scoped access (H-sec-3)", () => {
     await seedBug();
     const ctx = testEnv.authenticatedContext(
       OTHER_UID,
-      authUserOnly(OTHER_UID)
+      authUserOnly(OTHER_UID),
     );
     await assertFails(deleteDoc(bugRef(ctx)));
   });
@@ -1154,7 +1154,7 @@ describe("feedback/{feedbackId} — submitter/admin-scoped access (H-sec-4)", ()
   test("ALLOW submitter creating their own feedback", async () => {
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
-      authHouseGuest(GUEST_UID, HOUSE_ID)
+      authHouseGuest(GUEST_UID, HOUSE_ID),
     );
     await assertSucceeds(setDoc(fbRef(ctx), FB_DOC));
   });
@@ -1162,7 +1162,7 @@ describe("feedback/{feedbackId} — submitter/admin-scoped access (H-sec-4)", ()
   test("DENY creating feedback attributed to another user", async () => {
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
-      authHouseGuest(GUEST_UID, HOUSE_ID)
+      authHouseGuest(GUEST_UID, HOUSE_ID),
     );
     await assertFails(setDoc(fbRef(ctx), { ...FB_DOC, reviewer: OTHER_UID }));
   });
@@ -1171,7 +1171,7 @@ describe("feedback/{feedbackId} — submitter/admin-scoped access (H-sec-4)", ()
     await seedFeedback();
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
-      authHouseGuest(GUEST_UID, HOUSE_ID)
+      authHouseGuest(GUEST_UID, HOUSE_ID),
     );
     await assertSucceeds(getDoc(fbRef(ctx)));
   });
@@ -1180,7 +1180,7 @@ describe("feedback/{feedbackId} — submitter/admin-scoped access (H-sec-4)", ()
     await seedFeedback();
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, HOUSE_ID)
+      authHouseAdmin(ADMIN_UID, HOUSE_ID),
     );
     await assertSucceeds(getDoc(fbRef(ctx)));
   });
@@ -1189,7 +1189,7 @@ describe("feedback/{feedbackId} — submitter/admin-scoped access (H-sec-4)", ()
     await seedFeedback();
     const ctx = testEnv.authenticatedContext(
       OTHER_UID,
-      authHouseGuest(OTHER_UID, HOUSE_ID)
+      authHouseGuest(OTHER_UID, HOUSE_ID),
     );
     await assertFails(getDoc(fbRef(ctx)));
   });
@@ -1198,7 +1198,7 @@ describe("feedback/{feedbackId} — submitter/admin-scoped access (H-sec-4)", ()
     await seedFeedback();
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, HOUSE_ID_OTHER)
+      authHouseAdmin(ADMIN_UID, HOUSE_ID_OTHER),
     );
     await assertFails(getDoc(fbRef(ctx)));
   });
@@ -1207,7 +1207,7 @@ describe("feedback/{feedbackId} — submitter/admin-scoped access (H-sec-4)", ()
     await seedFeedback({ type: "app", houseId: "" });
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, HOUSE_ID)
+      authHouseAdmin(ADMIN_UID, HOUSE_ID),
     );
     await assertFails(getDoc(fbRef(ctx)));
   });
@@ -1216,7 +1216,7 @@ describe("feedback/{feedbackId} — submitter/admin-scoped access (H-sec-4)", ()
     await seedFeedback({ type: "app", houseId: "" });
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
-      authUserOnly(GUEST_UID)
+      authUserOnly(GUEST_UID),
     );
     await assertSucceeds(getDoc(fbRef(ctx)));
   });
@@ -1225,7 +1225,7 @@ describe("feedback/{feedbackId} — submitter/admin-scoped access (H-sec-4)", ()
     await seedFeedback();
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, HOUSE_ID)
+      authHouseAdmin(ADMIN_UID, HOUSE_ID),
     );
     await assertSucceeds(deleteDoc(fbRef(ctx)));
   });
@@ -1234,7 +1234,7 @@ describe("feedback/{feedbackId} — submitter/admin-scoped access (H-sec-4)", ()
     await seedFeedback();
     const ctx = testEnv.authenticatedContext(
       OTHER_UID,
-      authUserOnly(OTHER_UID)
+      authUserOnly(OTHER_UID),
     );
     await assertFails(deleteDoc(fbRef(ctx)));
   });
@@ -1257,7 +1257,7 @@ const CONTACT_DOC = {
 
 function contactRef(
   ctx: ReturnType<RulesTestEnvironment["unauthenticatedContext"]>,
-  id: string = "c1"
+  id: string = "c1",
 ) {
   return doc(ctx.firestore(), `contact/${id}`);
 }
@@ -1271,14 +1271,14 @@ describe("contact/{contactId} — bounded public create, server-only reads (H-se
   test("DENY submission with an oversized message", async () => {
     const ctx = testEnv.unauthenticatedContext();
     await assertFails(
-      setDoc(contactRef(ctx), { ...CONTACT_DOC, message: "x".repeat(5001) })
+      setDoc(contactRef(ctx), { ...CONTACT_DOC, message: "x".repeat(5001) }),
     );
   });
 
   test("DENY submission missing the email field", async () => {
     const ctx = testEnv.unauthenticatedContext();
     await assertFails(
-      setDoc(contactRef(ctx), { name: "A", message: "hi", subject: "s" })
+      setDoc(contactRef(ctx), { name: "A", message: "hi", subject: "s" }),
     );
   });
 
@@ -1300,7 +1300,7 @@ describe("contact/{contactId} — bounded public create, server-only reads (H-se
     });
     const ctx = testEnv.authenticatedContext(
       OTHER_UID,
-      authUserOnly(OTHER_UID)
+      authUserOnly(OTHER_UID),
     );
     await assertFails(getDoc(doc(ctx.firestore(), "contact/c1")));
   });
@@ -1311,10 +1311,10 @@ describe("contact/{contactId} — bounded public create, server-only reads (H-se
     });
     const ctx = testEnv.authenticatedContext(
       OTHER_UID,
-      authUserOnly(OTHER_UID)
+      authUserOnly(OTHER_UID),
     );
     await assertFails(
-      updateDoc(doc(ctx.firestore(), "contact/c1"), { name: "x" })
+      updateDoc(doc(ctx.firestore(), "contact/c1"), { name: "x" }),
     );
     await assertFails(deleteDoc(doc(ctx.firestore(), "contact/c1")));
   });
@@ -1331,17 +1331,17 @@ describe("beta-users/{docId} — server-only (H-sec-5)", () => {
   test("DENY unauthenticated create", async () => {
     const ctx = testEnv.unauthenticatedContext();
     await assertFails(
-      setDoc(doc(ctx.firestore(), "beta-users/users"), { emails: ["a@b.com"] })
+      setDoc(doc(ctx.firestore(), "beta-users/users"), { emails: ["a@b.com"] }),
     );
   });
 
   test("DENY signed-in create", async () => {
     const ctx = testEnv.authenticatedContext(
       OTHER_UID,
-      authUserOnly(OTHER_UID)
+      authUserOnly(OTHER_UID),
     );
     await assertFails(
-      setDoc(doc(ctx.firestore(), "beta-users/users"), { emails: ["a@b.com"] })
+      setDoc(doc(ctx.firestore(), "beta-users/users"), { emails: ["a@b.com"] }),
     );
   });
 
@@ -1353,7 +1353,7 @@ describe("beta-users/{docId} — server-only (H-sec-5)", () => {
     });
     const ctx = testEnv.authenticatedContext(
       OTHER_UID,
-      authUserOnly(OTHER_UID)
+      authUserOnly(OTHER_UID),
     );
     await assertFails(getDoc(doc(ctx.firestore(), "beta-users/users")));
   });
@@ -1374,7 +1374,7 @@ const COMPLAINT_DOC = {
 };
 
 function complaintRef(
-  ctx: ReturnType<RulesTestEnvironment["authenticatedContext"]>
+  ctx: ReturnType<RulesTestEnvironment["authenticatedContext"]>,
 ) {
   return doc(ctx.firestore(), `complaints/${COMPLAINT_ID}`);
 }
@@ -1383,7 +1383,7 @@ async function seedComplaint() {
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     await setDoc(
       doc(ctx.firestore(), `complaints/${COMPLAINT_ID}`),
-      COMPLAINT_DOC
+      COMPLAINT_DOC,
     );
   });
 }
@@ -1392,7 +1392,7 @@ describe("complaints/{complaintId} — house-scoped, houseId immutable (H-sec-2)
   test("ALLOW guest of the house creating a complaint", async () => {
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
-      authHouseGuest(GUEST_UID, HOUSE_ID)
+      authHouseGuest(GUEST_UID, HOUSE_ID),
     );
     await assertSucceeds(setDoc(complaintRef(ctx), COMPLAINT_DOC));
   });
@@ -1400,7 +1400,7 @@ describe("complaints/{complaintId} — house-scoped, houseId immutable (H-sec-2)
   test("ALLOW admin of the house creating a complaint", async () => {
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, HOUSE_ID)
+      authHouseAdmin(ADMIN_UID, HOUSE_ID),
     );
     await assertSucceeds(setDoc(complaintRef(ctx), COMPLAINT_DOC));
   });
@@ -1408,7 +1408,7 @@ describe("complaints/{complaintId} — house-scoped, houseId immutable (H-sec-2)
   test("DENY non-member creating a complaint in the house", async () => {
     const ctx = testEnv.authenticatedContext(
       OTHER_UID,
-      authUserOnly(OTHER_UID)
+      authUserOnly(OTHER_UID),
     );
     await assertFails(setDoc(complaintRef(ctx), COMPLAINT_DOC));
   });
@@ -1416,10 +1416,10 @@ describe("complaints/{complaintId} — house-scoped, houseId immutable (H-sec-2)
   test("DENY creating a complaint scoped to a house the caller is not in", async () => {
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
-      authHouseGuest(GUEST_UID, HOUSE_ID)
+      authHouseGuest(GUEST_UID, HOUSE_ID),
     );
     await assertFails(
-      setDoc(complaintRef(ctx), { ...COMPLAINT_DOC, houseId: HOUSE_ID_OTHER })
+      setDoc(complaintRef(ctx), { ...COMPLAINT_DOC, houseId: HOUSE_ID_OTHER }),
     );
   });
 
@@ -1427,7 +1427,7 @@ describe("complaints/{complaintId} — house-scoped, houseId immutable (H-sec-2)
     await seedComplaint(); // plaintiff === GUEST_UID
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
-      authHouseGuest(GUEST_UID, HOUSE_ID)
+      authHouseGuest(GUEST_UID, HOUSE_ID),
     );
     await assertSucceeds(getDoc(complaintRef(ctx)));
   });
@@ -1436,7 +1436,7 @@ describe("complaints/{complaintId} — house-scoped, houseId immutable (H-sec-2)
     await seedComplaint();
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, HOUSE_ID)
+      authHouseAdmin(ADMIN_UID, HOUSE_ID),
     );
     await assertSucceeds(getDoc(complaintRef(ctx)));
   });
@@ -1445,7 +1445,7 @@ describe("complaints/{complaintId} — house-scoped, houseId immutable (H-sec-2)
     await seedComplaint(); // plaintiff === GUEST_UID
     const ctx = testEnv.authenticatedContext(
       "guest-2",
-      authHouseGuest("guest-2", HOUSE_ID)
+      authHouseGuest("guest-2", HOUSE_ID),
     );
     await assertFails(getDoc(complaintRef(ctx)));
   });
@@ -1454,7 +1454,7 @@ describe("complaints/{complaintId} — house-scoped, houseId immutable (H-sec-2)
     await seedComplaint();
     const ctx = testEnv.authenticatedContext(
       OTHER_UID,
-      authUserOnly(OTHER_UID)
+      authUserOnly(OTHER_UID),
     );
     await assertFails(getDoc(complaintRef(ctx)));
   });
@@ -1463,7 +1463,7 @@ describe("complaints/{complaintId} — house-scoped, houseId immutable (H-sec-2)
     await seedComplaint();
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, HOUSE_ID)
+      authHouseAdmin(ADMIN_UID, HOUSE_ID),
     );
     await assertSucceeds(updateDoc(complaintRef(ctx), { reply: "handled" }));
   });
@@ -1472,10 +1472,10 @@ describe("complaints/{complaintId} — house-scoped, houseId immutable (H-sec-2)
     await seedComplaint();
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, HOUSE_ID)
+      authHouseAdmin(ADMIN_UID, HOUSE_ID),
     );
     await assertFails(
-      updateDoc(complaintRef(ctx), { houseId: HOUSE_ID_OTHER })
+      updateDoc(complaintRef(ctx), { houseId: HOUSE_ID_OTHER }),
     );
   });
 
@@ -1483,7 +1483,7 @@ describe("complaints/{complaintId} — house-scoped, houseId immutable (H-sec-2)
     await seedComplaint();
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
-      authHouseGuest(GUEST_UID, HOUSE_ID)
+      authHouseGuest(GUEST_UID, HOUSE_ID),
     );
     await assertFails(deleteDoc(complaintRef(ctx)));
   });
@@ -1492,7 +1492,7 @@ describe("complaints/{complaintId} — house-scoped, houseId immutable (H-sec-2)
     await seedComplaint();
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, HOUSE_ID)
+      authHouseAdmin(ADMIN_UID, HOUSE_ID),
     );
     await assertSucceeds(deleteDoc(complaintRef(ctx)));
   });
@@ -1517,7 +1517,7 @@ const DISPUTE_DOC = {
 };
 
 function disputeRef(
-  ctx: ReturnType<RulesTestEnvironment["authenticatedContext"]>
+  ctx: ReturnType<RulesTestEnvironment["authenticatedContext"]>,
 ) {
   return doc(ctx.firestore(), `disputes/${DISPUTE_ID}`);
 }
@@ -1532,7 +1532,7 @@ describe("disputes/{disputeId} — house-scoped, houseId immutable (H-sec-2)", (
   test("ALLOW guest of the house creating a dispute", async () => {
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
-      authHouseGuest(GUEST_UID, HOUSE_ID)
+      authHouseGuest(GUEST_UID, HOUSE_ID),
     );
     await assertSucceeds(setDoc(disputeRef(ctx), DISPUTE_DOC));
   });
@@ -1540,7 +1540,7 @@ describe("disputes/{disputeId} — house-scoped, houseId immutable (H-sec-2)", (
   test("DENY non-member creating a dispute in the house", async () => {
     const ctx = testEnv.authenticatedContext(
       OTHER_UID,
-      authUserOnly(OTHER_UID)
+      authUserOnly(OTHER_UID),
     );
     await assertFails(setDoc(disputeRef(ctx), DISPUTE_DOC));
   });
@@ -1548,10 +1548,10 @@ describe("disputes/{disputeId} — house-scoped, houseId immutable (H-sec-2)", (
   test("DENY creating a dispute scoped to a house the caller is not in", async () => {
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
-      authHouseGuest(GUEST_UID, HOUSE_ID)
+      authHouseGuest(GUEST_UID, HOUSE_ID),
     );
     await assertFails(
-      setDoc(disputeRef(ctx), { ...DISPUTE_DOC, houseId: HOUSE_ID_OTHER })
+      setDoc(disputeRef(ctx), { ...DISPUTE_DOC, houseId: HOUSE_ID_OTHER }),
     );
   });
 
@@ -1559,7 +1559,7 @@ describe("disputes/{disputeId} — house-scoped, houseId immutable (H-sec-2)", (
     await seedDispute();
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, HOUSE_ID)
+      authHouseAdmin(ADMIN_UID, HOUSE_ID),
     );
     await assertSucceeds(getDoc(disputeRef(ctx)));
   });
@@ -1568,7 +1568,7 @@ describe("disputes/{disputeId} — house-scoped, houseId immutable (H-sec-2)", (
     await seedDispute(); // guestId === GUEST_UID
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
-      authHouseGuest(GUEST_UID, HOUSE_ID)
+      authHouseGuest(GUEST_UID, HOUSE_ID),
     );
     await assertSucceeds(getDoc(disputeRef(ctx)));
   });
@@ -1577,7 +1577,7 @@ describe("disputes/{disputeId} — house-scoped, houseId immutable (H-sec-2)", (
     await seedDispute(); // guestId === GUEST_UID
     const ctx = testEnv.authenticatedContext(
       "guest-2",
-      authHouseGuest("guest-2", HOUSE_ID)
+      authHouseGuest("guest-2", HOUSE_ID),
     );
     await assertFails(getDoc(disputeRef(ctx)));
   });
@@ -1586,7 +1586,7 @@ describe("disputes/{disputeId} — house-scoped, houseId immutable (H-sec-2)", (
     await seedDispute();
     const ctx = testEnv.authenticatedContext(
       OTHER_UID,
-      authUserOnly(OTHER_UID)
+      authUserOnly(OTHER_UID),
     );
     await assertFails(getDoc(disputeRef(ctx)));
   });
@@ -1595,10 +1595,10 @@ describe("disputes/{disputeId} — house-scoped, houseId immutable (H-sec-2)", (
     await seedDispute();
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, HOUSE_ID)
+      authHouseAdmin(ADMIN_UID, HOUSE_ID),
     );
     await assertSucceeds(
-      updateDoc(disputeRef(ctx), { status: "resolved", resolvedBy: ADMIN_UID })
+      updateDoc(disputeRef(ctx), { status: "resolved", resolvedBy: ADMIN_UID }),
     );
   });
 
@@ -1606,7 +1606,7 @@ describe("disputes/{disputeId} — house-scoped, houseId immutable (H-sec-2)", (
     await seedDispute();
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, HOUSE_ID)
+      authHouseAdmin(ADMIN_UID, HOUSE_ID),
     );
     await assertFails(updateDoc(disputeRef(ctx), { houseId: HOUSE_ID_OTHER }));
   });
@@ -1615,7 +1615,7 @@ describe("disputes/{disputeId} — house-scoped, houseId immutable (H-sec-2)", (
     await seedDispute();
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
-      authHouseGuest(GUEST_UID, HOUSE_ID)
+      authHouseGuest(GUEST_UID, HOUSE_ID),
     );
     await assertFails(deleteDoc(disputeRef(ctx)));
   });
@@ -1624,7 +1624,7 @@ describe("disputes/{disputeId} — house-scoped, houseId immutable (H-sec-2)", (
     await seedDispute();
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, HOUSE_ID)
+      authHouseAdmin(ADMIN_UID, HOUSE_ID),
     );
     await assertSucceeds(deleteDoc(disputeRef(ctx)));
   });
@@ -1633,21 +1633,21 @@ describe("disputes/{disputeId} — house-scoped, houseId immutable (H-sec-2)", (
   test("DENY guest creating a dispute attributed to a different guestId", async () => {
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
-      authHouseGuest(GUEST_UID, HOUSE_ID)
+      authHouseGuest(GUEST_UID, HOUSE_ID),
     );
     await assertFails(
-      setDoc(disputeRef(ctx), { ...DISPUTE_DOC, guestId: OTHER_UID })
+      setDoc(disputeRef(ctx), { ...DISPUTE_DOC, guestId: OTHER_UID }),
     );
   });
 
   test("ALLOW admin creating a dispute attributed to another resident", async () => {
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, HOUSE_ID)
+      authHouseAdmin(ADMIN_UID, HOUSE_ID),
     );
     // Admin may file on behalf of any guestId — guestId != admin's UID
     await assertSucceeds(
-      setDoc(disputeRef(ctx), { ...DISPUTE_DOC, guestId: OTHER_UID })
+      setDoc(disputeRef(ctx), { ...DISPUTE_DOC, guestId: OTHER_UID }),
     );
   });
 });
@@ -1657,31 +1657,31 @@ describe("complaints/{complaintId} — plaintiff identity pinning (P1-2)", () =>
   test("DENY guest creating a complaint attributed to a different plaintiff", async () => {
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
-      authHouseGuest(GUEST_UID, HOUSE_ID)
+      authHouseGuest(GUEST_UID, HOUSE_ID),
     );
     await assertFails(
-      setDoc(complaintRef(ctx), { ...COMPLAINT_DOC, plaintiff: OTHER_UID })
+      setDoc(complaintRef(ctx), { ...COMPLAINT_DOC, plaintiff: OTHER_UID }),
     );
   });
 
   test("ALLOW admin creating a complaint with an anonymous plaintiff (empty string)", async () => {
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, HOUSE_ID)
+      authHouseAdmin(ADMIN_UID, HOUSE_ID),
     );
     // Anonymous complaints are admin-only by construction (plaintiff == '')
     await assertSucceeds(
-      setDoc(complaintRef(ctx), { ...COMPLAINT_DOC, plaintiff: "" })
+      setDoc(complaintRef(ctx), { ...COMPLAINT_DOC, plaintiff: "" }),
     );
   });
 
   test("DENY guest creating an anonymous complaint (plaintiff empty — admin-only)", async () => {
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
-      authHouseGuest(GUEST_UID, HOUSE_ID)
+      authHouseGuest(GUEST_UID, HOUSE_ID),
     );
     await assertFails(
-      setDoc(complaintRef(ctx), { ...COMPLAINT_DOC, plaintiff: "" })
+      setDoc(complaintRef(ctx), { ...COMPLAINT_DOC, plaintiff: "" }),
     );
   });
 });
@@ -1709,7 +1709,7 @@ const ISSUE_DOC = {
 };
 
 function issueRef(
-  ctx: ReturnType<RulesTestEnvironment["authenticatedContext"]>
+  ctx: ReturnType<RulesTestEnvironment["authenticatedContext"]>,
 ) {
   return doc(ctx.firestore(), `issues/${ISSUE_ID}`);
 }
@@ -1725,7 +1725,7 @@ describe("issues/{issueId} — house-scoped, houseId immutable (P1-2)", () => {
     test("ALLOW guest of the house creating an issue", async () => {
       const ctx = testEnv.authenticatedContext(
         GUEST_UID,
-        authHouseGuest(GUEST_UID, HOUSE_ID)
+        authHouseGuest(GUEST_UID, HOUSE_ID),
       );
       await assertSucceeds(setDoc(issueRef(ctx), ISSUE_DOC));
     });
@@ -1733,7 +1733,7 @@ describe("issues/{issueId} — house-scoped, houseId immutable (P1-2)", () => {
     test("ALLOW admin of the house creating an issue", async () => {
       const ctx = testEnv.authenticatedContext(
         ADMIN_UID,
-        authHouseAdmin(ADMIN_UID, HOUSE_ID)
+        authHouseAdmin(ADMIN_UID, HOUSE_ID),
       );
       await assertSucceeds(setDoc(issueRef(ctx), ISSUE_DOC));
     });
@@ -1741,7 +1741,7 @@ describe("issues/{issueId} — house-scoped, houseId immutable (P1-2)", () => {
     test("DENY non-member creating an issue", async () => {
       const ctx = testEnv.authenticatedContext(
         OTHER_UID,
-        authUserOnly(OTHER_UID)
+        authUserOnly(OTHER_UID),
       );
       await assertFails(setDoc(issueRef(ctx), ISSUE_DOC));
     });
@@ -1749,10 +1749,10 @@ describe("issues/{issueId} — house-scoped, houseId immutable (P1-2)", () => {
     test("DENY creating an issue scoped to a house the caller is not in", async () => {
       const ctx = testEnv.authenticatedContext(
         GUEST_UID,
-        authHouseGuest(GUEST_UID, HOUSE_ID)
+        authHouseGuest(GUEST_UID, HOUSE_ID),
       );
       await assertFails(
-        setDoc(issueRef(ctx), { ...ISSUE_DOC, houseId: HOUSE_ID_OTHER })
+        setDoc(issueRef(ctx), { ...ISSUE_DOC, houseId: HOUSE_ID_OTHER }),
       );
     });
   });
@@ -1762,7 +1762,7 @@ describe("issues/{issueId} — house-scoped, houseId immutable (P1-2)", () => {
       await seedIssue();
       const ctx = testEnv.authenticatedContext(
         GUEST_UID,
-        authHouseGuest(GUEST_UID, HOUSE_ID)
+        authHouseGuest(GUEST_UID, HOUSE_ID),
       );
       await assertSucceeds(getDoc(issueRef(ctx)));
     });
@@ -1771,7 +1771,7 @@ describe("issues/{issueId} — house-scoped, houseId immutable (P1-2)", () => {
       await seedIssue();
       const ctx = testEnv.authenticatedContext(
         ADMIN_UID,
-        authHouseAdmin(ADMIN_UID, HOUSE_ID)
+        authHouseAdmin(ADMIN_UID, HOUSE_ID),
       );
       await assertSucceeds(getDoc(issueRef(ctx)));
     });
@@ -1780,7 +1780,7 @@ describe("issues/{issueId} — house-scoped, houseId immutable (P1-2)", () => {
       await seedIssue();
       const ctx = testEnv.authenticatedContext(
         OTHER_UID,
-        authUserOnly(OTHER_UID)
+        authUserOnly(OTHER_UID),
       );
       await assertFails(getDoc(issueRef(ctx)));
     });
@@ -1791,7 +1791,7 @@ describe("issues/{issueId} — house-scoped, houseId immutable (P1-2)", () => {
       await seedIssue();
       const ctx = testEnv.authenticatedContext(
         GUEST_UID,
-        authHouseGuest(GUEST_UID, HOUSE_ID)
+        authHouseGuest(GUEST_UID, HOUSE_ID),
       );
       await assertSucceeds(updateDoc(issueRef(ctx), { status: "IN_PROGRESS" }));
     });
@@ -1800,10 +1800,10 @@ describe("issues/{issueId} — house-scoped, houseId immutable (P1-2)", () => {
       await seedIssue();
       const ctx = testEnv.authenticatedContext(
         ADMIN_UID,
-        authHouseAdmin(ADMIN_UID, HOUSE_ID)
+        authHouseAdmin(ADMIN_UID, HOUSE_ID),
       );
       await assertSucceeds(
-        updateDoc(issueRef(ctx), { status: "RESOLVED", resolver: ADMIN_UID })
+        updateDoc(issueRef(ctx), { status: "RESOLVED", resolver: ADMIN_UID }),
       );
     });
 
@@ -1811,7 +1811,7 @@ describe("issues/{issueId} — house-scoped, houseId immutable (P1-2)", () => {
       await seedIssue();
       const ctx = testEnv.authenticatedContext(
         ADMIN_UID,
-        authHouseAdmin(ADMIN_UID, HOUSE_ID)
+        authHouseAdmin(ADMIN_UID, HOUSE_ID),
       );
       await assertFails(updateDoc(issueRef(ctx), { houseId: HOUSE_ID_OTHER }));
     });
@@ -1820,7 +1820,7 @@ describe("issues/{issueId} — house-scoped, houseId immutable (P1-2)", () => {
       await seedIssue();
       const ctx = testEnv.authenticatedContext(
         OTHER_UID,
-        authUserOnly(OTHER_UID)
+        authUserOnly(OTHER_UID),
       );
       await assertFails(updateDoc(issueRef(ctx), { status: "RESOLVED" }));
     });
@@ -1831,7 +1831,7 @@ describe("issues/{issueId} — house-scoped, houseId immutable (P1-2)", () => {
       await seedIssue();
       const ctx = testEnv.authenticatedContext(
         ADMIN_UID,
-        authHouseAdmin(ADMIN_UID, HOUSE_ID)
+        authHouseAdmin(ADMIN_UID, HOUSE_ID),
       );
       await assertSucceeds(deleteDoc(issueRef(ctx)));
     });
@@ -1840,7 +1840,7 @@ describe("issues/{issueId} — house-scoped, houseId immutable (P1-2)", () => {
       await seedIssue();
       const ctx = testEnv.authenticatedContext(
         GUEST_UID,
-        authHouseGuest(GUEST_UID, HOUSE_ID)
+        authHouseGuest(GUEST_UID, HOUSE_ID),
       );
       await assertFails(deleteDoc(issueRef(ctx)));
     });
@@ -1868,7 +1868,7 @@ describe("houses/{houseId} — delete", () => {
   }
 
   function houseRef(
-    ctx: ReturnType<RulesTestEnvironment["authenticatedContext"]>
+    ctx: ReturnType<RulesTestEnvironment["authenticatedContext"]>,
   ) {
     return doc(ctx.firestore(), `houses/${HOUSE_ID}`);
   }
@@ -1877,7 +1877,7 @@ describe("houses/{houseId} — delete", () => {
     await seedHouse();
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, HOUSE_ID)
+      authHouseAdmin(ADMIN_UID, HOUSE_ID),
     );
     await assertSucceeds(deleteDoc(houseRef(ctx)));
   });
@@ -1890,7 +1890,7 @@ describe("houses/{houseId} — delete", () => {
     await seedHouse();
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseSuperAdmin(ADMIN_UID, HOUSE_ID)
+      authHouseSuperAdmin(ADMIN_UID, HOUSE_ID),
     );
     await assertSucceeds(deleteDoc(houseRef(ctx)));
   });
@@ -1899,7 +1899,7 @@ describe("houses/{houseId} — delete", () => {
     await seedHouse();
     const ctx = testEnv.authenticatedContext(
       GUEST_UID,
-      authHouseGuest(GUEST_UID, HOUSE_ID)
+      authHouseGuest(GUEST_UID, HOUSE_ID),
     );
     await assertFails(deleteDoc(houseRef(ctx)));
   });
@@ -1908,7 +1908,7 @@ describe("houses/{houseId} — delete", () => {
     await seedHouse();
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
-      authHouseAdmin(ADMIN_UID, HOUSE_ID_OTHER)
+      authHouseAdmin(ADMIN_UID, HOUSE_ID_OTHER),
     );
     await assertFails(deleteDoc(houseRef(ctx)));
   });
@@ -1917,5 +1917,159 @@ describe("houses/{houseId} — delete", () => {
     await seedHouse();
     const ctx = testEnv.unauthenticatedContext();
     await assertFails(deleteDoc(houseRef(ctx)));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// houses/{houseId} — update: sensitive financial/ownership fields restricted
+// to superAdmin ("Operator") only.
+//
+// The app's own permission model (src/context/rules.ts) grants regular
+// `admin` only `house:partial-edit`, and reserves `house:full-edit` — which
+// gates the financial/ownership controls in HouseSummary.tsx — for
+// `superAdmin` alone. Before this fix, the update rule used isAdmin([houseId])
+// (true for both admin AND superAdmin) with no field restriction beyond the
+// one already applied to guests, so a regular admin could write
+// stripeAccountId/stripeStatus/monthlyRent/weeklyRent/adminIds/ownerId
+// directly via the API/SDK even though the UI never exposes that capability
+// to them. Tightened so admins are held to the same sensitive-field
+// allowlist as guests; only superAdmin may touch those fields.
+// ---------------------------------------------------------------------------
+describe("houses/{houseId} — update: sensitive fields restricted to superAdmin", () => {
+  async function seedHouse() {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context
+        .firestore()
+        .doc(`houses/${HOUSE_ID}`)
+        .set({
+          id: HOUSE_ID,
+          name: "Test House",
+          stripeAccountId: "acct_original",
+          stripeStatus: "pending",
+          monthlyRent: 500,
+          weeklyRent: 125,
+          adminIds: [ADMIN_UID],
+          ownerId: "originalOwner",
+        });
+    });
+  }
+
+  function houseRef(
+    ctx: ReturnType<RulesTestEnvironment["authenticatedContext"]>,
+  ) {
+    return doc(ctx.firestore(), `houses/${HOUSE_ID}`);
+  }
+
+  describe("regular admin", () => {
+    test("DENY a regular admin updating stripeAccountId", async () => {
+      await seedHouse();
+      const ctx = testEnv.authenticatedContext(
+        ADMIN_UID,
+        authHouseAdmin(ADMIN_UID, HOUSE_ID),
+      );
+      await assertFails(
+        updateDoc(houseRef(ctx), { stripeAccountId: "acct_hijacked" }),
+      );
+    });
+
+    test("DENY a regular admin updating monthlyRent/weeklyRent", async () => {
+      await seedHouse();
+      const ctx = testEnv.authenticatedContext(
+        ADMIN_UID,
+        authHouseAdmin(ADMIN_UID, HOUSE_ID),
+      );
+      await assertFails(
+        updateDoc(houseRef(ctx), { monthlyRent: 999, weeklyRent: 250 }),
+      );
+    });
+
+    test("DENY a regular admin updating adminIds", async () => {
+      await seedHouse();
+      const ctx = testEnv.authenticatedContext(
+        ADMIN_UID,
+        authHouseAdmin(ADMIN_UID, HOUSE_ID),
+      );
+      await assertFails(
+        updateDoc(houseRef(ctx), { adminIds: [ADMIN_UID, OTHER_UID] }),
+      );
+    });
+
+    test("DENY a regular admin updating ownerId", async () => {
+      await seedHouse();
+      const ctx = testEnv.authenticatedContext(
+        ADMIN_UID,
+        authHouseAdmin(ADMIN_UID, HOUSE_ID),
+      );
+      await assertFails(updateDoc(houseRef(ctx), { ownerId: OTHER_UID }));
+    });
+
+    test("ALLOW a regular admin updating a non-sensitive field (house:partial-edit)", async () => {
+      await seedHouse();
+      const ctx = testEnv.authenticatedContext(
+        ADMIN_UID,
+        authHouseAdmin(ADMIN_UID, HOUSE_ID),
+      );
+      await assertSucceeds(updateDoc(houseRef(ctx), { name: "Renamed House" }));
+    });
+  });
+
+  describe("superAdmin", () => {
+    test("ALLOW a superAdmin updating stripeAccountId", async () => {
+      await seedHouse();
+      const ctx = testEnv.authenticatedContext(
+        ADMIN_UID,
+        authHouseSuperAdmin(ADMIN_UID, HOUSE_ID),
+      );
+      await assertSucceeds(
+        updateDoc(houseRef(ctx), { stripeAccountId: "acct_new" }),
+      );
+    });
+
+    test("ALLOW a superAdmin updating monthlyRent/weeklyRent/adminIds/ownerId", async () => {
+      await seedHouse();
+      const ctx = testEnv.authenticatedContext(
+        ADMIN_UID,
+        authHouseSuperAdmin(ADMIN_UID, HOUSE_ID),
+      );
+      await assertSucceeds(
+        updateDoc(houseRef(ctx), {
+          monthlyRent: 999,
+          weeklyRent: 250,
+          adminIds: [ADMIN_UID, OTHER_UID],
+          ownerId: OTHER_UID,
+        }),
+      );
+    });
+
+    test("ALLOW a superAdmin updating a non-sensitive field", async () => {
+      await seedHouse();
+      const ctx = testEnv.authenticatedContext(
+        ADMIN_UID,
+        authHouseSuperAdmin(ADMIN_UID, HOUSE_ID),
+      );
+      await assertSucceeds(updateDoc(houseRef(ctx), { name: "Renamed House" }));
+    });
+  });
+
+  describe("guest (unchanged behavior)", () => {
+    test("DENY a guest updating stripeAccountId", async () => {
+      await seedHouse();
+      const ctx = testEnv.authenticatedContext(
+        GUEST_UID,
+        authHouseGuest(GUEST_UID, HOUSE_ID),
+      );
+      await assertFails(
+        updateDoc(houseRef(ctx), { stripeAccountId: "acct_hijacked" }),
+      );
+    });
+
+    test("ALLOW a guest updating a non-sensitive field", async () => {
+      await seedHouse();
+      const ctx = testEnv.authenticatedContext(
+        GUEST_UID,
+        authHouseGuest(GUEST_UID, HOUSE_ID),
+      );
+      await assertSucceeds(updateDoc(houseRef(ctx), { name: "Renamed House" }));
+    });
   });
 });
