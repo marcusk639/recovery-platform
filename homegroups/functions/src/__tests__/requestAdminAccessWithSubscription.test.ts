@@ -647,6 +647,71 @@ describe("requestAdminAccessWithSubscription — ack-ambiguity-aware compensatio
     expect(memberDoc.isAdmin).toBe(true);
   });
 
+  it("a same-user CROSS-BRANCH race (this call's own create-new subscription vs. a different concurrent web-checkout request of theirs that won): does not falsely claim success, cancels its own now-orphaned subscription", async () => {
+    // Unlike the shared-object case above, this call's create-new path
+    // makes its OWN Stripe subscription ("sub_mobile_new"), while the
+    // post-tx group doc reflects a DIFFERENT subscription object
+    // ("sub_web_checkout") — as would happen if the SAME user's other
+    // concurrent request went through the web-checkout (subscriptionId
+    // already supplied) branch instead and won the claim transaction.
+    // admins.includes(userId) alone can't tell these two cases apart;
+    // only comparing the committed stripeSubscriptionId can.
+    mockStripeSubscriptionsCreate.mockResolvedValue({
+      id: "sub_mobile_new",
+      status: "trialing",
+      items: { data: [{ id: "si_mobile_new" }] },
+      latest_invoice: { payment_intent: {} },
+    });
+    mockStripeSubscriptionsCancel.mockResolvedValue({});
+    // First retrieve() call is the pre-transaction live-status re-check
+    // (must see an active/trialing status or the grant guard rejects
+    // before the transaction ever runs); second is the post-cancel
+    // confirmation read in the compensation block.
+    mockStripeSubscriptionsRetrieve
+      .mockResolvedValueOnce({ status: "trialing" })
+      .mockResolvedValueOnce({ status: "canceled" });
+
+    const originalRunTransaction = mockDb.runTransaction;
+    let transactionAttempt = 0;
+    mockDb.runTransaction = (async (fn: (tx: any) => Promise<unknown>) => {
+      transactionAttempt++;
+      if (transactionAttempt === 1) {
+        docStore[`groups/${GROUP_ID}`] = {
+          ...docStore[`groups/${GROUP_ID}`],
+          isClaimed: true,
+          admins: [USER_ID], // same user won — but via the OTHER request
+          stripeSubscriptionId: "sub_web_checkout", // NOT this call's own subscription
+          subscriptionStatus: "active",
+        };
+      }
+      return originalRunTransaction(fn);
+    }) as typeof mockDb.runTransaction;
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      paymentMethodId: PAYMENT_METHOD_ID,
+    });
+
+    // Must reject as a genuine race loss, NOT resolve as a false success —
+    // this call's own subscription was never the one that got committed.
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+
+    // Its own orphaned subscription must be canceled, not silently left
+    // active and billing with no group ever attached.
+    expect(mockStripeSubscriptionsCancel).toHaveBeenCalledWith(
+      "sub_mobile_new",
+    );
+
+    // The group doc still reflects the actual winner's data, untouched.
+    const finalGroup = docStore[`groups/${GROUP_ID}`] as Record<
+      string,
+      unknown
+    >;
+    expect(finalGroup.stripeSubscriptionId).toBe("sub_web_checkout");
+  });
+
   it("cancel-ack-ambiguity: cancel() rejects but retrieve() confirms canceled — advances the attempt counter", async () => {
     mockDb.runTransaction = (async () => {
       throw new Error("DEADLINE_EXCEEDED: transaction timed out");

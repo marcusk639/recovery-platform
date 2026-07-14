@@ -423,14 +423,24 @@ export const requestAdminAccessWithSubscription = onCall(
         }
 
         // Ack-ambiguity recovery: did THIS call's own transaction actually
-        // commit, despite the client observing an error? Relies on this
-        // callable's subscription idempotency key being scoped to `userId`
-        // — that's what makes this single check sufficient even for a
-        // same-user concurrent double-request sharing one Stripe
-        // subscription object; see the design spec for the full argument.
-        // No separate "does someone else own this subscription" check is
-        // needed.
-        if (postTxData?.admins?.includes(userId)) {
+        // commit, despite the client observing an error? `admins.includes`
+        // alone isn't sufficient — this same userId can win via a DIFFERENT
+        // concurrent request of theirs (e.g. a web-checkout call and an
+        // in-app-payment call racing on the same group), which would commit
+        // a different Stripe subscription than the one this call is
+        // holding. The idempotency-key-scoped-to-userId argument (see the
+        // design spec) only guarantees identical Stripe objects when both
+        // requests take the SAME branch with the SAME idempotency key — it
+        // does not hold across branches. Comparing stripeSubscriptionId
+        // confirms this call's own attempt (not some other concurrent
+        // request of the same user's) is what committed, so a genuinely-
+        // orphaned subscription from a losing cross-branch request still
+        // falls through to compensation below instead of being silently
+        // left uncanceled.
+        if (
+          postTxData?.admins?.includes(userId) &&
+          postTxData?.stripeSubscriptionId === stripeSubscriptionId
+        ) {
           return await grantMemberAdminAndBuildResponse(
             stripeSubscriptionId,
             subscriptionStatus,
