@@ -267,6 +267,12 @@ function setupDefaults() {
     items: { data: [{ id: "si_test" }] },
     latest_invoice: { payment_intent: {} },
   });
+
+  // Default for the final live-status re-check (Task 2): matches the
+  // create() response's status above, so tests unrelated to that re-check
+  // don't need to know it exists. Tests exercising the re-check itself
+  // override this to simulate a stale/replayed create() response.
+  mockStripeSubscriptionsRetrieve.mockResolvedValue({ status: "trialing" });
 }
 
 // ============================================================
@@ -430,3 +436,66 @@ describe("requestAdminAccessWithSubscription — write-ordering (Stripe fields o
   });
 });
 
+describe("requestAdminAccessWithSubscription — final live-status re-check before granting admin", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    docStore = {};
+    mockDb = buildMockDb();
+    setupDefaults();
+  });
+
+  it("rejects using a live retrieve() result even when the create() response's own status looked valid (stale/replayed data)", async () => {
+    // Simulate an idempotent replay: the create() call's own response
+    // still shows "trialing" (a cached response from before some earlier
+    // cancellation), but a live retrieve() reveals it's actually canceled.
+    mockStripeSubscriptionsCreate.mockResolvedValue({
+      id: "sub_test",
+      status: "trialing", // stale — this is what create()'s cached response shows
+      items: { data: [{ id: "si_test" }] },
+      latest_invoice: { payment_intent: {} },
+    });
+    mockStripeSubscriptionsRetrieve.mockResolvedValue({
+      status: "canceled", // the live truth
+    });
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      paymentMethodId: PAYMENT_METHOD_ID,
+    });
+
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+
+    // Confirm the guard's rejection message reflects the LIVE status, not
+    // the stale create() response's status.
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).rejects.toMatchObject({
+      message: expect.stringContaining("canceled"),
+    });
+  });
+
+  it("does NOT re-check live status for the web-checkout (subscriptionId-supplied) path — it already verified moments earlier", async () => {
+    mockStripeSubscriptionsRetrieve.mockResolvedValue({
+      id: "sub_already_created",
+      status: "trialing",
+      metadata: { groupId: GROUP_ID },
+      customer: "cus_existing",
+      items: { data: [{ id: "si_existing" }] },
+    });
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      subscriptionId: "sub_already_created",
+    });
+
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).resolves.toMatchObject({ success: true });
+
+    // Exactly one retrieve() call — the verify-time one. No second call
+    // right before the guard for this path.
+    expect(mockStripeSubscriptionsRetrieve).toHaveBeenCalledTimes(1);
+  });
+});

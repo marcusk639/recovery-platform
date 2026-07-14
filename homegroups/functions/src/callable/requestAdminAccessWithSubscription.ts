@@ -108,6 +108,13 @@ export const requestAdminAccessWithSubscription = onCall(
       // or the web-payment verify branch) are NOT rolled back.
       let subscriptionCreatedThisCall = false;
 
+      // Distinguishes which branch below actually ran. Used immediately
+      // before the grant guard to decide whether a fresh live re-check of
+      // subscriptionStatus is needed (create-new path) or would be a
+      // pure-waste duplicate Stripe call (web-checkout path, which just
+      // did its own fresh retrieve() above).
+      const usedWebCheckoutVerify = Boolean(subscriptionId);
+
       // If subscriptionId is provided (from web payment), verify and use it
       if (subscriptionId) {
         logger.info(
@@ -256,6 +263,20 @@ export const requestAdminAccessWithSubscription = onCall(
             `Stripe subscription ${stripeSubscriptionId} created for group ${groupId} with status ${subscriptionStatus}`,
           );
         }
+      }
+
+      // Final live-status re-check: the subscriptionStatus in scope here may
+      // be a stale idempotent replay of an earlier create() call (its cached
+      // response predates a later cancellation) for the create-new-subscription
+      // path. Re-derive from a live Stripe call immediately before the guard
+      // so a stale/replayed value can never grant admin. Skipped for the
+      // web-checkout path — it already did its own fresh retrieve() moments
+      // earlier at verify time with no Stripe calls in between, so a second
+      // one here would be a pure-waste extra round-trip.
+      if (!usedWebCheckoutVerify && stripeSubscriptionId) {
+        subscriptionStatus = (
+          await stripe.subscriptions.retrieve(stripeSubscriptionId)
+        ).status;
       }
 
       // Guard: only grant admin if subscription is active or trialing
