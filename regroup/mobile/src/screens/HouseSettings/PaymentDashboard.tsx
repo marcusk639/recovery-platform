@@ -46,7 +46,7 @@ import { RatsText } from "../../components/rats-text";
 import RatsButton from "../../components/rats-button/rats-button";
 
 import { useSelectedHouse } from "../../hooks/useSelectedHouse";
-import { useGuests } from "../../state/queries/guestQueries";
+import { useGuests, guestKeys } from "../../state/queries/guestQueries";
 import {
   listHousePayments,
   recordManualPayment,
@@ -120,7 +120,7 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
           exact: true,
         });
       }
-    }, [house?.id, queryClient])
+    }, [house?.id, queryClient]),
   );
 
   // Memoize the guest array so ManualPaymentModal's guests prop is stable
@@ -132,7 +132,7 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
       guestList
         .filter((g) => (g.rentOwed ?? 0) > 0)
         .sort((a, b) => (b.rentOwed ?? 0) - (a.rentOwed ?? 0)),
-    [guestList]
+    [guestList],
   );
 
   const guestNames = useMemo(
@@ -144,9 +144,9 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
             `${g.firstName || ""} ${g.lastName || ""}`.trim() ||
             "Unknown Resident",
         }),
-        {}
+        {},
       ),
-    [guestList]
+    [guestList],
   );
 
   const filteredPayments = useMemo(() => {
@@ -170,7 +170,7 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
         `${g.firstName || ""} ${g.lastName || ""}`.trim() || "Unknown Resident"
       );
     },
-    [guests]
+    [guests],
   );
 
   const generateCSV = useCallback((): string => {
@@ -305,8 +305,8 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
                   f === "week"
                     ? "This Week"
                     : f === "month"
-                    ? "This Month"
-                    : "All Time"
+                      ? "This Month"
+                      : "All Time"
                 }
                 style={[
                   styles.pillText,
@@ -544,7 +544,7 @@ const ManualPaymentModal: React.FC<ManualPaymentModalProps> = ({
 }) => {
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState<"Cash" | "Check" | "Venmo" | "Zelle">(
-    "Cash"
+    "Cash",
   );
   const [notes, setNotes] = useState("");
   const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
@@ -561,7 +561,7 @@ const ManualPaymentModal: React.FC<ManualPaymentModalProps> = ({
         houseId,
         amountInCents,
         method,
-        notes
+        notes,
       );
       // Refresh the parent dashboard list and any guest-balance views.
       queryClient.invalidateQueries({
@@ -572,6 +572,13 @@ const ManualPaymentModal: React.FC<ManualPaymentModalProps> = ({
       });
       queryClient.invalidateQueries({
         queryKey: paymentKeys.history(selectedGuestId),
+      });
+      // Also refresh the guests list — overdueGuests (and the "Overdue
+      // Residents" card) derive from `guests`, which is backed by this
+      // query. Without this, a resident whose balance was just cleared
+      // keeps showing as overdue until an unrelated refetch happens.
+      queryClient.invalidateQueries({
+        queryKey: guestKeys.list(houseId),
       });
       setAmount("");
       setNotes("");
