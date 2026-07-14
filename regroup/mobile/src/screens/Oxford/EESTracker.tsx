@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from "react";
 import {
   View,
   FlatList,
@@ -6,27 +6,27 @@ import {
   ActivityIndicator,
   RefreshControl,
   TouchableOpacity,
-} from 'react-native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { format, startOfISOWeek, parseISO } from 'date-fns';
-import { RootStackParamList } from '../../navigation/types';
+} from "react-native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { format, startOfISOWeek, parseISO } from "date-fns";
+import { RootStackParamList } from "../../navigation/types";
 
-import RatsScrollView from '../../components/rats-scroll-view';
-import ScreenHeader from '../../components/screen-header';
-import RatsButton from '../../components/rats-button/rats-button';
-import { RatsText } from '../../components/rats-text';
+import RatsScrollView from "../../components/rats-scroll-view";
+import ScreenHeader from "../../components/screen-header";
+import RatsButton from "../../components/rats-button/rats-button";
+import { RatsText } from "../../components/rats-text";
 
-import { useOxfordGate } from '../../hooks/useOxfordGate';
-import { useSelectedHouse } from '../../hooks/useSelectedHouse';
-import { useGuests } from '../../state/queries/guestQueries';
-import { Guest } from '../../entities/Guest';
-import { EESRecord, calculateEES } from '../../services/oxford/ees';
+import { useOxfordGate } from "../../hooks/useOxfordGate";
+import { useSelectedHouse } from "../../hooks/useSelectedHouse";
+import { useGuests } from "../../state/queries/guestQueries";
+import { Guest } from "../../entities/Guest";
+import { EESRecord, calculateEES } from "../../services/oxford/ees";
 import {
   useEESRecords,
   useMarkEESPaid,
   useCreateEESRecords,
-} from '../../state/queries/oxfordQueries';
-import { color, normalize, fontSize, CARD_STYLE } from '../../styles/theme';
+} from "../../state/queries/oxfordQueries";
+import { color, normalize, fontSize, CARD_STYLE } from "../../styles/theme";
 
 interface Props {
   navigation: NativeStackNavigationProp<RootStackParamList>;
@@ -42,7 +42,7 @@ const EESTracker: React.FC<Props> = ({ navigation }) => {
   // React Query is the source of truth for guests; see .full-review [A2].
   const { data: guests = {} } = useGuests(houseId, allowed);
 
-  const weekStart = format(startOfISOWeek(new Date()), 'yyyy-MM-dd');
+  const weekStart = format(startOfISOWeek(new Date()), "yyyy-MM-dd");
 
   const [totalExpenses, setTotalExpenses] = useState(0);
 
@@ -56,8 +56,15 @@ const EESTracker: React.FC<Props> = ({ navigation }) => {
   const markPaidMutation = useMarkEESPaid();
   const createRecordsMutation = useCreateEESRecords();
 
-  const residentCount = house?.currentCapacity || 0;
+  // Resident count — NOT house.currentCapacity (bed capacity). The preview
+  // amount shown here must match what handleCreateRecords actually bills,
+  // which divides by the number of residents currently in the house, not
+  // how many beds theoretically exist. See regroup Bug 1 fix (2026-07-14).
+  const guestList = useMemo(() => Object.values(guests) as Guest[], [guests]);
+  const residentCount = guestList.length;
   const eesAmount = calculateEES(totalExpenses, residentCount);
+  const bedCapacity = house?.currentCapacity ?? 0;
+  const capacityMismatch = bedCapacity > 0 && residentCount > bedCapacity;
 
   const handleMarkPaid = useCallback(
     async (record: EESRecordWithId) => {
@@ -72,7 +79,7 @@ const EESTracker: React.FC<Props> = ({ navigation }) => {
         });
       } catch {
         // onError already routes to Sentry via the mutation hook.
-        Alert.alert('Error', 'Failed to mark as paid. Please try again.');
+        Alert.alert("Error", "Failed to mark as paid. Please try again.");
       }
     },
     [markPaidMutation, houseId, weekStart],
@@ -82,11 +89,10 @@ const EESTracker: React.FC<Props> = ({ navigation }) => {
     if (!houseId) {
       return;
     }
-    const guestList = Object.values(guests) as Guest[];
     if (guestList.length === 0) {
       Alert.alert(
-        'No Residents',
-        'No residents found to create EES records for.',
+        "No Residents",
+        "No residents found to create EES records for.",
       );
       return;
     }
@@ -96,11 +102,11 @@ const EESTracker: React.FC<Props> = ({ navigation }) => {
       await createRecordsMutation.mutateAsync({
         houseId,
         weekStart,
-        guestIds: guestList.map(g => g.id),
+        guestIds: guestList.map((g) => g.id),
         amountPerGuest: amount,
       });
     } catch {
-      Alert.alert('Error', 'Failed to create EES records. Please try again.');
+      Alert.alert("Error", "Failed to create EES records. Please try again.");
     }
   };
 
@@ -108,11 +114,11 @@ const EESTracker: React.FC<Props> = ({ navigation }) => {
     (guestId: string): string => {
       const guest = guests[guestId] as Guest | undefined;
       if (!guest) {
-        return 'Unknown Resident';
+        return "Unknown Resident";
       }
       return (
-        `${guest.firstName || ''} ${guest.lastName || ''}`.trim() ||
-        'Unknown Resident'
+        `${guest.firstName || ""} ${guest.lastName || ""}`.trim() ||
+        "Unknown Resident"
       );
     },
     [guests],
@@ -140,11 +146,12 @@ const EESTracker: React.FC<Props> = ({ navigation }) => {
             borderLeftWidth: 4,
             borderLeftColor: item.paid ? color.green : color.red,
             padding: normalize(12),
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
           },
-        ]}>
+        ]}
+      >
         <View>
           <RatsText
             text={getGuestName(item.guestId)}
@@ -156,7 +163,7 @@ const EESTracker: React.FC<Props> = ({ navigation }) => {
           />
           {item.paidAt && (
             <RatsText
-              text={`Paid: ${format(parseISO(item.paidAt!), 'MMM d, yyyy')}`}
+              text={`Paid: ${format(parseISO(item.paidAt!), "MMM d, yyyy")}`}
               style={{ fontSize: fontSize.small, color: color.grey }}
             />
           )}
@@ -167,9 +174,10 @@ const EESTracker: React.FC<Props> = ({ navigation }) => {
             paddingHorizontal: normalize(10),
             paddingVertical: normalize(4),
             borderRadius: normalize(4),
-          }}>
+          }}
+        >
           <RatsText
-            text={item.paid ? 'PAID' : 'UNPAID'}
+            text={item.paid ? "PAID" : "UNPAID"}
             style={{ color: color.white, fontSize: fontSize.small }}
           />
         </View>
@@ -182,7 +190,7 @@ const EESTracker: React.FC<Props> = ({ navigation }) => {
     return (
       <RatsScrollView>
         <ScreenHeader header="Equal Expense Share" renderBackButton />
-        <View style={{ padding: normalize(24), alignItems: 'center' }}>
+        <View style={{ padding: normalize(24), alignItems: "center" }}>
           <RatsText
             text="Oxford House features are not enabled for this house."
             style={{ color: color.dark_grey, fontSize: fontSize.regular }}
@@ -212,7 +220,8 @@ const EESTracker: React.FC<Props> = ({ navigation }) => {
           refreshing={isFetching && !loading}
           onRefresh={refetch}
         />
-      }>
+      }
+    >
       <ScreenHeader header="Equal Expense Share" />
       <View style={{ padding: normalize(16) }}>
         {/* Summary Card */}
@@ -224,9 +233,10 @@ const EESTracker: React.FC<Props> = ({ navigation }) => {
               padding: normalize(16),
               marginBottom: normalize(16),
             },
-          ]}>
+          ]}
+        >
           <RatsText
-            text={`Week of ${format(parseISO(weekStart), 'MMM d, yyyy')}`}
+            text={`Week of ${format(parseISO(weekStart), "MMM d, yyyy")}`}
             style={{
               color: color.white,
               fontSize: fontSize.small,
@@ -245,10 +255,20 @@ const EESTracker: React.FC<Props> = ({ navigation }) => {
               marginTop: normalize(4),
             }}
           />
+          {capacityMismatch && (
+            <RatsText
+              text={`Warning: resident count (${residentCount}) exceeds bed capacity (${bedCapacity}). Check house data.`}
+              style={{
+                color: color.red,
+                fontSize: fontSize.small,
+                marginTop: normalize(4),
+              }}
+            />
+          )}
         </View>
 
         {records.length === 0 ? (
-          <View style={{ alignItems: 'center', marginTop: normalize(24) }}>
+          <View style={{ alignItems: "center", marginTop: normalize(24) }}>
             <RatsText
               text="No EES records for this week."
               style={{
@@ -274,7 +294,7 @@ const EESTracker: React.FC<Props> = ({ navigation }) => {
             />
             <FlatList
               data={records}
-              keyExtractor={item => item.id}
+              keyExtractor={(item) => item.id}
               renderItem={renderRecord}
               scrollEnabled={false}
             />
