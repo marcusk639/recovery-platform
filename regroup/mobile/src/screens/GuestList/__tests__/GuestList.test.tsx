@@ -20,13 +20,13 @@
 // ─── useSelectedHouse mock ────────────────────────────────────────────────────
 const mockUseSelectedHouse = jest.fn();
 
-jest.mock('../../../hooks/useSelectedHouse', () => ({
+jest.mock("../../../hooks/useSelectedHouse", () => ({
   useSelectedHouse: () => mockUseSelectedHouse(),
 }));
 
 // ─── Navigation mock ──────────────────────────────────────────────────────────
-jest.mock('@react-navigation/native-stack', () => ({}));
-jest.mock('@react-navigation/native', () => ({
+jest.mock("@react-navigation/native-stack", () => ({}));
+jest.mock("@react-navigation/native", () => ({
   useFocusEffect: jest.fn(),
   useNavigation: () => ({ navigate: jest.fn(), goBack: jest.fn() }),
 }));
@@ -35,7 +35,7 @@ jest.mock('@react-navigation/native', () => ({
 const mockShowPopover = jest.fn();
 const mockSetPopoverRef = jest.fn();
 
-jest.mock('../../../context', () => ({
+jest.mock("../../../context", () => ({
   useNotification: () => ({
     showPopover: mockShowPopover,
     setPopoverRef: mockSetPopoverRef,
@@ -48,27 +48,27 @@ jest.mock('../../../context', () => ({
   }),
   useTheme: () => ({
     theme: {
-      primaryFontFamily: 'System',
-      secondaryFontFamily: 'System',
-      primaryColor: '#000',
-      secondaryColor: '#fff',
-      tertiaryColor: '#ccc',
-      backgroundColor: '#fff',
-      textColor: '#000',
-      logoTintColor: '#fff',
+      primaryFontFamily: "System",
+      secondaryFontFamily: "System",
+      primaryColor: "#000",
+      secondaryColor: "#fff",
+      tertiaryColor: "#ccc",
+      backgroundColor: "#fff",
+      textColor: "#000",
+      logoTintColor: "#fff",
     },
   }),
   useTranslation: () => ({
     t: (key: string) => key,
-    i18n: { language: 'en', changeLanguage: jest.fn() },
+    i18n: { language: "en", changeLanguage: jest.fn() },
   }),
 }));
 
 // ─── useCurrentWeek mock ──────────────────────────────────────────────────────
-jest.mock('../../../hooks/activity/useCurrentWeek', () => ({
+jest.mock("../../../hooks/activity/useCurrentWeek", () => ({
   useCurrentWeek: () => ({
-    startDate: '2026-02-16',
-    endDate: '2026-02-22',
+    startDate: "2026-02-16",
+    endDate: "2026-02-22",
     weekNumber: 8,
     year: 2026,
   }),
@@ -77,22 +77,27 @@ jest.mock('../../../hooks/activity/useCurrentWeek', () => ({
 // ─── React Query guest hooks mock ─────────────────────────────────────────────
 const mockUseGuests = jest.fn();
 
-jest.mock('../../../state/queries', () => ({
+jest.mock("../../../state/queries", () => ({
   useGuests: (...args: any[]) => mockUseGuests(...args),
   useGuest: jest.fn(() => ({ data: null, isLoading: false, error: null })),
+  useWeekSummary: jest.fn(() => ({
+    data: undefined,
+    isLoading: false,
+    error: null,
+  })),
 }));
 
 // ─── Compliance indicator stub ────────────────────────────────────────────────
-jest.mock('../../../components/compliance-indicator', () => ({
+jest.mock("../../../components/compliance-indicator", () => ({
   GuestComplianceDot: ({ testID }: any) => {
-    const { View } = require('react-native');
-    return <View testID={testID || 'compliance-dot'} />;
+    const { View } = require("react-native");
+    return <View testID={testID || "compliance-dot"} />;
   },
 }));
 
 // ─── Component stubs ──────────────────────────────────────────────────────────
-jest.mock('../../../components/screen-header', () => {
-  const { View, Text } = require('react-native');
+jest.mock("../../../components/screen-header", () => {
+  const { View, Text } = require("react-native");
   return ({ header, icon }: any) => (
     <View testID="screen-header">
       <Text>{header}</Text>
@@ -101,8 +106,8 @@ jest.mock('../../../components/screen-header', () => {
   );
 });
 
-jest.mock('../../../components/rats-scroll-view', () => {
-  const { ScrollView } = require('react-native');
+jest.mock("../../../components/rats-scroll-view", () => {
+  const { ScrollView } = require("react-native");
   return (props: any) => {
     const { testID, children, contentContainerStyle, ...rest } = props;
     return (
@@ -113,15 +118,15 @@ jest.mock('../../../components/rats-scroll-view', () => {
   };
 });
 
-jest.mock('../../../components/help-icon', () => {
-  const { TouchableOpacity } = require('react-native');
+jest.mock("../../../components/help-icon", () => {
+  const { TouchableOpacity } = require("react-native");
   return ({ helpFn, setRef }: any) => (
     <TouchableOpacity testID="help-icon" onPress={helpFn} ref={setRef} />
   );
 });
 
-jest.mock('../../../components/rats-interactable-section', () => {
-  const { TouchableOpacity, Text, View } = require('react-native');
+jest.mock("../../../components/rats-interactable-section", () => {
+  const { TouchableOpacity, Text, View } = require("react-native");
   return ({ name, onPress, testID }: any) => (
     <TouchableOpacity testID={testID || `section-${name}`} onPress={onPress}>
       <Text>{name}</Text>
@@ -129,96 +134,96 @@ jest.mock('../../../components/rats-interactable-section', () => {
   );
 });
 
-jest.mock('../../../components/rats-text', () => ({
+jest.mock("../../../components/rats-text", () => ({
   RatsText: ({ text }: any) => {
-    const { Text } = require('react-native');
-    return <Text>{text || ''}</Text>;
+    const { Text } = require("react-native");
+    return <Text>{text || ""}</Text>;
   },
 }));
 
-jest.mock('../../../components/rats-icon', () => ({
+jest.mock("../../../components/rats-icon", () => ({
   RatsIcon: ({ testID, name }: any) => {
-    const { View } = require('react-native');
+    const { View } = require("react-native");
     return <View testID={testID || `icon-${name}`} />;
   },
 }));
 
 // ─── Util mocks ───────────────────────────────────────────────────────────────
-jest.mock('../../../util/display', () => ({
-  getTodaysDate: jest.fn(() => '2026-02-22'),
-  getDateAndTime: jest.fn(() => 'Jan 1, 2024'),
-  getCurrentTime: jest.fn(() => '2026-02-22T00:00:00.000Z'),
+jest.mock("../../../util/display", () => ({
+  getTodaysDate: jest.fn(() => "2026-02-22"),
+  getDateAndTime: jest.fn(() => "Jan 1, 2024"),
+  getCurrentTime: jest.fn(() => "2026-02-22T00:00:00.000Z"),
   formatName: jest.fn((first: string, last: string) =>
-    `${first || ''} ${last || ''}`.trim(),
+    `${first || ""} ${last || ""}`.trim(),
   ),
 }));
 
-jest.mock('../../../util/guest', () => ({
-  getHealthByPercentage: jest.fn(() => 'good'),
+jest.mock("../../../util/guest", () => ({
+  getHealthByPercentage: jest.fn(() => "good"),
   getOverallPercentage: jest.fn(() => 80),
-  HEALTH_ICON_MAP: { good: 'heart', fair: 'exclamation', poor: 'times' },
-  HEALTH_COLOR_MAP: { good: '#00c853', fair: '#ffab00', poor: '#d50000' },
+  HEALTH_ICON_MAP: { good: "heart", fair: "exclamation", poor: "times" },
+  HEALTH_COLOR_MAP: { good: "#00c853", fair: "#ffab00", poor: "#d50000" },
 }));
 
 // ─── React imports (after mocks) ──────────────────────────────────────────────
-import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
-import { Provider } from 'react-redux';
-import { configureStore } from '@reduxjs/toolkit';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React from "react";
+import { render, fireEvent, waitFor } from "@testing-library/react-native";
+import { Provider } from "react-redux";
+import { configureStore } from "@reduxjs/toolkit";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import housesReducer from '../../../state/slices/housesSlice';
-import guestsReducer from '../../../state/slices/guestsSlice';
-import userReducer from '../../../state/slices/userSlice';
-import adminReducer from '../../../state/slices/adminSlice';
-import authReducer from '../../../state/slices/authSlice';
-import themeReducer from '../../../state/slices/themeSlice';
-import chatReducer from '../../../state/slices/chatSlice';
-import setupReducer from '../../../state/slices/setupSlice';
-import notificationsReducer from '../../../state/slices/notificationsSlice';
-import meetingsReducer from '../../../state/slices/meetingsSlice';
+import housesReducer from "../../../state/slices/housesSlice";
+import guestsReducer from "../../../state/slices/guestsSlice";
+import userReducer from "../../../state/slices/userSlice";
+import adminReducer from "../../../state/slices/adminSlice";
+import authReducer from "../../../state/slices/authSlice";
+import themeReducer from "../../../state/slices/themeSlice";
+import chatReducer from "../../../state/slices/chatSlice";
+import setupReducer from "../../../state/slices/setupSlice";
+import notificationsReducer from "../../../state/slices/notificationsSlice";
+import meetingsReducer from "../../../state/slices/meetingsSlice";
 
-import GuestList from '../GuestList';
+import GuestList from "../GuestList";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
 const BASE_HOUSE: any = {
-  id: 'house123',
-  name: 'Test House',
+  id: "house123",
+  name: "Test House",
   adminIds: [],
   superAdminIds: [],
   pendingAdminInvites: [],
-  timezone: '',
-  ownerId: 'owner-1',
+  timezone: "",
+  ownerId: "owner-1",
   lat: 0,
   lng: 0,
-  geohash: '',
-  street: '1 Main St',
-  city: 'Springfield',
-  state: 'IL',
-  zip: '62701',
-  country: 'US',
+  geohash: "",
+  street: "1 Main St",
+  city: "Springfield",
+  state: "IL",
+  zip: "62701",
+  country: "US",
   health: {},
   monthlyRent: 1000,
   weeklyRent: 250,
   currentCapacity: 2,
   maximumCapacity: 5,
-  code: 'TEST01',
-  avatar: '',
-  imageUrl: '',
+  code: "TEST01",
+  avatar: "",
+  imageUrl: "",
   depositsAndFees: 0,
   certified: false,
-  phoneNumber: '5551234567',
-  rentFrequency: 'both',
-  subscriptionStatus: 'active',
+  phoneNumber: "5551234567",
+  rentFrequency: "both",
+  subscriptionStatus: "active",
   isDemoHouse: false,
-  houseType: 'traditional',
+  houseType: "traditional",
   seniorPeerEmails: [],
-  managerSetupType: 'operator-only',
+  managerSetupType: "operator-only",
   awaitingVerification: [],
   chores: {},
   phases: {},
-  gender: '',
+  gender: "",
   disputes: {},
   applications: {},
   complaints: {},
@@ -226,28 +231,28 @@ const BASE_HOUSE: any = {
   baths: 1,
   wifi: false,
   rating: 3,
-  createdDate: '2024-01-01',
-  lastUpdated: '2024-01-01',
+  createdDate: "2024-01-01",
+  lastUpdated: "2024-01-01",
 };
 
 const GUEST_1: any = {
-  id: 'guest1',
-  houseId: 'house123',
-  firstName: 'John',
-  lastName: 'Doe',
-  email: 'john@test.com',
+  id: "guest1",
+  houseId: "house123",
+  firstName: "John",
+  lastName: "Doe",
+  email: "john@test.com",
   avatar: null,
-  createdDate: new Date('2024-01-01'),
+  createdDate: new Date("2024-01-01"),
 };
 
 const GUEST_2: any = {
-  id: 'guest2',
-  houseId: 'house123',
-  firstName: 'Jane',
-  lastName: 'Smith',
-  email: 'jane@test.com',
+  id: "guest2",
+  houseId: "house123",
+  firstName: "Jane",
+  lastName: "Smith",
+  email: "jane@test.com",
   avatar: null,
-  createdDate: new Date('2024-01-02'),
+  createdDate: new Date("2024-01-02"),
 };
 
 const MOCK_GUESTS_DATA = {
@@ -307,12 +312,12 @@ function buildStore({ house = BASE_HOUSE }: BuildStoreOptions = {}) {
         guests: {},
         selectedGuest: null,
         userAsGuest: null,
-        status: 'idle',
+        status: "idle",
         error: null,
-        updateStatus: 'idle',
-        createStatus: 'idle',
-        deleteStatus: 'idle',
-        customizePhaseStatus: 'idle',
+        updateStatus: "idle",
+        createStatus: "idle",
+        deleteStatus: "idle",
+        customizePhaseStatus: "idle",
       } as any,
       admin: {
         houseAdmins: {},
@@ -324,9 +329,9 @@ function buildStore({ house = BASE_HOUSE }: BuildStoreOptions = {}) {
       } as any,
       user: {
         user: {
-          id: 'user-1',
-          firstName: 'Admin',
-          lastName: 'User',
+          id: "user-1",
+          firstName: "Admin",
+          lastName: "User",
           isAdmin: true,
         },
         loading: false,
@@ -369,7 +374,7 @@ function renderScreen(storeOptions: BuildStoreOptions = {}) {
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe('GuestList Component', () => {
+describe("GuestList Component", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     // Default: data loaded, no loading, no error
@@ -383,13 +388,13 @@ describe('GuestList Component', () => {
   });
 
   // ─── Rendering ─────────────────────────────────────────────────────────────
-  describe('Rendering', () => {
-    it('renders without crashing', () => {
+  describe("Rendering", () => {
+    it("renders without crashing", () => {
       const { getByTestId } = renderScreen();
-      expect(getByTestId('guest-list-screen')).toBeTruthy();
+      expect(getByTestId("guest-list-screen")).toBeTruthy();
     });
 
-    it('renders header with house name when data is loaded', () => {
+    it("renders header with house name when data is loaded", () => {
       mockUseGuests.mockReturnValue({
         data: MOCK_GUESTS_DATA,
         isLoading: false,
@@ -398,10 +403,10 @@ describe('GuestList Component', () => {
         refetch: jest.fn(),
       });
       const { getByText } = renderScreen();
-      expect(getByText('Test House Guests')).toBeTruthy();
+      expect(getByText("Test House Guests")).toBeTruthy();
     });
 
-    it('renders the screen header', () => {
+    it("renders the screen header", () => {
       mockUseGuests.mockReturnValue({
         data: MOCK_GUESTS_DATA,
         isLoading: false,
@@ -410,10 +415,10 @@ describe('GuestList Component', () => {
         refetch: jest.fn(),
       });
       const { getByTestId } = renderScreen();
-      expect(getByTestId('screen-header')).toBeTruthy();
+      expect(getByTestId("screen-header")).toBeTruthy();
     });
 
-    it('displays guest list when data loads', () => {
+    it("displays guest list when data loads", () => {
       mockUseGuests.mockReturnValue({
         data: MOCK_GUESTS_DATA,
         isLoading: false,
@@ -422,8 +427,8 @@ describe('GuestList Component', () => {
         refetch: jest.fn(),
       });
       const { getByText } = renderScreen();
-      expect(getByText('John Doe')).toBeTruthy();
-      expect(getByText('Jane Smith')).toBeTruthy();
+      expect(getByText("John Doe")).toBeTruthy();
+      expect(getByText("Jane Smith")).toBeTruthy();
     });
 
     it('renders "Guests" header fallback when no house is selected', () => {
@@ -435,13 +440,13 @@ describe('GuestList Component', () => {
         refetch: jest.fn(),
       });
       const { getByText } = renderScreen({ house: null });
-      expect(getByText('Guests')).toBeTruthy();
+      expect(getByText("Guests")).toBeTruthy();
     });
   });
 
   // ─── Loading state ─────────────────────────────────────────────────────────
-  describe('Loading state', () => {
-    it('shows loading header when guests are fetching', () => {
+  describe("Loading state", () => {
+    it("shows loading header when guests are fetching", () => {
       mockUseGuests.mockReturnValue({
         data: undefined,
         isLoading: true,
@@ -454,7 +459,7 @@ describe('GuestList Component', () => {
       expect(getByText(/Test House Guests|Loading/)).toBeTruthy();
     });
 
-    it('does not render the main list container while loading', () => {
+    it("does not render the main list container while loading", () => {
       mockUseGuests.mockReturnValue({
         data: undefined,
         isLoading: true,
@@ -463,13 +468,13 @@ describe('GuestList Component', () => {
         refetch: jest.fn(),
       });
       const { queryByTestId } = renderScreen();
-      expect(queryByTestId('guest-list-screen')).toBeNull();
+      expect(queryByTestId("guest-list-screen")).toBeNull();
     });
   });
 
   // ─── Empty state ───────────────────────────────────────────────────────────
-  describe('Empty state', () => {
-    it('renders no guest rows when guest data is an empty object', () => {
+  describe("Empty state", () => {
+    it("renders no guest rows when guest data is an empty object", () => {
       mockUseGuests.mockReturnValue({
         data: {},
         isLoading: false,
@@ -478,11 +483,11 @@ describe('GuestList Component', () => {
         refetch: jest.fn(),
       });
       const { queryByText } = renderScreen();
-      expect(queryByText('John Doe')).toBeNull();
-      expect(queryByText('Jane Smith')).toBeNull();
+      expect(queryByText("John Doe")).toBeNull();
+      expect(queryByText("Jane Smith")).toBeNull();
     });
 
-    it('still shows the header when guest list is empty', () => {
+    it("still shows the header when guest list is empty", () => {
       mockUseGuests.mockReturnValue({
         data: {},
         isLoading: false,
@@ -491,10 +496,10 @@ describe('GuestList Component', () => {
         refetch: jest.fn(),
       });
       const { getByText } = renderScreen();
-      expect(getByText('Test House Guests')).toBeTruthy();
+      expect(getByText("Test House Guests")).toBeTruthy();
     });
 
-    it('renders no rows when data is null (not yet resolved)', () => {
+    it("renders no rows when data is null (not yet resolved)", () => {
       mockUseGuests.mockReturnValue({
         data: null,
         isLoading: false,
@@ -503,18 +508,18 @@ describe('GuestList Component', () => {
         refetch: jest.fn(),
       });
       const { queryByText } = renderScreen();
-      expect(queryByText('John Doe')).toBeNull();
+      expect(queryByText("John Doe")).toBeNull();
     });
   });
 
   // ─── Error state ───────────────────────────────────────────────────────────
-  describe('Error Handling', () => {
-    it('displays error state when fetch fails', () => {
+  describe("Error Handling", () => {
+    it("displays error state when fetch fails", () => {
       mockUseGuests.mockReturnValue({
         data: undefined,
         isLoading: false,
         isError: true,
-        error: new Error('Failed to fetch guests'),
+        error: new Error("Failed to fetch guests"),
         refetch: jest.fn(),
       });
       const { getByText } = renderScreen();
@@ -522,22 +527,22 @@ describe('GuestList Component', () => {
       expect(getByText(/Test House Guests|Error/)).toBeTruthy();
     });
 
-    it('does not render the main list container when in error state', () => {
+    it("does not render the main list container when in error state", () => {
       mockUseGuests.mockReturnValue({
         data: undefined,
         isLoading: false,
         isError: true,
-        error: new Error('Network failure'),
+        error: new Error("Network failure"),
         refetch: jest.fn(),
       });
       const { queryByTestId } = renderScreen();
-      expect(queryByTestId('guest-list-screen')).toBeNull();
+      expect(queryByTestId("guest-list-screen")).toBeNull();
     });
   });
 
   // ─── Data fetching ─────────────────────────────────────────────────────────
-  describe('Data Fetching', () => {
-    it('calls useGuests with the house id when a house is selected', () => {
+  describe("Data Fetching", () => {
+    it("calls useGuests with the house id when a house is selected", () => {
       mockUseGuests.mockReturnValue({
         data: null,
         isLoading: false,
@@ -546,10 +551,10 @@ describe('GuestList Component', () => {
         refetch: jest.fn(),
       });
       renderScreen();
-      expect(mockUseGuests).toHaveBeenCalledWith('house123', true);
+      expect(mockUseGuests).toHaveBeenCalledWith("house123", true);
     });
 
-    it('calls useGuests with empty string and false when house is null', () => {
+    it("calls useGuests with empty string and false when house is null", () => {
       mockUseGuests.mockReturnValue({
         data: null,
         isLoading: false,
@@ -558,13 +563,13 @@ describe('GuestList Component', () => {
         refetch: jest.fn(),
       });
       renderScreen({ house: null });
-      expect(mockUseGuests).toHaveBeenCalledWith('', false);
+      expect(mockUseGuests).toHaveBeenCalledWith("", false);
     });
   });
 
   // ─── User interactions ─────────────────────────────────────────────────────
-  describe('User Interactions', () => {
-    it('navigates back when a guest row is tapped', () => {
+  describe("User Interactions", () => {
+    it("navigates back when a guest row is tapped", () => {
       mockUseGuests.mockReturnValue({
         data: MOCK_GUESTS_DATA,
         isLoading: false,
@@ -573,11 +578,11 @@ describe('GuestList Component', () => {
         refetch: jest.fn(),
       });
       const { getByText } = renderScreen();
-      fireEvent.press(getByText('John Doe'));
+      fireEvent.press(getByText("John Doe"));
       expect(mockNavigation.goBack).toHaveBeenCalled();
     });
 
-    it('navigates back when the second guest row is tapped', () => {
+    it("navigates back when the second guest row is tapped", () => {
       mockUseGuests.mockReturnValue({
         data: MOCK_GUESTS_DATA,
         isLoading: false,
@@ -586,11 +591,11 @@ describe('GuestList Component', () => {
         refetch: jest.fn(),
       });
       const { getByText } = renderScreen();
-      fireEvent.press(getByText('Jane Smith'));
+      fireEvent.press(getByText("Jane Smith"));
       expect(mockNavigation.goBack).toHaveBeenCalled();
     });
 
-    it('calls showPopover when the help icon is pressed', () => {
+    it("calls showPopover when the help icon is pressed", () => {
       mockUseGuests.mockReturnValue({
         data: MOCK_GUESTS_DATA,
         isLoading: false,
@@ -599,17 +604,17 @@ describe('GuestList Component', () => {
         refetch: jest.fn(),
       });
       const { getByTestId } = renderScreen();
-      fireEvent.press(getByTestId('help-icon'));
+      fireEvent.press(getByTestId("help-icon"));
       expect(mockShowPopover).toHaveBeenCalledWith(
-        'RESIDENT LIST',
+        "RESIDENT LIST",
         expect.any(String),
       );
     });
   });
 
   // ─── Caching ───────────────────────────────────────────────────────────────
-  describe('Performance - Caching', () => {
-    it('renders guest data without additional hook calls on re-render', () => {
+  describe("Performance - Caching", () => {
+    it("renders guest data without additional hook calls on re-render", () => {
       mockUseGuests.mockReturnValue({
         data: MOCK_GUESTS_DATA,
         isLoading: false,
@@ -628,7 +633,7 @@ describe('GuestList Component', () => {
         </Provider>,
       );
 
-      expect(getByText('John Doe')).toBeTruthy();
+      expect(getByText("John Doe")).toBeTruthy();
 
       rerender(
         <Provider store={store}>
@@ -638,13 +643,13 @@ describe('GuestList Component', () => {
         </Provider>,
       );
 
-      expect(getByText('John Doe')).toBeTruthy();
+      expect(getByText("John Doe")).toBeTruthy();
     });
   });
 
   // ─── Full parity with original Redux-connect implementation ────────────────
-  describe('Comparison with Old Implementation', () => {
-    it('provides same functionality as Redux connect version', () => {
+  describe("Comparison with Old Implementation", () => {
+    it("provides same functionality as Redux connect version", () => {
       mockUseGuests.mockReturnValue({
         data: MOCK_GUESTS_DATA,
         isLoading: false,
@@ -653,15 +658,15 @@ describe('GuestList Component', () => {
         refetch: jest.fn(),
       });
       const { getByText } = renderScreen();
-      expect(getByText('Test House Guests')).toBeTruthy();
-      expect(getByText('John Doe')).toBeTruthy();
-      expect(getByText('Jane Smith')).toBeTruthy();
+      expect(getByText("Test House Guests")).toBeTruthy();
+      expect(getByText("John Doe")).toBeTruthy();
+      expect(getByText("Jane Smith")).toBeTruthy();
     });
   });
 
   // ─── New UI states ─────────────────────────────────────────────────────────
-  describe('UI States', () => {
-    it('shows a loading indicator while guests are fetching', () => {
+  describe("UI States", () => {
+    it("shows a loading indicator while guests are fetching", () => {
       mockUseGuests.mockReturnValue({
         data: undefined,
         isLoading: true,
@@ -672,28 +677,28 @@ describe('GuestList Component', () => {
 
       const { getByTestId } = renderScreen();
 
-      expect(getByTestId('guest-list-loading')).toBeTruthy();
+      expect(getByTestId("guest-list-loading")).toBeTruthy();
     });
 
-    it('shows an error message and retry button when fetch fails', () => {
+    it("shows an error message and retry button when fetch fails", () => {
       const mockRefetch = jest.fn();
       mockUseGuests.mockReturnValue({
         data: undefined,
         isLoading: false,
         isError: true,
-        error: new Error('Network error'),
+        error: new Error("Network error"),
         refetch: mockRefetch,
       });
 
       const { getByTestId, getByText } = renderScreen();
 
-      expect(getByTestId('guest-list-error')).toBeTruthy();
-      expect(getByText('Unable to load residents. Tap to retry.')).toBeTruthy();
-      fireEvent.press(getByText('Retry'));
+      expect(getByTestId("guest-list-error")).toBeTruthy();
+      expect(getByText("Unable to load residents. Tap to retry.")).toBeTruthy();
+      fireEvent.press(getByText("Retry"));
       expect(mockRefetch).toHaveBeenCalledTimes(1);
     });
 
-    it('shows empty state when house has no guests', () => {
+    it("shows empty state when house has no guests", () => {
       mockUseGuests.mockReturnValue({
         data: {},
         isLoading: false,
@@ -704,7 +709,7 @@ describe('GuestList Component', () => {
 
       const { getByText } = renderScreen();
 
-      expect(getByText('No residents in this house yet.')).toBeTruthy();
+      expect(getByText("No residents in this house yet.")).toBeTruthy();
     });
   });
 });
