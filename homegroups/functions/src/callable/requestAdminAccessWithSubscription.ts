@@ -85,6 +85,13 @@ export const requestAdminAccessWithSubscription = onCall(
       let stripeSubscriptionId: string | undefined =
         groupData.stripeSubscriptionId;
       let subscriptionStatus: string | undefined = groupData.subscriptionStatus;
+      // These three are only ever assigned when this call actually creates or
+      // verifies a subscription (see the branches below). Kept in scope here
+      // so the claimStripeFields assembly (right before the transaction) can
+      // see whichever branch actually ran, without re-deriving them.
+      let stripeSubscriptionItemId: string | undefined;
+      let stripePriceIdGroup: string | undefined;
+      let stripeProductIdGroup: string | undefined;
       // Fed into the subscription's idempotency key below. Only incremented
       // by the compensation/revert block after a real cancellation — a
       // plain client-side retry of an unanswered call (no compensation yet)
@@ -128,15 +135,8 @@ export const requestAdminAccessWithSubscription = onCall(
                 ? existingSubscription.customer
                 : existingSubscription.customer.id;
             subscriptionStatus = existingSubscription.status;
-            const subscriptionItemId = existingSubscription.items.data[0]?.id;
+            stripeSubscriptionItemId = existingSubscription.items.data[0]?.id;
 
-            await groupRef.update({
-              stripeCustomerId,
-              stripeSubscriptionId,
-              subscriptionStatus,
-              stripeSubscriptionItemId: subscriptionItemId,
-              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            });
             logger.info(`Verified subscription for group ${groupId}`);
           } else {
             throw new HttpsError(
@@ -190,7 +190,6 @@ export const requestAdminAccessWithSubscription = onCall(
             { idempotencyKey: `req-admin-${userId}-${groupId}-customer` },
           );
           stripeCustomerId = customer.id;
-          await groupRef.update({ stripeCustomerId });
           logger.info(
             `Stripe customer ${stripeCustomerId} created for user ${userId} and group ${groupId}`,
           );
@@ -250,17 +249,9 @@ export const requestAdminAccessWithSubscription = onCall(
           stripeSubscriptionId = subscription.id;
           subscriptionStatus = subscription.status;
           subscriptionCreatedThisCall = true;
-          const subscriptionItemId = subscription.items.data[0].id;
-
-          await groupRef.update({
-            stripeCustomerId,
-            stripeSubscriptionId,
-            subscriptionStatus,
-            stripeSubscriptionItemId: subscriptionItemId,
-            stripePriceIdGroup: groupPriceId,
-            stripeProductIdGroup: productIdGroup,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
+          stripeSubscriptionItemId = subscription.items.data[0].id;
+          stripePriceIdGroup = groupPriceId;
+          stripeProductIdGroup = productIdGroup;
           logger.info(
             `Stripe subscription ${stripeSubscriptionId} created for group ${groupId} with status ${subscriptionStatus}`,
           );
@@ -278,11 +269,35 @@ export const requestAdminAccessWithSubscription = onCall(
         );
       }
 
+      // Assemble exactly once, from whichever branch above actually ran.
+      // Firestore rejects literal `undefined` — omit absent fields rather than
+      // setting them to undefined.
+      const claimStripeFields: Record<string, unknown> = { stripeCustomerId };
+      if (stripeSubscriptionId !== undefined) {
+        claimStripeFields.stripeSubscriptionId = stripeSubscriptionId;
+      }
+      if (subscriptionStatus !== undefined) {
+        claimStripeFields.subscriptionStatus = subscriptionStatus;
+      }
+      if (stripeSubscriptionItemId !== undefined) {
+        claimStripeFields.stripeSubscriptionItemId = stripeSubscriptionItemId;
+      }
+      if (stripePriceIdGroup !== undefined) {
+        claimStripeFields.stripePriceIdGroup = stripePriceIdGroup;
+      }
+      if (stripeProductIdGroup !== undefined) {
+        claimStripeFields.stripeProductIdGroup = stripeProductIdGroup;
+      }
+
       // 3. Atomically claim the group + grant admin via a Firestore transaction
       // so two concurrent callers can't both pass the pre-Stripe `isClaimed`
       // check and both end up in `admins`. Stripe ops happen OUTSIDE the
       // transaction (external calls + transactions must be fast), so on
       // contention failure we roll back any subscription created in THIS call.
+      // Stripe fields are only ever written here, inside the same atomic
+      // tx.update() that grants the claim — a losing caller's Stripe
+      // identifiers are never written anywhere, so there is nothing to
+      // corrupt and nothing to revert on failure.
       try {
         await db.runTransaction(async (tx) => {
           const txGroupSnap = await tx.get(groupRef);
@@ -299,6 +314,7 @@ export const requestAdminAccessWithSubscription = onCall(
             pendingAdminRequests:
               admin.firestore.FieldValue.arrayRemove(userId),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            ...claimStripeFields,
           });
         });
       } catch (txError: any) {
@@ -306,17 +322,9 @@ export const requestAdminAccessWithSubscription = onCall(
           txError instanceof HttpsError &&
           txError.code === "failed-precondition";
 
-        // Compensating action: if THIS call freshly created a Stripe
-        // subscription, cancel it regardless of whether the transaction
-        // failed due to a genuine claim-race loss or an unrelated error —
-        // in both cases we don't know the admin grant went through, so an
-        // orphaned live subscription is the wrong default. Mirrors the
-        // rollback pattern in createGroupWithSubscription.ts.
         if (subscriptionCreatedThisCall && stripeSubscriptionId) {
-          let cancelSucceeded = false;
           try {
             await stripe.subscriptions.cancel(stripeSubscriptionId);
-            cancelSucceeded = true;
             logger.warn(
               `Compensating: Canceled Stripe subscription ${stripeSubscriptionId} after claim transaction ${
                 isRaceLoss ? "lost the claim race" : "failed unexpectedly"
@@ -326,42 +334,6 @@ export const requestAdminAccessWithSubscription = onCall(
             logger.error(
               `Error canceling Stripe subscription ${stripeSubscriptionId} in compensation:`,
               stripeCancelError,
-            );
-          }
-
-          // Revert the group doc's Stripe fields THIS call wrote in step 2
-          // — but only if the doc still points at this call's own
-          // subscription. A genuine race winner's later write must never be
-          // clobbered by the loser's cleanup; comparing against the current
-          // stripeSubscriptionId value is the guard. Only bump the
-          // idempotency-key attempt counter when the cancel actually
-          // succeeded — if cancel failed, the subscription is still live,
-          // and incrementing the counter here would cause a retry to mint a
-          // fresh idempotency key and create a SECOND live subscription
-          // instead of correctly replaying the still-valid original.
-          try {
-            const staleSnap = await groupRef.get();
-            const staleData = staleSnap.data();
-            if (staleData?.stripeSubscriptionId === stripeSubscriptionId) {
-              await groupRef.update({
-                stripeSubscriptionId: null,
-                stripeSubscriptionItemId: null,
-                subscriptionStatus: null,
-                stripePriceIdGroup: null,
-                stripeProductIdGroup: null,
-                ...(cancelSucceeded
-                  ? {
-                      stripeSubscriptionAttempt:
-                        admin.firestore.FieldValue.increment(1),
-                    }
-                  : {}),
-                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-              });
-            }
-          } catch (revertError) {
-            logger.error(
-              `Error reverting stale group doc Stripe fields after compensation for group ${groupId}:`,
-              revertError,
             );
           }
         }

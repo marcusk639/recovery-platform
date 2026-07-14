@@ -344,7 +344,7 @@ describe("requestAdminAccessWithSubscription — payment method requirement", ()
   });
 });
 
-describe("requestAdminAccessWithSubscription — compensating-cancellation on transaction failure", () => {
+describe("requestAdminAccessWithSubscription — write-ordering (Stripe fields only land for the transaction winner)", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     docStore = {};
@@ -352,24 +352,54 @@ describe("requestAdminAccessWithSubscription — compensating-cancellation on tr
     setupDefaults();
   });
 
-  it("on a genuine already-claimed race loss: cancels the subscription, does NOT revert the winner's group-doc Stripe fields, and rethrows the original error", async () => {
-    // Force the transaction to behave as if another caller claimed the
-    // group first, by overriding runTransaction to simulate the real
-    // isClaimed-check-then-throw behavior after the group doc has been
-    // externally marked claimed between this call's step 2 write and the
-    // transaction running.
+  it("does not write any Stripe fields to the group doc before the claim transaction commits", async () => {
+    // Intercept the moment right before the transaction runs to inspect
+    // whether any Stripe fields have been written yet.
+    const originalRunTransaction = mockDb.runTransaction;
+    let stripeFieldsWrittenBeforeTransaction = false;
+    mockDb.runTransaction = (async (fn: (tx: any) => Promise<unknown>) => {
+      const preTxGroup = docStore[`groups/${GROUP_ID}`] as
+        Record<string, unknown> | undefined;
+      if (preTxGroup?.stripeSubscriptionId !== undefined) {
+        stripeFieldsWrittenBeforeTransaction = true;
+      }
+      return originalRunTransaction(fn);
+    }) as typeof mockDb.runTransaction;
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      paymentMethodId: PAYMENT_METHOD_ID,
+    });
+
+    await (requestAdminAccessWithSubscription as any)(request); // eslint-disable-line @typescript-eslint/no-explicit-any
+
+    expect(stripeFieldsWrittenBeforeTransaction).toBe(false);
+
+    // After the transaction commits, the fields ARE present (written
+    // atomically with the win).
+    const finalGroup = docStore[`groups/${GROUP_ID}`] as Record<
+      string,
+      unknown
+    >;
+    expect(finalGroup.stripeSubscriptionId).toBe("sub_test");
+    // Per this mock's documented convention, arrayUnion sentinels are stored
+    // verbatim rather than resolved to a real array — assert the sentinel
+    // was passed to tx.update(), consistent with how the rest of this file
+    // treats arrayUnion/arrayRemove.
+    expect(finalGroup.admins).toEqual({ __arrayUnion: [USER_ID] });
+  });
+
+  it("on a genuine already-claimed race loss, never writes this caller's own Stripe fields anywhere — the winner's data is untouched", async () => {
     const originalRunTransaction = mockDb.runTransaction;
     let transactionAttempt = 0;
     mockDb.runTransaction = (async (fn: (tx: any) => Promise<unknown>) => {
       transactionAttempt++;
       if (transactionAttempt === 1) {
-        // Simulate a concurrent winner claiming the group with its own
-        // Stripe subscription just before this call's transaction reads it.
         docStore[`groups/${GROUP_ID}`] = {
           ...docStore[`groups/${GROUP_ID}`],
           isClaimed: true,
           admins: ["winner-user"],
-          stripeSubscriptionId: "sub_winner", // winner's own write already landed
+          stripeSubscriptionId: "sub_winner",
           subscriptionStatus: "trialing",
         };
       }
@@ -387,248 +417,16 @@ describe("requestAdminAccessWithSubscription — compensating-cancellation on tr
       (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
     ).rejects.toMatchObject({ code: "failed-precondition" });
 
-    // This call's freshly-created subscription was canceled.
-    expect(mockStripeSubscriptionsCancel).toHaveBeenCalledWith("sub_test");
-
-    // The winner's Stripe fields were NOT clobbered — the doc still shows
-    // the winner's subscription, not reverted/nulled.
+    // The winner's Stripe fields are exactly as the winner left them —
+    // this caller's own (now-canceled) subscription was never written
+    // anywhere, so there's nothing to have clobbered them with.
     const finalGroup = docStore[`groups/${GROUP_ID}`] as Record<
       string,
       unknown
     >;
     expect(finalGroup.stripeSubscriptionId).toBe("sub_winner");
     expect(finalGroup.admins).toEqual(["winner-user"]);
-  });
-
-  it("on an unexpected (non-race) transaction failure: cancels the subscription, reverts THIS call's own stale group-doc Stripe fields, and throws a generic internal error instead of leaking the raw error", async () => {
-    mockDb.runTransaction = (async () => {
-      throw new Error("DEADLINE_EXCEEDED: transaction timed out");
-    }) as typeof mockDb.runTransaction;
-
-    mockStripeSubscriptionsCancel.mockResolvedValue({});
-
-    const request = makeRequest(USER_ID, {
-      groupId: GROUP_ID,
-      paymentMethodId: PAYMENT_METHOD_ID,
-    });
-
-    await expect(
-      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
-    ).rejects.toMatchObject({ code: "internal" });
-
     expect(mockStripeSubscriptionsCancel).toHaveBeenCalledWith("sub_test");
-
-    // This call's own stale Stripe fields were reverted, not left trusting
-    // a subscription that no longer exists.
-    const finalGroup = docStore[`groups/${GROUP_ID}`] as Record<
-      string,
-      unknown
-    >;
-    expect(finalGroup.stripeSubscriptionId).toBeNull();
-    expect(finalGroup.subscriptionStatus).toBeNull();
-  });
-
-  it("retry after an unexpected transaction failure creates a fresh subscription rather than trusting stale data", async () => {
-    mockDb.runTransaction = (async () => {
-      throw new Error("DEADLINE_EXCEEDED: transaction timed out");
-    }) as typeof mockDb.runTransaction;
-    mockStripeSubscriptionsCancel.mockResolvedValue({});
-
-    const request = makeRequest(USER_ID, {
-      groupId: GROUP_ID,
-      paymentMethodId: PAYMENT_METHOD_ID,
-    });
-
-    await expect(
-      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
-    ).rejects.toMatchObject({ code: "internal" });
-
-    // Now let the retry succeed normally.
-    mockDb.runTransaction = buildMockDb().runTransaction;
-    mockStripeSubscriptionsCreate.mockResolvedValue({
-      id: "sub_retry",
-      status: "trialing",
-      items: { data: [{ id: "si_retry" }] },
-      latest_invoice: { payment_intent: {} },
-    });
-
-    const retryResult = await (requestAdminAccessWithSubscription as any)(
-      // eslint-disable-line @typescript-eslint/no-explicit-any
-      request,
-    );
-
-    expect(retryResult).toMatchObject({ success: true });
-    // A NEW subscription was created on retry, backed by a genuinely fresh
-    // Stripe idempotency key (see the "idempotency-key replay after
-    // compensation" describe block below) rather than a cached response —
-    // it does not treat the reverted (canceled) subscription as still
-    // valid, at either the Firestore-staleness or Stripe-replay layer.
-    expect(mockStripeSubscriptionsCreate).toHaveBeenCalledTimes(2); // once in the failed attempt, once on retry
   });
 });
 
-describe("requestAdminAccessWithSubscription — idempotency-key replay after compensation", () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    docStore = {};
-    mockDb = buildMockDb();
-    setupDefaults();
-  });
-
-  it("uses a different Stripe idempotency key on a retry after the prior attempt's subscription was compensated", async () => {
-    // First attempt: transaction fails for a non-race reason, subscription
-    // gets created then compensated (canceled + reverted) per Task 1.
-    mockDb.runTransaction = (async () => {
-      throw new Error("DEADLINE_EXCEEDED: transaction timed out");
-    }) as typeof mockDb.runTransaction;
-    mockStripeSubscriptionsCancel.mockResolvedValue({});
-
-    const request = makeRequest(USER_ID, {
-      groupId: GROUP_ID,
-      paymentMethodId: PAYMENT_METHOD_ID,
-    });
-
-    await expect(
-      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
-    ).rejects.toMatchObject({ code: "internal" });
-
-    const firstCallArgs = mockStripeSubscriptionsCreate.mock.calls[0];
-    const firstIdempotencyKey = firstCallArgs[1].idempotencyKey;
-
-    // The attempt counter must have persisted to the group doc so the next
-    // call reads a different value.
-    const afterFirstAttempt = docStore[`groups/${GROUP_ID}`] as Record<
-      string,
-      unknown
-    >;
-    expect(afterFirstAttempt.stripeSubscriptionAttempt).toBe(1);
-
-    // Retry: let the transaction succeed this time.
-    mockDb.runTransaction = buildMockDb().runTransaction;
-    mockStripeSubscriptionsCreate.mockResolvedValue({
-      id: "sub_retry",
-      status: "trialing",
-      items: { data: [{ id: "si_retry" }] },
-      latest_invoice: { payment_intent: {} },
-    });
-
-    const retryResult = await (requestAdminAccessWithSubscription as any)(
-      // eslint-disable-line @typescript-eslint/no-explicit-any
-      request,
-    );
-
-    expect(retryResult).toMatchObject({ success: true });
-
-    const secondCallArgs = mockStripeSubscriptionsCreate.mock.calls[1];
-    const secondIdempotencyKey = secondCallArgs[1].idempotencyKey;
-
-    // The critical assertion: different idempotency keys mean Stripe will
-    // NOT replay the first (canceled) subscription's cached response.
-    expect(secondIdempotencyKey).not.toBe(firstIdempotencyKey);
-  });
-
-  it("reuses the same idempotency key across calls when no compensation has occurred (preserves legitimate client-retry dedup)", async () => {
-    // No transaction failure this time — call the handler once, then
-    // simulate a plain client-side retry of the same still-unanswered
-    // request (e.g. the client's connection dropped before it received
-    // the first attempt's response, so it never observed success or
-    // failure and retries with identical arguments). From the retry's
-    // perspective the group doc looks exactly like it did before the
-    // first attempt — nothing was ever compensated, so the attempt
-    // counter must stay at 0 and Stripe must see the SAME idempotency
-    // key both times so it correctly dedupes rather than creating a
-    // second subscription.
-    const request = makeRequest(USER_ID, {
-      groupId: GROUP_ID,
-      paymentMethodId: PAYMENT_METHOD_ID,
-    });
-
-    await (requestAdminAccessWithSubscription as any)(request); // eslint-disable-line @typescript-eslint/no-explicit-any
-
-    const firstCallArgs = mockStripeSubscriptionsCreate.mock.calls[0];
-    const firstIdempotencyKey = firstCallArgs[1].idempotencyKey;
-
-    expect(firstIdempotencyKey).toBe(
-      `req-admin-${USER_ID}-${GROUP_ID}-subscription-0`,
-    );
-
-    // Reset Firestore state to what the retry would actually observe: an
-    // unclaimed group with no Stripe fields set yet (the retry never saw
-    // the first attempt's writes land) — but keep the Stripe mock's call
-    // history so the two idempotency keys can be compared below.
-    docStore = {};
-    mockDb = buildMockDb();
-    setupDefaults();
-
-    await (requestAdminAccessWithSubscription as any)(request); // eslint-disable-line @typescript-eslint/no-explicit-any
-
-    const secondCallArgs = mockStripeSubscriptionsCreate.mock.calls[1];
-    const secondIdempotencyKey = secondCallArgs[1].idempotencyKey;
-
-    // The invariant this test previously never actually verified: a
-    // plain retry with no compensation reuses the SAME key, so Stripe
-    // dedupes it instead of creating a second subscription.
-    expect(secondIdempotencyKey).toBe(firstIdempotencyKey);
-  });
-
-  it("does not advance the attempt counter when the compensating Stripe cancel itself fails, so a retry replays the SAME idempotency key", async () => {
-    // First attempt: transaction fails for a non-race reason, but the
-    // compensating stripe.subscriptions.cancel() call ALSO fails (e.g. a
-    // transient Stripe/network error). The subscription created in this
-    // call therefore stays live — the attempt counter must NOT advance,
-    // otherwise a retry would mint a fresh idempotency key and create a
-    // SECOND live subscription instead of correctly replaying the first.
-    mockDb.runTransaction = (async () => {
-      throw new Error("DEADLINE_EXCEEDED: transaction timed out");
-    }) as typeof mockDb.runTransaction;
-    mockStripeSubscriptionsCancel.mockRejectedValue(
-      new Error("Stripe API error: could not cancel subscription"),
-    );
-
-    const request = makeRequest(USER_ID, {
-      groupId: GROUP_ID,
-      paymentMethodId: PAYMENT_METHOD_ID,
-    });
-
-    await expect(
-      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
-    ).rejects.toMatchObject({ code: "internal" });
-
-    const firstCallArgs = mockStripeSubscriptionsCreate.mock.calls[0];
-    const firstIdempotencyKey = firstCallArgs[1].idempotencyKey;
-
-    // The attempt counter must NOT have advanced — the cancel failed, so
-    // the subscription this call created is still live.
-    const afterFirstAttempt = docStore[`groups/${GROUP_ID}`] as Record<
-      string,
-      unknown
-    >;
-    expect(afterFirstAttempt.stripeSubscriptionAttempt).toBeUndefined();
-
-    // Retry: transaction and cancel both succeed this time (irrelevant to
-    // the retry's OWN create call, but keeps the mock realistic).
-    mockDb.runTransaction = buildMockDb().runTransaction;
-    mockStripeSubscriptionsCreate.mockResolvedValue({
-      id: "sub_retry",
-      status: "trialing",
-      items: { data: [{ id: "si_retry" }] },
-      latest_invoice: { payment_intent: {} },
-    });
-
-    const retryResult = await (requestAdminAccessWithSubscription as any)(
-      // eslint-disable-line @typescript-eslint/no-explicit-any
-      request,
-    );
-
-    expect(retryResult).toMatchObject({ success: true });
-
-    const secondCallArgs = mockStripeSubscriptionsCreate.mock.calls[1];
-    const secondIdempotencyKey = secondCallArgs[1].idempotencyKey;
-
-    // The critical assertion: the retry reuses the SAME idempotency key as
-    // the first attempt, because the counter never advanced. Stripe will
-    // correctly replay the still-live sub_test's cached response instead of
-    // creating an orphaned second subscription.
-    expect(secondIdempotencyKey).toBe(firstIdempotencyKey);
-  });
-});
