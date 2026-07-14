@@ -8,6 +8,7 @@ import {
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { db } from "../utils/firebase";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface CheckInToMeetingData {
   groupId: string;
@@ -31,9 +32,7 @@ export const checkInToMeeting = onCall(
   async (
     request: CallableRequest<CheckInToMeetingData>,
   ): Promise<CheckInToMeetingResult> => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Must be authenticated.");
-    }
+    const userId = requireAuth(request);
 
     const { groupId, instanceId } = request.data ?? {};
     if (
@@ -47,8 +46,6 @@ export const checkInToMeeting = onCall(
         "groupId and instanceId are required and must be strings.",
       );
     }
-
-    const userId = request.auth.uid;
 
     // Check if user is a member of the group
     const memberDocId = `${groupId}_${userId}`;

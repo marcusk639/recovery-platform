@@ -5,6 +5,7 @@ import {
 } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { db, messaging } from "../utils/firebase";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface NotifyAdminRequestResultData {
   groupId: string;
@@ -26,11 +27,7 @@ interface UserData {
 export const notifyAdminRequestResult = onCall(
   async (request: CallableRequest<NotifyAdminRequestResultData>) => {
     const { groupId, requesterId, approved } = request.data;
-    const callerId = request.auth?.uid;
-
-    if (!callerId) {
-      throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
+    const callerId = requireAuth(request);
 
     if (!groupId || !requesterId) {
       throw new HttpsError(

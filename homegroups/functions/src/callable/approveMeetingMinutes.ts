@@ -7,6 +7,7 @@ import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { db, messaging } from "../utils/firebase";
 import { assertGroupActive } from "../utils/subscriptionGuard";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface ApproveMinutesData {
   businessMeetingId: string;
@@ -29,12 +30,8 @@ export const approveMeetingMinutes = onCall(
   async (
     request: CallableRequest<ApproveMinutesData>,
   ): Promise<ApproveMinutesResult> => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Must be authenticated.");
-    }
-
     const { data } = request;
-    const callerId = request.auth.uid;
+    const callerId = requireAuth(request);
 
     if (!data.businessMeetingId) {
       throw new HttpsError(

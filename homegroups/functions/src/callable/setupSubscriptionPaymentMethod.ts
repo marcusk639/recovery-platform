@@ -6,6 +6,7 @@ import {
 import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
 import { stripe } from "../utils/stripe";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface SetupPaymentMethodData {
   groupId: string;
@@ -14,11 +15,8 @@ interface SetupPaymentMethodData {
 export const setupSubscriptionPaymentMethod = onCall(
   async (request: CallableRequest<SetupPaymentMethodData>) => {
     const { groupId } = request.data;
-    const userId = request.auth?.uid;
+    const userId = requireAuth(request);
 
-    if (!userId) {
-      throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
     if (!groupId) {
       throw new HttpsError("invalid-argument", "Group ID is required.");
     }

@@ -5,6 +5,7 @@ import {
 } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { auth } from "../utils/firebase";
+import { requireAuth } from "../utils/callableWrapper";
 
 /**
  * Creates a custom auth token for the authenticated user.
@@ -13,14 +14,7 @@ import { auth } from "../utils/firebase";
  */
 export const createWebAuthToken = onCall(
   async (request: CallableRequest<void>) => {
-    const userId = request.auth?.uid;
-
-    if (!userId) {
-      throw new HttpsError(
-        "unauthenticated",
-        "User must be logged in to create an auth token.",
-      );
-    }
+    const userId = requireAuth(request);
 
     try {
       // Create a custom token that expires in 1 hour
@@ -44,7 +38,10 @@ export const createWebAuthToken = onCall(
         throw error;
       }
       logger.error(`Error creating web auth token for user ${userId}:`, error);
-      throw new HttpsError("internal", "Failed to create authentication token.");
+      throw new HttpsError(
+        "internal",
+        "Failed to create authentication token.",
+      );
     }
   },
 );

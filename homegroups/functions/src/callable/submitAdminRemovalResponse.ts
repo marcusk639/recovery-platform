@@ -5,6 +5,7 @@ import {
 } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { db } from "../utils/firebase";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface ResponseData {
   requestId: string;
@@ -15,10 +16,9 @@ export const submitAdminRemovalResponse = onCall(
   async (
     request: CallableRequest<ResponseData>,
   ): Promise<{ success: boolean }> => {
-    const { data, auth: context } = request;
+    const { data } = request;
+    const callerId = requireAuth(request);
 
-    if (!context)
-      throw new HttpsError("unauthenticated", "Must be authenticated.");
     if (!data.requestId || !data.response?.trim()) {
       throw new HttpsError(
         "invalid-argument",
@@ -34,7 +34,7 @@ export const submitAdminRemovalResponse = onCall(
       throw new HttpsError("not-found", "Request not found.");
 
     const removalData = requestDoc.data()!;
-    if (context.uid !== removalData.targetAdminId) {
+    if (callerId !== removalData.targetAdminId) {
       throw new HttpsError(
         "permission-denied",
         "Only the targeted admin can submit a response.",

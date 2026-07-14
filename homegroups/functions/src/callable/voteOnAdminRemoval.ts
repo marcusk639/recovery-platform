@@ -6,6 +6,7 @@ import {
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { db } from "../utils/firebase";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface VoteData {
   requestId: string;
@@ -16,11 +17,8 @@ export const voteOnAdminRemoval = onCall(
   async (
     request: CallableRequest<VoteData>,
   ): Promise<{ success: boolean; message: string }> => {
-    const { data, auth: context } = request;
-
-    if (!context)
-      throw new HttpsError("unauthenticated", "Must be authenticated.");
-    const callerId = context.uid;
+    const { data } = request;
+    const callerId = requireAuth(request);
 
     if (!data.requestId || !["yes", "no", "abstain"].includes(data.vote)) {
       throw new HttpsError(

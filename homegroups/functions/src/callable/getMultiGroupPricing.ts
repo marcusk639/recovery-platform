@@ -6,6 +6,7 @@ import {
 import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
 import { productIdGroup, getDefaultPriceForProduct } from "../utils/stripe";
+import { requireAuth } from "../utils/callableWrapper";
 
 // Multi-group discount price ID.
 // Set the environment variable STRIPE_PRICE_ID_GROUP_ADDITIONAL to a Stripe
@@ -104,11 +105,7 @@ export const getMultiGroupPricing = onCall(
   async (
     request: CallableRequest<GetMultiGroupPricingData>,
   ): Promise<GetMultiGroupPricingResult> => {
-    const userId = request.auth?.uid;
-
-    if (!userId) {
-      throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
+    const userId = requireAuth(request);
 
     if (!productIdGroup) {
       throw new HttpsError(

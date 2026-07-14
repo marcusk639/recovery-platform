@@ -6,6 +6,7 @@ import {
 import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
 import * as admin from "firebase-admin";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface JoinGroupData {
   code: string;
@@ -20,11 +21,8 @@ export const joinGroupByInviteCode = onCall(
   },
   async (request: CallableRequest<JoinGroupData>) => {
     const { code } = request.data;
-    const userId = request.auth?.uid;
+    const userId = requireAuth(request);
 
-    if (!userId) {
-      throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
     if (!code || typeof code !== "string" || code.length !== 6) {
       throw new HttpsError("invalid-argument", "Invalid invite code format.");
     }
@@ -156,7 +154,10 @@ export const joinGroupByInviteCode = onCall(
         throw error;
       }
       logger.error("Error in joinGroupByInviteCode", { error });
-      throw new HttpsError("internal", "Failed to join group using invite code.");
+      throw new HttpsError(
+        "internal",
+        "Failed to join group using invite code.",
+      );
     }
   },
 );

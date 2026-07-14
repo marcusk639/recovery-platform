@@ -7,6 +7,7 @@ import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
 import { stripe } from "../utils/stripe";
 import { APP_BASE_URL } from "../utils/appConfig";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface AccountLinkData {
   groupId: string;
@@ -16,14 +17,11 @@ export const createStripeAccountLink = onCall(
   { region: "us-central1", memory: "256MiB", timeoutSeconds: 60 },
   async (request: CallableRequest<AccountLinkData>) => {
     const { groupId } = request.data;
-    const userId = request.auth?.uid;
 
     if (!stripe) {
       throw new HttpsError("internal", "Stripe not configured.");
     }
-    if (!userId) {
-      throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
+    const userId = requireAuth(request);
     if (!groupId) {
       throw new HttpsError("invalid-argument", "Missing required parameters.");
     }
@@ -89,7 +87,10 @@ export const createStripeAccountLink = onCall(
         `Error creating Stripe account link for group ${groupId}:`,
         error,
       );
-      throw new HttpsError("internal", "Failed to create Stripe onboarding link.");
+      throw new HttpsError(
+        "internal",
+        "Failed to create Stripe onboarding link.",
+      );
     }
   },
 );

@@ -8,6 +8,7 @@ import * as admin from "firebase-admin";
 import { Timestamp } from "firebase-admin/firestore";
 import { db, messaging } from "../utils/firebase";
 import { assertGroupActive } from "../utils/subscriptionGuard";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface RecordMilestoneData {
   groupId: string;
@@ -66,11 +67,7 @@ export function computeNextMilestoneDate(
 export async function recordMilestoneHandler(
   request: CallableRequest<RecordMilestoneData>,
 ): Promise<RecordMilestoneResult> {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "Must be authenticated.");
-  }
-
-  const callerId = request.auth.uid;
+  const callerId = requireAuth(request);
   const { data } = request;
 
   // --- Input validation ---

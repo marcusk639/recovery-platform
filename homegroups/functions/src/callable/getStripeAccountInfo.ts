@@ -5,14 +5,13 @@ import {
 } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { stripe } from "../utils/stripe";
+import { requireAuth } from "../utils/callableWrapper";
 
 export const getStripeAccountInfo = onCall(
   async (request: CallableRequest<{}>) => {
-    if (!request.auth?.uid) {
-      throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
+    requireAuth(request);
 
-    if (request.auth.token?.superAdmin !== true) {
+    if (request.auth?.token?.superAdmin !== true) {
       throw new HttpsError("permission-denied", "Requires super admin access.");
     }
 

@@ -13,6 +13,8 @@ import {
   getDefaultPriceForProduct,
 } from "../utils/stripe";
 import * as admin from "firebase-admin";
+import { z } from "zod";
+import { requireAuth, validateData } from "../utils/callableWrapper";
 
 interface CreateIntergroupData {
   name: string;
@@ -31,12 +33,28 @@ interface CreateIntergroupResult {
   checkoutUrl: string;
 }
 
-const ALLOWED_TYPES = [
-  "intergroup",
-  "district",
-  "area",
-  "treatment_center",
-] as const;
+// Server-side PII guard: reject names that look like email addresses. The
+// client collects a facilityName input, but defense-in-depth prevents
+// regression if a caller bypasses the UI.
+const createIntergroupSchema = z.object({
+  name: z
+    .string()
+    .min(1)
+    .refine((n) => !n.includes("@"), {
+      message: "name must not contain an email address",
+    }),
+  type: z.enum(["intergroup", "district", "area", "treatment_center"], {
+    errorMap: () => ({
+      message:
+        "Invalid type. Must be one of: intergroup, district, area, treatment_center",
+    }),
+  }),
+  tier: z.enum(["tier_a", "tier_b"]),
+  description: z.string().optional(),
+  contactEmail: z.string().email().optional(),
+  state: z.string().optional(),
+  country: z.string().optional(),
+});
 
 const UNLIMITED_MAX_GROUPS = 9999;
 
@@ -50,42 +68,15 @@ export const createIntergroup = onCall(
   async (
     request: CallableRequest<CreateIntergroupData>,
   ): Promise<CreateIntergroupResult> => {
-    if (!request.auth)
-      throw new HttpsError("unauthenticated", "Must be signed in");
+    const uid = requireAuth(request);
 
-    const {
-      name,
-      type,
-      tier,
-      description,
-      contactEmail,
-      state,
-      country,
-      successUrl,
-      cancelUrl,
-    } = request.data;
-
-    // Validate required fields
-    if (!name || !tier)
-      throw new HttpsError("invalid-argument", "name and tier are required");
-    // Server-side PII guard: reject names that look like email addresses.
-    // The client collects a facilityName input, but defense-in-depth prevents
-    // regression if a caller bypasses the UI.
-    if (name.includes("@"))
-      throw new HttpsError(
-        "invalid-argument",
-        "name must not contain an email address",
-      );
-    if (
-      !type ||
-      !ALLOWED_TYPES.includes(type as (typeof ALLOWED_TYPES)[number])
-    )
-      throw new HttpsError(
-        "invalid-argument",
-        "Invalid type. Must be one of: intergroup, district, area, treatment_center",
-      );
-    if (tier !== "tier_a" && tier !== "tier_b")
-      throw new HttpsError("invalid-argument", `Unknown tier: ${tier}`);
+    // successUrl/cancelUrl are validated separately below via a server-side
+    // origin allow-list — that's business-logic validation Zod can't express,
+    // so they're intentionally read raw here rather than through the schema.
+    const { successUrl, cancelUrl } = request.data;
+    const validated = validateData(createIntergroupSchema, request.data);
+    const { name, type, tier, description, contactEmail, state, country } =
+      validated;
 
     // Update this list when switching domains — see docs/LAUNCH_BLOCKERS.md
     const ALLOWED_REDIRECT_ORIGINS = [
@@ -108,7 +99,6 @@ export const createIntergroup = onCall(
     if (!isAllowedUrl(successUrl) || !isAllowedUrl(cancelUrl))
       throw new HttpsError("invalid-argument", "Invalid redirect URL");
 
-    const uid = request.auth.uid;
     const productId =
       tier === "tier_a" ? productIdIntergroupA : productIdIntergroupB;
     if (!productId)
@@ -131,8 +121,7 @@ export const createIntergroup = onCall(
       const pendingDoc = pendingQuery.docs[0];
       const pendingData = pendingDoc.data();
       const pendingSessionId = pendingData?.pendingCheckoutSessionId as
-        | string
-        | undefined;
+        string | undefined;
 
       if (pendingSessionId) {
         try {

@@ -7,6 +7,7 @@ import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { db, messaging } from "../utils/firebase";
 import { assertGroupActive } from "../utils/subscriptionGuard";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface CloseVoteData {
   voteId: string;
@@ -25,12 +26,8 @@ interface CloseVoteResult {
  */
 export const closeConscienceVote = onCall(
   async (request: CallableRequest<CloseVoteData>): Promise<CloseVoteResult> => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Must be authenticated.");
-    }
-
     const { data } = request;
-    const callerId = request.auth.uid;
+    const callerId = requireAuth(request);
 
     // --- Input validation ---
     if (!data.voteId) {

@@ -12,6 +12,7 @@ import {
   getDefaultPriceForProduct,
   TRIAL_PERIOD_DAYS,
 } from "../utils/stripe";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface RequestAdminAccessWithSubscriptionData {
   groupId: string;
@@ -29,11 +30,8 @@ export const requestAdminAccessWithSubscription = onCall(
   async (request: CallableRequest<RequestAdminAccessWithSubscriptionData>) => {
     const { groupId, message, paymentMethodId, subscriptionId, email, name } =
       request.data;
-    const userId = request.auth?.uid;
+    const userId = requireAuth(request);
 
-    if (!userId) {
-      throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
     if (!groupId) {
       throw new HttpsError("invalid-argument", "Group ID is required.");
     }

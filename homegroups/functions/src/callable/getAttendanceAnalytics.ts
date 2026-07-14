@@ -6,6 +6,7 @@ import {
 import * as logger from "firebase-functions/logger";
 import { db } from "../utils/firebase";
 import { assertGroupActive } from "../utils/subscriptionGuard";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface GetAttendanceAnalyticsData {
   groupId: string;
@@ -62,10 +63,7 @@ function getMonthLabel(date: Date): string {
 
 export const getAttendanceAnalytics = onCall(
   async (request: CallableRequest<GetAttendanceAnalyticsData>) => {
-    const userId = request.auth?.uid;
-    if (!userId) {
-      throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
+    const userId = requireAuth(request);
 
     const { groupId, meetingId, months } = request.data;
     if (!groupId) {
@@ -249,7 +247,10 @@ export const getAttendanceAnalytics = onCall(
         `Error computing attendance analytics for group ${groupId}:`,
         error,
       );
-      throw new HttpsError("internal", "Failed to compute attendance analytics.");
+      throw new HttpsError(
+        "internal",
+        "Failed to compute attendance analytics.",
+      );
     }
   },
 );

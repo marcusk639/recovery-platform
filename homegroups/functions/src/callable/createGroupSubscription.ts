@@ -14,6 +14,7 @@ import {
 } from "../utils/stripe";
 import { getMultiGroupPriceId } from "./getMultiGroupPricing";
 import * as admin from "firebase-admin";
+import { requireAuth } from "../utils/callableWrapper";
 
 const MAX_TRIALS_PER_YEAR = 2;
 const TWELVE_MONTHS_MS = 365 * 24 * 60 * 60 * 1000;
@@ -63,11 +64,8 @@ export const createGroupSubscription = onCall(
   },
   async (request: CallableRequest<CreateSubscriptionData>) => {
     const { groupId, isAdditionalGroup = false } = request.data;
-    const userId = request.auth?.uid;
+    const userId = requireAuth(request);
 
-    if (!userId) {
-      throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
     if (!groupId) {
       throw new HttpsError("invalid-argument", "Group ID is required.");
     }

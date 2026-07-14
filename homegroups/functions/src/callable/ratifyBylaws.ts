@@ -7,6 +7,7 @@ import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { db, messaging } from "../utils/firebase";
 import { assertGroupActive } from "../utils/subscriptionGuard";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface RatifyBylawsData {
   groupId: string;
@@ -31,12 +32,8 @@ export const ratifyBylaws = onCall(
   async (
     request: CallableRequest<RatifyBylawsData>,
   ): Promise<RatifyBylawsResult> => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Must be authenticated.");
-    }
-
     const { data } = request;
-    const callerId = request.auth.uid;
+    const callerId = requireAuth(request);
 
     if (!data.groupId) {
       throw new HttpsError("invalid-argument", "groupId is required.");

@@ -5,6 +5,7 @@ import {
 } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { stripe } from "../utils/stripe";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface GetStripeAccountMetricsData {
   accountId?: string;
@@ -20,12 +21,8 @@ export const getStripeAccountMetrics = onCall(
     region: "us-central1",
   },
   async (request: CallableRequest<GetStripeAccountMetricsData>) => {
-    const userId = request.auth?.uid;
+    requireAuth(request);
     const { accountId, startDate, endDate } = request.data;
-
-    if (!userId) {
-      throw new HttpsError("unauthenticated", "User must be logged in.");
-    }
 
     if (request.auth?.token?.superAdmin !== true) {
       throw new HttpsError("permission-denied", "Requires super admin access.");

@@ -8,6 +8,7 @@ import { db } from "../utils/firebase";
 import * as geofire from "geofire-common";
 import { Query } from "firebase-admin/firestore"; // Firestore types if needed
 import { MeetingType } from "../entities/Meeting"; // Assuming MeetingType is defined here
+import { requireAuth } from "../utils/callableWrapper";
 
 // Define the expected input data structure
 interface SearchGroupsData {
@@ -63,12 +64,8 @@ function calculateDistanceMeters(
  */
 export const searchGroupsByLocation = onCall(
   async (request: CallableRequest<SearchGroupsData>) => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Must be authenticated.");
-    }
-
     const { lat, lng, radius, type } = request.data;
-    const userId = request.auth.uid; // Authenticated user ID
+    requireAuth(request);
 
     // Validate required parameters
     if (lat === undefined || lng === undefined || radius === undefined) {

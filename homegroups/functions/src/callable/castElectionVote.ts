@@ -6,6 +6,7 @@ import {
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { db } from "../utils/firebase";
+import { requireAuth } from "../utils/callableWrapper";
 
 interface CastElectionVoteData {
   electionId: string;
@@ -29,12 +30,8 @@ export const castElectionVote = onCall(
   async (
     request: CallableRequest<CastElectionVoteData>,
   ): Promise<CastElectionVoteResult> => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Must be authenticated.");
-    }
-
     const { data } = request;
-    const callerId = request.auth.uid;
+    const callerId = requireAuth(request);
 
     if (!data.electionId) {
       throw new HttpsError("invalid-argument", "electionId is required.");
