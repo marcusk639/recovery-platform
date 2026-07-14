@@ -1,17 +1,17 @@
-import FirebaseFirestore from '@react-native-firebase/firestore';
-import { firestore } from '../../firebase-setup';
-import { Guest, GuestStatus } from '../entities/Guest';
-import { Guests } from '../types/index';
-import { logException } from '../util/logging';
-import * as crud from './crud';
-import { find, keyBy } from 'lodash';
-import { House } from '../entities/House';
-import { houseCollection, getHouse } from './house';
-import { findGuestBed } from '../util/house';
-import cloneDeep from 'lodash/cloneDeep';
+import FirebaseFirestore from "@react-native-firebase/firestore";
+import { firestore } from "../../firebase-setup";
+import { Guest, GuestStatus } from "../entities/Guest";
+import { Guests } from "../types/index";
+import { logException } from "../util/logging";
+import * as crud from "./crud";
+import { find, keyBy } from "lodash";
+import { House } from "../entities/House";
+import { houseCollection, getHouse, removeGuestPrivileges } from "./house";
+import { findGuestBed } from "../util/house";
+import cloneDeep from "lodash/cloneDeep";
 
-export const guestCollection = firestore.collection('guests');
-export const archiveCollection = firestore.collection('guest-archive');
+export const guestCollection = firestore.collection("guests");
+export const archiveCollection = firestore.collection("guest-archive");
 
 /**
  * Custom error for optimistic locking conflicts
@@ -19,10 +19,10 @@ export const archiveCollection = firestore.collection('guest-archive');
  */
 export class OptimisticLockError extends Error {
   constructor(
-    message: string = 'Guest was modified by another update. Please retry.',
+    message: string = "Guest was modified by another update. Please retry.",
   ) {
     super(message);
-    this.name = 'OptimisticLockError';
+    this.name = "OptimisticLockError";
   }
 }
 
@@ -47,10 +47,10 @@ export async function getGuests(
   const result = await crud.getByAttribute<Guest>(
     guestCollection,
     attribute,
-    '==',
+    "==",
     value,
   );
-  return keyBy(result, 'id') as Guests;
+  return keyBy(result, "id") as Guests;
 }
 
 export async function getGuestsBlocking(
@@ -60,10 +60,10 @@ export async function getGuestsBlocking(
   const result = await crud.getByAttribute<Guest>(
     guestCollection,
     attribute,
-    '==',
+    "==",
     value,
   );
-  return keyBy(result, 'id') as Guests;
+  return keyBy(result, "id") as Guests;
 }
 
 export async function updateGuest(
@@ -72,14 +72,14 @@ export async function updateGuest(
   retryCount: number = 3,
 ): Promise<Partial<Guest>> {
   if (!updatedGuest.id) {
-    throw new Error('Guest must have an id for update');
+    throw new Error("Guest must have an id for update");
   }
 
   const guestRef = guestCollection.doc(updatedGuest.id);
 
   for (let attempt = 0; attempt < retryCount; attempt++) {
     try {
-      const result = await firestore.runTransaction(async transaction => {
+      const result = await firestore.runTransaction(async (transaction) => {
         // Read the current state from database
         const currentDoc = await transaction.get(guestRef);
 
@@ -107,13 +107,13 @@ export async function updateGuest(
     } catch (error: any) {
       // If it's a Firestore contention error, retry
       if (
-        error.code === 'aborted' ||
-        error.code === 'failed-precondition' ||
-        error.message?.includes('contention')
+        error.code === "aborted" ||
+        error.code === "failed-precondition" ||
+        error.message?.includes("contention")
       ) {
         if (attempt < retryCount - 1) {
           // Exponential backoff
-          await new Promise(resolve =>
+          await new Promise((resolve) =>
             setTimeout(resolve, Math.pow(2, attempt) * 100),
           );
           continue;
@@ -156,16 +156,16 @@ function mergeGuestStats(
   // progress). Taking the max ensures a concurrent write that already recorded
   // a higher value is never overwritten with a stale lower value.
   const numericMaxFields: Array<keyof Guest> = [
-    'rentOwed',
-    'choreFees',
-    'step',
+    "rentOwed",
+    "choreFees",
+    "step",
   ];
   for (const field of numericMaxFields) {
     const current = currentGuest[field] as number | undefined;
     const update = (updateGuest as any)[field] as number | undefined;
-    if (typeof current === 'number' && typeof update === 'number') {
+    if (typeof current === "number" && typeof update === "number") {
       (merged as any)[field] = Math.max(current, update);
-    } else if (typeof current === 'number' && update === undefined) {
+    } else if (typeof current === "number" && update === undefined) {
       // Field not in the update — keep the DB value (already set above via spread).
       (merged as any)[field] = current;
     }
@@ -176,15 +176,15 @@ function mergeGuestStats(
   // Once a flag like isAdmin or infoEntered is set to true it should not be
   // cleared by a concurrent write that happened to still have the old false.
   const booleanOrFields: Array<keyof Guest> = [
-    'isAdmin',
-    'infoEntered',
-    'hasJob',
+    "isAdmin",
+    "infoEntered",
+    "hasJob",
   ];
   for (const field of booleanOrFields) {
     const current = currentGuest[field] as boolean | undefined;
     const update = (updateGuest as any)[field] as boolean | undefined;
-    const currentBool = typeof current === 'boolean' ? current : false;
-    const updateBool = typeof update === 'boolean' ? update : false;
+    const currentBool = typeof current === "boolean" ? current : false;
+    const updateBool = typeof update === "boolean" ? update : false;
     (merged as any)[field] = currentBool || updateBool;
   }
 
@@ -238,7 +238,7 @@ export async function deleteGuest(guest: Guest, house: House) {
       },
     };
   }
-  const guestPhase = find(house.phases, phase => phase.name === guest.id);
+  const guestPhase = find(house.phases, (phase) => phase.name === guest.id);
   const phases = cloneDeep(house.phases);
   if (guestPhase) {
     delete phases[guestPhase.name];
@@ -265,7 +265,7 @@ export function subscribeToGuest(
   errorHandler?: (error: Error) => void,
 ) {
   return guestCollection.doc(guest.id).onSnapshot(
-    docSnapshot => {
+    (docSnapshot) => {
       const updatedGuest = docSnapshot.data() as Guest;
       if (updatedGuest) {
         guestChangeHandler(updatedGuest);
@@ -276,7 +276,7 @@ export function subscribeToGuest(
         errorHandler(error);
       }
       // Always log even if caller doesn't provide a handler
-      console.warn('[subscribeToGuest] Subscription error:', error.message);
+      console.warn("[subscribeToGuest] Subscription error:", error.message);
     },
   );
 }
@@ -301,13 +301,29 @@ export async function dischargeGuest(
 ): Promise<void> {
   try {
     await guestCollection.doc(guestId).update({
-      status: 'discharged' as GuestStatus,
+      status: "discharged" as GuestStatus,
       moveOutDate,
       ...(notes ? { dischargeNotes: notes } : {}),
       updatedAt: FirebaseFirestore.FieldValue.serverTimestamp(),
     });
   } catch (error) {
     logException(error);
-    throw new Error('Failed to discharge resident. Please try again.');
+    throw new Error("Failed to discharge resident. Please try again.");
+  }
+
+  // The guest doc no longer reflects an active resident, but Firestore
+  // security rules gate house access on Firebase custom claims, not a live
+  // guest-doc status check. Unlike deleteGuest (which triggers claim
+  // revocation via the guest doc's onWrite delete trigger), discharge keeps
+  // the record — so claims must be revoked explicitly here or a discharged
+  // resident retains full house-level read/write access indefinitely.
+  try {
+    const guest = await getGuest(guestId);
+    await removeGuestPrivileges([guest]);
+  } catch (error) {
+    logException(error);
+    throw new Error(
+      "Resident was discharged, but house access could not be revoked. Please contact support.",
+    );
   }
 }

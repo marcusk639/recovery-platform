@@ -28,7 +28,7 @@ import { getCurrentTime } from "../util/display";
 export const houseCollection = firestore.collection("houses");
 
 export function shapeHouses(
-  docs: FirebaseFirestoreTypes.QueryDocumentSnapshot[]
+  docs: FirebaseFirestoreTypes.QueryDocumentSnapshot[],
 ): { [id: string]: House } {
   const houses: { [id: string]: House } = {};
   docs.forEach((house) => (houses[house.id] = house.data() as House));
@@ -55,13 +55,13 @@ export async function createHouse(house: House) {
 export async function getHouses(
   attribute: string,
   operator: FirebaseFirestore.WhereFilterOp,
-  value: string
+  value: string,
 ): Promise<Houses> {
   const result = await crud.getByAttribute<House>(
     houseCollection,
     attribute,
     operator,
-    value
+    value,
   );
   const houses: { [id: string]: House } = {};
   result.forEach((house) => (houses[house.id] = house));
@@ -78,7 +78,7 @@ export async function updateHouseAdmins(houseId: string, adminId: string) {
 export async function getNearbyHouses(
   lat: number,
   lng: number,
-  distanceInMiles: number
+  distanceInMiles: number,
 ) {
   const range = getGeohashRange(lat, lng, distanceInMiles);
   const result = await houseCollection
@@ -96,7 +96,7 @@ export async function getNearbyHouses(
  */
 export async function updateHouse(
   houseId: string,
-  values: Partial<House>
+  values: Partial<House>,
 ): Promise<void> {
   if (!values.id) {
     values.id = houseId;
@@ -124,13 +124,13 @@ export async function updateHouse(
 
 export async function updateHouseAwaitingVerification(
   houseCode: string,
-  awaitingVerification: AwaitingVerification
+  awaitingVerification: AwaitingVerification,
 ) {
   const houses = await crud.getByAttribute<House>(
     houseCollection,
     "code",
     "==",
-    houseCode
+    houseCode,
   );
   if (!houses.length) {
     throw new Error(HOUSE_CODE_INVALID);
@@ -147,7 +147,7 @@ export async function searchForHouses(searchData: HouseSearch) {
   const houses = await getNearbyHouses(
     searchData.filters!.location.lat!,
     searchData.filters!.location.lng!,
-    25
+    25,
   );
   // filter houses by gender
   if (searchData?.filters?.gender) {
@@ -194,16 +194,12 @@ export function createHouseId(): string {
 }
 
 export type HouseSettings =
-  | "chores"
-  | "phases"
-  | "managers"
-  | "guests"
-  | "house";
+  "chores" | "phases" | "managers" | "guests" | "house";
 
 const getUpdates = (
   membersBefore: { [key: string]: Admin | Guest },
   membersAfter: { [key: string]: Admin | Guest },
-  guest: boolean = false
+  guest: boolean = false,
 ): (Admin | Guest)[][] => {
   const updatedMembers: (Admin | Guest)[] = [];
   const deletedMembers: (Admin | Guest)[] = [];
@@ -244,7 +240,7 @@ const getUpdates = (
  */
 const sendNewInvites = async (
   house: Partial<House>,
-  houseBefore: House
+  houseBefore: House,
 ): Promise<CreateInvitationResult[]> => {
   const calls: Promise<CreateInvitationResult>[] = [];
   if (house.pendingAdminInvites && house.pendingAdminInvites.length) {
@@ -266,7 +262,7 @@ const sendNewInvites = async (
         const firstPhase = getFirstPhase(house.phases!);
         if (firstPhase) {
           calls.push(
-            createGuestInvite(updatedGuestEmail, house.id!, firstPhase.name)
+            createGuestInvite(updatedGuestEmail, house.id!, firstPhase.name),
           );
         }
       }
@@ -278,7 +274,7 @@ const sendNewInvites = async (
 export const promoteGuestsToAdmin = async (guests: Guest[]) => {
   if (guests && guests.length) {
     const response = await functions.httpsCallable("promoteGuestsToAdmin")(
-      guests
+      guests,
     );
     return response.data;
   }
@@ -287,7 +283,23 @@ export const promoteGuestsToAdmin = async (guests: Guest[]) => {
 export const removeAdminPrivilegesForGuests = async (adminGuests: Guest[]) => {
   if (adminGuests && adminGuests.length) {
     const response = await functions.httpsCallable("removePrivilegesForGuests")(
-      { role: "admin", guests: adminGuests }
+      { role: "admin", guests: adminGuests },
+    );
+    return response.data;
+  }
+};
+
+/**
+ * Revokes house-access custom claims for guests who no longer have a live
+ * membership in the house (e.g. discharged residents). Without this call the
+ * guest doc can be updated to a terminal status while the underlying Firebase
+ * custom claims — which Firestore security rules gate house access on — keep
+ * granting full house-level read/write access indefinitely.
+ */
+export const removeGuestPrivileges = async (guests: Guest[]) => {
+  if (guests && guests.length) {
+    const response = await functions.httpsCallable("removePrivilegesForGuests")(
+      { role: "guest", guests },
     );
     return response.data;
   }
@@ -296,7 +308,7 @@ export const removeAdminPrivilegesForGuests = async (adminGuests: Guest[]) => {
 export const removeAdminPrivileges = async (
   admin: Admin,
   adminHouseIds: string[],
-  superAdminHouseIds: string[]
+  superAdminHouseIds: string[],
 ) => {
   const response = await functions.httpsCallable("deleteAdminAuthorization")({
     admin,
@@ -313,7 +325,7 @@ export async function updateHouseBatch(
   guestsAfter: Guests,
   adminsBefore?: Admins,
   adminsAfter?: Admins,
-  type?: HouseSettings
+  type?: HouseSettings,
 ) {
   const batch = firestore.batch();
 
@@ -336,12 +348,12 @@ export async function updateHouseBatch(
   const [updatedGuests, deletedGuests, adminGuests, demotedGuests] = getUpdates(
     guestsBefore,
     guestsAfter,
-    true
+    true,
   ) as Guest[][];
   const [updatedAdmins, deletedAdmins] = getUpdates(
     adminsBefore!,
     adminsAfter!,
-    false
+    false,
   ) as Admin[][];
   // check image
   if (house.imageUrl !== houseBefore.imageUrl) {
@@ -366,15 +378,15 @@ export async function updateHouseBatch(
     const before = adminsBefore![after.id!];
     const [removedSuperAdminHouses, removedAdminHouses] = houseIdsRemoved(
       before,
-      after
+      after,
     );
     if (removedSuperAdminHouses.length || removedAdminHouses.length) {
       promises.push(
         removeAdminPrivileges(
           after,
           removedAdminHouses,
-          removedSuperAdminHouses
-        )
+          removedSuperAdminHouses,
+        ),
       );
     }
   });
@@ -408,7 +420,7 @@ export async function updateHouseBatch(
  */
 export async function finalizeHouseSetup(
   houseId: string,
-  finalConfig: Partial<House>
+  finalConfig: Partial<House>,
 ): Promise<void> {
   const updates = {
     ...finalConfig,
