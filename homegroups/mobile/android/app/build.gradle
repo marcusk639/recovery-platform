@@ -97,9 +97,18 @@ android {
                 storePassword MYAPP_RELEASE_STORE_PASSWORD
                 keyAlias MYAPP_RELEASE_KEY_ALIAS
                 keyPassword MYAPP_RELEASE_KEY_PASSWORD
-            } else {
-                signingConfig signingConfigs.debug
             }
+            // NOTE: `signingConfig signingConfigs.debug` used to sit in an `else`
+            // branch here, but `signingConfig` is a buildTypes-level DSL method —
+            // calling it inside a signingConfigs{} block is invalid and fails at
+            // Gradle project-evaluation time (breaks every task, not just
+            // assembleRelease). It went undetected because MYAPP_RELEASE_STORE_FILE
+            // used to always be set (even pointing at a keystore file that didn't
+            // exist), so this branch never actually ran. If no real release
+            // keystore is configured, `signingConfigs.release` stays empty here;
+            // `buildTypes.release` below still resolves to it, so assembleDebug is
+            // unaffected and assembleRelease fails only if actually invoked without
+            // a real keystore — matching regroup's equivalent block.
         }
     }
     buildTypes {
