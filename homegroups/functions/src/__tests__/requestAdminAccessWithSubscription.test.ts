@@ -584,6 +584,18 @@ describe("requestAdminAccessWithSubscription — ack-ambiguity-aware compensatio
     >;
     expect(finalGroup.admins).toEqual([USER_ID]);
     expect(finalGroup.stripeSubscriptionId).toBe("sub_test");
+
+    // Regression coverage: the ack-ambiguity recovery return must go
+    // through the same member-doc grant path as the normal happy path —
+    // it must not skip straight to returning success. Otherwise the user
+    // ends up listed in group.admins but with member.isAdmin unset, and
+    // the onMemberWrite trigger never syncs their custom JWT claims.
+    const memberDoc = docStore[`members/${GROUP_ID}_${USER_ID}`] as Record<
+      string,
+      unknown
+    >;
+    expect(memberDoc).toBeDefined();
+    expect(memberDoc.isAdmin).toBe(true);
   });
 
   it("a same-user concurrent double-request sharing one subscription object: the loser's ack-ambiguity check catches it, no cancellation attempted", async () => {
@@ -623,6 +635,15 @@ describe("requestAdminAccessWithSubscription — ack-ambiguity-aware compensatio
     ).resolves.toMatchObject({ success: true });
 
     expect(mockStripeSubscriptionsCancel).not.toHaveBeenCalled();
+
+    // Same regression coverage as the previous test: this recovery path
+    // must also grant the member doc, not just return success.
+    const memberDoc = docStore[`members/${GROUP_ID}_${USER_ID}`] as Record<
+      string,
+      unknown
+    >;
+    expect(memberDoc).toBeDefined();
+    expect(memberDoc.isAdmin).toBe(true);
   });
 
   it("cancel-ack-ambiguity: cancel() rejects but retrieve() confirms canceled — advances the attempt counter", async () => {

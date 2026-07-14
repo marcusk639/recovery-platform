@@ -44,8 +44,75 @@ export const requestAdminAccessWithSubscription = onCall(
       );
     }
 
+    const groupRef = db.collection("groups").doc(groupId);
+
+    // Ensures the member document reflects isAdmin = true — consistent with
+    // group.admins — and builds the success response, from a single place.
+    // Web-claim users (signed up on the web without ever using the mobile
+    // app) have no member doc yet — create it so admin privileges actually
+    // take effect. The onMemberWrite trigger syncs custom JWT claims FROM
+    // this member document, not from group.admins directly, so every
+    // success-return path (the normal happy path AND the ack-ambiguity
+    // recovery path below) MUST go through this helper — skipping it leaves
+    // a user listed as an admin in Firestore but with claims never synced.
+    async function grantMemberAdminAndBuildResponse(
+      currentStripeSubscriptionId: string | undefined,
+      currentSubscriptionStatus: string | undefined,
+    ): Promise<{
+      success: true;
+      groupId: string;
+      subscriptionId: string | undefined;
+      subscriptionStatus: string | undefined;
+      group: FirebaseFirestore.DocumentData | undefined;
+    }> {
+      const memberRef = db.collection("members").doc(`${groupId}_${userId}`);
+      const memberSnap = await memberRef.get();
+
+      if (memberSnap.exists) {
+        await memberRef.update({
+          isAdmin: true,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        logger.info(
+          `Updated member document ${groupId}_${userId} to set isAdmin = true`,
+        );
+      } else {
+        // Fetch user profile data to populate the new member doc.
+        const userSnap = await db.collection("users").doc(userId).get();
+        const userData = userSnap.data() || {};
+        const displayName =
+          userData.displayName || request.auth?.token?.name || name || "Member";
+
+        await memberRef.set({
+          id: `${groupId}_${userId}`,
+          userId,
+          groupId,
+          displayName,
+          isAdmin: true,
+          // Privacy defaults match UserModel (opt-in sharing).
+          showSobrietyDate: false,
+          showPhoneNumber: false,
+          joinedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        logger.info(
+          `Created member document ${groupId}_${userId} with isAdmin = true for web-claim user`,
+        );
+      }
+
+      // Fetch the updated group data to return
+      const updatedGroupSnap = await groupRef.get();
+
+      return {
+        success: true,
+        groupId,
+        subscriptionId: currentStripeSubscriptionId,
+        subscriptionStatus: currentSubscriptionStatus,
+        group: updatedGroupSnap.data(),
+      };
+    }
+
     try {
-      const groupRef = db.collection("groups").doc(groupId);
       const groupSnap = await groupRef.get();
 
       if (!groupSnap.exists) {
@@ -364,14 +431,10 @@ export const requestAdminAccessWithSubscription = onCall(
         // No separate "does someone else own this subscription" check is
         // needed.
         if (postTxData?.admins?.includes(userId)) {
-          const updatedGroupSnap = await groupRef.get();
-          return {
-            success: true,
-            groupId,
-            subscriptionId: stripeSubscriptionId,
+          return await grantMemberAdminAndBuildResponse(
+            stripeSubscriptionId,
             subscriptionStatus,
-            group: updatedGroupSnap.data(),
-          };
+          );
         }
 
         if (
@@ -435,55 +498,12 @@ export const requestAdminAccessWithSubscription = onCall(
       }
 
       // 4. Update or create the member document so isAdmin is consistent with
-      // group.admins and the onMemberWrite trigger can sync custom JWT claims.
-      // Web-claim users (signed up on the web without ever using the mobile
-      // app) have no member doc yet — create it so admin privileges actually
-      // take effect.
-      const memberRef = db.collection("members").doc(`${groupId}_${userId}`);
-      const memberSnap = await memberRef.get();
-
-      if (memberSnap.exists) {
-        await memberRef.update({
-          isAdmin: true,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-        logger.info(
-          `Updated member document ${groupId}_${userId} to set isAdmin = true`,
-        );
-      } else {
-        // Fetch user profile data to populate the new member doc.
-        const userSnap = await db.collection("users").doc(userId).get();
-        const userData = userSnap.data() || {};
-        const displayName =
-          userData.displayName || request.auth?.token?.name || name || "Member";
-
-        await memberRef.set({
-          id: `${groupId}_${userId}`,
-          userId,
-          groupId,
-          displayName,
-          isAdmin: true,
-          // Privacy defaults match UserModel (opt-in sharing).
-          showSobrietyDate: false,
-          showPhoneNumber: false,
-          joinedAt: admin.firestore.FieldValue.serverTimestamp(),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-        logger.info(
-          `Created member document ${groupId}_${userId} with isAdmin = true for web-claim user`,
-        );
-      }
-
-      // Fetch the updated group data to return
-      const updatedGroupSnap = await groupRef.get();
-
-      return {
-        success: true,
-        groupId,
-        subscriptionId: stripeSubscriptionId,
-        subscriptionStatus: subscriptionStatus,
-        group: updatedGroupSnap.data(),
-      };
+      // group.admins and the onMemberWrite trigger can sync custom JWT claims,
+      // then build the response.
+      return await grantMemberAdminAndBuildResponse(
+        stripeSubscriptionId,
+        subscriptionStatus,
+      );
     } catch (error: any) {
       logger.error(
         `Error requesting admin access with subscription for group ${groupId} by user ${userId}:`,
