@@ -647,6 +647,60 @@ describe("requestAdminAccessWithSubscription — ack-ambiguity-aware compensatio
     expect(memberDoc.isAdmin).toBe(true);
   });
 
+  it("a member-doc-sync failure inside ack-ambiguity recovery surfaces the committed-claim context instead of a generic error", async () => {
+    // Reuses the "same-user, same subscription object" setup above (the
+    // ack-ambiguity check recognizes this call's own committed win), but
+    // this time the member-doc write itself fails. The transaction is
+    // CONFIRMED committed at this point — losing that context and falling
+    // through to a bare "unexpected error" would leave a client retry
+    // stuck on the already-exists guard with no indication of what
+    // actually happened.
+    const originalRunTransaction = mockDb.runTransaction;
+    let transactionAttempt = 0;
+    mockDb.runTransaction = (async (fn: (tx: any) => Promise<unknown>) => {
+      transactionAttempt++;
+      if (transactionAttempt === 1) {
+        docStore[`groups/${GROUP_ID}`] = {
+          ...docStore[`groups/${GROUP_ID}`],
+          isClaimed: true,
+          admins: [USER_ID],
+          stripeSubscriptionId: "sub_test", // matches this call's own creation
+          subscriptionStatus: "trialing",
+        };
+      }
+      return originalRunTransaction(fn);
+    }) as typeof mockDb.runTransaction;
+
+    const originalCollection = mockDb.collection;
+    mockDb.collection = ((collPath: string) => {
+      const collRef = originalCollection(collPath);
+      if (collPath !== "members") return collRef;
+      return {
+        ...collRef,
+        doc: (docId: string) => {
+          const docRef = collRef.doc(docId);
+          if (docId !== `${GROUP_ID}_${USER_ID}`) return docRef;
+          docRef.set = jest.fn().mockImplementation(async () => {
+            throw new Error("Firestore unavailable while creating member doc");
+          });
+          return docRef;
+        },
+      };
+    }) as typeof mockDb.collection;
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      paymentMethodId: PAYMENT_METHOD_ID,
+    });
+
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).rejects.toMatchObject({
+      code: "internal",
+      message: expect.stringContaining("finishing setup failed"),
+    });
+  });
+
   it("a same-user CROSS-BRANCH race (this call's own create-new subscription vs. a different concurrent web-checkout request of theirs that won): does not falsely claim success, cancels its own now-orphaned subscription", async () => {
     // Unlike the shared-object case above, this call's create-new path
     // makes its OWN Stripe subscription ("sub_mobile_new"), while the
@@ -809,6 +863,59 @@ describe("requestAdminAccessWithSubscription — ack-ambiguity-aware compensatio
     expect(afterFirstAttempt.stripeSubscriptionAttempt).toBeUndefined();
   });
 
+  it("the attempt-counter write itself throwing does not escape the compensation block or shadow the isRaceLoss classification", async () => {
+    mockDb.runTransaction = (async () => {
+      throw new HttpsError(
+        "failed-precondition",
+        "This group has already been claimed by another admin.",
+      );
+    }) as typeof mockDb.runTransaction;
+    mockStripeSubscriptionsCancel.mockResolvedValue({});
+    // First retrieve() is the pre-transaction live-status re-check; second
+    // is the post-cancel confirmation, reporting the subscription as
+    // genuinely canceled — cancelConfirmed becomes true, so the guarded
+    // groupRef.update() (the thing under test) actually executes.
+    mockStripeSubscriptionsRetrieve
+      .mockResolvedValueOnce({ status: "trialing" })
+      .mockResolvedValueOnce({ status: "canceled" });
+
+    const originalCollection = mockDb.collection;
+    mockDb.collection = ((collPath: string) => {
+      const collRef = originalCollection(collPath);
+      if (collPath !== "groups") return collRef;
+      return {
+        ...collRef,
+        doc: (docId: string) => {
+          const docRef = collRef.doc(docId);
+          if (docId !== GROUP_ID) return docRef;
+          docRef.update = jest.fn().mockImplementation(async () => {
+            throw new Error("Firestore unavailable during counter increment");
+          });
+          return docRef;
+        },
+      };
+    }) as typeof mockDb.collection;
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      paymentMethodId: PAYMENT_METHOD_ID,
+    });
+
+    // The original txError (a genuine race loss) must still be rethrown as-is
+    // — the counter-update failure must not shadow that classification or
+    // fall through to the generic internal error instead.
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).rejects.toMatchObject({
+      code: "failed-precondition",
+      message: "This group has already been claimed by another admin.",
+    });
+
+    // Compensation still ran (cancel was attempted and confirmed) despite
+    // the counter write failing afterward.
+    expect(mockStripeSubscriptionsCancel).toHaveBeenCalledWith("sub_test");
+  });
+
   it("a failed re-read during compensation skips cancellation entirely rather than throwing unhandled", async () => {
     mockDb.runTransaction = (async () => {
       throw new Error("DEADLINE_EXCEEDED: transaction timed out");
@@ -904,6 +1011,67 @@ describe("requestAdminAccessWithSubscription — web-checkout residual case (alr
 
     // The subscription is NOT auto-canceled — refund implications the
     // backend can't resolve unilaterally.
+    expect(mockStripeSubscriptionsCancel).not.toHaveBeenCalled();
+  });
+
+  it("does not assert the 'claimed by someone else, contact support' narrative when the post-tx re-read itself fails", async () => {
+    mockStripeSubscriptionsRetrieve.mockResolvedValue({
+      id: "sub_already_created",
+      status: "trialing",
+      metadata: { groupId: GROUP_ID },
+      customer: "cus_existing",
+      items: { data: [{ id: "si_existing" }] },
+    });
+    mockDb.runTransaction = (async () => {
+      throw new HttpsError(
+        "failed-precondition",
+        "This group has already been claimed by another admin.",
+      );
+    }) as typeof mockDb.runTransaction;
+
+    // Same technique as the "failed re-read during compensation" test: the
+    // initial groupSnap.get() at the top of the handler must succeed, but
+    // the post-transaction-failure re-read inside the catch block must fail
+    // — we genuinely don't know whether someone else claimed the group or
+    // this caller's own request actually won.
+    const originalCollection = mockDb.collection;
+    let groupGetCallCount = 0;
+    mockDb.collection = ((collPath: string) => {
+      const collRef = originalCollection(collPath);
+      if (collPath !== "groups") return collRef;
+      return {
+        ...collRef,
+        doc: (docId: string) => {
+          const docRef = collRef.doc(docId);
+          if (docId !== GROUP_ID) return docRef;
+          const originalGet = docRef.get;
+          docRef.get = jest.fn().mockImplementation(async () => {
+            groupGetCallCount++;
+            if (groupGetCallCount === 2) {
+              throw new Error("Firestore unavailable during re-read");
+            }
+            return originalGet();
+          });
+          return docRef;
+        },
+      };
+    }) as typeof mockDb.collection;
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      subscriptionId: "sub_already_created",
+    });
+
+    // Must reject with the original race-loss error, NOT the confident
+    // "contact support for a refund" narrative this code path would assert
+    // when the re-read actually succeeds.
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).rejects.toMatchObject({
+      code: "failed-precondition",
+      message: "This group has already been claimed by another admin.",
+    });
+
     expect(mockStripeSubscriptionsCancel).not.toHaveBeenCalled();
   });
 });
