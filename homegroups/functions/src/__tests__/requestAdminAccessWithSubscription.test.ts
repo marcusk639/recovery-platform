@@ -280,6 +280,7 @@ function setupDefaults() {
 // ============================================================
 
 import { requestAdminAccessWithSubscription } from "../callable/requestAdminAccessWithSubscription";
+import { HttpsError } from "firebase-functions/v2/https";
 
 // ============================================================
 // TESTS
@@ -762,6 +763,47 @@ describe("requestAdminAccessWithSubscription — ack-ambiguity-aware compensatio
       (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
     ).rejects.toMatchObject({ code: "internal" });
 
+    expect(mockStripeSubscriptionsCancel).not.toHaveBeenCalled();
+  });
+});
+
+describe("requestAdminAccessWithSubscription — web-checkout residual case (already-billed subscription, lost the claim)", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    docStore = {};
+    mockDb = buildMockDb();
+    setupDefaults();
+  });
+
+  it("gives a distinct support-contact error, not a generic internal error, when the web-checkout caller loses the claim", async () => {
+    mockStripeSubscriptionsRetrieve.mockResolvedValue({
+      id: "sub_already_created",
+      status: "trialing",
+      metadata: { groupId: GROUP_ID },
+      customer: "cus_existing",
+      items: { data: [{ id: "si_existing" }] },
+    });
+    mockDb.runTransaction = (async () => {
+      throw new HttpsError(
+        "failed-precondition",
+        "This group has already been claimed by another admin.",
+      );
+    }) as typeof mockDb.runTransaction;
+
+    const request = makeRequest(USER_ID, {
+      groupId: GROUP_ID,
+      subscriptionId: "sub_already_created",
+    });
+
+    await expect(
+      (requestAdminAccessWithSubscription as any)(request), // eslint-disable-line @typescript-eslint/no-explicit-any
+    ).rejects.toMatchObject({
+      code: "failed-precondition",
+      message: expect.stringContaining("Contact support"),
+    });
+
+    // The subscription is NOT auto-canceled — refund implications the
+    // backend can't resolve unilaterally.
     expect(mockStripeSubscriptionsCancel).not.toHaveBeenCalled();
   });
 });

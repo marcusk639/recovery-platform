@@ -437,6 +437,27 @@ export const requestAdminAccessWithSubscription = onCall(
           );
         }
 
+        // Web-checkout residual case: this caller supplied an already-billed
+        // `subscriptionId` (verified above) and then genuinely lost the claim
+        // — the ack-ambiguity check just ruled out "actually committed", so
+        // this caller holds a real, live Stripe subscription with no group
+        // attached. Auto-canceling isn't safe (refund implications the
+        // backend can't resolve unilaterally) and a blind retry won't help
+        // (the subscription is fine; the group is what's unavailable), so
+        // this gets its own distinct error pointing toward support instead
+        // of either the generic "already claimed" race-loss message or the
+        // generic `internal` fallthrough below. `subscriptionCreatedThisCall`
+        // is always false on this path (only the create-new branch sets it),
+        // so the compensation block below would never fire for this caller
+        // anyway — this check exits first regardless, rather than relying on
+        // that invariant implicitly.
+        if (usedWebCheckoutVerify) {
+          throw new HttpsError(
+            "failed-precondition",
+            "Your payment was processed, but this group was claimed by someone else before your request completed. Contact support to arrange a refund or transfer.",
+          );
+        }
+
         if (
           subscriptionCreatedThisCall &&
           stripeSubscriptionId &&
