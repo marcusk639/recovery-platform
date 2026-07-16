@@ -38,6 +38,8 @@ src/
                       sendConfirmationEmail
     oxford.ts       Oxford House management callables
     invitations.ts  createInvitation, peekInvitation, redeemInvitation
+    compliance.ts   complianceExport (tier-gated compliance export, RG-SPEC-09)
+    analytics.ts    rentRoiMetrics (tier-gated rent-collection ROI metrics, RG-TRACK)
   triggers/
     firestore/      Firestore document write triggers
     rtdb/           Realtime Database triggers

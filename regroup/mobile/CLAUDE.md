@@ -11,7 +11,7 @@ Regroup is a React Native 0.72 sober living house management app for iOS and And
 npm test                              # unit tests
 npx jest path/to/file.test.tsx        # single file
 npm run test:coverage                 # with coverage
-npm run test:integration              # needs emulator (see .claude/testing.md)
+npm run test:integration              # BROKEN: jest.config.integration.js doesn't exist yet (test:rules likewise)
 npm run test:e2e:build:ios            # build for E2E
 npm run test:e2e:ios                  # run E2E on iOS simulator
 
@@ -34,7 +34,7 @@ npm run lint
 
 ## Detailed Guidelines
 
-- [Architecture](.claude/architecture.md) — provider tree, state management, navigation, entities, domain concepts
-- [Firebase / Firestore](.claude/firebase.md) — collection refs, timestamps, transactions, React Query, security rules
-- [Testing](.claude/testing.md) — Jest setup, Firebase mocks, integration tests, Detox E2E
-- [Conventions](.claude/conventions.md) — commits, component patterns, imports, selectors, known gotchas
+- [Architecture](.claude/rules/architecture.md) — provider tree, state management, navigation, entities, domain concepts
+- [Firebase / Firestore](.claude/rules/firebase.md) — collection refs, timestamps, transactions, React Query, security rules
+- [Testing](.claude/rules/testing.md) — Jest setup, Firebase mocks, integration tests, Detox E2E
+- [Conventions](.claude/rules/conventions.md) — commits, component patterns, imports, selectors, known gotchas

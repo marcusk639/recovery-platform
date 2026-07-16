@@ -1,4 +1,4 @@
-import { handleCreateReferral, handleGetReferrals, handleGetReferral } from './referrals';
+import { handleCreateReferral, handleGetReferral } from './referrals';
 
 const ctx = {
   appId: 'homegroups' as const,

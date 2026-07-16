@@ -43,14 +43,14 @@ firebase emulators:start          # Starts Firestore :8080, Functions :5001, Aut
 
 ```
 mobile/src/
-  models/        # Firestore data-access layer (16 models: GroupModel, UserModel, etc.)
+  models/        # Firestore data-access layer (15 models: GroupModel, UserModel, etc.)
   store/slices/  # Redux Toolkit slices (26 total)
   screens/       # UI screens organized by domain
   navigation/    # React Navigation navigators
   types/         # TypeScript types (schema.ts = Firestore doc shapes)
 
 functions/src/
-  callable/      # Client-invoked Cloud Functions (90 total)
+  callable/      # Client-invoked Cloud Functions (91 total)
   triggers/
     auth/        # Auth event triggers (onUserCreated)
     firestore/   # Firestore document write triggers (17 active + 2 commented out: onGroupAdminUpdate, onGroupCreateFetchMeetings)
@@ -61,7 +61,7 @@ functions/src/
   index.ts       # All function exports (entry point)
 
 web/src/
-  pages/         # React web app pages (20 total)
+  pages/         # React web app pages (21 total)
   components/    # Shared UI components
   lib/           # deepLinks.js, WEB_ORIGIN constant
 

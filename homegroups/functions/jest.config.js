@@ -1,23 +1,25 @@
 module.exports = {
-  preset: "ts-jest",
-  testEnvironment: "node",
-  roots: ["<rootDir>/src"],
-  testMatch: ["**/*.test.ts"],
+  preset: 'ts-jest',
+  testEnvironment: 'node',
+  roots: ['<rootDir>/src'],
+  testMatch: ['**/*.test.ts'],
   transform: {
-    "^.+\\.tsx?$": ["ts-jest", { isolatedModules: true, diagnostics: false }],
+    '^.+\\.tsx?$': ['ts-jest', { isolatedModules: true, diagnostics: false }],
   },
-  moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node"],
-  setupFiles: ["<rootDir>/jest.setup.ts"],
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
+  setupFiles: ['<rootDir>/jest.setup.ts'],
   setupFilesAfterEnv: [],
   testTimeout: 30000,
   // Ignore lib folder and emulator-dependent tests
-  modulePathIgnorePatterns: ["<rootDir>/lib/"],
+  modulePathIgnorePatterns: ['<rootDir>/lib/'],
   testPathIgnorePatterns: [
-    "/node_modules/",
-    "/lib/",
-    ...(process.env.FIRESTORE_EMULATOR_HOST ? [] : ["security-rules.test.ts"]), // requires Firestore emulator on port 8080
-    ...(process.env.FIREBASE_STORAGE_EMULATOR_HOST
-      ? []
-      : ["security-rules-storage.test.ts"]), // requires Storage emulator on port 9199
+    '/node_modules/',
+    '/lib/',
+    ...(process.env.FIRESTORE_EMULATOR_HOST ? [] : ['security-rules.test.ts']), // requires Firestore emulator on port 8080
+    ...(process.env.FIREBASE_STORAGE_EMULATOR_HOST ? [] : ['security-rules-storage.test.ts']), // requires Storage emulator on port 9199
   ],
+  // Ratchet floor — measured 79/60/70/80 on 2026-07-15. Raise as coverage grows; never lower.
+  coverageThreshold: {
+    global: { statements: 75, branches: 55, functions: 65, lines: 75 },
+  },
 };

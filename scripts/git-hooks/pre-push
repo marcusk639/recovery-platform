@@ -1,0 +1,40 @@
+#!/bin/bash
+# Pre-push gate: run unit tests for changed packages, with SHA-based caching.
+# Installed by scripts/install-git-hooks.sh (copies into .git/hooks/).
+set -uo pipefail
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+CACHE_FILE="$REPO_ROOT/.git/.test-passed"
+HEAD_SHA=$(git rev-parse HEAD)
+
+if [ -f "$CACHE_FILE" ] && [ "$(cat "$CACHE_FILE")" = "$HEAD_SHA" ]; then
+  echo "[pre-push] tests already passed for $HEAD_SHA — skipping"
+  exit 0
+fi
+
+# Packages with healthy, fast unit suites. Mobile apps and regroup/web are
+# excluded (slow / CI-covered / legacy) — CI remains their gate.
+PACKAGES="recovery-api detox-recovery homegroups/functions regroup/functions"
+
+# Diff range: everything not yet on the upstream (fall back to last commit).
+RANGE="@{push}..HEAD"
+git rev-parse --verify -q "@{push}" >/dev/null 2>&1 || RANGE="HEAD~1..HEAD"
+CHANGED=$(git diff --name-only "$RANGE" 2>/dev/null)
+
+RAN=0
+for PKG in $PACKAGES; do
+  echo "$CHANGED" | grep -q "^$PKG/" || continue
+  if [ ! -d "$REPO_ROOT/$PKG/node_modules" ]; then
+    echo "[pre-push] ⚠ $PKG changed but node_modules missing — run 'npm ci' there; skipping its tests" >&2
+    continue
+  fi
+  echo "[pre-push] running tests in $PKG..."
+  if ! (cd "$REPO_ROOT/$PKG" && npm test --silent); then
+    echo "[pre-push] ✗ tests failed in $PKG — push blocked (bypass: git push --no-verify)" >&2
+    exit 1
+  fi
+  RAN=1
+done
+
+[ "$RAN" -eq 1 ] && echo "$HEAD_SHA" > "$CACHE_FILE"
+exit 0

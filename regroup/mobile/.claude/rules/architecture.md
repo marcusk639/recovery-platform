@@ -1,3 +1,8 @@
+---
+description: Provider tree, state management, navigation, entities, domain concepts
+globs: "src/**/*.{ts,tsx}"
+---
+
 # Architecture
 
 ## Provider Tree (`App.tsx`)
