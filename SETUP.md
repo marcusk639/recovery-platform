@@ -23,6 +23,21 @@ git checkout test/e2e-launch-prep
 
 ---
 
+## Git Hooks (run once per clone)
+
+```bash
+./scripts/install-git-hooks.sh
+```
+
+Installs the versioned hooks from `scripts/git-hooks/` into `.git/hooks/`:
+
+- **pre-commit** — blocking secret scan + 300-line file-size ratchet on staged files
+- **pre-push** — runs unit tests for changed packages (recovery-api, detox-recovery, homegroups/functions, regroup/functions), cached by HEAD SHA so unchanged pushes skip the run
+
+Re-run the installer after editing anything in `scripts/git-hooks/`. Deliberate bypass: `--no-verify`.
+
+---
+
 ## Regroup App Setup
 
 This is the main app. All commands below run from `regroup/`.

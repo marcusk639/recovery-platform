@@ -1,0 +1,52 @@
+#!/bin/bash
+# Pre-commit gate: blocking secret scan + 300-line ratchet on staged files.
+# Installed by scripts/install-git-hooks.sh (copies into .git/hooks/).
+set -uo pipefail
+
+STAGED=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$STAGED" ] && exit 0
+
+FAIL=0
+
+# --- 1. Secret scan (BLOCKING) -------------------------------------------
+# Firebase client config files carry public-by-design AIza keys; test files
+# may contain known-bad fixtures (e.g. google-apikeys.test.ts regression test).
+SECRET_PATTERNS='sk-or-v1-[A-Za-z0-9]{16,}|sk-ant-[A-Za-z0-9_-]{16,}|sk_live_[A-Za-z0-9]{16,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|-----BEGIN [A-Z ]*PRIVATE KEY-----|AIza[0-9A-Za-z_-]{35}'
+ALLOWLIST='GoogleService-Info\.plist$|google-services\.json$|AndroidManifest\.xml$|\.test\.(ts|tsx|js)$|__tests__/|package-lock\.json$|\.env\.example$|env\.example$'
+
+while IFS= read -r f; do
+  echo "$f" | grep -qE "$ALLOWLIST" && continue
+  MATCH=$(git show ":$f" 2>/dev/null | grep -nE "$SECRET_PATTERNS" | head -3)
+  if [ -n "$MATCH" ]; then
+    echo "✗ possible secret in $f:" >&2
+    echo "$MATCH" | sed 's/^/    /' >&2
+    FAIL=1
+  fi
+done <<< "$STAGED"
+
+# --- 2. File-size ratchet ---------------------------------------------------
+# NEW source files over 300 lines are blocked; pre-existing oversized files
+# only warn when modified (the mobile apps carry legacy debt — don't freeze them).
+MAX_LINES=300
+SRC_RE='\.(ts|tsx|js|jsx)$'
+EXCLUDE_RE='node_modules/|/public/|\.min\.js$|-es(5|2015)\.js$|/dist/|/build/|/\.next/|jest\.setup\.(js|ts)$|\.config\.(js|cjs|mjs|ts)$|\.eslintrc\.js$'
+
+while IFS= read -r f; do
+  echo "$f" | grep -qE "$SRC_RE" || continue
+  echo "$f" | grep -qE "$EXCLUDE_RE" && continue
+  LINES=$(git show ":$f" 2>/dev/null | wc -l | tr -d ' ')
+  [ "$LINES" -le "$MAX_LINES" ] && continue
+  if git diff --cached --name-only --diff-filter=A | grep -qxF "$f"; then
+    echo "✗ new file $f is $LINES lines (limit $MAX_LINES) — split it before committing" >&2
+    FAIL=1
+  else
+    echo "⚠ $f is $LINES lines (>$MAX_LINES); consider splitting while you're in it" >&2
+  fi
+done <<< "$STAGED"
+
+if [ "$FAIL" -ne 0 ]; then
+  echo "" >&2
+  echo "pre-commit blocked. Fix the issues above, or bypass deliberately with: git commit --no-verify" >&2
+  exit 1
+fi
+exit 0

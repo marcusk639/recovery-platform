@@ -1,3 +1,8 @@
+---
+description: Jest setup, Firebase mocks, integration tests, Detox E2E
+globs: "**/__tests__/**,**/*.test.*,e2e/**,jest.*"
+---
+
 # Testing
 
 ## Test Locations

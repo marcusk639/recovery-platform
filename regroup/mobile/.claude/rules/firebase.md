@@ -1,3 +1,8 @@
+---
+description: Collection refs, timestamps, transactions, React Query, security rules
+globs: "src/**/*.{ts,tsx},firebase/**"
+---
+
 # Firebase / Firestore Patterns
 
 ## Collection References

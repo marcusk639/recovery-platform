@@ -1,3 +1,8 @@
+---
+description: Commits, component patterns, imports, selectors, known gotchas
+globs: "src/**/*.{ts,tsx}"
+---
+
 # Conventions
 
 ## Commits

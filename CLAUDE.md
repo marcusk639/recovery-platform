@@ -42,6 +42,7 @@ Each product has its own CLAUDE.md with product-specific context:
 - `getReferral` — fetch a single referral by ID (ownership enforced)
 - `getUserProfile` — fetch a user profile by UID
 - `updateUserProfile` — update a user profile
+- `findMeetings` — search the shared public meeting directory by location (geohash radius query, optional day/type filters)
 
 **Auth model (Phase 1):** `X-Service-Key` header + `X-App-Id` + `X-User-Uid` for service-to-service requests. Phase 2 will add Firebase custom token auth (`request.auth` with `appId` claim). See `recovery-api/CLAUDE.md` for full auth details.
 
@@ -95,9 +96,17 @@ These rules apply to all products in the monorepo without exception.
 - Never cross-query Firestore across products.
 - Cross-product data flows must go through recovery-api.
 
+**Quality gates**
+
+- Source files (`.ts`/`.tsx`/`.js`/`.jsx`) are capped at **300 lines**. Enforced mechanically by the pre-commit hook (`scripts/git-hooks/pre-commit`): new files over the cap are blocked; pre-existing oversized files warn on modification (legacy mobile debt is ratcheted down, not frozen). Split by extracting components, services, or per-function modules.
+- Secrets are scanned at commit time (blocking) by the same hook — Stripe/Anthropic/OpenRouter/AWS/GitHub key patterns, private keys, and Google `AIza` keys outside Firebase client config files.
+- Git hooks are versioned in `scripts/git-hooks/` and installed per-clone with `./scripts/install-git-hooks.sh` (run it after cloning or after editing a hook).
+- Jest `coverageThreshold` floors (recovery-api, homegroups/functions, detox-recovery) are ratchets: raise them as coverage grows, never lower them to make a run pass.
+
 ## Gotchas
 
 - Ignore minified bundles and build artifacts (`**/public/`, `*.min.js`, `*-es5.js`, `*-es2015.js`, `lib/`, `dist/`, `build/`, `.next/`) when counting, searching, or reading source — they are regenerated on rebuild. `regroup/web/public/` alone holds ~1.15M lines of vendor bundles; real hand-written source platform-wide is ~380K lines.
+- `homegroups/mobile` and `regroup/mobile` postinstall runs `pod install`; on a machine without working Xcode CLT, `npm ci` fails there — use `npm ci --ignore-scripts` for JS-only work (Jest/ESLint need only JS deps).
 
 ---
 

@@ -19,7 +19,7 @@ dist/
 build/
 /out/
 /.next/
-/coverage
+coverage/
 *.tsbuildinfo
 next-env.d.ts
 *.jsbundle

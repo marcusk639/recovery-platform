@@ -25,7 +25,7 @@ jobs:
       - name: Typecheck
         run: cd recovery-api && npx tsc --noEmit
       - name: Test
-        run: cd recovery-api && npm test -- --passWithNoTests --forceExit
+        run: cd recovery-api && npm test -- --forceExit
 
   homegroups-functions:
     name: homegroups/functions — typecheck + test
@@ -42,7 +42,7 @@ jobs:
       - name: Typecheck
         run: cd homegroups/functions && npx tsc --noEmit
       - name: Test
-        run: cd homegroups/functions && npm test -- --passWithNoTests --forceExit
+        run: cd homegroups/functions && npm test -- --forceExit
 
   homegroups-firestore-rules:
     name: homegroups/functions — Firestore security rules
@@ -131,7 +131,7 @@ jobs:
       - name: Typecheck
         run: cd regroup/functions && npx tsc --noEmit
       - name: Test
-        run: cd regroup/functions && npm test -- --passWithNoTests --forceExit
+        run: cd regroup/functions && npm test -- --forceExit
 
   detox-recovery:
     name: detox-recovery — typecheck + test
@@ -148,7 +148,7 @@ jobs:
       - name: Typecheck
         run: cd detox-recovery && npx tsc --noEmit
       - name: Test
-        run: cd detox-recovery && npm test -- --passWithNoTests --forceExit
+        run: cd detox-recovery && npm test -- --forceExit
 
   maestro-smoke:
     name: Maestro Cloud — smoke tests (regroup Android)

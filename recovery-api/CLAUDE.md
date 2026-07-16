@@ -33,6 +33,7 @@ src/
 ├── middleware/auth.ts requireServiceAuth — X-Service-Key (Phase 1) + request.auth (Phase 2)
 ├── entities/          User.ts, Referral.ts — shared TypeScript interfaces
 ├── callable/          getUserProfile, updateUserProfile, createReferral, getReferrals, getReferral
+│                      findMeetings — geohash-bounded search of the shared directoryMeetings collection
 │                      identity (Phase 2 scaffold — all code commented out, not deployed)
 ├── http/              health — GET /health liveness probe returning {ok: true, ts: <iso>}
 └── triggers/          onUserWrite (Phase 2 scaffold — inactive)

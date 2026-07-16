@@ -23,6 +23,8 @@ npm run migrate:house-sub:dry-run
 npm run migrate:house-sub:run
 ```
 
+> **Node ≥ 23 gotcha:** the firebase-admin → jsonwebtoken → jwa chain loads `buffer-equal-constant-time`, which crashes on Node ≥ 23 (SlowBuffer removed; no upstream fix exists). Jest maps it to `test-shims/buffer-equal-constant-time.js` so `npm test` works on any Node; deployed runtime is Node 22 (`engines`). Non-Jest local scripts that load firebase-admin auth still need Node ≤ 22.
+
 ## Architecture
 
 ```
@@ -38,6 +40,8 @@ src/
                       sendConfirmationEmail
     oxford.ts       Oxford House management callables
     invitations.ts  createInvitation, peekInvitation, redeemInvitation
+    compliance.ts   complianceExport (tier-gated compliance export, RG-SPEC-09)
+    analytics.ts    rentRoiMetrics (tier-gated rent-collection ROI metrics, RG-TRACK)
   triggers/
     firestore/      Firestore document write triggers
     rtdb/           Realtime Database triggers

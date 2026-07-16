@@ -1,4 +1,4 @@
-import { onCall, CallableRequest, HttpsError } from 'firebase-functions/v2/https';
+import { onCall, CallableRequest } from 'firebase-functions/v2/https';
 import { getFirestore } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import { requireServiceAuth, ServiceAuthContext } from '../middleware/auth';

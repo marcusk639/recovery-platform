@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r '.tool_input.file_path // empty'); if echo \"$FILE\" | grep -q '/recovery-api/src/'; then echo \"[tsc] Type-checking recovery-api...\"; cd /Users/marcus/dev/recovery-platform/recovery-api && npm run typecheck 2>&1 | tail -30; fi",
+            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r '.tool_input.file_path // empty'); if echo \"$FILE\" | grep -q '/recovery-api/src/'; then echo \"[tsc] Type-checking recovery-api...\"; cd \"${CLAUDE_PROJECT_DIR}/recovery-api\" && npm run typecheck 2>&1 | tail -30; fi",
             "timeout": 45000
           }
         ]
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r '.tool_input.file_path // empty'); if echo \"$FILE\" | grep -qE '\\.(ts|js|json|md)$' && echo \"$FILE\" | grep -q '/recovery-api/'; then cd /Users/marcus/dev/recovery-platform/recovery-api && npx prettier --write \"$FILE\" 2>/dev/null && echo \"[prettier] Formatted $FILE\"; fi",
+            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r '.tool_input.file_path // empty'); if echo \"$FILE\" | grep -qE '\\.(ts|js|json|md)$' && echo \"$FILE\" | grep -q '/recovery-api/'; then cd /Users/marcusklein/dev/recovery-platform/recovery-api && npx prettier --write \"$FILE\" 2>/dev/null && echo \"[prettier] Formatted $FILE\"; fi",
             "timeout": 15000
           }
         ]
@@ -26,7 +26,18 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR:-/Users/marcus/dev/recovery-platform}/.claude/hooks/secret-scan.sh\"",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-/Users/marcusklein/dev/recovery-platform}/.claude/hooks/secret-scan.sh\"",
+            "timeout": 10000
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-/Users/marcusklein/dev/recovery-platform}/scripts/session-check.sh\"",
             "timeout": 10000
           }
         ]
@@ -37,7 +48,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR:-/Users/marcus/dev/recovery-platform}/.claude/hooks/swarm-notify.sh\"",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-/Users/marcusklein/dev/recovery-platform}/.claude/hooks/swarm-notify.sh\"",
             "timeout": 10000
           }
         ]
