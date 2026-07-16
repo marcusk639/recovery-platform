@@ -13,10 +13,8 @@ if [ -f "$CACHE_FILE" ] && [ "$(cat "$CACHE_FILE")" = "$HEAD_SHA" ]; then
 fi
 
 # Packages with healthy, fast unit suites. Mobile apps and regroup/web are
-# excluded (slow / CI-covered / legacy). regroup/functions is excluded because its
-# firebase-admin jwt chain (buffer-equal-constant-time) crashes on Node >= 23
-# (SlowBuffer removed) — CI remains the gate for all excluded packages.
-PACKAGES="recovery-api detox-recovery homegroups/functions"
+# excluded (slow / CI-covered / legacy) — CI remains their gate.
+PACKAGES="recovery-api detox-recovery homegroups/functions regroup/functions"
 
 # Diff range: everything not yet on the upstream (fall back to last commit).
 RANGE="@{push}..HEAD"

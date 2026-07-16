@@ -76,7 +76,10 @@
       "!src/index.ts",
       "!src/entities/**",
       "!src/scripts/**"
-    ]
+    ],
+    "moduleNameMapper": {
+      "^buffer-equal-constant-time$": "<rootDir>/test-shims/buffer-equal-constant-time.js"
+    }
   },
   "private": true
 }
