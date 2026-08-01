@@ -24,15 +24,24 @@ appId: org.recoveryconnect
 - tapOn:
     text: "Allow"
     optional: true
-# Onboarding welcome step — Skip button has no testID, text-only selector.
-- extendedWaitUntil:
-    visible:
-      text: "Skip"
-    timeout: 30000
+# Onboarding may or may not appear: a fresh/logged-out launch shows the welcome carousel (tap
+# "Skip"), but a returning user whose onboardingComplete is persisted goes STRAIGHT to the home —
+# no Skip button. Let the screen settle, then dismiss onboarding (and the notification dialog) IF
+# present, tapping "Skip" until it's gone. Robust to both cases.
+- waitForAnimationToEnd:
+    timeout: 6000
 - tapOn:
     text: "Allow"
     optional: true
-- tapOn: "Skip"
+- repeat:
+    while:
+      visible:
+        text: "Skip"
+    times: 5
+    commands:
+      - tapOn:
+          text: "Skip"
+          optional: true
 # IDEMPOTENT: Firebase Auth persists its token in the iOS Keychain, which clearState (and even
 # app reinstall) does NOT clear — only a full `simctl erase` or in-app signOut does. So after
 # Skip the app may ALREADY be authenticated (persisted session) and land on group-list-screen,
@@ -89,11 +98,19 @@ appId: org.recoveryconnect
       notVisible:
         id: "group-list-screen"
     commands:
+      # clearState:true keeps Keychain auth (Firebase auth lives in the Keychain, NOT app data)
+      # AND resets navigation to the default Home tab — clearState:false would restore a persisted
+      # non-Home tab (e.g. Meetings) and group-list-screen would not be visible.
       - launchApp:
-          clearState: false
+          clearState: true
       - tapOn:
           text: "Skip"
           optional: true
+# An authenticated session can land on a non-Home tab (e.g. Meetings), where group-list-screen
+# is not present — tap the Home tab (tab-home testID) to be sure we're on it.
+- tapOn:
+    id: "tab-home"
+    optional: true
 - extendedWaitUntil:
     visible:
       id: "group-list-screen"

@@ -24,7 +24,10 @@ appId: org.recoveryconnect
     env:
       EMAIL: test-treasurer@homegroups-e2e.com
       PASSWORD: TestPassword123!
-- tapOn: "Home"
+# bottom-tab label not matchable on iOS; login already lands on Home/group-list.
+- tapOn:
+    text: "Home"
+    optional: true
 - extendedWaitUntil:
     visible:
       id: "group-list-screen"
@@ -43,6 +46,12 @@ appId: org.recoveryconnect
     visible:
       id: "group-info-section"
     timeout: 15000
+# treasury tile is below the fold on the group overview — scroll to it.
+- scrollUntilVisible:
+    element:
+      id: "group-overview-treasury-tile"
+    direction: DOWN
+    timeout: 10000
 - tapOn:
     id: "group-overview-treasury-tile"
 - extendedWaitUntil:

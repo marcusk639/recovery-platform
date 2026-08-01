@@ -370,6 +370,9 @@ const MainTabNavigator: React.FC = () => {
           component={isLimitedMode ? LimitedHomeScreen : GroupStackNavigator}
           options={{
             tabBarLabel: 'Home',
+            // Stable testID so E2E can reach the Home tab — bottom-tab labels are not matchable
+            // text on iOS, and an authenticated session can land on a different tab (e.g. Meetings).
+            tabBarTestID: 'tab-home',
             tabBarIcon: ({focused}) => <HomeIcon focused={focused} />,
             headerShown: false,
           }}
