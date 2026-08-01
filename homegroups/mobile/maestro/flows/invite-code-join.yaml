@@ -9,7 +9,10 @@ appId: org.recoveryconnect
     env:
       EMAIL: test-admin@homegroups-e2e.com
       PASSWORD: TestPassword123!
-- tapOn: "Home"
+# bottom-tab label is not matchable text on iOS; login already lands on Home/group-list.
+- tapOn:
+    text: "Home"
+    optional: true
 - extendedWaitUntil:
     visible:
       id: "group-list-screen"
@@ -24,7 +27,8 @@ appId: org.recoveryconnect
 # NEEDS LIVE VERIFICATION: a real, unused 6-char invite code must exist server-side for
 # the success branch to be exercised. Seed one before trusting this flow in CI.
 - inputText: "ABC123"
-- hideKeyboard
+# No hideKeyboard (flaky on iOS): the modal uses KeyboardAvoidingView (EnterInviteCodeModal.tsx:112),
+# so the Join Group / submit button stays above the keyboard.
 - tapOn:
     id: "invite-code-submit-button"
 # Success path: native Alert('Success!', "You've joined {groupName}!", [{text:'View Group'}])

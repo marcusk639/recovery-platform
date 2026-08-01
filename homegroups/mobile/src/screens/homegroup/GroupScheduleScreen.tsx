@@ -113,7 +113,9 @@ const GroupScheduleScreen: React.FC = () => {
         'Export for Meeting Guide',
         'Generating CSV and JSON for your intergroup or district...',
       );
-      const result = await functions().httpsCallable('exportMeetingGuideFormat')({
+      const result = await functions().httpsCallable(
+        'exportMeetingGuideFormat',
+      )({
         groupId,
       });
       const {csv, instructions} = result.data as {
@@ -161,7 +163,13 @@ const GroupScheduleScreen: React.FC = () => {
         </View>
       ),
     });
-  }, [navigation, groupId, groupName, isCurrentUserAdmin, handleExportMeetingGuide]);
+  }, [
+    navigation,
+    groupId,
+    groupName,
+    isCurrentUserAdmin,
+    handleExportMeetingGuide,
+  ]);
 
   const loadScheduleData = useCallback(
     async (force = false) => {
@@ -339,7 +347,12 @@ const GroupScheduleScreen: React.FC = () => {
           <Text style={styles.timeText}>{formatMeetingTime(item.time)}</Text>
         </View>
         <View style={styles.detailsContainer}>
-          <View style={{flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap'}}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+            }}>
             <Text style={styles.meetingName}>{item.name}</Text>
             {stepBadgeNum ? (
               <View style={styles.stepBadge}>
@@ -353,6 +366,7 @@ const GroupScheduleScreen: React.FC = () => {
           <View style={styles.meetingRowActions}>
             <TouchableOpacity
               style={styles.qrButton}
+              testID={`meeting-qr-button-${item.id}`}
               onPress={() =>
                 navigation.navigate('MeetingQRCode', {
                   groupId,
@@ -611,7 +625,9 @@ const GroupScheduleScreen: React.FC = () => {
         {/* V2.2: Calendar view shortcut */}
         <TouchableOpacity
           style={styles.calendarButton}
-          onPress={() => navigation.navigate('GroupCalendar', {groupId, groupName})}
+          onPress={() =>
+            navigation.navigate('GroupCalendar', {groupId, groupName})
+          }
           testID="view-calendar-button">
           <Icon name="calendar-month" size={18} color="#2196F3" />
           <Text style={styles.calendarButtonText}>View Calendar</Text>
