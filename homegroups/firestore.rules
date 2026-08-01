@@ -241,8 +241,13 @@ service cloud.firestore {
     // Document ID format: {groupId}_{userId}
     // ============================================
     match /members/{memberId} {
-      // Members can read other members in their groups
+      // Members can read other members in their groups. A user can ALWAYS read their own
+      // membership docs — required so the `members.where('userId','==',uid)` query in
+      // GroupModel.getUserGroups is allowed (Firestore validates list queries against rule
+      // conditions the query constraints guarantee; the groupId-based isGroupMember() check
+      // cannot satisfy a userId-filtered list query, so getUserGroups is denied without this).
       allow read: if isSignedIn() && (
+      resource.data.userId == request.auth.uid ||
       isSuperAdmin() ||
       isGroupMember(resource.data.groupId)
       );
