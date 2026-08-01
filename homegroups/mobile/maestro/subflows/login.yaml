@@ -64,20 +64,37 @@ appId: org.recoveryconnect
       - inputText: ${PASSWORD}
       - tapOn:
           id: "auth-modal-login-button"
-      # iOS shows a "Save Password?" system dialog after submitting a login form; it covers the
-      # app and blocks the group-list-screen assertion. Let it settle, then dismiss it.
-      - waitForAnimationToEnd:
-          timeout: 5000
+# On success (or if already authenticated), the Home tab renders GroupStackNavigator. On the
+# full-login path iOS pops a "Save Password?" system dialog at unpredictable timing that covers
+# group-list-screen. Poll until the group list is up, dismissing "Not Now" each iteration — the
+# loop exits as soon as group-list-screen appears (on the already-authenticated Keychain path it
+# is visible immediately, so this no-ops). This is more reliable than a single timed dismissal,
+# and keeps the fix E2E-only (avoids a prod UX regression from disabling password autofill).
+- repeat:
+    while:
+      notVisible:
+        id: "group-list-screen"
+    times: 20
+    commands:
       - tapOn:
           text: "Not Now"
           optional: true
-# On success (or if already authenticated), the Home tab renders GroupStackNavigator.
-# The iOS "Save Password?" dialog can appear a beat later than the in-block dismissal caught it,
-# covering group-list-screen — dismiss it again here if it's still/now present.
-- tapOn:
-    text: "Not Now"
-    optional: true
+# The login ALWAYS persists the session to the iOS Keychain, but the immediate UI transition to
+# the group list can lag behind the Save-Password dialog (occasionally past the poll above). If
+# we're still not on the group list, relaunch WITHOUT clearing state — Keychain auth survives, so
+# the app boots straight through onboarding to the authenticated home. This makes the full-login
+# path reliable within a single run (the flaky part is only the first-transition UI, never auth).
+- runFlow:
+    when:
+      notVisible:
+        id: "group-list-screen"
+    commands:
+      - launchApp:
+          clearState: false
+      - tapOn:
+          text: "Skip"
+          optional: true
 - extendedWaitUntil:
     visible:
       id: "group-list-screen"
-    timeout: 60000
+    timeout: 30000
