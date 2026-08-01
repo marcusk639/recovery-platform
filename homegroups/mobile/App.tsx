@@ -464,15 +464,21 @@ const App = () => {
     }
   }, [isOffline]);
 
+  // Guard the Stripe publishable key: react-native-dotenv inlines process.env.X only when a
+  // .env is present at bundle time. On any build without .env (CI, Maestro Cloud, a fresh clone)
+  // it is `undefined`, and stripe-react-native's native initialise force-casts it (`as! String`),
+  // crashing the app at launch (SIGTRAP). Skip init and pass a safe empty string when absent —
+  // payments are then unavailable, but the app boots.
+  const stripePublishableKey = process.env.STRIPE_TEST_PUBLISHABLE_KEY ?? '';
   useEffect(() => {
-    initStripe({
-      publishableKey: process.env.STRIPE_TEST_PUBLISHABLE_KEY as string,
-    });
-  }, []);
-  // !! REPLACE WITH YOUR ACTUAL STRIPE PUBLISHABLE KEY !!
-  // Consider using react-native-dotenv for better key management
-  const stripePublishableKey = process.env
-    .STRIPE_TEST_PUBLISHABLE_KEY as string;
+    if (stripePublishableKey) {
+      initStripe({publishableKey: stripePublishableKey});
+    } else {
+      console.warn(
+        'STRIPE_TEST_PUBLISHABLE_KEY is not set (no .env); Stripe is disabled and payment flows will not work.',
+      );
+    }
+  }, [stripePublishableKey]);
   return (
     <SafeAreaProvider>
       <Provider store={store}>

@@ -1,14 +1,10 @@
-import {
-  onCall,
-  CallableRequest,
-  HttpsError,
-} from "firebase-functions/v2/https";
-import * as logger from "firebase-functions/logger";
-import { db } from "../utils/firebase";
-import * as admin from "firebase-admin";
-import { sendEmail } from "../utils/email";
-import { APP_BASE_URL } from "../utils/appConfig";
-import { requireAuth } from "../utils/callableWrapper";
+import { onCall, CallableRequest, HttpsError } from 'firebase-functions/v2/https';
+import * as logger from 'firebase-functions/logger';
+import { db } from '../utils/firebase';
+import * as admin from 'firebase-admin';
+import { sendEmail } from '../utils/email';
+import { APP_BASE_URL } from '../utils/appConfig';
+import { requireAuth } from '../utils/callableWrapper';
 
 interface SendInviteEmailData {
   groupId: string;
@@ -19,29 +15,30 @@ interface SendInviteEmailData {
 export const sendGroupInviteEmail = onCall(
   {
     cpu: 0.5,
-    memory: "512MiB",
+    memory: '512MiB',
     timeoutSeconds: 60,
-    region: "us-east1",
+    // No region pin: deploy to the default us-central1 to match the client, which calls
+    // with the default region. A us-east1 pin here made this callable unreachable (NOT_FOUND).
   },
   async (request: CallableRequest<SendInviteEmailData>) => {
     const { groupId, inviteeEmail, inviteCode } = request.data;
     const inviterUid = requireAuth(request);
 
     if (!groupId || !inviteeEmail || !inviteCode) {
-      throw new HttpsError("invalid-argument", "Missing required fields.");
+      throw new HttpsError('invalid-argument', 'Missing required fields.');
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteeEmail)) {
-      throw new HttpsError("invalid-argument", "Invalid email format.");
+      throw new HttpsError('invalid-argument', 'Invalid email format.');
     }
 
     try {
-      const groupRef = db.collection("groups").doc(groupId);
+      const groupRef = db.collection('groups').doc(groupId);
       const inviteQuery = db
-        .collection("groupInvites")
-        .where("code", "==", inviteCode)
-        .where("groupId", "==", groupId)
+        .collection('groupInvites')
+        .where('code', '==', inviteCode)
+        .where('groupId', '==', groupId)
         .limit(1);
-      const userRef = db.collection("users").doc(inviterUid);
+      const userRef = db.collection('users').doc(inviterUid);
 
       const [groupSnap, inviteSnap, userSnap] = await Promise.all([
         groupRef.get(),
@@ -50,13 +47,10 @@ export const sendGroupInviteEmail = onCall(
       ]);
 
       if (!groupSnap.exists) {
-        throw new HttpsError("not-found", "Group not found.");
+        throw new HttpsError('not-found', 'Group not found.');
       }
       if (inviteSnap.empty) {
-        throw new HttpsError(
-          "not-found",
-          `Invite code ${inviteCode} invalid for this group.`,
-        );
+        throw new HttpsError('not-found', `Invite code ${inviteCode} invalid for this group.`);
       }
 
       const groupData = groupSnap.data();
@@ -64,33 +58,28 @@ export const sendGroupInviteEmail = onCall(
       const userData = userSnap.data();
 
       // Check if user is a member of the group (any member can send invites)
-      const memberRef = db
-        .collection("members")
-        .doc(`${groupId}_${inviterUid}`);
+      const memberRef = db.collection('members').doc(`${groupId}_${inviterUid}`);
       const memberSnap = await memberRef.get();
 
       if (!memberSnap.exists) {
         throw new HttpsError(
-          "permission-denied",
-          "You must be a member of this group to send invites.",
+          'permission-denied',
+          'You must be a member of this group to send invites.',
         );
       }
 
-      if (inviteData.status !== "pending") {
-        throw new HttpsError(
-          "failed-precondition",
-          `Invite code already ${inviteData.status}.`,
-        );
+      if (inviteData.status !== 'pending') {
+        throw new HttpsError('failed-precondition', `Invite code already ${inviteData.status}.`);
       }
       if (inviteData.expiresAt.toDate() < new Date()) {
-        await inviteSnap.docs[0].ref.update({ status: "expired" });
-        throw new HttpsError("failed-precondition", "Invite code has expired.");
+        await inviteSnap.docs[0].ref.update({ status: 'expired' });
+        throw new HttpsError('failed-precondition', 'Invite code has expired.');
       }
 
       const universalLinkBase = `${APP_BASE_URL}/`;
       const link = `${universalLinkBase}join?code=${inviteCode}`;
-      const inviterName = userData?.displayName || "A member";
-      const groupName = groupData?.name || "the group";
+      const inviterName = userData?.displayName || 'A member';
+      const groupName = groupData?.name || 'the group';
       const subject = `Invitation to join ${groupName} on Homegroups`;
       const emailBody = `
             <p>Hello,</p>
@@ -119,14 +108,14 @@ export const sendGroupInviteEmail = onCall(
         emailSentAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
-      logger.info("Invite email sent", { groupId, inviterUid });
+      logger.info('Invite email sent', { groupId, inviterUid });
       return { success: true };
     } catch (error) {
       if (error instanceof HttpsError) {
         throw error;
       }
-      logger.error("Error in sendGroupInviteEmail", { error });
-      throw new HttpsError("internal", "Failed to send group invite email.");
+      logger.error('Error in sendGroupInviteEmail', { error });
+      throw new HttpsError('internal', 'Failed to send group invite email.');
     }
   },
 );
