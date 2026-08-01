@@ -14,7 +14,9 @@ platform:
   android:
     disableAnimations: true
 
+# continueOnFailure: true so a full cloud run reports EVERY flow's pass/fail in
+# one go (discovery). Flip back to false once the suite is green and gating.
 executionOrder:
-  continueOnFailure: false
+  continueOnFailure: true
 
 testOutputDir: maestro/output

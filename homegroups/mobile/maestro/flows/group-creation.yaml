@@ -33,7 +33,21 @@ appId: org.recoveryconnect
 - hideKeyboard
 - tapOn:
     id: "create-group-next-button"
-# Step 2 — meeting details (day/time are required by validateStep2; format is optional)
+# Step 2 — meeting schedule. CORRECTED 2026-07-17: entry via group-list-create-button
+# navigates to CreateGroup with NO meeting param (GroupListScreen.tsx:110-112 navigateToCreateGroup
+# -> navigation.navigate('CreateGroup', {})), so `meetings` initializes EMPTY
+# (CreateGroupScreen.tsx:86-106). renderStep2 then renders ONLY an "Add First Meeting" empty
+# state (CreateGroupScreen.tsx:811-825) — the day/time/name/location fields are NOT mounted, and
+# validateStep2 hard-fails with Alert "Please add at least one meeting" (CreateGroupScreen.tsx
+# ~846) until a meeting exists. Must tap "Add First Meeting" before the meeting form appears.
+- extendedWaitUntil:
+    visible:
+      text: "Add First Meeting"
+    timeout: 15000
+- tapOn: "Add First Meeting"
+# Meeting form now mounted (day/time required by validateStep2; format optional). DayPicker
+# renders abbreviated, capitalized labels via upperFirst(day.substring(0,3)) => "Wed"
+# (DayPicker.tsx:11,29); TimePicker preset list includes "7:00 PM" (TimePicker.tsx:61).
 - tapOn: "Wed"
 - tapOn: "7:00 PM"
 - tapOn:

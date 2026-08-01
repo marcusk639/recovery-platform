@@ -18,11 +18,15 @@ appId: org.recoveryconnect
       text: "Skip"
     timeout: 30000
 - tapOn: "Skip"
+# RN flattens LimitedModeScreen into one merged accessibility blob, so the CTAs are NOT
+# matchable by visible text — tap the testID instead (validated by smoke-app-boot.yaml).
+# Both "Create Account" and "Sign in" open the same AuthModal (default Signup tab).
 - extendedWaitUntil:
     visible:
-      text: "Sign in"
+      id: "limited-mode-create-account-button"
     timeout: 20000
-- tapOn: "Sign in"
+- tapOn:
+    id: "limited-mode-create-account-button"
 # AuthModal opens on the Signup tab by default — no tab switch needed.
 - extendedWaitUntil:
     visible:

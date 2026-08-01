@@ -2035,7 +2035,7 @@ PODS:
     - React-Core
   - RNPermissions (5.5.1):
     - React-Core
-  - RNScreens (4.25.2):
+  - RNScreens (3.37.0):
     - RCT-Folly (= 2021.07.22.00)
     - React-Core
     - React-RCTImage
@@ -2494,7 +2494,7 @@ SPEC CHECKSUMS:
   RNGestureHandler: b72c93f525e6746b87f9de5cf9aed8bfc7b40e90
   RNGoogleSignin: 576a84dd0407b912e7a0adf07492de9feb79e5d9
   RNPermissions: a924440672dd3b2b7ca7fdf17d19b91b9d5ac015
-  RNScreens: 956938a537cf9ffc9ec70fa1b492a01e40458694
+  RNScreens: 508ace7f1c439ce1745c14a49939bb72726b4ecd
   RNSVG: d7c1f0b18e6f597d692d5532b076a02c905e1853
   SDWebImage: a7f831e1a65eb5e285e3fb046a23fcfbf08e696d
   SDWebImageWebPCoder: 908b83b6adda48effe7667cd2b7f78c897e5111d
@@ -2511,6 +2511,6 @@ SPEC CHECKSUMS:
   StripeUICore: 186f245526e86ab02578abcc6bb6d27cc34084c6
   Yoga: eddf2bbe4a896454c248a8f23b4355891eb720a6
 
-PODFILE CHECKSUM: b9b4baefeb06100ab1ba4fa8cb7358157ddbbbbf
+PODFILE CHECKSUM: f9ded2e38880502fa6f858874d7f5f17e24a040c
 
-COCOAPODS: 1.16.2
+COCOAPODS: 1.17.0

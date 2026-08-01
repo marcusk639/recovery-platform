@@ -18,35 +18,65 @@ appId: org.recoveryconnect
 ---
 - launchApp:
     clearState: true
+# First launch after a fresh install shows the iOS notification-permission dialog over
+# onboarding. clearState does not clear the system permission record, so it only appears
+# once per install — dismiss it optionally so the flow is robust either way.
+- tapOn:
+    text: "Allow"
+    optional: true
 # Onboarding welcome step — Skip button has no testID, text-only selector.
 - extendedWaitUntil:
     visible:
       text: "Skip"
     timeout: 30000
+- tapOn:
+    text: "Allow"
+    optional: true
 - tapOn: "Skip"
-# Lands in Main, limited mode, Home tab (LimitedHomeScreen). Neither CTA has a testID —
-# "Create Account" and "Sign in" both open the same AuthModal instance.
-- extendedWaitUntil:
-    visible:
-      text: "Sign in"
-    timeout: 20000
-- tapOn: "Sign in"
-# AuthModal opens defaulting to the Signup tab — switch to Login.
-- extendedWaitUntil:
-    visible:
-      text: "Login"
-    timeout: 10000
-- tapOn: "Login"
+# IDEMPOTENT: Firebase Auth persists its token in the iOS Keychain, which clearState (and even
+# app reinstall) does NOT clear — only a full `simctl erase` or in-app signOut does. So after
+# Skip the app may ALREADY be authenticated (persisted session) and land on group-list-screen,
+# OR be logged out and show LimitedModeScreen. Only perform the login when the limited-mode CTA
+# is present. (RN flattens LimitedModeScreen into one accessibility blob, so its CTAs are only
+# matchable by testID, added 2026-07-17.) Let the post-skip screen settle before branching.
+- waitForAnimationToEnd:
+    timeout: 6000
+- runFlow:
+    when:
+      visible:
+        id: "limited-mode-create-account-button"
+    commands:
+      - tapOn:
+          id: "limited-mode-create-account-button"
+      # AuthModal opens defaulting to the Signup tab — switch to Login.
+      - extendedWaitUntil:
+          visible:
+            text: "Login"
+          timeout: 10000
+      - tapOn: "Login"
+      # No hideKeyboard: AuthModal uses KeyboardAvoidingView (behavior="padding",
+      # AuthModal.tsx:362), so fields + Sign In button stay above the keyboard.
+      - tapOn:
+          id: "auth-modal-login-email-input"
+      - inputText: ${EMAIL}
+      - tapOn:
+          id: "auth-modal-login-password-input"
+      - inputText: ${PASSWORD}
+      - tapOn:
+          id: "auth-modal-login-button"
+      # iOS shows a "Save Password?" system dialog after submitting a login form; it covers the
+      # app and blocks the group-list-screen assertion. Let it settle, then dismiss it.
+      - waitForAnimationToEnd:
+          timeout: 5000
+      - tapOn:
+          text: "Not Now"
+          optional: true
+# On success (or if already authenticated), the Home tab renders GroupStackNavigator.
+# The iOS "Save Password?" dialog can appear a beat later than the in-block dismissal caught it,
+# covering group-list-screen — dismiss it again here if it's still/now present.
 - tapOn:
-    id: "auth-modal-login-email-input"
-- inputText: ${EMAIL}
-- hideKeyboard
-- tapOn:
-    id: "auth-modal-login-password-input"
-- inputText: ${PASSWORD}
-- tapOn:
-    id: "auth-modal-login-button"
-# On success, isAuthenticated flips true and the Home tab re-renders as GroupStackNavigator.
+    text: "Not Now"
+    optional: true
 - extendedWaitUntil:
     visible:
       id: "group-list-screen"

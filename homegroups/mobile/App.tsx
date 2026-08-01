@@ -28,7 +28,10 @@ import {
   NotificationHandler,
 } from './src/services/notifications';
 
-require('react-native').LogBox.ignoreLogs(['`GCanvasReady` with no listeners']);
+// Suppress all in-app LogBox toasts. They are dev-only, but in a debug build they stack up at
+// the bottom of the screen and overlap the bottom tab bar, intercepting taps meant for the tabs
+// (breaks E2E tab navigation, e.g. reaching the Profile tab to sign out). No production effect.
+require('react-native').LogBox.ignoreAllLogs();
 
 // Define the structure of expected deep link params - Simplified
 type LinkingParams = RootStackParamList & {

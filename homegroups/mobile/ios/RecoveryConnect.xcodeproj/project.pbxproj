@@ -275,6 +275,7 @@
 				A266B61CEC3B0862EFBA9916 /* [CP] Copy Pods Resources */,
 				59AD3137858EAD649B60509F /* [CP-User] [RNFB] Core Configuration */,
 				6F3A7545C268D28A95C5FA18 /* [CP-User] [RNFB] Crashlytics Configuration */,
+				4F77E13F93AF0AE9EC347ADA /* Configure Firebase Environment (E2E) */,
 			);
 			buildRules = (
 			);
@@ -312,9 +313,6 @@
 				Base,
 			);
 			mainGroup = 83CBB9F61A601CBA00E9B192;
-			packageReferences = (
-				C70EAD712D9C8125002B0C60 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
-			);
 			productRefGroup = 83CBBA001A601CBA00E9B192 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -398,6 +396,25 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-RecoveryConnect/Pods-RecoveryConnect-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		4F77E13F93AF0AE9EC347ADA /* Configure Firebase Environment (E2E) */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Configure Firebase Environment (E2E)";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Selects the Firebase GoogleService-Info.plist by build configuration.\n# Debug  -> homegroups-e2e  (E2E test backend; GoogleService-Info-E2E.plist)\n# Release/other -> committed prod plist (recovery-connect-cad4b) — untouched.\n# Runs AFTER Copy Bundle Resources so it overwrites the bundled plist in the .app.\nif [ \"${CONFIGURATION}\" = \"Debug\" ]; then\n  SRC=\"${SRCROOT}/GoogleService-Info-E2E.plist\"\n  DEST=\"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/GoogleService-Info.plist\"\n  if [ -f \"${SRC}\" ]; then\n    echo \"info: [FirebaseEnv] Debug build -> homegroups-e2e\"\n    cp \"${SRC}\" \"${DEST}\"\n  else\n    echo \"warning: [FirebaseEnv] ${SRC} not found; keeping default plist\"\n  fi\nelse\n  echo \"info: [FirebaseEnv] ${CONFIGURATION} build -> committed prod plist (recovery-connect-cad4b)\"\nfi\n";
 			showEnvVarsInLog = 0;
 		};
 		59AD3137858EAD649B60509F /* [CP-User] [RNFB] Core Configuration */ = {
@@ -888,17 +905,6 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
-/* Begin XCRemoteSwiftPackageReference section */
-		C70EAD712D9C8125002B0C60 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 11.11.0;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
 	};
 	rootObject = 83CBB9F71A601CBA00E9B192 /* Project object */;
 }

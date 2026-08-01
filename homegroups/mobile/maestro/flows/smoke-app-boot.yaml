@@ -1,0 +1,48 @@
+# Flow: SAFE read-only smoke test. Validates the app boots on a simulator, onboarding
+# can be skipped, limited-mode Home renders, and the AuthModal opens with its Login and
+# Signup fields present. Performs NO writes and NO real authentication — safe to run
+# against the production Firebase project (recovery-connect-cad4b) that the build targets.
+#
+# Purpose: prove the full E2E toolchain (native build -> simulator -> Maestro driving the
+# real UI) works, decoupled from the seeded-test-data / dedicated-test-backend decision
+# that the write-heavy persona flows depend on (see maestro/CI-CLOUD-SETUP.md §0-1).
+#
+# Run: maestro test homegroups/mobile/maestro/flows/smoke-app-boot.yaml
+appId: org.recoveryconnect
+---
+- launchApp:
+    clearState: true
+# Onboarding welcome — Skip button is text-only (no testID).
+- extendedWaitUntil:
+    visible:
+      text: "Skip"
+    timeout: 45000
+- tapOn: "Skip"
+# Limited-mode Home (LimitedModeScreen in MainTabNavigator) — both the "Create Account"
+# button and the "Sign in" link call the same onSignUp handler and open AuthModal. RN
+# flattens this screen's text into one merged accessibility blob, so the CTAs are not
+# addressable by visible text — tap the testID instead (added 2026-07-17).
+- extendedWaitUntil:
+    visible:
+      id: "limited-mode-create-account-button"
+    timeout: 20000
+- tapOn:
+    id: "limited-mode-create-account-button"
+# AuthModal opens on the Signup tab by default — verify the signup name field renders.
+- extendedWaitUntil:
+    visible:
+      id: "auth-modal-name-input"
+    timeout: 10000
+- assertVisible:
+    id: "auth-modal-email-input"
+# Switch to the Login tab and verify its fields render.
+- tapOn: "Login"
+- extendedWaitUntil:
+    visible:
+      id: "auth-modal-login-email-input"
+    timeout: 10000
+- assertVisible:
+    id: "auth-modal-login-password-input"
+- assertVisible:
+    id: "auth-modal-login-button"
+# Reached the live auth UI end-to-end without writing anything. Done.

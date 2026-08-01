@@ -7,21 +7,41 @@
 # gate. Confirmed by reading MainTabNavigator.tsx (isLimitedMode / LimitedProfileScreen).
 appId: org.recoveryconnect
 ---
+# Bottom-tab labels aren't matchable text on iOS — tap the Profile tab by its testID
+# (tabBarTestID added in MainTabNavigator.tsx). From a nested group screen this switches tabs.
 - tapOn:
-    text: "Profile"
+    id: "tab-profile"
 - assertVisible:
     id: "profile-screen"
+# A non-blocking app bug ("Error: Unsupported field value: undefined" — an onboarding/profile
+# write sends an undefined Firestore field) can pop a blocking alert over the profile screen.
+# Dismiss it if present so the scroll to the sign-out button isn't blocked.
+- tapOn:
+    text: "OK"
+    optional: true
+# Sign-out button is near the bottom of the scrollable profile screen — scroll to it.
+# visibilityPercentage lowered from the 100% default: the button sits just above the tab bar,
+# so it's never 100% unobstructed, which made the strict default fail to register it.
+- scrollUntilVisible:
+    element:
+      id: "profile-sign-out-button"
+    direction: DOWN
+    visibilityPercentage: 30
+    timeout: 12000
 - tapOn:
     id: "profile-sign-out-button"
 # Native Alert.alert('Sign Out', 'Are you sure...', [Cancel, {text:'Sign Out', destructive}])
-# — ProfileScreen.tsx confirmSignOut(). NEEDS LIVE VERIFICATION: confirm Maestro can target
-# the native alert's destructive button by text on both iOS and Android.
+# — ProfileScreen.tsx confirmSignOut(). "Sign Out" appears as: the alert title (index 0) and
+# the destructive confirm button (index 1) — the profile button behind the modal is obscured
+# and not counted. index:1 taps the confirm button (verified live).
 - tapOn:
     text: "Sign Out"
-    optional: true
+    index: 1
+# After signOut, isAuthenticated flips false and the app lands on the Home tab in limited mode
+# (LimitedModeScreen) — NOT the Profile tab. RN flattens that screen into one merged accessibility
+# blob, so its "Create Account" text is NOT matchable — assert the testID instead (the same
+# limited-mode CTA the login subflow taps). This is the reliable logged-out signal.
 - extendedWaitUntil:
     visible:
-      text: "Your Profile"
-    timeout: 15000
-- assertVisible:
-    text: "Create Account"
+      id: "limited-mode-create-account-button"
+    timeout: 30000

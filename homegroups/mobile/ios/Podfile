@@ -105,7 +105,21 @@ target 'RecoveryConnect' do
       target.build_configurations.each do |config|
         config.build_settings['SWIFT_VERSION'] = '5.0'
         config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0'
-        
+
+        # Force a single, uniform C++ language standard (c++17) across every Pods
+        # target. Root cause of the abseil "Undefined symbols ... referenced from
+        # FirebaseFirestoreInternal" link failure: FirebaseFirestoreInternal's own
+        # podspec pins CLANG_CXX_LANGUAGE_STANDARD=c++14, while the standalone
+        # 'abseil' pod target (and gRPC-Core/gRPC-C++/fmt, below) are forced to
+        # c++17 to fix an unrelated Xcode 16+ compile error. Abseil's
+        # absl::string_view aliases to std::string_view only when __cplusplus >=
+        # 201703L (ABSL_USES_STD_STRING_VIEW), so compiling abseil's headers under
+        # two different C++ standards across targets produces two ABI-incompatible,
+        # differently-mangled absl::string_view types -- hence symbols that exist
+        # in the compiled abseil archive still show as "undefined" at final link.
+        # Every target must agree on the same standard for ABI consistency.
+        config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+
         # Fix for .xcprivacy file on device builds
         if target.name == 'FirebaseMessaging'
           config.build_settings['EXCLUDED_SOURCE_FILE_NAMES'] ||= ['$(inherited)']
@@ -165,6 +179,17 @@ target 'RecoveryConnect' do
         target.build_configurations.each do |config|
           config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
           config.build_settings['OTHER_LDFLAGS'] = '$(inherited) -ObjC'
+        end
+      end
+    end
+
+    # Fix for Yoga UDL syntax rejected by Xcode 16+/26 clang. RN 0.72's YGValue.h
+    # declares literal operators as `operator"" _pt` (space before the identifier),
+    # which newer clang errors on under -Werror,-Wdeprecated-literal-operator.
+    installer.pods_project.targets.each do |target|
+      if target.name == 'Yoga'
+        target.build_configurations.each do |config|
+          config.build_settings['OTHER_CPLUSPLUSFLAGS'] = '$(inherited) -Wno-deprecated-literal-operator'
         end
       end
     end
