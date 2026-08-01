@@ -339,6 +339,10 @@ const GroupScheduleScreen: React.FC = () => {
       <TouchableOpacity
         style={styles.meetingItemContainer}
         onPress={() => showMeetingDetails(item)}
+        // accessible={false} so iOS does not flatten this row into one accessibility element —
+        // that would absorb the nested QR-button's testID and hide it from E2E. The row's own
+        // testID (accessibilityIdentifier) and onPress still work.
+        accessible={false}
         testID={`meeting-item-${item.id}`}>
         <View style={styles.dateTimeContainer}>
           <Text style={styles.dayText}>

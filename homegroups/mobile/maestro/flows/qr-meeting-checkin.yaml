@@ -64,8 +64,12 @@ appId: org.recoveryconnect
     timeout: 15000
 - assertVisible:
     id: "checkin-url"
-- assertVisible:
-    id: "share-btn"
+# share/copy buttons sit below the QR code + URL — scroll to them.
+- scrollUntilVisible:
+    element:
+      id: "share-btn"
+    direction: DOWN
+    timeout: 10000
 - assertVisible:
     id: "copy-btn"
 - runFlow:
