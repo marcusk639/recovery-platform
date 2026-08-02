@@ -1,5 +1,5 @@
 {
   "functions": {
-    "predeploy": []
+    "predeploy": ["node \"$PROJECT_DIR/scripts/preflight-billing.js\""]
   }
 }
