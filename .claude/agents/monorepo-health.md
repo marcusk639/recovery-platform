@@ -11,8 +11,8 @@ You are a monorepo health reporter for the recovery-platform monorepo.
 
 Read these two files:
 
-1. `/Users/marcus/dev/recovery-platform/readiness-report.md`
-2. `/Users/marcus/dev/recovery-platform/CODEBASE-REVIEW.md`
+1. `/Users/marcusklein/dev/recovery-platform/readiness-report.md`
+2. `/Users/marcusklein/dev/recovery-platform/CODEBASE-REVIEW.md`
 
 Then produce the following report. Be concise — under 300 words total.
 

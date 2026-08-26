@@ -45,14 +45,14 @@ lsof -iTCP:8080 -sTCP:LISTEN 2>/dev/null || echo "port 8080 is free"
 
 ```bash
 # homegroups
-cd /Users/marcus/dev/recovery-platform/homegroups && firebase emulators:start
+cd /Users/marcusklein/dev/recovery-platform/homegroups && firebase emulators:start
 
 # regroup
-cd /Users/marcus/dev/recovery-platform/regroup && firebase emulators:start
+cd /Users/marcusklein/dev/recovery-platform/regroup && firebase emulators:start
 
 # detox-recovery
-cd /Users/marcus/dev/recovery-platform/detox-recovery && firebase emulators:start
+cd /Users/marcusklein/dev/recovery-platform/detox-recovery && firebase emulators:start
 
 # recovery-api (no Firebase emulator — runs as Hono.js HTTP server)
-cd /Users/marcus/dev/recovery-platform/recovery-api && npm run dev
+cd /Users/marcusklein/dev/recovery-platform/recovery-api && npm run dev
 ```

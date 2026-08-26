@@ -4,7 +4,7 @@
       "command": "npx",
       "args": ["detox-mcp"],
       "env": {
-        "DETOX_PROJECT_PATH": "/Users/marcus/dev/recovery-platform/regroup/mobile"
+        "DETOX_PROJECT_PATH": "/Users/marcusklein/dev/recovery-platform/regroup/mobile"
       }
     },
     "context7": {
