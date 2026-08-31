@@ -285,7 +285,12 @@ export class UserModel {
         favoriteMeetings: [],
       };
 
-      const newUser = {...defaultUser, ...userData};
+      // Drop undefined keys from userData before merging — Firestore rejects `undefined` field
+      // values (e.g. signup passes recoveryDate: undefined), which would throw on the write.
+      const cleanUserData = Object.fromEntries(
+        Object.entries(userData).filter(([, v]) => v !== undefined),
+      ) as Partial<User>;
+      const newUser = {...defaultUser, ...cleanUserData};
 
       await firestore()
         .collection('users')
@@ -581,14 +586,17 @@ export class UserModel {
     try {
       const userRef = firestore().collection('users').doc(uid);
 
+      // Coalesce optional fields to null — Firestore rejects `undefined` field values
+      // ("Unsupported field value: undefined"). On "Skip", intent/action/groupId are unset,
+      // which was making the onboarding-complete write throw on every launch.
       await userRef.update({
         onboardingComplete: true,
         onboardingData: {
-          intent: onboardingData.intent,
-          groupId: onboardingData.groupId,
-          action: onboardingData.action,
+          intent: onboardingData.intent ?? null,
+          groupId: onboardingData.groupId ?? null,
+          action: onboardingData.action ?? null,
           completedAt: firestore.Timestamp.fromMillis(
-            onboardingData.completedAt,
+            onboardingData.completedAt ?? Date.now(),
           ),
         },
         updatedAt: firestore.FieldValue.serverTimestamp(),

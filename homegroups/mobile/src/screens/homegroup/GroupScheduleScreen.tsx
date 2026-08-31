@@ -113,7 +113,9 @@ const GroupScheduleScreen: React.FC = () => {
         'Export for Meeting Guide',
         'Generating CSV and JSON for your intergroup or district...',
       );
-      const result = await functions().httpsCallable('exportMeetingGuideFormat')({
+      const result = await functions().httpsCallable(
+        'exportMeetingGuideFormat',
+      )({
         groupId,
       });
       const {csv, instructions} = result.data as {
@@ -161,7 +163,13 @@ const GroupScheduleScreen: React.FC = () => {
         </View>
       ),
     });
-  }, [navigation, groupId, groupName, isCurrentUserAdmin, handleExportMeetingGuide]);
+  }, [
+    navigation,
+    groupId,
+    groupName,
+    isCurrentUserAdmin,
+    handleExportMeetingGuide,
+  ]);
 
   const loadScheduleData = useCallback(
     async (force = false) => {
@@ -331,6 +339,10 @@ const GroupScheduleScreen: React.FC = () => {
       <TouchableOpacity
         style={styles.meetingItemContainer}
         onPress={() => showMeetingDetails(item)}
+        // accessible={false} so iOS does not flatten this row into one accessibility element —
+        // that would absorb the nested QR-button's testID and hide it from E2E. The row's own
+        // testID (accessibilityIdentifier) and onPress still work.
+        accessible={false}
         testID={`meeting-item-${item.id}`}>
         <View style={styles.dateTimeContainer}>
           <Text style={styles.dayText}>
@@ -339,7 +351,12 @@ const GroupScheduleScreen: React.FC = () => {
           <Text style={styles.timeText}>{formatMeetingTime(item.time)}</Text>
         </View>
         <View style={styles.detailsContainer}>
-          <View style={{flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap'}}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+            }}>
             <Text style={styles.meetingName}>{item.name}</Text>
             {stepBadgeNum ? (
               <View style={styles.stepBadge}>
@@ -353,6 +370,7 @@ const GroupScheduleScreen: React.FC = () => {
           <View style={styles.meetingRowActions}>
             <TouchableOpacity
               style={styles.qrButton}
+              testID={`meeting-qr-button-${item.id}`}
               onPress={() =>
                 navigation.navigate('MeetingQRCode', {
                   groupId,
@@ -611,7 +629,9 @@ const GroupScheduleScreen: React.FC = () => {
         {/* V2.2: Calendar view shortcut */}
         <TouchableOpacity
           style={styles.calendarButton}
-          onPress={() => navigation.navigate('GroupCalendar', {groupId, groupName})}
+          onPress={() =>
+            navigation.navigate('GroupCalendar', {groupId, groupName})
+          }
           testID="view-calendar-button">
           <Icon name="calendar-month" size={18} color="#2196F3" />
           <Text style={styles.calendarButtonText}>View Calendar</Text>

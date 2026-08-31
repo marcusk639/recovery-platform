@@ -15,20 +15,37 @@ appId: org.recoveryconnect
     env:
       EMAIL: test-admin@homegroups-e2e.com
       PASSWORD: TestPassword123!
-- tapOn: "Home"
+# bottom-tab label not matchable on iOS; login already lands on Home/group-list.
+- tapOn:
+    text: "Home"
+    optional: true
 - extendedWaitUntil:
     visible:
       id: "group-list-screen"
     timeout: 15000
+# CORRECTED 2026-07-17: was `id: "group-list"` — that testID is on the FlatList CONTAINER
+# (GroupListScreen.tsx:292), not a row. Tapping it hits the container bounding-box center,
+# which for a single-seeded-group account lands in empty space below the one card and selects
+# nothing (next wait for group-info-section then times out). Target an actual group row; real
+# per-card testID is `group-card-${item.id}` (GroupListScreen.tsx:134).
+# NEEDS-LIVE-RUN: confirm the installed Maestro CLI supports regex `id` matching (same open
+# question already flagged for `meeting-item-.*` below).
 - tapOn:
-    id: "group-list"
+    id: "group-card-.*"
     index: 0
 - extendedWaitUntil:
     visible:
       id: "group-info-section"
     timeout: 15000
+# Use the always-present schedule nav tile (below the fold), not group-overview-view-schedule-button
+# — that button only renders when there are upcoming meeting INSTANCES on the overview preview.
+- scrollUntilVisible:
+    element:
+      id: "group-overview-schedule-tile"
+    direction: DOWN
+    timeout: 10000
 - tapOn:
-    id: "group-overview-view-schedule-button"
+    id: "group-overview-schedule-tile"
 # GroupScheduleScreen has no screen-level testID; wait on the first meeting row instead.
 # NEEDS LIVE VERIFICATION: confirm regex `id` matching is supported by the installed
 # Maestro CLI version.
@@ -36,19 +53,23 @@ appId: org.recoveryconnect
     visible:
       id: "meeting-item-.*"
     timeout: 15000
-# The QR TouchableOpacity has NO testID — only accessibilityLabel="Show QR code".
-# NEEDS LIVE VERIFICATION: Maestro's text matcher generally also matches
-# accessibilityLabel/content-description; confirm on-device.
+# QR button is an icon-only TouchableOpacity; its accessibilityLabel "Show QR code" is not
+# reliably matchable on iOS, so a testID meeting-qr-button-${item.id} was added
+# (GroupScheduleScreen.tsx). Tap it by testID (regex — the meeting doc id is dynamic).
 - tapOn:
-    text: "Show QR code"
+    id: "meeting-qr-button-.*"
 - extendedWaitUntil:
     visible:
       id: "qr-code-screen"
     timeout: 15000
 - assertVisible:
     id: "checkin-url"
-- assertVisible:
-    id: "share-btn"
+# share/copy buttons sit below the QR code + URL — scroll to them.
+- scrollUntilVisible:
+    element:
+      id: "share-btn"
+    direction: DOWN
+    timeout: 10000
 - assertVisible:
     id: "copy-btn"
 - runFlow:

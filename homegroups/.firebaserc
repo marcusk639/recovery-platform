@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "recovery-connect-cad4b"
+    "default": "recovery-connect-cad4b",
+    "e2e": "homegroups-e2e"
   }
 }

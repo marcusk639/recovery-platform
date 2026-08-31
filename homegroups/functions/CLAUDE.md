@@ -59,7 +59,9 @@ export const myCallable = onCall(
 );
 ```
 
-The v1 form `functions.https.onCall(config, handler)` accepts the config object at the call site but **silently ignores `region`** at deploy time — the function lands in `us-central1` regardless. See `joinGroupByInviteCode.ts` / `sendGroupInviteEmail.ts` for canonical v2 examples (refs: audit D-10).
+The v1 form `functions.https.onCall(config, handler)` accepts the config object at the call site but **silently ignores `region`** at deploy time — the function lands in `us-central1` regardless.
+
+> **Region caveat (2026-08-01):** a non-default `region` on a v2 callable IS honored at deploy time, but the **client must call that same region** or it gets `NOT_FOUND`. The mobile client calls `functions().httpsCallable(name)` with the **default `us-central1`** everywhere except where it explicitly does `firestore().app.functions('<region>')`. `joinGroupByInviteCode.ts` and `sendGroupInviteEmail.ts` were pinned to `us-west1`/`us-east1` while the client called `us-central1`, so invite-join was 100% broken in prod. Both region pins were removed (2026-08-01) so they deploy to `us-central1` like the other ~90 callables. **Only add a non-default `region` if you also update every client call site to match.**
 
 ### Facility / Treatment-Center Dashboard
 

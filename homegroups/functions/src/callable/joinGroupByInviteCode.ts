@@ -17,7 +17,6 @@ export const joinGroupByInviteCode = onCall(
     cpu: 0.5,
     memory: "512MiB",
     timeoutSeconds: 60,
-    region: "us-west1",
   },
   async (request: CallableRequest<JoinGroupData>) => {
     const { code } = request.data;

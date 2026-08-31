@@ -11,11 +11,12 @@ node_modules/
 service-key.json
 *service-key*.json
 
-# Environment variables — never commit (contains live Stripe keys)
+# Environment variables — never commit (may contain live Stripe keys).
+# Broad .env.* catch covers per-project deploy files (e.g. .env.phoenix-cleanhouse)
+# and .env.local; the template is the one exception that stays tracked.
 .env
-.env.local
-.env.*.local
-.env.bak*
+.env.*
+!.env.example
 
 # Firebase emulator local secret overrides — never commit
 .secret.local

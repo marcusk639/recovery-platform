@@ -12,7 +12,7 @@ FAIL=0
 # Firebase client config files carry public-by-design AIza keys; test files
 # may contain known-bad fixtures (e.g. google-apikeys.test.ts regression test).
 SECRET_PATTERNS='sk-or-v1-[A-Za-z0-9]{16,}|sk-ant-[A-Za-z0-9_-]{16,}|sk_live_[A-Za-z0-9]{16,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|-----BEGIN [A-Z ]*PRIVATE KEY-----|AIza[0-9A-Za-z_-]{35}'
-ALLOWLIST='GoogleService-Info\.plist$|google-services\.json$|AndroidManifest\.xml$|\.test\.(ts|tsx|js)$|__tests__/|package-lock\.json$|\.env\.example$|env\.example$'
+ALLOWLIST='GoogleService-Info[^/]*\.plist$|google-services[^/]*\.json$|AndroidManifest\.xml$|\.test\.(ts|tsx|js)$|__tests__/|package-lock\.json$|\.env\.example$|env\.example$'
 
 while IFS= read -r f; do
   echo "$f" | grep -qE "$ALLOWLIST" && continue

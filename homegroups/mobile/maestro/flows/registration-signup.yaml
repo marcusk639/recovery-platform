@@ -1,6 +1,22 @@
 # Flow: New user completes signup via AuthModal (Signup tab, the default), reaching
 # group-list-screen on success.
-# Run: maestro test homegroups/mobile/maestro/flows/registration-signup.yaml
+# Run: maestro test -e EMAIL="e2e-signup-$(date +%s)@homegroups-e2e.com" \
+#   homegroups/mobile/maestro/flows/registration-signup.yaml
+#
+# ⚠ KNOWN BLOCKER (2026-08-01, iOS 26.5 sim, Maestro 2.6.1): the `auth-modal-password-input`
+# field does NOT receive `inputText` on the SIGNUP form (verified via screenshots — the field
+# stays empty), so validateSignupForm() fails on the (empty) password and signup never fires.
+# The SAME field pattern works on the LOGIN form (subflows/login.yaml passes), so this is not an
+# app bug — the signup form is taller (First Name/Email/Password/Confirm), and the password field
+# sits at the keyboard boundary; tap+inputText doesn't land there. Tried & did NOT fix it:
+# removing hideKeyboard, tapping section labels to dismiss the keyboard, textContentType=
+# "oneTimeCode", and scrollUntilVisible-per-field (the last hung). NEXT IDEAS to try: swipe-down
+# to dismiss the keyboard before the password tap; a fixed-coordinate keyboard dismiss; or a
+# temporary testID on a scroll container to scroll deterministically. Real-user signup works;
+# this is an E2E harness limitation to resolve before this flow can go green.
+# NOTE: A real onboarding bug WAS found & fixed while investigating this — UserModel
+# .setOnboardingComplete wrote undefined onboardingData fields ("Unsupported field value:
+# undefined" on every launch); see the commit.
 #
 # CORRECTED: the original version of this file targeted LandingScreen/RegisterScreen via
 # AuthNavigator, which AppNavigator.tsx never mounts (same dead-code trap subflows/login.yaml
@@ -18,11 +34,15 @@ appId: org.recoveryconnect
       text: "Skip"
     timeout: 30000
 - tapOn: "Skip"
+# RN flattens LimitedModeScreen into one merged accessibility blob, so the CTAs are NOT
+# matchable by visible text — tap the testID instead (validated by smoke-app-boot.yaml).
+# Both "Create Account" and "Sign in" open the same AuthModal (default Signup tab).
 - extendedWaitUntil:
     visible:
-      text: "Sign in"
+      id: "limited-mode-create-account-button"
     timeout: 20000
-- tapOn: "Sign in"
+- tapOn:
+    id: "limited-mode-create-account-button"
 # AuthModal opens on the Signup tab by default — no tab switch needed.
 - extendedWaitUntil:
     visible:
@@ -31,25 +51,46 @@ appId: org.recoveryconnect
 - tapOn:
     id: "auth-modal-name-input"
 - inputText: "E2E Tester"
-- hideKeyboard
+# No hideKeyboard (flaky on iOS): AuthModal uses KeyboardAvoidingView so fields + the signup
+# button stay above the keyboard; tapping the next field moves focus.
 - tapOn:
     id: "auth-modal-email-input"
-# NEEDS LIVE VERIFICATION: Firebase will reject a duplicate email on repeat runs — this
-# static address collides after the first successful run. Pass a unique EMAIL via
-# `maestro test --env EMAIL=e2e-signup-$(date +%s)@homegroups-e2e.com ...` or add a
-# Firebase Auth cleanup step before this flow runs in CI.
-- inputText: "e2e-signup-000@homegroups-e2e.com"
-- hideKeyboard
+# Unique email per run REQUIRED — Firebase rejects a duplicate on repeat runs (then AuthModal
+# switches to the Login tab and signup never lands on group-list-screen). Pass a timestamped
+# address at run time, e.g.:
+#   maestro test -e EMAIL="e2e-signup-$(date +%s)@homegroups-e2e.com" \
+#     homegroups/mobile/maestro/flows/registration-signup.yaml
+- inputText: ${EMAIL}
 - tapOn:
     id: "auth-modal-password-input"
 - inputText: "TestPassword123!"
-- hideKeyboard
 - tapOn:
     id: "auth-modal-confirm-password-input"
 - inputText: "TestPassword123!"
-- hideKeyboard
 - tapOn:
     id: "auth-modal-signup-button"
+# iOS "Save Password?" dialog appears after submit and can cover group-list-screen. The session
+# always persists, so poll+dismiss "Not Now", then relaunch (Keychain-preserved) if still not
+# on the group list — same robust pattern as subflows/login.yaml.
+- repeat:
+    while:
+      notVisible:
+        id: "group-list-screen"
+    times: 20
+    commands:
+      - tapOn:
+          text: "Not Now"
+          optional: true
+- runFlow:
+    when:
+      notVisible:
+        id: "group-list-screen"
+    commands:
+      - launchApp:
+          clearState: false
+      - tapOn:
+          text: "Skip"
+          optional: true
 - extendedWaitUntil:
     visible:
       id: "group-list-screen"

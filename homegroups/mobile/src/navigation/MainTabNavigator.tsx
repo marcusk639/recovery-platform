@@ -132,13 +132,19 @@ const LimitedModeScreen: React.FC<{
       <Icon name="lock-outline" size={64} color="#BDBDBD" />
       <Text style={limitedStyles.title}>{title}</Text>
       <Text style={limitedStyles.description}>{description}</Text>
-      <TouchableOpacity style={limitedStyles.signUpButton} onPress={onSignUp}>
+      <TouchableOpacity
+        testID="limited-mode-create-account-button"
+        style={limitedStyles.signUpButton}
+        onPress={onSignUp}>
         <Icon name="account-plus" size={20} color="#FFFFFF" />
         <Text style={limitedStyles.signUpButtonText}>Create Account</Text>
       </TouchableOpacity>
       <Text style={limitedStyles.signInText}>
         Already have an account?{' '}
-        <Text style={limitedStyles.signInLink} onPress={onSignUp}>
+        <Text
+          testID="limited-mode-signin-link"
+          style={limitedStyles.signInLink}
+          onPress={onSignUp}>
           Sign in
         </Text>
       </Text>
@@ -364,6 +370,9 @@ const MainTabNavigator: React.FC = () => {
           component={isLimitedMode ? LimitedHomeScreen : GroupStackNavigator}
           options={{
             tabBarLabel: 'Home',
+            // Stable testID so E2E can reach the Home tab — bottom-tab labels are not matchable
+            // text on iOS, and an authenticated session can land on a different tab (e.g. Meetings).
+            tabBarTestID: 'tab-home',
             tabBarIcon: ({focused}) => <HomeIcon focused={focused} />,
             headerShown: false,
           }}
@@ -430,6 +439,10 @@ const MainTabNavigator: React.FC = () => {
           component={isLimitedMode ? LimitedProfileScreen : ProfileNavigator}
           options={{
             tabBarLabel: 'Profile',
+            // Bottom-tab labels are not matchable text nodes on iOS; expose a stable testID so
+            // E2E (logout subflow) can reach the Profile tab. tabBarTestID is honored by
+            // @react-navigation/bottom-tabs v6 (BottomTabBar renders testID={options.tabBarTestID}).
+            tabBarTestID: 'tab-profile',
             tabBarIcon: ({focused}) => <ProfileIcon focused={focused} />,
             headerTitle: 'Profile',
             headerShown: false,

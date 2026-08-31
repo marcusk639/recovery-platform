@@ -19,8 +19,15 @@ appId: org.recoveryconnect
     visible:
       id: "group-list-screen"
     timeout: 15000
+# CORRECTED 2026-07-17: was `id: "group-list"` — that testID is on the FlatList CONTAINER
+# (GroupListScreen.tsx:292), not a row. Tapping it hits the container bounding-box center,
+# which for a single-seeded-group account lands in empty space below the one card and selects
+# nothing (next wait for group-info-section then times out). Target an actual group row; real
+# per-card testID is `group-card-${item.id}` (GroupListScreen.tsx:134).
+# NEEDS-LIVE-RUN: confirm the installed Maestro CLI supports regex `id` matching (same open
+# question already flagged for `meeting-item-.*` in qr-meeting-checkin.yaml).
 - tapOn:
-    id: "group-list"
+    id: "group-card-.*"
     index: 0
 - extendedWaitUntil:
     visible:

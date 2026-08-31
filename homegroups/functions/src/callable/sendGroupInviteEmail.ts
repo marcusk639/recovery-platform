@@ -21,7 +21,6 @@ export const sendGroupInviteEmail = onCall(
     cpu: 0.5,
     memory: "512MiB",
     timeoutSeconds: 60,
-    region: "us-east1",
   },
   async (request: CallableRequest<SendInviteEmailData>) => {
     const { groupId, inviteeEmail, inviteCode } = request.data;

@@ -9,26 +9,49 @@ appId: org.recoveryconnect
     env:
       EMAIL: test-admin@homegroups-e2e.com
       PASSWORD: TestPassword123!
-- tapOn: "Home"
+# login subflow already lands on the Home tab / group-list-screen; the bottom-tab label is
+# not a matchable "Home" text node on iOS, so this tab tap is optional (belt-and-suspenders).
+- tapOn:
+    text: "Home"
+    optional: true
 - extendedWaitUntil:
     visible:
       id: "group-list-screen"
     timeout: 15000
+# CORRECTED 2026-07-17: was `id: "group-list"` — that testID is on the FlatList CONTAINER
+# (GroupListScreen.tsx:292), not a row. Tapping it hits the container bounding-box center,
+# which for a single-seeded-group account lands in empty space below the one card and selects
+# nothing (next wait for group-info-section then times out). Target an actual group row; real
+# per-card testID is `group-card-${item.id}` (GroupListScreen.tsx:134).
+# NEEDS-LIVE-RUN: confirm the installed Maestro CLI supports regex `id` matching (same open
+# question already flagged for `meeting-item-.*` in qr-meeting-checkin.yaml).
 - tapOn:
-    id: "group-list"
+    id: "group-card-.*"
     index: 0
 - extendedWaitUntil:
     visible:
       id: "group-info-section"
     timeout: 15000
+# The conscience tile sits below the fold (under Admin Actions + Members/Announcements
+# tiles), so scroll it into view before tapping — tapOn alone does not auto-scroll.
+- scrollUntilVisible:
+    element:
+      id: "group-overview-conscience-tile"
+    direction: DOWN
+    timeout: 10000
 - tapOn:
     id: "group-overview-conscience-tile"
 - extendedWaitUntil:
     visible:
       text: "Group Conscience"
     timeout: 15000
-- assertVisible:
-    id: "new-vote-button"
+# new-vote-button ("Start New Vote") sits below the Active Votes list; with existing votes it
+# can be below the fold, so scroll to it.
+- scrollUntilVisible:
+    element:
+      id: "new-vote-button"
+    direction: DOWN
+    timeout: 10000
 - tapOn:
     id: "new-vote-button"
 - extendedWaitUntil:
@@ -38,12 +61,22 @@ appId: org.recoveryconnect
 - tapOn:
     id: "vote-title-input"
 - inputText: "E2E Test Motion - Change meeting day?"
-- hideKeyboard
+# hideKeyboard removed — flaky on iOS sims. Tapping the next field moves focus; Maestro
+# scrolls to reveal the submit button if the keyboard overlaps it.
 - tapOn:
     id: "vote-description-input"
 - inputText: "Automated Maestro flow - safe to ignore/close."
-- hideKeyboard
+# The multiline description leaves the keyboard up covering the submit button. This screen's
+# ScrollView uses keyboardShouldPersistTaps="handled" (CreateConscienceVoteScreen.tsx:114), so
+# tapping the static "Vote Options" header dismisses the keyboard (hideKeyboard is flaky on iOS).
+- tapOn: "Vote Options"
 # Vote options default to ["Yes", "No", "Abstain"] — leaving them unedited is intentional.
+# Submit button sits below the options/quorum fields — scroll to it.
+- scrollUntilVisible:
+    element:
+      id: "create-vote-submit-button"
+    direction: DOWN
+    timeout: 10000
 - tapOn:
     id: "create-vote-submit-button"
 # CreateConscienceVoteScreen.tsx:86-95 shows a blocking native
@@ -73,6 +106,13 @@ appId: org.recoveryconnect
 - tapOn:
     text: "Yes"
     index: 0
-- assertVisible: "Your vote:"
+# Casting is an async callable round-trip; wait for the post-vote confirmation to render.
+# GroupConscienceScreen.tsx:224 renders "Your vote: <opt> (tap another option to change)" once
+# myVote is set — RN merges the split Text nodes, so match the distinctive trailing parenthetical
+# ("another option to change") which only appears AFTER a vote is cast, rather than "Your vote:".
+- extendedWaitUntil:
+    visible:
+      text: ".*another option to change.*"
+    timeout: 15000
 - runFlow:
     file: ../subflows/logout.yaml

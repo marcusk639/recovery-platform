@@ -28,7 +28,10 @@ import {
   NotificationHandler,
 } from './src/services/notifications';
 
-require('react-native').LogBox.ignoreLogs(['`GCanvasReady` with no listeners']);
+// Suppress all in-app LogBox toasts. They are dev-only, but in a debug build they stack up at
+// the bottom of the screen and overlap the bottom tab bar, intercepting taps meant for the tabs
+// (breaks E2E tab navigation, e.g. reaching the Profile tab to sign out). No production effect.
+require('react-native').LogBox.ignoreAllLogs();
 
 // Define the structure of expected deep link params - Simplified
 type LinkingParams = RootStackParamList & {
@@ -461,15 +464,21 @@ const App = () => {
     }
   }, [isOffline]);
 
+  // Guard the Stripe publishable key: react-native-dotenv inlines process.env.X only when a
+  // .env is present at bundle time. On any build without .env (CI, Maestro Cloud, a fresh clone)
+  // it is `undefined`, and stripe-react-native's native initialise force-casts it (`as! String`),
+  // crashing the app at launch (SIGTRAP). Skip init and pass a safe empty string when absent —
+  // payments are then unavailable, but the app boots.
+  const stripePublishableKey = process.env.STRIPE_TEST_PUBLISHABLE_KEY ?? '';
   useEffect(() => {
-    initStripe({
-      publishableKey: process.env.STRIPE_TEST_PUBLISHABLE_KEY as string,
-    });
-  }, []);
-  // !! REPLACE WITH YOUR ACTUAL STRIPE PUBLISHABLE KEY !!
-  // Consider using react-native-dotenv for better key management
-  const stripePublishableKey = process.env
-    .STRIPE_TEST_PUBLISHABLE_KEY as string;
+    if (stripePublishableKey) {
+      initStripe({publishableKey: stripePublishableKey});
+    } else {
+      console.warn(
+        'STRIPE_TEST_PUBLISHABLE_KEY is not set (no .env); Stripe is disabled and payment flows will not work.',
+      );
+    }
+  }, [stripePublishableKey]);
   return (
     <SafeAreaProvider>
       <Provider store={store}>
