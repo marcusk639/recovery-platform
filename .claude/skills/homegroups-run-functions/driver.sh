@@ -29,12 +29,31 @@ done
 [ -z "${R:-}" ] && { echo "functions emulator never answered" >&2; exit 1; }
 
 echo "==> seeding fixtures into firestore emulator"
-curl -s -o /dev/null -X POST "$FS/groups?documentId=driver-test-group" \
-  -H 'Content-Type: application/json' \
-  -d '{"fields":{"name":{"stringValue":"Verified Test Group"},"type":{"stringValue":"AA"},"isClaimed":{"booleanValue":true},"description":{"stringValue":"visible when claimed"},"city":{"stringValue":"Portland"}}}'
-curl -s -o /dev/null -X POST "$FS/groups?documentId=driver-hidden-group" \
-  -H 'Content-Type: application/json' \
-  -d '{"fields":{"name":{"stringValue":"Hidden"},"type":{"stringValue":"AA"},"publicProfileEnabled":{"booleanValue":false}}}'
+# The Firestore emulator REST API rejects unauthenticated writes; "owner" is the
+# emulator's magic bearer token. Without it the write silently 403s and every
+# lookup below returns NOT_FOUND -- which looks like a passing negative test.
+seed() {  # $1 = docId, $2 = fields JSON
+  local R
+  R=$(curl -s -X POST "$FS/groups?documentId=$1" \
+        -H 'Content-Type: application/json' \
+        -H 'Authorization: Bearer owner' \
+        -d "$2")
+  if printf '%s' "$R" | grep -q '"fields"'; then
+    ok "seeded $1"
+  else
+    no "seeded $1" "$R"
+  fi
+}
+
+seed driver-test-group '{"fields":{"name":{"stringValue":"Verified Test Group"},"type":{"stringValue":"AA"},"isClaimed":{"booleanValue":true},"description":{"stringValue":"visible when claimed"},"city":{"stringValue":"Portland"}}}'
+seed driver-hidden-group '{"fields":{"name":{"stringValue":"Hidden"},"type":{"stringValue":"AA"},"publicProfileEnabled":{"booleanValue":false}}}'
+
+# Abort early if seeding failed -- otherwise the NOT_FOUND assertions below pass
+# for the wrong reason and the run looks healthier than it is.
+if [ "$FAIL" -ne 0 ]; then
+  echo "seeding failed; aborting before assertions" >&2
+  exit 1
+fi
 
 echo "==> getPublicGroupProfile"
 
