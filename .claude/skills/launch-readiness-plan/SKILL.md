@@ -1,6 +1,6 @@
 ---
 name: launch-readiness-plan
-description: Produce an evidence-backed launch and monetization work plan for one or more recovery-platform apps. Use when asked what needs to happen before launch, what is blocking revenue, what to build next, how close an app is to shipping, or for a launch plan, go-to-market readiness, or monetization roadmap. Takes app targets as arguments (homegroups, regroup, detox-recovery, recovery-api); with no argument it analyses the whole platform.
+description: Produce an evidence-backed launch and monetization work plan for any part of the recovery-platform monorepo. Re-runnable as development continues; each run re-verifies the previous plan rather than trusting it. Use when asked what needs to happen before launch, what is blocking revenue, what to build next, how close something is to shipping, or for a launch plan, go-to-market readiness, or monetization roadmap. Takes one or more targets as arguments: a whole product (homegroups, regroup, detox-recovery, recovery-api) or a single subproject (homegroups/mobile, homegroups/web, homegroups/functions, regroup/mobile, regroup/web, regroup/functions). With no argument, or with recovery-platform, it analyses the entire platform.
 ---
 
 # Launch Readiness Plan
@@ -10,9 +10,68 @@ account of what must happen before the target can take money from a real custome
 
 ## Arguments
 
-`$ARGUMENTS` is an optional space/comma-separated list of targets:
-`homegroups`, `regroup`, `detox-recovery`, `recovery-api`, or `platform`.
-**Empty argument means the whole platform** — all four, plus the cross-product referral layer.
+`$ARGUMENTS` is an optional space- or comma-separated list of targets. Targets may be a whole
+product or a single subproject. **Empty means the entire platform.**
+
+| Target | Scope analysed |
+|---|---|
+| *(empty)* or `recovery-platform` or `platform` | Everything below, plus the cross-product referral layer |
+| `homegroups` | `homegroups/{mobile,web,functions}` (project `recovery-connect-cad4b`) |
+| `homegroups/mobile` | RN iOS+Android app only |
+| `homegroups/web` | CRA marketing/web app only |
+| `homegroups/functions` | Cloud Functions backend only |
+| `regroup` | `regroup/{mobile,web,functions}` (project `phoenix-cleanhouse`) |
+| `regroup/mobile` | RN 0.72 app only |
+| `regroup/web` | Angular app + its SSR functions only |
+| `regroup/functions` | Cloud Functions backend only |
+| `detox-recovery` | Next.js 15 site (project `nextsteprecovery-1d5c2`) — no subprojects |
+| `recovery-api` | Shared Functions API (project `recovery-platform`) — no subprojects |
+
+Multiple targets are allowed: `/launch-readiness-plan homegroups/functions regroup/functions`.
+Naming a product implies all its subprojects. Resolve targets to concrete directories before
+Phase 2 and state the resolved list in the document.
+
+### Scoping rule for subproject targets
+
+A subproject cannot be judged in isolation — a mobile payment screen is worthless if the
+callable behind it is misconfigured. So:
+
+- **Analyse** only the target's own files.
+- **You may read** sibling subprojects and other products purely to verify a call site, a
+  region, a contract, or a schema.
+- **Attribute** every finding to the subproject that must change. If the fix belongs to a
+  sibling, record it as `EXTERNAL DEPENDENCY — <target>: <what it needs>` rather than silently
+  widening scope.
+
+### Which areas apply to which target
+
+Skip areas that cannot apply; say in the document that you skipped them and why.
+
+| Area | mobile | web | functions | detox-recovery | recovery-api |
+|---|---|---|---|---|---|
+| Money path | yes | yes | yes | only if it sells | yes |
+| Auth & onboarding | yes | yes | contracts only | yes | auth model only |
+| Deploy & config | yes | yes | yes | yes | yes |
+| Store & distribution | yes | domain/SEO | no | domain/SEO | no |
+| Retention mechanics | yes | yes | triggers/jobs | yes | no |
+| Operational readiness | yes | yes | yes | yes | yes |
+
+## Re-runs
+
+This skill is meant to be re-run as development continues. It is not a one-time audit.
+
+Before Phase 2, look for the most recent previous plan for the same target under
+`docs/launch-readiness/plan-<target>-*.md`. If one exists:
+
+1. Read its **Critical path** and **Open questions**.
+2. Re-verify each item against current code — do not carry any of it forward on trust. Items
+   resolved since the last run belong in **Already Done**, with the evidence that settles them.
+3. Add a **Changes Since Last Plan** section: newly resolved, newly discovered, still blocked,
+   and any open question now answered.
+
+Treat the previous plan exactly as you treat every other document here: a hypothesis about the
+past, to be checked against the code as it is now. A plan that agrees with its predecessor
+without re-verification is worthless.
 
 ## The bar: first paying customer
 
