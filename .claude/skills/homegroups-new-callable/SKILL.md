@@ -203,8 +203,12 @@ jest.mock('firebase-admin', () => ({
 
 import { myCallable } from '../callable/myCallable';
 
-function req(data: unknown, auth: { uid: string } | undefined = { uid: 'user-1' }) {
-  return { data, auth } as any;
+// NOTE: the "no auth" case uses a `null` sentinel, not `undefined`. Passing an
+// explicit `undefined` to a parameter that has a default TRIGGERS the default,
+// so `req(data, undefined)` would silently produce an AUTHENTICATED request and
+// the auth-gate test would fail with `internal` instead of `unauthenticated`.
+function req(data: unknown, auth: { uid: string } | null = { uid: 'user-1' }) {
+  return { data, auth: auth ?? undefined } as any;
 }
 
 describe('myCallable', () => {
@@ -213,7 +217,7 @@ describe('myCallable', () => {
   // ---- Auth gate ----
   it('throws unauthenticated when no auth context', async () => {
     await expect(
-      (myCallable as unknown as Function)(req({ groupId: 'g1' }, undefined)),
+      (myCallable as unknown as Function)(req({ groupId: 'g1' }, null)),
     ).rejects.toMatchObject({ code: 'unauthenticated' });
   });
 
