@@ -103,6 +103,14 @@ Both confirmed clean on Node 22.
   negative assertion. Always assert the seed itself.
 - **`brew install` puts neither Node 22 nor Java on PATH.** Both formulae are keg-only;
   `java -version` reports "Unable to locate a Java Runtime" until you prepend them.
+- **`.zshrc` does not pin Node for non-interactive shells.** npm's `firebase` entrypoint has a
+  `#!/usr/bin/env node` shebang, so it takes whatever `node` PATH resolves first — and hooks,
+  cron, and driver scripts never source `.zshrc`, where the `node@22` prepend lives. There,
+  bare `node -v` is v26. A wrapper at `~/.local/bin/firebase` (earlier on PATH) closes the gap
+  by re-execing `/opt/homebrew/opt/node@22/bin/node` against
+  `/opt/homebrew/lib/node_modules/firebase-tools/lib/bin/firebase.js`. It falls back to the
+  unpinned launcher if either path moves — so after any `firebase-tools` reinstall, re-verify
+  with `sh -x ~/.local/bin/firebase --version | grep '^+ exec'` and confirm it names `node@22`.
 - **Secret Manager 403s at startup are expected and harmless.** The emulator prints
   `This API method requires billing to be enabled` for `STRIPE_SECRET_KEY`, `SENDGRID_API_KEY`
   and friends, then continues. Provide overrides in `functions/.secret.local` if a callable
