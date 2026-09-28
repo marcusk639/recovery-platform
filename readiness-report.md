@@ -1,101 +1,114 @@
 ---
-generated: 2026-07-15
+generated: 2026-09-04
 level: 1
 level_name: Bare
-score: 9
+score: 19
 total: 36
 stack: node-typescript-monorepo
 monorepo: true
 pillars:
-  style-validation: { pass: 0, total: 4 }
+  style-validation: { pass: 2, total: 4 }
   testing: { pass: 0, total: 5 }
-  git-hooks: { pass: 0, total: 5 }
+  git-hooks: { pass: 4, total: 5 }
   documentation: { pass: 5, total: 9 }
-  agent-config: { pass: 1, total: 5 }
-  code-quality: { pass: 0, total: 3 }
-  dev-environment: { pass: 2, total: 3 }
-  agentic-workflow: { pass: 1, total: 2 }
+  agent-config: { pass: 2, total: 5 }
+  code-quality: { pass: 1, total: 3 }
+  dev-environment: { pass: 3, total: 3 }
+  agentic-workflow: { pass: 2, total: 2 }
 ---
 
 # Harness Readiness Report
 
 **Project:** recovery-platform (TypeScript flat monorepo)
-**Level:** 1 / 5 (Bare)
-**Score:** 9 / 36 criteria passing
-**Delta:** was Level 1, 17/45 (38%) on 2026-05-31 → now 9/36 (25%). Part of the drop is stricter scoring (aggregated criteria now require ALL 7 sub-packages to pass); part is real regression from the Mac migration (see Changes below).
-**Sub-packages:** homegroups/mobile, homegroups/functions, regroup/mobile, regroup/functions, regroup/web, detox-recovery, recovery-api
+**Level:** 1 / 5 (Bare) — gated entirely by `regroup/web`; see below
+**Score:** 19 / 36 criteria passing
+**Delta:** +10 since 2026-07-15 (was 9/36, Level 1)
+**Sub-packages (8):** recovery-api, detox-recovery, homegroups/{functions,web,mobile}, regroup/{functions,web,mobile}
+
+> **Scope change:** the 2026-07-15 report scored 7 sub-packages and omitted `homegroups/web`,
+> which has its own `package.json` and is deployable. This report scores 8. A small part of
+> the delta is corrected scope, not improvement.
+
+> **Why Level 1 despite 19/36:** levels are gated by the weakest package. `regroup/web`'s test
+> runner cannot start, which fails a Level 2 criterion. Seven of eight packages clear Level 2
+> and most clear Level 3. Fixing that one package is the single highest-leverage move on this
+> report.
 
 ## Pillar Scores
 
 ```
-Style & Validation    ░░░░░░ 0/4
+Style & Validation    ███░░░ 2/4
 Testing               ░░░░░░ 0/5
-Git Hooks             ░░░░░░ 0/5
+Git Hooks             █████░ 4/5
 Documentation         ███░░░ 5/9
-Agent Configuration   █░░░░░ 1/5
-Code Quality          ░░░░░░ 0/3
-Dev Environment       ████░░ 2/3
-Agentic Workflow      ███░░░ 1/2
+Agent Configuration   ██░░░░ 2/5
+Code Quality          ██░░░░ 1/3
+Dev Environment       ██████ 3/3
+Agentic Workflow      ██████ 2/2
 ```
 
-## Monorepo Breakdown (app-scoped criteria: Testing 5 + Code Quality 3)
+## Monorepo Breakdown
 
-| Package              | Runner | Colocated | Coverage | Tests Pass     | TDD Rule | ≤300 Lines      | Secrets Clean       | Style Consistent | Score |
-| -------------------- | ------ | --------- | -------- | -------------- | -------- | --------------- | ------------------- | ---------------- | ----- |
-| homegroups/mobile    | ✓      | ✗         | ✗        | ✓ (CI)         | ✗        | ✗ (142 files)   | ✗ (AIza in config)  | ✓                | 3/8   |
-| homegroups/functions | ✓      | ✓         | ✗        | ✓ (CI)         | ✗        | ✗ (52 files)    | ✓ (AIza remediated) | ✓                | 5/8   |
-| regroup/mobile       | ✗      | ✓         | ✗        | ✗ (unrunnable) | ✗        | ✗ (181 files)   | ✗ (AIza in config)  | ✗                | 1/8   |
-| regroup/functions    | ✓      | ✓         | ✗        | ✓ (CI)         | ✗        | ✗ (23 files)    | ✓                   | ✗ (TSLint)       | 4/8   |
-| regroup/web          | ✗      | ✓         | ✗        | ✗ (no CI/conf) | ✗        | ✗ (1 file)      | ✗ (AIza in .ts src) | ✗ (legacy)       | 1/8   |
-| detox-recovery       | ✓      | ✓         | ✗        | ✓ (CI)         | ✗        | ✗ (1 file)      | ✓                   | ✓                | 5/8   |
-| recovery-api         | ✓      | ✓         | ✗        | ✓ (CI)         | ✗        | ✗ (1 test file) | ✓                   | ✓                | 5/8   |
-
-Note: "Tests Pass" evidence is GitHub Actions main-branch run 29366193051 (success, 2026-07-14) — node_modules is absent in all 7 packages after the Mac migration, so nothing was runnable locally.
+| Package | Score | Tests | Coverage floor | Files >300 lines | Doc drift |
+|---|---|---|---|---|---|
+| recovery-api | 26/36 | 14 suites / 124 ✓ | 80/75/78/80 | 0 | none |
+| homegroups/functions | 25/36 | 70 suites / 787 ✓ | 75/55/65/75 | 14 | none |
+| detox-recovery | 24/36 | 23 suites / 170 ✓ | 90/78/92/90 | 1 | 3 stale doc paths |
+| regroup/mobile | 24/36 | 288 suites / 4788 ✓ | none | 81 | none |
+| regroup/functions | 23/36 | 44 suites / 678 ✓ | none | 10 | 4 wrong paths |
+| homegroups/web | 22/36 | 3 suites / 10 ✓ | none | 11 | skills path stale |
+| homegroups/mobile | 22/36 | 19 suites / 98 ✓ | none | 141 | skills path stale |
+| regroup/web | 21/36 | **cannot run** | none | 1 | none |
 
 ## Passing
 
-- ✓ CLAUDE.md exists — 11 files covering root, both products, and all 7 sub-packages, with deliberate lazy-loaded hierarchy
-- ✓ Commands sections — every documented command spot-checked against package.json exists (zero phantom commands, including complex `deploy:batched` / `migrate:*` variants)
-- ✓ Architecture sections — directory trees, key modules, and data flow documented in all 7 units
-- ✓ Critical Gotchas — specific, non-obvious, and current (admin-claim write-ordering rule updated in step with the 2026-07-13 redesign commit)
-- ✓ Documentation content quality — exceptionally high signal density; copy-paste commands, silent-failure modes, config quirks, PII traps; almost no boilerplate
-- ✓ `.claude/settings.json` exists at repo level (PostToolUse typecheck/prettier/secret-scan + Stop hooks), plus unusually rich sub-package `.claude/` dirs
-- ✓ `.env.example` templates — 5/7 packages (recovery-api, detox-recovery, homegroups/functions, regroup/mobile, regroup/functions); detox even has `setup:env` hydration
-- ✓ Build/dev commands documented and matching package.json across products
-- ✓ Agentic workflow system — Superpowers plugin enabled globally; 6 repo skills + 6 repo agents; per-package run/review skills
+- ✓ Linter configured (7/8 packages have a `lint` script; homegroups/web lints via react-scripts)
+- ✓ Formatter configured (root `.prettierrc`: semi, singleQuote, printWidth 100)
+- ✓ Pre-push hook runs tests (4 fast packages, blocks on failure)
+- ✓ Secret scanning wired into pre-commit (Stripe/Anthropic/OpenRouter/AWS/GitHub/PEM/AIza, with Firebase-config allowlist)
+- ✓ File-size limit enforced mechanically (`MAX_LINES=300`, blocks new files, warns on legacy)
+- ✓ Smart test caching (pre-push SHA cache at `.git/.test-passed`)
+- ✓ CLAUDE.md exists for all 8 units (11 files total)
+- ✓ Commands sections accurate — every documented npm script verified present in package.json
+- ✓ Architecture sections present in all 8 units
+- ✓ Quality gates documented and mechanically real
+- ✓ Content quality high (region-pinning postmortem, JWT 1000-byte claim limit, Stripe cents-vs-dollars, honeypot silent-200)
+- ✓ `.claude/settings.json` exists (typecheck, prettier, secret-scan, session-check, swarm-notify hooks)
+- ✓ Enforcement hierarchy real for the 300-line rule (prose in CLAUDE.md + hook enforcement)
+- ✓ No hardcoded secrets in source (only client-safe Firebase `AIza` config and an allowlisted test fixture)
+- ✓ `.env.example` in 6/8 packages
+- ✓ Build/dev commands functional (verified `npm run build` in recovery-api)
+- ✓ Dependencies install cleanly in all 8 packages
+- ✓ Agentic workflow present (Superpowers plan→TDD→review→verify, plus repo skills incl. judge-review, monorepo-run-check, worktree-dispatch-safety)
+- ✓ Session-start validation (`scripts/session-check.sh` as SessionStart hook)
 
 ## Failing
 
-- ✗ Linter (aggregate) — regroup/mobile has a `lint` script but NO ESLint config file; recovery-api has no linter at all; regroup/functions + regroup/web still on deprecated TSLint
-- ✗ Formatter — Prettier config in only 2/7 packages (homegroups/mobile, recovery-api); no root config, no .editorconfig
-- ✗ Lint-on-commit — no husky, no lint-staged, no pre-commit framework anywhere
-- ✗ No-default-exports rule — absent from every ESLint config
-- ✗ Test runner (aggregate) — regroup/mobile scripts reference jest.config.integration.js / jest.config.rules.js that don't exist; regroup/web's angular.json points at a missing karma.conf.js
-- ✗ Test colocation (aggregate) — homegroups/mobile: 19 centralized test files vs ~319 source files
-- ✗ Coverage threshold — zero `coverageThreshold` occurrences repo-wide (0/7)
-- ✗ Tests pass (aggregate) — regroup/mobile (302 test files, unrunnable) and regroup/web (101 specs, no CI job) have no passing evidence; CI also weakens its own gate with `--passWithNoTests --forceExit`
-- ✗ TDD enforcement rule file — none at repo or package level (0/7); TDD exists only as global harness culture
-- ✗ Pre-commit hook — `.git/hooks/` has only samples; no `.husky/`
-- ✗ Pre-push hook — none; nothing runs tests before push
-- ✗ Secret scanning at commit time — only a warn-only (always exit 0) Claude PostToolUse hook; non-Claude commits entirely unscanned
-- ✗ File size limits — neither stated in any CLAUDE.md/rule nor enforced by any hook
-- ✗ Smart test caching — no `.test-passed` mechanism
-- ✗ Quality gates documented — no file-size/function-length/complexity limits anywhere in the doc hierarchy
-- ✗ Code Review Checklist — reviewer subagents documented in only 2/7 units (homegroups, regroup/web)
-- ✗ Auto-generated doc sections — zero `<!-- AUTO:name -->` markers; all counts/trees hand-maintained
-- ✗ No drift — recovery-api's `findMeetings` callable missing from recovery-api/CLAUDE.md AND root CLAUDE.md; 90-vs-91 callable count, 16-vs-15 models, 20-vs-21 pages; detox route table omits /privacy and /terms; regroup/functions tree omits compliance.ts/analytics.ts
-- ✗ Allow list — no `permissions` block in any repo-level settings file
-- ✗ Deny list — none at repo level; global settings has blanket `Bash` allow with empty deny
-- ✗ Path-scoped rules — no `.claude/rules/` with `globs:` frontmatter anywhere (regroup/mobile's .claude/*.md docs are ready-made candidates)
-- ✗ Enforcement hierarchy — only the .env-commit rule has mechanical backing; PII/error-sanitization/cross-product rules are prose-only, and all enforcement evaporates outside Claude sessions
-- ✗ File sizes ≤300 lines — 0/7 apps; bimodal: mobile apps have 142/181 oversized files (worst 2,531 lines), three packages fail by exactly 1 file
-- ✗ Secrets in source — AIza keys in Firebase client config (public-by-design, but matches scanner) in both mobile apps; regroup/web bakes the key into environment.ts source
-- ✗ Consistent style — repo spans TSLint, legacy .eslintrc, flat config, and no-linter across packages
-- ✗ Dependencies install cleanly — node_modules absent in ALL 7 packages post-migration; `npm ls` in recovery-api reports all 13 deps UNMET
-- ✗ Session-start validation — the gsd session hooks from the previous audit are gone from settings; no validate-docs mechanism
+- ✗ Lint-on-commit — pre-commit runs secrets + file-size only; no eslint/prettier/lint-staged anywhere, and CI never runs `npm run lint` either
+- ✗ No-default-export rule — zero eslint configs enforce it
+- ✗ Test runner works in all packages — `regroup/web`'s `angular.json` points at `karma.conf.js`, which has never existed in git history
+- ✗ Test colocation — `homegroups/mobile` 18/269 files (6.7%), `homegroups/web` 3/37 (8%)
+- ✗ Coverage threshold — only 3/8 packages set one
+- ✗ Tests pass everywhere — `regroup/web` executes zero specs
+- ✗ TDD enforcement — no TDD rule file anywhere in the repo
+- ✗ Critical Gotchas section — only 3 of 8 units have a labelled section
+- ✗ Code Review Checklist — none; partially substituted by named reviewer subagents in 2 units
+- ✗ Auto-generated doc sections — no `<!-- AUTO: -->` markers, no generate-docs/validate-docs tooling
+- ✗ No drift — doc/ restructure and today's skills flattening left stale paths in 5 units
+- ✗ No source files over 300 lines — ~258 violations, 222 of them in the two mobile apps
+- ✗ Consistent code style — flat ESLint vs legacy `.eslintrc` vs deprecated TSLint (2 packages) vs CRA preset
+- ✗ Allow list / deny list — `.claude/settings.json` has no `permissions` block at all
+- ✗ Path-scoped rules — no `.claude/rules/` directory at the repo root
 
-## Changes Since Last Report (2026-05-31)
+## Changes Since Last Report
 
-- ↑ Now passing: repo-level `.claude/settings.json` (agent-config was 0/5, now 1/5); `.env.example` coverage (dev-env 1/3 → 2/3); the hardcoded AIza key in homegroups/functions was remediated and regroup/mobile added a regression test for it
-- ↓ Regressed: **No drift** (findMeetings callable + count rot since the recent homegroups/meetings work); **session-start validation** (gsd SessionStart hooks no longer present — lost in the Mac migration); **regroup/mobile ESLint config** (previously reported configured, now missing); two repo Claude hooks hardcode the old `/Users/marcus/...` path and silently no-op; node_modules wiped by the migration (tests unrunnable locally)
-- Methodology note: aggregate criteria now require all 7 sub-packages to pass, which lowers the headline score independent of real changes; the per-app table above is the comparable view
+- ↑ Git Hooks 0/5 → 4/5 — hooks installed from `scripts/git-hooks/` this session
+- ↑ Dev Environment 2/3 → 3/3 — dependencies restored in all 8 packages
+- ↑ Style & Validation 0/4 → 2/4 — linters/formatter now detectable with deps present
+- ↑ Code Quality 0/3 → 1/3 — secret scan now runs clean
+- ↑ Agentic Workflow 1/2 → 2/2 — session-start validation confirmed wired
+- ↑ Agent Config 1/5 → 2/5 — enforcement hierarchy credited for the 300-line rule
+- ↓ Documentation 5/9 → 5/9 (flat) — content quality gained, but drift regressed from the docs
+     restructure and this session's skills flattening
+- → Testing 0/5 → 0/5 — 7/8 packages now pass tests (was: none runnable), but each criterion
+     requires all 8, and `regroup/web` still cannot start its runner
