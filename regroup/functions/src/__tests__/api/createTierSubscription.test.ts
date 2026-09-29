@@ -22,6 +22,7 @@ jest.mock("stripe", () =>
 );
 
 import {
+  createSubscription,
   createTierSubscription,
   initializeTierCustomer,
   TRIAL_PERIOD_DAYS,
@@ -75,7 +76,7 @@ describe("createTierSubscription", () => {
     expect(mockSubscriptionsCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         items: [{ price: "price_starter_annual", quantity: 1 }],
-        trial_period_days: TRIAL_PERIOD_DAYS,
+        trial_period_days: 7,
         metadata: {
           userId: "uid_1",
           houseType: "traditional",
@@ -149,6 +150,29 @@ describe("initializeTierCustomer — oxfordEnabled", () => {
 
     expect(mockSubscriptionsCreate).toHaveBeenCalledWith(
       expect.objectContaining({ trial_period_days: 7 }),
+    );
+  });
+});
+
+describe("createSubscription (legacy two-item path)", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    process.env.STRIPE_SECRET_KEY = "sk_test";
+    process.env.STRIPE_API_VERSION = "2026-01-28.clover";
+    mockSubscriptionsCreate.mockResolvedValue({
+      id: "sub_1",
+      items: { data: [{ id: "si_1" }] },
+    });
+  });
+
+  it("creates legacy subscriptions with a 7-day trial", async () => {
+    await createSubscription("cus_1", false, "uid_1");
+
+    expect(mockSubscriptionsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customer: "cus_1",
+        trial_period_days: 7,
+      }),
     );
   });
 });
