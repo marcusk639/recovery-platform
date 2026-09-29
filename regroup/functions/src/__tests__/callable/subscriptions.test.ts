@@ -562,6 +562,23 @@ describe("createOperatorSubscription — input validation", () => {
       }),
     ).rejects.toMatchObject({ code: "invalid-argument" });
   });
+
+  it("rejects a missing email with a human-readable message", async () => {
+    await expect(
+      callFn(createOperatorSubscription, {
+        user: {
+          id: "user-1",
+          subscriptionMetadata: { status: "active" },
+        },
+        paymentMethod: "pm_123",
+        houseType: "traditional",
+        tier: "starter",
+      }),
+    ).rejects.toMatchObject({
+      code: "invalid-argument",
+      message: "An email address is required to start a subscription",
+    });
+  });
 });
 
 describe("reactivateOperatorSubscription", () => {

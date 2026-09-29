@@ -93,7 +93,7 @@ const userMinSchema = z.object({
 const createOperatorSubscriptionSchema = z.object({
   user: z.object({
     id: z.string().min(1),
-    email: z.string().email(),
+    email: z.string().email().optional(),
     subscriptionMetadata: subscriptionMetadataMinSchema,
   }),
   paymentMethod: z.string().min(1),
@@ -169,6 +169,12 @@ export const createOperatorSubscription = onCall(
     };
     if (data.user.id !== request.auth.uid)
       throw new HttpsError("permission-denied", "User ID mismatch");
+    if (!data.user.email) {
+      throw new HttpsError(
+        "invalid-argument",
+        "An email address is required to start a subscription",
+      );
+    }
 
     // Resolve the tier config from SUBSCRIPTION_TIERS.
     const tierMap = SUBSCRIPTION_TIERS[data.houseType as HouseType];
