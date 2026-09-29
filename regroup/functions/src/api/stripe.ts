@@ -5,6 +5,13 @@ import { User } from "../entities/User";
 import { HouseType, TierKey } from "../config";
 import { resolveTierPriceId, BillingInterval } from "../util/tierPricing";
 
+/**
+ * Trial length for all new subscriptions. Stripe applies trial_period_days
+ * at subscription-creation time, so subscriptions already in flight are
+ * unaffected and no data migration is needed.
+ */
+export const TRIAL_PERIOD_DAYS = 7;
+
 // Lazy Proxy — secrets are only available at request time in v2, not at module load.
 let _stripe: Stripe | undefined;
 export const stripe = new Proxy({} as Stripe, {
@@ -98,7 +105,7 @@ export const createSubscription = async (
         quantity: 0,
       },
     ],
-    trial_period_days: 30,
+    trial_period_days: TRIAL_PERIOD_DAYS,
     // Embed userId at creation so webhook handlers can resolve the operator
     // without an extra Firestore query. Passing it here avoids a second
     // Stripe round-trip that could fail after the subscription is already live.
@@ -109,7 +116,7 @@ export const createSubscription = async (
 /**
  * Tier-based (flat-fee) subscription creation. Unlike createSubscription's
  * two-item house+guest model, this builds a SINGLE line item at the price
- * resolved from the tier config, with a 30-day trial. Used only when
+ * resolved from the tier config, with a trial (see TRIAL_PERIOD_DAYS). Used only when
  * TIER_BILLING_ENABLED is on. The legacy createSubscription is left untouched
  * for grandfathered subscribers.
  */
@@ -124,7 +131,7 @@ export const createTierSubscription = async (
   return stripe.subscriptions.create({
     customer: customerId,
     items: [{ price, quantity: 1 }],
-    trial_period_days: 30,
+    trial_period_days: TRIAL_PERIOD_DAYS,
     metadata: {
       ...(userId ? { userId } : {}),
       houseType,

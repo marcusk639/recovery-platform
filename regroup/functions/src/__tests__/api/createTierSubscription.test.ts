@@ -24,6 +24,7 @@ jest.mock("stripe", () =>
 import {
   createTierSubscription,
   initializeTierCustomer,
+  TRIAL_PERIOD_DAYS,
 } from "../../api/stripe";
 
 describe("createTierSubscription", () => {
@@ -49,7 +50,7 @@ describe("createTierSubscription", () => {
       expect.objectContaining({
         customer: "cus_1",
         items: [{ price: "price_starter", quantity: 1 }],
-        trial_period_days: 30,
+        trial_period_days: TRIAL_PERIOD_DAYS,
         metadata: {
           userId: "uid_1",
           houseType: "traditional",
@@ -74,7 +75,7 @@ describe("createTierSubscription", () => {
     expect(mockSubscriptionsCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         items: [{ price: "price_starter_annual", quantity: 1 }],
-        trial_period_days: 30,
+        trial_period_days: TRIAL_PERIOD_DAYS,
         metadata: {
           userId: "uid_1",
           houseType: "traditional",
@@ -132,5 +133,22 @@ describe("initializeTierCustomer — oxfordEnabled", () => {
     );
 
     expect(meta.oxfordEnabled).toBe(false);
+  });
+
+  it("creates tier subscriptions with a 7-day trial", async () => {
+    expect(TRIAL_PERIOD_DAYS).toBe(7);
+
+    await initializeTierCustomer(
+      "op@example.com",
+      "pm_123",
+      "traditional",
+      "starter",
+      "user_1",
+      "month",
+    );
+
+    expect(mockSubscriptionsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ trial_period_days: 7 }),
+    );
   });
 });
