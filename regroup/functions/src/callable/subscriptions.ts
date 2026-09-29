@@ -161,7 +161,7 @@ export const createOperatorSubscription = onCall(
       createOperatorSubscriptionSchema,
       request.data,
     ) as unknown as {
-      user: User;
+      user: Omit<User, "email"> & { email?: string };
       paymentMethod: string;
       houseType: string;
       tier: string;

@@ -563,7 +563,7 @@ describe("createOperatorSubscription — input validation", () => {
     ).rejects.toMatchObject({ code: "invalid-argument" });
   });
 
-  it("rejects a missing email with a human-readable message", async () => {
+  it("rejects a missing email with a human-readable message before touching Stripe (legacy branch)", async () => {
     await expect(
       callFn(createOperatorSubscription, {
         user: {
@@ -578,6 +578,32 @@ describe("createOperatorSubscription — input validation", () => {
       code: "invalid-argument",
       message: "An email address is required to start a subscription",
     });
+    expect(mockInitializeCustomer).not.toHaveBeenCalled();
+    expect(mockInitializeTierCustomer).not.toHaveBeenCalled();
+  });
+
+  it("rejects a missing email before touching Stripe (tier-billing branch)", async () => {
+    process.env.TIER_BILLING_ENABLED = "true";
+    try {
+      await expect(
+        callFn(createOperatorSubscription, {
+          user: {
+            id: "user-1",
+            subscriptionMetadata: { status: "active" },
+          },
+          paymentMethod: "pm_123",
+          houseType: "traditional",
+          tier: "starter",
+        }),
+      ).rejects.toMatchObject({
+        code: "invalid-argument",
+        message: "An email address is required to start a subscription",
+      });
+      expect(mockInitializeCustomer).not.toHaveBeenCalled();
+      expect(mockInitializeTierCustomer).not.toHaveBeenCalled();
+    } finally {
+      delete process.env.TIER_BILLING_ENABLED;
+    }
   });
 });
 
