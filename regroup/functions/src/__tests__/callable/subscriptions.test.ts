@@ -90,6 +90,12 @@ jest.mock("../../util/email", () => ({
   regroupEmail: "admin@regroup-app.com",
 }));
 
+const mockGrantPotentialSuperAdminClaim = jest.fn().mockResolvedValue(true);
+jest.mock("../../util/superAdminClaim", () => ({
+  grantPotentialSuperAdminClaim: (...args: any[]) =>
+    mockGrantPotentialSuperAdminClaim(...args),
+}));
+
 jest.mock("firebase-admin", () => ({
   firestore: Object.assign(
     jest.fn(() => ({})),
@@ -346,6 +352,121 @@ describe("createOperatorSubscription", () => {
         guestCount: 0,
       }),
     );
+  });
+});
+
+describe("createOperatorSubscription — potentialSuperAdmin claim grant (W7)", () => {
+  beforeEach(() => {
+    process.env.STRIPE_PRICE_TRAD_PROFESSIONAL = "price_test_pro_existing";
+  });
+  afterEach(() => {
+    delete process.env.STRIPE_PRICE_TRAD_PROFESSIONAL;
+    delete process.env.TIER_BILLING_ENABLED;
+    delete process.env.STRIPE_PRICE_TRAD_STARTER;
+  });
+
+  it("grants the claim after a successful legacy subscription and reports it in the response", async () => {
+    mockGetUser.mockResolvedValue(fakeUser);
+    mockInitializeCustomer.mockResolvedValue({
+      customerId: "cus_new",
+      subscriptionId: "sub_new",
+      items: { houseItemId: "si_house", guestItemId: "si_guest" },
+      status: "active",
+    });
+    mockUpdateUser.mockResolvedValue(undefined);
+    mockGrantPotentialSuperAdminClaim.mockResolvedValue(true);
+
+    const result = await call(createOperatorSubscription, {
+      user: fakeUser,
+      paymentMethod: "pm_test",
+      houseType: "traditional",
+      tier: "professional",
+    });
+
+    expect(mockGrantPotentialSuperAdminClaim).toHaveBeenCalledWith(
+      fakeUser.id,
+    );
+    expect(result).toMatchObject({ claimGranted: true });
+  });
+
+  it("grants the claim after a successful tier-billing subscription and reports it in the response", async () => {
+    process.env.TIER_BILLING_ENABLED = "true";
+    process.env.STRIPE_PRICE_TRAD_STARTER = "price_starter";
+    mockGetUser.mockResolvedValue(fakeUser);
+    mockInitializeTierCustomer.mockResolvedValue({
+      customerId: "cus_tier",
+      subscriptionId: "sub_tier",
+      subscriptionItemId: "si_tier",
+      status: "trialing",
+      houseType: "traditional",
+      tier: "starter",
+    });
+    mockUpdateUser.mockResolvedValue(undefined);
+    mockGrantPotentialSuperAdminClaim.mockResolvedValue(true);
+
+    const result = await call(createOperatorSubscription, {
+      user: fakeUser,
+      paymentMethod: "pm_test",
+      houseType: "traditional",
+      tier: "starter",
+    });
+
+    expect(mockGrantPotentialSuperAdminClaim).toHaveBeenCalledWith(
+      fakeUser.id,
+    );
+    expect(result).toMatchObject({ claimGranted: true });
+  });
+
+  it("does not grant a claim when subscription creation is rejected before Stripe is called", async () => {
+    mockGetUser.mockResolvedValue(fakeUser);
+
+    await expect(
+      call(createOperatorSubscription, {
+        user: fakeUser,
+        paymentMethod: "pm_test",
+        houseType: "oxford",
+        tier: "network",
+      }),
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+
+    expect(mockGrantPotentialSuperAdminClaim).not.toHaveBeenCalled();
+  });
+
+  it("does not grant a claim when the Stripe call itself throws", async () => {
+    mockGetUser.mockResolvedValue(fakeUser);
+    mockInitializeCustomer.mockRejectedValue(new Error("card_declined"));
+
+    await expect(
+      call(createOperatorSubscription, {
+        user: fakeUser,
+        paymentMethod: "pm_test",
+        houseType: "traditional",
+        tier: "professional",
+      }),
+    ).rejects.toThrow("card_declined");
+
+    expect(mockGrantPotentialSuperAdminClaim).not.toHaveBeenCalled();
+  });
+
+  it("does not fail the callable when the claim grant reports false, and surfaces claimGranted: false", async () => {
+    mockGetUser.mockResolvedValue(fakeUser);
+    mockInitializeCustomer.mockResolvedValue({
+      customerId: "cus_new",
+      subscriptionId: "sub_new",
+      items: { houseItemId: "si_house", guestItemId: "si_guest" },
+      status: "active",
+    });
+    mockUpdateUser.mockResolvedValue(undefined);
+    mockGrantPotentialSuperAdminClaim.mockResolvedValue(false);
+
+    const result = await call(createOperatorSubscription, {
+      user: fakeUser,
+      paymentMethod: "pm_test",
+      houseType: "traditional",
+      tier: "professional",
+    });
+
+    expect(result).toMatchObject({ claimGranted: false });
   });
 });
 
@@ -643,6 +764,70 @@ describe("reactivateOperatorSubscription", () => {
       status: "active",
     });
   });
+});
+
+describe("reactivateOperatorSubscription — never creates a duplicate subscription", () => {
+  const userWithStatus = (status: string) => ({
+    ...fakeUser,
+    subscriptionMetadata: { ...fakeUser.subscriptionMetadata, status },
+  });
+
+  beforeEach(() => {
+    mockReactivateSubscription.mockReset();
+    mockUncancelSubscription.mockReset();
+    mockUpdateUser.mockReset();
+    mockUpdateUser.mockResolvedValue(undefined);
+  });
+
+  it.each(["active", "trialing"])(
+    "is a no-op when the subscription is already live (%s)",
+    async (status) => {
+      mockGetUser.mockResolvedValue(userWithStatus(status));
+
+      await call(reactivateOperatorSubscription, { user: fakeUser });
+
+      expect(mockReactivateSubscription).not.toHaveBeenCalled();
+      expect(mockUncancelSubscription).not.toHaveBeenCalled();
+    },
+  );
+
+  it("uncancels instead of creating when status is cancelling", async () => {
+    mockGetUser.mockResolvedValue(userWithStatus("cancelling"));
+    mockUncancelSubscription.mockResolvedValue(undefined);
+
+    await call(reactivateOperatorSubscription, { user: fakeUser });
+
+    expect(mockUncancelSubscription).toHaveBeenCalledWith("sub_fake");
+    expect(mockReactivateSubscription).not.toHaveBeenCalled();
+  });
+
+  it.each(["canceled", "cancelled"])(
+    "creates a replacement subscription from terminal state %s",
+    async (status) => {
+      mockGetUser.mockResolvedValue(userWithStatus(status));
+      mockReactivateSubscription.mockResolvedValue({
+        subscriptionId: "sub_new",
+        customerId: "cus_fake",
+        status: "active",
+      });
+
+      await call(reactivateOperatorSubscription, { user: fakeUser });
+
+      expect(mockReactivateSubscription).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each(["past_due", "unpaid", ""])(
+    "refuses rather than double-billing when status is %s",
+    async (status) => {
+      mockGetUser.mockResolvedValue(userWithStatus(status));
+
+      await expect(
+        call(reactivateOperatorSubscription, { user: fakeUser }),
+      ).rejects.toMatchObject({ code: "failed-precondition" });
+      expect(mockReactivateSubscription).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("reactivateOperatorSubscription — input validation", () => {

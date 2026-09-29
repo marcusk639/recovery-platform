@@ -39,6 +39,7 @@ import {
   totalResidents,
 } from "../util/tierCaps";
 import { tierAllows, isTierAvailableForSale } from "../util/tierPricing";
+import { grantPotentialSuperAdminClaim } from "../util/superAdminClaim";
 import {
   getUser,
   updateUser,
@@ -271,9 +272,11 @@ export const createOperatorSubscription = onCall(
         text: `A new user has subscribed to Regroup: Sober Living App\nUser ID: ${data.user.id}\nUser email: ${data.user.email}`,
         subject: "New user subscription",
       });
+      const claimGranted = await grantPotentialSuperAdminClaim(data.user.id!);
       return {
         ...data.user,
         subscriptionMetadata: persistedTierMetadata,
+        claimGranted,
       } as unknown as User;
     }
 
@@ -332,7 +335,12 @@ export const createOperatorSubscription = onCall(
       text: `A new user has subscribed to Regroup: Sober Living App\nUser ID: ${data.user.id}\nUser email: ${data.user.email}`,
       subject: "New user subscription",
     });
-    return { ...data.user, subscriptionMetadata: metadata } as User;
+    const claimGranted = await grantPotentialSuperAdminClaim(data.user.id!);
+    return {
+      ...data.user,
+      subscriptionMetadata: metadata,
+      claimGranted,
+    } as User;
   },
 );
 
@@ -357,16 +365,40 @@ export const reactivateOperatorSubscription = onCall(
     }
     const storedMetadata = firestoreUser.subscriptionMetadata;
     let subscriptionMetadata: typeof storedMetadata;
-    if (storedMetadata.status === "cancelling") {
+
+    // "canceled" is the canonical spelling (Stripe's own). Documents written
+    // before that was settled may still hold the British "cancelled", so
+    // normalize on read; the writers now emit "canceled".
+    const status =
+      storedMetadata.status === "cancelled"
+        ? "canceled"
+        : storedMetadata.status;
+
+    if (status === "active" || status === "trialing") {
+      // Already live. Creating another Stripe subscription here would bill the
+      // operator twice over and orphan the original, which would keep charging
+      // with nothing in Firestore pointing at it.
+      subscriptionMetadata = storedMetadata;
+    } else if (status === "cancelling") {
+      // Set to cancel at period end but still live — resume in place.
       await uncancelSubscription(storedMetadata.subscriptionId);
       subscriptionMetadata = { ...storedMetadata, status: "active" };
-    } else {
+    } else if (status === "canceled") {
+      // Terminal in Stripe: a canceled subscription cannot be resumed, so a
+      // replacement is the only route back. The sole branch allowed to create.
       const freshMetadata = await reactivateSubscription(
         storedMetadata.customerId,
         storedMetadata,
         data.user.id,
       );
       subscriptionMetadata = { ...freshMetadata, status: "active" };
+    } else {
+      // past_due, unpaid, or unrecognized. The Stripe subscription still exists
+      // in these states, so creating a second one would double-bill.
+      throw new HttpsError(
+        "failed-precondition",
+        "This subscription cannot be reactivated from its current state. Please update your payment method in the billing portal.",
+      );
     }
     logger.info("Subscription reactivated");
     await updateUser(data.user.id!, { subscriptionMetadata });

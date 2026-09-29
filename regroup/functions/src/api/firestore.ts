@@ -174,8 +174,9 @@ export async function updateUserPeriodEnd(
     },
   };
   if (cancel) {
-    subscriptionMetadata.subscriptionMetadata!.status = 'cancelled';
-    await updateHouseStatuses(user.adminId, 'cancelled');
+    // "canceled" is Stripe's spelling and the canonical one across the codebase.
+    subscriptionMetadata.subscriptionMetadata!.status = 'canceled';
+    await updateHouseStatuses(user.adminId, 'canceled');
   }
   return userCollection.doc(user.id!).update(subscriptionMetadata);
 }
