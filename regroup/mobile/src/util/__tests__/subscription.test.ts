@@ -158,4 +158,22 @@ describe('subscriptionIsActive', () => {
 
     expect(subscriptionIsActive(user)).toBe(true);
   });
+
+  it('pins OperatorSubscription so a tier subscription needs no legacy fields (type-level)', () => {
+    // No cast: if plan/items/houses become required again, this literal
+    // fails to compile because a tier subscription carries none of them.
+    const tierSubscription: OperatorSubscription = {
+      subscriptionId: 'sub_1',
+      currentPeriodEnd: 0,
+      customerId: 'cus_1',
+      status: 'active',
+      houseType: 'oxford',
+      tier: 'standard',
+      oxfordEnabled: true,
+      maxResidents: 15,
+      maxProperties: 1,
+    };
+
+    expect(tierSubscription.oxfordEnabled).toBe(true);
+  });
 });
