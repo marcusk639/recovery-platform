@@ -8,16 +8,23 @@
 // package itself and assert against the mocked `subscriptions.create`.
 
 const mockSubscriptionsCreate = jest.fn();
+const mockCustomersCreate = jest.fn();
 
 jest.mock("stripe", () =>
   jest.fn().mockImplementation(() => ({
     subscriptions: {
       create: (...args: unknown[]) => mockSubscriptionsCreate(...args),
     },
+    customers: {
+      create: (...args: unknown[]) => mockCustomersCreate(...args),
+    },
   })),
 );
 
-import { createTierSubscription } from "../../api/stripe";
+import {
+  createTierSubscription,
+  initializeTierCustomer,
+} from "../../api/stripe";
 
 describe("createTierSubscription", () => {
   beforeEach(() => {
@@ -78,5 +85,52 @@ describe("createTierSubscription", () => {
     );
 
     delete process.env.STRIPE_PRICE_TRAD_STARTER_ANNUAL;
+  });
+});
+
+describe("initializeTierCustomer — oxfordEnabled", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    process.env.STRIPE_SECRET_KEY = "sk_test";
+    process.env.STRIPE_API_VERSION = "2026-01-28.clover";
+    process.env.STRIPE_PRICE_OXFORD_STANDARD = "price_oxford_standard";
+    process.env.STRIPE_PRICE_TRAD_STARTER = "price_starter";
+    mockCustomersCreate.mockResolvedValue({ id: "cus_1" });
+    mockSubscriptionsCreate.mockResolvedValue({
+      id: "sub_1",
+      status: "trialing",
+      items: { data: [{ id: "si_1" }] },
+    });
+  });
+
+  afterEach(() => {
+    delete process.env.STRIPE_PRICE_OXFORD_STANDARD;
+    delete process.env.STRIPE_PRICE_TRAD_STARTER;
+  });
+
+  it("sets oxfordEnabled true for an oxford house type", async () => {
+    const meta = await initializeTierCustomer(
+      "op@example.com",
+      "pm_123",
+      "oxford",
+      "standard",
+      "user_1",
+      "month",
+    );
+
+    expect(meta.oxfordEnabled).toBe(true);
+  });
+
+  it("sets oxfordEnabled false for a traditional house type", async () => {
+    const meta = await initializeTierCustomer(
+      "op@example.com",
+      "pm_123",
+      "traditional",
+      "starter",
+      "user_1",
+      "month",
+    );
+
+    expect(meta.oxfordEnabled).toBe(false);
   });
 });

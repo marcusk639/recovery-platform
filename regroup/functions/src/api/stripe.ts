@@ -395,6 +395,7 @@ export const initializeTierCustomer = async (
     houseType,
     tier,
     billingInterval,
+    oxfordEnabled: houseType === "oxford",
   };
 };
 

@@ -244,7 +244,8 @@ export const createOperatorSubscription = onCall(
       await updateUser(data.user.id!, {
         // Tier subscriptions have no house/guest items or houses map; the single
         // subscriptionItemId is the billing handle. Cast to the entity type —
-        // legacy-only fields (items/houses/plan/oxfordEnabled) are intentionally absent.
+        // legacy-only fields (items/houses/plan) are intentionally absent, but
+        // oxfordEnabled is included so mobile Oxford gating keeps working.
         subscriptionMetadata:
           persistedTierMetadata as unknown as OperatorSubscription,
       });
