@@ -37,17 +37,22 @@ export class OperatorSubscription {
   customerId: string = "";
   status: SubscriptionStatus = "";
   lastUpdatedAt?: string = undefined;
-  plan: string = "";
-  tier?: string;
-  items: {
+  // Legacy two-item model — absent on tier subscriptions.
+  plan?: string = "";
+  items?: {
     houseItemId: string;
     guestItemId: string;
   } = { guestItemId: "", houseItemId: "" };
-  houses: {
+  houses?: {
     [houseId: string]: {
       numberOfGuests: number;
     };
   } = {};
+  // Tier model — set by initializeTierCustomer, absent on legacy subscriptions.
+  houseType?: "traditional" | "oxford";
+  tier?: string;
+  maxResidents?: number | null;
+  maxProperties?: number | null;
   oxfordEnabled: boolean = false;
 }
 

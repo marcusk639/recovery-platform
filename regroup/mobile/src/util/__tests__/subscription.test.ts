@@ -141,4 +141,21 @@ describe('subscriptionIsActive', () => {
     (user as any).subscriptionMetadata = null;
     expect(subscriptionIsActive(user)).toBe(false);
   });
+
+  it('treats a tier subscription with no legacy fields as active', () => {
+    const user = {
+      subscriptionMetadata: {
+        status: 'active',
+        subscriptionId: 'sub_1',
+        customerId: 'cus_1',
+        houseType: 'oxford',
+        tier: 'standard',
+        oxfordEnabled: true,
+        maxResidents: 15,
+        maxProperties: 1,
+      },
+    } as unknown as User;
+
+    expect(subscriptionIsActive(user)).toBe(true);
+  });
 });
