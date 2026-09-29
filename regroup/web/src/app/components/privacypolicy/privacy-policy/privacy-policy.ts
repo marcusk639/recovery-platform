@@ -164,7 +164,7 @@ Last updated: May 21, 2026</p>
 <li><strong>Portability</strong> — receive your data in a machine-readable format</li>
 <li><strong>Opt-out of push notifications</strong> — via device settings at any time</li>
 </ul>
-<p>To exercise any of these rights, contact us at <strong><a href="mailto:privacy@regroup.app">privacy@regroup.app</a></strong>.</p>
+<p>To exercise any of these rights, contact us at <strong><a href="mailto:admin@regroup-app.com">admin@regroup-app.com</a></strong>.</p>
 <p>Residents should direct requests to their house operator first, as operators control house-level data.</p>
 <hr>
 <h2>8. Children</h2>
@@ -179,7 +179,7 @@ Last updated: May 21, 2026</p>
 <li>Firebase Authentication manages all password hashing and session security</li>
 <li>Access to production systems is restricted to authorized personnel</li>
 </ul>
-<p>No system is completely secure. If you discover a security vulnerability, please report it to <strong><a href="mailto:security@regroup.app">security@regroup.app</a></strong> rather than disclosing it publicly.</p>
+<p>No system is completely secure. If you discover a security vulnerability, please report it to <strong><a href="mailto:admin@regroup-app.com">admin@regroup-app.com</a></strong> rather than disclosing it publicly.</p>
 <hr>
 <h2>10. Push Notifications</h2>
 <p>We use Firebase Cloud Messaging to send push notifications about payment due dates, compliance reminders, and house updates. You can opt out at any time through your device settings (iOS: Settings → Notifications → Regroup; Android: Settings → Apps → Regroup → Notifications).</p>
@@ -190,7 +190,7 @@ Last updated: May 21, 2026</p>
 <h2>12. Contact</h2>
 <p>For privacy questions or to exercise your rights:</p>
 <p><strong>Regroup / RATS Recovery App</strong>
-Email: <a href="mailto:privacy@regroup.app">privacy@regroup.app</a></p>
+Email: <a href="mailto:admin@regroup-app.com">admin@regroup-app.com</a></p>
 <hr>
 <p><em>This document is a working draft for legal review. It does not constitute legal advice. Have a qualified attorney review this policy before publishing it on the App Store or making it available to users.</em></p>
 

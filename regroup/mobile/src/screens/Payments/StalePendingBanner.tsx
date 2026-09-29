@@ -10,7 +10,7 @@ import { logException } from '../../util/logging';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const SUPPORT_MAILTO =
-  'mailto:support@regroup-app.com?subject=Stuck%20Pending%20Payment';
+  'mailto:admin@regroup-app.com?subject=Stuck%20Pending%20Payment';
 
 const AMBER_BG = '#FFF8E1';
 const AMBER_ROW_BORDER = '#FFE082';

@@ -24,7 +24,7 @@ Last updated: May 21, 2026</p>
 <h3>4.1 Accurate Information</h3>
 <p>You agree to provide accurate, complete, and current information when registering. You are responsible for maintaining the accuracy of your account information.</p>
 <h3>4.2 Account Security</h3>
-<p>You are responsible for maintaining the confidentiality of your login credentials. Notify us immediately at <strong><a href="mailto:support@regroup.app">support@regroup.app</a></strong> if you suspect unauthorized access to your account.</p>
+<p>You are responsible for maintaining the confidentiality of your login credentials. Notify us immediately at <strong><a href="mailto:admin@regroup-app.com">admin@regroup-app.com</a></strong> if you suspect unauthorized access to your account.</p>
 <h3>4.3 Account Types</h3>
 <ul>
 <li><strong>Operator accounts</strong> are created by house managers and owners. Operators are responsible for inviting residents and managing house settings.</li>
@@ -96,7 +96,7 @@ Last updated: May 21, 2026</p>
 <hr>
 <h2>13. Termination</h2>
 <h3>13.1 By You</h3>
-<p>You may delete your account at any time by contacting <strong><a href="mailto:support@regroup.app">support@regroup.app</a></strong>. Operators may also delete their house and all associated resident accounts.</p>
+<p>You may delete your account at any time by contacting <strong><a href="mailto:admin@regroup-app.com">admin@regroup-app.com</a></strong>. Operators may also delete their house and all associated resident accounts.</p>
 <h3>13.2 By Us</h3>
 <p>We may suspend or terminate your account if you violate these Terms, engage in fraudulent activity, or at our discretion with 30 days&#39; notice. We may terminate immediately for violations involving illegal activity, harassment, or security threats.</p>
 <h3>13.3 Effect of Termination</h3>
@@ -104,7 +104,7 @@ Last updated: May 21, 2026</p>
 <hr>
 <h2>14. Governing Law and Dispute Resolution</h2>
 <p>These Terms are governed by the laws of the State of Louisiana, without regard to conflict of law principles.</p>
-<p><strong>For disputes under $10,000:</strong> We encourage resolution through direct negotiation. Contact us at <strong><a href="mailto:support@regroup.app">support@regroup.app</a></strong> and we will attempt to resolve the issue within 30 days.</p>
+<p><strong>For disputes under $10,000:</strong> We encourage resolution through direct negotiation. Contact us at <strong><a href="mailto:admin@regroup-app.com">admin@regroup-app.com</a></strong> and we will attempt to resolve the issue within 30 days.</p>
 <p><strong>For disputes over $10,000:</strong> Disputes will be resolved by binding arbitration under the American Arbitration Association&#39;s Consumer Arbitration Rules. The arbitration will be conducted in Lake Charles, Louisiana. Each party bears its own costs unless the arbitrator awards otherwise.</p>
 <p><strong>Class action waiver:</strong> You waive the right to participate in any class action lawsuit or class-wide arbitration against Regroup.</p>
 <hr>
@@ -119,8 +119,8 @@ Last updated: May 21, 2026</p>
 <hr>
 <h2>18. Contact</h2>
 <p><strong>Regroup / RATS Recovery App</strong>
-Email: <a href="mailto:admin@regroup.app">admin@regroup.app</a>
-Privacy: <a href="mailto:admin@regroup.app">admin@regroup.app</a></p>
+Email: <a href="mailto:admin@regroup-app.com">admin@regroup-app.com</a>
+Privacy: <a href="mailto:admin@regroup-app.com">admin@regroup-app.com</a></p>
 
 </div>
 `;
