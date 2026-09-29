@@ -44,7 +44,7 @@ export interface SubscriptionDoc {
   houseId: string;
   stripeCustomerId: string;
   stripeSubscriptionId: string;
-  status: 'active' | 'past_due' | 'canceled' | 'unpaid' | 'trialing';
+  status: 'active' | 'past_due' | 'canceled' | 'unpaid' | 'trialing' | 'cancelling';
   currentPeriodEnd: string;
   planId: string;
   guestCount: number;

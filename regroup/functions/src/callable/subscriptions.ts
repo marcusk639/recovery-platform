@@ -150,6 +150,23 @@ const sendConfirmationEmailSchema = z.object({
   name: z.string().min(1),
 });
 
+// Grants the potentialSuperAdmin claim (idempotent, never throws) and shapes
+// the checkout response. Shared by the tier and legacy billing paths, which
+// otherwise duplicated this tail identically.
+// Returns the caller's user shape plus `claimGranted`, which is NOT a field on
+// User: the web client reads it to show a "finishing setup" state when the
+// subscription succeeded but the custom claim did not land. Declaring it here
+// keeps the response contract visible rather than hiding it behind a cast.
+async function finishCheckout<U extends { id: string }, M>(
+  user: U,
+  subscriptionMetadata: M,
+): Promise<User & { claimGranted: boolean }> {
+  const claimGranted = await grantPotentialSuperAdminClaim(user.id);
+  return { ...user, subscriptionMetadata, claimGranted } as unknown as User & {
+    claimGranted: boolean;
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // createOperatorSubscription
 // ─────────────────────────────────────────────────────────────────────────────
@@ -158,16 +175,7 @@ export const createOperatorSubscription = onCall(
   async (request) => {
     if (!request.auth)
       throw new HttpsError("unauthenticated", "Login required");
-    const data = parseInput(
-      createOperatorSubscriptionSchema,
-      request.data,
-    ) as unknown as {
-      user: Omit<User, "email"> & { email?: string };
-      paymentMethod: string;
-      houseType: string;
-      tier: string;
-      billingInterval?: "month" | "year";
-    };
+    const data = parseInput(createOperatorSubscriptionSchema, request.data);
     if (data.user.id !== request.auth.uid)
       throw new HttpsError("permission-denied", "User ID mismatch");
     if (!data.user.email) {
@@ -223,8 +231,6 @@ export const createOperatorSubscription = onCall(
       tier: data.tier,
       priceEnvVar: tierConfig.priceEnvVar,
     });
-    const firestoreUser = await getUser(data.user.id);
-
     // Tier-billing path (flag-gated). Builds a single-item flat-fee subscription
     // from the resolved tier price. Legacy two-item subscribers are unaffected:
     // the flag defaults off, so the existing block below runs unchanged.
@@ -272,14 +278,10 @@ export const createOperatorSubscription = onCall(
         text: `A new user has subscribed to Regroup: Sober Living App\nUser ID: ${data.user.id}\nUser email: ${data.user.email}`,
         subject: "New user subscription",
       });
-      const claimGranted = await grantPotentialSuperAdminClaim(data.user.id!);
-      return {
-        ...data.user,
-        subscriptionMetadata: persistedTierMetadata,
-        claimGranted,
-      } as unknown as User;
+      return finishCheckout(data.user, persistedTierMetadata);
     }
 
+    const firestoreUser = await getUser(data.user.id);
     const oxfordEnabled =
       firestoreUser?.subscriptionMetadata?.oxfordEnabled ?? false;
     // W12: userId is embedded in the Stripe subscription metadata at creation
@@ -335,12 +337,7 @@ export const createOperatorSubscription = onCall(
       text: `A new user has subscribed to Regroup: Sober Living App\nUser ID: ${data.user.id}\nUser email: ${data.user.email}`,
       subject: "New user subscription",
     });
-    const claimGranted = await grantPotentialSuperAdminClaim(data.user.id!);
-    return {
-      ...data.user,
-      subscriptionMetadata: metadata,
-      claimGranted,
-    } as User;
+    return finishCheckout(data.user, metadata);
   },
 );
 
@@ -364,22 +361,18 @@ export const reactivateOperatorSubscription = onCall(
       throw new HttpsError("not-found", "User subscription record not found");
     }
     const storedMetadata = firestoreUser.subscriptionMetadata;
-    let subscriptionMetadata: typeof storedMetadata;
-
-    // "canceled" is the canonical spelling (Stripe's own). Documents written
-    // before that was settled may still hold the British "cancelled", so
-    // normalize on read; the writers now emit "canceled".
-    const status =
-      storedMetadata.status === "cancelled"
-        ? "canceled"
-        : storedMetadata.status;
+    const status = storedMetadata.status as SubscriptionDoc["status"];
 
     if (status === "active" || status === "trialing") {
       // Already live. Creating another Stripe subscription here would bill the
       // operator twice over and orphan the original, which would keep charging
-      // with nothing in Firestore pointing at it.
-      subscriptionMetadata = storedMetadata;
-    } else if (status === "cancelling") {
+      // with nothing in Firestore pointing at it. Nothing changed, so there is
+      // nothing to persist or log.
+      return { ...data.user, subscriptionMetadata: storedMetadata };
+    }
+
+    let subscriptionMetadata: typeof storedMetadata;
+    if (status === "cancelling") {
       // Set to cancel at period end but still live — resume in place.
       await uncancelSubscription(storedMetadata.subscriptionId);
       subscriptionMetadata = { ...storedMetadata, status: "active" };
@@ -697,6 +690,12 @@ export const updateSubscriptionHouses = onCall(
         user.subscriptionMetadata.items.houseItemId,
       );
       logger.info("House item quantity", houseItem.quantity);
+      // Only houses not already billed count toward the quantity. The Stripe
+      // write below is relative, so without this filter a retry (or a client
+      // double-submit) would increment the billed quantity a second time for
+      // houses that are already on the subscription.
+      const existingHouses = user.subscriptionMetadata.houses ?? {};
+      const newHouseIds = houseIds.filter((id) => !(id in existingHouses));
       const subscriptionMetadata = updateSubscriptionMetadata(
         user,
         null as unknown as string,
@@ -704,12 +703,18 @@ export const updateSubscriptionHouses = onCall(
         houseIds,
         true,
       );
-      // Stripe first — Firestore only written on success.
-      await updateSubscriptionItem(
-        user.subscriptionMetadata.items.houseItemId,
-        "house",
-        houseItem.quantity! + amount,
-      );
+      if (newHouseIds.length > 0) {
+        // Stripe first — Firestore only written on success.
+        await updateSubscriptionItem(
+          user.subscriptionMetadata.items.houseItemId,
+          "house",
+          houseItem.quantity! + newHouseIds.length * amount,
+        );
+      } else {
+        logger.info("No new houses to bill; skipping Stripe quantity update", {
+          houseIds,
+        });
+      }
       await updateUser(user.id!, { subscriptionMetadata });
       logger.info("House added to subscription", { houseIds });
     }
@@ -725,6 +730,14 @@ export const updateSubscriptionHouses = onCall(
       // houseIds[0] is the house being removed. numberOfGuests is the tracked
       // occupancy stored in subscriptionMetadata — authoritative for billing.
       const houseId = houseIds[0];
+      // If the house is already off the subscription this call is a replay;
+      // decrementing again would under-bill and could zero a slot still in use.
+      if (!(houseId in (user.subscriptionMetadata.houses ?? {}))) {
+        logger.info("House already removed from subscription; skipping", {
+          houseId,
+        });
+        return;
+      }
       const capacity =
         user.subscriptionMetadata.houses[houseId]?.numberOfGuests ?? 0;
       const newGuestQty = Math.max(0, guestItem.quantity! - capacity);

@@ -734,7 +734,7 @@ describe("reactivateOperatorSubscription", () => {
       ...fakeUser,
       subscriptionMetadata: {
         ...fakeUser.subscriptionMetadata,
-        status: "cancelled",
+        status: "canceled",
         oxfordEnabled: true,
       },
     };
@@ -788,6 +788,7 @@ describe("reactivateOperatorSubscription — never creates a duplicate subscript
 
       expect(mockReactivateSubscription).not.toHaveBeenCalled();
       expect(mockUncancelSubscription).not.toHaveBeenCalled();
+      expect(mockUpdateUser).not.toHaveBeenCalled();
     },
   );
 
@@ -801,7 +802,7 @@ describe("reactivateOperatorSubscription — never creates a duplicate subscript
     expect(mockReactivateSubscription).not.toHaveBeenCalled();
   });
 
-  it.each(["canceled", "cancelled"])(
+  it.each(["canceled"])(
     "creates a replacement subscription from terminal state %s",
     async (status) => {
       mockGetUser.mockResolvedValue(userWithStatus(status));
@@ -1413,5 +1414,66 @@ describe("createOperatorSubscription — tier-billing flag branch", () => {
     expect(mockInitializeCustomer).toHaveBeenCalled();
     expect(mockInitializeTierCustomer).not.toHaveBeenCalled();
     delete process.env.STRIPE_PRICE_TRAD_PROFESSIONAL;
+  });
+});
+
+describe("updateSubscriptionHouses — legacy Stripe quantity is idempotent", () => {
+  const houseQtyArg = () =>
+    mockUpdateSubscriptionItem.mock.calls.find((c: any[]) => c[1] === "house")?.[2];
+
+  beforeEach(() => {
+    mockUpdateSubscriptionItem.mockReset();
+    mockUpdateSubscriptionItem.mockResolvedValue({ quantity: 0 });
+    mockGetSubscriptionItem.mockReset();
+    mockGetSubscriptionItem.mockResolvedValue({ quantity: 1 });
+    mockUpdateSubscriptionMetadata.mockReset();
+    mockUpdateSubscriptionMetadata.mockReturnValue(fakeUser.subscriptionMetadata);
+    mockUpdateUser.mockReset();
+    mockUpdateUser.mockResolvedValue(undefined);
+    // fakeUser already has house-1 on the subscription.
+    mockGetUser.mockResolvedValue(fakeUser);
+  });
+
+  it("does not re-increment when adding a house already on the subscription", async () => {
+    await call(updateSubscriptionHouses, {
+      ownerUserId: "user-1",
+      houseIds: ["house-1"],
+      action: "add",
+      amountToAdjust: 1,
+    });
+
+    // A retry must not push the billed quantity from 1 to 2.
+    expect(houseQtyArg() ?? 1).toBe(1);
+  });
+
+  it("increments exactly once for a genuinely new house", async () => {
+    await call(updateSubscriptionHouses, {
+      ownerUserId: "user-1",
+      houseIds: ["house-2"],
+      action: "add",
+      amountToAdjust: 1,
+    });
+
+    expect(houseQtyArg()).toBe(2);
+  });
+
+  it("does not decrement when removing a house that is not on the subscription", async () => {
+    await call(updateSubscriptionHouses, {
+      ownerUserId: "user-1",
+      houseIds: ["house-not-present"],
+      action: "remove",
+    });
+
+    expect(houseQtyArg() ?? 1).toBe(1);
+  });
+
+  it("decrements exactly once for a house that is on the subscription", async () => {
+    await call(updateSubscriptionHouses, {
+      ownerUserId: "user-1",
+      houseIds: ["house-1"],
+      action: "remove",
+    });
+
+    expect(houseQtyArg()).toBe(0);
   });
 });
