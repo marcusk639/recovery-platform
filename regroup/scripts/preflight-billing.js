@@ -130,12 +130,18 @@ const ANNUAL_PRICE_VARS = TIER_PRICE_VARS.map((v) => `${v}_ANNUAL`);
 // [CONFIG] — must be present in the deployed .env files. Hard fail if missing.
 const CONFIG_REQUIRED = [
   'STRIPE_API_VERSION',
-  // Legacy price IDs — still referenced in api/stripe.ts and used to seed the
-  // subscriptions doc's planId even on the tier path. Required until legacy
-  // billing is fully retired.
-  'STRIPE_HOUSE_PRICE_ID',
-  'STRIPE_GUEST_PRICE_ID',
-  'STRIPE_OXFORD_PRICE_ID',
+  // Legacy price IDs removed 2026-09-29: Regroup launches on the six-tier model
+  // only. The tier path resolves prices via resolveTierPriceId() and never reads
+  // these (verified: createTierSubscription -> api/stripe.ts:123; planId writes at
+  // callable/subscriptions.ts:264,325 take that resolved price). The earlier note
+  // here claiming the tier path seeded planId from them was inaccurate.
+  //
+  // The legacy FUNCTIONS in api/stripe.ts still reference process.env for these
+  // and will now resolve undefined: createSubscription:84, createItemsFromMetadata:137,
+  // reactivateSubscription:197-199, initializeSubscription:334/347. They are
+  // unreachable while TIER_BILLING_ENABLED=true, EXCEPT reactivateSubscription,
+  // which is exposed via the reactivateOperatorSubscription callable — audit that
+  // before relying on this removal.
   ...TIER_PRICE_VARS,
   ...ANNUAL_PRICE_VARS,
 ];
