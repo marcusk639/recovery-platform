@@ -1,29 +1,25 @@
-import { Injectable } from "@angular/core";
-import { auth as firebaseAuth } from "firebase/app";
-import { AngularFirestore } from "@angular/fire/firestore";
-import { AngularFireAuth } from "@angular/fire/auth";
-import { User, createSuperAdmin } from "src/app/entities/User";
-import BaseFirestoreService from "../base-service";
-import _ from "lodash";
+import { Injectable } from '@angular/core';
+import { auth as firebaseAuth } from 'firebase/app';
+import { AngularFirestore } from '@angular/fire/firestore';
+import { AngularFireAuth } from '@angular/fire/auth';
+import { User, createSuperAdmin } from 'src/app/entities/User';
+import BaseFirestoreService from '../base-service';
+import _ from 'lodash';
 import {
   getFirebaseUserFromUserCredential,
   hasUpperCase,
   hasLowerCase,
   hasNumber,
-} from "src/app/util/user-util";
-import {
-  FormBuilder,
-  FormControl,
-  Validators,
-  ValidatorFn,
-} from "@angular/forms";
-import { CloudFunctionService } from "../functions/cloud-function.service";
-import { PaymentMethod } from "ngx-stripe/lib/interfaces/payment-intent";
-import { LocalStorageService } from "../local-storage.service";
-import firebase from "firebase";
+} from 'src/app/util/user-util';
+import { FormBuilder, FormControl, Validators, ValidatorFn } from '@angular/forms';
+import { CloudFunctionService } from '../functions/cloud-function.service';
+import { PaymentMethod } from 'ngx-stripe/lib/interfaces/payment-intent';
+import { LocalStorageService } from '../local-storage.service';
+import firebase from 'firebase';
+import { BillingInterval, HouseType } from 'src/app/entities/TierCatalog';
 
 @Injectable({
-  providedIn: "root",
+  providedIn: 'root',
 })
 export class AuthService extends BaseFirestoreService<User> {
   cachedDetails: { email?: string } = {};
@@ -35,7 +31,7 @@ export class AuthService extends BaseFirestoreService<User> {
     protected formBuilder: FormBuilder,
     protected functions: CloudFunctionService,
   ) {
-    super(firestore, "users");
+    super(firestore, 'users');
   }
 
   async login(email: string, password: string) {
@@ -48,7 +44,7 @@ export class AuthService extends BaseFirestoreService<User> {
   async autoLogin(): Promise<firebase.User> {
     return new Promise((resolve, reject) => {
       const unsub: any = this.auth.onAuthStateChanged((user) => {
-        if (typeof unsub === "function") unsub();
+        if (typeof unsub === 'function') unsub();
         if (user) {
           resolve(user);
         } else {
@@ -69,10 +65,7 @@ export class AuthService extends BaseFirestoreService<User> {
       const user = await this.autoLogin();
       this.user = await this.getUser(user.uid);
     } catch (error) {
-      console.error(
-        "Failed to log in",
-        error && (error as any).code ? (error as any).code : "",
-      );
+      console.error('Failed to log in', error && (error as any).code ? (error as any).code : '');
     }
     return this.user;
   }
@@ -91,9 +84,7 @@ export class AuthService extends BaseFirestoreService<User> {
    * @param {*} password
    */
   createUserWithEmail(email, password): Promise<firebase.User> {
-    return this.auth
-      .createUserWithEmailAndPassword(email, password)
-      .then((user) => user.user);
+    return this.auth.createUserWithEmailAndPassword(email, password).then((user) => user.user);
   }
 
   anonymouslyLogin() {
@@ -105,18 +96,12 @@ export class AuthService extends BaseFirestoreService<User> {
    * @param {*} email
    * @param {*} password
    */
-  signInWithEmail(
-    email: string,
-    password: string,
-  ): Promise<firebaseAuth.UserCredential> {
+  signInWithEmail(email: string, password: string): Promise<firebaseAuth.UserCredential> {
     return this.auth.signInWithEmailAndPassword(email, password);
   }
 
   async convertAnonymousUser(email: string, password: string) {
-    const credential = firebaseAuth.EmailAuthProvider.credential(
-      email,
-      password,
-    );
+    const credential = firebaseAuth.EmailAuthProvider.credential(email, password);
     const currentUser = await this.auth.currentUser;
     await currentUser.linkWithCredential(credential);
     return this.signInWithEmail(email, password).then((user) => user.user);
@@ -132,7 +117,7 @@ export class AuthService extends BaseFirestoreService<User> {
 
   async getUser(userId: string, email?: string): Promise<User> {
     if (email) {
-      const result = await this.getByAttribute("email", "==", email);
+      const result = await this.getByAttribute('email', '==', email);
       return result && result.length ? result[0] : null;
     }
     return this.get(userId);
@@ -165,21 +150,14 @@ export class AuthService extends BaseFirestoreService<User> {
   }
 
   getAuthUser(forceRefresh: boolean = false) {
-    return this.auth.currentUser.then((currentUser) =>
-      currentUser.getIdTokenResult(forceRefresh),
-    );
+    return this.auth.currentUser.then((currentUser) => currentUser.getIdTokenResult(forceRefresh));
   }
 
   refreshClaims() {
-    return this.auth.currentUser.then((currentUser) =>
-      currentUser.getIdToken(true),
-    );
+    return this.auth.currentUser.then((currentUser) => currentUser.getIdToken(true));
   }
 
-  convertFirebaseUserToRatsUser(
-    user: Partial<User>,
-    userCredential: firebase.User,
-  ) {
+  convertFirebaseUserToRatsUser(user: Partial<User>, userCredential: firebase.User) {
     user.password = null;
     //@ts-ignore
     const newUser: User = {
@@ -200,33 +178,16 @@ export class AuthService extends BaseFirestoreService<User> {
 
   buildAuthForm = (user: User = new User(), fullName: boolean = true) => {
     if (user) {
-      const name =
-        user.firstName && user.lastName
-          ? user.firstName + " " + user.lastName
-          : "";
+      const name = user.firstName && user.lastName ? user.firstName + ' ' + user.lastName : '';
       return this.formBuilder.group({
-        fullName: fullName
-          ? new FormControl(name, [Validators.required])
-          : undefined,
-        email: new FormControl(user.email, [
-          Validators.required,
-          Validators.email,
-        ]),
-        password: new FormControl(user.password, [
-          Validators.required,
-          this.validatePassword,
-        ]),
+        fullName: fullName ? new FormControl(name, [Validators.required]) : undefined,
+        email: new FormControl(user.email, [Validators.required, Validators.email]),
+        password: new FormControl(user.password, [Validators.required, this.validatePassword]),
       });
     } else {
       return this.formBuilder.group({
-        email: new FormControl(user.email, [
-          Validators.required,
-          Validators.email,
-        ]),
-        password: new FormControl(user.password, [
-          Validators.required,
-          this.validatePassword,
-        ]),
+        email: new FormControl(user.email, [Validators.required, Validators.email]),
+        password: new FormControl(user.password, [Validators.required, this.validatePassword]),
       });
     }
   };
@@ -234,17 +195,15 @@ export class AuthService extends BaseFirestoreService<User> {
   validatePassword: ValidatorFn = (password: FormControl) => {
     const errors: any = {};
     if (!password.value) {
-      errors.characters = "Password must have 8 characters.";
+      errors.characters = 'Password must have 8 characters.';
       return;
     }
-    if (password.value.length < 8)
-      errors.characters = "Password must have 8 characters.";
+    if (password.value.length < 8) errors.characters = 'Password must have 8 characters.';
     if (!hasUpperCase(password.value))
-      errors.uppercase = "Password must contain at least one uppercase letter.";
+      errors.uppercase = 'Password must contain at least one uppercase letter.';
     if (!hasLowerCase(password.value))
-      errors.lowercase = "Password must contain at least one lowercase letter.";
-    if (!hasNumber(password.value))
-      errors.number = "Password must contain at least one number.";
+      errors.lowercase = 'Password must contain at least one lowercase letter.';
+    if (!hasNumber(password.value)) errors.number = 'Password must contain at least one number.';
     return errors;
   };
 
@@ -252,7 +211,13 @@ export class AuthService extends BaseFirestoreService<User> {
     return this.functions.updatePaymentInfo(user, paymentMethod);
   }
 
-  async subscribeOperator(_user: User, paymentMethod: string) {
+  async subscribeOperator(
+    _user: User,
+    paymentMethod: string,
+    houseType: HouseType,
+    tier: string,
+    billingInterval?: BillingInterval,
+  ) {
     let user: User;
     try {
       user = await this.createUser({
@@ -260,14 +225,46 @@ export class AuthService extends BaseFirestoreService<User> {
         password: _user.password,
       });
     } catch (error) {
-      // abort
+      // abort — no account was created, nothing to clean up
       throw error;
     }
     try {
-      await this.functions.initializeSubscription(user, paymentMethod);
+      await this.functions.initializeSubscription(
+        user,
+        paymentMethod,
+        houseType,
+        tier,
+        billingInterval,
+      );
     } catch (error) {
-      // abort
+      // The Auth user + Firestore doc were already created above. A failed
+      // subscription (declined card, backend validation, etc.) must not
+      // leave an orphaned account behind — delete both before surfacing the
+      // error so the same email can be retried.
+      await this.cleanupOrphanedAccount(user.id);
       throw error;
+    }
+    return user;
+  }
+
+  /**
+   * Removes the Auth user and Firestore user doc created for a signup whose
+   * subscription failed to initialize. Best-effort: cleanup failures are
+   * logged but never mask the original subscription error.
+   */
+  private async cleanupOrphanedAccount(userId: string): Promise<void> {
+    try {
+      await this.delete(userId);
+    } catch (cleanupError) {
+      console.error('Failed to remove orphaned user document', cleanupError);
+    }
+    try {
+      const currentUser = await this.auth.currentUser;
+      if (currentUser && currentUser.uid === userId) {
+        await currentUser.delete();
+      }
+    } catch (cleanupError) {
+      console.error('Failed to remove orphaned auth account', cleanupError);
     }
   }
 
@@ -275,7 +272,7 @@ export class AuthService extends BaseFirestoreService<User> {
     try {
       await this.auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
     } catch (error) {
-      console.error("Failed to persist auth");
+      console.error('Failed to persist auth');
     }
   }
 

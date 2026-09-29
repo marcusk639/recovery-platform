@@ -14,9 +14,30 @@
             </div>
           </div>
           <div [ngClass]="{ dummy: !fromApp }"></div>
-          <div *ngIf="!signUpStarted" class="col-12 col-md-8 col-lg-5">
+
+          <!-- Step 0a: resolving the tier from the query string against the live catalog -->
+          <div *ngIf="resolvingTier && !signUpStarted" class="col-12 col-md-8 col-lg-5">
+            <div class="contact-box bg-white text-center rounded p-4 p-sm-5 mt-5 mt-lg-0 shadow-lg">
+              <span><i [class]="'fas fa-spinner fa-3x fa-spin'"></i></span>
+            </div>
+          </div>
+
+          <!-- Step 0b: capacity-first plan picker (shown when the URL has no valid tier) -->
+          <div *ngIf="!resolvingTier && pickerVisible && !signUpStarted" class="col-12 col-md-8 col-lg-5">
+            <div class="contact-box bg-white text-left rounded p-4 p-sm-5 mt-5 mt-lg-0 shadow-lg">
+              <div *ngIf="catalogError" class="text-danger">
+                We couldn't load current pricing. Please refresh the page or
+                <a [routerLink]="['/contact']">contact us</a>.
+              </div>
+              <tier-picker *ngIf="!catalogError" (selected)="onTierSelected($event)"></tier-picker>
+            </div>
+          </div>
+
+          <!-- Step 1: account details -->
+          <div *ngIf="!resolvingTier && !pickerVisible && !signUpStarted" class="col-12 col-md-8 col-lg-5">
             <!-- Contact Box -->
             <div class="contact-box bg-white text-center rounded p-4 p-sm-5 mt-5 mt-lg-0 shadow-lg">
+              <order-summary [tier]="selectedTier" [billingInterval]="billingInterval"></order-summary>
               <!-- Contact Form -->
               <form *ngIf="!loading" [formGroup]="formGroup" id="contact-form">
                 <div class="contact-top">
@@ -73,8 +94,11 @@
                   <h3 class="contact-title">Processing...</h3>
                   <h5 class="text-secondary fw-3 py-3">Please wait while we set up your account...</h5>
                 </div>
+                <order-summary [tier]="selectedTier" [billingInterval]="billingInterval"></order-summary>
                 <billing-info [initialSubscription]="true" [loading]="loading" [setLoading]="setLoading"
-                  [setBillingCompleted]="setBillingCompleted" [user]="user">
+                  [setBillingCompleted]="setBillingCompleted" [user]="user"
+                  [houseType]="selectedTier?.houseType" [tier]="selectedTier?.tier"
+                  [billingInterval]="billingInterval">
                 </billing-info>
                 <div *ngIf="loading">
                   <span><i [class]="'fas fa-spinner fa-3x fa-spin'"></i></span>

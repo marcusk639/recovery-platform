@@ -18,156 +18,156 @@
       </div>
     </div>
 
-    <!-- Traditional Sober Living -->
-    <div class="row justify-content-center pt-4">
+    <div *ngIf="loading" class="row justify-content-center pt-4">
       <div class="col-12 text-center">
-        <h3 class="text-uppercase color-primary">Traditional Sober Living</h3>
-      </div>
-    </div>
-    <div class="row price-plan-wrapper justify-content-center pt-3">
-      <div class="col-12 col-md-6 col-lg-4">
-        <div class="single-price-plan text-center p-5">
-          <div class="plan-title my-2 my-sm-3">
-            <h3 class="text-uppercase">Starter</h3>
-          </div>
-          <div class="plan-price pb-2 pb-sm-3">
-            <h3 class="color-primary"><small class="fw-7">$</small>69 <small class="fw-7">/ mo</small></h3>
-          </div>
-          <div class="plan-description">
-            <ul class="plan-features">
-              <li class="border-top py-3">Up to 10 residents</li>
-              <li class="border-top py-3">1 property</li>
-              <li class="border-top py-3">Resident accountability tools</li>
-              <li class="border-top py-3">Secure house data</li>
-              <li class="border-top border-bottom py-3">24/7 technical support</li>
-            </ul>
-          </div>
-          <div class="plan-button">
-            <a [routerLink]="['/signup']" class="btn mt-4">Start Free Trial</a>
-          </div>
-        </div>
-      </div>
-      <div class="col-12 col-md-6 col-lg-4">
-        <div class="single-price-plan active text-center p-5">
-          <div class="plan-title my-2 my-sm-3">
-            <h3 class="text-uppercase">Professional</h3>
-            <span class="badge badge-primary">Most Popular</span>
-          </div>
-          <div class="plan-price pb-2 pb-sm-3">
-            <h3 class="color-primary"><small class="fw-7">$</small>129 <small class="fw-7">/ mo</small></h3>
-          </div>
-          <div class="plan-description">
-            <ul class="plan-features">
-              <li class="border-top py-3">Up to 20 residents</li>
-              <li class="border-top py-3">Up to 3 properties</li>
-              <li class="border-top py-3">Everything in Starter</li>
-              <li class="border-top py-3">Multi-property dashboard</li>
-              <li class="border-top border-bottom py-3">Priority support</li>
-            </ul>
-          </div>
-          <div class="plan-button">
-            <a [routerLink]="['/signup']" class="btn mt-4">Start Free Trial</a>
-          </div>
-        </div>
-      </div>
-      <div class="col-12 col-md-6 col-lg-4">
-        <div class="single-price-plan text-center p-5">
-          <div class="plan-title my-2 my-sm-3">
-            <h3 class="text-uppercase">Enterprise</h3>
-          </div>
-          <div class="plan-price pb-2 pb-sm-3">
-            <h3 class="color-primary"><small class="fw-7">$</small>249 <small class="fw-7">/ mo</small></h3>
-          </div>
-          <div class="plan-description">
-            <ul class="plan-features">
-              <li class="border-top py-3">Unlimited residents</li>
-              <li class="border-top py-3">Multiple properties</li>
-              <li class="border-top py-3">Everything in Professional</li>
-              <li class="border-top py-3">Dedicated onboarding</li>
-              <li class="border-top border-bottom py-3">Premium support</li>
-            </ul>
-          </div>
-          <div class="plan-button">
-            <a [routerLink]="['/signup']" class="btn mt-4">Start Free Trial</a>
-          </div>
-        </div>
+        <i class="fas fa-spinner fa-2x fa-spin"></i>
       </div>
     </div>
 
-    <!-- Oxford Houses -->
-    <div class="row justify-content-center pt-5">
-      <div class="col-12 text-center">
-        <h3 class="text-uppercase color-primary">Oxford Houses</h3>
+    <div *ngIf="error" class="row justify-content-center pt-4">
+      <div class="col-12 text-center text-danger">
+        We couldn't load current pricing. Please refresh, or
+        <a [routerLink]="['/contact']">contact us</a> for plan details.
       </div>
     </div>
-    <div class="row price-plan-wrapper justify-content-center pt-3">
-      <div class="col-12 col-md-6 col-lg-4">
-        <div class="single-price-plan text-center p-5">
-          <div class="plan-title my-2 my-sm-3">
-            <h3 class="text-uppercase">Standard</h3>
-          </div>
-          <div class="plan-price pb-2 pb-sm-3">
-            <h3 class="color-primary"><small class="fw-7">$</small>49 <small class="fw-7">/ mo</small></h3>
-          </div>
-          <div class="plan-description">
-            <ul class="plan-features">
-              <li class="border-top py-3">Up to 15 residents</li>
-              <li class="border-top py-3">1 house</li>
-              <li class="border-top py-3">Self-run governance tools</li>
-              <li class="border-top py-3">Secure house data</li>
-              <li class="border-top border-bottom py-3">24/7 technical support</li>
-            </ul>
-          </div>
-          <div class="plan-button">
-            <a [routerLink]="['/signup']" class="btn mt-4">Start Free Trial</a>
-          </div>
-        </div>
-      </div>
-      <div class="col-12 col-md-6 col-lg-4">
-        <div class="single-price-plan text-center p-5">
-          <div class="plan-title my-2 my-sm-3">
-            <h3 class="text-uppercase">Plus</h3>
-          </div>
-          <div class="plan-price pb-2 pb-sm-3">
-            <h3 class="color-primary"><small class="fw-7">$</small>89 <small class="fw-7">/ mo</small></h3>
-          </div>
-          <div class="plan-description">
-            <ul class="plan-features">
-              <li class="border-top py-3">Up to 25 residents</li>
-              <li class="border-top py-3">1 house</li>
-              <li class="border-top py-3">Everything in Standard</li>
-              <li class="border-top py-3">Advanced reporting</li>
-              <li class="border-top border-bottom py-3">Priority support</li>
-            </ul>
-          </div>
-          <div class="plan-button">
-            <a [routerLink]="['/signup']" class="btn mt-4">Start Free Trial</a>
+
+    <ng-container *ngIf="!loading && !error">
+      <!-- Billing interval toggle -->
+      <div class="row justify-content-center pt-4">
+        <div class="col-12 text-center">
+          <div class="btn-group" role="group" aria-label="Billing interval">
+            <button
+              type="button"
+              class="btn btn-bordered"
+              [ngClass]="{ active: billingInterval === 'month' }"
+              (click)="setBillingInterval('month')"
+            >
+              Monthly
+            </button>
+            <button
+              type="button"
+              class="btn btn-bordered"
+              [ngClass]="{ active: billingInterval === 'year' }"
+              (click)="setBillingInterval('year')"
+            >
+              Annual
+            </button>
           </div>
         </div>
       </div>
-      <div class="col-12 col-md-6 col-lg-4">
-        <div class="single-price-plan text-center p-5">
-          <div class="plan-title my-2 my-sm-3">
-            <h3 class="text-uppercase">Network</h3>
-          </div>
-          <div class="plan-price pb-2 pb-sm-3">
-            <h3 class="color-primary"><small class="fw-7">$</small>299 <small class="fw-7">/ mo</small></h3>
-          </div>
-          <div class="plan-description">
-            <ul class="plan-features">
-              <li class="border-top py-3">10–50 houses</li>
-              <li class="border-top py-3">Regional chapter management</li>
-              <li class="border-top py-3">Everything in Plus</li>
-              <li class="border-top py-3">Network-wide dashboard</li>
-              <li class="border-top border-bottom py-3">Dedicated support</li>
-            </ul>
-          </div>
-          <div class="plan-button">
-            <a [routerLink]="['/signup']" class="btn mt-4">Contact Sales</a>
+
+      <!-- Traditional Sober Living -->
+      <div class="row justify-content-center pt-4">
+        <div class="col-12 text-center">
+          <h3 class="text-uppercase color-primary">Traditional Sober Living</h3>
+        </div>
+      </div>
+      <div class="row price-plan-wrapper justify-content-center pt-3">
+        <div class="col-12 col-md-6 col-lg-4" *ngFor="let tier of traditionalTiers">
+          <div class="single-price-plan text-center p-5" [ngClass]="{ active: isHighlighted(tier) }">
+            <div class="plan-title my-2 my-sm-3">
+              <h3 class="text-uppercase">{{ tier.label }}</h3>
+              <span *ngIf="isHighlighted(tier)" class="badge badge-primary">Most Popular</span>
+            </div>
+            <div class="plan-price pb-2 pb-sm-3">
+              <h3 class="color-primary">
+                <small class="fw-7">$</small>{{ formatAmount(tier) }}
+                <small class="fw-7">/ {{ effectiveInterval(tier) === "year" ? "yr" : "mo" }}</small>
+              </h3>
+              <div *ngIf="hasAnnual(tier) && annualSavingsPct(tier) && billingInterval === 'year'" class="small text-success">
+                Save {{ annualSavingsPct(tier) }}% billed annually
+              </div>
+              <div *ngIf="billingInterval === 'year' && !hasAnnual(tier)" class="small text-muted">
+                Annual pricing not yet available for this plan
+              </div>
+            </div>
+            <div class="plan-description">
+              <ul class="plan-features">
+                <li class="border-top py-3">
+                  {{ tier.maxResidents === null ? "Unlimited residents" : "Up to " + tier.maxResidents + " residents" }}
+                </li>
+                <li class="border-top py-3">
+                  {{ tier.maxProperties === null ? "Unlimited properties" : (tier.maxProperties === 1 ? "1 property" : "Up to " + tier.maxProperties + " properties") }}
+                </li>
+                <li class="border-top py-3" *ngIf="tier.features.automatedRentCollection">Automated rent collection</li>
+                <li class="border-top py-3" *ngIf="tier.features.complianceExport">Compliance export</li>
+                <li class="border-top py-3" *ngIf="tier.features.analytics">Analytics &amp; ROI reporting</li>
+                <li class="border-top border-bottom py-3" *ngIf="tier.features.whiteLabel">White-label branding</li>
+              </ul>
+            </div>
+            <div class="plan-button">
+              <a
+                *ngIf="tier.availableForSale"
+                [routerLink]="ctaRoute(tier)"
+                [queryParams]="signupQueryParams(tier)"
+                class="btn mt-4"
+              >
+                {{ ctaLabel(tier) }}
+              </a>
+              <a *ngIf="!tier.availableForSale" [routerLink]="ctaRoute(tier)" class="btn mt-4">
+                {{ ctaLabel(tier) }}
+              </a>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+
+      <!-- Oxford Houses -->
+      <div class="row justify-content-center pt-5">
+        <div class="col-12 text-center">
+          <h3 class="text-uppercase color-primary">Oxford Houses</h3>
+        </div>
+      </div>
+      <div class="row price-plan-wrapper justify-content-center pt-3">
+        <div class="col-12 col-md-6 col-lg-4" *ngFor="let tier of oxfordTiers">
+          <div class="single-price-plan text-center p-5" [ngClass]="{ active: isHighlighted(tier) }">
+            <div class="plan-title my-2 my-sm-3">
+              <h3 class="text-uppercase">{{ tier.label }}</h3>
+              <span *ngIf="isHighlighted(tier)" class="badge badge-primary">Most Popular</span>
+            </div>
+            <div class="plan-price pb-2 pb-sm-3">
+              <h3 class="color-primary">
+                <small class="fw-7">$</small>{{ formatAmount(tier) }}
+                <small class="fw-7">/ {{ effectiveInterval(tier) === "year" ? "yr" : "mo" }}</small>
+              </h3>
+              <div *ngIf="hasAnnual(tier) && annualSavingsPct(tier) && billingInterval === 'year'" class="small text-success">
+                Save {{ annualSavingsPct(tier) }}% billed annually
+              </div>
+              <div *ngIf="billingInterval === 'year' && !hasAnnual(tier)" class="small text-muted">
+                Annual pricing not yet available for this plan
+              </div>
+            </div>
+            <div class="plan-description">
+              <ul class="plan-features">
+                <li class="border-top py-3">
+                  {{ tier.maxResidents === null ? "Unlimited residents" : "Up to " + tier.maxResidents + " residents" }}
+                </li>
+                <li class="border-top py-3">
+                  {{ tier.maxProperties === null ? "Unlimited properties" : (tier.maxProperties === 1 ? "1 house" : "Up to " + tier.maxProperties + " houses") }}
+                </li>
+                <li class="border-top py-3" *ngIf="tier.features.automatedRentCollection">Automated rent collection</li>
+                <li class="border-top py-3" *ngIf="tier.features.complianceExport">Compliance export</li>
+                <li class="border-top py-3" *ngIf="tier.features.analytics">Analytics &amp; ROI reporting</li>
+                <li class="border-top border-bottom py-3" *ngIf="tier.features.whiteLabel">White-label branding</li>
+              </ul>
+            </div>
+            <div class="plan-button">
+              <a
+                *ngIf="tier.availableForSale"
+                [routerLink]="ctaRoute(tier)"
+                [queryParams]="signupQueryParams(tier)"
+                class="btn mt-4"
+              >
+                {{ ctaLabel(tier) }}
+              </a>
+              <a *ngIf="!tier.availableForSale" [routerLink]="ctaRoute(tier)" class="btn mt-4">
+                {{ ctaLabel(tier) }}
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </ng-container>
 
     <div class="row justify-content-center pt-5">
       <p class="text-body pt-4 fw-5">Questions about pricing? <a href="https://regroup-app.com/contact">Contact Us</a></p>
