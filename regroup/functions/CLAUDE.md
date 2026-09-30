@@ -45,16 +45,20 @@ src/
   triggers/
     firestore/      Firestore document write triggers
     rtdb/           Realtime Database triggers
-    stripeConnect.ts  Stripe Connect account event triggers
   http/
-    index.ts        HTTP-only endpoints (not callable)
-    stripeWebhook.ts  Stripe webhook receiver (signature-verified)
+    stripeConnect.ts  Stripe Connect account event endpoints (stripeConnectReauth, stripeConnectReturn)
+    universal.ts    Generic health-check catch-all (/health, /healthz -> 200; else 404) — no SSR logic.
+                    The Angular SSR `universal` handler lives in the separate
+                    `regroup/web/functions/src/index.ts` codebase, not here.
+  webhooks/
+    stripeWebhook.ts  Stripe webhook receiver (signature-verified); exports stripeWebhook
+                      (deployed as `stripeEvents`) and handleStripeConnectWebhook
   scheduled/
     officerTermReminder.ts
     overdueRentNotification.ts
     scheduledRentCollection.ts
-  webhooks/
-    universal.ts    Angular SSR handler (serves the web app)
+    index.ts        Also defines updateDisputes (daily 2am UTC), weeklyTransfers
+                     (Sundays 8am UTC), warmWebsite (every 5 min)
   api/              Internal API helpers
   entities/         TypeScript interfaces (House, Guest, Subscription, etc.)
   types/            Shared type definitions
@@ -74,11 +78,15 @@ All Stripe amounts are in **US cents** (integers). `50000` = $500.00. Convert on
 Multi-house operators on the **legacy per-house** subscription get an automatic
 stacking coupon: 3–4 houses → `regroup-bundle-3` (10% off), 5+ → `regroup-bundle-5`
 (15% off). The logic lives in `api/stripe.ts` (`getBundleCoupon`,
-`applyBundleDiscountToSubscription`, `removeBundleDiscount`) and is invoked from
-`callable/subscriptions.ts` — `updateSubscriptionHouses` (recompute on house
-add/remove) and the `applyBundleDiscount` callable. The discount is keyed off the
-count of `subscriptionMetadata.houses` and removed when it drops below 3. Coupons
-are `duration: forever`.
+`applyBundleDiscountToSubscription`, `removeBundleDiscount`). **It is now dormant.**
+The automatic trigger lived in the legacy branch of `updateSubscriptionHouses`,
+deleted with the rest of the per-house model; the only remaining entry point is the
+`applyBundleDiscount` callable, which early-returns for any sub carrying a `tier`.
+Every surviving subscription is a tier sub, so it never fires. Kept deliberately
+rather than deleted — do not wire it to tiers without a pricing decision, because
+tier level already prices multi-property. The discount was keyed off the count of
+`subscriptionMetadata.houses` and removed when it dropped below 3. Coupons are
+`duration: forever`.
 
 **Do not apply bundles to tier subscriptions.** The 6-tier model prices
 multi-property via the tier (Professional/Enterprise/Network), so per-house bundle
@@ -121,9 +129,54 @@ Oxford Network has `availableForSale: false` (P-8) — `isTierAvailableForSale()
 blocks it in `createOperatorSubscription` checkout while keeping the tier defined.
 Absent flag ⇒ sellable.
 
+### Server-side entitlement gate (paywall)
+
+`util/entitlement.ts` is the only server-side paywall enforcement. Before it,
+`castOxfordVote` was the sole callable that consulted `subscriptionStatus` — the
+paywall was otherwise enforced only in the mobile client, so anyone calling the API
+directly kept full access regardless of payment.
+
+`enforceHouseEntitlement(house, houseId)` is the gate. Ladder: `active`/`trialing`
+grant; `past_due` grants only while `guestGraceEndsAt` is in the future (an absent or
+unparseable deadline counts as expired, not as unlimited grace); `canceled`/`unpaid`
+deny; an unrecognized status denies.
+
+**Phase A is in force:** a house with no `subscriptionStatus` is GRANTED access and
+logs `entitlement.absent_status` with its house id. That measures how many houses a
+fail-closed rollout would lock out. Flip the absent branch to a denial only once that
+count reaches zero. `House.subscriptionStatus` defaults to `""`, so this is not rare.
+
+**Kill switch:** `paywall/config.enabled`, read with the Admin SDK so it bypasses
+security rules — there is no `match /paywall/...` block, so the mobile hook reading
+the same doc is denied on every attempt. Fails closed in every failure mode (missing
+doc, non-boolean field, throwing read). Cached 60s.
+
+Gated today: `castOxfordVote`, `setOxfordEnabled`, `createInvitation`, and claim
+**grants** via `assertCanGrantClaimForHouses({ enforceEntitlement: true })`.
+
+Deliberately NOT gated — do not "fix" these:
+
+- `createPaymentIntent` — residents must be able to pay rent while the operator is
+  lapsed. Blocking it harms the resident and removes the operator's means of
+  recovering.
+- Claim **revocations** (`deleteAdminAuthorization`, `removePrivilegesForGuests`) —
+  preventing an operator from removing someone's access is a safety problem.
+- `redeemInvitation` — an invitee mid-accept should not be stranded because the
+  operator lapsed after the invitation went out.
+- Billing/auth escape hatches (`createOperatorSubscription`,
+  `reactivateOperatorSubscription`, `createBillingPortalSession`,
+  `updatePaymentInfo`, the Stripe Connect trio) — gating any of these deadlocks a
+  lapsed operator out of paying.
+- Reads (`listPayments`, `complianceExport`, `rentRoiMetrics`) — the gate covers
+  writes; data is not held hostage.
+
+**Testing note:** because Phase A grants on absent status, a test whose house fixture
+omits `subscriptionStatus` passes whether or not the gate is wired at all. Assert the
+gate was *called*, and verify by deleting the gate and confirming the test fails.
+
 ### Webhook security
 
-`http/stripeWebhook.ts` uses Stripe signature verification (`stripe.webhooks.constructEvent`). Never process a webhook payload without verifying the signature first.
+`webhooks/stripeWebhook.ts` uses Stripe signature verification (`stripe.webhooks.constructEvent`). Never process a webhook payload without verifying the signature first.
 
 ### Cross-product access (meetings, referrals)
 
@@ -133,4 +186,8 @@ Never add direct Firestore cross-queries to another product's database — route
 
 Service key lives in `service-key.json` (gitignored). Download from Firebase Console under `phoenix-cleanhouse`. Functions read secrets via environment config, not hardcoded values.
 
-There is no `functions/.env.example`. Required deploy-time config beyond the `defineSecret` set: `STRIPE_CONNECT_WEBHOOK_SECRET` (defined but missing from the setup runbook), plain `process.env` values `STRIPE_PRICE_TRAD_*` / `STRIPE_PRICE_OXFORD_*`, `STRIPE_HOUSE_PRICE_ID` / `STRIPE_GUEST_PRICE_ID` / `STRIPE_OXFORD_PRICE_ID` (legacy), `TIER_BILLING_ENABLED`, `RECOVERY_API_BASE_URL`, and `STRIPE_API_VERSION` (pin to `2026-01-28.clover` — unset today, which silently defaults the `api/stripe.ts` client).
+There is no `functions/.env.example`. Required deploy-time config beyond the `defineSecret` set: `STRIPE_CONNECT_WEBHOOK_SECRET` (defined but missing from the setup runbook), plain `process.env` values `STRIPE_PRICE_TRAD_*` / `STRIPE_PRICE_OXFORD_*`, `TIER_BILLING_ENABLED`, `RECOVERY_API_BASE_URL`, and `STRIPE_API_VERSION`.
+
+The legacy `STRIPE_HOUSE_PRICE_ID` / `STRIPE_GUEST_PRICE_ID` / `STRIPE_OXFORD_PRICE_ID` values are no longer read — the per-house model that used them is gone.
+
+**Two Stripe clients, two version sources.** `util/stripe.ts` hardcodes `apiVersion: "2026-01-28.clover"`; `api/stripe.ts` reads `process.env.STRIPE_API_VERSION!`. `STRIPE_API_VERSION` is therefore still genuinely required — unset, it affects only the `api/stripe.ts` client; set to anything else, the two clients disagree. Worth collapsing to one source.
