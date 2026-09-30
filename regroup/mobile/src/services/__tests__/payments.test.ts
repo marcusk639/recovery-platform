@@ -13,7 +13,8 @@
 
 import { functions } from '../../../firebase-setup';
 import {
-  createPaymentIntent,
+  createRentPaymentIntent,
+  MAX_PAYMENT_CENTS,
   listPayments,
   listHousePayments,
   PaymentRecord,
@@ -29,16 +30,16 @@ describe('payments service', () => {
     jest.clearAllMocks();
   });
 
-  // ── createPaymentIntent ─────────────────────────────────────────────────────
+  // ── createRentPaymentIntent ─────────────────────────────────────────────────────
 
-  describe('createPaymentIntent', () => {
+  describe('createRentPaymentIntent', () => {
     it('calls the createPaymentIntent Cloud Function with correct args', async () => {
       const mockCallable = jest.fn(() =>
         Promise.resolve({ data: { clientSecret: 'pi_test_secret' } }),
       );
       mockFunctions.httpsCallable.mockReturnValueOnce(mockCallable);
 
-      await createPaymentIntent(500, 'guest1', 'house1', 'Monthly Rent');
+      await createRentPaymentIntent({ amountInCents: 500, guestId: 'guest1', houseId: 'house1', description: 'Monthly Rent' });
 
       expect(mockFunctions.httpsCallable).toHaveBeenCalledWith(
         'createPaymentIntent',
@@ -57,7 +58,7 @@ describe('payments service', () => {
       );
       mockFunctions.httpsCallable.mockReturnValueOnce(mockCallable);
 
-      const result = await createPaymentIntent(750, 'guest2', 'house2');
+      const result = await createRentPaymentIntent({ amountInCents: 750, guestId: 'guest2', houseId: 'house2' });
 
       expect(result).toEqual({ clientSecret: 'cs_live_abc123' });
     });
@@ -68,7 +69,7 @@ describe('payments service', () => {
       );
       mockFunctions.httpsCallable.mockReturnValueOnce(mockCallable);
 
-      await createPaymentIntent(100, 'g1', 'h1');
+      await createRentPaymentIntent({ amountInCents: 100, guestId: 'g1', houseId: 'h1' });
 
       expect(mockCallable).toHaveBeenCalledWith({
         amount: 100,
@@ -78,6 +79,19 @@ describe('payments service', () => {
       });
     });
 
+    it('rejects an amount above the $100,000 cap without calling the function', async () => {
+      // The cap guarded only one of the two merged wrappers. It now covers every
+      // resident rent payment, including the arbitrary-amount entry path.
+      await expect(
+        createRentPaymentIntent({
+          amountInCents: MAX_PAYMENT_CENTS + 1,
+          guestId: 'g1',
+          houseId: 'h1',
+        }),
+      ).rejects.toThrow(/exceeds maximum/);
+      expect(mockFunctions.httpsCallable).not.toHaveBeenCalled();
+    });
+
     it('propagates errors from the callable', async () => {
       const failCallable = jest.fn(() =>
         Promise.reject(new Error('functions/internal')),
@@ -85,7 +99,7 @@ describe('payments service', () => {
       mockFunctions.httpsCallable.mockReturnValueOnce(failCallable);
 
       await expect(
-        createPaymentIntent(200, 'guest1', 'house1'),
+        createRentPaymentIntent({ amountInCents: 200, guestId: 'guest1', houseId: 'house1' }),
       ).rejects.toThrow('functions/internal');
     });
 
@@ -96,7 +110,7 @@ describe('payments service', () => {
       );
       mockFunctions.httpsCallable.mockReturnValueOnce(mockCallable);
 
-      const result = await createPaymentIntent(1000, 'g99', 'h99', 'Deposit');
+      const result = await createRentPaymentIntent({ amountInCents: 1000, guestId: 'g99', houseId: 'h99', description: 'Deposit' });
 
       expect(result.clientSecret).toBe(expectedSecret);
     });

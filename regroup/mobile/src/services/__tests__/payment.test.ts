@@ -84,7 +84,7 @@ describe("payment service", () => {
       );
       mockFunctions.httpsCallable.mockReturnValueOnce(mockCallable);
 
-      await createRentPaymentIntent("guest1", "house1", 150);
+      await createRentPaymentIntent({ guestId: "guest1", houseId: "house1", amountInCents: 150 });
 
       expect(mockFunctions.httpsCallable).toHaveBeenCalledWith(
         "createPaymentIntent"
@@ -98,7 +98,7 @@ describe("payment service", () => {
       mockFunctions.httpsCallable.mockReturnValueOnce(failCallable);
 
       await expect(
-        createRentPaymentIntent("guest1", "house1", 150)
+        createRentPaymentIntent({ guestId: "guest1", houseId: "house1", amountInCents: 150 })
       ).rejects.toThrow("functions/not-found");
     });
 
@@ -114,7 +114,7 @@ describe("payment service", () => {
       );
       mockFunctions.httpsCallable.mockReturnValueOnce(mockCallable);
 
-      const result = await createRentPaymentIntent("g1", "h1", 200);
+      const result = await createRentPaymentIntent({ guestId: "g1", houseId: "h1", amountInCents: 200 });
       expect(result).toEqual({
         clientSecret: "cs_test",
         paymentUrl: "https://stripe.com/pay/test",

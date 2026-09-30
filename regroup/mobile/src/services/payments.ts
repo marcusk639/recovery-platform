@@ -63,29 +63,49 @@ export const paymentsCollection = firestore.collection("payments");
  * @param amountInCents - Payment amount in US cents (e.g., 50000 for $500.00).
  *   Stripe requires amounts in the smallest currency unit.
  */
-export async function createRentPaymentIntent(
-  guestId: string,
-  houseId: string,
-  amountInCents: number
-): Promise<CreatePaymentIntentResult> {
+/** $100,000. Sanity bound against accidental dollar-vs-cent errors. */
+export const MAX_PAYMENT_CENTS = 10000000;
+
+export interface CreateRentPaymentIntentParams {
+  guestId: string;
+  houseId: string;
+  /** Amount in US cents (e.g. 50000 for $500.00). */
+  amountInCents: number;
+  description?: string;
+}
+
+/**
+ * Create a Stripe PaymentIntent for a resident rent payment.
+ *
+ * Takes an object rather than positional arguments deliberately. This replaced
+ * two wrappers over the same `createPaymentIntent` callable whose argument
+ * orders disagreed — (guestId, houseId, amount) versus (amount, guestId,
+ * houseId) — so a call written against one and resolved against the other
+ * passed an id as the amount. An object makes that class of error impossible.
+ */
+export async function createRentPaymentIntent({
+  guestId,
+  houseId,
+  amountInCents,
+  description,
+}: CreateRentPaymentIntentParams): Promise<CreatePaymentIntentResult> {
   if (!Number.isInteger(amountInCents) || amountInCents <= 0) {
     throw new Error(
       `Invalid payment amount: ${amountInCents}. Must be a positive integer (cents).`
     );
   }
-  if (amountInCents > 10000000) {
-    // $100,000 cap — sanity check against accidental dollar-vs-cent errors
+  if (amountInCents > MAX_PAYMENT_CENTS) {
     throw new Error(
-      `Payment amount ${amountInCents} exceeds maximum (10000000 cents / $100,000).`
+      `Payment amount ${amountInCents} exceeds maximum (${MAX_PAYMENT_CENTS} cents / $100,000).`
     );
   }
   const response = await functions.httpsCallable("createPaymentIntent")({
+    amount: amountInCents,
     guestId,
     houseId,
-    amount: amountInCents,
+    description,
   });
-  const data = response.data as CreatePaymentIntentResult;
-  return data;
+  return response.data as CreatePaymentIntentResult;
 }
 
 /**
@@ -183,26 +203,6 @@ export async function getPaymentHistory(
 /**
  * @param amountInCents - Amount in US cents (e.g., 50000 for $500.00)
  */
-export async function createPaymentIntent(
-  amountInCents: number,
-  guestId: string,
-  houseId: string,
-  description?: string
-): Promise<{ clientSecret: string }> {
-  if (!Number.isInteger(amountInCents) || amountInCents <= 0) {
-    throw new Error(
-      `Invalid payment amount: ${amountInCents}. Must be a positive integer (cents).`
-    );
-  }
-  const result = await functions.httpsCallable("createPaymentIntent")({
-    amount: amountInCents,
-    guestId,
-    houseId,
-    description,
-  });
-  return result.data as { clientSecret: string };
-}
-
 export async function listPayments(
   guestId: string,
   houseId: string,

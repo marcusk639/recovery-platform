@@ -59,11 +59,12 @@ export const useCreateRentPayment = () => {
       amount: number;
       description?: string;
     }) => {
-      const intentResult = await paymentService.createRentPaymentIntent(
+      const intentResult = await paymentService.createRentPaymentIntent({
         guestId,
         houseId,
-        amount,
-      );
+        amountInCents: amount,
+        description,
+      });
       // Optimistically record the pending payment so history shows immediately
       try {
         await paymentService.recordRentPayment(

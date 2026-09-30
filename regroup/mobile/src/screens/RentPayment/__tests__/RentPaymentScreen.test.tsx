@@ -322,11 +322,11 @@ describe("RentPaymentScreen", () => {
 
     // baseGuest.rentOwed is 15000 (already cents) — must be passed through
     // as-is, not multiplied by 100 again.
-    expect(mockCreateRentPaymentIntent).toHaveBeenCalledWith(
-      "guest-1",
-      "house-1",
-      15000
-    );
+    expect(mockCreateRentPaymentIntent).toHaveBeenCalledWith({
+      guestId: "guest-1",
+      houseId: "house-1",
+      amountInCents: 15000,
+    });
   });
 
   it("presents the Stripe payment sheet and records the payment on success", async () => {
