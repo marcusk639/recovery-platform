@@ -55,20 +55,7 @@ export const RENT_FEE = {
   achRate: Number(process.env.RENT_FEE_ACH_RATE ?? 0), // 0 = use flat fee
   achCapCents: Number(process.env.RENT_FEE_ACH_CAP_CENTS ?? 300), // $3.00 cap
   cardPlatformRate: Number(process.env.RENT_FEE_CARD_PLATFORM_RATE ?? 0.0075), // 0.75%
-  legacyRate: Number(process.env.RENT_FEE_LEGACY_RATE ?? 0.02), // 2%
 } as const;
-
-/**
- * Explicit allow-list of house IDs grandfathered at the legacy 2% rent fee
- * (the 5 legacy houses, per P-3). Comma-separated in the environment.
- * Houses may also be flagged individually via `house.legacyRentFee === true`.
- */
-export const LEGACY_RENT_FEE_HOUSE_IDS = (
-  process.env.LEGACY_RENT_FEE_HOUSE_IDS ?? ""
-)
-  .split(",")
-  .map((id) => id.trim())
-  .filter(Boolean);
 
 export const SUBSCRIPTION_TIERS = {
   traditional: {

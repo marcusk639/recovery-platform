@@ -3,11 +3,7 @@ import { logger } from "firebase-functions";
 import * as admin from "firebase-admin";
 import Stripe from "stripe";
 import { z } from "zod";
-import {
-  STRIPE_SECRET_KEY,
-  STRIPE_CLIENT_ID,
-  LEGACY_RENT_FEE_HOUSE_IDS,
-} from "../config";
+import { STRIPE_SECRET_KEY, STRIPE_CLIENT_ID } from "../config";
 import { computeApplicationFee } from "../util/rentFee";
 import { transferStats } from "../util/guest";
 import { getUser } from "../api/firestore";
@@ -150,14 +146,10 @@ export const createPaymentIntent = onCall(
 
     // ── 5. Create PaymentIntent ───────────────────────────────────────────────
     // amount is already integer cents (validated above).
-    // Method-aware platform fee (P-1/P-2); legacy houses stay on the flat 2%.
-    const isLegacyHouse =
-      house.legacyRentFee === true ||
-      LEGACY_RENT_FEE_HOUSE_IDS.includes(houseId);
+    // Method-aware platform fee (P-1/P-2).
     const applicationFeeAmount = computeApplicationFee({
       amountCents: amount,
       paymentMethodType,
-      isLegacyHouse,
     });
 
     const stripe = createStripeClient();

@@ -1412,8 +1412,9 @@ describe("createPaymentIntent", () => {
       );
     });
 
-    it("grandfathers a legacy house at the flat 2% fee", async () => {
-      // baseData.amount = 15000 cents; legacy 2% = 300 cents, even on card.
+    it("ignores a legacy rent-fee flag — grandfathering is gone", async () => {
+      // The legacy flat 2% (300 cents on 15000) no longer exists. A house still
+      // carrying the old flag pays the standard card rate: 0.75% -> 113 cents.
       seedHouse(HOUSE_ID, {
         stripeAccountId: "acct_active_house",
         stripeStatus: "active",
@@ -1424,7 +1425,7 @@ describe("createPaymentIntent", () => {
         authedContext(USER_UID),
       );
       expect(mockStripePaymentIntentsCreate).toHaveBeenCalledWith(
-        expect.objectContaining({ application_fee_amount: 300 }),
+        expect.objectContaining({ application_fee_amount: 113 }),
         expect.anything(),
       );
     });

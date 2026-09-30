@@ -14,8 +14,6 @@ export interface ComputeApplicationFeeParams {
   amountCents: number;
   /** The method the resident is paying with. */
   paymentMethodType: RentPaymentMethodType;
-  /** Whether this house is grandfathered on the legacy flat 2% fee (P-3). */
-  isLegacyHouse: boolean;
 }
 
 const isBankTransfer = (type: RentPaymentMethodType): boolean =>
@@ -23,9 +21,8 @@ const isBankTransfer = (type: RentPaymentMethodType): boolean =>
 
 /**
  * Compute the Stripe `application_fee_amount` (platform fee) for a rent payment,
- * in integer cents. Method-aware per the pricing revision plan (P-1/P-2/P-3):
+ * in integer cents. Method-aware per the pricing revision plan (P-1/P-2):
  *
- * - Legacy house  → flat 2% of the rent (grandfathered until migration).
  * - ACH / bank    → flat per-transaction fee (or a capped percentage if a rate
  *                   is configured). Never exceeds the rent amount.
  * - Card          → a thin platform fee (default 0.75%); Stripe's processing
@@ -35,11 +32,7 @@ const isBankTransfer = (type: RentPaymentMethodType): boolean =>
  * Always returns a non-negative integer (Stripe rejects floats / over-charges).
  */
 export function computeApplicationFee(
-  {
-    amountCents,
-    paymentMethodType,
-    isLegacyHouse,
-  }: ComputeApplicationFeeParams,
+  { amountCents, paymentMethodType }: ComputeApplicationFeeParams,
   feeConfig: RentFeeConfig = RENT_FEE,
 ): number {
   // Normalize the rent amount to a non-negative integer cents value up front.
@@ -53,10 +46,6 @@ export function computeApplicationFee(
       : 0;
   if (amount === 0) {
     return 0;
-  }
-
-  if (isLegacyHouse) {
-    return Math.min(Math.round(amount * feeConfig.legacyRate), amount);
   }
 
   if (isBankTransfer(paymentMethodType)) {
