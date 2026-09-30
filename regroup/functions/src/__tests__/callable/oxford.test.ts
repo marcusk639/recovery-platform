@@ -59,6 +59,13 @@ jest.mock("../../api/stripe", () => ({
   getSubscriptionItemInterval: mockGetSubscriptionItemInterval,
 }));
 
+const mockEnforceHouseEntitlement = jest.fn();
+
+jest.mock("../../util/entitlement", () => ({
+  enforceHouseEntitlement: (...args: any[]) =>
+    mockEnforceHouseEntitlement(...args),
+}));
+
 const mockResolveTierPriceId = jest.fn();
 
 jest.mock("../../util/tierPricing", () => {
@@ -94,6 +101,10 @@ const baseUser = {
 beforeEach(() => {
   jest.clearAllMocks();
   mockGetSubscriptionItemInterval.mockResolvedValue("month");
+  mockEnforceHouseEntitlement.mockResolvedValue({
+    entitled: true,
+    reason: "active",
+  });
   mockResolveTierPriceId.mockImplementation(
     (houseType: string, tier: string, interval: string) =>
       `price_${houseType}_${tier}_${interval}`,
@@ -502,5 +513,54 @@ describe("setOxfordEnabled — tier subscriptions", () => {
       }),
     ).rejects.toMatchObject({ code: "failed-precondition" });
     expect(mockSwapSubscriptionItemPrice).not.toHaveBeenCalled();
+  });
+});
+
+describe("castOxfordVote — entitlement gate", () => {
+  const oxfordHouse = {
+    id: "house-1",
+    houseType: "oxford",
+    superAdminId: "op-1",
+    adminId: "op-1",
+    subscriptionStatus: "active",
+  };
+
+  beforeEach(() => {
+    mockGetHouse.mockResolvedValue(oxfordHouse);
+    mockEnforceHouseEntitlement.mockResolvedValue({
+      entitled: true,
+      reason: "active",
+    });
+  });
+
+  it("consults the shared entitlement gate with the house and id", async () => {
+    await (castOxfordVote as any)({
+      data: { houseId: "house-1", voteId: "vote-1", choice: "yes" },
+      auth: { uid: "guest-user", token: { guest: { "house-1": true } } },
+    }).catch(() => undefined);
+
+    expect(mockEnforceHouseEntitlement).toHaveBeenCalledWith(
+      oxfordHouse,
+      "house-1",
+    );
+  });
+
+  it("refuses the vote when the gate denies the house", async () => {
+    mockEnforceHouseEntitlement.mockRejectedValue(
+      Object.assign(new Error("no subscription"), {
+        code: "failed-precondition",
+      }),
+    );
+
+    let caught: { code?: string } | undefined;
+    try {
+      await (castOxfordVote as any)({
+        data: { houseId: "house-1", voteId: "vote-1", choice: "yes" },
+        auth: { uid: "guest-user", token: { guest: { "house-1": true } } },
+      });
+    } catch (err) {
+      caught = err as { code?: string };
+    }
+    expect(caught?.code).toBe("failed-precondition");
   });
 });

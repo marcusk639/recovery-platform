@@ -7,6 +7,7 @@ import {
   getSubscriptionItemInterval,
 } from "../api/stripe";
 import { resolveTierPriceId } from "../util/tierPricing";
+import { enforceHouseEntitlement } from "../util/entitlement";
 import {
   getHouse,
   getUser,
@@ -185,16 +186,16 @@ export const castOxfordVote = onCall(async (request) => {
   const house = await getHouse(houseId);
   if (!house) throw new HttpsError("not-found", "House not found");
 
-  const oxfordActive =
-    house.houseType === "oxford" &&
-    (house.subscriptionStatus === "active" ||
-      house.subscriptionStatus === "trialing");
-  if (!oxfordActive) {
+  if (house.houseType !== "oxford") {
     throw new HttpsError(
       "failed-precondition",
       "Oxford voting is not active for this house",
     );
   }
+  // Shared entitlement gate. Replaces an inline active/trialing check, which
+  // denied a past_due house still inside its grace window and could not be
+  // overridden by the paywall kill switch.
+  await enforceHouseEntitlement(house, houseId);
 
   // The `guest` custom claim only proves the caller is A guest of this house
   // (houseId -> true), not which guest doc is theirs — resolve that server-side

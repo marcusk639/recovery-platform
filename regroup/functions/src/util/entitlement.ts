@@ -1,5 +1,6 @@
 import { HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
+import * as admin from 'firebase-admin';
 
 /** Subscription statuses that grant access outright. */
 export const ENTITLED_STATUSES = ['active', 'trialing'];
@@ -24,7 +25,8 @@ export type EntitlementReason =
   | 'canceled'
   | 'unpaid'
   | 'expired_grace'
-  | 'unknown_status';
+  | 'unknown_status'
+  | 'kill_switch_off';
 
 export interface EntitlementVerdict {
   entitled: boolean;
@@ -96,4 +98,62 @@ export function assertHouseEntitled(
   }
 
   return verdict;
+}
+
+// ── Kill switch ──────────────────────────────────────────────────────────────
+//
+// paywall/config.enabled is the emergency override. It is read here with the
+// Admin SDK, which bypasses security rules — the client-side hook reading the
+// same document is denied by rules today (there is no `match /paywall/...`
+// block), so a client-only switch cannot be relied on.
+
+const KILL_SWITCH_TTL_MS = 60_000;
+
+let cachedSwitch: { enabled: boolean; readAt: number } | null = null;
+
+/** Test seam — the module-level cache would otherwise leak between cases. */
+export function __resetPaywallCacheForTests(): void {
+  cachedSwitch = null;
+}
+
+/**
+ * Whether the paywall is currently enforced. Fails closed: if the config
+ * document is missing, malformed, or unreadable, the paywall stays ON. An
+ * unreadable switch must never be mistaken for "switched off".
+ */
+export async function isPaywallEnabled(now: number = Date.now()): Promise<boolean> {
+  if (cachedSwitch && now - cachedSwitch.readAt < KILL_SWITCH_TTL_MS) {
+    return cachedSwitch.enabled;
+  }
+
+  try {
+    const snapshot = await admin.firestore().collection('paywall').doc('config').get();
+    const raw = snapshot.exists
+      ? (snapshot.data() as { enabled?: unknown } | undefined)
+      : undefined;
+    const enabled = typeof raw?.enabled === 'boolean' ? raw.enabled : true;
+    cachedSwitch = { enabled, readAt: now };
+    return enabled;
+  } catch (err) {
+    logger.error('entitlement.kill_switch_read_failed', {
+      error: (err as Error)?.message,
+    });
+    cachedSwitch = { enabled: true, readAt: now };
+    return true;
+  }
+}
+
+/**
+ * The gate callables should use: consults the kill switch first, then applies
+ * the entitlement ladder. Throws when the house is not entitled.
+ */
+export async function enforceHouseEntitlement(
+  house: HouseEntitlementFields,
+  houseId: string,
+  now: number = Date.now(),
+): Promise<EntitlementVerdict> {
+  if (!(await isPaywallEnabled(now))) {
+    return { entitled: true, reason: 'kill_switch_off' };
+  }
+  return assertHouseEntitled(house, houseId, now);
 }
