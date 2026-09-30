@@ -530,129 +530,6 @@ describe("cancelUserSubscription", () => {
   });
 });
 
-describe("updateSubscriptionGuests", () => {
-  it("retrieves the user by ownerUserId", async () => {
-    mockGetUser.mockResolvedValue(fakeUser);
-    mockGetSubscriptionItem.mockResolvedValue({ quantity: 2 });
-    mockUpdateSubscriptionItem.mockResolvedValue({});
-    mockUpdateSubscriptionMetadata.mockReturnValue(
-      fakeUser.subscriptionMetadata,
-    );
-    mockUpdateUser.mockResolvedValue(undefined);
-
-    await call(updateSubscriptionGuests, {
-      ownerUserId: "user-1",
-      houseIds: ["house-1"],
-      action: "add",
-    });
-
-    expect(mockGetUser).toHaveBeenCalledWith("user-1");
-  });
-
-  it("updates subscription item quantity when adding a guest", async () => {
-    mockGetUser.mockResolvedValue(fakeUser);
-    mockGetSubscriptionItem.mockResolvedValue({ quantity: 2 });
-    mockUpdateSubscriptionItem.mockResolvedValue({});
-    mockUpdateSubscriptionMetadata.mockReturnValue(
-      fakeUser.subscriptionMetadata,
-    );
-    mockUpdateUser.mockResolvedValue(undefined);
-
-    await call(updateSubscriptionGuests, {
-      ownerUserId: "user-1",
-      houseIds: ["house-1"],
-      action: "add",
-    });
-
-    expect(mockUpdateSubscriptionItem).toHaveBeenCalledWith(
-      "si_guest",
-      "guest",
-      3,
-    );
-  });
-
-  it("decrements subscription item quantity when removing a guest", async () => {
-    mockGetUser.mockResolvedValue(fakeUser);
-    mockGetSubscriptionItem.mockResolvedValue({ quantity: 2 });
-    mockUpdateSubscriptionItem.mockResolvedValue({});
-    mockUpdateSubscriptionMetadata.mockReturnValue(
-      fakeUser.subscriptionMetadata,
-    );
-    mockUpdateUser.mockResolvedValue(undefined);
-
-    await call(updateSubscriptionGuests, {
-      ownerUserId: "user-1",
-      houseIds: ["house-1"],
-      action: "remove",
-    });
-
-    expect(mockUpdateSubscriptionItem).toHaveBeenCalledWith(
-      "si_guest",
-      "guest",
-      1,
-    );
-  });
-
-  it("skips subscription update when user has no subscriptionMetadata", async () => {
-    const userWithoutMeta = { ...fakeUser, subscriptionMetadata: undefined };
-    mockGetUser.mockResolvedValue(userWithoutMeta);
-
-    await call(updateSubscriptionGuests, {
-      ownerUserId: "user-1",
-      houseIds: ["house-1"],
-      action: "add",
-    });
-
-    expect(mockUpdateSubscriptionItem).not.toHaveBeenCalled();
-  });
-
-  it("re-throws (does NOT fall back to Firestore) on a transient Stripe error", async () => {
-    mockGetUser.mockResolvedValue(fakeUser);
-    mockGetSubscriptionItem.mockResolvedValue({ quantity: 2 });
-    // Simulate a rate-limit/network style failure — NOT resource_missing.
-    mockUpdateSubscriptionItem.mockRejectedValue({
-      type: "StripeRateLimitError",
-      code: "rate_limit",
-      message: "Too many requests",
-    });
-    mockUpdateUser.mockResolvedValue(undefined);
-
-    await expect(
-      call(updateSubscriptionGuests, {
-        ownerUserId: "user-1",
-        houseIds: ["house-1"],
-        action: "add",
-      }),
-    ).rejects.toMatchObject({ code: "resource-exhausted" });
-
-    // Firestore occupancy must NOT diverge from Stripe on a transient error.
-    expect(mockUpdateUser).not.toHaveBeenCalled();
-  });
-
-  it("falls back to Firestore-only metadata when Stripe reports resource_missing", async () => {
-    mockGetUser.mockResolvedValue(fakeUser);
-    mockGetSubscriptionItem.mockResolvedValue({ quantity: 2 });
-    mockUpdateSubscriptionItem.mockRejectedValue({
-      type: "StripeInvalidRequestError",
-      code: "resource_missing",
-      message: "No such subscription item",
-    });
-    mockUpdateSubscriptionMetadata.mockReturnValue(
-      fakeUser.subscriptionMetadata,
-    );
-    mockUpdateUser.mockResolvedValue(undefined);
-
-    await call(updateSubscriptionGuests, {
-      ownerUserId: "user-1",
-      houseIds: ["house-1"],
-      action: "add",
-    });
-
-    // Subscription was deleted in Stripe — reconcile local metadata only.
-    expect(mockUpdateUser).toHaveBeenCalled();
-  });
-});
-
 // ──────────────────────────────────────────────────────────────────────────────
 // Input validation tests
 // ──────────────────────────────────────────────────────────────────────────────
@@ -1090,53 +967,6 @@ describe("createSubscription — tier routing", () => {
   });
 });
 
-describe("updateSubscriptionHouses — bundle discount integration", () => {
-  it("calls applyBundleDiscountToSubscription after adding a house", async () => {
-    mockGetUser.mockResolvedValue(fakeUserWith2Houses);
-    mockGetHousesByAttributes.mockResolvedValue({});
-    mockGetSubscriptionItem.mockResolvedValue({ quantity: 2 });
-    mockUpdateSubscriptionItem.mockResolvedValue({});
-    mockUpdateSubscriptionMetadata.mockReturnValue(
-      fakeUserWith2Houses.subscriptionMetadata,
-    );
-    mockUpdateUser.mockResolvedValue(undefined);
-
-    await call(updateSubscriptionHouses, {
-      ownerUserId: "user-1",
-      action: "add",
-      houseIds: ["house-3"],
-    });
-    expect(mockApplyBundleDiscountToSubscription).toHaveBeenCalledWith(
-      "sub_fake",
-      expect.any(Number),
-    );
-  });
-
-  it("does not throw if applyBundleDiscountToSubscription fails (non-fatal)", async () => {
-    mockGetUser.mockResolvedValue(fakeUserWith3Houses);
-    mockGetHousesByAttributes.mockResolvedValue({
-      "house-3": { currentCapacity: 0 },
-    });
-    mockGetSubscriptionItem.mockResolvedValue({ quantity: 3 });
-    mockUpdateSubscriptionItem.mockResolvedValue({});
-    mockUpdateSubscriptionMetadata.mockReturnValue(
-      fakeUserWith3Houses.subscriptionMetadata,
-    );
-    mockUpdateUser.mockResolvedValue(undefined);
-    mockApplyBundleDiscountToSubscription.mockRejectedValueOnce(
-      new Error("Stripe error"),
-    );
-
-    await expect(
-      call(updateSubscriptionHouses, {
-        ownerUserId: "user-1",
-        action: "remove",
-        houseIds: ["house-3"],
-      }),
-    ).resolves.not.toThrow();
-  });
-});
-
 describe("tier subscriptions skip Stripe quantity updates", () => {
   const tierUserAtResidentCap = {
     ...fakeUser,
@@ -1417,63 +1247,65 @@ describe("createOperatorSubscription — tier-billing flag branch", () => {
   });
 });
 
-describe("updateSubscriptionHouses — legacy Stripe quantity is idempotent", () => {
-  const houseQtyArg = () =>
-    mockUpdateSubscriptionItem.mock.calls.find((c: any[]) => c[1] === "house")?.[2];
+
+describe("post-legacy subscription shape", () => {
+  const nonTierUser = {
+    id: "user-1",
+    email: "user@test.com",
+    subscriptionMetadata: {
+      customerId: "cus_fake",
+      subscriptionId: "sub_fake",
+      houses: { "house-1": { numberOfGuests: 0 } },
+    },
+  };
 
   beforeEach(() => {
-    mockUpdateSubscriptionItem.mockReset();
-    mockUpdateSubscriptionItem.mockResolvedValue({ quantity: 0 });
-    mockGetSubscriptionItem.mockReset();
-    mockGetSubscriptionItem.mockResolvedValue({ quantity: 1 });
-    mockUpdateSubscriptionMetadata.mockReset();
-    mockUpdateSubscriptionMetadata.mockReturnValue(fakeUser.subscriptionMetadata);
     mockUpdateUser.mockReset();
     mockUpdateUser.mockResolvedValue(undefined);
-    // fakeUser already has house-1 on the subscription.
-    mockGetUser.mockResolvedValue(fakeUser);
+    mockUpdateSubscriptionItem.mockReset();
   });
 
-  it("does not re-increment when adding a house already on the subscription", async () => {
-    await call(updateSubscriptionHouses, {
+  it.each([
+    ["updateSubscriptionHouses", () => updateSubscriptionHouses],
+    ["updateSubscriptionGuests", () => updateSubscriptionGuests],
+  ])("%s refuses a subscription with no tier", async (_name, fn) => {
+    mockGetUser.mockResolvedValue(nonTierUser);
+
+    await expect(
+      call(fn(), {
+        ownerUserId: "user-1",
+        houseIds: ["house-1"],
+        action: "add",
+        amountToAdjust: 1,
+      }),
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+    // No Stripe quantity model remains, so nothing should have been billed.
+    expect(mockUpdateSubscriptionItem).not.toHaveBeenCalled();
+  });
+
+  it("updateSubscriptionHouses returns the updated user, not undefined", async () => {
+    // The mobile setup wizard reads subscriptionMetadata off the result; the
+    // tier branch used to return undefined and crash it.
+    mockGetUser.mockResolvedValue({
+      id: "user-1",
+      subscriptionMetadata: {
+        customerId: "cus_fake",
+        subscriptionId: "sub_fake",
+        tier: "professional",
+        houseType: "traditional",
+        maxProperties: 3,
+        houses: {},
+      },
+    });
+
+    const result = await call(updateSubscriptionHouses, {
       ownerUserId: "user-1",
-      houseIds: ["house-1"],
+      houseIds: ["house-new"],
       action: "add",
       amountToAdjust: 1,
     });
 
-    // A retry must not push the billed quantity from 1 to 2.
-    expect(houseQtyArg() ?? 1).toBe(1);
-  });
-
-  it("increments exactly once for a genuinely new house", async () => {
-    await call(updateSubscriptionHouses, {
-      ownerUserId: "user-1",
-      houseIds: ["house-2"],
-      action: "add",
-      amountToAdjust: 1,
-    });
-
-    expect(houseQtyArg()).toBe(2);
-  });
-
-  it("does not decrement when removing a house that is not on the subscription", async () => {
-    await call(updateSubscriptionHouses, {
-      ownerUserId: "user-1",
-      houseIds: ["house-not-present"],
-      action: "remove",
-    });
-
-    expect(houseQtyArg() ?? 1).toBe(1);
-  });
-
-  it("decrements exactly once for a house that is on the subscription", async () => {
-    await call(updateSubscriptionHouses, {
-      ownerUserId: "user-1",
-      houseIds: ["house-1"],
-      action: "remove",
-    });
-
-    expect(houseQtyArg()).toBe(0);
+    expect(result).toBeDefined();
+    expect(result.subscriptionMetadata.houses).toHaveProperty("house-new");
   });
 });

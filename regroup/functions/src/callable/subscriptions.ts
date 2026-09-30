@@ -503,80 +503,13 @@ export const updateSubscriptionGuests = onCall(
       return;
     }
 
-    // Check if user has subscription metadata
-    if (!user.subscriptionMetadata || !user.subscriptionMetadata.items) {
-      logger.warn(
-        "User has no subscription metadata, skipping subscription update",
-      );
-      return;
-    }
-
-    try {
-      let item = await getSubscriptionItem(
-        user.subscriptionMetadata.items.guestItemId,
-      );
-      logger.info(
-        "Subscription item retrieved",
-        item,
-        "quantity",
-        item.quantity,
-        "house id",
-        houseIds,
-      );
-      const newQuantity =
-        action === "add" ? item.quantity! + 1 : item.quantity! - 1;
-      if (newQuantity < 0) {
-        throw new HttpsError(
-          "invalid-argument",
-          "Cannot remove guest: quantity would go below zero",
-        );
-      }
-      // Update Stripe first — if it fails, Firestore is not touched.
-      await updateSubscriptionItem(
-        user.subscriptionMetadata.items.guestItemId,
-        "guest",
-        newQuantity,
-      );
-      await updateUser(user.id!, {
-        subscriptionMetadata: updateSubscriptionMetadata(
-          user,
-          houseIds[0],
-          action,
-          null as unknown as string[],
-        ),
-      });
-      logger.info("Subscription updated", item.quantity);
-      return;
-    } catch (error) {
-      // Re-throw validation errors — the Stripe fallback path must not swallow
-      // HttpsErrors thrown by guards (e.g. negative quantity check above).
-      if (error instanceof HttpsError) throw error;
-      logger.error("Error updating subscription:", error);
-      // Only fall back to Firestore-only updates when Stripe reports the
-      // subscription/item genuinely no longer exists (resource_missing). For
-      // transient failures (rate limit, network, API errors) surface the error
-      // so Firestore occupancy does not permanently diverge from Stripe billing.
-      if (!isResourceMissing(error)) {
-        throw mapStripeError(error);
-      }
-      // The subscription item was deleted in Stripe but metadata still exists —
-      // reconcile by updating the local metadata only.
-      try {
-        await updateUser(user.id!, {
-          subscriptionMetadata: updateSubscriptionMetadata(
-            user,
-            houseIds[0],
-            action,
-            null as unknown as string[],
-          ),
-        });
-        logger.info("Updated user metadata without Stripe subscription");
-        return;
-      } catch (metadataError) {
-        logger.error("Error updating user metadata:", metadataError);
-        throw new Error("Failed to update subscription and metadata");
-      }
-    }
+    // Only tier subscriptions exist — the legacy per-house/per-guest Stripe
+    // quantity model was removed. Reaching here means the subscription is in an
+    // unexpected shape, which is worth surfacing rather than silently ignoring.
+    throw new HttpsError(
+      "failed-precondition",
+      "Subscription is not on a tier plan",
+    );
   },
 );
 
@@ -606,6 +539,7 @@ export const updateSubscriptionHouses = onCall(
     const houseMeta = user.subscriptionMetadata;
     if (houseMeta?.tier) {
       const houses = houseMeta.houses ?? {};
+      let updatedMeta: OperatorSubscription;
       if (action === "add") {
         // P-7: a second property requires the multiProperty capability. Resolve
         // it once, fail-closed: a mismatched/grandfathered tier makes tierAllows
@@ -654,143 +588,37 @@ export const updateSubscriptionHouses = onCall(
           }
           added[id] = { numberOfGuests: 0 };
         }
-        await updateUser(user.id!, {
-          subscriptionMetadata: {
-            ...houseMeta,
-            houses: added,
-            lastUpdatedAt: new Date().toISOString(),
-          } as unknown as OperatorSubscription,
-        });
+        updatedMeta = {
+          ...houseMeta,
+          houses: added,
+          lastUpdatedAt: new Date().toISOString(),
+        } as unknown as OperatorSubscription;
       } else {
         const { [houseIds[0]]: _removed, ...remaining } = houses;
-        await updateUser(user.id!, {
-          subscriptionMetadata: {
-            ...houseMeta,
-            houses: remaining,
-            lastUpdatedAt: new Date().toISOString(),
-          } as unknown as OperatorSubscription,
-        });
+        updatedMeta = {
+          ...houseMeta,
+          houses: remaining,
+          lastUpdatedAt: new Date().toISOString(),
+        } as unknown as OperatorSubscription;
       }
+      await updateUser(user.id!, { subscriptionMetadata: updatedMeta });
       logger.info("Tier subscription house occupancy updated", {
         ownerUserId,
         action,
       });
-      return;
+      // The legacy branch returned the user and callers (the mobile setup
+      // wizard) read subscriptionMetadata off the result. The tier branch
+      // returned undefined, which crashed them; return the user here too.
+      return { ...user, subscriptionMetadata: updatedMeta };
     }
 
-    if (!user.subscriptionMetadata || !user.subscriptionMetadata.items) {
-      logger.warn(
-        "User has no subscription metadata, skipping subscription update",
-      );
-      return;
-    }
-
-    if (action === "add") {
-      const houseItem = await getSubscriptionItem(
-        user.subscriptionMetadata.items.houseItemId,
-      );
-      logger.info("House item quantity", houseItem.quantity);
-      // Only houses not already billed count toward the quantity. The Stripe
-      // write below is relative, so without this filter a retry (or a client
-      // double-submit) would increment the billed quantity a second time for
-      // houses that are already on the subscription.
-      const existingHouses = user.subscriptionMetadata.houses ?? {};
-      const newHouseIds = houseIds.filter((id) => !(id in existingHouses));
-      const subscriptionMetadata = updateSubscriptionMetadata(
-        user,
-        null as unknown as string,
-        "add",
-        houseIds,
-        true,
-      );
-      if (newHouseIds.length > 0) {
-        // Stripe first — Firestore only written on success.
-        await updateSubscriptionItem(
-          user.subscriptionMetadata.items.houseItemId,
-          "house",
-          houseItem.quantity! + newHouseIds.length * amount,
-        );
-      } else {
-        logger.info("No new houses to bill; skipping Stripe quantity update", {
-          houseIds,
-        });
-      }
-      await updateUser(user.id!, { subscriptionMetadata });
-      logger.info("House added to subscription", { houseIds });
-    }
-
-    if (action === "remove") {
-      // Fetch both items so guest quantity comes from the guest item, not the
-      // house item — using the wrong item caused the guest quantity to be set
-      // to (houseCount - currentCapacity) instead of (guestCount - currentCapacity).
-      const [houseItem, guestItem] = await Promise.all([
-        getSubscriptionItem(user.subscriptionMetadata.items.houseItemId),
-        getSubscriptionItem(user.subscriptionMetadata.items.guestItemId),
-      ]);
-      // houseIds[0] is the house being removed. numberOfGuests is the tracked
-      // occupancy stored in subscriptionMetadata — authoritative for billing.
-      const houseId = houseIds[0];
-      // If the house is already off the subscription this call is a replay;
-      // decrementing again would under-bill and could zero a slot still in use.
-      if (!(houseId in (user.subscriptionMetadata.houses ?? {}))) {
-        logger.info("House already removed from subscription; skipping", {
-          houseId,
-        });
-        return;
-      }
-      const capacity =
-        user.subscriptionMetadata.houses[houseId]?.numberOfGuests ?? 0;
-      const newGuestQty = Math.max(0, guestItem.quantity! - capacity);
-      const subscriptionMetadata = updateSubscriptionMetadata(
-        user,
-        houseId,
-        action,
-        null as unknown as string[],
-        true,
-      );
-      // Run both Stripe updates first, then commit to Firestore.
-      const [newHouseItem, newGuestItem] = await Promise.all([
-        updateSubscriptionItem(
-          user.subscriptionMetadata.items.houseItemId,
-          "house",
-          Math.max(0, houseItem.quantity! - 1),
-        ),
-        updateSubscriptionItem(
-          user.subscriptionMetadata.items.guestItemId,
-          "guest",
-          newGuestQty,
-        ),
-      ]);
-      await updateUser(user.id!, { subscriptionMetadata });
-      logger.info("House removed from subscription", {
-        houseId,
-        newHouseQty: newHouseItem.quantity,
-        newGuestQty: newGuestItem.quantity,
-      });
-    }
-
-    // Apply or remove the bundle discount based on the new house count.
-    if (user.subscriptionMetadata?.subscriptionId) {
-      const houseCount = Object.keys(
-        user.subscriptionMetadata.houses ?? {},
-      ).length;
-      try {
-        await applyBundleDiscountToSubscription(
-          user.subscriptionMetadata.subscriptionId,
-          houseCount,
-        );
-        logger.info("Bundle discount applied", {
-          ownerUserId,
-          houseCount,
-          subscriptionId: user.subscriptionMetadata.subscriptionId,
-        });
-      } catch (discountError) {
-        // Non-fatal: log and continue — subscription item update already succeeded.
-        logger.error("Failed to apply bundle discount", discountError);
-      }
-    }
-
-    return user;
+    // Only tier subscriptions exist — the legacy per-house/per-guest Stripe
+    // quantity model was removed. Reaching here means the subscription is in an
+    // unexpected shape, which is worth surfacing rather than silently ignoring.
+    throw new HttpsError(
+      "failed-precondition",
+      "Subscription is not on a tier plan",
+    );
   },
 );
 
