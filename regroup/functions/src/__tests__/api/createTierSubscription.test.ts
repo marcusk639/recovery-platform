@@ -9,6 +9,11 @@
 
 const mockSubscriptionsCreate = jest.fn();
 const mockCustomersCreate = jest.fn();
+// initializeTierCustomer now confirms an off-session SetupIntent between
+// customers.create and subscriptions.create (spec item 9 — card validation at
+// signup), so the client mock has to expose setupIntents/customers.del too.
+const mockSetupIntentsCreate = jest.fn();
+const mockCustomersDel = jest.fn();
 
 jest.mock("stripe", () =>
   jest.fn().mockImplementation(() => ({
@@ -17,6 +22,10 @@ jest.mock("stripe", () =>
     },
     customers: {
       create: (...args: unknown[]) => mockCustomersCreate(...args),
+      del: (...args: unknown[]) => mockCustomersDel(...args),
+    },
+    setupIntents: {
+      create: (...args: unknown[]) => mockSetupIntentsCreate(...args),
     },
   })),
 );
@@ -98,6 +107,9 @@ describe("initializeTierCustomer — oxfordEnabled", () => {
     process.env.STRIPE_PRICE_OXFORD_STANDARD = "price_oxford_standard";
     process.env.STRIPE_PRICE_TRAD_STARTER = "price_starter";
     mockCustomersCreate.mockResolvedValue({ id: "cus_1" });
+    // Card validation must pass for these tests to reach subscription creation.
+    mockSetupIntentsCreate.mockResolvedValue({ status: "succeeded" });
+    mockCustomersDel.mockResolvedValue({ id: "cus_1", deleted: true });
     mockSubscriptionsCreate.mockResolvedValue({
       id: "sub_1",
       status: "trialing",

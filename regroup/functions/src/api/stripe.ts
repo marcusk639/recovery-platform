@@ -4,6 +4,7 @@ import OperatorSubscription from "../entities/OperatorSubscription";
 import { User } from "../entities/User";
 import { HouseType, TierKey } from "../config";
 import { resolveTierPriceId, BillingInterval } from "../util/tierPricing";
+import { assertPaymentMethodUsable } from "./cardValidation";
 
 /**
  * Trial length for all new subscriptions. Stripe applies trial_period_days
@@ -380,6 +381,10 @@ export const initializeCustomer = async (
   userId?: string,
 ) => {
   const customer = await createCustomer(email, paymentMethod);
+  // Throws (and deletes the customer) before any subscription exists if the card
+  // is unusable. The trial means signup itself never charges, so this is the only
+  // point at which a dead card can be caught. See api/cardValidation.ts.
+  await assertPaymentMethodUsable(stripe, customer.id, paymentMethod);
   return initializeSubscription(customer.id, oxfordEnabled, userId);
 };
 
@@ -397,6 +402,8 @@ export const initializeTierCustomer = async (
   billingInterval: BillingInterval = "month",
 ) => {
   const customer = await createCustomer(email, paymentMethod);
+  // Same guard as the legacy path: validate before the subscription exists.
+  await assertPaymentMethodUsable(stripe, customer.id, paymentMethod);
   const subscription = await createTierSubscription(
     customer.id,
     houseType,
