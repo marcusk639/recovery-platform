@@ -146,6 +146,11 @@ export const createPaymentIntent = onCall(
 
     // ── 5. Create PaymentIntent ───────────────────────────────────────────────
     // amount is already integer cents (validated above).
+    // Deliberately NOT gated on house entitlement. Residents must be able to
+    // pay rent even while the operator's subscription has lapsed: the money is
+    // owed to the house, blocking it harms the resident and removes the
+    // operator's means of recovering. Do not add enforceHouseEntitlement here.
+    //
     // Method-aware platform fee (P-1/P-2).
     const applicationFeeAmount = computeApplicationFee({
       amountCents: amount,

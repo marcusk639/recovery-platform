@@ -68,6 +68,7 @@ export const addGuestAuthorization = onCall(async (request) => {
     targetUid: guest.userId,
     houseIds: [guest.houseId],
     callableName: "addGuestAuthorization",
+    enforceEntitlement: true,
   });
 
   try {
@@ -132,6 +133,7 @@ export const addAdminAuthorization = onCall(async (request) => {
     targetUid: adminInput.userId,
     houseIds: requestedHouses,
     callableName: "addAdminAuthorization",
+    enforceEntitlement: true,
   });
 
   try {
@@ -218,6 +220,7 @@ export const promoteGuestsToAdmin = onCall(async (request) => {
         targetUid,
         houseIds: [...houses],
         callableName: "promoteGuestsToAdmin",
+        enforceEntitlement: true,
       }),
     ),
   );

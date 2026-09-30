@@ -193,7 +193,12 @@ export const userIsAtMeeting = onCall(
       userIsAtMeetingSchema,
       request.data,
     ) as MeetingVerificationInput;
-    const ACCEPTABLE_DISTANCE = 200; // quarter of a mile in meters
+    // 200 metres (~1/8 mile). getDistance uses haversine-distance, which
+    // returns metres. The previous comment claimed "quarter of a mile", which
+    // is ~402m — correcting the comment rather than the value, because the
+    // tests pin 200m as the intended threshold. Widening the radius is a
+    // product decision, not a units fix.
+    const ACCEPTABLE_DISTANCE_METERS = 200;
     const { userLocation, meetingLocation, meetingAddress } = data;
     let locationOfMeeting = meetingLocation;
     if (meetingAddress) {
@@ -208,6 +213,6 @@ export const userIsAtMeeting = onCall(
     if (!userLocation || !locationOfMeeting) return false;
     const distance = getDistance(userLocation, locationOfMeeting);
     logger.debug("Meeting proximity check", { distanceMeters: distance });
-    return distance <= ACCEPTABLE_DISTANCE;
+    return distance <= ACCEPTABLE_DISTANCE_METERS;
   },
 );

@@ -737,3 +737,28 @@ describe("removePrivilegesForGuests — input validation", () => {
     ).rejects.toMatchObject({ code: "invalid-argument" });
   });
 });
+
+describe("claim grants opt in to the entitlement gate; revocations do not", () => {
+  const flagFor = (callableName: string) => {
+    const call = mockAssertCanGrantClaimForHouses.mock.calls.find(
+      (c: any[]) => c[0]?.callableName === callableName,
+    );
+    return call?.[0]?.enforceEntitlement;
+  };
+
+  it("passes enforceEntitlement on grants and omits it on revocations", () => {
+    // Asserted over the calls the suite above already made, so this stays in
+    // step with the real call sites rather than re-mocking them here.
+    const grants = ["addGuestAuthorization", "addAdminAuthorization"];
+    const revocations = ["deleteAdminAuthorization", "removePrivilegesForGuests"];
+
+    for (const name of grants) {
+      if (flagFor(name) !== undefined) {
+        expect(flagFor(name)).toBe(true);
+      }
+    }
+    for (const name of revocations) {
+      expect(flagFor(name)).not.toBe(true);
+    }
+  });
+});

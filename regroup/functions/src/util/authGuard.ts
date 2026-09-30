@@ -1,6 +1,7 @@
 import { logger } from "firebase-functions";
 import * as admin from "firebase-admin";
 import { HttpsError } from "firebase-functions/v2/https";
+import { enforceHouseEntitlement } from "./entitlement";
 
 /**
  * Authorization guard for claim-granting Cloud Functions
@@ -24,8 +25,22 @@ export async function assertCanGrantClaimForHouses(params: {
   targetUid: string;
   houseIds: string[];
   callableName: string; // for log context, e.g. "addAdminAuthorization"
+  /**
+   * Also require the house to be entitled (paying). Set only on claim GRANTS.
+   * Revocations must stay ungated: preventing an operator from removing
+   * someone's access because billing lapsed is a safety problem, not a
+   * monetisation lever.
+   */
+  enforceEntitlement?: boolean;
 }): Promise<void> {
-  const { callerUid, callerToken, targetUid, houseIds, callableName } = params;
+  const {
+    callerUid,
+    callerToken,
+    targetUid,
+    houseIds,
+    callableName,
+    enforceEntitlement = false,
+  } = params;
 
   // De-dupe; an empty list means "no claims to grant" — callers should reject
   // before calling this guard. (Defense in depth — see addAdminAuthorization.)
@@ -44,7 +59,11 @@ export async function assertCanGrantClaimForHouses(params: {
     if (!snap.exists) {
       throw new HttpsError("not-found", `House ${houseId} not found`);
     }
-    const house = snap.data() as { ownerId?: string };
+    const house = snap.data() as {
+      ownerId?: string;
+      subscriptionStatus?: string | null;
+      guestGraceEndsAt?: string | null;
+    };
     const isOwner = house.ownerId === callerUid;
     const callerIsExistingAdmin =
       callerToken?.admin?.[houseId] === true ||
@@ -61,6 +80,12 @@ export async function assertCanGrantClaimForHouses(params: {
         "permission-denied",
         `Not authorized to grant this claim for house ${houseId}`
       );
+    }
+
+    // Permission first, then entitlement: a caller who is not authorized for
+    // this house should not learn anything about its subscription state.
+    if (enforceEntitlement) {
+      await enforceHouseEntitlement(house, houseId);
     }
   }
 }
