@@ -13,6 +13,7 @@ import {
   roleConsumesResidentSlot,
 } from '../util/residentCapacity';
 import { getHouse } from '../api/firestore';
+import { enforceHouseEntitlement } from '../util/entitlement';
 import { Invitation, InvitationRole } from '../entities/Invitation';
 
 /**
@@ -85,7 +86,11 @@ export const createInvitation = onCall(async (request) => {
   if (!houseSnap.exists) {
     throw new HttpsError('not-found', 'House not found');
   }
-  const house = houseSnap.data() as { ownerId?: string };
+  const house = houseSnap.data() as {
+    ownerId?: string;
+    subscriptionStatus?: string | null;
+    guestGraceEndsAt?: string | null;
+  };
   const callerUid = request.auth.uid;
   const callerClaims = (request.auth.token ?? {}) as {
     admin?: Record<string, boolean>;
@@ -104,6 +109,11 @@ export const createInvitation = onCall(async (request) => {
       'Only the house owner or an existing admin can send invitations',
     );
   }
+
+  // Onboarding new people is product usage. Redeeming an already-sent
+  // invitation stays ungated so an invitee mid-flow is not stranded by the
+  // operator lapsing after the invite went out.
+  await enforceHouseEntitlement(house, input.houseId);
 
   // ── Resident capacity: guest/senior-peer invitations consume a slot on
   // the operator's subscription. Counts existing residents + outstanding

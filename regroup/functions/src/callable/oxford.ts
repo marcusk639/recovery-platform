@@ -62,6 +62,10 @@ export const setOxfordEnabled = onCall(
       );
     }
 
+    // Changing the plan shape is product usage, not a route back to paying.
+    // A lapsed operator should fix billing, not re-price their subscription.
+    await enforceHouseEntitlement(house, houseId);
+
     const operatorId = house.superAdminId;
     const user = await getUser(operatorId);
     const meta = user?.subscriptionMetadata;

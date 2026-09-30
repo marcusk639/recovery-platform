@@ -564,3 +564,45 @@ describe("castOxfordVote — entitlement gate", () => {
     expect(caught?.code).toBe("failed-precondition");
   });
 });
+
+describe("setOxfordEnabled — entitlement gate", () => {
+  beforeEach(() => {
+    mockGetHouse.mockResolvedValue({
+      id: "house-1",
+      superAdminId: "op-1",
+      houseType: "traditional",
+      subscriptionStatus: "active",
+    });
+    mockGetUser.mockResolvedValue({
+      id: "op-1",
+      subscriptionMetadata: {
+        subscriptionItemId: "si_tier",
+        tier: "professional",
+      },
+    });
+    mockEnforceHouseEntitlement.mockResolvedValue({
+      entitled: true,
+      reason: "active",
+    });
+  });
+
+  it("does not swap the Stripe price when the gate denies the house", async () => {
+    mockEnforceHouseEntitlement.mockRejectedValue(
+      Object.assign(new Error("no subscription"), {
+        code: "failed-precondition",
+      }),
+    );
+
+    let caught: { code?: string } | undefined;
+    try {
+      await (setOxfordEnabled as any)({
+        data: { houseId: "house-1", enabled: true },
+        auth: { uid: "op-1" },
+      });
+    } catch (err) {
+      caught = err as { code?: string };
+    }
+    expect(caught?.code).toBe("failed-precondition");
+    expect(mockSwapSubscriptionItemPrice).not.toHaveBeenCalled();
+  });
+});

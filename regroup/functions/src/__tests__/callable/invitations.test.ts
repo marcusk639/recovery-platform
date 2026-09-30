@@ -67,6 +67,12 @@ jest.mock('../../util/tokens', () => ({
 
 // Email helper — verify the CF calls it with the right args, don't
 // actually send mail.
+const mockEnforceHouseEntitlement = jest.fn();
+jest.mock('../../util/entitlement', () => ({
+  enforceHouseEntitlement: (...args: any[]) =>
+    mockEnforceHouseEntitlement(...args),
+}));
+
 const mockSendOneInviteEmail = jest.fn();
 jest.mock('../../util/inviteEmails', () => ({
   sendOneInviteEmail: (...args: unknown[]) => mockSendOneInviteEmail(...args),
@@ -662,5 +668,56 @@ describe('resident capacity enforcement', () => {
       expect(mockGetHouse).not.toHaveBeenCalled();
       expect(mockUpdateUser).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('createInvitation — entitlement gate', () => {
+  const houseData = {
+    ownerId: 'someone-else',
+    adminIds: ['inviter-admin-id'],
+    subscriptionStatus: 'active',
+  };
+
+  beforeEach(() => {
+    mockHouseGet.mockResolvedValue({ exists: true, data: () => houseData });
+    mockEnforceHouseEntitlement.mockResolvedValue({
+      entitled: true,
+      reason: 'active',
+    });
+  });
+
+  it('consults the entitlement gate with the house and id', async () => {
+    await call(
+      createInvitation,
+      { email: 'a@x.com', houseId: 'house-1', role: 'admin' },
+      { uid: 'inviter-uid', token: { admin: { 'house-1': true } } },
+    ).catch(() => undefined);
+
+    expect(mockEnforceHouseEntitlement).toHaveBeenCalledWith(
+      houseData,
+      'house-1',
+    );
+  });
+
+  it('does not write an invitation when the gate denies the house', async () => {
+    mockEnforceHouseEntitlement.mockRejectedValue(
+      Object.assign(new Error('no subscription'), {
+        code: 'failed-precondition',
+      }),
+    );
+    mockInvitationsSet.mockClear();
+
+    let caught: { code?: string } | undefined;
+    try {
+      await call(
+        createInvitation,
+        { email: 'a@x.com', houseId: 'house-1', role: 'admin' },
+        { uid: 'inviter-uid', token: { admin: { 'house-1': true } } },
+      );
+    } catch (err) {
+      caught = err as { code?: string };
+    }
+    expect(caught?.code).toBe('failed-precondition');
+    expect(mockInvitationsSet).not.toHaveBeenCalled();
   });
 });
