@@ -273,6 +273,16 @@ export const swapSubscriptionItemPrice = async (
   return stripe.subscriptionItems.update(itemId, { price: newPriceId });
 };
 
+// An Oxford price swap must land on a price with the same billing interval as
+// the subscription already has, or an annual plan silently becomes monthly.
+// Read it from Stripe: a stored field would be one more thing to keep in sync.
+export const getSubscriptionItemInterval = async (
+  itemId: string,
+): Promise<"month" | "year"> => {
+  const item = await stripe.subscriptionItems.retrieve(itemId);
+  return item.price?.recurring?.interval === "year" ? "year" : "month";
+};
+
 export const updateHouseSubscriptionAmount = async (
   itemId: string,
   quantity: number,

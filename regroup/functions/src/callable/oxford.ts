@@ -1,12 +1,12 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { z } from "zod";
-import { STRIPE_SECRET_KEY } from "../config";
+import { STRIPE_SECRET_KEY, TierKey } from "../config";
 import {
-  OXFORD_PRICE_ID,
-  HOUSE_PRICE_ID,
   swapSubscriptionItemPrice,
+  getSubscriptionItemInterval,
 } from "../api/stripe";
+import { resolveTierPriceId } from "../util/tierPricing";
 import {
   getHouse,
   getUser,
@@ -63,7 +63,8 @@ export const setOxfordEnabled = onCall(
 
     const operatorId = house.superAdminId;
     const user = await getUser(operatorId);
-    if (!user?.subscriptionMetadata?.items?.houseItemId) {
+    const meta = user?.subscriptionMetadata;
+    if (!meta?.subscriptionItemId || !meta.tier) {
       throw new HttpsError(
         "failed-precondition",
         "No active subscription — subscribe before enabling Oxford",
@@ -76,16 +77,30 @@ export const setOxfordEnabled = onCall(
       return { success: true, changed: false };
     }
 
-    const newPriceId = enabled ? OXFORD_PRICE_ID : HOUSE_PRICE_ID;
-    const rollbackPriceId = enabled ? HOUSE_PRICE_ID : OXFORD_PRICE_ID;
-    const houseItemId = user.subscriptionMetadata.items.houseItemId;
+    // The tier model bills a single flat-fee line item; Oxford vs traditional is
+    // a price swap on that item, resolved for the tier the operator is actually on.
+    const subscriptionItemId = meta.subscriptionItemId;
+    const tier = meta.tier as TierKey;
+    const billingInterval = await getSubscriptionItemInterval(
+      subscriptionItemId,
+    );
+    const newPriceId = resolveTierPriceId(
+      enabled ? "oxford" : "traditional",
+      tier,
+      billingInterval,
+    );
+    const rollbackPriceId = resolveTierPriceId(
+      enabled ? "traditional" : "oxford",
+      tier,
+      billingInterval,
+    );
 
     // Step 1: Stripe swap. Firestore is never touched if this throws.
-    await swapSubscriptionItemPrice(houseItemId, newPriceId);
+    await swapSubscriptionItemPrice(subscriptionItemId, newPriceId);
     logger.info("setOxfordEnabled: Stripe price swapped", {
       houseId,
       enabled,
-      houseItemId,
+      subscriptionItemId,
       newPriceId,
     });
 
@@ -110,7 +125,7 @@ export const setOxfordEnabled = onCall(
         },
       );
       try {
-        await swapSubscriptionItemPrice(houseItemId, rollbackPriceId);
+        await swapSubscriptionItemPrice(subscriptionItemId, rollbackPriceId);
         logger.info("setOxfordEnabled: Stripe rollback succeeded", { houseId });
       } catch (rollbackErr) {
         // Stripe is now out of sync with intended state. Operator must be notified.
@@ -119,7 +134,7 @@ export const setOxfordEnabled = onCall(
           {
             houseId,
             operatorId,
-            houseItemId,
+            subscriptionItemId,
             intendedPriceId: rollbackPriceId,
             rollbackError: (rollbackErr as Error).message,
           },

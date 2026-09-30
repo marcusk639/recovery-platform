@@ -52,11 +52,19 @@ jest.mock("../../api/firestore", () => ({
   },
 }));
 
+const mockGetSubscriptionItemInterval = jest.fn();
+
 jest.mock("../../api/stripe", () => ({
-  OXFORD_PRICE_ID: "price_oxford",
-  HOUSE_PRICE_ID: "price_house",
   swapSubscriptionItemPrice: mockSwapSubscriptionItemPrice,
+  getSubscriptionItemInterval: mockGetSubscriptionItemInterval,
 }));
+
+const mockResolveTierPriceId = jest.fn();
+
+jest.mock("../../util/tierPricing", () => {
+  const actual = jest.requireActual("../../util/tierPricing");
+  return { ...actual, resolveTierPriceId: mockResolveTierPriceId };
+});
 
 jest.mock("../../config", () => ({
   STRIPE_SECRET_KEY: "STRIPE_SECRET_KEY",
@@ -76,12 +84,21 @@ const baseHouse = {
 };
 const baseUser = {
   subscriptionMetadata: {
-    items: { houseItemId: "si_abc123" },
+    subscriptionItemId: "si_abc123",
+    tier: "professional",
+    houseType: "traditional",
     oxfordEnabled: false,
   },
 };
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockGetSubscriptionItemInterval.mockResolvedValue("month");
+  mockResolveTierPriceId.mockImplementation(
+    (houseType: string, tier: string, interval: string) =>
+      `price_${houseType}_${tier}_${interval}`,
+  );
+});
 
 describe("setOxfordEnabled — auth guards", () => {
   it("throws unauthenticated when no auth", async () => {
@@ -144,7 +161,7 @@ describe("setOxfordEnabled — happy paths", () => {
 
     expect(mockSwapSubscriptionItemPrice).toHaveBeenCalledWith(
       "si_abc123",
-      "price_oxford",
+      "price_oxford_professional_month",
     );
     expect(mockBatchUpdate).toHaveBeenCalledTimes(2);
     expect(mockBatchCommit).toHaveBeenCalledTimes(1);
@@ -155,7 +172,9 @@ describe("setOxfordEnabled — happy paths", () => {
     mockGetHouse.mockResolvedValue({ ...baseHouse, houseType: "oxford" });
     mockGetUser.mockResolvedValue({
       subscriptionMetadata: {
-        items: { houseItemId: "si_abc123" },
+        subscriptionItemId: "si_abc123",
+        tier: "professional",
+        houseType: "traditional",
         oxfordEnabled: true,
       },
     });
@@ -166,7 +185,7 @@ describe("setOxfordEnabled — happy paths", () => {
 
     expect(mockSwapSubscriptionItemPrice).toHaveBeenCalledWith(
       "si_abc123",
-      "price_house",
+      "price_traditional_professional_month",
     );
     expect(result).toEqual({ success: true, changed: true });
   });
@@ -190,12 +209,12 @@ describe("setOxfordEnabled — rollback on Firestore failure", () => {
     expect(mockSwapSubscriptionItemPrice).toHaveBeenNthCalledWith(
       1,
       "si_abc123",
-      "price_oxford",
+      "price_oxford_professional_month",
     );
     expect(mockSwapSubscriptionItemPrice).toHaveBeenNthCalledWith(
       2,
       "si_abc123",
-      "price_house",
+      "price_traditional_professional_month",
     );
   });
 
@@ -411,5 +430,77 @@ describe("castOxfordVote — miscellaneous", () => {
     await expect(
       castVoteCall({ houseId: "house-1", voteId: "v1", choice: "maybe" }),
     ).rejects.toThrow();
+  });
+});
+
+describe("setOxfordEnabled — tier subscriptions", () => {
+  const tierOperator = {
+    id: "op-1",
+    subscriptionMetadata: {
+      customerId: "cus_1",
+      subscriptionId: "sub_1",
+      subscriptionItemId: "si_tier",
+      tier: "professional",
+      houseType: "traditional",
+    },
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetHouse.mockResolvedValue({
+      id: "house-1",
+      superAdminId: "op-1",
+      houseType: "traditional",
+    });
+    mockGetUser.mockResolvedValue(tierOperator);
+    mockGetSubscriptionItemInterval.mockResolvedValue("month");
+    mockResolveTierPriceId.mockImplementation(
+      (houseType: string, tier: string, interval: string) =>
+        `price_${houseType}_${tier}_${interval}`,
+    );
+    mockSwapSubscriptionItemPrice.mockResolvedValue({ id: "si_tier" });
+    mockBatchCommit.mockResolvedValue(undefined);
+  });
+
+  it("swaps the tier line item, not a legacy house item", async () => {
+    const result = await (setOxfordEnabled as any)({
+      data: { houseId: "house-1", enabled: true },
+      auth: { uid: "op-1" },
+    });
+
+    expect(result).toMatchObject({ success: true, changed: true });
+    expect(mockSwapSubscriptionItemPrice).toHaveBeenCalledWith(
+      "si_tier",
+      "price_oxford_professional_month",
+    );
+  });
+
+  it("resolves the annual price for an annual subscription", async () => {
+    mockGetSubscriptionItemInterval.mockResolvedValue("year");
+
+    await (setOxfordEnabled as any)({
+      data: { houseId: "house-1", enabled: true },
+      auth: { uid: "op-1" },
+    });
+
+    expect(mockSwapSubscriptionItemPrice).toHaveBeenCalledWith(
+      "si_tier",
+      "price_oxford_professional_year",
+    );
+  });
+
+  it("refuses when the operator has no tier line item", async () => {
+    mockGetUser.mockResolvedValue({
+      id: "op-1",
+      subscriptionMetadata: { customerId: "cus_1", subscriptionId: "sub_1" },
+    });
+
+    await expect(
+      (setOxfordEnabled as any)({
+        data: { houseId: "house-1", enabled: true },
+        auth: { uid: "op-1" },
+      }),
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+    expect(mockSwapSubscriptionItemPrice).not.toHaveBeenCalled();
   });
 });
