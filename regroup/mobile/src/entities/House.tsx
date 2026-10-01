@@ -75,8 +75,14 @@ export class House extends BaseEntity {
   rentFrequency: 'weekly' | 'monthly' | 'both' = 'both';
   pendingAdminInvites?: string[] = [];
   pendingGuestInvites?: string[] = [];
-  // Default 'trialing' ensures new houses start with 14-day trial period.
-  // After the migration backfill, all existing houses have explicit status.
+  // LOAD-BEARING DEFAULT, not a placeholder: the setup wizard builds a house
+  // with `new House()` (screens/SetupWizards/OrgSetup.tsx, HouseSetup.tsx) and
+  // nothing else on the client writes this field, so this is what stamps a new
+  // house's status. The server denies an absent status
+  // (functions/src/util/entitlement.ts), so emptying this default would lock
+  // out every newly created house. Stamping it server-side at house creation
+  // is the real fix; until then, do not "clean this up".
+  // (Trial length itself is TRIAL_PERIOD_DAYS in functions/src/api/stripe.ts.)
   subscriptionStatus: SubscriptionStatus = 'trialing';
   guestGraceEndsAt?: string = undefined;
   isDemoHouse: boolean = false;

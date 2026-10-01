@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useAppSelector } from '../state/store';
 import { useSelectedHouse } from './useSelectedHouse';
-import { subscriptionIsActive } from '../util/subscription';
 import { logException } from '../util/logging';
 import { paywallConfigRef } from '../services/paywall';
 import { toDateSafe } from '../util/firestore';
@@ -71,6 +70,38 @@ export function usePaywallKillSwitch(): {
   };
 }
 
+type HouseAccess =
+  | { kind: 'allowed' }
+  | { kind: 'grace'; endsAt: Date }
+  | { kind: 'lapsed' };
+
+/**
+ * Client-side mirror of the server entitlement ladder
+ * (functions/src/util/entitlement.ts). Kept deliberately lenient where the
+ * server is strict: an absent status reads as allowed here, because this gate
+ * is UX — Firestore rules let a user write their own user doc, so the real
+ * boundary is the server. Denying here on a missing field would lock people
+ * out of the app without stopping anyone determined.
+ */
+function evaluateHouseAccess(house: {
+  subscriptionStatus?: string;
+  guestGraceEndsAt?: unknown;
+}): HouseAccess {
+  const status = house.subscriptionStatus;
+
+  if (!status || status === 'active' || status === 'trialing') {
+    return { kind: 'allowed' };
+  }
+
+  // Lapsed statuses: canceled, past_due, unpaid
+  const endsAt = toDateSafe(house.guestGraceEndsAt);
+  if (endsAt && endsAt > new Date()) {
+    return { kind: 'grace', endsAt };
+  }
+
+  return { kind: 'lapsed' };
+}
+
 /**
  * Evaluates whether the current user should be shown the full app or a
  * subscription-blocked screen.
@@ -81,7 +112,9 @@ export function usePaywallKillSwitch(): {
  * Logic:
  *   anonymous / potentialSuperAdmin           → allowed (short-circuit)
  *   kill switch disabled                       → allowed
- *   admin | superAdmin: subscriptionIsActive   → allowed  else → subscription_required
+ *   admin | superAdmin: house active/trialing  → allowed
+ *                       lapsed + grace open   → grace_period
+ *                       lapsed                → subscription_required
  *   guest: house not loaded                    → loading
  *          active | trialing | '' | undefined  → allowed
  *          lapsed + grace window open          → grace_period (with endsAt)
@@ -99,8 +132,11 @@ export function useSubscriptionGate(): GateResult {
     return { status: 'allowed' };
   }
 
-  // potentialSuperAdmin — mid-onboarding, not yet operator; allow through
-  if (user?.potentialSuperAdmin) {
+  // potentialSuperAdmin — mid-onboarding, no house exists yet, so there is
+  // nothing to gate on. Scoped to `!orgSetupCompleted`: the flag is set at
+  // signup by both funnels and is never cleared, so an unscoped check matched
+  // every operator forever and made the gate below unreachable.
+  if (user?.potentialSuperAdmin && !user?.orgSetupCompleted) {
     return { status: 'allowed' };
   }
 
@@ -117,16 +153,20 @@ export function useSubscriptionGate(): GateResult {
     return { status: 'allowed' };
   }
 
-  // --- Operator gate (admin / superAdmin) ---
-  if (user?.isAdmin || user?.isSuperAdmin) {
-    if (subscriptionIsActive(user as User)) {
-      return { status: 'allowed' };
-    }
-    return { status: 'subscription_required' };
-  }
+  // --- Operator and guest gates ---
+  //
+  // Both read the SAME house fields, because those are the fields the Stripe
+  // webhook actually writes (houses/*.subscriptionStatus and guestGraceEndsAt,
+  // via updateHouseSubscriptionStatus). The operator branch used to read
+  // user.subscriptionMetadata.status, which no webhook ever updates, so an
+  // operator's status was frozen at whatever checkout wrote.
+  //
+  // They differ only in the terminal screen: an operator can fix billing, so
+  // they get subscription_required (which deep-links to the portal); a guest
+  // cannot, so they get grace_expired.
+  const isOperator = user?.isAdmin || user?.isSuperAdmin;
 
-  // --- Guest gate ---
-  if (user?.isGuest) {
+  if (isOperator || user?.isGuest) {
     if (houseLoading) {
       return { status: 'loading' };
     }
@@ -137,24 +177,16 @@ export function useSubscriptionGate(): GateResult {
       return { status: 'loading' };
     }
 
-    const houseStatus = house.subscriptionStatus;
-
-    // Active, trialing, or not set — allow
-    if (
-      !houseStatus ||
-      houseStatus === 'active' ||
-      houseStatus === 'trialing'
-    ) {
+    const access = evaluateHouseAccess(house);
+    if (access.kind === 'allowed') {
       return { status: 'allowed' };
     }
-
-    // Lapsed statuses: canceled, past_due, unpaid
-    const endsAt = toDateSafe(house.guestGraceEndsAt);
-    if (endsAt && endsAt > new Date()) {
-      return { status: 'grace_period', endsAt };
+    if (access.kind === 'grace') {
+      return { status: 'grace_period', endsAt: access.endsAt };
     }
-
-    return { status: 'grace_expired' };
+    return isOperator
+      ? { status: 'subscription_required' }
+      : { status: 'grace_expired' };
   }
 
   // User record loaded but no role flags set — loading / transitional state

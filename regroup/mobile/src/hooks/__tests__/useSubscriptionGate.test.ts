@@ -204,8 +204,10 @@ describe('useSubscriptionGate', () => {
       expect(result.current).toEqual({ status: 'allowed' });
     });
 
-    it('returns allowed when user.potentialSuperAdmin is true', () => {
-      setUserState({ user: { potentialSuperAdmin: true } });
+    it('returns allowed for a potentialSuperAdmin who has not finished setup', () => {
+      setUserState({
+        user: { potentialSuperAdmin: true, orgSetupCompleted: false },
+      });
 
       const { result } = renderHook(() => useSubscriptionGate(), {
         wrapper: makeWrapper(),
@@ -248,22 +250,64 @@ describe('useSubscriptionGate', () => {
   });
 
   describe('operator (admin / superAdmin) gate', () => {
-    it('returns allowed when admin has an active subscription', async () => {
-      setUserState({ user: { isAdmin: true } });
-      mockSubscriptionIsActive.mockReturnValue(true);
+    // The operator branch reads the SAME house fields as the guest branch.
+    // It used to read user.subscriptionMetadata.status, which the Stripe
+    // webhook never writes (it updates subscriptions/* and houses/*), so an
+    // operator's status was frozen at whatever checkout wrote.
+    it('returns allowed when the operator house is active', async () => {
+      setUserState({ user: { isAdmin: true, orgSetupCompleted: true } });
+      setHouse({ house: { id: 'h1', subscriptionStatus: 'active' } });
+
+      const { result } = renderHook(() => useSubscriptionGate(), {
+        wrapper: makeWrapper(),
+      });
+
+      await waitFor(() => expect(result.current).toEqual({ status: 'allowed' }));
+    });
+
+    it('returns subscription_required when the operator house is canceled', async () => {
+      setUserState({ user: { isSuperAdmin: true, orgSetupCompleted: true } });
+      setHouse({ house: { id: 'h1', subscriptionStatus: 'canceled' } });
 
       const { result } = renderHook(() => useSubscriptionGate(), {
         wrapper: makeWrapper(),
       });
 
       await waitFor(() =>
-        expect(result.current).toEqual({ status: 'allowed' }),
+        expect(result.current).toEqual({ status: 'subscription_required' }),
       );
     });
 
-    it('returns subscription_required when admin has an inactive subscription', async () => {
-      setUserState({ user: { isAdmin: true } });
-      mockSubscriptionIsActive.mockReturnValue(false);
+    it('returns grace_period while a past_due operator house is still in grace', async () => {
+      const future = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      setUserState({ user: { isSuperAdmin: true, orgSetupCompleted: true } });
+      setHouse({
+        house: {
+          id: 'h1',
+          subscriptionStatus: 'past_due',
+          guestGraceEndsAt: future,
+        },
+      });
+
+      const { result } = renderHook(() => useSubscriptionGate(), {
+        wrapper: makeWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.status).toBe('grace_period'));
+    });
+
+    // The regression that made the operator paywall unreachable: every operator
+    // carries potentialSuperAdmin: true permanently (both signup funnels set it
+    // and nothing clears it), so the short-circuit above swallowed this case.
+    it('gates a completed operator who still carries potentialSuperAdmin', async () => {
+      setUserState({
+        user: {
+          isSuperAdmin: true,
+          potentialSuperAdmin: true,
+          orgSetupCompleted: true,
+        },
+      });
+      setHouse({ house: { id: 'h1', subscriptionStatus: 'canceled' } });
 
       const { result } = renderHook(() => useSubscriptionGate(), {
         wrapper: makeWrapper(),
