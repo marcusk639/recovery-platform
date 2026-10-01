@@ -49,11 +49,15 @@ describe('evaluateEntitlement', () => {
     });
   });
 
-  describe('absent status (Phase A: measure before enforcing)', () => {
-    it.each([undefined, '', null])('grants access but flags the gap for %p', (status) => {
+  describe('absent status', () => {
+    // Phase A granted access here to size the un-backfilled population before
+    // locking it out. That population is zero by construction: the relaunch
+    // starts every account from scratch, so any house reaching this branch has
+    // a write bug, not legacy data. Denying is the safe reading.
+    it.each([undefined, '', null])('denies access and flags the gap for %p', (status) => {
       expect(
         evaluateEntitlement({ subscriptionStatus: status as string | undefined }, NOW),
-      ).toEqual({ entitled: true, reason: 'absent_status' });
+      ).toEqual({ entitled: false, reason: 'absent_status' });
     });
   });
 
@@ -84,7 +88,13 @@ describe('assertHouseEntitled', () => {
     expect(caught?.code).toBe('failed-precondition');
   });
 
-  it('does not throw for an absent status while Phase A is in force', () => {
-    expect(() => assertHouseEntitled({}, 'house-1', NOW)).not.toThrow();
+  it('throws for an absent status rather than granting access', () => {
+    let caught: { code?: string } | undefined;
+    try {
+      assertHouseEntitled({}, 'house-1', NOW);
+    } catch (err) {
+      caught = err as { code?: string };
+    }
+    expect(caught?.code).toBe('failed-precondition');
   });
 });

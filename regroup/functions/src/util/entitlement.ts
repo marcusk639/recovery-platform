@@ -43,11 +43,14 @@ export function evaluateEntitlement(
 ): EntitlementVerdict {
   const status = house.subscriptionStatus;
 
-  // Phase A. A house with no status either predates the paywall or was never
-  // backfilled. Grant access and flag it, so the size of that population can be
-  // measured in production before this branch becomes a denial.
+  // A house with no status is a bug, not legacy data: the relaunch starts every
+  // account from scratch, so there is no un-backfilled population to measure.
+  // Phase A granted access here to size that population before locking it out;
+  // with it empty by construction, granting would only be a standing fail-open.
+  // Still reported separately from `unknown_status` so the writer that skipped
+  // the field is identifiable in logs.
   if (status === undefined || status === null || status === '') {
-    return { entitled: true, reason: 'absent_status' };
+    return { entitled: false, reason: 'absent_status' };
   }
 
   if (status === 'active' || status === 'trialing') {
@@ -84,9 +87,8 @@ export function assertHouseEntitled(
   const verdict = evaluateEntitlement(house, now);
 
   if (verdict.reason === 'absent_status') {
-    // Phase A signal. Every one of these is a house that will be denied once
-    // enforcement goes fail-closed; drive the backfill off this count and only
-    // flip the branch above once it reaches zero.
+    // A denial that points at a missing write rather than a real lapse — log it
+    // distinctly so it is not triaged as a billing problem.
     logger.warn('entitlement.absent_status', {
       houseId,
       subscriptionStatus: house.subscriptionStatus ?? null,
