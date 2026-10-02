@@ -435,6 +435,11 @@ export const connectStripeAccount = onCall(
       stripeAccountId?: string;
     };
 
+    // Deliberately NOT gated on house entitlement. Connecting Stripe is how
+    // rent starts flowing to the house, which is the operator's means of
+    // recovering from a lapse — the same reasoning that exempts
+    // createPaymentIntent above. Blocking setup during a lapse would make the
+    // lapse self-perpetuating. Do not add enforceHouseEntitlement here.
     assertHouseAdmin(
       auth.uid,
       house,

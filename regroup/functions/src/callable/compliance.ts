@@ -383,6 +383,15 @@ export const complianceExport = onCall(async (request) => {
     );
   }
 
+  // Gated on TIER CAPABILITY below, deliberately NOT on house entitlement.
+  // These are different questions: tierAllows asks whether the plan includes
+  // the feature, enforceHouseEntitlement asks whether it is currently paid for.
+  // An operator who lapses keeps export access on purpose. This is the one
+  // feature whose value peaks at churn: the records are theirs, sober living
+  // operators can carry state licensing retention duties against them, and
+  // withholding them over non-payment turns a cancellation into a dispute.
+  // The loophole (subscribe once, export indefinitely) is accepted.
+  // Do not add enforceHouseEntitlement here.
   const operator = await getUser(house.superAdminId);
   const sub = operator?.subscriptionMetadata;
   const tier = sub?.tier as TierKey | undefined;
