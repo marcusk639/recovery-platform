@@ -3,11 +3,7 @@ import { logger } from "firebase-functions";
 import * as admin from "firebase-admin";
 import Stripe from "stripe";
 import { z } from "zod";
-import {
-  STRIPE_SECRET_KEY,
-  STRIPE_CLIENT_ID,
-  LEGACY_RENT_FEE_HOUSE_IDS,
-} from "../config";
+import { STRIPE_SECRET_KEY, STRIPE_CLIENT_ID } from "../config";
 import { computeApplicationFee } from "../util/rentFee";
 import { transferStats } from "../util/guest";
 import { getUser } from "../api/firestore";
@@ -150,14 +146,15 @@ export const createPaymentIntent = onCall(
 
     // ── 5. Create PaymentIntent ───────────────────────────────────────────────
     // amount is already integer cents (validated above).
-    // Method-aware platform fee (P-1/P-2); legacy houses stay on the flat 2%.
-    const isLegacyHouse =
-      house.legacyRentFee === true ||
-      LEGACY_RENT_FEE_HOUSE_IDS.includes(houseId);
+    // Deliberately NOT gated on house entitlement. Residents must be able to
+    // pay rent even while the operator's subscription has lapsed: the money is
+    // owed to the house, blocking it harms the resident and removes the
+    // operator's means of recovering. Do not add enforceHouseEntitlement here.
+    //
+    // Method-aware platform fee (P-1/P-2).
     const applicationFeeAmount = computeApplicationFee({
       amountCents: amount,
       paymentMethodType,
-      isLegacyHouse,
     });
 
     const stripe = createStripeClient();
@@ -438,6 +435,11 @@ export const connectStripeAccount = onCall(
       stripeAccountId?: string;
     };
 
+    // Deliberately NOT gated on house entitlement. Connecting Stripe is how
+    // rent starts flowing to the house, which is the operator's means of
+    // recovering from a lapse — the same reasoning that exempts
+    // createPaymentIntent above. Blocking setup during a lapse would make the
+    // lapse self-perpetuating. Do not add enforceHouseEntitlement here.
     assertHouseAdmin(
       auth.uid,
       house,

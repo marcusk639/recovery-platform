@@ -4,6 +4,14 @@ import OperatorSubscription from "../entities/OperatorSubscription";
 import { User } from "../entities/User";
 import { HouseType, TierKey } from "../config";
 import { resolveTierPriceId, BillingInterval } from "../util/tierPricing";
+import { assertPaymentMethodUsable } from "./cardValidation";
+
+/**
+ * Trial length for all new subscriptions. Stripe applies trial_period_days
+ * at subscription-creation time, so subscriptions already in flight are
+ * unaffected and no data migration is needed.
+ */
+export const TRIAL_PERIOD_DAYS = 7;
 
 // Lazy Proxy — secrets are only available at request time in v2, not at module load.
 let _stripe: Stripe | undefined;
@@ -45,14 +53,35 @@ export const getBundleCoupon = (houseCount: number): string | null => {
 
 export const OXFORD_PRICE_ID = process.env.STRIPE_OXFORD_PRICE_ID!; // Regroup Oxford — $79/month (prod_UYy6cF0Ccj8fID)
 
-export const createCustomer = async (email: string, paymentMethod: string) => {
-  return stripe.customers.create({
+/**
+ * Day bucket for idempotency keys. Stripe keys expire after 24h, so a day is the
+ * natural granularity: a retry or double-submit within the day is deduped by
+ * Stripe, while a genuinely new operation tomorrow is not blocked. Matches the
+ * convention rent collection already uses (`${guestId}-${houseId}-${dayKey}`).
+ */
+const idempotencyDay = (): string => new Date().toISOString().slice(0, 10);
+
+/**
+ * Keys must not contain PII — they are echoed in logs and in Stripe's own
+ * request records. Key off ids, never the operator's email.
+ */
+export const createCustomer = async (
+  email: string,
+  paymentMethod: string,
+  idempotencyKey?: string,
+) => {
+  const params = {
     email,
     payment_method: paymentMethod,
     invoice_settings: {
       default_payment_method: paymentMethod,
     },
-  });
+  };
+  // Omit the options object entirely when unkeyed, rather than passing
+  // undefined — callers and tests assert on the argument list.
+  return idempotencyKey
+    ? stripe.customers.create(params, { idempotencyKey })
+    : stripe.customers.create(params);
 };
 
 export const updatePaymentMethod = async (
@@ -85,8 +114,9 @@ export const createSubscription = async (
   customerId: string,
   oxfordEnabled: boolean = false,
   userId?: string,
+  idempotencyKey?: string,
 ) => {
-  return stripe.subscriptions.create({
+  const params = {
     customer: customerId,
     items: [
       {
@@ -98,18 +128,21 @@ export const createSubscription = async (
         quantity: 0,
       },
     ],
-    trial_period_days: 30,
+    trial_period_days: TRIAL_PERIOD_DAYS,
     // Embed userId at creation so webhook handlers can resolve the operator
     // without an extra Firestore query. Passing it here avoids a second
     // Stripe round-trip that could fail after the subscription is already live.
     ...(userId ? { metadata: { userId } } : {}),
-  });
+  };
+  return idempotencyKey
+    ? stripe.subscriptions.create(params, { idempotencyKey })
+    : stripe.subscriptions.create(params);
 };
 
 /**
  * Tier-based (flat-fee) subscription creation. Unlike createSubscription's
  * two-item house+guest model, this builds a SINGLE line item at the price
- * resolved from the tier config, with a 30-day trial. Used only when
+ * resolved from the tier config, with a trial (see TRIAL_PERIOD_DAYS). Used only when
  * TIER_BILLING_ENABLED is on. The legacy createSubscription is left untouched
  * for grandfathered subscribers.
  */
@@ -119,19 +152,23 @@ export const createTierSubscription = async (
   tier: TierKey,
   userId?: string,
   billingInterval: BillingInterval = "month",
+  idempotencyKey?: string,
 ) => {
   const price = resolveTierPriceId(houseType, tier, billingInterval);
-  return stripe.subscriptions.create({
+  const params = {
     customer: customerId,
     items: [{ price, quantity: 1 }],
-    trial_period_days: 30,
+    trial_period_days: TRIAL_PERIOD_DAYS,
     metadata: {
       ...(userId ? { userId } : {}),
       houseType,
       tier,
       billingInterval,
     },
-  });
+  };
+  return idempotencyKey
+    ? stripe.subscriptions.create(params, { idempotencyKey })
+    : stripe.subscriptions.create(params);
 };
 
 export const createItemsFromMetadata = (
@@ -163,6 +200,10 @@ export const reactivateSubscription = async (
   subscriptionMetadata: OperatorSubscription,
   userId?: string,
 ): Promise<OperatorSubscription> => {
+  // This function creates a subscription unconditionally, so an unkeyed retry is
+  // the most direct way to double-bill an operator. Keyed on the customer rather
+  // than the old subscription id, which differs between the branches below.
+  const reactivateKey = `reactivate-${userId ?? customerId}-${idempotencyDay()}`;
   // Tier model: recreate a single flat-fee line item from the stored tier, and
   // record the single subscriptionItemId. Legacy two-item subscriptions keep the
   // house+guest createItemsFromMetadata path unchanged below.
@@ -170,11 +211,14 @@ export const reactivateSubscription = async (
     const houseType = subscriptionMetadata.houseType as HouseType;
     const tier = subscriptionMetadata.tier as TierKey;
     const price = resolveTierPriceId(houseType, tier);
-    const subscription = await stripe.subscriptions.create({
-      customer: customerId,
-      items: [{ price, quantity: 1 }],
-      ...(userId ? { metadata: { userId } } : {}),
-    });
+    const subscription = await stripe.subscriptions.create(
+      {
+        customer: customerId,
+        items: [{ price, quantity: 1 }],
+        ...(userId ? { metadata: { userId } } : {}),
+      },
+      { idempotencyKey: `${reactivateKey}-tier` },
+    );
     const freshMetadata = new OperatorSubscription();
     freshMetadata.houseType = houseType;
     freshMetadata.tier = tier;
@@ -186,11 +230,14 @@ export const reactivateSubscription = async (
     return freshMetadata;
   }
 
-  const subscription = await stripe.subscriptions.create({
-    customer: customerId,
-    items: createItemsFromMetadata(subscriptionMetadata),
-    ...(userId ? { metadata: { userId } } : {}),
-  });
+  const subscription = await stripe.subscriptions.create(
+    {
+      customer: customerId,
+      items: createItemsFromMetadata(subscriptionMetadata),
+      ...(userId ? { metadata: { userId } } : {}),
+    },
+    { idempotencyKey: `${reactivateKey}-legacy` },
+  );
   const freshMetadata = new OperatorSubscription();
   freshMetadata.oxfordEnabled = subscriptionMetadata.oxfordEnabled;
   mapSubscriptionToMetadata(subscription, freshMetadata, customerId);
@@ -264,6 +311,16 @@ export const swapSubscriptionItemPrice = async (
   newPriceId: string,
 ): Promise<Stripe.SubscriptionItem> => {
   return stripe.subscriptionItems.update(itemId, { price: newPriceId });
+};
+
+// An Oxford price swap must land on a price with the same billing interval as
+// the subscription already has, or an annual plan silently becomes monthly.
+// Read it from Stripe: a stored field would be one more thing to keep in sync.
+export const getSubscriptionItemInterval = async (
+  itemId: string,
+): Promise<"month" | "year"> => {
+  const item = await stripe.subscriptionItems.retrieve(itemId);
+  return item.price?.recurring?.interval === "year" ? "year" : "month";
 };
 
 export const updateHouseSubscriptionAmount = async (
@@ -340,6 +397,9 @@ export const initializeSubscription = async (
     customerId,
     oxfordEnabled,
     userId,
+    `sub-${userId ?? customerId}-${
+      oxfordEnabled ? "oxford" : "house"
+    }-${idempotencyDay()}`,
   );
   const subscriptionMetadata = new OperatorSubscription();
   subscriptionMetadata.oxfordEnabled = oxfordEnabled;
@@ -363,6 +423,10 @@ export const initializeCustomer = async (
   userId?: string,
 ) => {
   const customer = await createCustomer(email, paymentMethod);
+  // Throws (and deletes the customer) before any subscription exists if the card
+  // is unusable. The trial means signup itself never charges, so this is the only
+  // point at which a dead card can be caught. See api/cardValidation.ts.
+  await assertPaymentMethodUsable(stripe, customer.id, paymentMethod);
   return initializeSubscription(customer.id, oxfordEnabled, userId);
 };
 
@@ -379,13 +443,26 @@ export const initializeTierCustomer = async (
   userId: string,
   billingInterval: BillingInterval = "month",
 ) => {
-  const customer = await createCustomer(email, paymentMethod);
+  // Without these keys a retry or double-submit creates a SECOND real customer
+  // and subscription; Firestore keeps whichever finishes last, orphaning the
+  // other to bill forever with nothing pointing at it.
+  const day = idempotencyDay();
+  const customer = await createCustomer(
+    email,
+    paymentMethod,
+    `cust-${userId}-${day}`,
+  );
+  // Same guard as the legacy path: validate before the subscription exists.
+  await assertPaymentMethodUsable(stripe, customer.id, paymentMethod);
   const subscription = await createTierSubscription(
     customer.id,
     houseType,
     tier,
     userId,
     billingInterval,
+    // Tier and interval are part of the key: changing plan is a new operation,
+    // not a retry of the old one.
+    `tiersub-${userId}-${houseType}-${tier}-${billingInterval}-${day}`,
   );
   return {
     customerId: customer.id,
@@ -395,6 +472,7 @@ export const initializeTierCustomer = async (
     houseType,
     tier,
     billingInterval,
+    oxfordEnabled: houseType === "oxford",
   };
 };
 

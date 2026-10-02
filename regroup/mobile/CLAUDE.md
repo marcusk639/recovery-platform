@@ -11,7 +11,8 @@ Regroup is a React Native 0.72 sober living house management app for iOS and And
 npm test                              # unit tests
 npx jest path/to/file.test.tsx        # single file
 npm run test:coverage                 # with coverage
-npm run test:integration              # BROKEN: jest.config.integration.js doesn't exist yet (test:rules likewise)
+npm run test:integration              # needs emulators — see below
+npm run test:rules                    # needs emulators — see below
 npm run test:e2e:build:ios            # build for E2E
 npm run test:e2e:ios                  # run E2E on iOS simulator
 
@@ -21,6 +22,31 @@ npm run android
 npm run pod:install                   # CocoaPods
 npm run lint
 ```
+
+## Emulator-backed suites
+
+Both configs exist again (they were unrunnable: `regroup/.gitignore` ignored all
+JavaScript, so neither could be committed). Run them through `emulators:exec` so
+the emulators are guaranteed rather than assumed:
+
+```bash
+# Security rules — 240 tests. Needs firestore, storage AND auth; with firestore
+# alone the storage suite fails on grpc connection errors.
+cd firebase && firebase emulators:exec --only firestore,storage,auth \
+  --project demo-test \
+  "cd .. && npx jest --config jest.config.rules.js --no-coverage --forceExit"
+
+# Integration — needs firestore + auth. 24 of 48 currently fail; those suites
+# had never executed before the runner was restored, so the failures are
+# pre-existing and unverified, not regressions.
+cd firebase && firebase emulators:exec --only firestore,auth \
+  --project demo-test \
+  "cd .. && npx jest --config jest.config.integration.js --no-coverage --forceExit"
+```
+
+Integration tests alias `firebase-setup` to `src/integration/firebase-admin-setup.ts`;
+unit tests alias it to the mock. Getting that wrong makes every integration test
+fail on reads.
 
 ## Universal Rules
 

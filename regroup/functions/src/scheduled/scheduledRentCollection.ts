@@ -17,7 +17,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logger } from "firebase-functions";
 import Stripe from "stripe";
 import { guestCollection } from "../api/firestore";
-import { STRIPE_SECRET_KEY, LEGACY_RENT_FEE_HOUSE_IDS } from "../config";
+import { STRIPE_SECRET_KEY } from "../config";
 import { computeApplicationFee, RentPaymentMethodType } from "../util/rentFee";
 
 interface AutoPayGuest {
@@ -105,7 +105,6 @@ export async function runRentCollection(): Promise<void> {
           application_fee_amount: computeApplicationFee({
             amountCents,
             paymentMethodType,
-            isLegacyHouse: LEGACY_RENT_FEE_HOUSE_IDS.includes(guest.houseId),
           }),
         };
       }

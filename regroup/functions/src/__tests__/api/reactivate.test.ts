@@ -48,6 +48,8 @@ describe("reactivateSubscription", () => {
         customer: "cus_2",
         items: [{ price: "price_oxford_std", quantity: 1 }],
       }),
+      // reactivateSubscription creates unconditionally, so it is keyed.
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
     );
     expect(fresh.subscriptionItemId).toBe("si_2");
     expect(fresh.tier).toBe("standard");

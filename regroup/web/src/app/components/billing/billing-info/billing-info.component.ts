@@ -1,12 +1,5 @@
-import {
-  Component,
-  OnInit,
-  ViewChild,
-  Input,
-  Output,
-  EventEmitter,
-} from "@angular/core";
-import { FormGroup, FormBuilder, Validators } from "@angular/forms";
+import { Component, OnInit, ViewChild, Input, Output, EventEmitter } from '@angular/core';
+import { FormGroup, FormBuilder, Validators } from '@angular/forms';
 import {
   StripeService,
   Elements,
@@ -14,18 +7,19 @@ import {
   ElementsOptions,
   StripeCardComponent,
   ElementOptions,
-} from "ngx-stripe";
-import { User } from "src/app/entities/User";
-import { AuthService } from "src/app/services/auth/auth-service.service";
-import { PaymentMethod } from "ngx-stripe/lib/interfaces/payment-intent";
-import { ModalService } from "src/app/services/modal.service";
-import { analytics } from "firebase";
-import { AngularFireAnalytics } from "@angular/fire/analytics";
+} from 'ngx-stripe';
+import { User } from 'src/app/entities/User';
+import { AuthService } from 'src/app/services/auth/auth-service.service';
+import { PaymentMethod } from 'ngx-stripe/lib/interfaces/payment-intent';
+import { ModalService } from 'src/app/services/modal.service';
+import { analytics } from 'firebase';
+import { AngularFireAnalytics } from '@angular/fire/analytics';
+import { BillingInterval, HouseType } from 'src/app/entities/TierCatalog';
 
 @Component({
-  selector: "billing-info",
-  templateUrl: "./billing-info.component.html",
-  styleUrls: ["./billing-info.component.css"],
+  selector: 'billing-info',
+  templateUrl: './billing-info.component.html',
+  styleUrls: ['./billing-info.component.css'],
 })
 export class BillingInfoComponent implements OnInit {
   @Input() formGroup: FormGroup;
@@ -37,6 +31,9 @@ export class BillingInfoComponent implements OnInit {
   @Input() loading: boolean = false;
   @Input() showSubmit?: boolean = true;
   @Input() initialSubscription: boolean = false;
+  @Input() houseType: HouseType;
+  @Input() tier: string;
+  @Input() billingInterval: BillingInterval = 'month';
 
   elements: Elements;
   cardNumber: StripeElement;
@@ -45,25 +42,25 @@ export class BillingInfoComponent implements OnInit {
 
   // optional parameters
   elementsOptions: ElementsOptions = {
-    locale: "en",
+    locale: 'en',
   };
 
   elementStyles: ElementOptions = {
     //@ts-ignore
     classes: {
-      base: "StripeElement",
-      focus: "StripeElement",
-      empty: "StripeElement",
+      base: 'StripeElement',
+      focus: 'StripeElement',
+      empty: 'StripeElement',
     },
     style: {
       base: {
-        color: "#495057",
+        color: '#495057',
         // lineHeight: '30px',
-        fontFamily: "system-ui",
-        fontSize: "14px",
-        fontStyle: "black",
-        "::placeholder": {
-          color: "rgba(68, 68, 68, 0.6)",
+        fontFamily: 'system-ui',
+        fontSize: '14px',
+        fontStyle: 'black',
+        '::placeholder': {
+          color: 'rgba(68, 68, 68, 0.6)',
         },
       },
     },
@@ -79,8 +76,8 @@ export class BillingInfoComponent implements OnInit {
     private analytics: AngularFireAnalytics,
   ) {}
 
-  getElementStyles(type?: "Expiration" | "Cvc") {
-    const prefix = type || "Stripe";
+  getElementStyles(type?: 'Expiration' | 'Cvc') {
+    const prefix = type || 'Stripe';
     const className = `StripeElement ${prefix}Element`;
     return {
       classes: {
@@ -90,13 +87,13 @@ export class BillingInfoComponent implements OnInit {
       },
       style: {
         base: {
-          color: "#495057",
+          color: '#495057',
           // lineHeight: '50px',
-          fontFamily: "system-ui",
-          fontSize: "14px",
-          fontStyle: "black",
-          "::placeholder": {
-            color: "rgba(68, 68, 68, 0.6)",
+          fontFamily: 'system-ui',
+          fontSize: '14px',
+          fontStyle: 'black',
+          '::placeholder': {
+            color: 'rgba(68, 68, 68, 0.6)',
           },
         },
       },
@@ -109,7 +106,7 @@ export class BillingInfoComponent implements OnInit {
       displayError.textContent = event.error.message;
       this.modalService.disableConfirm = true;
     } else {
-      displayError.textContent = "";
+      displayError.textContent = '';
       this.modalService.disableConfirm = false;
     }
   }
@@ -120,102 +117,99 @@ export class BillingInfoComponent implements OnInit {
 
   ngOnInit() {
     this.stripeTest = this.fb.group({
-      name: ["", [Validators.required]],
+      name: ['', [Validators.required]],
     });
     this.stripeService.elements(this.elementsOptions).subscribe((elements) => {
       this.elements = elements;
       // Only mount the element the first time
       if (!this.cardNumber) {
-        this.cardNumber = this.elements.create(
-          "cardNumber",
-          this.getElementStyles(),
-        );
-        this.cardNumber.on("change", (event) =>
-          this.displayErrors("card-errors", event),
-        );
+        this.cardNumber = this.elements.create('cardNumber', this.getElementStyles());
+        this.cardNumber.on('change', (event) => this.displayErrors('card-errors', event));
       }
       if (!this.cardExpiration) {
         this.cardExpiration = this.elements.create(
-          "cardExpiry",
-          this.getElementStyles("Expiration"),
+          'cardExpiry',
+          this.getElementStyles('Expiration'),
         );
-        this.cardExpiration.on("change", (event) =>
-          this.displayErrors("exp-errors", event),
-        );
+        this.cardExpiration.on('change', (event) => this.displayErrors('exp-errors', event));
       }
       if (!this.cardCvc) {
-        this.cardCvc = this.elements.create("cardCvc", {
-          ...this.getElementStyles("Cvc"),
-          placeholder: "CVV",
+        this.cardCvc = this.elements.create('cardCvc', {
+          ...this.getElementStyles('Cvc'),
+          placeholder: 'CVV',
         });
-        this.cardCvc.on("change", (event) =>
-          this.displayErrors("cvc-errors", event),
-        );
+        this.cardCvc.on('change', (event) => this.displayErrors('cvc-errors', event));
       }
-      this.cardNumber.mount("#card-number");
-      this.cardExpiration.mount("#card-expiration");
-      this.cardCvc.mount("#card-cvc");
+      this.cardNumber.mount('#card-number');
+      this.cardExpiration.mount('#card-expiration');
+      this.cardCvc.mount('#card-cvc');
     });
     this.setSubmitFn();
   }
 
   buy() {
-    const name = this.stripeTest.get("name").value;
+    const name = this.stripeTest.get('name').value;
     this.setLoading(true);
-    this.stripeService.stripe
-      //@ts-ignore
-      .createPaymentMethod("card", this.cardNumber, {
-        billing_details: { name },
-      })
-      .toPromise()
-      .then(async (result) => {
-        if (result.paymentMethod) {
-          // should be if this.onsubmit && !initialSubscription
-          if (this.onSubmit && !this.initialSubscription) {
-            this.onSubmit.emit({
-              user: this.user,
-              paymentMethod: result.paymentMethod,
-            });
-          } else {
-            await this.authService.subscribeOperator(
-              this.user,
-              result.paymentMethod.id,
-            );
-            this.analytics.logEvent("subscription-created");
-            this.setBillingCompleted(true);
-            this.setLoading(false);
-            try {
-              const email =
-                this.authService.cachedDetails &&
-                this.authService.cachedDetails.email;
-              if (
-                typeof window !== "undefined" &&
-                //@ts-ignore
-                window.ReactNativeWebView &&
-                email
-              ) {
-                //@ts-ignore
-                window.ReactNativeWebView.postMessage(
-                  JSON.stringify({ event: "signup-complete", email }),
-                );
+    return (
+      this.stripeService.stripe
+        //@ts-ignore
+        .createPaymentMethod('card', this.cardNumber, {
+          billing_details: { name },
+        })
+        .toPromise()
+        .then(async (result) => {
+          if (result.paymentMethod) {
+            // should be if this.onsubmit && !initialSubscription
+            if (this.onSubmit && !this.initialSubscription) {
+              this.onSubmit.emit({
+                user: this.user,
+                paymentMethod: result.paymentMethod,
+              });
+            } else {
+              await this.authService.subscribeOperator(
+                this.user,
+                result.paymentMethod.id,
+                this.houseType,
+                this.tier,
+                this.billingInterval,
+              );
+              this.analytics.logEvent('subscription-created');
+              this.setBillingCompleted(true);
+              this.setLoading(false);
+              try {
+                const email =
+                  this.authService.cachedDetails && this.authService.cachedDetails.email;
+                if (
+                  typeof window !== 'undefined' &&
+                  //@ts-ignore
+                  window.ReactNativeWebView &&
+                  email
+                ) {
+                  //@ts-ignore
+                  window.ReactNativeWebView.postMessage(
+                    JSON.stringify({ event: 'signup-complete', email }),
+                  );
+                }
+              } catch (error) {
+                // postMessage failed; non-fatal
+              } finally {
+                this.authService.clearCachedDetails();
               }
-            } catch (error) {
-              // postMessage failed; non-fatal
-            } finally {
-              this.authService.clearCachedDetails();
             }
+          } else if (result.error) {
+            this.setLoading(false);
+            this.displayErrors('card-errors', result.error);
           }
-        } else if (result.error) {
+        })
+        .catch((error) => {
           this.setLoading(false);
-          this.displayErrors("card-errors", result.error);
-        }
-      })
-      .catch((error) => {
-        this.setLoading(false);
-        this.displayErrors("card-errors", {
-          error: { message: "Payment failed. Please try again." },
-        });
-        this.authService.clearCachedDetails();
-      });
+          // Surface the callable's message when available (e.g. a declined
+          // card or a subscription validation error) rather than a generic
+          // message that hides why checkout failed.
+          const message = (error && (error as any).message) || 'Payment failed. Please try again.';
+          this.displayErrors('card-errors', { error: { message } });
+          this.authService.clearCachedDetails();
+        })
+    );
   }
 }

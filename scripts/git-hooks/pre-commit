@@ -49,4 +49,15 @@ if [ "$FAIL" -ne 0 ]; then
   echo "pre-commit blocked. Fix the issues above, or bypass deliberately with: git commit --no-verify" >&2
   exit 1
 fi
+
+# --- 3. Optional machine-local additions ------------------------------------
+# Put machine-specific tooling in .git/hooks/pre-commit.local (untracked) rather
+# than appending to the installed hook, which makes .git/hooks/pre-commit drift
+# from this file and silently strands the appended code after `exit 0`.
+# Never allowed to block a commit.
+HOOK_DIR=$(dirname "$0")
+if [ -x "$HOOK_DIR/pre-commit.local" ]; then
+  "$HOOK_DIR/pre-commit.local" || true
+fi
+
 exit 0

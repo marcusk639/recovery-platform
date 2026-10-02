@@ -1,50 +1,50 @@
 // Must be first: initializes the default Firebase app before any re-export
 // transitively loads api/firestore.ts (which calls admin.firestore() at module
 // load time). ES import hoisting guarantees this runs before the exports below.
-import "./init";
+import './init';
 
 // Callable functions — auth
-export * from "./callable/auth";
+export * from './callable/auth';
 
 // Callable functions — meetings
-export * from "./callable/meetings";
+export * from './callable/meetings';
 
 // Callable functions — payments
-export * from "./callable/payments";
+export * from './callable/payments';
 
 // Callable functions — subscriptions (includes Stripe Connect account management,
 // sendConfirmationEmail)
-export * from "./callable/subscriptions";
+export * from './callable/subscriptions';
 
 // Callable functions — Oxford House management
-export * from "./callable/oxford";
+export * from './callable/oxford';
+
+// Callable functions — public tier pricing catalog (no auth — see file
+// comment in getTierCatalog.ts for why this callable is deliberately public)
+export * from './callable/getTierCatalog';
 
 // Callable functions — Compliance (RG-SPEC-09 court/drug-court export; Phase 5 stub)
-export * from "./callable/compliance";
+export * from './callable/compliance';
 
 // Callable functions — Analytics (issue #32 v1 — RG-TRACK rent-collection ROI metrics)
-export * from "./callable/analytics";
+export * from './callable/analytics';
 
 // Callable functions — Invitations (server-issued invitation tokens)
-export {
-  createInvitation,
-  peekInvitation,
-  redeemInvitation,
-} from "./callable/invitations";
+export { createInvitation, peekInvitation, redeemInvitation } from './callable/invitations';
 
 // HTTP handlers
-export * from "./http/stripeConnect";
-export * from "./http/universal";
+export * from './http/stripeConnect';
+export * from './http/universal';
 
 // Webhooks
 // The deployed function name is `stripeEvents`; the module exports it as `stripeWebhook`.
 export {
   stripeWebhook as stripeEvents,
   handleStripeConnectWebhook,
-} from "./webhooks/stripeWebhook";
+} from './webhooks/stripeWebhook';
 
 // Firestore triggers
-export * from "./triggers/firestore";
+export * from './triggers/firestore';
 
 // Scheduled functions
-export * from "./scheduled";
+export * from './scheduled';

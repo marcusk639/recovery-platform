@@ -1,26 +1,29 @@
-import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { logger } from "firebase-functions";
-import * as admin from "firebase-admin";
-import { auth } from "firebase-admin";
-import { z } from "zod";
-import { parseInput } from "../validation";
-import { generateInvitationToken } from "../util/tokens";
-import { sendOneInviteEmail } from "../util/inviteEmails";
-import { createClaims } from "../util/claims";
-import { Invitation, InvitationRole } from "../entities/Invitation";
+import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { logger } from 'firebase-functions';
+import * as admin from 'firebase-admin';
+import { auth } from 'firebase-admin';
+import { z } from 'zod';
+import { parseInput } from '../validation';
+import { generateInvitationToken } from '../util/tokens';
+import { sendOneInviteEmail } from '../util/inviteEmails';
+import { createClaims } from '../util/claims';
+import {
+  assertResidentCapacityAvailable,
+  recordResidentAccepted,
+  roleConsumesResidentSlot,
+} from '../util/residentCapacity';
+import { getHouse } from '../api/firestore';
+import { enforceHouseEntitlement } from '../util/entitlement';
+import { Invitation, InvitationRole } from '../entities/Invitation';
 
 /**
  * Fetches an invitation by token, throwing a `not-found` HttpsError when the
  * doc does not exist. Shared by peekInvitation + redeemInvitation.
  */
 async function fetchInvitationByToken(token: string): Promise<Invitation> {
-  const snap = await admin
-    .firestore()
-    .collection("invitations")
-    .doc(token)
-    .get();
+  const snap = await admin.firestore().collection('invitations').doc(token).get();
   if (!snap.exists) {
-    throw new HttpsError("not-found", "Invitation not found");
+    throw new HttpsError('not-found', 'Invitation not found');
   }
   return snap.data() as Invitation;
 }
@@ -32,10 +35,10 @@ async function fetchInvitationByToken(token: string): Promise<Invitation> {
  */
 function assertInvitationUsable(inv: Invitation): void {
   if (inv.redeemedAt) {
-    throw new HttpsError("failed-precondition", "Invitation already redeemed");
+    throw new HttpsError('failed-precondition', 'Invitation already redeemed');
   }
   if (new Date(inv.expiresAt).getTime() < Date.now()) {
-    throw new HttpsError("failed-precondition", "Invitation has expired");
+    throw new HttpsError('failed-precondition', 'Invitation has expired');
   }
 }
 
@@ -44,11 +47,10 @@ function assertInvitationUsable(inv: Invitation): void {
  * any downstream callers reference this same constant. Typed as a non-empty
  * readonly tuple so `z.enum(ROLES)` accepts it directly (no cast needed).
  */
-export const ROLES = [
-  "admin",
-  "guest",
-  "senior-peer",
-] as const satisfies readonly [InvitationRole, ...InvitationRole[]];
+export const ROLES = ['admin', 'guest', 'senior-peer'] as const satisfies readonly [
+  InvitationRole,
+  ...InvitationRole[],
+];
 
 const createInvitationSchema = z.object({
   email: z.string().email(),
@@ -75,20 +77,20 @@ function buildInviteLink(token: string): string {
 
 export const createInvitation = onCall(async (request) => {
   if (!request.auth) {
-    throw new HttpsError("unauthenticated", "Login required");
+    throw new HttpsError('unauthenticated', 'Login required');
   }
   const input = parseInput(createInvitationSchema, request.data);
 
   // ── Authorization: caller must be owner or existing admin/superAdmin ──
-  const houseSnap = await admin
-    .firestore()
-    .collection("houses")
-    .doc(input.houseId)
-    .get();
+  const houseSnap = await admin.firestore().collection('houses').doc(input.houseId).get();
   if (!houseSnap.exists) {
-    throw new HttpsError("not-found", "House not found");
+    throw new HttpsError('not-found', 'House not found');
   }
-  const house = houseSnap.data() as { ownerId?: string };
+  const house = houseSnap.data() as {
+    ownerId?: string;
+    subscriptionStatus?: string | null;
+    guestGraceEndsAt?: string | null;
+  };
   const callerUid = request.auth.uid;
   const callerClaims = (request.auth.token ?? {}) as {
     admin?: Record<string, boolean>;
@@ -98,14 +100,28 @@ export const createInvitation = onCall(async (request) => {
   const isAdmin = callerClaims.admin?.[input.houseId] === true;
   const isSuperAdmin = callerClaims.superAdmin?.[input.houseId] === true;
   if (!isOwner && !isAdmin && !isSuperAdmin) {
-    logger.warn("createInvitation: denied", {
+    logger.warn('createInvitation: denied', {
       callerUid,
       houseId: input.houseId,
     });
     throw new HttpsError(
-      "permission-denied",
-      "Only the house owner or an existing admin can send invitations",
+      'permission-denied',
+      'Only the house owner or an existing admin can send invitations',
     );
+  }
+
+  // Onboarding new people is product usage. Redeeming an already-sent
+  // invitation stays ungated so an invitee mid-flow is not stranded by the
+  // operator lapsing after the invite went out.
+  await enforceHouseEntitlement(house, input.houseId);
+
+  // ── Resident capacity: guest/senior-peer invitations consume a slot on
+  // the operator's subscription. Counts existing residents + outstanding
+  // pending invitations so an operator can't bypass the cap by sending many
+  // invitations at once and having them all accepted. Admin invitations
+  // grant house-staff access, not a resident/guest claim, so they're exempt.
+  if (roleConsumesResidentSlot(input.role)) {
+    await assertResidentCapacityAvailable(house.ownerId, input.houseId);
   }
 
   // ── Build + write the invitation doc ─────────────────────────────────
@@ -123,20 +139,20 @@ export const createInvitation = onCall(async (request) => {
       initialPhase: input.initialPhase,
     }),
   };
-  await admin.firestore().collection("invitations").doc(token).set(invitation);
+  await admin.firestore().collection('invitations').doc(token).set(invitation);
 
   // ── Send the email via the extracted helper ──────────────────────────
   const link = buildInviteLink(token);
   // role string for the email template: 'admin' | 'guest' (senior-peer
   // is templated as 'guest' for the recipient — they see the same email).
-  const emailRole = input.role === "senior-peer" ? "guest" : input.role;
+  const emailRole = input.role === 'senior-peer' ? 'guest' : input.role;
   await sendOneInviteEmail({
     toEmail: input.email,
     inviteLink: link,
     role: emailRole,
   });
 
-  logger.info("createInvitation: issued", {
+  logger.info('createInvitation: issued', {
     callerUid,
     houseId: input.houseId,
     role: input.role,
@@ -188,44 +204,65 @@ const redeemInvitationSchema = z.object({ token: z.string().min(1) });
  */
 export const redeemInvitation = onCall(async (request) => {
   if (!request.auth) {
-    throw new HttpsError("unauthenticated", "Login required");
+    throw new HttpsError('unauthenticated', 'Login required');
   }
   const { token } = parseInput(redeemInvitationSchema, request.data);
   const callerUid = request.auth.uid;
-  const callerEmail = (
-    (request.auth.token?.email as string | undefined) ?? ""
-  ).toLowerCase();
+  const callerEmail = ((request.auth.token?.email as string | undefined) ?? '').toLowerCase();
 
   const inv = await fetchInvitationByToken(token);
   assertInvitationUsable(inv);
 
   if (inv.invitedEmail.toLowerCase() !== callerEmail) {
-    logger.warn("redeemInvitation: email mismatch", { callerUid });
-    throw new HttpsError(
-      "permission-denied",
-      "Invitation was issued to a different email address",
-    );
+    logger.warn('redeemInvitation: email mismatch', { callerUid });
+    throw new HttpsError('permission-denied', 'Invitation was issued to a different email address');
+  }
+
+  // ── Resident capacity re-check: the invitation may have been created
+  // before a downgrade, or may be racing another acceptance for the same
+  // house. Re-derive the owner from the house doc — inv.inviterUid may be
+  // an admin, not necessarily the billing owner who holds the subscription.
+  let residentOwnerId: string | undefined;
+  if (roleConsumesResidentSlot(inv.role)) {
+    const house = await getHouse(inv.houseId);
+    residentOwnerId = house?.ownerId;
+    await assertResidentCapacityAvailable(residentOwnerId, inv.houseId);
   }
 
   // Map role → claims. createClaims is the canonical merger; we call it
   // once for guest+senior-peer and a second time to layer admin on top
   // of senior-peer. Mirrors addGuestAuthorization at callable/auth.ts:50-72.
-  if (inv.role === "guest" || inv.role === "senior-peer") {
-    const claims = await createClaims(callerUid, [inv.houseId], "guest", false);
+  if (inv.role === 'guest' || inv.role === 'senior-peer') {
+    const claims = await createClaims(callerUid, [inv.houseId], 'guest', false);
     await auth().setCustomUserClaims(callerUid, claims);
   }
-  if (inv.role === "admin" || inv.role === "senior-peer") {
-    const claims = await createClaims(callerUid, [inv.houseId], "admin", false);
+  if (inv.role === 'admin' || inv.role === 'senior-peer') {
+    const claims = await createClaims(callerUid, [inv.houseId], 'admin', false);
     await auth().setCustomUserClaims(callerUid, claims);
   }
 
-  const invitationRef = admin.firestore().collection("invitations").doc(token);
+  const invitationRef = admin.firestore().collection('invitations').doc(token);
   await invitationRef.update({
     redeemedAt: new Date().toISOString(),
     redeemedByUid: callerUid,
   });
 
-  logger.info("redeemInvitation: success", {
+  if (roleConsumesResidentSlot(inv.role)) {
+    // Best-effort: the claim grant + invitation redemption above already
+    // succeeded, so a failure here must not fail the whole call — it would
+    // incorrectly report the redemption as failed after access was already
+    // granted. Occupancy tracking is a cap-enforcement input, not the
+    // privilege boundary.
+    try {
+      await recordResidentAccepted(residentOwnerId, inv.houseId);
+    } catch {
+      logger.warn('redeemInvitation: failed to record resident occupancy', {
+        houseId: inv.houseId,
+      });
+    }
+  }
+
+  logger.info('redeemInvitation: success', {
     callerUid,
     houseId: inv.houseId,
     role: inv.role,

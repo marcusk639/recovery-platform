@@ -1,0 +1,12 @@
+<div *ngIf="tier" class="order-summary text-left p-3 mb-3 border rounded">
+  <div class="d-flex justify-content-between">
+    <strong>{{ tier.label }}</strong>
+    <span>{{ formattedAmount }} / {{ effectiveInterval === "year" ? "yr" : "mo" }}</span>
+  </div>
+  <div *ngIf="billingInterval === 'year' && effectiveInterval === 'month'" class="text-muted small mt-1">
+    Annual billing isn't available for this plan yet — you'll be billed monthly.
+  </div>
+  <div class="text-muted small mt-2">
+    {{ trialDays }}-day free trial. You won't be charged until {{ firstChargeDate | date: "mediumDate" }}.
+  </div>
+</div>

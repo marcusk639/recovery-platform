@@ -113,6 +113,12 @@ export const rentRoiMetrics = onCall(async (request) => {
     );
   }
 
+  // Gated on TIER CAPABILITY below, deliberately NOT on house entitlement.
+  // tierAllows asks whether the plan includes analytics; it never asks whether
+  // the subscription is paid, so a lapsed operator on a qualifying tier keeps
+  // these metrics. Accepted rather than overlooked: read-only reporting over
+  // the operator's own house, and denying it buys no leverage that the write
+  // gates do not already apply. Do not add enforceHouseEntitlement here.
   const operator = await getUser(house.superAdminId);
   const sub = operator?.subscriptionMetadata;
   const tier = sub?.tier as TierKey | undefined;

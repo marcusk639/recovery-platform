@@ -31,10 +31,6 @@ service cloud.firestore {
       return hasHouseRole() && houseId in request.auth.token.guest && isDemoScopedHouses([houseId]);
     }
     
-    function isPotentialSuperAdmin() {
-      return signedIn() && request.auth.token.potentialSuperAdmin == true;
-    }
-    
     function getRoleFromClaim(role) {
       return request.auth.token[role];
     }
@@ -218,7 +214,17 @@ service cloud.firestore {
       // isGuest()'s internal gate alone) since this rule also calls the raw
       // hasSuperAdminRoleInHouse/hasAdminRoleInHouse helpers directly, which
       // do NOT include the demo-account house-scoping check on their own.
+      // SERVER-OWNED FIELDS. subscriptionStatus and guestGraceEndsAt are read by
+      // the server entitlement gate, the mobile operator gate and
+      // houseOxfordActive() — a client able to write them could grant itself
+      // access. This guard sits ABOVE the role branches on purpose: the
+      // superAdmin branch skips the sensitive-field allowlist entirely, so
+      // putting these in that list alone would leave the hole open for exactly
+      // the role most able to exploit it. Written only via the Admin SDK, which
+      // bypasses rules.
       allow update: if isDemoScopedHouses([houseId]) &&
+        !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['subscriptionStatus', 'guestGraceEndsAt']) &&
         (hasSuperAdminRoleInHouse([houseId]) ||
           ((hasAdminRoleInHouse([houseId]) || hasGuestRoleInHouse([houseId])) && !request.resource.data.diff(resource.data).affectedKeys()
             .hasAny(['stripeAccountId', 'stripeStatus', 'monthlyRent', 'weeklyRent', 'adminIds', 'ownerId'])));
@@ -344,7 +350,30 @@ service cloud.firestore {
     }
     
     match /users/{userId} {
-      allow read, write: if isSameUser(userId);
+      allow read: if isSameUser(userId);
+
+      // subscriptionMetadata is SERVER-OWNED. Both the server entitlement gate
+      // (functions/src/util/entitlement.ts) and the house-create trigger
+      // (setHouseSubscriptionStatusOnCreate) derive access from
+      // subscriptionMetadata.status, so a client able to write it could grant
+      // itself access — and the server-side stamp would be forgeable too. The
+      // Admin SDK bypasses rules, so legitimate server writes are unaffected.
+      //
+      // On create the client writes the whole User entity, whose default status
+      // is "", so that is permitted; anything already claiming a real status is
+      // not.
+      allow create: if isSameUser(userId) &&
+        (!('subscriptionMetadata' in request.resource.data) ||
+          !('status' in request.resource.data.subscriptionMetadata) ||
+          request.resource.data.subscriptionMetadata.status == '');
+
+      // affectedKeys() reports only keys whose value actually changed, so a
+      // whole-object write that echoes the same metadata back still passes.
+      allow update: if isSameUser(userId) &&
+        !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['subscriptionMetadata']);
+
+      allow delete: if isSameUser(userId);
     }
     
     match /notifications/{notificationId} {
@@ -383,7 +412,15 @@ service cloud.firestore {
     match /activities/{activityId} {
       allow read: if isGuest([resource.data.houseId]) || isAdmin([resource.data.houseId]);
       allow create: if isSameUser(request.resource.data.loggedBy) || isAdmin([request.resource.data.houseId]);
-      allow update: if isSameUser(resource.data.loggedBy) || isAdmin([resource.data.houseId]);
+      // `verified`/`verifiedBy` feed the Verified column of the court-ready
+      // compliance export, so the resident who logged the activity must not be
+      // able to self-certify their own attendance. Admins may verify; the
+      // logging user may edit everything else. diff() only flags real changes,
+      // so a whole-object write echoing the same flags back still passes.
+      allow update: if isAdmin([resource.data.houseId]) ||
+        (isSameUser(resource.data.loggedBy) &&
+          !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['verified', 'verifiedBy']));
       allow delete: if isAdmin([resource.data.houseId]);
     }
 

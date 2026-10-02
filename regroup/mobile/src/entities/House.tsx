@@ -75,9 +75,19 @@ export class House extends BaseEntity {
   rentFrequency: 'weekly' | 'monthly' | 'both' = 'both';
   pendingAdminInvites?: string[] = [];
   pendingGuestInvites?: string[] = [];
-  // Default 'trialing' ensures new houses start with 14-day trial period.
-  // After the migration backfill, all existing houses have explicit status.
-  subscriptionStatus: SubscriptionStatus = 'trialing';
+  // LOAD-BEARING DEFAULT, not a placeholder: the setup wizard builds a house
+  // with `new House()` (screens/SetupWizards/OrgSetup.tsx, HouseSetup.tsx) and
+  // nothing else on the client writes this field, so this is what stamps a new
+  // house's status. The server denies an absent status
+  // (functions/src/util/entitlement.ts), so emptying this default would lock
+  // out every newly created house. Stamping it server-side at house creation
+  // is the real fix; until then, do not "clean this up".
+  // (Trial length itself is TRIAL_PERIOD_DAYS in functions/src/api/stripe.ts.)
+  // SERVER-OWNED. Deliberately no default: a client-side 'trialing' meant a new
+  // operator's access rested on a value the client wrote about itself. It is now
+  // stamped by setHouseSubscriptionStatusOnCreate from the operator's
+  // subscription, and firestore.rules denies client writes to it.
+  subscriptionStatus?: SubscriptionStatus = undefined;
   guestGraceEndsAt?: string = undefined;
   isDemoHouse: boolean = false;
   // House model type — gates Oxford House features

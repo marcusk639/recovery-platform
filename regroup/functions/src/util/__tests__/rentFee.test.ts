@@ -6,19 +6,17 @@ jest.mock("../../config", () => ({
     achRate: 0,
     achCapCents: 300,
     cardPlatformRate: 0.0075,
-    legacyRate: 0.02,
   },
 }));
 
 import { computeApplicationFee, RentFeeConfig } from "../rentFee";
 
-// Production-default model (flat $2 ACH, 0.75% card, 2% legacy).
+// Production-default model (flat $2 ACH, 0.75% card).
 const DEFAULT_FEES: RentFeeConfig = {
   achFlatCents: 200,
   achRate: 0,
   achCapCents: 300,
   cardPlatformRate: 0.0075,
-  legacyRate: 0.02,
 };
 
 describe("computeApplicationFee", () => {
@@ -26,7 +24,7 @@ describe("computeApplicationFee", () => {
     // 0.75% of 15000 = 112.5 -> 113
     expect(
       computeApplicationFee(
-        { amountCents: 15000, paymentMethodType: "card", isLegacyHouse: false },
+        { amountCents: 15000, paymentMethodType: "card" },
         DEFAULT_FEES,
       ),
     ).toBe(113);
@@ -38,42 +36,22 @@ describe("computeApplicationFee", () => {
         {
           amountCents: 15000,
           paymentMethodType: "us_bank_account",
-          isLegacyHouse: false,
         },
         DEFAULT_FEES,
       ),
     ).toBe(200);
     expect(
       computeApplicationFee(
-        { amountCents: 90000, paymentMethodType: "ach", isLegacyHouse: false },
+        { amountCents: 90000, paymentMethodType: "ach" },
         DEFAULT_FEES,
       ),
     ).toBe(200);
-  });
-
-  it("legacy house: applies the flat 2% fee regardless of method", () => {
-    expect(
-      computeApplicationFee(
-        { amountCents: 15000, paymentMethodType: "card", isLegacyHouse: true },
-        DEFAULT_FEES,
-      ),
-    ).toBe(300);
-    expect(
-      computeApplicationFee(
-        {
-          amountCents: 15000,
-          paymentMethodType: "us_bank_account",
-          isLegacyHouse: true,
-        },
-        DEFAULT_FEES,
-      ),
-    ).toBe(300);
   });
 
   it("clamps the flat ACH fee to the rent amount for tiny amounts", () => {
     expect(
       computeApplicationFee(
-        { amountCents: 100, paymentMethodType: "ach", isLegacyHouse: false },
+        { amountCents: 100, paymentMethodType: "ach" },
         DEFAULT_FEES,
       ),
     ).toBe(100);
@@ -81,7 +59,7 @@ describe("computeApplicationFee", () => {
 
   it("always returns an integer (Stripe rejects float amounts)", () => {
     const fee = computeApplicationFee(
-      { amountCents: 12345, paymentMethodType: "card", isLegacyHouse: false },
+      { amountCents: 12345, paymentMethodType: "card" },
       DEFAULT_FEES,
     );
     expect(Number.isInteger(fee)).toBe(true);
@@ -92,14 +70,14 @@ describe("computeApplicationFee", () => {
     // 0.5% of 100000 = 500 -> capped at 300
     expect(
       computeApplicationFee(
-        { amountCents: 100000, paymentMethodType: "ach", isLegacyHouse: false },
+        { amountCents: 100000, paymentMethodType: "ach" },
         ratedFees,
       ),
     ).toBe(300);
     // 0.5% of 40000 = 200 -> under cap
     expect(
       computeApplicationFee(
-        { amountCents: 40000, paymentMethodType: "ach", isLegacyHouse: false },
+        { amountCents: 40000, paymentMethodType: "ach" },
         ratedFees,
       ),
     ).toBe(200);
@@ -111,29 +89,23 @@ describe("computeApplicationFee", () => {
       computeApplicationFee({
         amountCents: 20000,
         paymentMethodType: "card",
-        isLegacyHouse: false,
       }),
     ).toBe(150);
   });
 
   describe("integer / non-negative invariant (Stripe rejects floats & negatives)", () => {
-    const cases: {
-      method: "card" | "ach" | "us_bank_account";
-      legacy: boolean;
-    }[] = [
-      { method: "card", legacy: false },
-      { method: "ach", legacy: false },
-      { method: "us_bank_account", legacy: false },
-      { method: "card", legacy: true },
+    const methods: ("card" | "ach" | "us_bank_account")[] = [
+      "card",
+      "ach",
+      "us_bank_account",
     ];
 
     it("returns an integer fee for a fractional amountCents on every path", () => {
-      for (const { method, legacy } of cases) {
+      for (const method of methods) {
         const fee = computeApplicationFee(
           {
             amountCents: 150.5,
             paymentMethodType: method,
-            isLegacyHouse: legacy,
           },
           DEFAULT_FEES,
         );
@@ -145,10 +117,10 @@ describe("computeApplicationFee", () => {
 
     it("returns 0 for a zero or negative amountCents (no charge to fee)", () => {
       for (const amountCents of [0, -1, -15000]) {
-        for (const { method, legacy } of cases) {
+        for (const method of methods) {
           expect(
             computeApplicationFee(
-              { amountCents, paymentMethodType: method, isLegacyHouse: legacy },
+              { amountCents, paymentMethodType: method },
               DEFAULT_FEES,
             ),
           ).toBe(0);
@@ -160,7 +132,7 @@ describe("computeApplicationFee", () => {
       for (const amountCents of [NaN, Infinity, -Infinity]) {
         expect(
           computeApplicationFee(
-            { amountCents, paymentMethodType: "ach", isLegacyHouse: false },
+            { amountCents, paymentMethodType: "ach" },
             DEFAULT_FEES,
           ),
         ).toBe(0);
@@ -174,7 +146,6 @@ describe("computeApplicationFee", () => {
           {
             amountCents: 150.5,
             paymentMethodType: "ach",
-            isLegacyHouse: false,
           },
           DEFAULT_FEES,
         ),

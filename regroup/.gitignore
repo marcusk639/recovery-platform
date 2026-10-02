@@ -1,9 +1,22 @@
 ## Compiled JavaScript files
-**/*.js
+#
+# Scoped to real build output. This was `**/*.js`, which also hid hand-written
+# source: jest.config.rules.js and jest.config.integration.js could not be
+# committed without -f, so `npm run test:rules` / `test:integration` referenced
+# configs that did not exist in a fresh clone and ~2.3k lines of security-rules
+# tests never ran. jest.config.js and jest.setup.js are tracked only because
+# they were force-added. The `!scripts/*.js` negation that used to live here was
+# a patch for the same over-broad rule and is no longer needed.
+#
+# Artifact list matches the one in the root CLAUDE.md "Gotchas" section.
+**/lib/**/*.js
+**/dist/**/*.js
+**/build/**/*.js
+**/public/**/*.js
+**/*.min.js
+**/*-es5.js
+**/*-es2015.js
 **/*.js.map
-
-# ...but hand-written ops tooling in scripts/ is source, not build output.
-!scripts/*.js
 
 # Typescript v1 declaration files
 typings/

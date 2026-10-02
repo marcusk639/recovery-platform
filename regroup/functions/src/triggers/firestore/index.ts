@@ -15,6 +15,7 @@ import { Guest } from "../../entities/Guest";
 import { sendNotification } from "../../util/notifications";
 import { sendEmail, regroupEmail } from "../../util/email";
 import {
+  getUser,
   guestCollection,
   houseCollection,
   notificationCollection,
@@ -24,6 +25,7 @@ import {
 import { getCurrentTime } from "../../util/date";
 import { deleteClaim } from "../../util/claims";
 import { SENDGRID_API_KEY } from "../../config";
+import { operatorStatusToHouseStatus } from "../../util/entitlement";
 
 /**
  * Sends a push notification when a new document is created in /notifications/{notificationId}.
@@ -68,6 +70,58 @@ export const notifyNewHouseCreated = onDocumentCreated(
     } catch (error) {
       logger.error("notifyNewHouseCreated: email delivery failed", { error });
     }
+  },
+);
+
+/**
+ * Stamps `house.subscriptionStatus` from the operator's subscription when a
+ * house is created.
+ *
+ * This is the ONLY path that sets an initial status. No Stripe webhook fires on
+ * subscription creation — all four webhook writers sit in existing-subscription
+ * handlers (invoice.payment_succeeded/failed, subscription.deleted/updated) — and
+ * createOperatorSubscription cannot write it because houses do not exist yet at
+ * checkout time. Deriving it from a Firestore trigger also makes initial
+ * entitlement independent of webhook health, which matters because that endpoint
+ * has a history of delivery failures.
+ *
+ * Separate from notifyNewHouseCreated on purpose: an email failure must not be
+ * able to prevent the entitlement write.
+ */
+export const setHouseSubscriptionStatusOnCreate = onDocumentCreated(
+  "/houses/{houseId}",
+  async (event) => {
+    const houseId = event.params.houseId;
+    const data = event.data?.data();
+    if (!data) return;
+
+    const house = data as House;
+    const operatorId = house.superAdminId || house.ownerId;
+    if (!operatorId) {
+      logger.error("house.created_without_operator", { houseId });
+      return;
+    }
+
+    const operator = await getUser(operatorId);
+    const operatorStatus = operator?.subscriptionMetadata?.status;
+    const status = operatorStatusToHouseStatus(operatorStatus);
+
+    if (!status) {
+      // Invariant: a house may only exist once its operator has a subscription,
+      // even a trialing one. Reaching here means the signup funnel created a
+      // house too early, or the operator's status is unrecognized — a bug, not a
+      // state to model. Deny, and log loudly enough to be noticed.
+      logger.error("house.created_without_subscription", {
+        houseId,
+        operatorId,
+        operatorStatus: operatorStatus ?? null,
+      });
+      await event.data!.ref.update({ subscriptionStatus: "canceled" });
+      return;
+    }
+
+    await event.data!.ref.update({ subscriptionStatus: status });
+    logger.info("house.subscription_status_stamped", { houseId, status });
   },
 );
 

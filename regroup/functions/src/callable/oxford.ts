@@ -1,12 +1,13 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import { z } from "zod";
-import { STRIPE_SECRET_KEY } from "../config";
+import { STRIPE_SECRET_KEY, TierKey } from "../config";
 import {
-  OXFORD_PRICE_ID,
-  HOUSE_PRICE_ID,
   swapSubscriptionItemPrice,
+  getSubscriptionItemInterval,
 } from "../api/stripe";
+import { resolveTierPriceId } from "../util/tierPricing";
+import { enforceHouseEntitlement } from "../util/entitlement";
 import {
   getHouse,
   getUser,
@@ -61,9 +62,14 @@ export const setOxfordEnabled = onCall(
       );
     }
 
+    // Changing the plan shape is product usage, not a route back to paying.
+    // A lapsed operator should fix billing, not re-price their subscription.
+    await enforceHouseEntitlement(house, houseId);
+
     const operatorId = house.superAdminId;
     const user = await getUser(operatorId);
-    if (!user?.subscriptionMetadata?.items?.houseItemId) {
+    const meta = user?.subscriptionMetadata;
+    if (!meta?.subscriptionItemId || !meta.tier) {
       throw new HttpsError(
         "failed-precondition",
         "No active subscription — subscribe before enabling Oxford",
@@ -76,16 +82,30 @@ export const setOxfordEnabled = onCall(
       return { success: true, changed: false };
     }
 
-    const newPriceId = enabled ? OXFORD_PRICE_ID : HOUSE_PRICE_ID;
-    const rollbackPriceId = enabled ? HOUSE_PRICE_ID : OXFORD_PRICE_ID;
-    const houseItemId = user.subscriptionMetadata.items.houseItemId;
+    // The tier model bills a single flat-fee line item; Oxford vs traditional is
+    // a price swap on that item, resolved for the tier the operator is actually on.
+    const subscriptionItemId = meta.subscriptionItemId;
+    const tier = meta.tier as TierKey;
+    const billingInterval = await getSubscriptionItemInterval(
+      subscriptionItemId,
+    );
+    const newPriceId = resolveTierPriceId(
+      enabled ? "oxford" : "traditional",
+      tier,
+      billingInterval,
+    );
+    const rollbackPriceId = resolveTierPriceId(
+      enabled ? "traditional" : "oxford",
+      tier,
+      billingInterval,
+    );
 
     // Step 1: Stripe swap. Firestore is never touched if this throws.
-    await swapSubscriptionItemPrice(houseItemId, newPriceId);
+    await swapSubscriptionItemPrice(subscriptionItemId, newPriceId);
     logger.info("setOxfordEnabled: Stripe price swapped", {
       houseId,
       enabled,
-      houseItemId,
+      subscriptionItemId,
       newPriceId,
     });
 
@@ -110,7 +130,7 @@ export const setOxfordEnabled = onCall(
         },
       );
       try {
-        await swapSubscriptionItemPrice(houseItemId, rollbackPriceId);
+        await swapSubscriptionItemPrice(subscriptionItemId, rollbackPriceId);
         logger.info("setOxfordEnabled: Stripe rollback succeeded", { houseId });
       } catch (rollbackErr) {
         // Stripe is now out of sync with intended state. Operator must be notified.
@@ -119,7 +139,7 @@ export const setOxfordEnabled = onCall(
           {
             houseId,
             operatorId,
-            houseItemId,
+            subscriptionItemId,
             intendedPriceId: rollbackPriceId,
             rollbackError: (rollbackErr as Error).message,
           },
@@ -170,16 +190,16 @@ export const castOxfordVote = onCall(async (request) => {
   const house = await getHouse(houseId);
   if (!house) throw new HttpsError("not-found", "House not found");
 
-  const oxfordActive =
-    house.houseType === "oxford" &&
-    (house.subscriptionStatus === "active" ||
-      house.subscriptionStatus === "trialing");
-  if (!oxfordActive) {
+  if (house.houseType !== "oxford") {
     throw new HttpsError(
       "failed-precondition",
       "Oxford voting is not active for this house",
     );
   }
+  // Shared entitlement gate. Replaces an inline active/trialing check, which
+  // denied a past_due house still inside its grace window and could not be
+  // overridden by the paywall kill switch.
+  await enforceHouseEntitlement(house, houseId);
 
   // The `guest` custom claim only proves the caller is A guest of this house
   // (houseId -> true), not which guest doc is theirs — resolve that server-side

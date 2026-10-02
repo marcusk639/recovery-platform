@@ -20,6 +20,8 @@
     "test:e2e:run:android": "./e2e/run-tests.sh --platform android",
     "test:integration": "jest --config jest.config.integration.js --no-coverage",
     "test:rules": "jest --config jest.config.rules.js --no-coverage --forceExit",
+    "deploy:rules": "cd firebase && firebase deploy --only firestore:rules,storage --project phoenix-cleanhouse",
+    "deploy:rules:dry": "cd firebase && firebase deploy --only firestore:rules,storage --project phoenix-cleanhouse --dry-run",
     "test:e2e:dispute": "./e2e/run-tests.sh --suite dispute --platform ios",
     "test:e2e:verification": "./e2e/run-tests.sh --suite verification --platform ios",
     "test:e2e:auth": "./e2e/run-tests.sh --suite auth --platform ios",

@@ -1,33 +1,33 @@
-import * as admin from "firebase-admin";
-import { logger } from "firebase-functions/v2";
-import { House } from "../entities/House";
-import { Notification } from "../entities/Notification";
-import { Guest } from "../entities/Guest";
-import { Dispute } from "../entities/Dispute";
-import { User } from "../entities/User";
-import { getGeohashRange } from "../util/location";
-import Stripe from "stripe";
-import { getQueriesForDocumentsAround } from "../util/geohash";
-import { Contact } from "../entities/Contact";
+import * as admin from 'firebase-admin';
+import { logger } from 'firebase-functions/v2';
+import { House } from '../entities/House';
+import { Notification } from '../entities/Notification';
+import { Guest } from '../entities/Guest';
+import { Dispute } from '../entities/Dispute';
+import { User } from '../entities/User';
+import { getGeohashRange } from '../util/location';
+import Stripe from 'stripe';
+import { getQueriesForDocumentsAround } from '../util/geohash';
+import { Contact } from '../entities/Contact';
 
 export const app = admin.app();
 export const ratsFirestore = admin.firestore();
-export const guestCollection = ratsFirestore.collection("guests");
-export const weeksCollection = ratsFirestore.collection("guest-weeks");
-export const weekSummariesCollection =
-  ratsFirestore.collection("week-summaries");
-export const userCollection = ratsFirestore.collection("users");
-export const houseCollection = ratsFirestore.collection("houses");
-export const notificationCollection = ratsFirestore.collection("notifications");
-export const meetingCollection = ratsFirestore.collection("meetings");
-export const reportCollection = ratsFirestore.collection("guest-reports");
-export const adminCollection = ratsFirestore.collection("admins");
-export const stripeEventCollection = ratsFirestore.collection("stripeEvents");
-export const contactCollection = ratsFirestore.collection("contact");
-export const subscriptionCollection = ratsFirestore.collection("subscriptions");
-export const drugTestCollection = ratsFirestore.collection("drug-tests");
-export const activityCollection = ratsFirestore.collection("activities");
-export const paymentsCollection = ratsFirestore.collection("payments");
+export const guestCollection = ratsFirestore.collection('guests');
+export const weeksCollection = ratsFirestore.collection('guest-weeks');
+export const weekSummariesCollection = ratsFirestore.collection('week-summaries');
+export const userCollection = ratsFirestore.collection('users');
+export const houseCollection = ratsFirestore.collection('houses');
+export const notificationCollection = ratsFirestore.collection('notifications');
+export const meetingCollection = ratsFirestore.collection('meetings');
+export const reportCollection = ratsFirestore.collection('guest-reports');
+export const adminCollection = ratsFirestore.collection('admins');
+export const stripeEventCollection = ratsFirestore.collection('stripeEvents');
+export const contactCollection = ratsFirestore.collection('contact');
+export const subscriptionCollection = ratsFirestore.collection('subscriptions');
+export const drugTestCollection = ratsFirestore.collection('drug-tests');
+export const activityCollection = ratsFirestore.collection('activities');
+export const paymentsCollection = ratsFirestore.collection('payments');
+export const invitationCollection = ratsFirestore.collection('invitations');
 
 /**
  * Shape of a document in the `subscriptions` collection. Read by the Stripe
@@ -44,7 +44,7 @@ export interface SubscriptionDoc {
   houseId: string;
   stripeCustomerId: string;
   stripeSubscriptionId: string;
-  status: "active" | "past_due" | "canceled" | "unpaid" | "trialing";
+  status: 'active' | 'past_due' | 'canceled' | 'unpaid' | 'trialing' | 'cancelling';
   currentPeriodEnd: string;
   planId: string;
   guestCount: number;
@@ -58,9 +58,7 @@ export interface SubscriptionDoc {
  * webhook event never clobbers fields it doesn't own.
  */
 export async function upsertSubscriptionDoc(doc: SubscriptionDoc) {
-  await subscriptionCollection
-    .doc(doc.stripeSubscriptionId)
-    .set(doc, { merge: true });
+  await subscriptionCollection.doc(doc.stripeSubscriptionId).set(doc, { merge: true });
 }
 
 export const createHouseId = () => houseCollection.doc().id;
@@ -88,7 +86,7 @@ export async function getHouses(
   attribute: string,
   value: string,
 ): Promise<{ [id: string]: House }> {
-  const result = await houseCollection.where(attribute, "==", value).get();
+  const result = await houseCollection.where(attribute, '==', value).get();
   return shapeHouses(result.docs);
 }
 
@@ -97,15 +95,11 @@ export async function getAllHouses() {
   return shapeHouses(result.docs);
 }
 
-export async function getNearbyHouses(
-  lat: number,
-  lng: number,
-  distanceInMiles: number,
-) {
+export async function getNearbyHouses(lat: number, lng: number, distanceInMiles: number) {
   const range = getGeohashRange(lat, lng, distanceInMiles);
   const result = await houseCollection
-    .where("geohash", ">=", range.lower)
-    .where("geohash", "<=", range.upper)
+    .where('geohash', '>=', range.lower)
+    .where('geohash', '<=', range.upper)
     .get();
   return shapeHouses(result.docs);
 }
@@ -119,35 +113,27 @@ export async function getHousesByAttributes(
   operator: FirebaseFirestore.WhereFilterOp,
   values: string[],
 ) {
-  let query = houseCollection.where(attributes[0], "==", values[0]);
+  let query = houseCollection.where(attributes[0], '==', values[0]);
   const slicedValues = values.slice(1);
   attributes
     .slice(1)
     .forEach(
-      (attribute, index, atts) =>
-        (query = query.where(attribute, operator, slicedValues[index])),
+      (attribute, index, atts) => (query = query.where(attribute, operator, slicedValues[index])),
     );
   const result = await query.get();
   return shapeHouses(result.docs);
 }
 
-export async function getUserBySubscription(
-  subscriptionId: string,
-): Promise<User | null> {
+export async function getUserBySubscription(subscriptionId: string): Promise<User | null> {
   const result = await userCollection
-    .where("subscriptionMetadata.subscriptionId", "==", subscriptionId)
+    .where('subscriptionMetadata.subscriptionId', '==', subscriptionId)
     .get();
   if (result.empty) return null;
   return result.docs[0].data() as User;
 }
 
-export async function updateHouseStatuses(
-  superAdminId: string,
-  status: string,
-) {
-  const result = await houseCollection
-    .where("superAdminIds", "array-contains", superAdminId)
-    .get();
+export async function updateHouseStatuses(superAdminId: string, status: string) {
+  const result = await houseCollection.where('superAdminIds', 'array-contains', superAdminId).get();
   const batch = ratsFirestore.batch();
   result.docs.forEach((doc) => {
     batch.update(doc.ref, { subscriptionStatus: status });
@@ -155,13 +141,10 @@ export async function updateHouseStatuses(
   return batch.commit();
 }
 
-export async function updateUserSubscriptionStatus(
-  subscriptionId: string,
-  status: string,
-) {
+export async function updateUserSubscriptionStatus(subscriptionId: string, status: string) {
   const user = await getUserBySubscription(subscriptionId);
   if (!user) {
-    logger.warn("updateUserSubscriptionStatus: no user for subscription");
+    logger.warn('updateUserSubscriptionStatus: no user for subscription');
     return;
   }
   const subscriptionMetadata: Partial<User> = {
@@ -181,7 +164,7 @@ export async function updateUserPeriodEnd(
 ) {
   const user = await getUserBySubscription(subscriptionId);
   if (!user) {
-    logger.warn("updateUserPeriodEnd: no user for subscription");
+    logger.warn('updateUserPeriodEnd: no user for subscription');
     return;
   }
   const subscriptionMetadata: Partial<User> = {
@@ -191,14 +174,15 @@ export async function updateUserPeriodEnd(
     },
   };
   if (cancel) {
-    subscriptionMetadata.subscriptionMetadata!.status = "cancelled";
-    await updateHouseStatuses(user.adminId, "cancelled");
+    // "canceled" is Stripe's spelling and the canonical one across the codebase.
+    subscriptionMetadata.subscriptionMetadata!.status = 'canceled';
+    await updateHouseStatuses(user.adminId, 'canceled');
   }
   return userCollection.doc(user.id!).update(subscriptionMetadata);
 }
 
 export async function getUsers(attribute: string, value: string) {
-  return userCollection.where(attribute, "==", value).get();
+  return userCollection.where(attribute, '==', value).get();
 }
 
 export async function getUser(id: string) {
@@ -212,7 +196,7 @@ export async function getUser(id: string) {
 function stripUndefinedDeep<T>(value: T): T {
   if (
     value === null ||
-    typeof value !== "object" ||
+    typeof value !== 'object' ||
     value instanceof Date ||
     value instanceof admin.firestore.FieldValue ||
     value instanceof admin.firestore.Timestamp
@@ -241,7 +225,7 @@ export async function addNotification(notification: Notification) {
 }
 
 export async function getMeetingsWhere(attribute: string, value: string) {
-  return meetingCollection.where(attribute, "==", value).get();
+  return meetingCollection.where(attribute, '==', value).get();
 }
 
 export async function getMeetings() {
@@ -249,7 +233,7 @@ export async function getMeetings() {
 }
 
 export async function getGuestsWhere(attribute: string, value: string) {
-  return guestCollection.where(attribute, "==", value).get();
+  return guestCollection.where(attribute, '==', value).get();
 }
 
 export function updateDispute(
@@ -263,7 +247,7 @@ export function updateDispute(
   transaction.update(guestCollection.doc(guest.id!), guest);
   if (resolvedDispute) {
     transaction.create(
-      ratsFirestore.collection("disputes").doc(resolvedDispute.id),
+      ratsFirestore.collection('disputes').doc(resolvedDispute.id),
       resolvedDispute,
     );
   }
@@ -292,7 +276,18 @@ export async function updateHouseAdmins(houseId: string, adminId: string) {
 export async function getGuestsForHouse(
   houseId: string,
 ): Promise<FirebaseFirestore.DocumentData[]> {
-  const result = await guestCollection.where("houseId", "==", houseId).get();
+  const result = await guestCollection.where('houseId', '==', houseId).get();
+  return result.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+// Single-field equality query (houseId only) so this never needs a composite
+// Firestore index — this repo has no deploy path for firestore.indexes.json
+// (deploys are `--only functions`), so a query requiring a manual composite
+// index would silently fail in production with no way to add it.
+export async function getInvitationsForHouse(
+  houseId: string,
+): Promise<FirebaseFirestore.DocumentData[]> {
+  const result = await invitationCollection.where('houseId', '==', houseId).get();
   return result.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
@@ -306,14 +301,14 @@ export async function getGuest(
 export async function getDrugTestsForGuest(
   guestId: string,
 ): Promise<FirebaseFirestore.DocumentData[]> {
-  const result = await drugTestCollection.where("guestId", "==", guestId).get();
+  const result = await drugTestCollection.where('guestId', '==', guestId).get();
   return result.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
 export async function getDrugTestsForHouse(
   houseId: string,
 ): Promise<FirebaseFirestore.DocumentData[]> {
-  const result = await drugTestCollection.where("houseId", "==", houseId).get();
+  const result = await drugTestCollection.where('houseId', '==', houseId).get();
   return result.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
@@ -321,8 +316,8 @@ export async function getMeetingActivitiesForGuest(
   guestId: string,
 ): Promise<FirebaseFirestore.DocumentData[]> {
   const result = await activityCollection
-    .where("guestId", "==", guestId)
-    .where("type", "==", "meeting")
+    .where('guestId', '==', guestId)
+    .where('type', '==', 'meeting')
     .get();
   return result.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
@@ -336,8 +331,8 @@ export async function getSuccessfulPaymentsForHouse(
   houseId: string,
 ): Promise<FirebaseFirestore.DocumentData[]> {
   const result = await paymentsCollection
-    .where("houseId", "==", houseId)
-    .where("status", "==", "succeeded")
+    .where('houseId', '==', houseId)
+    .where('status', '==', 'succeeded')
     .get();
   return result.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
@@ -346,20 +341,15 @@ export async function getMeetingActivitiesForHouse(
   houseId: string,
 ): Promise<FirebaseFirestore.DocumentData[]> {
   const result = await activityCollection
-    .where("houseId", "==", houseId)
-    .where("type", "==", "meeting")
+    .where('houseId', '==', houseId)
+    .where('type', '==', 'meeting')
     .get();
   return result.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
-export async function getNaMeetings(
-  lat: number,
-  lng: number,
-  distance: number,
-  day?: string,
-) {
+export async function getNaMeetings(lat: number, lng: number, distance: number, day?: string) {
   const queries = getQueriesForDocumentsAround(
-    ratsFirestore.collection("na-meetings"),
+    ratsFirestore.collection('na-meetings'),
     { lat, lon: lng },
     10,
     day,

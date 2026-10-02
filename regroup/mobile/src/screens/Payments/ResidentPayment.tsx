@@ -66,19 +66,20 @@ type PaymentState = 'idle' | 'fetching' | 'presenting' | 'success' | 'error';
 // Payments service — resolved defensively so the screen compiles on branches
 // where src/services/payments.ts does not yet exist.
 // ---------------------------------------------------------------------------
-type CreatePaymentIntentFn = (
-  amount: number,
-  guestId: string,
-  houseId: string,
-  description?: string,
-) => Promise<{ clientSecret: string }>;
+type CreateRentPaymentIntentFn = (params: {
+  guestId: string;
+  houseId: string;
+  amountInCents: number;
+  description?: string;
+}) => Promise<{ clientSecret: string }>;
 
-let createPaymentIntent: CreatePaymentIntentFn;
+let createRentPaymentIntent: CreateRentPaymentIntentFn;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  createPaymentIntent = require('../../services/payments').createPaymentIntent;
+  createRentPaymentIntent =
+    require('../../services/payments').createRentPaymentIntent;
 } catch {
-  createPaymentIntent = async () => {
+  createRentPaymentIntent = async () => {
     throw new Error('Payments service is not available on this branch.');
   };
 }
@@ -181,12 +182,12 @@ const ResidentPayment: React.FC<Props> = ({ navigation, route }) => {
       // Step 1 — fetch clientSecret from Cloud Function
       let clientSecret: string;
       try {
-        const result = await createPaymentIntent(
+        const result = await createRentPaymentIntent({
+          guestId: guest.id,
+          houseId: house.id,
           amountInCents,
-          guest.id,
-          house.id,
-          `Rent - ${house.name ?? 'House'}`,
-        );
+          description: `Rent - ${house.name ?? 'House'}`,
+        });
         clientSecret = result.clientSecret;
       } catch (err: any) {
         const msg = err?.message?.toLowerCase().includes('network')

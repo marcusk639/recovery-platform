@@ -160,11 +160,11 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
       // Step 1 — create the PaymentIntent via the Cloud Function.
       let clientSecret: string;
       try {
-        const intentResult = await paymentService.createRentPaymentIntent(
-          guest.id,
-          house.id,
-          amountInCents
-        );
+        const intentResult = await paymentService.createRentPaymentIntent({
+          guestId: guest.id,
+          houseId: house.id,
+          amountInCents,
+        });
         clientSecret = intentResult.clientSecret;
       } catch (err: any) {
         const raw: string = err?.message ?? "";

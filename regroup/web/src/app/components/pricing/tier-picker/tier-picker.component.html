@@ -1,0 +1,89 @@
+<div class="tier-picker text-left">
+  <div *ngIf="loading" class="text-center py-4">
+    <i class="fas fa-spinner fa-2x fa-spin"></i>
+  </div>
+
+  <div *ngIf="error" class="text-danger">
+    We couldn't load pricing right now. Please refresh the page or
+    <a [routerLink]="['/contact']">contact us</a>.
+  </div>
+
+  <ng-container *ngIf="!loading && !error">
+    <!-- Step: house type -->
+    <div *ngIf="step === 'houseType'">
+      <h5 class="mb-3">What kind of home do you operate?</h5>
+      <div class="row">
+        <div class="col-6">
+          <button type="button" class="btn btn-bordered w-100" (click)="chooseHouseType('traditional')">
+            Traditional Sober Living
+          </button>
+        </div>
+        <div class="col-6">
+          <button type="button" class="btn btn-bordered w-100" (click)="chooseHouseType('oxford')">
+            Oxford House
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step: capacity -->
+    <div *ngIf="step === 'capacity'">
+      <h5 class="mb-3">How many residents can you house?</h5>
+      <div class="form-group">
+        <input
+          type="number"
+          class="form-control"
+          min="1"
+          [(ngModel)]="residents"
+          placeholder="Number of residents"
+        />
+      </div>
+      <div *ngIf="needsProperties" class="form-group">
+        <label class="small text-muted">Number of properties</label>
+        <input
+          type="number"
+          class="form-control"
+          min="1"
+          [(ngModel)]="properties"
+          placeholder="Number of properties"
+        />
+      </div>
+      <div class="d-flex justify-content-between mt-3">
+        <button type="button" class="btn btn-link" (click)="back()">Back</button>
+        <button
+          type="button"
+          class="btn btn-bordered"
+          [disabled]="!residents || residents < 1"
+          (click)="submitCapacity()"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+
+    <!-- Step: confirm tier -->
+    <div *ngIf="step === 'confirm' && chosen">
+      <h5 class="mb-3">Recommended plan</h5>
+      <div class="row">
+        <div class="col-12 col-sm-6" *ngFor="let t of purchasableLadder">
+          <div
+            class="single-price-plan text-center p-3 mb-3"
+            [ngClass]="{ active: chosen.tier === t.tier }"
+            (click)="choose(t)"
+          >
+            <div class="plan-title my-1">
+              <h5 class="text-uppercase">{{ t.label }}</h5>
+            </div>
+            <div class="plan-price">
+              <strong>{{ formatAmount(t) }}</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="d-flex justify-content-between mt-3">
+        <button type="button" class="btn btn-link" (click)="back()">Back</button>
+        <button type="button" class="btn btn-bordered" (click)="confirm()">Continue</button>
+      </div>
+    </div>
+  </ng-container>
+</div>

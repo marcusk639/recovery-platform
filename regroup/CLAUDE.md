@@ -45,7 +45,7 @@ Emulator config is in `firebase.json` at this directory level.
 - **Firebase emulator ports** for this product: Firestore 8080, Functions 5001, Auth 9099 (same as homegroups — do not run both simultaneously without port overrides).
 - **Service key** for Cloud Functions: `functions/service-key.json` (gitignored). Download from Firebase Console under `phoenix-cleanhouse`.
 - **Stripe** amounts are in **US cents** (integers). `50000` = $500.00. Convert at the UI boundary only.
-- **Subscription model:** 6-tier flat monthly pricing (`SUBSCRIPTION_TIERS` in `functions/src/config.ts`: Traditional 69/129/249, Oxford 49/89/299), selected at checkout and gated by `TIER_BILLING_ENABLED` / `isTierBillingEnabled()`. The legacy per-house + per-guest model (`STRIPE_GUEST_PRICE_ID`) is retained only for existing subscribers. `OperatorSubscription` tracks Stripe `customerId`/`subscriptionId`.
+- **Subscription model:** 6-tier flat monthly pricing (`SUBSCRIPTION_TIERS` in `functions/src/config.ts`: Traditional 69/129/249, Oxford 49/89/299), selected at checkout and gated by `TIER_BILLING_ENABLED` / `isTierBillingEnabled()`. **The legacy per-house + per-guest quantity model has been deleted** (2026-09-30) — no operators remained on it. A subscription with no `tier` now raises `failed-precondition` rather than silently no-opping. `OperatorSubscription` tracks Stripe `customerId`/`subscriptionId`; tier subs carry a single `subscriptionItemId`, not the old `items.houseItemId`/`guestItemId` pair.
 
 ---
 

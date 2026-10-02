@@ -117,7 +117,7 @@ const mockCreatePaymentIntent = jest.fn();
 jest.mock(
   '../../../services/payments',
   () => ({
-    createPaymentIntent: (...args: any[]) => mockCreatePaymentIntent(...args),
+    createRentPaymentIntent: (...args: any[]) => mockCreatePaymentIntent(...args),
   }),
   { virtual: true },
 );
@@ -324,12 +324,12 @@ describe('ResidentPayment', () => {
     });
 
     await waitFor(() => {
-      expect(mockCreatePaymentIntent).toHaveBeenCalledWith(
-        2500, // $25.00 → 2500 cents
-        MOCK_GUEST.id,
-        MOCK_HOUSE.id,
-        'Rent - Serenity House',
-      );
+      expect(mockCreatePaymentIntent).toHaveBeenCalledWith({
+        amountInCents: 2500, // $25.00 → 2500 cents
+        guestId: MOCK_GUEST.id,
+        houseId: MOCK_HOUSE.id,
+        description: 'Rent - Serenity House',
+      });
     });
   });
 

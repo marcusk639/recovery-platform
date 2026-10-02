@@ -28,8 +28,7 @@ jest.mock('../../services/paywall', () => ({
 
 const mockSubscriptionIsActive = jest.fn();
 jest.mock('../../util/subscription', () => ({
-  subscriptionIsActive: (...args: unknown[]) =>
-    mockSubscriptionIsActive(...args),
+  subscriptionIsActive: (...args: unknown[]) => mockSubscriptionIsActive(...args),
 }));
 
 const mockLogException = jest.fn();
@@ -53,10 +52,7 @@ import React from 'react';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-import {
-  usePaywallKillSwitch,
-  useSubscriptionGate,
-} from '../useSubscriptionGate';
+import { usePaywallKillSwitch, useSubscriptionGate } from '../useSubscriptionGate';
 
 const { useAppSelector } = require('../../state/store');
 
@@ -204,8 +200,10 @@ describe('useSubscriptionGate', () => {
       expect(result.current).toEqual({ status: 'allowed' });
     });
 
-    it('returns allowed when user.potentialSuperAdmin is true', () => {
-      setUserState({ user: { potentialSuperAdmin: true } });
+    it('returns allowed for a potentialSuperAdmin who has not finished setup', () => {
+      setUserState({
+        user: { potentialSuperAdmin: true, orgSetupCompleted: false },
+      });
 
       const { result } = renderHook(() => useSubscriptionGate(), {
         wrapper: makeWrapper(),
@@ -241,37 +239,127 @@ describe('useSubscriptionGate', () => {
         wrapper: makeWrapper(),
       });
 
-      await waitFor(() =>
-        expect(result.current).toEqual({ status: 'allowed' }),
-      );
+      await waitFor(() => expect(result.current).toEqual({ status: 'allowed' }));
     });
   });
 
   describe('operator (admin / superAdmin) gate', () => {
-    it('returns allowed when admin has an active subscription', async () => {
-      setUserState({ user: { isAdmin: true } });
-      mockSubscriptionIsActive.mockReturnValue(true);
+    // The operator branch reads the SAME house fields as the guest branch.
+    // It used to read user.subscriptionMetadata.status, which the Stripe
+    // webhook never writes (it updates subscriptions/* and houses/*), so an
+    // operator's status was frozen at whatever checkout wrote.
+    it('returns allowed when the operator house is active', async () => {
+      setUserState({ user: { isAdmin: true, orgSetupCompleted: true } });
+      setHouse({ house: { id: 'h1', subscriptionStatus: 'active' } });
 
       const { result } = renderHook(() => useSubscriptionGate(), {
         wrapper: makeWrapper(),
       });
 
-      await waitFor(() =>
-        expect(result.current).toEqual({ status: 'allowed' }),
-      );
+      await waitFor(() => expect(result.current).toEqual({ status: 'allowed' }));
     });
 
-    it('returns subscription_required when admin has an inactive subscription', async () => {
-      setUserState({ user: { isAdmin: true } });
-      mockSubscriptionIsActive.mockReturnValue(false);
+    // Absent status was an untested path, which is how a client/server
+    // divergence survived: the client read absent as allowed while the server
+    // entitlement ladder returns absent_status → denied. It now reads as
+    // loading — fail closed, but without flashing a paywall at a new operator
+    // whose house has not been stamped by setHouseSubscriptionStatusOnCreate.
+    // NOTE on assertion style: a plain
+    //   await waitFor(() => expect(result.current).toEqual({status:'loading'}))
+    // is VACUOUS here. 'loading' is also the pre-settle value while the kill
+    // switch doc is being fetched, so waitFor is satisfied on the first render
+    // before the gate logic runs — such a test passes even when absent status
+    // folds into 'allowed'. Verified by mutation. So assert that the gate never
+    // settles on 'allowed', then confirm the terminal value.
+    async function expectNeverAllowed(result: { current: unknown }) {
+      await expect(
+        waitFor(() => expect(result.current).toEqual({ status: 'allowed' }), {
+          timeout: 400,
+        }),
+      ).rejects.toThrow();
+      expect(result.current).toEqual({ status: 'loading' });
+    }
+
+    it('does not grant access when the operator house has no subscriptionStatus', async () => {
+      setUserState({ user: { isAdmin: true, orgSetupCompleted: true } });
+      setHouse({ house: { id: 'h1' } });
 
       const { result } = renderHook(() => useSubscriptionGate(), {
         wrapper: makeWrapper(),
       });
 
-      await waitFor(() =>
-        expect(result.current).toEqual({ status: 'subscription_required' }),
-      );
+      await expectNeverAllowed(result);
+    });
+
+    it('does not grant access when the operator subscriptionStatus is an empty string', async () => {
+      setUserState({ user: { isAdmin: true, orgSetupCompleted: true } });
+      setHouse({ house: { id: 'h1', subscriptionStatus: '' } });
+
+      const { result } = renderHook(() => useSubscriptionGate(), {
+        wrapper: makeWrapper(),
+      });
+
+      await expectNeverAllowed(result);
+    });
+
+    it('does not grant access to a guest whose house has no subscriptionStatus', async () => {
+      setUserState({ user: { isGuest: true } });
+      setHouse({ house: { id: 'h1' } });
+
+      const { result } = renderHook(() => useSubscriptionGate(), {
+        wrapper: makeWrapper(),
+      });
+
+      await expectNeverAllowed(result);
+    });
+
+    it('returns subscription_required when the operator house is canceled', async () => {
+      setUserState({ user: { isSuperAdmin: true, orgSetupCompleted: true } });
+      setHouse({ house: { id: 'h1', subscriptionStatus: 'canceled' } });
+
+      const { result } = renderHook(() => useSubscriptionGate(), {
+        wrapper: makeWrapper(),
+      });
+
+      await waitFor(() => expect(result.current).toEqual({ status: 'subscription_required' }));
+    });
+
+    it('returns grace_period while a past_due operator house is still in grace', async () => {
+      const future = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      setUserState({ user: { isSuperAdmin: true, orgSetupCompleted: true } });
+      setHouse({
+        house: {
+          id: 'h1',
+          subscriptionStatus: 'past_due',
+          guestGraceEndsAt: future,
+        },
+      });
+
+      const { result } = renderHook(() => useSubscriptionGate(), {
+        wrapper: makeWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.status).toBe('grace_period'));
+    });
+
+    // The regression that made the operator paywall unreachable: every operator
+    // carries potentialSuperAdmin: true permanently (both signup funnels set it
+    // and nothing clears it), so the short-circuit above swallowed this case.
+    it('gates a completed operator who still carries potentialSuperAdmin', async () => {
+      setUserState({
+        user: {
+          isSuperAdmin: true,
+          potentialSuperAdmin: true,
+          orgSetupCompleted: true,
+        },
+      });
+      setHouse({ house: { id: 'h1', subscriptionStatus: 'canceled' } });
+
+      const { result } = renderHook(() => useSubscriptionGate(), {
+        wrapper: makeWrapper(),
+      });
+
+      await waitFor(() => expect(result.current).toEqual({ status: 'subscription_required' }));
     });
   });
 
@@ -285,9 +373,7 @@ describe('useSubscriptionGate', () => {
       });
 
       // Wait for kill switch to settle so loading is purely from house state
-      await waitFor(() =>
-        expect(result.current).toEqual({ status: 'loading' }),
-      );
+      await waitFor(() => expect(result.current).toEqual({ status: 'loading' }));
     });
 
     it('returns loading when the guest has no house yet (selectedHouseId unset)', async () => {
@@ -298,9 +384,7 @@ describe('useSubscriptionGate', () => {
         wrapper: makeWrapper(),
       });
 
-      await waitFor(() =>
-        expect(result.current).toEqual({ status: 'loading' }),
-      );
+      await waitFor(() => expect(result.current).toEqual({ status: 'loading' }));
     });
 
     it('returns allowed when the guest house is active', async () => {
@@ -313,9 +397,7 @@ describe('useSubscriptionGate', () => {
         wrapper: makeWrapper(),
       });
 
-      await waitFor(() =>
-        expect(result.current).toEqual({ status: 'allowed' }),
-      );
+      await waitFor(() => expect(result.current).toEqual({ status: 'allowed' }));
     });
 
     it('returns allowed when the guest house is trialing', async () => {
@@ -328,9 +410,7 @@ describe('useSubscriptionGate', () => {
         wrapper: makeWrapper(),
       });
 
-      await waitFor(() =>
-        expect(result.current).toEqual({ status: 'allowed' }),
-      );
+      await waitFor(() => expect(result.current).toEqual({ status: 'allowed' }));
     });
 
     it('returns grace_period with endsAt when canceled but grace window is open', async () => {
@@ -351,11 +431,9 @@ describe('useSubscriptionGate', () => {
       await waitFor(() => {
         expect(result.current.status).toBe('grace_period');
       });
-      expect(
-        (
-          result.current as { status: 'grace_period'; endsAt: Date }
-        ).endsAt.getTime(),
-      ).toBe(future.getTime());
+      expect((result.current as { status: 'grace_period'; endsAt: Date }).endsAt.getTime()).toBe(
+        future.getTime(),
+      );
     });
 
     it('returns grace_expired when past_due and grace window has closed', async () => {
@@ -373,9 +451,7 @@ describe('useSubscriptionGate', () => {
         wrapper: makeWrapper(),
       });
 
-      await waitFor(() =>
-        expect(result.current).toEqual({ status: 'grace_expired' }),
-      );
+      await waitFor(() => expect(result.current).toEqual({ status: 'grace_expired' }));
     });
   });
 
@@ -388,9 +464,7 @@ describe('useSubscriptionGate', () => {
         wrapper: makeWrapper(),
       });
 
-      await waitFor(() =>
-        expect(result.current).toEqual({ status: 'loading' }),
-      );
+      await waitFor(() => expect(result.current).toEqual({ status: 'loading' }));
     });
   });
 });

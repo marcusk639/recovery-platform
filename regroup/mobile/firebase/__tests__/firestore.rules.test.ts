@@ -2362,3 +2362,205 @@ describe("Demo account house-scoping (isDemoHouse gate)", () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// users/{userId} — subscriptionMetadata is server-owned
+//
+// The entitlement gate and the house-create trigger both derive access from
+// user.subscriptionMetadata.status. While a client could write it, an operator
+// could grant themselves access by editing their own user document, and the
+// server-side stamp was forgeable. The Admin SDK bypasses rules, so legitimate
+// server writes are unaffected.
+// ---------------------------------------------------------------------------
+
+describe("users/{userId} — subscriptionMetadata is server-owned", () => {
+  const SELF_UID = "selfUser";
+
+  const seedUser = async (metadata: Record<string, unknown>) => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `users/${SELF_UID}`), {
+        uid: SELF_UID,
+        email: "self@example.com",
+        avatar: "https://example.com/old.png",
+        subscriptionMetadata: metadata,
+      });
+    });
+  };
+
+  const selfDoc = () =>
+    doc(
+      testEnv.authenticatedContext(SELF_UID, authUserOnly(SELF_UID)).firestore(),
+      `users/${SELF_UID}`,
+    );
+
+  it("denies a client raising its own subscription status to active", async () => {
+    // The privilege escalation this rule exists to stop.
+    await seedUser({ status: "canceled" });
+    await assertFails(
+      updateDoc(selfDoc(), { "subscriptionMetadata.status": "active" }),
+    );
+  });
+
+  it("denies a client replacing the whole subscriptionMetadata object", async () => {
+    await seedUser({ status: "canceled" });
+    await assertFails(
+      updateDoc(selfDoc(), { subscriptionMetadata: { status: "active" } }),
+    );
+  });
+
+  it("still allows a client to update its other own fields", async () => {
+    // The avatar path must keep working — it is the reason the old rule was a
+    // blanket allow.
+    await seedUser({ status: "active" });
+    await assertSucceeds(
+      updateDoc(selfDoc(), { avatar: "https://example.com/new.png" }),
+    );
+  });
+
+  it("allows a full-object update that leaves subscriptionMetadata unchanged", async () => {
+    // diff().affectedKeys() only reports keys whose value actually changed, so
+    // echoing the same metadata back is permitted.
+    await seedUser({ status: "active" });
+    await assertSucceeds(
+      updateDoc(selfDoc(), {
+        avatar: "https://example.com/new.png",
+        subscriptionMetadata: { status: "active" },
+      }),
+    );
+  });
+
+  it("allows creating its own user doc with an empty subscription status", async () => {
+    // createUser() writes the whole entity, whose default status is "".
+    await assertSucceeds(
+      setDoc(selfDoc(), {
+        uid: SELF_UID,
+        email: "self@example.com",
+        subscriptionMetadata: { status: "" },
+      }),
+    );
+  });
+
+  it("denies creating its own user doc already marked active", async () => {
+    await assertFails(
+      setDoc(selfDoc(), {
+        uid: SELF_UID,
+        email: "self@example.com",
+        subscriptionMetadata: { status: "active" },
+      }),
+    );
+  });
+
+  it("still denies access to another user's document", async () => {
+    await seedUser({ status: "active" });
+    const otherCtx = testEnv.authenticatedContext(
+      OTHER_UID,
+      authUserOnly(OTHER_UID),
+    );
+    await assertFails(
+      getDoc(doc(otherCtx.firestore(), `users/${SELF_UID}`)),
+    );
+    await assertFails(
+      updateDoc(doc(otherCtx.firestore(), `users/${SELF_UID}`), {
+        avatar: "x",
+      }),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// houses/{houseId} — subscriptionStatus is server-owned
+//
+// This is the field the server entitlement gate, the mobile operator gate and
+// houseOxfordActive() all read. While a client could write it, an operator could
+// grant themselves access with a single update. The superAdmin branch is tested
+// explicitly because it skips the sensitive-field allowlist entirely — leaving it
+// open would preserve the hole for exactly the role most able to exploit it.
+// ---------------------------------------------------------------------------
+
+describe("houses/{houseId} — subscriptionStatus is server-owned", () => {
+  const seedHouse = async (status: string) => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `houses/${HOUSE_ID}`), {
+        name: "Test House",
+        ownerId: ADMIN_UID,
+        adminIds: [ADMIN_UID],
+        subscriptionStatus: status,
+        capacity: 8,
+      });
+    });
+  };
+
+  const houseDocAs = (uid: string, claims: object) =>
+    doc(testEnv.authenticatedContext(uid, claims).firestore(), `houses/${HOUSE_ID}`);
+
+  it("denies an admin raising subscriptionStatus to active", async () => {
+    await seedHouse("canceled");
+    await assertFails(
+      updateDoc(houseDocAs(ADMIN_UID, authHouseAdmin(ADMIN_UID, HOUSE_ID)), {
+        subscriptionStatus: "active",
+      }),
+    );
+  });
+
+  it("denies a SUPERADMIN raising subscriptionStatus to active", async () => {
+    // The superAdmin branch skips the allowlist, so this is the case that
+    // mattered most and the one a narrower fix would have missed.
+    await seedHouse("canceled");
+    await assertFails(
+      updateDoc(
+        houseDocAs(ADMIN_UID, authHouseSuperAdmin(ADMIN_UID, HOUSE_ID)),
+        { subscriptionStatus: "active" },
+      ),
+    );
+  });
+
+  it("denies a guest raising subscriptionStatus", async () => {
+    await seedHouse("canceled");
+    await assertFails(
+      updateDoc(houseDocAs(GUEST_UID, authHouseGuest(GUEST_UID, HOUSE_ID)), {
+        subscriptionStatus: "active",
+      }),
+    );
+  });
+
+  it("denies writing guestGraceEndsAt to extend a grace window", async () => {
+    await seedHouse("past_due");
+    await assertFails(
+      updateDoc(
+        houseDocAs(ADMIN_UID, authHouseSuperAdmin(ADMIN_UID, HOUSE_ID)),
+        { guestGraceEndsAt: "2099-01-01T00:00:00.000Z" },
+      ),
+    );
+  });
+
+  it("still allows a superAdmin to edit ordinary house fields", async () => {
+    await seedHouse("active");
+    await assertSucceeds(
+      updateDoc(
+        houseDocAs(ADMIN_UID, authHouseSuperAdmin(ADMIN_UID, HOUSE_ID)),
+        { name: "Renamed House" },
+      ),
+    );
+  });
+
+  it("still allows an admin to edit ordinary house fields", async () => {
+    await seedHouse("active");
+    await assertSucceeds(
+      updateDoc(houseDocAs(ADMIN_UID, authHouseAdmin(ADMIN_UID, HOUSE_ID)), {
+        name: "Renamed House",
+      }),
+    );
+  });
+
+  it("allows an update that leaves subscriptionStatus unchanged", async () => {
+    // affectedKeys() reports only changed keys, so echoing the same value back
+    // must not be blocked — full-object writes depend on this.
+    await seedHouse("active");
+    await assertSucceeds(
+      updateDoc(houseDocAs(ADMIN_UID, authHouseAdmin(ADMIN_UID, HOUSE_ID)), {
+        name: "Renamed House",
+        subscriptionStatus: "active",
+      }),
+    );
+  });
+});

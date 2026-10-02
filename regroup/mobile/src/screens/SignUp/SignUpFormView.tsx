@@ -232,14 +232,14 @@ const SignUpFormView: React.FC<
         >
           {"By signing up, you agree to our "}
           <Text
-            onPress={() => Linking.openURL("https://regroup.app/terms")}
+            onPress={() => Linking.openURL("https://regroup-app.com/terms")}
             style={{ color: color.baby_blue }}
           >
             Terms of Service
           </Text>
           {" and "}
           <Text
-            onPress={() => Linking.openURL("https://regroup.app/privacy")}
+            onPress={() => Linking.openURL("https://regroup-app.com/privacy")}
             style={{ color: color.baby_blue }}
           >
             Privacy Policy
