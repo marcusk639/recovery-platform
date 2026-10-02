@@ -879,8 +879,8 @@ the rules file permits by design and no server-side check catches.
     Detox scripts (§8, D4), web has no runnable suite (§5.4, D5).
 - **Refresh pass (2026-10-01):** all 139 `path:line` anchors were re-verified
   mechanically against `142ffee` — every file resolves and every line is in range, and
-  the surface-relative shorthand the first pass left behind (80 anchors such as
-  `subscriptions.ts:173`) has been expanded to repo-root-relative form. Anchors in the
+  the surface-relative shorthand the first pass left behind (80 anchors that named only
+  a basename and a line) has been expanded to repo-root-relative form. Anchors in the
   eleven cited files that changed were re-resolved by symbol, not adjusted by guesswork.
 - **No credential, key or signing secret appears in this document** — Stripe price IDs
   and secret names are referenced by variable name and file location only; fixture
