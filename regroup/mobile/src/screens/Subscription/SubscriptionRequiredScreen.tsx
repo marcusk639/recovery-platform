@@ -10,9 +10,19 @@ import RatsButton from '../../components/rats-button/rats-button';
 import { color, fontSize, normalize } from '../../styles/theme';
 import { logException } from '../../util/logging';
 
-const WEB_PORTAL_URL =
-  (process.env.RATS_WEB_URL as string | undefined) ??
-  'https://regroup-app.com/billing';
+// RATS_WEB_URL is a BASE url (e.g. https://regroup-app.com), per the 2026-05-19
+// paywall design spec; the path is appended here. Read as a complete url, as it
+// was before, setting the env var to a bare origin silently dropped the path.
+// /billing is a redirect to /my-account, which hosts the Stripe billing portal
+// — see regroup/web/src/app/app-routing.module.ts.
+//
+// WEB_BASE_URL is exported because SubscriptionUpdateModal builds its own
+// /my-account link from it. That import is already on main; this export was
+// not, so ACCOUNT_URL there currently evaluates to "undefined/my-account".
+export const WEB_BASE_URL = (
+  (process.env.RATS_WEB_URL as string | undefined) ?? 'https://regroup-app.com'
+).replace(/\/+$/, '');
+export const WEB_PORTAL_URL = `${WEB_BASE_URL}/billing`;
 
 /**
  * Shown to operators (admin / superAdmin) whose subscription has lapsed.
