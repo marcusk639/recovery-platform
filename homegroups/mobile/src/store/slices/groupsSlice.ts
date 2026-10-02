@@ -13,6 +13,7 @@ import firestore from '@react-native-firebase/firestore';
 import functions from '@react-native-firebase/functions';
 import {trackActivity} from '../../services/activityTracker';
 import {syncUserClaims} from '../../services/firebase/auth';
+import {setUser} from './authSlice';
 
 // Define proper entity types
 interface GroupEntity extends HomeGroup {
@@ -30,6 +31,27 @@ export interface GroupsState {
   groups: ReturnType<typeof groupsAdapter.getInitialState>;
   memberGroups: string[];
   adminGroups: string[];
+  /**
+   * The uid `memberGroups`/`adminGroups` were loaded for. Group membership is
+   * sensitive, so a membership list is only ever shown to the user it was read
+   * for — never to whoever happens to be signed in later.
+   */
+  memberGroupsUserId: string | null;
+  /**
+   * In-flight `fetchUserGroups` requests, keyed by requestId, each holding the
+   * uid that was signed in when the read was issued. An entry is removed when
+   * the read settles, and when anything invalidates it (the user switched, or
+   * the user changed their own membership), so a late payload carrying another
+   * user's — or pre-change — membership can be recognised and dropped.
+   */
+  membershipRequests: Record<string, string | null>;
+  /**
+   * In-flight membership *mutations* (join/create), keyed by requestId, each
+   * holding the uid that issued it. Separate from `membershipRequests`
+   * because a mutation invalidates in-flight reads but must NOT invalidate a
+   * sibling mutation the same user started concurrently.
+   */
+  membershipMutations: Record<string, string | null>;
   nearbyGroups: HomeGroup[];
   searchResults: HomeGroup[];
   status: 'idle' | 'loading' | 'succeeded' | 'failed';
@@ -42,6 +64,9 @@ const initialState: GroupsState = {
   groups: groupsAdapter.getInitialState(),
   memberGroups: [],
   adminGroups: [],
+  memberGroupsUserId: null,
+  membershipRequests: {},
+  membershipMutations: {},
   nearbyGroups: [],
   searchResults: [],
   status: 'idle',
@@ -51,6 +76,37 @@ const initialState: GroupsState = {
 
 // Constants
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache TTL
+
+/** The uid Firebase currently considers signed in, or null if nobody is. */
+const signedInUid = (): string | null => auth().currentUser?.uid ?? null;
+
+/**
+ * Whether a settled request may still speak for the signed-in user's
+ * membership: it must still be tracked — `setUser` drops requests issued for
+ * anyone else, and a membership change clears the map — and the uid it was
+ * issued for must still be the one signed in. Consumes the entry either way,
+ * so a request is honoured at most once.
+ */
+const isCurrentUsersRequest = (
+  state: GroupsState,
+  requestId: string,
+): boolean => {
+  const issuedForUid = state.membershipRequests[requestId];
+  const stillTracked = requestId in state.membershipRequests;
+  delete state.membershipRequests[requestId];
+  return stillTracked && issuedForUid === signedInUid();
+};
+
+/** The same test for an in-flight join/create. */
+const isCurrentUsersMutation = (
+  state: GroupsState,
+  requestId: string,
+): boolean => {
+  const issuedForUid = state.membershipMutations[requestId];
+  const stillTracked = requestId in state.membershipMutations;
+  delete state.membershipMutations[requestId];
+  return stillTracked && issuedForUid === signedInUid();
+};
 
 // Helper function to check if data is stale
 const isDataStale = (lastFetched: number | undefined): boolean => {
@@ -503,13 +559,28 @@ const groupsSlice = createSlice({
   extraReducers: builder => {
     builder
       // Fetch user groups
-      .addCase(fetchUserGroups.pending, state => {
+      .addCase(fetchUserGroups.pending, (state, action) => {
         state.status = 'loading';
+        state.membershipRequests[action.meta.requestId] = signedInUid();
       })
       .addCase(fetchUserGroups.fulfilled, (state, action) => {
         state.status = 'succeeded';
 
         const {groups, userId} = action.payload;
+        const issuedForUid = state.membershipRequests[action.meta.requestId];
+        const stillTracked = action.meta.requestId in state.membershipRequests;
+        delete state.membershipRequests[action.meta.requestId];
+
+        // A membership read may only define the groups list while it is still
+        // the current answer: it must not have been invalidated since it was
+        // issued (user switch, or the user changing their own membership), and
+        // the uid it was read for must still be the signed-in one. Anything
+        // else describes someone else's membership, or a past state of this
+        // user's, and is dropped rather than rendered.
+        if (!stillTracked || issuedForUid !== userId || userId !== signedInUid()) {
+          state.error = null;
+          return;
+        }
 
         // Add/update groups in the items dictionary
         groups.forEach((group: HomeGroup) => {
@@ -524,13 +595,40 @@ const groupsSlice = createSlice({
         state.adminGroups = groups
           .filter((group: HomeGroup) => group.admins.includes(userId))
           .map((group: HomeGroup) => group.id!);
+        state.memberGroupsUserId = userId;
 
         state.error = null;
       })
       .addCase(fetchUserGroups.rejected, (state, action) => {
         state.status = 'failed';
+        delete state.membershipRequests[action.meta.requestId];
         state.error =
           (action.payload as string) || 'Failed to fetch user groups';
+      })
+
+      // The authenticated user changed. Membership read for the previous uid is
+      // not this user's, so it is cleared before anything can render it, and
+      // reads issued for anyone else are abandoned.
+      .addCase(setUser, (state, action) => {
+        const uid = action.payload?.uid ?? null;
+
+        if (uid !== state.memberGroupsUserId) {
+          state.memberGroups = [];
+          state.adminGroups = [];
+          state.memberGroupsUserId = null;
+        }
+
+        Object.keys(state.membershipMutations).forEach(requestId => {
+          if (state.membershipMutations[requestId] !== uid) {
+            delete state.membershipMutations[requestId];
+          }
+        });
+
+        Object.keys(state.membershipRequests).forEach(requestId => {
+          if (state.membershipRequests[requestId] !== uid) {
+            delete state.membershipRequests[requestId];
+          }
+        });
       })
 
       // Fetch group by id
@@ -554,7 +652,8 @@ const groupsSlice = createSlice({
       })
 
       // Create group
-      .addCase(createGroup.pending, state => {
+      .addCase(createGroup.pending, (state, action) => {
+        state.membershipMutations[action.meta.requestId] = signedInUid();
         state.status = 'loading';
       })
       .addCase(createGroup.fulfilled, (state, action) => {
@@ -562,15 +661,25 @@ const groupsSlice = createSlice({
         const group = action.payload;
         groupsAdapter.upsertOne(state.groups, group);
 
-        // Add to user groups if it's not already there
-        if (!state.memberGroups.includes(group.id!)) {
-          state.memberGroups.push(group.id!);
+        // Caching the entity is always safe; adding it to the membership list
+        // is not. A create issued by the previous user can resolve after the
+        // switch, at which point `??` leaves the new user's tag in place while
+        // the group is pushed into their list. Gate it on the same request
+        // tracking fetchUserGroups uses: setUser prunes entries issued for
+        // anyone else, so an abandoned request is no longer tracked here.
+        if (isCurrentUsersMutation(state, action.meta.requestId)) {
+          if (!state.memberGroups.includes(group.id!)) {
+            state.memberGroups.push(group.id!);
+          }
+          state.memberGroupsUserId = state.memberGroupsUserId ?? signedInUid();
+          state.membershipRequests = {};
         }
 
         state.error = null;
       })
       .addCase(createGroup.rejected, (state, action) => {
         state.status = 'failed';
+        delete state.membershipMutations[action.meta.requestId];
         state.error = (action.payload as string) || 'Failed to create group';
       })
 
@@ -609,20 +718,33 @@ const groupsSlice = createSlice({
       })
 
       // Join group
-      .addCase(joinGroup.pending, state => {
+      .addCase(joinGroup.pending, (state, action) => {
+        state.membershipMutations[action.meta.requestId] = signedInUid();
         state.status = 'loading';
       })
       .addCase(joinGroup.fulfilled, (state, action) => {
         state.status = 'succeeded';
+
+        // Consume the tracked request before anything can short-circuit: the
+        // thunk returns GroupModel.getById(), typed HomeGroup | null, so a
+        // read-after-write miss resolves here with no payload and would
+        // otherwise strand the entry for the rest of the session.
+        const isOwnJoin = isCurrentUsersMutation(state, action.meta.requestId);
 
         if (action.payload) {
           // Update the group
           groupsAdapter.upsertOne(state.groups, action.payload);
           state.lastFetched[action.payload.id!] = Date.now();
 
-          // Add to member groups if not already there
-          if (!state.memberGroups.includes(action.payload.id!)) {
-            state.memberGroups.push(action.payload.id!);
+          // Caching the entity is always safe; adding it to the membership
+          // list is not — see the note on createGroup.fulfilled.
+          if (isOwnJoin) {
+            if (!state.memberGroups.includes(action.payload.id!)) {
+              state.memberGroups.push(action.payload.id!);
+            }
+            state.memberGroupsUserId =
+              state.memberGroupsUserId ?? signedInUid();
+            state.membershipRequests = {};
           }
         }
 
@@ -630,6 +752,7 @@ const groupsSlice = createSlice({
       })
       .addCase(joinGroup.rejected, (state, action) => {
         state.status = 'failed';
+        delete state.membershipMutations[action.meta.requestId];
         state.error = (action.payload as string) || 'Failed to join group';
       })
 
@@ -647,6 +770,15 @@ const groupsSlice = createSlice({
         state.adminGroups = state.adminGroups.filter(
           id => id !== action.payload,
         );
+        // Any read already in flight was issued before the user left and would
+        // resurrect the group, so it is no longer an answer we can use.
+        //
+        // In-flight *mutations* are deliberately left alone. Clearing them too
+        // would discard a join of an unrelated group that happened to be in
+        // flight while this one was left. A join that resolves after a leave
+        // did succeed server-side for a different group, and mutations are
+        // uid-gated anyway, so nothing here can cross users.
+        state.membershipRequests = {};
 
         state.error = null;
       })
@@ -765,9 +897,27 @@ export const selectNearbyGroups = (state: RootState) =>
 export const selectSearchResults = (state: RootState): HomeGroup[] =>
   state.groups.searchResults;
 
+const selectMemberGroupsUserId = (state: RootState) =>
+  state.groups.memberGroupsUserId;
+
+const selectSignedInUid = (state: RootState) => state.auth.user?.uid ?? null;
+
+/**
+ * The groups list. A group may appear here only if the membership read that put
+ * it in `memberGroups` was loaded for the uid that is signed in now, so the
+ * list can never disclose another session's groups — not even for one frame.
+ */
 export const selectMemberGroups = createSelector(
-  [selectAllGroups, selectMemberGroupIds],
-  (allGroups, memberIds) => {
+  [
+    selectAllGroups,
+    selectMemberGroupIds,
+    selectMemberGroupsUserId,
+    selectSignedInUid,
+  ],
+  (allGroups, memberIds, memberGroupsUserId, signedIn) => {
+    if (!signedIn || memberGroupsUserId !== signedIn) {
+      return [];
+    }
     return memberIds
       .map(id => allGroups.find(group => group.id === id))
       .filter((group): group is GroupEntity => group !== undefined);
