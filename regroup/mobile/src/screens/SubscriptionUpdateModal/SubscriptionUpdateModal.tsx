@@ -78,7 +78,9 @@ const FALLBACK_COPY = {
 // Built from WEB_BASE_URL so a staging/dev build does not send a lapsed
 // operator to the production billing page. Hardcoding the host here ignored
 // RATS_WEB_URL, unlike the paywall screen's own deep link.
-const ACCOUNT_URL = `${WEB_BASE_URL}/my-account`;
+// Exported so accountUrl.test.ts can pin it, matching WEB_PORTAL_URL on the
+// paywall screen.
+export const ACCOUNT_URL = `${WEB_BASE_URL}/my-account`;
 
 /**
  * Subscription Update Modal
