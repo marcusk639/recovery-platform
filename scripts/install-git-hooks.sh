@@ -4,7 +4,7 @@
 set -euo pipefail
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
-for hook in pre-commit pre-push; do
+for hook in pre-commit commit-msg pre-push; do
   cp "$REPO_ROOT/scripts/git-hooks/$hook" "$REPO_ROOT/.git/hooks/$hook"
   chmod +x "$REPO_ROOT/.git/hooks/$hook"
   echo "installed $hook"

@@ -100,6 +100,7 @@ These rules apply to all products in the monorepo without exception.
 
 - Source files (`.ts`/`.tsx`/`.js`/`.jsx`) are capped at **300 lines**. Enforced mechanically by the pre-commit hook (`scripts/git-hooks/pre-commit`): new files over the cap are blocked; pre-existing oversized files warn on modification (legacy mobile debt is ratcheted down, not frozen). Split by extracting components, services, or per-function modules.
 - Secrets are scanned at commit time (blocking) by the same hook — Stripe/Anthropic/OpenRouter/AWS/GitHub key patterns, private keys, and Google `AIza` keys outside Firebase client config files.
+- Commit scopes name the product: `fix(regroup-mobile):`, never `fix(mobile):` — two RN apps and three functions packages make a bare `mobile`/`web`/`functions` scope unreadable in `git log`. Blocked by the `commit-msg` hook.
 - Git hooks are versioned in `scripts/git-hooks/` and installed per-clone with `./scripts/install-git-hooks.sh` (run it after cloning or after editing a hook).
 - Jest `coverageThreshold` floors (recovery-api, homegroups/functions, detox-recovery) are ratchets: raise them as coverage grows, never lower them to make a run pass.
 
