@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+#
+# Commit-message gate: reject a scope that does not say which product it means.
+#
+# This is a flat monorepo with two React Native apps and three Cloud Functions
+# packages. `fix(mobile): ...` and `fix(functions): ...` are therefore ambiguous
+# on sight — homegroups/mobile and regroup/mobile are different products with
+# different Firebase projects and different users. History already carries 31
+# such commits, which is what motivated this hook: reading `git log` to find
+# when a regroup behaviour changed means opening commits one at a time.
+#
+# The rule: if a commit touches exactly one product directory, the scope must
+# name that product. Repo-wide scopes (ci, hooks, docs, scripts, deps, testing)
+# are accepted as-is.
+#
+# Bypass with --no-verify if you genuinely need to; CI does not re-check this.
+set -euo pipefail
+
+MSG_FILE="$1"
+SUBJECT=$(head -1 "$MSG_FILE")
+
+# Ignore merges, reverts, fixups and comment-only/empty messages.
+case "$SUBJECT" in
+  Merge*|Revert*|revert*|fixup!*|squash!*|'#'*|'') exit 0 ;;
+esac
+
+SCOPE=$(printf '%s' "$SUBJECT" | sed -n 's/^[a-z]*(\([^)]*\)).*/\1/p')
+[ -z "$SCOPE" ] && exit 0   # no scope at all — not this hook's business
+
+# Only these bare scopes are ambiguous; everything else passes.
+case "$SCOPE" in
+  mobile|web|functions) ;;
+  *) exit 0 ;;
+esac
+
+PRODUCTS=$(git diff --cached --name-only --diff-filter=ACMR \
+  | cut -d/ -f1 | sort -u \
+  | grep -xE 'homegroups|regroup|detox-recovery|recovery-api|shared' || true)
+COUNT=$(printf '%s' "$PRODUCTS" | grep -c . || true)
+
+echo "✗ ambiguous commit scope: ($SCOPE)" >&2
+echo "  This monorepo has homegroups/mobile and regroup/mobile, plus three" >&2
+echo "  functions packages. \"$SCOPE\" alone does not say which one changed." >&2
+if [ "$COUNT" = "1" ]; then
+  echo "  Staged changes touch only $PRODUCTS/ — use ($PRODUCTS-$SCOPE)." >&2
+elif [ "$COUNT" -gt 1 ]; then
+  echo "  Staged changes span several products:" >&2
+  printf '%s\n' "$PRODUCTS" | sed 's/^/    - /' >&2
+  echo "  Split the commit, or scope it to the product it is really about." >&2
+else
+  echo "  Use <product>-$SCOPE, e.g. (regroup-$SCOPE) or (homegroups-$SCOPE)." >&2
+fi
+exit 1
