@@ -237,7 +237,12 @@ export const updateOptionalInfo = async (
       logException(error);
     }
   }
-  batch.update(userCollection.doc(user.uid), user);
+  // subscriptionMetadata is server-owned — firestore.rules denies client writes
+  // to it, because the entitlement gate derives access from it. Strip it so a
+  // profile save is never rejected for echoing a field this function does not
+  // mean to change.
+  const { subscriptionMetadata: _serverOwned, ...userWritableFields } = user;
+  batch.update(userCollection.doc(user.uid), userWritableFields);
   if (guest) {
     guest.avatar = user.avatar || guest.avatar;
     batch.update(guestCollection.doc(guest.id), guest);

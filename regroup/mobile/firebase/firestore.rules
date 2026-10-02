@@ -31,10 +31,6 @@ service cloud.firestore {
       return hasHouseRole() && houseId in request.auth.token.guest && isDemoScopedHouses([houseId]);
     }
     
-    function isPotentialSuperAdmin() {
-      return signedIn() && request.auth.token.potentialSuperAdmin == true;
-    }
-    
     function getRoleFromClaim(role) {
       return request.auth.token[role];
     }
@@ -344,7 +340,30 @@ service cloud.firestore {
     }
     
     match /users/{userId} {
-      allow read, write: if isSameUser(userId);
+      allow read: if isSameUser(userId);
+
+      // subscriptionMetadata is SERVER-OWNED. Both the server entitlement gate
+      // (functions/src/util/entitlement.ts) and the house-create trigger
+      // (setHouseSubscriptionStatusOnCreate) derive access from
+      // subscriptionMetadata.status, so a client able to write it could grant
+      // itself access — and the server-side stamp would be forgeable too. The
+      // Admin SDK bypasses rules, so legitimate server writes are unaffected.
+      //
+      // On create the client writes the whole User entity, whose default status
+      // is "", so that is permitted; anything already claiming a real status is
+      // not.
+      allow create: if isSameUser(userId) &&
+        (!('subscriptionMetadata' in request.resource.data) ||
+          !('status' in request.resource.data.subscriptionMetadata) ||
+          request.resource.data.subscriptionMetadata.status == '');
+
+      // affectedKeys() reports only keys whose value actually changed, so a
+      // whole-object write that echoes the same metadata back still passes.
+      allow update: if isSameUser(userId) &&
+        !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['subscriptionMetadata']);
+
+      allow delete: if isSameUser(userId);
     }
     
     match /notifications/{notificationId} {

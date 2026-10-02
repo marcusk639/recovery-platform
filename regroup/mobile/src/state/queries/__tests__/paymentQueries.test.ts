@@ -202,11 +202,14 @@ describe('paymentQueries', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(result.current.data).toEqual(mockIntentResult);
-      expect(paymentService.createRentPaymentIntent).toHaveBeenCalledWith(
-        'guest456',
-        'house789',
-        500,
-      );
+      // Object form since the two wrappers were merged; description is now
+      // forwarded, where useCreateRentPayment previously dropped it.
+      expect(paymentService.createRentPaymentIntent).toHaveBeenCalledWith({
+        guestId: 'guest456',
+        houseId: 'house789',
+        amountInCents: 500,
+        description: 'Monthly Rent',
+      });
       expect(paymentService.recordRentPayment).toHaveBeenCalledWith(
         'guest456',
         'house789',

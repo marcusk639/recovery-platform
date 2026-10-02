@@ -2362,3 +2362,107 @@ describe("Demo account house-scoping (isDemoHouse gate)", () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// users/{userId} — subscriptionMetadata is server-owned
+//
+// The entitlement gate and the house-create trigger both derive access from
+// user.subscriptionMetadata.status. While a client could write it, an operator
+// could grant themselves access by editing their own user document, and the
+// server-side stamp was forgeable. The Admin SDK bypasses rules, so legitimate
+// server writes are unaffected.
+// ---------------------------------------------------------------------------
+
+describe("users/{userId} — subscriptionMetadata is server-owned", () => {
+  const SELF_UID = "selfUser";
+
+  const seedUser = async (metadata: Record<string, unknown>) => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `users/${SELF_UID}`), {
+        uid: SELF_UID,
+        email: "self@example.com",
+        avatar: "https://example.com/old.png",
+        subscriptionMetadata: metadata,
+      });
+    });
+  };
+
+  const selfDoc = () =>
+    doc(
+      testEnv.authenticatedContext(SELF_UID, authUserOnly(SELF_UID)).firestore(),
+      `users/${SELF_UID}`,
+    );
+
+  it("denies a client raising its own subscription status to active", async () => {
+    // The privilege escalation this rule exists to stop.
+    await seedUser({ status: "canceled" });
+    await assertFails(
+      updateDoc(selfDoc(), { "subscriptionMetadata.status": "active" }),
+    );
+  });
+
+  it("denies a client replacing the whole subscriptionMetadata object", async () => {
+    await seedUser({ status: "canceled" });
+    await assertFails(
+      updateDoc(selfDoc(), { subscriptionMetadata: { status: "active" } }),
+    );
+  });
+
+  it("still allows a client to update its other own fields", async () => {
+    // The avatar path must keep working — it is the reason the old rule was a
+    // blanket allow.
+    await seedUser({ status: "active" });
+    await assertSucceeds(
+      updateDoc(selfDoc(), { avatar: "https://example.com/new.png" }),
+    );
+  });
+
+  it("allows a full-object update that leaves subscriptionMetadata unchanged", async () => {
+    // diff().affectedKeys() only reports keys whose value actually changed, so
+    // echoing the same metadata back is permitted.
+    await seedUser({ status: "active" });
+    await assertSucceeds(
+      updateDoc(selfDoc(), {
+        avatar: "https://example.com/new.png",
+        subscriptionMetadata: { status: "active" },
+      }),
+    );
+  });
+
+  it("allows creating its own user doc with an empty subscription status", async () => {
+    // createUser() writes the whole entity, whose default status is "".
+    await assertSucceeds(
+      setDoc(selfDoc(), {
+        uid: SELF_UID,
+        email: "self@example.com",
+        subscriptionMetadata: { status: "" },
+      }),
+    );
+  });
+
+  it("denies creating its own user doc already marked active", async () => {
+    await assertFails(
+      setDoc(selfDoc(), {
+        uid: SELF_UID,
+        email: "self@example.com",
+        subscriptionMetadata: { status: "active" },
+      }),
+    );
+  });
+
+  it("still denies access to another user's document", async () => {
+    await seedUser({ status: "active" });
+    const otherCtx = testEnv.authenticatedContext(
+      OTHER_UID,
+      authUserOnly(OTHER_UID),
+    );
+    await assertFails(
+      getDoc(doc(otherCtx.firestore(), `users/${SELF_UID}`)),
+    );
+    await assertFails(
+      updateDoc(doc(otherCtx.firestore(), `users/${SELF_UID}`), {
+        avatar: "x",
+      }),
+    );
+  });
+});
