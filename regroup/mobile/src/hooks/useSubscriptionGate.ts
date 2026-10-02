@@ -16,11 +16,7 @@ import { User } from '../entities/User';
  * - loading              — house data not yet available; caller should suspend
  */
 export type GateStatus =
-  | 'allowed'
-  | 'subscription_required'
-  | 'grace_period'
-  | 'grace_expired'
-  | 'loading';
+  'allowed' | 'subscription_required' | 'grace_period' | 'grace_expired' | 'loading';
 
 export type GateResult =
   | { status: 'allowed' }
@@ -71,17 +67,24 @@ export function usePaywallKillSwitch(): {
 }
 
 type HouseAccess =
-  | { kind: 'allowed' }
-  | { kind: 'grace'; endsAt: Date }
-  | { kind: 'lapsed' };
+  { kind: 'allowed' } | { kind: 'pending' } | { kind: 'grace'; endsAt: Date } | { kind: 'lapsed' };
 
 /**
  * Client-side mirror of the server entitlement ladder
- * (functions/src/util/entitlement.ts). Kept deliberately lenient where the
- * server is strict: an absent status reads as allowed here, because this gate
- * is UX — Firestore rules let a user write their own user doc, so the real
- * boundary is the server. Denying here on a missing field would lock people
- * out of the app without stopping anyone determined.
+ * (functions/src/util/entitlement.ts).
+ *
+ * An absent status reads as 'pending', not 'allowed'. It used to read as
+ * allowed on the grounds that the client could forge the field anyway, so the
+ * gate was pure UX; that is no longer true — 65cd95a locked
+ * users/{userId}.subscriptionMetadata and ccd2924 locked
+ * houses/{houseId}.subscriptionStatus, both server-owned now. With the forgery
+ * vector closed, leniency only bought a window where the app looked unlocked
+ * while every gated callable rejected with absent_status.
+ *
+ * 'pending' resolves to a spinner rather than a paywall: a freshly created
+ * house has no status until setHouseSubscriptionStatusOnCreate stamps it, and
+ * showing a brand-new operator a paywall mid-signup would be worse than a
+ * brief wait. Anything OTHER than absent still evaluates strictly.
  */
 function evaluateHouseAccess(house: {
   subscriptionStatus?: string;
@@ -89,7 +92,11 @@ function evaluateHouseAccess(house: {
 }): HouseAccess {
   const status = house.subscriptionStatus;
 
-  if (!status || status === 'active' || status === 'trialing') {
+  if (!status) {
+    return { kind: 'pending' };
+  }
+
+  if (status === 'active' || status === 'trialing') {
     return { kind: 'allowed' };
   }
 
@@ -121,11 +128,10 @@ function evaluateHouseAccess(house: {
  *          lapsed + grace expired              → grace_expired
  */
 export function useSubscriptionGate(): GateResult {
-  const user = useAppSelector(s => s.user.user) as Partial<User> | null;
-  const anonymous = useAppSelector(s => s.user.anonymous);
+  const user = useAppSelector((s) => s.user.user) as Partial<User> | null;
+  const anonymous = useAppSelector((s) => s.user.anonymous);
   const { house, isLoading: houseLoading } = useSelectedHouse();
-  const { killSwitchEnabled, isLoading: killSwitchLoading } =
-    usePaywallKillSwitch();
+  const { killSwitchEnabled, isLoading: killSwitchLoading } = usePaywallKillSwitch();
 
   // Anonymous users — always allowed (pre-auth state)
   if (anonymous || user?.isAnonymous) {
@@ -181,12 +187,16 @@ export function useSubscriptionGate(): GateResult {
     if (access.kind === 'allowed') {
       return { status: 'allowed' };
     }
+    // Status not stamped yet (new house). Fail closed as 'loading' so the app
+    // is not shown as unlocked while the server would reject with
+    // absent_status — but without flashing a paywall at a new operator.
+    if (access.kind === 'pending') {
+      return { status: 'loading' };
+    }
     if (access.kind === 'grace') {
       return { status: 'grace_period', endsAt: access.endsAt };
     }
-    return isOperator
-      ? { status: 'subscription_required' }
-      : { status: 'grace_expired' };
+    return isOperator ? { status: 'subscription_required' } : { status: 'grace_expired' };
   }
 
   // User record loaded but no role flags set — loading / transitional state
