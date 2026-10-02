@@ -160,8 +160,11 @@ describe("initializeTierCustomer — oxfordEnabled", () => {
       "month",
     );
 
+    // initializeTierCustomer now also passes an idempotency key, so the call
+    // carries a second argument.
     expect(mockSubscriptionsCreate).toHaveBeenCalledWith(
       expect.objectContaining({ trial_period_days: 7 }),
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
     );
   });
 });
@@ -185,6 +188,141 @@ describe("createSubscription (legacy two-item path)", () => {
         customer: "cus_1",
         trial_period_days: 7,
       }),
+    );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stripe idempotency keys
+//
+// Without a key, a retry or double-submit creates a SECOND real customer and
+// subscription. Firestore keeps only whichever finishes last, so the first
+// becomes an orphan that bills forever with nothing pointing at it. Rent
+// collection already passes keys; the subscription lifecycle did not.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("subscription lifecycle idempotency keys", () => {
+  const optionsOf = (mock: jest.Mock) => mock.mock.calls[0]?.[1];
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    process.env.STRIPE_SECRET_KEY = "sk_test";
+    process.env.STRIPE_API_VERSION = "2026-01-28.clover";
+    process.env.STRIPE_PRICE_TRAD_STARTER = "price_starter";
+    mockCustomersCreate.mockResolvedValue({ id: "cus_new" });
+    mockSetupIntentsCreate.mockResolvedValue({ status: "succeeded" });
+    mockSubscriptionsCreate.mockResolvedValue({
+      id: "sub_1",
+      items: { data: [{ id: "si_1" }] },
+      status: "trialing",
+    });
+  });
+
+  afterEach(() => {
+    delete process.env.STRIPE_PRICE_TRAD_STARTER;
+  });
+
+  it("passes an idempotency key when creating a tier customer", async () => {
+    await initializeTierCustomer(
+      "op@example.com",
+      "pm_1",
+      "traditional",
+      "starter",
+      "uid_1",
+    );
+
+    expect(optionsOf(mockCustomersCreate)?.idempotencyKey).toBeTruthy();
+  });
+
+  it("passes an idempotency key when creating a tier subscription", async () => {
+    await initializeTierCustomer(
+      "op@example.com",
+      "pm_1",
+      "traditional",
+      "starter",
+      "uid_1",
+    );
+
+    expect(optionsOf(mockSubscriptionsCreate)?.idempotencyKey).toBeTruthy();
+  });
+
+  it("derives the same key for a repeated identical signup", async () => {
+    await initializeTierCustomer(
+      "op@example.com",
+      "pm_1",
+      "traditional",
+      "starter",
+      "uid_1",
+    );
+    const first = optionsOf(mockSubscriptionsCreate)?.idempotencyKey;
+
+    jest.clearAllMocks();
+    mockCustomersCreate.mockResolvedValue({ id: "cus_new" });
+    mockSetupIntentsCreate.mockResolvedValue({ status: "succeeded" });
+    mockSubscriptionsCreate.mockResolvedValue({
+      id: "sub_1",
+      items: { data: [{ id: "si_1" }] },
+      status: "trialing",
+    });
+
+    await initializeTierCustomer(
+      "op@example.com",
+      "pm_1",
+      "traditional",
+      "starter",
+      "uid_1",
+    );
+
+    // A retry must reuse the key, or Stripe cannot dedupe it.
+    expect(optionsOf(mockSubscriptionsCreate)?.idempotencyKey).toBe(first);
+  });
+
+  it("derives a different key for a different tier", async () => {
+    process.env.STRIPE_PRICE_TRAD_PROFESSIONAL = "price_pro";
+    await initializeTierCustomer(
+      "op@example.com",
+      "pm_1",
+      "traditional",
+      "starter",
+      "uid_1",
+    );
+    const starterKey = optionsOf(mockSubscriptionsCreate)?.idempotencyKey;
+
+    jest.clearAllMocks();
+    mockCustomersCreate.mockResolvedValue({ id: "cus_new" });
+    mockSetupIntentsCreate.mockResolvedValue({ status: "succeeded" });
+    mockSubscriptionsCreate.mockResolvedValue({
+      id: "sub_1",
+      items: { data: [{ id: "si_1" }] },
+      status: "trialing",
+    });
+
+    await initializeTierCustomer(
+      "op@example.com",
+      "pm_1",
+      "traditional",
+      "professional",
+      "uid_1",
+    );
+
+    // Choosing a different tier is a different operation, not a retry.
+    expect(optionsOf(mockSubscriptionsCreate)?.idempotencyKey).not.toBe(
+      starterKey,
+    );
+    delete process.env.STRIPE_PRICE_TRAD_PROFESSIONAL;
+  });
+
+  it("does not put the operator email in the key", async () => {
+    // Keys end up in logs and Stripe request records; keep PII out of them.
+    await initializeTierCustomer(
+      "op@example.com",
+      "pm_1",
+      "traditional",
+      "starter",
+      "uid_1",
+    );
+
+    expect(optionsOf(mockCustomersCreate)?.idempotencyKey).not.toContain(
+      "op@example.com",
     );
   });
 });

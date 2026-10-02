@@ -130,8 +130,11 @@ describe('customer initialization blocks subscription creation on a bad card', (
         confirm: true,
       }),
     );
+    // initializeTierCustomer also passes an idempotency key, so the call
+    // carries a second argument.
     expect(mockSubscriptionsCreate).toHaveBeenCalledWith(
       expect.objectContaining({ customer: 'cus_1', trial_period_days: 7 }),
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
     );
     expect(meta).toMatchObject({
       customerId: 'cus_1',

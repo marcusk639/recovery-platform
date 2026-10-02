@@ -53,14 +53,35 @@ export const getBundleCoupon = (houseCount: number): string | null => {
 
 export const OXFORD_PRICE_ID = process.env.STRIPE_OXFORD_PRICE_ID!; // Regroup Oxford — $79/month (prod_UYy6cF0Ccj8fID)
 
-export const createCustomer = async (email: string, paymentMethod: string) => {
-  return stripe.customers.create({
+/**
+ * Day bucket for idempotency keys. Stripe keys expire after 24h, so a day is the
+ * natural granularity: a retry or double-submit within the day is deduped by
+ * Stripe, while a genuinely new operation tomorrow is not blocked. Matches the
+ * convention rent collection already uses (`${guestId}-${houseId}-${dayKey}`).
+ */
+const idempotencyDay = (): string => new Date().toISOString().slice(0, 10);
+
+/**
+ * Keys must not contain PII — they are echoed in logs and in Stripe's own
+ * request records. Key off ids, never the operator's email.
+ */
+export const createCustomer = async (
+  email: string,
+  paymentMethod: string,
+  idempotencyKey?: string,
+) => {
+  const params = {
     email,
     payment_method: paymentMethod,
     invoice_settings: {
       default_payment_method: paymentMethod,
     },
-  });
+  };
+  // Omit the options object entirely when unkeyed, rather than passing
+  // undefined — callers and tests assert on the argument list.
+  return idempotencyKey
+    ? stripe.customers.create(params, { idempotencyKey })
+    : stripe.customers.create(params);
 };
 
 export const updatePaymentMethod = async (
@@ -127,9 +148,10 @@ export const createTierSubscription = async (
   tier: TierKey,
   userId?: string,
   billingInterval: BillingInterval = "month",
+  idempotencyKey?: string,
 ) => {
   const price = resolveTierPriceId(houseType, tier, billingInterval);
-  return stripe.subscriptions.create({
+  const params = {
     customer: customerId,
     items: [{ price, quantity: 1 }],
     trial_period_days: TRIAL_PERIOD_DAYS,
@@ -139,7 +161,10 @@ export const createTierSubscription = async (
       tier,
       billingInterval,
     },
-  });
+  };
+  return idempotencyKey
+    ? stripe.subscriptions.create(params, { idempotencyKey })
+    : stripe.subscriptions.create(params);
 };
 
 export const createItemsFromMetadata = (
@@ -401,7 +426,15 @@ export const initializeTierCustomer = async (
   userId: string,
   billingInterval: BillingInterval = "month",
 ) => {
-  const customer = await createCustomer(email, paymentMethod);
+  // Without these keys a retry or double-submit creates a SECOND real customer
+  // and subscription; Firestore keeps whichever finishes last, orphaning the
+  // other to bill forever with nothing pointing at it.
+  const day = idempotencyDay();
+  const customer = await createCustomer(
+    email,
+    paymentMethod,
+    `cust-${userId}-${day}`,
+  );
   // Same guard as the legacy path: validate before the subscription exists.
   await assertPaymentMethodUsable(stripe, customer.id, paymentMethod);
   const subscription = await createTierSubscription(
@@ -410,6 +443,9 @@ export const initializeTierCustomer = async (
     tier,
     userId,
     billingInterval,
+    // Tier and interval are part of the key: changing plan is a new operation,
+    // not a retry of the old one.
+    `tiersub-${userId}-${houseType}-${tier}-${billingInterval}-${day}`,
   );
   return {
     customerId: customer.id,
