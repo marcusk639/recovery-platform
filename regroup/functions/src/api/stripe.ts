@@ -114,8 +114,9 @@ export const createSubscription = async (
   customerId: string,
   oxfordEnabled: boolean = false,
   userId?: string,
+  idempotencyKey?: string,
 ) => {
-  return stripe.subscriptions.create({
+  const params = {
     customer: customerId,
     items: [
       {
@@ -132,7 +133,10 @@ export const createSubscription = async (
     // without an extra Firestore query. Passing it here avoids a second
     // Stripe round-trip that could fail after the subscription is already live.
     ...(userId ? { metadata: { userId } } : {}),
-  });
+  };
+  return idempotencyKey
+    ? stripe.subscriptions.create(params, { idempotencyKey })
+    : stripe.subscriptions.create(params);
 };
 
 /**
@@ -196,6 +200,10 @@ export const reactivateSubscription = async (
   subscriptionMetadata: OperatorSubscription,
   userId?: string,
 ): Promise<OperatorSubscription> => {
+  // This function creates a subscription unconditionally, so an unkeyed retry is
+  // the most direct way to double-bill an operator. Keyed on the customer rather
+  // than the old subscription id, which differs between the branches below.
+  const reactivateKey = `reactivate-${userId ?? customerId}-${idempotencyDay()}`;
   // Tier model: recreate a single flat-fee line item from the stored tier, and
   // record the single subscriptionItemId. Legacy two-item subscriptions keep the
   // house+guest createItemsFromMetadata path unchanged below.
@@ -203,11 +211,14 @@ export const reactivateSubscription = async (
     const houseType = subscriptionMetadata.houseType as HouseType;
     const tier = subscriptionMetadata.tier as TierKey;
     const price = resolveTierPriceId(houseType, tier);
-    const subscription = await stripe.subscriptions.create({
-      customer: customerId,
-      items: [{ price, quantity: 1 }],
-      ...(userId ? { metadata: { userId } } : {}),
-    });
+    const subscription = await stripe.subscriptions.create(
+      {
+        customer: customerId,
+        items: [{ price, quantity: 1 }],
+        ...(userId ? { metadata: { userId } } : {}),
+      },
+      { idempotencyKey: `${reactivateKey}-tier` },
+    );
     const freshMetadata = new OperatorSubscription();
     freshMetadata.houseType = houseType;
     freshMetadata.tier = tier;
@@ -219,11 +230,14 @@ export const reactivateSubscription = async (
     return freshMetadata;
   }
 
-  const subscription = await stripe.subscriptions.create({
-    customer: customerId,
-    items: createItemsFromMetadata(subscriptionMetadata),
-    ...(userId ? { metadata: { userId } } : {}),
-  });
+  const subscription = await stripe.subscriptions.create(
+    {
+      customer: customerId,
+      items: createItemsFromMetadata(subscriptionMetadata),
+      ...(userId ? { metadata: { userId } } : {}),
+    },
+    { idempotencyKey: `${reactivateKey}-legacy` },
+  );
   const freshMetadata = new OperatorSubscription();
   freshMetadata.oxfordEnabled = subscriptionMetadata.oxfordEnabled;
   mapSubscriptionToMetadata(subscription, freshMetadata, customerId);
@@ -383,6 +397,9 @@ export const initializeSubscription = async (
     customerId,
     oxfordEnabled,
     userId,
+    `sub-${userId ?? customerId}-${
+      oxfordEnabled ? "oxford" : "house"
+    }-${idempotencyDay()}`,
   );
   const subscriptionMetadata = new OperatorSubscription();
   subscriptionMetadata.oxfordEnabled = oxfordEnabled;

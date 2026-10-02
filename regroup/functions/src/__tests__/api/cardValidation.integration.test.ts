@@ -161,8 +161,10 @@ describe('customer initialization blocks subscription creation on a bad card', (
 
     const meta = await initializeCustomer('op@example.com', 'pm_1', false, 'user_1');
 
+    // initializeCustomer now passes an idempotency key too.
     expect(mockSubscriptionsCreate).toHaveBeenCalledWith(
       expect.objectContaining({ customer: 'cus_1', trial_period_days: 7 }),
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
     );
     expect(meta.customerId).toBe('cus_1');
     expect(mockCustomersDel).not.toHaveBeenCalled();
