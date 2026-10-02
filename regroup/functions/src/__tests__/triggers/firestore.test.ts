@@ -72,6 +72,7 @@ jest.mock("../../util/email", () => ({
 
 // ─── api/firestore ────────────────────────────────────────────────────────────
 const mockUpdateContact = jest.fn().mockResolvedValue(undefined);
+const mockGetUser = jest.fn();
 jest.mock("../../api/firestore", () => ({
   updateContact: (...args: any[]) => mockUpdateContact(...args),
   createGuestId: jest.fn(() => "guest-id-mock"),
@@ -80,7 +81,7 @@ jest.mock("../../api/firestore", () => ({
   userCollection: { doc: jest.fn(() => ({ update: jest.fn() })) },
   app: {},
   addNotification: jest.fn(),
-  getUser: jest.fn(),
+  getUser: (...args: any[]) => mockGetUser(...args),
   // onGuestWrite EES recalculation reads guestCollection + ratsFirestore directly.
   guestCollection: makeQueryChain(mockGuestsGet),
   houseCollection: makeQueryChain(
@@ -121,7 +122,9 @@ import {
   sendSubscriptionUpdateEmail,
   reportBug,
   submitFeedback,
+  setHouseSubscriptionStatusOnCreate,
 } from "../../triggers/firestore";
+import { logger } from "firebase-functions";
 
 // ─── Event helpers ────────────────────────────────────────────────────────────
 
@@ -570,5 +573,113 @@ describe("onGuestWrite (merged handler)", () => {
     const event = makeWrittenEvent(guest, null);
     await expect((onGuestWrite as Function)(event)).resolves.toBeUndefined();
     expect(mockDeleteClaim).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// setHouseSubscriptionStatusOnCreate
+//
+// The only path that sets an INITIAL house subscription status. No Stripe webhook
+// fires on subscription creation, and createOperatorSubscription cannot write it
+// because houses do not exist at checkout time.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("setHouseSubscriptionStatusOnCreate", () => {
+  const mockRefUpdate = jest.fn();
+
+  const event = (house: Record<string, unknown>) => ({
+    params: { houseId: "house-1" },
+    data: { data: () => house, ref: { update: mockRefUpdate } },
+  });
+
+  const operatorWith = (status?: string) => ({
+    id: "op-1",
+    subscriptionMetadata: status === undefined ? undefined : { status },
+  });
+
+  beforeEach(() => {
+    mockRefUpdate.mockReset().mockResolvedValue(undefined);
+    mockGetUser.mockReset();
+  });
+
+  it.each([
+    ["active", "active"],
+    ["trialing", "trialing"],
+    ["past_due", "past_due"],
+    ["unpaid", "unpaid"],
+    ["canceled", "canceled"],
+  ])("stamps %s from the operator as %s", async (operator, expected) => {
+    mockGetUser.mockResolvedValue(operatorWith(operator));
+
+    await (setHouseSubscriptionStatusOnCreate as any)(
+      event({ superAdminId: "op-1" }),
+    );
+
+    expect(mockRefUpdate).toHaveBeenCalledWith({
+      subscriptionStatus: expected,
+    });
+  });
+
+  it("maps 'cancelling' to active — set to cancel at period end but still live", async () => {
+    // cancelling is not a terminal state: the subscription still bills and the
+    // operator keeps access until the period ends.
+    mockGetUser.mockResolvedValue(operatorWith("cancelling"));
+
+    await (setHouseSubscriptionStatusOnCreate as any)(
+      event({ superAdminId: "op-1" }),
+    );
+
+    expect(mockRefUpdate).toHaveBeenCalledWith({ subscriptionStatus: "active" });
+  });
+
+  it("falls back to ownerId when superAdminId is absent", async () => {
+    mockGetUser.mockResolvedValue(operatorWith("active"));
+
+    await (setHouseSubscriptionStatusOnCreate as any)(
+      event({ ownerId: "op-1" }),
+    );
+
+    expect(mockGetUser).toHaveBeenCalledWith("op-1");
+    expect(mockRefUpdate).toHaveBeenCalledWith({ subscriptionStatus: "active" });
+  });
+
+  it("denies and logs an error when the operator has no subscription", async () => {
+    // Invariant: a house may only exist once the operator has a subscription,
+    // even a trialing one. Reaching here is a signup-funnel bug, not a state to
+    // model — deny, and make it loud.
+    mockGetUser.mockResolvedValue(operatorWith(undefined));
+
+    await (setHouseSubscriptionStatusOnCreate as any)(
+      event({ superAdminId: "op-1" }),
+    );
+
+    expect(mockRefUpdate).toHaveBeenCalledWith({
+      subscriptionStatus: "canceled",
+    });
+    expect(logger.error).toHaveBeenCalledWith(
+      "house.created_without_subscription",
+      expect.objectContaining({ houseId: "house-1", operatorId: "op-1" }),
+    );
+  });
+
+  it("denies and logs when an unrecognized operator status appears", async () => {
+    mockGetUser.mockResolvedValue(operatorWith("surprise"));
+
+    await (setHouseSubscriptionStatusOnCreate as any)(
+      event({ superAdminId: "op-1" }),
+    );
+
+    expect(mockRefUpdate).toHaveBeenCalledWith({
+      subscriptionStatus: "canceled",
+    });
+  });
+
+  it("writes nothing when the house has no operator at all", async () => {
+    await (setHouseSubscriptionStatusOnCreate as any)(event({}));
+
+    expect(mockRefUpdate).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith(
+      "house.created_without_operator",
+      expect.objectContaining({ houseId: "house-1" }),
+    );
   });
 });
