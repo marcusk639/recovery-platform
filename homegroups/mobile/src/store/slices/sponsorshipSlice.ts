@@ -4,6 +4,7 @@ import {
   createEntityAdapter,
   createSelector,
 } from '@reduxjs/toolkit';
+import {addUserScopeReset} from '../userScope';
 import {MemberModel} from '../../models/MemberModel';
 import {
   Sponsorship,
@@ -81,6 +82,8 @@ export interface SponsorshipState {
     typeof sponsorshipRequestsAdapter.getInitialState
   >;
   groupSponsors: Record<string, string[]>;
+  /** Maintained by addUserScopeReset; see store/userScope.ts. */
+  loadedForUserId: string | null;
 }
 
 const initialState: SponsorshipState = {
@@ -92,6 +95,7 @@ const initialState: SponsorshipState = {
   sponsors: sponsorsAdapter.getInitialState(),
   sponsorshipRequests: sponsorshipRequestsAdapter.getInitialState(),
   groupSponsors: {},
+  loadedForUserId: null,
 };
 
 const convertToSponsorshipEntity = (
@@ -793,6 +797,11 @@ const sponsorshipSlice = createSlice({
         state.error =
           (action.payload as string) || 'Failed to update sponsor availability';
       });
+
+    // Must come last: this registers a matcher, and RTK rejects any
+    // addCase that follows one. Clears the slice when the signed-in user
+    // changes — see store/userScope.ts.
+    addUserScopeReset(builder, initialState);
   },
 });
 

@@ -4,6 +4,7 @@ import {
   createSelector,
   PayloadAction,
 } from '@reduxjs/toolkit';
+import {addUserScopeReset} from '../userScope';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import {RootState} from '../types';
@@ -38,6 +39,8 @@ export interface EngagementState {
     status: 'idle' | 'loading' | 'succeeded' | 'failed';
     error: string | null;
   };
+  /** Maintained by addUserScopeReset; see store/userScope.ts. */
+  loadedForUserId: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -281,6 +284,7 @@ const initialState: EngagementState = {
     status: 'idle',
     error: null,
   },
+  loadedForUserId: null,
 };
 
 const engagementSlice = createSlice({
@@ -379,6 +383,11 @@ const engagementSlice = createSlice({
       state.streak.status = 'failed';
       state.streak.error = action.payload as string;
     });
+
+    // Must come last: this registers a matcher, and RTK rejects any
+    // addCase that follows one. Clears the slice when the signed-in user
+    // changes — see store/userScope.ts.
+    addUserScopeReset(builder, initialState);
   },
 });
 

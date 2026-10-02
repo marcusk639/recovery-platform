@@ -1,5 +1,6 @@
 // mobile/src/store/slices/stepWorkSlice.ts
 import {createSlice, createAsyncThunk, createSelector} from '@reduxjs/toolkit';
+import {addUserScopeReset} from '../userScope';
 import firestore, {
   FirebaseFirestoreTypes,
 } from '@react-native-firebase/firestore';
@@ -20,6 +21,8 @@ export interface StepWorkState {
   notes: Record<number, StepNoteDocument>;
   loading: boolean;
   error: string | null;
+  /** Maintained by addUserScopeReset; see store/userScope.ts. */
+  loadedForUserId: string | null;
 }
 
 const initialState: StepWorkState = {
@@ -27,6 +30,7 @@ const initialState: StepWorkState = {
   notes: {},
   loading: false,
   error: null,
+  loadedForUserId: null,
 };
 
 // ---------------------------------------------------------------------------
@@ -306,6 +310,11 @@ const stepWorkSlice = createSlice({
         state.loading = false;
         state.error = action.payload as string;
       });
+
+    // Must come last: this registers a matcher, and RTK rejects any
+    // addCase that follows one. Clears the slice when the signed-in user
+    // changes — see store/userScope.ts.
+    addUserScopeReset(builder, initialState);
   },
 });
 
