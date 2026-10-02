@@ -402,7 +402,15 @@ service cloud.firestore {
     match /activities/{activityId} {
       allow read: if isGuest([resource.data.houseId]) || isAdmin([resource.data.houseId]);
       allow create: if isSameUser(request.resource.data.loggedBy) || isAdmin([request.resource.data.houseId]);
-      allow update: if isSameUser(resource.data.loggedBy) || isAdmin([resource.data.houseId]);
+      // `verified`/`verifiedBy` feed the Verified column of the court-ready
+      // compliance export, so the resident who logged the activity must not be
+      // able to self-certify their own attendance. Admins may verify; the
+      // logging user may edit everything else. diff() only flags real changes,
+      // so a whole-object write echoing the same flags back still passes.
+      allow update: if isAdmin([resource.data.houseId]) ||
+        (isSameUser(resource.data.loggedBy) &&
+          !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['verified', 'verifiedBy']));
       allow delete: if isAdmin([resource.data.houseId]);
     }
 
