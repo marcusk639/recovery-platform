@@ -159,3 +159,44 @@ export async function enforceHouseEntitlement(
   }
   return assertHouseEntitled(house, houseId, now);
 }
+
+/** House-side statuses the entitlement ladder above understands. */
+export type HouseSubscriptionStatus =
+  | 'active'
+  | 'trialing'
+  | 'past_due'
+  | 'canceled'
+  | 'unpaid';
+
+/**
+ * Maps an operator's stored subscription status onto a house status.
+ *
+ * Shared by setHouseSubscriptionStatusOnCreate (new houses) and the
+ * migrateHouseSubscriptionStatus backfill (existing houses), so the two cannot
+ * disagree about what a given operator state means for access.
+ *
+ * Returns null for anything unrecognized; callers treat that as a denial rather
+ * than guessing, so a typo or a new Stripe status never becomes free access.
+ */
+export const operatorStatusToHouseStatus = (
+  status?: string | null,
+): HouseSubscriptionStatus | null => {
+  switch (status) {
+    case 'active':
+      return 'active';
+    case 'trialing':
+      return 'trialing';
+    case 'past_due':
+      return 'past_due';
+    case 'unpaid':
+      return 'unpaid';
+    case 'canceled':
+      return 'canceled';
+    // "cancelling" is set-to-cancel-at-period-end: the subscription still bills
+    // and the operator keeps access until the period actually ends.
+    case 'cancelling':
+      return 'active';
+    default:
+      return null;
+  }
+};

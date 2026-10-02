@@ -25,6 +25,7 @@ import {
 import { getCurrentTime } from "../../util/date";
 import { deleteClaim } from "../../util/claims";
 import { SENDGRID_API_KEY } from "../../config";
+import { operatorStatusToHouseStatus } from "../../util/entitlement";
 
 /**
  * Sends a push notification when a new document is created in /notifications/{notificationId}.
@@ -71,44 +72,6 @@ export const notifyNewHouseCreated = onDocumentCreated(
     }
   },
 );
-
-/** House-side statuses the entitlement gate understands. */
-type HouseSubscriptionStatus =
-  | "active"
-  | "trialing"
-  | "past_due"
-  | "canceled"
-  | "unpaid";
-
-/**
- * Maps an operator's Stripe subscription status onto the house status.
- *
- * Returns null for anything unrecognized, which the caller treats as a denial
- * rather than guessing — a typo or a new Stripe status must not become free
- * access.
- */
-const operatorStatusToHouseStatus = (
-  status?: string | null,
-): HouseSubscriptionStatus | null => {
-  switch (status) {
-    case "active":
-      return "active";
-    case "trialing":
-      return "trialing";
-    case "past_due":
-      return "past_due";
-    case "unpaid":
-      return "unpaid";
-    case "canceled":
-      return "canceled";
-    // "cancelling" is set-to-cancel-at-period-end: the subscription still bills
-    // and the operator keeps access until the period actually ends.
-    case "cancelling":
-      return "active";
-    default:
-      return null;
-  }
-};
 
 /**
  * Stamps `house.subscriptionStatus` from the operator's subscription when a

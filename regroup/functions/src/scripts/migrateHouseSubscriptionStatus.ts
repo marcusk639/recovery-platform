@@ -1,83 +1,81 @@
 #!/usr/bin/env node
 /**
- * Data migration: backfill subscriptionStatus on all house documents.
+ * Backfill `house.subscriptionStatus` from the OPERATOR's subscription.
  *
- * Problem: House docs created before the paywall have no subscriptionStatus
- * field. The TypeScript class default 'active' only applies to in-memory
- * objects — Firestore never stored it. Without this field, the paywall gate
- * reads undefined and behaves as if the house has no subscription.
+ * Rewritten 2026-10-02. The previous version derived status from
+ * `house.stripeSubscriptionId` — a field that does not exist on either House
+ * entity. Houses carry only Stripe *Connect* fields (stripeAccountId,
+ * stripeStatus, stripeConnectedAt), which are about receiving rent payouts, not
+ * about the operator's subscription. So that branch could never fire: every
+ * house fell through to "canceled" while the script demanded a Stripe key and
+ * built a client it never meaningfully used. It also SKIPPED houses that already
+ * had a real status, which is exactly the set holding a stale value after a mass
+ * cancellation — so it could not fix the case it was most needed for.
  *
- * Behavior:
- *   - Houses already having subscriptionStatus set are SKIPPED (idempotent).
- *   - Houses with a stripeSubscriptionId: fetch Stripe subscription, use real status.
- *   - Houses without a stripeSubscriptionId: set 'canceled' (no subscription = no access).
+ * The subscription actually lives on the operator's user document
+ * (`user.subscriptionMetadata`), reachable from the house via superAdminId or
+ * ownerId. This version resolves that and maps it through the same
+ * `operatorStatusToHouseStatus` used by setHouseSubscriptionStatusOnCreate, so
+ * new houses and backfilled houses cannot disagree about what an operator state
+ * means for access.
  *
- * Usage (from functions/):
- *   npm run build
- *   STRIPE_SECRET_KEY=sk_live_... node lib/scripts/migrateHouseSubscriptionStatus.js --dry-run
- *   STRIPE_SECRET_KEY=sk_live_... node lib/scripts/migrateHouseSubscriptionStatus.js
- *   STRIPE_SECRET_KEY=sk_live_... node lib/scripts/migrateHouseSubscriptionStatus.js --limit 5
+ * Re-derives by default (the point of a relaunch backfill). Pass
+ * --skip-existing for the old idempotent behaviour.
  *
- * Requires Firebase credentials (GOOGLE_APPLICATION_CREDENTIALS or gcloud ADC).
+ * --verify-stripe additionally retrieves each subscription from Stripe and
+ * prefers Stripe's own status, reporting every divergence from the stored value.
+ * Divergences are how you detect that webhook propagation has been failing, so
+ * running with this flag first is strongly recommended.
+ *
+ * Usage (from functions/, after `npm run build`):
+ *   node lib/scripts/migrateHouseSubscriptionStatus.js --dry-run
+ *   node lib/scripts/migrateHouseSubscriptionStatus.js --dry-run --verify-stripe
+ *   node lib/scripts/migrateHouseSubscriptionStatus.js --limit 5
+ *   node lib/scripts/migrateHouseSubscriptionStatus.js
+ *
+ * --verify-stripe needs STRIPE_SECRET_KEY. Firebase credentials come from
+ * GOOGLE_APPLICATION_CREDENTIALS or gcloud ADC.
+ *
+ * Never logs PII: house ids and operator uids only, never names or addresses.
  */
 
-import "./scriptBootstrap";
-import Stripe from "stripe";
-import { houseCollection } from "../api/firestore";
+import './scriptBootstrap';
+import Stripe from 'stripe';
+import { houseCollection, getUser } from '../api/firestore';
+import { operatorStatusToHouseStatus, type HouseSubscriptionStatus } from '../util/entitlement';
 
 // ---------------------------------------------------------------------------
 // CLI flags
 // ---------------------------------------------------------------------------
 
 const args = process.argv.slice(2);
-const DRY_RUN = args.includes("--dry-run");
-const LIMIT_IDX = args.indexOf("--limit");
+const DRY_RUN = args.includes('--dry-run');
+const SKIP_EXISTING = args.includes('--skip-existing');
+const VERIFY_STRIPE = args.includes('--verify-stripe');
+const LIMIT_IDX = args.indexOf('--limit');
 const LIMIT = LIMIT_IDX !== -1 ? parseInt(args[LIMIT_IDX + 1], 10) : Infinity;
 
 if (LIMIT_IDX !== -1 && (Number.isNaN(LIMIT) || LIMIT <= 0)) {
-  console.error("Error: --limit must be a positive integer");
+  console.error('Error: --limit must be a positive integer');
   process.exit(1);
 }
 
-type SubscriptionStatus =
-  | "active"
-  | "trialing"
-  | "past_due"
-  | "canceled"
-  | "unpaid"
-  | "";
+const REAL_STATUSES = new Set<string>(['active', 'trialing', 'past_due', 'canceled', 'unpaid']);
 
-const VALID_STRIPE_STATUSES = new Set<string>([
-  "active",
-  "trialing",
-  "past_due",
-  "canceled",
-  "unpaid",
-  "incomplete",
-  "incomplete_expired",
-  "paused",
-]);
-
-const REAL_STATUSES = new Set([
-  "active",
-  "trialing",
-  "past_due",
-  "canceled",
-  "unpaid",
-]);
-
-function stripeStatusToAppStatus(stripeStatus: string): SubscriptionStatus {
+/** Stripe's own status, mapped onto a house status. */
+function stripeStatusToHouseStatus(stripeStatus: string): HouseSubscriptionStatus {
   switch (stripeStatus) {
-    case "active":
-      return "active";
-    case "trialing":
-      return "trialing";
-    case "past_due":
-      return "past_due";
-    case "unpaid":
-      return "unpaid";
+    case 'active':
+      return 'active';
+    case 'trialing':
+      return 'trialing';
+    case 'past_due':
+      return 'past_due';
+    case 'unpaid':
+      return 'unpaid';
+    // incomplete, incomplete_expired, paused, canceled → no access.
     default:
-      return "canceled";
+      return 'canceled';
   }
 }
 
@@ -86,91 +84,138 @@ function stripeStatusToAppStatus(stripeStatus: string): SubscriptionStatus {
 // ---------------------------------------------------------------------------
 
 async function main(): Promise<void> {
-  const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
-  if (!stripeSecretKey) {
-    console.error(
-      "STRIPE_SECRET_KEY is required. Example:\n" +
-        "  STRIPE_SECRET_KEY=sk_live_... node lib/scripts/migrateHouseSubscriptionStatus.js --dry-run",
-    );
-    process.exit(1);
+  let stripe: Stripe | undefined;
+  if (VERIFY_STRIPE) {
+    const key = process.env.STRIPE_SECRET_KEY;
+    if (!key) {
+      console.error(
+        '--verify-stripe requires STRIPE_SECRET_KEY. Example:\n' +
+          '  STRIPE_SECRET_KEY=sk_live_... node lib/scripts/migrateHouseSubscriptionStatus.js --dry-run --verify-stripe',
+      );
+      process.exit(1);
+    }
+    stripe = new Stripe(key, {
+      apiVersion: '2026-01-28.clover' as Stripe.LatestApiVersion,
+    });
   }
 
-  const stripe = new Stripe(stripeSecretKey, {
-    apiVersion: "2026-01-28.clover" as Stripe.LatestApiVersion,
-  });
-
-  console.log(`Mode: ${DRY_RUN ? "DRY RUN" : "LIVE"} | Limit: ${LIMIT}`);
+  console.log(
+    `Mode: ${DRY_RUN ? 'DRY RUN' : 'LIVE'} | ` +
+      `${SKIP_EXISTING ? 'skip-existing' : 're-derive all'} | ` +
+      `${VERIFY_STRIPE ? 'verifying against Stripe' : 'stored status only'} | ` +
+      `limit: ${LIMIT}`,
+  );
 
   const snapshot = await houseCollection.get();
   const docs = snapshot.docs.slice(0, LIMIT);
-  console.log(
-    `Found ${snapshot.docs.length} houses total, processing ${docs.length}`,
-  );
+  console.log(`Found ${snapshot.docs.length} houses, processing ${docs.length}`);
 
-  let skipped = 0;
   let updated = 0;
+  let unchanged = 0;
+  let skipped = 0;
+  let noOperator = 0;
+  let noSubscription = 0;
   let errors = 0;
+  const divergences: string[] = [];
 
   for (const houseDoc of docs) {
-    const data = houseDoc.data() as Record<string, any>;
     const houseId = houseDoc.id;
+    const data = houseDoc.data() as Record<string, unknown>;
+    const current = data.subscriptionStatus as string | undefined;
 
-    // Already has a real status — skip
-    if (REAL_STATUSES.has(data.subscriptionStatus)) {
-      console.log(
-        `  [SKIP] ${houseId} — already has status: ${data.subscriptionStatus}`,
-      );
+    if (SKIP_EXISTING && current && REAL_STATUSES.has(current)) {
+      console.log(`  [SKIP] ${houseId} — already ${current}`);
       skipped++;
       continue;
     }
 
-    const stripeSubscriptionId = data.stripeSubscriptionId as
-      | string
-      | undefined;
-    let newStatus: SubscriptionStatus;
+    const operatorId = (data.superAdminId || data.ownerId) as string | undefined;
+    if (!operatorId) {
+      // Cannot resolve an owner, so cannot derive a status. Left untouched
+      // rather than guessed at; absent status denies, which is the safe default.
+      console.warn(`  [NO OPERATOR] ${houseId} — left as ${current ?? 'unset'}`);
+      noOperator++;
+      continue;
+    }
 
-    if (stripeSubscriptionId) {
-      try {
-        const sub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
-        newStatus = VALID_STRIPE_STATUSES.has(sub.status)
-          ? stripeStatusToAppStatus(sub.status)
-          : "canceled";
-        console.log(
-          `  [UPDATE] ${houseId} — Stripe status: ${sub.status} → ${newStatus}`,
-        );
-      } catch (err: any) {
-        // Stripe 404 = subscription deleted
-        if (err?.statusCode === 404) {
-          newStatus = "canceled";
-          console.log(`  [UPDATE] ${houseId} — Stripe 404 → canceled`);
-        } else {
-          console.error(
-            `  [ERROR] ${houseId} — Stripe lookup failed: ${err?.message}`,
-          );
-          errors++;
-          continue;
+    try {
+      const operator = await getUser(operatorId);
+      const storedStatus = operator?.subscriptionMetadata?.status;
+      let target = operatorStatusToHouseStatus(storedStatus);
+
+      if (VERIFY_STRIPE && stripe) {
+        const subscriptionId = operator?.subscriptionMetadata?.subscriptionId;
+        if (subscriptionId) {
+          try {
+            const sub = await stripe.subscriptions.retrieve(subscriptionId);
+            const fromStripe = stripeStatusToHouseStatus(sub.status);
+            if (fromStripe !== target) {
+              // Stripe is authoritative. A divergence means the stored status
+              // drifted — usually because webhook delivery failed.
+              divergences.push(
+                `${houseId} (operator ${operatorId}): stored ${
+                  storedStatus ?? 'unset'
+                } -> house ${target ?? 'deny'}, Stripe ${sub.status} -> house ${fromStripe}`,
+              );
+            }
+            target = fromStripe;
+          } catch (err) {
+            console.warn(`  [STRIPE ERROR] ${houseId} — ${(err as Error).message}`);
+            errors++;
+          }
         }
       }
-    } else {
-      newStatus = "canceled";
-      console.log(`  [UPDATE] ${houseId} — no stripeSubscriptionId → canceled`);
-    }
 
-    if (!DRY_RUN) {
-      await houseDoc.ref.update({ subscriptionStatus: newStatus });
+      if (!target) {
+        // The operator has no usable subscription. Deny: a house should only
+        // exist once its operator has one, so this is also worth noticing.
+        console.warn(`  [NO SUBSCRIPTION] ${houseId} (operator ${operatorId}) — setting canceled`);
+        noSubscription++;
+        target = 'canceled';
+      }
+
+      if (current === target) {
+        unchanged++;
+        continue;
+      }
+
+      console.log(
+        `  [${DRY_RUN ? 'WOULD SET' : 'SET'}] ${houseId}: ${current ?? 'unset'} -> ${target}`,
+      );
+      if (!DRY_RUN) {
+        await houseDoc.ref.update({ subscriptionStatus: target });
+      }
+      updated++;
+    } catch (err) {
+      console.error(`  [ERROR] ${houseId} — ${(err as Error).message}`);
+      errors++;
     }
-    updated++;
   }
 
-  console.log(
-    `\nDone. Skipped: ${skipped} | Updated: ${updated} | Errors: ${errors}`,
-  );
-  if (errors > 0) {
-    process.exit(1);
+  console.log('\n--- Summary ---');
+  console.log(`${DRY_RUN ? 'Would update' : 'Updated'}: ${updated}`);
+  console.log(`Already correct:  ${unchanged}`);
+  if (SKIP_EXISTING) console.log(`Skipped:          ${skipped}`);
+  console.log(`No operator:      ${noOperator}`);
+  console.log(`No subscription:  ${noSubscription}`);
+  console.log(`Errors:           ${errors}`);
+
+  if (divergences.length) {
+    console.log(
+      `\n--- ${divergences.length} STORED/STRIPE DIVERGENCES ---\n` +
+        'Each of these is a house whose stored status disagreed with Stripe,\n' +
+        'which usually means webhook propagation failed. Worth investigating\n' +
+        'before trusting subscription state anywhere else.',
+    );
+    for (const d of divergences) console.log(`  ${d}`);
+  } else if (VERIFY_STRIPE) {
+    console.log('\nNo stored/Stripe divergences found.');
   }
+
+  if (errors > 0) process.exitCode = 1;
 }
 
 main().catch((err) => {
-  console.error("Fatal:", err);
+  console.error(err);
   process.exit(1);
 });
