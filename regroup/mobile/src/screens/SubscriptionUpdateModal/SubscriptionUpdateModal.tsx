@@ -18,6 +18,7 @@ import { logException } from '../../util/logging';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
 import { useAppDispatch } from '../../state/store';
+import { WEB_BASE_URL } from '../Subscription/SubscriptionRequiredScreen';
 
 interface Props {
   closeModal: () => any;
@@ -58,8 +59,7 @@ const STATUS_COPY: Record<
   },
   expired: {
     header: 'Subscription Expired',
-    description:
-      'Your subscription period has ended. Please renew your plan to regain access.',
+    description: 'Your subscription period has ended. Please renew your plan to regain access.',
     icon: 'clock',
     iconColor: color.orange,
     primaryAction: 'Renew Subscription',
@@ -75,7 +75,10 @@ const FALLBACK_COPY = {
   primaryAction: 'Fix Subscription',
 };
 
-const ACCOUNT_URL = 'https://regroup-app.com/my-account';
+// Built from WEB_BASE_URL so a staging/dev build does not send a lapsed
+// operator to the production billing page. Hardcoding the host here ignored
+// RATS_WEB_URL, unlike the paywall screen's own deep link.
+const ACCOUNT_URL = `${WEB_BASE_URL}/my-account`;
 
 /**
  * Subscription Update Modal
@@ -83,7 +86,7 @@ const ACCOUNT_URL = 'https://regroup-app.com/my-account';
  * Displays subscription issues with user-friendly messaging and allows the
  * user to open their account page or sign out.
  */
-const SubscriptionUpdateModal: React.FC<Props> = props => {
+const SubscriptionUpdateModal: React.FC<Props> = (props) => {
   const { status, isGuest } = props;
 
   const dispatch = useAppDispatch();
@@ -98,7 +101,7 @@ const SubscriptionUpdateModal: React.FC<Props> = props => {
         icon: 'exclamation-triangle',
         iconColor: color.orange,
       }
-    : STATUS_COPY[status] ?? FALLBACK_COPY;
+    : (STATUS_COPY[status] ?? FALLBACK_COPY);
 
   const goToAccount = useCallback(async () => {
     setLinkError(null);
@@ -107,14 +110,10 @@ const SubscriptionUpdateModal: React.FC<Props> = props => {
       if (supported) {
         await Linking.openURL(ACCOUNT_URL);
       } else {
-        setLinkError(
-          'Unable to open browser. Please visit regroup-app.com/my-account.',
-        );
+        setLinkError(`Unable to open browser. Please visit ${ACCOUNT_URL}.`);
       }
     } catch {
-      setLinkError(
-        'Unable to open browser. Please visit regroup-app.com/my-account.',
-      );
+      setLinkError(`Unable to open browser. Please visit ${ACCOUNT_URL}.`);
       logException('Could not open account URL');
     }
   }, []);
@@ -142,11 +141,7 @@ const SubscriptionUpdateModal: React.FC<Props> = props => {
         />
 
         {/* Header */}
-        <RatsText
-          text={copy.header}
-          style={styles.header}
-          testID="subscription-status-header"
-        />
+        <RatsText text={copy.header} style={styles.header} testID="subscription-status-header" />
 
         {/* Description */}
         <RatsText
