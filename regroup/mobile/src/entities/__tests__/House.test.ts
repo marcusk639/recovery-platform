@@ -76,8 +76,12 @@ describe('House entity', () => {
       expect(house.geohash).toBe('');
     });
 
-    it('defaults subscriptionStatus to "trialing"', () => {
-      expect(house.subscriptionStatus).toBe('trialing');
+    it('leaves subscriptionStatus unset — it is server-owned', () => {
+      // A client-side 'trialing' default meant a new operator's access rested on
+      // a value the client wrote about itself. It is now stamped by
+      // setHouseSubscriptionStatusOnCreate from the operator's subscription, and
+      // firestore.rules denies client writes to it.
+      expect(house.subscriptionStatus).toBeUndefined();
     });
   });
 

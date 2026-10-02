@@ -83,7 +83,11 @@ export class House extends BaseEntity {
   // out every newly created house. Stamping it server-side at house creation
   // is the real fix; until then, do not "clean this up".
   // (Trial length itself is TRIAL_PERIOD_DAYS in functions/src/api/stripe.ts.)
-  subscriptionStatus: SubscriptionStatus = 'trialing';
+  // SERVER-OWNED. Deliberately no default: a client-side 'trialing' meant a new
+  // operator's access rested on a value the client wrote about itself. It is now
+  // stamped by setHouseSubscriptionStatusOnCreate from the operator's
+  // subscription, and firestore.rules denies client writes to it.
+  subscriptionStatus?: SubscriptionStatus = undefined;
   guestGraceEndsAt?: string = undefined;
   isDemoHouse: boolean = false;
   // House model type — gates Oxford House features

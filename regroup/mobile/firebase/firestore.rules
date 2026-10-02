@@ -214,7 +214,17 @@ service cloud.firestore {
       // isGuest()'s internal gate alone) since this rule also calls the raw
       // hasSuperAdminRoleInHouse/hasAdminRoleInHouse helpers directly, which
       // do NOT include the demo-account house-scoping check on their own.
+      // SERVER-OWNED FIELDS. subscriptionStatus and guestGraceEndsAt are read by
+      // the server entitlement gate, the mobile operator gate and
+      // houseOxfordActive() — a client able to write them could grant itself
+      // access. This guard sits ABOVE the role branches on purpose: the
+      // superAdmin branch skips the sensitive-field allowlist entirely, so
+      // putting these in that list alone would leave the hole open for exactly
+      // the role most able to exploit it. Written only via the Admin SDK, which
+      // bypasses rules.
       allow update: if isDemoScopedHouses([houseId]) &&
+        !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['subscriptionStatus', 'guestGraceEndsAt']) &&
         (hasSuperAdminRoleInHouse([houseId]) ||
           ((hasAdminRoleInHouse([houseId]) || hasGuestRoleInHouse([houseId])) && !request.resource.data.diff(resource.data).affectedKeys()
             .hasAny(['stripeAccountId', 'stripeStatus', 'monthlyRent', 'weeklyRent', 'adminIds', 'ownerId'])));

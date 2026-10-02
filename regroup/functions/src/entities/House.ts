@@ -80,7 +80,12 @@ export class House extends BaseEntity {
   baths: number = 1;
   wifi: boolean = false;
   rating: number = 3;
+  // Both SERVER-OWNED (firestore.rules denies client writes). subscriptionStatus
+  // is stamped at creation and by the Stripe webhooks; guestGraceEndsAt is
+  // written by handleInvoicePaymentFailed and was previously undeclared here
+  // despite being read by the entitlement ladder.
   subscriptionStatus: string = "";
+  guestGraceEndsAt?: string;
 
   // Fields added to align with mobile app entity
   ownerId: string = "";
