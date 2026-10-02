@@ -13,7 +13,7 @@ import {
 } from '../../models/DirectMessageModel';
 import {DirectMessage, DirectConversation} from '../../types';
 import {trackActivity} from '../../services/activityTracker';
-import {setUser} from './authSlice';
+import {addUserScopeReset} from '../userScope';
 
 // Define entity types
 export interface DirectMessageEntity extends DirectMessage {
@@ -592,19 +592,6 @@ const directMessagesSlice = createSlice({
       })
 
       // Fetch conversations
-      // The authenticated user changed. Unlike the groups slice there is
-      // nothing here worth keeping — no shared entity cache, every field is
-      // one inbox — so the whole slice goes back to initial. That also clears
-      // `pendingReads`, which is what makes a reply to a read issued by the
-      // previous user arrive untracked, and therefore be dropped below.
-      .addCase(setUser, (state, action) => {
-        const uid = action.payload?.uid ?? null;
-        if (uid !== state.loadedForUserId) {
-          return {...initialState, loadedForUserId: uid};
-        }
-        return state;
-      })
-
       .addCase(fetchConversations.pending, (state, action) => {
         state.status = 'loading';
         state.pendingReads[action.meta.requestId] = signedInUid();
@@ -651,6 +638,11 @@ const directMessagesSlice = createSlice({
         state.error =
           (action.payload as string) || 'Failed to fetch conversations';
       });
+
+    // Must come last: this registers a matcher, and RTK rejects any
+    // addCase that follows one. Clears the slice when the signed-in user
+    // changes — see store/userScope.ts.
+    addUserScopeReset(builder, initialState);
   },
 });
 
