@@ -131,10 +131,27 @@ async function main(): Promise<void> {
 
     const operatorId = (data.superAdminId || data.ownerId) as string | undefined;
     if (!operatorId) {
-      // Cannot resolve an owner, so cannot derive a status. Left untouched
-      // rather than guessed at; absent status denies, which is the safe default.
-      console.warn(`  [NO OPERATOR] ${houseId} — left as ${current ?? 'unset'}`);
+      // An unattributable house cannot be billed and its operator cannot even be
+      // contacted, so leaving it indefinitely `active` is exactly the hole the
+      // paywall exists to close. Revoke.
+      //
+      // Measured on phoenix-cleanhouse 2026-10-02: 92 of 180 houses had neither
+      // superAdminId nor ownerId, and 89 of those were `active`. 71 were provably
+      // test data (39 with "test" in the name, 20 "demo", 12 unnamed) and 90 of
+      // 92 had no capacity at all, so these are seeded or abandoned records
+      // rather than operating houses.
       noOperator++;
+      if (current === 'canceled') {
+        unchanged++;
+        continue;
+      }
+      console.log(
+        `  [${DRY_RUN ? 'WOULD SET' : 'SET'}] ${houseId}: ${current ?? 'unset'} -> canceled (no operator)`,
+      );
+      if (!DRY_RUN) {
+        await houseDoc.ref.update({ subscriptionStatus: 'canceled' });
+      }
+      updated++;
       continue;
     }
 
