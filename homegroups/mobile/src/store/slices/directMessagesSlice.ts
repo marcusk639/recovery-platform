@@ -13,6 +13,7 @@ import {
 } from '../../models/DirectMessageModel';
 import {DirectMessage, DirectConversation} from '../../types';
 import {trackActivity} from '../../services/activityTracker';
+import {setUser} from './authSlice';
 
 // Define entity types
 export interface DirectMessageEntity extends DirectMessage {
@@ -70,6 +71,14 @@ export interface DirectMessagesState {
   threadMessageIds: Record<string, string[]>;
   hasMoreConversations: boolean;
   lastConversationThreadId: string | null;
+  /**
+   * The uid this inbox was loaded for. Every field above belongs to exactly
+   * one user, so anything held here while a different uid is signed in is
+   * another person's private correspondence.
+   */
+  loadedForUserId: string | null;
+  /** In-flight conversation reads, keyed by requestId, holding the issuing uid. */
+  pendingReads: Record<string, string | null>;
 }
 
 // Initial state
@@ -82,7 +91,12 @@ const initialState: DirectMessagesState = {
   threadMessageIds: {},
   hasMoreConversations: false,
   lastConversationThreadId: null,
+  loadedForUserId: null,
+  pendingReads: {},
 };
+
+/** The uid Firebase currently considers signed in, or null if nobody is. */
+const signedInUid = (): string | null => auth().currentUser?.uid ?? null;
 
 // Constants
 const CACHE_TTL = 2 * 60 * 1000; // 2 minutes cache TTL
@@ -578,11 +592,36 @@ const directMessagesSlice = createSlice({
       })
 
       // Fetch conversations
-      .addCase(fetchConversations.pending, state => {
+      // The authenticated user changed. Unlike the groups slice there is
+      // nothing here worth keeping — no shared entity cache, every field is
+      // one inbox — so the whole slice goes back to initial. That also clears
+      // `pendingReads`, which is what makes a reply to a read issued by the
+      // previous user arrive untracked, and therefore be dropped below.
+      .addCase(setUser, (state, action) => {
+        const uid = action.payload?.uid ?? null;
+        if (uid !== state.loadedForUserId) {
+          return {...initialState, loadedForUserId: uid};
+        }
+        return state;
+      })
+
+      .addCase(fetchConversations.pending, (state, action) => {
         state.status = 'loading';
+        state.pendingReads[action.meta.requestId] = signedInUid();
       })
       .addCase(fetchConversations.fulfilled, (state, action) => {
         state.status = 'succeeded';
+
+        // Only apply a read that is still the signed-in user's answer.
+        const issuedForUid = state.pendingReads[action.meta.requestId];
+        const stillTracked = action.meta.requestId in state.pendingReads;
+        delete state.pendingReads[action.meta.requestId];
+        if (!stillTracked || issuedForUid !== signedInUid()) {
+          state.error = null;
+          return;
+        }
+        state.loadedForUserId = signedInUid();
+
         const {conversations, hasMore} = action.payload;
         const entities = conversations.map(toConversationEntity);
 
@@ -608,6 +647,7 @@ const directMessagesSlice = createSlice({
       })
       .addCase(fetchConversations.rejected, (state, action) => {
         state.status = 'failed';
+        delete state.pendingReads[action.meta.requestId];
         state.error =
           (action.payload as string) || 'Failed to fetch conversations';
       });
@@ -637,18 +677,47 @@ const conversationsSelectors = conversationsAdapter.getSelectors<RootState>(
   state => state.directMessages.conversations,
 );
 
+const selectInboxOwnerId = (state: RootState) =>
+  state.directMessages.loadedForUserId;
+const selectSignedInUid = (state: RootState) => state.auth.user?.uid ?? null;
+
+/**
+ * True only when the inbox in state was loaded for the uid signed in now.
+ * `signOut` clears `auth.user` before the async `setUser(null)` reaches this
+ * slice, so without this the previous inbox is renderable in that window.
+ */
+const selectInboxIsOwnedBySignedInUser = createSelector(
+  [selectInboxOwnerId, selectSignedInUid],
+  (ownerId, signedIn) => !!signedIn && ownerId === signedIn,
+);
+
+const EMPTY_CONVERSATIONS: ReturnType<typeof conversationsSelectors.selectAll> =
+  [];
+
+const EMPTY_MESSAGES: DirectMessageEntity[] = [];
+
 export const selectMessagesByThread = createSelector(
   [
     messagesSelectors.selectEntities,
     (state: RootState, threadId: string) =>
       state.directMessages.threadMessageIds[threadId] || [],
+    selectInboxIsOwnedBySignedInUser,
   ],
-  (entities, messageIds) => {
+  (entities, messageIds, owned) => {
+    // Message bodies are the most sensitive thing in this slice, so they get
+    // the same ownership gate as the conversation list rather than relying on
+    // the reducer reset alone — that reset only lands once `setUser` arrives.
+    if (!owned) {
+      return EMPTY_MESSAGES;
+    }
     return messageIds.map(id => entities[id]).filter(Boolean);
   },
 );
 
-export const selectAllConversations = conversationsSelectors.selectAll;
+export const selectAllConversations = createSelector(
+  [conversationsSelectors.selectAll, selectInboxIsOwnedBySignedInUser],
+  (conversations, owned) => (owned ? conversations : EMPTY_CONVERSATIONS),
+);
 export const selectConversationById = conversationsSelectors.selectById;
 export const selectHasMoreConversations = (state: RootState) =>
   state.directMessages.hasMoreConversations;
