@@ -133,6 +133,46 @@ jobs:
       - name: Test
         run: cd regroup/functions && npm test -- --forceExit
 
+  regroup-mobile:
+    name: regroup/mobile — test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: regroup/mobile/package-lock.json
+      # `npm ci` alone cannot work here. Unlike homegroups/mobile, whose
+      # postinstall guards CocoaPods behind `if [ "$(uname)" = "Darwin" ]`,
+      # this package runs `pod-install` unconditionally, which fails on Linux.
+      # Skipping lifecycle scripts also skips patch-package, and two patches
+      # under regroup/mobile/patches are load-bearing, so run it explicitly.
+      - name: Install dependencies
+        run: cd regroup/mobile && npm ci --ignore-scripts && npx patch-package
+      - name: Test
+        run: cd regroup/mobile && npm test -- --ci
+
+  regroup-web:
+    name: regroup/web — typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: regroup/web/package-lock.json
+      - name: Install dependencies
+        run: cd regroup/web && npm ci
+      # Deliberately not `npm test`: angular.json points the Karma target at
+      # karma.conf.js, which has never existed in this repo, so `ng test`
+      # cannot run. The specs do typecheck, so that is what is enforced until
+      # someone adds a runner — this job is named "typecheck", not "test", so
+      # it does not imply coverage it has not got.
+      - name: Typecheck
+        run: cd regroup/web && npx tsc --noEmit -p tsconfig.spec.json
+
   detox-recovery:
     name: detox-recovery — typecheck + test
     runs-on: ubuntu-latest

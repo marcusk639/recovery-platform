@@ -132,7 +132,7 @@ describe('StalePendingBanner', () => {
     );
     fireEvent.press(getByTestId('stale-pending-contact-support'));
     expect(Linking.openURL).toHaveBeenCalledWith(
-      'mailto:support@regroup-app.com?subject=Stuck%20Pending%20Payment',
+      'mailto:admin@regroup-app.com?subject=Stuck%20Pending%20Payment',
     );
   });
 });
