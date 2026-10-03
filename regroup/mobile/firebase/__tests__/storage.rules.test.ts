@@ -428,10 +428,11 @@ describe('Guest avatars (houses/{houseId}/guests/{guestId}/avatar/{fileName})', 
     await assertSucceeds(uploadToPath(ctx, avatarPath, TINY_PNG, 'image/jpeg'));
   });
 
-  // A resident's face photo plus a houseId implies recovery status, so reads are
-  // scoped to that house. These three cases replace a single
-  // 'ALLOW any authenticated user to read guest avatar' test, which pinned the
-  // leak rather than the contract.
+  // Reads are scoped to the house. These three cases replace a single
+  // 'ALLOW any authenticated user to read guest avatar' test, which pinned an
+  // open read rather than a contract. Note this path is currently unused —
+  // nothing calls uploadGuestAvatar — so these guard a future wiring-up rather
+  // than a live flow.
   test('ALLOW a guest of the house to read guest avatar', async () => {
     const adminCtx = testEnv.authenticatedContext(
       USER_A_UID,

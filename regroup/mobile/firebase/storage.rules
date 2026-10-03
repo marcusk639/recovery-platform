@@ -88,13 +88,18 @@ service firebase.storage {
     //    Read:  members of that house (guests + admins)
     //    Write: admin/superAdmin of that house; images only; max 5 MB
     //
-    // Read was `isAuthenticated()` until 2026-10-02, which let anyone who
-    // completed free self-serve signup fetch any resident's face photo in any
-    // house given a houseId/guestId pair — both are Firestore doc ids that
-    // travel in exports, shared links and prior memberships. Residency in a
-    // sober-living house implies recovery status, so that is the disclosure
-    // this product exists to prevent. Chore photos directly below were already
-    // member-scoped, so the open read was an inconsistency, not a design.
+    // Read was `isAuthenticated()` until 2026-10-02. Tightened as hygiene, NOT
+    // as an incident fix: this path is currently unused. `uploadGuestAvatar`
+    // and `getGuestAvatarDownloadURL` (mobile/src/services/storage.tsx) have no
+    // call sites, and real avatars are uploaded to `users/{uid}/avatar`, whose
+    // tokenised download URL is copied onto guest.avatar and admin.avatar
+    // (mobile/src/services/users.tsx:233,247,251). Scoped now so that wiring
+    // uploadGuestAvatar up later cannot quietly ship an open read; chore photos
+    // directly below were already member-scoped, so this matches them.
+    //
+    // The live read surface is `users/{userId}/avatar` above, still
+    // `isAuthenticated()`. Scoping it is a product question, not a typo: a user
+    // avatar is rendered in contact views that legitimately cross houses.
     // =========================================================================
     match /houses/{houseId}/guests/{guestId}/avatar/{fileName} {
       allow read: if isHouseMember(houseId);
