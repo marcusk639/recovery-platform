@@ -7,8 +7,13 @@ import 'react-native-gesture-handler';
 import * as Sentry from '@sentry/react-native';
 import { StripeProvider } from '@stripe/stripe-react-native';
 
-// TODO: Replace with real publishable key via react-native-config or similar
-const STRIPE_PUBLISHABLE_KEY = process.env.STRIPE_PUBLISHABLE_KEY ?? 'pk_test_placeholder';
+import { isStripeConfigured, stripePublishableKey } from './src/config/env';
+import { logException } from './src/util/logging';
+
+// '' when unconfigured, which leaves StripeProvider inert and surfaces the
+// problem here rather than at the point of payment. scripts/check-release-env.js
+// is the gate that stops an unconfigured bundle becoming a release build.
+const STRIPE_PUBLISHABLE_KEY = stripePublishableKey();
 
 import { ThemeProvider, color } from './src/styles/theme';
 import { useAppSelector } from './src/state/store';
@@ -17,11 +22,7 @@ import { withSplash } from './src/screens/Splash/Splash';
 import Auth from './src/components/auth/auth';
 import IOSStatusBar from './src/components/ios-status-bar';
 import ErrorBoundary from './src/components/ErrorBoundary';
-import {
-  ModalProvider,
-  NotificationProvider,
-  DataProvider,
-} from './src/context';
+import { ModalProvider, NotificationProvider, DataProvider } from './src/context';
 import {
   RootNavigator,
   improvedNavigationService,
@@ -36,6 +37,18 @@ Sentry.init({
   tracesSampleRate: 0.2,
 });
 
+// Reported after Sentry.init, not beside the constant above: captureException
+// before init is dropped without trace, which is the failure mode this report
+// exists to catch.
+if (!isStripeConfigured()) {
+  logException(
+    new Error(
+      'STRIPE_PUBLISHABLE_KEY was not bundled; in-app payments are disabled. ' +
+        'See regroup/mobile/.env.example.',
+    ),
+  );
+}
+
 interface RootNavigatorProps {
   initialRoute: keyof RootStackParamList;
   authInitialRoute?: keyof AuthStackParamList;
@@ -43,11 +56,7 @@ interface RootNavigatorProps {
 }
 
 const RootNavigatorMemo = memo(
-  ({
-    initialRoute,
-    authInitialRoute,
-    initialMainRoute,
-  }: RootNavigatorProps) => (
+  ({ initialRoute, authInitialRoute, initialMainRoute }: RootNavigatorProps) => (
     <RootNavigator
       initialRoute={initialRoute}
       authInitialRoute={authInitialRoute}
@@ -72,20 +81,17 @@ const App: React.FC = () => {
   const { theme } = useAppSelector(selectAppNavigationState);
 
   // Calculate initial routes once on mount
-  const initialRoutes = improvedNavigationService.getInitialNavigation(
-    user,
-    invitation,
-  );
+  const initialRoutes = improvedNavigationService.getInitialNavigation(user, invitation);
 
   const [initialRoute, setInitialRoute] = useState<keyof RootStackParamList>(
     initialRoutes.initialRoute as keyof RootStackParamList,
   );
-  const [authInitialRoute, setAuthInitialRoute] = useState<
-    keyof AuthStackParamList | undefined
-  >(initialRoutes.authInitialRoute as keyof AuthStackParamList | undefined);
-  const [initialMainRoute, setInitialMainRoute] = useState<
-    keyof MainTabParamList | undefined
-  >(initialRoutes.initialMainRoute as keyof MainTabParamList | undefined);
+  const [authInitialRoute, setAuthInitialRoute] = useState<keyof AuthStackParamList | undefined>(
+    initialRoutes.authInitialRoute as keyof AuthStackParamList | undefined,
+  );
+  const [initialMainRoute, setInitialMainRoute] = useState<keyof MainTabParamList | undefined>(
+    initialRoutes.initialMainRoute as keyof MainTabParamList | undefined,
+  );
 
   // Recalculate routes on auth state changes
   useEffect(() => {
@@ -93,17 +99,10 @@ const App: React.FC = () => {
     // (login/logout, user change, or invitation added/removed)
     // We don't recalculate when user info is updated during a flow (like infoEntered)
     // because navigation is handled manually by the screens
-    const routes = improvedNavigationService.getInitialNavigation(
-      user,
-      invitation,
-    );
+    const routes = improvedNavigationService.getInitialNavigation(user, invitation);
     setInitialRoute(routes.initialRoute as keyof RootStackParamList);
-    setAuthInitialRoute(
-      routes.authInitialRoute as keyof AuthStackParamList | undefined,
-    );
-    setInitialMainRoute(
-      routes.initialMainRoute as keyof MainTabParamList | undefined,
-    );
+    setAuthInitialRoute(routes.authInitialRoute as keyof AuthStackParamList | undefined);
+    setInitialMainRoute(routes.initialMainRoute as keyof MainTabParamList | undefined);
   }, [
     loggedIn,
     anonymous,
@@ -127,10 +126,7 @@ const App: React.FC = () => {
               <NotificationProvider>
                 <ModalProvider>
                   <Auth>
-                    <IOSStatusBar
-                      backgroundColor={color.black}
-                      barStyle="light-content"
-                    />
+                    <IOSStatusBar backgroundColor={color.black} barStyle="light-content" />
                     <RootNavigatorMemo
                       key={navigationKey}
                       initialRoute={initialRoute}
