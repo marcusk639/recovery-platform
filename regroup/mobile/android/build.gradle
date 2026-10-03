@@ -3,7 +3,14 @@
 buildscript {
     ext {
         buildToolsVersion = "34.0.0"
-        minSdkVersion = 34
+        // minSdk is the OLDEST Android release the app installs on — not a
+        // mirror of compileSdk. It arrived as 34 in the initial monorepo import
+        // and was never revisited, which would have limited the app to Android
+        // 14+ devices. 23 matches homegroups/mobile, the sibling app on the same
+        // React Native and Firebase stack. The React Native 0.72 template
+        // default is 21; nothing here needs more than 23 (detox declares 24 but
+        // is not wired into the Gradle build in either app).
+        minSdkVersion = 23
         compileSdkVersion = 34
         targetSdkVersion = 34
         androidXCore = "1.6.0"
