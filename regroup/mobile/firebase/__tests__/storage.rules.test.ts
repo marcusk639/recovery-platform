@@ -428,18 +428,53 @@ describe('Guest avatars (houses/{houseId}/guests/{guestId}/avatar/{fileName})', 
     await assertSucceeds(uploadToPath(ctx, avatarPath, TINY_PNG, 'image/jpeg'));
   });
 
-  test('ALLOW any authenticated user to read guest avatar', async () => {
+  // A resident's face photo plus a houseId implies recovery status, so reads are
+  // scoped to that house. These three cases replace a single
+  // 'ALLOW any authenticated user to read guest avatar' test, which pinned the
+  // leak rather than the contract.
+  test('ALLOW a guest of the house to read guest avatar', async () => {
     const adminCtx = testEnv.authenticatedContext(
       USER_A_UID,
       authHouseAdmin(USER_A_UID, HOUSE_ID),
     );
     await uploadToPath(adminCtx, avatarPath, TINY_PNG, 'image/jpeg');
 
+    const memberCtx = testEnv.authenticatedContext(
+      USER_B_UID,
+      authHouseGuest(USER_B_UID, HOUSE_ID),
+    );
+    await assertSucceeds(readFromPath(memberCtx, avatarPath));
+  });
+
+  test('ALLOW an admin of the house to read guest avatar', async () => {
+    const adminCtx = testEnv.authenticatedContext(
+      USER_A_UID,
+      authHouseAdmin(USER_A_UID, HOUSE_ID),
+    );
+    await uploadToPath(adminCtx, avatarPath, TINY_PNG, 'image/jpeg');
+    await assertSucceeds(readFromPath(adminCtx, avatarPath));
+  });
+
+  test('DENY an authenticated non-member reading guest avatar', async () => {
+    const adminCtx = testEnv.authenticatedContext(
+      USER_A_UID,
+      authHouseAdmin(USER_A_UID, HOUSE_ID),
+    );
+    await uploadToPath(adminCtx, avatarPath, TINY_PNG, 'image/jpeg');
+
+    // Signed up, belongs to no house — the free-signup attacker.
     const plainCtx = testEnv.authenticatedContext(
       USER_B_UID,
       authUserOnly(USER_B_UID),
     );
-    await assertSucceeds(readFromPath(plainCtx, avatarPath));
+    await assertFails(readFromPath(plainCtx, avatarPath));
+
+    // Member of a different house — the ex-resident / wrong-house case.
+    const otherHouseCtx = testEnv.authenticatedContext(
+      USER_B_UID,
+      authHouseGuest(USER_B_UID, HOUSE_ID_OTHER),
+    );
+    await assertFails(readFromPath(otherHouseCtx, avatarPath));
   });
 
   test('DENY guest (non-admin) writing guest avatar', async () => {
