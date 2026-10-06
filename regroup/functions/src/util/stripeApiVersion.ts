@@ -19,9 +19,14 @@ import type Stripe from 'stripe';
  *
  * The env var still wins, so a deployed override keeps working, but it now
  * applies to every client rather than one of them. regroup/scripts/
- * preflight-billing.js reads PINNED_API_VERSION out of this file and fails the
- * deploy when the deployed value diverges, which is the gate that makes the
- * override safe to keep.
+ * preflight-billing.js reads PINNED_API_VERSION out of this file and compares it
+ * against the deployed STRIPE_API_VERSION.
+ *
+ * That gate blocks the deploy only once TIER_BILLING_ENABLED=true in the deployed
+ * config, or when the script is run by hand with --strict. The wired predeploy
+ * passes no --strict (regroup/firebase.json), so BEFORE go-live a divergent
+ * version is a loud warning and the deploy proceeds. An earlier version of this
+ * comment said it fails the deploy unconditionally; it does not.
  *
  * Read at MODULE LOAD, which is correct for a plain config var baked in by the
  * Firebase CLI, and is why it cannot be moved into Secret Manager: a bound
@@ -43,4 +48,3 @@ const rawApiVersion = process.env.STRIPE_API_VERSION?.trim();
 export const STRIPE_API_VERSION: Stripe.LatestApiVersion = rawApiVersion
   ? (rawApiVersion as Stripe.LatestApiVersion)
   : PINNED_API_VERSION;
-

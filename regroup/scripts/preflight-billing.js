@@ -33,6 +33,16 @@
  *   - --strict → enforce regardless (a go-live readiness check; also makes
  *     unconfirmed secrets fatal).
  *
+ * The wired predeploy (firebase.json) passes NO --strict, and deliberately so.
+ * Under --strict every warning is fatal, and two warnings fire on healthy
+ * deploys: the informational "TIER_BILLING_ENABLED is not true" line on any
+ * pre-go-live deploy, and any [SECRET] that `firebase functions:secrets:access`
+ * cannot confirm — which needs secretmanager.versions.access, an IAM permission
+ * a deployer does not otherwise require. Wiring --strict into the predeploy
+ * would therefore block legitimate deploys on a permission the deploy itself
+ * does not need. Run it by hand as a readiness check instead. Nothing in this
+ * script should claim a gate blocks unless it blocks without --strict.
+ *
  * The CONFIG price-ID var names mirror priceEnvVar/annualPriceEnvVar in
  * functions/src/config.ts (SUBSCRIPTION_TIERS). Keep the two in sync.
  */
@@ -152,9 +162,22 @@ const SECRET_NAMES = [
   'STRIPE_CLIENT_ID',
   'STRIPE_WEBHOOK_SECRET',
   'STRIPE_CONNECT_WEBHOOK_SECRET',
-  // Test-mode signing secrets. Bound on both webhook functions, so a missing
-  // one fails the deploy rather than degrading at runtime — which is precisely
-  // what this gate exists to catch before the deploy is attempted.
+  // Test-mode signing secrets. One each, NOT both on both functions:
+  // STRIPE_TEST_WEBHOOK_SECRET is bound only on stripeWebhook and
+  // STRIPE_CONNECT_TEST_WEBHOOK_SECRET only on handleStripeConnectWebhook
+  // (functions/src/webhooks/stripeWebhook.ts). That asymmetry is correct —
+  // webhookSecretCandidates('platform') reads only the platform pair and
+  // ('connect') only the Connect pair, so a cross-binding would be dead weight.
+  // Asserted by the `secrets:` tests in
+  // functions/src/__tests__/webhooks/stripeWebhook.test.ts.
+  //
+  // A missing one does NOT fail the deploy: every [SECRET] finding below is a
+  // warning unless --strict is passed, and the wired predeploy passes no
+  // --strict (firebase.json). It degrades at runtime instead — the function
+  // falls back to the one remaining candidate, which still verifies its own
+  // mode's events, so the loss is diagnostic rather than functional. Run
+  // `node scripts/preflight-billing.js --strict` as a go-live readiness check
+  // to make it fatal.
   'STRIPE_TEST_WEBHOOK_SECRET',
   'STRIPE_CONNECT_TEST_WEBHOOK_SECRET',
 ];
@@ -162,25 +185,43 @@ const SECRET_NAMES = [
 // The API version this service is written against, read out of the source of
 // truth rather than copied. functions/src/util/stripeApiVersion.ts lets a
 // deployed STRIPE_API_VERSION override the pin, and that override now applies to
-// every Stripe client, so a present-but-divergent value changes object and event
-// shapes service-wide while passing a mere presence check.
+// every Stripe client, so a present-but-divergent value changes the shape of the
+// objects Stripe returns to every OUTBOUND call service-wide, while passing a
+// mere presence check. It does NOT change inbound webhook payload shapes — those
+// come from the API version set on the endpoint in the Stripe Dashboard, as
+// functions/src/util/stripeApiVersion.ts explains.
 //
 // Parsed textually because this is a plain Node script with no TS build step.
-// Returns null if the pin cannot be found, and the check below then skips rather
-// than asserting against a guess.
+// A parse failure is reported, never swallowed: returning null silently and
+// skipping the comparison meant renaming PINNED_API_VERSION, or switching it to
+// a template literal, disabled this gate with no signal at all.
 function readPinnedApiVersion() {
+  const pinFile = path.join(__dirname, '..', 'functions', 'src', 'util', 'stripeApiVersion.ts');
+  let src;
   try {
-    const src = fs.readFileSync(
-      path.join(__dirname, '..', 'functions', 'src', 'util', 'stripeApiVersion.ts'),
-      'utf8',
-    );
-    const m = src.match(/PINNED_API_VERSION\s*=\s*["']([^"']+)["']/);
-    return m ? m[1] : null;
-  } catch {
-    return null;
+    src = fs.readFileSync(pinFile, 'utf8');
+  } catch (err) {
+    return {
+      version: null,
+      problem:
+        `could not read ${path.relative(path.join(__dirname, '..'), pinFile)} ` +
+        `(${err.code || err.message})`,
+    };
   }
+  const m = src.match(/PINNED_API_VERSION\s*=\s*["']([^"']+)["']/);
+  if (!m) {
+    return {
+      version: null,
+      problem:
+        `no PINNED_API_VERSION = '<version>' assignment found in ` +
+        `${path.relative(path.join(__dirname, '..'), pinFile)} — it was probably ` +
+        `renamed or changed to a template literal. Until this parses, the ` +
+        `STRIPE_API_VERSION divergence gate below cannot run at all.`,
+    };
+  }
+  return { version: m[1], problem: null };
 }
-const EXPECTED_API_VERSION = readPinnedApiVersion();
+const { version: EXPECTED_API_VERSION, problem: API_VERSION_PIN_PROBLEM } = readPinnedApiVersion();
 
 // Existence check via `firebase functions:secrets:access` with all output
 // discarded (the value never reaches a log). Returns 'ok' | 'missing' |
@@ -204,6 +245,11 @@ function main() {
   const projectId = resolveProjectId();
   const { env, files } = loadDeployConfig(projectId);
   const warnings = [];
+  // Declared. The API-version gate below pushed onto an undeclared `errors`,
+  // which under 'use strict' threw ReferenceError: errors is not defined — so the
+  // enforced path crashed with a stack trace instead of printing its message. It
+  // did block the deploy, by crashing, which is not the same as reporting.
+  const errors = [];
 
   console.log(
     `[preflight-billing] project: ${projectId || '(unresolved)'} | ` +
@@ -231,26 +277,35 @@ function main() {
     );
   }
   // STRIPE_API_VERSION: presence alone is not enough. The override reaches every
-  // Stripe client, so a present-but-divergent value silently changes object and
-  // event shapes service-wide — the same class of bug as the four-way split this
-  // replaced, just uniform instead of inconsistent. Treated as an error under
-  // enforcement rather than a warning, because nothing downstream validates the
-  // cast to Stripe.LatestApiVersion at runtime.
+  // Stripe client, so a present-but-divergent value silently changes the shape of
+  // the objects Stripe returns to every outbound call service-wide — the same
+  // class of bug as the four-way split this replaced, just uniform instead of
+  // inconsistent. Treated as an error under enforcement rather than a warning,
+  // because nothing downstream validates the cast to Stripe.LatestApiVersion at
+  // runtime.
+  //
+  // The pin must parse before any of that can be checked, so a parse failure is
+  // reported at the same severity rather than silently skipping the comparison.
+  if (API_VERSION_PIN_PROBLEM) {
+    const message =
+      `cannot read the pinned Stripe API version: ${API_VERSION_PIN_PROBLEM} ` +
+      `STRIPE_API_VERSION in the deployed config is therefore UNCHECKED.`;
+    (enforce ? errors : warnings).push(message);
+  }
+
   const deployedApiVersion = (env.STRIPE_API_VERSION || '').trim();
   if (EXPECTED_API_VERSION && deployedApiVersion && deployedApiVersion !== EXPECTED_API_VERSION) {
     const message =
       `STRIPE_API_VERSION is "${deployedApiVersion}" but this service is written ` +
       `against "${EXPECTED_API_VERSION}" (PINNED_API_VERSION in ` +
       `functions/src/util/stripeApiVersion.ts). The deployed value overrides the ` +
-      `pin for every Stripe client, changing object and webhook payload shapes. ` +
-      `Align them, or bump the pin deliberately with its own verification.`;
-    if (enforce) {
-      errors.push(message);
-    } else {
-      warnings.push(message);
-    }
+      `pin for every Stripe client, changing the shape of the objects Stripe ` +
+      `returns to outbound calls. (It does NOT change inbound webhook payload ` +
+      `shapes — those follow the API version set on the endpoint in the Stripe ` +
+      `Dashboard, which is a separate manual check.) Align them, or bump the pin ` +
+      `deliberately with its own verification.`;
+    (enforce ? errors : warnings).push(message);
   }
-
 
   // --- [SECRET] best-effort check (warn-only unless --strict) ---------------
   const secretIssues = [];
@@ -275,6 +330,16 @@ function main() {
   }
 
   for (const w of warnings) console.warn(`[preflight-billing] ⚠ ${w}`);
+
+  // Hard errors block before the CONFIG report, which can `return` early and
+  // would otherwise swallow them.
+  if (errors.length) {
+    for (const e of errors) console.error(`[preflight-billing] ✗ ${e}`);
+    console.error(
+      `[preflight-billing] ✗ ${errors.length} blocking issue(s) above — deploy blocked.`,
+    );
+    process.exit(1);
+  }
 
   if (missingConfig.length) {
     console.error(
