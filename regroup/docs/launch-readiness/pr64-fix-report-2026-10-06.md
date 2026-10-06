@@ -16,7 +16,7 @@ left for a human.
 | `npm test` (`jest --runInBand`) | **54 suites / 854 tests passing** (baseline at ed2d7c9: 53 / 811)                              |
 | `npx tsc --noEmit`              | clean                                                                                          |
 | `npx jest --coverage`           | ran; **no `coverageThreshold` configured in `regroup/functions`**, so none breached or lowered |
-| Mutation tests                  | **27 applied, 27 caught**, every one reverted and the tree re-verified green                   |
+| Mutation tests | **27 applied, 27 caught** — but see §20: two (N7, N1) **survived at first** and are caught only because of the tests their survival exposed as missing. Every mutation was reverted and the tree re-verified green. |
 
 Coverage of the files touched: `stripeApiVersion.ts`, `stripeWebhookSecrets.ts`,
 `verifyStripeWebhook.ts`, `cardValidation.ts` all **100%**; `stripeWebhook.ts`
@@ -259,6 +259,28 @@ Verified across four states:
 | billing OFF + divergent version           | warning, `exit=0`                             |
 | billing ON + `PINNED_API_VERSION` renamed | `exit=1`, parse-failure message               |
 | billing OFF + pin renamed                 | loud warning, `exit=0`                        |
+
+### The recurring pattern this is an example of
+
+Three findings in this PR share one shape: **a gate whose own comment describes
+behaviour it does not have.**
+
+1. The API-version divergence gate said it "fails the deploy". It could not report at
+   all — it crashed on an undeclared identifier and "blocked" only by stack trace.
+   That is precisely why nobody noticed: the exit code was right, so from the outside
+   the gate looked like it worked.
+2. The `[SECRET]` block said a missing secret "fails the deploy". It warns, unless
+   `--strict`, which the wired predeploy does not pass.
+3. `stripeApiVersion.ts` said the preflight "fails the deploy when the deployed value
+   diverges". It blocks only once `TIER_BILLING_ENABLED=true`, or under `--strict`.
+
+The first is the worst, because a crash exits non-zero and therefore reads as a
+working gate. A gate that cannot report is worse than no gate: it suppresses the
+finding it exists to surface while appearing healthy.
+
+The lesson, now written into the script header: **do not claim a gate blocks unless it
+blocks on the wired path with no extra flag** — and assert a gate's output, not only
+its exit code.
 
 ### Item 4 — parse failure made loud
 
@@ -611,9 +633,70 @@ comment now says that explicitly, so nobody plans a rotation on its strength.
 This also means the opposite-mode secret binding is, after the guard, **diagnostic
 only** — it lets a cross-mode event be reported as "wrong mode" instead of an opaque
 signature failure. It was kept for that reason, documented and asserted, rather than
-silently unbound. Whether to keep binding it is a decision for a human (§21).
+silently unbound. Whether to keep binding it is a decision for a human (§21), and §19b takes that
+further: after the guard, the off-mode candidate can only ever refuse, never accept.
 
 ---
+
+## 19b. Design: the off-mode candidate can only ever refuse
+
+A question raised against this PR's own central mechanism. **The logic is correct.**
+
+### The proof
+
+Acceptance requires both gate conditions: `eventMode === candidate.mode` **and**
+`eventMode === deployedMode`. Take a live deployment, where `deployedMode === 'live'`,
+and the off-mode (test) candidate, where `candidate.mode === 'test'`:
+
+- for condition 1, `eventMode` must be `'test'`;
+- for condition 2, `eventMode` must be `'live'`.
+
+Unsatisfiable. The off-mode candidate can therefore **never** produce an acceptance,
+only a refusal, and symmetrically on a test deployment. Combined with §19 — one env
+var per mode, so no two same-mode candidates can coexist — the accepted set is exactly
+"an event of the deployment's own mode, signed with the deployment's own mode secret".
+
+That is the same accepted set as the pre-`ed2d7c9` design of resolving one secret from
+the deployment's mode. So the loop adds **no acceptance behaviour** over the design it
+replaced.
+
+### What the loop does still buy
+
+1. **Diagnosis.** A cross-mode event is reported as "wrong mode", naming
+   `eventMode` / `deployedMode` / `secretMode` / `verifiedWith`. Under single-secret
+   resolution the same request fails the HMAC and yields an opaque signature failure,
+   indistinguishable from a genuinely bad signature. Given that test-mode endpoints
+   are registered against both production URLs (§3), this traffic is expected, not
+   hypothetical — so the distinction has real operational value.
+2. **Misconfiguration diagnosis.** Secrets swapped between vars, or a secret pasted
+   into the wrong var, produce "verified with X, mode mismatch" instead of a blanket
+   failure.
+3. **Substrate for rotation.** Add a second same-mode var and the loop becomes
+   functional rather than diagnostic, with no change to the module or the handlers.
+
+### Verdict
+
+The mechanism is **more complex than its purpose currently requires**. Its cost is
+~140 lines, a mode-tagging concept threaded through the candidate type, and a reader
+having to hold "selection is not authorization" in mind. Its benefit today is log
+quality alone.
+
+Recommendation for a follow-up, not now — the current code is safe and better
+diagnosed than either predecessor:
+
+- **If signing-secret rotation is a real operational need**, add the second same-mode
+  env var. That converts the loop from diagnostic to functional and retroactively
+  justifies the whole structure. This is the option I would pick, since §19 shows
+  rotation currently drops in-flight events, which is a genuine gap.
+- **If rotation is not a need**, collapse back to resolving one secret from
+  `deployedStripeMode()` plus the explicit `event.livemode` assertion. That keeps the
+  security property — which is the part that matters — at much less surface. Be
+  explicit about the cost: a cross-mode event then fails the HMAC and the "wrong mode"
+  diagnosis is lost, so the §3 exposure becomes harder to observe in logs. That is a
+  real sacrifice, not a free simplification.
+
+What must **not** happen in either case is removing the `event.livemode` assertion.
+The loop is optional; the authorization check is not.
 
 ## 20. Mutation testing — 27 applied, 27 caught
 
@@ -671,11 +754,24 @@ exposed as missing.
 
 ## 21. Needs a human
 
-1. **Reconcile the Dashboard endpoint API versions with the pin.** One of the two
-   registered endpoints carries api_version `2025-05-28.basil` while the service pins
-   `2026-01-28.clover`. Inbound payload shape is a per-endpoint Dashboard setting and
-   no code change can fix it — this is exactly the manual check
-   `stripeApiVersion.ts` describes. Do this before the deploy.
+1. **MANUAL CHECK, NO CODE CAN PERFORM IT, STILL OUTSTANDING — reconcile the
+   Dashboard endpoint API versions with the pin.** The two registered endpoints
+   disagree with each other, and one disagrees with the service:
+
+   | Endpoint | Dashboard api_version | vs pin `2026-01-28.clover` |
+   | --- | --- | --- |
+   | `.../stripeEvents` (deployed alias of `stripeWebhook`) | `2025-05-28.basil` | **diverges** |
+   | `.../handleStripeConnectWebhook` | `2026-01-28.clover` | matches |
+
+   Inbound webhook payload shape is set **per endpoint in the Stripe Dashboard**, not
+   by any client's `apiVersion` (§6, item 8). Nothing in this PR, in
+   `stripeApiVersion.ts`, or in the preflight can detect or fix this. It is the manual
+   check `stripeApiVersion.ts` describes, and it is **not done**.
+
+   **Sandbox-only evidence.** These values come from sandbox account
+   `acct_1RXiFg2KPgAtfsl6`, the only account readable from this environment. **The
+   live account was never readable here**, so its endpoint versions are unknown and
+   must be checked separately. Do both before the deploy.
 
 2. **Decide whether to keep binding the opposite-mode secrets.** After the guard they
    are diagnostic only (§19). Kept, documented and asserted; unbinding them is a
@@ -683,6 +779,13 @@ exposed as missing.
 
 3. **Remove `STRIPE_WEBHOOK_MODE` in a separate PR** (§17), or give it a documented
    purpose. It is currently ordering-only dead weight.
+
+3b. **Decide the follow-up on the candidate loop (§19b).** Its accepted set is
+   identical to single-secret resolution, so its present value is diagnostic only.
+   Either add a second same-mode env var — making it functional and fixing the
+   rotation gap in §19, which is my recommendation — or collapse it back to one
+   resolved secret plus the `event.livemode` assertion, accepting the loss of
+   "wrong mode" diagnosis. Not for this PR.
 
 4. **`regroup/functions/.env.example` — no lines are required.** This work introduces
    no new environment variable. Specifically:
@@ -761,6 +864,11 @@ discriminates. Comment claims are either locally verified, attributed, or remove
 
 The condition is a configuration reconciliation, not a code change: the Dashboard
 endpoint carrying api_version `2025-05-28.basil` should be aligned with the pin
-before deploying, since no code in this PR can affect inbound payload shape. The
+before deploying, since no code in this PR can affect inbound payload shape, and the
+live account's endpoints were never readable from here and so remain unchecked. The
 deploy itself is what arms the exposure described in §3, so that reconciliation and
 this merge belong in the same window.
+
+Nothing in §19b blocks the merge. The candidate loop is more surface than its current
+purpose needs, but it is safe, better-diagnosed than either predecessor, and a
+follow-up decision rather than a defect.
