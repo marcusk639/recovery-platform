@@ -17,7 +17,7 @@ import {
   STRIPE_TEST_WEBHOOK_SECRET,
   STRIPE_CONNECT_TEST_WEBHOOK_SECRET,
 } from "../config";
-import { resolveWebhookSecret } from "../util/stripeWebhookSecrets";
+import { webhookSecretCandidates } from "../util/stripeWebhookSecrets";
 import { sendFcmToHouseAdmins } from "../util/notifications";
 import { sendEmail, regroupEmail } from "../util/email";
 import type { SubscriptionDoc } from "../api/firestore";
@@ -1029,13 +1029,13 @@ export const stripeWebhook = onRequest(
       return;
     }
 
-    // Resolved after the request is validated, in whichever Stripe mode the
-    // bound key implies. A missing secret is server misconfiguration, so it
-    // answers 500 — which Stripe retries — rather than letting constructEvent
-    // report it as a bad signature and blame the sender.
-    let endpointSecret: string;
+    // Resolved after the request is validated. No secret configured at all is
+    // server misconfiguration, so it answers 500 — which Stripe retries — rather
+    // than letting constructEvent report it as a bad signature and blame the
+    // sender.
+    let candidates;
     try {
-      endpointSecret = resolveWebhookSecret("platform");
+      candidates = webhookSecretCandidates("platform");
     } catch (err) {
       logger.error("stripeWebhook: webhook secret unavailable", {
         err: (err as Error).message,
@@ -1044,21 +1044,38 @@ export const stripeWebhook = onRequest(
       return;
     }
 
-    let event: Stripe.Event;
-    try {
-      // req.rawBody is provided by Firebase Cloud Functions for onRequest handlers
-      event = getStripe().webhooks.constructEvent(
-        req.rawBody,
-        sig,
-        endpointSecret,
-      );
-    } catch (err) {
+    // Every configured secret is tried. One URL can be registered as both a test
+    // and a live endpoint in Stripe, each with its own signing secret, and a
+    // rolled secret stays valid alongside its replacement for an overlap window.
+    // Guessing a single secret rejects the other half in both cases.
+    // req.rawBody is provided by Firebase Cloud Functions for onRequest handlers.
+    let event: Stripe.Event | undefined;
+    let verificationError: Error | undefined;
+    let verifiedWith: string | undefined;
+    for (const candidate of candidates) {
+      try {
+        event = getStripe().webhooks.constructEvent(
+          req.rawBody,
+          sig,
+          candidate.value,
+        );
+        verifiedWith = candidate.name;
+        break;
+      } catch (err) {
+        verificationError = err as Error;
+      }
+    }
+
+    if (!event) {
       logger.warn("stripeWebhook: signature verification failed", {
-        err: (err as Error).message,
+        candidatesTried: candidates.map((c) => c.name),
+        err: verificationError?.message,
       });
-      res.status(400).send(`Webhook Error: ${(err as Error).message}`);
+      res.status(400).send("Webhook Error: signature verification failed");
       return;
     }
+
+    logger.debug("stripeWebhook: signature verified", { verifiedWith });
 
     // -------------------------------------------------------------------------
     // 3. Idempotency check (transaction-safe)
@@ -1240,9 +1257,9 @@ export const handleStripeConnectWebhook = onRequest(
       res.status(400).send("Webhook Error: Missing stripe-signature header");
       return;
     }
-    let connectEndpointSecret: string;
+    let connectCandidates;
     try {
-      connectEndpointSecret = resolveWebhookSecret("connect");
+      connectCandidates = webhookSecretCandidates("connect");
     } catch (err) {
       logger.error("handleStripeConnectWebhook: webhook secret unavailable", {
         err: (err as Error).message,
@@ -1252,20 +1269,38 @@ export const handleStripeConnectWebhook = onRequest(
     }
 
 
-    let event: Stripe.Event;
-    try {
-      event = getStripe().webhooks.constructEvent(
-        req.rawBody,
-        sig,
-        connectEndpointSecret,
-      );
-    } catch (err) {
+    // See the platform handler: every configured secret is tried, because one URL
+    // can serve both a test and a live Connect endpoint and a rolled secret
+    // overlaps its replacement.
+    let event: Stripe.Event | undefined;
+    let verificationError: Error | undefined;
+    let verifiedWith: string | undefined;
+    for (const candidate of connectCandidates) {
+      try {
+        event = getStripe().webhooks.constructEvent(
+          req.rawBody,
+          sig,
+          candidate.value,
+        );
+        verifiedWith = candidate.name;
+        break;
+      } catch (err) {
+        verificationError = err as Error;
+      }
+    }
+
+    if (!event) {
       logger.warn("handleStripeConnectWebhook: signature verification failed", {
-        err: (err as Error).message,
+        candidatesTried: connectCandidates.map((c) => c.name),
+        err: verificationError?.message,
       });
-      res.status(400).send(`Webhook Error: ${(err as Error).message}`);
+      res.status(400).send("Webhook Error: signature verification failed");
       return;
     }
+
+    logger.debug("handleStripeConnectWebhook: signature verified", {
+      verifiedWith,
+    });
 
     logger.info("handleStripeConnectWebhook: processing Connect event", {
       eventId: event.id,

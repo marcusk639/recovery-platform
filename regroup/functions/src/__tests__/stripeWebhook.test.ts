@@ -52,6 +52,8 @@ jest.mock("firebase-admin", () => {
 // ---------------------------------------------------------------------------
 // firebase-functions mock
 // ---------------------------------------------------------------------------
+import { logger } from "firebase-functions";
+
 jest.mock("firebase-functions", () => ({
   config: jest.fn(() => ({
     stripe: {
@@ -74,6 +76,7 @@ jest.mock("firebase-functions", () => ({
     info: jest.fn(),
     warn: jest.fn(),
     error: jest.fn(),
+    debug: jest.fn(),
   },
 }));
 
@@ -491,7 +494,7 @@ describe("Signature Verification", () => {
     expect(mockConstructEvent).not.toHaveBeenCalled();
   });
 
-  test("expired timestamp (replay attack) returns 400", async () => {
+  test("expired timestamp (replay attack) returns 400 and logs the reason", async () => {
     mockConstructEvent.mockImplementation(() => {
       throw new Error("Timestamp outside the tolerance zone");
     });
@@ -502,8 +505,20 @@ describe("Signature Verification", () => {
     await stripeWebhook(req as never, res as never);
 
     expect(res.status).toHaveBeenCalledWith(400);
+
+    // The response body is deliberately generic. It used to echo Stripe's raw
+    // message, which discloses verification internals to an unauthenticated
+    // caller — a finding already tracked in regroup/CODEBASE-REVIEW.md. The
+    // specific reason belongs in the log, where an operator can see it and an
+    // attacker cannot.
     expect(res.send).toHaveBeenCalledWith(
-      expect.stringContaining("Timestamp outside"),
+      expect.not.stringContaining("Timestamp outside"),
+    );
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("signature verification failed"),
+      expect.objectContaining({
+        err: expect.stringContaining("Timestamp outside"),
+      }),
     );
   });
 

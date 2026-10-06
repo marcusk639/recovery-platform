@@ -1,34 +1,40 @@
-import { logger } from "firebase-functions";
+import { logger } from 'firebase-functions';
 
 /**
- * Resolves the webhook signing secret for an endpoint, in whichever Stripe mode
- * this service is actually operating in.
+ * Supplies the webhook signing secrets an endpoint may legitimately be signed
+ * with, for the caller to try in order.
  *
- * Why mode is derived from the API key rather than from a separate flag: a
- * webhook signature can only be verified with the signing secret belonging to
- * the same Stripe mode as the key that created the objects. Mode is therefore a
- * property of the key, not of the host — deriving it removes the failure where
- * someone points the service at a test key and forgets a second switch, which
- * presents as "signature verification failed" and sends you hunting the wrong
- * problem.
+ * Why a list and not one secret. Stripe webhook endpoints are per-mode objects:
+ * the same URL registered in test mode and in live mode is two endpoints with
+ * two different signing secrets. One deployed function URL can therefore receive
+ * both, while the deployment holds exactly one STRIPE_SECRET_KEY. An earlier
+ * version of this module derived a single mode from that key's prefix and
+ * returned one secret — so whichever mode it guessed, the other mode's events
+ * failed with "signature verification failed", the precise failure this module
+ * exists to prevent.
  *
- * STRIPE_WEBHOOK_MODE=test|live overrides the derivation for the case the
- * heuristic cannot see, such as a restricted key with an unusual prefix.
+ * The payload cannot settle it either: `livemode` is in the body, and the body is
+ * unauthenticated until the signature verifies. So the only sound approach is to
+ * try each candidate and let verification decide.
  *
- * All four signing secrets live in Secret Manager, declared in config.ts and
- * bound per function: the platform handler gets the platform pair, the Connect
- * handler the Connect pair. They reach this module through process.env because
- * that is how Firebase injects a bound secret at runtime, not because they are
- * plain environment config.
+ * This also makes signing-secret rotation survivable. Stripe keeps the previous
+ * secret valid for an overlap window after a roll, and accepting several
+ * candidates means that window needs no redeploy and drops nothing in flight.
+ * Returning a single string made zero-downtime rotation structurally impossible.
  *
- * An earlier revision of this comment said the test secrets belonged in
- * .env.local and were deliberately kept out of Secret Manager. That stopped
- * being true within the same change set, and following it would have put an
- * operator's secret somewhere the deployed function cannot read while the
- * deploy failed for the missing Secret Manager entry.
+ * All four secrets live in Secret Manager, declared in config.ts and bound per
+ * function: the platform handler gets the platform pair, the Connect handler the
+ * Connect pair. They arrive via process.env because that is how Firebase injects
+ * a bound secret at runtime.
  */
 
 export type StripeWebhookEndpoint = 'platform' | 'connect';
+
+export interface WebhookSecretCandidate {
+  /** Env var name. Safe to log; the value never is. */
+  readonly name: string;
+  readonly value: string;
+}
 
 const LIVE_SECRET_VAR: Record<StripeWebhookEndpoint, string> = {
   platform: 'STRIPE_WEBHOOK_SECRET',
@@ -40,26 +46,26 @@ const TEST_SECRET_VAR: Record<StripeWebhookEndpoint, string> = {
   connect: 'STRIPE_CONNECT_TEST_WEBHOOK_SECRET',
 };
 
-/** Raised when the secret for the resolved mode is absent. */
+/** Raised when no signing secret is configured for an endpoint at all. */
 export class WebhookSecretMissingError extends Error {
   constructor(
-    readonly variableName: string,
-    readonly mode: 'test' | 'live',
+    readonly variableNames: string,
     readonly endpoint: StripeWebhookEndpoint,
   ) {
     super(
-      `${variableName} is not set, so ${endpoint} webhook signatures cannot be ` +
-        `verified in ${mode} mode.`,
+      `No signing secret configured for the ${endpoint} webhook endpoint. ` +
+        `Set one of: ${variableNames}.`,
     );
     this.name = 'WebhookSecretMissingError';
   }
 }
 
 /**
- * True when this service is talking to Stripe in test mode.
+ * True when the bound key is a test key.
  *
- * Must only be called from inside a handler: STRIPE_SECRET_KEY is a bound
- * secret and is not present in process.env at module load.
+ * Used only to ORDER the candidates so the likelier secret is tried first.
+ * Correctness no longer depends on getting this right — every configured
+ * candidate is tried regardless — which is the point of the rework.
  */
 export const isStripeTestMode = (): boolean => {
   const override = process.env.STRIPE_WEBHOOK_MODE?.trim().toLowerCase();
@@ -74,54 +80,35 @@ export const isStripeTestMode = (): boolean => {
 };
 
 /**
- * The signing secret for `endpoint`, or a WebhookSecretMissingError naming the
- * variable that needs setting. Never returns an empty string: passing one to
- * constructEvent reports a signature failure, which blames Stripe for what is
- * actually local misconfiguration.
+ * Every configured signing secret for `endpoint`, likeliest first.
+ *
+ * Throws WebhookSecretMissingError when none is set. That is server
+ * misconfiguration rather than a bad request: handing an empty secret to
+ * constructEvent reports a signature failure and blames the sender.
  */
-export const resolveWebhookSecret = (endpoint: StripeWebhookEndpoint): string => {
-  const testMode = isStripeTestMode();
-
-  // Ordered candidates, first one set wins. In test mode the test-specific
-  // variable is preferred, but the live-named one is still accepted — which
-  // keeps this strictly additive. A sandbox already running a test key against
-  // STRIPE_WEBHOOK_SECRET keeps working, and setting STRIPE_TEST_WEBHOOK_SECRET
-  // is what opts into the split. Without this fallback the resolver broke every
-  // such deployment, which is how 71 tests caught it.
-  const candidates = testMode
+export const webhookSecretCandidates = (
+  endpoint: StripeWebhookEndpoint,
+): WebhookSecretCandidate[] => {
+  const testFirst = isStripeTestMode();
+  const names = testFirst
     ? [TEST_SECRET_VAR[endpoint], LIVE_SECRET_VAR[endpoint]]
-    : [LIVE_SECRET_VAR[endpoint]];
+    : [LIVE_SECRET_VAR[endpoint], TEST_SECRET_VAR[endpoint]];
 
-  for (const variableName of candidates) {
-    const secret = process.env[variableName];
-    if (secret) {
-      // Logged on every resolution, names only, never values. Without this the
-      // fallback below is silent, and a test-mode deployment verifying against
-      // the live secret produces nothing but "signature verification failed" —
-      // the exact symptom deriving mode from the key was meant to eliminate.
-      // Mode and chosen variable are what make that diagnosable from logs.
-      const usedFallback = testMode && variableName === LIVE_SECRET_VAR[endpoint];
-      if (usedFallback) {
-        logger.warn('resolveWebhookSecret: test mode using live-named secret', {
-          endpoint,
-          mode: 'test',
-          usedVariable: variableName,
-          preferredVariable: TEST_SECRET_VAR[endpoint],
-        });
-      } else {
-        logger.debug('resolveWebhookSecret: resolved', {
-          endpoint,
-          mode: testMode ? 'test' : 'live',
-          usedVariable: variableName,
-        });
-      }
-      return secret;
-    }
+  const found = names
+    .map((name) => ({ name, value: process.env[name]?.trim() }))
+    .filter((c): c is WebhookSecretCandidate => Boolean(c.value));
+
+  if (found.length === 0) {
+    throw new WebhookSecretMissingError(names.join(' or '), endpoint);
   }
 
-  throw new WebhookSecretMissingError(
-    candidates.join(' or '),
-    testMode ? 'test' : 'live',
+  // Names only, never values. Without this the configuration in force is
+  // invisible, and a verification failure gives no way to tell a wrong secret
+  // from a missing one.
+  logger.debug('webhookSecretCandidates: resolved', {
     endpoint,
-  );
+    candidates: found.map((c) => c.name),
+  });
+
+  return found;
 };

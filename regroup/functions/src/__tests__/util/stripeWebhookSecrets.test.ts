@@ -1,14 +1,15 @@
 /**
- * Guards webhook-secret mode resolution.
+ * Guards webhook signing-secret candidate resolution.
  *
- * The behaviour that matters: a signature can only be verified with the signing
- * secret from the same Stripe mode as the key that produced the event. Picking
- * the wrong one presents as "signature verification failed", which sends you
- * looking at Stripe rather than at your own configuration.
+ * The behaviour that matters: one function URL can be registered as both a test
+ * and a live webhook endpoint in Stripe, each with its own signing secret, and a
+ * rolled secret stays valid alongside its replacement for an overlap window. So
+ * every configured secret must be offered — returning one, chosen by guessing the
+ * mode, rejects the other half.
  */
 import {
   isStripeTestMode,
-  resolveWebhookSecret,
+  webhookSecretCandidates,
   WebhookSecretMissingError,
 } from '../../util/stripeWebhookSecrets';
 
@@ -40,6 +41,9 @@ afterEach(() => {
   }
 });
 
+const names = (endpoint: 'platform' | 'connect') =>
+  webhookSecretCandidates(endpoint).map((c) => c.name);
+
 describe('isStripeTestMode', () => {
   it('derives test mode from a test secret key', () => {
     process.env.STRIPE_SECRET_KEY = 'sk_test_abc';
@@ -56,7 +60,7 @@ describe('isStripeTestMode', () => {
     expect(isStripeTestMode()).toBe(false);
   });
 
-  it('treats an absent key as live, so it never silently reaches for test secrets', () => {
+  it('treats an absent key as live', () => {
     expect(isStripeTestMode()).toBe(false);
   });
 
@@ -83,87 +87,126 @@ describe('isStripeTestMode', () => {
   });
 });
 
-describe('resolveWebhookSecret — live mode', () => {
-  beforeEach(() => {
+// The reason this module was reworked. A single returned secret could only ever
+// verify one mode's events, so the other mode's events failed signature
+// verification on a URL Stripe was legitimately signing for.
+describe('webhookSecretCandidates — both modes on one URL', () => {
+  it('offers both secrets when both are configured, for the platform endpoint', () => {
     process.env.STRIPE_SECRET_KEY = 'sk_live_abc';
+    process.env.STRIPE_WEBHOOK_SECRET = 'whsec_live';
+    process.env.STRIPE_TEST_WEBHOOK_SECRET = 'whsec_test';
+
+    expect(names('platform')).toEqual(['STRIPE_WEBHOOK_SECRET', 'STRIPE_TEST_WEBHOOK_SECRET']);
   });
 
-  it('uses the live secret for each endpoint', () => {
-    process.env.STRIPE_WEBHOOK_SECRET = 'whsec_platform_live';
+  it('offers both secrets for the connect endpoint', () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_live_abc';
     process.env.STRIPE_CONNECT_WEBHOOK_SECRET = 'whsec_connect_live';
-
-    expect(resolveWebhookSecret('platform')).toBe('whsec_platform_live');
-    expect(resolveWebhookSecret('connect')).toBe('whsec_connect_live');
-  });
-
-  it('never falls back to a test secret in live mode', () => {
-    process.env.STRIPE_TEST_WEBHOOK_SECRET = 'whsec_platform_test';
-
-    expect(() => resolveWebhookSecret('platform')).toThrow(WebhookSecretMissingError);
-  });
-});
-
-describe('resolveWebhookSecret — test mode', () => {
-  beforeEach(() => {
-    process.env.STRIPE_SECRET_KEY = 'sk_test_abc';
-  });
-
-  it('prefers the test secret when present', () => {
-    process.env.STRIPE_TEST_WEBHOOK_SECRET = 'whsec_platform_test';
-    process.env.STRIPE_WEBHOOK_SECRET = 'whsec_platform_live';
-
-    expect(resolveWebhookSecret('platform')).toBe('whsec_platform_test');
-  });
-
-  it('prefers the connect test secret when present', () => {
     process.env.STRIPE_CONNECT_TEST_WEBHOOK_SECRET = 'whsec_connect_test';
-    process.env.STRIPE_CONNECT_WEBHOOK_SECRET = 'whsec_connect_live';
 
-    expect(resolveWebhookSecret('connect')).toBe('whsec_connect_test');
+    expect(names('connect')).toEqual([
+      'STRIPE_CONNECT_WEBHOOK_SECRET',
+      'STRIPE_CONNECT_TEST_WEBHOOK_SECRET',
+    ]);
   });
 
-  // The compatibility guarantee: a sandbox already running a test key against
-  // the live-named variable keeps working. Removing this fallback broke 71
-  // existing tests, which is what surfaced the regression.
-  it('falls back to the live-named secret when no test secret is set', () => {
-    process.env.STRIPE_WEBHOOK_SECRET = 'whsec_platform_live';
-
-    expect(resolveWebhookSecret('platform')).toBe('whsec_platform_live');
-  });
-
-  it('falls back for the connect endpoint too', () => {
+  it('never mixes platform and connect secrets', () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_live_abc';
+    process.env.STRIPE_WEBHOOK_SECRET = 'whsec_live';
     process.env.STRIPE_CONNECT_WEBHOOK_SECRET = 'whsec_connect_live';
 
-    expect(resolveWebhookSecret('connect')).toBe('whsec_connect_live');
+    expect(names('platform')).toEqual(['STRIPE_WEBHOOK_SECRET']);
+    expect(names('connect')).toEqual(['STRIPE_CONNECT_WEBHOOK_SECRET']);
   });
 });
 
-describe('resolveWebhookSecret — misconfiguration', () => {
-  it('throws naming both candidates when nothing is set in test mode', () => {
+describe('webhookSecretCandidates — ordering', () => {
+  // Ordering is an optimisation, not a correctness requirement: the likelier
+  // secret is tried first to avoid a wasted HMAC, but both are always offered.
+  it('puts the test secret first under a test key', () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test_abc';
+    process.env.STRIPE_WEBHOOK_SECRET = 'whsec_live';
+    process.env.STRIPE_TEST_WEBHOOK_SECRET = 'whsec_test';
+
+    expect(names('platform')).toEqual(['STRIPE_TEST_WEBHOOK_SECRET', 'STRIPE_WEBHOOK_SECRET']);
+  });
+
+  it('puts the live secret first under a live key', () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_live_abc';
+    process.env.STRIPE_WEBHOOK_SECRET = 'whsec_live';
+    process.env.STRIPE_TEST_WEBHOOK_SECRET = 'whsec_test';
+
+    expect(names('platform')).toEqual(['STRIPE_WEBHOOK_SECRET', 'STRIPE_TEST_WEBHOOK_SECRET']);
+  });
+});
+
+describe('webhookSecretCandidates — partial configuration', () => {
+  it('offers the live secret alone when no test secret is set', () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_live_abc';
+    process.env.STRIPE_WEBHOOK_SECRET = 'whsec_live';
+
+    expect(names('platform')).toEqual(['STRIPE_WEBHOOK_SECRET']);
+  });
+
+  // A test key with only the live-named secret set still works: this is what
+  // keeps an existing sandbox deployment running unchanged.
+  it('offers the live secret under a test key when no test secret is set', () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test_abc';
+    process.env.STRIPE_WEBHOOK_SECRET = 'whsec_live';
+
+    expect(names('platform')).toEqual(['STRIPE_WEBHOOK_SECRET']);
+  });
+
+  it('offers the test secret alone when no live secret is set', () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test_abc';
+    process.env.STRIPE_TEST_WEBHOOK_SECRET = 'whsec_test';
+
+    expect(names('platform')).toEqual(['STRIPE_TEST_WEBHOOK_SECRET']);
+  });
+
+  it('returns the value alongside the name', () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_live_abc';
+    process.env.STRIPE_WEBHOOK_SECRET = 'whsec_live';
+
+    expect(webhookSecretCandidates('platform')).toEqual([
+      { name: 'STRIPE_WEBHOOK_SECRET', value: 'whsec_live' },
+    ]);
+  });
+
+  it('trims a padded secret', () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_live_abc';
+    process.env.STRIPE_WEBHOOK_SECRET = '  whsec_live  ';
+
+    expect(webhookSecretCandidates('platform')[0].value).toBe('whsec_live');
+  });
+});
+
+describe('webhookSecretCandidates — misconfiguration', () => {
+  it('throws naming both candidates when nothing is set', () => {
     process.env.STRIPE_SECRET_KEY = 'sk_test_abc';
 
-    expect(() => resolveWebhookSecret('platform')).toThrow(
+    expect(() => webhookSecretCandidates('platform')).toThrow(
       /STRIPE_TEST_WEBHOOK_SECRET or STRIPE_WEBHOOK_SECRET/,
     );
   });
 
-  it('throws naming the live variable when nothing is set in live mode', () => {
+  it('names the connect variables for the connect endpoint', () => {
     process.env.STRIPE_SECRET_KEY = 'sk_live_abc';
 
-    expect(() => resolveWebhookSecret('connect')).toThrow(/STRIPE_CONNECT_WEBHOOK_SECRET/);
+    expect(() => webhookSecretCandidates('connect')).toThrow(
+      /STRIPE_CONNECT_WEBHOOK_SECRET or STRIPE_CONNECT_TEST_WEBHOOK_SECRET/,
+    );
   });
 
-  it('reports the mode and endpoint on the error', () => {
+  it('reports the endpoint on the error', () => {
     process.env.STRIPE_SECRET_KEY = 'sk_test_abc';
 
     try {
-      resolveWebhookSecret('connect');
-      throw new Error('expected resolveWebhookSecret to throw');
+      webhookSecretCandidates('connect');
+      throw new Error('expected webhookSecretCandidates to throw');
     } catch (err) {
       expect(err).toBeInstanceOf(WebhookSecretMissingError);
-      const typed = err as WebhookSecretMissingError;
-      expect(typed.mode).toBe('test');
-      expect(typed.endpoint).toBe('connect');
+      expect((err as WebhookSecretMissingError).endpoint).toBe('connect');
     }
   });
 
@@ -171,6 +214,13 @@ describe('resolveWebhookSecret — misconfiguration', () => {
     process.env.STRIPE_SECRET_KEY = 'sk_live_abc';
     process.env.STRIPE_WEBHOOK_SECRET = '';
 
-    expect(() => resolveWebhookSecret('platform')).toThrow(WebhookSecretMissingError);
+    expect(() => webhookSecretCandidates('platform')).toThrow(WebhookSecretMissingError);
+  });
+
+  it('treats whitespace as unset', () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_live_abc';
+    process.env.STRIPE_WEBHOOK_SECRET = '   ';
+
+    expect(() => webhookSecretCandidates('platform')).toThrow(WebhookSecretMissingError);
   });
 });
