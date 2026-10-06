@@ -15,6 +15,7 @@ import {
   STRIPE_WEBHOOK_SECRET,
   STRIPE_CONNECT_WEBHOOK_SECRET,
 } from "../config";
+import { resolveWebhookSecret } from "../util/stripeWebhookSecrets";
 import { sendFcmToHouseAdmins } from "../util/notifications";
 import { sendEmail, regroupEmail } from "../util/email";
 import type { SubscriptionDoc } from "../api/firestore";
@@ -1008,8 +1009,6 @@ export const stripeWebhook = onRequest(
       return;
     }
 
-    const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET!;
-
     // -------------------------------------------------------------------------
     // 2. Signature verification (CRITICAL — uses raw body)
     // -------------------------------------------------------------------------
@@ -1018,6 +1017,21 @@ export const stripeWebhook = onRequest(
     if (!sig) {
       logger.warn("stripeWebhook: missing stripe-signature header");
       res.status(400).send("Webhook Error: Missing stripe-signature header");
+      return;
+    }
+
+    // Resolved after the request is validated, in whichever Stripe mode the
+    // bound key implies. A missing secret is server misconfiguration, so it
+    // answers 500 — which Stripe retries — rather than letting constructEvent
+    // report it as a bad signature and blame the sender.
+    let endpointSecret: string;
+    try {
+      endpointSecret = resolveWebhookSecret("platform");
+    } catch (err) {
+      logger.error("stripeWebhook: webhook secret unavailable", {
+        err: (err as Error).message,
+      });
+      res.status(500).send("Webhook Error: endpoint not configured");
       return;
     }
 
@@ -1211,13 +1225,24 @@ export const handleStripeConnectWebhook = onRequest(
       res.status(400).send("Webhook Error: Missing stripe-signature header");
       return;
     }
+    let connectEndpointSecret: string;
+    try {
+      connectEndpointSecret = resolveWebhookSecret("connect");
+    } catch (err) {
+      logger.error("handleStripeConnectWebhook: webhook secret unavailable", {
+        err: (err as Error).message,
+      });
+      res.status(500).send("Webhook Error: endpoint not configured");
+      return;
+    }
+
 
     let event: Stripe.Event;
     try {
       event = getStripe().webhooks.constructEvent(
         req.rawBody,
         sig,
-        process.env.STRIPE_CONNECT_WEBHOOK_SECRET!,
+        connectEndpointSecret,
       );
     } catch (err) {
       logger.warn("handleStripeConnectWebhook: signature verification failed", {

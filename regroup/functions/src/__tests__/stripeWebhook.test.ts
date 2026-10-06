@@ -387,6 +387,14 @@ function setupIdempotencyTransaction(alreadyExists: boolean): void {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // The handler now resolves its signing secret and answers 500 when none is
+  // configured, rather than handing undefined to constructEvent. These suites
+  // previously passed without any secret only because constructEvent is mocked
+  // and ignored it, so the endpoint's own configuration was never exercised.
+  process.env.STRIPE_SECRET_KEY = "sk_test_fake";
+  process.env.STRIPE_WEBHOOK_SECRET = "whsec_fake";
+  process.env.STRIPE_CONNECT_WEBHOOK_SECRET = "whsec_connect_fake";
+
 
   // Default: successful FCM send
   mockMessagingSend.mockResolvedValue("message-id");
