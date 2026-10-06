@@ -127,6 +127,31 @@ subprojects { project ->
             android.buildFeatures.buildConfig = true
         }
 
+        // Make Kotlin's jvmTarget follow each module's own Java target.
+        //
+        // Under Kotlin 1.8.10 the KGP defaulted jvmTarget to 1.8 and set
+        // kotlin.jvm.target.validation.mode to `warning`. Kotlin 2.x derives
+        // jvmTarget from the Gradle JVM instead (JDK 17 in CI and for AGP 8) and
+        // makes that validation an `error` on Gradle 8, so three third-party
+        // modules that declare Java 11 and no kotlinOptions failed the build:
+        //   "Inconsistent JVM-target compatibility detected for tasks
+        //    'compileDebugJavaWithJavac' (11) and 'compileDebugKotlin' (17)"
+        // — react-native-safe-area-context, react-native-gesture-handler and
+        // react-native-screens.
+        //
+        // Follow Java rather than force both to 17: each module's compileOptions
+        // is its own deliberate choice, and reading it keeps modules on 1.8 and on
+        // 11 both correct without a per-module list. Not
+        // kotlin.jvm.target.validation.mode=warning — that silences the check
+        // while leaving the mismatch it is reporting in place.
+        def javaTarget = android.compileOptions.targetCompatibility.toString()
+        project.tasks
+            .withType(org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile)
+            .configureEach {
+                compilerOptions.jvmTarget.set(
+                    org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(javaTarget))
+            }
+
         // Deliberately no Compose Compiler pin here.
         // @stripe/stripe-react-native enables the compose buildFeature
         // (node_modules/@stripe/stripe-react-native/android/build.gradle:124), and
