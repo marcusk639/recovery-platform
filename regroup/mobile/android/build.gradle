@@ -98,6 +98,18 @@ subprojects { project ->
             android.buildFeatures.buildConfig = true
         }
 
+        // @stripe/stripe-react-native enables the compose buildFeature without
+        // naming a compiler version, so AGP falls back to its default 1.3.2 —
+        // which demands Kotlin 1.7.20 and fails against the 1.8.10 pinned above:
+        //   "This version (1.3.2) of the Compose Compiler requires Kotlin
+        //    version 1.7.20 but you appear to be using Kotlin version 1.8.10"
+        // 1.4.4 is the Compose Compiler release paired with Kotlin 1.8.10.
+        // Keep this in step with kotlinVersion; they are a matched pair, not two
+        // independent knobs.
+        if (android.buildFeatures.compose) {
+            android.composeOptions.kotlinCompilerExtensionVersion = '1.4.4'
+        }
+
         if (android.namespace == null) {
             def manifest = project.file('src/main/AndroidManifest.xml')
             if (manifest.exists()) {
