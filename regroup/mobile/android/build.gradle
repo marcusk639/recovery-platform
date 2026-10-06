@@ -17,16 +17,29 @@ buildscript {
         googlePlayServicesVersion = "21.0.1"
         kotlinVersion = "1.8.10"
 
+        // Pinned, where this used to be an unversioned classpath that resolved
+        // to whatever react-native-gradle-plugin happened to bring (7.4.2).
+        // 8.1.1 is the floor demanded by the transitive androidx artifacts:
+        // :app:checkDebugAarMetadata failed with 68 issues, led by
+        // androidx.navigation:navigation-runtime-android:2.9.7 requiring
+        // "Android Gradle plugin 8.1.1 or higher".
+        //
+        // 8.1.1 is also the ceiling the current Gradle supports: AGP 8.1.x
+        // needs Gradle 8.0+, and the wrapper here is already 8.0.1. Going
+        // higher means moving the wrapper too. AGP 8 requires JDK 17 — CI
+        // uses 17 (.github/workflows/ci.yml), and a local build needs
+        // JAVA_HOME pointed at a 17 install, not 21.
+        agpVersion = "8.1.1"
+
         // We use NDK 23 which has both M1 support and is the side-by-side NDK version from AGP.
         ndkVersion = "23.1.7779620"
     }
     repositories {
         google()
         mavenCentral()
-        jcenter()
     }
     dependencies {
-        classpath("com.android.tools.build:gradle")
+        classpath("com.android.tools.build:gradle:$agpVersion")
         classpath("com.facebook.react:react-native-gradle-plugin")
         classpath 'com.google.gms:google-services:4.3.15'
         classpath 'com.google.firebase:firebase-crashlytics-gradle:2.5.2'
@@ -41,7 +54,6 @@ allprojects {
     repositories {
         maven { url 'https://jitpack.io' }
 		maven { url "https://maven.google.com" }
-        jcenter()
     }
 
     configurations.all {
@@ -49,6 +61,42 @@ allprojects {
             // Force androidx.activity to use version 1.7.0 or higher for react-native-image-picker
             force 'androidx.activity:activity:1.7.0'
             force 'androidx.activity:activity-ktx:1.7.0'
+        }
+    }
+}
+
+// AGP 8 requires every Android module to declare a namespace, and ignores the
+// `package` attribute in a library manifest that used to supply it. Seven
+// third-party React Native modules here predate that and declare neither:
+// react-native-date-picker, react-native-fs, react-native-geolocation-service,
+// react-native-gesture-handler, react-native-push-notification,
+// react-native-safe-area-context, react-native-vector-icons.
+//
+// Rather than carry seven patch-package patches, derive each namespace from
+// the value its own manifest already declares. This is a bridge until those
+// packages ship AGP 8 support — each one that does simply stops matching the
+// `namespace == null` guard, so this block shrinks on its own and can be
+// deleted once the list is empty.
+// Runs in afterEvaluate, not plugins.withId: the latter fires while the
+// plugin is being applied, before the module's own `android { }` block has
+// been evaluated, so every namespace would read null and a module that does
+// declare one would get it overwritten from its manifest.
+subprojects { project ->
+    project.afterEvaluate {
+        def android = project.extensions.findByName('android')
+        if (android == null || android.namespace != null) {
+            return
+        }
+        def manifest = project.file('src/main/AndroidManifest.xml')
+        if (!manifest.exists()) {
+            return
+        }
+        def declaredPackage = new groovy.xml.XmlSlurper(false, false)
+            .parse(manifest).@package.text()
+        if (declaredPackage) {
+            android.namespace = declaredPackage
+            project.logger.lifecycle(
+                "AGP8 bridge: set namespace '${declaredPackage}' for :${project.name}")
         }
     }
 }

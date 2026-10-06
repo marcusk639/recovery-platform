@@ -96,6 +96,14 @@ android {
     compileSdkVersion rootProject.ext.compileSdkVersion
 
     namespace "com.rats.dev"
+
+    // AGP 8 stops generating BuildConfig unless asked. MainApplication.java
+    // reads BuildConfig.DEBUG, IS_NEW_ARCHITECTURE_ENABLED and IS_HERMES_ENABLED,
+    // so without this the app module no longer compiles.
+    buildFeatures {
+        buildConfig true
+    }
+
     defaultConfig {
         applicationId 'com.regroup.app'
         minSdkVersion rootProject.ext.minSdkVersion
@@ -163,7 +171,7 @@ android {
 
 buildscript {
     repositories {
-        jcenter()
+        mavenCentral()
         maven { url "https://maven.google.com" }
     }
 }
