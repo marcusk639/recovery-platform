@@ -164,12 +164,38 @@ describe('webhookSecretCandidates — partial configuration', () => {
     expect(names('platform')).toEqual(['STRIPE_TEST_WEBHOOK_SECRET']);
   });
 
-  it('returns the value alongside the name', () => {
+  it('returns the value and the mode alongside the name', () => {
     process.env.STRIPE_SECRET_KEY = 'sk_live_abc';
     process.env.STRIPE_WEBHOOK_SECRET = 'whsec_live';
 
     expect(webhookSecretCandidates('platform')).toEqual([
-      { name: 'STRIPE_WEBHOOK_SECRET', value: 'whsec_live' },
+      { name: 'STRIPE_WEBHOOK_SECRET', value: 'whsec_live', mode: 'live' },
+    ]);
+  });
+
+  // `mode` is what verifyStripeWebhook asserts the verified event against, so it
+  // must come from WHICH VAR the secret was read from and nothing else. Reading
+  // it from the key's mode instead would make both candidates claim the
+  // deployment's mode and silently neuter the cross-mode check.
+  it('tags each candidate with the mode of its own env var, not the key mode', () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_live_abc';
+    process.env.STRIPE_WEBHOOK_SECRET = 'whsec_live';
+    process.env.STRIPE_TEST_WEBHOOK_SECRET = 'whsec_test';
+
+    expect(webhookSecretCandidates('platform').map((c) => [c.name, c.mode])).toEqual([
+      ['STRIPE_WEBHOOK_SECRET', 'live'],
+      ['STRIPE_TEST_WEBHOOK_SECRET', 'test'],
+    ]);
+  });
+
+  it('tags the Connect pair the same way', () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test_abc';
+    process.env.STRIPE_CONNECT_WEBHOOK_SECRET = 'whsec_connect_live';
+    process.env.STRIPE_CONNECT_TEST_WEBHOOK_SECRET = 'whsec_connect_test';
+
+    expect(webhookSecretCandidates('connect').map((c) => [c.name, c.mode])).toEqual([
+      ['STRIPE_CONNECT_TEST_WEBHOOK_SECRET', 'test'],
+      ['STRIPE_CONNECT_WEBHOOK_SECRET', 'live'],
     ]);
   });
 

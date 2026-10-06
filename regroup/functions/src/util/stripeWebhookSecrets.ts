@@ -14,8 +14,17 @@ import { logger } from 'firebase-functions';
  * exists to prevent.
  *
  * The payload cannot settle it either: `livemode` is in the body, and the body is
- * unauthenticated until the signature verifies. So the only sound approach is to
- * try each candidate and let verification decide.
+ * unauthenticated BEFORE the signature verifies. So the only sound approach is to
+ * try each candidate and let verification decide WHICH SECRET to use.
+ *
+ * That is a statement about secret SELECTION only, and an earlier revision
+ * over-generalised it into never looking at `livemode` at all. AFTER a candidate
+ * verifies, the body is authenticated and `event.livemode` is trustworthy — it is
+ * then the only thing that says which Stripe mode produced the event. Trying all
+ * candidates without that post-verification check means a live deployment accepts
+ * test-mode events (the test secret is bound there too) and mutates production
+ * data from them. util/verifyStripeWebhook.ts applies the check; `mode` below is
+ * what it compares against.
  *
  * This also makes signing-secret rotation survivable. Stripe keeps the previous
  * secret valid for an overlap window after a roll, and accepting several
@@ -30,10 +39,20 @@ import { logger } from 'firebase-functions';
 
 export type StripeWebhookEndpoint = 'platform' | 'connect';
 
+/** Which Stripe mode a key, secret, or event belongs to. */
+export type StripeMode = 'test' | 'live';
+
 export interface WebhookSecretCandidate {
   /** Env var name. Safe to log; the value never is. */
   readonly name: string;
   readonly value: string;
+  /**
+   * The Stripe mode this secret belongs to, fixed by which env var it came from
+   * — not inferred from anything in the request. A signature only verifies
+   * against the secret of the endpoint that signed it, so once a candidate
+   * verifies, this is the authenticated mode of the signer.
+   */
+  readonly mode: StripeMode;
 }
 
 const LIVE_SECRET_VAR: Record<StripeWebhookEndpoint, string> = {
@@ -63,9 +82,12 @@ export class WebhookSecretMissingError extends Error {
 /**
  * True when the bound key is a test key.
  *
- * Used only to ORDER the candidates so the likelier secret is tried first.
- * Correctness no longer depends on getting this right — every configured
- * candidate is tried regardless — which is the point of the rework.
+ * Two jobs. It ORDERS the candidates so the likelier secret is tried first —
+ * verification no longer depends on getting that right, since every configured
+ * candidate is tried. And via deployedStripeMode() below it names the mode this
+ * deployment is allowed to act on, which verifyStripeWebhook enforces against
+ * the verified event. That second use IS correctness-critical: get it wrong and
+ * a deployment either refuses its own real events or accepts the other mode's.
  */
 export const isStripeTestMode = (): boolean => {
   const override = process.env.STRIPE_WEBHOOK_MODE?.trim().toLowerCase();
@@ -80,6 +102,15 @@ export const isStripeTestMode = (): boolean => {
 };
 
 /**
+ * The Stripe mode this deployment is configured to operate in.
+ *
+ * Derived from the bound STRIPE_SECRET_KEY (or the STRIPE_WEBHOOK_MODE override),
+ * never from request data. A deployment may only act on events from its own mode;
+ * verifyStripeWebhook enforces that.
+ */
+export const deployedStripeMode = (): StripeMode => (isStripeTestMode() ? 'test' : 'live');
+
+/**
  * Every configured signing secret for `endpoint`, likeliest first.
  *
  * Throws WebhookSecretMissingError when none is set. That is server
@@ -90,24 +121,34 @@ export const webhookSecretCandidates = (
   endpoint: StripeWebhookEndpoint,
 ): WebhookSecretCandidate[] => {
   const testFirst = isStripeTestMode();
-  const names = testFirst
-    ? [TEST_SECRET_VAR[endpoint], LIVE_SECRET_VAR[endpoint]]
-    : [LIVE_SECRET_VAR[endpoint], TEST_SECRET_VAR[endpoint]];
+  const ordered: ReadonlyArray<{ name: string; mode: StripeMode }> = testFirst
+    ? [
+        { name: TEST_SECRET_VAR[endpoint], mode: 'test' },
+        { name: LIVE_SECRET_VAR[endpoint], mode: 'live' },
+      ]
+    : [
+        { name: LIVE_SECRET_VAR[endpoint], mode: 'live' },
+        { name: TEST_SECRET_VAR[endpoint], mode: 'test' },
+      ];
 
-  const found = names
-    .map((name) => ({ name, value: process.env[name]?.trim() }))
+  const found = ordered
+    .map(({ name, mode }) => ({ name, mode, value: process.env[name]?.trim() }))
     .filter((c): c is WebhookSecretCandidate => Boolean(c.value));
 
   if (found.length === 0) {
-    throw new WebhookSecretMissingError(names.join(' or '), endpoint);
+    throw new WebhookSecretMissingError(ordered.map((c) => c.name).join(' or '), endpoint);
   }
 
   // Names only, never values. Without this the configuration in force is
   // invisible, and a verification failure gives no way to tell a wrong secret
-  // from a missing one.
-  logger.debug('webhookSecretCandidates: resolved', {
+  // from a missing one. INFO, not debug: the surrounding lifecycle lines are
+  // INFO and failures WARN, so at the default severity>=DEFAULT log filter a
+  // debug line here would drop exactly the record of which secrets were on
+  // offer — the first thing needed to explain a rejection.
+  logger.info('webhookSecretCandidates: resolved', {
     endpoint,
-    candidates: found.map((c) => c.name),
+    deployedMode: deployedStripeMode(),
+    candidates: found.map((c) => `${c.name}:${c.mode}`),
   });
 
   return found;

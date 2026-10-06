@@ -18,6 +18,7 @@ import {
   STRIPE_CONNECT_TEST_WEBHOOK_SECRET,
 } from "../config";
 import { webhookSecretCandidates } from "../util/stripeWebhookSecrets";
+import { verifyStripeWebhook } from "../util/verifyStripeWebhook";
 import { sendFcmToHouseAdmins } from "../util/notifications";
 import { sendEmail, regroupEmail } from "../util/email";
 import type { SubscriptionDoc } from "../api/firestore";
@@ -1044,38 +1045,38 @@ export const stripeWebhook = onRequest(
       return;
     }
 
-    // Every configured secret is tried. One URL can be registered as both a test
-    // and a live endpoint in Stripe, each with its own signing secret, and a
-    // rolled secret stays valid alongside its replacement for an overlap window.
-    // Guessing a single secret rejects the other half in both cases.
+    // Every configured secret is tried, then the verified event's mode is checked
+    // against both the verifying secret and this deployment. See
+    // util/verifyStripeWebhook.ts for why it is in that order and why both
+    // assertions are needed.
     // req.rawBody is provided by Firebase Cloud Functions for onRequest handlers.
-    let event: Stripe.Event | undefined;
-    let verificationError: Error | undefined;
-    let verifiedWith: string | undefined;
-    for (const candidate of candidates) {
-      try {
-        event = getStripe().webhooks.constructEvent(
-          req.rawBody,
-          sig,
-          candidate.value,
-        );
-        verifiedWith = candidate.name;
-        break;
-      } catch (err) {
-        verificationError = err as Error;
-      }
-    }
+    const verification = verifyStripeWebhook({
+      stripe: getStripe(),
+      rawBody: req.rawBody,
+      signature: sig,
+      candidates,
+    });
 
-    if (!event) {
-      logger.warn("stripeWebhook: signature verification failed", {
-        candidatesTried: candidates.map((c) => c.name),
-        err: verificationError?.message,
+    if (!verification.ok) {
+      // Full detail server-side, one sanitized sentence to the caller. The
+      // response must not reveal which secrets are configured, which one
+      // verified, or what mode this deployment runs in.
+      logger.warn(`stripeWebhook: rejected (${verification.reason})`, {
+        ...verification.detail,
       });
       res.status(400).send("Webhook Error: signature verification failed");
       return;
     }
 
-    logger.debug("stripeWebhook: signature verified", { verifiedWith });
+    const event = verification.event;
+
+    // INFO, not debug: neighbouring lifecycle lines are INFO and failures WARN,
+    // so at a default severity>=DEFAULT Logs Explorer filter a debug line here
+    // would drop exactly the record of which mode's secret verified.
+    logger.info("stripeWebhook: signature verified", {
+      verifiedWith: verification.verifiedWith,
+      mode: verification.mode,
+    });
 
     // -------------------------------------------------------------------------
     // 3. Idempotency check (transaction-safe)
@@ -1269,37 +1270,32 @@ export const handleStripeConnectWebhook = onRequest(
     }
 
 
-    // See the platform handler: every configured secret is tried, because one URL
-    // can serve both a test and a live Connect endpoint and a rolled secret
-    // overlaps its replacement.
-    let event: Stripe.Event | undefined;
-    let verificationError: Error | undefined;
-    let verifiedWith: string | undefined;
-    for (const candidate of connectCandidates) {
-      try {
-        event = getStripe().webhooks.constructEvent(
-          req.rawBody,
-          sig,
-          candidate.value,
-        );
-        verifiedWith = candidate.name;
-        break;
-      } catch (err) {
-        verificationError = err as Error;
-      }
-    }
+    // Identical to the platform handler, via the same helper: try every
+    // configured secret, then assert the verified event's mode against both the
+    // verifying secret and this deployment. The two handlers previously carried
+    // byte-identical copies of this loop, which is how the mode check came to be
+    // missing from both at once.
+    const verification = verifyStripeWebhook({
+      stripe: getStripe(),
+      rawBody: req.rawBody,
+      signature: sig,
+      candidates: connectCandidates,
+    });
 
-    if (!event) {
-      logger.warn("handleStripeConnectWebhook: signature verification failed", {
-        candidatesTried: connectCandidates.map((c) => c.name),
-        err: verificationError?.message,
-      });
+    if (!verification.ok) {
+      logger.warn(
+        `handleStripeConnectWebhook: rejected (${verification.reason})`,
+        { ...verification.detail },
+      );
       res.status(400).send("Webhook Error: signature verification failed");
       return;
     }
 
-    logger.debug("handleStripeConnectWebhook: signature verified", {
-      verifiedWith,
+    const event = verification.event;
+
+    logger.info("handleStripeConnectWebhook: signature verified", {
+      verifiedWith: verification.verifiedWith,
+      mode: verification.mode,
     });
 
     logger.info("handleStripeConnectWebhook: processing Connect event", {

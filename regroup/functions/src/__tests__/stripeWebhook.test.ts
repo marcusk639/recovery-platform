@@ -394,9 +394,14 @@ beforeEach(() => {
   // configured, rather than handing undefined to constructEvent. These suites
   // previously passed without any secret only because constructEvent is mocked
   // and ignored it, so the endpoint's own configuration was never exercised.
+  // All four signing secrets, as both deployed functions get them. The key is
+  // sk_test_, so this is a test-mode deployment: the test secret is the one that
+  // verifies and verifyStripeWebhook requires the event's mode to agree with it.
   process.env.STRIPE_SECRET_KEY = "sk_test_fake";
   process.env.STRIPE_WEBHOOK_SECRET = "whsec_fake";
+  process.env.STRIPE_TEST_WEBHOOK_SECRET = "whsec_test_fake";
   process.env.STRIPE_CONNECT_WEBHOOK_SECRET = "whsec_connect_fake";
+  process.env.STRIPE_CONNECT_TEST_WEBHOOK_SECRET = "whsec_connect_test_fake";
 
 
   // Default: successful FCM send
@@ -515,9 +520,11 @@ describe("Signature Verification", () => {
       expect.not.stringContaining("Timestamp outside"),
     );
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining("signature verification failed"),
+      expect.stringContaining("rejected (signature)"),
       expect.objectContaining({
-        err: expect.stringContaining("Timestamp outside"),
+        errors: expect.arrayContaining([
+          expect.stringContaining("Timestamp outside"),
+        ]),
       }),
     );
   });

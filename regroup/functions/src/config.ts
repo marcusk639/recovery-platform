@@ -9,8 +9,12 @@
  *   firebase functions:secrets:set GOOGLE_MAPS_API_KEY
  *   firebase functions:secrets:set RECOVERY_PLATFORM_API_KEY
  *
- * The two test-mode signing secrets below are used when the bound Stripe key is
- * a test key; see util/stripeWebhookSecrets.ts for how mode is resolved:
+ * The two test-mode signing secrets below are always offered for verification,
+ * whatever mode the bound Stripe key is in — the key's mode only ORDERS the
+ * candidates. What the key's mode does decide is which events may be ACTED on:
+ * util/verifyStripeWebhook.ts requires a verified event's mode to match both the
+ * secret that verified it and this deployment, so on a live deployment a
+ * test-mode event is verified and then refused:
  *   firebase functions:secrets:set STRIPE_TEST_WEBHOOK_SECRET
  *   firebase functions:secrets:set STRIPE_CONNECT_TEST_WEBHOOK_SECRET
  *
@@ -19,41 +23,42 @@
  *
  * Access at runtime via process.env.SECRET_NAME
  */
-import { defineSecret } from "firebase-functions/params";
+import { defineSecret } from 'firebase-functions/params';
 
-export const SENDGRID_API_KEY = defineSecret("SENDGRID_API_KEY");
-export const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
-export const STRIPE_CLIENT_ID = defineSecret("STRIPE_CLIENT_ID");
-export const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
-export const STRIPE_CONNECT_WEBHOOK_SECRET = defineSecret(
-  "STRIPE_CONNECT_WEBHOOK_SECRET"
-);
+export const SENDGRID_API_KEY = defineSecret('SENDGRID_API_KEY');
+export const STRIPE_SECRET_KEY = defineSecret('STRIPE_SECRET_KEY');
+export const STRIPE_CLIENT_ID = defineSecret('STRIPE_CLIENT_ID');
+export const STRIPE_WEBHOOK_SECRET = defineSecret('STRIPE_WEBHOOK_SECRET');
+export const STRIPE_CONNECT_WEBHOOK_SECRET = defineSecret('STRIPE_CONNECT_WEBHOOK_SECRET');
 
-// Test-mode webhook signing secrets. Separate from the live pair above because
-// a signature can only be verified with the secret from the same Stripe mode as
-// the key that produced the event. Bound alongside the live secrets so a
-// deployment pointed at a test key can verify its webhooks; resolution order
-// lives in util/stripeWebhookSecrets.ts.
-export const STRIPE_TEST_WEBHOOK_SECRET = defineSecret(
-  "STRIPE_TEST_WEBHOOK_SECRET"
-);
+// Test-mode webhook signing secrets. Separate from the live pair above because a
+// signature only verifies against the secret of the endpoint that signed it, and
+// a test and a live endpoint on the same URL are two endpoints.
+//
+// Bound alongside the live pair on both functions so that a deployment pointed at
+// a test key can verify its webhooks, and so that a cross-mode event is diagnosed
+// as "wrong mode" rather than as an opaque signature failure. It does NOT widen
+// what a deployment will act on: util/verifyStripeWebhook.ts refuses any verified
+// event whose mode differs from this deployment's, so on a live deployment the
+// test secret can verify an event but never get one processed.
+//
+// Candidate ordering lives in util/stripeWebhookSecrets.ts.
+export const STRIPE_TEST_WEBHOOK_SECRET = defineSecret('STRIPE_TEST_WEBHOOK_SECRET');
 export const STRIPE_CONNECT_TEST_WEBHOOK_SECRET = defineSecret(
-  "STRIPE_CONNECT_TEST_WEBHOOK_SECRET"
+  'STRIPE_CONNECT_TEST_WEBHOOK_SECRET',
 );
 
 // Google Maps Platform API key (Geocoding API, Time Zone API).
 // Set in Firebase Secret Manager: firebase functions:secrets:set GOOGLE_MAPS_API_KEY
 // Restrict to specific APIs + IPs in Google Cloud Console.
-export const GOOGLE_MAPS_API_KEY = defineSecret("GOOGLE_MAPS_API_KEY");
+export const GOOGLE_MAPS_API_KEY = defineSecret('GOOGLE_MAPS_API_KEY');
 
 // Shared service key for server-to-server calls into recovery-api (the shared
 // meeting directory). Must match recovery-api's RECOVERY_PLATFORM_API_KEY.
 // Set in Firebase Secret Manager: firebase functions:secrets:set RECOVERY_PLATFORM_API_KEY
 // The recovery-api base URL is a non-secret deploy config read from
 // process.env.RECOVERY_API_BASE_URL.
-export const RECOVERY_PLATFORM_API_KEY = defineSecret(
-  "RECOVERY_PLATFORM_API_KEY"
-);
+export const RECOVERY_PLATFORM_API_KEY = defineSecret('RECOVERY_PLATFORM_API_KEY');
 
 /**
  * Rent application-fee model (P-1/P-2/P-3 of the pricing revision plan).
@@ -78,12 +83,12 @@ export const RENT_FEE = {
 export const SUBSCRIPTION_TIERS = {
   traditional: {
     starter: {
-      priceEnvVar: "STRIPE_PRICE_TRAD_STARTER",
-      annualPriceEnvVar: "STRIPE_PRICE_TRAD_STARTER_ANNUAL",
+      priceEnvVar: 'STRIPE_PRICE_TRAD_STARTER',
+      annualPriceEnvVar: 'STRIPE_PRICE_TRAD_STARTER_ANNUAL',
       amountCents: 6900,
       maxResidents: 10,
       maxProperties: 1,
-      label: "Traditional Starter",
+      label: 'Traditional Starter',
       features: {
         automatedRentCollection: false,
         multiProperty: false,
@@ -93,12 +98,12 @@ export const SUBSCRIPTION_TIERS = {
       },
     },
     professional: {
-      priceEnvVar: "STRIPE_PRICE_TRAD_PROFESSIONAL",
-      annualPriceEnvVar: "STRIPE_PRICE_TRAD_PROFESSIONAL_ANNUAL",
+      priceEnvVar: 'STRIPE_PRICE_TRAD_PROFESSIONAL',
+      annualPriceEnvVar: 'STRIPE_PRICE_TRAD_PROFESSIONAL_ANNUAL',
       amountCents: 12900,
       maxResidents: 20,
       maxProperties: 3,
-      label: "Traditional Professional",
+      label: 'Traditional Professional',
       features: {
         automatedRentCollection: true,
         multiProperty: true,
@@ -108,12 +113,12 @@ export const SUBSCRIPTION_TIERS = {
       },
     },
     enterprise: {
-      priceEnvVar: "STRIPE_PRICE_TRAD_ENTERPRISE",
-      annualPriceEnvVar: "STRIPE_PRICE_TRAD_ENTERPRISE_ANNUAL",
+      priceEnvVar: 'STRIPE_PRICE_TRAD_ENTERPRISE',
+      annualPriceEnvVar: 'STRIPE_PRICE_TRAD_ENTERPRISE_ANNUAL',
       amountCents: 24900,
       maxResidents: null,
       maxProperties: null,
-      label: "Traditional Enterprise",
+      label: 'Traditional Enterprise',
       features: {
         automatedRentCollection: true,
         multiProperty: true,
@@ -125,12 +130,12 @@ export const SUBSCRIPTION_TIERS = {
   },
   oxford: {
     standard: {
-      priceEnvVar: "STRIPE_PRICE_OXFORD_STANDARD",
-      annualPriceEnvVar: "STRIPE_PRICE_OXFORD_STANDARD_ANNUAL",
+      priceEnvVar: 'STRIPE_PRICE_OXFORD_STANDARD',
+      annualPriceEnvVar: 'STRIPE_PRICE_OXFORD_STANDARD_ANNUAL',
       amountCents: 4900,
       maxResidents: 15,
       maxProperties: 1,
-      label: "Oxford Standard",
+      label: 'Oxford Standard',
       features: {
         automatedRentCollection: false,
         multiProperty: false,
@@ -140,12 +145,12 @@ export const SUBSCRIPTION_TIERS = {
       },
     },
     plus: {
-      priceEnvVar: "STRIPE_PRICE_OXFORD_PLUS",
-      annualPriceEnvVar: "STRIPE_PRICE_OXFORD_PLUS_ANNUAL",
+      priceEnvVar: 'STRIPE_PRICE_OXFORD_PLUS',
+      annualPriceEnvVar: 'STRIPE_PRICE_OXFORD_PLUS_ANNUAL',
       amountCents: 8900,
       maxResidents: 25,
       maxProperties: 1,
-      label: "Oxford Plus",
+      label: 'Oxford Plus',
       features: {
         automatedRentCollection: true,
         multiProperty: true,
@@ -155,12 +160,12 @@ export const SUBSCRIPTION_TIERS = {
       },
     },
     network: {
-      priceEnvVar: "STRIPE_PRICE_OXFORD_NETWORK",
-      annualPriceEnvVar: "STRIPE_PRICE_OXFORD_NETWORK_ANNUAL",
+      priceEnvVar: 'STRIPE_PRICE_OXFORD_NETWORK',
+      annualPriceEnvVar: 'STRIPE_PRICE_OXFORD_NETWORK_ANNUAL',
       amountCents: 29900,
       maxResidents: null,
       maxProperties: null,
-      label: "Oxford Network",
+      label: 'Oxford Network',
       // P-8: keep the tier defined but block checkout until a regional chapter
       // signs and validates the price.
       availableForSale: false,
@@ -182,5 +187,4 @@ export type TierKey = TraditionalTier | OxfordTier;
 
 // Gate for the tier-based flat-fee billing model. New subscriptions use the
 // tier model only when this is exactly "true". Legacy subscribers are unaffected.
-export const isTierBillingEnabled = (): boolean =>
-  process.env.TIER_BILLING_ENABLED === "true";
+export const isTierBillingEnabled = (): boolean => process.env.TIER_BILLING_ENABLED === 'true';
