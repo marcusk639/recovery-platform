@@ -31,6 +31,21 @@ buildscript {
         // JAVA_HOME pointed at a 17 install, not 21.
         agpVersion = "8.1.1"
 
+        // @stripe/stripe-react-native ships StripeSdk_stripeVersion=21.26.+ — a
+        // dynamic range — so com.stripe:stripe-android resolves to whatever
+        // 21.26.x is newest at build time. That is how Kotlin 2.1 metadata enters
+        // this build: the resolved AAR's own com.stripe.android.* classes are
+        // compiled with 2.1, which the pinned 1.8.10 compiler cannot read.
+        //
+        // Its android/build.gradle reads the version through
+        // getExtOrDefault('stripeVersion'), which prefers rootProject.ext over its
+        // own gradle.properties, so pinning here overrides it without
+        // patch-package.
+        //
+        // Worth pinning on reproducibility grounds alone: a dynamic range means
+        // this build can break with no change to this repository.
+        stripeVersion = "21.26.0"
+
         // We use NDK 23 which has both M1 support and is the side-by-side NDK version from AGP.
         ndkVersion = "23.1.7779620"
     }
@@ -62,33 +77,6 @@ allprojects {
             force 'androidx.activity:activity:1.7.0'
             force 'androidx.activity:activity-ktx:1.7.0'
 
-            // Something in the graph requests kotlin-stdlib 2.1.10, and Gradle
-            // resolves to the highest version, so the 1.8.10 compiler used here
-            // then cannot read its metadata:
-            //   Module was compiled with an incompatible version of Kotlin.
-            //   The binary version of its metadata is 2.1.0, expected 1.8.0.
-            // That presents as "Unresolved reference" for ordinary stdlib calls
-            // like `let` and `it`, which looks like missing symbols rather than a
-            // version conflict.
-            //
-            // Pinned to kotlinVersion so the stdlib on the classpath always
-            // matches the compiler, rather than drifting with whatever a
-            // transitive dependency asks for. The prefix match covers
-            // -common/-jdk7/-jdk8 as well.
-            //
-            // This is the narrow fix. If some dependency genuinely needs a Kotlin
-            // 2.1 stdlib API it will now fail to compile against 1.8.10 — which
-            // is the signal that the project's kotlinVersion has to move instead.
-            eachDependency { details ->
-                if (details.requested.group == 'org.jetbrains.kotlin' &&
-                    details.requested.name.startsWith('kotlin-stdlib')) {
-                    details.useVersion rootProject.ext.kotlinVersion
-                    details.because(
-                        'stdlib must match the Kotlin compiler version; a newer ' +
-                        'stdlib produces metadata 1.8.10 cannot read'
-                    )
-                }
-            }
         }
     }
 }
