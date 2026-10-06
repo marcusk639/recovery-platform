@@ -272,6 +272,40 @@ describe("stripeWebhook — signature verification", () => {
       expect.stringContaining("Webhook Error"),
     );
   });
+  // The 500 path, which the beforeEach above otherwise never reaches because it
+  // configures every secret. A missing secret is server misconfiguration: Stripe
+  // retries 500s, so the event survives until the secret is set, where a 400
+  // would have blamed the sender for a local problem.
+  it("returns 500 — not 400 — when no signing secret is configured", async () => {
+    delete process.env.STRIPE_WEBHOOK_SECRET;
+    delete process.env.STRIPE_TEST_WEBHOOK_SECRET;
+
+    const req = makeReq();
+    const res = makeRes();
+
+    await (stripeWebhook as any)(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    // constructEvent must never run: there is nothing to verify against, and
+    // letting it run is what produced a misleading "invalid signature".
+    expect(mockConstructEvent).not.toHaveBeenCalled();
+  });
+
+  it("does not leak the variable name into the 500 response body", async () => {
+    delete process.env.STRIPE_WEBHOOK_SECRET;
+    delete process.env.STRIPE_TEST_WEBHOOK_SECRET;
+
+    const req = makeReq();
+    const res = makeRes();
+
+    await (stripeWebhook as any)(req, res);
+
+    // The name is useful in logs and useless to an unauthenticated caller.
+    expect(res.send).toHaveBeenCalledWith(
+      expect.not.stringContaining("STRIPE_"),
+    );
+  });
+
 
   it("returns 405 for non-POST requests", async () => {
     const req = { ...makeReq(), method: "GET" };

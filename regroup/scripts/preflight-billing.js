@@ -152,7 +152,35 @@ const SECRET_NAMES = [
   'STRIPE_CLIENT_ID',
   'STRIPE_WEBHOOK_SECRET',
   'STRIPE_CONNECT_WEBHOOK_SECRET',
+  // Test-mode signing secrets. Bound on both webhook functions, so a missing
+  // one fails the deploy rather than degrading at runtime — which is precisely
+  // what this gate exists to catch before the deploy is attempted.
+  'STRIPE_TEST_WEBHOOK_SECRET',
+  'STRIPE_CONNECT_TEST_WEBHOOK_SECRET',
 ];
+
+// The API version this service is written against, read out of the source of
+// truth rather than copied. functions/src/util/stripeApiVersion.ts lets a
+// deployed STRIPE_API_VERSION override the pin, and that override now applies to
+// every Stripe client, so a present-but-divergent value changes object and event
+// shapes service-wide while passing a mere presence check.
+//
+// Parsed textually because this is a plain Node script with no TS build step.
+// Returns null if the pin cannot be found, and the check below then skips rather
+// than asserting against a guess.
+function readPinnedApiVersion() {
+  try {
+    const src = fs.readFileSync(
+      path.join(__dirname, '..', 'functions', 'src', 'util', 'stripeApiVersion.ts'),
+      'utf8',
+    );
+    const m = src.match(/PINNED_API_VERSION\s*=\s*["']([^"']+)["']/);
+    return m ? m[1] : null;
+  } catch {
+    return null;
+  }
+}
+const EXPECTED_API_VERSION = readPinnedApiVersion();
 
 // Existence check via `firebase functions:secrets:access` with all output
 // discarded (the value never reaches a log). Returns 'ok' | 'missing' |
@@ -202,6 +230,27 @@ function main() {
         '--strict, or set TIER_BILLING_ENABLED=true, to enforce).',
     );
   }
+  // STRIPE_API_VERSION: presence alone is not enough. The override reaches every
+  // Stripe client, so a present-but-divergent value silently changes object and
+  // event shapes service-wide — the same class of bug as the four-way split this
+  // replaced, just uniform instead of inconsistent. Treated as an error under
+  // enforcement rather than a warning, because nothing downstream validates the
+  // cast to Stripe.LatestApiVersion at runtime.
+  const deployedApiVersion = (env.STRIPE_API_VERSION || '').trim();
+  if (EXPECTED_API_VERSION && deployedApiVersion && deployedApiVersion !== EXPECTED_API_VERSION) {
+    const message =
+      `STRIPE_API_VERSION is "${deployedApiVersion}" but this service is written ` +
+      `against "${EXPECTED_API_VERSION}" (PINNED_API_VERSION in ` +
+      `functions/src/util/stripeApiVersion.ts). The deployed value overrides the ` +
+      `pin for every Stripe client, changing object and webhook payload shapes. ` +
+      `Align them, or bump the pin deliberately with its own verification.`;
+    if (enforce) {
+      errors.push(message);
+    } else {
+      warnings.push(message);
+    }
+  }
+
 
   // --- [SECRET] best-effort check (warn-only unless --strict) ---------------
   const secretIssues = [];

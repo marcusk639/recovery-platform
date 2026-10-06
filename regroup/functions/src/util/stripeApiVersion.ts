@@ -25,11 +25,3 @@ const PINNED_API_VERSION = '2026-01-28.clover' as Stripe.LatestApiVersion;
 export const STRIPE_API_VERSION: Stripe.LatestApiVersion =
   (process.env.STRIPE_API_VERSION as Stripe.LatestApiVersion | undefined) ?? PINNED_API_VERSION;
 
-/**
- * True when a deployed override is in force and disagrees with the pinned
- * default. Callers can surface this so the divergence is visible rather than
- * discovered through a malformed webhook payload.
- */
-export const isApiVersionOverridden = (): boolean => STRIPE_API_VERSION !== PINNED_API_VERSION;
-
-export { PINNED_API_VERSION };

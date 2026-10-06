@@ -1,3 +1,5 @@
+import { logger } from "firebase-functions";
+
 /**
  * Resolves the webhook signing secret for an endpoint, in whichever Stripe mode
  * this service is actually operating in.
@@ -13,11 +15,17 @@
  * STRIPE_WEBHOOK_MODE=test|live overrides the derivation for the case the
  * heuristic cannot see, such as a restricted key with an unusual prefix.
  *
- * The test-mode secrets are read straight from process.env rather than through
- * defineSecret, because they belong in .env.local — which the emulator loads and
- * deploys exclude. Routing them through Secret Manager would put test
- * credentials in the production function's config for no benefit. The live
- * secrets stay in Secret Manager and stay bound on each function.
+ * All four signing secrets live in Secret Manager, declared in config.ts and
+ * bound per function: the platform handler gets the platform pair, the Connect
+ * handler the Connect pair. They reach this module through process.env because
+ * that is how Firebase injects a bound secret at runtime, not because they are
+ * plain environment config.
+ *
+ * An earlier revision of this comment said the test secrets belonged in
+ * .env.local and were deliberately kept out of Secret Manager. That stopped
+ * being true within the same change set, and following it would have put an
+ * operator's secret somewhere the deployed function cannot read while the
+ * deploy failed for the missing Secret Manager entry.
  */
 
 export type StripeWebhookEndpoint = 'platform' | 'connect';
@@ -87,6 +95,26 @@ export const resolveWebhookSecret = (endpoint: StripeWebhookEndpoint): string =>
   for (const variableName of candidates) {
     const secret = process.env[variableName];
     if (secret) {
+      // Logged on every resolution, names only, never values. Without this the
+      // fallback below is silent, and a test-mode deployment verifying against
+      // the live secret produces nothing but "signature verification failed" —
+      // the exact symptom deriving mode from the key was meant to eliminate.
+      // Mode and chosen variable are what make that diagnosable from logs.
+      const usedFallback = testMode && variableName === LIVE_SECRET_VAR[endpoint];
+      if (usedFallback) {
+        logger.warn('resolveWebhookSecret: test mode using live-named secret', {
+          endpoint,
+          mode: 'test',
+          usedVariable: variableName,
+          preferredVariable: TEST_SECRET_VAR[endpoint],
+        });
+      } else {
+        logger.debug('resolveWebhookSecret: resolved', {
+          endpoint,
+          mode: testMode ? 'test' : 'live',
+          usedVariable: variableName,
+        });
+      }
       return secret;
     }
   }
