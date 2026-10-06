@@ -14,6 +14,8 @@ import {
   STRIPE_SECRET_KEY,
   STRIPE_WEBHOOK_SECRET,
   STRIPE_CONNECT_WEBHOOK_SECRET,
+  STRIPE_TEST_WEBHOOK_SECRET,
+  STRIPE_CONNECT_TEST_WEBHOOK_SECRET,
 } from "../config";
 import { resolveWebhookSecret } from "../util/stripeWebhookSecrets";
 import { sendFcmToHouseAdmins } from "../util/notifications";
@@ -1001,7 +1003,14 @@ async function checkAndMarkEventProcessed(
 // ---------------------------------------------------------------------------
 
 export const stripeWebhook = onRequest(
-  { secrets: [STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, SENDGRID_API_KEY] },
+  {
+    secrets: [
+      STRIPE_SECRET_KEY,
+      STRIPE_WEBHOOK_SECRET,
+      STRIPE_TEST_WEBHOOK_SECRET,
+      SENDGRID_API_KEY,
+    ],
+  },
   async (req, res) => {
     // Only accept POST
     if (req.method !== "POST") {
@@ -1210,7 +1219,13 @@ async function handleAccountDeauthorized(accountId: string): Promise<void> {
 }
 
 export const handleStripeConnectWebhook = onRequest(
-  { secrets: [STRIPE_SECRET_KEY, STRIPE_CONNECT_WEBHOOK_SECRET] },
+  {
+    secrets: [
+      STRIPE_SECRET_KEY,
+      STRIPE_CONNECT_WEBHOOK_SECRET,
+      STRIPE_CONNECT_TEST_WEBHOOK_SECRET,
+    ],
+  },
   async (req, res) => {
     if (req.method !== "POST") {
       res.status(405).send("Method Not Allowed");

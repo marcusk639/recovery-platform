@@ -6,6 +6,11 @@
  *   firebase functions:secrets:set STRIPE_CLIENT_ID
  *   firebase functions:secrets:set STRIPE_WEBHOOK_SECRET
  *   firebase functions:secrets:set STRIPE_CONNECT_WEBHOOK_SECRET
+ *
+ * Test-mode signing secrets, used when the bound Stripe key is a test key.
+ * See util/stripeWebhookSecrets.ts for how mode is resolved:
+ *   firebase functions:secrets:set STRIPE_TEST_WEBHOOK_SECRET
+ *   firebase functions:secrets:set STRIPE_CONNECT_TEST_WEBHOOK_SECRET
  *   firebase functions:secrets:set GOOGLE_MAPS_API_KEY
  *
  * Declare which secrets a function uses in its options object:
@@ -21,6 +26,18 @@ export const STRIPE_CLIENT_ID = defineSecret("STRIPE_CLIENT_ID");
 export const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
 export const STRIPE_CONNECT_WEBHOOK_SECRET = defineSecret(
   "STRIPE_CONNECT_WEBHOOK_SECRET"
+);
+
+// Test-mode webhook signing secrets. Separate from the live pair above because
+// a signature can only be verified with the secret from the same Stripe mode as
+// the key that produced the event. Bound alongside the live secrets so a
+// deployment pointed at a test key can verify its webhooks; resolution order
+// lives in util/stripeWebhookSecrets.ts.
+export const STRIPE_TEST_WEBHOOK_SECRET = defineSecret(
+  "STRIPE_TEST_WEBHOOK_SECRET"
+);
+export const STRIPE_CONNECT_TEST_WEBHOOK_SECRET = defineSecret(
+  "STRIPE_CONNECT_TEST_WEBHOOK_SECRET"
 );
 
 // Google Maps Platform API key (Geocoding API, Time Zone API).
