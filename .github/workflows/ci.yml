@@ -217,9 +217,21 @@ jobs:
       - name: Install regroup/mobile dependencies
         run: cd regroup/mobile && npm ci
 
+      # Diagnostic, kept permanently rather than as a one-off: the Android build has
+      # died from an OutOfMemoryError on this job before, and that is only diagnosable
+      # against the runner's actual RAM/CPU, not assumed from GitHub's documented
+      # ubuntu-latest defaults (which can change under us).
+      - name: Report runner resources (diagnostic for Gradle memory tuning)
+        run: free -h && nproc
+
       - name: Build regroup Android debug APK
         run: cd regroup/mobile/android && ./gradlew assembleDebug --no-daemon
         env:
+          # NOTE: this does NOT override regroup/mobile/android/gradle.properties'
+          # org.gradle.jvmargs -- that project-file setting takes precedence over this
+          # env var, so this line currently does nothing beyond matching it (both 4g).
+          # Raising -Xmx here alone, without also raising gradle.properties, would be a
+          # no-op that looks like a fix. Tune memory in gradle.properties instead.
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx4g"
 
       - name: Maestro smoke — regroup (login-and-view-dashboard)
