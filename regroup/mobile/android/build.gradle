@@ -61,6 +61,34 @@ allprojects {
             // Force androidx.activity to use version 1.7.0 or higher for react-native-image-picker
             force 'androidx.activity:activity:1.7.0'
             force 'androidx.activity:activity-ktx:1.7.0'
+
+            // Something in the graph requests kotlin-stdlib 2.1.10, and Gradle
+            // resolves to the highest version, so the 1.8.10 compiler used here
+            // then cannot read its metadata:
+            //   Module was compiled with an incompatible version of Kotlin.
+            //   The binary version of its metadata is 2.1.0, expected 1.8.0.
+            // That presents as "Unresolved reference" for ordinary stdlib calls
+            // like `let` and `it`, which looks like missing symbols rather than a
+            // version conflict.
+            //
+            // Pinned to kotlinVersion so the stdlib on the classpath always
+            // matches the compiler, rather than drifting with whatever a
+            // transitive dependency asks for. The prefix match covers
+            // -common/-jdk7/-jdk8 as well.
+            //
+            // This is the narrow fix. If some dependency genuinely needs a Kotlin
+            // 2.1 stdlib API it will now fail to compile against 1.8.10 — which
+            // is the signal that the project's kotlinVersion has to move instead.
+            eachDependency { details ->
+                if (details.requested.group == 'org.jetbrains.kotlin' &&
+                    details.requested.name.startsWith('kotlin-stdlib')) {
+                    details.useVersion rootProject.ext.kotlinVersion
+                    details.because(
+                        'stdlib must match the Kotlin compiler version; a newer ' +
+                        'stdlib produces metadata 1.8.10 cannot read'
+                    )
+                }
+            }
         }
     }
 }
