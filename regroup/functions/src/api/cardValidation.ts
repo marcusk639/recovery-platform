@@ -96,11 +96,21 @@ export const assertPaymentMethodUsable = async (
       //
       // Stripe's guidance is to never pass payment_method_types, and to use
       // allowed_payment_method_types where an intent genuinely needs an
-      // allowlist — which this one does. That parameter does not exist in the
-      // pinned SDK (stripe@20.3.1 declares it on neither SetupIntents nor
-      // PaymentIntents), so it cannot be adopted until the SDK is upgraded. Do
-      // not "fix" this by deleting the line: an off-session confirm with
-      // redirect methods enabled fails for want of a return_url.
+      // allowlist — which this one does. Adoption is blocked on TWO things, not
+      // one:
+      //   - the pinned SDK: stripe@20.3.1 declares allowed_payment_method_types
+      //     on neither SetupIntents nor PaymentIntents (zero occurrences in its
+      //     type definitions);
+      //   - the pinned API VERSION: the parameter was introduced in
+      //     2026-07-29.dahlia, and util/stripeApiVersion.ts pins
+      //     2026-01-28.clover, so an SDK upgrade alone is not sufficient.
+      // Both have to move, and the version bump changes response shapes
+      // service-wide, so it is its own change with its own verification.
+      //
+      // Do not "fix" this by deleting the line: an off-session confirm with
+      // redirect methods enabled fails for want of a return_url. (Stripe does
+      // remove payment_method_types as a request parameter, but not until
+      // 2026-08-26.preview and later, which is well past the current pin.)
       payment_method_types: ['card'],
       usage: 'off_session',
       confirm: true,

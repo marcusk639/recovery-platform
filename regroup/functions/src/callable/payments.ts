@@ -171,8 +171,10 @@ export const createPaymentIntent = onCall(
           //
           // Stripe's guidance is to omit payment_method_types so dynamic
           // payment methods apply, and to express a genuine allowlist with
-          // allowed_payment_method_types. That parameter is absent from the
-          // pinned SDK (stripe@20.3.1), so adopting it waits on the upgrade.
+          // allowed_payment_method_types. Two separate pins block that: the
+          // parameter is absent from stripe@20.3.1, AND it was introduced in API
+          // version 2026-07-29.dahlia while util/stripeApiVersion.ts pins
+          // 2026-01-28.clover. An SDK upgrade on its own would not be enough.
           //
           // Dropping the restriction instead is not equivalent: the Payment
           // Sheet would then show every method enabled in the Dashboard,
