@@ -44,20 +44,39 @@ buildscript {
         // JAVA_HOME pointed at a 17 install, not 21.
         agpVersion = "8.1.1"
 
-        // @stripe/stripe-react-native ships StripeSdk_stripeVersion=21.26.+ — a
-        // dynamic range — so com.stripe:stripe-android resolves to whatever
-        // 21.26.x is newest at build time. That is how Kotlin 2.1 metadata enters
-        // this build: the resolved AAR's own com.stripe.android.* classes are
-        // compiled with 2.1 — see kotlinVersion above, which is what reads them.
+        // This is a three-way version pin and all three parts have to agree:
+        // react-native 0.72.17 (pinned in package.json) caps
+        // @stripe/stripe-react-native at 0.44.0 — 0.45.0+ extends
+        // BaseReactPackage, which does not exist before RN 0.74. Wrapper 0.44.0 in
+        // turn caps the native SDK below the APIs its own Kotlin source never
+        // learned to handle: its own android/gradle.properties declares
+        // StripeSdk_stripeVersion=21.10.+, which is the native version range it
+        // was actually authored and tested against.
+        //
+        // Pinning higher breaks wrapper 0.44.0's compile, confirmed by bisecting
+        // real com.stripe:stripe-android/payments-core/paymentsheet AARs off Maven
+        // Central (not changelogs):
+        //   - StripeIntent.NextActionType gains a DisplayPayNowDetails case that
+        //     0.44.0's exhaustive `when` blocks (Mappers.kt, PaymentLauncherFragment.kt)
+        //     don't handle — absent at 21.23.0, present at 21.24.0.
+        //   - PaymentSheet.Typography gains a `custom` param gated behind the
+        //     @RequiresOptIn marker AppearanceAPIAdditionsPreview, which
+        //     PaymentSheetAppearance.kt calls without opting in — absent at
+        //     21.14.0, present at 21.18.0.
+        // 21.15.0-21.17.0 were not individually tested, so 21.14.0 is the
+        // confirmed-clean choice, not necessarily the highest safe one.
         //
         // Its android/build.gradle reads the version through
         // getExtOrDefault('stripeVersion'), which prefers rootProject.ext over its
         // own gradle.properties, so pinning here overrides it without
-        // patch-package.
+        // patch-package. Worth pinning on reproducibility grounds alone: a dynamic
+        // range means this build can break with no change to this repository.
         //
-        // Worth pinning on reproducibility grounds alone: a dynamic range means
-        // this build can break with no change to this repository.
-        stripeVersion = "21.26.0"
+        // kotlinVersion above stays at 2.1.20 despite this: com.stripe:payments-core
+        // depends on kotlin-stdlib 2.1.10 at 21.10.0 and 21.14.0 just as it does at
+        // 21.26.0, so the Kotlin 2.1 metadata problem that raise fixed is not specific
+        // to 21.26.0 and does not go away at this lower pin.
+        stripeVersion = "21.14.0"
 
         // We use NDK 23 which has both M1 support and is the side-by-side NDK version from AGP.
         ndkVersion = "23.1.7779620"
