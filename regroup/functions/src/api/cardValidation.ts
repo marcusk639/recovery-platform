@@ -94,23 +94,28 @@ export const assertPaymentMethodUsable = async (
       // return_url) out of an off-session confirm, and makes the outcome set
       // deterministic (succeeded / requires_action / decline error).
       //
-      // Stripe's guidance is to never pass payment_method_types, and to use
-      // allowed_payment_method_types where an intent genuinely needs an
-      // allowlist — which this one does. Adoption is blocked on TWO things, not
-      // one:
-      //   - the pinned SDK: stripe@20.3.1 declares allowed_payment_method_types
-      //     on neither SetupIntents nor PaymentIntents (zero occurrences in its
-      //     type definitions);
-      //   - the pinned API VERSION: the parameter was introduced in
-      //     2026-07-29.dahlia, and util/stripeApiVersion.ts pins
-      //     2026-01-28.clover, so an SDK upgrade alone is not sufficient.
-      // Both have to move, and the version bump changes response shapes
-      // service-wide, so it is its own change with its own verification.
+      // Stripe offers allowed_payment_method_types as the way to express an
+      // allowlist and encourages switching to it; it does not forbid
+      // payment_method_types. Switching here waits on BOTH an SDK upgrade and a
+      // deliberate pin bump:
+      //   - SDK: stripe@20.3.1 declares allowed_payment_method_types on neither
+      //     SetupIntents nor PaymentIntents. Verifiable locally — zero hits
+      //     across node_modules/stripe/types/{SetupIntents,SetupIntentsResource,
+      //     PaymentIntents,PaymentIntentsResource}.d.ts.
+      //   - API version: per Stripe's web changelog the parameter arrives in a
+      //     version later than the 2026-01-28.clover pinned in
+      //     util/stripeApiVersion.ts. That date is not checkable from this repo,
+      //     so confirm it against the changelog before acting on it.
+      //
+      // The swap is also NOT like-for-like, which matters more than the version:
+      // allowed_payment_method_types SILENTLY FILTERS incompatible methods,
+      // whereas payment_method_types errors on one. This call site depends on the
+      // erroring behaviour — a determinate succeeded / requires_action / decline
+      // outcome. Under silent filtering a misconfiguration degrades quietly
+      // instead, so adopting it needs a deliberate decision about that tradeoff.
       //
       // Do not "fix" this by deleting the line: an off-session confirm with
-      // redirect methods enabled fails for want of a return_url. (Stripe does
-      // remove payment_method_types as a request parameter, but not until
-      // 2026-08-26.preview and later, which is well past the current pin.)
+      // redirect methods enabled fails for want of a return_url.
       payment_method_types: ['card'],
       usage: 'off_session',
       confirm: true,

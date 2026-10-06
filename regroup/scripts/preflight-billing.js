@@ -171,13 +171,19 @@ const SECRET_NAMES = [
   // Asserted by the `secrets:` tests in
   // functions/src/__tests__/webhooks/stripeWebhook.test.ts.
   //
-  // A missing one does NOT fail the deploy: every [SECRET] finding below is a
-  // warning unless --strict is passed, and the wired predeploy passes no
-  // --strict (firebase.json). It degrades at runtime instead — the function
-  // falls back to the one remaining candidate, which still verifies its own
-  // mode's events, so the loss is diagnostic rather than functional. Run
-  // `node scripts/preflight-billing.js --strict` as a go-live readiness check
-  // to make it fatal.
+  // A missing one does NOT fail this preflight: every [SECRET] finding below is a
+  // warning unless --strict is passed, and the wired predeploy passes no --strict
+  // (firebase.json). It degrades at runtime instead — the function falls back to
+  // the one remaining candidate, which still verifies its own mode's events, so
+  // the loss is diagnostic rather than functional. Run
+  // `node scripts/preflight-billing.js --strict` as a go-live readiness check to
+  // make it fatal.
+  //
+  // Separately, do not assume `firebase deploy` itself hard-fails on a missing
+  // BOUND secret: newer firebase-tools may prompt interactively for a value
+  // instead, which in a non-interactive CI run is its own failure mode. UNVERIFIED
+  // here — not tested against the pinned CLI — so treat it as a reason not to rely
+  // on the deploy as a backstop, rather than as a documented behaviour.
   'STRIPE_TEST_WEBHOOK_SECRET',
   'STRIPE_CONNECT_TEST_WEBHOOK_SECRET',
 ];

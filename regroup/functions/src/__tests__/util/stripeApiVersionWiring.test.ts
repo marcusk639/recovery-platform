@@ -3,10 +3,10 @@
  * from a literal that happens to equal it.
  *
  * Why these tests are shaped the way they are. PINNED_API_VERSION is the same
- * string the four rewired call sites used to hardcode, so an assertion like
+ * string a hardcoded call site would carry, so an assertion like
  * `expect(opts.apiVersion).toBe('2026-01-28.clover')` passes just as happily
- * against the hardcoding it is supposed to forbid — a tautology. Reverting any
- * call site to its literal broke no test.
+ * against the hardcoding it is supposed to forbid — a tautology that leaves a
+ * revert to the literal undetected.
  *
  * The discriminator is the deployed override. STRIPE_API_VERSION is read at
  * module load and wins over the pin, so setting it to a sentinel that is NOT the

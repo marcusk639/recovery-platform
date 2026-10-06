@@ -169,12 +169,14 @@ export const createPaymentIntent = onCall(
           // An allowlist of one, by design: the client picks card or ACH
           // upstream and the Payment Sheet is expected to offer only that.
           //
-          // Stripe's guidance is to omit payment_method_types so dynamic
-          // payment methods apply, and to express a genuine allowlist with
-          // allowed_payment_method_types. Two separate pins block that: the
-          // parameter is absent from stripe@20.3.1, AND it was introduced in API
-          // version 2026-07-29.dahlia while util/stripeApiVersion.ts pins
-          // 2026-01-28.clover. An SDK upgrade on its own would not be enough.
+          // Stripe encourages omitting payment_method_types so dynamic payment
+          // methods apply, and expressing a genuine allowlist with
+          // allowed_payment_method_types instead. Adopting it waits on both an SDK
+          // upgrade and a deliberate pin bump: the parameter is absent from
+          // stripe@20.3.1 (locally verifiable), and per Stripe's web changelog it
+          // arrives in an API version later than the 2026-01-28.clover pin. Note it
+          // filters incompatible methods silently rather than erroring, so it is a
+          // weaker guarantee than this allowlist-of-one relies on.
           //
           // Dropping the restriction instead is not equivalent: the Payment
           // Sheet would then show every method enabled in the Dashboard,
