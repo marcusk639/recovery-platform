@@ -17,7 +17,10 @@ import {
   STRIPE_TEST_WEBHOOK_SECRET,
   STRIPE_CONNECT_TEST_WEBHOOK_SECRET,
 } from "../config";
-import { webhookSecretCandidates } from "../util/stripeWebhookSecrets";
+import {
+  webhookSecretCandidates,
+  type WebhookSecretCandidate,
+} from "../util/stripeWebhookSecrets";
 import { verifyStripeWebhook } from "../util/verifyStripeWebhook";
 import { sendFcmToHouseAdmins } from "../util/notifications";
 import { sendEmail, regroupEmail } from "../util/email";
@@ -1034,7 +1037,7 @@ export const stripeWebhook = onRequest(
     // server misconfiguration, so it answers 500 — which Stripe retries — rather
     // than letting constructEvent report it as a bad signature and blame the
     // sender.
-    let candidates;
+    let candidates: WebhookSecretCandidate[];
     try {
       candidates = webhookSecretCandidates("platform");
     } catch (err) {
@@ -1045,10 +1048,8 @@ export const stripeWebhook = onRequest(
       return;
     }
 
-    // Every configured secret is tried, then the verified event's mode is checked
-    // against both the verifying secret and this deployment. See
-    // util/verifyStripeWebhook.ts for why it is in that order and why both
-    // assertions are needed.
+    // Selection then mode authorization — util/verifyStripeWebhook.ts owns why,
+    // util/stripeWebhookSecrets.ts owns why there is a list at all.
     // req.rawBody is provided by Firebase Cloud Functions for onRequest handlers.
     const verification = verifyStripeWebhook({
       stripe: getStripe(),
@@ -1258,7 +1259,7 @@ export const handleStripeConnectWebhook = onRequest(
       res.status(400).send("Webhook Error: Missing stripe-signature header");
       return;
     }
-    let connectCandidates;
+    let connectCandidates: WebhookSecretCandidate[];
     try {
       connectCandidates = webhookSecretCandidates("connect");
     } catch (err) {
@@ -1269,12 +1270,7 @@ export const handleStripeConnectWebhook = onRequest(
       return;
     }
 
-
-    // Identical to the platform handler, via the same helper: try every
-    // configured secret, then assert the verified event's mode against both the
-    // verifying secret and this deployment. The two handlers previously carried
-    // byte-identical copies of this loop, which is how the mode check came to be
-    // missing from both at once.
+    // Same helper, same guarantees as the platform handler above.
     const verification = verifyStripeWebhook({
       stripe: getStripe(),
       rawBody: req.rawBody,

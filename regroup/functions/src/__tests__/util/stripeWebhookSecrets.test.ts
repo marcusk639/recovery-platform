@@ -8,6 +8,7 @@
  * mode, rejects the other half.
  */
 import {
+  deployedStripeMode,
   isStripeTestMode,
   webhookSecretCandidates,
   WebhookSecretMissingError,
@@ -186,6 +187,51 @@ describe('webhookSecretCandidates — partial configuration', () => {
       ['STRIPE_WEBHOOK_SECRET', 'live'],
       ['STRIPE_TEST_WEBHOOK_SECRET', 'test'],
     ]);
+  });
+
+  // STRIPE_WEBHOOK_MODE must reach ORDERING ONLY, never the mode guard. It has no
+  // other call site, no documentation, and no entry in the preflight's
+  // CONFIG_REQUIRED list, so letting it decide which events a deployment may act
+  // on would put authorization behind an undocumented env var. deployedStripeMode()
+  // reads the bound key alone.
+  it('lets STRIPE_WEBHOOK_MODE reorder candidates', () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_live_abc';
+    process.env.STRIPE_WEBHOOK_MODE = 'test';
+    process.env.STRIPE_WEBHOOK_SECRET = 'whsec_live';
+    process.env.STRIPE_TEST_WEBHOOK_SECRET = 'whsec_test';
+
+    expect(names('platform')).toEqual([
+      'STRIPE_TEST_WEBHOOK_SECRET',
+      'STRIPE_WEBHOOK_SECRET',
+    ]);
+  });
+
+  it('does NOT let STRIPE_WEBHOOK_MODE change the authorized mode', () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_live_abc';
+    process.env.STRIPE_WEBHOOK_MODE = 'test';
+
+    expect(deployedStripeMode()).toBe('live');
+  });
+
+  it('derives the authorized mode from the bound key', () => {
+    process.env.STRIPE_SECRET_KEY = 'sk_test_abc';
+    delete process.env.STRIPE_WEBHOOK_MODE;
+    expect(deployedStripeMode()).toBe('test');
+
+    process.env.STRIPE_SECRET_KEY = 'rk_test_abc';
+    expect(deployedStripeMode()).toBe('test');
+
+    process.env.STRIPE_SECRET_KEY = 'sk_live_abc';
+    expect(deployedStripeMode()).toBe('live');
+  });
+
+  it('fails closed to live when no key is bound', () => {
+    // A deployment that cannot show it is a test deployment is held to live-mode
+    // events, rather than defaulting to the permissive side.
+    delete process.env.STRIPE_SECRET_KEY;
+    delete process.env.STRIPE_WEBHOOK_MODE;
+
+    expect(deployedStripeMode()).toBe('live');
   });
 
   it('tags the Connect pair the same way', () => {

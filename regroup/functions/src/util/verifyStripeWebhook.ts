@@ -28,11 +28,14 @@ import {
  *    mode secrets are bound to both deployed functions, so without this check a
  *    LIVE deployment verifies and processes a test-mode event — and the handlers
  *    resolve their target from event metadata, not from a Stripe lookup, so a
- *    test-mode (or forged, if a low-value test signing secret ever leaks)
- *    payment_intent decrements rentOwed on a real guest and writes a real
- *    payment doc. The pre-rework code resolved a single secret from the
- *    deployment's own mode and so returned 400 here; this restores that property
- *    without reintroducing the single-secret guess.
+ *    test-mode payment_intent decrements rentOwed on a real guest and writes a
+ *    real payment doc.
+ *
+ * The signature itself is sound either way: stripe-node HMACs each candidate and
+ * enforces a 300s timestamp tolerance, so trying several forges nothing. What this
+ * closes is AUTHORIZATION — a correctly signed event from the wrong mode. Resolving
+ * one secret from the deployment's own mode answers 400 here; so does this, without
+ * reintroducing a single-secret guess.
  *
  * Two independent mode assertions are required, and neither alone is enough:
  *
@@ -84,10 +87,11 @@ export const verifyStripeWebhook = ({
   signature,
   candidates,
 }: VerifyWebhookInput): VerifyWebhookResult => {
-  // Every candidate's failure is kept, in order. Overwriting a single variable
-  // per iteration surfaced only the LAST candidate's error: when candidate 1
-  // fails with "Timestamp outside the tolerance zone" (a replay) and candidate 2
-  // with the generic "No signatures found", the diagnostic one was the one lost.
+  // EVERY candidate's failure is kept, each tagged with its candidate name.
+  // Keeping only one — first or last — loses the diagnostic case: when the
+  // correct-mode secret fails for a reason that is not "wrong secret", such as
+  // "Timestamp outside the tolerance zone" (a replay), that is the error the
+  // operator needs, and which position it lands in is not knowable here.
   const failures: Array<{ candidate: string; err: string }> = [];
 
   for (const candidate of candidates) {
@@ -131,7 +135,7 @@ export const verifyStripeWebhook = ({
     reason: 'signature',
     detail: {
       candidatesTried: candidates.map((c) => `${c.name}:${c.mode}`),
-      // First failure first — see the comment on `failures` above.
+      // All of them, in the order tried — see the comment on `failures` above.
       errors: failures.map((f) => `${f.candidate}: ${f.err}`),
     },
   };

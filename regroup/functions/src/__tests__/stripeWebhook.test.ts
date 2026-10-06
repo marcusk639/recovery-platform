@@ -390,10 +390,10 @@ function setupIdempotencyTransaction(alreadyExists: boolean): void {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  // The handler now resolves its signing secret and answers 500 when none is
-  // configured, rather than handing undefined to constructEvent. These suites
-  // previously passed without any secret only because constructEvent is mocked
-  // and ignored it, so the endpoint's own configuration was never exercised.
+  // The handler resolves its signing secret before verifying and answers 500 when
+  // none is configured, so these suites must configure one. constructEvent is
+  // mocked and ignores the secret, so without this the endpoint's own
+  // configuration would go unexercised.
   // All four signing secrets, as both deployed functions get them. The key is
   // sk_test_, so this is a test-mode deployment: the test secret is the one that
   // verifies and verifyStripeWebhook requires the event's mode to agree with it.
@@ -511,11 +511,10 @@ describe("Signature Verification", () => {
 
     expect(res.status).toHaveBeenCalledWith(400);
 
-    // The response body is deliberately generic. It used to echo Stripe's raw
-    // message, which discloses verification internals to an unauthenticated
-    // caller — a finding already tracked in regroup/CODEBASE-REVIEW.md. The
-    // specific reason belongs in the log, where an operator can see it and an
-    // attacker cannot.
+    // Invariant: the response body is a fixed string and never carries Stripe's
+    // raw message, which would disclose verification internals to an
+    // unauthenticated caller. The specific reason belongs in the log, where an
+    // operator can see it and an attacker cannot.
     expect(res.send).toHaveBeenCalledWith(
       expect.not.stringContaining("Timestamp outside"),
     );
