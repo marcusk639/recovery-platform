@@ -84,19 +84,31 @@ allprojects {
 subprojects { project ->
     project.afterEvaluate {
         def android = project.extensions.findByName('android')
-        if (android == null || android.namespace != null) {
+        if (android == null) {
             return
         }
-        def manifest = project.file('src/main/AndroidManifest.xml')
-        if (!manifest.exists()) {
-            return
+
+        // AGP 8 stops generating BuildConfig unless each module opts in, and
+        // the opt-in is per module rather than inherited — setting it on :app
+        // alone left the build failing while configuring
+        // :react-native-community_checkbox. Opt every Android module in, rather
+        // than discovering the affected ones a failed build at a time. Only
+        // when unset, so a module that deliberately disabled it keeps its choice.
+        if (android.buildFeatures.buildConfig == null) {
+            android.buildFeatures.buildConfig = true
         }
-        def declaredPackage = new groovy.xml.XmlSlurper(false, false)
-            .parse(manifest).@package.text()
-        if (declaredPackage) {
-            android.namespace = declaredPackage
-            project.logger.lifecycle(
-                "AGP8 bridge: set namespace '${declaredPackage}' for :${project.name}")
+
+        if (android.namespace == null) {
+            def manifest = project.file('src/main/AndroidManifest.xml')
+            if (manifest.exists()) {
+                def declaredPackage = new groovy.xml.XmlSlurper(false, false)
+                    .parse(manifest).@package.text()
+                if (declaredPackage) {
+                    android.namespace = declaredPackage
+                    project.logger.lifecycle(
+                        "AGP8 bridge: set namespace '${declaredPackage}' for :${project.name}")
+                }
+            }
         }
     }
 }
