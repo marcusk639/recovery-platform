@@ -26,11 +26,17 @@ import { logger } from 'firebase-functions';
  * util/verifyStripeWebhook.ts applies that check; `mode` below is what it compares
  * against.
  *
- * A list also keeps signing-secret rotation survivable. Stripe keeps the previous
- * secret valid for an overlap window after a roll, so accepting several candidates
- * lets that window pass with no redeploy and nothing dropped in flight. Only one
- * env var per mode exists today, so that tolerance is structural rather than
- * exercised.
+ * Rotation is NOT yet survivable, and the loop does not make it so. Stripe keeps
+ * the previous signing secret valid for an overlap window after a roll, so
+ * surviving one with nothing dropped needs the OLD and NEW secret of the SAME mode
+ * available at once. There is one env var per mode, so only one of the two can ever
+ * be held: the second candidate is always the other mode's secret, which the mode
+ * guard in util/verifyStripeWebhook.ts refuses by design. Rolling a secret today
+ * drops whatever is in flight signed with the old one.
+ *
+ * What the loop does buy is that the machinery is already in place: add a second
+ * same-mode var and both candidates pass the guard, with no change here or in the
+ * handlers. Until that var exists, do not read this as rotation support.
  *
  * All four secrets live in Secret Manager, declared in config.ts and bound per
  * function: the platform handler gets the platform pair, the Connect handler the
