@@ -144,12 +144,18 @@ subprojects { project ->
         // 11 both correct without a per-module list. Not
         // kotlin.jvm.target.validation.mode=warning — that silences the check
         // while leaving the mismatch it is reporting in place.
-        def javaTarget = android.compileOptions.targetCompatibility.toString()
+        // Read targetCompatibility through a provider, not eagerly. AGP finalizes
+        // :app's compileOptions after this afterEvaluate block runs, so reading it
+        // here directly fails the build with "targetCompatibility is not yet
+        // finalized". A provider defers the read to when the Kotlin task actually
+        // queries its jvmTarget, by which point every module has finalized.
         project.tasks
             .withType(org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile)
             .configureEach {
-                compilerOptions.jvmTarget.set(
-                    org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(javaTarget))
+                compilerOptions.jvmTarget.set(project.provider {
+                    org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(
+                        android.compileOptions.targetCompatibility.toString())
+                })
             }
 
         // Deliberately no Compose Compiler pin here.
