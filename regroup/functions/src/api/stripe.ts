@@ -1,5 +1,6 @@
 import { logger } from "firebase-functions";
 import Stripe from "stripe";
+import { STRIPE_API_VERSION } from "../util/stripeApiVersion";
 import OperatorSubscription from "../entities/OperatorSubscription";
 import { User } from "../entities/User";
 import { HouseType, TierKey } from "../config";
@@ -19,7 +20,7 @@ export const stripe = new Proxy({} as Stripe, {
   get(_target, prop: string | symbol) {
     if (!_stripe) {
       _stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-        apiVersion: process.env.STRIPE_API_VERSION! as Stripe.LatestApiVersion,
+        apiVersion: STRIPE_API_VERSION,
       });
     }
     // Cast through unknown so TypeScript accepts the dynamic property access

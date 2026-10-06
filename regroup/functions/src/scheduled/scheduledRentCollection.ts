@@ -19,6 +19,7 @@ import Stripe from "stripe";
 import { guestCollection } from "../api/firestore";
 import { STRIPE_SECRET_KEY } from "../config";
 import { computeApplicationFee, RentPaymentMethodType } from "../util/rentFee";
+import { STRIPE_API_VERSION } from "../util/stripeApiVersion";
 
 interface AutoPayGuest {
   id: string;
@@ -34,7 +35,7 @@ interface AutoPayGuest {
  */
 export async function runRentCollection(): Promise<void> {
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    apiVersion: "2026-01-28.clover" as Stripe.LatestApiVersion,
+    apiVersion: STRIPE_API_VERSION,
   });
 
   const snapshot = await guestCollection

@@ -43,6 +43,7 @@ import './scriptBootstrap';
 import Stripe from 'stripe';
 import { houseCollection, getUser } from '../api/firestore';
 import { operatorStatusToHouseStatus, type HouseSubscriptionStatus } from '../util/entitlement';
+import { STRIPE_API_VERSION } from "../util/stripeApiVersion";
 
 // ---------------------------------------------------------------------------
 // CLI flags
@@ -95,7 +96,7 @@ async function main(): Promise<void> {
       process.exit(1);
     }
     stripe = new Stripe(key, {
-      apiVersion: '2026-01-28.clover' as Stripe.LatestApiVersion,
+      apiVersion: STRIPE_API_VERSION,
     });
   }
 
