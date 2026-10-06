@@ -20,14 +20,21 @@ buildscript {
         // 1.8.0 at most, so every com.stripe.android.* reference failed with
         // "the binary version of its metadata is 2.1.0, expected version is 1.8.0".
         //
-        // Three narrower fixes were tried and each is disproved by CI, so do not
-        // retry them: downgrading the JS deps; forcing kotlin-stdlib down (the
-        // errors are on Stripe's own classes, not the stdlib, and a forced-down
-        // stdlib does not recompile a precompiled AAR — it buys a runtime
-        // NoClassDefFoundError); and pinning stripe-android (the pin provably
-        // resolved 21.26.0 and the error persisted, so the whole 21.26 line is
-        // 2.1-built). Raising the compiler is the only fix that addresses the
-        // mismatch rather than a symptom of it.
+        // Two narrower fixes were tried against the 21.26.x line specifically and
+        // each is disproved by CI, so do not retry them there: forcing kotlin-stdlib
+        // down (the errors are on Stripe's own classes, not the stdlib, and a
+        // forced-down stdlib does not recompile a precompiled AAR — it buys a
+        // runtime NoClassDefFoundError); and pinning stripe-android to a different
+        // 21.26.x patch (the pin provably resolved 21.26.0 and the error persisted,
+        // so the whole 21.26 line is 2.1-built). Raising the compiler is the fix
+        // that addresses that mismatch rather than a symptom of it.
+        //
+        // This does NOT mean pinning the native SDK to a different line is off the
+        // table — stripeVersion below is now pinned to 21.14.0, a line that
+        // predates the 2.1 metadata problem entirely (see its comment). kotlinVersion
+        // stays raised regardless: payments-core depends on kotlin-stdlib 2.1.10
+        // at 21.14.0 too, just via a different path (the dependency itself, not
+        // metadata on Stripe's compiled classes at 21.26.x).
         kotlinVersion = "2.1.20"
 
         // Pinned, where this used to be an unversioned classpath that resolved
