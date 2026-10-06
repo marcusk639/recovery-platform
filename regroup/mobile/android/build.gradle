@@ -15,7 +15,20 @@ buildscript {
         targetSdkVersion = 34
         androidXCore = "1.6.0"
         googlePlayServicesVersion = "21.0.1"
-        kotlinVersion = "1.8.10"
+        // com.stripe:stripe-android 21.26.x is compiled with Kotlin 2.1, so its
+        // .class metadata carries binary version 2.1.0. A 1.8.10 compiler reads
+        // 1.8.0 at most, so every com.stripe.android.* reference failed with
+        // "the binary version of its metadata is 2.1.0, expected version is 1.8.0".
+        //
+        // Three narrower fixes were tried and each is disproved by CI, so do not
+        // retry them: downgrading the JS deps; forcing kotlin-stdlib down (the
+        // errors are on Stripe's own classes, not the stdlib, and a forced-down
+        // stdlib does not recompile a precompiled AAR — it buys a runtime
+        // NoClassDefFoundError); and pinning stripe-android (the pin provably
+        // resolved 21.26.0 and the error persisted, so the whole 21.26 line is
+        // 2.1-built). Raising the compiler is the only fix that addresses the
+        // mismatch rather than a symptom of it.
+        kotlinVersion = "2.1.20"
 
         // Pinned, where this used to be an unversioned classpath that resolved
         // to whatever react-native-gradle-plugin happened to bring (7.4.2).
@@ -35,7 +48,7 @@ buildscript {
         // dynamic range — so com.stripe:stripe-android resolves to whatever
         // 21.26.x is newest at build time. That is how Kotlin 2.1 metadata enters
         // this build: the resolved AAR's own com.stripe.android.* classes are
-        // compiled with 2.1, which the pinned 1.8.10 compiler cannot read.
+        // compiled with 2.1 — see kotlinVersion above, which is what reads them.
         //
         // Its android/build.gradle reads the version through
         // getExtOrDefault('stripeVersion'), which prefers rootProject.ext over its
@@ -114,17 +127,16 @@ subprojects { project ->
             android.buildFeatures.buildConfig = true
         }
 
-        // @stripe/stripe-react-native enables the compose buildFeature without
-        // naming a compiler version, so AGP falls back to its default 1.3.2 —
-        // which demands Kotlin 1.7.20 and fails against the 1.8.10 pinned above:
-        //   "This version (1.3.2) of the Compose Compiler requires Kotlin
-        //    version 1.7.20 but you appear to be using Kotlin version 1.8.10"
-        // 1.4.4 is the Compose Compiler release paired with Kotlin 1.8.10.
-        // Keep this in step with kotlinVersion; they are a matched pair, not two
-        // independent knobs.
-        if (android.buildFeatures.compose) {
-            android.composeOptions.kotlinCompilerExtensionVersion = '1.4.4'
-        }
+        // Deliberately no Compose Compiler pin here.
+        // @stripe/stripe-react-native enables the compose buildFeature
+        // (node_modules/@stripe/stripe-react-native/android/build.gradle:124), and
+        // at Kotlin >= 2 that same file applies
+        // org.jetbrains.kotlin.plugin.compose (lines 16-21, 65-68), which supplies
+        // the Compose Compiler from the Kotlin version itself. Setting
+        // composeOptions.kotlinCompilerExtensionVersion alongside that plugin pins
+        // a second, Kotlin-1.8-era compiler against a 2.1 one. The override that
+        // stood here ('1.4.4', matched to kotlinVersion 1.8.10) is therefore wrong
+        // under Kotlin 2 rather than merely redundant.
 
         if (android.namespace == null) {
             def manifest = project.file('src/main/AndroidManifest.xml')
