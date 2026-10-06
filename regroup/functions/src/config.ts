@@ -6,12 +6,13 @@
  *   firebase functions:secrets:set STRIPE_CLIENT_ID
  *   firebase functions:secrets:set STRIPE_WEBHOOK_SECRET
  *   firebase functions:secrets:set STRIPE_CONNECT_WEBHOOK_SECRET
+ *   firebase functions:secrets:set GOOGLE_MAPS_API_KEY
+ *   firebase functions:secrets:set RECOVERY_PLATFORM_API_KEY
  *
- * Test-mode signing secrets, used when the bound Stripe key is a test key.
- * See util/stripeWebhookSecrets.ts for how mode is resolved:
+ * The two test-mode signing secrets below are used when the bound Stripe key is
+ * a test key; see util/stripeWebhookSecrets.ts for how mode is resolved:
  *   firebase functions:secrets:set STRIPE_TEST_WEBHOOK_SECRET
  *   firebase functions:secrets:set STRIPE_CONNECT_TEST_WEBHOOK_SECRET
- *   firebase functions:secrets:set GOOGLE_MAPS_API_KEY
  *
  * Declare which secrets a function uses in its options object:
  *   onCall({ secrets: [SENDGRID_API_KEY] }, async (request) => { ... })
