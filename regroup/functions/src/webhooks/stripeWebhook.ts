@@ -353,6 +353,33 @@ async function handlePaymentIntentSucceeded(
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
+  // 1b. Reconcile the auto-pay attempt record. The scheduled collector authors
+  // that record at charge time; this only confirms the outcome, so a missing id
+  // means a resident-initiated payment, not an error. Non-fatal: never let a
+  // reconciliation write block the rentOwed decrement below.
+  const rentAttemptId = paymentIntent.metadata?.rentAttemptId;
+  if (rentAttemptId) {
+    try {
+      await db
+        .collection("rent-collection-attempts")
+        .doc(rentAttemptId)
+        .set(
+          {
+            status: "charged",
+            paymentIntentId: paymentIntent.id,
+            needsReconciliation: false,
+            reconciledAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        );
+    } catch (err) {
+      logger.error("payment_intent.succeeded: rent attempt reconcile failed", {
+        rentAttemptId,
+        err: (err as Error).message,
+      });
+    }
+  }
+
   // 2. Atomically decrement guest rentOwed (integer cents) — eliminates read-modify-write race
   if (!guestSnap || !guestSnap.exists) {
     logger.warn("payment_intent.succeeded: guest not found", { guestId });

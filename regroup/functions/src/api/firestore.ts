@@ -28,6 +28,7 @@ export const drugTestCollection = ratsFirestore.collection('drug-tests');
 export const activityCollection = ratsFirestore.collection('activities');
 export const paymentsCollection = ratsFirestore.collection('payments');
 export const invitationCollection = ratsFirestore.collection('invitations');
+export const rentCollectionAttemptCollection = ratsFirestore.collection('rent-collection-attempts');
 
 /**
  * Shape of a document in the `subscriptions` collection. Read by the Stripe
