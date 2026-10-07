@@ -223,7 +223,10 @@ beforeEach(() => {
   mockRunTransaction.mockImplementation(
     async (fn: (txn: any) => Promise<any>) => {
       const txn = {
-        get: jest.fn().mockResolvedValue({ exists: false }),
+        get: jest.fn().mockResolvedValue({
+          exists: false,
+          get: (_field: string) => undefined,
+        }),
         set: jest.fn(),
       };
       return fn(txn);
@@ -680,6 +683,19 @@ describe("stripeWebhook — payment_intent.succeeded", () => {
 
     const mockGuestUpdate = jest.fn().mockResolvedValue(undefined);
     const mockPaymentSet = jest.fn().mockResolvedValue(undefined);
+    // The rentOwed decrement runs inside its own transaction so it applies
+    // exactly once per PaymentIntent. Route txn.update to the guest mock this
+    // test already asserts on, dropping the ref argument.
+    mockRunTransaction.mockImplementation(async (fn: (txn: any) => any) =>
+      fn({
+        get: jest.fn().mockResolvedValue({
+          exists: false,
+          get: (_field: string) => undefined,
+        }),
+        set: jest.fn(),
+        update: (_ref: any, data: any) => mockGuestUpdate(data),
+      }),
+    );
     const mockUserGet = jest.fn().mockResolvedValue({
       exists: true,
       data: () => ({ messagingToken: [] }),
