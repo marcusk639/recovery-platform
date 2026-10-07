@@ -6,6 +6,11 @@ import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { Platform } from 'react-native';
 
+// Captures the props the wrapper hands the library, so the Places API (New)
+// wiring can be asserted. Must be "mock"-prefixed for Jest to allow the factory
+// below to close over it.
+const mockLibProps: { current: any } = { current: null };
+
 jest.mock('react-native-google-places-autocomplete', () => {
   const React = require('react');
   const { View, TextInput, TouchableOpacity } = require('react-native');
@@ -22,6 +27,14 @@ jest.mock('react-native-google-places-autocomplete', () => {
         }: any,
         ref: any,
       ) => {
+        mockLibProps.current = {
+          placeholder,
+          onPress,
+          renderRightButton,
+          listViewDisplayed,
+          testID,
+          ...rest,
+        };
         // Expose a setAddressText method via ref
         if (ref && typeof ref === 'function') {
           ref({ setAddressText: jest.fn() });
@@ -91,6 +104,30 @@ const defaultProps = {
 describe('RatsGooglePlacesAutocomplete', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  it('drives the library against Places API (New), not the legacy endpoints', () => {
+    // The legacy places-backend.googleapis.com service is disabled on the
+    // phoenix-cleanhouse project, so the library's default
+    // https://maps.googleapis.com/maps/api base cannot work. These three props
+    // are what move it onto /v1/places:autocomplete.
+    render(<RatsGooglePlacesAutocomplete {...defaultProps} />);
+
+    expect(mockLibProps.current.isNewPlacesAPI).toBe(true);
+    expect(mockLibProps.current.requestUrl).toEqual({
+      useOnPlatform: 'all',
+      url: 'https://places.googleapis.com',
+    });
+    // The library passes `fields` to GET /v1/places/{id} as the Place Details
+    // field mask. Names must be UNPREFIXED: a `places.` prefix belongs to search
+    // responses and makes Details return HTTP 400 "Request contains an invalid
+    // argument", verified against the live API. This is the regression guard.
+    expect(mockLibProps.current.fields).toContain('id');
+    expect(mockLibProps.current.fields).toContain('location');
+    expect(mockLibProps.current.fields).not.toContain('places.');
+    // languageCode, not the legacy `language`.
+    expect(mockLibProps.current.query.languageCode).toBe('en');
+    expect(mockLibProps.current.query.language).toBeUndefined();
   });
 
   it('renders without crashing', () => {
