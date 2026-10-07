@@ -1,7 +1,7 @@
 import React from "react";
 import styled from "styled-components";
 
-const SUPPORT_EMAIL = "admin@homegroups-app.com";
+const SUPPORT_EMAIL = "admin@regroup-app.com";
 const SUPPORT_MAILTO = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(
   "Get Started with Homegroups",
 )}&body=${encodeURIComponent(

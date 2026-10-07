@@ -433,7 +433,7 @@ const PrivacyPage = () => {
 
           <ContactInfo>
             <ContactParagraph>
-              <Emphasis>By Email:</Emphasis> admin@homegroups-app.com
+              <Emphasis>By Email:</Emphasis> admin@regroup-app.com
             </ContactParagraph>
             <ContactParagraph>
               <Emphasis>By Mail:</Emphasis> Homegroups
