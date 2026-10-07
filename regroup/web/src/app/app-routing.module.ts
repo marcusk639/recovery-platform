@@ -60,13 +60,17 @@ const routes: Routes = [
   // The mobile app's "Manage Subscription" button deep-links to /billing — a
   // literal path, origin-only from env (SubscriptionRequiredScreen.tsx:25). The
   // route was specified in regroup/mobile/docs/superpowers/specs/
-  // 2026-05-19-subscription-paywall-design.md but never built, and this table has
-  // no ** fallback, so the router threw "Cannot match any routes" — a blank page
-  // in the browser, a 500 through SSR. Not a 404: hosting rewrites ** to
-  // /index.html. Points at my-account because that hosts the Stripe billing
-  // portal (my-account.component.ts:76). The spec wants /billing reachable
-  // regardless of subscription status; my-account is unguarded, so that holds.
+  // 2026-05-19-subscription-paywall-design.md but never built. my-account hosts
+  // the Stripe billing portal (my-account.component.ts:76).
   { path: 'billing', redirectTo: 'my-account', pathMatch: 'full' },
+  // Catch-all, and it MUST stay last. Without it the router throws "Cannot match
+  // any routes" on any unknown URL. Client-side that is a blank page; under SSR
+  // the throw escapes the Angular Universal handler, which never responds, so
+  // the Cloud Function holds an instance until it times out. Measured in the
+  // functions emulator before this route existed: /nonexistent-xyz returned no
+  // response at all and logged "Your function timed out after ~60s" — a hang,
+  // not the 500 an earlier version of this comment claimed.
+  { path: '**', component: ErrorComponent },
 ];
 
 @NgModule({
