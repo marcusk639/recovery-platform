@@ -123,3 +123,18 @@ scripts/logs/
 ts-error-inventory.txt
 scripts/recovery-connect.json
 scripts/logs/
+
+# ── Service account credentials ───────────────
+# regroup/functions/.gitignore already covers its own copy; these paths had no
+# rule at all, leaving a real Google service account key one `git add -A` away
+# from being committed. The pre-commit scanner's PRIVATE KEY pattern is the
+# backstop, not the primary guard.
+**/service-key*.json
+**/serviceAccount*.json
+
+# ── Mutation testing output (config is tracked, results are not) ──
+**/.stryker-tmp/
+**/reports/mutation/
+
+# ── Editor/tool settings backups ──────────────
+**/.claude/*.bak
