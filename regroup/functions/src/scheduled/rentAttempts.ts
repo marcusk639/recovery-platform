@@ -206,3 +206,37 @@ export async function markRentAttemptFailed(
     });
   }
 }
+
+/**
+ * Surface attempts whose Stripe outcome is unknown.
+ *
+ * `needsReconciliation` is set when a charge threw for a reason that is NOT a
+ * deterministic decline — a timeout may have left a real PaymentIntent behind.
+ * Until this existed the flag had no reader anywhere: no alert, no UI, no retry
+ * job, so an unresolved charge was recorded and then never mentioned again.
+ *
+ * Logged at ERROR so a Cloud Logging alert can fire on it. Deliberately does
+ * NOT throw: a permanently red scheduled job gets ignored, which would
+ * reproduce the same silence this is meant to break, just from the other side.
+ */
+export async function reportAttemptsNeedingReconciliation(): Promise<number> {
+  const snapshot = await rentCollectionAttemptCollection
+    .where('needsReconciliation', '==', true)
+    .get();
+
+  if (snapshot.empty) {
+    return 0;
+  }
+
+  logger.error('rentAttempts: attempts need reconciliation', {
+    count: snapshot.size,
+    // Ids only — never names or amounts per resident.
+    attempts: snapshot.docs.slice(0, 20).map((doc) => ({
+      attemptId: doc.id,
+      guestId: (doc.data() ?? {}).guestId ?? null,
+      status: (doc.data() ?? {}).status ?? null,
+    })),
+  });
+
+  return snapshot.size;
+}
