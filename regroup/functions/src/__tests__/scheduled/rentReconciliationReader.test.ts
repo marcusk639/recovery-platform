@@ -145,3 +145,101 @@ describe('needsReconciliation reader', () => {
     expect(payload).not.toMatch(/firstName|lastName|email|name"/i);
   });
 });
+
+/**
+ * The path the feature actually exists for: an attempt whose webhook never
+ * arrives. Every test above seeds `needsReconciliation: true` directly, which
+ * exercises the reader but NOT the production code meant to set the flag. The
+ * staleness branch used to only log, so the reader was blind to its one real
+ * input — three independent reviewers flagged that, and these pin it.
+ */
+describe('stale in-flight attempts become reconcilable', () => {
+  const STALE_MS = 10 * 24 * 60 * 60 * 1000;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    attemptStore.reset();
+    process.env.STRIPE_SECRET_KEY = 'sk_test_mock';
+    mockCreatePaymentIntent.mockResolvedValue({ id: 'pi', status: 'succeeded' });
+  });
+
+  const seedStuckAch = () =>
+    attemptStore.seedAttempt({
+      guestId: 'guest-stuck',
+      houseId: 'house-1',
+      amountCents: 50000,
+      // ACH confirmed but never settled: the webhook never landed.
+      status: 'awaiting_confirmation',
+      needsReconciliation: false,
+      createdAt: new Date(Date.now() - STALE_MS - 60_000).toISOString(),
+    });
+
+  it('flags a stale attempt so the reader can see it, in the SAME run', async () => {
+    const id = seedStuckAch();
+    noGuests();
+
+    const summary = await runRentCollection();
+
+    // The flag must be written...
+    expect(attemptStore.docs.get(id)).toMatchObject({ needsReconciliation: true });
+    // ...and reported by this run, not merely the next one.
+    expect(summary.needsReconciliationCount).toBe(1);
+  });
+
+  it('records when the release happened, so staleness is auditable', async () => {
+    const id = seedStuckAch();
+    noGuests();
+
+    await runRentCollection();
+
+    expect(attemptStore.docs.get(id)?.staleReleasedAt).toEqual(expect.any(String));
+  });
+
+  it('does not flag an attempt that is still fresh', async () => {
+    const id = attemptStore.seedAttempt({
+      guestId: 'guest-fresh',
+      amountCents: 50000,
+      status: 'awaiting_confirmation',
+      needsReconciliation: false,
+      createdAt: new Date(Date.now() - 60_000).toISOString(),
+    });
+    noGuests();
+
+    const summary = await runRentCollection();
+
+    expect(attemptStore.docs.get(id)).toMatchObject({ needsReconciliation: false });
+    expect(summary.needsReconciliationCount).toBe(0);
+  });
+
+  it('does not re-flag an attempt already marked', async () => {
+    const id = attemptStore.seedAttempt({
+      guestId: 'guest-stuck',
+      amountCents: 50000,
+      status: 'pending',
+      needsReconciliation: true,
+      staleReleasedAt: '2026-01-01T00:00:00.000Z',
+      createdAt: new Date(Date.now() - STALE_MS - 60_000).toISOString(),
+    });
+    noGuests();
+
+    await runRentCollection();
+
+    // Untouched: the original release timestamp survives.
+    expect(attemptStore.docs.get(id)?.staleReleasedAt).toBe('2026-01-01T00:00:00.000Z');
+  });
+
+  it('still releases the amount, so a stuck webhook is not a permanent lockout', async () => {
+    seedStuckAch();
+    // Same guest, balance intact: the stale hold must not suppress the charge.
+    guestCollection.get.mockResolvedValue({
+      empty: false,
+      size: 1,
+      docs: [fakeGuestDoc('guest-stuck', 50000)],
+    });
+
+    const summary = await runRentCollection();
+
+    expect(summary.attemptedCount).toBe(1);
+    expect(mockCreatePaymentIntent).toHaveBeenCalledTimes(1);
+  });
+});

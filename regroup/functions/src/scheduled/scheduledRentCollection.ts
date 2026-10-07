@@ -27,6 +27,7 @@ import { STRIPE_SECRET_KEY } from '../config';
 import { computeApplicationFee, RentPaymentMethodType } from '../util/rentFee';
 import { STRIPE_API_VERSION } from '../util/stripeApiVersion';
 import {
+  flagStaleForReconciliation,
   loadInFlightCentsByGuest,
   reportAttemptsNeedingReconciliation,
   markRentAttemptCharged,
@@ -62,8 +63,14 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
     apiVersion: STRIPE_API_VERSION,
   });
 
-  // BEFORE the guest query, so an unresolved attempt is still surfaced on a day
-  // with nothing to charge — both early returns below would otherwise skip it.
+  const now = new Date();
+
+  // Order matters. Scan in-flight first so the staleness cutoff can FLAG what
+  // it releases, then sweep, so an attempt abandoned today is reported today
+  // rather than a run later. Both run BEFORE the guest query, because the early
+  // returns below would otherwise skip them on a day with nothing to charge.
+  const { byGuest: inFlightByGuest, staleRefs } = await loadInFlightCentsByGuest(now);
+  await flagStaleForReconciliation(staleRefs);
   const needsReconciliationCount = await reportAttemptsNeedingReconciliation();
 
   const snapshot = await guestCollection
@@ -76,14 +83,12 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
     return { matchedCount: 0, attemptedCount: 0, failureCount: 0, needsReconciliationCount };
   }
 
-  const now = new Date();
   const today = now.toISOString().split('T')[0];
 
   // Subtract money already committed for this guest. Selection is balance-keyed
   // and the balance only moves when the webhook lands, so without this the same
   // resident re-matches every run — and for ACH the balance stays unreduced for
   // days, long after any idempotency key has expired.
-  const inFlightByGuest = await loadInFlightCentsByGuest(now);
 
   const due = snapshot.docs
     .map((doc) => {

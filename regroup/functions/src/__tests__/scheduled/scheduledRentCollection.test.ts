@@ -37,9 +37,20 @@ jest.mock('../../api/firestore', () => ({
   // succeeds. The repeat-charge guard itself is covered in
   // rentCollectionRepeatCharge.test.ts with a stateful store.
   rentCollectionAttemptCollection: {
-    where: () => ({
-      get: jest.fn().mockResolvedValue({ empty: true, size: 0, docs: [] }),
-    }),
+    where: () => {
+      const empty = { empty: true, size: 0, docs: [] };
+      // Mirrors the Query surface runRentCollection uses: get(),
+      // count().get(), and select(...).limit(n).get().
+      const q: any = {
+        get: jest.fn().mockResolvedValue(empty),
+        select: () => q,
+        limit: () => q,
+        count: () => ({
+          get: jest.fn().mockResolvedValue({ data: () => ({ count: 0 }) }),
+        }),
+      };
+      return q;
+    },
     doc: (id?: string) => ({
       id: id ?? 'auto-id',
       create: jest.fn().mockResolvedValue(undefined),
