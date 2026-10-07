@@ -26,6 +26,31 @@ jest.mock('@react-navigation/native', () => ({
   }),
 }));
 
+// Selection now comes from the id-only hooks, not from the legacy
+// state.guests.selectedGuest / state.houses.selectedHouse fields, which nothing
+// in the app dispatches any more. Seeding those fields made this suite pass
+// against a state the app can never reach, while the real screen rendered
+// "No payments found" for every resident.
+jest.mock('../../../hooks/useSelectedGuest', () => ({
+  useSelectedGuest: () => ({
+    guest: {
+      id: 'guest-1',
+      displayName: 'Alice Smith',
+      firstName: 'Alice',
+      lastName: 'Smith',
+    },
+    guestId: 'guest-1',
+    isLoading: false,
+  }),
+}));
+jest.mock('../../../hooks/useSelectedHouse', () => ({
+  useSelectedHouse: () => ({
+    house: { id: 'house-1', name: 'Test House' },
+    houseId: 'house-1',
+    isLoading: false,
+  }),
+}));
+
 // Store: provide a selected guest and house
 jest.mock('../../../state/store', () => ({
   useAppSelector: (selector: (s: any) => any) =>

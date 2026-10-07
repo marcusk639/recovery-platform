@@ -127,6 +127,29 @@ import React from 'react';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { Provider } from 'react-redux';
 import { configureStore, Reducer } from '@reduxjs/toolkit';
+// Selection comes from the id-only hooks now. The legacy
+// state.guests.selectedGuest / state.houses.selectedHouse fields this suite used
+// to seed are never populated by the running app, so those fixtures described a
+// state that could not occur. buildStore below drives these holders, which keeps
+// each test's guest/house overrides working. Names must start with "mock" for
+// Jest to allow the factories to close over them.
+let mockSelectedGuest: any = null;
+let mockSelectedHouse: any = null;
+jest.mock('../../../hooks/useSelectedGuest', () => ({
+  useSelectedGuest: () => ({
+    guest: mockSelectedGuest,
+    guestId: mockSelectedGuest?.id ?? null,
+    isLoading: false,
+  }),
+}));
+jest.mock('../../../hooks/useSelectedHouse', () => ({
+  useSelectedHouse: () => ({
+    house: mockSelectedHouse,
+    houseId: mockSelectedHouse?.id ?? null,
+    isLoading: false,
+  }),
+}));
+
 
 import housesReducer from '../../../state/slices/housesSlice';
 import guestsReducer from '../../../state/slices/guestsSlice';
@@ -212,6 +235,9 @@ function buildStore({
   guest = MOCK_GUEST,
   house = MOCK_HOUSE,
 }: BuildStoreOptions = {}) {
+  // Keep the hook mocks in step with whatever this test asked for.
+  mockSelectedGuest = guest ?? null;
+  mockSelectedHouse = house ?? null;
   return configureStore({
     reducer: {
       auth: authReducer,
@@ -540,22 +566,23 @@ describe('ResidentPayment', () => {
     expect(button.props.accessibilityState?.disabled).toBe(true);
   });
 
-  it('pay button is disabled when no guest is selected', () => {
-    const { getByTestId } = renderScreen({}, { guest: null });
+  // These two previously asserted that the form rendered with the Pay button
+  // merely disabled. That gave a resident a payment form and no explanation of
+  // why it would not submit. The screen now returns early with a message
+  // instead, so the assertion is that the form is absent, not that a button in
+  // it is disabled.
+  it('does not render the payment form when no guest is selected', () => {
+    const { queryByTestId } = renderScreen({}, { guest: null });
 
-    fireEvent.changeText(getByTestId('payment-amount-input'), '50.00');
-
-    const button = getByTestId('submit-payment-button');
-    expect(button.props.accessibilityState?.disabled).toBe(true);
+    expect(queryByTestId('payment-amount-input')).toBeNull();
+    expect(queryByTestId('submit-payment-button')).toBeNull();
   });
 
-  it('pay button is disabled when no house is selected', () => {
-    const { getByTestId } = renderScreen({}, { house: null });
+  it('does not render the payment form when no house is selected', () => {
+    const { queryByTestId } = renderScreen({}, { house: null });
 
-    fireEvent.changeText(getByTestId('payment-amount-input'), '50.00');
-
-    const button = getByTestId('submit-payment-button');
-    expect(button.props.accessibilityState?.disabled).toBe(true);
+    expect(queryByTestId('payment-amount-input')).toBeNull();
+    expect(queryByTestId('submit-payment-button')).toBeNull();
   });
 
   // ── Route param pre-fill ───────────────────────────────────────────────────

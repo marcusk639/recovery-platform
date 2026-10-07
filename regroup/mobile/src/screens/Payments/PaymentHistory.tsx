@@ -15,7 +15,6 @@ import ScreenHeader from '../../components/screen-header';
 import { RatsText } from '../../components/rats-text';
 import RatsButton from '../../components/rats-button/rats-button';
 
-import { useAppSelector } from '../../state/store';
 import { listPayments, PaymentRecord } from '../../services/payments';
 import { exportPaymentHistoryCSV } from '../../services/reportExport';
 import { logException } from '../../util/logging';
@@ -28,6 +27,8 @@ import {
 } from '../../styles/theme';
 import { RootStackParamList } from '../../navigation/types';
 import FontAwesome5 from 'react-native-vector-icons/FontAwesome5';
+import { useSelectedGuest } from '../../hooks/useSelectedGuest';
+import { useSelectedHouse } from '../../hooks/useSelectedHouse';
 
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
@@ -36,8 +37,11 @@ interface Props {
 }
 
 const PaymentHistory: React.FC<Props> = ({ navigation }) => {
-  const guest = useAppSelector((s: any) => s.guests.selectedGuest);
-  const house = useAppSelector((s: any) => s.houses.selectedHouse);
+  // Was reading s.guests.selectedGuest / s.houses.selectedHouse, which the
+  // id-only migration left permanently undefined; these hooks resolve the
+  // selected ids through React Query instead.
+  const { guest } = useSelectedGuest();
+  const { house } = useSelectedHouse();
 
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [loading, setLoading] = useState(true);
