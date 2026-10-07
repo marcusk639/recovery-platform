@@ -108,7 +108,13 @@ These rules apply to all products in the monorepo without exception.
 ## Gotchas
 
 - **The main checkout sits on `feat/regroup-tier-billing`**, a stale branch that reverts PRs #54–#61 and must never be merged. Files that exist on `main` therefore read as missing or untracked in the working tree — check with `git show origin/main:<path>`, and do real work in a worktree off `origin/main`.
-- PRs land as **squash merges**, so `git merge-base --is-ancestor` and three-dot diffs report a fully-merged branch as unmerged. The only reliable "is this merged" check is a two-dot diff restricted to the paths the branch itself changed: `git diff origin/main..<branch> -- $(git diff --name-only $(git merge-base <branch> origin/main)..<branch>)`.
+- PRs land as **squash merges**, so `git merge-base --is-ancestor` and three-dot diffs report a fully-merged branch as unmerged. The only reliable "is this merged" check is a two-dot diff restricted to the paths the branch itself changed, run against **`origin/<branch>`, not the local ref** — a local branch checked out in another worktree does not advance when the resolution is pushed from elsewhere, and a stale local ref makes a merged branch look unmerged all over again:
+
+  ```bash
+  B=origin/<branch>
+  git diff origin/main..$B -- $(git diff --name-only $(git merge-base $B origin/main)..$B) | wc -l   # 0 = merged
+  ```
+
 - Use `git -C <path> …`, never `cd <path> && git …`. If the path does not exist the `cd` fails and the git command silently runs in the main checkout, on the stale branch.
 - Ignore minified bundles and build artifacts (`**/public/`, `*.min.js`, `*-es5.js`, `*-es2015.js`, `lib/`, `dist/`, `build/`, `.next/`) when counting, searching, or reading source — they are regenerated on rebuild. `regroup/web/public/` alone holds ~1.15M lines of vendor bundles; real hand-written source platform-wide is ~380K lines.
 - `homegroups/mobile` and `regroup/mobile` postinstall runs `pod install`; on a machine without working Xcode CLT, `npm ci` fails there — use `npm ci --ignore-scripts` for JS-only work (Jest/ESLint need only JS deps).
