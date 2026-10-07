@@ -6,10 +6,10 @@
  * PaymentIntent for each. Uses Promise.allSettled so one failure does not stop
  * the rest.
  *
- * Repeat-charge protection and the money record both live in
- * `rentAttempts.ts`, NOT in the Stripe idempotency key — read that file's
- * header before changing anything here. The per-day key only collapses retries
- * of a single invocation.
+ * Repeat-charge protection lives in `rentAttempts.ts`, NOT in the Stripe
+ * idempotency key — read that file's header before changing anything here. The
+ * per-day key only collapses retries of a single invocation. The ledger
+ * (`rentOwed`, the `payments` document) is written by the webhook, not here.
  *
  * Firestore note: equality on one field (autoPayEnabled) combined with a range
  * on another (rentOwed) is permitted, but that pair still needs a composite

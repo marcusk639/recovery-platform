@@ -8,11 +8,17 @@
  * per-period buys nothing: past the window the same key string yields a fresh
  * charge. Cross-period protection has to live in Firestore.
  *
- * It is also why a charge can no longer go unrecorded. The only writer of rent
- * payments used to be the `payment_intent.succeeded` webhook, so an
- * unsubscribed or failing webhook meant money moved while `rentOwed` and
- * payment history never did. The collector now records its own attempt and the
- * webhook merely reconciles the outcome.
+ * It is an audit trail for the attempt, NOT the ledger. The ledger — the
+ * `rentOwed` decrement and the `payments` document — is still written only by
+ * the `payment_intent.succeeded` webhook. That event IS subscribed on the live
+ * platform endpoint, so the ledger does get written; this record exists to say
+ * a charge was attempted during the window before the event lands.
+ *
+ * That window is not short. A confirmed `us_bank_account` PaymentIntent reports
+ * `processing` and settles days later, so `status` here is not a settlement
+ * signal and `rentOwed` is still unreduced while ACH is in flight. Anything
+ * that reasons about whether a resident already paid must account for in-flight
+ * attempts, not just the balance.
  */
 
 import { logger } from 'firebase-functions';
