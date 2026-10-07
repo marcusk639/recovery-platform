@@ -1,9 +1,9 @@
-import { runRentCollection } from "../../scheduled/scheduledRentCollection";
+import { runRentCollection } from '../../scheduled/scheduledRentCollection';
 
 const mockCreatePaymentIntent = jest.fn();
 const mockPaymentMethodsRetrieve = jest.fn();
 
-jest.mock("../../api/firestore", () => ({
+jest.mock('../../api/firestore', () => ({
   guestCollection: {
     where: jest.fn().mockReturnThis(),
     get: jest.fn().mockResolvedValue({
@@ -11,21 +11,21 @@ jest.mock("../../api/firestore", () => ({
       size: 2,
       docs: [
         {
-          id: "guest-1",
+          id: 'guest-1',
           data: () => ({
-            houseId: "house-1",
-            stripeCustomerId: "cus_test1",
-            defaultPaymentMethodId: "pm_test1",
+            houseId: 'house-1',
+            stripeCustomerId: 'cus_test1',
+            defaultPaymentMethodId: 'pm_test1',
             autoPayEnabled: true,
             rentOwed: 500,
           }),
         },
         {
-          id: "guest-2",
+          id: 'guest-2',
           data: () => ({
-            houseId: "house-1",
-            stripeCustomerId: "cus_test2",
-            defaultPaymentMethodId: "pm_test2",
+            houseId: 'house-1',
+            stripeCustomerId: 'cus_test2',
+            defaultPaymentMethodId: 'pm_test2',
             autoPayEnabled: true,
             rentOwed: 750,
           }),
@@ -33,9 +33,22 @@ jest.mock("../../api/firestore", () => ({
       ],
     }),
   },
+  // Stateless stub: no prior attempt exists, and claiming a period always
+  // succeeds. The repeat-charge guard itself is covered in
+  // rentCollectionRepeatCharge.test.ts with a stateful store.
+  rentCollectionAttemptCollection: {
+    where: () => ({
+      get: jest.fn().mockResolvedValue({ empty: true, size: 0, docs: [] }),
+    }),
+    doc: (id?: string) => ({
+      id: id ?? 'auto-id',
+      create: jest.fn().mockResolvedValue(undefined),
+      update: jest.fn().mockResolvedValue(undefined),
+    }),
+  },
 }));
 
-jest.mock("stripe", () => {
+jest.mock('stripe', () => {
   return jest.fn().mockImplementation(() => ({
     paymentIntents: { create: mockCreatePaymentIntent },
     paymentMethods: { retrieve: mockPaymentMethodsRetrieve },
@@ -43,8 +56,8 @@ jest.mock("stripe", () => {
 });
 
 // Mock config to provide secret name + the rent-fee model used by the helper.
-jest.mock("../../config", () => ({
-  STRIPE_SECRET_KEY: { name: "STRIPE_SECRET_KEY" },
+jest.mock('../../config', () => ({
+  STRIPE_SECRET_KEY: { name: 'STRIPE_SECRET_KEY' },
   LEGACY_RENT_FEE_HOUSE_IDS: [],
   RENT_FEE: {
     achFlatCents: 200,
@@ -55,16 +68,16 @@ jest.mock("../../config", () => ({
   },
 }));
 
-describe("runRentCollection", () => {
+describe('runRentCollection', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    process.env.STRIPE_SECRET_KEY = "sk_test_mock";
+    process.env.STRIPE_SECRET_KEY = 'sk_test_mock';
   });
 
-  it("creates a PaymentIntent for each auto-pay guest with balance", async () => {
+  it('creates a PaymentIntent for each auto-pay guest with balance', async () => {
     mockCreatePaymentIntent.mockResolvedValue({
-      id: "pi_test",
-      status: "succeeded",
+      id: 'pi_test',
+      status: 'succeeded',
     });
 
     await runRentCollection();
@@ -73,45 +86,45 @@ describe("runRentCollection", () => {
     expect(mockCreatePaymentIntent).toHaveBeenCalledWith(
       expect.objectContaining({
         amount: expect.any(Number),
-        currency: "usd",
+        currency: 'usd',
         confirm: true,
         off_session: true,
       }),
       expect.objectContaining({
-        idempotencyKey: expect.stringContaining("auto-rent-guest-1"),
-      })
+        idempotencyKey: expect.stringContaining('auto-rent-guest-1'),
+      }),
     );
   });
 
-  it("continues processing when one payment fails", async () => {
+  it('continues processing when one payment fails', async () => {
     mockCreatePaymentIntent
-      .mockRejectedValueOnce(new Error("card_declined"))
-      .mockResolvedValueOnce({ id: "pi_test2", status: "succeeded" });
+      .mockRejectedValueOnce(new Error('card_declined'))
+      .mockResolvedValueOnce({ id: 'pi_test2', status: 'succeeded' });
 
     await expect(runRentCollection()).resolves.not.toThrow();
     expect(mockCreatePaymentIntent).toHaveBeenCalledTimes(2);
   });
 
-  it("rounds a non-integer rentOwed before charging (H-fns-1)", async () => {
+  it('rounds a non-integer rentOwed before charging (H-fns-1)', async () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { guestCollection } = require("../../api/firestore");
+    const { guestCollection } = require('../../api/firestore');
     guestCollection.get.mockResolvedValueOnce({
       empty: false,
       size: 1,
       docs: [
         {
-          id: "guest-float",
+          id: 'guest-float',
           data: () => ({
-            houseId: "house-1",
-            stripeCustomerId: "cus_float",
-            defaultPaymentMethodId: "pm_float",
+            houseId: 'house-1',
+            stripeCustomerId: 'cus_float',
+            defaultPaymentMethodId: 'pm_float',
             autoPayEnabled: true,
             rentOwed: 149.5, // stray non-integer cents — Stripe would reject as-is
           }),
         },
       ],
     });
-    mockCreatePaymentIntent.mockResolvedValue({ id: "pi_f", status: "succeeded" });
+    mockCreatePaymentIntent.mockResolvedValue({ id: 'pi_f', status: 'succeeded' });
 
     await runRentCollection();
 
@@ -121,9 +134,9 @@ describe("runRentCollection", () => {
     );
   });
 
-  describe("method-aware Connect application fee", () => {
+  describe('method-aware Connect application fee', () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { guestCollection } = require("../../api/firestore");
+    const { guestCollection } = require('../../api/firestore');
 
     const seedConnectGuest = (overrides: Record<string, unknown>) => {
       guestCollection.get.mockResolvedValueOnce({
@@ -131,12 +144,12 @@ describe("runRentCollection", () => {
         size: 1,
         docs: [
           {
-            id: "guest-c",
+            id: 'guest-c',
             data: () => ({
-              houseId: "house-1",
-              stripeCustomerId: "cus_c",
-              defaultPaymentMethodId: "pm_c",
-              stripeConnectId: "acct_dest",
+              houseId: 'house-1',
+              stripeCustomerId: 'cus_c',
+              defaultPaymentMethodId: 'pm_c',
+              stripeConnectId: 'acct_dest',
               autoPayEnabled: true,
               rentOwed: 10000, // $100.00
               ...overrides,
@@ -146,32 +159,32 @@ describe("runRentCollection", () => {
       });
     };
 
-    it("charges the 0.75% card platform fee when the default method is a card", async () => {
+    it('charges the 0.75% card platform fee when the default method is a card', async () => {
       seedConnectGuest({});
-      mockPaymentMethodsRetrieve.mockResolvedValue({ type: "card" });
+      mockPaymentMethodsRetrieve.mockResolvedValue({ type: 'card' });
       mockCreatePaymentIntent.mockResolvedValue({
-        id: "pi_c",
-        status: "succeeded",
+        id: 'pi_c',
+        status: 'succeeded',
       });
 
       await runRentCollection();
 
-      expect(mockPaymentMethodsRetrieve).toHaveBeenCalledWith("pm_c");
+      expect(mockPaymentMethodsRetrieve).toHaveBeenCalledWith('pm_c');
       expect(mockCreatePaymentIntent).toHaveBeenCalledWith(
         expect.objectContaining({
           application_fee_amount: 75, // 0.75% of 10000
-          transfer_data: { destination: "acct_dest" },
+          transfer_data: { destination: 'acct_dest' },
         }),
         expect.anything(),
       );
     });
 
-    it("charges the flat ACH fee when the default method is a bank account", async () => {
+    it('charges the flat ACH fee when the default method is a bank account', async () => {
       seedConnectGuest({});
-      mockPaymentMethodsRetrieve.mockResolvedValue({ type: "us_bank_account" });
+      mockPaymentMethodsRetrieve.mockResolvedValue({ type: 'us_bank_account' });
       mockCreatePaymentIntent.mockResolvedValue({
-        id: "pi_c",
-        status: "succeeded",
+        id: 'pi_c',
+        status: 'succeeded',
       });
 
       await runRentCollection();
