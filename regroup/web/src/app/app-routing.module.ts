@@ -56,12 +56,16 @@ const routes: Routes = [
   { path: 'contact', component: ContactPageComponent },
   { path: 'privacy-policy', component: PrivacyPolicyComponent },
   { path: 'terms', component: TermsComponent },
-  { path: 'my-account', component: MyAccountComponent, canActivate: [AuthGuard] },
-  // The mobile app's "Manage Subscription" button deep-links to /billing (see
-  // regroup/mobile/src/screens/Subscription/SubscriptionRequiredScreen.tsx and the
-  // 2026-05-19 paywall design spec). That path was specified but never built, so
-  // released builds land on a 404. Redirect it to the account page, which hosts the
-  // Stripe billing portal. Keep this route as long as any shipped build targets it.
+  { path: 'my-account', component: MyAccountComponent },
+  // The mobile app's "Manage Subscription" button deep-links to /billing — a
+  // literal path, origin-only from env (SubscriptionRequiredScreen.tsx:25). The
+  // route was specified in regroup/mobile/docs/superpowers/specs/
+  // 2026-05-19-subscription-paywall-design.md but never built, and this table has
+  // no ** fallback, so the router threw "Cannot match any routes" — a blank page
+  // in the browser, a 500 through SSR. Not a 404: hosting rewrites ** to
+  // /index.html. Points at my-account because that hosts the Stripe billing
+  // portal (my-account.component.ts:76). The spec wants /billing reachable
+  // regardless of subscription status; my-account is unguarded, so that holds.
   { path: 'billing', redirectTo: 'my-account', pathMatch: 'full' },
 ];
 

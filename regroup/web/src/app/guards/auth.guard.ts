@@ -34,11 +34,13 @@ export class AuthGuard implements CanActivate {
           });
       }
     }
-    // Server-side render: allow the route through and let the browser enforce.
-    // Returning false here makes Angular Universal refuse to render the page at
-    // all rather than redirect, so an unauthenticated request gets a blank
-    // prerender instead of being sent to /login. The guard runs again on the
-    // client once it bootstraps, which is where the redirect actually happens.
+    // Server-side render (the `universal` Cloud Function in web/functions). A
+    // guard cannot emit an HTTP redirect here: app.server.module.ts wires no
+    // REQUEST/RESPONSE providers, so returning false only cancels the navigation
+    // and the server ships an incomplete shell. Returning true lets the component
+    // mount and redirect itself. This defers enforcement rather than performing
+    // it — the SSR context has no Firebase session (persistence is browser-local),
+    // so a guarded component finds no user and routes to /login on its own.
     return true;
   }
 }
