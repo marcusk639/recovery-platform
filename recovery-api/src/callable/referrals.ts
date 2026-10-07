@@ -1,6 +1,6 @@
 import { onCall, CallableRequest, HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions/v2';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import { requireServiceAuth, ServiceAuthContext } from '../middleware/auth';
 import type { Referral } from '../entities/Referral';
@@ -53,7 +53,9 @@ export async function handleCreateReferral(
       referredBy: context.uid,
       referredByApp: context.appId,
       status: 'pending',
-      createdAt: new Date(),
+      // Server clock, not the caller's: a client-supplied Date would let a
+      // misconfigured or hostile caller backdate or future-date an audit field.
+      createdAt: FieldValue.serverTimestamp(),
     });
     return { id: ref.id, status: 'pending' };
   } catch (err) {
