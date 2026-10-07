@@ -14,7 +14,7 @@ The recovery platform serves individuals and organizations in the addiction reco
 | `homegroups/`     | Homegroups                | React Native (TypeScript) + Firebase + Redux Toolkit + Stripe | `recovery-connect-cad4b`                             | 12-step group admins and members            |
 | `regroup/`        | Regroup (Tentative Title) | React Native 0.72 + Firebase Cloud Functions + Angular web    | `phoenix-cleanhouse`                                 | Sober living house operators and residents  |
 | `detox-recovery/` | NextStep Recovery         | Next.js 15                                                    | `nextsteprecovery-1d5c2` (alias `nextstep-recovery`) | Individuals/families seeking detox guidance |
-| `shared/`         | (reserved)                | TypeScript                                                    | n/a                                                  | Future shared types/utilities               |
+| `shared/`         | (not yet created)         | n/a                                                           | n/a                                                  | Reserved name for future shared types/utilities — **this directory does not exist yet**; the duplicated helpers it was meant to hold still live in both `homegroups/functions/src/utils/` and `regroup/functions/src/util/` |
 
 ## Directory Map
 
@@ -107,7 +107,7 @@ These rules apply to all products in the monorepo without exception.
 
 ## Gotchas
 
-- **The main checkout sits on `feat/regroup-tier-billing`**, a stale branch that reverts PRs #54–#61 and must never be merged. Files that exist on `main` therefore read as missing or untracked in the working tree — check with `git show origin/main:<path>`, and do real work in a worktree off `origin/main`.
+- **Do real work in a worktree off `origin/main`**, and confirm a file's committed state with `git show origin/main:<path>` rather than trusting the working tree. The main checkout is often parked on a detached HEAD or a feature branch behind `origin/main`, which makes files that exist on `main` read as missing or untracked. (History: `feat/regroup-tier-billing` was a stale branch that reverted PRs #54–#61; its five salvageable fixes landed via #68 and PRs #54–#61 are all on `main`, so that branch is no longer a live hazard — but it still exists locally, so do not merge it.)
 - PRs land as **squash merges**, so `git merge-base --is-ancestor` and three-dot diffs report a fully-merged branch as unmerged. The only reliable "is this merged" check is a two-dot diff restricted to the paths the branch itself changed, run against **`origin/<branch>`, not the local ref** — a local branch checked out in another worktree does not advance when the resolution is pushed from elsewhere, and a stale local ref makes a merged branch look unmerged all over again:
 
   ```bash
