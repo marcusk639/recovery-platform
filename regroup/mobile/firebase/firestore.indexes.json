@@ -135,14 +135,13 @@
         { "fieldPath": "result", "order": "ASCENDING" },
         { "fieldPath": "testDate", "order": "ASCENDING" }
       ]
-    }
-    ,
+    },
     {
       "collectionGroup": "guests",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "autoPayEnabled", "order": "ASCENDING" },
-        { "fieldPath": "balance", "order": "ASCENDING" }
+        { "fieldPath": "rentOwed", "order": "ASCENDING" }
       ]
     },
     {

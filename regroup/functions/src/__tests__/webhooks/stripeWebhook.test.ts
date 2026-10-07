@@ -708,6 +708,81 @@ describe("stripeWebhook — payment_intent.succeeded", () => {
       rentOwed: { __increment: -50000 },
     });
   });
+  it("reconciles the auto-pay attempt record named in metadata", async () => {
+    const guestId = "guest_auto";
+    const houseId = "house_1";
+    const attemptId = `${guestId}_2026-11`;
+
+    const mockAttemptSet = jest.fn().mockResolvedValue(undefined);
+    const mockAttemptDoc = jest.fn().mockReturnValue({
+      set: mockAttemptSet,
+      update: jest.fn(),
+    });
+
+    mockConstructEvent.mockReturnValue({
+      id: "evt_pi_autopay",
+      type: "payment_intent.succeeded",
+      account: undefined,
+      data: {
+        object: {
+          id: "pi_auto_1",
+          amount: 50000,
+          currency: "usd",
+          metadata: {
+            guestId,
+            houseId,
+            rentAttemptId: attemptId,
+            autoPayPeriod: "2026-11",
+          },
+        },
+      },
+    });
+
+    mockCollectionFn.mockImplementation((col: string) => {
+      if (col === "rent-collection-attempts") {
+        return { doc: mockAttemptDoc };
+      }
+      if (col === "guests") {
+        return {
+          doc: jest.fn().mockReturnValue({
+            get: jest.fn().mockResolvedValue({
+              exists: true,
+              data: () => ({ userId: "user_1", firstName: "Jane", lastName: "Doe", houseId }),
+            }),
+            update: jest.fn().mockResolvedValue(undefined),
+          }),
+        };
+      }
+      return {
+        where: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            get: jest.fn().mockResolvedValue({ empty: true, docs: [] }),
+          }),
+          get: jest.fn().mockResolvedValue({ empty: true, docs: [] }),
+        }),
+        doc: jest.fn().mockReturnValue({
+          get: jest.fn().mockResolvedValue({ exists: false }),
+          update: jest.fn(),
+          set: jest.fn().mockResolvedValue(undefined),
+        }),
+      };
+    });
+
+    const res = makeRes();
+    await (stripeWebhook as any)(makeReq(), res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(mockAttemptDoc).toHaveBeenCalledWith(attemptId);
+    expect(mockAttemptSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "charged",
+        paymentIntentId: "pi_auto_1",
+        needsReconciliation: false,
+      }),
+      { merge: true },
+    );
+  });
+
 
   it("still writes partial payment doc when metadata is missing", async () => {
     const mockPaymentSet = jest.fn().mockResolvedValue(undefined);
