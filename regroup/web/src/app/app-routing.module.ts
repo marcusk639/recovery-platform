@@ -57,6 +57,16 @@ const routes: Routes = [
   { path: 'privacy-policy', component: PrivacyPolicyComponent },
   { path: 'terms', component: TermsComponent },
   { path: 'my-account', component: MyAccountComponent },
+  // The mobile app's "Manage Subscription" button deep-links to /billing — a
+  // literal path, origin-only from env (SubscriptionRequiredScreen.tsx:25). The
+  // route was specified in regroup/mobile/docs/superpowers/specs/
+  // 2026-05-19-subscription-paywall-design.md but never built, and this table has
+  // no ** fallback, so the router threw "Cannot match any routes" — a blank page
+  // in the browser, a 500 through SSR. Not a 404: hosting rewrites ** to
+  // /index.html. Points at my-account because that hosts the Stripe billing
+  // portal (my-account.component.ts:76). The spec wants /billing reachable
+  // regardless of subscription status; my-account is unguarded, so that holds.
+  { path: 'billing', redirectTo: 'my-account', pathMatch: 'full' },
 ];
 
 @NgModule({
