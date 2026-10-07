@@ -15,7 +15,7 @@ export const sendEmail = async ({
   to,
   subject,
   html,
-  from = "admin@homegroups-app.com",
+  from = "admin@regroup-app.com",
 }: EmailOptions): Promise<void> => {
   try {
     const msg = {
