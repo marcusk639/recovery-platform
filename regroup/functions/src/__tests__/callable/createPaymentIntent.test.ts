@@ -127,20 +127,26 @@ describe("createPaymentIntent — house validation", () => {
 
 // ── Authorization: admin bypass ────────────────────────────────────────────────
 describe("createPaymentIntent — house admin is authorized without guest lookup", () => {
-  it("succeeds and does NOT fetch the guest doc when caller is adminId", async () => {
-    // House doc returned on first get(); no second get() should be called
-    mockGet.mockResolvedValueOnce({
-      exists: true,
-      data: () => HOUSE_WITH_STRIPE,
-    });
+  it("succeeds for a house admin, and still reads the guest doc to confirm the house", async () => {
+    // This test previously asserted the opposite — that admins skip the guest
+    // lookup (expect(mockGet).toHaveBeenCalledTimes(1)) — which is what allowed
+    // an admin of one house to name a guest belonging to another. The guest doc
+    // is now read on every path, because it is the only authority on which house
+    // a guest belongs to.
+    mockGet
+      .mockResolvedValueOnce({ exists: true, data: () => HOUSE_WITH_STRIPE })
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({ userId: "some-resident", houseId: "house-1" }),
+      });
 
     const result = await run(
       makeRequest({ auth: { uid: "admin-user", token: {} } }),
     );
 
     expect(result).toHaveProperty("clientSecret");
-    // Only one Firestore read: the house doc. Guest doc is NOT fetched for admins.
-    expect(mockGet).toHaveBeenCalledTimes(1);
+    // Two reads now: the house doc, then the guest doc.
+    expect(mockGet).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -160,7 +166,7 @@ describe("createPaymentIntent — resident authorization", () => {
   it("succeeds when caller's uid matches guest.userId", async () => {
     mockGet.mockResolvedValueOnce(houseSnap).mockResolvedValueOnce({
       exists: true,
-      data: () => ({ userId: "resident-uid" }),
+      data: () => ({ userId: "resident-uid", houseId: "house-1" }),
     });
 
     const result = await run(makeRequest());
@@ -170,7 +176,7 @@ describe("createPaymentIntent — resident authorization", () => {
   it("throws permission-denied when caller's uid does not match guest.userId", async () => {
     mockGet.mockResolvedValueOnce(houseSnap).mockResolvedValueOnce({
       exists: true,
-      data: () => ({ userId: "other-resident" }),
+      data: () => ({ userId: "other-resident", houseId: "house-1" }),
     });
 
     await expect(run(makeRequest())).rejects.toMatchObject({
@@ -190,12 +196,78 @@ describe("createPaymentIntent — resident authorization", () => {
 });
 
 // ── Happy path: returns clientSecret ──────────────────────────────────────────
+describe("createPaymentIntent — guest must belong to the supplied house", () => {
+  // The suite's global beforeEach uses jest.clearAllMocks(), which clears call
+  // records but NOT queued mockResolvedValueOnce values. A test that queues a
+  // value the code never consumes therefore leaks it into the next test. Reset
+  // the queue after each of these so that cannot happen.
+  afterEach(() => mockGet.mockReset());
+
+  // Regression cover for a cross-tenant payment misdirection. The callable took
+  // houseId from the client and only checked that the caller owned the guest doc,
+  // never that the guest belonged to that house. A resident of house-1 could pass
+  // houseId: "house-2", and transfer_data.destination then sent the money to
+  // house-2's Stripe account while the webhook credited rentOwed on the resident's
+  // own guest doc — house-1's books showed rent collected that it never received.
+  it("throws permission-denied when the guest belongs to a different house", async () => {
+    mockGet
+      // The supplied house: a real, Stripe-active house the caller has no claim to.
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({
+          ...HOUSE_WITH_STRIPE,
+          adminId: "",
+          adminIds: [],
+          stripeAccountId: "acct_other_house",
+        }),
+      })
+      // The caller genuinely owns this guest doc, so the userId check passes.
+      // It is the houseId that does not match.
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({ userId: "resident-uid", houseId: "house-1" }),
+      });
+
+    await expect(
+      run(
+        makeRequest({
+          data: { amount: 100000, houseId: "house-2", guestId: "guest-doc-1" },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "permission-denied" });
+  });
+
+  it("throws permission-denied for an admin of the supplied house when the guest belongs elsewhere", async () => {
+    // The admin path previously skipped the guest lookup entirely, so an admin of
+    // house-2 could name any guest in the system.
+    mockGet
+      .mockResolvedValueOnce({ exists: true, data: () => HOUSE_WITH_STRIPE })
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({ userId: "someone-else", houseId: "house-99" }),
+      });
+
+    await expect(
+      run(
+        makeRequest({
+          auth: { uid: "admin-user", token: {} },
+          data: { amount: 100000, houseId: "house-1", guestId: "guest-doc-1" },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "permission-denied" });
+  });
+});
+
 describe("createPaymentIntent — happy path", () => {
   it("returns clientSecret on successful payment intent creation", async () => {
-    mockGet.mockResolvedValueOnce({
-      exists: true,
-      data: () => HOUSE_WITH_STRIPE,
-    });
+    mockGet
+      .mockResolvedValueOnce({ exists: true, data: () => HOUSE_WITH_STRIPE })
+      // The guest doc is read on every path now, admin included, to confirm the
+      // guest belongs to the house being paid.
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({ userId: "some-resident", houseId: "house-1" }),
+      });
 
     const result = await run(
       makeRequest({ auth: { uid: "admin-user", token: {} } }),
