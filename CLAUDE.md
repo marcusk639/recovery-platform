@@ -103,9 +103,21 @@ These rules apply to all products in the monorepo without exception.
 - Commit scopes name the product: `fix(regroup-mobile):`, never `fix(mobile):` — two RN apps and three functions packages make a bare `mobile`/`web`/`functions` scope unreadable in `git log`. Blocked by the `commit-msg` hook.
 - Git hooks are versioned in `scripts/git-hooks/` and installed per-clone with `./scripts/install-git-hooks.sh` (run it after cloning or after editing a hook).
 - Jest `coverageThreshold` floors (recovery-api, homegroups/functions, detox-recovery) are ratchets: raise them as coverage grows, never lower them to make a run pass.
+- Mutation-kill counts are evidence about **test coupling, not correctness** — tightly-pinned tests ratify wrong behaviour as firmly as right behaviour. On money paths, get an independent reviewer reasoning from the domain model.
 
 ## Gotchas
 
+- **The main checkout sits on `feat/regroup-tier-billing`**, a stale branch that reverts PRs #54–#61 and must never be merged. Files that exist on `main` therefore read as missing or untracked in the working tree — check with `git show origin/main:<path>`, and do real work in a worktree off `origin/main`.
+- PRs land as **squash merges**, so `git merge-base --is-ancestor` and three-dot diffs report a fully-merged branch as unmerged. The only reliable "is this merged" check is a two-dot diff restricted to the paths the branch itself changed, run against **`origin/<branch>`, not the local ref** — a local branch checked out in another worktree does not advance when the resolution is pushed from elsewhere, and a stale local ref makes a merged branch look unmerged all over again:
+
+  ```bash
+  B=origin/<branch>
+  git diff origin/main..$B -- $(git diff --name-only $(git merge-base $B origin/main)..$B) | wc -l
+  ```
+
+  Residual `0` proves it is merged. Residual non-zero is **inconclusive, not a verdict**: it also fires when a later PR edited the same paths. Disambiguate by looking for the branch's own distinctive contribution on `main` — a file or symbol it introduced — rather than by diff size. GitHub's PR state is the authority; this is a local heuristic.
+
+- Use `git -C <path> …`, never `cd <path> && git …`. If the path does not exist the `cd` fails and the git command silently runs in the main checkout, on the stale branch.
 - Ignore minified bundles and build artifacts (`**/public/`, `*.min.js`, `*-es5.js`, `*-es2015.js`, `lib/`, `dist/`, `build/`, `.next/`) when counting, searching, or reading source — they are regenerated on rebuild. `regroup/web/public/` alone holds ~1.15M lines of vendor bundles; real hand-written source platform-wide is ~380K lines.
 - `homegroups/mobile` and `regroup/mobile` postinstall runs `pod install`; on a machine without working Xcode CLT, `npm ci` fails there — use `npm ci --ignore-scripts` for JS-only work (Jest/ESLint need only JS deps).
 
