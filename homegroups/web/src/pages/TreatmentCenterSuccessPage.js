@@ -26,8 +26,8 @@ function TreatmentCenterSuccessPage() {
         </p>
         <p style={styles.note}>
           Questions? Email{" "}
-          <a href="mailto:admin@regroup-app.com" style={styles.link}>
-            admin@regroup-app.com
+          <a href="mailto:admin@homegroups-app.com" style={styles.link}>
+            admin@homegroups-app.com
           </a>
         </p>
         {isValidId && (
