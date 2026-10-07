@@ -68,6 +68,9 @@ function makeDb(seed: DirectoryMeeting[] = []) {
     orderBy: jest.fn().mockReturnThis(),
     startAt: jest.fn().mockReturnThis(),
     endAt: jest.fn().mockReturnThis(),
+    // Each geohash bound is read with a .limit() cap so a wide-radius search
+    // cannot read the whole collection before in-memory filtering.
+    limit: jest.fn().mockReturnThis(),
     get: jest.fn().mockResolvedValue({
       docs: seed.map((m) => ({ id: m.id, data: () => m })),
     }),
@@ -130,6 +133,21 @@ describe('handleFindMeetings (auth via wrapper)', () => {
 });
 
 describe('handleFindMeetings (handler)', () => {
+it('caps each geohash bound and reports truncation when a bound fills up', async () => {
+    // Geohash order is not distance order, so a bound that hits the read cap can
+    // omit meetings genuinely inside the radius. The caller has to be able to
+    // tell, otherwise incomplete results look complete.
+    const full = Array.from({ length: 500 }, (_v, n) =>
+      meeting({ id: `m${n}` }),
+    );
+    const { db } = makeDb(full);
+
+    const result = await handleFindMeetings({ location: CENTER }, ctx, { db });
+
+    expect(result.truncated).toBe(true);
+    expect(db.collection('directoryMeetings').limit).toHaveBeenCalledWith(500);
+  });
+
   it('returns seeded directory results for a known location', async () => {
     const { db } = makeDb([meeting({ id: 'm1' })]);
     const result = await handleFindMeetings({ location: CENTER }, ctx, { db });
