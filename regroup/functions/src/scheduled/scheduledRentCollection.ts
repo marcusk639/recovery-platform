@@ -28,6 +28,7 @@ import { computeApplicationFee, RentPaymentMethodType } from '../util/rentFee';
 import { STRIPE_API_VERSION } from '../util/stripeApiVersion';
 import {
   loadInFlightCentsByGuest,
+  reportAttemptsNeedingReconciliation,
   markRentAttemptCharged,
   markRentAttemptFailed,
   recordRentAttempt,
@@ -49,6 +50,8 @@ export interface RentCollectionSummary {
   attemptedCount: number;
   /** Attempts that threw. */
   failureCount: number;
+  /** Attempts whose Stripe outcome is unknown and awaiting a human. */
+  needsReconciliationCount: number;
 }
 
 /**
@@ -59,6 +62,10 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
     apiVersion: STRIPE_API_VERSION,
   });
 
+  // BEFORE the guest query, so an unresolved attempt is still surfaced on a day
+  // with nothing to charge — both early returns below would otherwise skip it.
+  const needsReconciliationCount = await reportAttemptsNeedingReconciliation();
+
   const snapshot = await guestCollection
     .where('autoPayEnabled', '==', true)
     .where('rentOwed', '>', 0)
@@ -66,7 +73,7 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
 
   if (snapshot.empty) {
     logger.info('scheduledRentCollection: no auto-pay guests with rent owed');
-    return { matchedCount: 0, attemptedCount: 0, failureCount: 0 };
+    return { matchedCount: 0, attemptedCount: 0, failureCount: 0, needsReconciliationCount };
   }
 
   const now = new Date();
@@ -93,7 +100,12 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
     logger.info('scheduledRentCollection: nothing due beyond in-flight charges', {
       matchedCount: snapshot.size,
     });
-    return { matchedCount: snapshot.size, attemptedCount: 0, failureCount: 0 };
+    return {
+      matchedCount: snapshot.size,
+      attemptedCount: 0,
+      failureCount: 0,
+      needsReconciliationCount,
+    };
   }
 
   const results = await Promise.allSettled(
@@ -225,6 +237,7 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
     matchedCount: snapshot.size,
     attemptedCount: due.length,
     failureCount,
+    needsReconciliationCount,
   };
 }
 
