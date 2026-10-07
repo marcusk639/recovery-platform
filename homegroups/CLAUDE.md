@@ -56,7 +56,7 @@ functions/src/
     firestore/   # Firestore document write triggers (17 active + 2 commented out: onGroupAdminUpdate, onGroupCreateFetchMeetings)
     pubsub/      # Pub/Sub scheduled functions (14 cron jobs)
     scheduled/   # Legacy scheduled functions (scheduledAnnouncementPublisher)
-  http/          # HTTP-only functions (not callable): stripeWebhook + stripeConnectWebhook (same file), getMeetingAttendance
+  http/          # HTTP-only functions (not callable), 4 deployed: stripeWebhook + stripeConnectWebhook (same file), getMeetingAttendance, googlePlacesProxy
   utils/         # Shared: firebase.ts, stripe.ts, stripeUtils.ts, location.ts
   index.ts       # All function exports (entry point)
 
