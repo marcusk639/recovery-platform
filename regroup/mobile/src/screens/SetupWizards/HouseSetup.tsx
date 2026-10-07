@@ -242,8 +242,20 @@ const HouseSetupFormView: React.FC<HouseSetupFormViewProps> = (props) => {
           }}
           uri={values.imageUrl}
         />
-        {/* {renderField('rentFrequency', 'weekly/monthly/both', RatsTextInput, false, 'Rent Frequency', 'string', labelColor)}
-        {renderField('depositsAndFees', 'deposits/fees', RatsTextInput, false, 'Deposits/Fees', 'string', labelColor)} */}
+        {/* rentFrequency is required for auto-pay: scheduledRentCollection
+            derives one period's rent from it, and the default 'both' means
+            "resident chooses", which a charge cannot act on. Leaving this
+            commented out is what made auto-pay unbillable for every house. */}
+        {renderField(
+          'rentFrequency',
+          'weekly or monthly',
+          RatsTextInput,
+          false,
+          'Rent Frequency',
+          'string',
+          labelColor,
+        )}
+        {/* {renderField('depositsAndFees', 'deposits/fees', RatsTextInput, false, 'Deposits/Fees', 'string', labelColor)} */}
         <Field
           name="monthlyRent"
           component={RatsNumericInput}

@@ -17,6 +17,15 @@ const attemptStore = new FakeRentAttemptStore();
 
 jest.mock('../../api/firestore', () => ({
   guestCollection: { where: jest.fn().mockReturnThis(), get: jest.fn() },
+  // A billable house: auto-pay needs a declared period and amount.
+  houseCollection: {
+    doc: () => ({
+      get: async () => ({
+        exists: true,
+        data: () => ({ rentFrequency: 'monthly', monthlyRent: 500 }),
+      }),
+    }),
+  },
   rentCollectionAttemptCollection: {
     doc: (id?: string) => attemptStore.doc(id),
     where: (f: string, op: string, v: unknown) => attemptStore.where(f, op, v),
@@ -140,7 +149,10 @@ describe('rent collection: in-flight repeat-charge guard', () => {
     expect(record).toMatchObject({ needsReconciliation: true });
   });
 
-  it('charges only the difference when an operator raises the balance mid-cycle', async () => {
+  // Changed by the period quota: a mid-period top-up is NOT collected now, it
+  // waits for the next window. Auto-pay collects one period's rent; ad-hoc
+  // additions are not something to debit off-session the same day.
+  it('defers a mid-cycle balance increase to the next period', async () => {
     // 50000 already in flight; the operator adds a 20000 correction. A period
     // key skipped this silently; the in-flight guard charges the delta.
     attemptStore.seedAttempt({
@@ -154,11 +166,15 @@ describe('rent collection: in-flight repeat-charge guard', () => {
 
     const summary = await runRentCollection();
 
-    expect(summary.attemptedCount).toBe(1);
-    expect(amountsCharged()).toEqual([20000]);
+    expect(summary.attemptedCount).toBe(0);
+    expect(mockCreatePaymentIntent).not.toHaveBeenCalled();
   });
 
-  it('releases an in-flight attempt once it is stale, so a lost webhook is not a permanent lockout', async () => {
+  // Staleness (10d) releases the IN-FLIGHT hold, but the quota window (30d)
+  // still bounds the period — a stale attempt may have taken money, so it keeps
+  // consuming quota. The lockout is bounded, not permanent, and the attempt is
+  // flagged for reconciliation meanwhile.
+  it('does not recharge a stale attempt inside the quota window', async () => {
     const longAgo = new Date(Date.now() - STALE_IN_FLIGHT_MS - 60_000);
     attemptStore.seedAttempt({
       guestId: 'guest-1',
@@ -171,8 +187,8 @@ describe('rent collection: in-flight repeat-charge guard', () => {
 
     const summary = await runRentCollection();
 
-    expect(summary.attemptedCount).toBe(1);
-    expect(amountsCharged()).toEqual([50000]);
+    expect(summary.attemptedCount).toBe(0);
+    expect(mockCreatePaymentIntent).not.toHaveBeenCalled();
   });
 
   it('keeps suppressing while the in-flight attempt is still fresh', async () => {
@@ -191,7 +207,10 @@ describe('rent collection: in-flight repeat-charge guard', () => {
     expect(mockCreatePaymentIntent).not.toHaveBeenCalled();
   });
 
-  it('ignores a settled attempt, which no longer holds the amount', async () => {
+  // This asserted a SECOND full-period charge on top of a settled one and called
+  // it correct — a reviewer flagged it as ratifying a double charge. The quota
+  // is what makes a settled charge count.
+  it('does not charge again after a settled charge in the same period', async () => {
     attemptStore.seedAttempt({
       guestId: 'guest-1',
       houseId: 'house-1',
@@ -203,8 +222,8 @@ describe('rent collection: in-flight repeat-charge guard', () => {
 
     const summary = await runRentCollection();
 
-    expect(summary.attemptedCount).toBe(1);
-    expect(amountsCharged()).toEqual([50000]);
+    expect(summary.attemptedCount).toBe(0);
+    expect(mockCreatePaymentIntent).not.toHaveBeenCalled();
   });
 
   it('does not key attempt documents on a sequential value', async () => {

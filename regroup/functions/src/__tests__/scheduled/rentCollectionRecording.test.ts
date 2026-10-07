@@ -18,6 +18,15 @@ const attemptStore = new FakeRentAttemptStore();
 
 jest.mock('../../api/firestore', () => ({
   guestCollection: { where: jest.fn().mockReturnThis(), get: jest.fn() },
+  // A billable house: auto-pay needs a declared period and amount.
+  houseCollection: {
+    doc: () => ({
+      get: async () => ({
+        exists: true,
+        data: () => ({ rentFrequency: 'monthly', monthlyRent: 500 }),
+      }),
+    }),
+  },
   rentCollectionAttemptCollection: {
     doc: (id?: string) => attemptStore.doc(id),
     where: (f: string, op: string, v: unknown) => attemptStore.where(f, op, v),

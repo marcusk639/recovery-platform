@@ -293,3 +293,69 @@ export async function reportAttemptsNeedingReconciliation(): Promise<number> {
 
   return total;
 }
+
+/** Rent periods, as trailing windows. Deliberately NOT calendar boundaries. */
+export const PERIOD_MS: Record<'weekly' | 'monthly', number> = {
+  weekly: 7 * 24 * 60 * 60 * 1000,
+  monthly: 30 * 24 * 60 * 60 * 1000,
+};
+
+/** Statuses that consume period quota: the money was asked for, settled or not. */
+const QUOTA_STATUSES: readonly RentAttemptStatus[] = [
+  'pending',
+  'awaiting_confirmation',
+  'charged',
+];
+
+/**
+ * Cents already charged per guest within a trailing window.
+ *
+ * This is the FREQUENCY bound, and it is a separate guard from the amount cap.
+ * An amount cap alone is worthless: capping each charge while leaving the daily
+ * cadence intact collects the same total in more debits, which is exactly how
+ * the previous attempt at this failed review.
+ *
+ * `charged` counts here but NOT in the in-flight scan, and that difference is
+ * the whole point. In-flight answers "is this debt already being collected" and
+ * must release once money lands. Quota answers "has this resident already paid
+ * this period" and must not.
+ *
+ * A trailing window rather than a calendar month because a calendar boundary is
+ * precisely what an ACH settlement slips across — the bug that killed the
+ * `{guestId}_{YYYY-MM}` key.
+ *
+ * Queries on `createdAt` alone (a single-field range, auto-indexed) and filters
+ * status in memory. Adding status to the query would need a composite index, and
+ * an undeployed composite index is how this feature was broken for months.
+ */
+export async function loadChargedInWindowByGuest(
+  now: Date,
+  windowMs: number,
+): Promise<Map<string, number>> {
+  const cutoff = new Date(now.getTime() - windowMs).toISOString();
+  const snapshot = await rentCollectionAttemptCollection
+    .where('createdAt', '>=', cutoff)
+    .get();
+
+  const byGuest = new Map<string, number>();
+
+  for (const doc of snapshot.docs) {
+    const data = doc.data() ?? {};
+    const guestId = data.guestId as string | undefined;
+    const amountCents = data.amountCents as number | undefined;
+    const status = data.status as RentAttemptStatus | undefined;
+
+    if (
+      typeof guestId !== 'string' ||
+      !Number.isFinite(amountCents) ||
+      status === undefined ||
+      !QUOTA_STATUSES.includes(status)
+    ) {
+      continue;
+    }
+
+    byGuest.set(guestId, (byGuest.get(guestId) ?? 0) + (amountCents as number));
+  }
+
+  return byGuest;
+}

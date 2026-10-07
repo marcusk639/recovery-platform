@@ -14,6 +14,15 @@ const mockCreatePaymentIntent = jest.fn();
 
 jest.mock('../../api/firestore', () => ({
   guestCollection: { where: jest.fn().mockReturnThis(), get: jest.fn() },
+  // A billable house: auto-pay needs a declared period and amount.
+  houseCollection: {
+    doc: () => ({
+      get: async () => ({
+        exists: true,
+        data: () => ({ rentFrequency: 'monthly', monthlyRent: 500 }),
+      }),
+    }),
+  },
   rentCollectionAttemptCollection: {
     doc: (id?: string) => attemptStore.doc(id),
     where: (f: string, op: string, v: unknown) => attemptStore.where(f, op, v),
@@ -228,7 +237,10 @@ describe('stale in-flight attempts become reconcilable', () => {
     expect(attemptStore.docs.get(id)?.staleReleasedAt).toBe('2026-01-01T00:00:00.000Z');
   });
 
-  it('still releases the amount, so a stuck webhook is not a permanent lockout', async () => {
+  // The staleness release frees the in-flight hold; the quota window still
+  // bounds the period. So the lockout is bounded (one window), not permanent,
+  // and the attempt is flagged meanwhile rather than silently dropped.
+  it('releases the in-flight hold but stays within the period quota', async () => {
     seedStuckAch();
     // Same guest, balance intact: the stale hold must not suppress the charge.
     guestCollection.get.mockResolvedValue({
@@ -239,7 +251,7 @@ describe('stale in-flight attempts become reconcilable', () => {
 
     const summary = await runRentCollection();
 
-    expect(summary.attemptedCount).toBe(1);
-    expect(mockCreatePaymentIntent).toHaveBeenCalledTimes(1);
+    expect(summary.attemptedCount).toBe(0);
+    expect(summary.needsReconciliationCount).toBe(1);
   });
 });

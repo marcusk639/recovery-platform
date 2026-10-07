@@ -36,6 +36,15 @@ jest.mock('../../api/firestore', () => ({
   // Stateless stub: no prior attempt exists, and claiming a period always
   // succeeds. The repeat-charge guard itself is covered in
   // rentCollectionRepeatCharge.test.ts with a stateful store.
+  // A billable house: auto-pay needs a declared period and amount.
+  houseCollection: {
+    doc: () => ({
+      get: async () => ({
+        exists: true,
+        data: () => ({ rentFrequency: 'monthly', monthlyRent: 500 }),
+      }),
+    }),
+  },
   rentCollectionAttemptCollection: {
     where: () => {
       const empty = { empty: true, size: 0, docs: [] };
