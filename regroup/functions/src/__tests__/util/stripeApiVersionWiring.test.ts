@@ -91,6 +91,15 @@ describe('Stripe clients are constructed from STRIPE_API_VERSION', () => {
       },
       // runRentCollection sweeps needsReconciliation before the guest query, so
       // this collection is touched even on an empty pass.
+      // A billable house: auto-pay needs a declared period and amount.
+      houseCollection: {
+        doc: () => ({
+          get: async () => ({
+            exists: true,
+            data: () => ({ rentFrequency: 'monthly', monthlyRent: 500 }),
+          }),
+        }),
+      },
       rentCollectionAttemptCollection: {
         where: () => {
           const empty = { empty: true, size: 0, docs: [] };

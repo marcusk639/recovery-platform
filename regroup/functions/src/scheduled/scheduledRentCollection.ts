@@ -22,13 +22,15 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions';
 import Stripe from 'stripe';
-import { guestCollection } from '../api/firestore';
+import { guestCollection, houseCollection } from '../api/firestore';
 import { STRIPE_SECRET_KEY } from '../config';
 import { computeApplicationFee, RentPaymentMethodType } from '../util/rentFee';
 import { STRIPE_API_VERSION } from '../util/stripeApiVersion';
 import {
   flagStaleForReconciliation,
+  loadChargedInWindowByGuest,
   loadInFlightCentsByGuest,
+  PERIOD_MS,
   reportAttemptsNeedingReconciliation,
   markRentAttemptCharged,
   markRentAttemptFailed,
@@ -53,11 +55,41 @@ export interface RentCollectionSummary {
   failureCount: number;
   /** Attempts whose Stripe outcome is unknown and awaiting a human. */
   needsReconciliationCount: number;
+  /** Guests skipped because their house has no billable rent period. */
+  noRentPeriodCount: number;
 }
 
 /**
  * Exported for unit testing. Performs the auto-pay collection pass.
  */
+/**
+ * One period's rent for a house, in CENTS, or null when the house cannot be
+ * billed automatically.
+ *
+ * `house.monthlyRent` / `weeklyRent` are stored in DOLLARS — this is the one
+ * place that conversion happens. Do NOT add a per-guest cents field: an earlier
+ * attempt did, and a cap hand-entered as 500 for a $500 rent became a $5.00 cap.
+ *
+ * `rentFrequency` defaults to 'both', which means "resident chooses" — not an
+ * answer a charge can act on. So 'both' is NOT billable, deliberately: auto-pay
+ * requires the house to have committed to a period.
+ */
+export function periodRentCents(house: {
+  rentFrequency?: string;
+  monthlyRent?: number;
+  weeklyRent?: number;
+}): { cents: number; windowMs: number } | null {
+  const freq = house.rentFrequency;
+  if (freq !== 'weekly' && freq !== 'monthly') {
+    return null;
+  }
+  const dollars = freq === 'weekly' ? house.weeklyRent : house.monthlyRent;
+  if (!Number.isFinite(dollars) || (dollars as number) <= 0) {
+    return null;
+  }
+  return { cents: Math.round((dollars as number) * 100), windowMs: PERIOD_MS[freq] };
+}
+
 export async function runRentCollection(): Promise<RentCollectionSummary> {
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
     apiVersion: STRIPE_API_VERSION,
@@ -80,7 +112,13 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
 
   if (snapshot.empty) {
     logger.info('scheduledRentCollection: no auto-pay guests with rent owed');
-    return { matchedCount: 0, attemptedCount: 0, failureCount: 0, needsReconciliationCount };
+    return {
+      matchedCount: 0,
+      attemptedCount: 0,
+      failureCount: 0,
+      needsReconciliationCount,
+      noRentPeriodCount: 0,
+    };
   }
 
   const today = now.toISOString().split('T')[0];
@@ -90,14 +128,72 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
   // resident re-matches every run — and for ACH the balance stays unreduced for
   // days, long after any idempotency key has expired.
 
+  // The billable period and its rent live on the HOUSE, not the guest.
+  const houseIds = [
+    ...new Set(
+      snapshot.docs
+        .map((doc) => (doc.data() ?? {}).houseId as string | undefined)
+        .filter((id): id is string => typeof id === 'string'),
+    ),
+  ];
+  const houses = new Map<string, Record<string, unknown>>();
+  for (const id of houseIds) {
+    const houseSnap = await houseCollection.doc(id).get();
+    if (houseSnap.exists) {
+      houses.set(id, (houseSnap.data() ?? {}) as Record<string, unknown>);
+    }
+  }
+
+  // One quota query covering the widest period in play; each guest is then
+  // measured against its own window.
+  const chargedInWindow = await loadChargedInWindowByGuest(now, PERIOD_MS.monthly);
+
+  let noRentPeriodCount = 0;
+
   const due = snapshot.docs
     .map((doc) => {
-      const rentOwed = (doc.data() ?? {}).rentOwed as number | undefined;
+      const data = doc.data() ?? {};
+      const rentOwed = data.rentOwed as number | undefined;
       const owed = Number.isFinite(rentOwed) ? (rentOwed as number) : 0;
-      return {
-        doc,
-        dueCents: Math.round(owed - (inFlightByGuest.get(doc.id) ?? 0)),
-      };
+      const outstanding = Math.round(owed - (inFlightByGuest.get(doc.id) ?? 0));
+
+      const period = periodRentCents(
+        (houses.get((data.houseId as string) ?? '') ?? {}) as never,
+      );
+      if (!period) {
+        if (outstanding > 0) {
+          noRentPeriodCount += 1;
+          logger.error(
+            'scheduledRentCollection: house has no billable rent period, skipping',
+            { guestId: doc.id, houseId: (data.houseId as string) ?? null },
+          );
+        }
+        return { doc, dueCents: 0 };
+      }
+
+      // Two independent guards. The cap bounds ONE charge; the quota bounds the
+      // PERIOD. Without the quota, capping each charge merely spreads the same
+      // total across consecutive days.
+      const remainingQuota = period.cents - (chargedInWindow.get(doc.id) ?? 0);
+      const dueCents = Math.min(outstanding, remainingQuota);
+
+      if (dueCents <= 0 && outstanding > 0) {
+        logger.info('scheduledRentCollection: period quota already used', {
+          guestId: doc.id,
+          outstandingCents: outstanding,
+        });
+      } else if (outstanding > dueCents) {
+        logger.info(
+          'scheduledRentCollection: charging one period; arrears NOT collected',
+          {
+            guestId: doc.id,
+            chargingCents: dueCents,
+            arrearsCents: outstanding - dueCents,
+          },
+        );
+      }
+
+      return { doc, dueCents };
     })
     .filter((entry) => entry.dueCents > 0);
 
@@ -110,6 +206,7 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
       attemptedCount: 0,
       failureCount: 0,
       needsReconciliationCount,
+      noRentPeriodCount,
     };
   }
 
@@ -243,6 +340,7 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
     attemptedCount: due.length,
     failureCount,
     needsReconciliationCount,
+    noRentPeriodCount,
   };
 }
 

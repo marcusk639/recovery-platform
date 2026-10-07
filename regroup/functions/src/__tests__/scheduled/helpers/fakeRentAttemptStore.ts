@@ -64,12 +64,29 @@ export class FakeRentAttemptStore {
 
   where(field: string, op: string, value: unknown) {
     const store = this;
+    // Supports the operators the production code actually uses. Range ops are
+    // NOT optional: loadChargedInWindowByGuest filters on `createdAt >= cutoff`,
+    // and a double that silently matched nothing for `>=` hid a real defect.
+    const test = (v: unknown): boolean => {
+      switch (op) {
+        case 'in':
+          return (value as unknown[]).includes(v);
+        case '==':
+          return v === value;
+        case '>=':
+          return v !== undefined && (v as never) >= (value as never);
+        case '>':
+          return v !== undefined && (v as never) > (value as never);
+        case '<=':
+          return v !== undefined && (v as never) <= (value as never);
+        case '<':
+          return v !== undefined && (v as never) < (value as never);
+        default:
+          throw new Error(`FakeRentAttemptStore: unsupported operator ${op}`);
+      }
+    };
     const matches = () =>
-      [...store.docs.entries()].filter(([, data]) =>
-        op === 'in'
-          ? (value as unknown[]).includes(data[field])
-          : data[field] === value,
-      );
+      [...store.docs.entries()].filter(([, data]) => test(data[field]));
 
     // Mirrors the Firestore Query surface the production code actually uses:
     // .get(), .count().get(), and .select(...).limit(n).get().
