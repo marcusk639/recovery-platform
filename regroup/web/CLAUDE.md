@@ -55,7 +55,8 @@ src/app/
   util/          # Shared utilities
 
 functions/
-  src/index.ts   # Two Cloud Functions: `universal` (SSR) and `warmWebsite` (keep-alive cron)
+  src/index.ts   # One Cloud Function: `ssr` (Angular Universal SSR). Deployed under
+                 # the `web` codebase, NOT `default` — see firebase.json.
 
 e2e/             # Protractor E2E tests
 ```
@@ -64,17 +65,32 @@ e2e/             # Protractor E2E tests
 
 The app runs in two modes:
 
-- **Browser**: `dist/sapp/browser/` — served by Firebase Hosting for static routes
-- **SSR**: `dist/sapp/server/main.js` — executed by the `universal` Firebase Cloud Function for dynamic rendering
+- **Browser**: `dist/sapp/browser/` — Hosting serves the JS/CSS/asset files directly.
+  `index.html` is deliberately in `firebase.json`'s `ignore` list so it is NOT uploaded:
+  Hosting matches static files before rewrites, so an uploaded `index.html` would make
+  `/` serve the un-rendered CSR shell while every other route rendered server-side.
+- **SSR**: `dist/sapp/server/main.js` — executed by the `ssr` Cloud Function. Hosting
+  rewrites `**` to it, so every route with no matching static file is server-rendered.
 
 `server.ts` is the Express entry point for SSR; it uses `domino` to shim `window`/`document` globals in the Node environment. `src/app/app.server.module.ts` bootstraps the server-side module.
 
 ### Cloud Functions
 
-This repo's `functions/src/index.ts` defines exactly two functions:
+This package's `functions/src/index.ts` defines exactly one function:
 
-- **`universal`**: HTTP function serving the Angular Universal SSR app
-- **`warmWebsite`**: Pub/Sub cron (every minute) that pings the web server to prevent cold starts
+- **`ssr`**: HTTP function serving the Angular Universal SSR app. v2, `us-central1`,
+  512MiB, `minInstances: 1`. The min instance replaces cold-start warming — the
+  former `warmWebsite` cron in this package only pinged a dev URL, and the
+  `warmWebsite` that is actually deployed (from `../functions`) makes no HTTP
+  request at all, so neither ever warmed this function.
+
+**Deployed under the `web` codebase.** `../functions` owns the `default` codebase.
+Firebase deletes any function missing from the codebase being deployed, so if both
+packages shared `default`, deploying either would delete the other's functions —
+a web deploy would have removed all ~51 backend functions. Keep them separate.
+
+Do not confuse the `ssr` function with `universal` in `../functions`: that one is a
+health-check catch-all (`/health`, `/healthz`) with no SSR logic, despite the name.
 
 All **callable** functions consumed by `CloudFunctionService` (`src/app/services/functions/cloud-function.service.ts`) are implemented in the sibling `../functions/` directory within the monorepo (deployed to the same `phoenix-cleanhouse` Firebase project). Modifications to callable logic belong in `../functions/` (see `../functions/CLAUDE.md`), not here.
 
