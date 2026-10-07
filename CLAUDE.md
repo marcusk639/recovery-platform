@@ -112,8 +112,10 @@ These rules apply to all products in the monorepo without exception.
 
   ```bash
   B=origin/<branch>
-  git diff origin/main..$B -- $(git diff --name-only $(git merge-base $B origin/main)..$B) | wc -l   # 0 = merged
+  git diff origin/main..$B -- $(git diff --name-only $(git merge-base $B origin/main)..$B) | wc -l
   ```
+
+  Residual `0` proves it is merged. Residual non-zero is **inconclusive, not a verdict**: it also fires when a later PR edited the same paths. Disambiguate by looking for the branch's own distinctive contribution on `main` — a file or symbol it introduced — rather than by diff size. GitHub's PR state is the authority; this is a local heuristic.
 
 - Use `git -C <path> …`, never `cd <path> && git …`. If the path does not exist the `cd` fails and the git command silently runs in the main checkout, on the stale branch.
 - Ignore minified bundles and build artifacts (`**/public/`, `*.min.js`, `*-es5.js`, `*-es2015.js`, `lib/`, `dist/`, `build/`, `.next/`) when counting, searching, or reading source — they are regenerated on rebuild. `regroup/web/public/` alone holds ~1.15M lines of vendor bundles; real hand-written source platform-wide is ~380K lines.
