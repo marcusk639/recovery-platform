@@ -64,18 +64,45 @@ export class FakeRentAttemptStore {
 
   where(field: string, op: string, value: unknown) {
     const store = this;
-    return {
-      get: async () => {
-        const matched = [...store.docs.entries()].filter(([, data]) =>
-          op === 'in' ? (value as unknown[]).includes(data[field]) : data[field] === value,
-        );
-        return {
-          empty: matched.length === 0,
-          size: matched.length,
-          docs: matched.map(([id, data]) => ({ id, data: () => data })),
-        };
-      },
-    };
+    const matches = () =>
+      [...store.docs.entries()].filter(([, data]) =>
+        op === 'in'
+          ? (value as unknown[]).includes(data[field])
+          : data[field] === value,
+      );
+
+    // Mirrors the Firestore Query surface the production code actually uses:
+    // .get(), .count().get(), and .select(...).limit(n).get().
+    const snapshotOf = (
+      entries: [string, Record<string, unknown>][],
+      fields?: string[],
+    ) => ({
+      empty: entries.length === 0,
+      size: entries.length,
+      docs: entries.map(([id, data]) => ({
+        id,
+        // doc.ref is what the staleness branch needs in order to FLAG rather
+        // than silently drop — the earlier double lacked it entirely.
+        ref: store.doc(id),
+        data: () =>
+          fields
+            ? Object.fromEntries(fields.filter((f) => f in data).map((f) => [f, data[f]]))
+            : data,
+      })),
+    });
+
+    const build = (fields?: string[], limit?: number) => ({
+      get: async () =>
+        snapshotOf(limit === undefined ? matches() : matches().slice(0, limit), fields),
+      select: (...f: string[]) => build(f, limit),
+      limit: (n: number) => build(fields, n),
+      count: () => ({
+        // count() ignores select/limit in Firestore too — it is the full total.
+        get: async () => ({ data: () => ({ count: matches().length }) }),
+      }),
+    });
+
+    return build();
   }
 }
 

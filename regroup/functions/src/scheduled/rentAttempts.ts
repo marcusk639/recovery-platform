@@ -80,12 +80,23 @@ export function isDeterministicDecline(err: unknown): boolean {
  * undeployed composite index. It is also bounded by genuinely in-flight
  * charges rather than by everything that happened this month.
  */
-export async function loadInFlightCentsByGuest(now: Date): Promise<Map<string, number>> {
+/** What the in-flight pass found: amounts still committed, plus the abandoned. */
+export interface InFlightScan {
+  byGuest: Map<string, number>;
+  /**
+   * Attempts released by the staleness cutoff. Released is NOT resolved — the
+   * Stripe outcome is unknown, so these must be FLAGGED, not just dropped.
+   */
+  staleRefs: RentAttemptRef[];
+}
+
+export async function loadInFlightCentsByGuest(now: Date): Promise<InFlightScan> {
   const snapshot = await rentCollectionAttemptCollection
     .where('status', 'in', IN_FLIGHT_STATUSES as RentAttemptStatus[])
     .get();
 
   const byGuest = new Map<string, number>();
+  const staleRefs: RentAttemptRef[] = [];
 
   for (const doc of snapshot.docs) {
     const data = doc.data() ?? {};
@@ -104,19 +115,52 @@ export async function loadInFlightCentsByGuest(now: Date): Promise<Map<string, n
 
     if (isStale) {
       // Released deliberately, but it is NOT resolved — the Stripe outcome is
-      // unknown and a human has to settle it.
+      // unknown and a human has to settle it. Collect the ref so the caller can
+      // set needsReconciliation; this branch used to only log, which left the
+      // reader permanently blind to the one case it exists for.
       logger.error('rentAttempts: in-flight attempt is stale, releasing', {
         attemptId: doc.id,
         guestId,
         createdAt: (data.createdAt as string) ?? null,
       });
+      if (data.needsReconciliation !== true) {
+        staleRefs.push(doc.ref as unknown as RentAttemptRef);
+      }
       continue;
     }
 
     byGuest.set(guestId, (byGuest.get(guestId) ?? 0) + (amountCents as number));
   }
 
-  return byGuest;
+  return { byGuest, staleRefs };
+}
+
+/**
+ * Mark released-but-unresolved attempts for reconciliation.
+ *
+ * Separate from the scan on purpose: the scan is a read, this is a write, and
+ * conflating them is how the staleness branch ended up logging without ever
+ * recording anything. Never throws — a failed flag must not stop collection.
+ */
+export async function flagStaleForReconciliation(
+  refs: readonly RentAttemptRef[],
+): Promise<number> {
+  let flagged = 0;
+  for (const ref of refs) {
+    try {
+      await ref.update({
+        needsReconciliation: true,
+        staleReleasedAt: new Date().toISOString(),
+      });
+      flagged += 1;
+    } catch (err) {
+      logger.error('rentAttempts: could not flag stale attempt', {
+        attemptId: ref.id,
+        err: (err as Error)?.message,
+      });
+    }
+  }
+  return flagged;
 }
 
 /**
@@ -205,4 +249,47 @@ export async function markRentAttemptFailed(
       err: (updateErr as Error)?.message,
     });
   }
+}
+
+/**
+ * Surface attempts whose Stripe outcome is unknown.
+ *
+ * `needsReconciliation` is set when a charge threw for a reason that is NOT a
+ * deterministic decline — a timeout may have left a real PaymentIntent behind.
+ * Until this existed the flag had no reader anywhere: no alert, no UI, no retry
+ * job, so an unresolved charge was recorded and then never mentioned again.
+ *
+ * Logged at ERROR so a Cloud Logging alert can fire on it. Deliberately does
+ * NOT throw: a permanently red scheduled job gets ignored, which would
+ * reproduce the same silence this is meant to break, just from the other side.
+ */
+export async function reportAttemptsNeedingReconciliation(): Promise<number> {
+  const flagged = rentCollectionAttemptCollection.where(
+    'needsReconciliation',
+    '==',
+    true,
+  );
+
+  // count() for the exact total, a limited select() for the sample, so payload
+  // stays flat as the collection grows. An unbounded .get() here would fetch
+  // every flagged doc body on every daily run.
+  const total = (await flagged.count().get()).data().count;
+  if (total === 0) {
+    return 0;
+  }
+
+  const sample = await flagged.select('guestId', 'status').limit(20).get();
+
+  logger.error('rentAttempts: attempts need reconciliation', {
+    count: total,
+    sampled: sample.size,
+    // Ids and status only — never names or amounts per resident.
+    attempts: sample.docs.map((doc) => ({
+      attemptId: doc.id,
+      guestId: (doc.data() ?? {}).guestId ?? null,
+      status: (doc.data() ?? {}).status ?? null,
+    })),
+  });
+
+  return total;
 }

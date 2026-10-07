@@ -89,6 +89,25 @@ describe('Stripe clients are constructed from STRIPE_API_VERSION', () => {
         // completes without needing any guest fixtures.
         get: jest.fn().mockResolvedValue({ empty: true, size: 0, docs: [] }),
       },
+      // runRentCollection sweeps needsReconciliation before the guest query, so
+      // this collection is touched even on an empty pass.
+      rentCollectionAttemptCollection: {
+        where: () => {
+          const empty = { empty: true, size: 0, docs: [] };
+          // Mirrors the Query surface runRentCollection uses: get(),
+          // count().get(), and select(...).limit(n).get().
+          const q: any = {
+            get: jest.fn().mockResolvedValue(empty),
+            select: () => q,
+            limit: () => q,
+            count: () => ({
+              get: jest.fn().mockResolvedValue({ data: () => ({ count: 0 }) }),
+            }),
+          };
+          return q;
+        },
+        doc: jest.fn(),
+      },
     }));
     jest.doMock('../../config', () => ({
       STRIPE_SECRET_KEY: { name: 'STRIPE_SECRET_KEY' },
