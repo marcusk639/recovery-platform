@@ -5,8 +5,11 @@
  * These tests guard against accidental re-introduction of credentials in source.
  */
 
-// Known-bad hardcoded key that must never appear in the export
-const KNOWN_HARDCODED_KEY = 'AIzaSyCKXu_eJrW6QBamTNPyCOQy_lVO2xhwl9Q';
+// Deliberately no literal key here. A previous version pinned the specific
+// key that had once been hardcoded, but every assertion using it sat beside
+// a GOOGLE_KEY_PATTERN check that already matches ANY Google API key —
+// including that one — so the literal added no detection power while keeping
+// a real credential in source. The pattern is the guard.
 
 // General Google API key pattern (AIza followed by 35 alphanumeric/special chars)
 const GOOGLE_KEY_PATTERN = /AIza[0-9A-Za-z_-]{35}/;
@@ -37,10 +40,9 @@ describe('google/apikeys security', () => {
 
     // The returned value must equal the env var, not the old hardcoded literal
     expect(value).toBe('test-placeholder-key');
-    expect(value).not.toBe(KNOWN_HARDCODED_KEY);
   });
 
-  it('does not embed the known hardcoded key in the module source', () => {
+  it('does not embed any Google API key in the module source', () => {
     const fs = require('fs');
     const path = require('path');
     // Resolve from project root (jest rootDir) — go up three levels from this
@@ -51,7 +53,6 @@ describe('google/apikeys security', () => {
     );
     const source = fs.readFileSync(modulePath, 'utf8');
 
-    expect(source).not.toContain(KNOWN_HARDCODED_KEY);
     // No raw Google API key pattern should exist as a literal in source
     expect(GOOGLE_KEY_PATTERN.test(source)).toBe(false);
   });
@@ -80,7 +81,6 @@ describe('google/apikeys security', () => {
     const exportedValues = Object.values(apikeys);
     exportedValues.forEach(val => {
       if (typeof val === 'string') {
-        expect(val).not.toBe(KNOWN_HARDCODED_KEY);
         expect(GOOGLE_KEY_PATTERN.test(val)).toBe(false);
       }
     });
