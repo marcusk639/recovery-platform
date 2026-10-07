@@ -166,6 +166,22 @@ export const createPaymentIntent = onCall(
           currency,
           description: description || `Rent payment for ${houseId}`,
           metadata: { guestId, houseId },
+          // An allowlist of one, by design: the client picks card or ACH
+          // upstream and the Payment Sheet is expected to offer only that.
+          //
+          // Stripe encourages omitting payment_method_types so dynamic payment
+          // methods apply, and expressing a genuine allowlist with
+          // allowed_payment_method_types instead. Adopting it waits on both an SDK
+          // upgrade and a deliberate pin bump: the parameter is absent from
+          // stripe@20.3.1 (locally verifiable), and per Stripe's web changelog it
+          // arrives in an API version later than the 2026-01-28.clover pin. Note it
+          // filters incompatible methods silently rather than erroring, so it is a
+          // weaker guarantee than this allowlist-of-one relies on.
+          //
+          // Dropping the restriction instead is not equivalent: the Payment
+          // Sheet would then show every method enabled in the Dashboard,
+          // regardless of which one the resident chose. That is a product
+          // decision about the rent-payment flow, not a mechanical cleanup.
           payment_method_types: [paymentMethodType],
           transfer_data: { destination: house.stripeAccountId },
           application_fee_amount: applicationFeeAmount,

@@ -14,7 +14,14 @@ import {
   STRIPE_SECRET_KEY,
   STRIPE_WEBHOOK_SECRET,
   STRIPE_CONNECT_WEBHOOK_SECRET,
+  STRIPE_TEST_WEBHOOK_SECRET,
+  STRIPE_CONNECT_TEST_WEBHOOK_SECRET,
 } from "../config";
+import {
+  webhookSecretCandidates,
+  type WebhookSecretCandidate,
+} from "../util/stripeWebhookSecrets";
+import { verifyStripeWebhook } from "../util/verifyStripeWebhook";
 import { sendFcmToHouseAdmins } from "../util/notifications";
 import { sendEmail, regroupEmail } from "../util/email";
 import type { SubscriptionDoc } from "../api/firestore";
@@ -1027,15 +1034,20 @@ async function checkAndMarkEventProcessed(
 // ---------------------------------------------------------------------------
 
 export const stripeWebhook = onRequest(
-  { secrets: [STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, SENDGRID_API_KEY] },
+  {
+    secrets: [
+      STRIPE_SECRET_KEY,
+      STRIPE_WEBHOOK_SECRET,
+      STRIPE_TEST_WEBHOOK_SECRET,
+      SENDGRID_API_KEY,
+    ],
+  },
   async (req, res) => {
     // Only accept POST
     if (req.method !== "POST") {
       res.status(405).send("Method Not Allowed");
       return;
     }
-
-    const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
     // -------------------------------------------------------------------------
     // 2. Signature verification (CRITICAL — uses raw body)
@@ -1048,21 +1060,51 @@ export const stripeWebhook = onRequest(
       return;
     }
 
-    let event: Stripe.Event;
+    // Resolved after the request is validated. No secret configured at all is
+    // server misconfiguration, so it answers 500 — which Stripe retries — rather
+    // than letting constructEvent report it as a bad signature and blame the
+    // sender.
+    let candidates: WebhookSecretCandidate[];
     try {
-      // req.rawBody is provided by Firebase Cloud Functions for onRequest handlers
-      event = getStripe().webhooks.constructEvent(
-        req.rawBody,
-        sig,
-        endpointSecret,
-      );
+      candidates = webhookSecretCandidates("platform");
     } catch (err) {
-      logger.warn("stripeWebhook: signature verification failed", {
+      logger.error("stripeWebhook: webhook secret unavailable", {
         err: (err as Error).message,
       });
-      res.status(400).send(`Webhook Error: ${(err as Error).message}`);
+      res.status(500).send("Webhook Error: endpoint not configured");
       return;
     }
+
+    // Selection then mode authorization — util/verifyStripeWebhook.ts owns why,
+    // util/stripeWebhookSecrets.ts owns why there is a list at all.
+    // req.rawBody is provided by Firebase Cloud Functions for onRequest handlers.
+    const verification = verifyStripeWebhook({
+      stripe: getStripe(),
+      rawBody: req.rawBody,
+      signature: sig,
+      candidates,
+    });
+
+    if (!verification.ok) {
+      // Full detail server-side, one sanitized sentence to the caller. The
+      // response must not reveal which secrets are configured, which one
+      // verified, or what mode this deployment runs in.
+      logger.warn(`stripeWebhook: rejected (${verification.reason})`, {
+        ...verification.detail,
+      });
+      res.status(400).send("Webhook Error: signature verification failed");
+      return;
+    }
+
+    const event = verification.event;
+
+    // INFO, not debug: neighbouring lifecycle lines are INFO and failures WARN,
+    // so at a default severity>=DEFAULT Logs Explorer filter a debug line here
+    // would drop exactly the record of which mode's secret verified.
+    logger.info("stripeWebhook: signature verified", {
+      verifiedWith: verification.verifiedWith,
+      mode: verification.mode,
+    });
 
     // -------------------------------------------------------------------------
     // 3. Idempotency check (transaction-safe)
@@ -1223,7 +1265,13 @@ async function handleAccountDeauthorized(accountId: string): Promise<void> {
 }
 
 export const handleStripeConnectWebhook = onRequest(
-  { secrets: [STRIPE_SECRET_KEY, STRIPE_CONNECT_WEBHOOK_SECRET] },
+  {
+    secrets: [
+      STRIPE_SECRET_KEY,
+      STRIPE_CONNECT_WEBHOOK_SECRET,
+      STRIPE_CONNECT_TEST_WEBHOOK_SECRET,
+    ],
+  },
   async (req, res) => {
     if (req.method !== "POST") {
       res.status(405).send("Method Not Allowed");
@@ -1238,21 +1286,40 @@ export const handleStripeConnectWebhook = onRequest(
       res.status(400).send("Webhook Error: Missing stripe-signature header");
       return;
     }
-
-    let event: Stripe.Event;
+    let connectCandidates: WebhookSecretCandidate[];
     try {
-      event = getStripe().webhooks.constructEvent(
-        req.rawBody,
-        sig,
-        process.env.STRIPE_CONNECT_WEBHOOK_SECRET!,
-      );
+      connectCandidates = webhookSecretCandidates("connect");
     } catch (err) {
-      logger.warn("handleStripeConnectWebhook: signature verification failed", {
+      logger.error("handleStripeConnectWebhook: webhook secret unavailable", {
         err: (err as Error).message,
       });
-      res.status(400).send(`Webhook Error: ${(err as Error).message}`);
+      res.status(500).send("Webhook Error: endpoint not configured");
       return;
     }
+
+    // Same helper, same guarantees as the platform handler above.
+    const verification = verifyStripeWebhook({
+      stripe: getStripe(),
+      rawBody: req.rawBody,
+      signature: sig,
+      candidates: connectCandidates,
+    });
+
+    if (!verification.ok) {
+      logger.warn(
+        `handleStripeConnectWebhook: rejected (${verification.reason})`,
+        { ...verification.detail },
+      );
+      res.status(400).send("Webhook Error: signature verification failed");
+      return;
+    }
+
+    const event = verification.event;
+
+    logger.info("handleStripeConnectWebhook: signature verified", {
+      verifiedWith: verification.verifiedWith,
+      mode: verification.mode,
+    });
 
     logger.info("handleStripeConnectWebhook: processing Connect event", {
       eventId: event.id,

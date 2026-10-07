@@ -1,5 +1,6 @@
 import { HttpsError } from "firebase-functions/v2/https";
 import Stripe from "stripe";
+import { STRIPE_API_VERSION } from "./stripeApiVersion";
 
 /**
  * Creates a Stripe client using the Secret Manager value injected at runtime.
@@ -8,7 +9,7 @@ import Stripe from "stripe";
  */
 export const createStripeClient = (): Stripe =>
   new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    apiVersion: "2026-01-28.clover" as Stripe.LatestApiVersion,
+    apiVersion: STRIPE_API_VERSION,
   });
 
 /**

@@ -7,6 +7,16 @@
  *   firebase functions:secrets:set STRIPE_WEBHOOK_SECRET
  *   firebase functions:secrets:set STRIPE_CONNECT_WEBHOOK_SECRET
  *   firebase functions:secrets:set GOOGLE_MAPS_API_KEY
+ *   firebase functions:secrets:set RECOVERY_PLATFORM_API_KEY
+ *
+ * The two test-mode signing secrets below are always offered for verification,
+ * whatever mode the bound Stripe key is in — the key's mode only ORDERS the
+ * candidates. What the key's mode does decide is which events may be ACTED on:
+ * util/verifyStripeWebhook.ts requires a verified event's mode to match both the
+ * secret that verified it and this deployment, so on a live deployment a
+ * test-mode event is verified and then refused:
+ *   firebase functions:secrets:set STRIPE_TEST_WEBHOOK_SECRET
+ *   firebase functions:secrets:set STRIPE_CONNECT_TEST_WEBHOOK_SECRET
  *
  * Declare which secrets a function uses in its options object:
  *   onCall({ secrets: [SENDGRID_API_KEY] }, async (request) => { ... })
@@ -21,6 +31,25 @@ export const STRIPE_CLIENT_ID = defineSecret("STRIPE_CLIENT_ID");
 export const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
 export const STRIPE_CONNECT_WEBHOOK_SECRET = defineSecret(
   "STRIPE_CONNECT_WEBHOOK_SECRET"
+);
+
+// Test-mode webhook signing secrets. Separate from the live pair above because a
+// signature only verifies against the secret of the endpoint that signed it, and
+// a test and a live endpoint on the same URL are two endpoints.
+//
+// Bound alongside the live pair on both functions so that a deployment pointed at
+// a test key can verify its webhooks, and so that a cross-mode event is diagnosed
+// as "wrong mode" rather than as an opaque signature failure. It does NOT widen
+// what a deployment will act on: util/verifyStripeWebhook.ts refuses any verified
+// event whose mode differs from this deployment's, so on a live deployment the
+// test secret can verify an event but never get one processed.
+//
+// Candidate ordering lives in util/stripeWebhookSecrets.ts.
+export const STRIPE_TEST_WEBHOOK_SECRET = defineSecret(
+  "STRIPE_TEST_WEBHOOK_SECRET"
+);
+export const STRIPE_CONNECT_TEST_WEBHOOK_SECRET = defineSecret(
+  "STRIPE_CONNECT_TEST_WEBHOOK_SECRET"
 );
 
 // Google Maps Platform API key (Geocoding API, Time Zone API).

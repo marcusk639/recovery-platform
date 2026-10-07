@@ -1,7 +1,7 @@
-import { logger } from "firebase-functions";
-import { HttpsError } from "firebase-functions/v2/https";
-import Stripe from "stripe";
-import { mapStripeError } from "../util/stripe";
+import { logger } from 'firebase-functions';
+import { HttpsError } from 'firebase-functions/v2/https';
+import Stripe from 'stripe';
+import { mapStripeError } from '../util/stripe';
 
 /**
  * The minimal slice of the Stripe client this module needs. It is injected by the
@@ -9,7 +9,7 @@ import { mapStripeError } from "../util/stripe";
  * free of a circular dependency on the lazy client Proxy and makes it trivially
  * mockable without reaching for the `stripe` package.
  */
-export type CardValidationClient = Pick<Stripe, "setupIntents" | "customers">;
+export type CardValidationClient = Pick<Stripe, 'setupIntents' | 'customers'>;
 
 /**
  * 3DS / additional-verification outcome. This product is US-only, where 3DS on an
@@ -17,11 +17,11 @@ export type CardValidationClient = Pick<Stripe, "setupIntents" | "customers">;
  * confirmation flow — we fail cleanly with its own message instead.
  */
 export const CARD_REQUIRES_ACTION_MESSAGE =
-  "This card requires additional verification. Please try a different card.";
+  'This card requires additional verification. Please try a different card.';
 
 /** Any other non-`succeeded` SetupIntent outcome. */
 export const CARD_UNUSABLE_MESSAGE =
-  "This payment method could not be verified. Please try a different card.";
+  'This payment method could not be verified. Please try a different card.';
 
 /**
  * Sanitized view of a Stripe error for logging. Stripe error objects can embed the
@@ -37,10 +37,10 @@ const describeStripeError = (error: unknown) => {
     requestId?: unknown;
   };
   return {
-    stripeErrorType: typeof e?.type === "string" ? e.type : "unknown",
-    stripeErrorCode: typeof e?.code === "string" ? e.code : undefined,
-    declineCode: typeof e?.decline_code === "string" ? e.decline_code : undefined,
-    stripeRequestId: typeof e?.requestId === "string" ? e.requestId : undefined,
+    stripeErrorType: typeof e?.type === 'string' ? e.type : 'unknown',
+    stripeErrorCode: typeof e?.code === 'string' ? e.code : undefined,
+    declineCode: typeof e?.decline_code === 'string' ? e.decline_code : undefined,
+    stripeRequestId: typeof e?.requestId === 'string' ? e.requestId : undefined,
   };
 };
 
@@ -60,7 +60,7 @@ const discardUnvalidatedCustomer = async (
   try {
     await client.customers.del(customerId);
   } catch (error) {
-    logger.error("Failed to delete customer after card validation failure", {
+    logger.error('Failed to delete customer after card validation failure', {
       customerId,
       ...describeStripeError(error),
     });
@@ -93,12 +93,35 @@ export const assertPaymentMethodUsable = async (
       // Explicit card-only: keeps redirect-based methods (which would demand a
       // return_url) out of an off-session confirm, and makes the outcome set
       // deterministic (succeeded / requires_action / decline error).
-      payment_method_types: ["card"],
-      usage: "off_session",
+      //
+      // Stripe offers allowed_payment_method_types as the way to express an
+      // allowlist and encourages switching to it; it does not forbid
+      // payment_method_types. Switching here waits on BOTH an SDK upgrade and a
+      // deliberate pin bump:
+      //   - SDK: stripe@20.3.1 declares allowed_payment_method_types on neither
+      //     SetupIntents nor PaymentIntents. Verifiable locally — zero hits
+      //     across node_modules/stripe/types/{SetupIntents,SetupIntentsResource,
+      //     PaymentIntents,PaymentIntentsResource}.d.ts.
+      //   - API version: per Stripe's web changelog the parameter arrives in a
+      //     version later than the 2026-01-28.clover pinned in
+      //     util/stripeApiVersion.ts. That date is not checkable from this repo,
+      //     so confirm it against the changelog before acting on it.
+      //
+      // The swap is also NOT like-for-like, which matters more than the version:
+      // allowed_payment_method_types SILENTLY FILTERS incompatible methods,
+      // whereas payment_method_types errors on one. This call site depends on the
+      // erroring behaviour — a determinate succeeded / requires_action / decline
+      // outcome. Under silent filtering a misconfiguration degrades quietly
+      // instead, so adopting it needs a deliberate decision about that tradeoff.
+      //
+      // Do not "fix" this by deleting the line: an off-session confirm with
+      // redirect methods enabled fails for want of a return_url.
+      payment_method_types: ['card'],
+      usage: 'off_session',
       confirm: true,
     });
   } catch (error) {
-    logger.error("Card validation SetupIntent failed", {
+    logger.error('Card validation SetupIntent failed', {
       customerId,
       ...describeStripeError(error),
     });
@@ -108,18 +131,18 @@ export const assertPaymentMethodUsable = async (
     throw mapStripeError(error);
   }
 
-  if (setupIntent.status === "succeeded") return;
+  if (setupIntent.status === 'succeeded') return;
 
-  const requiresAction = setupIntent.status === "requires_action";
+  const requiresAction = setupIntent.status === 'requires_action';
   // Logged (not silent) so the frequency of requires_action is observable.
-  logger.warn("Card validation did not succeed", {
+  logger.warn('Card validation did not succeed', {
     customerId,
     setupIntentStatus: setupIntent.status,
     requiresAction,
   });
   await discardUnvalidatedCustomer(client, customerId);
   throw new HttpsError(
-    "failed-precondition",
+    'failed-precondition',
     requiresAction ? CARD_REQUIRES_ACTION_MESSAGE : CARD_UNUSABLE_MESSAGE,
   );
 };

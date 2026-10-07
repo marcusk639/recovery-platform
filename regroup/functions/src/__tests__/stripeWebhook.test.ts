@@ -52,6 +52,8 @@ jest.mock("firebase-admin", () => {
 // ---------------------------------------------------------------------------
 // firebase-functions mock
 // ---------------------------------------------------------------------------
+import { logger } from "firebase-functions";
+
 jest.mock("firebase-functions", () => ({
   config: jest.fn(() => ({
     stripe: {
@@ -74,6 +76,7 @@ jest.mock("firebase-functions", () => ({
     info: jest.fn(),
     warn: jest.fn(),
     error: jest.fn(),
+    debug: jest.fn(),
   },
 }));
 
@@ -387,6 +390,19 @@ function setupIdempotencyTransaction(alreadyExists: boolean): void {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // The handler resolves its signing secret before verifying and answers 500 when
+  // none is configured, so these suites must configure one. constructEvent is
+  // mocked and ignores the secret, so without this the endpoint's own
+  // configuration would go unexercised.
+  // All four signing secrets, as both deployed functions get them. The key is
+  // sk_test_, so this is a test-mode deployment: the test secret is the one that
+  // verifies and verifyStripeWebhook requires the event's mode to agree with it.
+  process.env.STRIPE_SECRET_KEY = "sk_test_fake";
+  process.env.STRIPE_WEBHOOK_SECRET = "whsec_fake";
+  process.env.STRIPE_TEST_WEBHOOK_SECRET = "whsec_test_fake";
+  process.env.STRIPE_CONNECT_WEBHOOK_SECRET = "whsec_connect_fake";
+  process.env.STRIPE_CONNECT_TEST_WEBHOOK_SECRET = "whsec_connect_test_fake";
+
 
   // Default: successful FCM send
   mockMessagingSend.mockResolvedValue("message-id");
@@ -483,7 +499,7 @@ describe("Signature Verification", () => {
     expect(mockConstructEvent).not.toHaveBeenCalled();
   });
 
-  test("expired timestamp (replay attack) returns 400", async () => {
+  test("expired timestamp (replay attack) returns 400 and logs the reason", async () => {
     mockConstructEvent.mockImplementation(() => {
       throw new Error("Timestamp outside the tolerance zone");
     });
@@ -494,8 +510,21 @@ describe("Signature Verification", () => {
     await stripeWebhook(req as never, res as never);
 
     expect(res.status).toHaveBeenCalledWith(400);
+
+    // Invariant: the response body is a fixed string and never carries Stripe's
+    // raw message, which would disclose verification internals to an
+    // unauthenticated caller. The specific reason belongs in the log, where an
+    // operator can see it and an attacker cannot.
     expect(res.send).toHaveBeenCalledWith(
-      expect.stringContaining("Timestamp outside"),
+      expect.not.stringContaining("Timestamp outside"),
+    );
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("rejected (signature)"),
+      expect.objectContaining({
+        errors: expect.arrayContaining([
+          expect.stringContaining("Timestamp outside"),
+        ]),
+      }),
     );
   });
 

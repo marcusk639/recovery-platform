@@ -85,15 +85,33 @@ jest.mock("firebase-admin", () => {
 // ---------------------------------------------------------------------------
 // firebase-functions/v2/https mock — unwrap onRequest to return the handler
 // ---------------------------------------------------------------------------
+// The options object is RECORDED so the `secrets:` arrays can be asserted.
+// Discarding it lets a deleted binding pass every test here while collapsing the
+// candidate list to one secret in production.
+//
+// Stored on globalThis because a jest.mock factory is hoisted above module-scope
+// consts, and because onRequest is called at import time: anything recorded on
+// the jest.fn itself is wiped by the jest.clearAllMocks() in beforeEach.
 jest.mock("firebase-functions/v2/https", () => {
   const actual = jest.requireActual("firebase-functions/v2/https");
   return {
     ...actual,
-    onRequest: jest.fn((_optsOrHandler: any, handler?: any) =>
-      typeof _optsOrHandler === "function" ? _optsOrHandler : handler,
-    ),
+    onRequest: jest.fn((_optsOrHandler: any, handler?: any) => {
+      if (typeof _optsOrHandler === "function") {
+        return _optsOrHandler;
+      }
+      const g = globalThis as any;
+      (g.__onRequestOptions ??= []).push(_optsOrHandler);
+      return handler;
+    }),
   };
 });
+
+/** Every options object onRequest was constructed with, in declaration order. */
+const recordedOnRequestOptions = (): Array<{ secrets?: unknown[] }> =>
+  ((globalThis as any).__onRequestOptions ?? []) as Array<{
+    secrets?: unknown[];
+  }>;
 
 // ---------------------------------------------------------------------------
 // firebase-functions/params mock — defineSecret is a no-op string stub
@@ -110,6 +128,7 @@ jest.mock("firebase-functions", () => ({
     info: jest.fn(),
     warn: jest.fn(),
     error: jest.fn(),
+    debug: jest.fn(),
   },
 }));
 
@@ -130,6 +149,8 @@ jest.mock("stripe", () => {
 // ---------------------------------------------------------------------------
 // Imports — after all mocks
 // ---------------------------------------------------------------------------
+import { logger } from "firebase-functions";
+
 import {
   stripeWebhook,
   handleStripeConnectWebhook,
@@ -232,9 +253,20 @@ beforeEach(() => {
     metadata: {},
   });
 
+  // A test-mode deployment with all four signing secrets bound — what both
+  // deployed functions actually get. All four matter: with only the live/platform
+  // vars set, `delete process.env.STRIPE_TEST_WEBHOOK_SECRET` in the 500 tests
+  // below is a no-op and STRIPE_CONNECT_TEST_WEBHOOK_SECRET goes unexercised.
+  //
+  // The key is sk_test_, so deployedStripeMode() is 'test': candidates are ordered
+  // test-first, the test secret is the one that verifies, and an event with no
+  // `livemode` field counts as test-mode. That is the combination
+  // verifyStripeWebhook requires, which is why fixtures here need no `livemode`.
   process.env.STRIPE_SECRET_KEY = "sk_test_fake";
   process.env.STRIPE_WEBHOOK_SECRET = "whsec_fake";
+  process.env.STRIPE_TEST_WEBHOOK_SECRET = "whsec_test_fake";
   process.env.STRIPE_CONNECT_WEBHOOK_SECRET = "whsec_connect_fake";
+  process.env.STRIPE_CONNECT_TEST_WEBHOOK_SECRET = "whsec_connect_test_fake";
 });
 
 // ===========================================================================
@@ -272,6 +304,42 @@ describe("stripeWebhook — signature verification", () => {
       expect.stringContaining("Webhook Error"),
     );
   });
+  // The 500 path, which the beforeEach above otherwise never reaches because it
+  // configures all four secrets. BOTH platform vars have to be deleted for this
+  // to be the no-secret case — deleting one leaves the other as a live candidate.
+  // A missing secret is server misconfiguration: Stripe retries 500s, so the
+  // event survives until the secret is set, where a 400 would have blamed the
+  // sender for a local problem.
+  it("returns 500 — not 400 — when no signing secret is configured", async () => {
+    delete process.env.STRIPE_WEBHOOK_SECRET;
+    delete process.env.STRIPE_TEST_WEBHOOK_SECRET;
+
+    const req = makeReq();
+    const res = makeRes();
+
+    await (stripeWebhook as any)(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    // constructEvent must never run: there is nothing to verify against, and
+    // letting it run is what produced a misleading "invalid signature".
+    expect(mockConstructEvent).not.toHaveBeenCalled();
+  });
+
+  it("does not leak the variable name into the 500 response body", async () => {
+    delete process.env.STRIPE_WEBHOOK_SECRET;
+    delete process.env.STRIPE_TEST_WEBHOOK_SECRET;
+
+    const req = makeReq();
+    const res = makeRes();
+
+    await (stripeWebhook as any)(req, res);
+
+    // The name is useful in logs and useless to an unauthenticated caller.
+    expect(res.send).toHaveBeenCalledWith(
+      expect.not.stringContaining("STRIPE_"),
+    );
+  });
+
 
   it("returns 405 for non-POST requests", async () => {
     const req = { ...makeReq(), method: "GET" };
@@ -1835,5 +1903,502 @@ describe("B8 — house.subscriptionStatus propagation", () => {
 
     // updateHouseSubscriptionStatus returns early — batch.commit must NOT be called
     expect(mockBatchCommit).not.toHaveBeenCalled();
+  });
+});
+
+// ===========================================================================
+// Candidate loop + mode gate
+//
+// Two invariants nothing else in this suite pins: that EVERY configured signing
+// secret is tried, and that a VERIFIED event whose Stripe mode disagrees with this
+// deployment is rejected.
+//
+// Both need a secret-AWARE constructEvent mock. Simulating rejection by throwing
+// for every secret at once cannot distinguish a handler that checks the secret
+// from one that ignores it, and cannot exercise the loop past its first candidate.
+// ===========================================================================
+
+/**
+ * A constructEvent implementation that behaves differently per signing secret.
+ * `byValue` maps a secret VALUE to either an event to return or an Error to throw;
+ * an unlisted secret throws the generic Stripe signature error.
+ */
+const constructEventBySecret = (
+  byValue: Record<string, Error | Record<string, unknown>>,
+) =>
+  mockConstructEvent.mockImplementation(
+    (_body: any, _sig: any, secret: string) => {
+      const outcome = byValue[secret];
+      if (outcome === undefined) {
+        throw new Error(
+          "No signatures found matching the expected signature for payload",
+        );
+      }
+      if (outcome instanceof Error) {
+        throw outcome;
+      }
+      return outcome;
+    },
+  );
+
+/** Secret values constructEvent was offered, in the order it was offered them. */
+const secretsTried = () =>
+  mockConstructEvent.mock.calls.map((c: any[]) => c[2]);
+
+const testModeEvent = (overrides: Record<string, unknown> = {}) => ({
+  id: "evt_mode_test",
+  type: "payment_intent.succeeded",
+  account: undefined,
+  livemode: false,
+  data: { object: { id: "pi_1", metadata: {} } },
+  ...overrides,
+});
+
+describe("stripeWebhook — candidate loop", () => {
+  it("tries every configured secret rather than stopping at the first failure", async () => {
+    // Test-mode deployment, so the order is [test secret, live secret]. The test
+    // secret fails; the live secret is still offered.
+    constructEventBySecret({
+      whsec_test_fake: new Error("Timestamp outside the tolerance zone"),
+      whsec_fake: testModeEvent({ livemode: true }),
+    });
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    // A single-candidate handler calls constructEvent once and never reaches the
+    // second secret. This is the assertion that fails on that revert.
+    expect(secretsTried()).toEqual(["whsec_test_fake", "whsec_fake"]);
+    expect(mockConstructEvent).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects with 400 when no candidate verifies, having tried them all", async () => {
+    constructEventBySecret({}); // every secret throws the generic error
+
+    const res = makeRes();
+    await (stripeWebhook as any)(makeReq(), res);
+
+    expect(secretsTried()).toEqual(["whsec_test_fake", "whsec_fake"]);
+    expect(res.status).toHaveBeenCalledWith(400);
+    // Nothing downstream ran: no idempotency write, no document mutation.
+    expect(mockRunTransaction).not.toHaveBeenCalled();
+    expect(mockDocUpdate).not.toHaveBeenCalled();
+  });
+
+  it("rejects a WRONG secret while accepting the right one", async () => {
+    // Only the live secret verifies. On a test-mode deployment that is the wrong
+    // secret, so this must be refused — proving the handler does not treat any
+    // secret as good enough. This needs a secret-AWARE constructEvent mock: one
+    // that returns a valid event for any secret cannot tell these cases apart.
+    constructEventBySecret({ whsec_fake: testModeEvent({ livemode: true }) });
+
+    const res = makeRes();
+    await (stripeWebhook as any)(makeReq(), res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(mockRunTransaction).not.toHaveBeenCalled();
+  });
+
+  it("preserves the FIRST candidate's error, not only the last", async () => {
+    // A replay ("Timestamp outside the tolerance zone") on candidate 1 is the
+    // diagnostic failure; candidate 2's generic message is noise. Overwriting one
+    // variable per iteration reported only the latter.
+    constructEventBySecret({
+      whsec_test_fake: new Error("Timestamp outside the tolerance zone"),
+    });
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    const warn = (logger.warn as jest.Mock).mock.calls.find((c) =>
+      String(c[0]).includes("rejected (signature)"),
+    );
+    expect(warn).toBeDefined();
+    expect(warn![1].errors[0]).toContain("Timestamp outside");
+    expect(warn![1].errors[1]).toContain("No signatures found");
+  });
+
+  it("binds both platform signing secrets, so the candidate list cannot collapse", () => {
+    // Asserted on the real options object. Dropping STRIPE_TEST_WEBHOOK_SECRET
+    // here leaves one candidate in production; every other test in this file
+    // would still pass.
+    const platformOpts = recordedOnRequestOptions().find((o) =>
+      (o.secrets ?? []).includes("STRIPE_WEBHOOK_SECRET"),
+    );
+    expect(platformOpts).toBeDefined();
+    expect(platformOpts!.secrets).toEqual(
+      expect.arrayContaining([
+        "STRIPE_SECRET_KEY",
+        "STRIPE_WEBHOOK_SECRET",
+        "STRIPE_TEST_WEBHOOK_SECRET",
+      ]),
+    );
+  });
+});
+
+describe("stripeWebhook — mode gate", () => {
+  // The regression this guards. Both mode secrets are bound to the live function,
+  // so without a post-verification mode check a test-mode-signed event verifies
+  // and is processed against production data — and the handlers resolve their
+  // target from event METADATA, not a Stripe lookup, so a payment_intent event
+  // decrements a real guest's rentOwed. Resolving a single secret from the
+  // deployment's own mode answers 400 here; so must this.
+  it("rejects a verified TEST-mode event on a LIVE deployment", async () => {
+    process.env.STRIPE_SECRET_KEY = "sk_live_fake";
+    constructEventBySecret({ whsec_fake: testModeEvent({ livemode: false }) });
+
+    const res = makeRes();
+    await (stripeWebhook as any)(makeReq(), res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    // Verification happened, so this is the mode gate and not a signature failure.
+    expect(mockConstructEvent).toHaveBeenCalled();
+    // Nothing was written: no idempotency marker, no guest/payment mutation.
+    expect(mockRunTransaction).not.toHaveBeenCalled();
+    expect(mockDocUpdate).not.toHaveBeenCalled();
+    expect(mockDocSet).not.toHaveBeenCalled();
+  });
+
+  it("rejects an event claiming livemode:true that was signed with the TEST secret", async () => {
+    // The other half of the gate. Matching the event's mode against the
+    // deployment alone is not enough: an attacker holding the low-value test
+    // signing secret would simply set livemode:true.
+    process.env.STRIPE_SECRET_KEY = "sk_live_fake";
+    constructEventBySecret({
+      whsec_test_fake: testModeEvent({ livemode: true }),
+    });
+
+    const res = makeRes();
+    await (stripeWebhook as any)(makeReq(), res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(mockRunTransaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects a verified LIVE-mode event on a TEST deployment", async () => {
+    // Symmetric: a test deployment must not act on production events either.
+    constructEventBySecret({ whsec_fake: testModeEvent({ livemode: true }) });
+
+    const res = makeRes();
+    await (stripeWebhook as any)(makeReq(), res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(mockRunTransaction).not.toHaveBeenCalled();
+  });
+
+  it("treats a payload with no livemode field as test-mode", async () => {
+    // Never coerce a missing field into satisfying a live deployment.
+    process.env.STRIPE_SECRET_KEY = "sk_live_fake";
+    const noLivemode = testModeEvent();
+    delete (noLivemode as any).livemode;
+    constructEventBySecret({ whsec_fake: noLivemode });
+
+    const res = makeRes();
+    await (stripeWebhook as any)(makeReq(), res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  it("accepts a LIVE event on a LIVE deployment signed with the live secret", async () => {
+    // The gate must not reject the one combination that is correct.
+    process.env.STRIPE_SECRET_KEY = "sk_live_fake";
+    constructEventBySecret({
+      whsec_fake: {
+        id: "evt_live_ok",
+        type: "some.unhandled.event",
+        account: undefined,
+        livemode: true,
+        data: { object: {} },
+      },
+    });
+
+    const res = makeRes();
+    await (stripeWebhook as any)(makeReq(), res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it("ignores STRIPE_WEBHOOK_MODE when deciding what it may act on", async () => {
+    // End-to-end form of the unit test in util/stripeWebhookSecrets.test.ts. The
+    // override may reorder candidates; it must not widen what a live deployment
+    // acts on. If the guard consulted it, this test-mode event would be accepted.
+    process.env.STRIPE_SECRET_KEY = "sk_live_fake";
+    process.env.STRIPE_WEBHOOK_MODE = "test";
+    constructEventBySecret({ whsec_test_fake: testModeEvent({ livemode: false }) });
+
+    const res = makeRes();
+    try {
+      await (stripeWebhook as any)(makeReq(), res);
+    } finally {
+      delete process.env.STRIPE_WEBHOOK_MODE;
+    }
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(mockRunTransaction).not.toHaveBeenCalled();
+  });
+
+  it("still accepts a live event on a live deployment under that override", async () => {
+    // The complement: ignoring the override must not break the correct case.
+    process.env.STRIPE_SECRET_KEY = "sk_live_fake";
+    process.env.STRIPE_WEBHOOK_MODE = "test";
+    constructEventBySecret({
+      whsec_fake: {
+        id: "evt_live_override",
+        type: "some.unhandled.event",
+        account: undefined,
+        livemode: true,
+        data: { object: {} },
+      },
+    });
+
+    const res = makeRes();
+    try {
+      await (stripeWebhook as any)(makeReq(), res);
+    } finally {
+      delete process.env.STRIPE_WEBHOOK_MODE;
+    }
+
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it("never names a secret, a mode, or a variable in the rejection body", async () => {
+    process.env.STRIPE_SECRET_KEY = "sk_live_fake";
+    constructEventBySecret({ whsec_fake: testModeEvent({ livemode: false }) });
+
+    const res = makeRes();
+    await (stripeWebhook as any)(makeReq(), res);
+
+    const body = String((res.send as jest.Mock).mock.calls[0][0]);
+    expect(body).not.toContain("STRIPE_");
+    expect(body).not.toContain("whsec");
+    expect(body).not.toContain("livemode");
+  });
+});
+
+// ===========================================================================
+// handleStripeConnectWebhook — the same rewrite landed here and had none of the
+// coverage above. STRIPE_CONNECT_TEST_WEBHOOK_SECRET was not set by any handler
+// test before this file's beforeEach was fixed.
+// ===========================================================================
+
+describe("handleStripeConnectWebhook — candidate loop and mode gate", () => {
+  const connectEvent = (overrides: Record<string, unknown> = {}) => ({
+    id: "evt_connect_mode",
+    type: "some.unhandled.connect.event",
+    account: "acct_1",
+    livemode: false,
+    data: { object: {} },
+    ...overrides,
+  });
+
+  it("tries every configured Connect secret rather than stopping at the first", async () => {
+    constructEventBySecret({
+      whsec_connect_test_fake: new Error(
+        "Timestamp outside the tolerance zone",
+      ),
+      whsec_connect_fake: connectEvent({ livemode: true }),
+    });
+
+    await (handleStripeConnectWebhook as any)(makeReq(), makeRes());
+
+    expect(secretsTried()).toEqual([
+      "whsec_connect_test_fake",
+      "whsec_connect_fake",
+    ]);
+  });
+
+  it("rejects with 400 when no Connect candidate verifies", async () => {
+    constructEventBySecret({});
+
+    const res = makeRes();
+    await (handleStripeConnectWebhook as any)(makeReq(), res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(mockRunTransaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects a verified TEST-mode Connect event on a LIVE deployment", async () => {
+    // account.application.deauthorized is reachable this way, which would
+    // disconnect a real house's Stripe account from a test-mode event.
+    process.env.STRIPE_SECRET_KEY = "sk_live_fake";
+    constructEventBySecret({
+      whsec_connect_fake: connectEvent({
+        type: "account.application.deauthorized",
+        livemode: false,
+      }),
+    });
+
+    const res = makeRes();
+    await (handleStripeConnectWebhook as any)(makeReq(), res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(mockConstructEvent).toHaveBeenCalled();
+    expect(mockRunTransaction).not.toHaveBeenCalled();
+    expect(mockDocUpdate).not.toHaveBeenCalled();
+  });
+
+  it("rejects a Connect event claiming livemode:true signed with the TEST secret", async () => {
+    process.env.STRIPE_SECRET_KEY = "sk_live_fake";
+    constructEventBySecret({
+      whsec_connect_test_fake: connectEvent({ livemode: true }),
+    });
+
+    const res = makeRes();
+    await (handleStripeConnectWebhook as any)(makeReq(), res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(mockRunTransaction).not.toHaveBeenCalled();
+  });
+
+  it("accepts a LIVE Connect event on a LIVE deployment", async () => {
+    process.env.STRIPE_SECRET_KEY = "sk_live_fake";
+    constructEventBySecret({
+      whsec_connect_fake: connectEvent({ livemode: true }),
+    });
+
+    const res = makeRes();
+    await (handleStripeConnectWebhook as any)(makeReq(), res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it("returns 500 when neither Connect secret is configured", async () => {
+    delete process.env.STRIPE_CONNECT_WEBHOOK_SECRET;
+    delete process.env.STRIPE_CONNECT_TEST_WEBHOOK_SECRET;
+
+    const res = makeRes();
+    await (handleStripeConnectWebhook as any)(makeReq(), res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(mockConstructEvent).not.toHaveBeenCalled();
+    expect(res.send).toHaveBeenCalledWith(
+      expect.not.stringContaining("STRIPE_"),
+    );
+  });
+
+  it("binds both Connect signing secrets", () => {
+    const connectOpts = recordedOnRequestOptions().find((o) =>
+      (o.secrets ?? []).includes("STRIPE_CONNECT_WEBHOOK_SECRET"),
+    );
+    expect(connectOpts).toBeDefined();
+    expect(connectOpts!.secrets).toEqual(
+      expect.arrayContaining([
+        "STRIPE_SECRET_KEY",
+        "STRIPE_CONNECT_WEBHOOK_SECRET",
+        "STRIPE_CONNECT_TEST_WEBHOOK_SECRET",
+      ]),
+    );
+  });
+});
+
+// ===========================================================================
+// Diagnostic log fields
+//
+// verifiedWith / candidatesTried / the resolved candidate list are the fields an
+// operator uses to tell "wrong secret" from "missing secret" from "wrong mode".
+// Nothing else asserts them, so deleting any of them — or dropping one back to
+// logger.debug, where a default severity>=DEFAULT filter discards it — changes no
+// other test.
+// ===========================================================================
+
+describe("webhook diagnostics", () => {
+  const infoCall = (needle: string) =>
+    (logger.info as jest.Mock).mock.calls.find((c) =>
+      String(c[0]).includes(needle),
+    );
+  const warnCall = (needle: string) =>
+    (logger.warn as jest.Mock).mock.calls.find((c) =>
+      String(c[0]).includes(needle),
+    );
+
+  it("names the secret and mode that verified, at INFO", async () => {
+    constructEventBySecret({ whsec_test_fake: testModeEvent() });
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    const call = infoCall("signature verified");
+    expect(call).toBeDefined();
+    expect(call![1]).toEqual({
+      verifiedWith: "STRIPE_TEST_WEBHOOK_SECRET",
+      mode: "test",
+    });
+  });
+
+  it("names the resolved candidates and the deployed mode, at INFO", async () => {
+    constructEventBySecret({ whsec_test_fake: testModeEvent() });
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    const call = infoCall("webhookSecretCandidates");
+    expect(call).toBeDefined();
+    expect(call![1]).toEqual({
+      endpoint: "platform",
+      deployedMode: "test",
+      candidates: ["STRIPE_TEST_WEBHOOK_SECRET:test", "STRIPE_WEBHOOK_SECRET:live"],
+    });
+  });
+
+  it("names every candidate tried when none verifies", async () => {
+    constructEventBySecret({});
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    const call = warnCall("rejected (signature)");
+    expect(call).toBeDefined();
+    expect(call![1].candidatesTried).toEqual([
+      "STRIPE_TEST_WEBHOOK_SECRET:test",
+      "STRIPE_WEBHOOK_SECRET:live",
+    ]);
+  });
+
+  it("names both modes and the verifying secret when the mode gate rejects", async () => {
+    // Without these fields a 400 from the mode gate is indistinguishable from a
+    // 400 for a bad signature, and the response body is identical by design.
+    process.env.STRIPE_SECRET_KEY = "sk_live_fake";
+    constructEventBySecret({ whsec_fake: testModeEvent({ livemode: false }) });
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    const call = warnCall("rejected (mode)");
+    expect(call).toBeDefined();
+    expect(call![1]).toMatchObject({
+      eventMode: "test",
+      deployedMode: "live",
+      verifiedWith: "STRIPE_WEBHOOK_SECRET",
+      secretMode: "live",
+    });
+  });
+
+  it("logs no secret VALUE anywhere, only variable names", async () => {
+    // The names are useful to an operator; the values are the credential.
+    constructEventBySecret({ whsec_test_fake: testModeEvent() });
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    const serialized = JSON.stringify([
+      ...(logger.info as jest.Mock).mock.calls,
+      ...(logger.warn as jest.Mock).mock.calls,
+      ...(logger.error as jest.Mock).mock.calls,
+    ]);
+    expect(serialized).not.toContain("whsec_");
+  });
+
+  it("names the Connect secret and mode that verified, at INFO", async () => {
+    constructEventBySecret({
+      whsec_connect_test_fake: {
+        id: "evt_c",
+        type: "some.unhandled.connect.event",
+        account: "acct_1",
+        livemode: false,
+        data: { object: {} },
+      },
+    });
+
+    await (handleStripeConnectWebhook as any)(makeReq(), makeRes());
+
+    const call = infoCall("signature verified");
+    expect(call).toBeDefined();
+    expect(call![1]).toEqual({
+      verifiedWith: "STRIPE_CONNECT_TEST_WEBHOOK_SECRET",
+      mode: "test",
+    });
   });
 });
