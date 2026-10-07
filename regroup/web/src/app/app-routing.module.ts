@@ -56,7 +56,13 @@ const routes: Routes = [
   { path: 'contact', component: ContactPageComponent },
   { path: 'privacy-policy', component: PrivacyPolicyComponent },
   { path: 'terms', component: TermsComponent },
-  { path: 'my-account', component: MyAccountComponent },
+  { path: 'my-account', component: MyAccountComponent, canActivate: [AuthGuard] },
+  // The mobile app's "Manage Subscription" button deep-links to /billing (see
+  // regroup/mobile/src/screens/Subscription/SubscriptionRequiredScreen.tsx and the
+  // 2026-05-19 paywall design spec). That path was specified but never built, so
+  // released builds land on a 404. Redirect it to the account page, which hosts the
+  // Stripe billing portal. Keep this route as long as any shipped build targets it.
+  { path: 'billing', redirectTo: 'my-account', pathMatch: 'full' },
 ];
 
 @NgModule({

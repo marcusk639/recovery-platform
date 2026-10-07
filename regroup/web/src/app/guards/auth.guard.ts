@@ -34,6 +34,11 @@ export class AuthGuard implements CanActivate {
           });
       }
     }
-    return false;
+    // Server-side render: allow the route through and let the browser enforce.
+    // Returning false here makes Angular Universal refuse to render the page at
+    // all rather than redirect, so an unauthenticated request gets a blank
+    // prerender instead of being sent to /login. The guard runs again on the
+    // client once it bootstraps, which is where the redirect actually happens.
+    return true;
   }
 }
