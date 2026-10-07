@@ -14,7 +14,6 @@ import ScreenHeader from '../../components/screen-header';
 import RatsButton from '../../components/rats-button/rats-button';
 import { RatsText } from '../../components/rats-text';
 
-import { useAppSelector } from '../../state/store';
 import {
   color,
   normalize,
@@ -25,6 +24,8 @@ import {
 import { RootStackParamList, Routes } from '../../navigation/types';
 
 import { cancelRentReminder } from '../../services/notifications/rentReminder';
+import { useSelectedGuest } from '../../hooks/useSelectedGuest';
+import { useSelectedHouse } from '../../hooks/useSelectedHouse';
 
 // ---------------------------------------------------------------------------
 // Stripe import — wrapped defensively so the screen compiles before the
@@ -132,8 +133,11 @@ function classifyPaymentError(
 // Component
 // ---------------------------------------------------------------------------
 const ResidentPayment: React.FC<Props> = ({ navigation, route }) => {
-  const guest = useAppSelector((s: any) => s.guests.selectedGuest);
-  const house = useAppSelector((s: any) => s.houses.selectedHouse);
+  // Was reading s.guests.selectedGuest / s.houses.selectedHouse, which the
+  // id-only migration left permanently undefined; these hooks resolve the
+  // selected ids through React Query instead.
+  const { guest } = useSelectedGuest();
+  const { house } = useSelectedHouse();
 
   // If an amount (in cents) was passed as a route param, pre-fill the input.
   const paramAmountCents = route?.params?.amount ?? null;
@@ -171,6 +175,16 @@ const ResidentPayment: React.FC<Props> = ({ navigation, route }) => {
   const handlePayment = useCallback(async () => {
     if (paymentInProgress.current) return;
     if (!canPay || amountInCents === null) {
+      return;
+    }
+    if (!guest || !house) {
+      // Should not happen once selection has resolved, but the previous code
+      // dereferenced guest.id/house.id unguarded against an `any`-typed value
+      // that was in fact undefined, so a tap threw instead of reporting.
+      setErrorMessage(
+        'Could not identify your house. Please go back and try again.',
+      );
+      setPaymentState('error');
       return;
     }
     paymentInProgress.current = true;
@@ -284,6 +298,20 @@ const ResidentPayment: React.FC<Props> = ({ navigation, route }) => {
             containerStyle={styles.doneButton}
           />
         </View>
+      </RatsScrollView>
+    );
+  }
+
+  // Selection has not resolved. The hooks return null both while React Query is
+  // fetching and when nothing is selected; either way there is no house to pay.
+  if (!guest || !house) {
+    return (
+      <RatsScrollView>
+        <ScreenHeader renderBackButton header="Make a Payment" />
+        <RatsText
+          text="Loading your house details. If this persists, go back and reopen the screen."
+          style={styles.errorText}
+        />
       </RatsScrollView>
     );
   }

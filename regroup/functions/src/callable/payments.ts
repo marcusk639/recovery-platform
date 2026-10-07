@@ -123,21 +123,37 @@ export const createPaymentIntent = onCall(
       );
     }
 
-    // ── 3b. Authorization: caller must be the resident or a house admin ───────
-    // Admins are checked directly from house doc fields (already in memory).
-    // Non-admins must be paying for themselves — verified via the guest doc.
-    if (!isHouseAdmin(request.auth.uid, house)) {
-      const guestSnap = await db.collection("guests").doc(guestId).get();
-      if (!guestSnap.exists) {
-        throw new HttpsError("not-found", "Guest record not found");
-      }
-      const guestData = guestSnap.data() as { userId?: string };
-      if (guestData.userId !== request.auth.uid) {
-        throw new HttpsError(
-          "permission-denied",
-          "Only the resident or a house admin can initiate this payment",
-        );
-      }
+    // ── 3b. Authorization ─────────────────────────────────────────────────────
+    // The guest doc is the authority on which house a resident belongs to, so it
+    // is read for admins as well as residents. `guests` is a TOP-LEVEL
+    // collection, so guestId alone says nothing about the client-supplied
+    // houseId. Without binding the two, a resident of house A could pass house
+    // B's id: transfer_data.destination below would send the money to house B's
+    // Stripe account, while the payment_intent.succeeded handler decrements
+    // rentOwed on guests/{guestId} — the resident's own doc at house A. House A
+    // would show the rent as collected without ever receiving it.
+    const guestSnap = await db.collection("guests").doc(guestId).get();
+    if (!guestSnap.exists) {
+      throw new HttpsError("not-found", "Guest record not found");
+    }
+    const guestData = guestSnap.data() as {
+      userId?: string;
+      houseId?: string;
+    };
+    if (guestData.houseId !== houseId) {
+      throw new HttpsError(
+        "permission-denied",
+        "Guest does not belong to this house",
+      );
+    }
+    if (
+      !isHouseAdmin(request.auth.uid, house) &&
+      guestData.userId !== request.auth.uid
+    ) {
+      throw new HttpsError(
+        "permission-denied",
+        "Only the resident or a house admin can initiate this payment",
+      );
     }
 
     // ── 4. Build idempotency key ──────────────────────────────────────────────

@@ -1360,7 +1360,13 @@ describe("createPaymentIntent", () => {
       });
       // Caller is the resident paying their own rent — ownership check reads
       // guests/{guestId}.userId and requires it to match request.auth.uid.
-      firestoreDocStore[`guests/${GUEST_ID}`] = { userId: USER_UID };
+      firestoreDocStore[`guests/${GUEST_ID}`] = {
+        userId: USER_UID,
+        // houseId is required on a real guest doc (entities/Guest.ts) and the
+        // callable now rejects a guest that does not belong to the house being
+        // paid, so a fixture without it no longer models a valid resident.
+        houseId: HOUSE_ID,
+      };
     });
 
     it("returns the clientSecret from Stripe", async () => {
@@ -1503,7 +1509,13 @@ describe("createPaymentIntent", () => {
       });
       // Caller is the resident paying their own rent — ownership check reads
       // guests/{guestId}.userId and requires it to match request.auth.uid.
-      firestoreDocStore[`guests/${GUEST_ID}`] = { userId: USER_UID };
+      firestoreDocStore[`guests/${GUEST_ID}`] = {
+        userId: USER_UID,
+        // houseId is required on a real guest doc (entities/Guest.ts) and the
+        // callable now rejects a guest that does not belong to the house being
+        // paid, so a fixture without it no longer models a valid resident.
+        houseId: HOUSE_ID,
+      };
     });
 
     it("wraps StripeCardError as failed-precondition HttpsError", async () => {

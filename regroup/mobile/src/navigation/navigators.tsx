@@ -89,11 +89,21 @@ import GuestImportScreen from '../screens/GuestImport/GuestImportScreen';
 import AdminReportScreen from '../screens/AdminReport/AdminReportScreen';
 import DocumentListScreen from '../screens/Documents/DocumentListScreen';
 import StaffNotesFeed from '../screens/StaffNotes/StaffNotesFeed';
+import { useSelectedGuest } from '../hooks/useSelectedGuest';
+import { useSelectedHouse } from '../hooks/useSelectedHouse';
 
 // Wrapper to inject Redux guest+house into RentPaymentScreen
 const RentPaymentConnector = ({ navigation }: any) => {
-  const guest = useAppSelector((s: any) => s.guests.selectedGuest);
-  const house = useAppSelector((s: any) => s.houses.selectedHouse);
+  // Reads selection through the id-only hooks. These previously read
+  // s.guests.selectedGuest / s.houses.selectedHouse directly, which the id-only
+  // migration left permanently undefined — nothing dispatches the full-entity
+  // setters any more, as useSelectedGuest/useSelectedHouse themselves note — so
+  // the guard below always tripped and Pay Rent rendered nothing on every tap.
+  const { guest, isLoading: guestLoading } = useSelectedGuest();
+  const { house, isLoading: houseLoading } = useSelectedHouse();
+  // Entities come from React Query, so a first render can legitimately have
+  // neither yet. Render nothing only while they are actually in flight.
+  if (guestLoading || houseLoading) return null;
   if (!guest || !house) return null;
   return (
     <RentPaymentScreen navigation={navigation} guest={guest} house={house} />

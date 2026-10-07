@@ -13,7 +13,7 @@
     "prerender": "ng run sapp:prerender",
     "build": "export NODE_OPTIONS=--openssl-legacy-provider; npm run build:ssr && npm run build:functions",
     "build:functions": "npm run --prefix functions build",
-    "deploy": "firebase deploy --only hosting,functions:ssr",
+    "deploy": "firebase deploy --only hosting,functions:web:ssr",
     "build:deploy": "npm run build && npm run deploy"
   },
   "private": true,

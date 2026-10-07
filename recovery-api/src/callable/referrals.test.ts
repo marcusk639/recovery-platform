@@ -65,6 +65,22 @@ describe('handleCreateReferral', () => {
     expect(addCall.referredByApp).toBe('homegroups');
   });
 
+  it('stamps createdAt from the server clock, not the caller', async () => {
+    const db = makeDb();
+    await handleCreateReferral(
+      { toApp: 'sober-living', clientName: 'Bob', clientEmail: 'bob@test.com' },
+      ctx,
+      db,
+    );
+    const addCall = db.collection.mock.results[0].value.add.mock.calls[0][0];
+    // The repo rule is FieldValue.serverTimestamp() for audit fields. A `new
+    // Date()` here would be the calling service's clock, which this API does not
+    // control, so it could be skewed, backdated or future-dated. Asserting "not a
+    // Date" pins the rule without depending on the sentinel's internals.
+    expect(addCall.createdAt).toBeDefined();
+    expect(addCall.createdAt).not.toBeInstanceOf(Date);
+  });
+
   it('stores the canonical toApp for a display-name wire value', async () => {
     const db = makeDb();
     await handleCreateReferral(
