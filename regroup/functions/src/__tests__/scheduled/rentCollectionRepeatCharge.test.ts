@@ -1,22 +1,16 @@
 /**
  * Repeat-charge guard for scheduled auto-pay rent collection.
  *
- * Covers the defect class the per-day Stripe idempotency key cannot: selection
- * is balance-keyed, the balance only moves when the `payment_intent.succeeded`
- * webhook lands, and Stripe forgets an idempotency key after ~24h — so without
- * a Firestore-side period record the same resident is charged the full balance
- * again every single day, and a declined card does not stop it.
+ * The guard is in-flight AMOUNT, not a calendar period. These tests pin the
+ * three ways a period key failed: ACH settles days later so the balance is
+ * still unreduced when the next period opens; a declined card consumed the
+ * whole period instead of retrying; and the period correlated with nothing
+ * because `rentOwed` is raised by hand, not by an accrual job.
  */
 
-import {
-  runRentCollection,
-  billingPeriodFor,
-  rentAttemptId,
-} from '../../scheduled/scheduledRentCollection';
-import {
-  FakeRentAttemptStore,
-  fakeGuestDoc,
-} from './helpers/fakeRentAttemptStore';
+import { runRentCollection } from '../../scheduled/scheduledRentCollection';
+import { STALE_IN_FLIGHT_MS } from '../../scheduled/rentAttempts';
+import { FakeRentAttemptStore, fakeGuestDoc, cardDecline } from './helpers/fakeRentAttemptStore';
 
 const mockCreatePaymentIntent = jest.fn();
 const attemptStore = new FakeRentAttemptStore();
@@ -24,7 +18,7 @@ const attemptStore = new FakeRentAttemptStore();
 jest.mock('../../api/firestore', () => ({
   guestCollection: { where: jest.fn().mockReturnThis(), get: jest.fn() },
   rentCollectionAttemptCollection: {
-    doc: (id: string) => attemptStore.doc(id),
+    doc: (id?: string) => attemptStore.doc(id),
     where: (f: string, op: string, v: unknown) => attemptStore.where(f, op, v),
   },
 }));
@@ -52,24 +46,26 @@ jest.mock('../../config', () => ({
 const { guestCollection } = require('../../api/firestore');
 
 /**
- * The resident never pays the balance down between runs — that is the real
- * state, because `rentOwed` is only decremented by the webhook.
+ * The balance never moves between runs — the real state, because `rentOwed` is
+ * only decremented by the webhook, and for ACH not for days.
  */
-const seedSameGuestEveryRun = () => {
+const seedGuest = (rentOwed = 50000) => {
   guestCollection.get.mockResolvedValue({
     empty: false,
     size: 1,
-    docs: [fakeGuestDoc('guest-1', 50000)],
+    docs: [fakeGuestDoc('guest-1', rentOwed)],
   });
 };
 
-describe('scheduled rent collection: repeat-charge guard', () => {
+const amountsCharged = () => mockCreatePaymentIntent.mock.calls.map((c) => c[0].amount);
+
+describe('rent collection: in-flight repeat-charge guard', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     attemptStore.reset();
     process.env.STRIPE_SECRET_KEY = 'sk_test_mock';
     mockCreatePaymentIntent.mockResolvedValue({
-      id: 'pi_test',
+      id: 'pi_card',
       status: 'succeeded',
     });
   });
@@ -78,83 +74,147 @@ describe('scheduled rent collection: repeat-charge guard', () => {
     jest.useRealTimers();
   });
 
-  it('does not create a second charge on a later day in the same billing period', async () => {
-    seedSameGuestEveryRun();
+  it('does not re-charge while an ACH payment is still settling across a month boundary', async () => {
+    seedGuest();
     jest.useFakeTimers();
 
-    jest.setSystemTime(new Date('2026-11-03T10:00:00.000Z'));
-    await runRentCollection();
+    // ACH: confirmed but unsettled. This is the case a YYYY-MM key could not
+    // cover, because the key expires inside the settlement window.
+    mockCreatePaymentIntent.mockResolvedValue({
+      id: 'pi_ach',
+      status: 'processing',
+    });
 
-    // A later day — past the ~24h Stripe idempotency window, so the key string
-    // itself provides no protection whatsoever here.
-    jest.setSystemTime(new Date('2026-11-04T10:00:00.000Z'));
+    jest.setSystemTime(new Date('2026-11-28T10:00:00.000Z'));
+    await runRentCollection();
+    expect(mockCreatePaymentIntent).toHaveBeenCalledTimes(1);
+
+    // New calendar month, three days later — balance still unreduced.
+    jest.setSystemTime(new Date('2026-12-01T10:00:00.000Z'));
     const second = await runRentCollection();
-
-    // And a third, to show the guard is not merely off-by-one.
-    jest.setSystemTime(new Date('2026-11-19T10:00:00.000Z'));
-    await runRentCollection();
 
     expect(mockCreatePaymentIntent).toHaveBeenCalledTimes(1);
     expect(second.attemptedCount).toBe(0);
     expect(second.matchedCount).toBe(1);
-    expect([...attemptStore.docs.keys()]).toEqual([rentAttemptId('guest-1', '2026-11')]);
   });
 
-  it('charges again once the billing period rolls over', async () => {
-    seedSameGuestEveryRun();
+  it('retries the next day after a declined card instead of consuming the period', async () => {
+    seedGuest();
     jest.useFakeTimers();
 
-    jest.setSystemTime(new Date('2026-11-03T10:00:00.000Z'));
-    await runRentCollection();
+    mockCreatePaymentIntent.mockRejectedValue(cardDecline());
+    jest.setSystemTime(new Date('2026-11-10T10:00:00.000Z'));
+    const first = await runRentCollection();
+    expect(first.failureCount).toBe(1);
 
-    jest.setSystemTime(new Date('2026-12-01T10:00:00.000Z'));
-    await runRentCollection();
-
-    expect(mockCreatePaymentIntent).toHaveBeenCalledTimes(2);
-    expect([...attemptStore.docs.keys()].sort()).toEqual([
-      rentAttemptId('guest-1', '2026-11'),
-      rentAttemptId('guest-1', '2026-12'),
-    ]);
-  });
-
-  it('marks a thrown charge for reconciliation and keeps the period claimed', async () => {
-    seedSameGuestEveryRun();
-    mockCreatePaymentIntent.mockRejectedValue(new Error('card_declined'));
-
-    const summary = await runRentCollection();
-    expect(summary.failureCount).toBe(1);
-
-    // A declined card must NOT re-arm tomorrow's charge.
+    // A decline is terminal and releases the amount — the resident is eligible
+    // again tomorrow, not locked out for the rest of the month.
     mockCreatePaymentIntent.mockResolvedValue({
-      id: 'pi_2',
+      id: 'pi_retry',
       status: 'succeeded',
     });
+    jest.setSystemTime(new Date('2026-11-11T10:00:00.000Z'));
+    const second = await runRentCollection();
+
+    expect(second.attemptedCount).toBe(1);
+    expect(mockCreatePaymentIntent).toHaveBeenCalledTimes(2);
+  });
+
+  it('does NOT retry after an unknown error, which may have charged', async () => {
+    seedGuest();
+    jest.useFakeTimers();
+
+    // A timeout can leave a real PaymentIntent behind, so the amount must stay
+    // in flight rather than being released like a decline.
+    mockCreatePaymentIntent.mockRejectedValue(new Error('socket hang up'));
+    jest.setSystemTime(new Date('2026-11-10T10:00:00.000Z'));
+    await runRentCollection();
+
+    mockCreatePaymentIntent.mockResolvedValue({ id: 'pi_x', status: 'succeeded' });
+    jest.setSystemTime(new Date('2026-11-11T10:00:00.000Z'));
     const second = await runRentCollection();
 
     expect(second.attemptedCount).toBe(0);
     expect(mockCreatePaymentIntent).toHaveBeenCalledTimes(1);
-    expect(
-      attemptStore.docs.get(rentAttemptId('guest-1', billingPeriodFor(new Date()))),
-    ).toMatchObject({ status: 'failed', needsReconciliation: true });
+    const record = [...attemptStore.docs.values()][0];
+    expect(record).toMatchObject({ needsReconciliation: true });
   });
 
-  it('skips a guest whose period was claimed by a concurrent run', async () => {
-    seedSameGuestEveryRun();
-    const period = billingPeriodFor(new Date());
-    // Present in the store but carrying no `guestId`, so the exclusion query
-    // cannot see it — only the atomic create() can. This is the race arm.
-    attemptStore.docs.set(rentAttemptId('guest-1', period), { period });
+  it('charges only the difference when an operator raises the balance mid-cycle', async () => {
+    // 50000 already in flight; the operator adds a 20000 correction. A period
+    // key skipped this silently; the in-flight guard charges the delta.
+    attemptStore.seedAttempt({
+      guestId: 'guest-1',
+      houseId: 'house-1',
+      amountCents: 50000,
+      status: 'awaiting_confirmation',
+      createdAt: new Date().toISOString(),
+    });
+    seedGuest(70000);
 
     const summary = await runRentCollection();
 
-    expect(mockCreatePaymentIntent).not.toHaveBeenCalled();
-    expect(summary.failureCount).toBe(0);
+    expect(summary.attemptedCount).toBe(1);
+    expect(amountsCharged()).toEqual([20000]);
   });
-});
 
-describe('billingPeriodFor', () => {
-  it('keys on UTC year-month', () => {
-    expect(billingPeriodFor(new Date('2026-11-30T23:59:59.000Z'))).toBe('2026-11');
-    expect(billingPeriodFor(new Date('2026-12-01T00:00:00.000Z'))).toBe('2026-12');
+  it('releases an in-flight attempt once it is stale, so a lost webhook is not a permanent lockout', async () => {
+    const longAgo = new Date(Date.now() - STALE_IN_FLIGHT_MS - 60_000);
+    attemptStore.seedAttempt({
+      guestId: 'guest-1',
+      houseId: 'house-1',
+      amountCents: 50000,
+      status: 'pending',
+      createdAt: longAgo.toISOString(),
+    });
+    seedGuest();
+
+    const summary = await runRentCollection();
+
+    expect(summary.attemptedCount).toBe(1);
+    expect(amountsCharged()).toEqual([50000]);
+  });
+
+  it('keeps suppressing while the in-flight attempt is still fresh', async () => {
+    attemptStore.seedAttempt({
+      guestId: 'guest-1',
+      houseId: 'house-1',
+      amountCents: 50000,
+      status: 'pending',
+      createdAt: new Date(Date.now() - 60_000).toISOString(),
+    });
+    seedGuest();
+
+    const summary = await runRentCollection();
+
+    expect(summary.attemptedCount).toBe(0);
+    expect(mockCreatePaymentIntent).not.toHaveBeenCalled();
+  });
+
+  it('ignores a settled attempt, which no longer holds the amount', async () => {
+    attemptStore.seedAttempt({
+      guestId: 'guest-1',
+      houseId: 'house-1',
+      amountCents: 50000,
+      status: 'charged',
+      createdAt: new Date().toISOString(),
+    });
+    seedGuest();
+
+    const summary = await runRentCollection();
+
+    expect(summary.attemptedCount).toBe(1);
+    expect(amountsCharged()).toEqual([50000]);
+  });
+
+  it('does not key attempt documents on a sequential value', async () => {
+    seedGuest();
+    await runRentCollection();
+
+    // Firestore shards by key range, so a timestamp-keyed id would concentrate
+    // writes on one range. doc() is called with no argument.
+    expect(attemptStore.mintedIds).toHaveLength(1);
+    expect(attemptStore.mintedIds[0]).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+    expect(attemptStore.mintedIds[0]).not.toContain('guest-1');
   });
 });

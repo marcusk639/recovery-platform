@@ -1,24 +1,17 @@
 /**
  * Recording guarantees for scheduled auto-pay rent collection.
  *
- * The attempt record must be written BEFORE the charge, so a charge that
- * succeeds while a follow-up write fails is still visible. Previously the only
- * writer of rent payments was the `payment_intent.succeeded` webhook, which the
- * live platform endpoint never subscribed to — money moved and nothing recorded
- * it.
+ * The attempt record is written BEFORE the charge, so a charge that succeeds
+ * while a follow-up write fails still holds its amount in flight and cannot be
+ * charged a second time. The record is an audit trail, not the ledger — the
+ * `rentOwed` decrement and the `payments` doc are written by the webhook.
  */
 
 import {
   runRentCollection,
   scheduledRentCollection,
-  billingPeriodFor,
-  rentAttemptId,
 } from '../../scheduled/scheduledRentCollection';
-import {
-  FakeRentAttemptStore,
-  fakeGuestDoc,
-  callOrder,
-} from './helpers/fakeRentAttemptStore';
+import { FakeRentAttemptStore, fakeGuestDoc, callOrder } from './helpers/fakeRentAttemptStore';
 
 const mockCreatePaymentIntent = jest.fn();
 const attemptStore = new FakeRentAttemptStore();
@@ -26,7 +19,7 @@ const attemptStore = new FakeRentAttemptStore();
 jest.mock('../../api/firestore', () => ({
   guestCollection: { where: jest.fn().mockReturnThis(), get: jest.fn() },
   rentCollectionAttemptCollection: {
-    doc: (id: string) => attemptStore.doc(id),
+    doc: (id?: string) => attemptStore.doc(id),
     where: (f: string, op: string, v: unknown) => attemptStore.where(f, op, v),
   },
 }));
@@ -66,9 +59,11 @@ const seedGuest = () => {
   });
 };
 
+const onlyRecord = () => [...attemptStore.docs.values()][0];
+
 type Runnable = { run: (event: unknown) => Promise<void> };
 
-describe('scheduled rent collection: recording guarantees', () => {
+describe('rent collection: recording guarantees', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     attemptStore.reset();
@@ -83,8 +78,7 @@ describe('scheduled rent collection: recording guarantees', () => {
   it('records the attempt BEFORE calling Stripe', async () => {
     await runRentCollection();
 
-    const claimId = rentAttemptId('guest-1', billingPeriodFor(new Date()));
-    const createIdx = callOrder.indexOf(`create:${claimId}`);
+    const createIdx = callOrder.indexOf('firestore:create');
     const stripeIdx = callOrder.indexOf('stripe:create');
 
     expect(createIdx).toBeGreaterThanOrEqual(0);
@@ -101,46 +95,54 @@ describe('scheduled rent collection: recording guarantees', () => {
     expect(summary.failureCount).toBe(1);
   });
 
-  it('leaves a durable pending record when the post-charge write fails', async () => {
+  it('keeps a failed post-charge write in flight so it cannot be charged twice', async () => {
     attemptStore.failUpdate = true;
 
     await expect(runRentCollection()).resolves.toMatchObject({
       failureCount: 0,
     });
-
-    // The charge is real, so the record must survive for reconciliation.
     expect(mockCreatePaymentIntent).toHaveBeenCalledTimes(1);
-    expect(
-      attemptStore.docs.get(rentAttemptId('guest-1', billingPeriodFor(new Date()))),
-    ).toMatchObject({ status: 'pending', amountCents: 50000 });
+
+    // The outcome write was lost, so the record is still `pending` — which is
+    // precisely what keeps its amount counted as in-flight on the next run.
+    expect(onlyRecord()).toMatchObject({ status: 'pending', amountCents: 50000 });
+
+    const second = await runRentCollection();
+    expect(second.attemptedCount).toBe(0);
+    expect(mockCreatePaymentIntent).toHaveBeenCalledTimes(1);
   });
 
-  it('flags an unconfirmed PaymentIntent for reconciliation', async () => {
+  it('marks a settled card charge as charged', async () => {
+    await runRentCollection();
+
+    expect(onlyRecord()).toMatchObject({
+      status: 'charged',
+      paymentIntentId: 'pi_test',
+    });
+  });
+
+  it('marks an unsettled ACH charge as awaiting_confirmation, not charged', async () => {
     mockCreatePaymentIntent.mockResolvedValue({
-      id: 'pi_action',
-      status: 'requires_action',
+      id: 'pi_ach',
+      status: 'processing',
     });
 
     await runRentCollection();
 
-    expect(
-      attemptStore.docs.get(rentAttemptId('guest-1', billingPeriodFor(new Date()))),
-    ).toMatchObject({
+    expect(onlyRecord()).toMatchObject({
       status: 'awaiting_confirmation',
-      needsReconciliation: true,
+      stripeStatus: 'processing',
     });
   });
 
   it('passes rentAttemptId in metadata so the webhook can reconcile', async () => {
     await runRentCollection();
 
-    const period = billingPeriodFor(new Date());
     expect(mockCreatePaymentIntent).toHaveBeenCalledWith(
       expect.objectContaining({
         metadata: expect.objectContaining({
           guestId: 'guest-1',
-          rentAttemptId: rentAttemptId('guest-1', period),
-          autoPayPeriod: period,
+          rentAttemptId: attemptStore.mintedIds[0],
         }),
       }),
       expect.anything(),
@@ -148,7 +150,7 @@ describe('scheduled rent collection: recording guarantees', () => {
   });
 
   // Without this the job reported SUCCESS while every charge failed, which is
-  // the state that let this defect run unnoticed for days.
+  // the state that let the original defect run unnoticed for days.
   it('rejects so Cloud Scheduler records a FAILURE when a charge fails', async () => {
     mockCreatePaymentIntent.mockRejectedValue(new Error('card_declined'));
 

@@ -40,8 +40,8 @@ jest.mock('../../api/firestore', () => ({
     where: () => ({
       get: jest.fn().mockResolvedValue({ empty: true, size: 0, docs: [] }),
     }),
-    doc: (id: string) => ({
-      id,
+    doc: (id?: string) => ({
+      id: id ?? 'auto-id',
       create: jest.fn().mockResolvedValue(undefined),
       update: jest.fn().mockResolvedValue(undefined),
     }),

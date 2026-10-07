@@ -6,10 +6,12 @@
  * PaymentIntent for each. Uses Promise.allSettled so one failure does not stop
  * the rest.
  *
- * Repeat-charge protection lives in `rentAttempts.ts`, NOT in the Stripe
- * idempotency key — read that file's header before changing anything here. The
- * per-day key only collapses retries of a single invocation. The ledger
- * (`rentOwed`, the `payments` document) is written by the webhook, not here.
+ * Repeat-charge protection lives in `rentAttempts.ts` and is keyed on IN-FLIGHT
+ * AMOUNT, not on a calendar period or the Stripe idempotency key — read that
+ * file's header before changing anything here. The per-day key only collapses
+ * retries of a single invocation. The ledger (`rentOwed`, the `payments`
+ * document) is written by the webhook, not here, which is exactly why in-flight
+ * charges have to be tracked separately from the balance.
  *
  * Firestore note: equality on one field (autoPayEnabled) combined with a range
  * on another (rentOwed) is permitted, but that pair still needs a composite
@@ -20,18 +22,15 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions';
 import Stripe from 'stripe';
-import { guestCollection, rentCollectionAttemptCollection } from '../api/firestore';
+import { guestCollection } from '../api/firestore';
 import { STRIPE_SECRET_KEY } from '../config';
 import { computeApplicationFee, RentPaymentMethodType } from '../util/rentFee';
 import {
-  billingPeriodFor,
-  claimRentPeriod,
-  loadAttemptedGuestIds,
+  loadInFlightCentsByGuest,
   markRentAttemptCharged,
   markRentAttemptFailed,
+  recordRentAttempt,
 } from './rentAttempts';
-
-export { billingPeriodFor, rentAttemptId } from './rentAttempts';
 
 interface AutoPayGuest {
   id: string;
@@ -43,7 +42,7 @@ interface AutoPayGuest {
 }
 
 export interface RentCollectionSummary {
-  /** Guests the selection query matched, before period exclusion. */
+  /** Guests the selection query matched, before the in-flight subtraction. */
   matchedCount: number;
   /** Guests a charge was actually attempted for. */
   attemptedCount: number;
@@ -71,25 +70,33 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
 
   const now = new Date();
   const today = now.toISOString().split('T')[0];
-  const period = billingPeriodFor(now);
 
-  // Exclude guests already charged (or attempted) this period. Selection is
-  // balance-keyed and the balance only moves once the webhook lands, so without
-  // this exclusion the same resident re-matches every single day.
-  const alreadyAttempted = await loadAttemptedGuestIds(period);
+  // Subtract money already committed for this guest. Selection is balance-keyed
+  // and the balance only moves when the webhook lands, so without this the same
+  // resident re-matches every run — and for ACH the balance stays unreduced for
+  // days, long after any idempotency key has expired.
+  const inFlightByGuest = await loadInFlightCentsByGuest(now);
 
-  const dueDocs = snapshot.docs.filter((doc) => !alreadyAttempted.has(doc.id));
+  const due = snapshot.docs
+    .map((doc) => {
+      const rentOwed = (doc.data() ?? {}).rentOwed as number | undefined;
+      const owed = Number.isFinite(rentOwed) ? (rentOwed as number) : 0;
+      return {
+        doc,
+        dueCents: Math.round(owed - (inFlightByGuest.get(doc.id) ?? 0)),
+      };
+    })
+    .filter((entry) => entry.dueCents > 0);
 
-  if (dueDocs.length === 0) {
-    logger.info('scheduledRentCollection: all auto-pay guests already charged', {
-      period,
+  if (due.length === 0) {
+    logger.info('scheduledRentCollection: nothing due beyond in-flight charges', {
       matchedCount: snapshot.size,
     });
     return { matchedCount: snapshot.size, attemptedCount: 0, failureCount: 0 };
   }
 
   const results = await Promise.allSettled(
-    dueDocs.map(async (doc) => {
+    due.map(async ({ doc, dueCents }) => {
       const guest: AutoPayGuest = {
         id: doc.id,
         ...doc.data(),
@@ -113,23 +120,20 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
         });
         return;
       }
-      const amountCents = Math.round(guest.rentOwed);
+      // Charge what is actually outstanding, not the gross balance: part of it
+      // may already be in flight.
+      const amountCents = dueCents;
       const idempotencyKey = `auto-rent-${guest.id}-${today}`;
 
-      // Claim the billing period BEFORE touching Stripe. Ordering is the whole
-      // point: if this write fails no charge happens, and if the charge
-      // succeeds while the follow-up write fails the `pending` record is
-      // already durable, so the money is never invisible.
-      const attemptRef = await claimRentPeriod({
+      // Record BEFORE touching Stripe. If this write fails no charge happens,
+      // and if the charge succeeds while a follow-up write fails the record is
+      // already durable and its amount still counts as in-flight.
+      const attemptRef = await recordRentAttempt({
         guestId: guest.id,
         houseId: guest.houseId,
-        period,
         amountCents,
         nowIso: now.toISOString(),
       });
-      if (!attemptRef) {
-        return;
-      }
 
       // The platform application fee only applies to Connect transfers. When
       // present, derive the method-aware fee (P-1/P-2): look up the stored
@@ -175,30 +179,22 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
               // Lets the webhook reconcile the record this run created rather
               // than having to author one.
               rentAttemptId: attemptRef.id,
-              autoPayPeriod: period,
             },
             ...transferParams,
           },
           { idempotencyKey },
         );
       } catch (err) {
-        await markRentAttemptFailed(attemptRef, err, {
-          guestId: guest.id,
-          period,
-        });
+        await markRentAttemptFailed(attemptRef, err, { guestId: guest.id });
         throw err;
       }
 
-      await markRentAttemptCharged(attemptRef, intent, {
-        guestId: guest.id,
-        period,
-      });
+      await markRentAttemptCharged(attemptRef, intent, { guestId: guest.id });
 
       logger.info('scheduledRentCollection: payment created', {
         guestId: guest.id,
         intentId: intent.id,
         status: intent.status,
-        period,
       });
     }),
   );
@@ -211,7 +207,7 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
     if (result.status === 'rejected') {
       failureCount += 1;
       logger.error('scheduledRentCollection: charge failed', {
-        guestId: dueDocs[index].id,
+        guestId: due[index].doc.id,
         reason: (result.reason as Error)?.message ?? String(result.reason),
       });
     }
@@ -219,14 +215,14 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
   if (failureCount > 0) {
     logger.error('scheduledRentCollection: some payments failed', {
       failureCount,
-      attemptedCount: dueDocs.length,
+      attemptedCount: due.length,
       matchedCount: snapshot.size,
     });
   }
 
   return {
     matchedCount: snapshot.size,
-    attemptedCount: dueDocs.length,
+    attemptedCount: due.length,
     failureCount,
   };
 }
