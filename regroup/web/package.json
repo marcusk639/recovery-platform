@@ -11,11 +11,10 @@
     "serve:ssr": "node dist/sapp/server/main.js",
     "build:ssr": "export NODE_OPTIONS=--openssl-legacy-provider; ng build --prod && ng run sapp:server:production",
     "prerender": "ng run sapp:prerender",
-    "build": "export NODE_OPTIONS=--openssl-legacy-provider; ng build && npm run copy:hosting && npm run build:ssr && npm run build:functions",
-    "copy:hosting": "cp -r ./dist/sapp/* ./public && rm ./public/index.html",
+    "build": "export NODE_OPTIONS=--openssl-legacy-provider; npm run build:ssr && npm run build:functions",
     "build:functions": "npm run --prefix functions build",
-    "deploy": "firebase deploy",
-    "build:deploy": "export NODE_OPTIONS=--openssl-legacy-provider; ng build --prod && cd functions && npm run build && cd .. && npm run deploy"
+    "deploy": "firebase deploy --only hosting,functions:ssr",
+    "build:deploy": "npm run build && npm run deploy"
   },
   "private": true,
   "dependencies": {

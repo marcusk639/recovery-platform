@@ -1,21 +1,30 @@
 {
   "hosting": {
     "public": "dist/sapp/browser",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "index.html"
+    ],
     "rewrites": [
       {
         "source": "**",
-        "destination": "/index.html"
+        "function": {
+          "functionId": "ssr",
+          "region": "us-central1"
+        }
       }
     ]
   },
   "functions": [
     {
       "source": "functions",
-      "codebase": "default",
+      "codebase": "web",
       "ignore": [
         "node_modules",
         ".git",
+        "dist/sapp/browser/*.map",
         "firebase-debug.log",
         "firebase-debug.*.log"
       ],
