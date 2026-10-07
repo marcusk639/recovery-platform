@@ -89,6 +89,14 @@ describe('Stripe clients are constructed from STRIPE_API_VERSION', () => {
         // completes without needing any guest fixtures.
         get: jest.fn().mockResolvedValue({ empty: true, size: 0, docs: [] }),
       },
+      // runRentCollection sweeps needsReconciliation before the guest query, so
+      // this collection is touched even on an empty pass.
+      rentCollectionAttemptCollection: {
+        where: jest.fn().mockReturnValue({
+          get: jest.fn().mockResolvedValue({ empty: true, size: 0, docs: [] }),
+        }),
+        doc: jest.fn(),
+      },
     }));
     jest.doMock('../../config', () => ({
       STRIPE_SECRET_KEY: { name: 'STRIPE_SECRET_KEY' },
