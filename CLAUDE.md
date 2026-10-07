@@ -103,9 +103,13 @@ These rules apply to all products in the monorepo without exception.
 - Commit scopes name the product: `fix(regroup-mobile):`, never `fix(mobile):` — two RN apps and three functions packages make a bare `mobile`/`web`/`functions` scope unreadable in `git log`. Blocked by the `commit-msg` hook.
 - Git hooks are versioned in `scripts/git-hooks/` and installed per-clone with `./scripts/install-git-hooks.sh` (run it after cloning or after editing a hook).
 - Jest `coverageThreshold` floors (recovery-api, homegroups/functions, detox-recovery) are ratchets: raise them as coverage grows, never lower them to make a run pass.
+- Mutation-kill counts are evidence about **test coupling, not correctness** — tightly-pinned tests ratify wrong behaviour as firmly as right behaviour. On money paths, get an independent reviewer reasoning from the domain model.
 
 ## Gotchas
 
+- **The main checkout sits on `feat/regroup-tier-billing`**, a stale branch that reverts PRs #54–#61 and must never be merged. Files that exist on `main` therefore read as missing or untracked in the working tree — check with `git show origin/main:<path>`, and do real work in a worktree off `origin/main`.
+- PRs land as **squash merges**, so `git merge-base --is-ancestor` and three-dot diffs report a fully-merged branch as unmerged. The only reliable "is this merged" check is a two-dot diff restricted to the paths the branch itself changed: `git diff origin/main..<branch> -- $(git diff --name-only $(git merge-base <branch> origin/main)..<branch>)`.
+- Use `git -C <path> …`, never `cd <path> && git …`. If the path does not exist the `cd` fails and the git command silently runs in the main checkout, on the stale branch.
 - Ignore minified bundles and build artifacts (`**/public/`, `*.min.js`, `*-es5.js`, `*-es2015.js`, `lib/`, `dist/`, `build/`, `.next/`) when counting, searching, or reading source — they are regenerated on rebuild. `regroup/web/public/` alone holds ~1.15M lines of vendor bundles; real hand-written source platform-wide is ~380K lines.
 - `homegroups/mobile` and `regroup/mobile` postinstall runs `pod install`; on a machine without working Xcode CLT, `npm ci` fails there — use `npm ci --ignore-scripts` for JS-only work (Jest/ESLint need only JS deps).
 

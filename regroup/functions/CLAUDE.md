@@ -191,3 +191,32 @@ There is no `functions/.env.example`. Required deploy-time config beyond the `de
 The legacy `STRIPE_HOUSE_PRICE_ID` / `STRIPE_GUEST_PRICE_ID` / `STRIPE_OXFORD_PRICE_ID` values are no longer read — the per-house model that used them is gone.
 
 **Two Stripe clients, two version sources.** `util/stripe.ts` hardcodes `apiVersion: "2026-01-28.clover"`; `api/stripe.ts` reads `process.env.STRIPE_API_VERSION!`. `STRIPE_API_VERSION` is therefore still genuinely required — unset, it affects only the `api/stripe.ts` client; set to anything else, the two clients disagree. Worth collapsing to one source.
+
+### Firestore gotchas
+
+**No script in this repo deploys regroup's Firestore indexes.** `regroup/mobile/firebase/firestore.indexes.json` is the source of truth (wired via `mobile/firebase/firebase.json`), but `mobile`'s `deploy:rules` is only `--only firestore:rules,storage`. A `balance`→`rentOwed` rename in `6e67faf` (2026-06-01) left the committed index stale, and `scheduledRentCollection` threw `FAILED_PRECONDITION` on every single run for months while Cloud Scheduler went unwatched. After changing any composite query, deploy `--only firestore:indexes` explicitly and confirm the index reports READY.
+
+Never key a document on a timestamp or counter — Firestore shards by key range, so sequential keys concentrate writes on one range instead of spreading them. Use `collection.doc()` auto-ids and keep the time in a `createdAt` field.
+
+### Live reads (phoenix-cleanhouse)
+
+The firebase MCP server is pinned to `recovery-api` / the `recovery-platform` project, so it cannot query regroup. Use ADC + REST instead:
+
+```bash
+TOK=$(gcloud auth application-default print-access-token)
+curl -s -X POST "https://firestore.googleapis.com/v1/projects/phoenix-cleanhouse/databases/(default)/documents:runQuery" \
+  -H "Authorization: Bearer $TOK" -H "Content-Type: application/json" -d @query.json
+```
+
+Gen2 function logs live under `resource.type="cloud_run_revision"` with a **lowercased** `service_name` — not `resource.labels.function_name`, which returns nothing:
+
+```bash
+gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="scheduledrentcollection"' \
+  --project=phoenix-cleanhouse --freshness=30d
+```
+
+Log retention is ~30 days, so anything older cannot be confirmed from logs at all.
+
+### Test mocking
+
+A `jest.mock(path, () => importedConstant)` factory that returns a value **imported** from a test helper throws `ReferenceError: Cannot access '<helper>_1' before initialization` — jest hoists the factory above the import, and it runs during the hoisted import of the module under test. Inline shared mock *values* in each factory; only shared *behaviour* survives extraction, because an arrow like `doc: (id) => store.doc(id)` reads the outer binding lazily at call time.
