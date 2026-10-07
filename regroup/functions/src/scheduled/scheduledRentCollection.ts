@@ -40,6 +40,13 @@ interface AutoPayGuest {
   stripeCustomerId: string;
   defaultPaymentMethodId: string;
   rentOwed: number;
+  /**
+   * One period's rent, integer cents. REQUIRED for auto-pay: without it we
+   * cannot tell this period's rent from accumulated arrears, and an off-session
+   * charge must never sweep a backlog. A guest missing it is skipped, not
+   * charged in full.
+   */
+  monthlyRentCents?: number;
   stripeConnectId?: string;
 }
 
@@ -52,6 +59,8 @@ export interface RentCollectionSummary {
   failureCount: number;
   /** Attempts whose Stripe outcome is unknown and awaiting a human. */
   needsReconciliationCount: number;
+  /** Auto-pay guests skipped because monthlyRentCents is unset or invalid. */
+  missingRentAmountCount: number;
 }
 
 /**
@@ -73,7 +82,13 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
 
   if (snapshot.empty) {
     logger.info('scheduledRentCollection: no auto-pay guests with rent owed');
-    return { matchedCount: 0, attemptedCount: 0, failureCount: 0, needsReconciliationCount };
+    return {
+      matchedCount: 0,
+      attemptedCount: 0,
+      failureCount: 0,
+      needsReconciliationCount,
+      missingRentAmountCount: 0,
+    };
   }
 
   const now = new Date();
@@ -85,14 +100,48 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
   // days, long after any idempotency key has expired.
   const inFlightByGuest = await loadInFlightCentsByGuest(now);
 
+  // Charge ONE PERIOD's rent, never the accumulated balance. rentOwed is a
+  // running ledger with no per-cycle concept — there is no rent accrual job, so
+  // a balance of 150000 may be three months of arrears, and sweeping it
+  // off-session without warning is not a charge the resident consented to.
+  // Arrears stay on rentOwed and surface through overdueRentNotification, which
+  // already queries rentOwed > 0; collecting them is an operator decision.
+  let missingRentAmountCount = 0;
+
   const due = snapshot.docs
     .map((doc) => {
-      const rentOwed = (doc.data() ?? {}).rentOwed as number | undefined;
+      const data = doc.data() ?? {};
+      const rentOwed = data.rentOwed as number | undefined;
+      const monthlyRentCents = data.monthlyRentCents as number | undefined;
       const owed = Number.isFinite(rentOwed) ? (rentOwed as number) : 0;
-      return {
-        doc,
-        dueCents: Math.round(owed - (inFlightByGuest.get(doc.id) ?? 0)),
-      };
+      const outstanding = Math.round(owed - (inFlightByGuest.get(doc.id) ?? 0));
+
+      // Fail closed: no cap means no charge. Auto-pay is opt-in per guest and
+      // the cap is part of opting in, so this is a configuration error, not a
+      // reason to fall back to charging everything.
+      if (!Number.isFinite(monthlyRentCents) || (monthlyRentCents as number) <= 0) {
+        if (outstanding > 0) {
+          missingRentAmountCount += 1;
+          logger.error(
+            'scheduledRentCollection: autoPay enabled without monthlyRentCents, skipping',
+            { guestId: doc.id },
+          );
+        }
+        return { doc, dueCents: 0 };
+      }
+
+      const cap = Math.round(monthlyRentCents as number);
+      const dueCents = Math.min(outstanding, cap);
+
+      if (outstanding > cap) {
+        logger.info('scheduledRentCollection: charging one period, arrears remain', {
+          guestId: doc.id,
+          chargingCents: dueCents,
+          arrearsCents: outstanding - cap,
+        });
+      }
+
+      return { doc, dueCents };
     })
     .filter((entry) => entry.dueCents > 0);
 
@@ -105,6 +154,7 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
       attemptedCount: 0,
       failureCount: 0,
       needsReconciliationCount,
+      missingRentAmountCount,
     };
   }
 
@@ -238,6 +288,7 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
     attemptedCount: due.length,
     failureCount,
     needsReconciliationCount,
+    missingRentAmountCount,
   };
 }
 

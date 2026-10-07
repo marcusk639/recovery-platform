@@ -18,6 +18,7 @@ jest.mock('../../api/firestore', () => ({
             defaultPaymentMethodId: 'pm_test1',
             autoPayEnabled: true,
             rentOwed: 500,
+            monthlyRentCents: 500,
           }),
         },
         {
@@ -28,6 +29,7 @@ jest.mock('../../api/firestore', () => ({
             defaultPaymentMethodId: 'pm_test2',
             autoPayEnabled: true,
             rentOwed: 750,
+            monthlyRentCents: 750,
           }),
         },
       ],
@@ -119,7 +121,8 @@ describe('runRentCollection', () => {
             stripeCustomerId: 'cus_float',
             defaultPaymentMethodId: 'pm_float',
             autoPayEnabled: true,
-            rentOwed: 149.5, // stray non-integer cents — Stripe would reject as-is
+            rentOwed: 149.5,
+            monthlyRentCents: 149.5, // stray non-integer cents — Stripe would reject as-is
           }),
         },
       ],
@@ -151,7 +154,8 @@ describe('runRentCollection', () => {
               defaultPaymentMethodId: 'pm_c',
               stripeConnectId: 'acct_dest',
               autoPayEnabled: true,
-              rentOwed: 10000, // $100.00
+              rentOwed: 10000,
+            monthlyRentCents: 10000, // $100.00
               ...overrides,
             }),
           },

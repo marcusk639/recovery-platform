@@ -80,7 +80,13 @@ export class FakeRentAttemptStore {
 }
 
 /** A guest doc shaped the way scheduledRentCollection reads it. */
-export const fakeGuestDoc = (id: string, rentOwed: number) => ({
+export const fakeGuestDoc = (
+  id: string,
+  rentOwed: number,
+  // Defaults to the full balance so a fixture that does not care about the
+  // one-period cap behaves as it did before the cap existed.
+  monthlyRentCents: number = rentOwed,
+) => ({
   id,
   data: () => ({
     houseId: 'house-1',
@@ -88,6 +94,7 @@ export const fakeGuestDoc = (id: string, rentOwed: number) => ({
     defaultPaymentMethodId: `pm_${id}`,
     autoPayEnabled: true,
     rentOwed,
+    monthlyRentCents,
   }),
 });
 
