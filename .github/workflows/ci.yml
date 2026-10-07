@@ -150,6 +150,14 @@ jobs:
       # under regroup/mobile/patches are load-bearing, so run it explicitly.
       - name: Install dependencies
         run: cd regroup/mobile && npm ci --ignore-scripts && npx patch-package
+      # Ratchet, not a clean-run gate. This package had no typecheck step at all,
+      # so it starts from a large pre-existing error count pinned in
+      # regroup/mobile/.typecheck-baseline; the step fails only when the count
+      # goes UP. If this run's count differs from the baseline purely because CI
+      # resolves dependencies differently from a developer machine, set the
+      # baseline from a CI run rather than loosening the gate.
+      - name: Typecheck (ratchet)
+        run: cd regroup/mobile && npm run typecheck:ratchet
       - name: Test
         run: cd regroup/mobile && npm test -- --ci
 
