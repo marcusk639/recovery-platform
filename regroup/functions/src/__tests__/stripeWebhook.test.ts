@@ -376,8 +376,17 @@ function setupIdempotencyTransaction(alreadyExists: boolean): void {
   mockRunTransaction.mockImplementation(
     async (fn: (txn: unknown) => Promise<unknown>) => {
       const txn = {
-        get: jest.fn().mockResolvedValue({ exists: alreadyExists }),
+        get: jest.fn().mockResolvedValue({
+          exists: alreadyExists,
+          // payment_intent.succeeded reads payments/{id}.rentApplied inside its
+          // own transaction to make the rentOwed decrement exactly-once.
+          get: (_field: string) => undefined,
+        }),
         set: jest.fn(),
+        // The rentOwed decrement moved inside a transaction. Delegate to the
+        // same doc-level mock the assertions use, dropping the ref argument, so
+        // they keep asserting the write itself rather than the mechanism.
+        update: (_ref: unknown, data: unknown) => mockUpdate(data),
       };
       return fn(txn);
     },
@@ -883,6 +892,49 @@ describe("payment_intent.succeeded", () => {
       String(args[0]).toLowerCase().includes("fcm"),
     );
     expect(fcmErrors).toHaveLength(0);
+  });
+
+  test("a redelivered payment_intent.succeeded does not decrement rentOwed twice", async () => {
+    // Stripe can deliver the same event more than once, and any retry after a
+    // partial failure re-enters this handler. FieldValue.increment is atomic but
+    // NOT idempotent, so applying it twice would credit the resident twice and
+    // the house would lose the difference. The guard is payments/{id}.rentApplied,
+    // checked and set in the same transaction as the decrement.
+    //
+    // The handler runs two transactions in order: the event-idempotency claim,
+    // then the rentOwed application. This mock answers them in sequence — the
+    // event is unseen, but the payment has already had rent applied.
+    let txnCall = 0;
+    const installSequencedTxn = () => mockRunTransaction.mockImplementation(
+      async (fn: (txn: unknown) => Promise<unknown>) => {
+        txnCall += 1;
+        const isPaymentTxn = txnCall === 2;
+        const txn = {
+          get: jest.fn().mockResolvedValue({
+            exists: isPaymentTxn,
+            get: (field: string) =>
+              isPaymentTxn && field === "rentApplied" ? true : undefined,
+          }),
+          set: jest.fn(),
+          update: (_ref: unknown, data: unknown) => mockUpdate(data),
+        };
+        return fn(txn);
+      },
+    );
+
+    const pi = makePaymentIntent({ amount: 50000 });
+    mockConstructEvent.mockReturnValue(
+      makeStripeEvent("payment_intent.succeeded", pi),
+    );
+    setupForPaymentSucceeded({ guestData: { rentOwed: 100000 } });
+    installSequencedTxn();
+
+    await stripeWebhook(makeRequest({}) as never, makeResponse() as never);
+
+    // The decrement must not have been applied a second time.
+    expect(mockUpdate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ rentOwed: expect.anything() }),
+    );
   });
 
   test("overpayment decrements rentOwed atomically (carries a credit)", async () => {

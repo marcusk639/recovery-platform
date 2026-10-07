@@ -387,15 +387,46 @@ async function handlePaymentIntentSucceeded(
     }
   }
 
-  // 2. Atomically decrement guest rentOwed (integer cents) — eliminates read-modify-write race
+  // 2. Decrement guest rentOwed (integer cents), exactly once per PaymentIntent.
+  //
+  // FieldValue.increment is atomic against concurrent writers but NOT idempotent:
+  // applying it twice for one payment credits the resident twice and the house
+  // loses the difference. Stripe can deliver the same event more than once, and
+  // a retry after a partial failure would re-enter this handler, so the guard
+  // has to live in the data, not in the delivery path.
+  //
+  // The payments/{paymentIntentId} doc is the marker: a transaction reads it,
+  // skips if rentApplied is already set, and otherwise decrements and sets the
+  // flag in the same commit. The doc is keyed by PaymentIntent id and is already
+  // written by recordPaymentDoc, so this adds no new collection.
   if (!guestSnap || !guestSnap.exists) {
     logger.warn("payment_intent.succeeded: guest not found", { guestId });
   } else {
     const guestData = guestSnap.data() as GuestDoc;
 
-    await guestRef.update({
-      rentOwed: admin.firestore.FieldValue.increment(-amountCents),
+    const paymentRef = db.collection("payments").doc(paymentIntent.id);
+    const applied = await db.runTransaction(async (txn) => {
+      const paymentSnap = await txn.get(paymentRef);
+      if (paymentSnap.exists && paymentSnap.get("rentApplied") === true) {
+        return false;
+      }
+      txn.update(guestRef, {
+        rentOwed: admin.firestore.FieldValue.increment(-amountCents),
+      });
+      txn.set(
+        paymentRef,
+        { rentApplied: true, rentAppliedAmountCents: amountCents },
+        { merge: true },
+      );
+      return true;
     });
+
+    if (!applied) {
+      logger.info(
+        "payment_intent.succeeded: rentOwed already applied, skipping",
+        { paymentIntentId: paymentIntent.id, guestId },
+      );
+    }
 
     // 3. Notify the guest
     await sendFcmToUser(
