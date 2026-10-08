@@ -119,6 +119,22 @@ service cloud.firestore {
       match /gratitudeEntries/{date} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
+
+      // Per-user reverse index of 12-step meeting check-ins.
+      //
+      // Attendance deliberately does NOT live on meetingInstances: that collection
+      // is world-readable so unauthenticated clients can discover meetings, and
+      // Firestore rules are document-level — there is no rule that hides an
+      // `attendees` field while keeping `attendeeCount` public. Who attended which
+      // 12-step meeting is recovery-status PII, so it is scoped to its owner here.
+      //
+      // Writes are server-only (checkInToMeeting): the callable also maintains
+      // meetingInstances.attendeeCount, and a client-writable record would let a
+      // user assert attendance they never had.
+      match /meetingAttendance/{instanceId} {
+        allow read: if isOwner(userId);
+        allow write: if false;
+      }
     }
 
     // ============================================
