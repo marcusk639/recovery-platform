@@ -146,10 +146,34 @@ class RatsGooglePlacesAutocomplete extends Component<
           }
         } // custom description render
         onPress={onPress}
+        // Places API (New). The legacy places-backend.googleapis.com service is
+        // disabled on the phoenix-cleanhouse project, so the legacy
+        // /maps/api/place/* endpoints this library calls by default cannot work.
+        //
+        // isNewPlacesAPI switches it to POST /v1/places:autocomplete and
+        // GET /v1/places/{id}, and the library maps the new response back to the
+        // legacy shape internally (placePrediction.text.text -> description,
+        // placeId -> place_id, structuredFormat -> structured_formatting), so
+        // onPress still receives GooglePlaceData/GooglePlaceDetail and callers
+        // like rats-search-bar and rats-text-input need no change.
+        isNewPlacesAPI
+        requestUrl={{
+          useOnPlatform: 'all',
+          url: 'https://places.googleapis.com',
+        }}
+        // Field mask for the Place Details call only — the library passes
+        // `fields` to GET /v1/places/{id} and not to :autocomplete. Names are
+        // UNPREFIXED here: the `places.` prefix belongs to search responses,
+        // where results sit under places[], and sending it to Details returns
+        // HTTP 400 "Request contains an invalid argument" (verified against the
+        // live API). Defaults to '*' in the library, which bills at the widest
+        // SKU, so this narrows it to what the legacy mapping actually reads.
+        fields="id,displayName,formattedAddress,location,addressComponents,types"
         query={{
-          // available options: https://developers.google.com/places/web-service/autocomplete
+          // Options: https://developers.google.com/maps/documentation/places/web-service/place-autocomplete
           key: apiKey,
-          language: 'en', // language of the results
+          // New API uses languageCode, not language.
+          languageCode: 'en',
         }}
         styles={styles ? styles : autocompleteStyles}
         GooglePlacesSearchQuery={{
