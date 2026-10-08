@@ -26,6 +26,21 @@ describe("meetingAttendance helpers", () => {
     expect(record.attendedAt instanceof Date).toBe(false);
   });
 
+  it("accepts an explicit attendedAt so a backfill can preserve real history", () => {
+    const scheduled = { seconds: 1700000000, nanoseconds: 0 } as never;
+    const record = buildAttendanceRecord({
+      instanceId: "inst-9",
+      meetingId: "meet-3",
+      groupId: "group-7",
+      scheduledAt: scheduled,
+      attendedAt: scheduled,
+    });
+    expect(record.attendedAt).toBe(scheduled);
+    expect(record.attendedAt).not.toEqual(
+      admin.firestore.FieldValue.serverTimestamp(),
+    );
+  });
+
   it("carries groupId and instanceId so the index is queryable without a join", () => {
     const record = buildAttendanceRecord({
       instanceId: "inst-9",

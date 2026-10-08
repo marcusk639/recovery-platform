@@ -131,8 +131,12 @@ const EditMeetingInstanceScreen: React.FC = () => {
     setIsCheckingIn(true);
     try {
       const functions = require('@react-native-firebase/functions').default;
+      // groupId is required by the callable (it throws invalid-argument without
+      // it) and is used to verify group membership before recording attendance.
+      // Omitting it made every check-in from this screen fail.
       const result = await functions().httpsCallable('checkInToMeeting')({
         instanceId,
+        groupId,
       });
       const data = result.data as {
         success: boolean;

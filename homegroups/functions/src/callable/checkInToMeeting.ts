@@ -96,11 +96,16 @@ export const checkInToMeeting = onCall(
     // concurrent check-ins could both pass it and both increment the count —
     // existing `attendeeCount` values may therefore sit above `attendees.length`.
     const attendanceRef = db.doc(attendanceDocPath(userId, instanceId));
-    const applied = await db.runTransaction(async (txn) => {
+    const outcome = await db.runTransaction(async (txn) => {
       const existing = await txn.get(attendanceRef);
+      const instanceSnap = await txn.get(instanceRef);
+      const currentCount =
+        (instanceSnap.data()?.attendeeCount as number) ?? 0;
+
       if (existing.exists) {
-        return false;
+        return { applied: false, attendeeCount: currentCount };
       }
+
       txn.set(
         attendanceRef,
         buildAttendanceRecord({
@@ -111,22 +116,38 @@ export const checkInToMeeting = onCall(
             (instance.scheduledAt as admin.firestore.Timestamp) ?? null,
         }),
       );
+      // Deliberately does NOT write `attendees`. meetingInstances is
+      // `allow read: if true` so meetings can be discovered without signing in,
+      // so attendee ids on that document are readable by anyone. The legacy array
+      // is left in place only so the backfill can still read historical rows; it
+      // is dropped once that has run.
       txn.update(instanceRef, {
-        attendees: admin.firestore.FieldValue.arrayUnion(userId),
         attendeeCount: admin.firestore.FieldValue.increment(1),
       });
-      return true;
+      return { applied: true, attendeeCount: currentCount + 1 };
     });
 
-    // Also record last meeting attendance on user document for activity tracking
-    await db.collection("users").doc(userId).update({
-      "activityLog.lastMeetingAttendance":
-        admin.firestore.FieldValue.serverTimestamp(),
-      lastActivityAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+    const { applied, attendeeCount: newCount } = outcome;
 
-    const storedCount = (instance.attendeeCount as number) ?? 0;
-    const newCount = applied ? storedCount + 1 : storedCount;
+    // Activity tracking, only for a check-in that actually happened: a repeat tap
+    // must stay a true no-op. `set(..., merge)` rather than `update()` because an
+    // update against a missing user doc would throw AFTER the attendance record is
+    // already committed, surfacing a failure for a check-in that succeeded.
+    if (applied) {
+      await db
+        .collection("users")
+        .doc(userId)
+        .set(
+          {
+            activityLog: {
+              lastMeetingAttendance:
+                admin.firestore.FieldValue.serverTimestamp(),
+            },
+            lastActivityAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        );
+    }
 
     // Deliberately identifier-free: a user id joined to a meeting instance is
     // recovery-status PII, and Cloud Functions logs sit outside Firestore rules.

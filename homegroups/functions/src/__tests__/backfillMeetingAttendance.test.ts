@@ -81,6 +81,21 @@ describe("backfillMeetingAttendance", () => {
     expect(db.instanceUpdates).toEqual([]);
   });
 
+  it("stamps attendedAt from the meeting's scheduledAt, not the migration time", async () => {
+    const scheduled = { seconds: 1700000000, nanoseconds: 0 };
+    const db = makeFakeDb({
+      "inst-1": { groupId: "g1", attendees: ["u1"], scheduledAt: scheduled },
+    });
+
+    await backfillMeetingAttendance(db as never);
+
+    const rec = db.written["users/u1/meetingAttendance/inst-1"];
+    // A backfilled row stamped with "now" would claim every historical meeting was
+    // attended on migration day, making the field useless for history.
+    expect(rec.attendedAt).toBe(scheduled);
+    expect(rec.scheduledAt).toBe(scheduled);
+  });
+
   it("tolerates an instance with no attendees field", async () => {
     const db = makeFakeDb({ "inst-2": { groupId: "g1" } });
 

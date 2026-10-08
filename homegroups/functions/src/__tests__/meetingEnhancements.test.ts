@@ -28,7 +28,9 @@ const mockServerTimestamp = jest.fn(() => ({
 
 // Transaction + root-level doc() support. checkInToMeeting writes the per-user
 // attendance record and the instance's attendeeCount inside one transaction.
-const mockTxnGet = jest.fn().mockResolvedValue({ exists: false });
+const mockTxnGet = jest
+  .fn()
+  .mockResolvedValue({ exists: false, data: () => undefined });
 const mockTxnSet = jest.fn();
 const mockTxnUpdate = jest.fn();
 const mockRunTransaction = jest.fn(async (fn: any) =>
@@ -596,7 +598,10 @@ describe("checkInToMeeting", () => {
     const groupId = "group-x";
     const instanceId = "instance-x";
 
-    mockTxnGet.mockResolvedValue({ exists: false }); // no attendance record yet
+    // attendance doc absent; the instance read inside the txn reports 3 already there
+    mockTxnGet
+      .mockResolvedValueOnce({ exists: false })
+      .mockResolvedValueOnce({ exists: true, data: () => ({ attendeeCount: 3 }) });
 
     const mockDocGet = jest.fn();
 
@@ -630,11 +635,16 @@ describe("checkInToMeeting", () => {
         return {
           doc: jest.fn().mockReturnValue({
             update: mockUpdate,
+            set: mockSet,
           }),
         };
       }
       return {
-        doc: jest.fn().mockReturnValue({ get: jest.fn(), update: mockUpdate }),
+        doc: jest.fn().mockReturnValue({
+          get: jest.fn(),
+          update: mockUpdate,
+          set: mockSet,
+        }),
       };
     });
 
@@ -645,9 +655,11 @@ describe("checkInToMeeting", () => {
       makeAuthRequest(userId, { groupId, instanceId }),
     );
 
+    // I2: count comes from the value read INSIDE the transaction (3 -> 4), not from
+    // the stale pre-transaction snapshot (which said 0).
     expect(result).toEqual({
       success: true,
-      attendeeCount: 1,
+      attendeeCount: 4,
       alreadyCheckedIn: false,
     });
 
@@ -661,6 +673,11 @@ describe("checkInToMeeting", () => {
       expect.anything(),
       expect.objectContaining({ attendeeCount: expect.anything() }),
     );
+    // C1: must NOT keep publishing attendee ids onto the world-readable instance.
+    // meetingInstances stays `allow read: if true` for discovery, so any write of
+    // attendee ids there is a fresh disclosure of recovery-status PII.
+    const instancePatch = mockTxnUpdate.mock.calls[0][1];
+    expect(instancePatch).not.toHaveProperty("attendees");
   });
 
   it("Idempotent: returns alreadyCheckedIn=true when user checks in twice", async () => {
@@ -668,7 +685,10 @@ describe("checkInToMeeting", () => {
     const groupId = "group-y";
     const instanceId = "instance-y";
 
-    mockTxnGet.mockResolvedValue({ exists: true }); // attendance already recorded
+    // attendance already recorded; the in-txn instance read reports the live count
+    mockTxnGet
+      .mockResolvedValueOnce({ exists: true })
+      .mockResolvedValueOnce({ exists: true, data: () => ({ attendeeCount: 1 }) });
 
     mockCollection.mockImplementation((name: string) => {
       if (name === "members") {
@@ -697,7 +717,11 @@ describe("checkInToMeeting", () => {
         };
       }
       return {
-        doc: jest.fn().mockReturnValue({ get: jest.fn(), update: mockUpdate }),
+        doc: jest.fn().mockReturnValue({
+          get: jest.fn(),
+          update: mockUpdate,
+          set: mockSet,
+        }),
       };
     });
 
@@ -717,6 +741,10 @@ describe("checkInToMeeting", () => {
     // Should write nothing when the attendance record already exists
     expect(mockTxnSet).not.toHaveBeenCalled();
     expect(mockTxnUpdate).not.toHaveBeenCalled();
+    // I1: and must not refresh the user's activity log either — the old code
+    // early-returned before that write, so a double tap was a true no-op.
+    expect(mockUpdate).not.toHaveBeenCalled();
+    expect(mockSet).not.toHaveBeenCalled();
   });
 
   it("Privacy: never logs the attending user id or the instance id", async () => {
@@ -724,7 +752,7 @@ describe("checkInToMeeting", () => {
     const groupId = "group-pii";
     const instanceId = "instance-pii";
 
-    mockTxnGet.mockResolvedValue({ exists: false });
+    mockTxnGet.mockResolvedValue({ exists: false, data: () => undefined });
 
     mockCollection.mockImplementation((name: string) => {
       if (name === "members") {
@@ -749,7 +777,11 @@ describe("checkInToMeeting", () => {
         };
       }
       return {
-        doc: jest.fn().mockReturnValue({ get: jest.fn(), update: mockUpdate }),
+        doc: jest.fn().mockReturnValue({
+          get: jest.fn(),
+          update: mockUpdate,
+          set: mockSet,
+        }),
       };
     });
 

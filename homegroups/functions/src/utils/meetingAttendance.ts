@@ -21,12 +21,20 @@ export function buildAttendanceRecord(args: {
   meetingId: string | null;
   groupId: string;
   scheduledAt: admin.firestore.Timestamp | null;
+  /**
+   * When the check-in happened. Defaults to the server's clock, which is right
+   * for a live check-in. A backfill MUST pass the meeting's own `scheduledAt`
+   * instead: stamping migrated rows with "now" would claim every historical
+   * meeting was attended on migration day.
+   */
+  attendedAt?: admin.firestore.Timestamp | null;
 }): Record<string, unknown> {
   return {
     instanceId: args.instanceId,
     meetingId: args.meetingId,
     groupId: args.groupId,
     scheduledAt: args.scheduledAt,
-    attendedAt: admin.firestore.FieldValue.serverTimestamp(),
+    attendedAt:
+      args.attendedAt ?? admin.firestore.FieldValue.serverTimestamp(),
   };
 }

@@ -57,13 +57,16 @@ export async function backfillMeetingAttendance(
           recordsSkipped += 1;
           continue;
         }
+        const scheduledAt =
+          (data.scheduledAt as admin.firestore.Timestamp) ?? null;
         await ref.set(
           buildAttendanceRecord({
             instanceId: snap.id,
             meetingId: (data.meetingId as string) ?? null,
             groupId: data.groupId as string,
-            scheduledAt:
-              (data.scheduledAt as admin.firestore.Timestamp) ?? null,
+            scheduledAt,
+            // Preserve real history: the meeting's own time, not migration time.
+            attendedAt: scheduledAt,
           }),
         );
         recordsWritten += 1;
