@@ -4,6 +4,7 @@ import * as logger from "firebase-functions/logger";
 import { onRequest } from "firebase-functions/v2/https";
 import { Request, Response } from "express";
 import { createHmac, timingSafeEqual } from "crypto";
+import { MEETING_ATTENDANCE_SUBCOLLECTION } from "../utils/meetingAttendance";
 
 // Fixed-salt used only to normalize string lengths before timingSafeEqual — not a secret.
 const TIMING_SAFE_COMPARISON_SALT = "timing-safe-comparison-salt-v1";
@@ -66,24 +67,45 @@ export async function getMeetingAttendanceHandler(
   try {
     const RESULT_LIMIT = 100;
     const db = admin.firestore();
+    // Reads the caller's own attendance index rather than
+    // meetingInstances.attendees. That array was world-readable (the collection
+    // is public so meetings can be discovered unauthenticated), which exposed who
+    // attended a given 12-step meeting. The doc id here IS the instance id.
     const snapshot = await db
-      .collection("meetingInstances")
+      .collection(`users/${userId}/${MEETING_ATTENDANCE_SUBCOLLECTION}`)
       .where("groupId", "==", groupId)
-      .where("attendees", "array-contains", userId)
       .orderBy("scheduledAt", "desc")
       .limit(RESULT_LIMIT)
       .get();
 
-    const checkIns = snapshot.docs.map((doc) => {
+    const attended = snapshot.docs.map((doc) => {
       const data = doc.data();
       const scheduledAt: Date | null = data.scheduledAt?.toDate?.() ?? null;
       return {
         instanceId: doc.id,
         meetingId: (data.meetingId as string) ?? null,
         scheduledAt: scheduledAt ? scheduledAt.toISOString() : null,
-        attendeeCount: (data.attendeeCount as number) ?? 0,
       };
     });
+
+    // attendeeCount is the public, denormalized number and still lives on the
+    // instance, so fetch it in one batched read instead of N round trips.
+    const instanceSnaps = attended.length
+      ? await db.getAll(
+          ...attended.map((a) => db.doc(`meetingInstances/${a.instanceId}`)),
+        )
+      : [];
+    const countByInstanceId = new Map<string, number>(
+      instanceSnaps.map((snap) => [
+        snap.id,
+        (snap.data()?.attendeeCount as number) ?? 0,
+      ]),
+    );
+
+    const checkIns = attended.map((a) => ({
+      ...a,
+      attendeeCount: countByInstanceId.get(a.instanceId) ?? 0,
+    }));
 
     const truncated = checkIns.length === RESULT_LIMIT;
 
