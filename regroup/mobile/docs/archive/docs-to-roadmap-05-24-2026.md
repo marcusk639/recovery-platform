@@ -378,7 +378,7 @@ Status: MISSING
 Effort: S
 
 What's needed:
-- [ ] Revoke AIzaSyCKXu_eJrW6QBamTNPyCOQy_lVO2xhwl9Q in Google Cloud Console; replace with defineSecret("GOOGLE_MAPS_API_KEY") in functions/src/config.ts
+- [ ] Revoke AIza<redacted-this-key-needs-rotating> in Google Cloud Console; replace with defineSecret("GOOGLE_MAPS_API_KEY") in functions/src/config.ts
 - [ ] Run firebase functions:secrets:set GOOGLE_MAPS_API_KEY with new value
 - [ ] Rotate SendGrid API key in dashboard; run firebase functions:secrets:set SENDGRID_API_KEY
 - [ ] Run git filter-repo --path scripts/.env --invert-paths to remove from history

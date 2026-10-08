@@ -137,7 +137,7 @@ const ref = await db.collection("referrals").add({
 
 **Domain:** Security — Secret Exposure
 **File:** `homegroups/functions/src/api/api.ts:10`
-**Issue:** `const API_KEY = "AIzaSyCKXu_eJrW6QBamTNPyCOQy_lVO2xhwl9Q"` is a literal string in committed TypeScript source. Maps API keys have per-project billing quotas and can be abused for unauthorized geocoding usage.
+**Issue:** `const API_KEY = "AIza<redacted-this-key-needs-rotating>"` is a literal string in committed TypeScript source. Maps API keys have per-project billing quotas and can be abused for unauthorized geocoding usage.
 **Fix needed:** Move to `process.env.GOOGLE_MAPS_API_KEY`, provision via Firebase Secret Manager. If the key was ever pushed to a remote, rotate it immediately.
 **Confidence:** 98
 

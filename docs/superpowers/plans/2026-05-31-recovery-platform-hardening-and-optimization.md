@@ -326,7 +326,7 @@
 
 ### Task 4: Rotate and remove the Google Maps API key (C6)
 
-**Why:** `const API_KEY = "AIzaSyCKXu_eJrW6QBamTNPyCOQy_lVO2xhwl9Q"` is a string literal at `homegroups/functions/src/api/api.ts:9`. API keys in git history are considered compromised regardless of current source state.
+**Why:** `const API_KEY = "AIza<redacted-this-key-needs-rotating>"` is a string literal at `homegroups/functions/src/api/api.ts:9`. API keys in git history are considered compromised regardless of current source state.
 
 **Files:**
 
@@ -355,7 +355,7 @@
   Replace:
 
   ```typescript
-  const API_KEY = "AIzaSyCKXu_eJrW6QBamTNPyCOQy_lVO2xhwl9Q";
+  const API_KEY = "AIza<redacted-this-key-needs-rotating>";
   ```
 
   With:

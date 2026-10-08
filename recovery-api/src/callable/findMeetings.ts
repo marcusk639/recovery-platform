@@ -28,6 +28,21 @@ import type { DirectoryMeeting } from '../entities/DirectoryMeeting';
 const DEFAULT_RADIUS_METERS = 5000;
 const MAX_RADIUS_METERS = 100000;
 
+/**
+ * Per-geohash-bound read cap.
+ *
+ * Without it, a max-radius search in a dense metro reads and bills every
+ * directoryMeetings doc inside the geohash ranges before any distance, day or
+ * type filtering happens — all of which is done in memory below. radiusMeters is
+ * caller-controlled up to MAX_RADIUS_METERS, so the read volume is too.
+ *
+ * Geohash order is not distance order, so a bound that hits this cap can omit
+ * meetings that were genuinely within the radius. That makes truncation a
+ * correctness matter, not just a cost one, so it is reported to the caller
+ * rather than hidden. The cap is set well above any plausible real bound.
+ */
+const PER_BOUND_READ_LIMIT = 500;
+
 const FindMeetingsSchema = z.object({
   location: z.object({
     lat: z.number().min(-90).max(90),
@@ -46,7 +61,7 @@ export async function handleFindMeetings(
   data: unknown,
   context: ServiceAuthContext,
   deps: FindMeetingsDeps,
-): Promise<{ meetings: DirectoryMeeting[] }> {
+): Promise<{ meetings: DirectoryMeeting[]; truncated: boolean }> {
   let parsed: z.infer<typeof FindMeetingsSchema>;
   try {
     parsed = FindMeetingsSchema.parse(data);
@@ -75,6 +90,7 @@ export async function handleFindMeetings(
         .orderBy('location.geohash')
         .startAt(start)
         .endAt(end)
+        .limit(PER_BOUND_READ_LIMIT)
         .get(),
     ),
   );
@@ -111,7 +127,19 @@ export async function handleFindMeetings(
     logger.warn('findMeetings: audit write failed', err),
   );
 
-  return { meetings };
+  // True when any bound returned a full page, meaning results may be incomplete.
+  const truncated = snapshots.some(
+    (snap) => snap.docs.length >= PER_BOUND_READ_LIMIT,
+  );
+  if (truncated) {
+    logger.warn('findMeetings: a geohash bound hit the read limit', {
+      radiusMeters,
+      bounds: bounds.length,
+      limit: PER_BOUND_READ_LIMIT,
+    });
+  }
+
+  return { meetings, truncated };
 }
 
 /** Coarsen a coordinate to ~2 decimals (~1km) so the audit row isn't a precise fix. */
