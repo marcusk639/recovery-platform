@@ -95,12 +95,33 @@ const EditMeetingInstanceScreen: React.FC = () => {
     [instance?.scheduledAt, instance?.isCancelled],
   );
 
-  // Determine if current user already checked in
+  // Determine if current user already checked in.
+  //
+  // Reads this user's own attendance record rather than the instance's attendee
+  // list: meetingInstances is world-readable for meeting discovery, so the list
+  // no longer lives there.
   useEffect(() => {
-    if (instance && currentUser && instance.attendees?.includes(currentUser.uid)) {
-      setCheckedIn(true);
+    if (!instance?.id || !currentUser) {
+      return;
     }
-  }, [instance, currentUser]);
+    let cancelled = false;
+    firestore()
+      .doc(`users/${currentUser.uid}/meetingAttendance/${instance.id}`)
+      .get()
+      .then(snap => {
+        if (!cancelled) {
+          setCheckedIn(snap.exists);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCheckedIn(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [instance?.id, currentUser]);
 
   const handleCheckIn = async () => {
     if (!currentUser) {
