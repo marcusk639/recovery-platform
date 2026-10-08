@@ -9,6 +9,10 @@ import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { db } from "../utils/firebase";
 import { requireAuth } from "../utils/callableWrapper";
+import {
+  attendanceDocPath,
+  buildAttendanceRecord,
+} from "../utils/meetingAttendance";
 
 interface CheckInToMeetingData {
   groupId: string;
@@ -86,20 +90,32 @@ export const checkInToMeeting = onCall(
       );
     }
 
-    // Check if already checked in
-    const existingAttendees: string[] = instance.attendees ?? [];
-    if (existingAttendees.includes(userId)) {
-      return {
-        success: true,
-        attendeeCount: existingAttendees.length,
-        alreadyCheckedIn: true,
-      };
-    }
-
-    // Atomically add user to attendees and increment count
-    await instanceRef.update({
-      attendees: admin.firestore.FieldValue.arrayUnion(userId),
-      attendeeCount: admin.firestore.FieldValue.increment(1),
+    // Idempotency and the count increment must agree, so both live in one
+    // transaction keyed on the per-user attendance doc. The previous guard read
+    // `instance.attendees` and then updated outside any transaction, so two
+    // concurrent check-ins could both pass it and both increment the count —
+    // existing `attendeeCount` values may therefore sit above `attendees.length`.
+    const attendanceRef = db.doc(attendanceDocPath(userId, instanceId));
+    const applied = await db.runTransaction(async (txn) => {
+      const existing = await txn.get(attendanceRef);
+      if (existing.exists) {
+        return false;
+      }
+      txn.set(
+        attendanceRef,
+        buildAttendanceRecord({
+          instanceId,
+          meetingId: (instance.meetingId as string) ?? null,
+          groupId: instance.groupId as string,
+          scheduledAt:
+            (instance.scheduledAt as admin.firestore.Timestamp) ?? null,
+        }),
+      );
+      txn.update(instanceRef, {
+        attendees: admin.firestore.FieldValue.arrayUnion(userId),
+        attendeeCount: admin.firestore.FieldValue.increment(1),
+      });
+      return true;
     });
 
     // Also record last meeting attendance on user document for activity tracking
@@ -109,16 +125,17 @@ export const checkInToMeeting = onCall(
       lastActivityAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    const newCount = existingAttendees.length + 1;
+    const storedCount = (instance.attendeeCount as number) ?? 0;
+    const newCount = applied ? storedCount + 1 : storedCount;
 
-    logger.info(
-      `User ${userId} checked in to meeting instance ${instanceId}. Count: ${newCount}`,
-    );
+    // Deliberately identifier-free: a user id joined to a meeting instance is
+    // recovery-status PII, and Cloud Functions logs sit outside Firestore rules.
+    logger.info("Meeting check-in processed", { applied });
 
     return {
       success: true,
       attendeeCount: newCount,
-      alreadyCheckedIn: false,
+      alreadyCheckedIn: !applied,
     };
   },
 );
