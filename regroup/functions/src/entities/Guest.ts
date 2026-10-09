@@ -1,3 +1,4 @@
+import { Cents, asCents } from "../util/money";
 import { BaseEntity } from "./BaseEntity";
 import { Roles } from "./Roles";
 import { getTodaysDate, getCurrentTime } from "../util/date";
@@ -90,8 +91,8 @@ export class Guest extends BaseEntity {
   userId: string = "";
   houseId: string = "";
   isAdmin: boolean = false;
-  rentOwed: number = 0;
-  choreFees: number = 0;
+  rentOwed: Cents = asCents(0);
+  choreFees: Cents = asCents(0);
   dailyHabit: number = 0;
   drugOfChoice: string = "";
   email: string = "";

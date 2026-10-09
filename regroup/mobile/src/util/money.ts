@@ -52,6 +52,23 @@ export function dollarsToCents(dollars: Dollars): Cents {
   return Math.round(dollars * 100) as Cents;
 }
 
+/**
+ * Adds cent amounts and keeps the unit.
+ *
+ * `a + b` on two Cents yields plain `number`, so storing the result needs a
+ * re-assertion. Without a helper the obvious workaround is an `as Cents` cast,
+ * and a codebase that casts routinely has no brand at all. These keep the safe
+ * path the short one.
+ */
+export function addCents(...amounts: Cents[]): Cents {
+  return amounts.reduce<number>((sum, n) => sum + n, 0) as Cents;
+}
+
+/** Subtracts cents from cents, clamping at zero so a balance cannot go negative. */
+export function subtractCents(from: Cents, amount: Cents): Cents {
+  return Math.max(0, from - amount) as Cents;
+}
+
 export function centsToDollars(cents: Cents): Dollars {
   return (cents / 100) as Dollars;
 }

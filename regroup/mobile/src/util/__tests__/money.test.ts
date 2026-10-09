@@ -4,9 +4,11 @@ import {
   asCents,
   asDollars,
   centsToDollars,
+  addCents,
   dollarsToCents,
   formatCents,
   parseDollarsInput,
+  subtractCents,
 } from '../money';
 
 describe('money units', () => {
@@ -98,6 +100,27 @@ describe('money units', () => {
       // functions with branded parameters rather than inline expressions.
       const leaked: number = owed + rent;
       expect(leaked).toBe(50500);
+    });
+  });
+
+  describe('arithmetic that keeps its unit', () => {
+    it('adds cents without losing the brand', () => {
+      const total: Cents = addCents(asCents(50000), asCents(2500));
+      expect(total).toBe(52500);
+      expect(addCents()).toBe(0);
+    });
+
+    it('accrues rent correctly: dollars converted, then added as cents', () => {
+      // The rent-accrual job that does not exist yet. Written the wrong way
+      // (owed + monthlyRent) this does not compile, which is the point.
+      const owed = asCents(50000);
+      const monthlyRent = asDollars(750);
+      expect(addCents(owed, dollarsToCents(monthlyRent))).toBe(125000);
+    });
+
+    it('subtracts a payment and clamps at zero rather than going negative', () => {
+      expect(subtractCents(asCents(50000), asCents(20000))).toBe(30000);
+      expect(subtractCents(asCents(5000), asCents(9999))).toBe(0);
     });
   });
 });
