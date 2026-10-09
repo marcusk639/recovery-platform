@@ -25,6 +25,7 @@ import { verifyStripeWebhook } from "../util/verifyStripeWebhook";
 import { sendFcmToHouseAdmins } from "../util/notifications";
 import { sendEmail, regroupEmail } from "../util/email";
 import type { SubscriptionDoc } from "../api/firestore";
+import { Cents } from "../util/money";
 
 // ---------------------------------------------------------------------------
 // Firestore data-model types
@@ -48,7 +49,7 @@ interface GuestDoc {
   userId: string;
   firstName: string;
   lastName: string;
-  rentOwed?: number;
+  rentOwed?: Cents;
   rentDueDate?: string; // YYYY-MM-DD (optional live field)
   email?: string;
 }

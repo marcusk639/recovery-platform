@@ -2,6 +2,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logger } from "firebase-functions";
 import { guestCollection } from "../api/firestore";
 import { sendFcmToHouseAdmins } from "../util/notifications";
+import { Cents } from "../util/money";
 
 const OVERDUE_DAYS_THRESHOLD = 3;
 
@@ -9,7 +10,7 @@ interface OverdueGuestFields {
   houseId: string;
   firstName: string;
   lastName: string;
-  rentOwed: number;
+  rentOwed: Cents;
 }
 
 /**

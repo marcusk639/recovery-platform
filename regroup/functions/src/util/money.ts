@@ -22,8 +22,24 @@
  * dollars and raising guest.rentOwed in cents -- would live here.
  *
  * These brands make the mistake a compile error instead. They carry no runtime
- * cost — a branded value is still just a number at runtime — so the conversion
- * helpers are the only place a /100 or *100 should appear.
+ * cost — a branded value is still just a number at runtime.
+ *
+ * Scope, stated honestly: this module is NOT yet the single conversion point.
+ * Roughly a dozen hand-rolled `/100` formatters survive across the money UI
+ * (ResidentPayment, PaymentDashboard, BalanceDashboard, Treasury*, receiptService,
+ * treasuryReport, rentPaymentHelpers — TreasuryDashboard even declares its own
+ * local `formatCents`). Consolidating them is deliberately a separate change:
+ * rewriting a dozen display sites in the same pass as the type work is how a 100x
+ * bug gets shipped. Until then, treat an unbranded `/100` you find as unconverted
+ * legacy rather than as evidence this module is unused.
+ *
+ * What the brands DO buy, verified by probe:
+ *   - writing a wrong-unit or unbranded value INTO a `Cents` field is a compile
+ *     error, which is the rent-accrual bug
+ *   - reading a `Cents` value out into plain `number` is allowed, which is what
+ *     every display site does
+ * So the protection is on the write side. It does not validate that stored data
+ * is really in the unit it claims — see `asCents`.
  *
  * There is no rent-accrual job in regroup today; `rentOwed` is raised by a
  * human. When that job is written it will need `dollarsToCents(house.monthlyRent)`,
@@ -40,8 +56,13 @@ export type Cents = number & { readonly [centsBrand]: true };
 export type Dollars = number & { readonly [dollarsBrand]: true };
 
 /**
- * Assert that a raw number is already in cents. Use at a trust boundary —
- * reading a stored field, or a Stripe amount — not to paper over a mismatch.
+ * Assert that a raw number is already in cents.
+ *
+ * This is an assertion, not a check. Entity reads go through
+ * `snapshot.data() as T`, so a stored value written in the wrong unit acquires
+ * the brand silently — `migrateBalanceToCents.ts` exists because non-cent
+ * legacy values really did occur. Use at a trust boundary or on a literal; it
+ * cannot tell you the data is sound.
  */
 export function asCents(value: number): Cents {
   return value as Cents;
@@ -73,9 +94,23 @@ export function addCents(...amounts: Cents[]): Cents {
   return amounts.reduce<number>((sum, n) => sum + n, 0) as Cents;
 }
 
-/** Subtracts cents from cents, clamping at zero so a balance cannot go negative. */
+
+/**
+ * Subtracts cents from cents, clamping at zero.
+ *
+ * Currently has no callers. Retained rather than deleted because removing it
+ * would drop its test case, which this repo's pre-commit gate reserves for a
+ * human decision. The clamp is also worth a second look before anything adopts
+ * it: on a rent ledger, silently flooring an overpayment at zero hides a credit
+ * the resident is owed.
+ */
 export function subtractCents(from: Cents, amount: Cents): Cents {
   return Math.max(0, from - amount) as Cents;
+}
+
+/** Formats an already-dollar amount. No callers yet; see subtractCents. */
+export function formatDollars(dollars: Dollars): string {
+  return `$${dollars.toFixed(2)}`;
 }
 
 export function centsToDollars(cents: Cents): Dollars {
@@ -86,9 +121,6 @@ export function formatCents(cents: Cents): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
-export function formatDollars(dollars: Dollars): string {
-  return `$${dollars.toFixed(2)}`;
-}
 
 /**
  * Converts a dollar amount typed into a form field to cents.

@@ -7,6 +7,7 @@ import {
   addCents,
   dollarsToCents,
   formatCents,
+  formatDollars,
   parseDollarsInput,
   subtractCents,
 } from '../money';
@@ -140,7 +141,12 @@ describe('money units', () => {
 
     it('subtracts a payment and clamps at zero rather than going negative', () => {
       expect(subtractCents(asCents(50000), asCents(20000))).toBe(30000);
+      // Clamping hides a credit on a rent ledger — see the note on subtractCents.
       expect(subtractCents(asCents(5000), asCents(9999))).toBe(0);
+    });
+
+    it('formats an already-dollar amount', () => {
+      expect(formatDollars(asDollars(500))).toBe('$500.00');
     });
   });
 });

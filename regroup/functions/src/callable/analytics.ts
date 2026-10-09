@@ -10,6 +10,7 @@ import {
 } from "../api/firestore";
 import { tierAllows } from "../util/tierPricing";
 import { parseInput } from "../validation";
+import { Cents } from "../util/money";
 
 const rentRoiMetricsSchema = z.object({
   houseId: z.string().min(1),
@@ -45,7 +46,7 @@ interface PaymentRecord {
 
 interface GuestRecord {
   status?: string;
-  rentOwed?: number; // integer CENTS (live balance)
+  rentOwed?: Cents;
   rentDueDate?: string; // YYYY-MM-DD (optional live field)
 }
 

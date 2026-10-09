@@ -26,6 +26,7 @@ import { guestCollection } from '../api/firestore';
 import { STRIPE_SECRET_KEY } from '../config';
 import { computeApplicationFee, RentPaymentMethodType } from '../util/rentFee';
 import { STRIPE_API_VERSION } from '../util/stripeApiVersion';
+import { Cents } from '../util/money';
 import {
   flagStaleForReconciliation,
   loadInFlightCentsByGuest,
@@ -40,7 +41,7 @@ interface AutoPayGuest {
   houseId: string;
   stripeCustomerId: string;
   defaultPaymentMethodId: string;
-  rentOwed: number;
+  rentOwed: Cents;
   stripeConnectId?: string;
 }
 
