@@ -6,6 +6,7 @@ import GuestUpdateFormView from './GuestUpdateFormView';
 import { Guest } from '../../entities/Guest';
 import {
   GuestFormValues,
+  changedMoneyFields,
   formValuesToGuest,
   guestToFormValues,
 } from './guestFormValues';
@@ -16,7 +17,10 @@ import { RootStackParamList } from '../../navigation/types';
 export interface GuestUpdateProps {
   guest: Guest;
   guests: Guests;
-  updateGuest: (guest: Guest, clearCache?: boolean) => any;
+  updateGuest: (
+    guest: Partial<Guest>,
+    authoritativeFields?: ReadonlyArray<keyof Guest>,
+  ) => any;
   navigation: NativeStackNavigationProp<RootStackParamList>;
 }
 
@@ -31,7 +35,11 @@ const GuestUpdateForm = withFormik<GuestUpdateProps, GuestFormValues>({
     setSubmitting(true);
     try {
       const updatedGuest = formValuesToGuest(props.guest, values);
-      await props.updateGuest(updatedGuest, true);
+      // Only the money fields the operator actually edited are authoritative.
+      // Declaring an untouched field authoritative would let a stale form value
+      // beat a concurrent server-side decrement (a resident's Stripe payment).
+      const authoritativeFields = changedMoneyFields(props.guest, values);
+      await props.updateGuest(updatedGuest, authoritativeFields);
       setStatus({ succeeded: true });
       setSubmitting(false);
     } catch (err) {
@@ -61,7 +69,10 @@ const GuestUpdateFormWrapper: React.FC<any> = props => {
   const { mutateAsync: updateGuestMutation } = useUpdateGuest();
 
   const updateGuest = useCallback(
-    async (updatedGuest: Guest) => {
+    async (
+      updatedGuest: Partial<Guest>,
+      authoritativeFields?: ReadonlyArray<keyof Guest>,
+    ) => {
       // The mutation expects a { guest, updatedGuest } pair — guest is the
       // pre-update snapshot used for rollback in onError.
       if (!guest) return;
@@ -73,7 +84,7 @@ const GuestUpdateFormWrapper: React.FC<any> = props => {
       return updateGuestMutation({
         guest,
         updatedGuest,
-        authoritativeFields: ["rentOwed", "choreFees"],
+        authoritativeFields,
       });
     },
     [guest, updateGuestMutation],

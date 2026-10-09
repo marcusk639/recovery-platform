@@ -1,4 +1,5 @@
 import {
+  changedMoneyFields,
   formValuesToGuest,
   guestToFormValues,
 } from '../guestFormValues';
@@ -39,11 +40,37 @@ describe('guest update form money boundary', () => {
     expect(updated.choreFees).toBe(1000);
   });
 
-  it('round-trips an untouched form without changing the balance', () => {
+  it('omits an untouched money field so a concurrent payment is not reverted', () => {
     const guest = makeGuest({ rentOwed: 123456 } as Partial<Guest>);
     const updated = formValuesToGuest(guest, guestToFormValues(guest));
 
-    expect(updated.rentOwed).toBe(123456);
+    // Submitting an absolute rentOwed the operator never touched would overwrite
+    // whatever landed while the form was open — a resident's Stripe payment
+    // decrements rentOwed server-side, and a stale form value would undo it.
+    // Omitting the field leaves the stored value standing.
+    expect('rentOwed' in updated).toBe(false);
+    expect('choreFees' in updated).toBe(false);
+  });
+
+  it('reports only the money fields the operator actually changed', () => {
+    const guest = makeGuest();
+    const values = guestToFormValues(guest);
+
+    expect(changedMoneyFields(guest, values)).toEqual([]);
+    expect(changedMoneyFields(guest, { ...values, rentOwed: '100' })).toEqual([
+      'rentOwed',
+    ]);
+    expect(
+      changedMoneyFields(guest, { ...values, rentOwed: '100', choreFees: '1' }),
+    ).toEqual(['rentOwed', 'choreFees']);
+  });
+
+  it('does not treat a re-typed identical amount as a change', () => {
+    const guest = makeGuest({ rentOwed: 50000 } as Partial<Guest>);
+    // operator tabs through and retypes the same figure
+    const values = { ...guestToFormValues(guest), rentOwed: '500.00' };
+
+    expect(changedMoneyFields(guest, values)).toEqual([]);
   });
 
   it('keeps the stored balance when the admin clears the field', () => {
@@ -54,7 +81,10 @@ describe('guest update form money boundary', () => {
     });
 
     // Resolving a blank money field to zero would silently forgive a real debt.
-    expect(updated.rentOwed).toBe(50000);
+    // The field is now omitted rather than written back with the stored figure,
+    // which is strictly safer: the stored value stands and a concurrent payment
+    // that landed while the form was open is not overwritten either.
+    expect('rentOwed' in updated).toBe(false);
   });
 
   // Scope note: these exercise the CONVERSION only. They say nothing about

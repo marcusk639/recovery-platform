@@ -24,34 +24,62 @@ export type GuestFormValues = Record<string, unknown>;
 export function guestToFormValues(guest: Guest): GuestFormValues {
   const values: GuestFormValues = { ...guest };
   for (const field of CENTS_FIELDS) {
-    const stored = (guest as unknown as Record<string, number | undefined>)[
-      field
-    ];
-    values[field] = centsToDollars(asCents(stored ?? 0));
+    values[field] = centsToDollars(asCents(storedCents(guest, field)));
   }
   return values;
 }
 
+function storedCents(guest: Guest, field: string): number {
+  return (
+    (guest as unknown as Record<string, number | undefined>)[field] ?? 0
+  );
+}
+
 /**
- * Submitted dollar figures -> stored cents.
+ * The money fields whose submitted value differs from what is stored.
  *
- * Each field falls back to the guest's existing stored cents when the input is
- * blank or unusable, so a cleared field cannot silently wipe an outstanding
- * balance. An explicit "0" is still zero.
+ * Only these are sent, and only these are declared authoritative. A field the
+ * operator never touched must not be submitted at all: `rentOwed` is decremented
+ * server-side when a resident pays, so writing back an absolute figure captured
+ * when the form opened would silently undo that payment. Omitting the field
+ * leaves the stored value standing.
+ */
+export function changedMoneyFields(
+  guest: Guest,
+  values: GuestFormValues,
+): ReadonlyArray<keyof Guest> {
+  return CENTS_FIELDS.filter(field => {
+    const stored = asCents(storedCents(guest, field));
+    return parseDollarsInput(
+      values[field] as string | number | undefined,
+      stored,
+    ) !== stored;
+  }) as ReadonlyArray<keyof Guest>;
+}
+
+/**
+ * Submitted dollar figures -> stored cents, for the changed fields only.
+ *
+ * A blank or unusable input resolves to the stored value and therefore counts as
+ * unchanged, so it is omitted rather than written back — clearing the field
+ * cannot wipe a balance. An explicit "0" differs from a non-zero balance and is
+ * submitted as a real zero.
  */
 export function formValuesToGuest(
   guest: Guest,
   values: GuestFormValues,
-): Guest {
+): Partial<Guest> {
   const merged = { ...guest, ...values } as unknown as Record<string, unknown>;
+  const changed = changedMoneyFields(guest, values);
   for (const field of CENTS_FIELDS) {
-    const stored = (guest as unknown as Record<string, number | undefined>)[
-      field
-    ];
-    merged[field] = parseDollarsInput(
-      values[field] as string | number | undefined,
-      asCents(stored ?? 0),
-    );
+    if (changed.includes(field as keyof Guest)) {
+      merged[field] = parseDollarsInput(
+        values[field] as string | number | undefined,
+        asCents(storedCents(guest, field)),
+      );
+    } else {
+      delete merged[field];
+    }
   }
-  return merged as unknown as Guest;
+  return merged as Partial<Guest>;
 }
