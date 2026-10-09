@@ -49,19 +49,27 @@ export type Dollars = number & { readonly [dollarsBrand]: true };
 /**
  * Assert that a raw number is already in cents.
  *
+ * The conditional parameter type exists so the sanctioned helper cannot itself
+ * launder the opposite unit: `asCents(house.monthlyRent)` was the 100x bug
+ * reachable through the front door, and it is now a compile error.
+ *
  * This is an assertion, not a check. Entity reads go through
  * `snapshot.data() as T`, so a stored value written in the wrong unit acquires
  * the brand silently — `migrateBalanceToCents.ts` exists because non-cent
  * legacy values really did occur. Use at a trust boundary or on a literal; it
  * cannot tell you the data is sound.
  */
-export function asCents(value: number): Cents {
-  return value as Cents;
+export function asCents<T extends number>(
+  value: T extends Dollars ? never : T,
+): Cents {
+  return value as unknown as Cents;
 }
 
 /** Assert that a raw number is already in dollars. */
-export function asDollars(value: number): Dollars {
-  return value as Dollars;
+export function asDollars<T extends number>(
+  value: T extends Cents ? never : T,
+): Dollars {
+  return value as unknown as Dollars;
 }
 
 /**

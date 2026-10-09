@@ -122,6 +122,14 @@ describe('money units', () => {
       const leaked: number = owed + rent;
       expect(leaked).toBe(50500);
     });
+
+    it('refuses to launder the opposite unit through asCents itself', () => {
+      // asCents(house.monthlyRent) compiled before, which made the sanctioned
+      // helper the easiest route to the 100x bug.
+      // @ts-expect-error — a Dollars value is not acceptable to asCents
+      const owed: Cents = asCents(asDollars(500));
+      expect(owed).toBe(500);
+    });
   });
 
   describe('arithmetic that keeps its unit', () => {
