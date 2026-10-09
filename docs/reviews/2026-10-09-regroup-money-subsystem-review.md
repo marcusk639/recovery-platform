@@ -25,13 +25,14 @@ latent risk "if this unreachable screen is ever reconnected".
 
 | Severity | Count | Auto-fixed | Requires Decision |
 | -------- | ----- | ---------- | ----------------- |
-| CRITICAL | 1     | 1          | 0                 |
-| HIGH     | 1     | 0          | 1                 |
-| MEDIUM   | 2     | 0          | 2                 |
+| CRITICAL | 3     | 1          | 2                 |
+| HIGH     | 6     | 0          | 6                 |
+| MEDIUM   | 6     | 0          | 6                 |
 | Docs gap | 4     | 0          | 4                 |
 
-Two of four specialist streams had not reported when this was written — see *Incomplete
-coverage*.
+All four specialist streams have now reported (all late). Their findings are in
+*Specialist findings* below and are NOT yet fixed — they are larger than this pass and need
+sequencing. Two are CRITICAL and verified first-hand.
 
 ---
 
@@ -144,6 +145,108 @@ at all. **This review is therefore not a clean pass.** Specifically unverified h
 
 ---
 
+## Specialist findings (reported after the first draft; none fixed)
+
+Verified first-hand where marked. Not fixed in this pass: each is a money or authz change
+with migration or rules implications, and three cycles of fixes on this branch have shown
+that rushing them introduces defects.
+
+### [C2] `payments.amount` is dollars from the server and cents from the client — VERIFIED
+
+**Confidence:** 95. The same 100x class this branch set out to fix, in a field the branded
+types never covered.
+
+- Webhook writes DOLLARS: `functions/src/webhooks/stripeWebhook.ts:356` (`amount: amountDollars`,
+  from `paymentIntent.amount / 100` at `:319`).
+- `recordManualPayment` writes CENTS: `mobile/src/services/payments.ts:263` (`amount: amountInCents`).
+- `functions/src/callable/analytics.ts:41` declares the field DOLLARS and multiplies by 100
+  at `:172`.
+
+A $500 cash payment stored as `50000` is reported by `rentRoiMetrics` as **$50,000**.
+Conversely Stripe-originated rows read as cents are 100x low. Fix: settle on cents in a new
+`amountCents` field, change webhook + analytics + mobile together, migrate existing docs.
+Do not rename in place — both unit conventions exist in live data.
+
+### [C3] The webhook marks an event processed before handling it, then swallows the error — VERIFIED
+
+**Confidence:** 92. `functions/src/webhooks/stripeWebhook.ts` — `checkAndMarkEventProcessed`
+at `:1146`, handler at `:1174`, `catch` at `:1241` logs only, `res.status(200)` at `:1253`.
+
+If `handlePaymentIntentSucceeded` throws, the event is already marked done, so Stripe never
+retries: the charge succeeded, `rentOwed` is never decremented, and no payment doc is written.
+The in-code comment justifies this as "Stripe best practices", which misapplies the rule —
+200 is correct for an event successfully processed or deliberately ignored, not one whose
+handler threw. The per-payment transaction at `:409` already makes re-delivery safe, so the
+retry is free. Fix: mark processed only after success (or delete the marker in the `catch`)
+and return non-2xx on a thrown handler. Related: `:328-336` treats a failed guest read as
+non-fatal and then logs "guest not found", a misleading message for a read error.
+
+### Security — `cr-sec`
+
+- **[HIGH 90] `listHousePayments` leaks every resident's payment history.**
+  `functions/src/callable/payments.ts:272`, authz at `:284`. `assertHouseMemberFromClaims`
+  accepts a `guest` **or** `admin` claim, so any resident receives every charge on the house's
+  connected account including `receipt_url` (`:300-310`) — unauthenticated Stripe links showing
+  payer name and card last-4. This contradicts the committed ruleset, which restricts guests to
+  their own payment docs (`firestore.rules:298`). The house doc is already loaded at `:289`;
+  use `assertHouseAdmin`.
+- **[HIGH 90] `listPayments` `guestId` IDOR.** `payments.ts:219`, authz `:233`. Membership is
+  checked on `houseId`; `guestId` is then only a metadata filter (`:249`), so a resident can
+  read a housemate's history. `createPaymentIntent:135-157` already has the correct pattern.
+- **[HIGH 80] `guests` create rule allows injecting a phantom resident into any house.**
+  `firestore.rules:140` — the self branch constrains only `userId`, not `houseId`. `onGuestWrite`
+  (`functions/src/triggers/firestore/index.ts:261`, EES block `:295-336`) then runs under the
+  Admin SDK, bypassing the admin-only `ees-records` write rule, recounts active residents and
+  rewrites `amount`/`residentCount` on every unpaid EES doc — lowering every real resident's
+  Equal Expense Share, repeatably. No claim escalation. Fix: require `isGuest([houseId])` on
+  the self branch, pin `rentOwed == 0`, prefer routing creation through `redeemInvitation`.
+- **[MEDIUM 90] The `payments` guest-self-read guard is dead.** `firestore.rules:299` keys on
+  `resource.data.guestUserId`, which no writer sets — the webhook and `recordManualPayment`
+  write `guestId`. It fails closed, which is why the app leans on the over-broad callable above.
+- **[MEDIUM 85] `guest-weeks` / `guest-reports` update rules are unconstrained.**
+  `firestore.rules:173,177` — `write` with no `request.resource` constraint on update, so the
+  owner can re-parent the doc into another house. `guest-weeks` appears dead today.
+
+### Data layer — `cr-data`
+
+- **[HIGH 85] `payments.createdAt` has two types** — `serverTimestamp()` from the webhook, ISO
+  strings from mobile (`payments.ts:162,267`). Firestore sorts by type first, so
+  `getPaymentHistory`'s `orderBy("createdAt","desc")` is wrong across the mix, and
+  `paymentQueries.ts:191`'s `new Date(p.createdAt)` yields Invalid Date for Timestamps — the
+  pending-staleness filter silently never matches.
+- **[HIGH 80] `getPaymentHistory` has no composite index** — `payments where guestId == x
+  orderBy createdAt desc` (`payments.ts:190`), and no `payments` index exists in
+  `firestore.indexes.json`.
+- **[HIGH 75] Manual payment docs omit `guestUserId`**, compounding the dead rule above.
+- **[MEDIUM 85] ANSWERS AN OPEN QUESTION: the `(autoPayEnabled, rentOwed)` index IS correct in
+  the committed `firestore.indexes.json`.** The prior session's `(autoPayEnabled, balance)`
+  finding is stale. The remaining risk is purely deployment: nothing deploys regroup's indexes,
+  so the live index may still be the old one and `scheduledRentCollection.ts:78` would throw
+  `FAILED_PRECONDITION` on first run. Run `firebase deploy --only firestore:indexes` and verify.
+- **[MEDIUM 80] Unbounded reads / unthrottled fan-out** — `scheduledRentCollection.ts:78` has no
+  `.limit()`; `Promise.allSettled(due.map(...))` makes one Stripe call per guest with no cap;
+  `overdueRentNotification.ts:29` scans every guest with `rentOwed > 0` across all houses;
+  `api/firestore.ts:277,334` read whole collections and filter in memory.
+- **[MEDIUM 70] Client-clock audit timestamps** — `rentAttempts.ts:153,211,243`,
+  `guest.tsx:108,312`, `payments.ts:162,267,293`, `guestImport.ts:112`.
+
+### Architecture — `cr-arch`
+
+- **[HIGH 75] `rentOwed` has no single writer.** Server writers: webhook,
+  `scheduledRentCollection`, `rentAttempts`, `payments.ts`. Client writer: `mergeGuestStats`
+  max-merge. C1 above is the reachable instance. Fix direction: stop client writes to ledger
+  fields entirely — make adjustment a server callable and block the fields in rules.
+- **[MEDIUM 85] `rentPaymentHelpers.ts:2-9` applies `Math.abs`,** silently hiding negative
+  balances (credits/overpayments), while `money.ts` `formatCents` does not. The two disagree on
+  sign. Pick the behaviour deliberately before consolidating.
+- **[MEDIUM 80] `stripeWebhook.ts` seams** — rent handlers `:295-670`, subscription `:671-952`,
+  Connect `:953-1042`, shared helpers `:72-294`, dispatcher `:1068-1255`. Split alongside C3,
+  which lands in the dispatcher.
+- **[MEDIUM 70] Keep the `money.ts` duplication** per-codebase for now, but add a CI check that
+  diffs the two copies with comments stripped — turning silent divergence into a failed build.
+
+---
+
 ## Actions Taken
 
 - [x] Fixed C1: `EditUserInfoForm` sends only changed fields — `EditUserInfoForm.tsx:137`
@@ -152,12 +255,22 @@ at all. **This review is therefore not a clean pass.** Specifically unverified h
 - [ ] Decide H1: reconnect `GuestUpdate` vs build an adjustment flow
 - [ ] Decide M1: validating reader at the money read boundary
 - [ ] Sequence M2: formatter consolidation
-- [ ] Re-run the four specialist streams for a clean pass
+- [x] All four specialist streams reported; C2 and C3 verified first-hand
+- [ ] Decide C2: `payments.amount` unit migration (both conventions exist in live data)
+- [ ] Decide C3: webhook idempotency ordering + return code
+- [ ] Decide the three HIGH authz findings (two callables, one rules create branch)
+- [ ] Deploy regroup's Firestore indexes and verify the live `guests` index
 
 ## Recommended Next Steps
 
-1. **H1** — no way to record a cash payment is the launch blocker here, bigger than any single defect.
-2. **Re-run the specialist streams**, especially rules and the index check: a missing composite
-   index means auto-pay has never run at all.
-3. **M1** — add the validating read boundary; the brands cannot do this job.
-4. **M2** — consolidate the formatters, one site per commit.
+1. **C3** — webhook idempotency ordering. A thrown handler silently loses a real payment
+   forever, and the fix is small because the per-payment transaction already makes retry safe.
+2. **C2** — `payments.amount` unit split. Reporting is already wrong by 100x in both
+   directions. Needs a new field plus a migration, not a rename.
+3. **The three HIGH authz findings** — two are a resident reading other residents' payment
+   history (one with Stripe receipt links carrying payer name and card last-4); the third
+   lets any signed-in user alter every resident's Equal Expense Share.
+4. **Deploy the indexes.** The committed `guests` index is correct; the live one may not be.
+   Until then auto-pay may throw on every run.
+5. **H1** — no reachable way to record a cash payment.
+6. **M1/M2** — validating read boundary, then formatter consolidation one site per commit.
