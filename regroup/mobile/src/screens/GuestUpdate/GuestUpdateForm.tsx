@@ -4,6 +4,11 @@ import { useSelectedGuest } from '../../hooks/useSelectedGuest';
 import { useGuests, useUpdateGuest } from '../../state/queries/guestQueries';
 import GuestUpdateFormView from './GuestUpdateFormView';
 import { Guest } from '../../entities/Guest';
+import {
+  GuestFormValues,
+  formValuesToGuest,
+  guestToFormValues,
+} from './guestFormValues';
 import { Guests } from '../../types';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
@@ -15,14 +20,17 @@ export interface GuestUpdateProps {
   navigation: NativeStackNavigationProp<RootStackParamList>;
 }
 
-const GuestUpdateForm = withFormik<GuestUpdateProps, Guest>({
+const GuestUpdateForm = withFormik<GuestUpdateProps, GuestFormValues>({
   enableReinitialize: true,
-  mapPropsToValues: ({ guest }) => guest,
+  // rentOwed/choreFees are stored in cents but edited in dollars — see
+  // guestFormValues.ts. Passing the guest through unconverted is what made an
+  // operator typing "500" set a $5.00 balance.
+  mapPropsToValues: ({ guest }) => guestToFormValues(guest),
   handleSubmit: async (values, { props, setStatus, setSubmitting }) => {
     setStatus({});
     setSubmitting(true);
     try {
-      const updatedGuest = { ...props.guest, ...values };
+      const updatedGuest = formValuesToGuest(props.guest, values);
       await props.updateGuest(updatedGuest, true);
       setStatus({ succeeded: true });
       setSubmitting(false);

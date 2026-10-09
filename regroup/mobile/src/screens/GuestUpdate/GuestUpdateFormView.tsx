@@ -13,6 +13,16 @@ import { RatsText } from '../../components/rats-text';
 import { normalize } from '../../styles/theme';
 import { GuestUpdateProps } from './GuestUpdateForm';
 
+/**
+ * Money fields are edited in dollars (converted to cents on submit by
+ * guestFormValues.ts). The generic placeholder is the raw field name, which
+ * gave an operator no way to tell what unit "Rent Owed" wanted.
+ */
+const MONEY_FIELD_PLACEHOLDERS: Record<string, string> = {
+  rentOwed: 'Rent Owed ($)',
+  choreFees: 'Chore Fees ($)',
+};
+
 const GuestUpdateFormView: React.FC<
   GuestUpdateProps & FormikProps<any>
 > = props => {
@@ -33,7 +43,7 @@ const GuestUpdateFormView: React.FC<
         component = RatsTextInput;
       }
 
-      let placeholder = fieldName;
+      let placeholder = MONEY_FIELD_PLACEHOLDERS[fieldName] ?? fieldName;
       if (isDate) {
         placeholder =
           fieldValue.length === 0
