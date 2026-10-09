@@ -97,12 +97,31 @@ export function parseDollarsInput(
   if (raw === undefined || raw === null) {
     return fallback;
   }
-  const cleaned = String(raw).replace(/[$,\s]/g, '');
-  if (cleaned.length === 0) {
+  // Outer whitespace and a leading currency symbol are noise; INTERNAL
+  // whitespace is ambiguous ('1 2 3' is not 123) and is refused below.
+  const trimmed = String(raw).trim().replace(/^\$/, '').trim();
+  if (trimmed.length === 0) {
     return fallback;
   }
-  const parsed = Number(cleaned);
-  if (!Number.isFinite(parsed) || parsed < 0) {
+  if (/\s/.test(trimmed)) {
+    return fallback;
+  }
+
+  // Commas are only accepted as thousands grouping. Stripping every separator
+  // unconditionally silently mis-scaled real input: '12,34' became 1234 dollars
+  // (100x), '1.234,56' became 1.23, and Number() also accepts '1e3' and '0x10'.
+  // Anything that is not a plain decimal amount is refused rather than guessed
+  // at, because a wrong magnitude on a rent balance is worse than a rejected edit.
+  const degrouped = /^\d{1,3}(,\d{3})+(\.\d{1,2})?$/.test(trimmed)
+    ? trimmed.replace(/,/g, '')
+    : trimmed;
+
+  if (!/^\d+(\.\d{1,2})?$/.test(degrouped)) {
+    return fallback;
+  }
+
+  const parsed = Number(degrouped);
+  if (!Number.isFinite(parsed)) {
     return fallback;
   }
   return dollarsToCents(parsed as Dollars);

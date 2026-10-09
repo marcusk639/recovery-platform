@@ -50,6 +50,26 @@ describe('money units', () => {
       expect(parseDollarsInput(undefined, asCents(50000))).toBe(50000);
     });
 
+    it('rejects ambiguous or non-decimal input instead of mis-scaling it', () => {
+      const stored = asCents(50000);
+      // Stripping separators unconditionally turned these into 100x-1000x errors:
+      // '12,34' parsed as 1234 dollars, '1.234,56' as 1.23, '1e3' as 1000.
+      expect(parseDollarsInput('12,34', stored)).toBe(stored);
+      expect(parseDollarsInput('1.234,56', stored)).toBe(stored);
+      expect(parseDollarsInput('1 2 3', stored)).toBe(stored);
+      expect(parseDollarsInput('1e3', stored)).toBe(stored);
+      expect(parseDollarsInput('0x10', stored)).toBe(stored);
+      expect(parseDollarsInput('1.2.3', stored)).toBe(stored);
+      expect(parseDollarsInput('500.123', stored)).toBe(stored);
+    });
+
+    it('accepts correctly grouped thousands and a plain decimal', () => {
+      expect(parseDollarsInput('1,234.56', asCents(0))).toBe(123456);
+      expect(parseDollarsInput('$1,234,567.89', asCents(0))).toBe(123456789);
+      expect(parseDollarsInput('750', asCents(0))).toBe(75000);
+      expect(parseDollarsInput('750.5', asCents(0))).toBe(75050);
+    });
+
     it('rejects a negative amount rather than creating a credit by typo', () => {
       expect(parseDollarsInput('-50', asCents(50000))).toBe(50000);
     });

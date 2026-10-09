@@ -57,7 +57,15 @@ describe('guest update form money boundary', () => {
     expect(updated.rentOwed).toBe(50000);
   });
 
-  it('accepts an explicit zero as a real zero', () => {
+  // Scope note: these exercise the CONVERSION only. They say nothing about
+  // whether the converted value survives the write path — mergeGuestStats
+  // max-merges rentOwed/choreFees, so a lowered balance was silently discarded
+  // until the form started declaring those fields authoritative. The test that
+  // actually proves a lower value lands lives in
+  // src/services/__tests__/guest.test.ts ("lowers rentOwed when the caller
+  // declares the field authoritative"). Do not cite the test below as evidence
+  // that zeroing a balance works end to end.
+  it('converts an explicit zero to zero cents', () => {
     const guest = makeGuest();
     const updated = formValuesToGuest(guest, {
       ...guestToFormValues(guest),

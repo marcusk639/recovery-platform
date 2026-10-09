@@ -65,7 +65,16 @@ const GuestUpdateFormWrapper: React.FC<any> = props => {
       // The mutation expects a { guest, updatedGuest } pair — guest is the
       // pre-update snapshot used for rollback in onError.
       if (!guest) return;
-      return updateGuestMutation({ guest, updatedGuest });
+      // The operator editing this form is authoritative over the money fields,
+      // so they are exempted from the accumulator max-merge in mergeGuestStats.
+      // Without this an edit that LOWERS a balance (cash payment, write-off,
+      // correction, or zeroing a paid-off resident) is silently discarded while
+      // the form reports success.
+      return updateGuestMutation({
+        guest,
+        updatedGuest,
+        authoritativeFields: ["rentOwed", "choreFees"],
+      });
     },
     [guest, updateGuestMutation],
   );

@@ -70,6 +70,12 @@ export async function updateGuest(
   guest: Partial<Guest>,
   updatedGuest: Partial<Guest>,
   retryCount: number = 3,
+  /**
+   * Fields the caller owns absolutely, exempt from the accumulator max-merge.
+   * Pass the money fields for operator-driven edits; leave empty for background
+   * or concurrent writers that must not clobber a higher recorded value.
+   */
+  authoritativeFields: ReadonlyArray<keyof Guest> = [],
 ): Promise<Partial<Guest>> {
   if (!updatedGuest.id) {
     throw new Error("Guest must have an id for update");
@@ -91,7 +97,11 @@ export async function updateGuest(
 
         // FIX #2: Merge stats instead of overwriting
         // This prevents one device's updates from overwriting another's
-        const mergedGuest = mergeGuestStats(currentGuest, updatedGuest);
+        const mergedGuest = mergeGuestStats(
+          currentGuest,
+          updatedGuest,
+          authoritativeFields,
+        );
 
         // Increment version for optimistic locking
         mergedGuest.version = (currentGuest.version || 0) + 1;
@@ -143,6 +153,7 @@ export async function updateGuest(
 function mergeGuestStats(
   currentGuest: Guest,
   updateGuest: Partial<Guest>,
+  authoritativeFields: ReadonlyArray<keyof Guest> = [],
 ): Partial<Guest> {
   // Start with all current fields so nothing from the DB is silently dropped,
   // then layer the incoming update on top (update wins for most fields).
@@ -163,6 +174,17 @@ function mergeGuestStats(
   for (const field of numericMaxFields) {
     const current = currentGuest[field] as number | undefined;
     const update = (updateGuest as any)[field] as number | undefined;
+    if (authoritativeFields.includes(field)) {
+      // The caller is the source of truth for this field, so the max-merge is
+      // skipped and the spread above stands. An operator editing a resident's
+      // balance must be able to LOWER it — to record a cash payment, a
+      // write-off, or a correction. Without this, Math.max silently discarded
+      // the edit while the form still reported success.
+      if (update === undefined && typeof current === "number") {
+        (merged as any)[field] = current;
+      }
+      continue;
+    }
     if (typeof current === "number" && typeof update === "number") {
       (merged as any)[field] = Math.max(current, update);
     } else if (typeof current === "number" && update === undefined) {
