@@ -82,7 +82,7 @@ export const useUpdateGuest = () => {
       guest,
       updatedGuest,
       retryCount = 3,
-      authoritativeFields,
+      authoritativeFields = [],
     }: {
       guest: Partial<Guest>;
       updatedGuest: Partial<Guest>;

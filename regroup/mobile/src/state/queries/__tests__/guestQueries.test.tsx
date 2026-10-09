@@ -171,6 +171,7 @@ describe('guestQueries', () => {
         mockGuest,
         updatedGuest,
         3,
+        [], // authoritativeFields — none for an ordinary update
       );
     });
 
