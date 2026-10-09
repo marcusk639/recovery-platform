@@ -316,8 +316,23 @@ async function handlePaymentIntentSucceeded(
   }
 
   const db = admin.firestore();
+
+  // Stripe amounts are in the currency's smallest unit, NOT always cents: JPY is
+  // zero-decimal, so `amount: 50000` is ¥50,000 (about $335), not $500. rentOwed
+  // is USD cents and is decremented by this figure with no conversion, so a
+  // non-USD payment would clear a far larger balance than it paid. Refuse rather
+  // than guess a rate.
+  if (paymentIntent.currency !== "usd") {
+    logger.error("stripeWebhook: refusing a non-USD payment on the rent ledger", {
+      paymentIntentId: paymentIntent.id,
+      currency: paymentIntent.currency,
+    });
+    throw new Error(
+      `Unsupported currency ${paymentIntent.currency} on the rent ledger`,
+    );
+  }
+
   const amountDollars = paymentIntent.amount / 100;
-  // paymentIntent.amount is already in cents (Stripe always uses cents)
   const amountCents = paymentIntent.amount;
 
   // Read the guest once up front so we can both (a) capture the due date active

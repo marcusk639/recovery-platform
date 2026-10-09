@@ -98,6 +98,41 @@ beforeEach(() => jest.clearAllMocks());
 
 // ── Auth guard ─────────────────────────────────────────────────────────────────
 describe("createPaymentIntent — unauthenticated", () => {
+  it("refuses a non-USD currency instead of letting the client pick one", async () => {
+    // currency was `z.string().optional()` and passed straight to Stripe, while the
+    // webhook decrements rentOwed by paymentIntent.amount with no currency check.
+    // {amount: 50000, currency: 'jpy'} charges ~¥50,000 (about $335) and clears a
+    // $500 balance. The unit of `amount` is only meaningful alongside its currency.
+    await expect(
+      run(
+        makeRequest({
+          data: {
+            amount: 50000,
+            currency: "jpy",
+            houseId: "house-1",
+            guestId: "guest-doc-1",
+          },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+  });
+
+  it("refuses an amount above the server-side cap", async () => {
+    // The $100k bound lived only in the mobile client (MAX_PAYMENT_CENTS), so a
+    // direct callable invocation had no upper limit at all.
+    await expect(
+      run(
+        makeRequest({
+          data: {
+            amount: 10000001,
+            houseId: "house-1",
+            guestId: "guest-doc-1",
+          },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+  });
+
   it("throws unauthenticated when auth is missing", async () => {
     await expect(run(makeRequest({ auth: null }))).rejects.toMatchObject({
       code: "unauthenticated",

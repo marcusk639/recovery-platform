@@ -798,6 +798,27 @@ describe("payment_intent.succeeded", () => {
     expect(mockMessagingSend).toHaveBeenCalledTimes(2); // guest + 1 admin
   });
 
+  test("refuses a non-USD payment instead of decrementing rentOwed by its raw amount", async () => {
+    // rentOwed is USD cents, and Stripe amounts are the currency's smallest unit.
+    // JPY is zero-decimal, so amount 50000 is about $335 but would clear $500 of
+    // debt. Same fixture as the happy path above — the guest EXISTS and the
+    // transaction is wired — so the decrement would fire if the guard were absent.
+    const pi = makePaymentIntent({
+      metadata: { guestId: "guest_1", houseId: "house_1" },
+      amount: 50000,
+      currency: "jpy",
+    } as never);
+    const event = makeStripeEvent("payment_intent.succeeded", pi);
+    mockConstructEvent.mockReturnValue(event);
+    setupForPaymentSucceeded();
+
+    await stripeWebhook(makeRequest({}) as never, makeResponse() as never);
+
+    expect(mockUpdate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ rentOwed: expect.anything() }),
+    );
+  });
+
   test("missing guestId in metadata: handles gracefully without throwing", async () => {
     const pi = makePaymentIntent({
       metadata: { houseId: "house_1" } as Stripe.Metadata,
