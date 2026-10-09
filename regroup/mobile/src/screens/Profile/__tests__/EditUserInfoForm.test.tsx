@@ -42,7 +42,7 @@ jest.mock("../../../state/slices/userSlice", () => ({
   updateUser: (arg: any) => mockUpdateUserThunkCreator(arg),
 }));
 
-const mockGuestMutateAsync = jest.fn(() => Promise.resolve({}));
+const mockGuestMutateAsync = jest.fn((_args: any) => Promise.resolve({}));
 jest.mock("../../../state/queries/guestQueries", () => ({
   useUpdateGuest: () => ({ mutateAsync: mockGuestMutateAsync }),
 }));
