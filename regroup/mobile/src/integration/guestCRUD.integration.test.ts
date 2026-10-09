@@ -5,10 +5,13 @@
 import { getGuest, updateGuest } from '../services/guest';
 import { Guest } from '../entities/Guest';
 import { firestore } from '../../firebase-setup';
+import { asCents } from '../util/money';
 
 const GUEST_ID = 'crud-guest-1';
 
-const seedData: Partial<Guest> = {
+// Carries createdDate/lastUpdated, which are not Guest fields. Pre-existing;
+// previously masked by a looser money type on the line below.
+const seedData: Partial<Guest> & Record<string, unknown> = {
   id: GUEST_ID,
   userId: 'u1',
   houseId: 'h1',
@@ -22,8 +25,8 @@ const seedData: Partial<Guest> = {
   sobrietyDate: '2025-01-01',
   drugOfChoice: 'alcohol',
   hasJob: false,
-  rentOwed: 0,
-  choreFees: 0,
+  rentOwed: asCents(0),
+  choreFees: asCents(0),
   dailyHabit: 0,
   supporters: [],
   jobs: [],

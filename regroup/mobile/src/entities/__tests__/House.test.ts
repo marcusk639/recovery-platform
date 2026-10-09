@@ -1,5 +1,6 @@
 import { House, StripeAccountStatus } from '../House';
 import { DEFAULT_PHASE } from '../Phase';
+import { asDollars } from '../../util/money';
 
 describe('House entity', () => {
   describe('constructor with no args', () => {
@@ -268,7 +269,7 @@ describe('House entity', () => {
 
     it('allows monthlyRent to be updated', () => {
       const house = new House();
-      house.monthlyRent = 750;
+      house.monthlyRent = asDollars(750);
       expect(house.monthlyRent).toBe(750);
     });
   });

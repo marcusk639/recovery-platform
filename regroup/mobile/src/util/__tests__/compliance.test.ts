@@ -73,7 +73,7 @@ function makeGuest(overrides: Partial<Guest> = {}): Guest {
     createdDate: new Date().toISOString(),
     lastUpdated: new Date().toISOString(),
     ...overrides,
-  } as Guest;
+  } as unknown as Guest;
 }
 
 function makeHouse(phases: House['phases'] = {}): House {

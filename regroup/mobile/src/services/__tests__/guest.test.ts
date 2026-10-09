@@ -80,6 +80,7 @@ jest.mock("../../util/house", () => ({
 // ─── Imports (after mocks) ───────────────────────────────────────────────────
 
 import { firestore } from "../../../firebase-setup";
+import { asCents } from "../../util/money";
 import * as crud from "../crud";
 import {
   getGuest,
@@ -553,7 +554,7 @@ describe("guest service", () => {
         id: "g1",
         phase: "phase-2",
         firstName: "Jane",
-        rentOwed: 12345,
+        rentOwed: asCents(12345),
       });
       const house = { id: "h1", phases: {} } as any;
 

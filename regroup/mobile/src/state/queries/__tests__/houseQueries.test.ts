@@ -29,7 +29,7 @@ describe('houseQueries', () => {
 
   // Build a plain mock House without triggering the House constructor
   // (the House class constructor calls createHouseId() which hits Firestore)
-  const mockHouse: House = {
+  const mockHouse = {
     id: 'house001',
     timezone: 'America/New_York',
     ownerId: 'owner001',
@@ -83,7 +83,7 @@ describe('houseQueries', () => {
     stripeError: undefined,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
-  } as House;
+  } as unknown as House;
 
   const mockHouse2: House = {
     ...mockHouse,

@@ -1,3 +1,4 @@
+import { Cents, asCents } from '../util/money';
 import * as yup from 'yup';
 import { BaseEntity } from './BaseEntity';
 import { Roles } from './Roles';
@@ -51,8 +52,8 @@ export class Guest extends BaseEntity {
   hasJob: boolean = false;
 
   // Financial
-  rentOwed: number = 0;
-  choreFees: number = 0;
+  rentOwed: Cents = asCents(0);
+  choreFees: Cents = asCents(0);
   dailyHabit: number = 0;
   autoPayEnabled?: boolean;
 
