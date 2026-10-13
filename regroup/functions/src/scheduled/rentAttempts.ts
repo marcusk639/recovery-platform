@@ -265,6 +265,16 @@ export async function markRentAttemptFailed(
  * Logged at ERROR so a Cloud Logging alert can fire on it. Deliberately does
  * NOT throw: a permanently red scheduled job gets ignored, which would
  * reproduce the same silence this is meant to break, just from the other side.
+ *
+ * CLEARING CONTRACT: an attempt is cleared ONLY by setting
+ * `needsReconciliation: false`. `reconciledAt` has no effect on an attempt. The
+ * sibling reportPaymentsNeedingReconciliation below clears the opposite way.
+ *
+ * DO NOT "harmonise" this query with that one by adding
+ * `.where('reconciledAt', '==', null)`. Firestore's `== null` matches only an
+ * existing null field, never a missing one, and no existing attempt document
+ * has a `reconciledAt` field, so this sweep would go permanently silent
+ * (confirmed against the emulator).
  */
 export async function reportAttemptsNeedingReconciliation(): Promise<number> {
   const flagged = rentCollectionAttemptCollection.where(
@@ -309,6 +319,10 @@ export async function reportAttemptsNeedingReconciliation(): Promise<number> {
  * this module's own comment above describes. The reconciledAt clause is the
  * other half: an alert that cannot be cleared becomes an alert nobody reads.
  * Operators resolve a record by setting reconciledAt until a UI exists.
+ *
+ * CLEARING CONTRACT: `reconciledAt` is what clears a payment here. It does
+ * nothing on an attempt, whose flag is cleared by setting
+ * `needsReconciliation: false` (see reportAttemptsNeedingReconciliation).
  */
 export async function reportPaymentsNeedingReconciliation(): Promise<number> {
   const flagged = paymentsCollection
