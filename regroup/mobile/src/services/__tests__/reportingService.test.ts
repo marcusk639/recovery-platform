@@ -70,7 +70,7 @@ function makeGuest(overrides: Partial<Guest> = {}): Guest {
     lastUpdated: new Date().toISOString(),
     jobs: [],
     ...overrides,
-  } as Guest;
+  } as unknown as Guest;
 }
 
 function makeWeekSummary(overrides: Partial<WeekSummary> = {}): WeekSummary {

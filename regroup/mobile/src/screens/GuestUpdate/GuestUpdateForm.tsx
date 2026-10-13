@@ -4,6 +4,12 @@ import { useSelectedGuest } from '../../hooks/useSelectedGuest';
 import { useGuests, useUpdateGuest } from '../../state/queries/guestQueries';
 import GuestUpdateFormView from './GuestUpdateFormView';
 import { Guest } from '../../entities/Guest';
+import {
+  GuestFormValues,
+  changedMoneyFields,
+  formValuesToGuest,
+  guestToFormValues,
+} from './guestFormValues';
 import { Guests } from '../../types';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
@@ -11,19 +17,29 @@ import { RootStackParamList } from '../../navigation/types';
 export interface GuestUpdateProps {
   guest: Guest;
   guests: Guests;
-  updateGuest: (guest: Guest, clearCache?: boolean) => any;
+  updateGuest: (
+    guest: Partial<Guest>,
+    authoritativeFields?: ReadonlyArray<keyof Guest>,
+  ) => any;
   navigation: NativeStackNavigationProp<RootStackParamList>;
 }
 
-const GuestUpdateForm = withFormik<GuestUpdateProps, Guest>({
+const GuestUpdateForm = withFormik<GuestUpdateProps, GuestFormValues>({
   enableReinitialize: true,
-  mapPropsToValues: ({ guest }) => guest,
+  // rentOwed/choreFees are stored in cents but edited in dollars — see
+  // guestFormValues.ts. Passing the guest through unconverted is what made an
+  // operator typing "500" set a $5.00 balance.
+  mapPropsToValues: ({ guest }) => guestToFormValues(guest),
   handleSubmit: async (values, { props, setStatus, setSubmitting }) => {
     setStatus({});
     setSubmitting(true);
     try {
-      const updatedGuest = { ...props.guest, ...values };
-      await props.updateGuest(updatedGuest, true);
+      const updatedGuest = formValuesToGuest(props.guest, values);
+      // Only the money fields the operator actually edited are authoritative.
+      // Declaring an untouched field authoritative would let a stale form value
+      // beat a concurrent server-side decrement (a resident's Stripe payment).
+      const authoritativeFields = changedMoneyFields(props.guest, values);
+      await props.updateGuest(updatedGuest, authoritativeFields);
       setStatus({ succeeded: true });
       setSubmitting(false);
     } catch (err) {
@@ -53,11 +69,23 @@ const GuestUpdateFormWrapper: React.FC<any> = props => {
   const { mutateAsync: updateGuestMutation } = useUpdateGuest();
 
   const updateGuest = useCallback(
-    async (updatedGuest: Guest) => {
+    async (
+      updatedGuest: Partial<Guest>,
+      authoritativeFields?: ReadonlyArray<keyof Guest>,
+    ) => {
       // The mutation expects a { guest, updatedGuest } pair — guest is the
       // pre-update snapshot used for rollback in onError.
       if (!guest) return;
-      return updateGuestMutation({ guest, updatedGuest });
+      // The operator editing this form is authoritative over the money fields,
+      // so they are exempted from the accumulator max-merge in mergeGuestStats.
+      // Without this an edit that LOWERS a balance (cash payment, write-off,
+      // correction, or zeroing a paid-off resident) is silently discarded while
+      // the form reports success.
+      return updateGuestMutation({
+        guest,
+        updatedGuest,
+        authoritativeFields,
+      });
     },
     [guest, updateGuestMutation],
   );

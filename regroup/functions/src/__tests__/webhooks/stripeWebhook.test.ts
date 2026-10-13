@@ -228,6 +228,11 @@ beforeEach(() => {
           get: (_field: string) => undefined,
         }),
         set: jest.fn(),
+        // A real Firestore transaction has update(). Omitting it made the
+        // rentApplied decrement transaction throw "txn.update is not a
+        // function", which the handler's old blanket 200 swallowed — so these
+        // tests passed while the rentOwed decrement never ran.
+        update: jest.fn(),
       };
       return fn(txn);
     },
@@ -386,7 +391,11 @@ describe("stripeWebhook — signature verification", () => {
     mockRunTransaction.mockImplementation(
       async (fn: (txn: any) => Promise<any>) => {
         const txn = {
-          get: jest.fn().mockResolvedValue({ exists: true }),
+          get: jest.fn().mockResolvedValue({
+            exists: true,
+            // legacy marker: no status field -> treated as done
+            get: (_f: string) => undefined,
+          }),
           set: jest.fn(),
         };
         return fn(txn);
@@ -1546,7 +1555,11 @@ describe("handleStripeConnectWebhook", () => {
     mockRunTransaction.mockImplementation(
       async (fn: (txn: any) => Promise<any>) => {
         const txn = {
-          get: jest.fn().mockResolvedValue({ exists: true }),
+          get: jest.fn().mockResolvedValue({
+            exists: true,
+            // legacy marker: no status field -> treated as done
+            get: (_f: string) => undefined,
+          }),
           set: jest.fn(),
         };
         return fn(txn);

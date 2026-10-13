@@ -23,12 +23,13 @@ jest.mock("../EditUserInfoFormView", () => (props: any) => {
 
 const mockUnwrap = jest.fn(() => Promise.resolve({ id: "user-1" }));
 const mockDispatch = jest.fn(() => ({ unwrap: mockUnwrap }));
+let mockUserAsGuest: any = null;
 jest.mock("../../../state/store", () => ({
   useAppDispatch: () => mockDispatch,
   useAppSelector: (selector: any) =>
     selector({
       user: { user: { id: "user-1" } },
-      guests: { userAsGuest: null },
+      guests: { userAsGuest: mockUserAsGuest },
       admin: { userAsAdmin: null },
     }),
 }));
@@ -41,8 +42,9 @@ jest.mock("../../../state/slices/userSlice", () => ({
   updateUser: (arg: any) => mockUpdateUserThunkCreator(arg),
 }));
 
+const mockGuestMutateAsync = jest.fn((_args: any) => Promise.resolve({}));
 jest.mock("../../../state/queries/guestQueries", () => ({
-  useUpdateGuest: () => ({ mutateAsync: jest.fn() }),
+  useUpdateGuest: () => ({ mutateAsync: mockGuestMutateAsync }),
 }));
 jest.mock("../../../state/queries/adminQueries", () => ({
   useUpdateAdmin: () => ({ mutateAsync: jest.fn() }),
@@ -60,6 +62,33 @@ import EditUserInfoFormWrapper from "../EditUserInfoForm";
 describe("EditUserInfoFormWrapper", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  it("sends only the fields being updated, never the whole guest doc", async () => {
+    // The payload spread the entire guest, so rentOwed rode along with whatever
+    // value the screen loaded. mergeGuestStats max-merges rentOwed as an
+    // accumulator, so a stale higher figure beats the real post-payment balance
+    // and silently re-bills rent the resident already paid. The only writer that
+    // lowers rentOwed is services/payments.ts (FieldValue.increment(-amount)),
+    // and this screen is navigation-registered as Routes.EditUserInfo.
+    mockUserAsGuest = {
+      id: "guest-1",
+      houseId: "house-1",
+      rentOwed: 50000,
+      choreFees: 2500,
+      phoneNumber: "5550000000",
+    };
+    render(<EditUserInfoFormWrapper navigation={{} as any} />);
+
+    await capturedProps.updateGuest(mockUserAsGuest, {
+      phoneNumber: "5551234567",
+    });
+
+    const payload = mockGuestMutateAsync.mock.calls[0][0] as any;
+    expect(payload.updatedGuest.phoneNumber).toBe("5551234567");
+    expect("rentOwed" in payload.updatedGuest).toBe(false);
+    expect("choreFees" in payload.updatedGuest).toBe(false);
+    mockUserAsGuest = null;
   });
 
   it("unwraps the updateUser thunk dispatch instead of resolving to the raw action envelope", async () => {

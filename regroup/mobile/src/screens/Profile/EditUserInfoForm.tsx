@@ -133,8 +133,15 @@ const EditUserInfoFormWrapper: React.FC<any> = (props) => {
         guest
           ? (guestArg: Guest, updates: Partial<Guest>) =>
               updateGuestMutation({
+                // Send only the fields being changed, plus the id updateGuest
+                // requires. Spreading the whole guest carried rentOwed/choreFees
+                // along at whatever value the screen loaded, and mergeGuestStats
+                // max-merges those as accumulators -- so a stale higher balance
+                // beat the real post-payment figure and re-billed rent the
+                // resident had already paid. mergeGuestStats fills unchanged
+                // fields from the stored document anyway.
                 guest: guestArg,
-                updatedGuest: { ...guestArg, ...updates },
+                updatedGuest: { ...updates, id: guestArg.id },
               })
           : undefined
       }

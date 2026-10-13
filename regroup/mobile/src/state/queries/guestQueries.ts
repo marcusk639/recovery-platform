@@ -82,11 +82,19 @@ export const useUpdateGuest = () => {
       guest,
       updatedGuest,
       retryCount = 3,
+      authoritativeFields = [],
     }: {
       guest: Partial<Guest>;
       updatedGuest: Partial<Guest>;
       retryCount?: number;
-    }) => guestService.updateGuest(guest, updatedGuest, retryCount),
+      authoritativeFields?: ReadonlyArray<keyof Guest>;
+    }) =>
+      guestService.updateGuest(
+        guest,
+        updatedGuest,
+        retryCount,
+        authoritativeFields,
+      ),
 
     // Optimistic update
     onMutate: async ({ updatedGuest }) => {

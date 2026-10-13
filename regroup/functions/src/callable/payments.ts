@@ -22,9 +22,22 @@ import {
 import { parseInput, safeReturnUrlSchema } from "../validation";
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
+/**
+ * Rent is collected in USD only. `rentOwed` is integer USD cents and the webhook
+ * decrements it by `paymentIntent.amount` with no currency conversion, so an
+ * amount is only meaningful alongside its currency: a client-chosen `jpy` let a
+ * resident clear a $500 balance for ~¥50,000 (about $335). Pinned to a literal
+ * rather than defaulted, so a non-USD request is refused instead of silently
+ * rewritten.
+ */
+const SUPPORTED_CURRENCY = "usd" as const;
+
+/** Mirrors MAX_PAYMENT_CENTS in the mobile client, which was the only bound. */
+const MAX_PAYMENT_CENTS = 10_000_000;
+
 const createPaymentIntentSchema = z.object({
-  amount: z.number().int().positive(),
-  currency: z.string().optional(),
+  amount: z.number().int().positive().max(MAX_PAYMENT_CENTS),
+  currency: z.literal(SUPPORTED_CURRENCY).optional(),
   guestId: z.string().min(1),
   houseId: z.string().min(1),
   description: z.string().optional(),
@@ -95,7 +108,7 @@ export const createPaymentIntent = onCall(
     // ── 2. Input validation ───────────────────────────────────────────────────
     const {
       amount,
-      currency = "usd",
+      currency = SUPPORTED_CURRENCY,
       guestId,
       houseId,
       description,

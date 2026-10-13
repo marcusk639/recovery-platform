@@ -1,3 +1,4 @@
+import { Dollars, asDollars } from '../util/money';
 import * as yup from 'yup';
 import SchemaConstants from './SchemaConstants';
 import { BaseEntity } from './BaseEntity';
@@ -60,8 +61,8 @@ export class House extends BaseEntity {
   country: string = '';
   health: HouseHealth = {};
   name: string = '';
-  monthlyRent: number = 0;
-  weeklyRent: number = 0;
+  monthlyRent: Dollars = asDollars(0);
+  weeklyRent: Dollars = asDollars(0);
   currentCapacity: number = 0;
   maximumCapacity: number = 1;
   state: string = '';

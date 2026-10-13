@@ -25,6 +25,7 @@ import { verifyStripeWebhook } from "../util/verifyStripeWebhook";
 import { sendFcmToHouseAdmins } from "../util/notifications";
 import { sendEmail, regroupEmail } from "../util/email";
 import type { SubscriptionDoc } from "../api/firestore";
+import { Cents } from "../util/money";
 
 // ---------------------------------------------------------------------------
 // Firestore data-model types
@@ -48,7 +49,7 @@ interface GuestDoc {
   userId: string;
   firstName: string;
   lastName: string;
-  rentOwed?: number;
+  rentOwed?: Cents;
   rentDueDate?: string; // YYYY-MM-DD (optional live field)
   email?: string;
 }
@@ -315,8 +316,23 @@ async function handlePaymentIntentSucceeded(
   }
 
   const db = admin.firestore();
+
+  // Stripe amounts are in the currency's smallest unit, NOT always cents: JPY is
+  // zero-decimal, so `amount: 50000` is ¥50,000 (about $335), not $500. rentOwed
+  // is USD cents and is decremented by this figure with no conversion, so a
+  // non-USD payment would clear a far larger balance than it paid. Refuse rather
+  // than guess a rate.
+  if (paymentIntent.currency !== "usd") {
+    logger.error("stripeWebhook: refusing a non-USD payment on the rent ledger", {
+      paymentIntentId: paymentIntent.id,
+      currency: paymentIntent.currency,
+    });
+    throw new PermanentWebhookError(
+      `Unsupported currency ${paymentIntent.currency} on the rent ledger`,
+    );
+  }
+
   const amountDollars = paymentIntent.amount / 100;
-  // paymentIntent.amount is already in cents (Stripe always uses cents)
   const amountCents = paymentIntent.amount;
 
   // Read the guest once up front so we can both (a) capture the due date active
@@ -1039,25 +1055,146 @@ async function handlePayoutFailed(
 // Returns true if this event was already processed (skip further handling)
 // ---------------------------------------------------------------------------
 
-async function checkAndMarkEventProcessed(
+/**
+ * A refusal that re-delivery can never fix — a non-USD payment on a USD ledger,
+ * say. The idempotency marker stands and Stripe is answered 200, because
+ * retrying for three days is noise rather than recovery. Anything else is
+ * treated as transient and retried.
+ */
+export class PermanentWebhookError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PermanentWebhookError";
+  }
+}
+
+/**
+ * `instanceof` alone is unreliable across duplicate module instances (src vs the
+ * compiled lib), structured clone, or a wrap-and-rethrow, and the misclassification
+ * cost is asymmetric: treating a permanent refusal as transient costs three days of
+ * harmless retries, while treating a transient failure as permanent loses money.
+ */
+function isPermanent(err: unknown): boolean {
+  return (
+    err instanceof PermanentWebhookError ||
+    (err as Error)?.name === "PermanentWebhookError"
+  );
+}
+
+/**
+ * How long a `processing` claim is honoured before another delivery may take it
+ * over. Comfortably longer than any single invocation, far shorter than Stripe's
+ * ~3-day retry horizon, so a crashed invocation self-heals on a later retry.
+ */
+const CLAIM_STALE_MS = 10 * 60 * 1000;
+
+type ClaimOutcome = "done" | "in_flight" | "claimed";
+
+/**
+ * Two-phase idempotency claim.
+ *
+ * An earlier version marked the event processed up front and deleted the marker
+ * if the handler threw. That delete is the weak link: a Firestore outage causes
+ * the handler throw AND the delete failure together, leaving the event claimed
+ * forever — Stripe's retry then sees a duplicate, gets 200, and the payment is
+ * lost exactly as before the fix.
+ *
+ * So the marker now carries a status instead of merely existing:
+ *   - `done`       — finished, or deliberately refused. Later deliveries skip it.
+ *   - `processing` — a delivery is working on it. A concurrent delivery backs off
+ *                    (500, so Stripe retries later) rather than reporting success.
+ *                    Reclaimable once older than CLAIM_STALE_MS.
+ *   - `failed`     — the handler threw. Immediately reclaimable.
+ *
+ * The failure path still writes, but if that write fails the doc simply stays
+ * `processing` and becomes reclaimable when it goes stale. The degraded outcome
+ * is "retried later" rather than "lost permanently".
+ */
+async function claimEvent(
   eventId: string,
   eventType: string,
-): Promise<boolean> {
+): Promise<ClaimOutcome> {
   const db = admin.firestore();
   const eventRef = db.collection("webhookEvents").doc(eventId);
 
   return await db.runTransaction(async (txn) => {
     const snap = await txn.get(eventRef);
+
     if (snap.exists) {
-      return true; // already processed
+      const status = snap.get("status");
+
+      // Legacy markers predate the status field; treat a bare marker as done so
+      // previously-processed events are never replayed.
+      if (status === undefined || status === "done") {
+        return "done";
+      }
+
+      if (status === "processing") {
+        const claimedAtMs = snap.get("claimedAtMs");
+        const fresh =
+          typeof claimedAtMs === "number" &&
+          Date.now() - claimedAtMs < CLAIM_STALE_MS;
+        if (fresh) {
+          return "in_flight";
+        }
+      }
+      // `failed`, or a stale `processing` claim: fall through and reclaim.
     }
+
     txn.set(eventRef, {
       eventId,
       type: eventType,
-      processedAt: admin.firestore.FieldValue.serverTimestamp(),
+      status: "processing",
+      claimedAtMs: Date.now(),
+      claimedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
-    return false; // not yet processed
+    return "claimed";
   });
+}
+
+/** Marks the claim finished so later deliveries skip the event. */
+async function markEventDone(eventId: string): Promise<void> {
+  try {
+    await admin
+      .firestore()
+      .collection("webhookEvents")
+      .doc(eventId)
+      .set(
+        {
+          status: "done",
+          doneAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+  } catch (err) {
+    // The work succeeded; only the bookkeeping failed. The claim goes stale and
+    // a later delivery may reprocess, which the per-payment rentApplied
+    // transaction makes safe.
+    logger.error("stripeWebhook: failed to mark the event done", {
+      eventId,
+      err: (err as Error).message,
+    });
+  }
+}
+
+/** Releases the claim after a transient failure so a retry can pick it up. */
+async function markEventFailed(eventId: string): Promise<boolean> {
+  try {
+    await admin
+      .firestore()
+      .collection("webhookEvents")
+      .doc(eventId)
+      .set({ status: "failed" }, { merge: true });
+    return true;
+  } catch (err) {
+    // Not fatal: the claim stays `processing` and becomes reclaimable once
+    // stale, so the event is retried later rather than lost.
+    logger.error("stripeWebhook: failed to release the claim; relying on staleness", {
+      eventId,
+      err: (err as Error).message,
+    });
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1140,9 +1277,9 @@ export const stripeWebhook = onRequest(
     // -------------------------------------------------------------------------
     // 3. Idempotency check (transaction-safe)
     // -------------------------------------------------------------------------
-    let alreadyProcessed: boolean;
+    let outcome: ClaimOutcome;
     try {
-      alreadyProcessed = await checkAndMarkEventProcessed(event.id, event.type);
+      outcome = await claimEvent(event.id, event.type);
     } catch (err) {
       // If idempotency check itself fails, we log and continue processing
       // (better to process twice than to miss an event)
@@ -1150,10 +1287,22 @@ export const stripeWebhook = onRequest(
         eventId: event.id,
         err: (err as Error).message,
       });
-      alreadyProcessed = false;
+      outcome = "claimed";
     }
 
-    if (alreadyProcessed) {
+    if (outcome === "in_flight") {
+      // Another delivery of this same event is mid-flight. Answering 200 here
+      // would tell Stripe the work is done while the in-flight attempt may still
+      // fail, so ask for a retry instead.
+      logger.info("stripeWebhook: event already in flight, asking for a retry", {
+        eventId: event.id,
+        type: event.type,
+      });
+      res.status(409).send({ error: "event in flight" });
+      return;
+    }
+
+    if (outcome === "done") {
       logger.info("stripeWebhook: duplicate event ignored", {
         eventId: event.id,
         type: event.type,
@@ -1238,17 +1387,30 @@ export const stripeWebhook = onRequest(
           });
       }
     } catch (err) {
-      // Per Stripe best practices: return 200 so Stripe does not retry infinitely.
-      // The idempotency record has already been written, so we log the error for
-      // ops investigation without triggering a retry storm.
-      logger.error("stripeWebhook: event handler threw an error", {
+      if (!isPermanent(err)) {
+        // Transient. The claim was taken before the handler ran, so answering
+        // 200 here would lose a real payment permanently.
+        const released = await markEventFailed(event.id);
+        logger.error("stripeWebhook: event handler threw, released for retry", {
+          eventId: event.id,
+          type: event.type,
+          released,
+          err: (err as Error).message,
+          stack: (err as Error).stack,
+        });
+        res.status(500).send({ error: "handler failed" });
+        return;
+      }
+      // Re-delivery can never succeed, so fall through: the claim is marked done
+      // below and Stripe is told to stop rather than retry for three days.
+      logger.error("stripeWebhook: refused the event", {
         eventId: event.id,
         type: event.type,
         err: (err as Error).message,
-        stack: (err as Error).stack,
       });
     }
 
+    await markEventDone(event.id);
     res.status(200).send({ received: true });
   },
 );
@@ -1360,18 +1522,30 @@ export const handleStripeConnectWebhook = onRequest(
     // Idempotency check (transaction-safe) — Stripe retries Connect events, and
     // replaying account.application.deauthorized after a reconnect would wrongly
     // disconnect a re-onboarded account. Mirrors the platform webhook handler.
-    let alreadyProcessed: boolean;
+    let outcome: ClaimOutcome;
     try {
-      alreadyProcessed = await checkAndMarkEventProcessed(event.id, event.type);
+      outcome = await claimEvent(event.id, event.type);
     } catch (err) {
       logger.error("handleStripeConnectWebhook: idempotency check failed", {
         eventId: event.id,
         err: (err as Error).message,
       });
-      alreadyProcessed = false;
+      outcome = "claimed";
     }
 
-    if (alreadyProcessed) {
+    if (outcome === "in_flight") {
+      // Another delivery of this same event is mid-flight. Answering 200 here
+      // would tell Stripe the work is done while the in-flight attempt may still
+      // fail, so ask for a retry instead.
+      logger.info("stripeWebhook: event already in flight, asking for a retry", {
+        eventId: event.id,
+        type: event.type,
+      });
+      res.status(409).send({ error: "event in flight" });
+      return;
+    }
+
+    if (outcome === "done") {
       logger.info("handleStripeConnectWebhook: duplicate event ignored", {
         eventId: event.id,
         type: event.type,
@@ -1401,14 +1575,29 @@ export const handleStripeConnectWebhook = onRequest(
           );
       }
     } catch (err) {
-      logger.error("handleStripeConnectWebhook: event handler threw an error", {
+      if (!isPermanent(err)) {
+        const released = await markEventFailed(event.id);
+        logger.error(
+          "handleStripeConnectWebhook: event handler threw, released for retry",
+          {
+            eventId: event.id,
+            type: event.type,
+            released,
+            err: (err as Error).message,
+            stack: (err as Error).stack,
+          },
+        );
+        res.status(500).send({ error: "handler failed" });
+        return;
+      }
+      logger.error("handleStripeConnectWebhook: refused the event", {
         eventId: event.id,
         type: event.type,
         err: (err as Error).message,
-        stack: (err as Error).stack,
       });
     }
 
+    await markEventDone(event.id);
     res.status(200).send({ received: true });
   },
 );

@@ -80,6 +80,7 @@ jest.mock("../../util/house", () => ({
 // ─── Imports (after mocks) ───────────────────────────────────────────────────
 
 import { firestore } from "../../../firebase-setup";
+import { asCents } from "../../util/money";
 import * as crud from "../crud";
 import {
   getGuest,
@@ -247,6 +248,65 @@ describe("guest service", () => {
       );
 
       expect((result as Partial<Guest>).version).toBe(6);
+    });
+
+    // ── rentOwed is an accumulator for concurrent writes, but an operator
+    // editing a balance is authoritative. These pin both halves.
+    it("keeps the higher rentOwed on an ordinary update, protecting concurrent accrual", async () => {
+      const current = makeGuest({ id: "g1", rentOwed: asCents(50000) });
+      getTxGet().mockResolvedValue({ exists: true, data: () => current });
+
+      const result = await updateGuest(
+        { id: "g1" },
+        { id: "g1", rentOwed: asCents(10000) },
+      );
+
+      expect((result as Partial<Guest>).rentOwed).toBe(50000);
+    });
+
+    it("lowers rentOwed when the caller declares the field authoritative", async () => {
+      const current = makeGuest({ id: "g1", rentOwed: asCents(50000) });
+      getTxGet().mockResolvedValue({ exists: true, data: () => current });
+
+      // An operator correcting $500 -> $100 after a cash payment. Without this,
+      // Math.max discards the edit and the UI still reports success.
+      const result = await updateGuest(
+        { id: "g1" },
+        { id: "g1", rentOwed: asCents(10000) },
+        3,
+        ["rentOwed", "choreFees"],
+      );
+
+      expect((result as Partial<Guest>).rentOwed).toBe(10000);
+    });
+
+    it("zeroes a paid-off balance when the field is authoritative", async () => {
+      const current = makeGuest({ id: "g1", rentOwed: asCents(50000) });
+      getTxGet().mockResolvedValue({ exists: true, data: () => current });
+
+      const result = await updateGuest(
+        { id: "g1" },
+        { id: "g1", rentOwed: asCents(0) },
+        3,
+        ["rentOwed", "choreFees"],
+      );
+
+      expect((result as Partial<Guest>).rentOwed).toBe(0);
+    });
+
+    it("still max-merges a field the caller did not declare authoritative", async () => {
+      const current = makeGuest({ id: "g1", rentOwed: asCents(50000), step: 4 });
+      getTxGet().mockResolvedValue({ exists: true, data: () => current });
+
+      const result = await updateGuest(
+        { id: "g1" },
+        { id: "g1", rentOwed: asCents(10000), step: 1 },
+        3,
+        ["rentOwed"],
+      );
+
+      expect((result as Partial<Guest>).rentOwed).toBe(10000);
+      expect((result as Partial<Guest>).step).toBe(4);
     });
 
     it("calls transaction.update with the merged guest", async () => {
@@ -553,7 +613,7 @@ describe("guest service", () => {
         id: "g1",
         phase: "phase-2",
         firstName: "Jane",
-        rentOwed: 12345,
+        rentOwed: asCents(12345),
       });
       const house = { id: "h1", phases: {} } as any;
 
