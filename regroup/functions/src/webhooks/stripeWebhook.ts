@@ -348,6 +348,12 @@ async function handlePaymentIntentSucceeded(
       rentApplied: false,
       needsManualReconciliation: true,
       refusedReason: "unsupported_currency",
+      // Without createdAt this doc is invisible: analytics filters on
+      // inWindow(toDateStr(createdAt)) which is false for undefined, and
+      // getPaymentHistory orders by createdAt, which Firestore uses to
+      // exclude documents missing the field. A quarantine record nobody can
+      // query is not a quarantine record.
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
@@ -358,6 +364,24 @@ async function handlePaymentIntentSucceeded(
 
   const amountDollars = paymentIntent.amount / 100;
   const amountCents = paymentIntent.amount;
+
+  // 1. Write the payment record FIRST, before anything that can fail.
+  // Refusing to apply a payment and refusing to record it are separate
+  // decisions — the same principle the currency guard above applies. The guest
+  // read below propagates on failure (500, claim released, Stripe retries),
+  // and across a long outage that window is time the resident's history shows
+  // nothing for a captured card. dueDate is not known yet; it rides on the
+  // transaction's existing txn.set below, costing no extra write.
+  await upsertPaymentDoc(paymentIntent.id, {
+    stripePaymentIntentId: paymentIntent.id,
+    houseId,
+    guestId,
+    amount: amountDollars,
+    currency: paymentIntent.currency,
+    status: "succeeded",
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
 
   // Read the guest once up front so we can both (a) capture the due date active
   // when this payment posted and (b) reuse the snapshot for the rentOwed
@@ -384,19 +408,6 @@ async function handlePaymentIntentSucceeded(
     guestDataForDueDate.rentDueDate.length > 0
       ? guestDataForDueDate.rentDueDate
       : undefined;
-
-  // 1. Write / update payment document
-  await upsertPaymentDoc(paymentIntent.id, {
-    stripePaymentIntentId: paymentIntent.id,
-    houseId,
-    guestId,
-    amount: amountDollars,
-    currency: paymentIntent.currency,
-    status: "succeeded",
-    ...(dueDate ? { dueDate } : {}),
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
 
   // 1b. Reconcile the auto-pay attempt record. The scheduled collector authors
   // that record at charge time; this only confirms the outcome, so a missing id
@@ -455,7 +466,11 @@ async function handlePaymentIntentSucceeded(
       });
       txn.set(
         paymentRef,
-        { rentApplied: true, rentAppliedAmountCents: amountCents },
+        {
+          rentApplied: true,
+          rentAppliedAmountCents: amountCents,
+          ...(dueDate ? { dueDate } : {}),
+        },
         { merge: true },
       );
       return true;

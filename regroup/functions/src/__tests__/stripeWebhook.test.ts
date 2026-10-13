@@ -947,12 +947,24 @@ describe("payment_intent.succeeded", () => {
         houseId: "house_1",
         currency: "jpy",
         status: "succeeded",
+        amountMinorUnits: 50000,
         rentApplied: false,
         needsManualReconciliation: true,
         refusedReason: "unsupported_currency",
       }),
       expect.objectContaining({ merge: true }),
     );
+    // `amount` means USD dollars to analytics.ts. Writing a zero-decimal
+    // currency under that key reports 100x. Minor units go in their own field.
+    // Scoped to THIS call rather than the whole mock: after the reorder in
+    // this task the success path writes an amount-bearing doc, so a
+    // mock-wide negative would be asserting the absence of an unrelated call.
+    const refusalCall = mockSet.mock.calls.find(
+      ([doc]) => (doc as Record<string, unknown>).refusedReason !== undefined,
+    );
+    expect(refusalCall).toBeDefined();
+    expect(refusalCall?.[0]).not.toHaveProperty("amount");
+    expect(refusalCall?.[0]).toHaveProperty("createdAt");
   });
 
   test("a transient guest read failure returns 500 and releases the claim so Stripe retries", async () => {
@@ -975,6 +987,30 @@ describe("payment_intent.succeeded", () => {
     expect(res.status).toHaveBeenCalledWith(500);
     expect(mockEventSet).toHaveBeenCalledWith(
       expect.objectContaining({ status: "failed" }),
+      expect.objectContaining({ merge: true }),
+    );
+  });
+
+  test("records the payment before reading the guest, so a read failure still leaves a record", async () => {
+    // The read failure returns 500 and Stripe retries, but across a
+    // multi-hour degradation the resident's history and the operator's
+    // dashboard would otherwise show no payment for a captured card.
+    const pi = makePaymentIntent({
+      metadata: { guestId: "guest_1", houseId: "house_1" },
+      amount: 50000,
+    });
+    const event = makeStripeEvent("payment_intent.succeeded", pi);
+    mockConstructEvent.mockReturnValue(event);
+    setupForPaymentSucceeded({ guestGetError: new Error("UNAVAILABLE") });
+
+    await stripeWebhook(makeRequest({}) as never, makeResponse() as never);
+
+    expect(mockSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stripePaymentIntentId: "pi_test_123",
+        status: "succeeded",
+        amount: 500,
+      }),
       expect.objectContaining({ merge: true }),
     );
   });
