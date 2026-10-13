@@ -698,6 +698,7 @@ describe("payment_intent.succeeded", () => {
   function setupForPaymentSucceeded({
     guestExists = true,
     guestData = {},
+    guestGetError = undefined as Error | undefined,
     adminDocs = [] as Array<{
       id: string;
       data: () => Record<string, unknown>;
@@ -752,7 +753,9 @@ describe("payment_intent.succeeded", () => {
       if (name === "guests") {
         return {
           doc: jest.fn().mockReturnValue({
-            get: jest.fn().mockResolvedValue(guestDoc),
+            get: guestGetError
+              ? jest.fn().mockRejectedValue(guestGetError)
+              : jest.fn().mockResolvedValue(guestDoc),
             update: mockUpdate.mockResolvedValue(undefined),
           }),
         };
@@ -918,6 +921,82 @@ describe("payment_intent.succeeded", () => {
 
     expect(mockUpdate).not.toHaveBeenCalledWith(
       expect.objectContaining({ rentOwed: expect.anything() }),
+    );
+  });
+
+  test("records a refused non-USD payment for manual reconciliation before throwing", async () => {
+    // payment_intent.succeeded fires post-capture: the funds are already taken.
+    // Refusing to APPLY the payment is correct; refusing to RECORD it means the
+    // operator's Stripe balance and the Regroup ledger diverge with only a log
+    // line to find it by, and the event is marked done so Stripe never retries.
+    const pi = makePaymentIntent({
+      metadata: { guestId: "guest_1", houseId: "house_1" },
+      amount: 50000,
+      currency: "jpy",
+    } as never);
+    const event = makeStripeEvent("payment_intent.succeeded", pi);
+    mockConstructEvent.mockReturnValue(event);
+    setupForPaymentSucceeded();
+
+    await stripeWebhook(makeRequest({}) as never, makeResponse() as never);
+
+    expect(mockSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stripePaymentIntentId: "pi_test_123",
+        guestId: "guest_1",
+        houseId: "house_1",
+        currency: "jpy",
+        status: "succeeded",
+        rentApplied: false,
+        needsManualReconciliation: true,
+        refusedReason: "unsupported_currency",
+      }),
+      expect.objectContaining({ merge: true }),
+    );
+  });
+
+  test("a transient guest read failure returns 500 and releases the claim so Stripe retries", async () => {
+    // The decrement lives in an `else` branch guarded on the snapshot. Swallowing
+    // the read error skips it while the handler returns NORMALLY, so the event is
+    // marked done and Stripe is told 200: the card was charged, the balance never
+    // moved, and no retry can repair it. Retrying is safe — rentApplied lives on
+    // paymentRef, which is in the transaction's read set.
+    const pi = makePaymentIntent({
+      metadata: { guestId: "guest_1", houseId: "house_1" },
+      amount: 50000,
+    });
+    const event = makeStripeEvent("payment_intent.succeeded", pi);
+    mockConstructEvent.mockReturnValue(event);
+    setupForPaymentSucceeded({ guestGetError: new Error("UNAVAILABLE") });
+
+    const res = makeResponse();
+    await stripeWebhook(makeRequest({}) as never, res as never);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(mockEventSet).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "failed" }),
+      expect.objectContaining({ merge: true }),
+    );
+  });
+
+  test("a genuinely absent guest is not retried: still 200 and marked done", async () => {
+    // A read that SUCCEEDS and reports exists:false is permanent — retrying it for
+    // three days accomplishes nothing. Only the transient case above may retry.
+    const pi = makePaymentIntent({
+      metadata: { guestId: "guest_1", houseId: "house_1" },
+      amount: 50000,
+    });
+    const event = makeStripeEvent("payment_intent.succeeded", pi);
+    mockConstructEvent.mockReturnValue(event);
+    setupForPaymentSucceeded({ guestExists: false });
+
+    const res = makeResponse();
+    await stripeWebhook(makeRequest({}) as never, res as never);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(mockEventSet).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "done" }),
+      expect.objectContaining({ merge: true }),
     );
   });
 
