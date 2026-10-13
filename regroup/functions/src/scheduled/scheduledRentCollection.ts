@@ -76,8 +76,7 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
   const { byGuest: inFlightByGuest, staleRefs } = await loadInFlightCentsByGuest(now);
   await flagStaleForReconciliation(staleRefs);
   const needsReconciliationCount = await reportAttemptsNeedingReconciliation();
-  const paymentsNeedingReconciliationCount =
-    await reportPaymentsNeedingReconciliation();
+  const paymentsNeedingReconciliationCount = await reportPaymentsNeedingReconciliation();
 
   const snapshot = await guestCollection
     .where('autoPayEnabled', '==', true)
