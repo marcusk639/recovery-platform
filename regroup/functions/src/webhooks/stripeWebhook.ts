@@ -348,6 +348,10 @@ async function handlePaymentIntentSucceeded(
       rentApplied: false,
       needsManualReconciliation: true,
       refusedReason: "unsupported_currency",
+      // Null, not absent: the reconciliation sweep queries reconciledAt == null,
+      // which only matches a field that exists. An operator resolves the
+      // record by setting this to a timestamp.
+      reconciledAt: null,
       // Without createdAt this doc is invisible: analytics filters on
       // inWindow(toDateStr(createdAt)) which is false for undefined, and
       // getPaymentHistory orders by createdAt, which Firestore uses to

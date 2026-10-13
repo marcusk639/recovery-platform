@@ -30,7 +30,10 @@
  */
 
 import { logger } from 'firebase-functions';
-import { rentCollectionAttemptCollection } from '../api/firestore';
+import {
+  paymentsCollection,
+  rentCollectionAttemptCollection,
+} from '../api/firestore';
 
 export type RentAttemptStatus = 'pending' | 'awaiting_confirmation' | 'charged' | 'failed';
 
@@ -288,6 +291,45 @@ export async function reportAttemptsNeedingReconciliation(): Promise<number> {
       attemptId: doc.id,
       guestId: (doc.data() ?? {}).guestId ?? null,
       status: (doc.data() ?? {}).status ?? null,
+    })),
+  });
+
+  return total;
+}
+
+/**
+ * Surfaces payments quarantined by the webhook for manual reconciliation.
+ *
+ * Mirrors reportAttemptsNeedingReconciliation for the `payments` collection.
+ * The flag lives there rather than on an attempt record because `payments` is
+ * the money record, and a resident-initiated payment has no attempt document
+ * to carry a flag at all.
+ *
+ * Without this the flag had no reader anywhere, which is the exact failure
+ * this module's own comment above describes. The reconciledAt clause is the
+ * other half: an alert that cannot be cleared becomes an alert nobody reads.
+ * Operators resolve a record by setting reconciledAt until a UI exists.
+ */
+export async function reportPaymentsNeedingReconciliation(): Promise<number> {
+  const flagged = paymentsCollection
+    .where('needsManualReconciliation', '==', true)
+    .where('reconciledAt', '==', null);
+
+  const total = (await flagged.count().get()).data().count;
+  if (total === 0) {
+    return 0;
+  }
+
+  const sample = await flagged.select('guestId', 'refusedReason').limit(20).get();
+
+  logger.error('rentAttempts: payments need manual reconciliation', {
+    count: total,
+    sampled: sample.size,
+    // Ids and reasons only — never names or amounts per resident.
+    payments: sample.docs.map((doc) => ({
+      paymentId: doc.id,
+      guestId: (doc.data() ?? {}).guestId ?? null,
+      refusedReason: (doc.data() ?? {}).refusedReason ?? null,
     })),
   });
 

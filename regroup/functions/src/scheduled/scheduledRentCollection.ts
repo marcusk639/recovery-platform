@@ -31,6 +31,7 @@ import {
   flagStaleForReconciliation,
   loadInFlightCentsByGuest,
   reportAttemptsNeedingReconciliation,
+  reportPaymentsNeedingReconciliation,
   markRentAttemptCharged,
   markRentAttemptFailed,
   recordRentAttempt,
@@ -54,6 +55,8 @@ export interface RentCollectionSummary {
   failureCount: number;
   /** Attempts whose Stripe outcome is unknown and awaiting a human. */
   needsReconciliationCount: number;
+  /** Payments the webhook quarantined and no operator has resolved yet. */
+  paymentsNeedingReconciliationCount: number;
 }
 
 /**
@@ -73,6 +76,8 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
   const { byGuest: inFlightByGuest, staleRefs } = await loadInFlightCentsByGuest(now);
   await flagStaleForReconciliation(staleRefs);
   const needsReconciliationCount = await reportAttemptsNeedingReconciliation();
+  const paymentsNeedingReconciliationCount =
+    await reportPaymentsNeedingReconciliation();
 
   const snapshot = await guestCollection
     .where('autoPayEnabled', '==', true)
@@ -81,7 +86,13 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
 
   if (snapshot.empty) {
     logger.info('scheduledRentCollection: no auto-pay guests with rent owed');
-    return { matchedCount: 0, attemptedCount: 0, failureCount: 0, needsReconciliationCount };
+    return {
+      matchedCount: 0,
+      attemptedCount: 0,
+      failureCount: 0,
+      needsReconciliationCount,
+      paymentsNeedingReconciliationCount,
+    };
   }
 
   const today = now.toISOString().split('T')[0];
@@ -111,6 +122,7 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
       attemptedCount: 0,
       failureCount: 0,
       needsReconciliationCount,
+      paymentsNeedingReconciliationCount,
     };
   }
 
@@ -244,6 +256,7 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
     attemptedCount: due.length,
     failureCount,
     needsReconciliationCount,
+    paymentsNeedingReconciliationCount,
   };
 }
 
