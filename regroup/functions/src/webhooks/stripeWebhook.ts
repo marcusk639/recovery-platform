@@ -333,6 +333,13 @@ async function handlePaymentIntentSucceeded(
     // redelivers: if we do not record the payment here, nothing anywhere records
     // it. Refusing to APPLY the payment and refusing to RECORD it are separate
     // decisions and only the first one is correct.
+    //
+    // This block must stay terminal. `reconciledAt: null` below is what makes the
+    // record visible to the daily sweep, but it also overwrites an operator's
+    // resolution timestamp. That is safe only because nothing re-enters here: the
+    // PermanentWebhookError is caught in the dispatcher, which falls through to
+    // markEventDone, and later deliveries short-circuit in claimEvent. If this
+    // path is ever made to retry, make `reconciledAt` conditional first.
     await upsertPaymentDoc(paymentIntent.id, {
       stripePaymentIntentId: paymentIntent.id,
       // Deliberately not `amount`. That field is NOT consistently scaled:
@@ -461,6 +468,12 @@ async function handlePaymentIntentSucceeded(
     // Without these keys the record is invisible to reportPaymentsNeedingReconciliation.
     // reconciledAt: null is mandatory — the sweep's == null clause matches an
     // existing null field, never a missing one. createdAt was set in step 1.
+    //
+    // This block must stay terminal. `reconciledAt: null` overwrites an
+    // operator's resolution timestamp, which is safe only because nothing
+    // re-enters here: the handler falls through to markEventDone and later
+    // deliveries short-circuit in claimEvent. If this branch is ever made to
+    // throw and retry, make `reconciledAt` conditional first.
     await upsertPaymentDoc(paymentIntent.id, {
       needsManualReconciliation: true,
       refusedReason: "guest_missing",
