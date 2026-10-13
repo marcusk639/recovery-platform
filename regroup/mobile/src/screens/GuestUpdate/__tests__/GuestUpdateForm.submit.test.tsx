@@ -10,7 +10,7 @@
  * "unchanged", and the form reports success.
  */
 import React from 'react';
-import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 
 import GuestUpdateForm from '../GuestUpdateForm';
 import { Guest } from '../../../entities/Guest';
@@ -78,7 +78,23 @@ describe('GuestUpdateForm submit guard', () => {
     fireEvent.changeText(getByTestId('guest-rentowed-input'), '12,34');
     fireEvent.press(getByTestId('create-guest-button'));
 
-    expect(await findByText(/Enter an amount like/i)).toBeTruthy();
+    await findByText(/Enter an amount like/i);
+
+    // Every field is marked touched on submit, so an error misrouted to ANY
+    // input would still render the text. Pin the attachment instead: climb from
+    // the rentOwed input to the first container that holds the message — that
+    // container is the field's own, so it must not also hold another input.
+    let container = getByTestId('guest-rentowed-input').parent;
+    while (
+      container &&
+      within(container).queryByText(/Enter an amount like/i) === null
+    ) {
+      container = container.parent;
+    }
+    expect(container).toBeTruthy();
+    expect(
+      within(container!).queryByTestId('guest-firstname-input'),
+    ).toBeNull();
   });
 
   it('still submits a readable edit, in cents, marked authoritative', async () => {

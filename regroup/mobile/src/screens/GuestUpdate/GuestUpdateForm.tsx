@@ -58,8 +58,8 @@ const GuestUpdateForm = withFormik<GuestUpdateProps, GuestFormValues>({
       // load-bearing if anyone later sets validateOnChange: false, adds a
       // validationSchema that deep-merges over this result, or reaches
       // submitForm down a path that skips validation. It is also what narrows
-      // the type — result.payload does not exist on the ok: false arm — so it
-      // cannot be deleted without a compile error. See Step 8.
+      // the type. Deleting this guard is a compile error, not a test failure,
+      // because payload does not exist on the ok: false arm.
       if (!result.ok) {
         setSubmitting(false);
         return;
