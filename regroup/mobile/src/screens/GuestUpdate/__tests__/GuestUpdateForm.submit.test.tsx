@@ -2,7 +2,7 @@
  * Pins the form -> service seam.
  *
  * Both halves of the malformed-money guard were covered in isolation —
- * `malformedMoneyFields` computes the list, and the parser distinguishes blank
+ * `guestMoneyUpdate` computes the verdict, and the parser distinguishes blank
  * from malformed — but nothing proved the FORM consults either one. Deleting
  * the guard from handleSubmit left every other test green, which is the same
  * blind spot that let the original bug through: an operator types an unreadable
@@ -70,6 +70,15 @@ describe('GuestUpdateForm submit guard', () => {
     });
 
     expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('tells the operator which field it could not read', async () => {
+    const { getByTestId, findByText } = renderForm();
+
+    fireEvent.changeText(getByTestId('guest-rentowed-input'), '12,34');
+    fireEvent.press(getByTestId('create-guest-button'));
+
+    expect(await findByText(/Enter an amount like/i)).toBeTruthy();
   });
 
   it('still submits a readable edit, in cents, marked authoritative', async () => {

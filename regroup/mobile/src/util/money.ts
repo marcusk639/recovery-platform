@@ -88,6 +88,8 @@ export function dollarsToCents(dollars: Dollars): Cents {
  * re-assertion. Without a helper the obvious workaround is an `as Cents` cast,
  * and a codebase that casts routinely has no brand at all. These keep the safe
  * path the short one.
+ *
+ * No callers yet; see subtractCents.
  */
 export function addCents(...amounts: Cents[]): Cents {
   return amounts.reduce<number>((sum, n) => sum + n, 0) as Cents;
@@ -185,6 +187,11 @@ export function parseDollarsField(
  * outstanding rent, and silently resolving a cleared field to zero would wipe a
  * real debt with no warning. An explicit "0" still means zero. A negative
  * amount is rejected rather than quietly turned into a credit.
+ *
+ * No callers since guestMoneyUpdate replaced the form's lossy parse path;
+ * see subtractCents. Retained rather than deleted because removing it would
+ * drop its test cases, which this repo's pre-commit gate reserves for a
+ * human decision.
  */
 export function parseDollarsInput(
   raw: string | number | undefined | null,
