@@ -272,9 +272,13 @@ export async function markRentAttemptFailed(
  *
  * DO NOT "harmonise" this query with that one by adding
  * `.where('reconciledAt', '==', null)`. Firestore's `== null` matches only an
- * existing null field, never a missing one, and no existing attempt document
- * has a `reconciledAt` field, so this sweep would go permanently silent
- * (confirmed against the emulator).
+ * existing null field, never a missing one, and no attempt carrying
+ * `needsReconciliation: true` has a `reconciledAt` field at all: the only two
+ * writers of that flag — flagStaleForReconciliation above and
+ * markRentAttemptFailed — never write it. (The field does appear on attempts;
+ * stripeWebhook.ts writes it as a server timestamp on a successful reconcile,
+ * but those carry the flag `false`, and a timestamp is not null regardless.)
+ * Adding the clause would match nothing and silence this sweep permanently.
  */
 export async function reportAttemptsNeedingReconciliation(): Promise<number> {
   const flagged = rentCollectionAttemptCollection.where(
