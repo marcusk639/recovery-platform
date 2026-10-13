@@ -21,6 +21,10 @@ jest.mock('../../api/firestore', () => ({
     doc: (id?: string) => attemptStore.doc(id),
     where: (f: string, op: string, v: unknown) => attemptStore.where(f, op, v),
   },
+  // Required lazily: this factory runs while the module under test is still
+  // importing, before a top-level import of the helper has initialized.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  paymentsCollection: require('./helpers/fakeApiFirestore').fakeEmptyCollection(),
 }));
 
 jest.mock('stripe', () =>
