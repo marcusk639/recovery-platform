@@ -465,7 +465,6 @@ async function handlePaymentIntentSucceeded(
       needsManualReconciliation: true,
       refusedReason: "guest_missing",
       reconciledAt: null,
-      rentApplied: false,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
   } else {

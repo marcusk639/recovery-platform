@@ -1093,7 +1093,6 @@ describe("payment_intent.succeeded", () => {
         needsManualReconciliation: true,
         refusedReason: "guest_missing",
         reconciledAt: null,
-        rentApplied: false,
       }),
       expect.objectContaining({ merge: true }),
     );
