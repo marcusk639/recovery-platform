@@ -334,8 +334,11 @@ async function handlePaymentIntentSucceeded(
     // decisions and only the first one is correct.
     await upsertPaymentDoc(paymentIntent.id, {
       stripePaymentIntentId: paymentIntent.id,
-      // Deliberately not `amount`: that field is USD dollars everywhere else, and
-      // dividing a zero-decimal currency by 100 would write a junk figure.
+      // Deliberately not `amount`. That field is NOT consistently scaled:
+      // stripeWebhook writes dollars and mobile/src/services/payments.ts:271
+      // writes cents, and analytics.ts:172 multiplies every row by 100
+      // assuming dollars — so manual payments already report 100x. Tracked
+      // separately; do not add to it here. Minor units are unambiguous.
       amountMinorUnits: paymentIntent.amount,
       currency: paymentIntent.currency,
       status: "succeeded",
