@@ -9,6 +9,7 @@ import {
   changedMoneyFields,
   formValuesToGuest,
   guestToFormValues,
+  malformedMoneyFields,
 } from './guestFormValues';
 import { Guests } from '../../types';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -32,6 +33,15 @@ const GuestUpdateForm = withFormik<GuestUpdateProps, GuestFormValues>({
   mapPropsToValues: ({ guest }) => guestToFormValues(guest),
   handleSubmit: async (values, { props, setStatus, setSubmitting }) => {
     setStatus({});
+    // Unreadable money is refused, not silently discarded. Without this the
+    // field parses back to the stored value, counts as unchanged, is omitted
+    // from the payload, and the operator is told the save succeeded.
+    const malformed = malformedMoneyFields(values);
+    if (malformed.length > 0) {
+      setStatus({ failed: true, malformedFields: malformed });
+      setSubmitting(false);
+      return;
+    }
     setSubmitting(true);
     try {
       const updatedGuest = formValuesToGuest(props.guest, values);

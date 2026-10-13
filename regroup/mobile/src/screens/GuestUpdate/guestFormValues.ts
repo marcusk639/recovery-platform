@@ -1,5 +1,10 @@
 import { Guest } from '../../entities/Guest';
-import { asCents, centsToDollars, parseDollarsInput } from '../../util/money';
+import {
+  asCents,
+  centsToDollars,
+  parseDollarsField,
+  parseDollarsInput,
+} from '../../util/money';
 
 /**
  * Money boundary for the guest update form.
@@ -54,6 +59,26 @@ export function changedMoneyFields(
       values[field] as string | number | undefined,
       stored,
     ) !== stored;
+  }) as ReadonlyArray<keyof Guest>;
+}
+
+/**
+ * Money fields the operator typed something unreadable into.
+ *
+ * A blank field is NOT malformed — clearing a field deliberately keeps the
+ * stored value. This is only the entries we could not read at all ('12,34',
+ * '-50', '1 200'). They must block submit: treating them as "unchanged" drops
+ * the edit while the form reports success, so an operator crediting an
+ * overpayment watches the balance stay exactly where it was.
+ */
+export function malformedMoneyFields(
+  values: GuestFormValues,
+): ReadonlyArray<keyof Guest> {
+  return CENTS_FIELDS.filter(field => {
+    const result = parseDollarsField(
+      values[field] as string | number | undefined,
+    );
+    return !result.ok && result.reason === 'malformed';
   }) as ReadonlyArray<keyof Guest>;
 }
 
