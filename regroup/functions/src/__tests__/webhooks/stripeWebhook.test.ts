@@ -391,7 +391,11 @@ describe("stripeWebhook — signature verification", () => {
     mockRunTransaction.mockImplementation(
       async (fn: (txn: any) => Promise<any>) => {
         const txn = {
-          get: jest.fn().mockResolvedValue({ exists: true }),
+          get: jest.fn().mockResolvedValue({
+            exists: true,
+            // legacy marker: no status field -> treated as done
+            get: (_f: string) => undefined,
+          }),
           set: jest.fn(),
         };
         return fn(txn);
@@ -1551,7 +1555,11 @@ describe("handleStripeConnectWebhook", () => {
     mockRunTransaction.mockImplementation(
       async (fn: (txn: any) => Promise<any>) => {
         const txn = {
-          get: jest.fn().mockResolvedValue({ exists: true }),
+          get: jest.fn().mockResolvedValue({
+            exists: true,
+            // legacy marker: no status field -> treated as done
+            get: (_f: string) => undefined,
+          }),
           set: jest.fn(),
         };
         return fn(txn);

@@ -15,7 +15,7 @@
 
 // Firestore mock infrastructure
 const mockSet = jest.fn();
-const mockEventDelete = jest.fn().mockResolvedValue(undefined);
+const mockEventSet = jest.fn().mockResolvedValue(undefined);
 const mockUpdate = jest.fn();
 const mockCollection = jest.fn();
 const mockRunTransaction = jest.fn();
@@ -649,7 +649,11 @@ describe("Idempotency", () => {
         transactionCallCount++;
         const alreadyExists = transactionCallCount > 1;
         const txn = {
-          get: jest.fn().mockResolvedValue({ exists: alreadyExists }),
+          get: jest.fn().mockResolvedValue({
+            exists: alreadyExists,
+            // a real DocumentSnapshot always has get(); no status = legacy = done
+            get: (_f: string) => undefined,
+          }),
           set: jest.fn(),
         };
         return fn(txn);
@@ -738,8 +742,7 @@ describe("payment_intent.succeeded", () => {
         return {
           doc: () => ({
             get: jest.fn().mockResolvedValue({ exists: false }),
-            set: jest.fn(),
-            delete: mockEventDelete,
+            set: mockEventSet,
           }),
         };
       }
@@ -808,7 +811,38 @@ describe("payment_intent.succeeded", () => {
     expect(mockMessagingSend).toHaveBeenCalledTimes(2); // guest + 1 admin
   });
 
-  test("a transient handler failure releases the marker and returns 500 so Stripe retries", async () => {
+  test("a concurrent in-flight delivery is asked to retry, not told the work is done", async () => {
+    // Stripe times out at ~30s and re-delivers while the first attempt is still
+    // running. Answering 200 here would tell Stripe the work is done while the
+    // in-flight attempt may still fail — and if it then fails, nothing retries.
+    const pi = makePaymentIntent({
+      metadata: { guestId: "guest_1", houseId: "house_1" },
+    });
+    mockConstructEvent.mockReturnValue(
+      makeStripeEvent("payment_intent.succeeded", pi),
+    );
+    setupForPaymentSucceeded();
+    mockRunTransaction.mockImplementation(
+      async (fn: (txn: unknown) => Promise<unknown>) =>
+        fn({
+          get: jest.fn().mockResolvedValue({
+            exists: true,
+            get: (field: string) =>
+              field === "status" ? "processing" : Date.now(),
+          }),
+          set: jest.fn(),
+          update: jest.fn(),
+        }),
+    );
+
+    const res = makeResponse();
+    await stripeWebhook(makeRequest({}) as never, res as never);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  test("a transient handler failure marks the claim failed and returns 500 so Stripe retries", async () => {
     // The event is marked processed BEFORE the handler runs. If the handler then
     // throws and we still answer 200, Stripe never retries: the charge succeeded
     // at Stripe, rentOwed is never decremented, and no payment doc is written.
@@ -827,7 +861,13 @@ describe("payment_intent.succeeded", () => {
     const res = makeResponse();
     await stripeWebhook(makeRequest({}) as never, res as never);
 
-    expect(mockEventDelete).toHaveBeenCalled();
+    // The claim is released by status, not by deleting the doc: if this write
+    // itself fails the claim merely goes stale and is reclaimed later, instead
+    // of being stuck forever as it would be if release depended on a delete.
+    expect(mockEventSet).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "failed" }),
+      expect.objectContaining({ merge: true }),
+    );
     expect(res.status).toHaveBeenCalledWith(500);
   });
 
@@ -847,7 +887,16 @@ describe("payment_intent.succeeded", () => {
     const res = makeResponse();
     await stripeWebhook(makeRequest({}) as never, res as never);
 
-    expect(mockEventDelete).not.toHaveBeenCalled();
+    // Discriminating assertion: this log line exists only on the refusal path,
+    // so the test fails if the permanent/transient split is removed.
+    expect(functions.logger.error).toHaveBeenCalledWith(
+      "stripeWebhook: refused the event",
+      expect.any(Object),
+    );
+    expect(mockEventSet).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "done" }),
+      expect.objectContaining({ merge: true }),
+    );
     expect(res.status).toHaveBeenCalledWith(200);
   });
 
