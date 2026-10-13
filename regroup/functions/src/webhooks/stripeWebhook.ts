@@ -327,7 +327,7 @@ async function handlePaymentIntentSucceeded(
       paymentIntentId: paymentIntent.id,
       currency: paymentIntent.currency,
     });
-    throw new Error(
+    throw new PermanentWebhookError(
       `Unsupported currency ${paymentIntent.currency} on the rent ledger`,
     );
   }
@@ -1055,6 +1055,42 @@ async function handlePayoutFailed(
 // Returns true if this event was already processed (skip further handling)
 // ---------------------------------------------------------------------------
 
+/**
+ * A refusal that re-delivery can never fix — a non-USD payment on a USD ledger,
+ * say. The idempotency marker stands and Stripe is answered 200, because
+ * retrying for three days is noise rather than recovery. Anything else is
+ * treated as transient and retried.
+ */
+export class PermanentWebhookError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PermanentWebhookError";
+  }
+}
+
+/**
+ * Drops the idempotency claim so Stripe's retry can be processed.
+ *
+ * The claim is taken BEFORE the handler runs, which is what makes concurrent
+ * deliveries safe. The cost is that a handler which throws leaves the event
+ * marked done forever: the charge succeeded at Stripe, rentOwed was never
+ * decremented, no payment doc was written, and nothing retries. Releasing the
+ * claim on a transient failure closes that hole; the per-payment `rentApplied`
+ * transaction already makes a re-delivery idempotent.
+ */
+async function releaseEventProcessed(eventId: string): Promise<void> {
+  try {
+    await admin.firestore().collection("webhookEvents").doc(eventId).delete();
+  } catch (err) {
+    // Best effort. If the release fails the event stays claimed and the payment
+    // needs manual reconciliation, so this must be loud.
+    logger.error("stripeWebhook: failed to release the idempotency claim", {
+      eventId,
+      err: (err as Error).message,
+    });
+  }
+}
+
 async function checkAndMarkEventProcessed(
   eventId: string,
   eventType: string,
@@ -1254,15 +1290,28 @@ export const stripeWebhook = onRequest(
           });
       }
     } catch (err) {
-      // Per Stripe best practices: return 200 so Stripe does not retry infinitely.
-      // The idempotency record has already been written, so we log the error for
-      // ops investigation without triggering a retry storm.
-      logger.error("stripeWebhook: event handler threw an error", {
-        eventId: event.id,
-        type: event.type,
-        err: (err as Error).message,
-        stack: (err as Error).stack,
-      });
+      if (err instanceof PermanentWebhookError) {
+        // Re-delivery can never succeed. Keep the claim and tell Stripe we are
+        // done, so it stops rather than retrying for three days.
+        logger.error("stripeWebhook: refused the event", {
+          eventId: event.id,
+          type: event.type,
+          err: (err as Error).message,
+        });
+      } else {
+        // Transient. The claim was taken before the handler ran, so answering
+        // 200 here would lose a real payment permanently: release it and let
+        // Stripe retry.
+        await releaseEventProcessed(event.id);
+        logger.error("stripeWebhook: event handler threw, released for retry", {
+          eventId: event.id,
+          type: event.type,
+          err: (err as Error).message,
+          stack: (err as Error).stack,
+        });
+        res.status(500).send({ error: "handler failed" });
+        return;
+      }
     }
 
     res.status(200).send({ received: true });
@@ -1417,12 +1466,26 @@ export const handleStripeConnectWebhook = onRequest(
           );
       }
     } catch (err) {
-      logger.error("handleStripeConnectWebhook: event handler threw an error", {
-        eventId: event.id,
-        type: event.type,
-        err: (err as Error).message,
-        stack: (err as Error).stack,
-      });
+      if (err instanceof PermanentWebhookError) {
+        logger.error("handleStripeConnectWebhook: refused the event", {
+          eventId: event.id,
+          type: event.type,
+          err: (err as Error).message,
+        });
+      } else {
+        await releaseEventProcessed(event.id);
+        logger.error(
+          "handleStripeConnectWebhook: event handler threw, released for retry",
+          {
+            eventId: event.id,
+            type: event.type,
+            err: (err as Error).message,
+            stack: (err as Error).stack,
+          },
+        );
+        res.status(500).send({ error: "handler failed" });
+        return;
+      }
     }
 
     res.status(200).send({ received: true });

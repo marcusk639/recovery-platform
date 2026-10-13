@@ -15,6 +15,7 @@
 
 // Firestore mock infrastructure
 const mockSet = jest.fn();
+const mockEventDelete = jest.fn().mockResolvedValue(undefined);
 const mockUpdate = jest.fn();
 const mockCollection = jest.fn();
 const mockRunTransaction = jest.fn();
@@ -733,6 +734,15 @@ describe("payment_intent.succeeded", () => {
     const userDocFactory = houseAdmin.buildUserDocGet(defaultUserGet);
 
     mockCollection.mockImplementation((name: string) => {
+      if (name === "webhookEvents") {
+        return {
+          doc: () => ({
+            get: jest.fn().mockResolvedValue({ exists: false }),
+            set: jest.fn(),
+            delete: mockEventDelete,
+          }),
+        };
+      }
       if (name === "payments") {
         return { doc: () => ({ set: mockSet.mockResolvedValue(undefined) }) };
       }
@@ -796,6 +806,49 @@ describe("payment_intent.succeeded", () => {
 
     // FCM sent to guest and admin
     expect(mockMessagingSend).toHaveBeenCalledTimes(2); // guest + 1 admin
+  });
+
+  test("a transient handler failure releases the marker and returns 500 so Stripe retries", async () => {
+    // The event is marked processed BEFORE the handler runs. If the handler then
+    // throws and we still answer 200, Stripe never retries: the charge succeeded
+    // at Stripe, rentOwed is never decremented, and no payment doc is written.
+    // Silently, permanently. Releasing the claim lets the retry land; the
+    // per-payment rentApplied transaction already makes re-delivery safe.
+    const pi = makePaymentIntent({
+      metadata: { guestId: "guest_1", houseId: "house_1" },
+      amount: 50000,
+    });
+    mockConstructEvent.mockReturnValue(
+      makeStripeEvent("payment_intent.succeeded", pi),
+    );
+    setupForPaymentSucceeded();
+    mockSet.mockRejectedValueOnce(new Error("firestore unavailable"));
+
+    const res = makeResponse();
+    await stripeWebhook(makeRequest({}) as never, res as never);
+
+    expect(mockEventDelete).toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(500);
+  });
+
+  test("a deliberate refusal keeps the marker and returns 200 so Stripe stops", async () => {
+    // A non-USD payment can never succeed on a USD ledger. Retrying it for three
+    // days is noise, not recovery, so the claim stands and Stripe is told we are done.
+    const pi = makePaymentIntent({
+      metadata: { guestId: "guest_1", houseId: "house_1" },
+      amount: 50000,
+      currency: "jpy",
+    } as never);
+    mockConstructEvent.mockReturnValue(
+      makeStripeEvent("payment_intent.succeeded", pi),
+    );
+    setupForPaymentSucceeded();
+
+    const res = makeResponse();
+    await stripeWebhook(makeRequest({}) as never, res as never);
+
+    expect(mockEventDelete).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(200);
   });
 
   test("refuses a non-USD payment instead of decrementing rentOwed by its raw amount", async () => {
@@ -2042,7 +2095,7 @@ describe("payout.failed", () => {
 // ===========================================================================
 
 describe("General error handling", () => {
-  test("Firestore write fails: returns 200 (prevents Stripe retry storms)", async () => {
+  test("Firestore write fails: returns 500 so Stripe retries", async () => {
     const pi = makePaymentIntent({
       metadata: { guestId: "guest_1", houseId: "house_1" },
     });
@@ -2065,8 +2118,13 @@ describe("General error handling", () => {
     const res = makeResponse();
     await stripeWebhook(makeRequest({}) as never, res as never);
 
-    // Must return 200 — Stripe should NOT retry
-    expect(res.status).toHaveBeenCalledWith(200);
+    // Expectation deliberately flipped. This previously asserted 200 "to prevent
+    // Stripe retry storms", which made a transient Firestore outage lose the
+    // payment permanently: the event was already marked processed, so Stripe
+    // never retried and rentOwed was never decremented. A transient failure is
+    // exactly what retries exist for. Storms are prevented by refusing
+    // unfixable events with PermanentWebhookError, which still answers 200.
+    expect(res.status).toHaveBeenCalledWith(500);
   });
 
   test("unrecognized event type: ignored, returns 200", async () => {
@@ -2090,7 +2148,7 @@ describe("General error handling", () => {
     );
   });
 
-  test("event handler throws: error is logged and 200 is still returned", async () => {
+  test("event handler throws: the claim is released and 500 is returned", async () => {
     const pi = makePaymentIntent();
     const event = makeStripeEvent("payment_intent.succeeded", pi);
     mockConstructEvent.mockReturnValue(event);
@@ -2113,9 +2171,9 @@ describe("General error handling", () => {
     const res = makeResponse();
     await stripeWebhook(makeRequest({}) as never, res as never);
 
-    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.status).toHaveBeenCalledWith(500);
     expect(functions.logger.error).toHaveBeenCalledWith(
-      "stripeWebhook: event handler threw an error",
+      "stripeWebhook: event handler threw, released for retry",
       expect.any(Object),
     );
   });
