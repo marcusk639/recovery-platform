@@ -2,6 +2,7 @@ import {
   changedMoneyFields,
   formValuesToGuest,
   guestToFormValues,
+  malformedMoneyFields,
 } from '../guestFormValues';
 import { Guest } from '../../../entities/Guest';
 
@@ -115,5 +116,28 @@ describe('guest update form money boundary', () => {
     expect(updated.firstName).toBe('Alex');
     expect(updated.id).toBe('guest-1');
     expect(updated.houseId).toBe('house-1');
+  });
+});
+
+describe('malformedMoneyFields', () => {
+  const guest = { id: 'g1', rentOwed: 50000, choreFees: 0 } as never;
+
+  it('flags unreadable money so the form can refuse to submit it', () => {
+    // '12,34' parses back to the stored value, so changedMoneyFields sees it as
+    // untouched and formValuesToGuest drops it. Without this the operator is
+    // told the save succeeded and the balance never moves.
+    const values = { ...guestToFormValues(guest), rentOwed: '12,34' } as never;
+    expect(malformedMoneyFields(values)).toContain('rentOwed');
+    expect(changedMoneyFields(guest, values)).not.toContain('rentOwed');
+  });
+
+  it('does not flag a cleared field, which deliberately keeps the stored value', () => {
+    const values = { ...guestToFormValues(guest), rentOwed: '' } as never;
+    expect(malformedMoneyFields(values)).toHaveLength(0);
+  });
+
+  it('does not flag a readable edit', () => {
+    const values = { ...guestToFormValues(guest), rentOwed: '400' } as never;
+    expect(malformedMoneyFields(values)).toHaveLength(0);
   });
 });
