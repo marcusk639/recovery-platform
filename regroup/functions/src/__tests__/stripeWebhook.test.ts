@@ -1086,6 +1086,42 @@ describe("payment_intent.succeeded", () => {
     );
     // No balance update attempted
     expect(mockUpdate).not.toHaveBeenCalled();
+    // The captured payment is quarantined so the reconciliation sweep sees it.
+    // reconciledAt must be an explicit null: == null never matches a missing field.
+    expect(mockSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        needsManualReconciliation: true,
+        refusedReason: "guest_missing",
+        reconciledAt: null,
+        rentApplied: false,
+      }),
+      expect.objectContaining({ merge: true }),
+    );
+  });
+
+  test("missing metadata: partial payment doc carries createdAt", async () => {
+    const pi = makePaymentIntent({
+      metadata: { houseId: "house_1" } as Stripe.Metadata,
+    });
+    mockConstructEvent.mockReturnValue(makeStripeEvent("payment_intent.succeeded", pi));
+    mockCollection.mockImplementation((name: string) => {
+      if (name === "payments")
+        return { doc: () => ({ set: mockSet.mockResolvedValue(undefined) }) };
+      return {
+        doc: () => ({
+          set: jest.fn(),
+          get: jest.fn().mockResolvedValue({ exists: false }),
+        }),
+      };
+    });
+
+    await stripeWebhook(makeRequest({}) as never, makeResponse() as never);
+
+    // analytics.ts and getPaymentHistory's orderBy("createdAt") drop docs without it.
+    expect(mockSet).toHaveBeenCalledWith(
+      expect.objectContaining({ guestId: null, createdAt: expect.anything() }),
+      expect.objectContaining({ merge: true }),
+    );
   });
 
   test("FCM send fails: event still processes successfully", async () => {

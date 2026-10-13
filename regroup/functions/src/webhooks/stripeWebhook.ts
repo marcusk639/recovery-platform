@@ -310,6 +310,7 @@ async function handlePaymentIntentSucceeded(
       status: "succeeded",
       houseId: houseId ?? null,
       guestId: guestId ?? null,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     return;
@@ -451,11 +452,22 @@ async function handlePaymentIntentSucceeded(
   // The payments/{paymentIntentId} doc is the marker: a transaction reads it,
   // skips if rentApplied is already set, and otherwise decrements and sets the
   // flag in the same commit. The doc is keyed by PaymentIntent id and is already
-  // written by recordPaymentDoc, so this adds no new collection.
+  // written by upsertPaymentDoc in step 1 above, so this adds no new collection.
   if (!guestSnap.exists) {
     // A successful read reporting exists:false is permanent — retrying for three
     // days accomplishes nothing. Only a failed READ (above) is retried.
     logger.warn("payment_intent.succeeded: guest not found", { guestId });
+    // Quarantine: the payment was captured but rentOwed was never decremented.
+    // Without these keys the record is invisible to reportPaymentsNeedingReconciliation.
+    // reconciledAt: null is mandatory — the sweep's == null clause matches an
+    // existing null field, never a missing one. createdAt was set in step 1.
+    await upsertPaymentDoc(paymentIntent.id, {
+      needsManualReconciliation: true,
+      refusedReason: "guest_missing",
+      reconciledAt: null,
+      rentApplied: false,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
   } else {
     const guestData = guestSnap.data() as GuestDoc;
 
