@@ -95,12 +95,33 @@ const EditMeetingInstanceScreen: React.FC = () => {
     [instance?.scheduledAt, instance?.isCancelled],
   );
 
-  // Determine if current user already checked in
+  // Determine if current user already checked in.
+  //
+  // Reads this user's own attendance record rather than the instance's attendee
+  // list: meetingInstances is world-readable for meeting discovery, so the list
+  // no longer lives there.
   useEffect(() => {
-    if (instance && currentUser && instance.attendees?.includes(currentUser.uid)) {
-      setCheckedIn(true);
+    if (!instance?.id || !currentUser) {
+      return;
     }
-  }, [instance, currentUser]);
+    let cancelled = false;
+    firestore()
+      .doc(`users/${currentUser.uid}/meetingAttendance/${instance.id}`)
+      .get()
+      .then(snap => {
+        if (!cancelled) {
+          setCheckedIn(snap.exists);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCheckedIn(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [instance?.id, currentUser]);
 
   const handleCheckIn = async () => {
     if (!currentUser) {
@@ -110,8 +131,12 @@ const EditMeetingInstanceScreen: React.FC = () => {
     setIsCheckingIn(true);
     try {
       const functions = require('@react-native-firebase/functions').default;
+      // groupId is required by the callable (it throws invalid-argument without
+      // it) and is used to verify group membership before recording attendance.
+      // Omitting it made every check-in from this screen fail.
       const result = await functions().httpsCallable('checkInToMeeting')({
         instanceId,
+        groupId,
       });
       const data = result.data as {
         success: boolean;

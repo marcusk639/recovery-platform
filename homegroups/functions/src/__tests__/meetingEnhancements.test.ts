@@ -26,6 +26,32 @@ const mockServerTimestamp = jest.fn(() => ({
   _methodName: "FieldValue.serverTimestamp",
 }));
 
+// Transaction + root-level doc() support. checkInToMeeting writes the per-user
+// attendance record and the instance's attendeeCount inside one transaction.
+const mockTxnGet = jest
+  .fn()
+  .mockResolvedValue({ exists: false, data: () => undefined });
+const mockTxnSet = jest.fn();
+const mockTxnUpdate = jest.fn();
+const mockRunTransaction = jest.fn(async (fn: any) =>
+  fn({ get: mockTxnGet, set: mockTxnSet, update: mockTxnUpdate }),
+);
+const mockDoc = jest.fn((path: string) => ({ path }));
+
+// checkInToMeeting imports `* as logger from "firebase-functions/logger"` — a different
+// module from the "firebase-functions" mock below. Without this mock the PII assertion
+// reads a logger the production code never writes to, and passes vacuously.
+const mockLoggerInfo = jest.fn();
+const mockLoggerWarn = jest.fn();
+const mockLoggerError = jest.fn();
+jest.mock("firebase-functions/logger", () => ({
+  info: mockLoggerInfo,
+  warn: mockLoggerWarn,
+  error: mockLoggerError,
+  log: mockLoggerInfo,
+  debug: jest.fn(),
+}));
+
 jest.mock("firebase-admin", () => {
   const fromDate = (date: Date) => ({
     toDate: () => date,
@@ -38,7 +64,11 @@ jest.mock("firebase-admin", () => {
     apps: [],
     initializeApp: jest.fn(),
     firestore: Object.assign(
-      jest.fn().mockReturnValue({ collection: mockCollection }),
+      jest.fn().mockReturnValue({
+        collection: mockCollection,
+        doc: mockDoc,
+        runTransaction: mockRunTransaction,
+      }),
       {
         Timestamp: {
           fromDate,
@@ -101,7 +131,11 @@ jest.mock("firebase-functions/v1", () => ({
 // v2/https + logger mocks come from functions/jest.setup.ts (shared)
 
 jest.mock("../utils/firebase", () => ({
-  db: { collection: mockCollection },
+  db: {
+    collection: mockCollection,
+    doc: mockDoc,
+    runTransaction: mockRunTransaction,
+  },
   messaging: { sendEachForMulticast: mockSendEachForMulticast },
 }));
 
@@ -564,6 +598,11 @@ describe("checkInToMeeting", () => {
     const groupId = "group-x";
     const instanceId = "instance-x";
 
+    // attendance doc absent; the instance read inside the txn reports 3 already there
+    mockTxnGet
+      .mockResolvedValueOnce({ exists: false })
+      .mockResolvedValueOnce({ exists: true, data: () => ({ attendeeCount: 3 }) });
+
     const mockDocGet = jest.fn();
 
     mockCollection.mockImplementation((name: string) => {
@@ -585,7 +624,7 @@ describe("checkInToMeeting", () => {
               data: () => ({
                 groupId,
                 isCancelled: false,
-                attendees: [], // not yet checked in
+                attendeeCount: 0, // nobody checked in yet
               }),
             }),
             update: mockUpdate,
@@ -596,11 +635,16 @@ describe("checkInToMeeting", () => {
         return {
           doc: jest.fn().mockReturnValue({
             update: mockUpdate,
+            set: mockSet,
           }),
         };
       }
       return {
-        doc: jest.fn().mockReturnValue({ get: jest.fn(), update: mockUpdate }),
+        doc: jest.fn().mockReturnValue({
+          get: jest.fn(),
+          update: mockUpdate,
+          set: mockSet,
+        }),
       };
     });
 
@@ -611,25 +655,40 @@ describe("checkInToMeeting", () => {
       makeAuthRequest(userId, { groupId, instanceId }),
     );
 
+    // I2: count comes from the value read INSIDE the transaction (3 -> 4), not from
+    // the stale pre-transaction snapshot (which said 0).
     expect(result).toEqual({
       success: true,
-      attendeeCount: 1,
+      attendeeCount: 4,
       alreadyCheckedIn: false,
     });
 
-    // Should have called update on the instance with arrayUnion and increment
-    expect(mockUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        attendees: expect.anything(), // FieldValue.arrayUnion
-        attendeeCount: expect.anything(), // FieldValue.increment
-      }),
+    // Writes the per-user attendance record inside the transaction
+    expect(mockTxnSet).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ instanceId, groupId }),
     );
+    // and increments the public count in the same transaction
+    expect(mockTxnUpdate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ attendeeCount: expect.anything() }),
+    );
+    // C1: must NOT keep publishing attendee ids onto the world-readable instance.
+    // meetingInstances stays `allow read: if true` for discovery, so any write of
+    // attendee ids there is a fresh disclosure of recovery-status PII.
+    const instancePatch = mockTxnUpdate.mock.calls[0][1];
+    expect(instancePatch).not.toHaveProperty("attendees");
   });
 
   it("Idempotent: returns alreadyCheckedIn=true when user checks in twice", async () => {
     const userId = "user-b";
     const groupId = "group-y";
     const instanceId = "instance-y";
+
+    // attendance already recorded; the in-txn instance read reports the live count
+    mockTxnGet
+      .mockResolvedValueOnce({ exists: true })
+      .mockResolvedValueOnce({ exists: true, data: () => ({ attendeeCount: 1 }) });
 
     mockCollection.mockImplementation((name: string) => {
       if (name === "members") {
@@ -650,7 +709,7 @@ describe("checkInToMeeting", () => {
               data: () => ({
                 groupId,
                 isCancelled: false,
-                attendees: [userId], // already checked in
+                attendeeCount: 1, // this user is already counted
               }),
             }),
             update: mockUpdate,
@@ -658,7 +717,11 @@ describe("checkInToMeeting", () => {
         };
       }
       return {
-        doc: jest.fn().mockReturnValue({ get: jest.fn(), update: mockUpdate }),
+        doc: jest.fn().mockReturnValue({
+          get: jest.fn(),
+          update: mockUpdate,
+          set: mockSet,
+        }),
       };
     });
 
@@ -675,8 +738,70 @@ describe("checkInToMeeting", () => {
       alreadyCheckedIn: true,
     });
 
-    // Should NOT call update when already checked in
+    // Should write nothing when the attendance record already exists
+    expect(mockTxnSet).not.toHaveBeenCalled();
+    expect(mockTxnUpdate).not.toHaveBeenCalled();
+    // I1: and must not refresh the user's activity log either — the old code
+    // early-returned before that write, so a double tap was a true no-op.
     expect(mockUpdate).not.toHaveBeenCalled();
+    expect(mockSet).not.toHaveBeenCalled();
+  });
+
+  it("Privacy: never logs the attending user id or the instance id", async () => {
+    const userId = "user-pii";
+    const groupId = "group-pii";
+    const instanceId = "instance-pii";
+
+    mockTxnGet.mockResolvedValue({ exists: false, data: () => undefined });
+
+    mockCollection.mockImplementation((name: string) => {
+      if (name === "members") {
+        return {
+          doc: jest.fn().mockReturnValue({
+            get: jest.fn().mockResolvedValue({
+              exists: true,
+              data: () => ({ userId, groupId }),
+            }),
+          }),
+        };
+      }
+      if (name === "meetingInstances") {
+        return {
+          doc: jest.fn().mockReturnValue({
+            get: jest.fn().mockResolvedValue({
+              exists: true,
+              data: () => ({ groupId, isCancelled: false, attendeeCount: 0 }),
+            }),
+            update: mockUpdate,
+          }),
+        };
+      }
+      return {
+        doc: jest.fn().mockReturnValue({
+          get: jest.fn(),
+          update: mockUpdate,
+          set: mockSet,
+        }),
+      };
+    });
+
+    jest.resetModules();
+    const { checkInToMeeting } = await import("../callable/checkInToMeeting");
+
+    await (checkInToMeeting as Function)(
+      makeAuthRequest(userId, { groupId, instanceId }),
+    );
+
+    // Attendance at a 12-step meeting is recovery-status PII. Cloud Functions logs
+    // sit outside Firestore rules, so a user id joined to an instance id here is a
+    // disclosure the rules fix cannot close.
+    const logged = JSON.stringify([
+      ...mockLoggerInfo.mock.calls,
+      ...mockLoggerWarn.mock.calls,
+      ...mockLoggerError.mock.calls,
+    ]);
+    expect(logged).not.toContain(userId);
+    expect(logged).not.toContain(instanceId);
   });
 
   it("Negative: throws unauthenticated when no auth context", async () => {

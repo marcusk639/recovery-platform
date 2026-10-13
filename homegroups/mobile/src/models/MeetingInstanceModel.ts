@@ -11,7 +11,6 @@ export interface MeetingInstance {
   groupId: string;
   scheduledAt: Date;
   attendeeCount: number;
-  attendees?: string[];
 }
 
 /**
@@ -64,7 +63,6 @@ export class MeetingInstanceModel {
             groupId: data.groupId,
             scheduledAt,
             attendeeCount: data.attendeeCount ?? 0,
-            attendees: data.attendees ?? [],
           });
         },
         err => {

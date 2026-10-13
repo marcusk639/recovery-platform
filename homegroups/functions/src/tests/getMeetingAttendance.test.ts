@@ -4,6 +4,9 @@ const mockWhere = jest.fn().mockReturnThis();
 const mockOrderBy = jest.fn().mockReturnThis();
 const mockLimit = jest.fn().mockReturnThis();
 
+const mockGetAll = jest.fn();
+const mockDoc = jest.fn((path: string) => ({ path }));
+
 const mockDb: any = {
   collection: jest.fn(() => ({
     where: mockWhere,
@@ -11,6 +14,8 @@ const mockDb: any = {
     limit: mockLimit,
     get: mockGet,
   })),
+  doc: mockDoc,
+  getAll: mockGetAll,
 };
 
 jest.mock("firebase-admin", () => ({
@@ -100,7 +105,7 @@ describe("getMeetingAttendanceHandler", () => {
     );
   });
 
-  it("returns empty checkIns array when no instances found", async () => {
+  it("returns empty checkIns array when the user has no attendance records", async () => {
     mockGet.mockResolvedValueOnce({ docs: [] });
     const req = makeReq();
     const res = makeRes();
@@ -115,20 +120,38 @@ describe("getMeetingAttendanceHandler", () => {
     });
   });
 
-  it("returns serialized checkIns when instances found", async () => {
+  it("reads the caller's own attendance index, never meetingInstances.attendees", async () => {
     const fakeTs = { toDate: () => new Date("2026-05-01T19:00:00Z") };
     mockGet.mockResolvedValueOnce({
-      docs: [
-        {
-          id: "inst-1",
-          data: () => ({
-            meetingId: "mtg-1",
-            scheduledAt: fakeTs,
-            attendeeCount: 12,
-          }),
-        },
-      ],
+      docs: [{ id: "inst-1", data: () => ({ meetingId: "mtg-1", scheduledAt: fakeTs }) }],
     });
+    mockGetAll.mockResolvedValueOnce([
+      { id: "inst-1", data: () => ({ attendeeCount: 12 }) },
+    ]);
+
+    const req = makeReq();
+    const res = makeRes();
+    await getMeetingAttendanceHandler(req, res);
+
+    // the per-user reverse index, scoped by rules to its owner
+    expect(mockDb.collection).toHaveBeenCalledWith("users/user-1/meetingAttendance");
+    // and emphatically NOT the world-readable array that leaked attendance
+    expect(mockWhere).not.toHaveBeenCalledWith(
+      "attendees",
+      "array-contains",
+      expect.anything(),
+    );
+    expect(mockDb.collection).not.toHaveBeenCalledWith("meetingInstances");
+  });
+
+  it("returns serialized checkIns, taking attendeeCount from the instance", async () => {
+    const fakeTs = { toDate: () => new Date("2026-05-01T19:00:00Z") };
+    mockGet.mockResolvedValueOnce({
+      docs: [{ id: "inst-1", data: () => ({ meetingId: "mtg-1", scheduledAt: fakeTs }) }],
+    });
+    mockGetAll.mockResolvedValueOnce([
+      { id: "inst-1", data: () => ({ attendeeCount: 12 }) },
+    ]);
     const req = makeReq();
     const res = makeRes();
     await getMeetingAttendanceHandler(req, res);

@@ -102,10 +102,12 @@ const MyRecoveryJourneyScreen: React.FC = () => {
             .get()
             .catch(() => null),
 
-          // 4. Meeting instances attended this year (requires composite index)
+          // 4. Meetings attended this year, from this user's own attendance
+          // index. Previously an `array-contains` scan of meetingInstances,
+          // which only worked because that collection is world-readable — the
+          // same property that exposed every meeting's attendee list.
           firestore()
-            .collection('meetingInstances')
-            .where('attendees', 'array-contains', uid)
+            .collection(`users/${uid}/meetingAttendance`)
             .where('scheduledAt', '>=', yearStart)
             .get()
             .catch(() => null),
