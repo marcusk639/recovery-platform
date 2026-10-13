@@ -310,6 +310,17 @@ async function handlePaymentIntentSucceeded(
       status: "succeeded",
       houseId: houseId ?? null,
       guestId: guestId ?? null,
+      // Without createdAt this document falls out of every query: getPaymentHistory
+      // orders by it (mobile/src/services/payments.ts:191) and analytics filters
+      // on inWindow(toDateStr(createdAt)) (callable/analytics.ts:168), and both
+      // exclude a document missing the field. The consequence differs by which
+      // key is absent: with a houseId the payment counts toward that house's
+      // collected revenue, unattributed to any resident, and trips the
+      // duePaymentCount < paymentCount caveat; with a guestId it restores the
+      // payment to that resident's history. Collected revenue is a house-level
+      // total and the house did receive the money, so counting it is correct.
+      // The on-time rate excludes it by design, for want of a dueDate
+      // (analytics.ts:187-191).
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
