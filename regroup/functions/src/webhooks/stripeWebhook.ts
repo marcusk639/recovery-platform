@@ -1118,10 +1118,17 @@ export class PermanentWebhookError extends Error {
  * harmless retries, while treating a transient failure as permanent loses money.
  */
 function isPermanent(err: unknown): boolean {
-  return (
+  if (
     err instanceof PermanentWebhookError ||
     (err as Error)?.name === "PermanentWebhookError"
-  );
+  ) {
+    return true;
+  }
+  // Firestore NOT_FOUND (gRPC code 5) on a write means the target document is
+  // gone; waiting cannot bring it back. This applies to BOTH dispatchers
+  // (platform and Connect), which is wider than the one call site that
+  // motivates it but is the correct semantics for all of them.
+  return (err as { code?: number })?.code === 5;
 }
 
 /**

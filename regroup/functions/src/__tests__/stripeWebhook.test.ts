@@ -994,6 +994,41 @@ describe("payment_intent.succeeded", () => {
     );
   });
 
+  test("a guest deleted mid-transaction is permanent, not a three-day retry", async () => {
+    // txn.update on a missing doc throws NOT_FOUND. Classified transient, that
+    // retries against a document that will never exist until Stripe gives up.
+    const pi = makePaymentIntent({
+      metadata: { guestId: "guest_1", houseId: "house_1" },
+      amount: 50000,
+    });
+    const event = makeStripeEvent("payment_intent.succeeded", pi);
+    mockConstructEvent.mockReturnValue(event);
+    setupForPaymentSucceeded();
+    // The handler runs two transactions: the idempotency claim first, then the
+    // rentOwed decrement. Only the second may fail, or the rejection lands in
+    // claimEvent and this test never reaches the decrement path.
+    setupIdempotencyTransaction(false);
+    const claimTxn = mockRunTransaction.getMockImplementation()!;
+    let txnCalls = 0;
+    mockRunTransaction.mockImplementation(
+      async (fn: (txn: unknown) => Promise<unknown>) => {
+        if (++txnCalls === 1) return claimTxn(fn);
+        throw Object.assign(new Error("NOT_FOUND: no entity to update"), {
+          code: 5,
+        });
+      },
+    );
+
+    const res = makeResponse();
+    await stripeWebhook(makeRequest({}) as never, res as never);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(mockEventSet).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "done" }),
+      expect.objectContaining({ merge: true }),
+    );
+  });
+
   test("records the payment before reading the guest, so a read failure still leaves a record", async () => {
     // The read failure returns 500 and Stripe retries, but across a
     // multi-hour degradation the resident's history and the operator's
