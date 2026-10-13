@@ -327,6 +327,26 @@ async function handlePaymentIntentSucceeded(
       paymentIntentId: paymentIntent.id,
       currency: paymentIntent.currency,
     });
+    // The funds are already captured — payment_intent.succeeded fires post-capture.
+    // The throw below is permanent, so the event is marked done and Stripe never
+    // redelivers: if we do not record the payment here, nothing anywhere records
+    // it. Refusing to APPLY the payment and refusing to RECORD it are separate
+    // decisions and only the first one is correct.
+    await upsertPaymentDoc(paymentIntent.id, {
+      stripePaymentIntentId: paymentIntent.id,
+      // Deliberately not `amount`: that field is USD dollars everywhere else, and
+      // dividing a zero-decimal currency by 100 would write a junk figure.
+      amountMinorUnits: paymentIntent.amount,
+      currency: paymentIntent.currency,
+      status: "succeeded",
+      houseId,
+      guestId,
+      rentApplied: false,
+      needsManualReconciliation: true,
+      refusedReason: "unsupported_currency",
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
     throw new PermanentWebhookError(
       `Unsupported currency ${paymentIntent.currency} on the rent ledger`,
     );
@@ -339,22 +359,20 @@ async function handlePaymentIntentSucceeded(
   // when this payment posted and (b) reuse the snapshot for the rentOwed
   // decrement + notifications below. (#34 on-time rate)
   const guestRef = db.collection("guests").doc(guestId);
-  let guestSnap: FirebaseFirestore.DocumentSnapshot | undefined;
-  try {
-    guestSnap = await guestRef.get();
-  } catch (err) {
-    // Never block payment recording on a guest read failure.
-    logger.warn("payment_intent.succeeded: guest read failed (non-fatal)", {
-      guestId,
-      err: (err as Error).message,
-    });
-  }
+  // Let a read failure propagate. It is transient, so isPermanent() is false and
+  // the caller returns 500 and releases the claim for Stripe to retry. Swallowing
+  // it left guestSnap undefined, which skipped the rentOwed decrement below while
+  // the handler still returned successfully — so the event was marked done, Stripe
+  // was told 200, and the charge was lost with only a warn to find it by.
+  // Retrying is safe: rentApplied lives on paymentRef, which is in the decrement
+  // transaction's read set, so concurrent runs conflict and re-run.
+  const guestSnap = await guestRef.get();
 
   // dueDate is the guest's rentDueDate at charge time. This is an approximation:
   // it reflects the due date *active when the payment posted* (the best available
   // signal — no per-charge due-date schedule history exists). Omitted when the
   // guest has no rentDueDate or the read failed.
-  const guestDataForDueDate = guestSnap?.exists
+  const guestDataForDueDate = guestSnap.exists
     ? (guestSnap.data() as GuestDoc)
     : undefined;
   const dueDate =
@@ -415,7 +433,9 @@ async function handlePaymentIntentSucceeded(
   // skips if rentApplied is already set, and otherwise decrements and sets the
   // flag in the same commit. The doc is keyed by PaymentIntent id and is already
   // written by recordPaymentDoc, so this adds no new collection.
-  if (!guestSnap || !guestSnap.exists) {
+  if (!guestSnap.exists) {
+    // A successful read reporting exists:false is permanent — retrying for three
+    // days accomplishes nothing. Only a failed READ (above) is retried.
     logger.warn("payment_intent.succeeded: guest not found", { guestId });
   } else {
     const guestData = guestSnap.data() as GuestDoc;
