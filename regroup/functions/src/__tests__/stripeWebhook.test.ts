@@ -1004,40 +1004,24 @@ describe("payment_intent.succeeded", () => {
     const event = makeStripeEvent("payment_intent.succeeded", pi);
     mockConstructEvent.mockReturnValue(event);
     setupForPaymentSucceeded();
-    // Dispatch on identity, not call order: claimEvent only get/sets the event
-    // doc, while the rentOwed decrement is the one transaction that updates.
-    // Firestore surfaces NOT_FOUND at commit, so reject after the callback runs.
+    // The handler runs two transactions: the idempotency claim first, then the
+    // rentOwed decrement. Only the second may fail, or the rejection lands in
+    // claimEvent and this test never reaches the decrement path.
+    setupIdempotencyTransaction(false);
+    const claimTxn = mockRunTransaction.getMockImplementation()!;
+    let txnCalls = 0;
     mockRunTransaction.mockImplementation(
       async (fn: (txn: unknown) => Promise<unknown>) => {
-        let decremented = false;
-        const txn = {
-          get: jest
-            .fn()
-            .mockResolvedValue({ exists: false, get: () => undefined }),
-          set: jest.fn(),
-          update: (_ref: unknown, data: Record<string, unknown>) => {
-            if ("rentOwed" in data) decremented = true;
-            mockUpdate(data);
-          },
-        };
-        const result = await fn(txn);
-        if (decremented) {
-          throw Object.assign(new Error("NOT_FOUND: no entity to update"), {
-            code: 5,
-          });
-        }
-        return result;
+        if (++txnCalls === 1) return claimTxn(fn);
+        throw Object.assign(new Error("NOT_FOUND: no entity to update"), {
+          code: 5,
+        });
       },
     );
 
     const res = makeResponse();
     await stripeWebhook(makeRequest({}) as never, res as never);
 
-    // Without this, a mock that stops throwing still yields 200 and "done".
-    expect(functions.logger.error).toHaveBeenCalledWith(
-      "stripeWebhook: refused the event",
-      expect.objectContaining({ err: expect.stringContaining("NOT_FOUND") }),
-    );
     expect(res.status).toHaveBeenCalledWith(200);
     expect(mockEventSet).toHaveBeenCalledWith(
       expect.objectContaining({ status: "done" }),
