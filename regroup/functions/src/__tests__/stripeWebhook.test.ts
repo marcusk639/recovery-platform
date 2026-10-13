@@ -951,6 +951,9 @@ describe("payment_intent.succeeded", () => {
         rentApplied: false,
         needsManualReconciliation: true,
         refusedReason: "unsupported_currency",
+        // The reconciliation sweep matches on reconciledAt == null, which only
+        // matches a field that exists. Dropping this hides the record.
+        reconciledAt: null,
       }),
       expect.objectContaining({ merge: true }),
     );
