@@ -6,8 +6,7 @@ import GuestUpdateFormView from './GuestUpdateFormView';
 import { Guest } from '../../entities/Guest';
 import {
   GuestFormValues,
-  changedMoneyFields,
-  formValuesToGuest,
+  guestMoneyUpdate,
   guestToFormValues,
 } from './guestFormValues';
 import { Guests } from '../../types';
@@ -30,16 +29,42 @@ const GuestUpdateForm = withFormik<GuestUpdateProps, GuestFormValues>({
   // guestFormValues.ts. Passing the guest through unconverted is what made an
   // operator typing "500" set a $5.00 balance.
   mapPropsToValues: ({ guest }) => guestToFormValues(guest),
+  // Formik's own channel. `status` is rendered nowhere in this app — all three
+  // pre-existing setStatus calls on this form were already going nowhere — but
+  // `errors[field]` is rendered inline with a red border by RatsTextInput,
+  // which this form already uses for these fields. Returning a non-empty
+  // object here also stops Formik calling handleSubmit at all.
+  //
+  // withFormik wires this as validate(values, props) — see formik 2.4.9
+  // formik.cjs.development.js:1471 — and SUBMIT_ATTEMPT marks every field
+  // touched, which is the gate RatsTextInput:423 needs before it renders.
+  validate: (values: GuestFormValues, props: GuestUpdateProps) => {
+    const result = guestMoneyUpdate(props.guest, values);
+    if (result.ok) {
+      return {};
+    }
+    const errors: Record<string, string> = {};
+    for (const field of result.malformedFields) {
+      errors[field as string] = 'Enter an amount like 1234.56';
+    }
+    return errors;
+  },
   handleSubmit: async (values, { props, setStatus, setSubmitting }) => {
     setStatus({});
     setSubmitting(true);
     try {
-      const updatedGuest = formValuesToGuest(props.guest, values);
-      // Only the money fields the operator actually edited are authoritative.
-      // Declaring an untouched field authoritative would let a stale form value
-      // beat a concurrent server-side decrement (a resident's Stripe payment).
-      const authoritativeFields = changedMoneyFields(props.guest, values);
-      await props.updateGuest(updatedGuest, authoritativeFields);
+      const result = guestMoneyUpdate(props.guest, values);
+      // Defence in depth, deliberately redundant with validate above. It is
+      // load-bearing if anyone later sets validateOnChange: false, adds a
+      // validationSchema that deep-merges over this result, or reaches
+      // submitForm down a path that skips validation. It is also what narrows
+      // the type. Deleting this guard is a compile error, not a test failure,
+      // because payload does not exist on the ok: false arm.
+      if (!result.ok) {
+        setSubmitting(false);
+        return;
+      }
+      await props.updateGuest(result.payload, result.authoritativeFields);
       setStatus({ succeeded: true });
       setSubmitting(false);
     } catch (err) {

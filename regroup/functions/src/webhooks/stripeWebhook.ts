@@ -310,6 +310,18 @@ async function handlePaymentIntentSucceeded(
       status: "succeeded",
       houseId: houseId ?? null,
       guestId: guestId ?? null,
+      // Without createdAt this document falls out of every query: getPaymentHistory
+      // orders by it (mobile/src/services/payments.ts:191) and analytics filters
+      // on inWindow(toDateStr(createdAt)) (callable/analytics.ts:168), and both
+      // exclude a document missing the field. The consequence differs by which
+      // key is absent: with a houseId the payment counts toward that house's
+      // collected revenue, unattributed to any resident, and trips the
+      // duePaymentCount < paymentCount caveat; with a guestId it restores the
+      // payment to that resident's history. Collected revenue is a house-level
+      // total and the house did receive the money, so counting it is correct.
+      // The on-time rate excludes it by design, for want of a dueDate
+      // (analytics.ts:187-191).
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     return;
@@ -327,6 +339,47 @@ async function handlePaymentIntentSucceeded(
       paymentIntentId: paymentIntent.id,
       currency: paymentIntent.currency,
     });
+    // The funds are already captured — payment_intent.succeeded fires post-capture.
+    // The throw below is permanent, so the event is marked done and Stripe never
+    // redelivers: if we do not record the payment here, nothing anywhere records
+    // it. Refusing to APPLY the payment and refusing to RECORD it are separate
+    // decisions and only the first one is correct.
+    //
+    // This block must stay terminal. `reconciledAt: null` below is what makes the
+    // record visible to the daily sweep, but it also overwrites an operator's
+    // resolution timestamp. That is safe only because nothing re-enters here: the
+    // PermanentWebhookError is caught in the dispatcher, which falls through to
+    // markEventDone, and later deliveries short-circuit in claimEvent. If this
+    // path is ever made to retry, make `reconciledAt` conditional first.
+    await upsertPaymentDoc(paymentIntent.id, {
+      stripePaymentIntentId: paymentIntent.id,
+      // Deliberately not `amount`. That field is NOT consistently scaled:
+      // stripeWebhook writes dollars, while mobile's recordManualPayment
+      // (src/services/payments.ts:263) writes cents, and analytics.ts:172
+      // multiplies every row by 100 assuming dollars — so manual payments
+      // already report 100x. Tracked separately; do not add to it here.
+      // Minor units are unambiguous.
+      amountMinorUnits: paymentIntent.amount,
+      currency: paymentIntent.currency,
+      status: "succeeded",
+      houseId,
+      guestId,
+      rentApplied: false,
+      needsManualReconciliation: true,
+      refusedReason: "unsupported_currency",
+      // Null, not absent: the reconciliation sweep queries reconciledAt == null,
+      // which only matches a field that exists. An operator resolves the
+      // record by setting this to a timestamp.
+      reconciledAt: null,
+      // Without createdAt this doc is invisible: analytics filters on
+      // inWindow(toDateStr(createdAt)) which is false for undefined, and
+      // getPaymentHistory orders by createdAt, which Firestore uses to
+      // exclude documents missing the field. A quarantine record nobody can
+      // query is not a quarantine record.
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
     throw new PermanentWebhookError(
       `Unsupported currency ${paymentIntent.currency} on the rent ledger`,
     );
@@ -335,35 +388,13 @@ async function handlePaymentIntentSucceeded(
   const amountDollars = paymentIntent.amount / 100;
   const amountCents = paymentIntent.amount;
 
-  // Read the guest once up front so we can both (a) capture the due date active
-  // when this payment posted and (b) reuse the snapshot for the rentOwed
-  // decrement + notifications below. (#34 on-time rate)
-  const guestRef = db.collection("guests").doc(guestId);
-  let guestSnap: FirebaseFirestore.DocumentSnapshot | undefined;
-  try {
-    guestSnap = await guestRef.get();
-  } catch (err) {
-    // Never block payment recording on a guest read failure.
-    logger.warn("payment_intent.succeeded: guest read failed (non-fatal)", {
-      guestId,
-      err: (err as Error).message,
-    });
-  }
-
-  // dueDate is the guest's rentDueDate at charge time. This is an approximation:
-  // it reflects the due date *active when the payment posted* (the best available
-  // signal — no per-charge due-date schedule history exists). Omitted when the
-  // guest has no rentDueDate or the read failed.
-  const guestDataForDueDate = guestSnap?.exists
-    ? (guestSnap.data() as GuestDoc)
-    : undefined;
-  const dueDate =
-    typeof guestDataForDueDate?.rentDueDate === "string" &&
-    guestDataForDueDate.rentDueDate.length > 0
-      ? guestDataForDueDate.rentDueDate
-      : undefined;
-
-  // 1. Write / update payment document
+  // 1. Write the payment record FIRST, before anything that can fail.
+  // Refusing to apply a payment and refusing to record it are separate
+  // decisions — the same principle the currency guard above applies. The guest
+  // read below propagates on failure (500, claim released, Stripe retries),
+  // and across a long outage that window is time the resident's history shows
+  // nothing for a captured card. dueDate is not known yet; it rides on the
+  // transaction's existing txn.set below, costing no extra write.
   await upsertPaymentDoc(paymentIntent.id, {
     stripePaymentIntentId: paymentIntent.id,
     houseId,
@@ -371,10 +402,35 @@ async function handlePaymentIntentSucceeded(
     amount: amountDollars,
     currency: paymentIntent.currency,
     status: "succeeded",
-    ...(dueDate ? { dueDate } : {}),
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
+
+  // Read the guest once up front so we can both (a) capture the due date active
+  // when this payment posted and (b) reuse the snapshot for the rentOwed
+  // decrement + notifications below. (#34 on-time rate)
+  const guestRef = db.collection("guests").doc(guestId);
+  // Let a read failure propagate. It is transient, so isPermanent() is false and
+  // the caller returns 500 and releases the claim for Stripe to retry. Swallowing
+  // it left guestSnap undefined, which skipped the rentOwed decrement below while
+  // the handler still returned successfully — so the event was marked done, Stripe
+  // was told 200, and the charge was lost with only a warn to find it by.
+  // Retrying is safe: rentApplied lives on paymentRef, which is in the decrement
+  // transaction's read set, so concurrent runs conflict and re-run.
+  const guestSnap = await guestRef.get();
+
+  // dueDate is the guest's rentDueDate at charge time. This is an approximation:
+  // it reflects the due date *active when the payment posted* (the best available
+  // signal — no per-charge due-date schedule history exists). Omitted when the
+  // guest has no rentDueDate or the read failed.
+  const guestDataForDueDate = guestSnap.exists
+    ? (guestSnap.data() as GuestDoc)
+    : undefined;
+  const dueDate =
+    typeof guestDataForDueDate?.rentDueDate === "string" &&
+    guestDataForDueDate.rentDueDate.length > 0
+      ? guestDataForDueDate.rentDueDate
+      : undefined;
 
   // 1b. Reconcile the auto-pay attempt record. The scheduled collector authors
   // that record at charge time; this only confirms the outcome, so a missing id
@@ -414,9 +470,27 @@ async function handlePaymentIntentSucceeded(
   // The payments/{paymentIntentId} doc is the marker: a transaction reads it,
   // skips if rentApplied is already set, and otherwise decrements and sets the
   // flag in the same commit. The doc is keyed by PaymentIntent id and is already
-  // written by recordPaymentDoc, so this adds no new collection.
-  if (!guestSnap || !guestSnap.exists) {
+  // written by upsertPaymentDoc in step 1 above, so this adds no new collection.
+  if (!guestSnap.exists) {
+    // A successful read reporting exists:false is permanent — retrying for three
+    // days accomplishes nothing. Only a failed READ (above) is retried.
     logger.warn("payment_intent.succeeded: guest not found", { guestId });
+    // Quarantine: the payment was captured but rentOwed was never decremented.
+    // Without these keys the record is invisible to reportPaymentsNeedingReconciliation.
+    // reconciledAt: null is mandatory — the sweep's == null clause matches an
+    // existing null field, never a missing one. createdAt was set in step 1.
+    //
+    // This block must stay terminal. `reconciledAt: null` overwrites an
+    // operator's resolution timestamp, which is safe only because nothing
+    // re-enters here: the handler falls through to markEventDone and later
+    // deliveries short-circuit in claimEvent. If this branch is ever made to
+    // throw and retry, make `reconciledAt` conditional first.
+    await upsertPaymentDoc(paymentIntent.id, {
+      needsManualReconciliation: true,
+      refusedReason: "guest_missing",
+      reconciledAt: null,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
   } else {
     const guestData = guestSnap.data() as GuestDoc;
 
@@ -431,7 +505,11 @@ async function handlePaymentIntentSucceeded(
       });
       txn.set(
         paymentRef,
-        { rentApplied: true, rentAppliedAmountCents: amountCents },
+        {
+          rentApplied: true,
+          rentAppliedAmountCents: amountCents,
+          ...(dueDate ? { dueDate } : {}),
+        },
         { merge: true },
       );
       return true;

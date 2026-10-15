@@ -30,7 +30,10 @@
  */
 
 import { logger } from 'firebase-functions';
-import { rentCollectionAttemptCollection } from '../api/firestore';
+import {
+  paymentsCollection,
+  rentCollectionAttemptCollection,
+} from '../api/firestore';
 
 export type RentAttemptStatus = 'pending' | 'awaiting_confirmation' | 'charged' | 'failed';
 
@@ -262,6 +265,20 @@ export async function markRentAttemptFailed(
  * Logged at ERROR so a Cloud Logging alert can fire on it. Deliberately does
  * NOT throw: a permanently red scheduled job gets ignored, which would
  * reproduce the same silence this is meant to break, just from the other side.
+ *
+ * CLEARING CONTRACT: an attempt is cleared ONLY by setting
+ * `needsReconciliation: false`. `reconciledAt` has no effect on an attempt. The
+ * sibling reportPaymentsNeedingReconciliation below clears the opposite way.
+ *
+ * DO NOT "harmonise" this query with that one by adding
+ * `.where('reconciledAt', '==', null)`. Firestore's `== null` matches only an
+ * existing null field, never a missing one, and no attempt carrying
+ * `needsReconciliation: true` has a `reconciledAt` field at all: the only two
+ * writers of that flag — flagStaleForReconciliation above and
+ * markRentAttemptFailed — never write it. (The field does appear on attempts;
+ * stripeWebhook.ts writes it as a server timestamp on a successful reconcile,
+ * but those carry the flag `false`, and a timestamp is not null regardless.)
+ * Adding the clause would match nothing and silence this sweep permanently.
  */
 export async function reportAttemptsNeedingReconciliation(): Promise<number> {
   const flagged = rentCollectionAttemptCollection.where(
@@ -288,6 +305,49 @@ export async function reportAttemptsNeedingReconciliation(): Promise<number> {
       attemptId: doc.id,
       guestId: (doc.data() ?? {}).guestId ?? null,
       status: (doc.data() ?? {}).status ?? null,
+    })),
+  });
+
+  return total;
+}
+
+/**
+ * Surfaces payments quarantined by the webhook for manual reconciliation.
+ *
+ * Mirrors reportAttemptsNeedingReconciliation for the `payments` collection.
+ * The flag lives there rather than on an attempt record because `payments` is
+ * the money record, and a resident-initiated payment has no attempt document
+ * to carry a flag at all.
+ *
+ * Without this the flag had no reader anywhere, which is the exact failure
+ * this module's own comment above describes. The reconciledAt clause is the
+ * other half: an alert that cannot be cleared becomes an alert nobody reads.
+ * Operators resolve a record by setting reconciledAt until a UI exists.
+ *
+ * CLEARING CONTRACT: `reconciledAt` is what clears a payment here. It does
+ * nothing on an attempt, whose flag is cleared by setting
+ * `needsReconciliation: false` (see reportAttemptsNeedingReconciliation).
+ */
+export async function reportPaymentsNeedingReconciliation(): Promise<number> {
+  const flagged = paymentsCollection
+    .where('needsManualReconciliation', '==', true)
+    .where('reconciledAt', '==', null);
+
+  const total = (await flagged.count().get()).data().count;
+  if (total === 0) {
+    return 0;
+  }
+
+  const sample = await flagged.select('guestId', 'refusedReason').limit(20).get();
+
+  logger.error('rentAttempts: payments need manual reconciliation', {
+    count: total,
+    sampled: sample.size,
+    // Ids and reasons only — never names or amounts per resident.
+    payments: sample.docs.map((doc) => ({
+      paymentId: doc.id,
+      guestId: (doc.data() ?? {}).guestId ?? null,
+      refusedReason: (doc.data() ?? {}).refusedReason ?? null,
     })),
   });
 

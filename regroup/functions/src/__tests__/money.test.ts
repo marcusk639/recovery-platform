@@ -8,6 +8,7 @@ import {
   dollarsToCents,
   formatCents,
   formatDollars,
+  parseDollarsField,
   parseDollarsInput,
   subtractCents,
 } from '../util/money';
@@ -29,6 +30,29 @@ describe('money units', () => {
     expect(formatCents(asCents(50000))).toBe('$500.00');
     expect(formatCents(asCents(7))).toBe('$0.07');
     expect(formatCents(asCents(0))).toBe('$0.00');
+  });
+
+
+  describe('parseDollarsField — blank and malformed are different outcomes', () => {
+    it('reports a readable amount', () => {
+      expect(parseDollarsField('500')).toEqual({ ok: true, cents: 50000 });
+      expect(parseDollarsField('19.99')).toEqual({ ok: true, cents: 1999 });
+      expect(parseDollarsField('$1,234.56')).toEqual({ ok: true, cents: 123456 });
+      expect(parseDollarsField('0')).toEqual({ ok: true, cents: 0 });
+    });
+
+    it('distinguishes a cleared field from an unreadable one', () => {
+      // The whole point of the type: a caller keeping the stored value on blank
+      // must NOT also keep it on malformed, or the edit vanishes silently.
+      expect(parseDollarsField('')).toEqual({ ok: false, reason: 'blank' });
+      expect(parseDollarsField('   ')).toEqual({ ok: false, reason: 'blank' });
+      expect(parseDollarsField(undefined)).toEqual({ ok: false, reason: 'blank' });
+      expect(parseDollarsField(null)).toEqual({ ok: false, reason: 'blank' });
+
+      for (const bad of ['12,34', '1.234,56', '1 2 3', '1e3', '0x10', '1.2.3', '500.123', '-50', 'abc']) {
+        expect(parseDollarsField(bad)).toEqual({ ok: false, reason: 'malformed' });
+      }
+    });
   });
 
   describe('parseDollarsInput — the admin form boundary', () => {

@@ -695,13 +695,14 @@ describe("stripeWebhook — payment_intent.succeeded", () => {
     // The rentOwed decrement runs inside its own transaction so it applies
     // exactly once per PaymentIntent. Route txn.update to the guest mock this
     // test already asserts on, dropping the ref argument.
+    const mockTxnSet = jest.fn();
     mockRunTransaction.mockImplementation(async (fn: (txn: any) => any) =>
       fn({
         get: jest.fn().mockResolvedValue({
           exists: false,
           get: (_field: string) => undefined,
         }),
-        set: jest.fn(),
+        set: mockTxnSet,
         update: (_ref: any, data: any) => mockGuestUpdate(data),
       }),
     );
@@ -783,8 +784,8 @@ describe("stripeWebhook — payment_intent.succeeded", () => {
     await (stripeWebhook as any)(req, res);
 
     expect(res.status).toHaveBeenCalledWith(200);
-    // Payment doc should be written with merge:true, including the guest's
-    // rentDueDate captured at charge time (#34 on-time rate).
+    // Payment doc is written first with merge:true, before the guest is read,
+    // so it cannot carry dueDate.
     expect(mockPaymentSet).toHaveBeenCalledWith(
       expect.objectContaining({
         stripePaymentIntentId: "pi_test_1",
@@ -792,6 +793,20 @@ describe("stripeWebhook — payment_intent.succeeded", () => {
         status: "succeeded",
         houseId,
         guestId,
+      }),
+      { merge: true },
+    );
+    expect(mockPaymentSet).not.toHaveBeenCalledWith(
+      expect.objectContaining({ dueDate: expect.anything() }),
+      expect.anything(),
+    );
+    // The guest's rentDueDate captured at charge time (#34 on-time rate) rides
+    // on the decrement transaction's set.
+    expect(mockTxnSet).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        rentApplied: true,
+        rentAppliedAmountCents: 50000,
         dueDate: "2026-06-30",
       }),
       { merge: true },

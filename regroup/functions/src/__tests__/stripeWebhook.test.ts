@@ -698,6 +698,7 @@ describe("payment_intent.succeeded", () => {
   function setupForPaymentSucceeded({
     guestExists = true,
     guestData = {},
+    guestGetError = undefined as Error | undefined,
     adminDocs = [] as Array<{
       id: string;
       data: () => Record<string, unknown>;
@@ -752,7 +753,9 @@ describe("payment_intent.succeeded", () => {
       if (name === "guests") {
         return {
           doc: jest.fn().mockReturnValue({
-            get: jest.fn().mockResolvedValue(guestDoc),
+            get: guestGetError
+              ? jest.fn().mockRejectedValue(guestGetError)
+              : jest.fn().mockResolvedValue(guestDoc),
             update: mockUpdate.mockResolvedValue(undefined),
           }),
         };
@@ -921,6 +924,121 @@ describe("payment_intent.succeeded", () => {
     );
   });
 
+  test("records a refused non-USD payment for manual reconciliation before throwing", async () => {
+    // payment_intent.succeeded fires post-capture: the funds are already taken.
+    // Refusing to APPLY the payment is correct; refusing to RECORD it means the
+    // operator's Stripe balance and the Regroup ledger diverge with only a log
+    // line to find it by, and the event is marked done so Stripe never retries.
+    const pi = makePaymentIntent({
+      metadata: { guestId: "guest_1", houseId: "house_1" },
+      amount: 50000,
+      currency: "jpy",
+    } as never);
+    const event = makeStripeEvent("payment_intent.succeeded", pi);
+    mockConstructEvent.mockReturnValue(event);
+    setupForPaymentSucceeded();
+
+    await stripeWebhook(makeRequest({}) as never, makeResponse() as never);
+
+    expect(mockSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stripePaymentIntentId: "pi_test_123",
+        guestId: "guest_1",
+        houseId: "house_1",
+        currency: "jpy",
+        status: "succeeded",
+        amountMinorUnits: 50000,
+        rentApplied: false,
+        needsManualReconciliation: true,
+        refusedReason: "unsupported_currency",
+        // The reconciliation sweep matches on reconciledAt == null, which only
+        // matches a field that exists. Dropping this hides the record.
+        reconciledAt: null,
+      }),
+      expect.objectContaining({ merge: true }),
+    );
+    // `amount` means USD dollars to analytics.ts. Writing a zero-decimal
+    // currency under that key reports 100x. Minor units go in their own field.
+    // Scoped to THIS call rather than the whole mock: after the reorder in
+    // this task the success path writes an amount-bearing doc, so a
+    // mock-wide negative would be asserting the absence of an unrelated call.
+    const refusalCall = mockSet.mock.calls.find(
+      ([doc]) => (doc as Record<string, unknown>).refusedReason !== undefined,
+    );
+    expect(refusalCall).toBeDefined();
+    expect(refusalCall?.[0]).not.toHaveProperty("amount");
+    expect(refusalCall?.[0]).toHaveProperty("createdAt");
+  });
+
+  test("a transient guest read failure returns 500 and releases the claim so Stripe retries", async () => {
+    // The decrement lives in an `else` branch guarded on the snapshot. Swallowing
+    // the read error skips it while the handler returns NORMALLY, so the event is
+    // marked done and Stripe is told 200: the card was charged, the balance never
+    // moved, and no retry can repair it. Retrying is safe — rentApplied lives on
+    // paymentRef, which is in the transaction's read set.
+    const pi = makePaymentIntent({
+      metadata: { guestId: "guest_1", houseId: "house_1" },
+      amount: 50000,
+    });
+    const event = makeStripeEvent("payment_intent.succeeded", pi);
+    mockConstructEvent.mockReturnValue(event);
+    setupForPaymentSucceeded({ guestGetError: new Error("UNAVAILABLE") });
+
+    const res = makeResponse();
+    await stripeWebhook(makeRequest({}) as never, res as never);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(mockEventSet).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "failed" }),
+      expect.objectContaining({ merge: true }),
+    );
+  });
+
+  test("records the payment before reading the guest, so a read failure still leaves a record", async () => {
+    // The read failure returns 500 and Stripe retries, but across a
+    // multi-hour degradation the resident's history and the operator's
+    // dashboard would otherwise show no payment for a captured card.
+    const pi = makePaymentIntent({
+      metadata: { guestId: "guest_1", houseId: "house_1" },
+      amount: 50000,
+    });
+    const event = makeStripeEvent("payment_intent.succeeded", pi);
+    mockConstructEvent.mockReturnValue(event);
+    setupForPaymentSucceeded({ guestGetError: new Error("UNAVAILABLE") });
+
+    await stripeWebhook(makeRequest({}) as never, makeResponse() as never);
+
+    expect(mockSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stripePaymentIntentId: "pi_test_123",
+        status: "succeeded",
+        amount: 500,
+      }),
+      expect.objectContaining({ merge: true }),
+    );
+  });
+
+  test("a genuinely absent guest is not retried: still 200 and marked done", async () => {
+    // A read that SUCCEEDS and reports exists:false is permanent — retrying it for
+    // three days accomplishes nothing. Only the transient case above may retry.
+    const pi = makePaymentIntent({
+      metadata: { guestId: "guest_1", houseId: "house_1" },
+      amount: 50000,
+    });
+    const event = makeStripeEvent("payment_intent.succeeded", pi);
+    mockConstructEvent.mockReturnValue(event);
+    setupForPaymentSucceeded({ guestExists: false });
+
+    const res = makeResponse();
+    await stripeWebhook(makeRequest({}) as never, res as never);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(mockEventSet).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "done" }),
+      expect.objectContaining({ merge: true }),
+    );
+  });
+
   test("missing guestId in metadata: handles gracefully without throwing", async () => {
     const pi = makePaymentIntent({
       metadata: { houseId: "house_1" } as Stripe.Metadata,
@@ -968,6 +1086,41 @@ describe("payment_intent.succeeded", () => {
     );
     // No balance update attempted
     expect(mockUpdate).not.toHaveBeenCalled();
+    // The captured payment is quarantined so the reconciliation sweep sees it.
+    // reconciledAt must be an explicit null: == null never matches a missing field.
+    expect(mockSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        needsManualReconciliation: true,
+        refusedReason: "guest_missing",
+        reconciledAt: null,
+      }),
+      expect.objectContaining({ merge: true }),
+    );
+  });
+
+  test("missing metadata: partial payment doc carries createdAt", async () => {
+    const pi = makePaymentIntent({
+      metadata: { houseId: "house_1" } as Stripe.Metadata,
+    });
+    mockConstructEvent.mockReturnValue(makeStripeEvent("payment_intent.succeeded", pi));
+    mockCollection.mockImplementation((name: string) => {
+      if (name === "payments")
+        return { doc: () => ({ set: mockSet.mockResolvedValue(undefined) }) };
+      return {
+        doc: () => ({
+          set: jest.fn(),
+          get: jest.fn().mockResolvedValue({ exists: false }),
+        }),
+      };
+    });
+
+    await stripeWebhook(makeRequest({}) as never, makeResponse() as never);
+
+    // analytics.ts and getPaymentHistory's orderBy("createdAt") drop docs without it.
+    expect(mockSet).toHaveBeenCalledWith(
+      expect.objectContaining({ guestId: null, createdAt: expect.anything() }),
+      expect.objectContaining({ merge: true }),
+    );
   });
 
   test("FCM send fails: event still processes successfully", async () => {

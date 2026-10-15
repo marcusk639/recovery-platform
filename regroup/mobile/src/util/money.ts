@@ -88,6 +88,8 @@ export function dollarsToCents(dollars: Dollars): Cents {
  * re-assertion. Without a helper the obvious workaround is an `as Cents` cast,
  * and a codebase that casts routinely has no brand at all. These keep the safe
  * path the short one.
+ *
+ * No callers yet; see subtractCents.
  */
 export function addCents(...amounts: Cents[]): Cents {
   return amounts.reduce<number>((sum, n) => sum + n, 0) as Cents;
@@ -122,29 +124,39 @@ export function formatCents(cents: Cents): string {
 
 
 /**
- * Converts a dollar amount typed into a form field to cents.
+ * The outcome of reading a dollar amount typed into a form field.
  *
- * `fallback` is returned when the input is blank or unusable. That is
- * deliberate: this function backs an admin field that edits a resident's
- * outstanding rent, and silently resolving a cleared field to zero would wipe a
- * real debt with no warning. An explicit "0" still means zero. A negative
- * amount is rejected rather than quietly turned into a credit.
+ * Three outcomes, kept distinct on purpose. Collapsing them into one return
+ * channel is what let a malformed entry masquerade as "unchanged": the caller
+ * could not tell "operator left this alone" from "operator typed something we
+ * could not read", so the edit was dropped and the form still reported success.
  */
-export function parseDollarsInput(
+export type ParsedDollars =
+  | { ok: true; cents: Cents }
+  | { ok: false; reason: 'blank' | 'malformed' };
+
+/**
+ * Reads a dollar amount typed into a form field, without a fallback.
+ *
+ * `blank` means the field was cleared or absent — callers keep the stored value,
+ * because silently resolving a cleared field to zero would wipe a real debt.
+ * `malformed` means the operator typed something unusable; callers must surface
+ * that rather than discard it. A negative amount is malformed, not a credit.
+ */
+export function parseDollarsField(
   raw: string | number | undefined | null,
-  fallback: Cents,
-): Cents {
+): ParsedDollars {
   if (raw === undefined || raw === null) {
-    return fallback;
+    return { ok: false, reason: 'blank' };
   }
   // Outer whitespace and a leading currency symbol are noise; INTERNAL
   // whitespace is ambiguous ('1 2 3' is not 123) and is refused below.
   const trimmed = String(raw).trim().replace(/^\$/, '').trim();
   if (trimmed.length === 0) {
-    return fallback;
+    return { ok: false, reason: 'blank' };
   }
   if (/\s/.test(trimmed)) {
-    return fallback;
+    return { ok: false, reason: 'malformed' };
   }
 
   // Commas are only accepted as thousands grouping. Stripping every separator
@@ -157,12 +169,34 @@ export function parseDollarsInput(
     : trimmed;
 
   if (!/^\d+(\.\d{1,2})?$/.test(degrouped)) {
-    return fallback;
+    return { ok: false, reason: 'malformed' };
   }
 
   const parsed = Number(degrouped);
   if (!Number.isFinite(parsed)) {
-    return fallback;
+    return { ok: false, reason: 'malformed' };
   }
-  return dollarsToCents(parsed as Dollars);
+  return { ok: true, cents: dollarsToCents(parsed as Dollars) };
+}
+
+/**
+ * Converts a dollar amount typed into a form field to cents.
+ *
+ * `fallback` is returned when the input is blank or unusable. That is
+ * deliberate: this function backs an admin field that edits a resident's
+ * outstanding rent, and silently resolving a cleared field to zero would wipe a
+ * real debt with no warning. An explicit "0" still means zero. A negative
+ * amount is rejected rather than quietly turned into a credit.
+ *
+ * No callers since guestMoneyUpdate replaced the form's lossy parse path;
+ * see subtractCents. Retained rather than deleted because removing it would
+ * drop its test cases, which this repo's pre-commit gate reserves for a
+ * human decision.
+ */
+export function parseDollarsInput(
+  raw: string | number | undefined | null,
+  fallback: Cents,
+): Cents {
+  const result = parseDollarsField(raw);
+  return result.ok ? result.cents : fallback;
 }

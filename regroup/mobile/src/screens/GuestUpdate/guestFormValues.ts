@@ -1,5 +1,9 @@
 import { Guest } from '../../entities/Guest';
-import { asCents, centsToDollars, parseDollarsInput } from '../../util/money';
+import {
+  asCents,
+  centsToDollars,
+  parseDollarsField,
+} from '../../util/money';
 
 /**
  * Money boundary for the guest update form.
@@ -35,51 +39,63 @@ function storedCents(guest: Guest, field: string): number {
   );
 }
 
-/**
- * The money fields whose submitted value differs from what is stored.
- *
- * Only these are sent, and only these are declared authoritative. A field the
- * operator never touched must not be submitted at all: `rentOwed` is decremented
- * server-side when a resident pays, so writing back an absolute figure captured
- * when the form opened would silently undo that payment. Omitting the field
- * leaves the stored value standing.
- */
-export function changedMoneyFields(
-  guest: Guest,
-  values: GuestFormValues,
-): ReadonlyArray<keyof Guest> {
-  return CENTS_FIELDS.filter(field => {
-    const stored = asCents(storedCents(guest, field));
-    return parseDollarsInput(
-      values[field] as string | number | undefined,
-      stored,
-    ) !== stored;
-  }) as ReadonlyArray<keyof Guest>;
-}
+export type GuestMoneyUpdate =
+  | {
+      ok: true;
+      payload: Partial<Guest>;
+      authoritativeFields: ReadonlyArray<keyof Guest>;
+    }
+  | { ok: false; malformedFields: ReadonlyArray<keyof Guest> };
 
 /**
- * Submitted dollar figures -> stored cents, for the changed fields only.
+ * Validates and converts the form's money fields in a single pass.
  *
- * A blank or unusable input resolves to the stored value and therefore counts as
- * unchanged, so it is omitted rather than written back — clearing the field
- * cannot wipe a balance. An explicit "0" differs from a non-zero balance and is
- * submitted as a real zero.
+ * One traversal, one parse per field, three outcomes sorted as we go. This was
+ * three functions parsing the same field four times between them, where only
+ * one of the four could reject — so the rejection travelled as "we returned
+ * early" and money was protected by statement order at one call site.
+ * Returning a discriminated result removes the ordering hazard rather than
+ * enforcing it, and keeps authoritativeFields in the same arm as the payload
+ * it describes so they cannot desynchronise.
+ *
+ * A field is judged only on what the operator TYPED. The form seeds each input
+ * with centsToDollars(stored), so judging the seeded value would let a legacy
+ * non-integer balance reject input nobody entered and brick every field on
+ * that guest.
  */
-export function formValuesToGuest(
+export function guestMoneyUpdate(
   guest: Guest,
   values: GuestFormValues,
-): Partial<Guest> {
-  const merged = { ...guest, ...values } as unknown as Record<string, unknown>;
-  const changed = changedMoneyFields(guest, values);
+): GuestMoneyUpdate {
+  const seeded = guestToFormValues(guest);
+  const payload = { ...guest, ...values } as unknown as Record<string, unknown>;
+  const authoritativeFields: Array<keyof Guest> = [];
+  const malformedFields: Array<keyof Guest> = [];
+
   for (const field of CENTS_FIELDS) {
-    if (changed.includes(field as keyof Guest)) {
-      merged[field] = parseDollarsInput(
-        values[field] as string | number | undefined,
-        asCents(storedCents(guest, field)),
-      );
+    const raw = values[field] as string | number | undefined;
+    const untouched = String(raw ?? '') === String(seeded[field] ?? '');
+    const parsed = parseDollarsField(raw);
+
+    if (!parsed.ok && parsed.reason === 'malformed' && !untouched) {
+      malformedFields.push(field as keyof Guest);
+      continue;
+    }
+
+    const stored = asCents(storedCents(guest, field));
+    if (parsed.ok && parsed.cents !== stored) {
+      payload[field] = parsed.cents;
+      authoritativeFields.push(field as keyof Guest);
     } else {
-      delete merged[field];
+      // Blank, unchanged, or a seeded value we cannot re-read: leave the
+      // stored figure standing rather than writing an absolute value back
+      // over a concurrent server-side decrement.
+      delete payload[field];
     }
   }
-  return merged as Partial<Guest>;
+
+  if (malformedFields.length > 0) {
+    return { ok: false, malformedFields };
+  }
+  return { ok: true, payload: payload as Partial<Guest>, authoritativeFields };
 }
