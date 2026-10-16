@@ -245,6 +245,32 @@ describe("stripeConnectReauth", () => {
       }),
     );
   });
+
+  it("ignores a spoofed Host header when building the redirect URLs", async () => {
+    // This endpoint is unauthenticated, so the Host header is attacker-supplied.
+    // If it reached refresh_url / return_url, Stripe would send the house
+    // operator to the attacker's origin after onboarding.
+    const stripeAccountId = "acct_host_spoof";
+    mockAccountLinksCreate.mockResolvedValue({
+      url: "https://stripe.com/setup",
+    });
+    seedHouseQuery(matchingHouse(stripeAccountId));
+
+    const req = {
+      ...makeReq({ stripeAccountId }),
+      protocol: "https",
+      hostname: "evil.example.com",
+      headers: { host: "evil.example.com" },
+    };
+    const res = makeRes();
+
+    await (stripeConnectReauth as any)(req, res);
+
+    const params = mockAccountLinksCreate.mock.calls[0][0];
+    expect(params.refresh_url).not.toContain("evil.example.com");
+    expect(params.return_url).not.toContain("evil.example.com");
+    expect(params.refresh_url).toContain("cloudfunctions.net");
+  });
 });
 
 // ===========================================================================

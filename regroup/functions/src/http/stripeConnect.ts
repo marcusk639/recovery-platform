@@ -29,6 +29,22 @@ import { createStripeClient } from "../util/stripe";
 let _stripe: Stripe | undefined;
 const getStripe = (): Stripe => (_stripe ??= createStripeClient());
 
+/**
+ * Origin for the Connect onboarding redirect URLs.
+ *
+ * CONNECT_BASE_URL overrides it (custom domain, or a preview deployment).
+ * Otherwise it is derived from the project and region the function is running
+ * in — both supplied by the runtime, neither influenced by the request.
+ */
+function connectBaseUrl(): string {
+  const override = process.env.CONNECT_BASE_URL?.trim();
+  if (override) return override.replace(/\/+$/, "");
+  const project =
+    process.env.GCLOUD_PROJECT ?? process.env.GOOGLE_CLOUD_PROJECT ?? "";
+  const region = process.env.FUNCTION_REGION ?? "us-central1";
+  return `https://${region}-${project}.cloudfunctions.net`;
+}
+
 // ---------------------------------------------------------------------------
 // stripeConnectReauth
 // ---------------------------------------------------------------------------
@@ -67,9 +83,12 @@ export const stripeConnectReauth = onRequest(
       return;
     }
 
-    // Build the return and refresh URLs from this same function so they
-    // remain consistent regardless of which environment is deployed.
-    const baseUrl = `${req.protocol}://${req.hostname}`;
+    // Never build these from req.hostname. This endpoint is unauthenticated and
+    // the Host header is attacker-supplied, so a spoofed Host would put an
+    // attacker's origin into refresh_url / return_url and Stripe would send the
+    // house operator there after onboarding. Derive it from deployment config
+    // instead, which a request cannot influence.
+    const baseUrl = connectBaseUrl();
     const refreshUrl = `${baseUrl}/stripeConnectReauth?stripeAccountId=${stripeAccountId}`;
     const returnUrl = `${baseUrl}/stripeConnectReturn`;
 
