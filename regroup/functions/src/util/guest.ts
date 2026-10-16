@@ -217,7 +217,7 @@ export const transferStats = async (
         continue;
       }
 
-      logger.info(`Processing house: ${house.name} (${house.id})`);
+      logger.info(`Processing house: ${house.id}`);
 
       try {
         const guestQuery = await guestCollection
@@ -227,7 +227,7 @@ export const transferStats = async (
 
         results.totalGuests += guestQuery.size;
         logger.info(
-          `Found ${guestQuery.size} active guests in house ${house.name}`
+          `Found ${guestQuery.size} active guests in house ${house.id}`
         );
 
         // Update house health
@@ -236,7 +236,7 @@ export const transferStats = async (
           await houseDoc.ref.update(JSON.parse(JSON.stringify(house)));
         } catch (healthError) {
           logger.warn(
-            `Failed to update house health for ${house.name}`,
+            `Failed to update house health for ${house.id}`,
             healthError
           );
         }
@@ -255,7 +255,7 @@ export const transferStats = async (
           }
         }
       } catch (houseError) {
-        logger.error(`Error processing house ${house.name}`, houseError);
+        logger.error(`Error processing house ${house.id}`, houseError);
       }
     }
   } catch (error) {
