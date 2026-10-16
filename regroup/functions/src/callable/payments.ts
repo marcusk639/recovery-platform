@@ -227,7 +227,11 @@ export const createPaymentIntent = onCall(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // listPayments
-// Returns recent payments for a guest in a house.
+// Returns recent payments for one resident.
+//
+// Read scope: the resident named by `guestId`, or an admin of that resident's
+// house. House membership alone is not sufficient — `guestId` is client-supplied
+// and says nothing about who the caller is.
 // ─────────────────────────────────────────────────────────────────────────────
 export const listPayments = onCall(
   { secrets: [STRIPE_SECRET_KEY] },
@@ -242,15 +246,52 @@ export const listPayments = onCall(
       limit = 20,
     } = parseInput(listPaymentsSchema, request.data);
 
-    // Authorization: caller must be a member (admin or guest) of the house
+    // Authorization step 1: caller must hold a claim for this house at all.
+    // Cheap, and keeps a non-member from probing house existence below.
     assertHouseMemberFromClaims(
       request.auth.token as Record<string, unknown>,
       houseId,
     );
 
     const houseDoc = await db.collection("houses").doc(houseId).get();
-    const house = houseDoc.data();
-    if (!house?.stripeAccountId) return { payments: [] };
+    if (!houseDoc.exists) {
+      throw new HttpsError("not-found", "House not found");
+    }
+    const house = houseDoc.data() as HouseAdminFields & {
+      stripeAccountId?: string;
+    };
+
+    // Authorization step 2: bind the requested guestId to the caller, the same
+    // way updatePaymentInfo and createPaymentIntent do. `guests` is a TOP-LEVEL
+    // collection, so guestId alone says nothing about the client-supplied
+    // houseId — the guest doc is the authority on which house a resident
+    // belongs to. Checked before the Stripe read so the response cannot depend
+    // on a guestId the caller is not entitled to.
+    const guestSnap = await db.collection("guests").doc(guestId).get();
+    if (!guestSnap.exists) {
+      throw new HttpsError("not-found", "Guest record not found");
+    }
+    const guestData = guestSnap.data() as {
+      userId?: string;
+      houseId?: string;
+    };
+    if (guestData.houseId !== houseId) {
+      throw new HttpsError(
+        "permission-denied",
+        "Guest does not belong to this house",
+      );
+    }
+    if (
+      !isHouseAdmin(request.auth.uid, house) &&
+      guestData.userId !== request.auth.uid
+    ) {
+      throw new HttpsError(
+        "permission-denied",
+        "Only the resident or a house admin can view these payments",
+      );
+    }
+
+    if (!house.stripeAccountId) return { payments: [] };
 
     const stripe = createStripeClient();
     const charges = await stripe.charges.list(
@@ -281,6 +322,10 @@ export const listPayments = onCall(
 // listHousePayments
 // Returns all recent payments across all residents for a house in one call.
 // Replaces the N+1 pattern of calling listPayments per guest.
+//
+// Read scope: house admins only. Every row is labelled with the resident it
+// belongs to, so this is a house-wide view of other residents' records — a
+// resident reads their own through listPayments instead.
 // ─────────────────────────────────────────────────────────────────────────────
 export const listHousePayments = onCall(
   { secrets: [STRIPE_SECRET_KEY] },
@@ -300,8 +345,22 @@ export const listHousePayments = onCall(
     );
 
     const houseDoc = await db.collection("houses").doc(houseId).get();
-    const house = houseDoc.data();
-    if (!house?.stripeAccountId) return { payments: [] };
+    if (!houseDoc.exists) {
+      throw new HttpsError("not-found", "House not found");
+    }
+    const house = houseDoc.data() as HouseAdminFields & {
+      stripeAccountId?: string;
+    };
+
+    // Ground truth from the house doc, not the token: custom claims only say
+    // "member", and may be up to an hour stale after a role change.
+    assertHouseAdmin(
+      request.auth.uid,
+      house,
+      "Only house admins can view house-wide payments",
+    );
+
+    if (!house.stripeAccountId) return { payments: [] };
 
     const stripe = createStripeClient();
     const charges = await stripe.charges.list(

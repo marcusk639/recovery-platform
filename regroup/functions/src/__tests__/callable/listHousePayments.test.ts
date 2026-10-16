@@ -1,6 +1,9 @@
 /**
  * Unit tests for listHousePayments Cloud Function.
  *
+ * listHousePayments is admin-only: the response labels every charge with the
+ * resident it belongs to. The house doc is the authority on who is an admin.
+ *
  * We test the authorization and business logic in isolation by mocking:
  * - firebase-admin (Firestore reads)
  * - Stripe client
@@ -116,7 +119,10 @@ describe("listHousePayments", () => {
     jest.clearAllMocks();
     mockGet.mockResolvedValue({
       exists: true,
-      data: () => ({ stripeAccountId: "acct_test_123" }),
+      data: () => ({
+        stripeAccountId: "acct_test_123",
+        adminIds: ["admin1"],
+      }),
     });
   });
 
@@ -145,10 +151,26 @@ describe("listHousePayments", () => {
   it("returns empty payments when house has no stripeAccountId", async () => {
     mockGet.mockResolvedValueOnce({
       exists: true,
-      data: () => ({}),
+      data: () => ({ adminIds: ["admin1"] }),
     });
     const result = await (listHousePayments as any).run(makeRequest());
     expect(result.payments).toEqual([]);
+  });
+
+  it("throws permission-denied when the caller is not an admin of the house", async () => {
+    const req = makeRequest({
+      auth: { uid: "resident1", token: { guest: { house1: true } } },
+    });
+    await expect((listHousePayments as any).run(req)).rejects.toMatchObject({
+      code: "permission-denied",
+    });
+  });
+
+  it("throws not-found when the house does not exist", async () => {
+    mockGet.mockResolvedValueOnce({ exists: false, data: () => undefined });
+    await expect(
+      (listHousePayments as any).run(makeRequest()),
+    ).rejects.toMatchObject({ code: "not-found" });
   });
 
   it("returns mapped payment records from Stripe charges", async () => {
