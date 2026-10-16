@@ -22,6 +22,7 @@ import { STRIPE_SECRET_KEY } from "../config";
 import * as admin from "firebase-admin";
 import Stripe from "stripe";
 import { createStripeClient } from "../util/stripe";
+import { connectRefreshUrl, connectReturnUrl } from "../util/connectUrls";
 
 // Lazily instantiated to avoid constructing the Stripe client at module load
 // (Firebase source analysis loads modules without secrets bound, so eager
@@ -29,21 +30,6 @@ import { createStripeClient } from "../util/stripe";
 let _stripe: Stripe | undefined;
 const getStripe = (): Stripe => (_stripe ??= createStripeClient());
 
-/**
- * Origin for the Connect onboarding redirect URLs.
- *
- * CONNECT_BASE_URL overrides it (custom domain, or a preview deployment).
- * Otherwise it is derived from the project and region the function is running
- * in — both supplied by the runtime, neither influenced by the request.
- */
-function connectBaseUrl(): string {
-  const override = process.env.CONNECT_BASE_URL?.trim();
-  if (override) return override.replace(/\/+$/, "");
-  const project =
-    process.env.GCLOUD_PROJECT ?? process.env.GOOGLE_CLOUD_PROJECT ?? "";
-  const region = process.env.FUNCTION_REGION ?? "us-central1";
-  return `https://${region}-${project}.cloudfunctions.net`;
-}
 
 // ---------------------------------------------------------------------------
 // stripeConnectReauth
@@ -88,11 +74,14 @@ export const stripeConnectReauth = onRequest(
     // attacker's origin into refresh_url / return_url and Stripe would send the
     // house operator there after onboarding. Derive it from deployment config
     // instead, which a request cannot influence.
-    const baseUrl = connectBaseUrl();
-    const refreshUrl = `${baseUrl}/stripeConnectReauth?stripeAccountId=${stripeAccountId}`;
-    const returnUrl = `${baseUrl}/stripeConnectReturn`;
-
     try {
+      // Inside the try: these throw on a missing project id, and an
+      // uncaught throw here would reject the handler, producing an unlogged
+      // generic 500. Catching it keeps the error-log line and the operator-
+      // facing message that the catch below already provides.
+      const refreshUrl = connectRefreshUrl(stripeAccountId);
+      const returnUrl = connectReturnUrl();
+
       const accountLink = await getStripe().accountLinks.create({
         account: stripeAccountId,
         refresh_url: refreshUrl,

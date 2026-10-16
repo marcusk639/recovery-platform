@@ -20,6 +20,7 @@ import {
   HouseAdminFields,
 } from "../util/houseAuth";
 import { parseInput, safeReturnUrlSchema } from "../validation";
+import { connectRefreshUrl, connectReturnUrl } from "../util/connectUrls";
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
 /**
@@ -611,14 +612,14 @@ export const connectStripeAccount = onCall(
     // Defaults point to stripeConnectReturn / stripeConnectReauth, which are
     // HTTP Cloud Functions in this same deployment.  Region defaults to
     // us-central1 (matches the project's setGlobalOptions / deploy default).
-    const projectId =
-      process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || "";
-    const hostedBaseUrl = `https://us-central1-${projectId}.cloudfunctions.net`;
-    const resolvedReturnUrl =
-      returnUrl ?? `${hostedBaseUrl}/stripeConnectReturn`;
+    // Shared with stripeConnectReauth via util/connectUrls, so one onboarding
+    // flow cannot redirect to two different origins. This used to build the URL
+    // inline with us-central1 hardcoded and an empty-project fallback; the
+    // helper reads the deployed region and refuses to emit an unresolvable URL.
+    // Evaluated lazily: a client that supplied both URLs never calls it.
+    const resolvedReturnUrl = returnUrl ?? connectReturnUrl();
     const resolvedRefreshUrl =
-      refreshUrl ??
-      `${hostedBaseUrl}/stripeConnectReauth?stripeAccountId=${stripeAccountId}`;
+      refreshUrl ?? connectRefreshUrl(stripeAccountId);
 
     // ── 6. Create an account link (works for both new and existing accounts) ──
     let accountLink: Stripe.AccountLink;
