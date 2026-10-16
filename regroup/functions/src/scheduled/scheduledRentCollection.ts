@@ -73,9 +73,19 @@ async function runReportSweep(
   try {
     return await report();
   } catch (err) {
+    // `code` is the field that says whether this is worth paging for: a
+    // Firestore UNAVAILABLE is transient and self-clearing, while
+    // PERMISSION_DENIED or FAILED_PRECONDITION (a missing index) will repeat
+    // every day until someone acts. The message alone does not distinguish them.
+    const e = err as { message?: string; code?: unknown; stack?: string } | null;
     logger.error(
       'scheduledRentCollection: reconciliation sweep failed, count unknown; collection continues',
-      { sweep, reason: (err as Error)?.message ?? String(err) },
+      {
+        sweep,
+        code: e?.code ?? null,
+        reason: e?.message ?? String(err),
+        stack: e?.stack ?? null,
+      },
     );
     return null;
   }

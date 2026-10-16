@@ -18,6 +18,8 @@ Create them, or the non-throwing design is just a quieter silence.
 | `rentAttempts: in-flight attempt is stale, releasing` | An attempt sat unsettled past 10 days. Its hold is released, so the resident can be charged again — if the original did settle, that is a duplicate debit. | Same day  |
 | `scheduledRentCollection: some payments failed`       | One or more charges threw. The job also goes red for this.                                                                                                 | Immediate |
 | `rentAttempts: could not flag stale attempt`          | The flag write itself failed, so the signal above may be missing.                                                                                          | Same day  |
+| `rentAttempts: payments need manual reconciliation`  | A captured payment was quarantined and `rentOwed` was never decremented. Money moved; the balance did not. Highest urgency of the four.                    | Same day  |
+| `scheduledRentCollection: reconciliation sweep failed` | A sweep could not run, so its count is unknown rather than zero. Collection still charged residents; the diagnostic is blind until this clears.           | Same day  |
 
 ## Create the metric and policy
 
@@ -30,12 +32,14 @@ PROJECT=phoenix-cleanhouse
 # One log-based metric covering the reconciliation + staleness signals.
 gcloud logging metrics create rent_reconciliation_needed \
   --project="$PROJECT" \
-  --description="Rent attempts with an unknown Stripe outcome, or released as stale" \
+  --description="Rent attempts or payments needing reconciliation, released as stale, or a sweep that could not run" \
   --log-filter='resource.type="cloud_run_revision"
 AND resource.labels.service_name="scheduledrentcollection"
 AND severity>=ERROR
 AND (jsonPayload.message:"attempts need reconciliation"
-     OR jsonPayload.message:"in-flight attempt is stale")'
+     OR jsonPayload.message:"payments need manual reconciliation"
+     OR jsonPayload.message:"in-flight attempt is stale"
+     OR jsonPayload.message:"reconciliation sweep failed")'
 
 cat > /tmp/rent-recon-policy.json <<'JSON'
 {
