@@ -38,7 +38,7 @@ const ANALYTICS_MIN_TIER: Record<HouseType, string> = {
 // Loosely-typed shapes for the docs we read. The callable owns the field
 // contract — we deliberately do NOT import mobile entities.
 interface PaymentRecord {
-  amount?: number; // DOLLARS (paymentIntent.amount / 100)
+  amount?: number; // integer CENTS — the canonical unit for payments.amount (#82)
   createdAt?: unknown; // Firestore Timestamp | ISO string | Date
   refundedAmountCents?: number; // cumulative refunds in CENTS (#35, charge.refunded)
   dueDate?: string; // YYYY-MM-DD due date captured at charge time (#34)
@@ -168,9 +168,13 @@ export const rentRoiMetrics = onCall(async (request) => {
     inWindow(toDateStr(p.createdAt), startDate, endDate),
   );
 
-  // amount is DOLLARS → cents; round per-payment to avoid float drift.
+  // amount is integer CENTS, the same unit as refundedAmountCents below and as
+  // guests.rentOwed. It used to be read as dollars and multiplied by 100, which
+  // was right for the Stripe webhook's writes and 100x wrong for mobile's
+  // manual cash/check payments, which have always stored cents (#82).
+  // Math.round still guards a legacy document holding a fractional value.
   const collectedGrossCents = filteredPayments.reduce(
-    (sum, p) => sum + Math.round((p.amount ?? 0) * 100),
+    (sum, p) => sum + Math.round(p.amount ?? 0),
     0,
   );
   const paymentCount = filteredPayments.length;

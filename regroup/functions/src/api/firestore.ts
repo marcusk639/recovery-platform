@@ -326,8 +326,12 @@ export async function getMeetingActivitiesForGuest(
 // ─── Rent-collection ROI metrics (RG-TRACK) read helper ─────────────────────
 // Returns all successful payment docs for a house. The date window is filtered
 // in memory by the analytics callable (avoids a composite index on
-// houseId + status + createdAt). The `payments` collection is written by the
-// Stripe webhook on `payment_intent.succeeded`; `amount` is in dollars.
+// houseId + status + createdAt). The `payments` collection has two writers:
+// the Stripe webhook on `payment_intent.succeeded`, and mobile's
+// recordManualPayment for cash/check/Venmo/Zelle. Both store `amount` as
+// integer CENTS (#82) — the same unit as guests.rentOwed and
+// refundedAmountCents. Documents written before #82 may still hold dollars;
+// see scripts/migratePaymentAmountsToCents.ts.
 export async function getSuccessfulPaymentsForHouse(
   houseId: string,
 ): Promise<FirebaseFirestore.DocumentData[]> {

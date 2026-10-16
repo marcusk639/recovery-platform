@@ -798,7 +798,10 @@ describe("payment_intent.succeeded", () => {
         stripePaymentIntentId: "pi_test_123",
         houseId: "house_1",
         guestId: "guest_1",
-        amount: 500,
+        // Cents — the same unit as the rentOwed decrement asserted below
+        // (#82). This used to be dollars while mobile wrote cents into the
+        // same field, leaving analytics unable to read either correctly.
+        amount: 50000,
         currency: "usd",
         status: "succeeded",
       }),
@@ -812,6 +815,36 @@ describe("payment_intent.succeeded", () => {
 
     // FCM sent to guest and admin
     expect(mockMessagingSend).toHaveBeenCalledTimes(2); // guest + 1 admin
+  });
+
+  test("stores payments.amount in the same unit it decrements rentOwed by (#82)", async () => {
+    // The two writes come from one PaymentIntent and must not disagree about
+    // units. rentOwed is unambiguously integer cents, so `amount` is too.
+    // Asserting the relationship rather than a literal keeps the invariant
+    // visible if the fixture amount ever changes.
+    const pi = makePaymentIntent({
+      metadata: { guestId: "guest_1", houseId: "house_1" },
+      amount: 123456, // $1,234.56 — not a round number, so a /100 shows up
+    });
+    mockConstructEvent.mockReturnValue(
+      makeStripeEvent("payment_intent.succeeded", pi),
+    );
+    setupForPaymentSucceeded();
+
+    await stripeWebhook(makeRequest({}) as never, makeResponse() as never);
+
+    const paymentDoc = mockSet.mock.calls
+      .map(([doc]) => doc as Record<string, unknown>)
+      .find((doc) => doc.amount !== undefined);
+    expect(paymentDoc).toBeDefined();
+
+    const decrement = mockUpdate.mock.calls
+      .map(([doc]) => doc as Record<string, { __increment?: number }>)
+      .find((doc) => doc.rentOwed?.__increment !== undefined);
+    expect(decrement).toBeDefined();
+
+    expect(paymentDoc?.amount).toBe(123456);
+    expect(paymentDoc?.amount).toBe(-decrement!.rentOwed.__increment!);
   });
 
   test("a concurrent in-flight delivery is asked to retry, not told the work is done", async () => {
@@ -957,8 +990,9 @@ describe("payment_intent.succeeded", () => {
       }),
       expect.objectContaining({ merge: true }),
     );
-    // `amount` means USD dollars to analytics.ts. Writing a zero-decimal
-    // currency under that key reports 100x. Minor units go in their own field.
+    // `amount` means USD cents to every reader (#82). A zero-decimal currency
+    // is not USD cents, so writing it under that key would credit the rent
+    // ledger a figure it cannot convert. Minor units go in their own field.
     // Scoped to THIS call rather than the whole mock: after the reorder in
     // this task the success path writes an amount-bearing doc, so a
     // mock-wide negative would be asserting the absence of an unrelated call.
@@ -1012,7 +1046,7 @@ describe("payment_intent.succeeded", () => {
       expect.objectContaining({
         stripePaymentIntentId: "pi_test_123",
         status: "succeeded",
-        amount: 500,
+        amount: 50000,
       }),
       expect.objectContaining({ merge: true }),
     );
@@ -1119,6 +1153,13 @@ describe("payment_intent.succeeded", () => {
     // analytics.ts and getPaymentHistory's orderBy("createdAt") drop docs without it.
     expect(mockSet).toHaveBeenCalledWith(
       expect.objectContaining({ guestId: null, createdAt: expect.anything() }),
+      expect.objectContaining({ merge: true }),
+    );
+    // Cents, like every other write to this field (#82). This doc carries a
+    // houseId, so analytics counts it toward the house's collected revenue —
+    // in the wrong unit it would be the 100x defect by another route.
+    expect(mockSet).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 100000 }),
       expect.objectContaining({ merge: true }),
     );
   });
@@ -1300,6 +1341,24 @@ describe("payment_intent.payment_failed", () => {
       ...extraProps,
     });
   }
+
+  test("records the failed payment amount in cents (#82)", async () => {
+    // A failed payment is excluded from the analytics window by status, but
+    // the resident's history reads the same `amount` field as every other
+    // payment doc, so the unit still has to agree.
+    const pi = makeFailedPaymentIntent("card_declined", { amount: 123456 });
+    mockConstructEvent.mockReturnValue(
+      makeStripeEvent("payment_intent.payment_failed", pi),
+    );
+    setupForPaymentFailed();
+
+    await stripeWebhook(makeRequest({}) as never, makeResponse() as never);
+
+    expect(mockSet).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 123456, status: "failed" }),
+      expect.objectContaining({ merge: true }),
+    );
+  });
 
   test("card_declined: failure message includes decline reason", async () => {
     const pi = makeFailedPaymentIntent("card_declined");
