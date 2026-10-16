@@ -17,6 +17,7 @@ import { onRequest } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import * as fs from "fs";
 import * as path from "path";
+import { CONTENT_SECURITY_POLICY, CSP_HEADER_NAME } from "./csp";
 
 /**
  * Minimal structural types covering only the members used here. Deliberately not
@@ -26,6 +27,7 @@ import * as path from "path";
  */
 interface ResponseLike {
   headersSent: boolean;
+  setHeader(name: string, value: string): unknown;
   status(code: number): ResponseLike;
   type(contentType: string): ResponseLike;
   send(body: string): unknown;
@@ -82,6 +84,7 @@ function getShell(): string {
 function sendShell(res: ResponseLike, reason: string, url: string): void {
   if (res.headersSent) return;
   logger.warn("ssr: falling back to client rendering", { reason, url });
+  res.setHeader(CSP_HEADER_NAME, CONTENT_SECURITY_POLICY);
   res.status(200).type("html").send(getShell());
 }
 
@@ -112,6 +115,10 @@ export const ssr = onRequest(
       RENDER_DEADLINE_MS,
     );
     response.on("close", () => clearTimeout(deadline));
+
+    // Set before the render so it covers the Universal response; sendShell sets it
+    // again for the fallback path. Static assets are served by Hosting, not here.
+    response.setHeader(CSP_HEADER_NAME, CONTENT_SECURITY_POLICY);
 
     try {
       getApp()(req, res);
