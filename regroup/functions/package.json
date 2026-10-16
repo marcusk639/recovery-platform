@@ -80,7 +80,8 @@
     ],
     "moduleNameMapper": {
       "^buffer-equal-constant-time$": "<rootDir>/test-shims/buffer-equal-constant-time.js"
-    }
+    },
+    "clearMocks": true
   },
   "private": true
 }
