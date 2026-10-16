@@ -10,9 +10,14 @@ import { getUser } from "../api/firestore";
 import {
   createStripeClient,
   mapStripeError,
-  isAlreadyDeauthorized,
   isResourceMissing,
 } from "../util/stripe";
+import {
+  closeOrphanedAccount,
+  closeRecipientAccount,
+  createRecipientAccount,
+  isAccountAlreadyGone,
+} from "../util/connectAccountLifecycle";
 import {
   assertHouseAdmin,
   assertHouseMemberFromClaims,
@@ -517,22 +522,6 @@ export const updatePaymentInfo = onCall(
 //     that two simultaneous calls cannot both create separate Stripe accounts
 //     for the same house.
 // ─────────────────────────────────────────────────────────────────────────────
-/**
- * Closes an account we created but could not persist. v2 has no `delete`; close
- * is its analogue, and it must name every configuration the account carries —
- * for a house that is `recipient` alone. Best-effort: a failure here leaves an
- * unreferenced account on the platform, which is strictly better than failing
- * the caller's request a second time.
- */
-async function closeOrphanedAccount(
-  stripe: Stripe,
-  accountId: string,
-): Promise<void> {
-  await stripe.v2.core.accounts
-    .close(accountId, { applied_configurations: ["recipient"] })
-    .catch(() => undefined);
-}
-
 export const connectStripeAccount = onCall(
   { secrets: [STRIPE_SECRET_KEY] },
   async (request) => {
@@ -588,28 +577,7 @@ export const connectStripeAccount = onCall(
       // transaction below ensures only one ID is ever persisted.
       let newAccount: Stripe.V2.Core.Account;
       try {
-        newAccount = await stripe.v2.core.accounts.create({
-          // Express dashboard: Stripe hosts the operator-facing views.
-          dashboard: "express",
-          defaults: {
-            responsibilities: {
-              // The platform collects fees and owns negative balances.
-              // losses_collector: 'stripe' is a blocked combination with
-              // destination charges, and is rejected outright alongside the
-              // Express dashboard — this is a constraint, not a preference.
-              fees_collector: "application",
-              losses_collector: "application",
-            },
-          },
-          configuration: {
-            recipient: {
-              capabilities: {
-                stripe_balance: { stripe_transfers: { requested: true } },
-              },
-            },
-          },
-          metadata: { houseId },
-        });
+        newAccount = await createRecipientAccount(stripe, houseId);
       } catch (err) {
         throw mapStripeError(err);
       }
@@ -685,7 +653,7 @@ export const connectStripeAccount = onCall(
 // ─────────────────────────────────────────────────────────────────────────────
 // disconnectStripeAccount
 //
-// Disconnects a Stripe Express account from a house.
+// Disconnects a Stripe Accounts v2 recipient account from a house.
 //
 // Design decisions:
 //   - Idempotent: if the house has no stripeAccountId (already disconnected),
@@ -696,6 +664,10 @@ export const connectStripeAccount = onCall(
 //   - Caller must be an admin of the house (verified from Firestore).
 // ─────────────────────────────────────────────────────────────────────────────
 export const disconnectStripeAccount = onCall(
+  // STRIPE_CLIENT_ID is no longer read by this function — the v2 close needs no
+  // OAuth client id. The secret is left bound and defined on purpose:
+  // scripts/preflight-billing.js still lists it among the required secrets, so
+  // removing it is a deploy-config decision, not a code one.
   { secrets: [STRIPE_SECRET_KEY, STRIPE_CLIENT_ID] },
   async (request) => {
     const stripe = createStripeClient();
@@ -733,18 +705,19 @@ export const disconnectStripeAccount = onCall(
       // ── 5. Attempt Stripe deauthorization ────────────────────────────────────
       //   Errors that indicate the account is already gone are swallowed so that
       //   we can always bring local state in sync.
+      // Close, not oauth.deauthorize. Deauthorization is for OAuth-connected
+      // Standard accounts and is one of the cases Stripe documents as forcing
+      // Accounts v1; these accounts are API-created v2 recipients, so the
+      // matching operation is close.
       try {
-        await stripe.oauth.deauthorize({
-          client_id: process.env.STRIPE_CLIENT_ID ?? "",
-          stripe_user_id: stripeAccountId,
-        });
+        await closeRecipientAccount(stripe, stripeAccountId);
       } catch (err) {
-        if (!isAlreadyDeauthorized(err)) {
+        if (!isAccountAlreadyGone(err)) {
           // For unexpected Stripe errors, surface to the caller.
           throw mapStripeError(err);
         }
-        // Account was already disconnected on Stripe's side — proceed to clear
-        // Firestore.
+        // Account was already gone on Stripe's side — proceed to clear
+        // Firestore so local state matches the desired outcome.
       }
     }
 

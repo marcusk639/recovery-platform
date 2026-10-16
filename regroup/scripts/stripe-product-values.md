@@ -139,7 +139,7 @@ Source: `functions/src/config.ts` [`S3`] — `defineSecret()` declarations;
 | `STRIPE_PUBLISHABLE_KEY` | Dashboard → Developers → API keys | Angular web app (`NgxStripeModule`), React Native mobile |
 | `STRIPE_WEBHOOK_SECRET` | Created with webhook (§4a above) | `stripeWebhook` function — verifies `constructEvent()` |
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | Created with webhook (§4b above) | `handleStripeConnectWebhook` function |
-| `STRIPE_CLIENT_ID` | Dashboard → Connect → Settings → Client ID | `disconnectStripeAccount` callable — `stripe.oauth.deauthorize()` |
+| `STRIPE_CLIENT_ID` | Dashboard → Connect → Settings → Client ID | **No longer read by any function.** Disconnect uses `stripe.v2.core.accounts.close()`, which needs no OAuth client id. Still bound on `disconnectStripeAccount` and still listed in `scripts/preflight-billing.js`; unbinding it is a deploy-config decision. |
 
 **Current known values (TEST mode):**
 
@@ -171,11 +171,11 @@ Connect accounts are created per-house (not scripted — created at operator onb
 
 | Requirement | Detail |
 |-------------|--------|
-| Account type | Express (not Standard or Custom) |
+| Account type | Accounts v2 **recipient**, Express dashboard (`dashboard: 'express'`). Not a merchant: houses receive transfers and never charge anyone, so `configuration.merchant` and `card_payments` are deliberately not requested. |
 | Onboarding flow | `stripe.accountLinks.create()` → redirect → `stripeConnectReturn` HTTP endpoint |
 | Reauth URL | `https://us-central1-phoenix-cleanhouse.cloudfunctions.net/stripeConnectReauth?stripeAccountId={id}` |
 | Return URL | `https://us-central1-phoenix-cleanhouse.cloudfunctions.net/stripeConnectReturn` |
-| Disconnect | `stripe.oauth.deauthorize({ client_id: STRIPE_CLIENT_ID })` |
+| Disconnect | `stripe.v2.core.accounts.close(id, { applied_configurations: ['recipient'] })` |
 | Payout failures | Handled by `payout.failed` event → FCM push + email to house admins |
 
 ---
@@ -189,6 +189,8 @@ Connect accounts are created per-house (not scripted — created at operator onb
 | `S3` | `functions/src/config.ts` | Firebase Secret Manager `defineSecret()` declarations |
 | `S4` | `functions/src/webhooks/stripeWebhook.ts` | Both webhook handlers and their event routing switch() blocks |
 | `S5` | `functions/src/util/tierPricing.ts` | `resolveTierPriceId()` — reads price IDs from env vars at runtime |
-| `S6` | `functions/src/callable/payments.ts` | Connect onboarding, disconnect, `STRIPE_CLIENT_ID` usage |
+| `S6` | `functions/src/callable/payments.ts` | Connect onboarding and disconnect callables |
+| `S6a` | `functions/src/util/connectAccountLifecycle.ts` | v2 recipient account create / close params, already-gone tolerance |
+| `S6b` | `functions/src/util/connectAccountStatus.ts` | The one mapping from the v2 recipient transfers capability to house status |
 | `S7` | `functions/src/util/stripe.ts` | API version string `"2026-01-28.clover"` |
 | `S8` | `web/src/environments/environment*.ts` | Angular publishable key per environment |

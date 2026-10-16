@@ -923,13 +923,18 @@ describe("disconnectStripeAccount", () => {
       });
     });
 
-    it("calls stripe.oauth.deauthorize with the correct account id", async () => {
+    it("closes the v2 account instead of deauthorizing an OAuth connection", async () => {
+      // oauth.deauthorize is for OAuth-connected Standard accounts and forces
+      // Accounts v1. An API-created v2 recipient is closed, and close requires
+      // every configuration the account carries — here 'recipient' alone.
       await (disconnectStripeAccount as unknown as Function)(
         { houseId: HOUSE_ID },
         authedContext(ADMIN_UID),
       );
-      expect(mockStripeOAuthDeauthorize).toHaveBeenCalledWith(
-        expect.objectContaining({ stripe_user_id: "acct_to_disconnect" }),
+      expect(mockStripeOAuthDeauthorize).not.toHaveBeenCalled();
+      expect(mockStripeV2AccountsClose).toHaveBeenCalledWith(
+        "acct_to_disconnect",
+        { applied_configurations: ["recipient"] },
       );
     });
 
@@ -974,12 +979,13 @@ describe("disconnectStripeAccount", () => {
       seedHouse(HOUSE_ID, { adminId: ADMIN_UID, stripeStatus: "disconnected" });
     });
 
-    it("does not call stripe.oauth.deauthorize", async () => {
+    it("does not call Stripe at all", async () => {
       await (disconnectStripeAccount as unknown as Function)(
         { houseId: HOUSE_ID },
         authedContext(ADMIN_UID),
       );
       expect(mockStripeOAuthDeauthorize).not.toHaveBeenCalled();
+      expect(mockStripeV2AccountsClose).not.toHaveBeenCalled();
     });
 
     it("still returns { success: true }", async () => {
@@ -991,18 +997,18 @@ describe("disconnectStripeAccount", () => {
     });
   });
 
-  describe("Stripe deauthorize errors", () => {
+  describe("Stripe close errors", () => {
     beforeEach(() => {
       seedHouse(HOUSE_ID, { adminId: ADMIN_UID, stripeAccountId: "acct_gone" });
     });
 
-    it("succeeds (idempotent) when Stripe reports the account is already disconnected", async () => {
+    it("succeeds (idempotent) when Stripe reports the account is already gone", async () => {
       const alreadyGone = makeStripeError(
         StripeErrors.StripeInvalidRequestError,
         "No such account: acct_gone",
         "invalid_request_error",
       );
-      mockStripeOAuthDeauthorize.mockRejectedValue(alreadyGone);
+      mockStripeV2AccountsClose.mockRejectedValue(alreadyGone);
 
       const result = await (disconnectStripeAccount as unknown as Function)(
         { houseId: HOUSE_ID },
@@ -1013,13 +1019,33 @@ describe("disconnectStripeAccount", () => {
       expect(readHouse(HOUSE_ID)?.stripeStatus).toBe("disconnected");
     });
 
+    it("succeeds when the account is gone by resource_missing rather than by message", async () => {
+      // The v1 tolerance matched on message text. v2 is free to word a closed
+      // or missing account differently, so the code has to be enough on its own.
+      mockStripeV2AccountsClose.mockRejectedValue(
+        makeStripeError(
+          StripeErrors.StripeInvalidRequestError,
+          "Account acct_gone could not be found.",
+          "invalid_request_error",
+          { code: "resource_missing" },
+        ),
+      );
+
+      const result = await (disconnectStripeAccount as unknown as Function)(
+        { houseId: HOUSE_ID },
+        authedContext(ADMIN_UID),
+      );
+      expect(result).toEqual({ success: true });
+      expect(readHouse(HOUSE_ID)?.stripeStatus).toBe("disconnected");
+    });
+
     it("propagates unexpected Stripe errors as an internal HttpsError", async () => {
       const unexpected = makeStripeError(
         StripeErrors.StripeAPIError,
         "Something exploded",
         "api_error",
       );
-      mockStripeOAuthDeauthorize.mockRejectedValue(unexpected);
+      mockStripeV2AccountsClose.mockRejectedValue(unexpected);
 
       await expectHttpsError(
         () =>
@@ -1029,6 +1055,28 @@ describe("disconnectStripeAccount", () => {
           ),
         "internal",
       );
+    });
+
+    it("leaves Firestore untouched when the close fails unexpectedly", async () => {
+      // Local state must not claim `disconnected` while Stripe still has a
+      // live account the house is the destination for.
+      mockStripeV2AccountsClose.mockRejectedValue(
+        makeStripeError(
+          StripeErrors.StripeAPIError,
+          "Something exploded",
+          "api_error",
+        ),
+      );
+
+      await expectHttpsError(
+        () =>
+          (disconnectStripeAccount as unknown as Function)(
+            { houseId: HOUSE_ID },
+            authedContext(ADMIN_UID),
+          ),
+        "internal",
+      );
+      expect(readHouse(HOUSE_ID)?.stripeAccountId).toBe("acct_gone");
     });
   });
 });
