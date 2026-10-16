@@ -5,18 +5,64 @@
  * This package has never been typechecked: there was no script and no CI step,
  * so `tsc --noEmit` reports a large pre-existing error count. Making that a
  * blocking clean-run gate would mean fixing every one before anything else can
- * merge, so instead the count is pinned in .typecheck-baseline and this script
- * fails only when it goes UP.
+ * merge, so instead the known errors are pinned in .typecheck-baseline and this
+ * script fails only when an error appears that is not in it.
+ *
+ * The baseline lists error IDENTITIES, one per line, not a total. A bare count
+ * is masked the moment an old error is fixed: fix one, introduce one, and the
+ * total still passes. An identity is `<file>: <TS code>: <message>`, with the
+ * line and column left out so unrelated edits that shift a known error do not
+ * look like a new one. The same identity can occur more than once in a file;
+ * the baseline repeats it, and the comparison is by multiplicity.
  *
  * The point is to stop new type errors arriving, not to pretend the existing
- * ones are acceptable. When the count drops, the script says so and asks for
- * the baseline to be lowered — the number is meant to ratchet towards zero.
+ * ones are acceptable. When errors are fixed, the script says so and asks for
+ * the baseline to be regenerated, so the list ratchets towards empty:
+ *   node scripts/typecheck-ratchet.js --update
  */
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
 const BASELINE_PATH = path.join(__dirname, '..', '.typecheck-baseline');
+
+/** `src/a.ts(12,5): error TS2322: msg` -> `src/a.ts: TS2322: msg`. */
+function parseErrors(output) {
+  const identities = [];
+  for (const line of output.split('\n')) {
+    const match = /^(.+?)\(\d+,\d+\): error (TS\d+): (.*)$/.exec(line.trim());
+    if (match) {
+      identities.push(`${match[1]}: ${match[2]}: ${match[3].trim()}`);
+    }
+  }
+  return identities.sort();
+}
+
+function parseBaseline(text) {
+  return text
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0)
+    .sort();
+}
+
+/** Multiset difference: entries of `a` left over after removing those in `b`. */
+function subtract(a, b) {
+  const remaining = new Map();
+  for (const id of b) {
+    remaining.set(id, (remaining.get(id) || 0) + 1);
+  }
+  const extra = [];
+  for (const id of a) {
+    const n = remaining.get(id) || 0;
+    if (n > 0) {
+      remaining.set(id, n - 1);
+    } else {
+      extra.push(id);
+    }
+  }
+  return extra;
+}
 
 function runTsc() {
   try {
@@ -29,40 +75,48 @@ function runTsc() {
 }
 
 function main() {
+  const current = parseErrors(runTsc());
+
+  if (process.argv.includes('--update')) {
+    fs.writeFileSync(BASELINE_PATH, current.map((l) => `${l}\n`).join(''));
+    console.log(`Wrote ${current.length} error(s) to ${BASELINE_PATH}`);
+    process.exit(0);
+  }
+
   if (!fs.existsSync(BASELINE_PATH)) {
-    console.error(`No baseline at ${BASELINE_PATH}. Create it with the current error count.`);
-    process.exit(2);
-  }
-  const baseline = Number.parseInt(fs.readFileSync(BASELINE_PATH, 'utf8').trim(), 10);
-  if (!Number.isInteger(baseline) || baseline < 0) {
-    console.error(`Baseline file must hold a non-negative integer, got: ${baseline}`);
-    process.exit(2);
-  }
-
-  const output = runTsc();
-  const errorLines = output.split('\n').filter((l) => /error TS\d+/.test(l));
-  const count = errorLines.length;
-
-  console.log(`typecheck errors: ${count} (baseline ${baseline})`);
-
-  if (count > baseline) {
     console.error(
-      `\nFAIL: ${count - baseline} new type error(s). Fix them, or justify a raise.\n` +
-        `Full tsc output below; the new ones are not marked, so compare against the\n` +
-        `baseline by running this on origin/main if you need to narrow it down.\n`,
+      `No baseline at ${BASELINE_PATH}. Create it with: node scripts/typecheck-ratchet.js --update`,
     );
-    console.error(errorLines.join('\n'));
+    process.exit(2);
+  }
+  const baseline = parseBaseline(fs.readFileSync(BASELINE_PATH, 'utf8'));
+
+  const added = subtract(current, baseline);
+  const fixed = subtract(baseline, current);
+
+  console.log(`typecheck errors: ${current.length} (baseline ${baseline.length})`);
+
+  if (added.length > 0) {
+    console.error(
+      `\nFAIL: ${added.length} type error(s) not in the baseline. Fix them, or justify\n` +
+        `adding them to regroup/mobile/.typecheck-baseline:\n`,
+    );
+    console.error(added.join('\n'));
     process.exit(1);
   }
 
-  if (count < baseline) {
+  if (fixed.length > 0) {
     console.log(
-      `\n${baseline - count} error(s) fixed. Lower the baseline:\n` +
-        `  echo ${count} > regroup/mobile/.typecheck-baseline\n` +
-        `Leaving it high lets those errors come back unnoticed.`,
+      `\n${fixed.length} baseline error(s) no longer occur. Regenerate the baseline:\n` +
+        `  cd regroup/mobile && node scripts/typecheck-ratchet.js --update\n` +
+        `Leaving them listed lets those errors come back unnoticed.`,
     );
   }
   process.exit(0);
 }
 
-main();
+module.exports = { parseErrors, parseBaseline, subtract };
+
+if (require.main === module) {
+  main();
+}
