@@ -11,8 +11,13 @@ buildscript {
         androidXAppCompat = "1.6.1"
         androidXActivity = "1.8.0"
         androidXFragment = "1.6.1"
-        // Downgrade AGP to be compatible with Gradle 7.6
-        agpVersion = "7.4.2"
+        // 8.1.1 is the floor demanded by the transitive androidx artifacts:
+        // :app:checkDebugAarMetadata failed with
+        // androidx.navigation:navigation-runtime-android:2.9.7 requiring
+        // "Android Gradle plugin 8.1.1 or higher". AGP 8.1.x needs Gradle 8.0+
+        // (wrapper) and JDK 17 (CI uses 17; a local build needs JAVA_HOME on a
+        // 17 install). Kept equal to regroup/mobile on purpose.
+        agpVersion = "8.1.1"
 
         // We use NDK 23 which has both M1 support and is the side-by-side NDK version from AGP.
         ndkVersion = "23.1.7779620"
@@ -44,9 +49,47 @@ allprojects {
 }
 
 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-    kotlinOptions {
-        jvmTarget = "17"
-    }
     doNotTrackState("Kotlin compilation is not tracked")
 }
 
+// Same bridges as regroup/mobile/android/build.gradle (see the comments there for
+// the failures each one answers). AGP 8 requires them across every module.
+subprojects { project ->
+    project.afterEvaluate {
+        def android = project.extensions.findByName('android')
+        if (android == null) {
+            return
+        }
+
+        // AGP 8 stops generating BuildConfig unless each module opts in.
+        if (android.buildFeatures.buildConfig == null) {
+            android.buildFeatures.buildConfig = true
+        }
+
+        // Make Kotlin's jvmTarget follow each module's own Java target. Read
+        // through a provider: :app's compileOptions are finalized after this block.
+        project.tasks
+            .withType(org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile)
+            .configureEach {
+                compilerOptions.jvmTarget.set(project.provider {
+                    org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(
+                        android.compileOptions.targetCompatibility.toString())
+                })
+            }
+
+        // AGP 8 requires a namespace and ignores the manifest `package`; derive it
+        // for third-party modules that still only declare the latter.
+        if (android.namespace == null) {
+            def manifest = project.file('src/main/AndroidManifest.xml')
+            if (manifest.exists()) {
+                def declaredPackage = new groovy.xml.XmlSlurper(false, false)
+                    .parse(manifest).@package.text()
+                if (declaredPackage) {
+                    android.namespace = declaredPackage
+                    project.logger.lifecycle(
+                        "AGP8 bridge: set namespace '${declaredPackage}' for :${project.name}")
+                }
+            }
+        }
+    }
+}
