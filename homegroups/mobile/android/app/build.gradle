@@ -76,6 +76,13 @@ android {
     compileSdkVersion rootProject.ext.compileSdkVersion
 
     namespace "com.recoveryconnect"
+
+    // AGP 8 stops generating BuildConfig unless asked; MainApplication.java
+    // reads BuildConfig.DEBUG, IS_NEW_ARCHITECTURE_ENABLED and IS_HERMES_ENABLED.
+    buildFeatures {
+        buildConfig true
+    }
+
     defaultConfig {
         applicationId "com.recoveryconnect"
         minSdkVersion rootProject.ext.minSdkVersion
