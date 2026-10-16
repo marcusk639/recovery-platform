@@ -46,6 +46,18 @@ allprojects {
         google()
         mavenCentral()
     }
+
+    // androidx.core is a transitive dependency that floats. 1.15.0+ requires
+    // compileSdk 35 and 1.16.0 also requires AGP 8.6.0 (read from each AAR's
+    // aar-metadata.properties). 1.13.1 is the newest release that builds with
+    // compileSdk 34 on AGP 8.1.1. Pinned here rather than raising AGP, which would
+    // also need a newer Gradle and move regroup/mobile too.
+    configurations.all {
+        resolutionStrategy {
+            force 'androidx.core:core:1.13.1'
+            force 'androidx.core:core-ktx:1.13.1'
+        }
+    }
 }
 
 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
