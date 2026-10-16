@@ -1,6 +1,7 @@
 import * as admin from "firebase-admin";
 import Stripe from "stripe";
-import { createStripeClient } from "../util/stripe";
+import { createStripeClient, isResourceMissing } from "../util/stripe";
+import { fetchConnectAccountStatus } from "../util/connectAccountStatus";
 
 // Lazily instantiated to avoid constructing the Stripe client at module load
 // (Firebase source analysis loads modules without secrets bound, so eager
@@ -1043,40 +1044,70 @@ async function handleSubscriptionUpdated(
 // Event handler: account.updated (Stripe Connect)
 // ---------------------------------------------------------------------------
 
-async function handleAccountUpdated(account: Stripe.Account): Promise<void> {
-  const house = await findHouseByStripeAccountId(account.id);
+/**
+ * account.updated is a TRIGGER, not a source of truth.
+ *
+ * A v2 account emits both v1 snapshot events and v2 thin events, and the v1
+ * `account.updated` snapshot still carries charges_enabled / payouts_enabled —
+ * which are false on a perfectly healthy recipient. Reading them off the
+ * payload is what let a working house sit at `pending`. So the event tells us
+ * *that* something changed and for which account; the authoritative state comes
+ * from a v2 read of the recipient capability.
+ */
+async function handleAccountUpdated(accountId: string): Promise<void> {
+  const house = await findHouseByStripeAccountId(accountId);
 
   if (!house) {
     logger.info("account.updated: no house found for account", {
-      accountId: account.id,
+      accountId,
     });
     return;
   }
 
-  const chargesEnabled = account.charges_enabled === true;
-  const payoutsEnabled = account.payouts_enabled === true;
+  const previousStatus = house.data.stripeStatus;
+  const db = admin.firestore();
 
   let newStatus: HouseDoc["stripeStatus"];
-  if (chargesEnabled && payoutsEnabled) {
-    newStatus = "active";
-  } else if (
-    account.requirements?.disabled_reason ||
-    (account.requirements?.currently_due &&
-      account.requirements.currently_due.length > 0)
-  ) {
-    newStatus = "restricted";
-  } else {
-    newStatus = "pending";
+  let chargesEnabled: boolean;
+  let payoutsEnabled: boolean;
+  let requirements: string[];
+
+  try {
+    const accountStatus = await fetchConnectAccountStatus(
+      getStripe(),
+      accountId,
+    );
+    newStatus = accountStatus.status;
+    // Both columns answer the same question for a recipient: can transfers
+    // land? Kept because the mobile client renders a row from each.
+    chargesEnabled = accountStatus.transfersEnabled;
+    payoutsEnabled = accountStatus.transfersEnabled;
+    requirements = Array.from(
+      new Set([
+        ...accountStatus.currentlyDue,
+        ...accountStatus.pastDue,
+        ...accountStatus.eventuallyDue,
+      ]),
+    );
+  } catch (err) {
+    if (!isResourceMissing(err)) {
+      // Transient or unexpected. Rethrow so the dispatcher releases the event
+      // for retry rather than recording a status we could not read.
+      throw err;
+    }
+    // The account is genuinely gone. Leaving the house at its previous status
+    // would strand it as `active` forever, which is the one state that lets
+    // rent collection attempt a transfer into nothing.
+    logger.warn("account.updated: account no longer exists, marking house disconnected", {
+      accountId,
+      previousStatus,
+    });
+    newStatus = "disconnected";
+    chargesEnabled = false;
+    payoutsEnabled = false;
+    requirements = [];
   }
 
-  const previousStatus = house.data.stripeStatus;
-
-  const requirements: string[] = [
-    ...(account.requirements?.currently_due ?? []),
-    ...(account.requirements?.eventually_due ?? []),
-  ];
-
-  const db = admin.firestore();
   await db.collection("houses").doc(house.id).update({
     stripeStatus: newStatus,
     stripeChargesEnabled: chargesEnabled,
@@ -1449,7 +1480,9 @@ export const stripeWebhook = onRequest(
 
         // --- Stripe Connect account events ---
         case "account.updated":
-          await handleAccountUpdated(event.data.object as Stripe.Account);
+          await handleAccountUpdated(
+            (event.data.object as Stripe.Account).id,
+          );
           break;
 
         case "payout.failed":
@@ -1635,7 +1668,9 @@ export const handleStripeConnectWebhook = onRequest(
     try {
       switch (event.type) {
         case "account.updated":
-          await handleAccountUpdated(event.data.object as Stripe.Account);
+          await handleAccountUpdated(
+            (event.data.object as Stripe.Account).id,
+          );
           break;
 
         case "account.application.deauthorized":
