@@ -10,6 +10,7 @@ jest.mock('@sendgrid/mail', () => ({
   },
 }));
 
+import { logger } from 'firebase-functions';
 import { sendEmail, regroupEmail } from '../../util/email';
 import { Email } from '../../entities/Email';
 
@@ -61,5 +62,28 @@ describe('sendEmail', () => {
     mockSendgridSend.mockRejectedValue(new Error('SMTP error'));
     await expect(sendEmail({ to: 'u@t.com', from: regroupEmail, subject: 'Hi', text: 'Hi' }))
       .resolves.toBeUndefined();
+  });
+
+  it('does not log the recipient or message body when sendgrid rejects', async () => {
+    const infoSpy = jest.spyOn(logger, 'info').mockImplementation(() => undefined);
+    const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => undefined);
+    // Shaped like @sendgrid/mail's ResponseError: the response echoes the request.
+    const sendgridError = Object.assign(new Error('Bad Request'), {
+      code: 400,
+      response: {
+        body: { errors: [{ message: 'Invalid address: resident.name@example.com' }] },
+      },
+      request: { to: 'resident.name@example.com', text: 'Sensitive body' },
+    });
+    mockSendgridSend.mockRejectedValue(sendgridError);
+
+    await sendEmail({ to: 'resident.name@example.com', from: regroupEmail, subject: 'Hi', text: 'Sensitive body' });
+
+    const logged = JSON.stringify([...infoSpy.mock.calls, ...errorSpy.mock.calls]);
+    expect(logged).toContain('400');
+    expect(logged).not.toContain('resident.name@example.com');
+    expect(logged).not.toContain('Sensitive body');
+    infoSpy.mockRestore();
+    errorSpy.mockRestore();
   });
 });

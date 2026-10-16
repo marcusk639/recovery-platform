@@ -30,6 +30,9 @@ export const sendEmail = async (email: Email): Promise<void> => {
 
     await sendgrid.send(emailData);
   } catch (error) {
-    logger.info("There was an error sending the email:", JSON.stringify(error));
+    // Log the status code only. A SendGrid ResponseError carries the response
+    // body and request, which can echo the recipient address and message text.
+    const code = (error as { code?: unknown } | null)?.code;
+    logger.info("There was an error sending the email", { code });
   }
 };
