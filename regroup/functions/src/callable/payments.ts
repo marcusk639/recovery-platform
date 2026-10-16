@@ -11,6 +11,7 @@ import {
   createStripeClient,
   mapStripeError,
   isAlreadyDeauthorized,
+  isResourceMissing,
 } from "../util/stripe";
 import {
   assertHouseAdmin,
@@ -21,6 +22,10 @@ import {
 } from "../util/houseAuth";
 import { parseInput, safeReturnUrlSchema } from "../validation";
 import { connectRefreshUrl, connectReturnUrl } from "../util/connectUrls";
+import {
+  fetchConnectAccountStatus,
+  type ConnectAccountStatus,
+} from "../util/connectAccountStatus";
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
 /**
@@ -835,14 +840,23 @@ export const getStripeAccountStatus = onCall(
     }
 
     // ── 6. Retrieve the live account from Stripe ──────────────────────────────
-    let account: Stripe.Account;
+    // Through the shared v2 helper: the recipient transfers capability is the
+    // only signal that says whether this house can receive rent, and it is only
+    // returned when the retrieve asks for it.
+    let accountStatus: ConnectAccountStatus;
     try {
-      account = await stripe.accounts.retrieve(house.stripeAccountId);
+      accountStatus = await fetchConnectAccountStatus(
+        stripe,
+        house.stripeAccountId,
+      );
     } catch (err) {
+      // `resource_missing` is the machine-readable form; the message match is a
+      // v1 artefact kept because v2 is free to word the message differently.
       if (
-        err instanceof Stripe.errors.StripeError &&
-        err.type === "StripeInvalidRequestError" &&
-        err.message.toLowerCase().includes("no such account")
+        isResourceMissing(err) ||
+        (err instanceof Stripe.errors.StripeError &&
+          err.type === "StripeInvalidRequestError" &&
+          err.message.toLowerCase().includes("no such account"))
       ) {
         // The Stripe account no longer exists — treat as not connected and sync.
         await houseRef.update({
@@ -865,36 +879,23 @@ export const getStripeAccountStatus = onCall(
     }
 
     // ── 7. Map Stripe account to our status model ─────────────────────────────
-    const chargesEnabled = account.charges_enabled ?? false;
-    const payoutsEnabled = account.payouts_enabled ?? false;
+    const { currentlyDue, pastDue, eventuallyDue } = accountStatus;
+    const status: StripeStatus = accountStatus.status;
 
-    const currentlyDue: string[] = account.requirements?.currently_due ?? [];
-    const pastDue: string[] = account.requirements?.past_due ?? [];
-    const eventuallyDue: string[] = account.requirements?.eventually_due ?? [];
+    // chargesEnabled / payoutsEnabled are kept for the mobile client, which
+    // renders one row from each. A recipient account has no charges of its own,
+    // so for a house both questions reduce to the same one: can transfers land?
+    const chargesEnabled = accountStatus.transfersEnabled;
+    const payoutsEnabled = accountStatus.transfersEnabled;
 
-    // All requirement items to persist — union of currently_due + past_due
+    // All requirement items to persist — union of every deadline bucket.
     const requirementsToStore = Array.from(
       new Set([...currentlyDue, ...pastDue, ...eventuallyDue]),
     );
 
-    let status: StripeStatus;
-    if (chargesEnabled && payoutsEnabled) {
-      status = "active";
-    } else if (!chargesEnabled && currentlyDue.length > 0) {
-      status = "restricted";
-    } else {
-      status = "pending";
-    }
-
-    // Build a simplified capabilities map { capability_name: 'active' | 'inactive' | ... }
-    const capabilities: Record<string, string> = {};
-    if (account.capabilities) {
-      for (const [key, value] of Object.entries(account.capabilities)) {
-        if (typeof value === "string") {
-          capabilities[key] = value;
-        }
-      }
-    }
+    const capabilities: Record<string, string> = {
+      stripe_transfers: accountStatus.transfersStatus,
+    };
 
     // ── 8. Sync status back to Firestore ─────────────────────────────────────
     await houseRef.update({
