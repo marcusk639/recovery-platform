@@ -159,11 +159,10 @@ beforeEach(() => {
   }));
 
   process.env.STRIPE_SECRET_KEY = "sk_test_fake";
-  // The Functions runtime always supplies this; without it connectBaseUrl
-  // refuses to build a redirect URL. Setting it here means the suite runs in
-  // the deployed shape rather than the degenerate empty-project one.
-  process.env.GCLOUD_PROJECT = "phoenix-cleanhouse-test";
-  delete process.env.CONNECT_BASE_URL;
+  // Required: the redirect paths are Hosting rewrites, so connectBaseUrl has
+  // no origin to derive and refuses to guess. Setting it here runs the suite in
+  // the deployed shape rather than the misconfigured one.
+  process.env.CONNECT_BASE_URL = "https://regroup-app.test/connect";
 });
 
 // ===========================================================================
@@ -246,7 +245,7 @@ describe("stripeConnectReauth", () => {
     expect(mockAccountLinksCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         refresh_url: expect.stringContaining(stripeAccountId),
-        return_url: expect.stringContaining("stripeConnectReturn"),
+        return_url: expect.stringContaining("stripe-return"),
       }),
     );
   });
@@ -274,25 +273,16 @@ describe("stripeConnectReauth", () => {
     const params = mockAccountLinksCreate.mock.calls[0][0];
     expect(params.refresh_url).not.toContain("evil.example.com");
     expect(params.return_url).not.toContain("evil.example.com");
-    expect(params.refresh_url).toContain("cloudfunctions.net");
-    // Asserting the host is well-formed, not merely non-attacker. Without this
-    // an empty project id gives "us-central1-.cloudfunctions.net", which
-    // satisfies every assertion above while resolving nowhere.
+    // Asserting the configured origin, not merely non-attacker.
     expect(params.refresh_url).toMatch(
-      /^https:\/\/[a-z0-9-]+-[a-z0-9][a-z0-9-]*\.cloudfunctions\.net\//,
+      /^https:\/\/regroup-app\.test\/connect\/stripe-refresh\?/,
     );
   });
 
-  it("refuses to build a redirect URL when no project id is available", async () => {
-    // Failing loudly beats handing Stripe a URL that goes nowhere: onboarding
-    // would break with no error to find it by.
-    const saved = {
-      g: process.env.GCLOUD_PROJECT,
-      gc: process.env.GOOGLE_CLOUD_PROJECT,
-      override: process.env.CONNECT_BASE_URL,
-    };
-    delete process.env.GCLOUD_PROJECT;
-    delete process.env.GOOGLE_CLOUD_PROJECT;
+  it("refuses to build a redirect URL when CONNECT_BASE_URL is unset", async () => {
+    // Failing loudly beats handing Stripe a URL that 404s: the operator meets
+    // it after submitting bank details, on a redirect we never see.
+    const saved = { override: process.env.CONNECT_BASE_URL };
     delete process.env.CONNECT_BASE_URL;
 
     const stripeAccountId = "acct_no_project";
@@ -303,8 +293,6 @@ describe("stripeConnectReauth", () => {
     expect(mockAccountLinksCreate).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(500);
 
-    if (saved.g !== undefined) process.env.GCLOUD_PROJECT = saved.g;
-    if (saved.gc !== undefined) process.env.GOOGLE_CLOUD_PROJECT = saved.gc;
     if (saved.override !== undefined)
       process.env.CONNECT_BASE_URL = saved.override;
   });
@@ -324,7 +312,7 @@ describe("stripeConnectReauth", () => {
     const params = mockAccountLinksCreate.mock.calls[0][0];
     // Trailing slash stripped, so the path is not doubled.
     expect(params.refresh_url).toBe(
-      `https://connect.example.org/stripeConnectReauth?stripeAccountId=${stripeAccountId}`,
+      `https://connect.example.org/stripe-refresh?stripeAccountId=${stripeAccountId}`,
     );
 
     if (saved === undefined) delete process.env.CONNECT_BASE_URL;

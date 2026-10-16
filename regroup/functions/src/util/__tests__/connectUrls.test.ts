@@ -30,65 +30,55 @@ afterEach(() => {
 });
 
 describe("connectBaseUrl", () => {
-  it("derives the origin from the runtime project and default region", () => {
+  it("uses CONNECT_BASE_URL and strips trailing slashes", () => {
+    process.env.CONNECT_BASE_URL = "https://regroup-app.com/connect///";
+    expect(connectBaseUrl()).toBe("https://regroup-app.com/connect");
+  });
+
+  it("refuses to run without CONNECT_BASE_URL", () => {
+    // The paths are Hosting rewrites, so there is no origin to derive. Stripe
+    // would send the operator to a 404 after they submitted bank details, on a
+    // redirect this codebase never sees — undetectable from here.
+    expect(() => connectBaseUrl()).toThrow(/CONNECT_BASE_URL is not set/);
+  });
+
+  it("does not silently derive an origin from the runtime project", () => {
+    // Guards the regression this replaced: a derived cloudfunctions.net origin
+    // was correct only while the paths were the function names.
     process.env.GCLOUD_PROJECT = "phoenix-cleanhouse";
-    expect(connectBaseUrl()).toBe(
-      "https://us-central1-phoenix-cleanhouse.cloudfunctions.net",
-    );
+    process.env.FUNCTION_REGION = "us-central1";
+    expect(() => connectBaseUrl()).toThrow(/CONNECT_BASE_URL is not set/);
   });
 
-  it("honours the deployed region rather than hardcoding us-central1", () => {
-    // The inline version this replaced hardcoded us-central1, so a regional
-    // deploy would have redirected operators at the wrong origin.
-    process.env.GCLOUD_PROJECT = "phoenix-cleanhouse";
-    process.env.FUNCTION_REGION = "europe-west1";
-    expect(connectBaseUrl()).toBe(
-      "https://europe-west1-phoenix-cleanhouse.cloudfunctions.net",
-    );
-  });
-
-  it("falls through the project-id variables the runtime may supply", () => {
-    process.env.GOOGLE_CLOUD_PROJECT = "from-google-cloud";
-    expect(connectBaseUrl()).toContain("from-google-cloud");
-    delete process.env.GOOGLE_CLOUD_PROJECT;
-    process.env.GCP_PROJECT = "from-gcp";
-    expect(connectBaseUrl()).toContain("from-gcp");
-  });
-
-  it("prefers CONNECT_BASE_URL and strips trailing slashes", () => {
-    process.env.GCLOUD_PROJECT = "ignored-when-overridden";
-    process.env.CONNECT_BASE_URL = "https://connect.regroup-app.com///";
-    expect(connectBaseUrl()).toBe("https://connect.regroup-app.com");
-  });
-
-  it("throws rather than emitting an origin with an empty project id", () => {
-    // The old fallback produced "https://us-central1-.cloudfunctions.net":
-    // valid enough for Stripe to accept as a redirect target, and resolving
-    // nowhere, so onboarding broke with nothing to find it by.
-    expect(() => connectBaseUrl()).toThrow(/no project id/i);
-    process.env.GCLOUD_PROJECT = "   ";
-    expect(() => connectBaseUrl()).toThrow(/no project id/i);
+  it("treats a whitespace-only override as unset", () => {
+    process.env.CONNECT_BASE_URL = "   ";
+    expect(() => connectBaseUrl()).toThrow(/CONNECT_BASE_URL is not set/);
   });
 });
 
 describe("connectReturnUrl / connectRefreshUrl", () => {
   beforeEach(() => {
-    process.env.GCLOUD_PROJECT = "phoenix-cleanhouse";
+    process.env.CONNECT_BASE_URL = "https://regroup-app.com/connect";
   });
 
-  it("builds the paths both onboarding entry points share", () => {
+  it("builds the operator-visible paths both entry points share", () => {
     expect(connectReturnUrl()).toBe(
-      "https://us-central1-phoenix-cleanhouse.cloudfunctions.net/stripeConnectReturn",
+      "https://regroup-app.com/connect/stripe-return",
     );
     expect(connectRefreshUrl("acct_123")).toBe(
-      "https://us-central1-phoenix-cleanhouse.cloudfunctions.net/stripeConnectReauth?stripeAccountId=acct_123",
+      "https://regroup-app.com/connect/stripe-refresh?stripeAccountId=acct_123",
     );
+  });
+
+  it("uses the rewrite paths, not the function names", () => {
+    // stripeConnectReturn / stripeConnectReauth are the function ids the
+    // rewrites target; they must not leak into the operator-facing URL.
+    const urls = [connectReturnUrl(), connectRefreshUrl("acct_1")].join(" ");
+    expect(urls).not.toContain("stripeConnectReturn");
+    expect(urls).not.toContain("stripeConnectReauth");
   });
 
   it("encodes the account id into the query string", () => {
-    // Stripe ids are alphanumeric, so this is belt-and-braces — but the value
-    // lands in a URL the operator follows, and an unencoded & or # would
-    // silently truncate or re-point it.
     expect(connectRefreshUrl("acct_a&b=c")).toContain(
       "stripeAccountId=acct_a%26b%3Dc",
     );

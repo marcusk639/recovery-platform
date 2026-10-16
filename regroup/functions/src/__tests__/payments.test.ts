@@ -414,7 +414,7 @@ describe("connectStripeAccount", () => {
         adminId: ADMIN_UID,
         stripeAccountId: "acct_existing_house",
       });
-      process.env.GCLOUD_PROJECT = "testproj";
+      process.env.CONNECT_BASE_URL = "https://regroup-app.test/connect";
       await (connectStripeAccount as unknown as Function)(
         { houseId: HOUSE_ID, refreshUrl: "https://regroup-app.com/refresh" },
         authedContext(ADMIN_UID),
@@ -422,7 +422,7 @@ describe("connectStripeAccount", () => {
       expect(mockStripeAccountLinksCreate).toHaveBeenCalledWith(
         expect.objectContaining({
           return_url:
-            "https://us-central1-testproj.cloudfunctions.net/stripeConnectReturn",
+            "https://regroup-app.test/connect/stripe-return",
           refresh_url: "https://regroup-app.com/refresh",
         }),
       );
@@ -433,7 +433,7 @@ describe("connectStripeAccount", () => {
         adminId: ADMIN_UID,
         stripeAccountId: "acct_existing_house",
       });
-      process.env.GCLOUD_PROJECT = "testproj";
+      process.env.CONNECT_BASE_URL = "https://regroup-app.test/connect";
       await (connectStripeAccount as unknown as Function)(
         { houseId: HOUSE_ID, returnUrl: "https://regroup-app.com/return" },
         authedContext(ADMIN_UID),
@@ -442,7 +442,7 @@ describe("connectStripeAccount", () => {
         expect.objectContaining({
           return_url: "https://regroup-app.com/return",
           refresh_url:
-            "https://us-central1-testproj.cloudfunctions.net/stripeConnectReauth?stripeAccountId=acct_existing_house",
+            "https://regroup-app.test/connect/stripe-refresh?stripeAccountId=acct_existing_house",
         }),
       );
     });
@@ -452,7 +452,7 @@ describe("connectStripeAccount", () => {
         adminId: ADMIN_UID,
         stripeAccountId: "acct_existing_house",
       });
-      process.env.GCLOUD_PROJECT = "testproj";
+      process.env.CONNECT_BASE_URL = "https://regroup-app.test/connect";
       await (connectStripeAccount as unknown as Function)(
         { houseId: HOUSE_ID },
         authedContext(ADMIN_UID),
@@ -460,9 +460,9 @@ describe("connectStripeAccount", () => {
       expect(mockStripeAccountLinksCreate).toHaveBeenCalledWith(
         expect.objectContaining({
           return_url:
-            "https://us-central1-testproj.cloudfunctions.net/stripeConnectReturn",
+            "https://regroup-app.test/connect/stripe-return",
           refresh_url:
-            "https://us-central1-testproj.cloudfunctions.net/stripeConnectReauth?stripeAccountId=acct_existing_house",
+            "https://regroup-app.test/connect/stripe-refresh?stripeAccountId=acct_existing_house",
         }),
       );
     });
