@@ -78,6 +78,17 @@ subprojects { project ->
             android.buildFeatures.buildConfig = true
         }
 
+        // Force Java 17 on every module. Deliberately DIFFERENT from regroup/mobile,
+        // which follows each module's own target: homegroups' dependency set has
+        // floated to majors that require 17 (e.g. @react-native-firebase/* ^21 uses
+        // instanceof pattern matching and failed with "not supported in -source 11"),
+        // whereas regroup's older set compiles at 8/11. Neither app declares a Java
+        // level, so modules otherwise inherit 11 from the RN Gradle plugin. Raising
+        // is safe; do not "align" this with regroup. Runs before the Kotlin bridge
+        // below, which reads targetCompatibility, so Kotlin follows to 17 as well.
+        android.compileOptions.sourceCompatibility = JavaVersion.VERSION_17
+        android.compileOptions.targetCompatibility = JavaVersion.VERSION_17
+
         // Make Kotlin's jvmTarget follow each module's own Java target. Read
         // through a provider: :app's compileOptions are finalized after this block.
         project.tasks
