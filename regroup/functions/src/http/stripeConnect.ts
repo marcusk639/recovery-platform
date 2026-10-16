@@ -23,6 +23,7 @@ import * as admin from "firebase-admin";
 import Stripe from "stripe";
 import { createStripeClient } from "../util/stripe";
 import { connectRefreshUrl, connectReturnUrl } from "../util/connectUrls";
+import { fetchConnectAccountStatus } from "../util/connectAccountStatus";
 
 // Lazily instantiated to avoid constructing the Stripe client at module load
 // (Firebase source analysis loads modules without secrets bound, so eager
@@ -153,27 +154,20 @@ export const stripeConnectReturn = onRequest(
       } else {
         // Eagerly sync the account status so the app reflects it immediately
         // without waiting for the account.updated webhook.
-        const account = await getStripe().accounts.retrieve(stripeAccountId);
-        const chargesEnabled = account.charges_enabled === true;
-        const payoutsEnabled = account.payouts_enabled === true;
-
-        let stripeStatus: "active" | "pending" | "restricted";
-        if (chargesEnabled && payoutsEnabled) {
-          stripeStatus = "active";
-        } else if (
-          account.requirements?.disabled_reason ||
-          (account.requirements?.currently_due &&
-            account.requirements.currently_due.length > 0)
-        ) {
-          stripeStatus = "restricted";
-        } else {
-          stripeStatus = "pending";
-        }
+        // Houses are Accounts v2 recipients, so the status comes from the
+        // recipient transfers capability via the shared helper — not from
+        // charges_enabled / payouts_enabled, which are false on a healthy
+        // recipient and used to withhold `active` from it here.
+        const accountStatus = await fetchConnectAccountStatus(
+          getStripe(),
+          stripeAccountId,
+        );
+        const stripeStatus = accountStatus.status;
 
         await snap.docs[0].ref.update({
           stripeStatus,
-          stripeChargesEnabled: chargesEnabled,
-          stripePayoutsEnabled: payoutsEnabled,
+          stripeChargesEnabled: accountStatus.transfersEnabled,
+          stripePayoutsEnabled: accountStatus.transfersEnabled,
           updatedAt: new Date().toISOString(),
         });
         logger.info("stripeConnectReturn: synced account status to Firestore", {
