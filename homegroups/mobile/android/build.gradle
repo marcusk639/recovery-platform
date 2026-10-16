@@ -64,8 +64,8 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
     doNotTrackState("Kotlin compilation is not tracked")
 }
 
-// Same bridges as regroup/mobile/android/build.gradle (see the comments there for
-// the failures each one answers). AGP 8 requires them across every module.
+// AGP 8 bridges, adapted from regroup/mobile/android/build.gradle (see the comments
+// there for the failures each answers). The Java/Kotlin target differs on purpose.
 subprojects { project ->
     project.afterEvaluate {
         def android = project.extensions.findByName('android')
@@ -78,32 +78,26 @@ subprojects { project ->
             android.buildFeatures.buildConfig = true
         }
 
-        // Force Java 17 on every module. Deliberately DIFFERENT from regroup/mobile,
-        // which follows each module's own target: homegroups' dependency set has
-        // floated to majors that require 17 (e.g. @react-native-firebase/* ^21 uses
-        // instanceof pattern matching and failed with "not supported in -source 11"),
-        // whereas regroup's older set compiles at 8/11. Neither app declares a Java
-        // level, so modules otherwise inherit 11 from the RN Gradle plugin. Raising
-        // is safe; do not "align" this with regroup. Runs before the Kotlin bridge
-        // below, which reads targetCompatibility, so Kotlin follows to 17 as well.
-        android.compileOptions.sourceCompatibility = JavaVersion.VERSION_17
-        android.compileOptions.targetCompatibility = JavaVersion.VERSION_17
-
-        // Make Kotlin's jvmTarget follow each module's own Java target. Read
-        // through a provider: :app's compileOptions are finalized after this block.
+        // Compile every module at Java 17. Deliberately DIFFERENT from
+        // regroup/mobile, which follows each module's own target: homegroups'
+        // dependency set has floated to majors that need 17. @react-native-firebase
+        // 21.x-22.x declares VERSION_11 in its own compileOptions yet ships Java 16+
+        // source (instanceof pattern matching), so it only builds when the app
+        // forces 17 over it, which RN 0.76+ does and 0.72 does not. Do not "align"
+        // this with regroup.
+        //
+        // Set on the tasks, not on android.compileOptions: by afterEvaluate AGP has
+        // finalized the extension, so a write there is a silent no-op and loses to
+        // the module's own declaration. Kotlin is set to 17 directly (not read back
+        // from the extension, which would still report 11) so Java and Kotlin match.
+        project.tasks.withType(JavaCompile).configureEach {
+            sourceCompatibility = '17'
+            targetCompatibility = '17'
+        }
         project.tasks
             .withType(org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile)
             .configureEach {
-                compilerOptions.jvmTarget.set(project.provider {
-                    // `.@Companion` is required. fromTarget is an instance method on
-                    // the Kotlin companion (KGP 1.9.22, not @JvmStatic). Groovy resolves
-                    // plain `JvmTarget.Companion` to the nested CLASS JvmTarget$Companion
-                    // in preference to the static FIELD of that name, then fails looking
-                    // for a static fromTarget. `.@` forces the field read. Do not
-                    // "simplify" it back.
-                    org.jetbrains.kotlin.gradle.dsl.JvmTarget.@Companion.fromTarget(
-                        android.compileOptions.targetCompatibility.toString())
-                })
+                compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
             }
 
         // AGP 8 requires a namespace and ignores the manifest `package`; derive it
