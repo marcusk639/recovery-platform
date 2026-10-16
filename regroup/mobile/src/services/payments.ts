@@ -8,6 +8,7 @@
  */
 import { firestore, functions } from "../../firebase-setup";
 import FirebaseFirestore from "@react-native-firebase/firestore";
+import { asDollars, dollarsToCents } from "../util/money";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -72,6 +73,30 @@ export interface CreateRentPaymentIntentParams {
   /** Amount in US cents (e.g. 50000 for $500.00). */
   amountInCents: number;
   description?: string;
+  /** Overrides the derived key. Leave unset unless a caller needs its own retry scope. */
+  idempotencyKey?: string;
+}
+
+/**
+ * Idempotency key sent with every createPaymentIntent call.
+ *
+ * The callable's own fallback is `${guestId}-${houseId}-${utcDay}`, which omits
+ * the amount. Stripe rejects a reused key whose parameters differ
+ * (idempotency_error), so a resident who cancelled the sheet and then paid a
+ * different amount — or made a second, different payment — the same UTC day got
+ * an error until the next day. Folding the amount in keeps what the fallback
+ * is good for (a repeat tap at the same amount returns the same PaymentIntent
+ * rather than creating a second charge) and lets a different amount through.
+ * The day is UTC to match the callable's own `dayKey`.
+ */
+export function rentPaymentIdempotencyKey(
+  guestId: string,
+  houseId: string,
+  amountInCents: number,
+  now: Date = new Date(),
+): string {
+  const day = now.toISOString().slice(0, 10);
+  return `${guestId}-${houseId}-${day}-${amountInCents}`;
 }
 
 /**
@@ -88,6 +113,7 @@ export async function createRentPaymentIntent({
   houseId,
   amountInCents,
   description,
+  idempotencyKey,
 }: CreateRentPaymentIntentParams): Promise<CreatePaymentIntentResult> {
   if (!Number.isInteger(amountInCents) || amountInCents <= 0) {
     throw new Error(
@@ -104,6 +130,9 @@ export async function createRentPaymentIntent({
     guestId,
     houseId,
     description,
+    idempotencyKey:
+      idempotencyKey ??
+      rentPaymentIdempotencyKey(guestId, houseId, amountInCents),
   });
   return response.data as CreatePaymentIntentResult;
 }
@@ -201,6 +230,21 @@ export async function getPaymentHistory(
 // ─── CF-backed service functions ──────────────────────────────────────────────
 
 /**
+ * The listPayments / listHousePayments callables report `amount` in DOLLARS
+ * (`c.amount / 100` in functions/src/callable/payments.ts, pinned by the
+ * "converts Stripe amount from cents to dollars" test), while every screen that
+ * renders a PaymentRecord divides `amount` by 100 as cents. Passed straight
+ * through, the Payment Dashboard showed a $500.00 payment as $5.00 and its CSV
+ * export carried the same figure. Convert once, here, at the boundary.
+ */
+function recordsWithAmountInCents<T extends PaymentRecord>(records: T[]): T[] {
+  return records.map((r) => ({
+    ...r,
+    amount: dollarsToCents(asDollars(r.amount)),
+  }));
+}
+
+/**
  * @param amountInCents - Amount in US cents (e.g., 50000 for $500.00)
  */
 export async function listPayments(
@@ -213,7 +257,7 @@ export async function listPayments(
     houseId,
     limit,
   });
-  return (result.data as any).payments;
+  return recordsWithAmountInCents((result.data as any).payments);
 }
 
 export async function listHousePayments(
@@ -224,7 +268,7 @@ export async function listHousePayments(
     houseId,
     limit,
   });
-  return (result.data as any).payments;
+  return recordsWithAmountInCents((result.data as any).payments);
 }
 
 /**
