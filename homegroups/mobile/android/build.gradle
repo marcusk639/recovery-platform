@@ -84,9 +84,13 @@ subprojects { project ->
             .withType(org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile)
             .configureEach {
                 compilerOptions.jvmTarget.set(project.provider {
-                    // fromTarget is an instance method on the Kotlin companion in KGP
-                    // 1.9.22 (not @JvmStatic), so Groovy needs Companion explicitly.
-                    org.jetbrains.kotlin.gradle.dsl.JvmTarget.Companion.fromTarget(
+                    // `.@Companion` is required. fromTarget is an instance method on
+                    // the Kotlin companion (KGP 1.9.22, not @JvmStatic). Groovy resolves
+                    // plain `JvmTarget.Companion` to the nested CLASS JvmTarget$Companion
+                    // in preference to the static FIELD of that name, then fails looking
+                    // for a static fromTarget. `.@` forces the field read. Do not
+                    // "simplify" it back.
+                    org.jetbrains.kotlin.gradle.dsl.JvmTarget.@Companion.fromTarget(
                         android.compileOptions.targetCompatibility.toString())
                 })
             }
