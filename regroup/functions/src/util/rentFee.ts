@@ -20,17 +20,36 @@ const isBankTransfer = (type: RentPaymentMethodType): boolean =>
   type === "us_bank_account" || type === "ach";
 
 /**
- * Compute the Stripe `application_fee_amount` (platform fee) for a rent payment,
- * in integer cents. Method-aware per the pricing revision plan (P-1/P-2):
+ * Compute the Stripe `application_fee_amount` for a rent payment, in integer
+ * cents. It is the platform margin PLUS the estimated Stripe processing cost:
  *
- * - ACH / bank    → flat per-transaction fee (or a capped percentage if a rate
- *                   is configured). Never exceeds the rent amount.
- * - Card          → a thin platform fee (default 0.75%); Stripe's processing
- *                   cost is borne by the resident as a disclosed convenience fee
- *                   and is not double-charged here.
+ *   ACH  → flat margin (or capped percentage) + min(amount * 0.8%, $5)
+ *   Card → amount * 0.75% + (amount * 2.9% + 30c)
+ *
+ * Including the processing cost is what makes the house bear it. These are
+ * destination charges, so Stripe debits processing from the platform; a
+ * margin-only fee meant the platform paid ~2.9% to collect 0.75%. See RENT_FEE
+ * in config for why this rather than `on_behalf_of`, and for the estimate's
+ * trade-off.
+ *
+ * Capped at the rent amount: Stripe rejects an application fee larger than the
+ * charge, and the cap is reachable on very small amounts where the 30c fixed
+ * component dominates.
  *
  * Always returns a non-negative integer (Stripe rejects floats / over-charges).
  */
+/**
+ * Read a configured fee component, treating anything non-numeric as 0.
+ *
+ * Every component is multiplied into the fee, so one undefined or NaN value
+ * would make the whole `application_fee_amount` NaN and Stripe would reject the
+ * PaymentIntent — failing a resident's rent payment outright. Degrading to 0
+ * instead means the platform absorbs that part of the cost, which is the safe
+ * direction: a config gap must not stop rent being collected.
+ */
+const num = (value: number | undefined): number =>
+  typeof value === "number" && Number.isFinite(value) ? value : 0;
+
 export function computeApplicationFee(
   { amountCents, paymentMethodType }: ComputeApplicationFeeParams,
   feeConfig: RentFeeConfig = RENT_FEE,
@@ -49,17 +68,29 @@ export function computeApplicationFee(
   }
 
   if (isBankTransfer(paymentMethodType)) {
-    const fee =
-      feeConfig.achRate > 0
+    const achRate = num(feeConfig.achRate);
+    const margin =
+      achRate > 0
         ? Math.min(
-            Math.round(amount * feeConfig.achRate),
-            feeConfig.achCapCents,
+            Math.round(amount * achRate),
+            num(feeConfig.achCapCents),
           )
-        : feeConfig.achFlatCents;
+        : num(feeConfig.achFlatCents);
+    // Cap applied unconditionally: zeroing the cap zeroes the recovery, which
+    // is what the documented rollback expects. A zero cap meaning "uncapped"
+    // would be a trap.
+    const stripeCost = Math.min(
+      Math.round(amount * num(feeConfig.stripeAchRate)),
+      num(feeConfig.stripeAchCapCents),
+    );
     // Never charge more than the rent itself (guards tiny amounts).
-    return Math.min(Math.round(fee), amount);
+    return Math.min(Math.round(margin) + stripeCost, amount);
   }
 
   // card (default)
-  return Math.min(Math.round(amount * feeConfig.cardPlatformRate), amount);
+  const margin = Math.round(amount * num(feeConfig.cardPlatformRate));
+  const stripeCost =
+    Math.round(amount * num(feeConfig.stripeCardRate)) +
+    num(feeConfig.stripeCardFixedCents);
+  return Math.min(margin + stripeCost, amount);
 }

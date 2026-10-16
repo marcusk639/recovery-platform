@@ -6,31 +6,47 @@ jest.mock("../../config", () => ({
     achRate: 0,
     achCapCents: 300,
     cardPlatformRate: 0.0075,
+    stripeCardRate: 0.029,
+    stripeCardFixedCents: 30,
+    stripeAchRate: 0.008,
+    stripeAchCapCents: 500,
   },
 }));
 
 import { computeApplicationFee, RentFeeConfig } from "../rentFee";
 
-// Production-default model (flat $2 ACH, 0.75% card).
+// Production-default model: platform margin (flat $2 ACH, 0.75% card) PLUS the
+// estimated Stripe cost recovered from the house (2.9% + 30c card, 0.8% capped
+// at $5 ACH).
 const DEFAULT_FEES: RentFeeConfig = {
   achFlatCents: 200,
   achRate: 0,
   achCapCents: 300,
   cardPlatformRate: 0.0075,
+  stripeCardRate: 0.029,
+  stripeCardFixedCents: 30,
+  stripeAchRate: 0.008,
+  stripeAchCapCents: 500,
 };
 
+/** What Stripe actually charges, mirroring DEFAULT_FEES, for net assertions. */
+const stripeCost = (amountCents: number, card: boolean): number =>
+  card
+    ? Math.round(amountCents * 0.029) + 30
+    : Math.min(Math.round(amountCents * 0.008), 500);
+
 describe("computeApplicationFee", () => {
-  it("card: applies the 0.75% platform fee, rounded to integer cents", () => {
-    // 0.75% of 15000 = 112.5 -> 113
+  it("card: margin plus recovered Stripe cost", () => {
+    // margin 0.75% of 15000 = 112.5 -> 113; Stripe 2.9% = 435, +30 fixed = 465
     expect(
       computeApplicationFee(
         { amountCents: 15000, paymentMethodType: "card" },
         DEFAULT_FEES,
       ),
-    ).toBe(113);
+    ).toBe(578);
   });
 
-  it("ach / us_bank_account: applies the flat $2 fee regardless of amount", () => {
+  it("ach / us_bank_account: flat $2 margin plus recovered Stripe cost", () => {
     expect(
       computeApplicationFee(
         {
@@ -39,16 +55,16 @@ describe("computeApplicationFee", () => {
         },
         DEFAULT_FEES,
       ),
-    ).toBe(200);
+    ).toBe(320);
     expect(
       computeApplicationFee(
         { amountCents: 90000, paymentMethodType: "ach" },
         DEFAULT_FEES,
       ),
-    ).toBe(200);
+    ).toBe(700);
   });
 
-  it("clamps the flat ACH fee to the rent amount for tiny amounts", () => {
+  it("clamps the total fee to the rent amount for tiny amounts", () => {
     expect(
       computeApplicationFee(
         { amountCents: 100, paymentMethodType: "ach" },
@@ -67,30 +83,30 @@ describe("computeApplicationFee", () => {
 
   it("uses min(rate, cap) when an ACH percentage rate is configured", () => {
     const ratedFees: RentFeeConfig = { ...DEFAULT_FEES, achRate: 0.005 }; // 0.5%
-    // 0.5% of 100000 = 500 -> capped at 300
+    // margin: 0.5% of 100000 = 500 -> capped at 300; Stripe: 800 -> capped at 500
     expect(
       computeApplicationFee(
         { amountCents: 100000, paymentMethodType: "ach" },
         ratedFees,
       ),
-    ).toBe(300);
-    // 0.5% of 40000 = 200 -> under cap
+    ).toBe(800);
+    // margin: 0.5% of 40000 = 200 under cap; Stripe: 0.8% = 320 under cap
     expect(
       computeApplicationFee(
         { amountCents: 40000, paymentMethodType: "ach" },
         ratedFees,
       ),
-    ).toBe(200);
+    ).toBe(520);
   });
 
   it("falls back to the imported RENT_FEE when no config is passed", () => {
-    // Uses the mocked config above (card 0.75% of 20000 = 150).
+    // Mocked config above: margin 150 + Stripe (580 + 30) = 760.
     expect(
       computeApplicationFee({
         amountCents: 20000,
         paymentMethodType: "card",
       }),
-    ).toBe(150);
+    ).toBe(760);
   });
 
   describe("integer / non-negative invariant (Stripe rejects floats & negatives)", () => {
@@ -150,6 +166,76 @@ describe("computeApplicationFee", () => {
           DEFAULT_FEES,
         ),
       ).toBe(151);
+    });
+  });
+
+  describe("house bears processing (the point of including Stripe cost)", () => {
+    it("leaves the platform its margin after Stripe takes its cut", () => {
+      // This is the invariant the change exists for. Before it, a $500 card
+      // payment collected 375 and paid Stripe 1480 — a loss of 1105.
+      for (const amountCents of [1000, 50000, 100000, 250000]) {
+        const cardFee = computeApplicationFee(
+          { amountCents, paymentMethodType: "card" },
+          DEFAULT_FEES,
+        );
+        expect(cardFee - stripeCost(amountCents, true)).toBe(
+          Math.round(amountCents * 0.0075),
+        );
+
+        const achFee = computeApplicationFee(
+          { amountCents, paymentMethodType: "ach" },
+          DEFAULT_FEES,
+        );
+        expect(achFee - stripeCost(amountCents, false)).toBe(200);
+      }
+    });
+
+    it("degrades to margin-only rather than NaN when config is incomplete", () => {
+      // A partial config (an older deployment, or a test mock) must not poison
+      // the fee: NaN reaches Stripe as an invalid application_fee_amount and
+      // fails the whole PaymentIntent, i.e. the resident's rent payment.
+      const partial = {
+        achFlatCents: 200,
+        achRate: 0,
+        achCapCents: 300,
+        cardPlatformRate: 0.0075,
+      } as unknown as RentFeeConfig;
+
+      const card = computeApplicationFee(
+        { amountCents: 15000, paymentMethodType: "card" },
+        partial,
+      );
+      const ach = computeApplicationFee(
+        { amountCents: 15000, paymentMethodType: "ach" },
+        partial,
+      );
+      expect(Number.isFinite(card)).toBe(true);
+      expect(Number.isFinite(ach)).toBe(true);
+      expect(card).toBe(113);
+      expect(ach).toBe(200);
+    });
+
+    it("reverts to margin-only when the Stripe-cost values are zeroed", () => {
+      // The documented rollback: config change, no code change.
+      const marginOnly: RentFeeConfig = {
+        ...DEFAULT_FEES,
+        stripeCardRate: 0,
+        stripeCardFixedCents: 0,
+        stripeAchRate: 0,
+        stripeAchCapCents: 0,
+      };
+      expect(
+        computeApplicationFee(
+          { amountCents: 15000, paymentMethodType: "card" },
+          marginOnly,
+        ),
+      ).toBe(113);
+      expect(
+        computeApplicationFee(
+          { amountCents: 15000, paymentMethodType: "ach" },
+          marginOnly,
+        ),
+      ).toBe(200);
     });
   });
 });

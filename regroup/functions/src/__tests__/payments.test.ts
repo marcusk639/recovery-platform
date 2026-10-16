@@ -1393,7 +1393,7 @@ describe("createPaymentIntent", () => {
       );
     });
 
-    it("applies the 0.75% card platform fee by default (method-aware)", async () => {
+    it("applies the card margin plus recovered Stripe cost (method-aware)", async () => {
       // baseData.amount = 15000 cents ($150.00); 0.75% = 112.5 -> 113 cents.
       await (createPaymentIntent as unknown as Function)(
         baseData,
@@ -1401,14 +1401,14 @@ describe("createPaymentIntent", () => {
       );
       expect(mockStripePaymentIntentsCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          application_fee_amount: 113,
+          application_fee_amount: 578,
           payment_method_types: ["card"],
         }),
         expect.anything(),
       );
     });
 
-    it("applies the flat ACH fee for us_bank_account payments", async () => {
+    it("applies the ACH margin plus recovered Stripe cost", async () => {
       // ACH = flat $2.00 (200 cents) regardless of amount.
       await (createPaymentIntent as unknown as Function)(
         { ...baseData, paymentMethodType: "us_bank_account" },
@@ -1416,7 +1416,7 @@ describe("createPaymentIntent", () => {
       );
       expect(mockStripePaymentIntentsCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          application_fee_amount: 200,
+          application_fee_amount: 320,
           payment_method_types: ["us_bank_account"],
         }),
         expect.anything(),
@@ -1436,7 +1436,7 @@ describe("createPaymentIntent", () => {
         authedContext(USER_UID),
       );
       expect(mockStripePaymentIntentsCreate).toHaveBeenCalledWith(
-        expect.objectContaining({ application_fee_amount: 113 }),
+        expect.objectContaining({ application_fee_amount: 578 }),
         expect.anything(),
       );
     });
