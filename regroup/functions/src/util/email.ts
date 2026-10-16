@@ -30,9 +30,28 @@ export const sendEmail = async (email: Email): Promise<void> => {
 
     await sendgrid.send(emailData);
   } catch (error) {
-    // Log the status code only. A SendGrid ResponseError carries the response
-    // body and request, which can echo the recipient address and message text.
-    const code = (error as { code?: unknown } | null)?.code;
-    logger.info("There was an error sending the email", { code });
+    // Allowlist, never the whole error. A SendGrid ResponseError carries
+    // response.body and request, and its `message` echoes the recipient
+    // address and the message text — so `message` is deliberately excluded.
+    // `field` and `help` describe the API contract, not the payload, and are
+    // what actually distinguishes a bad sender identity from a bad field or a
+    // revoked key. Logged at error level so a severity-based alert can fire;
+    // a send failure is swallowed here, so the log is the only signal there is.
+    const err = error as
+      | {
+          code?: unknown;
+          name?: unknown;
+          response?: { body?: { errors?: { field?: unknown; help?: unknown }[] } };
+        }
+      | null
+      | undefined;
+    logger.error("There was an error sending the email", {
+      code: err?.code,
+      name: err?.name,
+      errors: (err?.response?.body?.errors ?? []).map((e) => ({
+        field: e?.field,
+        help: e?.help,
+      })),
+    });
   }
 };

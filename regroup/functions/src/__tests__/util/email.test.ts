@@ -86,4 +86,53 @@ describe('sendEmail', () => {
     infoSpy.mockRestore();
     errorSpy.mockRestore();
   });
+
+  it('logs a send failure at error level so a severity alert can fire', async () => {
+    const infoSpy = jest.spyOn(logger, 'info').mockImplementation(() => undefined);
+    const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => undefined);
+    mockSendgridSend.mockRejectedValue(Object.assign(new Error('Unauthorized'), { code: 401 }));
+
+    await sendEmail({ to: 'u@t.com', from: regroupEmail, subject: 'Hi', text: 'Hi' });
+
+    // A swallowed failure is invisible unless it is logged at >= ERROR.
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(infoSpy).not.toHaveBeenCalled();
+    expect(warnSpy).not.toHaveBeenCalled();
+    infoSpy.mockRestore();
+    warnSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  it('keeps the diagnostic fields that distinguish one failure from another', async () => {
+    const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => undefined);
+    // A 403 for an unverified sender and a 400 for a bad field are both
+    // actionable, and a bare status code cannot tell them apart.
+    const sendgridError = Object.assign(new Error('Forbidden'), {
+      code: 403,
+      response: {
+        body: {
+          errors: [
+            {
+              message: 'The from address does not match a verified Sender Identity: ops@regroup-app.com',
+              field: 'from',
+              help: 'https://sendgrid.com/docs/for-developers/sending-email/sender-identity/',
+            },
+          ],
+        },
+      },
+    });
+    mockSendgridSend.mockRejectedValue(sendgridError);
+
+    await sendEmail({ to: 'u@t.com', from: regroupEmail, subject: 'Hi', text: 'Hi' });
+
+    const payload = JSON.stringify(errorSpy.mock.calls);
+    expect(payload).toContain('403');
+    expect(payload).toContain('from');
+    expect(payload).toContain('sender-identity');
+    // `message` is the field that echoes addresses, so it must not survive.
+    expect(payload).not.toContain('does not match a verified Sender Identity');
+    expect(payload).not.toContain('ops@regroup-app.com');
+    errorSpy.mockRestore();
+  });
 });
