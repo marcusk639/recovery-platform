@@ -197,6 +197,10 @@ jest.mock("../api/firestore", () => ({
 const mockStripeAccountsCreate = jest.fn();
 const mockStripeAccountsDel = jest.fn();
 const mockStripeAccountsRetrieve = jest.fn();
+// Accounts v2 (stripe.v2.core.accounts) — houses are v2 recipient accounts.
+const mockStripeV2AccountsCreate = jest.fn();
+const mockStripeV2AccountsRetrieve = jest.fn();
+const mockStripeV2AccountsClose = jest.fn();
 const mockStripeAccountLinksCreate = jest.fn();
 const mockStripeOAuthDeauthorize = jest.fn();
 const mockStripePaymentIntentsCreate = jest.fn();
@@ -218,6 +222,15 @@ jest.mock("stripe", () => {
       create: mockStripeAccountsCreate,
       del: mockStripeAccountsDel,
       retrieve: mockStripeAccountsRetrieve,
+    },
+    v2: {
+      core: {
+        accounts: {
+          create: mockStripeV2AccountsCreate,
+          retrieve: mockStripeV2AccountsRetrieve,
+          close: mockStripeV2AccountsClose,
+        },
+      },
     },
     accountLinks: { create: mockStripeAccountLinksCreate },
     oauth: { deauthorize: mockStripeOAuthDeauthorize },
@@ -328,6 +341,45 @@ function makeStripeError(
   return new ErrorClass({ message, type, ...extra });
 }
 
+// ── Accounts v2 fixtures ──────────────────────────────────────────────────────
+
+/**
+ * A v2 recipient account as `stripe.v2.core.accounts.retrieve(id, { include:
+ * ['configuration.recipient', 'requirements'] })` returns it. The capability
+ * status under configuration.recipient is the only authoritative signal for
+ * whether the house can receive transfers.
+ */
+function v2RecipientAccount(
+  id: string,
+  transfersStatus: "active" | "pending" | "restricted" | "unsupported",
+  requirementEntries: Array<{ description: string; deadline: string }> = [],
+): Record<string, unknown> {
+  return {
+    id,
+    object: "v2.core.account",
+    applied_configurations: ["recipient"],
+    configuration: {
+      recipient: {
+        applied: true,
+        capabilities: {
+          stripe_balance: {
+            stripe_transfers: { status: transfersStatus, status_details: [] },
+          },
+        },
+      },
+    },
+    requirements: {
+      entries: requirementEntries.map((e) => ({
+        awaiting_action_from: "user",
+        description: e.description,
+        errors: [],
+        minimum_deadline: { status: e.deadline },
+        requested_reasons: [],
+      })),
+    },
+  };
+}
+
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
@@ -344,6 +396,11 @@ beforeEach(() => {
   // Default happy-path Stripe responses.
   mockStripeAccountsCreate.mockResolvedValue({ id: "acct_new123" });
   mockStripeAccountsDel.mockResolvedValue({ deleted: true });
+  mockStripeV2AccountsCreate.mockResolvedValue({ id: "acct_new123" });
+  mockStripeV2AccountsClose.mockResolvedValue({ id: "acct_new123" });
+  mockStripeV2AccountsRetrieve.mockResolvedValue(
+    v2RecipientAccount("acct_existing", "active"),
+  );
   mockStripeAccountLinksCreate.mockResolvedValue({
     url: "https://connect.stripe.com/onboard",
   });
@@ -572,15 +629,58 @@ describe("connectStripeAccount", () => {
   describe("house with no existing Stripe account", () => {
     beforeEach(() => seedHouse(HOUSE_ID, { adminId: ADMIN_UID }));
 
-    it("creates a new Stripe Express account", async () => {
+    it("creates an Accounts v2 recipient account, not a v1 Express account", async () => {
       await (connectStripeAccount as unknown as Function)(
         baseData,
         authedContext(ADMIN_UID),
       );
-      expect(mockStripeAccountsCreate).toHaveBeenCalledWith({
-        type: "express",
+      expect(mockStripeAccountsCreate).not.toHaveBeenCalled();
+      expect(mockStripeV2AccountsCreate).toHaveBeenCalledWith({
+        dashboard: "express",
+        defaults: {
+          responsibilities: {
+            fees_collector: "application",
+            losses_collector: "application",
+          },
+        },
+        configuration: {
+          recipient: {
+            capabilities: {
+              stripe_balance: { stripe_transfers: { requested: true } },
+            },
+          },
+        },
         metadata: { houseId: HOUSE_ID },
       });
+    });
+
+    it("does not request a merchant configuration or card_payments", async () => {
+      // Houses only ever receive transfers. Requesting merchant capabilities
+      // for a recipient lengthens onboarding for verification nobody needs.
+      await (connectStripeAccount as unknown as Function)(
+        baseData,
+        authedContext(ADMIN_UID),
+      );
+      const params = mockStripeV2AccountsCreate.mock.calls[0][0] as {
+        configuration?: Record<string, unknown>;
+      };
+      expect(params.configuration).not.toHaveProperty("merchant");
+      expect(JSON.stringify(params)).not.toContain("card_payments");
+    });
+
+    it("keeps losses_collector on the application, which Express requires", async () => {
+      // losses_collector: 'stripe' is a blocked combination with destination
+      // charges, and outright rejected alongside the Express dashboard.
+      await (connectStripeAccount as unknown as Function)(
+        baseData,
+        authedContext(ADMIN_UID),
+      );
+      const params = mockStripeV2AccountsCreate.mock.calls[0][0] as {
+        defaults?: { responsibilities?: { losses_collector?: string } };
+      };
+      expect(params.defaults?.responsibilities?.losses_collector).toBe(
+        "application",
+      );
     });
 
     it("saves stripeAccountId and sets stripeStatus to pending", async () => {
@@ -662,7 +762,7 @@ describe("connectStripeAccount", () => {
         "api exploded",
         "api_error",
       );
-      mockStripeAccountsCreate.mockRejectedValue(err);
+      mockStripeV2AccountsCreate.mockRejectedValue(err);
       await expectHttpsError(
         () =>
           (connectStripeAccount as unknown as Function)(
@@ -679,7 +779,7 @@ describe("connectStripeAccount", () => {
         "too many requests",
         "rate_limit_error",
       );
-      mockStripeAccountsCreate.mockRejectedValue(err);
+      mockStripeV2AccountsCreate.mockRejectedValue(err);
       await expectHttpsError(
         () =>
           (connectStripeAccount as unknown as Function)(
@@ -742,9 +842,13 @@ describe("connectStripeAccount", () => {
       );
       expect(result.url).toBe("https://connect.stripe.com/onboard");
 
-      // Our newly-created account (acct_new123) should have been deleted to
-      // prevent an orphaned Stripe account.
-      expect(mockStripeAccountsDel).toHaveBeenCalledWith("acct_new123");
+      // Our newly-created account (acct_new123) should have been closed to
+      // prevent an orphaned Stripe account. v2 has no delete; close is the
+      // analogue and must list every configuration the account carries.
+      expect(mockStripeAccountsDel).not.toHaveBeenCalled();
+      expect(mockStripeV2AccountsClose).toHaveBeenCalledWith("acct_new123", {
+        applied_configurations: ["recipient"],
+      });
     });
   });
 });
