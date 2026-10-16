@@ -15,13 +15,47 @@
 // ---------------------------------------------------------------------------
 const mockAccountLinksCreate = jest.fn();
 const mockAccountsRetrieve = jest.fn();
+const mockV2AccountsRetrieve = jest.fn();
 
 jest.mock("stripe", () => {
   return jest.fn().mockImplementation(() => ({
     accountLinks: { create: mockAccountLinksCreate },
     accounts: { retrieve: mockAccountsRetrieve },
+    v2: { core: { accounts: { retrieve: mockV2AccountsRetrieve } } },
   }));
 });
+
+/** A v2 recipient account with the transfers capability at `status`. */
+function v2RecipientAccount(
+  id: string,
+  transfersStatus: "active" | "pending" | "restricted" | "unsupported",
+  requirementEntries: Array<{ description: string; deadline: string }> = [],
+): Record<string, unknown> {
+  return {
+    id,
+    object: "v2.core.account",
+    applied_configurations: ["recipient"],
+    configuration: {
+      recipient: {
+        applied: true,
+        capabilities: {
+          stripe_balance: {
+            stripe_transfers: { status: transfersStatus, status_details: [] },
+          },
+        },
+      },
+    },
+    requirements: {
+      entries: requirementEntries.map((e) => ({
+        awaiting_action_from: "user",
+        description: e.description,
+        errors: [],
+        minimum_deadline: { status: e.deadline },
+        requested_reasons: [],
+      })),
+    },
+  };
+}
 
 // ---------------------------------------------------------------------------
 // firebase-admin mock
@@ -339,12 +373,16 @@ describe("stripeConnectReturn", () => {
   it("syncs account status to Firestore and returns 200 when account is fully active", async () => {
     const stripeAccountId = "acct_return_1";
 
-    mockAccountsRetrieve.mockResolvedValue({
-      id: stripeAccountId,
-      charges_enabled: true,
-      payouts_enabled: true,
-      requirements: { currently_due: [], disabled_reason: null },
+    // charges_enabled deliberately false: a recipient account never charges,
+    // and gating on it here used to withhold `active` from a healthy house.
+    mockV2AccountsRetrieve.mockResolvedValue({
+      ...v2RecipientAccount(stripeAccountId, "active"),
+      charges_enabled: false,
+      payouts_enabled: false,
     });
+    mockAccountsRetrieve.mockRejectedValue(
+      new Error("v1 accounts.retrieve must not be used for a v2 account"),
+    );
 
     mockQuerySnap = {
       empty: false,
@@ -372,7 +410,10 @@ describe("stripeConnectReturn", () => {
 
     await (stripeConnectReturn as any)(req, res);
 
-    expect(mockAccountsRetrieve).toHaveBeenCalledWith(stripeAccountId);
+    expect(mockAccountsRetrieve).not.toHaveBeenCalled();
+    expect(mockV2AccountsRetrieve).toHaveBeenCalledWith(stripeAccountId, {
+      include: ["configuration.recipient", "requirements"],
+    });
     expect(mockFirestoreUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
         stripeStatus: "active",
@@ -386,15 +427,11 @@ describe("stripeConnectReturn", () => {
   it("sets stripeStatus to restricted when requirements are currently due", async () => {
     const stripeAccountId = "acct_restricted_return";
 
-    mockAccountsRetrieve.mockResolvedValue({
-      id: stripeAccountId,
-      charges_enabled: false,
-      payouts_enabled: false,
-      requirements: {
-        currently_due: ["individual.id_number"],
-        disabled_reason: "requirements.past_due",
-      },
-    });
+    mockV2AccountsRetrieve.mockResolvedValue(
+      v2RecipientAccount(stripeAccountId, "restricted", [
+        { description: "Government-issued ID", deadline: "past_due" },
+      ]),
+    );
 
     mockQuerySnap = {
       empty: false,
@@ -426,12 +463,9 @@ describe("stripeConnectReturn", () => {
   it("sets stripeStatus to pending when account has no requirements yet", async () => {
     const stripeAccountId = "acct_pending_return";
 
-    mockAccountsRetrieve.mockResolvedValue({
-      id: stripeAccountId,
-      charges_enabled: false,
-      payouts_enabled: false,
-      requirements: { currently_due: [], disabled_reason: null },
-    });
+    mockV2AccountsRetrieve.mockResolvedValue(
+      v2RecipientAccount(stripeAccountId, "pending"),
+    );
 
     mockQuerySnap = {
       empty: false,
@@ -463,7 +497,7 @@ describe("stripeConnectReturn", () => {
   it("still returns 200 success HTML even when Stripe API throws during sync", async () => {
     const stripeAccountId = "acct_err_return";
 
-    mockAccountsRetrieve.mockRejectedValue(new Error("Stripe API timeout"));
+    mockV2AccountsRetrieve.mockRejectedValue(new Error("Stripe API timeout"));
 
     const req = makeReq({ stripeAccountId });
     const res = makeRes();
@@ -479,12 +513,9 @@ describe("stripeConnectReturn", () => {
   it("returns 200 and skips Firestore update when no house is found for account", async () => {
     const stripeAccountId = "acct_no_house";
 
-    mockAccountsRetrieve.mockResolvedValue({
-      id: stripeAccountId,
-      charges_enabled: true,
-      payouts_enabled: true,
-      requirements: { currently_due: [], disabled_reason: null },
-    });
+    mockV2AccountsRetrieve.mockResolvedValue(
+      v2RecipientAccount(stripeAccountId, "active"),
+    );
 
     // mockQuerySnap remains empty (default from beforeEach)
 
