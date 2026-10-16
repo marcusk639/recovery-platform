@@ -26,13 +26,33 @@ const path = require('path');
 
 const BASELINE_PATH = path.join(__dirname, '..', '.typecheck-baseline');
 
+const PKG_ROOT = path.resolve(__dirname, '..');
+const REPO_ROOT = path.resolve(PKG_ROOT, '..', '..');
+
+/**
+ * Strip machine-specific absolute paths out of an error identity.
+ *
+ * tsc embeds absolute paths INSIDE some messages, e.g.
+ *   Argument of type 'import("/home/runner/work/.../navigation/types").Routes'
+ * The prefix differs between a developer machine and CI, so an identity
+ * carrying one can never match across them: the count agrees while five
+ * entries look simultaneously added and removed. Both sides are normalised
+ * here, at parse time, so a baseline written anywhere compares anywhere.
+ * Longest root first — PKG_ROOT is inside REPO_ROOT.
+ */
+function normalisePaths(text) {
+  return text.split(PKG_ROOT).join('<pkg>').split(REPO_ROOT).join('<repo>');
+}
+
 /** `src/a.ts(12,5): error TS2322: msg` -> `src/a.ts: TS2322: msg`. */
 function parseErrors(output) {
   const identities = [];
   for (const line of output.split('\n')) {
     const match = /^(.+?)\(\d+,\d+\): error (TS\d+): (.*)$/.exec(line.trim());
     if (match) {
-      identities.push(`${match[1]}: ${match[2]}: ${match[3].trim()}`);
+      identities.push(
+        normalisePaths(`${match[1]}: ${match[2]}: ${match[3].trim()}`),
+      );
     }
   }
   return identities.sort();
@@ -115,7 +135,7 @@ function main() {
   process.exit(0);
 }
 
-module.exports = { parseErrors, parseBaseline, subtract };
+module.exports = { parseErrors, parseBaseline, subtract, normalisePaths };
 
 if (require.main === module) {
   main();

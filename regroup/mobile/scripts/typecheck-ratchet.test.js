@@ -1,4 +1,5 @@
-const { parseErrors, parseBaseline, subtract } = require('./typecheck-ratchet');
+const path = require('path');
+const { parseErrors, parseBaseline, subtract , normalisePaths} = require('./typecheck-ratchet');
 
 const out = [
   "src/a.ts(10,5): error TS2322: Type 'string' is not assignable to type 'number'.",
@@ -36,5 +37,29 @@ describe('typecheck ratchet identities', () => {
     expect(subtract(parseErrors(`${line}\n${line.replace('(1,1)', '(9,1)')}`), baseline)).toEqual([
       'src/a.ts: TS2322: bad.',
     ]);
+  });
+
+  it('strips the absolute path tsc embeds in a message, so CI matches a local baseline', () => {
+    // tsc writes the ABSOLUTE path of an imported module inside some messages.
+    // Left in, the identity encodes the machine: a baseline written on a laptop
+    // reports those errors as both added and removed in CI, while the total
+    // agrees. That is exactly how this gate failed on PR #85.
+    const pkgRoot = path.resolve(__dirname, '..');
+    const withAbs =
+      `src/screens/Contacts/ContactScreen.tsx(10,5): error TS2345: ` +
+      `Argument of type 'import("${pkgRoot}/src/navigation/types").Routes' is not assignable.`;
+    const parsed = parseErrors(withAbs);
+
+    expect(parsed).toEqual([
+      "src/screens/Contacts/ContactScreen.tsx: TS2345: Argument of type " +
+        "'import(\"<pkg>/src/navigation/types\").Routes' is not assignable.",
+    ]);
+    expect(parsed[0]).not.toContain(pkgRoot);
+  });
+
+  it('normalisePaths leaves text without an absolute path untouched', () => {
+    expect(normalisePaths("src/a.ts: TS2322: Type 'string' is not assignable.")).toBe(
+      "src/a.ts: TS2322: Type 'string' is not assignable.",
+    );
   });
 });
