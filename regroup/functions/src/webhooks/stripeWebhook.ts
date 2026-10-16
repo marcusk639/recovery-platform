@@ -281,11 +281,19 @@ async function upsertPaymentDoc(
   paymentIntentId: string,
   fields: Record<string, unknown>,
 ): Promise<void> {
-  const db = admin.firestore();
-  await db
-    .collection("payments")
-    .doc(paymentIntentId)
-    .set(fields, { merge: true });
+  const ref = admin.firestore().collection("payments").doc(paymentIntentId);
+  let toWrite = fields;
+  if ("createdAt" in fields) {
+    // createdAt is write-once: a redelivered event must not re-date the original
+    // payment (history ordering and the analytics date window key on it). A doc
+    // that exists without createdAt (a refund event landed first) still gets it.
+    const existing = await ref.get();
+    if (existing.exists && existing.data()?.createdAt != null) {
+      const { createdAt: _keep, ...rest } = fields;
+      toWrite = rest;
+    }
+  }
+  await ref.set(toWrite, { merge: true });
 }
 
 // ---------------------------------------------------------------------------

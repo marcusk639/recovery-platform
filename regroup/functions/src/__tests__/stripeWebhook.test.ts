@@ -446,7 +446,12 @@ describe("Signature Verification", () => {
         return { doc: () => ({ get: jest.fn(), set: jest.fn() }) };
       }
       if (name === "payments") {
-        return { doc: () => ({ set: mockSet.mockResolvedValue(undefined) }) };
+        return {
+          doc: () => ({
+            set: mockSet.mockResolvedValue(undefined),
+            get: jest.fn().mockResolvedValue({ exists: false }),
+          }),
+        };
       }
       if (name === "guests") {
         return {
@@ -748,7 +753,12 @@ describe("payment_intent.succeeded", () => {
         };
       }
       if (name === "payments") {
-        return { doc: () => ({ set: mockSet.mockResolvedValue(undefined) }) };
+        return {
+          doc: () => ({
+            set: mockSet.mockResolvedValue(undefined),
+            get: jest.fn().mockResolvedValue({ exists: false }),
+          }),
+        };
       }
       if (name === "guests") {
         return {
@@ -1048,7 +1058,12 @@ describe("payment_intent.succeeded", () => {
 
     mockCollection.mockImplementation((name: string) => {
       if (name === "payments")
-        return { doc: () => ({ set: mockSet.mockResolvedValue(undefined) }) };
+        return {
+          doc: () => ({
+            set: mockSet.mockResolvedValue(undefined),
+            get: jest.fn().mockResolvedValue({ exists: false }),
+          }),
+        };
       return {
         doc: () => ({
           set: jest.fn(),
@@ -1105,7 +1120,12 @@ describe("payment_intent.succeeded", () => {
     mockConstructEvent.mockReturnValue(makeStripeEvent("payment_intent.succeeded", pi));
     mockCollection.mockImplementation((name: string) => {
       if (name === "payments")
-        return { doc: () => ({ set: mockSet.mockResolvedValue(undefined) }) };
+        return {
+          doc: () => ({
+            set: mockSet.mockResolvedValue(undefined),
+            get: jest.fn().mockResolvedValue({ exists: false }),
+          }),
+        };
       return {
         doc: () => ({
           set: jest.fn(),
@@ -1123,6 +1143,45 @@ describe("payment_intent.succeeded", () => {
     );
   });
 
+
+  describe("createdAt is write-once on redelivery", () => {
+    const run = async (existing: { exists: boolean; data?: () => unknown }) => {
+      const pi = makePaymentIntent({
+        metadata: { houseId: "house_1" } as Stripe.Metadata,
+      });
+      mockConstructEvent.mockReturnValue(
+        makeStripeEvent("payment_intent.succeeded", pi),
+      );
+      mockCollection.mockImplementation((name: string) => {
+        if (name === "payments")
+          return {
+            doc: () => ({
+              set: mockSet.mockResolvedValue(undefined),
+              get: jest.fn().mockResolvedValue(existing),
+            }),
+          };
+        return {
+          doc: () => ({
+            set: jest.fn(),
+            get: jest.fn().mockResolvedValue({ exists: false }),
+          }),
+        };
+      });
+      await stripeWebhook(makeRequest({}) as never, makeResponse() as never);
+    };
+
+    test("existing createdAt is not re-stamped, updatedAt still moves", async () => {
+      await run({ exists: true, data: () => ({ createdAt: "original" }) });
+      const [written] = mockSet.mock.calls[0];
+      expect(written).not.toHaveProperty("createdAt");
+      expect(written).toHaveProperty("updatedAt");
+    });
+
+    test("existing doc without createdAt still gets one", async () => {
+      await run({ exists: true, data: () => ({ status: "refunded" }) });
+      expect(mockSet.mock.calls[0][0]).toHaveProperty("createdAt");
+    });
+  });
   test("FCM send fails: event still processes successfully", async () => {
     const pi = makePaymentIntent({ amount: 20000 }); // $200
     const event = makeStripeEvent("payment_intent.succeeded", pi);
@@ -1258,7 +1317,12 @@ describe("payment_intent.payment_failed", () => {
 
     mockCollection.mockImplementation((name: string) => {
       if (name === "payments")
-        return { doc: () => ({ set: mockSet.mockResolvedValue(undefined) }) };
+        return {
+          doc: () => ({
+            set: mockSet.mockResolvedValue(undefined),
+            get: jest.fn().mockResolvedValue({ exists: false }),
+          }),
+        };
       if (name === "guests") {
         return {
           doc: jest
@@ -1426,7 +1490,12 @@ describe("charge.dispute.created", () => {
 
     mockCollection.mockImplementation((name: string) => {
       if (name === "payments") {
-        return { doc: () => ({ set: mockSet.mockResolvedValue(undefined) }) };
+        return {
+          doc: () => ({
+            set: mockSet.mockResolvedValue(undefined),
+            get: jest.fn().mockResolvedValue({ exists: false }),
+          }),
+        };
       }
       if (name === "houses") {
         return {
@@ -2392,7 +2461,12 @@ describe("General error handling", () => {
 
     mockCollection.mockImplementation((name: string) => {
       if (name === "payments")
-        return { doc: () => ({ set: mockSet.mockResolvedValue(undefined) }) };
+        return {
+          doc: () => ({
+            set: mockSet.mockResolvedValue(undefined),
+            get: jest.fn().mockResolvedValue({ exists: false }),
+          }),
+        };
       if (name === "guests") {
         return {
           doc: jest.fn().mockReturnValue({
