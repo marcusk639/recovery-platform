@@ -73,3 +73,10 @@ it — the scheduler callback inspects only `failureCount`. That is intentional 
 reason at the top, but it means the summary is diagnostic, not a control signal. If you
 would rather have the job go red, change the throw condition in the `onSchedule`
 callback; just accept that it will stay red until a human clears every flagged attempt.
+
+The summary carries two such counts, `needsReconciliationCount` (attempts) and
+`paymentsNeedingReconciliationCount` (payments). Each has three states: a number is
+the count found, `0` is none found, and `null` means that sweep itself failed and the
+count is unknown, which is not the same as none. A sweep failure is logged at error
+level ("reconciliation sweep failed", with `sweep: attempts` or `payments`) and the
+day's collection continues, so look for that log line rather than for a failed job.
