@@ -493,8 +493,13 @@ export const updatePaymentInfo = onCall(
 // ─────────────────────────────────────────────────────────────────────────────
 // connectStripeAccount
 //
-// Creates (or re-uses) a Stripe Express account for a house, then returns
-// an account onboarding/update link URL.
+// Creates (or re-uses) a Stripe Accounts v2 *recipient* account for a house,
+// then returns an account onboarding/update link URL.
+//
+// Recipient, not merchant: a house only ever receives /v1/transfers from the
+// platform's destination charges — it never charges anyone. Requesting a
+// merchant configuration or card_payments would demand verification the house
+// does not need and lengthen onboarding for nothing.
 //
 // Security:
 //   - Caller must be authenticated.
@@ -507,6 +512,22 @@ export const updatePaymentInfo = onCall(
 //     that two simultaneous calls cannot both create separate Stripe accounts
 //     for the same house.
 // ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Closes an account we created but could not persist. v2 has no `delete`; close
+ * is its analogue, and it must name every configuration the account carries —
+ * for a house that is `recipient` alone. Best-effort: a failure here leaves an
+ * unreferenced account on the platform, which is strictly better than failing
+ * the caller's request a second time.
+ */
+async function closeOrphanedAccount(
+  stripe: Stripe,
+  accountId: string,
+): Promise<void> {
+  await stripe.v2.core.accounts
+    .close(accountId, { applied_configurations: ["recipient"] })
+    .catch(() => undefined);
+}
+
 export const connectStripeAccount = onCall(
   { secrets: [STRIPE_SECRET_KEY] },
   async (request) => {
@@ -551,7 +572,7 @@ export const connectStripeAccount = onCall(
       "Only house admins can connect a Stripe account",
     );
 
-    // ── 4. Get or create the Stripe Express account ───────────────────────────
+    // ── 4. Get or create the Stripe recipient account ─────────────────────────
     //   We use a transaction so that concurrent calls do not create two accounts.
     let stripeAccountId: string = house.stripeAccountId ?? "";
 
@@ -560,10 +581,28 @@ export const connectStripeAccount = onCall(
       // to write.  Stripe account creation is idempotent via metadata — if a
       // second call races here it will create a second account, but the
       // transaction below ensures only one ID is ever persisted.
-      let newAccount: Stripe.Account;
+      let newAccount: Stripe.V2.Core.Account;
       try {
-        newAccount = await stripe.accounts.create({
-          type: "express",
+        newAccount = await stripe.v2.core.accounts.create({
+          // Express dashboard: Stripe hosts the operator-facing views.
+          dashboard: "express",
+          defaults: {
+            responsibilities: {
+              // The platform collects fees and owns negative balances.
+              // losses_collector: 'stripe' is a blocked combination with
+              // destination charges, and is rejected outright alongside the
+              // Express dashboard — this is a constraint, not a preference.
+              fees_collector: "application",
+              losses_collector: "application",
+            },
+          },
+          configuration: {
+            recipient: {
+              capabilities: {
+                stripe_balance: { stripe_transfers: { requested: true } },
+              },
+            },
+          },
           metadata: { houseId },
         });
       } catch (err) {
@@ -597,14 +636,14 @@ export const connectStripeAccount = onCall(
         });
       } catch (err) {
         // If the transaction fails for any reason, clean up the Stripe account.
-        await stripe.accounts.del(newAccount.id).catch(() => undefined);
+        await closeOrphanedAccount(stripe, newAccount.id);
         throw new HttpsError("internal", "Failed to save Stripe account");
       }
 
       // Post-transaction cleanup: if the transaction found a concurrent account,
-      // delete the one we created to prevent orphaned Express accounts.
+      // close the one we created to prevent orphaned recipient accounts.
       if (existingAccountId !== null) {
-        await stripe.accounts.del(newAccount.id).catch(() => undefined);
+        await closeOrphanedAccount(stripe, newAccount.id);
       }
     }
 
