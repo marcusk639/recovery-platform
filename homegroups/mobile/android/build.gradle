@@ -84,7 +84,9 @@ subprojects { project ->
             .withType(org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile)
             .configureEach {
                 compilerOptions.jvmTarget.set(project.provider {
-                    org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(
+                    // fromTarget is an instance method on the Kotlin companion in KGP
+                    // 1.9.22 (not @JvmStatic), so Groovy needs Companion explicitly.
+                    org.jetbrains.kotlin.gradle.dsl.JvmTarget.Companion.fromTarget(
                         android.compileOptions.targetCompatibility.toString())
                 })
             }
