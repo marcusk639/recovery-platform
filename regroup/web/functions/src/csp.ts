@@ -41,11 +41,19 @@ export const CONTENT_SECURITY_POLICY = [
  * of that fires on this site is unknown without a browser.
  *
  * Shipping an enforcing policy that is wrong breaks the page, and one of the
- * pages is billing. Report-only collects the same violation reports and breaks
- * nothing, which is the normal way to roll a CSP out.
+ * pages is billing. Report-only breaks nothing, which is the normal way to roll
+ * a CSP out.
  *
- * To enforce: set CSP_ENFORCE=true on the function, confirm no violations are
- * being reported, and keep it enforcing. The flip needs no code change.
+ * NOTE: there is no report-uri / report-to directive and no Reporting-Endpoints
+ * header, so violations surface only in each visitor's own devtools console.
+ * Nothing is collected server-side. Validating this therefore means loading the
+ * pages yourself with devtools open — the billing page, signup, and the
+ * deep-link redirect, which is the one most likely to trip frame-src. Adding a
+ * reporting endpoint would turn that into a signal worth watching, and is the
+ * better long-term answer.
+ *
+ * To enforce: exercise those pages with devtools open, confirm no violations,
+ * then set CSP_ENFORCE=true. The flip needs no code change.
  */
 export const CSP_HEADER_NAME =
   process.env.CSP_ENFORCE === 'true'

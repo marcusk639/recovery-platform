@@ -215,6 +215,30 @@ describe("computeApplicationFee", () => {
       expect(ach).toBe(200);
     });
 
+    it("ignores a non-finite CONFIG value rather than consuming the rent", () => {
+      // Infinity is the dangerous one. NaN is already rejected by the `> 0`
+      // comparison, but `Infinity > 0` is true, so without the finite check the
+      // fee becomes Infinity, clamps to the rent amount, and the house receives
+      // nothing while the resident is charged in full.
+      for (const bad of [Infinity, -Infinity, NaN]) {
+        const fee = computeApplicationFee(
+          { amountCents: 50000, paymentMethodType: "card" },
+          { ...DEFAULT_FEES, stripeCardRate: bad } as RentFeeConfig,
+        );
+        expect(Number.isFinite(fee)).toBe(true);
+        expect(fee).toBeLessThan(50000);
+        // Margin plus the fixed component survive; only the bad rate drops out.
+        expect(fee).toBe(375 + 30);
+      }
+
+      const achFee = computeApplicationFee(
+        { amountCents: 50000, paymentMethodType: "ach" },
+        { ...DEFAULT_FEES, stripeAchCapCents: Infinity } as RentFeeConfig,
+      );
+      expect(Number.isFinite(achFee)).toBe(true);
+      expect(achFee).toBeLessThan(50000);
+    });
+
     it("reverts to margin-only when the Stripe-cost values are zeroed", () => {
       // The documented rollback: config change, no code change.
       const marginOnly: RentFeeConfig = {
