@@ -749,6 +749,7 @@ describe("stripeWebhook — payment_intent.succeeded", () => {
           doc: jest.fn().mockReturnValue({
             set: mockPaymentSet,
             update: jest.fn(),
+            get: jest.fn().mockResolvedValue({ exists: false }),
           }),
         };
       }
@@ -915,7 +916,11 @@ describe("stripeWebhook — payment_intent.succeeded", () => {
         return {
           doc: jest
             .fn()
-            .mockReturnValue({ set: mockPaymentSet, update: jest.fn() }),
+            .mockReturnValue({
+              set: mockPaymentSet,
+              update: jest.fn(),
+              get: jest.fn().mockResolvedValue({ exists: false }),
+            }),
         };
       }
       return {
@@ -976,7 +981,11 @@ describe("stripeWebhook — charge.refunded", () => {
         return {
           doc: jest
             .fn()
-            .mockReturnValue({ set: mockPaymentSet, update: jest.fn() }),
+            .mockReturnValue({
+              set: mockPaymentSet,
+              update: jest.fn(),
+              get: jest.fn().mockResolvedValue({ exists: false }),
+            }),
         };
       }
       return {
@@ -1027,7 +1036,11 @@ describe("stripeWebhook — charge.refunded", () => {
         return {
           doc: jest
             .fn()
-            .mockReturnValue({ set: mockPaymentSet, update: jest.fn() }),
+            .mockReturnValue({
+              set: mockPaymentSet,
+              update: jest.fn(),
+              get: jest.fn().mockResolvedValue({ exists: false }),
+            }),
         };
       }
       return {
@@ -1078,7 +1091,11 @@ describe("stripeWebhook — charge.refunded", () => {
         return {
           doc: jest
             .fn()
-            .mockReturnValue({ set: mockPaymentSet, update: jest.fn() }),
+            .mockReturnValue({
+              set: mockPaymentSet,
+              update: jest.fn(),
+              get: jest.fn().mockResolvedValue({ exists: false }),
+            }),
         };
       }
       return {

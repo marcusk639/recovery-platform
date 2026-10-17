@@ -53,10 +53,42 @@ export interface RentCollectionSummary {
   attemptedCount: number;
   /** Attempts that threw. */
   failureCount: number;
-  /** Attempts whose Stripe outcome is unknown and awaiting a human. */
-  needsReconciliationCount: number;
-  /** Payments the webhook quarantined and no operator has resolved yet. */
-  paymentsNeedingReconciliationCount: number;
+  /**
+   * Attempts whose Stripe outcome is unknown and awaiting a human. `null` means
+   * the sweep itself failed and the count is unknown; 0 means none were found.
+   */
+  needsReconciliationCount: number | null;
+  /**
+   * Payments the webhook quarantined and no operator has resolved yet. `null`
+   * means the sweep itself failed; 0 means none were found.
+   */
+  paymentsNeedingReconciliationCount: number | null;
+}
+
+/** Runs a reporting sweep; returns null, never throws, when the sweep fails. */
+async function runReportSweep(
+  sweep: 'attempts' | 'payments',
+  report: () => Promise<number>,
+): Promise<number | null> {
+  try {
+    return await report();
+  } catch (err) {
+    // `code` is the field that says whether this is worth paging for: a
+    // Firestore UNAVAILABLE is transient and self-clearing, while
+    // PERMISSION_DENIED or FAILED_PRECONDITION (a missing index) will repeat
+    // every day until someone acts. The message alone does not distinguish them.
+    const e = err as { message?: string; code?: unknown; stack?: string } | null;
+    logger.error(
+      'scheduledRentCollection: reconciliation sweep failed, count unknown; collection continues',
+      {
+        sweep,
+        code: e?.code ?? null,
+        reason: e?.message ?? String(err),
+        stack: e?.stack ?? null,
+      },
+    );
+    return null;
+  }
 }
 
 /**
@@ -75,8 +107,16 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
   // returns below would otherwise skip them on a day with nothing to charge.
   const { byGuest: inFlightByGuest, staleRefs } = await loadInFlightCentsByGuest(now);
   await flagStaleForReconciliation(staleRefs);
-  const needsReconciliationCount = await reportAttemptsNeedingReconciliation();
-  const paymentsNeedingReconciliationCount = await reportPaymentsNeedingReconciliation();
+  // The sweeps are diagnostic. A failure must not stop the day's collection, so
+  // it is logged loudly and surfaced as a null count instead of thrown.
+  const needsReconciliationCount = await runReportSweep(
+    'attempts',
+    reportAttemptsNeedingReconciliation,
+  );
+  const paymentsNeedingReconciliationCount = await runReportSweep(
+    'payments',
+    reportPaymentsNeedingReconciliation,
+  );
 
   const snapshot = await guestCollection
     .where('autoPayEnabled', '==', true)
