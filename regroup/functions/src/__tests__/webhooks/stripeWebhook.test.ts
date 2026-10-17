@@ -138,13 +138,51 @@ jest.mock("firebase-functions", () => ({
 const mockConstructEvent = jest.fn();
 const mockChargesRetrieve = jest.fn();
 
+const mockV2AccountsRetrieve = jest.fn();
+
 jest.mock("stripe", () => {
   return jest.fn().mockImplementation(() => ({
     webhooks: { constructEvent: mockConstructEvent },
     charges: { retrieve: mockChargesRetrieve },
     subscriptions: { retrieve: mockSubscriptionsRetrieve },
+    v2: { core: { accounts: { retrieve: mockV2AccountsRetrieve } } },
   }));
 });
+
+/**
+ * The authoritative v2 read behind account.updated. The event payload's v1
+ * charges_enabled / payouts_enabled no longer decide the house status.
+ */
+function v2RecipientAccount(
+  id: string,
+  transfersStatus: "active" | "pending" | "restricted" | "unsupported",
+  requirementEntries: Array<{ description: string; deadline: string }> = [],
+): Record<string, unknown> {
+  return {
+    id,
+    object: "v2.core.account",
+    applied_configurations: ["recipient"],
+    configuration: {
+      recipient: {
+        applied: true,
+        capabilities: {
+          stripe_balance: {
+            stripe_transfers: { status: transfersStatus, status_details: [] },
+          },
+        },
+      },
+    },
+    requirements: {
+      entries: requirementEntries.map((e) => ({
+        awaiting_action_from: "user",
+        description: e.description,
+        errors: [],
+        minimum_deadline: { status: e.deadline },
+        requested_reasons: [],
+      })),
+    },
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Imports — after all mocks
@@ -1300,11 +1338,13 @@ describe("stripeWebhook — customer.subscription.deleted", () => {
 // ===========================================================================
 
 describe("stripeWebhook — account.updated", () => {
-  it("updates house stripeStatus to active when charges and payouts are enabled", async () => {
+  it("updates house stripeStatus to active when the transfers capability is active", async () => {
     const stripeAccountId = "acct_test_1";
     const houseDocId = "house_connect_1";
     const mockHouseUpdate = jest.fn().mockResolvedValue(undefined);
 
+    // The payload reports charges_enabled: false, as every healthy recipient
+    // account does. Only the authoritative read grants `active`.
     mockConstructEvent.mockReturnValue({
       id: "evt_acct_updated",
       type: "account.updated",
@@ -1312,16 +1352,14 @@ describe("stripeWebhook — account.updated", () => {
       data: {
         object: {
           id: stripeAccountId,
-          charges_enabled: true,
-          payouts_enabled: true,
-          requirements: {
-            currently_due: [],
-            eventually_due: [],
-            disabled_reason: null,
-          },
+          charges_enabled: false,
+          payouts_enabled: false,
         },
       },
     });
+    mockV2AccountsRetrieve.mockResolvedValue(
+      v2RecipientAccount(stripeAccountId, "active"),
+    );
 
     mockCollectionFn.mockImplementation((col: string) => {
       if (col === "houses") {
@@ -1365,6 +1403,9 @@ describe("stripeWebhook — account.updated", () => {
     await (stripeWebhook as any)(req, res);
 
     expect(res.status).toHaveBeenCalledWith(200);
+    expect(mockV2AccountsRetrieve).toHaveBeenCalledWith(stripeAccountId, {
+      include: ["configuration.recipient", "requirements"],
+    });
     expect(mockHouseUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
         stripeStatus: "active",
@@ -1374,10 +1415,11 @@ describe("stripeWebhook — account.updated", () => {
     );
   });
 
-  it("sets stripeStatus to restricted when requirements are pending", async () => {
+  it("sets stripeStatus to restricted when the transfers capability is restricted", async () => {
     const stripeAccountId = "acct_restricted";
     const mockHouseUpdate = jest.fn().mockResolvedValue(undefined);
 
+    // A payload that would have read as `active` under the old v1 mapping.
     mockConstructEvent.mockReturnValue({
       id: "evt_acct_restricted",
       type: "account.updated",
@@ -1385,16 +1427,16 @@ describe("stripeWebhook — account.updated", () => {
       data: {
         object: {
           id: stripeAccountId,
-          charges_enabled: false,
-          payouts_enabled: false,
-          requirements: {
-            currently_due: ["individual.id_number"],
-            eventually_due: [],
-            disabled_reason: "requirements.past_due",
-          },
+          charges_enabled: true,
+          payouts_enabled: true,
         },
       },
     });
+    mockV2AccountsRetrieve.mockResolvedValue(
+      v2RecipientAccount(stripeAccountId, "restricted", [
+        { description: "Identity document", deadline: "currently_due" },
+      ]),
+    );
 
     mockCollectionFn.mockImplementation((col: string) => {
       if (col === "houses") {
@@ -1451,7 +1493,12 @@ describe("stripeWebhook — account.updated", () => {
 
     expect(res.status).toHaveBeenCalledWith(200);
     expect(mockHouseUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ stripeStatus: "restricted" }),
+      expect.objectContaining({
+        stripeStatus: "restricted",
+        stripeChargesEnabled: false,
+        stripePayoutsEnabled: false,
+        stripeRequirements: ["Identity document"],
+      }),
     );
   });
 });

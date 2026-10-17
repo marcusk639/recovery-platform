@@ -26,6 +26,7 @@ const mockMessagingSend = jest.fn();
 // Stripe mock
 const mockConstructEvent = jest.fn();
 const mockChargesRetrieve = jest.fn();
+const mockV2AccountsRetrieve = jest.fn();
 
 // ---------------------------------------------------------------------------
 // firebase-admin mock
@@ -92,6 +93,7 @@ jest.mock("stripe", () => {
     charges: {
       retrieve: mockChargesRetrieve,
     },
+    v2: { core: { accounts: { retrieve: mockV2AccountsRetrieve } } },
   }));
 });
 
@@ -355,6 +357,42 @@ function makeAccount(overrides: Partial<Stripe.Account> = {}): Stripe.Account {
     } as unknown as Stripe.Account["requirements"],
     ...overrides,
   } as unknown as Stripe.Account;
+}
+
+/**
+ * A v2 recipient account as the authoritative read returns it. account.updated
+ * is only a trigger now: the handler re-reads this, so the v1 fields on the
+ * event payload no longer decide anything.
+ */
+function makeV2RecipientAccount(
+  transfersStatus: "active" | "pending" | "restricted" | "unsupported",
+  requirementEntries: Array<{ description: string; deadline: string }> = [],
+  id = "acct_test_123",
+): Record<string, unknown> {
+  return {
+    id,
+    object: "v2.core.account",
+    applied_configurations: ["recipient"],
+    configuration: {
+      recipient: {
+        applied: true,
+        capabilities: {
+          stripe_balance: {
+            stripe_transfers: { status: transfersStatus, status_details: [] },
+          },
+        },
+      },
+    },
+    requirements: {
+      entries: requirementEntries.map((e) => ({
+        awaiting_action_from: "user",
+        description: e.description,
+        errors: [],
+        minimum_deadline: { status: e.deadline },
+        requested_reasons: [],
+      })),
+    },
+  };
 }
 
 function makePayout(overrides: Partial<Stripe.Payout> = {}): Stripe.Payout {
@@ -2176,17 +2214,23 @@ describe("account.updated", () => {
     });
   }
 
-  test("charges_enabled + payouts_enabled → status active", async () => {
+  test("active transfers capability → status active", async () => {
+    // charges_enabled is false on the payload, as it is on every healthy
+    // recipient account. The authoritative read is what decides.
     const account = makeAccount({
-      charges_enabled: true,
-      payouts_enabled: true,
+      charges_enabled: false,
+      payouts_enabled: false,
     });
     const event = makeStripeEvent("account.updated", account);
     mockConstructEvent.mockReturnValue(event);
+    mockV2AccountsRetrieve.mockResolvedValue(makeV2RecipientAccount("active"));
     setupForAccountUpdated(true, "pending");
 
     await stripeWebhook(makeRequest({}) as never, makeResponse() as never);
 
+    expect(mockV2AccountsRetrieve).toHaveBeenCalledWith("acct_test_123", {
+      include: ["configuration.recipient", "requirements"],
+    });
     expect(mockUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
         stripeStatus: "active",
@@ -2196,23 +2240,42 @@ describe("account.updated", () => {
     );
   });
 
-  test("requirements.currently_due present → status restricted", async () => {
+  test("re-reads authoritative state rather than trusting the event payload", async () => {
+    // A payload that would have mapped to `active` under the old v1 reading,
+    // against a live account that is actually restricted.
     const account = makeAccount({
-      charges_enabled: false,
-      payouts_enabled: false,
-      requirements: {
-        currently_due: ["individual.verification.document"],
-        eventually_due: [],
-        disabled_reason: null,
-        alternatives: null,
-        current_deadline: null,
-        errors: [],
-        past_due: [],
-        pending_verification: [],
-      } as unknown as Stripe.Account["requirements"],
+      charges_enabled: true,
+      payouts_enabled: true,
     });
     const event = makeStripeEvent("account.updated", account);
     mockConstructEvent.mockReturnValue(event);
+    mockV2AccountsRetrieve.mockResolvedValue(
+      makeV2RecipientAccount("restricted", [
+        { description: "Government-issued ID", deadline: "past_due" },
+      ]),
+    );
+    setupForAccountUpdated(true, "active");
+
+    await stripeWebhook(makeRequest({}) as never, makeResponse() as never);
+
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stripeStatus: "restricted",
+        stripeChargesEnabled: false,
+        stripePayoutsEnabled: false,
+        stripeRequirements: ["Government-issued ID"],
+      }),
+    );
+  });
+
+  test("restricted transfers capability → status restricted", async () => {
+    const event = makeStripeEvent("account.updated", makeAccount());
+    mockConstructEvent.mockReturnValue(event);
+    mockV2AccountsRetrieve.mockResolvedValue(
+      makeV2RecipientAccount("restricted", [
+        { description: "Identity document", deadline: "currently_due" },
+      ]),
+    );
     setupForAccountUpdated(true, "active");
 
     await stripeWebhook(makeRequest({}) as never, makeResponse() as never);
@@ -2222,23 +2285,10 @@ describe("account.updated", () => {
     );
   });
 
-  test("not ready but no requirements → status pending", async () => {
-    const account = makeAccount({
-      charges_enabled: false,
-      payouts_enabled: false,
-      requirements: {
-        currently_due: [],
-        eventually_due: [],
-        disabled_reason: null,
-        alternatives: null,
-        current_deadline: null,
-        errors: [],
-        past_due: [],
-        pending_verification: [],
-      } as unknown as Stripe.Account["requirements"],
-    });
-    const event = makeStripeEvent("account.updated", account);
+  test("pending transfers capability → status pending", async () => {
+    const event = makeStripeEvent("account.updated", makeAccount());
     mockConstructEvent.mockReturnValue(event);
+    mockV2AccountsRetrieve.mockResolvedValue(makeV2RecipientAccount("pending"));
     setupForAccountUpdated(true, "pending");
 
     await stripeWebhook(makeRequest({}) as never, makeResponse() as never);
@@ -2249,21 +2299,13 @@ describe("account.updated", () => {
   });
 
   test("account went active → restricted: admin notified", async () => {
-    const account = makeAccount({
-      charges_enabled: false,
-      requirements: {
-        currently_due: ["individual.verification.document"],
-        eventually_due: [],
-        disabled_reason: "requirements.past_due",
-        alternatives: null,
-        current_deadline: null,
-        errors: [],
-        past_due: [],
-        pending_verification: [],
-      } as unknown as Stripe.Account["requirements"],
-    });
-    const event = makeStripeEvent("account.updated", account);
+    const event = makeStripeEvent("account.updated", makeAccount());
     mockConstructEvent.mockReturnValue(event);
+    mockV2AccountsRetrieve.mockResolvedValue(
+      makeV2RecipientAccount("restricted", [
+        { description: "Identity document", deadline: "past_due" },
+      ]),
+    );
     setupForAccountUpdated(true, "active"); // previously active
 
     await stripeWebhook(makeRequest({}) as never, makeResponse() as never);
@@ -2278,21 +2320,13 @@ describe("account.updated", () => {
   });
 
   test("account stays restricted: no double notification on same state", async () => {
-    const account = makeAccount({
-      charges_enabled: false,
-      requirements: {
-        currently_due: ["some.field"],
-        eventually_due: [],
-        disabled_reason: null,
-        alternatives: null,
-        current_deadline: null,
-        errors: [],
-        past_due: [],
-        pending_verification: [],
-      } as unknown as Stripe.Account["requirements"],
-    });
-    const event = makeStripeEvent("account.updated", account);
+    const event = makeStripeEvent("account.updated", makeAccount());
     mockConstructEvent.mockReturnValue(event);
+    mockV2AccountsRetrieve.mockResolvedValue(
+      makeV2RecipientAccount("restricted", [
+        { description: "Identity document", deadline: "currently_due" },
+      ]),
+    );
     setupForAccountUpdated(true, "restricted"); // was already restricted
 
     await stripeWebhook(makeRequest({}) as never, makeResponse() as never);
@@ -2302,7 +2336,7 @@ describe("account.updated", () => {
     expect(mockMessagingSend).not.toHaveBeenCalled();
   });
 
-  test("account ID not found in any house: no crash", async () => {
+  test("account ID not found in any house: no crash, and Stripe is not called", async () => {
     const account = makeAccount({ id: "acct_unknown" });
     const event = makeStripeEvent("account.updated", account);
     mockConstructEvent.mockReturnValue(event);
@@ -2313,6 +2347,70 @@ describe("account.updated", () => {
 
     expect(res.status).toHaveBeenCalledWith(200);
     expect(mockUpdate).not.toHaveBeenCalled();
+    expect(mockV2AccountsRetrieve).not.toHaveBeenCalled();
+  });
+
+  test("a gone account is marked disconnected rather than left stale", async () => {
+    const event = makeStripeEvent("account.updated", makeAccount());
+    mockConstructEvent.mockReturnValue(event);
+    const missing = Object.assign(
+      new Error("No such account: acct_test_123"),
+      { type: "StripeInvalidRequestError", code: "resource_missing" },
+    );
+    mockV2AccountsRetrieve.mockRejectedValue(missing);
+    setupForAccountUpdated(true, "active");
+
+    const res = makeResponse();
+    await stripeWebhook(makeRequest({}) as never, res as never);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ stripeStatus: "disconnected" }),
+    );
+  });
+
+  test("a closed account is marked disconnected even though it still retrieves", async () => {
+    // Closed v2 accounts are returned with closed: true, not resource_missing,
+    // and keep their last capability status. Trusting that status would leave
+    // the house active against an account Stripe accepts no transfers for.
+    const event = makeStripeEvent("account.updated", makeAccount());
+    mockConstructEvent.mockReturnValue(event);
+    mockV2AccountsRetrieve.mockResolvedValue({
+      ...makeV2RecipientAccount("active"),
+      closed: true,
+    });
+    setupForAccountUpdated(true, "active");
+
+    const res = makeResponse();
+    await stripeWebhook(makeRequest({}) as never, res as never);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stripeStatus: "disconnected",
+        stripeChargesEnabled: false,
+        stripePayoutsEnabled: false,
+      }),
+    );
+  });
+
+  test("a transient retrieve failure is retried, not recorded as disconnected", async () => {
+    const event = makeStripeEvent("account.updated", makeAccount());
+    mockConstructEvent.mockReturnValue(event);
+    mockV2AccountsRetrieve.mockRejectedValue(
+      Object.assign(new Error("Too many requests"), {
+        type: "StripeRateLimitError",
+      }),
+    );
+    setupForAccountUpdated(true, "active");
+
+    const res = makeResponse();
+    await stripeWebhook(makeRequest({}) as never, res as never);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(mockUpdate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ stripeStatus: "disconnected" }),
+    );
   });
 });
 

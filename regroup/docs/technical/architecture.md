@@ -294,9 +294,9 @@ These are invoked from the mobile client via `functions.httpsCallable('functionN
 | `listPayments`            | Get payment history for a guest          | PaymentIntents list         |
 | `listHousePayments`       | Batch fetch all house payments           | PaymentIntents list         |
 | `savePaymentMethod`       | Store card reference in Firestore        | PaymentMethods              |
-| `connectStripeAccount`    | Create Express account + onboarding link | Accounts, AccountLinks      |
-| `disconnectStripeAccount` | Disconnect Express account (idempotent)  | Accounts                    |
-| `getStripeAccountStatus`  | Fetch + sync account status              | Accounts                    |
+| `connectStripeAccount`    | Create v2 recipient account + onboarding link | Accounts v2, AccountLinks |
+| `disconnectStripeAccount` | Close v2 recipient account (idempotent)  | Accounts v2                 |
+| `getStripeAccountStatus`  | Fetch + sync account status              | Accounts v2                 |
 
 #### Subscription Functions (`src/callable/subscriptions.ts`)
 
@@ -640,7 +640,7 @@ Storage rules (`firebase/storage.rules`) validate both content type and file siz
 
 ### 6.2 Payment Flow
 
-1. **House operator connects Stripe** via `connectStripeAccount` → Creates Express account → Onboarding link
+1. **House operator connects Stripe** via `connectStripeAccount` → Creates an Accounts v2 recipient account (Express dashboard) → Onboarding link
 2. **Guest initiates rent payment** → `createPaymentIntent` → Stripe destination charge with 2% app fee
 3. **Stripe processes payment** → Webhook → `payment_intent.succeeded` or `payment_intent.payment_failed`
 4. **Cloud Function records result** → Updates `payments` collection → Decrements `guest.rentOwed` → Sends notifications

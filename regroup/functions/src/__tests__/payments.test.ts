@@ -197,6 +197,10 @@ jest.mock("../api/firestore", () => ({
 const mockStripeAccountsCreate = jest.fn();
 const mockStripeAccountsDel = jest.fn();
 const mockStripeAccountsRetrieve = jest.fn();
+// Accounts v2 (stripe.v2.core.accounts) — houses are v2 recipient accounts.
+const mockStripeV2AccountsCreate = jest.fn();
+const mockStripeV2AccountsRetrieve = jest.fn();
+const mockStripeV2AccountsClose = jest.fn();
 const mockStripeAccountLinksCreate = jest.fn();
 const mockStripeOAuthDeauthorize = jest.fn();
 const mockStripePaymentIntentsCreate = jest.fn();
@@ -218,6 +222,15 @@ jest.mock("stripe", () => {
       create: mockStripeAccountsCreate,
       del: mockStripeAccountsDel,
       retrieve: mockStripeAccountsRetrieve,
+    },
+    v2: {
+      core: {
+        accounts: {
+          create: mockStripeV2AccountsCreate,
+          retrieve: mockStripeV2AccountsRetrieve,
+          close: mockStripeV2AccountsClose,
+        },
+      },
     },
     accountLinks: { create: mockStripeAccountLinksCreate },
     oauth: { deauthorize: mockStripeOAuthDeauthorize },
@@ -328,6 +341,45 @@ function makeStripeError(
   return new ErrorClass({ message, type, ...extra });
 }
 
+// ── Accounts v2 fixtures ──────────────────────────────────────────────────────
+
+/**
+ * A v2 recipient account as `stripe.v2.core.accounts.retrieve(id, { include:
+ * ['configuration.recipient', 'requirements'] })` returns it. The capability
+ * status under configuration.recipient is the only authoritative signal for
+ * whether the house can receive transfers.
+ */
+function v2RecipientAccount(
+  id: string,
+  transfersStatus: "active" | "pending" | "restricted" | "unsupported",
+  requirementEntries: Array<{ description: string; deadline: string }> = [],
+): Record<string, unknown> {
+  return {
+    id,
+    object: "v2.core.account",
+    applied_configurations: ["recipient"],
+    configuration: {
+      recipient: {
+        applied: true,
+        capabilities: {
+          stripe_balance: {
+            stripe_transfers: { status: transfersStatus, status_details: [] },
+          },
+        },
+      },
+    },
+    requirements: {
+      entries: requirementEntries.map((e) => ({
+        awaiting_action_from: "user",
+        description: e.description,
+        errors: [],
+        minimum_deadline: { status: e.deadline },
+        requested_reasons: [],
+      })),
+    },
+  };
+}
+
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
@@ -344,6 +396,11 @@ beforeEach(() => {
   // Default happy-path Stripe responses.
   mockStripeAccountsCreate.mockResolvedValue({ id: "acct_new123" });
   mockStripeAccountsDel.mockResolvedValue({ deleted: true });
+  mockStripeV2AccountsCreate.mockResolvedValue({ id: "acct_new123" });
+  mockStripeV2AccountsClose.mockResolvedValue({ id: "acct_new123" });
+  mockStripeV2AccountsRetrieve.mockResolvedValue(
+    v2RecipientAccount("acct_existing", "active"),
+  );
   mockStripeAccountLinksCreate.mockResolvedValue({
     url: "https://connect.stripe.com/onboard",
   });
@@ -572,15 +629,58 @@ describe("connectStripeAccount", () => {
   describe("house with no existing Stripe account", () => {
     beforeEach(() => seedHouse(HOUSE_ID, { adminId: ADMIN_UID }));
 
-    it("creates a new Stripe Express account", async () => {
+    it("creates an Accounts v2 recipient account, not a v1 Express account", async () => {
       await (connectStripeAccount as unknown as Function)(
         baseData,
         authedContext(ADMIN_UID),
       );
-      expect(mockStripeAccountsCreate).toHaveBeenCalledWith({
-        type: "express",
+      expect(mockStripeAccountsCreate).not.toHaveBeenCalled();
+      expect(mockStripeV2AccountsCreate).toHaveBeenCalledWith({
+        dashboard: "express",
+        defaults: {
+          responsibilities: {
+            fees_collector: "application",
+            losses_collector: "application",
+          },
+        },
+        configuration: {
+          recipient: {
+            capabilities: {
+              stripe_balance: { stripe_transfers: { requested: true } },
+            },
+          },
+        },
         metadata: { houseId: HOUSE_ID },
       });
+    });
+
+    it("does not request a merchant configuration or card_payments", async () => {
+      // Houses only ever receive transfers. Requesting merchant capabilities
+      // for a recipient lengthens onboarding for verification nobody needs.
+      await (connectStripeAccount as unknown as Function)(
+        baseData,
+        authedContext(ADMIN_UID),
+      );
+      const params = mockStripeV2AccountsCreate.mock.calls[0][0] as {
+        configuration?: Record<string, unknown>;
+      };
+      expect(params.configuration).not.toHaveProperty("merchant");
+      expect(JSON.stringify(params)).not.toContain("card_payments");
+    });
+
+    it("keeps losses_collector on the application, which Express requires", async () => {
+      // losses_collector: 'stripe' is a blocked combination with destination
+      // charges, and outright rejected alongside the Express dashboard.
+      await (connectStripeAccount as unknown as Function)(
+        baseData,
+        authedContext(ADMIN_UID),
+      );
+      const params = mockStripeV2AccountsCreate.mock.calls[0][0] as {
+        defaults?: { responsibilities?: { losses_collector?: string } };
+      };
+      expect(params.defaults?.responsibilities?.losses_collector).toBe(
+        "application",
+      );
     });
 
     it("saves stripeAccountId and sets stripeStatus to pending", async () => {
@@ -653,6 +753,45 @@ describe("connectStripeAccount", () => {
     });
   });
 
+  describe("house whose stored Stripe account has been closed", () => {
+    // Closed in the Stripe Dashboard, or by a disconnect whose Firestore clear
+    // never landed. A closed v2 account still retrieves (closed: true) but
+    // accepts no operations, so reusing its id fails onboarding forever.
+    beforeEach(() => {
+      seedHouse(HOUSE_ID, {
+        adminId: ADMIN_UID,
+        stripeAccountId: "acct_closed",
+        stripeStatus: "disconnected",
+      });
+      mockStripeV2AccountsRetrieve.mockResolvedValue({
+        ...v2RecipientAccount("acct_closed", "active"),
+        closed: true,
+      });
+    });
+
+    it("creates a fresh recipient account instead of reusing the closed one", async () => {
+      await (connectStripeAccount as unknown as Function)(
+        baseData,
+        authedContext(ADMIN_UID),
+      );
+
+      expect(mockStripeV2AccountsCreate).toHaveBeenCalledTimes(1);
+      expect(readHouse(HOUSE_ID)?.stripeAccountId).toBe("acct_new123");
+      expect(mockStripeAccountLinksCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ account: "acct_new123" }),
+      );
+    });
+
+    it("does not close the fresh account as if it had lost a race", async () => {
+      await (connectStripeAccount as unknown as Function)(
+        baseData,
+        authedContext(ADMIN_UID),
+      );
+
+      expect(mockStripeV2AccountsClose).not.toHaveBeenCalled();
+    });
+  });
+
   describe("Stripe API errors", () => {
     beforeEach(() => seedHouse(HOUSE_ID, { adminId: ADMIN_UID }));
 
@@ -662,7 +801,7 @@ describe("connectStripeAccount", () => {
         "api exploded",
         "api_error",
       );
-      mockStripeAccountsCreate.mockRejectedValue(err);
+      mockStripeV2AccountsCreate.mockRejectedValue(err);
       await expectHttpsError(
         () =>
           (connectStripeAccount as unknown as Function)(
@@ -679,7 +818,7 @@ describe("connectStripeAccount", () => {
         "too many requests",
         "rate_limit_error",
       );
-      mockStripeAccountsCreate.mockRejectedValue(err);
+      mockStripeV2AccountsCreate.mockRejectedValue(err);
       await expectHttpsError(
         () =>
           (connectStripeAccount as unknown as Function)(
@@ -742,9 +881,52 @@ describe("connectStripeAccount", () => {
       );
       expect(result.url).toBe("https://connect.stripe.com/onboard");
 
-      // Our newly-created account (acct_new123) should have been deleted to
-      // prevent an orphaned Stripe account.
-      expect(mockStripeAccountsDel).toHaveBeenCalledWith("acct_new123");
+      // Our newly-created account (acct_new123) should have been closed to
+      // prevent an orphaned Stripe account. v2 has no delete; close is the
+      // analogue and must list every configuration the account carries.
+      expect(mockStripeAccountsDel).not.toHaveBeenCalled();
+      expect(mockStripeV2AccountsClose).toHaveBeenCalledWith("acct_new123", {
+        applied_configurations: ["recipient"],
+      });
+    });
+
+    it("logs the orphaned account id when cleaning it up fails", async () => {
+      // Best-effort cleanup must still leave a trace: without the id nobody
+      // can find the open account it left on the platform.
+      seedHouse(HOUSE_ID, { adminId: ADMIN_UID });
+      mockRunTransaction.mockImplementationOnce(
+        async (fn: (tx: unknown) => Promise<unknown>) =>
+          fn({
+            get: jest.fn(async () => ({
+              data: () => ({ stripeAccountId: "acct_concurrently_created" }),
+            })),
+            update: jest.fn(),
+          }),
+      );
+      mockStripeV2AccountsClose.mockRejectedValue(
+        makeStripeError(
+          StripeErrors.StripeAPIError,
+          "Something exploded",
+          "api_error",
+        ),
+      );
+      const errorSpy = jest
+        .spyOn(functions.logger, "error")
+        .mockImplementation(() => undefined);
+
+      try {
+        await (connectStripeAccount as unknown as Function)(
+          baseData,
+          authedContext(ADMIN_UID),
+        );
+
+        expect(errorSpy).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.objectContaining({ accountId: "acct_new123" }),
+        );
+      } finally {
+        errorSpy.mockRestore();
+      }
     });
   });
 });
@@ -819,13 +1001,18 @@ describe("disconnectStripeAccount", () => {
       });
     });
 
-    it("calls stripe.oauth.deauthorize with the correct account id", async () => {
+    it("closes the v2 account instead of deauthorizing an OAuth connection", async () => {
+      // oauth.deauthorize is for OAuth-connected Standard accounts and forces
+      // Accounts v1. An API-created v2 recipient is closed, and close requires
+      // every configuration the account carries — here 'recipient' alone.
       await (disconnectStripeAccount as unknown as Function)(
         { houseId: HOUSE_ID },
         authedContext(ADMIN_UID),
       );
-      expect(mockStripeOAuthDeauthorize).toHaveBeenCalledWith(
-        expect.objectContaining({ stripe_user_id: "acct_to_disconnect" }),
+      expect(mockStripeOAuthDeauthorize).not.toHaveBeenCalled();
+      expect(mockStripeV2AccountsClose).toHaveBeenCalledWith(
+        "acct_to_disconnect",
+        { applied_configurations: ["recipient"] },
       );
     });
 
@@ -870,12 +1057,13 @@ describe("disconnectStripeAccount", () => {
       seedHouse(HOUSE_ID, { adminId: ADMIN_UID, stripeStatus: "disconnected" });
     });
 
-    it("does not call stripe.oauth.deauthorize", async () => {
+    it("does not call Stripe at all", async () => {
       await (disconnectStripeAccount as unknown as Function)(
         { houseId: HOUSE_ID },
         authedContext(ADMIN_UID),
       );
       expect(mockStripeOAuthDeauthorize).not.toHaveBeenCalled();
+      expect(mockStripeV2AccountsClose).not.toHaveBeenCalled();
     });
 
     it("still returns { success: true }", async () => {
@@ -887,25 +1075,52 @@ describe("disconnectStripeAccount", () => {
     });
   });
 
-  describe("Stripe deauthorize errors", () => {
+  describe("Stripe close errors", () => {
     beforeEach(() => {
       seedHouse(HOUSE_ID, { adminId: ADMIN_UID, stripeAccountId: "acct_gone" });
     });
 
-    it("succeeds (idempotent) when Stripe reports the account is already disconnected", async () => {
-      const alreadyGone = makeStripeError(
-        StripeErrors.StripeInvalidRequestError,
-        "No such account: acct_gone",
-        "invalid_request_error",
+    it("does not treat message text alone as proof the account is gone", async () => {
+      // The v1 tolerance matched wording like "No such account". v2 never
+      // reports a missing account that way (an inaccessible id is a 403
+      // forbidden), so the match could only misread some other refusal as
+      // "gone" and clear a house whose Stripe account is still open.
+      mockStripeV2AccountsClose.mockRejectedValue(
+        makeStripeError(
+          StripeErrors.StripeInvalidRequestError,
+          "No such account: acct_gone",
+          "invalid_request_error",
+        ),
       );
-      mockStripeOAuthDeauthorize.mockRejectedValue(alreadyGone);
+
+      await expectHttpsError(
+        () =>
+          (disconnectStripeAccount as unknown as Function)(
+            { houseId: HOUSE_ID },
+            authedContext(ADMIN_UID),
+          ),
+        "invalid-argument",
+      );
+      expect(readHouse(HOUSE_ID)?.stripeAccountId).toBe("acct_gone");
+    });
+
+    it("succeeds when the account is gone by resource_missing rather than by message", async () => {
+      // The v1 tolerance matched on message text. v2 is free to word a closed
+      // or missing account differently, so the code has to be enough on its own.
+      mockStripeV2AccountsClose.mockRejectedValue(
+        makeStripeError(
+          StripeErrors.StripeInvalidRequestError,
+          "Account acct_gone could not be found.",
+          "invalid_request_error",
+          { code: "resource_missing" },
+        ),
+      );
 
       const result = await (disconnectStripeAccount as unknown as Function)(
         { houseId: HOUSE_ID },
         authedContext(ADMIN_UID),
       );
       expect(result).toEqual({ success: true });
-      // Firestore should still be cleared.
       expect(readHouse(HOUSE_ID)?.stripeStatus).toBe("disconnected");
     });
 
@@ -915,7 +1130,7 @@ describe("disconnectStripeAccount", () => {
         "Something exploded",
         "api_error",
       );
-      mockStripeOAuthDeauthorize.mockRejectedValue(unexpected);
+      mockStripeV2AccountsClose.mockRejectedValue(unexpected);
 
       await expectHttpsError(
         () =>
@@ -925,6 +1140,77 @@ describe("disconnectStripeAccount", () => {
           ),
         "internal",
       );
+    });
+
+    it("leaves Firestore untouched when the close fails unexpectedly", async () => {
+      // Local state must not claim `disconnected` while Stripe still has a
+      // live account the house is the destination for.
+      mockStripeV2AccountsClose.mockRejectedValue(
+        makeStripeError(
+          StripeErrors.StripeAPIError,
+          "Something exploded",
+          "api_error",
+        ),
+      );
+
+      await expectHttpsError(
+        () =>
+          (disconnectStripeAccount as unknown as Function)(
+            { houseId: HOUSE_ID },
+            authedContext(ADMIN_UID),
+          ),
+        "internal",
+      );
+      expect(readHouse(HOUSE_ID)?.stripeAccountId).toBe("acct_gone");
+    });
+
+    it("succeeds when the close fails because the account is already closed", async () => {
+      // A closed v2 account still exists, so closing it again is not
+      // resource_missing: Stripe refuses any operation on it. Without this, a
+      // disconnect whose Firestore clear failed could never be retried.
+      mockStripeV2AccountsClose.mockRejectedValue(
+        makeStripeError(
+          StripeErrors.StripeInvalidRequestError,
+          "This account is closed.",
+          "invalid_request_error",
+        ),
+      );
+      mockStripeV2AccountsRetrieve.mockResolvedValue({
+        ...v2RecipientAccount("acct_gone", "active"),
+        closed: true,
+      });
+
+      const result = await (disconnectStripeAccount as unknown as Function)(
+        { houseId: HOUSE_ID },
+        authedContext(ADMIN_UID),
+      );
+
+      expect(result).toEqual({ success: true });
+      expect(readHouse(HOUSE_ID)?.stripeStatus).toBe("disconnected");
+      expect(readHouse(HOUSE_ID)?.stripeAccountId).toBeUndefined();
+    });
+
+    it("still fails when the close is refused and the account is not closed", async () => {
+      mockStripeV2AccountsClose.mockRejectedValue(
+        makeStripeError(
+          StripeErrors.StripeInvalidRequestError,
+          "Account has a non-zero balance.",
+          "invalid_request_error",
+        ),
+      );
+      mockStripeV2AccountsRetrieve.mockResolvedValue(
+        v2RecipientAccount("acct_gone", "active"),
+      );
+
+      await expectHttpsError(
+        () =>
+          (disconnectStripeAccount as unknown as Function)(
+            { houseId: HOUSE_ID },
+            authedContext(ADMIN_UID),
+          ),
+        "invalid-argument",
+      );
+      expect(readHouse(HOUSE_ID)?.stripeAccountId).toBe("acct_gone");
     });
   });
 });
@@ -1001,6 +1287,7 @@ describe("getStripeAccountStatus", () => {
       expect(result.chargesEnabled).toBe(false);
       expect(result.payoutsEnabled).toBe(false);
       expect(mockStripeAccountsRetrieve).not.toHaveBeenCalled();
+      expect(mockStripeV2AccountsRetrieve).not.toHaveBeenCalled();
     });
   });
 
@@ -1010,16 +1297,33 @@ describe("getStripeAccountStatus", () => {
         adminId: ADMIN_UID,
         stripeAccountId: "acct_active",
       });
-      mockStripeAccountsRetrieve.mockResolvedValue({
-        id: "acct_active",
-        charges_enabled: true,
-        payouts_enabled: true,
-        requirements: { currently_due: [], past_due: [], eventually_due: [] },
-        capabilities: { card_payments: "active", transfers: "active" },
+      // Deliberately charges_enabled: false. A recipient account never takes
+      // charges, so the v1 pair is false on a perfectly good house; gating on
+      // it is what could block rent collection.
+      mockStripeV2AccountsRetrieve.mockResolvedValue({
+        ...v2RecipientAccount("acct_active", "active"),
+        charges_enabled: false,
+        payouts_enabled: false,
+      });
+      // Make the v1 resource unusable, so a lingering v1 read cannot quietly
+      // produce the right answer from the wrong source.
+      mockStripeAccountsRetrieve.mockRejectedValue(
+        new Error("v1 accounts.retrieve must not be used for a v2 account"),
+      );
+    });
+
+    it("reads the account through v2.core.accounts with the recipient configuration included", async () => {
+      await (getStripeAccountStatus as unknown as Function)(
+        { houseId: HOUSE_ID },
+        authedContext(ADMIN_UID),
+      );
+      expect(mockStripeAccountsRetrieve).not.toHaveBeenCalled();
+      expect(mockStripeV2AccountsRetrieve).toHaveBeenCalledWith("acct_active", {
+        include: ["configuration.recipient", "requirements"],
       });
     });
 
-    it("maps charges_enabled=true and payouts_enabled=true to active", async () => {
+    it("maps an active stripe_transfers capability to active despite charges_enabled=false", async () => {
       const result = await (getStripeAccountStatus as unknown as Function)(
         { houseId: HOUSE_ID },
         authedContext(ADMIN_UID),
@@ -1027,7 +1331,9 @@ describe("getStripeAccountStatus", () => {
       expect(result.status).toBe("active");
     });
 
-    it("returns chargesEnabled and payoutsEnabled as true", async () => {
+    it("reports chargesEnabled/payoutsEnabled from the transfers capability", async () => {
+      // Kept for the mobile client, whose two capability rows read these. For a
+      // recipient account both mean the same thing: transfers can land.
       const result = await (getStripeAccountStatus as unknown as Function)(
         { houseId: HOUSE_ID },
         authedContext(ADMIN_UID),
@@ -1049,10 +1355,7 @@ describe("getStripeAccountStatus", () => {
         { houseId: HOUSE_ID },
         authedContext(ADMIN_UID),
       );
-      expect(result.capabilities).toEqual({
-        card_payments: "active",
-        transfers: "active",
-      });
+      expect(result.capabilities).toEqual({ stripe_transfers: "active" });
     });
   });
 
@@ -1062,20 +1365,15 @@ describe("getStripeAccountStatus", () => {
         adminId: ADMIN_UID,
         stripeAccountId: "acct_restricted",
       });
-      mockStripeAccountsRetrieve.mockResolvedValue({
-        id: "acct_restricted",
-        charges_enabled: false,
-        payouts_enabled: false,
-        requirements: {
-          currently_due: ["individual.ssn_last_4", "external_account"],
-          past_due: [],
-          eventually_due: [],
-        },
-        capabilities: {},
-      });
+      mockStripeV2AccountsRetrieve.mockResolvedValue(
+        v2RecipientAccount("acct_restricted", "restricted", [
+          { description: "individual.ssn_last_4", deadline: "currently_due" },
+          { description: "external_account", deadline: "currently_due" },
+        ]),
+      );
     });
 
-    it("maps charges_enabled=false with currently_due items to restricted", async () => {
+    it("maps a restricted stripe_transfers capability to restricted", async () => {
       const result = await (getStripeAccountStatus as unknown as Function)(
         { houseId: HOUSE_ID },
         authedContext(ADMIN_UID),
@@ -1114,16 +1412,12 @@ describe("getStripeAccountStatus", () => {
         adminId: ADMIN_UID,
         stripeAccountId: "acct_pending",
       });
-      mockStripeAccountsRetrieve.mockResolvedValue({
-        id: "acct_pending",
-        charges_enabled: false,
-        payouts_enabled: false,
-        requirements: { currently_due: [], past_due: [], eventually_due: [] },
-        capabilities: {},
-      });
+      mockStripeV2AccountsRetrieve.mockResolvedValue(
+        v2RecipientAccount("acct_pending", "pending"),
+      );
     });
 
-    it("maps charges_enabled=false with no currently_due to pending", async () => {
+    it("maps a pending stripe_transfers capability to pending", async () => {
       const result = await (getStripeAccountStatus as unknown as Function)(
         { houseId: HOUSE_ID },
         authedContext(ADMIN_UID),
@@ -1138,12 +1432,14 @@ describe("getStripeAccountStatus", () => {
         adminId: ADMIN_UID,
         stripeAccountId: "acct_deleted",
       });
-      const noSuchAccount = makeStripeError(
-        StripeErrors.StripeInvalidRequestError,
-        "No such account: acct_deleted",
-        "invalid_request_error",
+      mockStripeV2AccountsRetrieve.mockRejectedValue(
+        makeStripeError(
+          StripeErrors.StripeInvalidRequestError,
+          "Account acct_deleted could not be found.",
+          "invalid_request_error",
+          { code: "resource_missing" },
+        ),
       );
-      mockStripeAccountsRetrieve.mockRejectedValue(noSuchAccount);
     });
 
     it("returns status disconnected", async () => {
@@ -1161,6 +1457,91 @@ describe("getStripeAccountStatus", () => {
       );
       expect(readHouse(HOUSE_ID)?.stripeStatus).toBe("disconnected");
     });
+
+    it("does not disconnect the house when Stripe refuses access rather than reporting it missing", async () => {
+      // What v2 actually returns for an id the key cannot see (wrong key, wrong
+      // mode, wrong platform): 403 forbidden. That says nothing about whether
+      // the house's account exists, so it must surface, not stop rent.
+      seedHouse(HOUSE_ID, {
+        adminId: ADMIN_UID,
+        stripeAccountId: "acct_deleted",
+        stripeStatus: "active",
+      });
+      mockStripeV2AccountsRetrieve.mockRejectedValue(
+        makeStripeError(
+          StripeErrors.StripePermissionError,
+          "Permission denied. API Key does not have permission to access account.",
+          "invalid_request_error",
+          { code: "forbidden" },
+        ),
+      );
+
+      await expect(
+        (getStripeAccountStatus as unknown as Function)(
+          { houseId: HOUSE_ID },
+          authedContext(ADMIN_UID),
+        ),
+      ).rejects.toBeInstanceOf(HttpsError);
+      expect(readHouse(HOUSE_ID)?.stripeStatus).toBe("active");
+    });
+
+    it("does not treat message text alone as proof the account is gone", async () => {
+      seedHouse(HOUSE_ID, {
+        adminId: ADMIN_UID,
+        stripeAccountId: "acct_deleted",
+        stripeStatus: "active",
+      });
+      mockStripeV2AccountsRetrieve.mockRejectedValue(
+        makeStripeError(
+          StripeErrors.StripeInvalidRequestError,
+          "No such account: acct_deleted",
+          "invalid_request_error",
+        ),
+      );
+
+      await expect(
+        (getStripeAccountStatus as unknown as Function)(
+          { houseId: HOUSE_ID },
+          authedContext(ADMIN_UID),
+        ),
+      ).rejects.toBeInstanceOf(HttpsError);
+      expect(readHouse(HOUSE_ID)?.stripeStatus).toBe("active");
+    });
+  });
+
+  describe("Stripe account has been closed", () => {
+    beforeEach(() => {
+      seedHouse(HOUSE_ID, {
+        adminId: ADMIN_UID,
+        stripeAccountId: "acct_closed",
+        stripeStatus: "active",
+      });
+      // Its last capability status still reads active; closed must win.
+      mockStripeV2AccountsRetrieve.mockResolvedValue({
+        ...v2RecipientAccount("acct_closed", "active"),
+        closed: true,
+      });
+    });
+
+    it("returns disconnected rather than the stale capability status", async () => {
+      const result = await (getStripeAccountStatus as unknown as Function)(
+        { houseId: HOUSE_ID },
+        authedContext(ADMIN_UID),
+      );
+
+      expect(result.status).toBe("disconnected");
+      expect(result.chargesEnabled).toBe(false);
+      expect(result.payoutsEnabled).toBe(false);
+    });
+
+    it("syncs disconnected to Firestore so rent collection stops", async () => {
+      await (getStripeAccountStatus as unknown as Function)(
+        { houseId: HOUSE_ID },
+        authedContext(ADMIN_UID),
+      );
+
+      expect(readHouse(HOUSE_ID)?.stripeStatus).toBe("disconnected");
+    });
   });
 
   describe("unexpected Stripe error", () => {
@@ -1171,7 +1552,7 @@ describe("getStripeAccountStatus", () => {
         "internal stripe boom",
         "api_error",
       );
-      mockStripeAccountsRetrieve.mockRejectedValue(boom);
+      mockStripeV2AccountsRetrieve.mockRejectedValue(boom);
 
       await expectHttpsError(
         () =>
@@ -1194,13 +1575,9 @@ describe("getStripeAccountStatus", () => {
         stripeAccountId: "acct_active_guest",
       });
 
-      mockStripeAccountsRetrieve.mockResolvedValue({
-        id: "acct_active_guest",
-        charges_enabled: true,
-        payouts_enabled: true,
-        requirements: { currently_due: [], past_due: [], eventually_due: [] },
-        capabilities: {},
-      });
+      mockStripeV2AccountsRetrieve.mockResolvedValue(
+        v2RecipientAccount("acct_active_guest", "active"),
+      );
 
       // Re-wire Firestore so the guest sub-collection membership query returns a hit.
       wireFirestore(false);

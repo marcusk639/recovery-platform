@@ -72,21 +72,3 @@ export function isResourceMissing(err: unknown): boolean {
   );
 }
 
-/**
- * Returns true for Stripe errors indicating the account is already gone or
- * was never Express-connected, so disconnect can be treated as idempotent.
- */
-export function isAlreadyDeauthorized(err: unknown): boolean {
-  if (err instanceof Stripe.errors.StripeError) {
-    const msg = err.message.toLowerCase();
-    return (
-      err.type === "StripeInvalidRequestError" &&
-      (msg.includes("no such account") ||
-        msg.includes("not connected") ||
-        msg.includes("already disconnected") ||
-        msg.includes("cannot deauthorize") ||
-        msg.includes("account not found"))
-    );
-  }
-  return false;
-}

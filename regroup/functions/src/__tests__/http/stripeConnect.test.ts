@@ -15,13 +15,47 @@
 // ---------------------------------------------------------------------------
 const mockAccountLinksCreate = jest.fn();
 const mockAccountsRetrieve = jest.fn();
+const mockV2AccountsRetrieve = jest.fn();
 
 jest.mock("stripe", () => {
   return jest.fn().mockImplementation(() => ({
     accountLinks: { create: mockAccountLinksCreate },
     accounts: { retrieve: mockAccountsRetrieve },
+    v2: { core: { accounts: { retrieve: mockV2AccountsRetrieve } } },
   }));
 });
+
+/** A v2 recipient account with the transfers capability at `status`. */
+function v2RecipientAccount(
+  id: string,
+  transfersStatus: "active" | "pending" | "restricted" | "unsupported",
+  requirementEntries: Array<{ description: string; deadline: string }> = [],
+): Record<string, unknown> {
+  return {
+    id,
+    object: "v2.core.account",
+    applied_configurations: ["recipient"],
+    configuration: {
+      recipient: {
+        applied: true,
+        capabilities: {
+          stripe_balance: {
+            stripe_transfers: { status: transfersStatus, status_details: [] },
+          },
+        },
+      },
+    },
+    requirements: {
+      entries: requirementEntries.map((e) => ({
+        awaiting_action_from: "user",
+        description: e.description,
+        errors: [],
+        minimum_deadline: { status: e.deadline },
+        requested_reasons: [],
+      })),
+    },
+  };
+}
 
 // ---------------------------------------------------------------------------
 // firebase-admin mock
@@ -325,182 +359,102 @@ describe("stripeConnectReauth", () => {
 // ===========================================================================
 
 describe("stripeConnectReturn", () => {
-  it("returns 200 with success HTML when stripeAccountId is missing", async () => {
-    const req = makeReq({});
-    const res = makeRes();
-
-    await (stripeConnectReturn as any)(req, res);
-
-    expect(res.status).toHaveBeenCalledWith(200);
-    const sentBody: string = res.send.mock.calls[0][0];
-    expect(sentBody).toContain("Stripe setup complete");
-  });
-
-  it("syncs account status to Firestore and returns 200 when account is fully active", async () => {
-    const stripeAccountId = "acct_return_1";
-
-    mockAccountsRetrieve.mockResolvedValue({
-      id: stripeAccountId,
-      charges_enabled: true,
-      payouts_enabled: true,
-      requirements: { currently_due: [], disabled_reason: null },
-    });
-
-    mockQuerySnap = {
-      empty: false,
-      docs: [
-        {
-          id: "house_return_1",
-          ref: mockFirestoreDocRef,
-          data: () => ({ stripeAccountId }),
-        },
-      ],
-    };
-
-    // Re-wire collection with the updated snap
-    mockCollectionFn.mockImplementation((_col: string) => ({
-      where: jest.fn().mockReturnValue({
-        limit: jest.fn().mockReturnValue({
-          get: jest.fn().mockResolvedValue(mockQuerySnap),
-        }),
-      }),
-      doc: jest.fn().mockReturnValue(mockFirestoreDocRef),
-    }));
-
-    const req = makeReq({ stripeAccountId });
-    const res = makeRes();
-
-    await (stripeConnectReturn as any)(req, res);
-
-    expect(mockAccountsRetrieve).toHaveBeenCalledWith(stripeAccountId);
-    expect(mockFirestoreUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        stripeStatus: "active",
-        stripeChargesEnabled: true,
-        stripePayoutsEnabled: true,
-      }),
-    );
-    expect(res.status).toHaveBeenCalledWith(200);
-  });
-
-  it("sets stripeStatus to restricted when requirements are currently due", async () => {
-    const stripeAccountId = "acct_restricted_return";
-
-    mockAccountsRetrieve.mockResolvedValue({
-      id: stripeAccountId,
-      charges_enabled: false,
-      payouts_enabled: false,
-      requirements: {
-        currently_due: ["individual.id_number"],
-        disabled_reason: "requirements.past_due",
-      },
-    });
-
-    mockQuerySnap = {
-      empty: false,
-      docs: [
-        { id: "house_restricted", ref: mockFirestoreDocRef, data: () => ({}) },
-      ],
-    };
-
-    mockCollectionFn.mockImplementation((_col: string) => ({
-      where: jest.fn().mockReturnValue({
-        limit: jest.fn().mockReturnValue({
-          get: jest.fn().mockResolvedValue(mockQuerySnap),
-        }),
-      }),
-      doc: jest.fn().mockReturnValue(mockFirestoreDocRef),
-    }));
-
-    const req = makeReq({ stripeAccountId });
-    const res = makeRes();
-
-    await (stripeConnectReturn as any)(req, res);
-
-    expect(mockFirestoreUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ stripeStatus: "restricted" }),
-    );
-    expect(res.status).toHaveBeenCalledWith(200);
-  });
-
-  it("sets stripeStatus to pending when account has no requirements yet", async () => {
-    const stripeAccountId = "acct_pending_return";
-
-    mockAccountsRetrieve.mockResolvedValue({
-      id: stripeAccountId,
-      charges_enabled: false,
-      payouts_enabled: false,
-      requirements: { currently_due: [], disabled_reason: null },
-    });
-
-    mockQuerySnap = {
-      empty: false,
-      docs: [
-        { id: "house_pending", ref: mockFirestoreDocRef, data: () => ({}) },
-      ],
-    };
-
-    mockCollectionFn.mockImplementation((_col: string) => ({
-      where: jest.fn().mockReturnValue({
-        limit: jest.fn().mockReturnValue({
-          get: jest.fn().mockResolvedValue(mockQuerySnap),
-        }),
-      }),
-      doc: jest.fn().mockReturnValue(mockFirestoreDocRef),
-    }));
-
-    const req = makeReq({ stripeAccountId });
-    const res = makeRes();
-
-    await (stripeConnectReturn as any)(req, res);
-
-    expect(mockFirestoreUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ stripeStatus: "pending" }),
-    );
-    expect(res.status).toHaveBeenCalledWith(200);
-  });
-
-  it("still returns 200 success HTML even when Stripe API throws during sync", async () => {
-    const stripeAccountId = "acct_err_return";
-
-    mockAccountsRetrieve.mockRejectedValue(new Error("Stripe API timeout"));
-
-    const req = makeReq({ stripeAccountId });
-    const res = makeRes();
-
-    await (stripeConnectReturn as any)(req, res);
-
-    // Non-fatal — should still return success page
-    expect(res.status).toHaveBeenCalledWith(200);
-    const sentBody: string = res.send.mock.calls[0][0];
-    expect(sentBody).toContain("Stripe setup complete");
-  });
-
-  it("returns 200 and skips Firestore update when no house is found for account", async () => {
-    const stripeAccountId = "acct_no_house";
-
-    mockAccountsRetrieve.mockResolvedValue({
-      id: stripeAccountId,
-      charges_enabled: true,
-      payouts_enabled: true,
-      requirements: { currently_due: [], disabled_reason: null },
-    });
-
-    // mockQuerySnap remains empty (default from beforeEach)
-
-    const req = makeReq({ stripeAccountId });
-    const res = makeRes();
-
-    await (stripeConnectReturn as any)(req, res);
-
+  /** The page is read-only: it must never call Stripe or write Firestore. */
+  const expectNoSideEffects = () => {
+    expect(mockV2AccountsRetrieve).not.toHaveBeenCalled();
+    expect(mockAccountsRetrieve).not.toHaveBeenCalled();
     expect(mockFirestoreUpdate).not.toHaveBeenCalled();
+  };
+
+  const renderFor = async (
+    stripeStatus: string | undefined,
+    opts: { house?: boolean; accountId?: string } = {},
+  ): Promise<string> => {
+    const { house = true, accountId = "acct_return" } = opts;
+    seedHouseQuery(
+      house
+        ? {
+            empty: false,
+            docs: [
+              {
+                id: "house_return",
+                ref: mockFirestoreDocRef,
+                data: () => ({ stripeAccountId: accountId, stripeStatus }),
+                get: (field: string) =>
+                  field === "stripeStatus" ? stripeStatus : undefined,
+              } as never,
+            ],
+          }
+        : { empty: true, docs: [] },
+    );
+    const res = makeRes();
+    await (stripeConnectReturn as any)(makeReq({ stripeAccountId: accountId }), res);
     expect(res.status).toHaveBeenCalledWith(200);
+    return res.send.mock.calls[0][0] as string;
+  };
+
+  it("never writes to Firestore or calls Stripe", async () => {
+    // The endpoint is unauthenticated and stripeAccountId is readable by any
+    // resident of the house, so a write here is an unauthenticated write
+    // primitive plus unbounded Stripe calls against a chosen house.
+    await renderFor("active");
+    expectNoSideEffects();
+  });
+
+  it("reports payouts enabled only when the status is active", async () => {
+    const body = await renderFor("active");
+    expect(body).toContain("can now receive rent");
+    expectNoSideEffects();
+  });
+
+  it("does not claim completion when the account is restricted", async () => {
+    // Stripe redirects here whenever the flow ends, including abandonment. A
+    // restricted account then fails the rent-collection gate, so telling the
+    // operator they are finished is the worst possible message.
+    const body = await renderFor("restricted");
+    expect(body).toContain("needs more information");
+    expect(body).not.toContain("complete");
+    expect(body).not.toContain("can now receive rent");
+  });
+
+  it("does not claim completion when the account is pending", async () => {
+    const body = await renderFor("pending");
+    expect(body).toContain("verifying");
+    expect(body).not.toContain("complete");
+    expect(body).not.toContain("can now receive rent");
+  });
+
+  it("falls back to a neutral message when the status is unknown", async () => {
+    // Three indistinguishable cases: no status yet because the webhook has not
+    // landed, no house matching the id, and no id on the request at all.
+    for (const body of [
+      await renderFor(undefined),
+      await renderFor(undefined, { house: false }),
+    ]) {
+      expect(body).toContain("Finishing setup");
+      expect(body).not.toContain("can now receive rent");
+    }
+
+    const res = makeRes();
+    await (stripeConnectReturn as any)(makeReq({}), res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.send.mock.calls[0][0]).toContain("Finishing setup");
+    expectNoSideEffects();
+  });
+
+  it("still returns 200 when the house lookup throws", async () => {
+    mockCollectionFn.mockImplementation(() => {
+      throw new Error("firestore unavailable");
+    });
+    const res = makeRes();
+    await (stripeConnectReturn as any)(
+      makeReq({ stripeAccountId: "acct_boom" }),
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.send.mock.calls[0][0]).toContain("Finishing setup");
   });
 });
-
-// ===========================================================================
-// universal HTTP handler
-// ===========================================================================
 
 describe("universal", () => {
   it("returns 200 with status:ok on /health", async () => {
