@@ -1088,8 +1088,9 @@ async function handleAccountUpdated(accountId: string): Promise<void> {
 
   if (accountStatus !== null && !accountStatus.closed) {
     newStatus = accountStatus.status;
-    // Both columns answer the same question for a recipient: can transfers
-    // land? Kept because the mobile client renders a row from each.
+    // Both columns are derived from the transfers capability — the signal that
+    // gates rent — because the mobile client renders a row from each. Payouts
+    // are a separate Stripe capability not read here; see getStripeAccountStatus.
     chargesEnabled = accountStatus.transfersEnabled;
     payoutsEnabled = accountStatus.transfersEnabled;
     requirements = Array.from(
@@ -1542,7 +1543,10 @@ export const stripeWebhook = onRequest(
 //
 // Handled event types:
 //   account.updated              — syncs Connect account status to Firestore
-//   account.application.deauthorized — marks house Stripe account as disconnected
+//   account.application.deauthorized — marks house Stripe account as disconnected.
+//     Legacy safety net: this event belongs to OAuth-connected accounts, and
+//     API-created v2 recipients are closed rather than deauthorized, so it is
+//     not expected to fire for houses created by connectStripeAccount.
 // ---------------------------------------------------------------------------
 
 async function handleAccountDeauthorized(accountId: string): Promise<void> {

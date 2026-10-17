@@ -17,7 +17,7 @@ account with a platform fee retained. Everything below follows from that.
 | Resident pays rent | `createPaymentIntent` (callable) | Destination charge, `transfer_data.destination` + `application_fee_amount` |
 | Scheduled auto-pay | `scheduledRentCollection` (cron) | Same, but `confirm: true` + `off_session: true` |
 | Connect onboarding | `connectStripeAccount` → `stripeConnectReauth` / `stripeConnectReturn` | AccountLinks, Stripe-hosted |
-| Account status sync | `handleStripeConnectWebhook` | `account.updated`, `account.application.deauthorized` |
+| Account status sync | `handleStripeConnectWebhook` | `account.updated` (`account.application.deauthorized` is handled as a legacy safety net; not expected for v2 recipients) |
 | Payment outcomes | `stripeWebhook` | `payment_intent.succeeded`, `payment_intent.payment_failed`, refunds, disputes |
 | Operator subscriptions | `createOperatorSubscription`, `cancelUserSubscription` | Ordinary platform subscriptions — **not** a Connect flow |
 | Payment reads | `listPayments`, `listHousePayments`, `getStripeAccountStatus` | Stripe API reads, not Firestore |

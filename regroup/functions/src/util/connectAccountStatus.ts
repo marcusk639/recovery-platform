@@ -56,9 +56,9 @@ export interface ConnectAccountStatus {
 }
 
 /**
- * Fields a recipient-status retrieve must ask for. Without
- * `configuration.recipient` the `configuration` key is simply absent from the
- * response and the capability is unreadable.
+ * Fields a recipient-status retrieve must ask for. Fields not named in
+ * `include` come back null, so without `configuration.recipient` the
+ * capability is unreadable.
  */
 export const RECIPIENT_ACCOUNT_INCLUDE: Array<
   "configuration.recipient" | "requirements"

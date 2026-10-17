@@ -27,9 +27,9 @@ const HOUSE_CONFIGURATIONS: Array<"customer" | "merchant" | "recipient"> = [
  * card_payments would demand verification a house never needs and lengthen
  * onboarding for nothing.
  *
- * `losses_collector: 'application'` is a constraint rather than a preference —
- * 'stripe' is a blocked combination with destination charges, and is rejected
- * outright alongside the Express dashboard.
+ * `losses_collector: 'application'`: rent is collected with destination
+ * charges, which need the platform to carry loss liability. Stripe-managed
+ * losses ('stripe') require direct charges instead.
  */
 export async function createRecipientAccount(
   stripe: Stripe,

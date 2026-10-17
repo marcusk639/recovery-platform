@@ -403,7 +403,7 @@ describe("stripeConnectReturn", () => {
 
   it("reports payouts enabled only when the status is active", async () => {
     const body = await renderFor("active");
-    expect(body).toContain("Payouts are enabled");
+    expect(body).toContain("can now receive rent");
     expectNoSideEffects();
   });
 
@@ -414,14 +414,14 @@ describe("stripeConnectReturn", () => {
     const body = await renderFor("restricted");
     expect(body).toContain("needs more information");
     expect(body).not.toContain("complete");
-    expect(body).not.toContain("Payouts are enabled");
+    expect(body).not.toContain("can now receive rent");
   });
 
   it("does not claim completion when the account is pending", async () => {
     const body = await renderFor("pending");
     expect(body).toContain("verifying");
     expect(body).not.toContain("complete");
-    expect(body).not.toContain("Payouts are enabled");
+    expect(body).not.toContain("can now receive rent");
   });
 
   it("falls back to a neutral message when the status is unknown", async () => {
@@ -432,7 +432,7 @@ describe("stripeConnectReturn", () => {
       await renderFor(undefined, { house: false }),
     ]) {
       expect(body).toContain("Finishing setup");
-      expect(body).not.toContain("Payouts are enabled");
+      expect(body).not.toContain("can now receive rent");
     }
 
     const res = makeRes();

@@ -603,9 +603,9 @@ export const connectStripeAccount = onCall(
 
     if (!stripeAccountId) {
       // Create the account first (outside the transaction) so we have an ID
-      // to write.  Stripe account creation is idempotent via metadata — if a
-      // second call races here it will create a second account, but the
-      // transaction below ensures only one ID is ever persisted.
+      // to write. Creation is NOT idempotent: a second call racing here creates
+      // a second account. The transaction below ensures only one ID is ever
+      // persisted, and the loser's account is closed.
       let newAccount: Stripe.V2.Core.Account;
       try {
         newAccount = await createRecipientAccount(stripe, houseId);
@@ -689,9 +689,9 @@ export const connectStripeAccount = onCall(
 // Design decisions:
 //   - Idempotent: if the house has no stripeAccountId (already disconnected),
 //     the function succeeds immediately without calling Stripe.
-//   - If Stripe reports the account is not found or already deauthorized we
-//     still clear the Firestore fields and return success, because our local
-//     state should match the desired "disconnected" outcome regardless.
+//   - If Stripe reports the account missing (resource_missing) or already
+//     closed we still clear the Firestore fields and return success, because
+//     local state should match the desired "disconnected" outcome regardless.
 //   - Caller must be an admin of the house (verified from Firestore).
 // ─────────────────────────────────────────────────────────────────────────────
 export const disconnectStripeAccount = onCall(
@@ -733,9 +733,7 @@ export const disconnectStripeAccount = onCall(
     const { stripeAccountId } = house;
 
     if (stripeAccountId) {
-      // ── 5. Attempt Stripe deauthorization ────────────────────────────────────
-      //   Errors that indicate the account is already gone are swallowed so that
-      //   we can always bring local state in sync.
+      // ── 5. Close the Stripe account ──────────────────────────────────────────
       // Close, not oauth.deauthorize. Deauthorization is for OAuth-connected
       // Standard accounts and is one of the cases Stripe documents as forcing
       // Accounts v1; these accounts are API-created v2 recipients, so the
@@ -886,7 +884,10 @@ export const getStripeAccountStatus = onCall(
 
     // chargesEnabled / payoutsEnabled are kept for the mobile client, which
     // renders one row from each. A recipient account has no charges of its own,
-    // so for a house both questions reduce to the same one: can transfers land?
+    // so both are derived from the one signal that gates rent: can transfers
+    // land? Stripe tracks payouts as a separate stripe_balance.payouts
+    // capability, which is not read here, so payoutsEnabled is an
+    // approximation and must not gate anything.
     const chargesEnabled = accountStatus.transfersEnabled;
     const payoutsEnabled = accountStatus.transfersEnabled;
 

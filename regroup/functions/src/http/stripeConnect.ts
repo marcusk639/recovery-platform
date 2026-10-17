@@ -1,19 +1,19 @@
 /**
- * Stripe Connect HTTP handlers (v2).
+ * Stripe Connect HTTP handlers (Cloud Functions v2 `onRequest`).
  *
  * - stripeConnectReauth: Stripe redirects here when a Connect onboarding link
  *   expires before the user completes verification. This endpoint should
  *   generate a fresh AccountLink and redirect the user back to Stripe.
  *
  * - stripeConnectReturn: Stripe redirects here after the user completes (or
- *   abandons) the Express onboarding flow. This endpoint displays a
+ *   abandons) the Stripe-hosted onboarding flow. This endpoint displays a
  *   confirmation page or redirects back into the mobile deep-link.
  *
  * NOTE: onboardStripeConnectUser was the legacy web-based standard-account
  * onboarding endpoint. It has been removed — see FUNCTION_AUDIT.md. The
  * replacement callable function `connectStripeAccount` (in
- * src/callable/payments.ts) handles Express-account onboarding for
- * the React Native app.
+ * src/callable/payments.ts) handles onboarding of Accounts v2 recipient
+ * accounts for the React Native app.
  */
 
 import { onRequest } from "firebase-functions/v2/https";
@@ -23,7 +23,6 @@ import * as admin from "firebase-admin";
 import Stripe from "stripe";
 import { createStripeClient } from "../util/stripe";
 import { connectRefreshUrl, connectReturnUrl } from "../util/connectUrls";
-import { fetchConnectAccountStatus } from "../util/connectAccountStatus";
 
 // Lazily instantiated to avoid constructing the Stripe client at module load
 // (Firebase source analysis loads modules without secrets bound, so eager
@@ -109,9 +108,9 @@ export const stripeConnectReauth = onRequest(
 // ---------------------------------------------------------------------------
 // stripeConnectReturn
 // ---------------------------------------------------------------------------
-// Stripe redirects here after the user completes or abandons the Express
-// onboarding flow.  On completion we sync the account status back to
-// Firestore and render a simple acknowledgement page.
+// Stripe redirects here after the user completes or abandons onboarding. The
+// handler is read-only: it reports the status the house already has and leaves
+// syncing to the account.updated webhook (see the note inside the handler).
 // ---------------------------------------------------------------------------
 
 /**
@@ -124,18 +123,18 @@ export const stripeConnectReauth = onRequest(
  * `stripeStatus === "active"` gate on rent collection, leaving an operator who
  * was told they were finished wondering why nothing works.
  *
- * `undefined` covers three cases that are indistinguishable here and need the
- * same message: no account id on the request, no house matching it, and the
- * account.updated webhook not having landed yet.
+ * Every other value gets the same neutral message: no account id on the
+ * request, no house matching it, a failed read of the house, the
+ * account.updated webhook not having landed yet, and `disconnected`.
  */
 function renderReturnPage(status: string | undefined): string {
   const body =
     status === "active"
-      ? "<h2>Stripe setup complete.</h2><p>Payouts are enabled for your house.</p>"
+      ? "<h2>Stripe setup complete.</h2><p>Your house can now receive rent.</p>"
       : status === "restricted"
         ? "<h2>Stripe needs more information.</h2>" +
           "<p>Your account was created, but Stripe requires further details " +
-          "before payouts can be enabled. Reopen setup from the app to finish.</p>"
+          "before your house can receive rent. Reopen setup from the app to finish.</p>"
         : status === "pending"
           ? "<h2>Stripe is verifying your details.</h2>" +
             "<p>This usually takes a few minutes. You can close this window.</p>"
