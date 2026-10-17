@@ -30,6 +30,21 @@ function normalized(file: string): string {
   return ts.createPrinter({ removeComments: true }).printFile(source);
 }
 
+/**
+ * Comments that change how a file is compiled or linted, rather than what it
+ * says. `removeComments: true` strips these along with the prose, so the
+ * printed comparison above cannot see them — and a `@ts-expect-error` added to
+ * one copy silences the brand check there while leaving this test green, which
+ * is exactly the silent loss of protection described at the top of this file.
+ * Prose is still free to differ; only directives are compared.
+ */
+const DIRECTIVE =
+  /@ts-(?:ignore|expect-error|nocheck)\b[^\n]*|\/\/\/\s*<reference[^\n]*|eslint-(?:disable|enable)[^\n]*/g;
+
+function directives(file: string): string[] {
+  return (fs.readFileSync(file, 'utf8').match(DIRECTIVE) ?? []).map((d) => d.trim()).sort();
+}
+
 describe('money.ts mirrors', () => {
   it('both copies exist', () => {
     expect(fs.existsSync(FUNCTIONS_COPY)).toBe(true);
@@ -38,5 +53,9 @@ describe('money.ts mirrors', () => {
 
   it('have not drifted apart (code and types, ignoring comments and formatting)', () => {
     expect(normalized(MOBILE_COPY)).toBe(normalized(FUNCTIONS_COPY));
+  });
+
+  it('carry the same compiler and lint directives', () => {
+    expect(directives(MOBILE_COPY)).toEqual(directives(FUNCTIONS_COPY));
   });
 });
