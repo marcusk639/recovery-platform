@@ -263,4 +263,62 @@ describe('transferStats', () => {
 
     expect(mockWhere).toHaveBeenCalledWith('timezone', '==', 'America/New_York');
   });
+
+  describe('logging carries ids only (no house name)', () => {
+    const HOUSE_NAME = 'Sunrise Recovery House';
+
+    const loggedText = () => {
+      const { logger } = require('firebase-functions');
+      return JSON.stringify([
+        ...logger.info.mock.calls,
+        ...logger.warn.mock.calls,
+        ...logger.error.mock.calls,
+      ]);
+    };
+
+    const runWithHouse = async () => {
+      const { houseCollection } = require('../../api/firestore');
+      houseCollection.get.mockResolvedValue({
+        size: 1,
+        docs: [
+          {
+            data: () => ({ id: 'house-9', name: HOUSE_NAME }),
+            ref: { update: jest.fn().mockResolvedValue(undefined) },
+          },
+        ],
+      });
+      await transferStats(null);
+    };
+
+    it('does not log the house name on the happy path', async () => {
+      await runWithHouse();
+      expect(loggedText()).toContain('house-9');
+      expect(loggedText()).not.toContain(HOUSE_NAME);
+    });
+
+    it('does not log the house name when the health update fails', async () => {
+      const { calculateWeeklyHealth } = require('../../util/house');
+      calculateWeeklyHealth.mockRejectedValueOnce(new Error('boom'));
+      await runWithHouse();
+      const { logger } = require('firebase-functions');
+      expect(logger.warn).toHaveBeenCalled();
+      expect(loggedText()).not.toContain(HOUSE_NAME);
+    });
+
+    it('does not log the house name when processing the house throws', async () => {
+      const { guestCollection } = require('../../api/firestore');
+      const originalWhere = guestCollection.where;
+      guestCollection.where = jest.fn(() => {
+        throw new Error('query failed');
+      });
+      try {
+        await runWithHouse();
+      } finally {
+        guestCollection.where = originalWhere;
+      }
+      const { logger } = require('firebase-functions');
+      expect(logger.error).toHaveBeenCalled();
+      expect(loggedText()).not.toContain(HOUSE_NAME);
+    });
+  });
 });
