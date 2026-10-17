@@ -22,12 +22,14 @@ import { STRIPE_SECRET_KEY } from "../config";
 import * as admin from "firebase-admin";
 import Stripe from "stripe";
 import { createStripeClient } from "../util/stripe";
+import { connectRefreshUrl, connectReturnUrl } from "../util/connectUrls";
 
 // Lazily instantiated to avoid constructing the Stripe client at module load
 // (Firebase source analysis loads modules without secrets bound, so eager
 // `createStripeClient()` would throw on an empty key). Memoized on first use.
 let _stripe: Stripe | undefined;
 const getStripe = (): Stripe => (_stripe ??= createStripeClient());
+
 
 // ---------------------------------------------------------------------------
 // stripeConnectReauth
@@ -67,13 +69,19 @@ export const stripeConnectReauth = onRequest(
       return;
     }
 
-    // Build the return and refresh URLs from this same function so they
-    // remain consistent regardless of which environment is deployed.
-    const baseUrl = `${req.protocol}://${req.hostname}`;
-    const refreshUrl = `${baseUrl}/stripeConnectReauth?stripeAccountId=${stripeAccountId}`;
-    const returnUrl = `${baseUrl}/stripeConnectReturn`;
-
+    // Never build these from req.hostname. This endpoint is unauthenticated and
+    // the Host header is attacker-supplied, so a spoofed Host would put an
+    // attacker's origin into refresh_url / return_url and Stripe would send the
+    // house operator there after onboarding. Derive it from deployment config
+    // instead, which a request cannot influence.
     try {
+      // Inside the try: these throw on a missing project id, and an
+      // uncaught throw here would reject the handler, producing an unlogged
+      // generic 500. Catching it keeps the error-log line and the operator-
+      // facing message that the catch below already provides.
+      const refreshUrl = connectRefreshUrl(stripeAccountId);
+      const returnUrl = connectReturnUrl();
+
       const accountLink = await getStripe().accountLinks.create({
         account: stripeAccountId,
         refresh_url: refreshUrl,

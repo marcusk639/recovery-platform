@@ -87,9 +87,15 @@ try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   usePaymentSheet = require("@stripe/stripe-react-native").usePaymentSheet;
 } catch {
+  // Fails closed: a stub that resolved `{}` would read as a confirmed payment
+  // and show "Payment successful!" for a charge that never happened.
   usePaymentSheet = () => ({
-    initPaymentSheet: async () => ({}),
-    presentPaymentSheet: async () => ({}),
+    initPaymentSheet: async () => ({
+      error: { message: "Payments are unavailable in this build." },
+    }),
+    presentPaymentSheet: async () => ({
+      error: { message: "Payments are unavailable in this build." },
+    }),
     loading: false,
   });
 }

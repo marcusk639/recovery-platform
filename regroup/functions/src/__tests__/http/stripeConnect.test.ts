@@ -159,6 +159,10 @@ beforeEach(() => {
   }));
 
   process.env.STRIPE_SECRET_KEY = "sk_test_fake";
+  // Required: the redirect paths are Hosting rewrites, so connectBaseUrl has
+  // no origin to derive and refuses to guess. Setting it here runs the suite in
+  // the deployed shape rather than the misconfigured one.
+  process.env.CONNECT_BASE_URL = "https://regroup-app.test/connect";
 });
 
 // ===========================================================================
@@ -241,9 +245,78 @@ describe("stripeConnectReauth", () => {
     expect(mockAccountLinksCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         refresh_url: expect.stringContaining(stripeAccountId),
-        return_url: expect.stringContaining("stripeConnectReturn"),
+        return_url: expect.stringContaining("stripe-return"),
       }),
     );
+  });
+
+  it("ignores a spoofed Host header when building the redirect URLs", async () => {
+    // This endpoint is unauthenticated, so the Host header is attacker-supplied.
+    // If it reached refresh_url / return_url, Stripe would send the house
+    // operator to the attacker's origin after onboarding.
+    const stripeAccountId = "acct_host_spoof";
+    mockAccountLinksCreate.mockResolvedValue({
+      url: "https://stripe.com/setup",
+    });
+    seedHouseQuery(matchingHouse(stripeAccountId));
+
+    const req = {
+      ...makeReq({ stripeAccountId }),
+      protocol: "https",
+      hostname: "evil.example.com",
+      headers: { host: "evil.example.com" },
+    };
+    const res = makeRes();
+
+    await (stripeConnectReauth as any)(req, res);
+
+    const params = mockAccountLinksCreate.mock.calls[0][0];
+    expect(params.refresh_url).not.toContain("evil.example.com");
+    expect(params.return_url).not.toContain("evil.example.com");
+    // Asserting the configured origin, not merely non-attacker.
+    expect(params.refresh_url).toMatch(
+      /^https:\/\/regroup-app\.test\/connect\/stripe-refresh\?/,
+    );
+  });
+
+  it("refuses to build a redirect URL when CONNECT_BASE_URL is unset", async () => {
+    // Failing loudly beats handing Stripe a URL that 404s: the operator meets
+    // it after submitting bank details, on a redirect we never see.
+    const saved = { override: process.env.CONNECT_BASE_URL };
+    delete process.env.CONNECT_BASE_URL;
+
+    const stripeAccountId = "acct_no_project";
+    seedHouseQuery(matchingHouse(stripeAccountId));
+    const res = makeRes();
+    await (stripeConnectReauth as any)(makeReq({ stripeAccountId }), res);
+
+    expect(mockAccountLinksCreate).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(500);
+
+    if (saved.override !== undefined)
+      process.env.CONNECT_BASE_URL = saved.override;
+  });
+
+  it("uses CONNECT_BASE_URL when set, for a custom domain or preview deploy", async () => {
+    const saved = process.env.CONNECT_BASE_URL;
+    process.env.CONNECT_BASE_URL = "https://connect.example.org/";
+
+    const stripeAccountId = "acct_override";
+    mockAccountLinksCreate.mockResolvedValue({ url: "https://stripe.com/s" });
+    seedHouseQuery(matchingHouse(stripeAccountId));
+    await (stripeConnectReauth as any)(
+      makeReq({ stripeAccountId }),
+      makeRes(),
+    );
+
+    const params = mockAccountLinksCreate.mock.calls[0][0];
+    // Trailing slash stripped, so the path is not doubled.
+    expect(params.refresh_url).toBe(
+      `https://connect.example.org/stripe-refresh?stripeAccountId=${stripeAccountId}`,
+    );
+
+    if (saved === undefined) delete process.env.CONNECT_BASE_URL;
+    else process.env.CONNECT_BASE_URL = saved;
   });
 });
 

@@ -80,6 +80,11 @@ jest.mock('../../config', () => ({
     achCapCents: 300,
     cardPlatformRate: 0.0075,
     legacyRate: 0.02,
+    // Mirrors the production defaults; the fee is margin + recovered Stripe cost.
+    stripeCardRate: 0.029,
+    stripeCardFixedCents: 30,
+    stripeAchRate: 0.008,
+    stripeAchCapCents: 500,
   },
 }));
 
@@ -174,7 +179,7 @@ describe('runRentCollection', () => {
       });
     };
 
-    it('charges the 0.75% card platform fee when the default method is a card', async () => {
+    it('charges the card margin plus recovered Stripe cost when the default method is a card', async () => {
       seedConnectGuest({});
       mockPaymentMethodsRetrieve.mockResolvedValue({ type: 'card' });
       mockCreatePaymentIntent.mockResolvedValue({
@@ -187,14 +192,14 @@ describe('runRentCollection', () => {
       expect(mockPaymentMethodsRetrieve).toHaveBeenCalledWith('pm_c');
       expect(mockCreatePaymentIntent).toHaveBeenCalledWith(
         expect.objectContaining({
-          application_fee_amount: 75, // 0.75% of 10000
+          application_fee_amount: 395, // margin 75 + Stripe (290 + 30)
           transfer_data: { destination: 'acct_dest' },
         }),
         expect.anything(),
       );
     });
 
-    it('charges the flat ACH fee when the default method is a bank account', async () => {
+    it('charges the ACH margin plus recovered Stripe cost when the default method is a bank account', async () => {
       seedConnectGuest({});
       mockPaymentMethodsRetrieve.mockResolvedValue({ type: 'us_bank_account' });
       mockCreatePaymentIntent.mockResolvedValue({
@@ -205,7 +210,7 @@ describe('runRentCollection', () => {
       await runRentCollection();
 
       expect(mockCreatePaymentIntent).toHaveBeenCalledWith(
-        expect.objectContaining({ application_fee_amount: 200 }), // flat $2
+        expect.objectContaining({ application_fee_amount: 280 }), // margin 200 + Stripe 80
         expect.anything(),
       );
     });

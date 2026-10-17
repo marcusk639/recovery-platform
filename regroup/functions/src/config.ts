@@ -67,23 +67,61 @@ export const RECOVERY_PLATFORM_API_KEY = defineSecret(
 );
 
 /**
- * Rent application-fee model (P-1/P-2/P-3 of the pricing revision plan).
+ * Rent application-fee model (P-1/P-3 of the pricing revision plan).
  *
- * - ACH / bank transfer: a flat per-transaction fee (cheap, to nudge bank pay).
- *   If `RENT_FEE_ACH_RATE` is set > 0, a percentage-with-cap model is used
- *   instead (0.5% capped at $3, per P-1's alternative) — flat is the default.
- * - Card: a thin platform fee on top of Stripe's processing cost. The card
- *   processing cost itself is borne by the resident as a disclosed convenience
- *   fee (P-2), so it is NOT double-charged here.
+ * The platform fee has TWO parts, and the sum is what Stripe is told to take:
+ *
+ *   application_fee_amount = platform margin + estimated Stripe processing cost
+ *
+ * WHY THE STRIPE COST IS INCLUDED. These are destination charges, so the
+ * platform is merchant of record and Stripe debits its processing fee from the
+ * PLATFORM, not the house. A margin-only fee was therefore loss-making: 0.75%
+ * collected against ~2.9% + 30c paid meant roughly -$11 on a $500 card payment.
+ *
+ * The model used to assume the resident covered processing through a disclosed
+ * convenience fee (the old P-2). That fee was never built — no code added it and
+ * no screen disclosed it — so the assumption silently financed every card
+ * payment out of platform margin. Rather than build it, the house now bears
+ * processing, which is also where the card-vs-ACH cost difference can actually
+ * be acted on.
+ *
+ * WHY NOT `on_behalf_of`, which would pass the real cost through exactly:
+ * Stripe's Connect guidance lists it under traps to avoid for marketplace
+ * flows, and it would make the house merchant of record and put the house's
+ * name on the resident's bank statement. Stripe's recommendation for a platform
+ * fee under ~4% on destination charges is exactly this — fold the estimated
+ * processing cost into `application_fee_amount`.
+ *
+ * THE TRADE-OFF THIS ACCEPTS: it is an ESTIMATE. An Amex or a non-US card costs
+ * more than the figures below and the platform absorbs the difference. Revisit
+ * the rates if the card mix shifts; they are env-overridable for exactly that.
+ *
+ * ROLLBACK: set the four stripe-cost values below to 0 and the fee reverts
+ * to margin-only, with no code change.
+ *
+ * - ACH / bank transfer: a flat per-transaction margin (cheap, to nudge bank
+ *   pay). If `RENT_FEE_ACH_RATE` is set > 0, a percentage-with-cap model is
+ *   used instead (0.5% capped at $3, per P-1's alternative).
  * - Legacy houses are grandfathered at the old flat 2% (P-3) until migrated.
  *
  * All values are integer-cents / decimal-rate, env-overridable for tuning.
+ * Stripe's published US rates are the defaults; see stripe.com/pricing.
  */
 export const RENT_FEE = {
+  // Platform margin.
   achFlatCents: Number(process.env.RENT_FEE_ACH_FLAT_CENTS ?? 200), // $2.00
   achRate: Number(process.env.RENT_FEE_ACH_RATE ?? 0), // 0 = use flat fee
   achCapCents: Number(process.env.RENT_FEE_ACH_CAP_CENTS ?? 300), // $3.00 cap
   cardPlatformRate: Number(process.env.RENT_FEE_CARD_PLATFORM_RATE ?? 0.0075), // 0.75%
+
+  // Estimated Stripe processing cost, recovered from the house so the margin
+  // above is what the platform actually keeps. Set to 0 to disable recovery.
+  stripeCardRate: Number(process.env.RENT_FEE_STRIPE_CARD_RATE ?? 0.029), // 2.9%
+  stripeCardFixedCents: Number(
+    process.env.RENT_FEE_STRIPE_CARD_FIXED_CENTS ?? 30
+  ), // 30c
+  stripeAchRate: Number(process.env.RENT_FEE_STRIPE_ACH_RATE ?? 0.008), // 0.8%
+  stripeAchCapCents: Number(process.env.RENT_FEE_STRIPE_ACH_CAP_CENTS ?? 500), // $5.00 cap
 } as const;
 
 export const SUBSCRIPTION_TIERS = {

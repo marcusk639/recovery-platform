@@ -287,6 +287,11 @@ function readHouse(houseId: string): Record<string, unknown> | undefined {
   return firestoreDocStore[`houses/${houseId}`];
 }
 
+/** `guests` is a TOP-LEVEL collection — the doc is the authority on houseId. */
+function seedGuest(guestId: string, data: Record<string, unknown>): void {
+  firestoreDocStore[`guests/${guestId}`] = { ...data };
+}
+
 async function expectHttpsError(
   fn: () => Promise<unknown>,
   code: functions.https.FunctionsErrorCode,
@@ -409,7 +414,7 @@ describe("connectStripeAccount", () => {
         adminId: ADMIN_UID,
         stripeAccountId: "acct_existing_house",
       });
-      process.env.GCLOUD_PROJECT = "testproj";
+      process.env.CONNECT_BASE_URL = "https://regroup-app.test/connect";
       await (connectStripeAccount as unknown as Function)(
         { houseId: HOUSE_ID, refreshUrl: "https://regroup-app.com/refresh" },
         authedContext(ADMIN_UID),
@@ -417,7 +422,7 @@ describe("connectStripeAccount", () => {
       expect(mockStripeAccountLinksCreate).toHaveBeenCalledWith(
         expect.objectContaining({
           return_url:
-            "https://us-central1-testproj.cloudfunctions.net/stripeConnectReturn",
+            "https://regroup-app.test/connect/stripe-return",
           refresh_url: "https://regroup-app.com/refresh",
         }),
       );
@@ -428,7 +433,7 @@ describe("connectStripeAccount", () => {
         adminId: ADMIN_UID,
         stripeAccountId: "acct_existing_house",
       });
-      process.env.GCLOUD_PROJECT = "testproj";
+      process.env.CONNECT_BASE_URL = "https://regroup-app.test/connect";
       await (connectStripeAccount as unknown as Function)(
         { houseId: HOUSE_ID, returnUrl: "https://regroup-app.com/return" },
         authedContext(ADMIN_UID),
@@ -437,7 +442,7 @@ describe("connectStripeAccount", () => {
         expect.objectContaining({
           return_url: "https://regroup-app.com/return",
           refresh_url:
-            "https://us-central1-testproj.cloudfunctions.net/stripeConnectReauth?stripeAccountId=acct_existing_house",
+            "https://regroup-app.test/connect/stripe-refresh?stripeAccountId=acct_existing_house",
         }),
       );
     });
@@ -447,7 +452,7 @@ describe("connectStripeAccount", () => {
         adminId: ADMIN_UID,
         stripeAccountId: "acct_existing_house",
       });
-      process.env.GCLOUD_PROJECT = "testproj";
+      process.env.CONNECT_BASE_URL = "https://regroup-app.test/connect";
       await (connectStripeAccount as unknown as Function)(
         { houseId: HOUSE_ID },
         authedContext(ADMIN_UID),
@@ -455,9 +460,9 @@ describe("connectStripeAccount", () => {
       expect(mockStripeAccountLinksCreate).toHaveBeenCalledWith(
         expect.objectContaining({
           return_url:
-            "https://us-central1-testproj.cloudfunctions.net/stripeConnectReturn",
+            "https://regroup-app.test/connect/stripe-return",
           refresh_url:
-            "https://us-central1-testproj.cloudfunctions.net/stripeConnectReauth?stripeAccountId=acct_existing_house",
+            "https://regroup-app.test/connect/stripe-refresh?stripeAccountId=acct_existing_house",
         }),
       );
     });
@@ -1388,7 +1393,7 @@ describe("createPaymentIntent", () => {
       );
     });
 
-    it("applies the 0.75% card platform fee by default (method-aware)", async () => {
+    it("applies the card margin plus recovered Stripe cost (method-aware)", async () => {
       // baseData.amount = 15000 cents ($150.00); 0.75% = 112.5 -> 113 cents.
       await (createPaymentIntent as unknown as Function)(
         baseData,
@@ -1396,14 +1401,14 @@ describe("createPaymentIntent", () => {
       );
       expect(mockStripePaymentIntentsCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          application_fee_amount: 113,
+          application_fee_amount: 578,
           payment_method_types: ["card"],
         }),
         expect.anything(),
       );
     });
 
-    it("applies the flat ACH fee for us_bank_account payments", async () => {
+    it("applies the ACH margin plus recovered Stripe cost", async () => {
       // ACH = flat $2.00 (200 cents) regardless of amount.
       await (createPaymentIntent as unknown as Function)(
         { ...baseData, paymentMethodType: "us_bank_account" },
@@ -1411,7 +1416,7 @@ describe("createPaymentIntent", () => {
       );
       expect(mockStripePaymentIntentsCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          application_fee_amount: 200,
+          application_fee_amount: 320,
           payment_method_types: ["us_bank_account"],
         }),
         expect.anything(),
@@ -1431,7 +1436,7 @@ describe("createPaymentIntent", () => {
         authedContext(USER_UID),
       );
       expect(mockStripePaymentIntentsCreate).toHaveBeenCalledWith(
-        expect.objectContaining({ application_fee_amount: 113 }),
+        expect.objectContaining({ application_fee_amount: 578 }),
         expect.anything(),
       );
     });
@@ -1590,7 +1595,7 @@ describe("createPaymentIntent", () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
-// listPayments — house membership authorization
+// listPayments — read scope: own records, or any resident for an admin
 // ══════════════════════════════════════════════════════════════════════════════
 
 describe("listPayments", () => {
@@ -1600,6 +1605,79 @@ describe("listPayments", () => {
     seedHouse(HOUSE_ID, {
       stripeAccountId: "acct_list_house",
       stripeStatus: "active",
+      adminIds: ["admin-uid"],
+    });
+    seedGuest("guest-1", { userId: "resident-1-uid", houseId: HOUSE_ID });
+    seedGuest("guest-2", { userId: "resident-2-uid", houseId: HOUSE_ID });
+  });
+
+  describe("read scope", () => {
+    it("lets a resident read their own payments", async () => {
+      const ctx = {
+        auth: { uid: "resident-1-uid", token: { guest: { [HOUSE_ID]: true } } },
+      };
+      const result = await (listPayments as unknown as Function)(
+        { guestId: "guest-1", houseId: HOUSE_ID },
+        ctx,
+      );
+      expect(result).toHaveProperty("payments");
+    });
+
+    it("denies a resident reading another resident's payments", async () => {
+      const ctx = {
+        auth: { uid: "resident-1-uid", token: { guest: { [HOUSE_ID]: true } } },
+      };
+      await expectHttpsError(
+        () =>
+          (listPayments as unknown as Function)(
+            { guestId: "guest-2", houseId: HOUSE_ID },
+            ctx,
+          ),
+        "permission-denied",
+      );
+    });
+
+    it("lets a house admin read any resident's payments in their house", async () => {
+      const ctx = {
+        auth: { uid: "admin-uid", token: { admin: { [HOUSE_ID]: true } } },
+      };
+      const result = await (listPayments as unknown as Function)(
+        { guestId: "guest-2", houseId: HOUSE_ID },
+        ctx,
+      );
+      expect(result).toHaveProperty("payments");
+    });
+
+    it("denies a guestId that belongs to a different house", async () => {
+      seedGuest("guest-elsewhere", {
+        userId: "resident-1-uid",
+        houseId: "some-other-house",
+      });
+      const ctx = {
+        auth: { uid: "resident-1-uid", token: { guest: { [HOUSE_ID]: true } } },
+      };
+      await expectHttpsError(
+        () =>
+          (listPayments as unknown as Function)(
+            { guestId: "guest-elsewhere", houseId: HOUSE_ID },
+            ctx,
+          ),
+        "permission-denied",
+      );
+    });
+
+    it("throws not-found for an unknown guestId", async () => {
+      const ctx = {
+        auth: { uid: "admin-uid", token: { admin: { [HOUSE_ID]: true } } },
+      };
+      await expectHttpsError(
+        () =>
+          (listPayments as unknown as Function)(
+            { guestId: "no-such-guest", houseId: HOUSE_ID },
+            ctx,
+          ),
+        "not-found",
+      );
     });
   });
 
@@ -1654,12 +1732,12 @@ describe("listPayments", () => {
     it("allows call when caller token has guest claim for the house", async () => {
       const ctx = {
         auth: {
-          uid: "guest-uid",
+          uid: "resident-1-uid",
           token: { guest: { [HOUSE_ID]: true } },
         },
       };
       const result = await (listPayments as unknown as Function)(
-        { guestId: "guest-uid", houseId: HOUSE_ID },
+        { guestId: "guest-1", houseId: HOUSE_ID },
         ctx,
       );
       expect(result).toHaveProperty("payments");
@@ -1708,6 +1786,50 @@ describe("listHousePayments — input validation", () => {
     await expect(callV(listHousePayments, {}, auth)).rejects.toMatchObject({
       code: "invalid-argument",
     });
+  });
+});
+
+describe("listHousePayments — read scope", () => {
+  const HOUSE_ID = "house-wide-1";
+
+  beforeEach(() => {
+    seedHouse(HOUSE_ID, {
+      stripeAccountId: "acct_house_wide",
+      stripeStatus: "active",
+      adminIds: ["admin-uid"],
+    });
+  });
+
+  it("lets a house admin list the whole house", async () => {
+    const auth = { uid: "admin-uid", token: { admin: { [HOUSE_ID]: true } } };
+    const result = await callV(listHousePayments, { houseId: HOUSE_ID }, auth);
+    expect(result).toHaveProperty("payments");
+  });
+
+  it("denies a resident of the house", async () => {
+    const auth = {
+      uid: "resident-1-uid",
+      token: { guest: { [HOUSE_ID]: true } },
+    };
+    await expect(
+      callV(listHousePayments, { houseId: HOUSE_ID }, auth),
+    ).rejects.toMatchObject({ code: "permission-denied" });
+  });
+
+  it("denies an admin of a different house", async () => {
+    const auth = {
+      uid: "other-admin-uid",
+      token: { admin: { "other-house": true } },
+    };
+    await expect(
+      callV(listHousePayments, { houseId: HOUSE_ID }, auth),
+    ).rejects.toMatchObject({ code: "permission-denied" });
+  });
+
+  it("throws unauthenticated when no auth context", async () => {
+    await expect(
+      callV(listHousePayments, { houseId: HOUSE_ID }),
+    ).rejects.toMatchObject({ code: "unauthenticated" });
   });
 });
 

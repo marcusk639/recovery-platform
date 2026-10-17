@@ -14,6 +14,7 @@
 import { functions } from '../../../firebase-setup';
 import {
   createRentPaymentIntent,
+  rentPaymentIdempotencyKey,
   MAX_PAYMENT_CENTS,
   listPayments,
   listHousePayments,
@@ -49,7 +50,51 @@ describe('payments service', () => {
         guestId: 'guest1',
         houseId: 'house1',
         description: 'Monthly Rent',
+        idempotencyKey: expect.any(String),
       });
+    });
+
+    it('sends an explicit idempotency key that changes with the amount', async () => {
+      const mockCallable = jest.fn(() =>
+        Promise.resolve({ data: { clientSecret: 'cs_test' } }),
+      );
+      mockFunctions.httpsCallable.mockReturnValue(mockCallable);
+
+      await createRentPaymentIntent({ amountInCents: 20000, guestId: 'g1', houseId: 'h1' });
+      await createRentPaymentIntent({ amountInCents: 20000, guestId: 'g1', houseId: 'h1' });
+      await createRentPaymentIntent({ amountInCents: 30000, guestId: 'g1', houseId: 'h1' });
+
+      const keys = (mockCallable.mock.calls as any[]).map((c) => c[0].idempotencyKey);
+      // Same amount, same day: same key, so a repeat tap cannot make a second charge.
+      expect(keys[0]).toBe(keys[1]);
+      // Different amount: different key, so Stripe does not reject the changed params.
+      expect(keys[2]).not.toBe(keys[0]);
+      mockFunctions.httpsCallable.mockReset();
+    });
+
+    it('lets the caller override the idempotency key', async () => {
+      const mockCallable = jest.fn(() =>
+        Promise.resolve({ data: { clientSecret: 'cs_test' } }),
+      );
+      mockFunctions.httpsCallable.mockReturnValueOnce(mockCallable);
+
+      await createRentPaymentIntent({
+        amountInCents: 100,
+        guestId: 'g1',
+        houseId: 'h1',
+        idempotencyKey: 'custom-key',
+      });
+
+      expect(mockCallable).toHaveBeenCalledWith(
+        expect.objectContaining({ idempotencyKey: 'custom-key' }),
+      );
+    });
+
+    it('scopes the derived key to guest, house, UTC day and amount', () => {
+      const at = new Date('2026-10-16T23:30:00.000Z');
+      expect(rentPaymentIdempotencyKey('g1', 'h1', 50000, at)).toBe(
+        'g1-h1-2026-10-16-50000',
+      );
     });
 
     it('returns { clientSecret } from the callable result', async () => {
@@ -76,6 +121,7 @@ describe('payments service', () => {
         guestId: 'g1',
         houseId: 'h1',
         description: undefined,
+        idempotencyKey: expect.any(String),
       });
     });
 
@@ -163,7 +209,11 @@ describe('payments service', () => {
 
       const result = await listPayments('guest1', 'house1', 10);
 
-      expect(result).toEqual(mockPayments);
+      // The callable reports dollars; the service hands screens cents.
+      expect(result).toEqual([
+        { ...mockPayments[0], amount: 50000 },
+        { ...mockPayments[1], amount: 2500 },
+      ]);
       expect(result).toHaveLength(2);
     });
 
@@ -210,7 +260,7 @@ describe('payments service', () => {
 
       const result = await listPayments('g1', 'h1');
 
-      expect(result[0]).toEqual(singlePayment);
+      expect(result[0]).toEqual({ ...singlePayment, amount: 120000 });
       expect(result[0].receiptUrl).toBe('https://stripe.com/receipts/pay_solo');
     });
 
@@ -282,6 +332,24 @@ describe('payments service', () => {
       const result = await listHousePayments('house1');
       expect(result).toHaveLength(1);
       expect(result[0].guestId).toBe('guest1');
+    });
+
+    it('converts the callable\'s dollar amounts to cents (a $500.00 charge is 50000)', async () => {
+      const mockCallable = jest.fn(() =>
+        Promise.resolve({
+          data: {
+            payments: [
+              { ...mockHousePayments[0], amount: 500 },
+              { ...mockHousePayments[0], id: 'ch_002', amount: 19.99 },
+            ],
+          },
+        }),
+      );
+      mockFunctions.httpsCallable.mockReturnValueOnce(mockCallable);
+
+      const result = await listHousePayments('house1');
+
+      expect(result.map((r) => r.amount)).toEqual([50000, 1999]);
     });
   });
 });
