@@ -2,9 +2,15 @@
  * Cloud Functions for the Regroup web app.
  *
  * This package exists to serve Angular Universal server-side rendering. The
- * Angular server bundle is not imported from source — `npm run build` copies
- * ../dist into this directory first (see package.json), so the built bundle
- * ships inside the deployed function at dist/sapp/server/main.js.
+ * Angular server bundle is not imported from source: `npm run build` compiles
+ * this package and then stages ../dist/sapp into ./dist/sapp (see
+ * ../scripts/copy-ssr-to-functions.js), so the built bundle ships inside the
+ * deployed function at dist/sapp/server/main.js.
+ *
+ * The bundle is not self-contained — angular.json externalises
+ * @firebase/firestore, which resolves from this package's node_modules via its
+ * `firebase` dependency. Removing that dependency breaks SSR at the first
+ * request, with nothing in the build to catch it.
  *
  * Deployed under the `web` codebase (see ../firebase.json), deliberately
  * separate from the `default` codebase that ../../functions owns. Firebase
