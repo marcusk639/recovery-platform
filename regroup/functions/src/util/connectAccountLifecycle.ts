@@ -1,5 +1,6 @@
 import type Stripe from "stripe";
-import { isAlreadyDeauthorized, isResourceMissing } from "./stripe";
+import { logger } from "firebase-functions";
+import { isResourceMissing } from "./stripe";
 
 /**
  * Create and close for a house's Stripe Accounts v2 recipient account.
@@ -70,13 +71,21 @@ export async function closeRecipientAccount(
 /**
  * Closes an account we created but could not persist. Best-effort: a failure
  * here leaves an unreferenced account on the platform, which is strictly better
- * than failing the caller's request a second time.
+ * than failing the caller's request a second time. It is logged with the id
+ * because nothing else references that account any more.
  */
 export async function closeOrphanedAccount(
   stripe: Stripe,
   accountId: string,
 ): Promise<void> {
-  await closeRecipientAccount(stripe, accountId).catch(() => undefined);
+  try {
+    await closeRecipientAccount(stripe, accountId);
+  } catch (err) {
+    logger.error("Failed to close orphaned Stripe recipient account", {
+      accountId,
+      err,
+    });
+  }
 }
 
 /** True when Stripe reports the account as closed. Throws on a failed read. */
@@ -106,22 +115,21 @@ export async function closeHouseAccount(
   try {
     await closeRecipientAccount(stripe, accountId);
   } catch (err) {
-    if (isAccountAlreadyGone(err)) return;
+    // Only the machine-readable code counts as "gone". Message text is not
+    // evidence: v2 reports an inaccessible id as 403 forbidden, never as
+    // "No such account", so a wording match could only misread a refusal.
+    if (isResourceMissing(err)) {
+      logger.warn("Stripe account already gone; treating close as done", {
+        accountId,
+      });
+      return;
+    }
     const closed = await isRecipientAccountClosed(stripe, accountId).catch(
       () => false,
     );
     if (!closed) throw err;
+    logger.warn("Stripe account already closed; treating close as done", {
+      accountId,
+    });
   }
-}
-
-/**
- * True when Stripe is telling us the account is already gone, so a disconnect
- * can be treated as idempotent and local state brought in sync anyway.
- *
- * `resource_missing` is the machine-readable form and is what a v2 close
- * returns; the message matching in isAlreadyDeauthorized is a v1 artefact kept
- * because the wording is not something we control.
- */
-export function isAccountAlreadyGone(err: unknown): boolean {
-  return isResourceMissing(err) || isAlreadyDeauthorized(err);
 }

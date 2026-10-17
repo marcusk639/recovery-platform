@@ -889,6 +889,45 @@ describe("connectStripeAccount", () => {
         applied_configurations: ["recipient"],
       });
     });
+
+    it("logs the orphaned account id when cleaning it up fails", async () => {
+      // Best-effort cleanup must still leave a trace: without the id nobody
+      // can find the open account it left on the platform.
+      seedHouse(HOUSE_ID, { adminId: ADMIN_UID });
+      mockRunTransaction.mockImplementationOnce(
+        async (fn: (tx: unknown) => Promise<unknown>) =>
+          fn({
+            get: jest.fn(async () => ({
+              data: () => ({ stripeAccountId: "acct_concurrently_created" }),
+            })),
+            update: jest.fn(),
+          }),
+      );
+      mockStripeV2AccountsClose.mockRejectedValue(
+        makeStripeError(
+          StripeErrors.StripeAPIError,
+          "Something exploded",
+          "api_error",
+        ),
+      );
+      const errorSpy = jest
+        .spyOn(functions.logger, "error")
+        .mockImplementation(() => undefined);
+
+      try {
+        await (connectStripeAccount as unknown as Function)(
+          baseData,
+          authedContext(ADMIN_UID),
+        );
+
+        expect(errorSpy).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.objectContaining({ accountId: "acct_new123" }),
+        );
+      } finally {
+        errorSpy.mockRestore();
+      }
+    });
   });
 });
 
@@ -1041,21 +1080,28 @@ describe("disconnectStripeAccount", () => {
       seedHouse(HOUSE_ID, { adminId: ADMIN_UID, stripeAccountId: "acct_gone" });
     });
 
-    it("succeeds (idempotent) when Stripe reports the account is already gone", async () => {
-      const alreadyGone = makeStripeError(
-        StripeErrors.StripeInvalidRequestError,
-        "No such account: acct_gone",
-        "invalid_request_error",
+    it("does not treat message text alone as proof the account is gone", async () => {
+      // The v1 tolerance matched wording like "No such account". v2 never
+      // reports a missing account that way (an inaccessible id is a 403
+      // forbidden), so the match could only misread some other refusal as
+      // "gone" and clear a house whose Stripe account is still open.
+      mockStripeV2AccountsClose.mockRejectedValue(
+        makeStripeError(
+          StripeErrors.StripeInvalidRequestError,
+          "No such account: acct_gone",
+          "invalid_request_error",
+        ),
       );
-      mockStripeV2AccountsClose.mockRejectedValue(alreadyGone);
 
-      const result = await (disconnectStripeAccount as unknown as Function)(
-        { houseId: HOUSE_ID },
-        authedContext(ADMIN_UID),
+      await expectHttpsError(
+        () =>
+          (disconnectStripeAccount as unknown as Function)(
+            { houseId: HOUSE_ID },
+            authedContext(ADMIN_UID),
+          ),
+        "invalid-argument",
       );
-      expect(result).toEqual({ success: true });
-      // Firestore should still be cleared.
-      expect(readHouse(HOUSE_ID)?.stripeStatus).toBe("disconnected");
+      expect(readHouse(HOUSE_ID)?.stripeAccountId).toBe("acct_gone");
     });
 
     it("succeeds when the account is gone by resource_missing rather than by message", async () => {
@@ -1386,12 +1432,14 @@ describe("getStripeAccountStatus", () => {
         adminId: ADMIN_UID,
         stripeAccountId: "acct_deleted",
       });
-      const noSuchAccount = makeStripeError(
-        StripeErrors.StripeInvalidRequestError,
-        "No such account: acct_deleted",
-        "invalid_request_error",
+      mockStripeV2AccountsRetrieve.mockRejectedValue(
+        makeStripeError(
+          StripeErrors.StripeInvalidRequestError,
+          "Account acct_deleted could not be found.",
+          "invalid_request_error",
+          { code: "resource_missing" },
+        ),
       );
-      mockStripeV2AccountsRetrieve.mockRejectedValue(noSuchAccount);
     });
 
     it("returns status disconnected", async () => {
@@ -1410,25 +1458,54 @@ describe("getStripeAccountStatus", () => {
       expect(readHouse(HOUSE_ID)?.stripeStatus).toBe("disconnected");
     });
 
-    it("recognises a gone account by resource_missing, not only by message text", async () => {
-      // The 'no such account' message match is a v1 artefact. v2 is free to
-      // word it differently, so the machine-readable code has to be enough.
+    it("does not disconnect the house when Stripe refuses access rather than reporting it missing", async () => {
+      // What v2 actually returns for an id the key cannot see (wrong key, wrong
+      // mode, wrong platform): 403 forbidden. That says nothing about whether
+      // the house's account exists, so it must surface, not stop rent.
+      seedHouse(HOUSE_ID, {
+        adminId: ADMIN_UID,
+        stripeAccountId: "acct_deleted",
+        stripeStatus: "active",
+      });
       mockStripeV2AccountsRetrieve.mockRejectedValue(
         makeStripeError(
-          StripeErrors.StripeInvalidRequestError,
-          "Account acct_deleted could not be found.",
+          StripeErrors.StripePermissionError,
+          "Permission denied. API Key does not have permission to access account.",
           "invalid_request_error",
-          { code: "resource_missing" },
+          { code: "forbidden" },
         ),
       );
 
-      const result = await (getStripeAccountStatus as unknown as Function)(
-        { houseId: HOUSE_ID },
-        authedContext(ADMIN_UID),
+      await expect(
+        (getStripeAccountStatus as unknown as Function)(
+          { houseId: HOUSE_ID },
+          authedContext(ADMIN_UID),
+        ),
+      ).rejects.toBeInstanceOf(HttpsError);
+      expect(readHouse(HOUSE_ID)?.stripeStatus).toBe("active");
+    });
+
+    it("does not treat message text alone as proof the account is gone", async () => {
+      seedHouse(HOUSE_ID, {
+        adminId: ADMIN_UID,
+        stripeAccountId: "acct_deleted",
+        stripeStatus: "active",
+      });
+      mockStripeV2AccountsRetrieve.mockRejectedValue(
+        makeStripeError(
+          StripeErrors.StripeInvalidRequestError,
+          "No such account: acct_deleted",
+          "invalid_request_error",
+        ),
       );
 
-      expect(result.status).toBe("disconnected");
-      expect(readHouse(HOUSE_ID)?.stripeStatus).toBe("disconnected");
+      await expect(
+        (getStripeAccountStatus as unknown as Function)(
+          { houseId: HOUSE_ID },
+          authedContext(ADMIN_UID),
+        ),
+      ).rejects.toBeInstanceOf(HttpsError);
+      expect(readHouse(HOUSE_ID)?.stripeStatus).toBe("active");
     });
   });
 

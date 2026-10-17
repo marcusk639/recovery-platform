@@ -851,16 +851,10 @@ export const getStripeAccountStatus = onCall(
         house.stripeAccountId,
       );
     } catch (err) {
-      // `resource_missing` is the machine-readable form; the message match is a
-      // v1 artefact kept because v2 is free to word the message differently.
-      if (
-        !(
-          isResourceMissing(err) ||
-          (err instanceof Stripe.errors.StripeError &&
-            err.type === "StripeInvalidRequestError" &&
-            err.message.toLowerCase().includes("no such account"))
-        )
-      ) {
+      // Only `resource_missing` means gone. Anything else — including the 403
+      // forbidden v2 returns for an id this key cannot see — says nothing about
+      // the house's account, so it surfaces rather than stopping rent.
+      if (!isResourceMissing(err)) {
         throw mapStripeError(err);
       }
     }

@@ -82,7 +82,6 @@ jest.mock("../../util/stripe", () => ({
     },
   })),
   mapStripeError: jest.fn((e: any) => e),
-  isAlreadyDeauthorized: jest.fn(() => false),
 }));
 
 const mockGet = jest.fn();
