@@ -9,6 +9,20 @@
     ],
     "rewrites": [
       {
+        "source": "/connect/stripe-return",
+        "function": {
+          "functionId": "stripeConnectReturn",
+          "region": "us-central1"
+        }
+      },
+      {
+        "source": "/connect/stripe-refresh",
+        "function": {
+          "functionId": "stripeConnectReauth",
+          "region": "us-central1"
+        }
+      },
+      {
         "source": "**",
         "function": {
           "functionId": "ssr",
