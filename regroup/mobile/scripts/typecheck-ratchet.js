@@ -50,9 +50,7 @@ function parseErrors(output) {
   for (const line of output.split('\n')) {
     const match = /^(.+?)\(\d+,\d+\): error (TS\d+): (.*)$/.exec(line.trim());
     if (match) {
-      identities.push(
-        normalisePaths(`${match[1]}: ${match[2]}: ${match[3].trim()}`),
-      );
+      identities.push(normalisePaths(`${match[1]}: ${match[2]}: ${match[3].trim()}`));
     }
   }
   return identities.sort();
@@ -84,13 +82,36 @@ function subtract(a, b) {
   return extra;
 }
 
+/**
+ * `cwd` is pinned to PKG_ROOT because BASELINE_PATH resolves from __dirname:
+ * the script can be invoked from anywhere, and there is no repo-root tsconfig,
+ * so inheriting the caller's cwd typechecks a directory with no inputs.
+ */
 function runTsc() {
   try {
-    execSync('npx tsc --noEmit', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    execSync('npx tsc --noEmit', {
+      cwd: PKG_ROOT,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
     return '';
   } catch (err) {
-    // tsc exits non-zero when it finds errors; that is the normal path here.
-    return `${err.stdout || ''}${err.stderr || ''}`;
+    const output = `${err.stdout || ''}${err.stderr || ''}`;
+    // tsc exits non-zero both when it finds type errors (the normal path) and
+    // when it could not typecheck at all — missing binary, unresolvable
+    // tsconfig, OOM kill, no inputs. Nothing in that second case matches the
+    // identity regex, so an empty result would compare as "every baseline
+    // error is fixed" and the gate would pass green over an unchecked tree.
+    // Fail closed instead: a non-zero exit must yield at least one parseable
+    // error to be believed.
+    if (parseErrors(output).length === 0) {
+      throw new Error(
+        `tsc exited ${err.status ?? 'abnormally'} without reporting a single ` +
+          `file-anchored error, so it did not typecheck this package. Refusing ` +
+          `to compare against the baseline.\n\n${output.trim()}`,
+      );
+    }
+    return output;
   }
 }
 
@@ -98,6 +119,21 @@ function main() {
   const current = parseErrors(runTsc());
 
   if (process.argv.includes('--update')) {
+    // Wiping a populated baseline retires the gate entirely, so it cannot be
+    // the accidental outcome of a regenerate. runTsc already refuses to return
+    // an unchecked tree; this is the second lock on the same door.
+    const existing = fs.existsSync(BASELINE_PATH)
+      ? parseBaseline(fs.readFileSync(BASELINE_PATH, 'utf8'))
+      : [];
+    if (current.length === 0 && existing.length > 0 && !process.argv.includes('--force')) {
+      console.error(
+        `Refusing to replace a ${existing.length}-error baseline with an empty one.\n` +
+          `Every pinned error vanishing at once is far more often a typecheck that\n` +
+          `did not run than ${existing.length} genuine fixes. If the package really is\n` +
+          `clean, re-run with --force.`,
+      );
+      process.exit(2);
+    }
     fs.writeFileSync(BASELINE_PATH, current.map((l) => `${l}\n`).join(''));
     console.log(`Wrote ${current.length} error(s) to ${BASELINE_PATH}`);
     process.exit(0);
@@ -138,5 +174,11 @@ function main() {
 module.exports = { parseErrors, parseBaseline, subtract, normalisePaths };
 
 if (require.main === module) {
-  main();
+  // Exit codes: 0 clean, 1 new type errors, 2 the check could not be made.
+  try {
+    main();
+  } catch (err) {
+    console.error(`\nFAIL: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(2);
+  }
 }
