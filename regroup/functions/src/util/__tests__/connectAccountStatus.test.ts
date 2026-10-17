@@ -138,6 +138,26 @@ describe("mapRecipientAccountStatus", () => {
     expect(result.pastDue).toEqual([]);
     expect(result.eventuallyDue).toEqual([]);
   });
+
+  it("reports an open account as not closed", () => {
+    const result = mapRecipientAccountStatus(accountWithTransfers("active"));
+
+    expect(result.closed).toBe(false);
+  });
+
+  it("never reports a closed account as active, whatever its capability says", () => {
+    // A closed v2 account is still retrievable (closed: true) rather than
+    // resource_missing, and Stripe permits no operations on it. Its last
+    // capability status is history, not a promise that transfers will land.
+    const result = mapRecipientAccountStatus({
+      ...accountWithTransfers("active"),
+      closed: true,
+    } as Stripe.V2.Core.Account);
+
+    expect(result.closed).toBe(true);
+    expect(result.status).not.toBe("active");
+    expect(result.transfersEnabled).toBe(false);
+  });
 });
 
 describe("fetchConnectAccountStatus", () => {

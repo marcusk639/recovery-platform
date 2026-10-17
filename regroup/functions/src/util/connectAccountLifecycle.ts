@@ -79,6 +79,41 @@ export async function closeOrphanedAccount(
   await closeRecipientAccount(stripe, accountId).catch(() => undefined);
 }
 
+/** True when Stripe reports the account as closed. Throws on a failed read. */
+export async function isRecipientAccountClosed(
+  stripe: Stripe,
+  accountId: string,
+): Promise<boolean> {
+  const account = await stripe.v2.core.accounts.retrieve(accountId);
+  return account.closed === true;
+}
+
+/**
+ * Closes a house's account, succeeding if Stripe already has it gone or closed.
+ *
+ * A closed v2 account still exists, so closing it again is refused with an
+ * error that is not resource_missing. Re-reading the account is the only
+ * reliable way to tell "already closed" from a genuine refusal. Without it, a
+ * disconnect whose Firestore clear failed after a successful close could never
+ * be retried, and neither could one for an account closed in the Dashboard.
+ *
+ * Any other failure rethrows the original close error.
+ */
+export async function closeHouseAccount(
+  stripe: Stripe,
+  accountId: string,
+): Promise<void> {
+  try {
+    await closeRecipientAccount(stripe, accountId);
+  } catch (err) {
+    if (isAccountAlreadyGone(err)) return;
+    const closed = await isRecipientAccountClosed(stripe, accountId).catch(
+      () => false,
+    );
+    if (!closed) throw err;
+  }
+}
+
 /**
  * True when Stripe is telling us the account is already gone, so a disconnect
  * can be treated as idempotent and local state brought in sync anyway.

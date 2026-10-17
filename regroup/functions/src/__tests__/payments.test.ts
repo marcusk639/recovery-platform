@@ -753,6 +753,45 @@ describe("connectStripeAccount", () => {
     });
   });
 
+  describe("house whose stored Stripe account has been closed", () => {
+    // Closed in the Stripe Dashboard, or by a disconnect whose Firestore clear
+    // never landed. A closed v2 account still retrieves (closed: true) but
+    // accepts no operations, so reusing its id fails onboarding forever.
+    beforeEach(() => {
+      seedHouse(HOUSE_ID, {
+        adminId: ADMIN_UID,
+        stripeAccountId: "acct_closed",
+        stripeStatus: "disconnected",
+      });
+      mockStripeV2AccountsRetrieve.mockResolvedValue({
+        ...v2RecipientAccount("acct_closed", "active"),
+        closed: true,
+      });
+    });
+
+    it("creates a fresh recipient account instead of reusing the closed one", async () => {
+      await (connectStripeAccount as unknown as Function)(
+        baseData,
+        authedContext(ADMIN_UID),
+      );
+
+      expect(mockStripeV2AccountsCreate).toHaveBeenCalledTimes(1);
+      expect(readHouse(HOUSE_ID)?.stripeAccountId).toBe("acct_new123");
+      expect(mockStripeAccountLinksCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ account: "acct_new123" }),
+      );
+    });
+
+    it("does not close the fresh account as if it had lost a race", async () => {
+      await (connectStripeAccount as unknown as Function)(
+        baseData,
+        authedContext(ADMIN_UID),
+      );
+
+      expect(mockStripeV2AccountsClose).not.toHaveBeenCalled();
+    });
+  });
+
   describe("Stripe API errors", () => {
     beforeEach(() => seedHouse(HOUSE_ID, { adminId: ADMIN_UID }));
 
@@ -1078,6 +1117,55 @@ describe("disconnectStripeAccount", () => {
       );
       expect(readHouse(HOUSE_ID)?.stripeAccountId).toBe("acct_gone");
     });
+
+    it("succeeds when the close fails because the account is already closed", async () => {
+      // A closed v2 account still exists, so closing it again is not
+      // resource_missing: Stripe refuses any operation on it. Without this, a
+      // disconnect whose Firestore clear failed could never be retried.
+      mockStripeV2AccountsClose.mockRejectedValue(
+        makeStripeError(
+          StripeErrors.StripeInvalidRequestError,
+          "This account is closed.",
+          "invalid_request_error",
+        ),
+      );
+      mockStripeV2AccountsRetrieve.mockResolvedValue({
+        ...v2RecipientAccount("acct_gone", "active"),
+        closed: true,
+      });
+
+      const result = await (disconnectStripeAccount as unknown as Function)(
+        { houseId: HOUSE_ID },
+        authedContext(ADMIN_UID),
+      );
+
+      expect(result).toEqual({ success: true });
+      expect(readHouse(HOUSE_ID)?.stripeStatus).toBe("disconnected");
+      expect(readHouse(HOUSE_ID)?.stripeAccountId).toBeUndefined();
+    });
+
+    it("still fails when the close is refused and the account is not closed", async () => {
+      mockStripeV2AccountsClose.mockRejectedValue(
+        makeStripeError(
+          StripeErrors.StripeInvalidRequestError,
+          "Account has a non-zero balance.",
+          "invalid_request_error",
+        ),
+      );
+      mockStripeV2AccountsRetrieve.mockResolvedValue(
+        v2RecipientAccount("acct_gone", "active"),
+      );
+
+      await expectHttpsError(
+        () =>
+          (disconnectStripeAccount as unknown as Function)(
+            { houseId: HOUSE_ID },
+            authedContext(ADMIN_UID),
+          ),
+        "invalid-argument",
+      );
+      expect(readHouse(HOUSE_ID)?.stripeAccountId).toBe("acct_gone");
+    });
   });
 });
 
@@ -1340,6 +1428,41 @@ describe("getStripeAccountStatus", () => {
       );
 
       expect(result.status).toBe("disconnected");
+      expect(readHouse(HOUSE_ID)?.stripeStatus).toBe("disconnected");
+    });
+  });
+
+  describe("Stripe account has been closed", () => {
+    beforeEach(() => {
+      seedHouse(HOUSE_ID, {
+        adminId: ADMIN_UID,
+        stripeAccountId: "acct_closed",
+        stripeStatus: "active",
+      });
+      // Its last capability status still reads active; closed must win.
+      mockStripeV2AccountsRetrieve.mockResolvedValue({
+        ...v2RecipientAccount("acct_closed", "active"),
+        closed: true,
+      });
+    });
+
+    it("returns disconnected rather than the stale capability status", async () => {
+      const result = await (getStripeAccountStatus as unknown as Function)(
+        { houseId: HOUSE_ID },
+        authedContext(ADMIN_UID),
+      );
+
+      expect(result.status).toBe("disconnected");
+      expect(result.chargesEnabled).toBe(false);
+      expect(result.payoutsEnabled).toBe(false);
+    });
+
+    it("syncs disconnected to Firestore so rent collection stops", async () => {
+      await (getStripeAccountStatus as unknown as Function)(
+        { houseId: HOUSE_ID },
+        authedContext(ADMIN_UID),
+      );
+
       expect(readHouse(HOUSE_ID)?.stripeStatus).toBe("disconnected");
     });
   });

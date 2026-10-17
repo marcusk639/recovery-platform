@@ -35,6 +35,14 @@ export type TransfersCapabilityStatus =
   | "absent";
 
 export interface ConnectAccountStatus {
+  /**
+   * True when Stripe has closed the account. A closed v2 account is still
+   * retrievable — it is NOT resource_missing — but accepts no operations, so
+   * callers must treat it as gone: mark the house disconnected and never reuse
+   * its id. `status` is only `pending` here to keep the type closed; it is not
+   * a state the house can recover from.
+   */
+  closed: boolean;
   /** Mapped house status. */
   status: ConnectStatus;
   /** The capability status this was derived from, for logging and diagnosis. */
@@ -97,8 +105,12 @@ export function mapRecipientAccountStatus(
     account.configuration?.recipient?.capabilities?.stripe_balance
       ?.stripe_transfers?.status ?? "absent";
 
+  // Stripe keeps a closed account's last capability status, which can still
+  // read `active`. It is history, so it must never decide the status.
+  const closed = account.closed === true;
+
   let status: ConnectStatus;
-  switch (transfersStatus) {
+  switch (closed ? "absent" : transfersStatus) {
     case "active":
       status = "active";
       break;
@@ -112,9 +124,10 @@ export function mapRecipientAccountStatus(
   }
 
   return {
+    closed,
     status,
     transfersStatus,
-    transfersEnabled: transfersStatus === "active",
+    transfersEnabled: !closed && transfersStatus === "active",
     currentlyDue: requirementDescriptions(account, "currently_due"),
     pastDue: requirementDescriptions(account, "past_due"),
     eventuallyDue: requirementDescriptions(account, "eventually_due"),

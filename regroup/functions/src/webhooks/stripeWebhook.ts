@@ -1,7 +1,10 @@
 import * as admin from "firebase-admin";
 import Stripe from "stripe";
 import { createStripeClient, isResourceMissing } from "../util/stripe";
-import { fetchConnectAccountStatus } from "../util/connectAccountStatus";
+import {
+  fetchConnectAccountStatus,
+  type ConnectAccountStatus,
+} from "../util/connectAccountStatus";
 
 // Lazily instantiated to avoid constructing the Stripe client at module load
 // (Firebase source analysis loads modules without secrets bound, so eager
@@ -1072,11 +1075,18 @@ async function handleAccountUpdated(accountId: string): Promise<void> {
   let payoutsEnabled: boolean;
   let requirements: string[];
 
+  let accountStatus: ConnectAccountStatus | null = null;
   try {
-    const accountStatus = await fetchConnectAccountStatus(
-      getStripe(),
-      accountId,
-    );
+    accountStatus = await fetchConnectAccountStatus(getStripe(), accountId);
+  } catch (err) {
+    if (!isResourceMissing(err)) {
+      // Transient or unexpected. Rethrow so the dispatcher releases the event
+      // for retry rather than recording a status we could not read.
+      throw err;
+    }
+  }
+
+  if (accountStatus !== null && !accountStatus.closed) {
     newStatus = accountStatus.status;
     // Both columns answer the same question for a recipient: can transfers
     // land? Kept because the mobile client renders a row from each.
@@ -1089,18 +1099,15 @@ async function handleAccountUpdated(accountId: string): Promise<void> {
         ...accountStatus.eventuallyDue,
       ]),
     );
-  } catch (err) {
-    if (!isResourceMissing(err)) {
-      // Transient or unexpected. Rethrow so the dispatcher releases the event
-      // for retry rather than recording a status we could not read.
-      throw err;
-    }
-    // The account is genuinely gone. Leaving the house at its previous status
-    // would strand it as `active` forever, which is the one state that lets
-    // rent collection attempt a transfer into nothing.
-    logger.warn("account.updated: account no longer exists, marking house disconnected", {
+  } else {
+    // The account is gone, or Stripe has closed it (a closed account still
+    // retrieves, with its last capability status intact). Leaving the house at
+    // its previous status would strand it as `active` forever, which is the one
+    // state that lets rent collection attempt a transfer into nothing.
+    logger.warn("account.updated: account gone or closed, marking house disconnected", {
       accountId,
       previousStatus,
+      closed: accountStatus?.closed ?? false,
     });
     newStatus = "disconnected";
     chargesEnabled = false;

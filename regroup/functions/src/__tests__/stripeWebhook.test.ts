@@ -2240,6 +2240,50 @@ describe("account.updated", () => {
       expect.objectContaining({ stripeStatus: "disconnected" }),
     );
   });
+
+  test("a closed account is marked disconnected even though it still retrieves", async () => {
+    // Closed v2 accounts are returned with closed: true, not resource_missing,
+    // and keep their last capability status. Trusting that status would leave
+    // the house active against an account Stripe accepts no transfers for.
+    const event = makeStripeEvent("account.updated", makeAccount());
+    mockConstructEvent.mockReturnValue(event);
+    mockV2AccountsRetrieve.mockResolvedValue({
+      ...makeV2RecipientAccount("active"),
+      closed: true,
+    });
+    setupForAccountUpdated(true, "active");
+
+    const res = makeResponse();
+    await stripeWebhook(makeRequest({}) as never, res as never);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stripeStatus: "disconnected",
+        stripeChargesEnabled: false,
+        stripePayoutsEnabled: false,
+      }),
+    );
+  });
+
+  test("a transient retrieve failure is retried, not recorded as disconnected", async () => {
+    const event = makeStripeEvent("account.updated", makeAccount());
+    mockConstructEvent.mockReturnValue(event);
+    mockV2AccountsRetrieve.mockRejectedValue(
+      Object.assign(new Error("Too many requests"), {
+        type: "StripeRateLimitError",
+      }),
+    );
+    setupForAccountUpdated(true, "active");
+
+    const res = makeResponse();
+    await stripeWebhook(makeRequest({}) as never, res as never);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(mockUpdate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ stripeStatus: "disconnected" }),
+    );
+  });
 });
 
 // ===========================================================================
