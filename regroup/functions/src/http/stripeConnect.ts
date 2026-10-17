@@ -114,6 +114,37 @@ export const stripeConnectReauth = onRequest(
 // Firestore and render a simple acknowledgement page.
 // ---------------------------------------------------------------------------
 
+/**
+ * The page Stripe returns an operator to after onboarding.
+ *
+ * Never claims success unconditionally. Stripe redirects here whenever the flow
+ * ends, including when the operator abandoned it part-way, so "Stripe setup
+ * complete" was wrong for every account that came back `pending` or
+ * `restricted` — and those are exactly the accounts that then fail the
+ * `stripeStatus === "active"` gate on rent collection, leaving an operator who
+ * was told they were finished wondering why nothing works.
+ *
+ * `undefined` covers three cases that are indistinguishable here and need the
+ * same message: no account id on the request, no house matching it, and the
+ * account.updated webhook not having landed yet.
+ */
+function renderReturnPage(status: string | undefined): string {
+  const body =
+    status === "active"
+      ? "<h2>Stripe setup complete.</h2><p>Payouts are enabled for your house.</p>"
+      : status === "restricted"
+        ? "<h2>Stripe needs more information.</h2>" +
+          "<p>Your account was created, but Stripe requires further details " +
+          "before payouts can be enabled. Reopen setup from the app to finish.</p>"
+        : status === "pending"
+          ? "<h2>Stripe is verifying your details.</h2>" +
+            "<p>This usually takes a few minutes. You can close this window.</p>"
+          : "<h2>Finishing setup.</h2>" +
+            "<p>We are confirming your details with Stripe. You can close this " +
+            "window and check your house settings in the app shortly.</p>";
+  return `<html><body>${body}</body></html>`;
+}
+
 export const stripeConnectReturn = onRequest(
   { secrets: [STRIPE_SECRET_KEY] },
   async (req, res) => {
@@ -123,72 +154,44 @@ export const stripeConnectReturn = onRequest(
       stripeAccountId: stripeAccountId ?? "unknown",
     });
 
-    if (!stripeAccountId) {
-      // No account ID — still render a success page; the account.updated
-      // webhook will sync Firestore when Stripe sends it.
-      res
-        .status(200)
-        .send(
-          "<html><body><h2>Stripe setup complete.</h2>" +
-            "<p>You can close this window and return to the app.</p>" +
-            "</body></html>",
-        );
-      return;
-    }
-
-    try {
-      // This endpoint is unauthenticated (reached via Stripe redirect). Verify
-      // the account maps to a regroup house BEFORE calling Stripe, so an
-      // attacker cannot use it to probe arbitrary connected-account IDs.
-      const db = admin.firestore();
-      const snap = await db
-        .collection("houses")
-        .where("stripeAccountId", "==", stripeAccountId)
-        .limit(1)
-        .get();
-
-      if (snap.empty) {
-        logger.warn("stripeConnectReturn: no house found for account", {
+    // Read-only by design. This endpoint is unauthenticated and reached by
+    // redirect, and stripeAccountId is not a secret — firestore.rules lets any
+    // resident of a house read houses/{houseId}, where the field lives. The
+    // previous version retrieved the account from Stripe and wrote the result to
+    // the house document on every hit, which handed anyone holding an account id
+    // an unauthenticated write plus unbounded Stripe calls against a chosen
+    // house, and let them choose WHEN a status refresh happened — which matters
+    // because createPaymentIntent gates on house.stripeStatus === "active".
+    //
+    // Nothing is lost by dropping it: account.updated is handled
+    // (stripeWebhook.ts) and re-reads authoritative v2 state, so the webhook is
+    // the syncing path. The cost is that status can lag this page by the webhook
+    // delivery, which is why the copy below never claims more than it knows.
+    let status: string | undefined;
+    if (stripeAccountId) {
+      try {
+        const snap = await admin
+          .firestore()
+          .collection("houses")
+          .where("stripeAccountId", "==", stripeAccountId)
+          .limit(1)
+          .get();
+        if (snap.empty) {
+          logger.warn("stripeConnectReturn: no house found for account", {
+            stripeAccountId,
+          });
+        } else {
+          status = snap.docs[0].get("stripeStatus") as string | undefined;
+        }
+      } catch (err) {
+        // Non-fatal: the page still renders, just without a status.
+        logger.error("stripeConnectReturn: could not read house status", {
           stripeAccountId,
-        });
-      } else {
-        // Eagerly sync the account status so the app reflects it immediately
-        // without waiting for the account.updated webhook.
-        // Houses are Accounts v2 recipients, so the status comes from the
-        // recipient transfers capability via the shared helper — not from
-        // charges_enabled / payouts_enabled, which are false on a healthy
-        // recipient and used to withhold `active` from it here.
-        const accountStatus = await fetchConnectAccountStatus(
-          getStripe(),
-          stripeAccountId,
-        );
-        const stripeStatus = accountStatus.status;
-
-        await snap.docs[0].ref.update({
-          stripeStatus,
-          stripeChargesEnabled: accountStatus.transfersEnabled,
-          stripePayoutsEnabled: accountStatus.transfersEnabled,
-          updatedAt: new Date().toISOString(),
-        });
-        logger.info("stripeConnectReturn: synced account status to Firestore", {
-          stripeAccountId,
-          stripeStatus,
+          err: (err as Error)?.message,
         });
       }
-    } catch (err) {
-      // Non-fatal — the account.updated webhook will reconcile state.
-      logger.error("stripeConnectReturn: error syncing account status", {
-        stripeAccountId,
-        err: (err as Error).message,
-      });
     }
 
-    res
-      .status(200)
-      .send(
-        "<html><body><h2>Stripe setup complete.</h2>" +
-          "<p>You can close this window and return to the app.</p>" +
-          "</body></html>",
-      );
+    res.status(200).send(renderReturnPage(status));
   },
 );
