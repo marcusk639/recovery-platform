@@ -305,7 +305,11 @@ async function handlePaymentIntentSucceeded(
     // Still write a partial payment doc so ops can investigate
     await upsertPaymentDoc(paymentIntent.id, {
       stripePaymentIntentId: paymentIntent.id,
-      amount: paymentIntent.amount / 100,
+      // Integer cents, matching every other writer and reader of this field
+      // (#82). Guarded by the USD check below on the metadata-bearing path;
+      // here the currency is recorded alongside so a non-USD stray is
+      // identifiable rather than silently summed.
+      amount: paymentIntent.amount,
       currency: paymentIntent.currency,
       status: "succeeded",
       houseId: houseId ?? null,
@@ -353,12 +357,11 @@ async function handlePaymentIntentSucceeded(
     // path is ever made to retry, make `reconciledAt` conditional first.
     await upsertPaymentDoc(paymentIntent.id, {
       stripePaymentIntentId: paymentIntent.id,
-      // Deliberately not `amount`. That field is NOT consistently scaled:
-      // stripeWebhook writes dollars, while mobile's recordManualPayment
-      // (src/services/payments.ts:263) writes cents, and analytics.ts:172
-      // multiplies every row by 100 assuming dollars — so manual payments
-      // already report 100x. Tracked separately; do not add to it here.
-      // Minor units are unambiguous.
+      // Deliberately not `amount`. That field is USD cents by contract (#82)
+      // and this payment is not USD, so its minor units are not USD cents and
+      // no conversion is available here. Writing them under `amount` would
+      // credit the rent ledger a figure it cannot interpret. `amountMinorUnits`
+      // carries the raw value next to `currency`, which is unambiguous.
       amountMinorUnits: paymentIntent.amount,
       currency: paymentIntent.currency,
       status: "succeeded",
@@ -385,8 +388,11 @@ async function handlePaymentIntentSucceeded(
     );
   }
 
-  const amountDollars = paymentIntent.amount / 100;
+  // amountCents is the ledger value: it is what `amount` stores, what rentOwed
+  // is decremented by, and what analytics sums. amountDollars exists only for
+  // human-facing notification copy below.
   const amountCents = paymentIntent.amount;
+  const amountDollars = amountCents / 100;
 
   // 1. Write the payment record FIRST, before anything that can fail.
   // Refusing to apply a payment and refusing to record it are separate
@@ -399,7 +405,7 @@ async function handlePaymentIntentSucceeded(
     stripePaymentIntentId: paymentIntent.id,
     houseId,
     guestId,
-    amount: amountDollars,
+    amount: amountCents,
     currency: paymentIntent.currency,
     status: "succeeded",
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -570,7 +576,8 @@ async function handlePaymentIntentFailed(
   const lastError = paymentIntent.last_payment_error;
   const failureCode = lastError?.code ?? "unknown";
   const failureMessage = lastError?.message ?? "Payment failed";
-  const amountDollars = paymentIntent.amount / 100;
+  const amountCents = paymentIntent.amount;
+  const amountDollars = amountCents / 100;
 
   logger.error("payment_intent.payment_failed", {
     paymentIntentId: paymentIntent.id,
@@ -585,7 +592,10 @@ async function handlePaymentIntentFailed(
     stripePaymentIntentId: paymentIntent.id,
     houseId: houseId ?? null,
     guestId: guestId ?? null,
-    amount: amountDollars,
+    // Cents, like every other write to this field (#82). A failed payment is
+    // excluded from the analytics window by status, but the unit must still
+    // agree — the resident's history reads the same field.
+    amount: amountCents,
     currency: paymentIntent.currency,
     status: "failed",
     failureCode,

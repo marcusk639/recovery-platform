@@ -789,7 +789,8 @@ describe("stripeWebhook — payment_intent.succeeded", () => {
     expect(mockPaymentSet).toHaveBeenCalledWith(
       expect.objectContaining({
         stripePaymentIntentId: "pi_test_1",
-        amount: 500,
+        // Cents (#82); the webhook used to write dollars here.
+        amount: 50000,
         status: "succeeded",
         houseId,
         guestId,

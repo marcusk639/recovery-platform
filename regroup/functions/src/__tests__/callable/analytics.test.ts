@@ -118,8 +118,8 @@ describe("rentRoiMetrics — entitled metrics", () => {
   it("computes collected, outstanding, overdue and payment counts", async () => {
     entitledTraditional();
     mockGetSuccessfulPaymentsForHouse.mockResolvedValue([
-      { amount: 500, createdAt: "2026-06-01T10:00:00.000Z" },
-      { amount: 250, createdAt: "2026-06-05T10:00:00.000Z" },
+      { amount: 50000, createdAt: "2026-06-01T10:00:00.000Z" },
+      { amount: 25000, createdAt: "2026-06-05T10:00:00.000Z" },
     ]);
     mockGetGuestsForHouse.mockResolvedValue([
       // overdue: owes money + due date in the past
@@ -136,7 +136,7 @@ describe("rentRoiMetrics — entitled metrics", () => {
     expect(result).toMatchObject({
       available: true,
       spec: "RG-TRACK",
-      collectedGrossCents: 75000, // (500 + 250) * 100
+      collectedGrossCents: 75000, // 50000 + 25000, already cents
       paymentCount: 2,
       outstandingCents: 50000, // 30000 + 20000 + 0 (active only)
       overdueResidentCount: 1,
@@ -160,9 +160,9 @@ describe("rentRoiMetrics — entitled metrics", () => {
     entitledTraditional();
     mockGetGuestsForHouse.mockResolvedValue([]);
     mockGetSuccessfulPaymentsForHouse.mockResolvedValue([
-      { amount: 100, createdAt: "2026-05-15T00:00:00.000Z" }, // before window
-      { amount: 200, createdAt: "2026-06-10T00:00:00.000Z" }, // in window
-      { amount: 300, createdAt: "2026-07-02T00:00:00.000Z" }, // after window
+      { amount: 10000, createdAt: "2026-05-15T00:00:00.000Z" }, // before window
+      { amount: 20000, createdAt: "2026-06-10T00:00:00.000Z" }, // in window
+      { amount: 30000, createdAt: "2026-07-02T00:00:00.000Z" }, // after window
     ]);
 
     const result = await call({
@@ -171,21 +171,24 @@ describe("rentRoiMetrics — entitled metrics", () => {
       endDate: "2026-06-30",
     });
     expect(result.paymentCount).toBe(1);
-    expect(result.collectedGrossCents).toBe(20000); // 200 * 100
+    expect(result.collectedGrossCents).toBe(20000);
     expect(result.period).toEqual({
       startDate: "2026-06-01",
       endDate: "2026-06-30",
     });
   });
 
-  it("rounds dollars→cents correctly for fractional amounts", async () => {
+  it("rounds a non-integer amount to whole cents", async () => {
+    // Every writer stores an integer, but a legacy document could hold a
+    // fractional value. Summing it raw would leak sub-cent drift into the
+    // total, so the reducer still rounds per payment.
     entitledTraditional();
     mockGetGuestsForHouse.mockResolvedValue([]);
     mockGetSuccessfulPaymentsForHouse.mockResolvedValue([
-      { amount: 99.99, createdAt: "2026-06-10T00:00:00.000Z" },
+      { amount: 9999.6, createdAt: "2026-06-10T00:00:00.000Z" },
     ]);
     const result = await call({ houseId: "house-1" });
-    expect(result.collectedGrossCents).toBe(9999); // round(99.99 * 100)
+    expect(result.collectedGrossCents).toBe(10000);
   });
 
   it("handles Firestore Timestamp createdAt (toDate + _seconds)", async () => {
@@ -193,10 +196,10 @@ describe("rentRoiMetrics — entitled metrics", () => {
     mockGetGuestsForHouse.mockResolvedValue([]);
     mockGetSuccessfulPaymentsForHouse.mockResolvedValue([
       {
-        amount: 100,
+        amount: 10000,
         createdAt: { toDate: () => new Date("2026-06-10T00:00:00.000Z") },
       },
-      { amount: 50, createdAt: { _seconds: 1750118400 } }, // 2025-06-17 (out of window)
+      { amount: 5000, createdAt: { _seconds: 1750118400 } }, // 2025-06-17 (out of window)
     ]);
     const result = await call({
       houseId: "house-1",
@@ -217,6 +220,51 @@ describe("rentRoiMetrics — entitled metrics", () => {
   });
 });
 
+describe("rentRoiMetrics — payments.amount is cents (#82)", () => {
+  const entitledTraditional = () => {
+    mockGetHouse.mockResolvedValue(baseHouse);
+    mockGetUser.mockResolvedValue(userWithTier("traditional", "professional"));
+  };
+
+  it("does not inflate a manual cash payment 100x", async () => {
+    // Repro from #82. The Payment Dashboard records a $500 cash payment as
+    // recordManualPayment(..., 50000, "Cash"), which stores amount: 50000 —
+    // integer cents. This reducer used to multiply every row by 100 because
+    // the Stripe webhook wrote dollars into the same field, so a single cash
+    // payment reported $50,000 collected.
+    entitledTraditional();
+    mockGetGuestsForHouse.mockResolvedValue([]);
+    mockGetSuccessfulPaymentsForHouse.mockResolvedValue([
+      { amount: 50000, createdAt: "2026-06-01T10:00:00.000Z" },
+    ]);
+
+    const result = await call({ houseId: "house-1" });
+    expect(result.collectedGrossCents).toBe(50000);
+    expect(result.collectedNetCents).toBe(50000);
+  });
+
+  it("nets a refund against a cents-valued payment in the same unit", async () => {
+    // refundedAmountCents is written by the charge.refunded webhook in genuine
+    // cents. Netting it against a gross computed in the wrong unit made the
+    // subtraction meaningless as well as the gross: $500 collected less $100
+    // refunded came out as $49,900, not $400.
+    entitledTraditional();
+    mockGetGuestsForHouse.mockResolvedValue([]);
+    mockGetSuccessfulPaymentsForHouse.mockResolvedValue([
+      {
+        amount: 50000,
+        createdAt: "2026-06-01T10:00:00.000Z",
+        refundedAmountCents: 10000,
+      },
+    ]);
+
+    const result = await call({ houseId: "house-1" });
+    expect(result.collectedGrossCents).toBe(50000);
+    expect(result.refundedCents).toBe(10000);
+    expect(result.collectedNetCents).toBe(40000);
+  });
+});
+
 describe("rentRoiMetrics — refund netting (#35)", () => {
   const entitledTraditional = () => {
     mockGetHouse.mockResolvedValue(baseHouse);
@@ -229,16 +277,16 @@ describe("rentRoiMetrics — refund netting (#35)", () => {
     mockGetSuccessfulPaymentsForHouse.mockResolvedValue([
       // $500, $100 refunded
       {
-        amount: 500,
+        amount: 50000,
         createdAt: "2026-06-01T10:00:00.000Z",
         refundedAmountCents: 10000,
       },
       // $250, no refund field
-      { amount: 250, createdAt: "2026-06-05T10:00:00.000Z" },
+      { amount: 25000, createdAt: "2026-06-05T10:00:00.000Z" },
     ]);
 
     const result = await call({ houseId: "house-1" });
-    expect(result.collectedGrossCents).toBe(75000); // (500 + 250) * 100
+    expect(result.collectedGrossCents).toBe(75000); // 50000 + 25000
     expect(result.refundedCents).toBe(10000);
     expect(result.collectedNetCents).toBe(65000); // 75000 - 10000
   });
@@ -248,7 +296,7 @@ describe("rentRoiMetrics — refund netting (#35)", () => {
     mockGetGuestsForHouse.mockResolvedValue([]);
     mockGetSuccessfulPaymentsForHouse.mockResolvedValue([
       {
-        amount: 100,
+        amount: 10000,
         createdAt: "2026-06-01T10:00:00.000Z",
         refundedAmountCents: 50000, // refunded far more than collected
       },
@@ -264,7 +312,7 @@ describe("rentRoiMetrics — refund netting (#35)", () => {
     entitledTraditional();
     mockGetGuestsForHouse.mockResolvedValue([]);
     mockGetSuccessfulPaymentsForHouse.mockResolvedValue([
-      { amount: 300, createdAt: "2026-06-01T10:00:00.000Z" },
+      { amount: 30000, createdAt: "2026-06-01T10:00:00.000Z" },
     ]);
 
     const result = await call({ houseId: "house-1" });
@@ -286,24 +334,24 @@ describe("rentRoiMetrics — on-time rate (#34)", () => {
     mockGetSuccessfulPaymentsForHouse.mockResolvedValue([
       // on-time: paid 2026-06-01, due 2026-06-05
       {
-        amount: 100,
+        amount: 10000,
         createdAt: "2026-06-01T10:00:00.000Z",
         dueDate: "2026-06-05",
       },
       // on-time (boundary): paid exactly on the due date
       {
-        amount: 100,
+        amount: 10000,
         createdAt: "2026-06-10T10:00:00.000Z",
         dueDate: "2026-06-10",
       },
       // late: paid 2026-06-20, due 2026-06-10
       {
-        amount: 100,
+        amount: 10000,
         createdAt: "2026-06-20T10:00:00.000Z",
         dueDate: "2026-06-10",
       },
       // excluded: no dueDate
-      { amount: 100, createdAt: "2026-06-15T10:00:00.000Z" },
+      { amount: 10000, createdAt: "2026-06-15T10:00:00.000Z" },
     ]);
 
     const result = await call({ houseId: "house-1" });
@@ -321,7 +369,7 @@ describe("rentRoiMetrics — on-time rate (#34)", () => {
     entitledTraditional();
     mockGetGuestsForHouse.mockResolvedValue([]);
     mockGetSuccessfulPaymentsForHouse.mockResolvedValue([
-      { amount: 100, createdAt: "2026-06-01T10:00:00.000Z" },
+      { amount: 10000, createdAt: "2026-06-01T10:00:00.000Z" },
     ]);
 
     const result = await call({ houseId: "house-1" });
@@ -334,12 +382,12 @@ describe("rentRoiMetrics — on-time rate (#34)", () => {
     mockGetGuestsForHouse.mockResolvedValue([]);
     mockGetSuccessfulPaymentsForHouse.mockResolvedValue([
       {
-        amount: 100,
+        amount: 10000,
         createdAt: "2026-06-01T10:00:00.000Z",
         dueDate: "2026-06-05",
       },
       {
-        amount: 100,
+        amount: 10000,
         createdAt: "2026-06-09T10:00:00.000Z",
         dueDate: "2026-06-05",
       },
