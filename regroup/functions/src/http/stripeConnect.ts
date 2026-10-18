@@ -12,8 +12,8 @@
  * NOTE: onboardStripeConnectUser was the legacy web-based standard-account
  * onboarding endpoint. It has been removed — see FUNCTION_AUDIT.md. The
  * replacement callable function `connectStripeAccount` (in
- * src/callable/payments.ts) handles onboarding of Accounts v2 recipient
- * accounts for the React Native app.
+ * src/callable/payments.ts) handles house account onboarding (Accounts v1
+ * by default, v2 behind CONNECT_ACCOUNTS_API) for the React Native app.
  */
 
 import { onRequest } from "firebase-functions/v2/https";

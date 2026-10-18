@@ -1,8 +1,13 @@
 import * as admin from "firebase-admin";
 import Stripe from "stripe";
-import { createStripeClient, isResourceMissing } from "../util/stripe";
+import {
+  createStripeClient,
+  isAccountInvalid,
+  isResourceMissing,
+} from "../util/stripe";
 import {
   fetchConnectAccountStatus,
+  houseAccountApi,
   type ConnectAccountStatus,
 } from "../util/connectAccountStatus";
 
@@ -37,6 +42,8 @@ import { Cents } from "../util/money";
 
 interface HouseDoc {
   stripeAccountId: string;
+  /** Which Accounts API created the account; absent on pre-field (v1) houses. */
+  stripeAccountApi?: "v1" | "v2";
   stripeStatus:
     | "active"
     | "pending"
@@ -1070,10 +1077,12 @@ async function handleSubscriptionUpdated(
  *
  * A v2 account emits both v1 snapshot events and v2 thin events, and the v1
  * `account.updated` snapshot still carries charges_enabled / payouts_enabled —
- * which are false on a perfectly healthy recipient. Reading them off the
- * payload is what let a working house sit at `pending`. So the event tells us
+ * which are false on a perfectly healthy v2 recipient. Reading them off the
+ * payload is what let a working house sit at `pending`. (For a v1 house those
+ * flags are real, but are still display-only; transfers is what gates rent.) So the event tells us
  * *that* something changed and for which account; the authoritative state comes
- * from a v2 read of the recipient capability.
+ * from re-reading the account — with the API that created it (v1 or v2) — and
+ * mapping its transfers capability.
  */
 async function handleAccountUpdated(accountId: string): Promise<void> {
   const house = await findHouseByStripeAccountId(accountId);
@@ -1093,10 +1102,25 @@ async function handleAccountUpdated(accountId: string): Promise<void> {
   let payoutsEnabled: boolean;
   let requirements: string[];
 
+  const api = houseAccountApi(house.data.stripeAccountApi);
   let accountStatus: ConnectAccountStatus | null = null;
   try {
-    accountStatus = await fetchConnectAccountStatus(getStripe(), accountId);
+    accountStatus = await fetchConnectAccountStatus(getStripe(), accountId, api);
   } catch (err) {
+    if (api === "v1" && isAccountInvalid(err)) {
+      // Deleted, or this key cannot see it — Stripe does not say which, so the
+      // house is left as it is (a wrong-key deploy must not disconnect every
+      // house). Neither case resolves on retry, so stop Stripe re-delivering
+      // for three days and leave an error an operator can act on.
+      logger.error("account.updated: v1 account returned account_invalid; house left unchanged", {
+        houseId: house.id,
+        accountId,
+        previousStatus,
+      });
+      throw new PermanentWebhookError(
+        `account.updated: v1 account ${accountId} returned account_invalid`,
+      );
+    }
     if (!isResourceMissing(err)) {
       // Transient or unexpected. Rethrow so the dispatcher releases the event
       // for retry rather than recording a status we could not read.
@@ -1106,11 +1130,9 @@ async function handleAccountUpdated(accountId: string): Promise<void> {
 
   if (accountStatus !== null && !accountStatus.closed) {
     newStatus = accountStatus.status;
-    // Both columns are derived from the transfers capability — the signal that
-    // gates rent — because the mobile client renders a row from each. Payouts
-    // are a separate Stripe capability not read here; see getStripeAccountStatus.
-    chargesEnabled = accountStatus.transfersEnabled;
-    payoutsEnabled = accountStatus.transfersEnabled;
+    // Display-only rows for the mobile client; see ConnectAccountStatus.
+    chargesEnabled = accountStatus.chargesEnabled;
+    payoutsEnabled = accountStatus.payoutsEnabled;
     requirements = Array.from(
       new Set([
         ...accountStatus.currentlyDue,
@@ -1562,9 +1584,10 @@ export const stripeWebhook = onRequest(
 // Handled event types:
 //   account.updated              — syncs Connect account status to Firestore
 //   account.application.deauthorized — marks house Stripe account as disconnected.
-//     Legacy safety net: this event belongs to OAuth-connected accounts, and
-//     API-created v2 recipients are closed rather than deauthorized, so it is
-//     not expected to fire for houses created by connectStripeAccount.
+//     Legacy safety net: this event belongs to OAuth-connected accounts. Houses
+//     created by connectStripeAccount are API-created (v1 controller-property
+//     accounts or v2 recipients), are never deauthorized, so it is not
+//     expected to fire for them.
 // ---------------------------------------------------------------------------
 
 async function handleAccountDeauthorized(accountId: string): Promise<void> {

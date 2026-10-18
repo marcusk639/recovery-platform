@@ -3,7 +3,11 @@ import { logger } from "firebase-functions";
 import * as admin from "firebase-admin";
 import Stripe from "stripe";
 import { z } from "zod";
-import { STRIPE_SECRET_KEY, STRIPE_CLIENT_ID } from "../config";
+import {
+  STRIPE_SECRET_KEY,
+  STRIPE_CLIENT_ID,
+  connectAccountsApi,
+} from "../config";
 import { computeApplicationFee } from "../util/rentFee";
 import { transferStats } from "../util/guest";
 import { getUser } from "../api/firestore";
@@ -15,7 +19,7 @@ import {
 import {
   closeHouseAccount,
   closeOrphanedAccount,
-  createRecipientAccount,
+  createHouseAccount,
   isRecipientAccountClosed,
 } from "../util/connectAccountLifecycle";
 import {
@@ -29,6 +33,7 @@ import { parseInput, safeReturnUrlSchema } from "../validation";
 import { connectRefreshUrl, connectReturnUrl } from "../util/connectUrls";
 import {
   fetchConnectAccountStatus,
+  houseAccountApi,
   type ConnectAccountStatus,
 } from "../util/connectAccountStatus";
 
@@ -503,13 +508,15 @@ export const updatePaymentInfo = onCall(
 // ─────────────────────────────────────────────────────────────────────────────
 // connectStripeAccount
 //
-// Creates (or re-uses) a Stripe Accounts v2 *recipient* account for a house,
-// then returns an account onboarding/update link URL.
+// Creates (or re-uses) a house's Stripe connected account, then returns an
+// account onboarding/update link URL. New accounts use the API selected by
+// CONNECT_ACCOUNTS_API (v1 unless it is exactly "v2"); the house records which
+// one, and a re-used account is always handled with the API that created it.
 //
-// Recipient, not merchant: a house only ever receives /v1/transfers from the
-// platform's destination charges — it never charges anyone. Requesting a
-// merchant configuration or card_payments would demand verification the house
-// does not need and lengthen onboarding for nothing.
+// A house only ever receives transfers from the platform's destination charges
+// — it never charges anyone. On v2 that makes it a recipient with no merchant
+// configuration. On v1, card_payments has to be requested alongside transfers
+// (transfers alone needs Stripe's approval); see createV1HouseAccount.
 //
 // Security:
 //   - Caller must be authenticated.
@@ -553,6 +560,7 @@ export const connectStripeAccount = onCall(
 
     const house = houseSnap.data() as HouseAdminFields & {
       stripeAccountId?: string;
+      stripeAccountApi?: unknown;
     };
 
     // Deliberately NOT gated on house entitlement. Connecting Stripe is how
@@ -566,15 +574,17 @@ export const connectStripeAccount = onCall(
       "Only house admins can connect a Stripe account",
     );
 
-    // ── 4. Get or create the Stripe recipient account ─────────────────────────
+    // ── 4. Get or create the house's Stripe account ───────────────────────────
     //   We use a transaction so that concurrent calls do not create two accounts.
     let stripeAccountId: string = house.stripeAccountId ?? "";
 
-    // A closed account still retrieves but accepts no operations, so an
+    // A closed v2 account still retrieves but accepts no operations, so an
     // onboarding link for it fails every time. Detach it and fall through to
     // creating a fresh one. The clear is conditional on the id being unchanged
     // so a concurrent call that already attached a new account is not undone.
-    if (stripeAccountId) {
+    // v2 only: v1 has no closed state, and this platform rejects v1 accounts on
+    // v2 endpoints.
+    if (stripeAccountId && houseAccountApi(house.stripeAccountApi) === "v2") {
       let closed: boolean;
       try {
         closed = await isRecipientAccountClosed(stripe, stripeAccountId);
@@ -589,6 +599,7 @@ export const connectStripeAccount = onCall(
           if (current?.stripeAccountId === closedId) {
             tx.update(houseRef, {
               stripeAccountId: admin.firestore.FieldValue.delete(),
+              stripeAccountApi: admin.firestore.FieldValue.delete(),
               stripeStatus: "disconnected",
             });
           }
@@ -606,9 +617,12 @@ export const connectStripeAccount = onCall(
       // to write. Creation is NOT idempotent: a second call racing here creates
       // a second account. The transaction below ensures only one ID is ever
       // persisted, and the loser's account is closed.
-      let newAccount: Stripe.V2.Core.Account;
+      // New accounts use the configured API; the house records it so every
+      // later read and close uses the same one.
+      const api = connectAccountsApi();
+      let newAccount: { id: string };
       try {
-        newAccount = await createRecipientAccount(stripe, houseId);
+        newAccount = await createHouseAccount(stripe, houseId, api);
       } catch (err) {
         throw mapStripeError(err);
       }
@@ -634,20 +648,21 @@ export const connectStripeAccount = onCall(
 
           tx.update(houseRef, {
             stripeAccountId: newAccount.id,
+            stripeAccountApi: api,
             stripeStatus: "pending",
           });
           return newAccount.id;
         });
       } catch (err) {
         // If the transaction fails for any reason, clean up the Stripe account.
-        await closeOrphanedAccount(stripe, newAccount.id);
+        await closeOrphanedAccount(stripe, newAccount.id, api);
         throw new HttpsError("internal", "Failed to save Stripe account");
       }
 
       // Post-transaction cleanup: if the transaction found a concurrent account,
-      // close the one we created to prevent orphaned recipient accounts.
+      // close (v2) or delete (v1) the one we created so it is not left orphaned.
       if (existingAccountId !== null) {
-        await closeOrphanedAccount(stripe, newAccount.id);
+        await closeOrphanedAccount(stripe, newAccount.id, api);
       }
     }
 
@@ -684,19 +699,22 @@ export const connectStripeAccount = onCall(
 // ─────────────────────────────────────────────────────────────────────────────
 // disconnectStripeAccount
 //
-// Disconnects a Stripe Accounts v2 recipient account from a house.
+// Disconnects a house from its Stripe connected account.
 //
 // Design decisions:
 //   - Idempotent: if the house has no stripeAccountId (already disconnected),
 //     the function succeeds immediately without calling Stripe.
-//   - If Stripe reports the account missing (resource_missing) or already
-//     closed we still clear the Firestore fields and return success, because
-//     local state should match the desired "disconnected" outcome regardless.
+//   - v2: the account is closed. If Stripe reports it missing
+//     (resource_missing) or already closed we still clear the Firestore fields
+//     and return success, because local state should match the desired
+//     "disconnected" outcome regardless.
+//   - v1: the house is unlinked and the account is left open — never deleted
+//     (see step 5) — so no Stripe call is made.
 //   - Caller must be an admin of the house (verified from Firestore).
 // ─────────────────────────────────────────────────────────────────────────────
 export const disconnectStripeAccount = onCall(
-  // STRIPE_CLIENT_ID is no longer read by this function — the v2 close needs no
-  // OAuth client id. The secret is left bound and defined on purpose:
+  // STRIPE_CLIENT_ID is no longer read by this function — neither the v2 close
+  // nor the v1 unlink needs an OAuth client id. The secret is left bound and defined on purpose:
   // scripts/preflight-billing.js still lists it among the required secrets, so
   // removing it is a deploy-config decision, not a code one.
   { secrets: [STRIPE_SECRET_KEY, STRIPE_CLIENT_ID] },
@@ -721,6 +739,7 @@ export const disconnectStripeAccount = onCall(
 
     const house = houseSnap.data() as HouseAdminFields & {
       stripeAccountId?: string;
+      stripeAccountApi?: unknown;
     };
 
     assertHouseAdmin(
@@ -732,8 +751,8 @@ export const disconnectStripeAccount = onCall(
     // ── 4. If there is no account, we are already in the desired state ─────────
     const { stripeAccountId } = house;
 
-    if (stripeAccountId) {
-      // ── 5. Close the Stripe account ──────────────────────────────────────────
+    if (stripeAccountId && houseAccountApi(house.stripeAccountApi) === "v2") {
+      // ── 5. Close the Stripe account (v2) ─────────────────────────────────────
       // Close, not oauth.deauthorize. Deauthorization is for OAuth-connected
       // Standard accounts and is one of the cases Stripe documents as forcing
       // Accounts v1; these accounts are API-created v2 recipients, so the
@@ -745,11 +764,23 @@ export const disconnectStripeAccount = onCall(
       } catch (err) {
         throw mapStripeError(err);
       }
+    } else if (stripeAccountId) {
+      // ── 5. v1: unlink only, never delete ─────────────────────────────────────
+      // Rent is a destination charge, so refunds and disputes on past rent are
+      // recovered by reversing the transfer from this account. Deleting it
+      // would forfeit that, and live-mode deletion also fails while the
+      // account holds any balance. The account keeps metadata.houseId, the
+      // durable link back to this house; the log line is for operators.
+      logger.info("disconnectStripeAccount: unlinking v1 account without deleting it", {
+        houseId,
+        stripeAccountId,
+      });
     }
 
     // ── 6. Clear Stripe fields from the house document ────────────────────────
     await houseRef.update({
       stripeAccountId: admin.firestore.FieldValue.delete(),
+      stripeAccountApi: admin.firestore.FieldValue.delete(),
       stripeStatus: "disconnected",
       stripeRequirements: admin.firestore.FieldValue.delete(),
       stripeChargesEnabled: false,
@@ -818,6 +849,7 @@ export const getStripeAccountStatus = onCall(
 
     const house = houseSnap.data() as HouseAdminFields & {
       stripeAccountId?: string;
+      stripeAccountApi?: unknown;
     };
 
     // ── 4. Membership check ───────────────────────────────────────────────────
@@ -839,14 +871,15 @@ export const getStripeAccountStatus = onCall(
     }
 
     // ── 6. Retrieve the live account from Stripe ──────────────────────────────
-    // Through the shared v2 helper: the recipient transfers capability is the
-    // only signal that says whether this house can receive rent, and it is only
-    // returned when the retrieve asks for it.
+    // Through the shared status helper, with the API that created the house's
+    // account: the transfers capability is the only signal that says whether
+    // this house can receive rent.
     let accountStatus: ConnectAccountStatus | null = null;
     try {
       accountStatus = await fetchConnectAccountStatus(
         stripe,
         house.stripeAccountId,
+        houseAccountApi(house.stripeAccountApi),
       );
     } catch (err) {
       // Only `resource_missing` means gone. Anything else — including the 403
@@ -882,14 +915,10 @@ export const getStripeAccountStatus = onCall(
     const { currentlyDue, pastDue, eventuallyDue } = accountStatus;
     const status: StripeStatus = accountStatus.status;
 
-    // chargesEnabled / payoutsEnabled are kept for the mobile client, which
-    // renders one row from each. A recipient account has no charges of its own,
-    // so both are derived from the one signal that gates rent: can transfers
-    // land? Stripe tracks payouts as a separate stripe_balance.payouts
-    // capability, which is not read here, so payoutsEnabled is an
-    // approximation and must not gate anything.
-    const chargesEnabled = accountStatus.transfersEnabled;
-    const payoutsEnabled = accountStatus.transfersEnabled;
+    // chargesEnabled / payoutsEnabled are display-only rows for the mobile
+    // client; neither gates rent. How each API derives them is documented on
+    // ConnectAccountStatus.
+    const { chargesEnabled, payoutsEnabled } = accountStatus;
 
     // All requirement items to persist — union of every deadline bucket.
     const requirementsToStore = Array.from(

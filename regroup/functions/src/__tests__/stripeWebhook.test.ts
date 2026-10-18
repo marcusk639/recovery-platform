@@ -27,6 +27,7 @@ const mockMessagingSend = jest.fn();
 const mockConstructEvent = jest.fn();
 const mockChargesRetrieve = jest.fn();
 const mockV2AccountsRetrieve = jest.fn();
+const mockV1AccountsRetrieve = jest.fn();
 
 // ---------------------------------------------------------------------------
 // firebase-admin mock
@@ -93,6 +94,7 @@ jest.mock("stripe", () => {
     charges: {
       retrieve: mockChargesRetrieve,
     },
+    accounts: { retrieve: mockV1AccountsRetrieve },
     v2: { core: { accounts: { retrieve: mockV2AccountsRetrieve } } },
   }));
 });
@@ -2156,6 +2158,7 @@ describe("account.updated", () => {
   function setupForAccountUpdated(
     houseExists: boolean,
     previousStatus: HouseStatus = "active",
+    stripeAccountApi: "v1" | "v2" = "v2",
   ): void {
     const adminSnap = buildQuerySnap([
       { id: "admin_1", data: () => ({ messagingToken: ["token_admin_1"] }) },
@@ -2167,6 +2170,7 @@ describe("account.updated", () => {
             id: "house_1",
             data: () => ({
               stripeAccountId: "acct_test_123",
+              stripeAccountApi,
               stripeStatus: previousStatus,
               stripeChargesEnabled: true,
               stripePayoutsEnabled: true,
@@ -2391,6 +2395,90 @@ describe("account.updated", () => {
         stripeChargesEnabled: false,
         stripePayoutsEnabled: false,
       }),
+    );
+  });
+
+  test("a v1 house is re-read through the v1 accounts resource, gated on transfers", async () => {
+    const event = makeStripeEvent("account.updated", makeAccount());
+    mockConstructEvent.mockReturnValue(event);
+    mockV2AccountsRetrieve.mockRejectedValue(
+      new Error("v2 must not be used for a v1 house"),
+    );
+    mockV1AccountsRetrieve.mockResolvedValue({
+      id: "acct_test_123",
+      object: "account",
+      charges_enabled: false,
+      payouts_enabled: true,
+      capabilities: { card_payments: "active", transfers: "active" },
+      requirements: { currently_due: [], past_due: [], eventually_due: [], disabled_reason: null },
+    });
+    setupForAccountUpdated(true, "pending", "v1");
+
+    const res = makeResponse();
+    await stripeWebhook(makeRequest({}) as never, res as never);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(mockV1AccountsRetrieve).toHaveBeenCalledWith("acct_test_123");
+    expect(mockV2AccountsRetrieve).not.toHaveBeenCalled();
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stripeStatus: "active",
+        stripeChargesEnabled: false,
+        stripePayoutsEnabled: true,
+      }),
+    );
+  });
+
+  test("a v1 house Stripe has disabled is marked restricted", async () => {
+    const event = makeStripeEvent("account.updated", makeAccount());
+    mockConstructEvent.mockReturnValue(event);
+    mockV1AccountsRetrieve.mockResolvedValue({
+      id: "acct_test_123",
+      object: "account",
+      charges_enabled: false,
+      payouts_enabled: false,
+      capabilities: { card_payments: "inactive", transfers: "inactive" },
+      requirements: {
+        currently_due: [],
+        past_due: ["external_account"],
+        eventually_due: [],
+        disabled_reason: "requirements.past_due",
+      },
+    });
+    setupForAccountUpdated(true, "active", "v1");
+
+    const res = makeResponse();
+    await stripeWebhook(makeRequest({}) as never, res as never);
+
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ stripeStatus: "restricted" }),
+    );
+  });
+
+  test("an unreadable v1 account stops retrying but leaves the house as it was", async () => {
+    // A deleted v1 account and a key that cannot see it both return 403
+    // account_invalid, so it is not proof the account is gone — a wrong-key
+    // deploy must not disconnect every house. But it never resolves on retry,
+    // so the event is acknowledged with an error log instead of being
+    // re-delivered for three days.
+    const event = makeStripeEvent("account.updated", makeAccount());
+    mockConstructEvent.mockReturnValue(event);
+    mockV1AccountsRetrieve.mockRejectedValue(
+      Object.assign(new Error("does not have access to account"), {
+        type: "StripePermissionError",
+        code: "account_invalid",
+      }),
+    );
+    setupForAccountUpdated(true, "active", "v1");
+
+    const res = makeResponse();
+    await stripeWebhook(makeRequest({}) as never, res as never);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(mockUpdate).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining("account_invalid"),
+      expect.objectContaining({ houseId: "house_1", accountId: "acct_test_123" }),
     );
   });
 

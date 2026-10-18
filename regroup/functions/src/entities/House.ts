@@ -95,6 +95,8 @@ export class House extends BaseEntity {
 
   // Stripe Connect fields (written by stripeWebhook and callable functions)
   stripeAccountId?: string;
+  /** Accounts API that created stripeAccountId; absent means v1. */
+  stripeAccountApi?: "v1" | "v2";
   stripeStatus:
     | "not_connected"
     | "pending"

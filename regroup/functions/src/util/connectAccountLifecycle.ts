@@ -1,15 +1,66 @@
 import type Stripe from "stripe";
 import { logger } from "firebase-functions";
+import type { ConnectAccountsApi } from "../config";
 import { isResourceMissing } from "./stripe";
 
 /**
- * Create and close for a house's Stripe Accounts v2 recipient account.
+ * Create and close for a house's Stripe connected account, on either Accounts
+ * API.
  *
- * Kept beside the status helper and out of callable/payments.ts so the v2
- * account lifecycle lives in one place: the create parameters, the close
- * parameters, and the "already gone" tolerance all have to agree, and they used
- * to be spread across the callable.
+ * Kept beside the status helper and out of callable/payments.ts so the account
+ * lifecycle lives in one place: the create parameters, the close parameters,
+ * and the "already gone" tolerance all have to agree, and they used to be
+ * spread across the callable.
+ *
+ * v1 is the live path: Accounts v2 needs Stripe to enable it for the platform.
+ * The v2 functions stay so that switching CONNECT_ACCOUNTS_API to "v2" works
+ * once it does.
  */
+
+/**
+ * Creates a house's v1 account from controller properties — Stripe's
+ * replacement for the legacy `type: "express"` — configured like the v2
+ * recipient account below, except that v1 also requests card_payments (see
+ * below): Express dashboard, platform pays fees and
+ * carries losses (destination charges need platform loss liability), Stripe
+ * collects requirements (required with the Express dashboard).
+ *
+ * card_payments is requested alongside transfers because a v1 platform needs
+ * Stripe's approval to request transfers on its own. The two are coupled:
+ * if either goes inactive Stripe disables both, which the status mapping
+ * accounts for. `country` is fixed to US: requesting capabilities locks it
+ * anyway, and regroup only operates in the US.
+ */
+export async function createV1HouseAccount(
+  stripe: Stripe,
+  houseId: string,
+): Promise<Stripe.Account> {
+  return stripe.accounts.create({
+    country: "US",
+    controller: {
+      stripe_dashboard: { type: "express" },
+      fees: { payer: "application" },
+      losses: { payments: "application" },
+      requirement_collection: "stripe",
+    },
+    capabilities: {
+      card_payments: { requested: true },
+      transfers: { requested: true },
+    },
+    metadata: { houseId },
+  });
+}
+
+/** Creates a house's account with the given API. Only the id is used. */
+export async function createHouseAccount(
+  stripe: Stripe,
+  houseId: string,
+  api: ConnectAccountsApi,
+): Promise<{ id: string }> {
+  return api === "v1"
+    ? createV1HouseAccount(stripe, houseId)
+    : createRecipientAccount(stripe, houseId);
+}
 
 /**
  * The configurations a house account carries. `close` rejects unless every one
@@ -56,8 +107,9 @@ export async function createRecipientAccount(
 }
 
 /**
- * Closes a house's account. v2 has no `delete`; close is its analogue, and it
- * removes access while leaving history retrievable.
+ * Closes a house's v2 account. v2 has no `delete`; close is its analogue, and
+ * it removes access while leaving history retrievable. v2 only: this platform
+ * rejects v1 accounts on v2 endpoints.
  */
 export async function closeRecipientAccount(
   stripe: Stripe,
@@ -77,18 +129,29 @@ export async function closeRecipientAccount(
 export async function closeOrphanedAccount(
   stripe: Stripe,
   accountId: string,
+  api: ConnectAccountsApi,
 ): Promise<void> {
   try {
-    await closeRecipientAccount(stripe, accountId);
+    if (api === "v1") {
+      // Deleting is safe here and only here: the account was created moments
+      // ago, has never received a transfer, and holds no balance.
+      await stripe.accounts.del(accountId);
+    } else {
+      await closeRecipientAccount(stripe, accountId);
+    }
   } catch (err) {
-    logger.error("Failed to close orphaned Stripe recipient account", {
+    logger.error("Failed to close orphaned Stripe account", {
       accountId,
+      api,
       err,
     });
   }
 }
 
-/** True when Stripe reports the account as closed. Throws on a failed read. */
+/**
+ * True when Stripe reports a v2 account as closed. Throws on a failed read.
+ * v2 only — v1 has no closed state.
+ */
 export async function isRecipientAccountClosed(
   stripe: Stripe,
   accountId: string,
@@ -98,7 +161,8 @@ export async function isRecipientAccountClosed(
 }
 
 /**
- * Closes a house's account, succeeding if Stripe already has it gone or closed.
+ * Closes a house's v2 account, succeeding if Stripe already has it gone or
+ * closed. v2 only; a v1 house is unlinked without a Stripe call instead.
  *
  * A closed v2 account still exists, so closing it again is refused with an
  * error that is not resource_missing. Re-reading the account is the only
