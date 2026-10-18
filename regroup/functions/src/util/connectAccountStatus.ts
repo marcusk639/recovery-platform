@@ -1,19 +1,22 @@
 import type Stripe from "stripe";
+import type { ConnectAccountsApi } from "../config";
 
 /**
- * The ONE translation from a Stripe Accounts v2 recipient account to this
- * service's house-level Connect status.
+ * The ONE translation from a house's Stripe connected account to this
+ * service's house-level Connect status, for both Accounts APIs.
  *
- * Houses are Accounts v2 *recipient* accounts: they only ever receive
- * /v1/transfers from the platform's destination charges. They never charge
- * anyone. The v1 fields `charges_enabled` and `payouts_enabled` are therefore
- * the wrong signal — a recipient can be fully able to receive transfers while
- * `charges_enabled` is false, and every site that gated on those fields could
- * block rent collection on a perfectly good house. The authoritative signal is
+ * Houses only ever receive transfers from the platform's destination charges
+ * (no on_behalf_of); they never charge anyone. So the signal that decides
+ * whether rent can land is the transfers capability, not `charges_enabled`:
  *
- *   configuration.recipient.capabilities.stripe_balance.stripe_transfers.status
+ *   v2: configuration.recipient.capabilities.stripe_balance.stripe_transfers.status
+ *       (only returned when the retrieve asks for it via `include`)
+ *   v1: capabilities.transfers
  *
- * which Stripe only returns when the retrieve asks for it via `include`.
+ * A house's account is read with the API that created it
+ * (`houses.stripeAccountApi`). This platform rejects v1 accounts on v2
+ * endpoints (v1_account_instead_of_v2_account) while Accounts v2 is not
+ * enabled for it, so the version cannot be guessed or mixed.
  *
  * Every caller must go through here. The same mapping duplicated across call
  * sites is exactly what produced the bug this replaces.
@@ -32,6 +35,7 @@ export type TransfersCapabilityStatus =
   | "pending"
   | "restricted"
   | "unsupported"
+  | "inactive"
   | "absent";
 
 export interface ConnectAccountStatus {
@@ -49,6 +53,14 @@ export interface ConnectAccountStatus {
   transfersStatus: TransfersCapabilityStatus;
   /** True only when the account can actually receive transfers right now. */
   transfersEnabled: boolean;
+  /**
+   * Display only — the mobile client renders a row from each; neither gates
+   * rent. v1 reports Stripe's own charges_enabled / payouts_enabled. v2 has no
+   * charges of its own and its payouts capability is not read here, so both
+   * mirror transfersEnabled.
+   */
+  chargesEnabled: boolean;
+  payoutsEnabled: boolean;
   /** Requirement descriptions, split by Stripe's own deadline buckets. */
   currentlyDue: string[];
   pastDue: string[];
@@ -128,17 +140,75 @@ export function mapRecipientAccountStatus(
     status,
     transfersStatus,
     transfersEnabled: !closed && transfersStatus === "active",
+    chargesEnabled: !closed && transfersStatus === "active",
+    payoutsEnabled: !closed && transfersStatus === "active",
     currentlyDue: requirementDescriptions(account, "currently_due"),
     pastDue: requirementDescriptions(account, "past_due"),
     eventuallyDue: requirementDescriptions(account, "eventually_due"),
   };
 }
 
-/** Retrieve + map, which is what every call site actually wants. */
+/**
+ * Maps a retrieved v1 account onto the house status model.
+ *
+ * `transfers` active is the only route to `active`. Otherwise the account is
+ * `restricted` when Stripe has disabled it or the operator owes information —
+ * card_payments and transfers are coupled (if either is inactive Stripe
+ * disables both), so disabled_reason is the cue whichever one failed — and
+ * `pending` while Stripe is still reviewing. A missing capability is never
+ * active. v1 has no closed state; a deleted account fails to retrieve.
+ */
+export function mapV1AccountStatus(account: Stripe.Account): ConnectAccountStatus {
+  const transfersStatus: TransfersCapabilityStatus =
+    account.capabilities?.transfers ?? "absent";
+  const requirements = account.requirements;
+  const currentlyDue = requirements?.currently_due ?? [];
+  const pastDue = requirements?.past_due ?? [];
+  const eventuallyDue = requirements?.eventually_due ?? [];
+
+  let status: ConnectStatus;
+  if (transfersStatus === "active") {
+    status = "active";
+  } else if (
+    requirements?.disabled_reason ||
+    currentlyDue.length > 0 ||
+    pastDue.length > 0
+  ) {
+    status = "restricted";
+  } else {
+    status = "pending";
+  }
+
+  return {
+    closed: false,
+    status,
+    transfersStatus,
+    transfersEnabled: transfersStatus === "active",
+    chargesEnabled: account.charges_enabled === true,
+    payoutsEnabled: account.payouts_enabled === true,
+    currentlyDue,
+    pastDue,
+    eventuallyDue,
+  };
+}
+
+/**
+ * The API a house's account was created with. Houses connected before the
+ * field existed were all created on v1, so anything but exactly "v2" is v1.
+ */
+export function houseAccountApi(stored: unknown): ConnectAccountsApi {
+  return stored === "v2" ? "v2" : "v1";
+}
+
+/** Retrieve + map with the house's own API, which is what every call site wants. */
 export async function fetchConnectAccountStatus(
   stripe: Stripe,
   accountId: string,
+  api: ConnectAccountsApi,
 ): Promise<ConnectAccountStatus> {
+  if (api === "v1") {
+    return mapV1AccountStatus(await stripe.accounts.retrieve(accountId));
+  }
   return mapRecipientAccountStatus(
     await retrieveRecipientAccount(stripe, accountId),
   );

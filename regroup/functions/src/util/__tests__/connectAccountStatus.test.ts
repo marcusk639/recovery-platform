@@ -171,7 +171,7 @@ describe("fetchConnectAccountStatus", () => {
       v2: { core: { accounts: { retrieve } } },
     } as unknown as Stripe;
 
-    const result = await fetchConnectAccountStatus(stripe, "acct_v2_1");
+    const result = await fetchConnectAccountStatus(stripe, "acct_v2_1", "v2");
 
     expect(retrieve).toHaveBeenCalledWith("acct_v2_1", {
       include: RECIPIENT_ACCOUNT_INCLUDE,
@@ -195,7 +195,7 @@ describe("fetchConnectAccountStatus", () => {
       },
     } as unknown as Stripe;
 
-    await fetchConnectAccountStatus(stripe, "acct_v2_1");
+    await fetchConnectAccountStatus(stripe, "acct_v2_1", "v2");
 
     expect(v1Retrieve).not.toHaveBeenCalled();
   });

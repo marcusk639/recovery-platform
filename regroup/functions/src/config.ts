@@ -233,3 +233,13 @@ export type TierKey = TraditionalTier | OxfordTier;
 // tier model only when this is exactly "true". Legacy subscribers are unaffected.
 export const isTierBillingEnabled = (): boolean =>
   process.env.TIER_BILLING_ENABLED === "true";
+
+export type ConnectAccountsApi = "v1" | "v2";
+
+// Which Stripe Accounts API creates NEW house accounts. Accounts v2 is gated:
+// Stripe has to enable it for the platform on request, and until then a v2
+// create is rejected (non_connect_platform_accounts_v2_access_blocked). So
+// anything other than exactly "v2" means v1. Existing houses keep the API
+// recorded on them (houses.stripeAccountApi); this only affects new accounts.
+export const connectAccountsApi = (): ConnectAccountsApi =>
+  process.env.CONNECT_ACCOUNTS_API === "v2" ? "v2" : "v1";

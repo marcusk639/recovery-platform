@@ -1371,7 +1371,7 @@ describe("stripeWebhook — account.updated", () => {
                 docs: [
                   {
                     id: houseDocId,
-                    data: () => ({ stripeAccountId, stripeStatus: "pending" }),
+                    data: () => ({ stripeAccountId, stripeAccountApi: "v2", stripeStatus: "pending" }),
                     ref: { update: mockHouseUpdate, set: jest.fn() },
                   },
                 ],
@@ -1448,7 +1448,7 @@ describe("stripeWebhook — account.updated", () => {
                 docs: [
                   {
                     id: "house_r",
-                    data: () => ({ stripeAccountId, stripeStatus: "active" }),
+                    data: () => ({ stripeAccountId, stripeAccountApi: "v2", stripeStatus: "active" }),
                     ref: { update: mockHouseUpdate, set: jest.fn() },
                   },
                 ],

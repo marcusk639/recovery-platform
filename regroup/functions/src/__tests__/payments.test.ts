@@ -292,8 +292,18 @@ function wireFirestore(guestQueryEmpty = true): void {
 const authedContext = (uid = "user-123") => ({ auth: { uid, token: {} } });
 const unauthContext = { auth: null };
 
+/**
+ * A house with a Stripe account records which Accounts API created it. Most
+ * suites here were written for the Accounts v2 path, so a seeded account is v2
+ * unless the test says otherwise; v1 suites pass `stripeAccountApi: "v1"`, and
+ * pass it as `undefined` to model a house connected before the field existed.
+ */
 function seedHouse(houseId: string, data: Record<string, unknown>): void {
-  firestoreDocStore[`houses/${houseId}`] = { ...data };
+  const withApi =
+    data.stripeAccountId !== undefined && !("stripeAccountApi" in data)
+      ? { ...data, stripeAccountApi: "v2" }
+      : data;
+  firestoreDocStore[`houses/${houseId}`] = { ...withApi };
 }
 
 function readHouse(houseId: string): Record<string, unknown> | undefined {
@@ -441,6 +451,14 @@ describe("connectStripeAccount", () => {
     returnUrl: "https://regroup-app.com/return",
     refreshUrl: "https://regroup-app.com/refresh",
   };
+
+  // The suites below cover the Accounts v2 path; the v1 default has its own.
+  beforeEach(() => {
+    process.env.CONNECT_ACCOUNTS_API = "v2";
+  });
+  afterEach(() => {
+    delete process.env.CONNECT_ACCOUNTS_API;
+  });
 
   describe("auth and input validation", () => {
     it("throws unauthenticated when no auth context", async () => {
@@ -691,6 +709,7 @@ describe("connectStripeAccount", () => {
       const house = readHouse(HOUSE_ID);
       expect(house?.stripeAccountId).toBe("acct_new123");
       expect(house?.stripeStatus).toBe("pending");
+      expect(house?.stripeAccountApi).toBe("v2");
     });
 
     it("creates an account link with correct parameters", async () => {
@@ -750,6 +769,101 @@ describe("connectStripeAccount", () => {
         authedContext(ADMIN_UID),
       );
       expect(result.url).toBe("https://connect.stripe.com/onboard");
+    });
+  });
+
+  describe("Accounts v1 — the default while Stripe has not enabled v2", () => {
+    beforeEach(() => {
+      delete process.env.CONNECT_ACCOUNTS_API;
+    });
+
+    it("creates a v1 account from controller properties, not a legacy type or a v2 account", async () => {
+      seedHouse(HOUSE_ID, { adminId: ADMIN_UID });
+
+      await (connectStripeAccount as unknown as Function)(
+        baseData,
+        authedContext(ADMIN_UID),
+      );
+
+      // The Express-equivalent controller properties for a destination-charge
+      // recipient whose losses the platform carries. card_payments is
+      // requested alongside transfers because a v1 platform needs Stripe's
+      // approval to request transfers on its own.
+      expect(mockStripeAccountsCreate).toHaveBeenCalledWith({
+        country: "US",
+        controller: {
+          stripe_dashboard: { type: "express" },
+          fees: { payer: "application" },
+          losses: { payments: "application" },
+          requirement_collection: "stripe",
+        },
+        capabilities: {
+          card_payments: { requested: true },
+          transfers: { requested: true },
+        },
+        metadata: { houseId: HOUSE_ID },
+      });
+      expect(mockStripeAccountsCreate.mock.calls[0][0]).not.toHaveProperty("type");
+      expect(mockStripeV2AccountsCreate).not.toHaveBeenCalled();
+    });
+
+    it("records that the house's account was created on v1", async () => {
+      seedHouse(HOUSE_ID, { adminId: ADMIN_UID });
+
+      await (connectStripeAccount as unknown as Function)(
+        baseData,
+        authedContext(ADMIN_UID),
+      );
+
+      const house = readHouse(HOUSE_ID);
+      expect(house?.stripeAccountId).toBe("acct_new123");
+      expect(house?.stripeAccountApi).toBe("v1");
+      expect(house?.stripeStatus).toBe("pending");
+    });
+
+    it("reuses an existing v1 account without asking the v2 API about it", async () => {
+      // This platform rejects v1 accounts on v2 endpoints, so the v2 closed
+      // check must never run for a v1 house.
+      seedHouse(HOUSE_ID, {
+        adminId: ADMIN_UID,
+        stripeAccountId: "acct_v1_existing",
+        stripeAccountApi: "v1",
+      });
+      mockStripeV2AccountsRetrieve.mockRejectedValue(
+        new Error("v2 must not be called for a v1 house"),
+      );
+
+      await (connectStripeAccount as unknown as Function)(
+        baseData,
+        authedContext(ADMIN_UID),
+      );
+
+      expect(mockStripeV2AccountsRetrieve).not.toHaveBeenCalled();
+      expect(mockStripeAccountsCreate).not.toHaveBeenCalled();
+      expect(mockStripeAccountLinksCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ account: "acct_v1_existing" }),
+      );
+    });
+
+    it("deletes its own brand-new v1 account when it loses the creation race", async () => {
+      seedHouse(HOUSE_ID, { adminId: ADMIN_UID });
+      mockRunTransaction.mockImplementationOnce(
+        async (fn: (tx: unknown) => Promise<unknown>) =>
+          fn({
+            get: jest.fn(async () => ({
+              data: () => ({ stripeAccountId: "acct_concurrently_created" }),
+            })),
+            update: jest.fn(),
+          }),
+      );
+
+      await (connectStripeAccount as unknown as Function)(
+        baseData,
+        authedContext(ADMIN_UID),
+      );
+
+      expect(mockStripeAccountsDel).toHaveBeenCalledWith("acct_new123");
+      expect(mockStripeV2AccountsClose).not.toHaveBeenCalled();
     });
   });
 
@@ -1072,6 +1186,36 @@ describe("disconnectStripeAccount", () => {
         authedContext(ADMIN_UID),
       );
       expect(result).toEqual({ success: true });
+    });
+  });
+
+  describe("Accounts v1 house", () => {
+    beforeEach(() => {
+      seedHouse(HOUSE_ID, {
+        adminId: ADMIN_UID,
+        stripeAccountId: "acct_v1_house",
+        stripeAccountApi: "v1",
+        stripeStatus: "active",
+      });
+    });
+
+    it("unlinks the house without deleting or closing its Stripe account", async () => {
+      // Rent is a destination charge: refunds and disputes on past rent are
+      // recovered by reversing the transfer from the house's account. Deleting
+      // it would forfeit that, and live-mode deletion also fails outright
+      // while the account holds any balance. So disconnect only unlinks.
+      const result = await (disconnectStripeAccount as unknown as Function)(
+        { houseId: HOUSE_ID },
+        authedContext(ADMIN_UID),
+      );
+
+      expect(result).toEqual({ success: true });
+      expect(mockStripeAccountsDel).not.toHaveBeenCalled();
+      expect(mockStripeV2AccountsClose).not.toHaveBeenCalled();
+      const house = readHouse(HOUSE_ID);
+      expect(house?.stripeStatus).toBe("disconnected");
+      expect(house?.stripeAccountId).toBeUndefined();
+      expect(house?.stripeAccountApi).toBeUndefined();
     });
   });
 
@@ -1496,6 +1640,93 @@ describe("getStripeAccountStatus", () => {
           StripeErrors.StripeInvalidRequestError,
           "No such account: acct_deleted",
           "invalid_request_error",
+        ),
+      );
+
+      await expect(
+        (getStripeAccountStatus as unknown as Function)(
+          { houseId: HOUSE_ID },
+          authedContext(ADMIN_UID),
+        ),
+      ).rejects.toBeInstanceOf(HttpsError);
+      expect(readHouse(HOUSE_ID)?.stripeStatus).toBe("active");
+    });
+  });
+
+  describe("Accounts v1 house", () => {
+    const v1Account = (overrides: Record<string, unknown> = {}) => ({
+      id: "acct_v1_house",
+      object: "account",
+      charges_enabled: false,
+      payouts_enabled: true,
+      capabilities: { card_payments: "active", transfers: "active" },
+      requirements: {
+        currently_due: [],
+        past_due: [],
+        eventually_due: [],
+        disabled_reason: null,
+      },
+      ...overrides,
+    });
+
+    beforeEach(() => {
+      mockStripeV2AccountsRetrieve.mockRejectedValue(
+        new Error("v2 must not be used for a v1 house"),
+      );
+    });
+
+    it("reads the account through the v1 resource and gates on the transfers capability", async () => {
+      seedHouse(HOUSE_ID, {
+        adminId: ADMIN_UID,
+        stripeAccountId: "acct_v1_house",
+        stripeAccountApi: "v1",
+      });
+      mockStripeAccountsRetrieve.mockResolvedValue(v1Account());
+
+      const result = await (getStripeAccountStatus as unknown as Function)(
+        { houseId: HOUSE_ID },
+        authedContext(ADMIN_UID),
+      );
+
+      expect(mockStripeAccountsRetrieve).toHaveBeenCalledWith("acct_v1_house");
+      expect(result.status).toBe("active");
+      expect(result.chargesEnabled).toBe(false);
+      expect(result.payoutsEnabled).toBe(true);
+      expect(readHouse(HOUSE_ID)?.stripeStatus).toBe("active");
+    });
+
+    it("treats a house connected before the API was recorded as v1", async () => {
+      seedHouse(HOUSE_ID, {
+        adminId: ADMIN_UID,
+        stripeAccountId: "acct_v1_house",
+        stripeAccountApi: undefined,
+      });
+      mockStripeAccountsRetrieve.mockResolvedValue(v1Account());
+
+      const result = await (getStripeAccountStatus as unknown as Function)(
+        { houseId: HOUSE_ID },
+        authedContext(ADMIN_UID),
+      );
+
+      expect(result.status).toBe("active");
+      expect(mockStripeV2AccountsRetrieve).not.toHaveBeenCalled();
+    });
+
+    it("surfaces account_invalid instead of disconnecting the house", async () => {
+      // Stripe returns 403 account_invalid both for a deleted v1 account and
+      // for a key that cannot see it, so it is not proof the account is gone.
+      seedHouse(HOUSE_ID, {
+        adminId: ADMIN_UID,
+        stripeAccountId: "acct_v1_house",
+        stripeAccountApi: "v1",
+        stripeStatus: "active",
+      });
+      mockStripeAccountsRetrieve.mockRejectedValue(
+        makeStripeError(
+          StripeErrors.StripePermissionError,
+          "The provided key does not have access to account (or that account does not exist).",
+          "invalid_request_error",
+          { code: "account_invalid" },
         ),
       );
 
