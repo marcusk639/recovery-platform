@@ -110,17 +110,15 @@ jest.mock('@stripe/stripe-react-native', () => ({
 }));
 
 // ─── Payments service mock ────────────────────────────────────────────────────
-// The payments service may not exist on all branches, so we use virtual: true
-// to mock it without requiring the real module to be present on disk.
+// Mocked by resolved path, NOT with { virtual: true }. The component resolves
+// this service with require() at module load; a virtual mock is keyed on the
+// literal specifier, so the component's own specifier could reach the REAL
+// module and the whole payment flow would run unmocked.
 const mockCreatePaymentIntent = jest.fn();
 
-jest.mock(
-  '../../../services/payments',
-  () => ({
-    createRentPaymentIntent: (...args: any[]) => mockCreatePaymentIntent(...args),
-  }),
-  { virtual: true },
-);
+jest.mock('../../../services/payments', () => ({
+  createRentPaymentIntent: (...args: any[]) => mockCreatePaymentIntent(...args),
+}));
 
 // ─── React imports (after mocks) ──────────────────────────────────────────────
 import React from 'react';
