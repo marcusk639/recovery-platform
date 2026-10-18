@@ -871,9 +871,9 @@ export const getStripeAccountStatus = onCall(
     }
 
     // ── 6. Retrieve the live account from Stripe ──────────────────────────────
-    // Through the shared v2 helper: the recipient transfers capability is the
-    // only signal that says whether this house can receive rent, and it is only
-    // returned when the retrieve asks for it.
+    // Through the shared status helper, with the API that created the house's
+    // account: the transfers capability is the only signal that says whether
+    // this house can receive rent.
     let accountStatus: ConnectAccountStatus | null = null;
     try {
       accountStatus = await fetchConnectAccountStatus(

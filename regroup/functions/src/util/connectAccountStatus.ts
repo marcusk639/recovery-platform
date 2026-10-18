@@ -160,6 +160,9 @@ export function mapRecipientAccountStatus(
 const STRIPE_REVIEW_REASONS: ReadonlySet<string> = new Set([
   "requirements.pending_verification",
   "under_review",
+  // Stripe is checking the account against prohibited lists and will enable or
+  // reject it; the operator has nothing to submit.
+  "listed",
 ]);
 
 /**

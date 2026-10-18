@@ -94,7 +94,7 @@ describe('mapV1AccountStatus', () => {
     expect(result.eventuallyDue).toEqual(['individual.id_number']);
   });
 
-  it.each(['requirements.pending_verification', 'under_review'])(
+  it.each(['requirements.pending_verification', 'under_review', 'listed'])(
     'is pending, not restricted, while Stripe itself is reviewing (%s)',
     (reason) => {
       // These disabled reasons mean the operator has nothing left to do;
