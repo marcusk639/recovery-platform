@@ -27,9 +27,12 @@ import type { ConnectAccountsApi } from "../config";
 export type ConnectStatus = "active" | "pending" | "restricted";
 
 /**
- * Raw capability status, plus `absent` for the case where Stripe returned no
- * recipient configuration at all (a retrieve without `include`, or an account
- * that has no recipient configuration applied).
+ * Raw transfers capability status from either API, plus `absent`.
+ *   v2 (stripe_balance.stripe_transfers): active | pending | restricted | unsupported
+ *   v1 (capabilities.transfers):          active | pending | inactive
+ * `absent` means the capability was not in the response: on v2, no recipient
+ * configuration (a retrieve without `include`, or none applied); on v1, the
+ * account has no transfers capability.
  */
 export type TransfersCapabilityStatus =
   | "active"
@@ -55,8 +58,8 @@ export interface ConnectAccountStatus {
   /** True only when the account can actually receive transfers right now. */
   transfersEnabled: boolean;
   /**
-   * Display only — the mobile client renders a row from each; neither gates
-   * rent. v1 reports Stripe's own charges_enabled / payouts_enabled. v2 has no
+   * Display only — getStripeAccountStatus returns both to the mobile client,
+   * which renders a row from each; neither gates rent. v1 reports Stripe's own charges_enabled / payouts_enabled. v2 has no
    * charges of its own and its payouts capability is not read here, so both
    * mirror transfersEnabled.
    */

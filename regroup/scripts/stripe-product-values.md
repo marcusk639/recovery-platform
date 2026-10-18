@@ -139,7 +139,7 @@ Source: `functions/src/config.ts` [`S3`] — `defineSecret()` declarations;
 | `STRIPE_PUBLISHABLE_KEY` | Dashboard → Developers → API keys | Angular web app (`NgxStripeModule`), React Native mobile |
 | `STRIPE_WEBHOOK_SECRET` | Created with webhook (§4a above) | `stripeWebhook` function — verifies `constructEvent()` |
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | Created with webhook (§4b above) | `handleStripeConnectWebhook` function |
-| `STRIPE_CLIENT_ID` | Dashboard → Connect → Settings → Client ID | **No longer read by any function.** Disconnect uses `stripe.v2.core.accounts.close()`, which needs no OAuth client id. Still bound on `disconnectStripeAccount` and still listed in `scripts/preflight-billing.js`; unbinding it is a deploy-config decision. |
+| `STRIPE_CLIENT_ID` | Dashboard → Connect → Settings → Client ID | **No longer read by any function.** Disconnect closes a v2 account (`stripe.v2.core.accounts.close()`) or unlinks a v1 one without a Stripe call; neither needs an OAuth client id. Still bound on `disconnectStripeAccount` and still listed in `scripts/preflight-billing.js`; unbinding it is a deploy-config decision. |
 
 **Current known values (TEST mode):**
 
@@ -171,11 +171,11 @@ Connect accounts are created per-house (not scripted — created at operator onb
 
 | Requirement | Detail |
 |-------------|--------|
-| Account type | Accounts v2 **recipient**, Express dashboard (`dashboard: 'express'`). Not a merchant: houses receive transfers and never charge anyone, so `configuration.merchant` and `card_payments` are deliberately not requested. |
+| Account type | Chosen by `CONNECT_ACCOUNTS_API` for new accounts; each house records its own in `houses.stripeAccountApi` (absent = v1). **v1 (default, live):** created from controller properties — `stripe_dashboard.type: express`, `fees.payer: application`, `losses.payments: application`, `requirement_collection: stripe`, `country: US` — requesting `card_payments` and `transfers` (transfers alone needs Stripe's approval). **v2 (needs Stripe to enable Accounts v2 for the platform):** a **recipient**, Express dashboard; `configuration.merchant` and `card_payments` deliberately not requested. Houses receive transfers and never charge anyone either way. |
 | Onboarding flow | `stripe.accountLinks.create()` → redirect → `stripeConnectReturn` HTTP endpoint |
 | Reauth URL | `https://us-central1-phoenix-cleanhouse.cloudfunctions.net/stripeConnectReauth?stripeAccountId={id}` |
 | Return URL | `https://us-central1-phoenix-cleanhouse.cloudfunctions.net/stripeConnectReturn` |
-| Disconnect | `stripe.v2.core.accounts.close(id, { applied_configurations: ['recipient'] })` |
+| Disconnect | v2: `stripe.v2.core.accounts.close(id, { applied_configurations: ['recipient'] })`. v1: the house is unlinked and the account left open — never deleted, so transfer reversals for refunds and disputes stay possible. |
 | Payout failures | Handled by `payout.failed` event → FCM push + email to house admins |
 
 ---
@@ -190,7 +190,7 @@ Connect accounts are created per-house (not scripted — created at operator onb
 | `S4` | `functions/src/webhooks/stripeWebhook.ts` | Both webhook handlers and their event routing switch() blocks |
 | `S5` | `functions/src/util/tierPricing.ts` | `resolveTierPriceId()` — reads price IDs from env vars at runtime |
 | `S6` | `functions/src/callable/payments.ts` | Connect onboarding and disconnect callables |
-| `S6a` | `functions/src/util/connectAccountLifecycle.ts` | v2 recipient account create / close params, already-gone tolerance |
-| `S6b` | `functions/src/util/connectAccountStatus.ts` | The one mapping from the v2 recipient transfers capability to house status |
+| `S6a` | `functions/src/util/connectAccountLifecycle.ts` | v1 and v2 account create params, v2 close, orphan cleanup, already-gone tolerance |
+| `S6b` | `functions/src/util/connectAccountStatus.ts` | The one mapping from the transfers capability (v1 or v2) to house status, and the per-house API dispatch |
 | `S7` | `functions/src/util/stripe.ts` | API version string `"2026-01-28.clover"` |
 | `S8` | `web/src/environments/environment*.ts` | Angular publishable key per environment |

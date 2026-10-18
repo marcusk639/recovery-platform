@@ -19,8 +19,9 @@ import { isResourceMissing } from "./stripe";
 
 /**
  * Creates a house's v1 account from controller properties — Stripe's
- * replacement for the legacy `type: "express"` — configured the way the v2
- * recipient account below is: Express dashboard, platform pays fees and
+ * replacement for the legacy `type: "express"` — configured like the v2
+ * recipient account below, except that v1 also requests card_payments (see
+ * below): Express dashboard, platform pays fees and
  * carries losses (destination charges need platform loss liability), Stripe
  * collects requirements (required with the Express dashboard).
  *
@@ -106,8 +107,9 @@ export async function createRecipientAccount(
 }
 
 /**
- * Closes a house's account. v2 has no `delete`; close is its analogue, and it
- * removes access while leaving history retrievable.
+ * Closes a house's v2 account. v2 has no `delete`; close is its analogue, and
+ * it removes access while leaving history retrievable. v2 only: this platform
+ * rejects v1 accounts on v2 endpoints.
  */
 export async function closeRecipientAccount(
   stripe: Stripe,
@@ -146,7 +148,10 @@ export async function closeOrphanedAccount(
   }
 }
 
-/** True when Stripe reports the account as closed. Throws on a failed read. */
+/**
+ * True when Stripe reports a v2 account as closed. Throws on a failed read.
+ * v2 only — v1 has no closed state.
+ */
 export async function isRecipientAccountClosed(
   stripe: Stripe,
   accountId: string,
@@ -156,7 +161,8 @@ export async function isRecipientAccountClosed(
 }
 
 /**
- * Closes a house's account, succeeding if Stripe already has it gone or closed.
+ * Closes a house's v2 account, succeeding if Stripe already has it gone or
+ * closed. v2 only; a v1 house is unlinked without a Stripe call instead.
  *
  * A closed v2 account still exists, so closing it again is refused with an
  * error that is not resource_missing. Re-reading the account is the only

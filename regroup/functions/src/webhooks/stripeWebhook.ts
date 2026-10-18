@@ -1077,8 +1077,9 @@ async function handleSubscriptionUpdated(
  *
  * A v2 account emits both v1 snapshot events and v2 thin events, and the v1
  * `account.updated` snapshot still carries charges_enabled / payouts_enabled —
- * which are false on a perfectly healthy recipient. Reading them off the
- * payload is what let a working house sit at `pending`. So the event tells us
+ * which are false on a perfectly healthy v2 recipient. Reading them off the
+ * payload is what let a working house sit at `pending`. (For a v1 house those
+ * flags are real, but are still display-only; transfers is what gates rent.) So the event tells us
  * *that* something changed and for which account; the authoritative state comes
  * from re-reading the account — with the API that created it (v1 or v2) — and
  * mapping its transfers capability.
@@ -1583,9 +1584,10 @@ export const stripeWebhook = onRequest(
 // Handled event types:
 //   account.updated              — syncs Connect account status to Firestore
 //   account.application.deauthorized — marks house Stripe account as disconnected.
-//     Legacy safety net: this event belongs to OAuth-connected accounts, and
-//     API-created v2 recipients are closed rather than deauthorized, so it is
-//     not expected to fire for houses created by connectStripeAccount.
+//     Legacy safety net: this event belongs to OAuth-connected accounts. Houses
+//     created by connectStripeAccount are API-created (v1 controller-property
+//     accounts or v2 recipients), are never deauthorized, so it is not
+//     expected to fire for them.
 // ---------------------------------------------------------------------------
 
 async function handleAccountDeauthorized(accountId: string): Promise<void> {
