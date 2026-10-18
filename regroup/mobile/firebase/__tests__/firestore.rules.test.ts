@@ -2533,6 +2533,22 @@ describe("houses/{houseId} — subscriptionStatus is server-owned", () => {
     );
   });
 
+  // stripeAccountApi tells every server read and close which Stripe Accounts
+  // API owns stripeAccountId. A client flipping it would send status syncs and
+  // disconnects to the wrong API, so status stops syncing and disconnect fails.
+  it.each([
+    ["admin", () => authHouseAdmin(ADMIN_UID, HOUSE_ID), ADMIN_UID],
+    ["SUPERADMIN", () => authHouseSuperAdmin(ADMIN_UID, HOUSE_ID), ADMIN_UID],
+    ["guest", () => authHouseGuest(GUEST_UID, HOUSE_ID), GUEST_UID],
+  ])("denies a %s writing stripeAccountApi", async (_role, claims, uid) => {
+    await seedHouse("active");
+    await assertFails(
+      updateDoc(houseDocAs(uid as string, (claims as () => object)()), {
+        stripeAccountApi: "v2",
+      }),
+    );
+  });
+
   it("still allows a superAdmin to edit ordinary house fields", async () => {
     await seedHouse("active");
     await assertSucceeds(

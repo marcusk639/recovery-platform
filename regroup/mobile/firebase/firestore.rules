@@ -221,10 +221,12 @@ service cloud.firestore {
       // superAdmin branch skips the sensitive-field allowlist entirely, so
       // putting these in that list alone would leave the hole open for exactly
       // the role most able to exploit it. Written only via the Admin SDK, which
-      // bypasses rules.
+      // bypasses rules. stripeAccountApi records which Stripe Accounts API owns
+      // stripeAccountId; every server read and close dispatches on it, so a
+      // client flipping it would stop status syncing and break disconnect.
       allow update: if isDemoScopedHouses([houseId]) &&
         !request.resource.data.diff(resource.data).affectedKeys()
-          .hasAny(['subscriptionStatus', 'guestGraceEndsAt']) &&
+          .hasAny(['subscriptionStatus', 'guestGraceEndsAt', 'stripeAccountApi']) &&
         (hasSuperAdminRoleInHouse([houseId]) ||
           ((hasAdminRoleInHouse([houseId]) || hasGuestRoleInHouse([houseId])) && !request.resource.data.diff(resource.data).affectedKeys()
             .hasAny(['stripeAccountId', 'stripeStatus', 'monthlyRent', 'weeklyRent', 'adminIds', 'ownerId'])));
