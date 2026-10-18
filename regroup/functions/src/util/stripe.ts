@@ -61,6 +61,19 @@ export function mapStripeError(err: unknown): HttpsError {
  * subscription/item from transient failures (rate limit, network) so callers
  * only fall back to local-only state when Stripe truly has nothing to update.
  */
+/**
+ * True for v1's 403 `account_invalid`. Stripe returns it both for a deleted
+ * account and for a key that cannot see the account, so it is NOT proof the
+ * account is gone — only that retrying will not help.
+ */
+export function isAccountInvalid(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    (err as { code?: unknown }).code === "account_invalid"
+  );
+}
+
 export function isResourceMissing(err: unknown): boolean {
   // Duck-typed rather than `instanceof Stripe.errors.StripeError` so it also
   // works under test harnesses that fully mock the `stripe` module.

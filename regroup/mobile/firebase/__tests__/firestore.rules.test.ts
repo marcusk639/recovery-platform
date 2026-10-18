@@ -15,7 +15,7 @@ import {
   assertFails,
   RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
-import { doc, getDoc, setDoc, updateDoc, deleteDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, deleteField } from "firebase/firestore";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -2545,6 +2545,53 @@ describe("houses/{houseId} — subscriptionStatus is server-owned", () => {
     await assertFails(
       updateDoc(houseDocAs(uid as string, (claims as () => object)()), {
         stripeAccountApi: "v2",
+      }),
+    );
+  });
+
+  // The harmful edits are on a house already recorded as v2: deleting the field
+  // (absent reads as v1) or downgrading it sends v1 calls to a v2 account.
+  const seedV2House = async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `houses/${HOUSE_ID}`), {
+        name: "Test House",
+        ownerId: ADMIN_UID,
+        adminIds: [ADMIN_UID],
+        subscriptionStatus: "active",
+        capacity: 8,
+        stripeAccountId: "acct_v2_house",
+        stripeAccountApi: "v2",
+      });
+    });
+  };
+
+  it("denies a SUPERADMIN deleting stripeAccountApi from a v2 house", async () => {
+    await seedV2House();
+    await assertFails(
+      updateDoc(
+        houseDocAs(ADMIN_UID, authHouseSuperAdmin(ADMIN_UID, HOUSE_ID)),
+        { stripeAccountApi: deleteField() },
+      ),
+    );
+  });
+
+  it("denies a SUPERADMIN downgrading stripeAccountApi from v2 to v1", async () => {
+    await seedV2House();
+    await assertFails(
+      updateDoc(
+        houseDocAs(ADMIN_UID, authHouseSuperAdmin(ADMIN_UID, HOUSE_ID)),
+        { stripeAccountApi: "v1" },
+      ),
+    );
+  });
+
+  it("still allows a guest to edit an ordinary field on a v2 house", async () => {
+    // Positive control for the guest denial above: the guest branch is open
+    // for ordinary fields, so the denial is the stripeAccountApi guard.
+    await seedV2House();
+    await assertSucceeds(
+      updateDoc(houseDocAs(GUEST_UID, authHouseGuest(GUEST_UID, HOUSE_ID)), {
+        name: "Renamed House",
       }),
     );
   });

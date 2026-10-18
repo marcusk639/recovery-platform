@@ -23,6 +23,7 @@
  *
  * Access at runtime via process.env.SECRET_NAME
  */
+import { logger } from "firebase-functions";
 import { defineSecret } from "firebase-functions/params";
 
 export const SENDGRID_API_KEY = defineSecret("SENDGRID_API_KEY");
@@ -241,5 +242,13 @@ export type ConnectAccountsApi = "v1" | "v2";
 // create is rejected (non_connect_platform_accounts_v2_access_blocked). So
 // anything other than exactly "v2" means v1. Existing houses keep the API
 // recorded on them (houses.stripeAccountApi); this only affects new accounts.
-export const connectAccountsApi = (): ConnectAccountsApi =>
-  process.env.CONNECT_ACCOUNTS_API === "v2" ? "v2" : "v1";
+export const connectAccountsApi = (): ConnectAccountsApi => {
+  const value = process.env.CONNECT_ACCOUNTS_API;
+  if (value !== undefined && value !== "v1" && value !== "v2") {
+    // Most likely a typo of "v2" that would otherwise silently keep v1.
+    logger.warn("CONNECT_ACCOUNTS_API is not v1 or v2; creating v1 accounts", {
+      value,
+    });
+  }
+  return value === "v2" ? "v2" : "v1";
+};

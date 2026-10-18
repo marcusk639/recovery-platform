@@ -1,6 +1,10 @@
 import * as admin from "firebase-admin";
 import Stripe from "stripe";
-import { createStripeClient, isResourceMissing } from "../util/stripe";
+import {
+  createStripeClient,
+  isAccountInvalid,
+  isResourceMissing,
+} from "../util/stripe";
 import {
   fetchConnectAccountStatus,
   houseAccountApi,
@@ -1097,14 +1101,25 @@ async function handleAccountUpdated(accountId: string): Promise<void> {
   let payoutsEnabled: boolean;
   let requirements: string[];
 
+  const api = houseAccountApi(house.data.stripeAccountApi);
   let accountStatus: ConnectAccountStatus | null = null;
   try {
-    accountStatus = await fetchConnectAccountStatus(
-      getStripe(),
-      accountId,
-      houseAccountApi(house.data.stripeAccountApi),
-    );
+    accountStatus = await fetchConnectAccountStatus(getStripe(), accountId, api);
   } catch (err) {
+    if (api === "v1" && isAccountInvalid(err)) {
+      // Deleted, or this key cannot see it — Stripe does not say which, so the
+      // house is left as it is (a wrong-key deploy must not disconnect every
+      // house). Neither case resolves on retry, so stop Stripe re-delivering
+      // for three days and leave an error an operator can act on.
+      logger.error("account.updated: v1 account returned account_invalid; house left unchanged", {
+        houseId: house.id,
+        accountId,
+        previousStatus,
+      });
+      throw new PermanentWebhookError(
+        `account.updated: v1 account ${accountId} returned account_invalid`,
+      );
+    }
     if (!isResourceMissing(err)) {
       // Transient or unexpected. Rethrow so the dispatcher releases the event
       // for retry rather than recording a status we could not read.

@@ -807,6 +807,77 @@ describe("connectStripeAccount", () => {
       expect(mockStripeV2AccountsCreate).not.toHaveBeenCalled();
     });
 
+    it("maps a rejected v1 create to an error and writes nothing", async () => {
+      seedHouse(HOUSE_ID, { adminId: ADMIN_UID });
+      mockStripeAccountsCreate.mockRejectedValue(
+        makeStripeError(
+          StripeErrors.StripeInvalidRequestError,
+          "Your platform needs approval for accounts to have requested the `transfers` capability without the `card_payments` capability.",
+          "invalid_request_error",
+        ),
+      );
+
+      await expectHttpsError(
+        () =>
+          (connectStripeAccount as unknown as Function)(
+            baseData,
+            authedContext(ADMIN_UID),
+          ),
+        "invalid-argument",
+      );
+      expect(readHouse(HOUSE_ID)?.stripeAccountId).toBeUndefined();
+      expect(readHouse(HOUSE_ID)?.stripeAccountApi).toBeUndefined();
+    });
+
+    it("deletes the new v1 account and fails cleanly when saving it fails", async () => {
+      seedHouse(HOUSE_ID, { adminId: ADMIN_UID });
+      mockRunTransaction.mockRejectedValueOnce(new Error("contention"));
+
+      await expectHttpsError(
+        () =>
+          (connectStripeAccount as unknown as Function)(
+            baseData,
+            authedContext(ADMIN_UID),
+          ),
+        "internal",
+      );
+      expect(mockStripeAccountsDel).toHaveBeenCalledWith("acct_new123");
+    });
+
+    it("logs, and does not fail the request, when deleting a race-loser v1 account fails", async () => {
+      seedHouse(HOUSE_ID, { adminId: ADMIN_UID });
+      mockRunTransaction.mockImplementationOnce(
+        async (fn: (tx: unknown) => Promise<unknown>) =>
+          fn({
+            get: jest.fn(async () => ({
+              data: () => ({ stripeAccountId: "acct_concurrently_created" }),
+            })),
+            update: jest.fn(),
+          }),
+      );
+      mockStripeAccountsDel.mockRejectedValue(
+        makeStripeError(StripeErrors.StripeAPIError, "Something exploded", "api_error"),
+      );
+      const errorSpy = jest
+        .spyOn(functions.logger, "error")
+        .mockImplementation(() => undefined);
+
+      try {
+        const result = await (connectStripeAccount as unknown as Function)(
+          baseData,
+          authedContext(ADMIN_UID),
+        );
+
+        expect(result.url).toBe("https://connect.stripe.com/onboard");
+        expect(errorSpy).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.objectContaining({ accountId: "acct_new123", api: "v1" }),
+        );
+      } finally {
+        errorSpy.mockRestore();
+      }
+    });
+
     it("records that the house's account was created on v1", async () => {
       seedHouse(HOUSE_ID, { adminId: ADMIN_UID });
 
@@ -1693,6 +1764,74 @@ describe("getStripeAccountStatus", () => {
       expect(result.chargesEnabled).toBe(false);
       expect(result.payoutsEnabled).toBe(true);
       expect(readHouse(HOUSE_ID)?.stripeStatus).toBe("active");
+    });
+
+    it("syncs a restricted v1 account with every requirement bucket", async () => {
+      seedHouse(HOUSE_ID, {
+        adminId: ADMIN_UID,
+        stripeAccountId: "acct_v1_house",
+        stripeAccountApi: "v1",
+        stripeStatus: "active",
+      });
+      mockStripeAccountsRetrieve.mockResolvedValue(
+        v1Account({
+          capabilities: { card_payments: "inactive", transfers: "inactive" },
+          payouts_enabled: false,
+          requirements: {
+            currently_due: ["individual.ssn_last_4"],
+            past_due: ["external_account"],
+            eventually_due: ["individual.id_number"],
+            disabled_reason: "requirements.past_due",
+          },
+        }),
+      );
+
+      const result = await (getStripeAccountStatus as unknown as Function)(
+        { houseId: HOUSE_ID },
+        authedContext(ADMIN_UID),
+      );
+
+      expect(result.status).toBe("restricted");
+      expect(result.requirements).toEqual({
+        currentlyDue: ["individual.ssn_last_4"],
+        pastDue: ["external_account"],
+      });
+      const house = readHouse(HOUSE_ID);
+      expect(house?.stripeStatus).toBe("restricted");
+      expect(house?.stripeRequirements).toEqual(
+        expect.arrayContaining([
+          "individual.ssn_last_4",
+          "external_account",
+          "individual.id_number",
+        ]),
+      );
+    });
+
+    it("syncs a v1 account Stripe is still reviewing as pending", async () => {
+      seedHouse(HOUSE_ID, {
+        adminId: ADMIN_UID,
+        stripeAccountId: "acct_v1_house",
+        stripeAccountApi: "v1",
+      });
+      mockStripeAccountsRetrieve.mockResolvedValue(
+        v1Account({
+          capabilities: { card_payments: "pending", transfers: "pending" },
+          requirements: {
+            currently_due: [],
+            past_due: [],
+            eventually_due: [],
+            disabled_reason: "requirements.pending_verification",
+          },
+        }),
+      );
+
+      const result = await (getStripeAccountStatus as unknown as Function)(
+        { houseId: HOUSE_ID },
+        authedContext(ADMIN_UID),
+      );
+
+      expect(result.status).toBe("pending");
+      expect(readHouse(HOUSE_ID)?.stripeStatus).toBe("pending");
     });
 
     it("treats a house connected before the API was recorded as v1", async () => {

@@ -8,6 +8,7 @@
  */
 
 import type Stripe from 'stripe';
+import { logger } from 'firebase-functions';
 import {
   fetchConnectAccountStatus,
   houseAccountApi,
@@ -93,6 +94,75 @@ describe('mapV1AccountStatus', () => {
     expect(result.eventuallyDue).toEqual(['individual.id_number']);
   });
 
+  it.each(['requirements.pending_verification', 'under_review'])(
+    'is pending, not restricted, while Stripe itself is reviewing (%s)',
+    (reason) => {
+      // These disabled reasons mean the operator has nothing left to do;
+      // telling them "Stripe needs more information" would send them back
+      // into onboarding for nothing.
+      const result = mapV1AccountStatus(
+        v1Account('inactive', {
+          requirements: {
+            currently_due: [],
+            past_due: [],
+            eventually_due: [],
+            pending_verification: ['individual.verification.document'],
+            disabled_reason: reason,
+          },
+        }),
+      );
+
+      expect(result.status).toBe('pending');
+      expect(result.transfersEnabled).toBe(false);
+    },
+  );
+
+  it('is restricted when Stripe is reviewing but the operator also owes information', () => {
+    const result = mapV1AccountStatus(
+      v1Account('inactive', {
+        requirements: {
+          currently_due: [],
+          past_due: ['external_account'],
+          eventually_due: [],
+          disabled_reason: 'requirements.pending_verification',
+        },
+      }),
+    );
+
+    expect(result.status).toBe('restricted');
+  });
+
+  it('is restricted when Stripe has rejected the account, with nothing due', () => {
+    const result = mapV1AccountStatus(
+      v1Account('inactive', {
+        requirements: {
+          currently_due: [],
+          past_due: [],
+          eventually_due: [],
+          disabled_reason: 'rejected.fraud',
+        },
+      }),
+    );
+
+    expect(result.status).toBe('restricted');
+  });
+
+  it('treats null requirement lists as empty', () => {
+    const result = mapV1AccountStatus(
+      v1Account('pending', {
+        requirements: {
+          currently_due: null,
+          past_due: null,
+          eventually_due: null,
+          disabled_reason: null,
+        },
+      }),
+    );
+
+    expect(result.status).toBe('pending');
+    expect(result.currentlyDue).toEqual([]);
+  });
+
   it('never reports active when the transfers capability is missing', () => {
     const result = mapV1AccountStatus(v1Account(undefined));
 
@@ -116,6 +186,27 @@ describe('houseAccountApi', () => {
   ])('maps a stored %p to %p', (stored, expected) => {
     // Houses connected before this field existed were all created on v1.
     expect(houseAccountApi(stored)).toBe(expected);
+  });
+});
+
+describe('houseAccountApi warnings', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('warns when a stored value is neither v1, v2 nor absent', () => {
+    // Read as v1 regardless — but a v2 house mis-recorded as "V2" would be
+    // unlinked without being closed, so the mismatch must be visible.
+    const warn = jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+    expect(houseAccountApi('V2')).toBe('v1');
+    expect(warn).toHaveBeenCalledWith(expect.any(String), { stored: 'V2' });
+  });
+
+  it.each([[undefined], ['v1'], ['v2']])('stays quiet for %p', (stored) => {
+    const warn = jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+    houseAccountApi(stored);
+
+    expect(warn).not.toHaveBeenCalled();
   });
 });
 

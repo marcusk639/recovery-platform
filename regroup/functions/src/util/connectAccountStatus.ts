@@ -1,4 +1,5 @@
 import type Stripe from "stripe";
+import { logger } from "firebase-functions";
 import type { ConnectAccountsApi } from "../config";
 
 /**
@@ -149,14 +150,25 @@ export function mapRecipientAccountStatus(
 }
 
 /**
+ * v1 disabled reasons that mean Stripe, not the operator, holds the next step.
+ * Treating them as `restricted` would tell an operator who has submitted
+ * everything that Stripe needs more information.
+ */
+const STRIPE_REVIEW_REASONS: ReadonlySet<string> = new Set([
+  "requirements.pending_verification",
+  "under_review",
+]);
+
+/**
  * Maps a retrieved v1 account onto the house status model.
  *
  * `transfers` active is the only route to `active`. Otherwise the account is
- * `restricted` when Stripe has disabled it or the operator owes information —
- * card_payments and transfers are coupled (if either is inactive Stripe
- * disables both), so disabled_reason is the cue whichever one failed — and
- * `pending` while Stripe is still reviewing. A missing capability is never
- * active. v1 has no closed state; a deleted account fails to retrieve.
+ * `restricted` when the operator owes information or Stripe has disabled it
+ * for a reason the operator must act on — card_payments and transfers are
+ * coupled (if either is inactive Stripe disables both), so disabled_reason is
+ * the cue whichever one failed — and `pending` while Stripe itself is
+ * reviewing. A missing capability is never active. v1 has no closed state; a
+ * deleted account fails to retrieve.
  */
 export function mapV1AccountStatus(account: Stripe.Account): ConnectAccountStatus {
   const transfersStatus: TransfersCapabilityStatus =
@@ -166,14 +178,16 @@ export function mapV1AccountStatus(account: Stripe.Account): ConnectAccountStatu
   const pastDue = requirements?.past_due ?? [];
   const eventuallyDue = requirements?.eventually_due ?? [];
 
+  const disabledReason = requirements?.disabled_reason;
+  const operatorOwes =
+    currentlyDue.length > 0 ||
+    pastDue.length > 0 ||
+    (!!disabledReason && !STRIPE_REVIEW_REASONS.has(disabledReason));
+
   let status: ConnectStatus;
   if (transfersStatus === "active") {
     status = "active";
-  } else if (
-    requirements?.disabled_reason ||
-    currentlyDue.length > 0 ||
-    pastDue.length > 0
-  ) {
+  } else if (operatorOwes) {
     status = "restricted";
   } else {
     status = "pending";
@@ -197,6 +211,14 @@ export function mapV1AccountStatus(account: Stripe.Account): ConnectAccountStatu
  * field existed were all created on v1, so anything but exactly "v2" is v1.
  */
 export function houseAccountApi(stored: unknown): ConnectAccountsApi {
+  if (stored !== undefined && stored !== "v1" && stored !== "v2") {
+    // Firestore rules keep clients out, so this is a server-side bug or a bad
+    // backfill. Read as v1 regardless, but a v2 house mis-recorded here would
+    // be unlinked without being closed, so make it visible.
+    logger.warn("houses.stripeAccountApi has an unexpected value; reading as v1", {
+      stored,
+    });
+  }
   return stored === "v2" ? "v2" : "v1";
 }
 

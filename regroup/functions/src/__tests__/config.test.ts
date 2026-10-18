@@ -1,3 +1,4 @@
+import { logger } from "firebase-functions";
 import { connectAccountsApi, isTierBillingEnabled } from "../config";
 
 describe("isTierBillingEnabled", () => {
@@ -22,6 +23,24 @@ describe("connectAccountsApi", () => {
     // create is rejected, so v1 is the only safe default.
     delete process.env.CONNECT_ACCOUNTS_API;
     expect(connectAccountsApi()).toBe("v1");
+  });
+  it("warns when set to something other than v1 or v2, e.g. a typo of v2", () => {
+    const warn = jest.spyOn(logger, "warn").mockImplementation(() => undefined);
+    process.env.CONNECT_ACCOUNTS_API = "V2";
+
+    expect(connectAccountsApi()).toBe("v1");
+    expect(warn).toHaveBeenCalledWith(expect.any(String), { value: "V2" });
+    warn.mockRestore();
+  });
+  it("stays quiet when unset, v1 or v2", () => {
+    const warn = jest.spyOn(logger, "warn").mockImplementation(() => undefined);
+    for (const value of [undefined, "v1", "v2"]) {
+      if (value === undefined) delete process.env.CONNECT_ACCOUNTS_API;
+      else process.env.CONNECT_ACCOUNTS_API = value;
+      connectAccountsApi();
+    }
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
   it("is v2 only for the exact string 'v2'", () => {
     process.env.CONNECT_ACCOUNTS_API = "v2";

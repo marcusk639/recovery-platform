@@ -2455,6 +2455,33 @@ describe("account.updated", () => {
     );
   });
 
+  test("an unreadable v1 account stops retrying but leaves the house as it was", async () => {
+    // A deleted v1 account and a key that cannot see it both return 403
+    // account_invalid, so it is not proof the account is gone — a wrong-key
+    // deploy must not disconnect every house. But it never resolves on retry,
+    // so the event is acknowledged with an error log instead of being
+    // re-delivered for three days.
+    const event = makeStripeEvent("account.updated", makeAccount());
+    mockConstructEvent.mockReturnValue(event);
+    mockV1AccountsRetrieve.mockRejectedValue(
+      Object.assign(new Error("does not have access to account"), {
+        type: "StripePermissionError",
+        code: "account_invalid",
+      }),
+    );
+    setupForAccountUpdated(true, "active", "v1");
+
+    const res = makeResponse();
+    await stripeWebhook(makeRequest({}) as never, res as never);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(mockUpdate).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining("account_invalid"),
+      expect.objectContaining({ houseId: "house_1", accountId: "acct_test_123" }),
+    );
+  });
+
   test("a transient retrieve failure is retried, not recorded as disconnected", async () => {
     const event = makeStripeEvent("account.updated", makeAccount());
     mockConstructEvent.mockReturnValue(event);
