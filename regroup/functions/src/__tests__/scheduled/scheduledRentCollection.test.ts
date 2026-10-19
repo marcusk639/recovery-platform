@@ -3,6 +3,14 @@ import { runRentCollection } from '../../scheduled/scheduledRentCollection';
 const mockCreatePaymentIntent = jest.fn();
 const mockPaymentMethodsRetrieve = jest.fn();
 
+// Houses by id. Autopay sends each guest's rent to their house's Connect
+// account, read from the house document — never from the guest.
+const mockHouses: Record<string, Record<string, unknown> | undefined> = {};
+const mockHouseGet = jest.fn(async (id: string) => ({
+  exists: mockHouses[id] !== undefined,
+  data: () => mockHouses[id],
+}));
+
 jest.mock('../../api/firestore', () => ({
   guestCollection: {
     where: jest.fn().mockReturnThis(),
@@ -61,6 +69,9 @@ jest.mock('../../api/firestore', () => ({
   // importing, before a top-level import of the helper has initialized.
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   paymentsCollection: require('./helpers/fakeApiFirestore').fakeEmptyCollection(),
+  houseCollection: {
+    doc: (id: string) => ({ get: () => mockHouseGet(id) }),
+  },
 }));
 
 jest.mock('stripe', () => {
@@ -92,6 +103,98 @@ describe('runRentCollection', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     process.env.STRIPE_SECRET_KEY = 'sk_test_mock';
+    for (const id of Object.keys(mockHouses)) delete mockHouses[id];
+    mockHouses['house-1'] = { stripeAccountId: 'acct_house1', stripeStatus: 'active' };
+  });
+
+  describe('where the rent goes', () => {
+    // The default guests carry no stripeConnectId, exactly like production:
+    // nothing in the app writes that field. Autopay used to read the
+    // destination from it, so every charge settled in the platform balance
+    // and no house was ever paid.
+    it("sends every autopay charge to the house's Connect account with the platform fee", async () => {
+      mockCreatePaymentIntent.mockResolvedValue({ id: 'pi_test', status: 'succeeded' });
+      mockPaymentMethodsRetrieve.mockResolvedValue({ type: 'card' });
+
+      await runRentCollection();
+
+      expect(mockCreatePaymentIntent).toHaveBeenCalledTimes(2);
+      for (const [params] of mockCreatePaymentIntent.mock.calls) {
+        expect(params.transfer_data).toEqual({ destination: 'acct_house1' });
+        expect(params.application_fee_amount).toEqual(expect.any(Number));
+      }
+    });
+
+    it('ignores a destination stored on the guest and uses the house', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { guestCollection } = require('../../api/firestore');
+      guestCollection.get.mockResolvedValueOnce({
+        empty: false,
+        size: 1,
+        docs: [
+          {
+            id: 'guest-stray',
+            data: () => ({
+              houseId: 'house-1',
+              stripeCustomerId: 'cus_s',
+              defaultPaymentMethodId: 'pm_s',
+              stripeConnectId: 'acct_somewhere_else',
+              autoPayEnabled: true,
+              rentOwed: 500,
+            }),
+          },
+        ],
+      });
+      mockCreatePaymentIntent.mockResolvedValue({ id: 'pi_s', status: 'succeeded' });
+
+      await runRentCollection();
+
+      expect(mockCreatePaymentIntent).toHaveBeenCalledWith(
+        expect.objectContaining({ transfer_data: { destination: 'acct_house1' } }),
+        expect.anything(),
+      );
+    });
+
+    it.each([
+      ['is still onboarding', { stripeAccountId: 'acct_house1', stripeStatus: 'pending' }],
+      ['is restricted', { stripeAccountId: 'acct_house1', stripeStatus: 'restricted' }],
+      ['is disconnected', { stripeStatus: 'disconnected' }],
+      ['has no Stripe account', { stripeStatus: 'not_connected' }],
+      ['does not exist', undefined],
+      ['is marked active but has no account id', { stripeStatus: 'active' }],
+    ])('does not charge when the house %s', async (_label, house) => {
+      // Charging without a destination would keep the resident's rent in the
+      // platform balance. Skipping leaves the balance owed and visible, and the
+      // next run charges it once the house can receive transfers.
+      mockHouses['house-1'] = house as Record<string, unknown> | undefined;
+
+      const summary = await runRentCollection();
+
+      expect(mockCreatePaymentIntent).not.toHaveBeenCalled();
+      expect(summary.notChargedHouseNotReadyCount).toBe(2);
+      expect(summary.failureCount).toBe(0);
+    });
+
+    it('reads each house once per run, however many of its guests are due', async () => {
+      mockCreatePaymentIntent.mockResolvedValue({ id: 'pi_test', status: 'succeeded' });
+
+      await runRentCollection();
+
+      expect(mockHouseGet).toHaveBeenCalledTimes(1);
+      expect(mockHouseGet).toHaveBeenCalledWith('house-1');
+    });
+
+    it('fails the charge, without charging, when the house cannot be read', async () => {
+      // A transient read failure is not "house not ready": it must surface as
+      // a failure so Cloud Scheduler records it, rather than look like a skip.
+      mockHouseGet.mockRejectedValueOnce(new Error('UNAVAILABLE'));
+
+      const summary = await runRentCollection();
+
+      expect(mockCreatePaymentIntent).not.toHaveBeenCalled();
+      expect(summary.failureCount).toBe(2);
+      expect(summary.notChargedHouseNotReadyCount).toBe(0);
+    });
   });
 
   it('creates a PaymentIntent for each auto-pay guest with balance', async () => {
@@ -169,7 +272,6 @@ describe('runRentCollection', () => {
               houseId: 'house-1',
               stripeCustomerId: 'cus_c',
               defaultPaymentMethodId: 'pm_c',
-              stripeConnectId: 'acct_dest',
               autoPayEnabled: true,
               rentOwed: 10000, // $100.00
               ...overrides,
@@ -193,7 +295,7 @@ describe('runRentCollection', () => {
       expect(mockCreatePaymentIntent).toHaveBeenCalledWith(
         expect.objectContaining({
           application_fee_amount: 395, // margin 75 + Stripe (290 + 30)
-          transfer_data: { destination: 'acct_dest' },
+          transfer_data: { destination: 'acct_house1' },
         }),
         expect.anything(),
       );

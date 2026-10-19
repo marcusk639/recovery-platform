@@ -19,6 +19,8 @@ jest.mock('../../api/firestore', () => ({
   },
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   paymentsCollection: require('./helpers/fakeApiFirestore').fakeEmptyCollection(),
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  houseCollection: require('./helpers/fakeApiFirestore').fakeActiveHouseCollection(),
 }));
 
 jest.mock('stripe', () =>

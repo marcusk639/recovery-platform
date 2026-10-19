@@ -20,6 +20,8 @@ jest.mock('../../api/firestore', () => ({
     where: (f: string, op: string, v: unknown) => attemptStore.where(f, op, v),
   },
   paymentsCollection: { where: (...a: unknown[]) => mockPaymentsWhere(...a) },
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  houseCollection: require('./helpers/fakeApiFirestore').fakeActiveHouseCollection(),
 }));
 
 jest.mock('stripe', () =>
