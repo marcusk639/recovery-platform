@@ -60,31 +60,51 @@ unpinned exactly this way — the test existed and the mutation survived it.
 ## Layer 2 — emulator plus Stripe CLI
 
 Use this to exercise webhook handlers against real Stripe event payloads.
+Test mode only works here: the deployed functions run in live mode and refuse
+test-mode events by design (`util/verifyStripeWebhook.ts`), so there are no
+test-mode webhook endpoints in the Stripe Dashboard.
+
+All commands run from `regroup/functions`:
 
 ```bash
-# Platform emulator ports (see the platform CLAUDE.md — do not run two
-# products' emulators at once, the ports collide)
-cd regroup/functions
-npm run serve            # build + firebase serve --only functions
+# Once: make the emulator a TEST deployment. In .secret.local, STRIPE_SECRET_KEY
+# must be an sk_test_ key for the same Stripe account the CLI is logged into.
 
-# In a second shell, forward real test-mode events to the local handler
-stripe listen --forward-to http://localhost:5001/phoenix-cleanhouse/us-central1/stripeEvents
+# Put the `stripe listen` signing secret where the verifier looks for it
+# (STRIPE_TEST_WEBHOOK_SECRET and STRIPE_CONNECT_TEST_WEBHOOK_SECRET). Rerun
+# after `stripe login` to a different account.
+npm run stripe:listen:secret
 
-# Connect events go to the other endpoint
-stripe listen --forward-connect-to \
-  http://localhost:5001/phoenix-cleanhouse/us-central1/handleStripeConnectWebhook
+# Shell 1: the emulator (do not run two products' emulators at once)
+npm run serve
+
+# Shell 2: forward platform and Connect events to the local handlers
+npm run stripe:listen
 ```
 
-`stripe listen` prints a `whsec_…` signing secret. Put it in
-`regroup/functions/.env` as `STRIPE_WEBHOOK_SECRET` for the duration — the
-handler verifies signatures and will reject everything otherwise.
+Putting the listen secret in `STRIPE_WEBHOOK_SECRET` (the live secret) makes
+every forwarded event fail with a 400: a test-mode event only verifies against
+the test secrets.
 
-Trigger individual events:
+Single events from Stripe's fixtures:
 
 ```bash
-stripe trigger payment_intent.succeeded
-stripe trigger payment_intent.payment_failed
-stripe trigger account.updated
+npm run stripe:trigger:payment-succeeded
+npm run stripe:trigger:payment-failed
+npm run stripe:trigger:account-updated
+```
+
+**Refunds and disputes need real destination charges.** `stripe trigger
+charge.refunded` creates a charge with no transfer to a house, so the
+transfer-reversal code only logs "nothing to reverse". These scenarios create
+rent the way the app does ($500, $15 platform fee) and need
+`STRIPE_TEST_HOUSE_ACCOUNT=acct_…`, a test connected account with transfers
+active, in the environment or `.secret.local`:
+
+```bash
+npm run stripe:scenario:refund       # expect a $485.00 reversal on the transfer
+npm run stripe:scenario:dispute      # expect a $485.00 reversal on the transfer
+npm run stripe:scenario:dispute-won  # then, on close, $485.00 transferred back
 ```
 
 **Idempotency is worth testing deliberately.** The handler claims each event by
