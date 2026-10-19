@@ -23,5 +23,32 @@
         "(check|scan|review).*documentation"
       ]
     }
+  },
+  "launch-readiness-plan": {
+    "type": "domain",
+    "enforcement": "suggest",
+    "priority": "high",
+    "promptTriggers": {
+      "keywords": [
+        "launch-readiness-plan",
+        "launch readiness",
+        "go live",
+        "go-live",
+        "go-live backlog",
+        "pre-launch audit",
+        "ready to launch",
+        "launch plan",
+        "launch blockers",
+        "blocking revenue",
+        "docs vs code before launch",
+        "what's left before launch"
+      ],
+      "intentPatterns": [
+        "(what|anything).*(left|remaining|needed|missing|blocking).*(before|to).*(go\\s*live|launch|ship)",
+        "(are|is).*(we|it|app|regroup|homegroups).*(ready).*(launch|go\\s*live|ship|production)",
+        "(pre-?launch|go-?live|launch).*(audit|review|backlog|checklist|plan|readiness)",
+        "(compare|reconcile|check).*(docs?|documentation).*(code|implementation).*(launch|go\\s*live)"
+      ]
+    }
   }
 }
