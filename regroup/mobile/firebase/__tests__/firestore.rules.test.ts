@@ -648,6 +648,66 @@ function guestDocRef(
   return doc(ctx.firestore(), `guests/${GUEST_DOC_ID}`);
 }
 
+// A guest's houseId decides which house's Stripe account receives their
+// autopay rent (scheduledRentCollection reads houses/{guest.houseId}). The
+// admin branch used to check only the NEW houseId, so an admin of any house
+// could re-home another operator's resident into their own house and collect
+// that resident's rent from the card already saved on the guest doc. An admin
+// must now hold both the guest's current house and the destination house.
+describe("guests/{guestId} — admins can't move another house's guest", () => {
+  const ATTACKER_HOUSE_ID = "attackerHouse";
+  const ATTACKER_UID = "attackerAdmin";
+
+  test("DENY an admin of another house moving the guest into their house", async () => {
+    await seedGuestDoc();
+    const ctx = testEnv.authenticatedContext(
+      ATTACKER_UID,
+      authHouseAdmin(ATTACKER_UID, ATTACKER_HOUSE_ID),
+    );
+    await assertFails(
+      updateDoc(guestDocRef(ctx), { houseId: ATTACKER_HOUSE_ID, autoPayEnabled: true }),
+    );
+  });
+
+  test("DENY a superAdmin of another house moving the guest into their house", async () => {
+    await seedGuestDoc();
+    const ctx = testEnv.authenticatedContext(
+      ATTACKER_UID,
+      authHouseSuperAdmin(ATTACKER_UID, ATTACKER_HOUSE_ID),
+    );
+    await assertFails(updateDoc(guestDocRef(ctx), { houseId: ATTACKER_HOUSE_ID }));
+  });
+
+  test("DENY an admin of another house editing the guest's rent", async () => {
+    await seedGuestDoc();
+    const ctx = testEnv.authenticatedContext(
+      ATTACKER_UID,
+      authHouseAdmin(ATTACKER_UID, ATTACKER_HOUSE_ID),
+    );
+    await assertFails(updateDoc(guestDocRef(ctx), { rentOwed: 999999 }));
+  });
+
+  test("ALLOW an admin of the guest's own house editing the guest's rent", async () => {
+    await seedGuestDoc();
+    const ctx = testEnv.authenticatedContext(ADMIN_UID, authHouseAdmin(ADMIN_UID, HOUSE_ID));
+    await assertSucceeds(updateDoc(guestDocRef(ctx), { rentOwed: 200 }));
+  });
+
+  test("ALLOW an operator who admins both houses moving the guest between them", async () => {
+    await seedGuestDoc();
+    const ctx = testEnv.authenticatedContext(ADMIN_UID, {
+      admin: { [HOUSE_ID]: true, [ATTACKER_HOUSE_ID]: true },
+    });
+    await assertSucceeds(updateDoc(guestDocRef(ctx), { houseId: ATTACKER_HOUSE_ID }));
+  });
+
+  test("DENY an admin of the guest's house moving the guest to a house they don't admin", async () => {
+    await seedGuestDoc();
+    const ctx = testEnv.authenticatedContext(ADMIN_UID, authHouseAdmin(ADMIN_UID, HOUSE_ID));
+    await assertFails(updateDoc(guestDocRef(ctx), { houseId: ATTACKER_HOUSE_ID }));
+  });
+});
+
 describe("guests/{guestId} — self-edit field guard (S1)", () => {
   describe("allowed self-edits", () => {
     test("ALLOW guest editing their own firstName", async () => {

@@ -36,6 +36,7 @@ import {
   markRentAttemptFailed,
   recordRentAttempt,
 } from './rentAttempts';
+import { createRentDestinationLookup } from './rentDestination';
 
 interface AutoPayGuest {
   id: string;
@@ -43,7 +44,6 @@ interface AutoPayGuest {
   stripeCustomerId: string;
   defaultPaymentMethodId: string;
   rentOwed: Cents;
-  stripeConnectId?: string;
 }
 
 export interface RentCollectionSummary {
@@ -53,6 +53,12 @@ export interface RentCollectionSummary {
   attemptedCount: number;
   /** Attempts that threw. */
   failureCount: number;
+  /**
+   * Guests not charged because their house can't receive rent: no house, no
+   * connected Stripe account, or an account that isn't `active`. Their balance
+   * stays owed and the next run charges it once the house is ready.
+   */
+  notChargedHouseNotReadyCount: number;
   /**
    * Attempts whose Stripe outcome is unknown and awaiting a human. `null` means
    * the sweep itself failed and the count is unknown; 0 means none were found.
@@ -129,6 +135,7 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
       matchedCount: 0,
       attemptedCount: 0,
       failureCount: 0,
+      notChargedHouseNotReadyCount: 0,
       needsReconciliationCount,
       paymentsNeedingReconciliationCount,
     };
@@ -160,10 +167,14 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
       matchedCount: snapshot.size,
       attemptedCount: 0,
       failureCount: 0,
+      notChargedHouseNotReadyCount: 0,
       needsReconciliationCount,
       paymentsNeedingReconciliationCount,
     };
   }
+
+  const destinationFor = createRentDestinationLookup();
+  let notChargedHouseNotReadyCount = 0;
 
   const results = await Promise.allSettled(
     due.map(async ({ doc, dueCents }) => {
@@ -190,6 +201,20 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
         });
         return;
       }
+      // Rent goes to the house's Connect account. Without one that can
+      // receive it, don't charge: a charge with no destination keeps the
+      // resident's rent in the platform balance. Checked before the attempt
+      // is recorded, so a skipped guest leaves nothing in flight.
+      const destination = await destinationFor(guest.houseId);
+      if (!destination) {
+        notChargedHouseNotReadyCount += 1;
+        logger.warn('scheduledRentCollection: house cannot receive rent yet, not charging', {
+          guestId: guest.id,
+          houseId: guest.houseId,
+        });
+        return;
+      }
+
       // Charge what is actually outstanding, not the gross balance: part of it
       // may already be in flight.
       const amountCents = dueCents;
@@ -205,32 +230,20 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
         nowIso: now.toISOString(),
       });
 
-      // The platform application fee only applies to Connect transfers. When
-      // present, derive the method-aware fee (P-1/P-2): look up the stored
-      // default method's type so ACH vs card is priced correctly; legacy
-      // houses stay on the flat 2% via the allow-list (P-3).
-      let transferParams: Partial<Stripe.PaymentIntentCreateParams> = {};
-      if (guest.stripeConnectId) {
-        // The method type only affects the (cents-level) fee. If the lookup
-        // fails (deleted method, rate limit, transient network), fall back to
-        // pricing as a card rather than skipping the whole rent charge.
-        let paymentMethodType: RentPaymentMethodType = 'card';
-        try {
-          const method = await stripe.paymentMethods.retrieve(guest.defaultPaymentMethodId);
-          paymentMethodType = method.type === 'us_bank_account' ? 'us_bank_account' : 'card';
-        } catch (err) {
-          logger.warn(
-            'scheduledRentCollection: payment method lookup failed, ' + 'defaulting to card fee',
-            { guestId: guest.id, err: (err as Error)?.message },
-          );
-        }
-        transferParams = {
-          transfer_data: { destination: guest.stripeConnectId },
-          application_fee_amount: computeApplicationFee({
-            amountCents,
-            paymentMethodType,
-          }),
-        };
+      // Method-aware platform fee (P-1/P-2): look up the stored default
+      // method's type so ACH vs card is priced correctly; legacy houses stay on
+      // the flat 2% via the allow-list (P-3). The method type only affects the
+      // (cents-level) fee, so if the lookup fails (deleted method, rate limit,
+      // transient network) price it as a card rather than skip the rent.
+      let paymentMethodType: RentPaymentMethodType = 'card';
+      try {
+        const method = await stripe.paymentMethods.retrieve(guest.defaultPaymentMethodId);
+        paymentMethodType = method.type === 'us_bank_account' ? 'us_bank_account' : 'card';
+      } catch (err) {
+        logger.warn(
+          'scheduledRentCollection: payment method lookup failed, ' + 'defaulting to card fee',
+          { guestId: guest.id, err: (err as Error)?.message },
+        );
       }
 
       let intent: Stripe.PaymentIntent;
@@ -250,7 +263,11 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
               // than having to author one.
               rentAttemptId: attemptRef.id,
             },
-            ...transferParams,
+            transfer_data: { destination: destination.accountId },
+            application_fee_amount: computeApplicationFee({
+              amountCents,
+              paymentMethodType,
+            }),
           },
           { idempotencyKey },
         );
@@ -290,10 +307,19 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
     });
   }
 
+  if (notChargedHouseNotReadyCount > 0) {
+    // Not a job failure — an operator who hasn't finished Stripe onboarding is
+    // a normal state — but rent that autopay can't collect should be visible.
+    logger.warn('scheduledRentCollection: guests not charged, house cannot receive rent', {
+      notChargedHouseNotReadyCount,
+    });
+  }
+
   return {
     matchedCount: snapshot.size,
     attemptedCount: due.length,
     failureCount,
+    notChargedHouseNotReadyCount,
     needsReconciliationCount,
     paymentsNeedingReconciliationCount,
   };

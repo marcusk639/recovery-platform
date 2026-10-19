@@ -26,6 +26,8 @@ jest.mock('../../api/firestore', () => ({
   // importing, before a top-level import of the helper has initialized.
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   paymentsCollection: require('./helpers/fakeApiFirestore').fakeEmptyCollection(),
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  houseCollection: require('./helpers/fakeApiFirestore').fakeActiveHouseCollection(),
 }));
 
 jest.mock('stripe', () =>
