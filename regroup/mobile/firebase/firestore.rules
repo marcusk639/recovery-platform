@@ -142,6 +142,12 @@ service cloud.firestore {
       // Update has two distinct branches:
       //
       //  Admin branch — full write authority on any field within the house.
+      //    The admin must hold BOTH the guest's current house and the house
+      //    the write leaves it in. houseId decides which house's Stripe
+      //    account receives the guest's autopay rent, so checking only the
+      //    new houseId let an admin of any house re-home another operator's
+      //    resident and collect their rent from the card already on file.
+      //    An operator who admins both houses can still move a guest.
       //
       //  Self branch — guest editing their own profile is restricted to a
       //    whitelist of personal fields. Financial fields (rentOwed,
@@ -153,7 +159,7 @@ service cloud.firestore {
       //
       // See .full-review/02-security-performance.md [S1] for the threat model.
       allow update: if
-        isAdmin([request.resource.data.houseId]) ||
+        (isAdmin([resource.data.houseId]) && isAdmin([request.resource.data.houseId])) ||
         (isSameUser(request.resource.data.userId) &&
          request.resource.data.userId == resource.data.userId &&
          request.resource.data.houseId == resource.data.houseId &&
