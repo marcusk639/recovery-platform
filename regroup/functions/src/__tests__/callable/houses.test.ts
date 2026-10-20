@@ -154,13 +154,9 @@ describe('createHouses', () => {
     const userUpdates = events.filter((e) => e.op === 'update');
     expect(userUpdates).toHaveLength(1);
     expect(userUpdates[0].path).toBe(`users/${UID}`);
-    expect(userUpdates[0].data).toMatchObject({
-      orgSetupCompleted: true,
-      isAdmin: true,
-      isSuperAdmin: true,
-      adminId,
-      housesOwned: [H1, H2],
-    });
+    expect(userUpdates[0].data).toMatchObject({ adminId, housesOwned: [H1, H2] });
+    // Onboarding flags are written after the claim grant, not in the tx.
+    expect(userUpdates[0].data).not.toHaveProperty('orgSetupCompleted');
     expect(Object.keys(userUpdates[0].data!.subscriptionMetadata.houses)).toEqual([H1, H2]);
     expect(mockAddHousesToSubscription).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'active' }),
@@ -257,7 +253,8 @@ describe('createHouses', () => {
   });
 
   it('rejects a house with ownerId === uid that is not in the subscription map', async () => {
-    // ownerId is client-forgeable; only the server-owned map proves ownership.
+    // A house with a matching ownerId that is missing from the server-owned
+    // subscription map is not accepted as ours.
     seedUser();
     const forged = { id: H1, ownerId: UID, name: 'Forged' };
     store.set(`houses/${H1}`, forged);

@@ -118,5 +118,11 @@ describe('createHouses — server-derived house ids', () => {
     const res = await call([house('key-1'), house(victimId)], OTHER);
     expect(res.houseIds).not.toContain(victimId);
     expect(store.has(`houses/${victimId}`)).toBe(false);
+    // Claims are granted on exactly the caller-derived ids, never the victim's.
+    expect(mockGrantHouseRoles).toHaveBeenCalledTimes(1);
+    expect(mockGrantHouseRoles).toHaveBeenCalledWith(OTHER, [
+      deriveHouseId(OTHER, 'key-1'),
+      deriveHouseId(OTHER, victimId),
+    ]);
   });
 });

@@ -62,8 +62,11 @@ export const assertCanCreateHouses = (
  * with the same key derives the same id, and a house that already exists with
  * ownerId === uid AND is already in the caller's server-owned subscription map
  * is treated as created, so the retry rewrites nothing and only re-applies the
- * set-unions. A deleted id (houseTombstones) can never be created again
- * (defence in depth: the caller would have to re-derive its own deleted id).
+ * admin/user array unions. A tombstoned (deleted) id is refused.
+ *
+ * The onboarding flags (orgSetupCompleted/isAdmin/isSuperAdmin) are NOT
+ * written here: the callable sets them only after the claims are granted, so
+ * a failed grant never leaves the operator past onboarding without claims.
  */
 export const createHousesTx = async (
   tx: Transaction,
@@ -82,9 +85,9 @@ export const createHousesTx = async (
   const ids = inputs.map((h) => deriveHouseId(uid, h.requestKey));
   const houseRefs = ids.map((id) => houseCollection.doc(id));
   const houseSnaps = await Promise.all(houseRefs.map((ref) => tx.get(ref)));
-  // A deleted house leaves a tombstone (triggers/firestore/houseTombstone.ts).
-  // Without this check, deleting a house and calling createHouses with its id
-  // would see no doc and mint superAdmin on it for the caller.
+  // Defence in depth: ids are already caller-scoped, but a deleted id must
+  // never be re-created. The tombstone is written by the onHouseDeleted
+  // trigger (eventually, after the delete), so this is not the primary guard.
   const tombstoneSnaps = await Promise.all(
     ids.map((id) => tx.get(houseTombstoneCollection.doc(id))),
   );
@@ -97,20 +100,10 @@ export const createHousesTx = async (
       newIndexes.push(i);
       return;
     }
-    // Ids are server-derived from (uid, requestKey), so a caller can never
-    // name another operator's id — live or deleted — and an existing doc here
-    // is normally this caller's own earlier create (a retry with the same key).
-    // It still counts as "already created by this caller" only if ownerId ===
-    // uid AND the id is already in the caller's subscription map (defence in
-    // depth, e.g. against a legacy client-created house). Together they prove
-    // ownership: firestore.rules deny client house creates, and only a
-    // superAdmin of the house may change ownerId (plain admins and guests
-    // cannot). subscriptionMetadata is written only by the server — here, in
-    // the same transaction as the house, and by updateSubscriptionHouses "add",
-    // which itself requires ownerId === uid. So a caller whose ownerId and map
-    // both match is the creator or already superAdmin of the house. Another
-    // user (e.g. a plain admin) cannot re-create a deleted house either: its
-    // uid derives a different id, and the deleted id is tombstoned (above).
+    // An existing doc at a caller-derived id is normally this caller's own
+    // earlier create (a retry). It counts as ours only if ownerId === uid AND
+    // the id is already in the server-owned subscription map; anything else
+    // (e.g. a legacy client-created house) is refused.
     const ownerId = (snap.data() as { ownerId?: string } | undefined)?.ownerId;
     const inSubscription = Object.prototype.hasOwnProperty.call(meta.houses ?? {}, ids[i]);
     if (ownerId !== uid || !inSubscription) {
@@ -131,7 +124,6 @@ export const createHousesTx = async (
   }
 
   // ── Pure computation (may throw on the property cap; nothing written yet) ──
-  const allIds = ids;
   const newIds = newIndexes.map((i) => ids[i]);
   const idMap = Object.fromEntries(inputs.map((h, i) => [h.requestKey, ids[i]]));
   const subscriptionMetadata = addHousesToSubscription(meta, newIds, now);
@@ -142,8 +134,8 @@ export const createHousesTx = async (
     firstName: existingAdmin?.firstName ?? user?.firstName ?? '',
     lastName: existingAdmin?.lastName ?? user?.lastName ?? '',
     userId: uid,
-    houseIds: union(existingAdmin?.houseIds, allIds),
-    superAdmin: union(existingAdmin?.superAdmin, allIds),
+    houseIds: union(existingAdmin?.houseIds, ids),
+    superAdmin: union(existingAdmin?.superAdmin, ids),
   };
 
   // ── Writes ──
@@ -162,13 +154,10 @@ export const createHousesTx = async (
   });
   tx.set(adminCollection.doc(adminId), admin, { merge: true });
   tx.update(userRef, {
-    orgSetupCompleted: true,
-    isAdmin: true,
-    isSuperAdmin: true,
     adminId,
-    housesOwned: union(user?.housesOwned, allIds),
+    housesOwned: union(user?.housesOwned, ids),
     subscriptionMetadata,
   });
 
-  return { houseIds: allIds, idMap, admin, subscriptionMetadata, status };
+  return { houseIds: ids, idMap, admin, subscriptionMetadata, status };
 };

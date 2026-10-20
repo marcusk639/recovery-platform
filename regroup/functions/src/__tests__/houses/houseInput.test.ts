@@ -84,8 +84,8 @@ describe('houseInput', () => {
   });
 
   it('sets superAdminId to the operator uid, ignoring client input', () => {
-    // callable/oxford.ts and callable/analytics.ts authorize on
-    // house.superAdminId === request.auth.uid; nothing else writes it.
+    // Server callables and triggers resolve the house's operator through
+    // superAdminId, so it is always the operator's uid, never client input.
     expect(build({ superAdminId: 'evil' }).superAdminId).toBe(ctx.ownerUid);
   });
 

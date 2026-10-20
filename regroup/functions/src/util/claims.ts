@@ -87,9 +87,10 @@ export const deleteClaim = async (
 };
 
 /**
- * Grants admin AND superAdmin on every given house in a single read-modify-write.
- * Building both roles from one snapshot and merging once avoids the stale-map bug
- * where two createClaims results from the same snapshot were spread together.
+ * Grants admin AND superAdmin on every given house in a single read-modify-write
+ * of the user's custom claims (both roles built from one snapshot, set once).
+ * Not atomic with respect to concurrent claim writers: a claim written for the
+ * same user between the read and the set is overwritten.
  */
 export const grantHouseRoles = async (
   userId: string,

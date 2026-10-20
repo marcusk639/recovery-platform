@@ -1134,6 +1134,41 @@ describe("tier subscriptions skip Stripe quantity updates", () => {
     expect(mockUpdateUser).toHaveBeenCalled();
   });
 
+  it.each([
+    [
+      "an owned house mixed with another operator's",
+      { id: "house-3", ownerId: "someone-else" },
+    ],
+    ["an owned house mixed with a missing one", undefined],
+  ])("rejects a batch adding %s", async (_label, secondDoc) => {
+    // One bad id denies the whole batch: no partial map update.
+    mockGetUser.mockResolvedValue(tierUserUnderCap);
+    mockGetHouse
+      .mockResolvedValueOnce({ id: "house-2", ownerId: "user-1" })
+      .mockResolvedValueOnce(secondDoc as any);
+    await expect(
+      call(updateSubscriptionHouses, {
+        ownerUserId: "user-1",
+        action: "add",
+        houseIds: ["house-2", "house-3"],
+      }),
+    ).rejects.toMatchObject({ code: "permission-denied" });
+    expect(mockGetHouse).toHaveBeenCalledTimes(2);
+    expect(mockUpdateUser).not.toHaveBeenCalled();
+  });
+
+  it("rejects removing with an empty houseIds list", async () => {
+    mockGetUser.mockResolvedValue(tierUserUnderCap);
+    await expect(
+      call(updateSubscriptionHouses, {
+        ownerUserId: "user-1",
+        action: "remove",
+        houseIds: [],
+      }),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+    expect(mockUpdateUser).not.toHaveBeenCalled();
+  });
+
   it("denies a second property on a tier without the multiProperty capability (P-7)", async () => {
     // Starter has multiProperty=false: adding a 2nd house is blocked by the
     // capability gate, independent of the numeric cap.

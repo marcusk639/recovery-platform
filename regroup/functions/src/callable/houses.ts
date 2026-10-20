@@ -1,7 +1,7 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import { z } from 'zod';
-import { ratsFirestore } from '../api/firestore';
+import { ratsFirestore, userCollection } from '../api/firestore';
 import type Admin from '../entities/Admin';
 import type OperatorSubscription from '../entities/OperatorSubscription';
 import { createHousesTx } from '../houses/createHousesTx';
@@ -28,11 +28,22 @@ export interface CreateHousesResponse {
 }
 
 /**
+ * Fields that move the operator past onboarding. Written only after the claims
+ * are granted, so a failed grant never leaves an operator who skips setup but
+ * holds no house claims; a retry writes them once the grant succeeds.
+ */
+export const OPERATOR_SETUP_FIELDS = {
+  orgSetupCompleted: true,
+  isAdmin: true,
+  isSuperAdmin: true,
+} as const;
+
+/**
  * Creates an operator's houses server-side. The houses, the operator's admin
  * doc and the user/subscription fields are written in one Firestore
  * transaction; the house-scoped admin + superAdmin claims are granted after it
- * commits. The client cannot write a house itself because it does not yet hold
- * the house-scoped claim the Firestore rules require.
+ * commits, then the onboarding flags (OPERATOR_SETUP_FIELDS) are set. Clients
+ * cannot create houses: the Firestore rules deny every client house create.
  *
  * House ids are derived by the server from (uid, requestKey); the client never
  * chooses one and maps its requestKeys to the created ids via `idMap`. Safe to
@@ -55,12 +66,25 @@ export const createHouses = onCall(async (request): Promise<CreateHousesResponse
     logger.error('createHouses: claim grant failed', {
       uid,
       houseIds: result.houseIds,
-      err: (err as Error)?.message,
+      code: (err as { code?: string })?.code,
+      err,
     });
     throw new HttpsError(
       'internal',
       'Houses were created but access could not be granted. Try again.',
     );
+  }
+
+  try {
+    await userCollection.doc(uid).update({ ...OPERATOR_SETUP_FIELDS });
+  } catch (err) {
+    logger.error('createHouses: onboarding flags update failed', {
+      uid,
+      houseIds: result.houseIds,
+      code: (err as { code?: string })?.code,
+      err,
+    });
+    throw new HttpsError('internal', 'Houses were created but setup could not finish. Try again.');
   }
 
   logger.info('house.created', { uid, houseIds: result.houseIds, status: result.status });

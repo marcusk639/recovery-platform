@@ -6,6 +6,8 @@
  * Firestore's all-or-nothing commit (a thrown error writes nothing). Every
  * get/create/set/update, and the commit itself, lands in `events` so tests can
  * assert exactly what was written and its order relative to other side effects.
+ * A non-transactional `ref.update()` is applied immediately and recorded as
+ * `directUpdate`.
  *
  * Usage:
  *   jest.mock('../../api/firestore', () =>
@@ -23,6 +25,7 @@ export interface TxEvent {
 interface Ref {
   id: string;
   path: string;
+  update: (data: Doc) => Promise<void>;
 }
 
 export const store = new Map<string, Doc>();
@@ -33,12 +36,35 @@ export const resetFakeFirestore = (): void => {
   store.clear();
   events.length = 0;
   autoId = 0;
+  failNextDirectUpdate = undefined;
 };
 
 export const writeEvents = (): TxEvent[] =>
-  events.filter((e) => ['create', 'set', 'update'].includes(e.op));
+  events.filter((e) => ['create', 'set', 'update', 'directUpdate'].includes(e.op));
 
-const makeRef = (collection: string, id: string): Ref => ({ id, path: `${collection}/${id}` });
+/** Rejects the next non-transactional `ref.update()` with the given error. */
+let failNextDirectUpdate: Error | undefined;
+export const failNextUpdate = (err: Error): void => {
+  failNextDirectUpdate = err;
+};
+
+const makeRef = (collection: string, id: string): Ref => {
+  const path = `${collection}/${id}`;
+  return {
+    id,
+    path,
+    update: async (data: Doc) => {
+      if (failNextDirectUpdate) {
+        const err = failNextDirectUpdate;
+        failNextDirectUpdate = undefined;
+        throw err;
+      }
+      if (!store.has(path)) throw new Error(`NOT_FOUND ${path}`);
+      events.push({ op: 'directUpdate', path, data });
+      store.set(path, { ...store.get(path), ...data });
+    },
+  };
+};
 const makeCollection = (name: string) => ({
   doc: (id?: string) => makeRef(name, id ?? `${name}-auto-${++autoId}`),
 });

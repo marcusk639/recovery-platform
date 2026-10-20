@@ -534,6 +534,9 @@ export const updateSubscriptionHouses = onCall(
     const amount = !isNil(data.amountToAdjust) ? data.amountToAdjust : 1;
     logger.info("Updating user subscription. User", data.ownerUserId);
     const { ownerUserId, action, houseIds } = data;
+    if (action === "remove" && (houseIds ?? []).length === 0) {
+      throw new HttpsError("invalid-argument", "houseIds must not be empty");
+    }
     const user = await getUser(ownerUserId);
     logger.info("User retrieved", { userId: user.id });
 

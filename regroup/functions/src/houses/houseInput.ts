@@ -1,16 +1,6 @@
 import { encode } from 'ngeohash';
 import { z } from 'zod';
 
-/**
- * Client-supplied house fields for createHouses. This is a WHITELIST: unknown
- * keys are stripped (zod default, made explicit with .strip()), so server-owned
- * fields (ownerId, adminIds, superAdminIds, subscriptionStatus, guestGraceEndsAt,
- * stripe*, isDemoHouse, oxfordEnabled, ...) can never come from the client.
- * `certified` is client-supplied: the wizard asks the operator, and the
- * operator (superAdmin) can already set it via a house update. Nested wizard
- * structures are intentionally permissive. The house id is never client input
- * (see requestKey below).
- */
 // Numeric (or numeric string), range-checked after coercion.
 const coordinate = (min: number, max: number) =>
   z
@@ -27,6 +17,16 @@ const coordinate = (min: number, max: number) =>
 const looseRecord = z.record(z.string(), z.unknown());
 const emails = z.array(z.string().max(320)).max(200);
 
+/**
+ * Client-supplied house fields for createHouses. This is a WHITELIST: unknown
+ * keys are stripped (zod default, made explicit with .strip()), so server-owned
+ * fields (ownerId, adminIds, superAdminIds, subscriptionStatus, guestGraceEndsAt,
+ * stripe*, isDemoHouse, oxfordEnabled, ...) can never come from the client.
+ * `certified` is client-supplied: the wizard asks the operator, and the
+ * operator (superAdmin) can already set it via a house update. Nested wizard
+ * structures are intentionally permissive. The house id is never client input
+ * (see requestKey below).
+ */
 export const createHouseInputSchema = z
   .object({
     // Idempotency key, not an id: the house id is derived server-side from
@@ -83,8 +83,9 @@ export function buildHouseDoc(
   input: CreateHouseInput,
   ctx: BuildHouseContext,
 ): Record<string, unknown> {
+  const { lat, lng, ...rest } = input;
   // requestKey is request metadata, not a house field.
-  const { lat, lng, requestKey: _requestKey, ...rest } = input;
+  delete (rest as { requestKey?: string }).requestKey;
   const latNum = Number(lat);
   const lngNum = Number(lng);
   return {
@@ -103,9 +104,8 @@ export function buildHouseDoc(
     lng: lngNum,
     geohash: encode(latNum, lngNum),
     ownerId: ctx.ownerUid,
-    // A uid, not an admin id: callable/oxford.ts and callable/analytics.ts
-    // authorize on house.superAdminId === request.auth.uid, and
-    // setHouseSubscriptionStatusOnCreate reads it as the operator's uid.
+    // The operator's uid, not an admin id: server callables and triggers
+    // resolve the house's operator through it.
     superAdminId: ctx.ownerUid,
     adminIds: [ctx.adminId],
     superAdminIds: [ctx.adminId],
