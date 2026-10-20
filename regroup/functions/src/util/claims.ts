@@ -85,3 +85,30 @@ export const deleteClaim = async (
     potentialSuperAdmin,
   };
 };
+
+/**
+ * Grants admin AND superAdmin on every given house in a single read-modify-write.
+ * Building both roles from one snapshot and merging once avoids the stale-map bug
+ * where two createClaims results from the same snapshot were spread together.
+ */
+export const grantHouseRoles = async (
+  userId: string,
+  houseIds: string[]
+): Promise<void> => {
+  const currentUser = await auth().getUser(userId);
+  const { potentialSuperAdmin, ...current } = parseCurrentClaims(
+    currentUser?.customClaims
+  );
+  const admin: Record<string, true> = { ...current.admin };
+  const superAdmin: Record<string, true> = { ...current.superAdmin };
+  for (const houseId of houseIds) {
+    admin[houseId] = true;
+    superAdmin[houseId] = true;
+  }
+  await auth().setCustomUserClaims(userId, {
+    ...current,
+    admin,
+    superAdmin,
+    ...(potentialSuperAdmin !== undefined ? { potentialSuperAdmin } : {}),
+  });
+};
