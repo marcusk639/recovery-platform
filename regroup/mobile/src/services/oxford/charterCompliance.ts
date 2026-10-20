@@ -18,7 +18,12 @@ import { EESRecord } from './ees';
  * Eligible-voter count per vote:
  * - If the vote has a matching meeting, use meeting.attendees.length.
  * - Otherwise use activeResidentCount.
- * Anonymous votes use sum of vote.results values as numerator.
+ * Votes cast (numerator):
+ * - Anonymous votes: the sum of vote.results values.
+ * - Named votes: max(sum of vote.results, number of individualVotes keys). The
+ *   tally is one count per voter and survives account deletion, which removes
+ *   the deleted user's individualVotes entry; the key count is only a floor for
+ *   legacy docs whose tally is incomplete.
  */
 export function computeDemocraticCondition(
   votes: Vote[],
