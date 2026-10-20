@@ -21,11 +21,16 @@ jest.mock("../../../../firebase-setup", () => ({
 }));
 
 // Mock the users service so async thunks don't touch Firebase
-jest.mock("../../../services/users", () => ({
+jest.mock("../../../services/users", () => {
+  const getUser = jest.fn();
+  return {
   signInWithEmail: jest.fn(),
   anonymouslyLogin: jest.fn(),
   signOut: jest.fn(),
-  getUser: jest.fn(),
+  getUser,
+  // The login thunks load the user via getUserFinishingSetup; by default it
+  // behaves like getUser (no setup recovery needed).
+  getUserFinishingSetup: jest.fn((uid: string) => getUser(uid)),
   createUser: jest.fn(),
   createAnonUser: jest.fn(),
   updateUser: jest.fn(),
@@ -33,7 +38,8 @@ jest.mock("../../../services/users", () => ({
   requestAccountVerification: jest.fn(),
   convertFirebaseUserToRatsUser: jest.fn(),
   userCollection: {},
-}));
+  };
+});
 
 // Mock user utility
 jest.mock("../../../util/user", () => ({

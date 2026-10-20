@@ -10,7 +10,7 @@ export const CREATE_HOUSES_RETRY_MESSAGE =
   "We couldn't finish creating your houses. Please try again.";
 
 export const HOUSES_CREATED_RESTART_MESSAGE =
-  'Your houses were created. Please restart the app to finish setup.';
+  'Your houses were created. Tap Complete Setup again or restart the app to finish.';
 
 // Callable error codes whose server message is written for the operator.
 const USER_SAFE_CODES = new Set([

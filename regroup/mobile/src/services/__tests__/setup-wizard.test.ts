@@ -568,7 +568,7 @@ describe("setup-wizard service", () => {
 
       // The houses exist server-side; never claim they were not created.
       await expect(initializeHouses(makeHouses(), makeUser())).rejects.toThrow(
-        "Your houses were created. Please restart the app to finish setup."
+        "Your houses were created. Tap Complete Setup again or restart the app to finish."
       );
       expect(invitationsService.createInvitation).not.toHaveBeenCalled();
     });

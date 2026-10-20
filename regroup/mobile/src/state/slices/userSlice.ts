@@ -73,7 +73,7 @@ export const login = createAsyncThunk(
   ) => {
     let user: any = await userService.signInWithEmail(email, password);
     user = getFirebaseUserFromUserCredential(user);
-    const userEntity = await userService.getUser(user.uid);
+    const userEntity = await userService.getUserFinishingSetup(user.uid);
     const token = await userService.getAuthUser(true);
     dispatch(setSubscriptionStatus(subscriptionStatus(userEntity)));
     return { user: userEntity, token };
@@ -96,7 +96,7 @@ export const anonymouslyLogin = createAsyncThunk(
 export const autoLogin = createAsyncThunk(
   "user/autoLogin",
   async (signedInUser: FirebaseAuthTypes.User, { dispatch }) => {
-    let userEntity = await userService.getUser(signedInUser.uid);
+    let userEntity = await userService.getUserFinishingSetup(signedInUser.uid);
     if (!userEntity) {
       // Convert Firebase user to our User entity
       const convertedUser = userService.convertFirebaseUserToRatsUser({}, {
