@@ -92,10 +92,12 @@ export const createHousesTx = async (
     }
     // An existing house counts as "already created by this caller" only if
     // ownerId === uid AND the id is already in the caller's subscription map.
-    // Both are server-owned: firestore.rules deny client house creates and any
-    // client change to ownerId, and subscriptionMetadata is written only by the
-    // server — here, in the same transaction as the house, and by
-    // updateSubscriptionHouses "add", which itself requires ownerId === uid.
+    // Together they prove ownership: firestore.rules deny client house creates,
+    // and only a superAdmin of the house may change ownerId (plain admins and
+    // guests cannot). subscriptionMetadata is written only by the server — here,
+    // in the same transaction as the house, and by updateSubscriptionHouses
+    // "add", which itself requires ownerId === uid. So a caller whose ownerId
+    // and map both match is the creator or already superAdmin of the house.
     // A plain admin cannot delete-and-recreate the house either: delete needs
     // superAdmin of that house, and the deleted id is tombstoned (checked above).
     const ownerId = (snap.data() as { ownerId?: string } | undefined)?.ownerId;

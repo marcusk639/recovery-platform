@@ -545,9 +545,9 @@ export const updateSubscriptionHouses = onCall(
       if (action === "add") {
         // The subscription houses map is what createHouses accepts as proof of
         // ownership on retry, so only a house this caller owns may enter it.
-        // ownerId is server-written (rules deny client house creates and any
-        // ownerId change), so it is a trustworthy check here. ownerUserId is
-        // request.auth.uid (checked above).
+        // ownerId is set by createHouses and only a superAdmin of the house can
+        // change it (rules deny client house creates and admin/guest ownerId
+        // writes). ownerUserId is request.auth.uid (checked above).
         const added = await Promise.all(
           (houseIds ?? []).map((id) => getHouse(id)),
         );
