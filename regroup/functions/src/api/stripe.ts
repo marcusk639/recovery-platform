@@ -6,6 +6,7 @@ import { User } from "../entities/User";
 import { HouseType, TierKey } from "../config";
 import { resolveTierPriceId, BillingInterval } from "../util/tierPricing";
 import { assertPaymentMethodUsable } from "./cardValidation";
+import { isResourceMissing } from "../util/stripe";
 
 /**
  * Trial length for all new subscriptions. Stripe applies trial_period_days
@@ -103,6 +104,32 @@ export const cancelSubscription = async (subscriptionId: string) => {
   return stripe.subscriptions.update(subscriptionId, {
     cancel_at_period_end: true,
   });
+};
+
+/**
+ * Cancels a subscription immediately (no period-end grace). A subscription
+ * that no longer exists is treated as already cancelled.
+ */
+export const cancelSubscriptionNow = async (
+  subscriptionId: string,
+): Promise<void> => {
+  try {
+    await stripe.subscriptions.cancel(subscriptionId);
+  } catch (err) {
+    if (!isResourceMissing(err)) throw err;
+  }
+};
+
+/**
+ * Deletes a Stripe customer. A customer that no longer exists is treated as
+ * already deleted.
+ */
+export const deleteCustomer = async (customerId: string): Promise<void> => {
+  try {
+    await stripe.customers.del(customerId);
+  } catch (err) {
+    if (!isResourceMissing(err)) throw err;
+  }
 };
 
 export const uncancelSubscription = async (subscriptionId: string) => {
