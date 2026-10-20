@@ -30,7 +30,10 @@ jest.mock("../../../services/users", () => {
   getUser,
   // The login thunks load the user via getUserFinishingSetup; by default it
   // behaves like getUser (no setup recovery needed).
-  getUserFinishingSetup: jest.fn((uid: string) => getUser(uid)),
+  getUserFinishingSetup: jest.fn(async (uid: string) => ({
+    user: await getUser(uid),
+    setupRecoveryFailed: false,
+  })),
   createUser: jest.fn(),
   createAnonUser: jest.fn(),
   updateUser: jest.fn(),

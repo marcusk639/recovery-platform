@@ -9,6 +9,7 @@ import { FirebaseAuthTypes } from "@react-native-firebase/auth";
 import { navigationRef } from "../../navigation/service";
 import { CommonActions } from "@react-navigation/native";
 import { Routes } from "../../navigation/types";
+import { retrySetupRecovery } from "./setupRecoveryThunk";
 
 /**
  * User State Interface
@@ -37,6 +38,8 @@ interface UserState {
   loggingOutSuccessful: boolean;
   token: any;
   subscriptionStatus?: string | null;
+  // finishOperatorSetup threw on login: OrgSetup blocks the wizard until Retry.
+  setupRecoveryFailed: boolean;
 }
 
 const initialState: UserState = {
@@ -62,6 +65,7 @@ const initialState: UserState = {
   loggingOutSuccessful: false,
   token: { claims: {} },
   subscriptionStatus: null,
+  setupRecoveryFailed: false,
 };
 
 // Async Thunks
@@ -73,10 +77,11 @@ export const login = createAsyncThunk(
   ) => {
     let user: any = await userService.signInWithEmail(email, password);
     user = getFirebaseUserFromUserCredential(user);
-    const userEntity = await userService.getUserFinishingSetup(user.uid);
+    const { user: userEntity, setupRecoveryFailed } =
+      await userService.getUserFinishingSetup(user.uid);
     const token = await userService.getAuthUser(true);
     dispatch(setSubscriptionStatus(subscriptionStatus(userEntity)));
-    return { user: userEntity, token };
+    return { user: userEntity, token, setupRecoveryFailed };
   }
 );
 
@@ -96,7 +101,8 @@ export const anonymouslyLogin = createAsyncThunk(
 export const autoLogin = createAsyncThunk(
   "user/autoLogin",
   async (signedInUser: FirebaseAuthTypes.User, { dispatch }) => {
-    let userEntity = await userService.getUserFinishingSetup(signedInUser.uid);
+    let { user: userEntity, setupRecoveryFailed } =
+      await userService.getUserFinishingSetup(signedInUser.uid);
     if (!userEntity) {
       // Convert Firebase user to our User entity
       const convertedUser = userService.convertFirebaseUserToRatsUser({}, {
@@ -111,7 +117,7 @@ export const autoLogin = createAsyncThunk(
     // stayed null until the user explicitly logged out and back in, breaking
     // any paywall-gated UI reading this field.
     dispatch(setSubscriptionStatus(subscriptionStatus(userEntity)));
-    return { user: userEntity, token };
+    return { user: userEntity, token, setupRecoveryFailed };
   }
 );
 
@@ -235,6 +241,7 @@ const userSlice = createSlice({
       })
       .addCase(login.fulfilled, (state, action) => {
         state.user = action.payload.user;
+        state.setupRecoveryFailed = action.payload.setupRecoveryFailed;
         state.token = action.payload.token;
         state.loggedIn = true;
         state.loggingIn = false;
@@ -280,6 +287,7 @@ const userSlice = createSlice({
       })
       .addCase(autoLogin.fulfilled, (state, action) => {
         state.user = action.payload.user;
+        state.setupRecoveryFailed = action.payload.setupRecoveryFailed;
         state.token = action.payload.token;
         state.loggedIn = true;
         state.anonymous = false;
@@ -307,11 +315,19 @@ const userSlice = createSlice({
         state.loggingOutSuccessful = true;
         state.loggedIn = true;
         state.anonymous = true;
+        state.setupRecoveryFailed = false;
       })
       .addCase(logout.rejected, (state, action) => {
         state.loggingOut = false;
         state.error = action.error;
       });
+
+    // SetupRecoveryPanel Retry (rejection keeps the flag set)
+    builder.addCase(retrySetupRecovery.fulfilled, (state, action) => {
+      state.user = action.payload.user;
+      if (action.payload.token) state.token = action.payload.token;
+      state.setupRecoveryFailed = false;
+    });
 
     // Update User
     builder

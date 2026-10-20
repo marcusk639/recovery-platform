@@ -28,19 +28,28 @@ jest.mock('../../../firebase-setup', () => ({
 }));
 
 // Mock the users service so the login thunk doesn't touch real Firebase auth
-jest.mock('../../services/users', () => ({
-  signInWithEmail: jest.fn(),
-  anonymouslyLogin: jest.fn(),
-  signOut: jest.fn(),
-  getUser: jest.fn(),
-  createUser: jest.fn(),
-  createAnonUser: jest.fn(),
-  updateUser: jest.fn(),
-  getAuthUser: jest.fn(),
-  requestAccountVerification: jest.fn(),
-  convertFirebaseUserToRatsUser: jest.fn(),
-  userCollection: {},
-}));
+jest.mock('../../services/users', () => {
+  const getUser = jest.fn();
+  return {
+    signInWithEmail: jest.fn(),
+    anonymouslyLogin: jest.fn(),
+    signOut: jest.fn(),
+    getUser,
+    // The login thunks load the user via getUserFinishingSetup; here it behaves
+    // like getUser (no setup recovery needed).
+    getUserFinishingSetup: jest.fn(async (uid: string) => ({
+      user: await getUser(uid),
+      setupRecoveryFailed: false,
+    })),
+    createUser: jest.fn(),
+    createAnonUser: jest.fn(),
+    updateUser: jest.fn(),
+    getAuthUser: jest.fn(),
+    requestAccountVerification: jest.fn(),
+    convertFirebaseUserToRatsUser: jest.fn(),
+    userCollection: {},
+  };
+});
 
 // Mock user utility — returns the firebase user object the thunk hands to
 // userService.getUser via `.uid`.
@@ -76,7 +85,7 @@ jest.mock('../../navigation/service', () => ({
 // Mock @react-navigation/native
 jest.mock('@react-navigation/native', () => ({
   CommonActions: {
-    reset: jest.fn(payload => payload),
+    reset: jest.fn((payload) => payload),
     navigate: jest.fn(),
   },
   createRef: jest.fn(() => ({ current: null })),
@@ -134,10 +143,7 @@ describe('userSlice — login thunk', () => {
       };
       const action = login.fulfilled(payload as any, '', credentials);
       // Seed a "logging in" state to prove the reducer clears it.
-      const pendingState = userReducer(
-        initialState,
-        login.pending('', credentials),
-      );
+      const pendingState = userReducer(initialState, login.pending('', credentials));
       const state = userReducer(pendingState, action);
       expect(state.loggedIn).toBe(true);
       expect(state.loggingIn).toBe(false);
@@ -155,12 +161,8 @@ describe('userSlice — login thunk', () => {
       const userEntity = { uid: 'user-123', email: 'user@example.com' };
       const token = { claims: { admin: false } };
 
-      (userService.signInWithEmail as jest.Mock).mockResolvedValueOnce(
-        credential,
-      );
-      (getFirebaseUserFromUserCredential as jest.Mock).mockReturnValueOnce(
-        firebaseUser,
-      );
+      (userService.signInWithEmail as jest.Mock).mockResolvedValueOnce(credential);
+      (getFirebaseUserFromUserCredential as jest.Mock).mockReturnValueOnce(firebaseUser);
       (userService.getUser as jest.Mock).mockResolvedValueOnce(userEntity);
       (userService.getAuthUser as jest.Mock).mockResolvedValueOnce(token);
       (subscriptionStatus as jest.Mock).mockReturnValueOnce('active');
@@ -196,10 +198,7 @@ describe('userSlice — login thunk', () => {
         name: 'FirebaseError',
       });
       const action = login.rejected(wrongPasswordError, '', credentials);
-      const pendingState = userReducer(
-        initialState,
-        login.pending('', credentials),
-      );
+      const pendingState = userReducer(initialState, login.pending('', credentials));
       const state = userReducer(pendingState, action);
       expect(state.loggedIn).toBe(false);
       expect(state.loggingIn).toBe(false);
@@ -213,9 +212,7 @@ describe('userSlice — login thunk', () => {
         code: 'auth/wrong-password',
         name: 'FirebaseError',
       });
-      (userService.signInWithEmail as jest.Mock).mockRejectedValueOnce(
-        wrongPasswordError,
-      );
+      (userService.signInWithEmail as jest.Mock).mockRejectedValueOnce(wrongPasswordError);
 
       const store = makeStore();
       const result = await store.dispatch(login(credentials));
