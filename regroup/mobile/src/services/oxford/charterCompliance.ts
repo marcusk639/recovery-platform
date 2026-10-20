@@ -59,12 +59,15 @@ export function computeDemocraticCondition(
     }
     if (eligibleCount === 0) continue;
 
-    let voterCount: number;
-    if (vote.isAnonymous) {
-      voterCount = Object.values(vote.results).reduce((s, n) => s + n, 0);
-    } else {
-      voterCount = Object.keys(vote.individualVotes ?? {}).length;
-    }
+    // Ballots cast come from the `results` tally, which castOxfordVote keeps at
+    // one per voter (a changed vote moves a count, it does not add one). Named
+    // polls also list voters in `individualVotes`, but account deletion removes
+    // a deleted user's entry there while the tally stands, so that map is only
+    // a floor for legacy docs whose tally is incomplete.
+    const tallied = Object.values(vote.results ?? {}).reduce((s, n) => s + n, 0);
+    const voterCount = vote.isAnonymous
+      ? tallied
+      : Math.max(tallied, Object.keys(vote.individualVotes ?? {}).length);
     participationRates.push(voterCount / eligibleCount);
   }
 
