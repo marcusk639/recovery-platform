@@ -64,6 +64,8 @@ const USER_DATA: Entry[] = [
   { path: 'invitations/t1', data: { guestId: 'g1' }, fate: 'retained-by-policy' },
   // deleted (personal): feedback the user sent; `reviewer` is their uid.
   { path: 'feedback/f1', data: { reviewer: 'u1', houseId: 'h1' }, fate: 'deleted', step: 'personal' },
+  // deleted (personal): bug reports the user filed; `reporter` is their uid.
+  { path: 'bugs/b1', data: { reporter: 'u1', description: 'x' }, fate: 'deleted', step: 'personal' },
   // scrubbed (members): Oxford officer seat is vacated; role and term stay.
   {
     path: 'houses/h1/officers/o1',

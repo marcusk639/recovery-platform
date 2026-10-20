@@ -127,6 +127,18 @@ describe('deletePersonalData', () => {
     expect(paths()).toEqual(['feedback/f3']);
   });
 
+  it("deletes the user's bug reports only, and a re-run is a no-op", async () => {
+    store = [
+      { path: 'bugs/b1', data: { reporter: UID, description: 'crash' } },
+      { path: 'bugs/b2', data: { reporter: 'other', description: 'crash' } },
+      { path: 'bugs/b3', data: { reporter: '', description: 'anonymous' } },
+    ];
+    await deletePersonalData(UID, [], {});
+    expect(paths()).toEqual(['bugs/b2', 'bugs/b3']);
+    await deletePersonalData(UID, [], {});
+    expect(paths()).toEqual(['bugs/b2', 'bugs/b3']);
+  });
+
   it('deletes only messages the user sent', async () => {
     store = [
       { path: 'direct-messages/c1/chat/m1', data: { senderId: UID, recipientId: 'x' } },

@@ -47,7 +47,7 @@ const isDirectMessage = (ref: {
 
 /**
  * Delete a user's personal Firestore records and Storage files: notifications,
- * feedback, applications, direct messages they sent, their FCM device tokens, their
+ * feedback, bug reports, applications, direct messages they sent, their FCM device tokens, their
  * avatars, and the documents uploaded to their resident profile (Storage files
  * under `houses/{houseId}/guests/{guestId}/documents/` plus the matching
  * `documents/{docId}` records, which mobile keys by `guestId`).
@@ -83,6 +83,10 @@ export async function deletePersonalData(
     // Feedback the user submitted (mobile Personal screen; `reviewer` is the uid).
     feedback: await deleteAllMatching(
       collection('feedback').where('reviewer', '==', uid) as unknown as PagedQuery,
+    ),
+    // Bug reports the user filed (`reporter` is the uid).
+    bugs: await deleteAllMatching(
+      collection('bugs').where('reporter', '==', uid) as unknown as PagedQuery,
     ),
     // Defensive: no current writer.
     guestWeeks: await deleteAllMatching(
