@@ -352,6 +352,11 @@ const PersonalScreen: React.FC<PersonalProps> = ({ navigation }) => {
         label: "Two-Factor Authentication",
         disabled: !admin,
       },
+      deleteAccount: {
+        icon: "trash",
+        action: () => navigation.navigate(Routes.DeleteAccount),
+        label: "Delete account",
+      },
     }),
     [
       fileComplaint,
