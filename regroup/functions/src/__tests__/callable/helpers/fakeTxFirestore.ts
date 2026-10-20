@@ -7,7 +7,7 @@
  * get/create/set/update, and the commit itself, lands in `events` so tests can
  * assert exactly what was written and its order relative to other side effects.
  * A non-transactional `ref.update()` is applied immediately and recorded as
- * `directUpdate`.
+ * `directUpdate`; a non-transactional `ref.get()` is recorded as `directGet`.
  *
  * Usage:
  *   jest.mock('../../api/firestore', () =>
@@ -25,6 +25,7 @@ export interface TxEvent {
 interface Ref {
   id: string;
   path: string;
+  get: () => Promise<{ exists: boolean; id: string; data: () => Doc | undefined }>;
   update: (data: Doc) => Promise<void>;
 }
 
@@ -53,6 +54,11 @@ const makeRef = (collection: string, id: string): Ref => {
   return {
     id,
     path,
+    get: async () => {
+      events.push({ op: 'directGet', path });
+      const data = store.get(path);
+      return { exists: data !== undefined, id, data: () => data };
+    },
     update: async (data: Doc) => {
       if (failNextDirectUpdate) {
         const err = failNextDirectUpdate;

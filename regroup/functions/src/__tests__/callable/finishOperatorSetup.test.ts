@@ -1,0 +1,203 @@
+// src/__tests__/callable/finishOperatorSetup.test.ts
+//
+// finishOperatorSetup recovers an operator whose houses exist but whose claim
+// grant / onboarding-flags write never completed (app restarted before a
+// retry). It grants roles only on houses the caller provably owns — ids in the
+// server-owned subscription map whose house doc has ownerId === uid — and
+// writes the flags only after the grant succeeds.
+
+jest.mock('firebase-functions/v2/https', () => {
+  const actual = jest.requireActual('firebase-functions/v2/https');
+  return {
+    ...actual,
+    onCall: (_opts: any, handler?: Function) => (typeof _opts === 'function' ? _opts : handler),
+  };
+});
+
+jest.mock('firebase-functions', () => ({
+  logger: { info: jest.fn(), error: jest.fn(), warn: jest.fn() },
+}));
+
+jest.mock('../../api/firestore', () => require('./helpers/fakeTxFirestore').apiFirestoreMock());
+
+const mockGrantHouseRoles = jest.fn();
+jest.mock('../../util/claims', () => ({
+  grantHouseRoles: (...args: unknown[]) => mockGrantHouseRoles(...args),
+}));
+
+import { logger } from 'firebase-functions';
+import { finishOperatorSetup } from '../../callable/finishOperatorSetup';
+import { OPERATOR_SETUP_FIELDS } from '../../houses/operatorSetup';
+import {
+  events,
+  expectCode,
+  failNextUpdate,
+  resetFakeFirestore,
+  store,
+} from './helpers/fakeTxFirestore';
+
+const handler = finishOperatorSetup as unknown as (req: unknown) => Promise<any>;
+
+const UID = 'operator-uid';
+const call = (data: unknown = undefined) => handler({ auth: { uid: UID, token: {} }, data });
+const user = () => store.get(`users/${UID}`)!;
+
+const seedUser = (houses: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
+  store.set(`users/${UID}`, {
+    id: UID,
+    adminId: 'admin-1',
+    housesOwned: Object.keys(houses),
+    orgSetupCompleted: false,
+    potentialSuperAdmin: true,
+    subscriptionMetadata: { status: 'active', tier: 'starter', maxProperties: 1, houses },
+    ...extra,
+  });
+const seedHouse = (id: string, ownerId: string = UID) =>
+  store.set(`houses/${id}`, { id, name: 'House', ownerId });
+
+const writes = () => events.filter((e) => e.op === 'directUpdate');
+
+beforeEach(() => {
+  resetFakeFirestore();
+  jest.clearAllMocks();
+  mockGrantHouseRoles.mockImplementation(async () => {
+    events.push({ op: 'grantHouseRoles', path: '' });
+  });
+});
+
+describe('finishOperatorSetup', () => {
+  it('rejects an unauthenticated caller', async () => {
+    await expectCode(handler({ data: {} }), 'unauthenticated');
+    expect(mockGrantHouseRoles).not.toHaveBeenCalled();
+  });
+
+  it('returns completed:false and grants nothing when the caller owns no houses', async () => {
+    seedUser({});
+    await expect(call()).resolves.toEqual({ completed: false });
+    expect(mockGrantHouseRoles).not.toHaveBeenCalled();
+    expect(writes()).toHaveLength(0);
+    expect(user().orgSetupCompleted).toBe(false);
+  });
+
+  it('returns completed:false when the user doc does not exist', async () => {
+    await expect(call()).resolves.toEqual({ completed: false });
+    expect(mockGrantHouseRoles).not.toHaveBeenCalled();
+  });
+
+  it('grants exactly the owned houses, then writes the flags', async () => {
+    seedUser({ h1: { addedAt: 'x' }, h2: { addedAt: 'x' } });
+    seedHouse('h1');
+    seedHouse('h2');
+
+    await expect(call()).resolves.toEqual({ completed: true, houseIds: ['h1', 'h2'] });
+
+    expect(mockGrantHouseRoles).toHaveBeenCalledTimes(1);
+    expect(mockGrantHouseRoles).toHaveBeenCalledWith(UID, ['h1', 'h2']);
+    expect(writes()).toEqual([
+      { op: 'directUpdate', path: `users/${UID}`, data: { ...OPERATOR_SETUP_FIELDS } },
+    ]);
+    const ops = events.map((e) => e.op);
+    expect(ops.indexOf('directUpdate')).toBeGreaterThan(ops.indexOf('grantHouseRoles'));
+    expect(user()).toMatchObject(OPERATOR_SETUP_FIELDS);
+    expect(user().adminId).toBe('admin-1');
+  });
+
+  it('excludes houses owned by someone else or whose doc is missing', async () => {
+    seedUser({ mine: {}, theirs: {}, gone: {} });
+    seedHouse('mine');
+    seedHouse('theirs', 'other-uid');
+
+    await expect(call()).resolves.toEqual({ completed: true, houseIds: ['mine'] });
+    expect(mockGrantHouseRoles).toHaveBeenCalledWith(UID, ['mine']);
+  });
+
+  it('returns completed:false when no house in the map is provably owned', async () => {
+    seedUser({ theirs: {}, gone: {} });
+    seedHouse('theirs', 'other-uid');
+
+    await expect(call()).resolves.toEqual({ completed: false });
+    expect(mockGrantHouseRoles).not.toHaveBeenCalled();
+    expect(writes()).toHaveLength(0);
+  });
+
+  it('ignores client input entirely', async () => {
+    seedUser({ mine: {} });
+    seedHouse('mine');
+    seedHouse('theirs', 'other-uid');
+
+    await call({ houseIds: ['theirs'], houses: { theirs: {} } });
+    expect(mockGrantHouseRoles).toHaveBeenCalledWith(UID, ['mine']);
+  });
+
+  it('ignores housesOwned entries that are not in the subscription map', async () => {
+    seedUser({}, { housesOwned: ['mine'] });
+    seedHouse('mine');
+
+    await expect(call()).resolves.toEqual({ completed: false });
+    expect(mockGrantHouseRoles).not.toHaveBeenCalled();
+  });
+
+  it('a grant failure is a retryable internal error and writes no flags', async () => {
+    seedUser({ h1: {} });
+    seedHouse('h1');
+    mockGrantHouseRoles.mockRejectedValueOnce(
+      Object.assign(new Error('auth down op@example.com'), { code: 'auth/internal-error' }),
+    );
+
+    await expectCode(
+      call(),
+      'internal',
+      'Houses were created but access could not be granted. Try again.',
+    );
+    expect(writes()).toHaveLength(0);
+    expect(user().orgSetupCompleted).toBe(false);
+    // uid / ids / code only: never the raw error (its message may carry PII).
+    expect(logger.error).toHaveBeenCalledWith('finishOperatorSetup: claim grant failed', {
+      uid: UID,
+      houseIds: ['h1'],
+      code: 'auth/internal-error',
+    });
+  });
+
+  it('a flags write failure is a retryable internal error', async () => {
+    seedUser({ h1: {} });
+    seedHouse('h1');
+    failNextUpdate(Object.assign(new Error('firestore down'), { code: 'unavailable' }));
+
+    await expectCode(
+      call(),
+      'internal',
+      'Houses were created but setup could not finish. Try again.',
+    );
+    expect(mockGrantHouseRoles).toHaveBeenCalledWith(UID, ['h1']);
+    expect(user().orgSetupCompleted).toBe(false);
+    expect(logger.error).toHaveBeenCalledWith(
+      'finishOperatorSetup: onboarding flags update failed',
+      { uid: UID, houseIds: ['h1'], code: 'unavailable' },
+    );
+  });
+
+  it('is idempotent: a second call re-grants the same houses and leaves the flags set', async () => {
+    seedUser({ h1: {} });
+    seedHouse('h1');
+
+    const first = await call();
+    const afterFirst = { ...user() };
+    const second = await call();
+
+    expect(second).toEqual(first);
+    expect(mockGrantHouseRoles).toHaveBeenCalledTimes(2);
+    expect(mockGrantHouseRoles).toHaveBeenNthCalledWith(2, UID, ['h1']);
+    expect(user()).toEqual(afterFirst);
+  });
+
+  it('a retry after a failed grant completes setup', async () => {
+    seedUser({ h1: {} });
+    seedHouse('h1');
+    mockGrantHouseRoles.mockRejectedValueOnce(new Error('auth down'));
+
+    await expectCode(call(), 'internal');
+    await expect(call()).resolves.toEqual({ completed: true, houseIds: ['h1'] });
+    expect(user()).toMatchObject(OPERATOR_SETUP_FIELDS);
+  });
+});

@@ -1,11 +1,12 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import { z } from 'zod';
-import { ratsFirestore, userCollection } from '../api/firestore';
+import { ratsFirestore } from '../api/firestore';
 import type Admin from '../entities/Admin';
 import type OperatorSubscription from '../entities/OperatorSubscription';
 import { createHousesTx } from '../houses/createHousesTx';
 import { createHouseInputSchema } from '../houses/houseInput';
+import { writeOperatorSetupFlags } from '../houses/operatorSetup';
 import { grantHouseRoles } from '../util/claims';
 import { parseInput } from '../validation';
 
@@ -27,16 +28,7 @@ export interface CreateHousesResponse {
   subscriptionMetadata: OperatorSubscription;
 }
 
-/**
- * Fields that move the operator past onboarding. Written only after the claims
- * are granted, so a failed grant never leaves an operator who skips setup but
- * holds no house claims; a retry writes them once the grant succeeds.
- */
-export const OPERATOR_SETUP_FIELDS = {
-  orgSetupCompleted: true,
-  isAdmin: true,
-  isSuperAdmin: true,
-} as const;
+export { OPERATOR_SETUP_FIELDS } from '../houses/operatorSetup';
 
 /**
  * Creates an operator's houses server-side. The houses, the operator's admin
@@ -76,7 +68,7 @@ export const createHouses = onCall(async (request): Promise<CreateHousesResponse
   }
 
   try {
-    await userCollection.doc(uid).update({ ...OPERATOR_SETUP_FIELDS });
+    await writeOperatorSetupFlags(uid);
   } catch (err) {
     logger.error('createHouses: onboarding flags update failed', {
       uid,
