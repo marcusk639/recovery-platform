@@ -2,9 +2,9 @@
 //
 // finishOperatorSetup recovers an operator whose houses exist but whose claim
 // grant / onboarding-flags write never completed (app restarted before a
-// retry). It grants roles only on houses the caller provably owns — ids in the
-// server-owned subscription map whose house doc has ownerId === uid — and
-// writes the flags only after the grant succeeds.
+// retry). It grants roles only on houses the caller provably owns — candidate
+// ids from housesOwned and the (client-seedable) subscription map whose house
+// doc has ownerId === uid — and writes the flags only after the grant succeeds.
 
 jest.mock('firebase-functions/v2/https', () => {
   const actual = jest.requireActual('firebase-functions/v2/https');
@@ -130,12 +130,69 @@ describe('finishOperatorSetup', () => {
     expect(mockGrantHouseRoles).toHaveBeenCalledWith(UID, ['mine']);
   });
 
-  it('ignores housesOwned entries that are not in the subscription map', async () => {
-    seedUser({}, { housesOwned: ['mine'] });
+  it('recovers a housesOwned entry missing from the subscription map only if ownerId === uid', async () => {
+    seedUser({}, { housesOwned: ['mine', 'theirs'] });
     seedHouse('mine');
+    seedHouse('theirs', 'other-uid');
+
+    await expect(call()).resolves.toEqual({ completed: true, houseIds: ['mine'] });
+    expect(mockGrantHouseRoles).toHaveBeenCalledWith(UID, ['mine']);
+  });
+
+  it('ignores housesOwned entries whose house is not owned by the caller', async () => {
+    seedUser({}, { housesOwned: ['theirs', 'gone'] });
+    seedHouse('theirs', 'other-uid');
 
     await expect(call()).resolves.toEqual({ completed: false });
     expect(mockGrantHouseRoles).not.toHaveBeenCalled();
+  });
+
+  it('puts housesOwned ids ahead of subscription-map keys, deduped, within the cap', async () => {
+    const mapIds = Array.from({ length: 30 }, (_, i) => `m${String(i).padStart(2, '0')}`);
+    // 'm05' is in both sources: it must be read once.
+    seedUser(Object.fromEntries(mapIds.map((id) => [id, {}])), {
+      housesOwned: ['owned-a', 'm05', 'owned-b'],
+    });
+    seedHouse('owned-a');
+    seedHouse('owned-b');
+    mapIds.forEach((id) => seedHouse(id, 'other-uid'));
+
+    await expect(call()).resolves.toEqual({
+      completed: true,
+      houseIds: ['owned-a', 'owned-b'],
+    });
+    const candidates = getAll.mock.calls[0].map((ref: { id: string }) => ref.id);
+    expect(candidates).toHaveLength(MAX_CANDIDATE_HOUSES);
+    expect(candidates.slice(0, 3)).toEqual(['owned-a', 'm05', 'owned-b']);
+    expect(new Set(candidates).size).toBe(candidates.length);
+  });
+
+  it('logs a PII-free warning when it returns completed:false', async () => {
+    seedUser({ theirs: {} }, { housesOwned: ['theirs'], email: 'op@example.com' });
+    seedHouse('theirs', 'other-uid');
+
+    await expect(call()).resolves.toEqual({ completed: false });
+    expect(logger.warn).toHaveBeenCalledWith('finishOperatorSetup: no owned houses found', {
+      uid: UID,
+      candidateCount: 1,
+      ownedCount: 0,
+      truncated: false,
+    });
+    expect(JSON.stringify((logger.warn as jest.Mock).mock.calls)).not.toContain('example.com');
+  });
+
+  it('flags truncated in the warning when candidates exceed the cap', async () => {
+    const ids = Array.from({ length: 30 }, (_, i) => `t${i}`);
+    seedUser(Object.fromEntries(ids.map((id) => [id, {}])));
+    ids.forEach((id) => seedHouse(id, 'other-uid'));
+
+    await expect(call()).resolves.toEqual({ completed: false });
+    expect(logger.warn).toHaveBeenCalledWith('finishOperatorSetup: no owned houses found', {
+      uid: UID,
+      candidateCount: MAX_CANDIDATE_HOUSES,
+      ownedCount: 0,
+      truncated: true,
+    });
   });
 
   it('a grant failure is a retryable internal error and writes no flags', async () => {
@@ -199,9 +256,7 @@ describe('finishOperatorSetup', () => {
     await expect(call()).resolves.toEqual({ completed: true, houseIds: [] });
     expect(mockGrantHouseRoles).not.toHaveBeenCalled();
     expect(getAll).not.toHaveBeenCalled();
-    expect(events.filter((e) => e.op === 'directGet').map((e) => e.path)).toEqual([
-      `users/${UID}`,
-    ]);
+    expect(events.filter((e) => e.op === 'directGet').map((e) => e.path)).toEqual([`users/${UID}`]);
     expect(writes()).toHaveLength(0);
   });
 
@@ -218,6 +273,12 @@ describe('finishOperatorSetup', () => {
     const houseReads = events.filter((e) => e.op === 'directGet' && e.path.startsWith('houses/'));
     expect(houseReads).toHaveLength(MAX_CANDIDATE_HOUSES);
     expect(mockGrantHouseRoles).toHaveBeenCalledWith(UID, ['h00', 'h10', 'h20']);
+    // h30 is owned but beyond the cap: not recovered, and the truncation is logged.
+    expect(logger.info).toHaveBeenCalledWith('operator.setup.finished', {
+      uid: UID,
+      houseIds: ['h00', 'h10', 'h20'],
+      truncated: true,
+    });
   });
 
   it('a retry after a failed grant completes setup', async () => {

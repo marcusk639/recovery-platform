@@ -11,21 +11,36 @@ export type FinishOperatorSetupResponse =
 const errorCode = (err: unknown): string | undefined => (err as { code?: string })?.code;
 
 /**
- * The subscription houses map is client-seedable, so only this many of its
- * keys are considered: it bounds the house reads one call can trigger.
+ * Caps the house reads one call can trigger. `subscriptionMetadata.houses` can
+ * be seeded by the client when the user doc is created (rules allow status
+ * ''); it is only trusted together with `house.ownerId === uid`. Legitimate
+ * houses beyond the first MAX_CANDIDATE_HOUSES candidates are not recovered;
+ * that case is logged as `truncated`.
  */
 export const MAX_CANDIDATE_HOUSES = 25;
 
+const stringKeys = (ids: unknown): string[] =>
+  Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string' && id !== '') : [];
+
 /**
- * House ids the caller provably owns: ids in the `subscriptionMetadata.houses`
- * map (at most MAX_CANDIDATE_HOUSES, read in one getAll) whose house doc
- * exists with `ownerId === uid`. Anything else in the map is ignored.
+ * Candidate house ids: `housesOwned` first, then the subscription houses map
+ * keys, deduped. Both sources are client-influenced, so neither is trusted
+ * alone; ownership is verified against the house doc.
  */
-const ownedHouseIds = async (uid: string, user: Partial<User> | undefined): Promise<string[]> => {
-  const candidates = Object.keys(user?.subscriptionMetadata?.houses ?? {}).slice(
-    0,
-    MAX_CANDIDATE_HOUSES,
+const candidateHouseIds = (user: Partial<User> | undefined): string[] =>
+  Array.from(
+    new Set([
+      ...stringKeys(user?.housesOwned),
+      ...Object.keys(user?.subscriptionMetadata?.houses ?? {}),
+    ]),
   );
+
+/**
+ * House ids the caller provably owns: the first MAX_CANDIDATE_HOUSES
+ * candidates (read in one getAll) whose house doc exists with
+ * `ownerId === uid`. Every other candidate is ignored.
+ */
+const ownedHouseIds = async (uid: string, candidates: string[]): Promise<string[]> => {
   if (candidates.length === 0) {
     return [];
   }
@@ -53,12 +68,20 @@ export const finishOperatorSetup = onCall(async (request): Promise<FinishOperato
   const uid = request.auth.uid;
   const userSnap = await userCollection.doc(uid).get();
   const user = userSnap.exists ? (userSnap.data() as Partial<User>) : undefined;
-  // Already-completed operators are never re-granted.
+  // Skips the grant for completed operators (not a security boundary).
   if (user?.orgSetupCompleted === true) {
     return { completed: true, houseIds: [] };
   }
-  const houseIds = await ownedHouseIds(uid, user);
+  const allCandidates = candidateHouseIds(user);
+  const candidates = allCandidates.slice(0, MAX_CANDIDATE_HOUSES);
+  const houseIds = await ownedHouseIds(uid, candidates);
   if (houseIds.length === 0) {
+    logger.warn('finishOperatorSetup: no owned houses found', {
+      uid,
+      candidateCount: candidates.length,
+      ownedCount: houseIds.length,
+      truncated: allCandidates.length > candidates.length,
+    });
     return { completed: false };
   }
 
@@ -87,6 +110,10 @@ export const finishOperatorSetup = onCall(async (request): Promise<FinishOperato
     throw new HttpsError('internal', 'Houses were created but setup could not finish. Try again.');
   }
 
-  logger.info('operator.setup.finished', { uid, houseIds });
+  logger.info('operator.setup.finished', {
+    uid,
+    houseIds,
+    truncated: allCandidates.length > candidates.length,
+  });
   return { completed: true, houseIds };
 });
