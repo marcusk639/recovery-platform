@@ -106,9 +106,12 @@ export const cancelSubscription = async (subscriptionId: string) => {
   });
 };
 
+const ENDED_SUBSCRIPTION_STATUSES = new Set(["canceled", "incomplete_expired"]);
+
 /**
  * Cancels a subscription immediately (no period-end grace). A subscription
- * that no longer exists is treated as already cancelled.
+ * that no longer exists is treated as already cancelled, as is one Stripe
+ * refuses to cancel (invalid request) because it has already ended.
  */
 export const cancelSubscriptionNow = async (
   subscriptionId: string,
@@ -116,7 +119,15 @@ export const cancelSubscriptionNow = async (
   try {
     await stripe.subscriptions.cancel(subscriptionId);
   } catch (err) {
-    if (!isResourceMissing(err)) throw err;
+    if (isResourceMissing(err)) return;
+    if ((err as { type?: unknown })?.type !== "StripeInvalidRequestError") throw err;
+    let status: string | undefined;
+    try {
+      status = (await stripe.subscriptions.retrieve(subscriptionId)).status;
+    } catch {
+      throw err;
+    }
+    if (!ENDED_SUBSCRIPTION_STATUSES.has(status)) throw err;
   }
 };
 

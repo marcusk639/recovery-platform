@@ -1,15 +1,13 @@
 import * as admin from 'firebase-admin';
 import { logger } from 'firebase-functions/v2';
-import {
-  adminCollection,
-  guestCollection,
-  houseCollection,
-  ratsFirestore,
-  userCollection,
-} from '../api/firestore';
+import { ratsFirestore, userCollection } from '../api/firestore';
+import { deleteCustomer } from '../api/stripe';
 import { closeOperatorAccount, OperatorDeletionUser } from './operatorRecords';
-import { dischargeResident, removeStaffAdmin } from './memberRecords';
+import { dischargeResident, removeStaffAdmin, scrubArchivedGuest } from './memberRecords';
 import { deletePersonalData } from './personalData';
+import { DeletionTargets, snapshotTargets, TargetUser } from './targets';
+
+export type { DeletionTargets } from './targets';
 
 export type DeletionStep = 'operator' | 'members' | 'personal' | 'userDoc' | 'auth';
 
@@ -21,51 +19,19 @@ export const DELETION_STEPS: readonly DeletionStep[] = [
   'auth',
 ];
 
-/**
- * What the run will act on, captured once on the first run. The "members" step
- * deletes the guest docs that "personal" still needs (guest ids and houses for
- * avatar paths), so a resumed run must read this snapshot, never re-query.
- */
-export interface DeletionTargets {
-  guestIds: string[];
-  houseIdsByGuest: Record<string, string>;
-  adminIds: string[];
-  ownsHouses: boolean;
-  hasSubscription: boolean;
-}
-
 interface DeletionRecord {
   completed?: DeletionStep[];
   targets?: DeletionTargets;
 }
 
+type DeletionUser = OperatorDeletionUser & TargetUser;
+
 const deletionDoc = (uid: string) => ratsFirestore.collection('accountDeletions').doc(uid);
 
-async function loadUser(uid: string): Promise<OperatorDeletionUser> {
+async function loadUser(uid: string): Promise<DeletionUser> {
   const snap = await userCollection.doc(uid).get();
-  const data = snap.exists ? (snap.data() as Partial<OperatorDeletionUser>) : {};
+  const data = snap.exists ? (snap.data() as Partial<DeletionUser>) : {};
   return { ...data, id: uid };
-}
-
-async function snapshotTargets(uid: string, user: OperatorDeletionUser): Promise<DeletionTargets> {
-  const [guests, admins, houses] = await Promise.all([
-    guestCollection.where('userId', '==', uid).get(),
-    adminCollection.where('userId', '==', uid).get(),
-    houseCollection.where('ownerId', '==', uid).get(),
-  ]);
-  const houseIdsByGuest: Record<string, string> = {};
-  for (const doc of guests.docs) {
-    const houseId = (doc.data() as { houseId?: string }).houseId;
-    if (houseId) houseIdsByGuest[doc.id] = houseId;
-  }
-  const { subscriptionId, customerId } = user.subscriptionMetadata ?? {};
-  return {
-    guestIds: guests.docs.map((d) => d.id),
-    houseIdsByGuest,
-    adminIds: admins.docs.map((d) => d.id),
-    ownsHouses: !houses.empty,
-    hasSubscription: Boolean(subscriptionId || customerId),
-  };
 }
 
 async function deleteAuthUser(uid: string): Promise<void> {
@@ -76,10 +42,22 @@ async function deleteAuthUser(uid: string): Promise<void> {
   }
 }
 
+/** Attach the failed step so the callable can log it; never masks the error. */
+function tagStep(err: unknown, step: DeletionStep): unknown {
+  if (typeof err === 'object' && err !== null) {
+    try {
+      (err as { step?: DeletionStep }).step = step;
+    } catch {
+      // Frozen error objects keep their original shape.
+    }
+  }
+  return err;
+}
+
 async function runStep(
   step: DeletionStep,
   uid: string,
-  user: OperatorDeletionUser,
+  user: DeletionUser,
   targets: DeletionTargets,
   now: string,
 ): Promise<void> {
@@ -88,11 +66,17 @@ async function runStep(
       if (targets.ownsHouses || targets.hasSubscription) await closeOperatorAccount(user, now);
       return;
     case 'members':
+      for (const customerId of targets.guestCustomerIds ?? []) await deleteCustomer(customerId);
       for (const guestId of targets.guestIds) await dischargeResident(guestId, now);
+      for (const guestId of targets.archivedGuestIds ?? []) await scrubArchivedGuest(guestId, now);
       for (const adminId of targets.adminIds) await removeStaffAdmin(adminId);
       return;
     case 'personal':
-      await deletePersonalData(uid, targets.guestIds, targets.houseIdsByGuest);
+      await deletePersonalData(
+        uid,
+        [...targets.guestIds, ...(targets.archivedGuestIds ?? [])],
+        targets.houseIdsByGuest,
+      );
       return;
     case 'userDoc':
       await userCollection.doc(uid).delete();
@@ -107,8 +91,9 @@ async function runStep(
  * Delete a Regroup account. Runs each step in order, recording progress in
  * `accountDeletions/{uid}` so a failed run resumes where it stopped. Skipped
  * steps (non-operators, users with no member docs) are recorded as completed.
- * The Auth user is deleted last. Failures record the step and time only (no
- * error text, which may carry PII) and are rethrown.
+ * The Auth user is deleted last. A failure logs the step plus the error's code
+ * and message (Firestore/Storage/Stripe messages carry ids, not personal data),
+ * records the step and time (no error text) and is rethrown with `step` set.
  */
 export async function runAccountDeletion(
   uid: string,
@@ -131,9 +116,23 @@ export async function runAccountDeletion(
     try {
       await runStep(step, uid, user, targets, now);
     } catch (err) {
-      await ref.set({ lastError: step, failedAt: now }, { merge: true });
-      logger.error('accountDeletion: step failed');
-      throw err;
+      const e = err as { code?: unknown; message?: unknown } | undefined;
+      logger.error('accountDeletion: step failed', {
+        uid,
+        step,
+        code: e?.code,
+        message: e?.message,
+      });
+      try {
+        await ref.set({ lastError: step, failedAt: now }, { merge: true });
+      } catch (recordErr) {
+        logger.error('accountDeletion: failure record not written', {
+          uid,
+          step,
+          code: (recordErr as { code?: unknown } | undefined)?.code,
+        });
+      }
+      throw tagStep(err, step);
     }
     completed.push(step);
     await ref.set({ completed }, { merge: true });

@@ -17,6 +17,7 @@ jest.mock('../../accountDeletion', () => ({
   runAccountDeletion: (...args: unknown[]) => mockRun(...args),
 }));
 
+import { logger } from 'firebase-functions';
 import { deleteAccount } from '../../callable/account';
 
 const handler = deleteAccount as unknown as (req: any) => Promise<any>;
@@ -67,6 +68,18 @@ describe('deleteAccount', () => {
     await expect(handler(req())).rejects.toMatchObject({
       code: 'internal',
       message: "We couldn't finish deleting your account. Try again.",
+    });
+  });
+
+  it('logs the failed step attached by the deletion run', async () => {
+    mockRun.mockRejectedValue(
+      Object.assign(new Error('x'), { code: 'storage/unknown', step: 'personal' }),
+    );
+    await expect(handler(req())).rejects.toMatchObject({ code: 'internal' });
+    expect(logger.error).toHaveBeenCalledWith('deleteAccount failed', {
+      uid: 'u1',
+      code: 'storage/unknown',
+      step: 'personal',
     });
   });
 });

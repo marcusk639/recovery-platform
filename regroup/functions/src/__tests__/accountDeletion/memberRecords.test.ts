@@ -6,6 +6,8 @@ const mockAdminGet = jest.fn();
 const mockAdminDelete = jest.fn();
 const mockHouseUpdate = jest.fn();
 const mockHouseGet = jest.fn();
+const mockRefGet = jest.fn();
+const mockRefSet = jest.fn();
 
 jest.mock("firebase-admin", () => {
   const firestore = () => ({});
@@ -19,7 +21,11 @@ jest.mock("firebase-functions/v2", () => ({
   logger: { info: jest.fn(), error: jest.fn(), warn: jest.fn() },
 }));
 
-const ref = (path: string) => ({ path });
+const ref = (path: string) => ({
+  path,
+  get: () => mockRefGet(path),
+  set: (...a: unknown[]) => mockRefSet(path, ...a),
+});
 
 jest.mock("../../api/firestore", () => ({
   guestCollection: { doc: (id: string) => ref(`guests/${id}`) },
@@ -48,6 +54,7 @@ import {
   GUEST_PII_FIELDS,
   dischargeResident,
   removeStaffAdmin,
+  scrubArchivedGuest,
   scrubGuestForArchive,
 } from "../../accountDeletion/memberRecords";
 
@@ -76,6 +83,35 @@ describe("memberRecords", () => {
     expect(out).toMatchObject(KEPT);
     expect(out.accountDeletedAt).toBe(NOW);
     expect(out.userId).toBeNull();
+  });
+
+  it("strips the resident's Stripe autopay fields", () => {
+    const out = scrubGuestForArchive(
+      { ...KEPT, stripeCustomerId: "cus_1", defaultPaymentMethodId: "pm_1", autoPayEnabled: true },
+      NOW,
+    );
+    expect(out).not.toHaveProperty("stripeCustomerId");
+    expect(out).not.toHaveProperty("defaultPaymentMethodId");
+    expect(out).not.toHaveProperty("autoPayEnabled");
+  });
+
+  it("overwrites a pre-existing guest-archive doc with the scrubbed guest (no merge)", async () => {
+    mockRefGet.mockResolvedValue(
+      snap({ ...KEPT, userId: "u1", sobrietyDate: "2020-01-01", drugOfChoice: "x" }),
+    );
+    await scrubArchivedGuest("g1", NOW);
+    expect(mockRefGet).toHaveBeenCalledWith("guest-archive/g1");
+    expect(mockRefSet).toHaveBeenCalledTimes(1);
+    const [path, data, ...rest] = mockRefSet.mock.calls[0];
+    expect(path).toBe("guest-archive/g1");
+    expect(rest).toEqual([]);
+    expect(data).toEqual({ ...KEPT, userId: null, accountDeletedAt: NOW });
+  });
+
+  it("scrubbing a missing archive doc is a no-op", async () => {
+    mockRefGet.mockResolvedValue(snap(undefined));
+    await scrubArchivedGuest("g1", NOW);
+    expect(mockRefSet).not.toHaveBeenCalled();
   });
 
   const rooms = {

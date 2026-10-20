@@ -58,9 +58,12 @@ describe("closeOperatorAccount", () => {
   });
 
   it("closes every owned house and unlinks Connect", async () => {
-    mockGet.mockResolvedValue({ docs: [houseDoc("h1"), houseDoc("h2")] });
+    mockGet
+      .mockResolvedValueOnce({ docs: [houseDoc("h1"), houseDoc("h2")] })
+      .mockResolvedValueOnce({ docs: [] });
     const result = await closeOperatorAccount({ id: "u1" }, NOW);
     expect(mockWhere).toHaveBeenCalledWith("ownerId", "==", "u1");
+    expect(mockWhere).toHaveBeenCalledWith("superAdminId", "==", "u1");
     expect(result).toEqual({ housesClosed: ["h1", "h2"] });
     expect(mockUpdates).toHaveLength(2);
     for (const u of mockUpdates) {
@@ -91,5 +94,26 @@ describe("closeOperatorAccount", () => {
     expect(mockCancelNow).not.toHaveBeenCalled();
     expect(mockDeleteCustomer).not.toHaveBeenCalled();
     expect(mockUpdates).toHaveLength(0);
+  });
+
+  it("skips the cancel for a subscription already recorded as canceled", async () => {
+    await closeOperatorAccount(
+      {
+        id: "u1",
+        subscriptionMetadata: { subscriptionId: "sub_1", customerId: "cus_1", status: "canceled" },
+      },
+      NOW,
+    );
+    expect(mockCancelNow).not.toHaveBeenCalled();
+    expect(mockDeleteCustomer).toHaveBeenCalledWith("cus_1");
+  });
+
+  it("closes superAdminId houses too, once each", async () => {
+    mockGet
+      .mockResolvedValueOnce({ docs: [houseDoc("h1")] })
+      .mockResolvedValueOnce({ docs: [houseDoc("h1"), houseDoc("h2")] });
+    const result = await closeOperatorAccount({ id: "u1" }, NOW);
+    expect(result.housesClosed).toEqual(["h1", "h2"]);
+    expect(mockUpdates.map((u) => u.id)).toEqual(["h1", "h2"]);
   });
 });

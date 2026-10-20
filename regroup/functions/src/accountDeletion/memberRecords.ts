@@ -33,6 +33,10 @@ export const GUEST_PII_FIELDS: readonly string[] = [
   "probationOfficerPhone",
   "intakeNotes",
   "dischargeNotes",
+  // Rent autopay links to the resident's Stripe customer and card.
+  "stripeCustomerId",
+  "defaultPaymentMethodId",
+  "autoPayEnabled",
 ];
 
 export function scrubGuestForArchive(
@@ -89,6 +93,19 @@ export async function dischargeResident(guestId: string, now: string): Promise<v
     }
   });
   logger.info("accountDeletion: resident discharged", { guestId });
+}
+
+/**
+ * Scrub a `guest-archive` doc written earlier by mobile `deleteGuest` /
+ * `archiveGuest`, which holds the full guest. Uses a full `set` (not merge) so
+ * the stripped fields are actually removed. Idempotent.
+ */
+export async function scrubArchivedGuest(guestId: string, now: string): Promise<void> {
+  const archiveRef = ratsFirestore.collection("guest-archive").doc(guestId);
+  const snap = await archiveRef.get();
+  if (!snap.exists) return;
+  await archiveRef.set(scrubGuestForArchive(snap.data() as Record<string, unknown>, now));
+  logger.info("accountDeletion: archived guest scrubbed", { guestId });
 }
 
 /** Remove a staff admin from every house they administer, then delete their admin doc. */
