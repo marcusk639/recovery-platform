@@ -50,3 +50,6 @@ export * from './triggers/firestore';
 
 // Scheduled functions
 export * from './scheduled';
+
+// Account deletion
+export { deleteAccount } from './callable/account';
