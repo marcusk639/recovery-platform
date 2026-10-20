@@ -356,6 +356,7 @@ const PersonalScreen: React.FC<PersonalProps> = ({ navigation }) => {
         icon: "trash",
         action: () => navigation.navigate(Routes.DeleteAccount),
         label: "Delete account",
+        disabled: !user?.email || isDemo(user.email),
       },
     }),
     [

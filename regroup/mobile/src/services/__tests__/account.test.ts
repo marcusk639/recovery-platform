@@ -47,6 +47,19 @@ describe("deleteMyAccount", () => {
     expect(calls).toEqual(["reauth", "token", "call:deleteAccount", "signOut"]);
   });
 
+  it("rejects without calling anything when there is no email", async () => {
+    const { auth } = require("../../../firebase-setup");
+    const saved = auth.currentUser.email;
+    auth.currentUser.email = null;
+    try {
+      await expect(deleteMyAccount("pw")).rejects.toThrow("No signed-in user");
+    } finally {
+      auth.currentUser.email = saved;
+    }
+    expect(mockReauth).not.toHaveBeenCalled();
+    expect(mockCallable).not.toHaveBeenCalled();
+  });
+
   it("does not call deleteAccount when re-authentication fails", async () => {
     mockReauth.mockRejectedValue({ code: "auth/wrong-password" });
     await expect(deleteMyAccount("bad")).rejects.toEqual({

@@ -45,6 +45,16 @@ describe('deleteAccount', () => {
     expect(mockRun).not.toHaveBeenCalled();
   });
 
+  it('refuses to delete the shared demo account (case-insensitive)', async () => {
+    const r = req();
+    (r.auth.token as any).email = 'Demo_User@AppDemo.net';
+    await expect(handler(r)).rejects.toMatchObject({
+      code: 'permission-denied',
+      message: "The demo account can't be deleted.",
+    });
+    expect(mockRun).not.toHaveBeenCalled();
+  });
+
   it("deletes the caller's own account only", async () => {
     const res = await handler(req(10, { uid: 'someone-else' }));
     expect(res).toEqual({ deleted: true });
