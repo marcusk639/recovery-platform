@@ -103,8 +103,10 @@ handler functions, each verified with its own signing secret.
 **Listened events:**
 - `payment_intent.succeeded`
 - `payment_intent.payment_failed`
-- `charge.dispute.created`
-- `charge.refunded`
+- `charge.dispute.created` — also reverses the house's net share of the disputed rent
+- `charge.dispute.closed` — **add to the endpoint**: returns that share to the house if the dispute is won
+- `charge.refunded` — also reverses the house's net share of each settled refund
+- `charge.refund.updated` — **add to the endpoint**: reverses a refund that was still pending when `charge.refunded` fired
 - `invoice.payment_succeeded`
 - `invoice.payment_failed`
 - `customer.subscription.deleted`

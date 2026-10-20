@@ -137,6 +137,12 @@ jest.mock("firebase-functions", () => ({
 // ---------------------------------------------------------------------------
 const mockConstructEvent = jest.fn();
 const mockChargesRetrieve = jest.fn();
+const mockRefundsList = jest.fn();
+const mockTransfersRetrieve = jest.fn();
+const mockCreateReversal = jest.fn();
+const mockListReversals = jest.fn();
+const mockTransfersCreate = jest.fn();
+const mockTransfersList = jest.fn();
 
 const mockV2AccountsRetrieve = jest.fn();
 
@@ -144,6 +150,14 @@ jest.mock("stripe", () => {
   return jest.fn().mockImplementation(() => ({
     webhooks: { constructEvent: mockConstructEvent },
     charges: { retrieve: mockChargesRetrieve },
+    refunds: { list: mockRefundsList },
+    transfers: {
+      retrieve: mockTransfersRetrieve,
+      createReversal: mockCreateReversal,
+      listReversals: mockListReversals,
+      create: mockTransfersCreate,
+      list: mockTransfersList,
+    },
     subscriptions: { retrieve: mockSubscriptionsRetrieve },
     v2: { core: { accounts: { retrieve: mockV2AccountsRetrieve } } },
   }));
@@ -997,6 +1011,18 @@ describe("stripeWebhook — payment_intent.succeeded", () => {
 // ===========================================================================
 
 describe("stripeWebhook — charge.refunded", () => {
+  // These tests are about the payment doc; the charge was never transferred
+  // to a house, so there is nothing to reverse.
+  beforeEach(() => {
+    mockChargesRetrieve.mockResolvedValue({
+      id: "ch_test_1",
+      amount: 50000,
+      application_fee_amount: null,
+      transfer: null,
+    });
+    mockRefundsList.mockResolvedValue({ data: [] });
+  });
+
   it("merges refundedAmountCents onto the payment doc (string payment_intent)", async () => {
     const mockPaymentSet = jest.fn().mockResolvedValue(undefined);
 
@@ -1157,6 +1183,135 @@ describe("stripeWebhook — charge.refunded", () => {
 
     expect(res.status).toHaveBeenCalledWith(200);
     expect(mockPaymentSet).not.toHaveBeenCalled();
+  });
+});
+
+// ===========================================================================
+// stripeWebhook — transfer reversals for refunds and disputes
+//
+// The unit behaviour is in transferReversals.test.ts; these check the webhook
+// actually invokes it and that a Stripe failure releases the event for retry.
+// ===========================================================================
+
+describe("stripeWebhook — transfer reversals", () => {
+  const paymentsOnly = () =>
+    mockCollectionFn.mockImplementation(() => ({
+      doc: jest.fn().mockReturnValue({
+        set: jest.fn().mockResolvedValue(undefined),
+        update: jest.fn(),
+        get: jest.fn().mockResolvedValue({ exists: false }),
+      }),
+      where: jest.fn().mockReturnValue({
+        limit: jest.fn().mockReturnValue({
+          get: jest.fn().mockResolvedValue({ empty: true, docs: [] }),
+        }),
+      }),
+    }));
+
+  beforeEach(() => {
+    paymentsOnly();
+    mockChargesRetrieve.mockResolvedValue({
+      id: "ch_rent",
+      amount: 50000,
+      application_fee_amount: 1500,
+      transfer: "tr_rent",
+      metadata: {},
+    });
+    mockTransfersRetrieve.mockResolvedValue({
+      id: "tr_rent",
+      amount: 50000,
+      amount_reversed: 0,
+      destination: "acct_house",
+    });
+    mockListReversals.mockResolvedValue({ data: [] });
+    mockRefundsList.mockResolvedValue({
+      data: [{ id: "re_1", amount: 50000, status: "succeeded", transfer_reversal: null }],
+    });
+    mockCreateReversal.mockResolvedValue({ id: "trr_1" });
+    mockTransfersList.mockResolvedValue({ data: [] });
+    mockTransfersCreate.mockResolvedValue({ id: "tr_restore" });
+  });
+
+  const deliver = async (type: string, object: Record<string, unknown>) => {
+    mockConstructEvent.mockReturnValue({ id: `evt_${type}`, type, account: undefined, data: { object } });
+    const res = makeRes();
+    await (stripeWebhook as any)(makeReq(), res);
+    return res;
+  };
+
+  it("charge.refunded reverses the house's net share of the refund", async () => {
+    const res = await deliver("charge.refunded", {
+      id: "ch_rent",
+      payment_intent: "pi_rent",
+      amount: 50000,
+      amount_refunded: 50000,
+    });
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(mockCreateReversal).toHaveBeenCalledWith(
+      "tr_rent",
+      expect.objectContaining({ amount: 48500 }),
+      { idempotencyKey: "refund-reversal-re_1" },
+    );
+  });
+
+  it("charge.refund.updated reverses a refund that has now settled", async () => {
+    const res = await deliver("charge.refund.updated", {
+      id: "re_1",
+      charge: "ch_rent",
+      status: "succeeded",
+    });
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(mockCreateReversal).toHaveBeenCalledTimes(1);
+  });
+
+  it("charge.dispute.created pulls the house's net share", async () => {
+    const res = await deliver("charge.dispute.created", {
+      id: "dp_1",
+      charge: "ch_rent",
+      amount: 50000,
+      status: "needs_response",
+    });
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(mockCreateReversal).toHaveBeenCalledWith(
+      "tr_rent",
+      expect.objectContaining({ amount: 48500, metadata: expect.objectContaining({ disputeId: "dp_1" }) }),
+      { idempotencyKey: "dispute-reversal-dp_1" },
+    );
+  });
+
+  it("charge.dispute.closed (won) returns what the dispute reversal took", async () => {
+    mockListReversals.mockResolvedValue({
+      data: [{ id: "trr_d", amount: 48500, currency: "usd", metadata: { disputeId: "dp_1" } }],
+    });
+
+    const res = await deliver("charge.dispute.closed", {
+      id: "dp_1",
+      charge: "ch_rent",
+      amount: 50000,
+      status: "won",
+    });
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(mockTransfersCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 48500, destination: "acct_house" }),
+      { idempotencyKey: "dispute-restore-dp_1" },
+    );
+  });
+
+  it("a Stripe failure while reversing releases the event for retry", async () => {
+    mockCreateReversal.mockRejectedValue(new Error("rate_limit"));
+
+    const res = await deliver("charge.refunded", {
+      id: "ch_rent",
+      payment_intent: "pi_rent",
+      amount: 50000,
+      amount_refunded: 50000,
+    });
+
+    expect(res.status).toHaveBeenCalledWith(500);
   });
 });
 

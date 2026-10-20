@@ -20,7 +20,15 @@
     "test": "jest --runInBand",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "preflight:billing": "node ../scripts/preflight-billing.js"
+    "preflight:billing": "node ../scripts/preflight-billing.js",
+    "stripe:listen": "stripe listen --forward-to http://localhost:5001/phoenix-cleanhouse/us-central1/stripeEvents --forward-connect-to http://localhost:5001/phoenix-cleanhouse/us-central1/handleStripeConnectWebhook",
+    "stripe:listen:secret": "node ../scripts/stripe-listen-secret.js",
+    "stripe:trigger:payment-succeeded": "stripe trigger payment_intent.succeeded",
+    "stripe:trigger:payment-failed": "stripe trigger payment_intent.payment_failed",
+    "stripe:trigger:account-updated": "stripe trigger account.updated",
+    "stripe:scenario:refund": "npm run build && node ../scripts/stripe-scenario.js refund",
+    "stripe:scenario:dispute": "npm run build && node ../scripts/stripe-scenario.js dispute",
+    "stripe:scenario:dispute-won": "npm run build && node ../scripts/stripe-scenario.js dispute-won"
   },
   "engines": {
     "node": "22"

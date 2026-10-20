@@ -31,6 +31,11 @@ import {
   type WebhookSecretCandidate,
 } from "../util/stripeWebhookSecrets";
 import { verifyStripeWebhook } from "../util/verifyStripeWebhook";
+import {
+  restoreTransferAfterWonDispute,
+  reverseTransferForDispute,
+  reverseTransfersForRefunds,
+} from "./transferReversals";
 import { sendFcmToHouseAdmins } from "../util/notifications";
 import { sendEmail, regroupEmail } from "../util/email";
 import type { SubscriptionDoc } from "../api/firestore";
@@ -744,6 +749,10 @@ async function handleDisputeCreated(
       { disputeId: dispute.id },
     );
   }
+
+  // Stripe debits the disputed amount from the platform. Pull the house's
+  // share back from its transfer (returned if the dispute is won).
+  await reverseTransferForDispute(stripeClient, dispute);
 }
 
 // ---------------------------------------------------------------------------
@@ -756,7 +765,10 @@ async function handleDisputeCreated(
 // the originating PaymentIntent, which is our payments doc id.
 // ---------------------------------------------------------------------------
 
-async function handleChargeRefunded(charge: Stripe.Charge): Promise<void> {
+async function handleChargeRefunded(
+  charge: Stripe.Charge,
+  stripeClient: Stripe,
+): Promise<void> {
   const paymentIntentId =
     typeof charge.payment_intent === "string"
       ? charge.payment_intent
@@ -781,6 +793,10 @@ async function handleChargeRefunded(charge: Stripe.Charge): Promise<void> {
     paymentIntentId,
     refundedAmountCents,
   });
+
+  // A refund is paid from the platform balance; reverse the house's share of
+  // the transfer so the house doesn't keep refunded rent.
+  await reverseTransfersForRefunds(stripeClient, charge.id);
 }
 
 // ---------------------------------------------------------------------------
@@ -1499,7 +1515,28 @@ export const stripeWebhook = onRequest(
           break;
 
         case "charge.refunded":
-          await handleChargeRefunded(event.data.object as Stripe.Charge);
+          await handleChargeRefunded(
+            event.data.object as Stripe.Charge,
+            getStripe(),
+          );
+          break;
+
+        // A refund that was pending when charge.refunded fired settles here.
+        case "charge.refund.updated": {
+          const refund = event.data.object as Stripe.Refund;
+          const chargeId =
+            typeof refund.charge === "string"
+              ? refund.charge
+              : refund.charge?.id;
+          if (chargeId) await reverseTransfersForRefunds(getStripe(), chargeId);
+          break;
+        }
+
+        case "charge.dispute.closed":
+          await restoreTransferAfterWonDispute(
+            getStripe(),
+            event.data.object as Stripe.Dispute,
+          );
           break;
 
         // --- Subscription events (RATS platform) ---
