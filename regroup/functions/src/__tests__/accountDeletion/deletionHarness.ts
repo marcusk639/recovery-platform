@@ -20,6 +20,7 @@ export const h = {
   removeStaff: jest.fn(),
   scrubArchive: jest.fn(),
   deletePersonal: jest.fn(),
+  unlinkHouse: jest.fn(),
   deleteCustomer: jest.fn(),
   deleteUser: jest.fn(),
   userDelete: jest.fn(),
@@ -41,6 +42,7 @@ export function resetHarness(): void {
   h.removeStaff.mockResolvedValue(undefined);
   h.scrubArchive.mockResolvedValue(undefined);
   h.deletePersonal.mockResolvedValue(undefined);
+  h.unlinkHouse.mockResolvedValue(undefined);
   h.deleteCustomer.mockResolvedValue(undefined);
   h.deleteUser.mockImplementation(async () => {
     h.calls.push('auth');
@@ -131,4 +133,9 @@ export const memberModule = {
 
 export const personalModule = {
   deletePersonalData: recorded(() => 'personal', h.deletePersonal),
+};
+
+/** Not added to `h.calls`, so step-order assertions stay about the step functions. */
+export const houseRecordsModule = {
+  unlinkHouseRecords: (...a: unknown[]) => h.unlinkHouse(...a),
 };

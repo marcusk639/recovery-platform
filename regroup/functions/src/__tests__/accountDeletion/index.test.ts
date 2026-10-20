@@ -4,8 +4,15 @@ jest.mock('firebase-admin', () => require('./deletionHarness').adminModule);
 jest.mock('firebase-functions/v2', () => require('./deletionHarness').functionsModule);
 jest.mock('../../api/firestore', () => require('./deletionHarness').firestoreModule);
 jest.mock('../../api/stripeDeletion', () => require('./deletionHarness').stripeModule);
-jest.mock('../../accountDeletion/operatorRecords', () => require('./deletionHarness').operatorModule);
+jest.mock(
+  '../../accountDeletion/operatorRecords',
+  () => require('./deletionHarness').operatorModule,
+);
 jest.mock('../../accountDeletion/memberRecords', () => require('./deletionHarness').memberModule);
+jest.mock(
+  '../../accountDeletion/houseRecords',
+  () => require('./deletionHarness').houseRecordsModule,
+);
 jest.mock('../../accountDeletion/personalData', () => require('./deletionHarness').personalModule);
 
 import { logger } from 'firebase-functions/v2';
@@ -125,6 +132,30 @@ describe('runAccountDeletion', () => {
     await expect(runAccountDeletion('u1', NOW)).rejects.toThrow('quota');
     expect(h.deletions.u1.lastError).toBe('auth');
     expect(h.deletions.u1.completed).toEqual(['operator', 'members', 'personal', 'userDoc']);
+  });
+
+  it("unlinks house records for all of the user's guest, house and admin ids", async () => {
+    h.guests = { g1: { userId: 'u1', houseId: 'h1' } };
+    h.archive = { old1: { userId: 'u1', houseId: 'h9' } };
+    h.admins = { a1: { userId: 'u1' } };
+    h.users.u1 = { id: 'u1', adminId: 'a0' };
+
+    await runAccountDeletion('u1', NOW);
+
+    expect(h.unlinkHouse).toHaveBeenCalledTimes(1);
+    expect(h.unlinkHouse).toHaveBeenCalledWith(
+      'u1',
+      ['g1', 'old1'],
+      { g1: 'h1', old1: 'h9' },
+      ['a1', 'a0'],
+      NOW,
+    );
+  });
+
+  it('unlinks uid-keyed house records even with no member docs', async () => {
+    await runAccountDeletion('u1', NOW);
+
+    expect(h.unlinkHouse).toHaveBeenCalledWith('u1', [], {}, [], NOW);
   });
 
   it('scrubs pre-existing guest-archive docs of a former resident', async () => {

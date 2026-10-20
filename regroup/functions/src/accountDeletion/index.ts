@@ -2,6 +2,7 @@ import * as admin from 'firebase-admin';
 import { logger } from 'firebase-functions/v2';
 import { ratsFirestore, userCollection } from '../api/firestore';
 import { deleteCustomer } from '../api/stripeDeletion';
+import { unlinkHouseRecords } from './houseRecords';
 import { closeOperatorAccount, OperatorDeletionUser } from './operatorRecords';
 import { dischargeResident, removeStaffAdmin, scrubArchivedGuest } from './memberRecords';
 import { deletePersonalData } from './personalData';
@@ -90,13 +91,9 @@ function stepActs(step: DeletionStep, t: DeletionTargets): boolean {
   switch (step) {
     case 'operator':
       return t.ownsHouses || t.hasSubscription;
-    case 'members':
-      return (
-        t.guestIds.length > 0 ||
-        t.adminIds.length > 0 ||
-        (t.archivedGuestIds ?? []).length > 0 ||
-        (t.guestCustomerIds ?? []).length > 0
-      );
+    // 'members' also unlinks uid-keyed house records (officer seats, staff notes,
+    // archived admins) that only a query can find, so it is assumed to act: the
+    // safe direction for partial reporting.
     default:
       return true;
   }
@@ -118,6 +115,13 @@ async function runStep(
       for (const guestId of targets.guestIds) await dischargeResident(guestId, now);
       for (const guestId of targets.archivedGuestIds ?? []) await scrubArchivedGuest(guestId, now);
       for (const adminId of targets.adminIds) await removeStaffAdmin(adminId);
+      await unlinkHouseRecords(
+        uid,
+        [...targets.guestIds, ...(targets.archivedGuestIds ?? [])],
+        targets.houseIdsByGuest,
+        [...targets.adminIds, ...(user.adminId ? [user.adminId] : [])],
+        now,
+      );
       return;
     case 'personal':
       await deletePersonalData(

@@ -47,7 +47,7 @@ const isDirectMessage = (ref: {
 
 /**
  * Delete a user's personal Firestore records and Storage files: notifications,
- * applications, direct messages they sent, their FCM device tokens, their
+ * feedback, applications, direct messages they sent, their FCM device tokens, their
  * avatars, and the documents uploaded to their resident profile (Storage files
  * under `houses/{houseId}/guests/{guestId}/documents/` plus the matching
  * `documents/{docId}` records, which mobile keys by `guestId`).
@@ -79,6 +79,10 @@ export async function deletePersonalData(
     messages: await deleteAllMatching(
       ratsFirestore.collectionGroup('chat').where('senderId', '==', uid) as unknown as PagedQuery,
       isDirectMessage,
+    ),
+    // Feedback the user submitted (mobile Personal screen; `reviewer` is the uid).
+    feedback: await deleteAllMatching(
+      collection('feedback').where('reviewer', '==', uid) as unknown as PagedQuery,
     ),
     // Defensive: no current writer.
     guestWeeks: await deleteAllMatching(

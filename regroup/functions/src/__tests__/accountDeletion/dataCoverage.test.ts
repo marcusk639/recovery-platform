@@ -1,5 +1,5 @@
 // What account deletion does with every store that holds a user's data. When a
-// feature starts writing user-keyed data, add it here as deleted or
+// feature starts writing user-keyed data, add it here as deleted, scrubbed or
 // retained-by-policy, so an omission shows up as a missing entry in review.
 
 type Fate = 'deleted' | 'scrubbed' | 'retained-by-policy';
@@ -10,7 +10,14 @@ interface Entry {
   fate: Fate;
   /** Deletion step that handles it (deleted / scrubbed only). */
   step?: 'operator' | 'members' | 'personal' | 'userDoc' | 'auth';
+  /** Scrubbed house records (houseRecords.ts): the record after the members step. */
+  after?: Record<string, unknown>;
 }
+
+const NOW = '2026-10-20T00:00:00.000Z';
+const TERM = { role: 'treasurer', termStartDate: '2026-01-01', termEndDate: '2026-07-01' };
+const BALLOT = { houseId: 'h1', results: { yes: 1, no: 1 }, passed: false };
+const NOTE = { houseId: 'h1', type: 'shift_log', content: 'Quiet night' };
 
 const USER_DATA: Entry[] = [
   // deleted (userDoc): the user's profile.
@@ -55,6 +62,58 @@ const USER_DATA: Entry[] = [
   { path: 'payments/x5', data: { guestId: 'g1' }, fate: 'retained-by-policy' },
   // retained-by-policy: invitations are the operator's records.
   { path: 'invitations/t1', data: { guestId: 'g1' }, fate: 'retained-by-policy' },
+  // deleted (personal): feedback the user sent; `reviewer` is their uid.
+  { path: 'feedback/f1', data: { reviewer: 'u1', houseId: 'h1' }, fate: 'deleted', step: 'personal' },
+  // scrubbed (members): Oxford officer seat is vacated; role and term stay.
+  {
+    path: 'houses/h1/officers/o1',
+    data: { ...TERM, userId: 'u1', name: 'A B', isActive: true },
+    fate: 'scrubbed',
+    step: 'members',
+    after: { ...TERM, isActive: false, vacatedAt: NOW },
+  },
+  // scrubbed (members): the user's ballot is unlinked (keyed by guest id); tallies stand.
+  {
+    path: 'houses/h1/votes/v1',
+    data: { ...BALLOT, voterIds: ['g1'], individualVotes: { g1: 'yes' } },
+    fate: 'scrubbed',
+    step: 'members',
+    after: { ...BALLOT, voterIds: [], individualVotes: {} },
+  },
+  // scrubbed (members): notes the user wrote as staff lose the author link and email.
+  {
+    path: 'staffNotes/s1',
+    data: { ...NOTE, authorId: 'u1', authorName: 'u1@example.com' },
+    fate: 'scrubbed',
+    step: 'members',
+    after: { ...NOTE, authorName: 'Former staff member' },
+  },
+  // scrubbed (members): archived copy of the user's staff admin record, minus contact details.
+  {
+    path: 'admin-archive/a1',
+    data: { userId: 'u1', firstName: 'A', houseIds: ['h1'], email: 'u1@example.com', phoneNumber: '1' },
+    fate: 'scrubbed',
+    step: 'members',
+    after: { userId: null, firstName: 'A', houseIds: ['h1'], accountDeletedAt: NOW },
+  },
+  // retained-by-policy: staff notes about the resident are house records (guest id + staff text).
+  {
+    path: 'staffNotes/s2',
+    data: { ...NOTE, type: 'resident_note', guestId: 'g1', authorId: 'staff' },
+    fate: 'retained-by-policy',
+  },
+  // retained-by-policy: disputes hold guest ids and names only, no contact details.
+  {
+    path: 'disputes/x6',
+    data: { guestId: 'g1', disputerIds: ['g1'], victimId: 'g1', disputerName: 'A B' },
+    fate: 'retained-by-policy',
+  },
+  // retained-by-policy: rent charge audit trail (guest id, amount, status); no contact details.
+  {
+    path: 'rent-collection-attempts/x7',
+    data: { guestId: 'g1', houseId: 'h1', amountCents: 100, status: 'charged' },
+    fate: 'retained-by-policy',
+  },
 ];
 
 /** Storage prefixes, same classification. */
@@ -66,71 +125,30 @@ const USER_FILES: Array<{ prefix: string; fate: Fate }> = [
   { prefix: 'houses/h1/documents/', fate: 'retained-by-policy' },
 ];
 
-type Doc = { path: string; data: Record<string, unknown> };
-let store: Doc[] = [];
 const storageDeletes: string[] = [];
 
-jest.mock('firebase-admin', () => ({
-  storage: () => ({
-    bucket: () => ({
-      file: (p: string) => ({ delete: async () => void storageDeletes.push(p) }),
-      deleteFiles: async (o: { prefix: string }) => void storageDeletes.push(o.prefix),
+jest.mock('firebase-admin', () => {
+  const firestore = () => ({});
+  firestore.FieldValue = require('./fakeFirestore').fieldValue;
+  return {
+    firestore,
+    storage: () => ({
+      bucket: () => ({
+        file: (p: string) => ({ delete: async () => void storageDeletes.push(p) }),
+        deleteFiles: async (o: { prefix: string }) => void storageDeletes.push(o.prefix),
+      }),
     }),
-  }),
-}));
+  };
+});
 jest.mock('firebase-functions/v2', () => ({
   logger: { info: jest.fn(), error: jest.fn(), warn: jest.fn() },
 }));
-
-const parentOf = (path: string) => path.split('/').slice(-2)[0];
-const refFor = (path: string) => {
-  const s = path.split('/');
-  return { path, parent: { parent: { parent: { id: s[s.length - 4] } } } };
-};
-const query = (match: (d: Doc) => boolean, after?: string): unknown => ({
-  limit: () => query(match, after),
-  startAfter: (s: { ref: { path: string } }) => query(match, s.ref.path),
-  get: async () => {
-    const docs = store
-      .filter(match)
-      .filter((d) => after === undefined || d.path > after)
-      .sort((a, b) => (a.path < b.path ? -1 : 1))
-      .map((d) => ({ ref: refFor(d.path) }));
-    return { empty: docs.length === 0, docs };
-  },
-});
-
-jest.mock('../../api/firestore', () => ({
-  ratsFirestore: {
-    collection: (name: string) => ({
-      where: (f: string, _op: string, v: unknown) =>
-        query(
-          (d) => d.path.split('/').length === 2 && parentOf(d.path) === name && d.data[f] === v,
-        ),
-      doc: (id: string) => ({
-        delete: async () => {
-          store = store.filter((d) => d.path !== `${name}/${id}`);
-        },
-      }),
-    }),
-    collectionGroup: (name: string) => ({
-      where: (f: string, _op: string, v: unknown) =>
-        query((d) => parentOf(d.path) === name && d.data[f] === v),
-    }),
-    batch: () => {
-      const paths: string[] = [];
-      return {
-        delete: (r: { path: string }) => paths.push(r.path),
-        commit: async () => {
-          store = store.filter((d) => !paths.includes(d.path));
-        },
-      };
-    },
-  },
-}));
+jest.mock('../../api/firestore', () => require('./fakeFirestore').firestoreModule);
 
 import { DELETION_STEPS } from '../../accountDeletion';
+import { unlinkHouseRecords } from '../../accountDeletion/houseRecords';
 import { deletePersonalData } from '../../accountDeletion/personalData';
+import { Doc, fake } from './fakeFirestore';
 
 /** The same record for a second user (u2, guest g2) that must never be touched. */
 const otherUsers = (e: Entry): Doc => ({
@@ -138,8 +156,11 @@ const otherUsers = (e: Entry): Doc => ({
   data: JSON.parse(JSON.stringify(e.data).replace(/u1/g, 'u2').replace(/g1/g, 'g2')),
 });
 
+const toDoc = ({ path, data }: Doc): Doc => JSON.parse(JSON.stringify({ path, data }));
+const at = (path: string) => fake.store.find((d) => d.path === path)?.data;
+
 beforeEach(() => {
-  store = [];
+  fake.store = [];
   storageDeletes.length = 0;
 });
 
@@ -155,12 +176,27 @@ describe('account deletion data coverage', () => {
     const personal = USER_DATA.filter((e) => e.step === 'personal');
     const retained = USER_DATA.filter((e) => e.fate === 'retained-by-policy');
     const others = [...personal, ...retained].map(otherUsers);
-    store = [...personal, ...retained].map(({ path, data }) => ({ path, data })).concat(others);
+    fake.store = [...personal, ...retained].map(toDoc).concat(others);
 
     await deletePersonalData('u1', ['g1'], { g1: 'h1' });
 
-    const left = store.map((d) => d.path).sort();
+    const left = fake.store.map((d) => d.path).sort();
     expect(left).toEqual([...retained.map((e) => e.path), ...others.map((d) => d.path)].sort());
+  });
+
+  it("the members step unlinks only the user's house records, idempotently", async () => {
+    const house = USER_DATA.filter((e) => e.after);
+    const retained = USER_DATA.filter((e) => e.fate === 'retained-by-policy');
+    const others = [...house, ...retained].map(otherUsers);
+    fake.store = [...house, ...retained].map(toDoc).concat(others.map(toDoc));
+
+    await unlinkHouseRecords('u1', ['g1'], { g1: 'h1' }, ['a1'], NOW);
+    const afterFirst = JSON.parse(JSON.stringify(fake.store));
+    await unlinkHouseRecords('u1', ['g1'], { g1: 'h1' }, ['a1'], '2027-01-01T00:00:00.000Z');
+
+    expect(fake.store).toEqual(afterFirst);
+    for (const e of house) expect(at(e.path)).toEqual(e.after);
+    for (const d of [...retained, ...others]) expect(at(d.path)).toEqual(d.data);
   });
 
   it('the personal step removes the deleted Storage prefixes only', async () => {

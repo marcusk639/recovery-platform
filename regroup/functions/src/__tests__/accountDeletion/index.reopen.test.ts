@@ -6,6 +6,7 @@ jest.mock('../../api/firestore', () => require('./deletionHarness').firestoreMod
 jest.mock('../../api/stripeDeletion', () => require('./deletionHarness').stripeModule);
 jest.mock('../../accountDeletion/operatorRecords', () => require('./deletionHarness').operatorModule);
 jest.mock('../../accountDeletion/memberRecords', () => require('./deletionHarness').memberModule);
+jest.mock('../../accountDeletion/houseRecords', () => require('./deletionHarness').houseRecordsModule);
 jest.mock('../../accountDeletion/personalData', () => require('./deletionHarness').personalModule);
 
 import { logger } from 'firebase-functions/v2';

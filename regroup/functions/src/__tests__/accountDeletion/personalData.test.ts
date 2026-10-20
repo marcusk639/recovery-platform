@@ -115,6 +115,18 @@ describe('deletePersonalData', () => {
     expect(paths()).toEqual(['guest-weeks/w2', 'houses/h2/applications/a2', 'notifications/n2']);
   });
 
+  it("deletes the user's feedback only, and a re-run is a no-op", async () => {
+    store = [
+      { path: 'feedback/f1', data: { reviewer: UID, type: 'house', houseId: 'h1' } },
+      { path: 'feedback/f2', data: { reviewer: UID, type: 'app', houseId: '' } },
+      { path: 'feedback/f3', data: { reviewer: 'other', type: 'house', houseId: 'h1' } },
+    ];
+    await deletePersonalData(UID, [], {});
+    expect(paths()).toEqual(['feedback/f3']);
+    await deletePersonalData(UID, [], {});
+    expect(paths()).toEqual(['feedback/f3']);
+  });
+
   it('deletes only messages the user sent', async () => {
     store = [
       { path: 'direct-messages/c1/chat/m1', data: { senderId: UID, recipientId: 'x' } },
