@@ -5,17 +5,23 @@ import { z } from 'zod';
  * Client-supplied house fields for createHouses. This is a WHITELIST: unknown
  * keys are stripped (zod default, made explicit with .strip()), so server-owned
  * fields (ownerId, adminIds, superAdminIds, subscriptionStatus, guestGraceEndsAt,
- * stripe*, isDemoHouse, certified, oxfordEnabled, ...) can never come from the
- * client. Nested wizard structures are intentionally permissive.
+ * stripe*, isDemoHouse, oxfordEnabled, ...) can never come from the client.
+ * `certified` is client-supplied: the wizard asks the operator, and the
+ * operator (superAdmin) can already set it via a house update. Nested wizard
+ * structures are intentionally permissive.
  */
-const coordinate = z.union([
-  z.number().finite(),
+// Numeric (or numeric string), range-checked after coercion.
+const coordinate = (min: number, max: number) =>
   z
-    .string()
-    .trim()
-    .min(1)
-    .refine((s) => Number.isFinite(Number(s)), 'must be numeric'),
-]);
+    .union([
+      z.number().finite(),
+      z
+        .string()
+        .trim()
+        .min(1)
+        .refine((s) => Number.isFinite(Number(s)), 'must be numeric'),
+    ])
+    .refine((v) => Number(v) >= min && Number(v) <= max, `must be between ${min} and ${max}`);
 
 const looseRecord = z.record(z.string(), z.unknown());
 const emails = z.array(z.string().max(320)).max(200);
@@ -24,8 +30,8 @@ export const createHouseInputSchema = z
   .object({
     id: z.string().regex(/^[A-Za-z0-9]{20}$/),
     name: z.string().min(1).max(120),
-    lat: coordinate,
-    lng: coordinate,
+    lat: coordinate(-90, 90),
+    lng: coordinate(-180, 180),
     street: z.string().max(300).optional(),
     city: z.string().max(120).optional(),
     state: z.string().max(120).optional(),
@@ -41,6 +47,7 @@ export const createHouseInputSchema = z
     gender: z.string().max(30).nullable().optional(),
     baths: z.number().finite().min(0).optional(),
     wifi: z.boolean().optional(),
+    certified: z.boolean().optional(),
     managerSetupType: z
       .enum(['senior-peer', 'operator-only', 'external-managers', 'democratic'])
       .optional(),
@@ -71,6 +78,15 @@ export function buildHouseDoc(
   const latNum = Number(lat);
   const lngNum = Number(lng);
   return {
+    // Defaults matching the shape of legacy client-created houses; client input
+    // may override only the whitelisted ones (certified).
+    certified: false,
+    issues: {},
+    complaints: {},
+    disputes: {},
+    applications: {},
+    health: {},
+    awaitingVerification: [],
     ...rest,
     lat: latNum,
     lng: lngNum,
@@ -86,7 +102,6 @@ export function buildHouseDoc(
     currentCapacity: 0,
     stripeStatus: 'not_connected',
     isDemoHouse: false,
-    certified: false,
     imageUrl: '',
     avatar: '',
     createdAt: ctx.now,

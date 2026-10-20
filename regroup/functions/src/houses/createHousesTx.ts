@@ -1,6 +1,12 @@
 import { HttpsError } from 'firebase-functions/v2/https';
 import type { Transaction } from 'firebase-admin/firestore';
-import { adminCollection, createAdminId, houseCollection, userCollection } from '../api/firestore';
+import {
+  adminCollection,
+  createAdminId,
+  houseCollection,
+  houseTombstoneCollection,
+  userCollection,
+} from '../api/firestore';
 import type Admin from '../entities/Admin';
 import type OperatorSubscription from '../entities/OperatorSubscription';
 import type { User } from '../entities/User';
@@ -48,8 +54,10 @@ export const assertCanCreateHouses = (
 /**
  * Transaction body for createHouses. All reads happen before any write
  * (firebase-admin requirement). Idempotent per house id: a house that already
- * exists with ownerId === uid is treated as created, so a retry after a failed
- * claim grant rewrites nothing and only re-applies the set-unions.
+ * exists with ownerId === uid AND is already in the caller's server-owned
+ * subscription map is treated as created, so a retry after a failed claim
+ * grant rewrites nothing and only re-applies the set-unions. A deleted id
+ * (houseTombstones) can never be created again.
  */
 export const createHousesTx = async (
   tx: Transaction,
@@ -67,6 +75,15 @@ export const createHousesTx = async (
 
   const houseRefs = inputs.map((h) => houseCollection.doc(h.id));
   const houseSnaps = await Promise.all(houseRefs.map((ref) => tx.get(ref)));
+  // A deleted house leaves a tombstone (triggers/firestore/houseTombstone.ts).
+  // Without this check, deleting a house and calling createHouses with its id
+  // would see no doc and mint superAdmin on it for the caller.
+  const tombstoneSnaps = await Promise.all(
+    inputs.map((h) => tx.get(houseTombstoneCollection.doc(h.id))),
+  );
+  if (tombstoneSnaps.some((snap) => snap.exists)) {
+    throw new HttpsError('already-exists', 'A house with this id already exists');
+  }
   const newInputs: CreateHouseInput[] = [];
   houseSnaps.forEach((snap, i) => {
     if (!snap.exists) {
@@ -75,13 +92,12 @@ export const createHousesTx = async (
     }
     // An existing house counts as "already created by this caller" only if
     // ownerId === uid AND the id is already in the caller's subscription map.
-    // ownerId alone is not proof: it is client-forgeable (the house delete and
-    // create rules accept a plain `admin` claim with no field restrictions), so
-    // an admin of another operator's house could delete and recreate it with
-    // ownerId = self, then retry here to be granted superAdmin on it without it
-    // ever counting against their property cap. subscriptionMetadata.houses is
-    // server-owned and is written in the same transaction as the house, so it
-    // can only hold the id if a previous createHouses call really created it.
+    // Both are server-owned: firestore.rules deny client house creates and any
+    // client change to ownerId, and subscriptionMetadata is written only by the
+    // server — here, in the same transaction as the house, and by
+    // updateSubscriptionHouses "add", which itself requires ownerId === uid.
+    // A plain admin cannot delete-and-recreate the house either: delete needs
+    // superAdmin of that house, and the deleted id is tombstoned (checked above).
     const ownerId = (snap.data() as { ownerId?: string } | undefined)?.ownerId;
     const inSubscription = Object.prototype.hasOwnProperty.call(meta.houses ?? {}, inputs[i].id);
     if (ownerId !== uid || !inSubscription) {

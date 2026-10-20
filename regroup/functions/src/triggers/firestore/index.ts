@@ -27,6 +27,8 @@ import { deleteClaim } from "../../util/claims";
 import { SENDGRID_API_KEY } from "../../config";
 import { operatorStatusToHouseStatus } from "../../util/entitlement";
 
+export { onHouseDeleted } from "./houseTombstone";
+
 /**
  * Sends a push notification when a new document is created in /notifications/{notificationId}.
  */
@@ -63,7 +65,7 @@ export const notifyNewHouseCreated = onDocumentCreated(
         Name: ${house.name}
         ID: ${house.id}
         Super Admin: ${house.superAdminId}
-        Date: ${house.createdDate}
+        Date: ${(house as House & { createdAt?: string }).createdAt ?? house.createdDate}
       `,
         subject: "New house created",
       });

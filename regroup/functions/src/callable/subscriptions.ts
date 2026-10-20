@@ -44,6 +44,7 @@ import {
 } from "../util/subscriptionHouses";
 import { grantPotentialSuperAdminClaim } from "../util/superAdminClaim";
 import {
+  getHouse,
   getUser,
   updateUser,
   upsertSubscriptionDoc,
@@ -541,6 +542,22 @@ export const updateSubscriptionHouses = onCall(
     // and persist the houses map instead of touching Stripe items.
     const houseMeta = user.subscriptionMetadata;
     if (houseMeta?.tier) {
+      if (action === "add") {
+        // The subscription houses map is what createHouses accepts as proof of
+        // ownership on retry, so only a house this caller owns may enter it.
+        // ownerId is server-written (rules deny client house creates and any
+        // ownerId change), so it is a trustworthy check here. ownerUserId is
+        // request.auth.uid (checked above).
+        const added = await Promise.all(
+          (houseIds ?? []).map((id) => getHouse(id)),
+        );
+        if (added.some((h) => !h || h.ownerId !== ownerUserId)) {
+          throw new HttpsError(
+            "permission-denied",
+            "You can only add houses you own",
+          );
+        }
+      }
       const updatedMeta =
         action === "add"
           ? addHousesToSubscription(houseMeta, houseIds ?? [])

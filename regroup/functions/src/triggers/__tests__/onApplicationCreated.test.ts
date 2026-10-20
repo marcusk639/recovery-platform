@@ -14,6 +14,7 @@ describe("notifyOperatorOnApplication", () => {
       onDocumentCreated: jest.fn((path: string, handler: any) => handler),
       onDocumentUpdated: jest.fn(),
       onDocumentWritten: jest.fn((path: string, handler: any) => handler),
+      onDocumentDeleted: jest.fn((path: string, handler: any) => handler),
     }));
     jest.mock("../../util/notifications", () => ({
       sendNotification: jest.fn(),

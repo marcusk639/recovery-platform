@@ -29,6 +29,9 @@ export const activityCollection = ratsFirestore.collection('activities');
 export const paymentsCollection = ratsFirestore.collection('payments');
 export const invitationCollection = ratsFirestore.collection('invitations');
 export const rentCollectionAttemptCollection = ratsFirestore.collection('rent-collection-attempts');
+// Server-only (no client rule => default deny): one doc per deleted house id,
+// so createHouses can never re-mint a deleted id. Written by onHouseDeleted.
+export const houseTombstoneCollection = ratsFirestore.collection('houseTombstones');
 
 /**
  * Shape of a document in the `subscriptions` collection. Read by the Stripe

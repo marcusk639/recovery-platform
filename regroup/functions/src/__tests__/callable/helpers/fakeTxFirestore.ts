@@ -85,6 +85,7 @@ export const apiFirestoreMock = () => ({
   ratsFirestore: { runTransaction },
   userCollection: makeCollection('users'),
   houseCollection: makeCollection('houses'),
+  houseTombstoneCollection: makeCollection('houseTombstones'),
   adminCollection: makeCollection('admins'),
   createAdminId: () => `admin-new-${++autoId}`,
 });

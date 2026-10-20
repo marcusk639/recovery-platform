@@ -26,7 +26,6 @@ describe('houseInput', () => {
       oxfordEnabled: true,
       adminIds: ['evil'],
       superAdminIds: ['evil'],
-      certified: true,
       guestGraceEndsAt: 'x',
       stripeAccountApi: 'v2',
       stripeStatus: 'active',
@@ -40,12 +39,47 @@ describe('houseInput', () => {
     expect(doc.subscriptionStatus).toBe(ctx.subscriptionStatus);
     expect(doc.adminIds).toEqual(['admin-id']);
     expect(doc.superAdminIds).toEqual(['admin-id']);
-    expect(doc.certified).toBe(false);
     expect(doc.stripeStatus).toBe('not_connected');
     expect(doc.currentCapacity).toBe(0);
     expect(doc.imageUrl).toBe('');
     expect(doc.avatar).toBe('');
     expect(doc.createdAt).toBe(ctx.now);
+  });
+
+  it('passes the wizard-collected certified flag through, defaulting to false', () => {
+    expect(build({ certified: true }).certified).toBe(true);
+    expect(build({ certified: false }).certified).toBe(false);
+    expect(build().certified).toBe(false);
+    expect(createHouseInputSchema.safeParse({ ...base, certified: 'yes' }).success).toBe(false);
+  });
+
+  it('seeds the collections legacy client-created houses carried', () => {
+    expect(build()).toMatchObject({
+      issues: {},
+      complaints: {},
+      disputes: {},
+      applications: {},
+      health: {},
+      awaitingVerification: [],
+    });
+    // Not client-writable: the schema strips them.
+    expect(build({ issues: { x: 1 }, awaitingVerification: ['x'] })).toMatchObject({
+      issues: {},
+      awaitingVerification: [],
+    });
+  });
+
+  it('range-checks coordinates after numeric coercion', () => {
+    const ok = (lat: unknown, lng: unknown) =>
+      createHouseInputSchema.safeParse({ ...base, lat, lng }).success;
+    expect(ok(90, 180)).toBe(true);
+    expect(ok(-90, -180)).toBe(true);
+    expect(ok('-90', '180')).toBe(true);
+    expect(ok(90.0001, 0)).toBe(false);
+    expect(ok(-91, 0)).toBe(false);
+    expect(ok('91', 0)).toBe(false);
+    expect(ok(0, 180.5)).toBe(false);
+    expect(ok(0, '-181')).toBe(false);
   });
 
   it('sets superAdminId to the operator uid, ignoring client input', () => {
