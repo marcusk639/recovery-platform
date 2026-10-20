@@ -11,6 +11,18 @@ jest.mock('../../state/store', () => ({
   useAppSelector: (sel: (s: any) => unknown) => sel(mockState),
   useAppDispatch: () => mockDispatch,
 }));
+// useFocusEffect runs its callback on focus; tests fire a re-focus by calling
+// the latest registered callback again.
+let mockFocusCallback: (() => void) | undefined;
+jest.mock('@react-navigation/native', () => {
+  const { useEffect } = jest.requireActual('react');
+  return {
+    useFocusEffect: (cb: () => void) => {
+      mockFocusCallback = cb;
+      useEffect(() => cb(), [cb]);
+    },
+  };
+});
 jest.mock('../../state/slices/setupSlice', () => ({
   resetSubmissionState: () => ({ type: 'setup/resetSubmissionState' }),
 }));
@@ -76,5 +88,17 @@ describe('useOrgSetupBlocker', () => {
     expect(mockDispatch).toHaveBeenCalledWith({ type: 'setup/resetSubmissionState' });
     expect(mockGetUser).toHaveBeenCalledTimes(2);
     expect(result.current.kind).toBeNull();
+  });
+
+  it('re-reads the plan when the screen regains focus (operator subscribed and came back)', async () => {
+    mockGetUser.mockResolvedValueOnce(lapsed).mockResolvedValueOnce(active);
+    const { result } = renderHook(() => useOrgSetupBlocker());
+    await waitFor(() => expect(result.current.kind).toBe('plan-required'));
+
+    await act(async () => {
+      mockFocusCallback?.();
+    });
+    await waitFor(() => expect(result.current.kind).toBeNull());
+    expect(mockGetUser).toHaveBeenCalledTimes(2);
   });
 });

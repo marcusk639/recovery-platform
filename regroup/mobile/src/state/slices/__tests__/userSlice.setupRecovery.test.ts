@@ -236,6 +236,19 @@ describe("retrySetupRecovery (SetupRecoveryPanel's Retry)", () => {
     expect(store.getState().user.user?.orgSetupCompleted).toBe(false);
   });
 
+  it('without a uid, rejects without calling the server and keeps the flag set', async () => {
+    const base = userReducer(undefined, { type: '@@INIT' });
+    const store = configureStore({
+      reducer: { user: userReducer },
+      preloadedState: { user: { ...base, user: {}, setupRecoveryFailed: true } },
+    });
+
+    const result = await store.dispatch(retrySetupRecovery() as any);
+    expect(result.type).toBe(retrySetupRecovery.rejected.type);
+    expect(functions.httpsCallable).not.toHaveBeenCalled();
+    expect(store.getState().user.setupRecoveryFailed).toBe(true);
+  });
+
   it('is cleared on logout', async () => {
     const store = await failedLogin();
     store.dispatch({ type: logout.fulfilled.type, payload: { user: { id: 'anon' } } });

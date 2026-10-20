@@ -128,12 +128,11 @@ describe('initializeHouses — createHouses failures', () => {
   });
 
   it('accepts web-SDK style prefixed codes', async () => {
-    (createHouses as jest.Mock).mockRejectedValueOnce(
-      fnError('functions/failed-precondition', 'An active subscription is required'),
-    );
-    await expect(initializeHouses(makeHouses(), operator)).rejects.toThrow(
-      'An active subscription is required',
-    );
+    const err = fnError('functions/failed-precondition', 'Property limit reached for your plan');
+    (createHouses as jest.Mock).mockRejectedValueOnce(err);
+    const thrown = await initializeHouses(makeHouses(), operator).catch((e) => e);
+    expect(thrown.message).toBe('Property limit reached for your plan');
+    expect(thrown.cause).toBe(err);
   });
 
   it.each([

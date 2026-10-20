@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { canCreateHouses } from '../services/setup-plan-gate';
 import { getUser } from '../services/users';
 import { resetSubmissionState } from '../state/slices/setupSlice';
@@ -11,7 +12,7 @@ export type OrgSetupBlocker = 'setup-recovery' | 'plan-required' | null;
  * What OrgSetup must show instead of the wizard:
  * - setup-recovery: finishOperatorSetup failed on login; the houses may exist.
  * - plan-required: a fresh read of the user doc fails the createHouses
- *   entitlement gate (checked at entry), or createHouses refused for no active
+ *   entitlement gate (checked on each focus), or createHouses refused for no active
  *   plan (backstop). A failed read does not block: the server still enforces
  *   the gate.
  * `checkAgain` clears the submission error and re-reads the plan.
@@ -39,9 +40,13 @@ export const useOrgSetupBlocker = (): {
     }
   }, [uid, recoveryFailed]);
 
-  useEffect(() => {
-    checkPlan();
-  }, [checkPlan]);
+  // On every focus, not just mount: an operator who leaves for the plan screen,
+  // subscribes and comes back is unblocked without tapping Check again.
+  useFocusEffect(
+    useCallback(() => {
+      checkPlan();
+    }, [checkPlan]),
+  );
 
   const checkAgain = useCallback(async () => {
     dispatch(resetSubmissionState());
