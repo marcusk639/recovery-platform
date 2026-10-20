@@ -76,6 +76,10 @@ export function buildHouseDoc(
     lng: lngNum,
     geohash: encode(latNum, lngNum),
     ownerId: ctx.ownerUid,
+    // A uid, not an admin id: callable/oxford.ts and callable/analytics.ts
+    // authorize on house.superAdminId === request.auth.uid, and
+    // setHouseSubscriptionStatusOnCreate reads it as the operator's uid.
+    superAdminId: ctx.ownerUid,
     adminIds: [ctx.adminId],
     superAdminIds: [ctx.adminId],
     subscriptionStatus: ctx.subscriptionStatus,

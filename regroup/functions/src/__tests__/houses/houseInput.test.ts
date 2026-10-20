@@ -48,6 +48,12 @@ describe('houseInput', () => {
     expect(doc.createdAt).toBe(ctx.now);
   });
 
+  it('sets superAdminId to the operator uid, ignoring client input', () => {
+    // callable/oxford.ts and callable/analytics.ts authorize on
+    // house.superAdminId === request.auth.uid; nothing else writes it.
+    expect(build({ superAdminId: 'evil' }).superAdminId).toBe(ctx.ownerUid);
+  });
+
   it('computes geohash on the server', () => {
     expect(build({ geohash: 'evil' }).geohash).toBe(encode(30.2672, -97.7431));
     expect(build({ lat: '30.2672', lng: '-97.7431' }).geohash).toBe(encode(30.2672, -97.7431));
