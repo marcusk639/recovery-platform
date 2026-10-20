@@ -89,8 +89,9 @@ export function buildHouseDoc(
   const latNum = Number(lat);
   const lngNum = Number(lng);
   return {
-    // Defaults matching the shape of legacy client-created houses; client input
-    // may override only the whitelisted ones (certified).
+    // Defaults matching the shape of legacy client-created houses. `...rest` is
+    // already whitelisted by the schema, so only schema keys can override these
+    // defaults.
     certified: false,
     issues: {},
     complaints: {},

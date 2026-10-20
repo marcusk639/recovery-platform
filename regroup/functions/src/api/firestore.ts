@@ -30,7 +30,8 @@ export const paymentsCollection = ratsFirestore.collection('payments');
 export const invitationCollection = ratsFirestore.collection('invitations');
 export const rentCollectionAttemptCollection = ratsFirestore.collection('rent-collection-attempts');
 // Server-only (no client rule => default deny): one doc per deleted house id,
-// so createHouses can never re-mint a deleted id. Written by onHouseDeleted.
+// written by onHouseDeleted shortly after the delete; createHouses refuses
+// tombstoned ids (defence in depth, see houseTombstone.ts).
 export const houseTombstoneCollection = ratsFirestore.collection('houseTombstones');
 
 /**

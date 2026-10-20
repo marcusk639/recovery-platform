@@ -1,4 +1,5 @@
 import { HttpsError } from 'firebase-functions/v2/https';
+import { logger } from 'firebase-functions';
 import type { Transaction } from 'firebase-admin/firestore';
 import {
   adminCollection,
@@ -60,9 +61,12 @@ export const assertCanCreateHouses = (
  * (uid, requestKey) — the client never chooses one — so a caller can only ever
  * address ids in its own derived namespace. Idempotent per requestKey: a retry
  * with the same key derives the same id, and a house that already exists with
- * ownerId === uid AND is already in the caller's server-owned subscription map
- * is treated as created, so the retry rewrites nothing and only re-applies the
- * admin/user array unions. A tombstoned (deleted) id is refused.
+ * ownerId === uid AND is already in the caller's subscription houses map is
+ * treated as created: no house doc is rewritten; the admin doc and the user's
+ * housesOwned/subscriptionMetadata are re-applied (lastUpdatedAt is bumped).
+ * `subscriptionMetadata.houses` can be seeded by the client when the user doc
+ * is created (rules allow status ''); it is only trusted together with
+ * `house.ownerId === uid`. A tombstoned (deleted) id is refused.
  *
  * The onboarding flags (orgSetupCompleted/isAdmin/isSuperAdmin) are NOT
  * written here: the callable sets them only after the claims are granted, so
@@ -91,7 +95,9 @@ export const createHousesTx = async (
   const tombstoneSnaps = await Promise.all(
     ids.map((id) => tx.get(houseTombstoneCollection.doc(id))),
   );
-  if (tombstoneSnaps.some((snap) => snap.exists)) {
+  const tombstoned = ids.filter((_id, i) => tombstoneSnaps[i].exists);
+  if (tombstoned.length > 0) {
+    logger.warn('createHouses: refused', { uid, houseIds: tombstoned, reason: 'tombstoned' });
     throw new HttpsError('already-exists', 'A house with this id already exists');
   }
   const newIndexes: number[] = [];
@@ -102,11 +108,18 @@ export const createHousesTx = async (
     }
     // An existing doc at a caller-derived id is normally this caller's own
     // earlier create (a retry). It counts as ours only if ownerId === uid AND
-    // the id is already in the server-owned subscription map; anything else
-    // (e.g. a legacy client-created house) is refused.
+    // the id is already in the subscription houses map; anything else (e.g. a
+    // legacy client-created house) is refused. `subscriptionMetadata.houses`
+    // can be seeded by the client when the user doc is created (rules allow
+    // status ''); it is only trusted together with `house.ownerId === uid`.
     const ownerId = (snap.data() as { ownerId?: string } | undefined)?.ownerId;
     const inSubscription = Object.prototype.hasOwnProperty.call(meta.houses ?? {}, ids[i]);
     if (ownerId !== uid || !inSubscription) {
+      logger.warn('createHouses: refused', {
+        uid,
+        houseIds: [ids[i]],
+        reason: 'existing-house-not-owned',
+      });
       throw new HttpsError('already-exists', 'A house with this id already exists');
     }
   });
@@ -117,6 +130,7 @@ export const createHousesTx = async (
     const adminSnap = await tx.get(adminCollection.doc(adminId));
     existingAdmin = adminSnap.exists ? (adminSnap.data() as Partial<AdminDoc>) : undefined;
     if (existingAdmin?.userId !== uid) {
+      logger.warn('createHouses: refused', { uid, adminId, reason: 'admin-not-owned' });
       throw new HttpsError('permission-denied', 'Admin profile does not belong to this user');
     }
   } else {
