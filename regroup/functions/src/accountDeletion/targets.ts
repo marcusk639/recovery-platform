@@ -1,11 +1,11 @@
 import { adminCollection, guestCollection, houseCollection, ratsFirestore } from '../api/firestore';
 
 /**
- * What the run will act on, captured once on the first run. The "members" step
+ * What the run will act on, captured on the first run. The "members" step
  * deletes the guest docs that "personal" still needs (guest ids and houses for
- * avatar paths), so a resumed run must read this snapshot, never re-query.
- * Fields added after the first release are optional so records written by an
- * older run still resume.
+ * Storage paths), so a resumed run must keep the stored ids rather than rely on
+ * a re-query alone; see `mergeTargets`. `archivedGuestIds` and
+ * `guestCustomerIds` are kept optional defensively.
  */
 export interface DeletionTargets {
   guestIds: string[];
@@ -79,5 +79,31 @@ export async function snapshotTargets(uid: string, user: TargetUser): Promise<De
     hasSubscription: Boolean(subscriptionId || customerId),
     archivedGuestIds: dedupe(archived.docs.map((d) => d.id)).filter((id) => !guestIds.includes(id)),
     guestCustomerIds: dedupe(guestCustomerIds),
+  };
+}
+
+/**
+ * On resume: the stored snapshot plus anything a fresh snapshot finds that was
+ * created since the first attempt. Stored ids are kept (their docs may already
+ * be deleted, which is why the snapshot is stored) and the stored house wins
+ * for a guest. Steps already completed do not re-run, so only steps still to
+ * run act on the additions.
+ */
+export function mergeTargets(stored: DeletionTargets, fresh: DeletionTargets): DeletionTargets {
+  const guestIds = dedupe([...stored.guestIds, ...fresh.guestIds]);
+  return {
+    guestIds,
+    houseIdsByGuest: { ...fresh.houseIdsByGuest, ...stored.houseIdsByGuest },
+    adminIds: dedupe([...stored.adminIds, ...fresh.adminIds]),
+    ownsHouses: stored.ownsHouses || fresh.ownsHouses,
+    hasSubscription: stored.hasSubscription || fresh.hasSubscription,
+    archivedGuestIds: dedupe([
+      ...(stored.archivedGuestIds ?? []),
+      ...(fresh.archivedGuestIds ?? []),
+    ]).filter((id) => !guestIds.includes(id)),
+    guestCustomerIds: dedupe([
+      ...(stored.guestCustomerIds ?? []),
+      ...(fresh.guestCustomerIds ?? []),
+    ]),
   };
 }

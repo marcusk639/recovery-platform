@@ -18,7 +18,9 @@ jest.mock('../../accountDeletion', () => ({
 }));
 
 import { logger } from 'firebase-functions';
-import { deleteAccount } from '../../callable/account';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { deleteAccount, PARTIAL_MESSAGE } from '../../callable/account';
 
 const handler = deleteAccount as unknown as (req: any) => Promise<any>;
 const nowSec = () => Math.floor(Date.now() / 1000);
@@ -46,6 +48,40 @@ describe('deleteAccount', () => {
     expect(mockRun).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['missing', undefined],
+    ['a string', '1700000000'],
+    ['NaN', Number.NaN],
+  ])('refuses a %s auth_time', async (_label, authTime) => {
+    const r = req();
+    (r.auth.token as any).auth_time = authTime;
+    await expect(handler(r)).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect(mockRun).not.toHaveBeenCalled();
+  });
+
+  it('accepts a sign-in exactly 300 seconds old and refuses 300.001', async () => {
+    const nowMs = 1_800_000_000_000;
+    const spy = jest.spyOn(Date, 'now').mockReturnValue(nowMs);
+    try {
+      const at = (ageSec: number) => ({
+        auth: { uid: 'u1', token: { auth_time: nowMs / 1000 - ageSec } },
+        data: {},
+      });
+      await expect(handler(at(300))).resolves.toEqual({ deleted: true });
+      await expect(handler(at(300.001))).rejects.toMatchObject({ code: 'failed-precondition' });
+      expect(mockRun).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('ignores a non-string email claim instead of crashing', async () => {
+    const r = req();
+    (r.auth.token as any).email = { value: 'demo_user@appdemo.net' };
+    await expect(handler(r)).resolves.toEqual({ deleted: true });
+    expect(mockRun).toHaveBeenCalledWith('u1');
+  });
+
   it('refuses to delete the shared demo account (case-insensitive)', async () => {
     const r = req();
     (r.auth.token as any).email = 'Demo_User@AppDemo.net';
@@ -69,6 +105,34 @@ describe('deleteAccount', () => {
       code: 'internal',
       message: "We couldn't finish deleting your account. Try again.",
     });
+  });
+
+  it('says part of the account was removed when earlier steps already ran', async () => {
+    mockRun.mockRejectedValue(
+      Object.assign(new Error('secret detail'), { step: 'personal', partial: true }),
+    );
+    const err = await handler(req()).catch((e: unknown) => e);
+    expect(err).toMatchObject({
+      code: 'internal',
+      message: PARTIAL_MESSAGE,
+      details: { partial: true },
+    });
+    expect(PARTIAL_MESSAGE).toBe(
+      'Part of your account was already removed. Please try again; contact support if this keeps happening.',
+    );
+  });
+
+  it('uses the plain retry message when nothing was removed yet', async () => {
+    mockRun.mockRejectedValue(Object.assign(new Error('x'), { step: 'operator', partial: false }));
+    await expect(handler(req())).rejects.toMatchObject({
+      code: 'internal',
+      message: "We couldn't finish deleting your account. Try again.",
+    });
+  });
+
+  it('is exported from the functions entry point', () => {
+    const entry = readFileSync(join(__dirname, '../../index.ts'), 'utf8');
+    expect(entry).toMatch(/export \{ deleteAccount \} from '\.\/callable\/account';/);
   });
 
   it('logs the failed step attached by the deletion run', async () => {

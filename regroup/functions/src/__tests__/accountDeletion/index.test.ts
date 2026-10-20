@@ -3,7 +3,7 @@ import { h, resetHarness } from './deletionHarness';
 jest.mock('firebase-admin', () => require('./deletionHarness').adminModule);
 jest.mock('firebase-functions/v2', () => require('./deletionHarness').functionsModule);
 jest.mock('../../api/firestore', () => require('./deletionHarness').firestoreModule);
-jest.mock('../../api/stripe', () => require('./deletionHarness').stripeModule);
+jest.mock('../../api/stripeDeletion', () => require('./deletionHarness').stripeModule);
 jest.mock('../../accountDeletion/operatorRecords', () => require('./deletionHarness').operatorModule);
 jest.mock('../../accountDeletion/memberRecords', () => require('./deletionHarness').memberModule);
 jest.mock('../../accountDeletion/personalData', () => require('./deletionHarness').personalModule);
@@ -44,7 +44,7 @@ describe('runAccountDeletion', () => {
     expect(h.calls).not.toContain('discharge:g1');
   });
 
-  it('runs the operator step for a subscriber who owns no h.houses', async () => {
+  it('runs the operator step for a subscriber who owns no houses', async () => {
     h.users.u1 = { id: 'u1', subscriptionMetadata: { customerId: 'cus_1' } };
 
     await runAccountDeletion('u1', NOW);
@@ -127,7 +127,7 @@ describe('runAccountDeletion', () => {
     expect(h.deletions.u1.completed).toEqual(['operator', 'members', 'personal', 'userDoc']);
   });
 
-  it('scrubs pre-existing guest-h.archive docs of a former resident', async () => {
+  it('scrubs pre-existing guest-archive docs of a former resident', async () => {
     h.archive = { old1: { userId: 'u1', houseId: 'h9', sobrietyDate: 'x' } };
 
     await runAccountDeletion('u1', NOW);
@@ -138,7 +138,7 @@ describe('runAccountDeletion', () => {
     expect(h.deletions.u1.targets).toMatchObject({ archivedGuestIds: ['old1'] });
   });
 
-  it('does not scrub an h.archive doc separately when the guest is also current', async () => {
+  it('does not scrub an archive doc separately when the guest is also current', async () => {
     h.guests = { g1: { userId: 'u1', houseId: 'h1' } };
     h.archive = { g1: { userId: 'u1', houseId: 'h1' } };
 
@@ -167,7 +167,7 @@ describe('runAccountDeletion', () => {
     expect(h.closeOperator).toHaveBeenCalledTimes(1);
   });
 
-  it('falls back to h.users/{uid}.guestId and .adminId for docs without userId', async () => {
+  it('falls back to users/{uid}.guestId and .adminId for docs without userId', async () => {
     h.users.u1 = { id: 'u1', guestId: 'gL', adminId: 'aL' };
     h.guests = { gL: { houseId: 'h1' }, g1: { userId: 'u1', houseId: 'h2' } };
     h.admins = { aL: {} };
@@ -184,7 +184,7 @@ describe('runAccountDeletion', () => {
     ]);
   });
 
-  it('ignores a h.users/{uid} pointer to a doc linked to someone else, and dedupes', async () => {
+  it('ignores a users/{uid} pointer to a doc linked to someone else, and dedupes', async () => {
     h.users.u1 = { id: 'u1', guestId: 'g1', adminId: 'aX' };
     h.guests = { g1: { userId: 'u1', houseId: 'h1' } };
     h.admins = { aX: { userId: 'other' } };
@@ -203,6 +203,7 @@ describe('runAccountDeletion', () => {
     expect(logger.error).toHaveBeenCalledWith('accountDeletion: step failed', {
       uid: 'u1',
       step: 'personal',
+      phase: 'run',
       code: 'storage/404',
       message: 'bucket gone',
     });

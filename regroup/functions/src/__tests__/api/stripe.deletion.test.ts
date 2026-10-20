@@ -1,5 +1,3 @@
-// src/__tests__/api/stripe.deletion.test.ts
-//
 // Mocks the `stripe` npm package directly (same convention as reactivate.test.ts).
 
 const mockSubscriptionsCancel = jest.fn();
@@ -18,7 +16,10 @@ jest.mock("stripe", () =>
   })),
 );
 
-import { cancelSubscriptionNow, deleteCustomer } from "../../api/stripe";
+import { logger } from "firebase-functions";
+import { cancelSubscriptionNow, deleteCustomer } from "../../api/stripeDeletion";
+
+const warn = jest.spyOn(logger, "warn").mockImplementation(() => undefined);
 
 const missingError = () =>
   Object.assign(new Error("No such resource"), {
@@ -41,6 +42,11 @@ describe("Stripe deletion helpers", () => {
   it("treats a missing subscription as already cancelled", async () => {
     mockSubscriptionsCancel.mockRejectedValue(missingError());
     await expect(cancelSubscriptionNow("sub_gone")).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      "cancelSubscriptionNow: subscription missing, treated as cancelled",
+      { subscriptionId: "sub_gone", code: "resource_missing" },
+    );
   });
 
   it("deletes a customer", async () => {
@@ -52,6 +58,10 @@ describe("Stripe deletion helpers", () => {
   it("treats a missing customer as already deleted", async () => {
     mockCustomersDel.mockRejectedValue(missingError());
     await expect(deleteCustomer("cus_gone")).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledWith("deleteCustomer: customer missing, treated as deleted", {
+      customerId: "cus_gone",
+      code: "resource_missing",
+    });
   });
 
   it("rethrows other Stripe errors", async () => {
@@ -63,6 +73,15 @@ describe("Stripe deletion helpers", () => {
     mockCustomersDel.mockRejectedValue(err);
     await expect(cancelSubscriptionNow("sub_1")).rejects.toBe(err);
     await expect(deleteCustomer("cus_1")).rejects.toBe(err);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("does not warn on a successful cancel or delete", async () => {
+    mockSubscriptionsCancel.mockResolvedValue({ id: "sub_1" });
+    mockCustomersDel.mockResolvedValue({ id: "cus_1", deleted: true });
+    await cancelSubscriptionNow("sub_1");
+    await deleteCustomer("cus_1");
+    expect(warn).not.toHaveBeenCalled();
   });
 
   const invalidRequest = () =>
@@ -78,6 +97,11 @@ describe("Stripe deletion helpers", () => {
       mockSubscriptionsRetrieve.mockResolvedValue({ id: "sub_1", status });
       await expect(cancelSubscriptionNow("sub_1")).resolves.toBeUndefined();
       expect(mockSubscriptionsRetrieve).toHaveBeenCalledWith("sub_1");
+      // Logs the id and Stripe error code only (no status, no message).
+      expect(warn).toHaveBeenCalledWith(
+        "cancelSubscriptionNow: subscription already ended, treated as cancelled",
+        { subscriptionId: "sub_1", code: undefined },
+      );
     },
   );
 

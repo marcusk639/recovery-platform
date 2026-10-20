@@ -13,6 +13,8 @@ export const h = {
   deletions: {} as Docs,
   archive: {} as Docs,
   failDeletionWrites: false,
+  /** When set, an accountDeletions write whose data matches throws. */
+  failWriteWhen: null as null | ((data: Record<string, unknown>) => boolean),
   closeOperator: jest.fn(),
   discharge: jest.fn(),
   removeStaff: jest.fn(),
@@ -33,6 +35,7 @@ export function resetHarness(): void {
   h.deletions = {};
   h.archive = {};
   h.failDeletionWrites = false;
+  h.failWriteWhen = null;
   h.closeOperator.mockResolvedValue({ housesClosed: [] });
   h.discharge.mockResolvedValue(undefined);
   h.removeStaff.mockResolvedValue(undefined);
@@ -104,6 +107,7 @@ export const firestoreModule = {
               get: async () => snap(id, h.deletions[id]),
               set: async (data: Record<string, unknown>) => {
                 if (h.failDeletionWrites && 'lastError' in data) throw new Error('firestore down');
+                if (h.failWriteWhen?.(data)) throw new Error('progress write failed');
                 h.deletions[id] = { ...(h.deletions[id] ?? {}), ...data };
               },
             }),

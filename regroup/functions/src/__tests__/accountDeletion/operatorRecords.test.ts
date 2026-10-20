@@ -16,7 +16,7 @@ jest.mock("firebase-functions/v2", () => ({
   logger: { info: jest.fn(), error: jest.fn(), warn: jest.fn() },
 }));
 
-jest.mock("../../api/stripe", () => ({
+jest.mock("../../api/stripeDeletion", () => ({
   cancelSubscriptionNow: (...a: unknown[]) => mockCancelNow(...a),
   deleteCustomer: (...a: unknown[]) => mockDeleteCustomer(...a),
 }));
@@ -96,16 +96,21 @@ describe("closeOperatorAccount", () => {
     expect(mockUpdates).toHaveLength(0);
   });
 
-  it("skips the cancel for a subscription already recorded as canceled", async () => {
-    await closeOperatorAccount(
+  it("still cancels a subscription recorded as canceled (stored status may be stale)", async () => {
+    // cancelSubscriptionNow is idempotent: it resolves for an already-ended subscription.
+    mockCancelNow.mockResolvedValue(undefined);
+    mockGet.mockResolvedValue({ docs: [houseDoc("h1")] });
+    const result = await closeOperatorAccount(
       {
         id: "u1",
         subscriptionMetadata: { subscriptionId: "sub_1", customerId: "cus_1", status: "canceled" },
       },
       NOW,
     );
-    expect(mockCancelNow).not.toHaveBeenCalled();
+    expect(mockCancelNow).toHaveBeenCalledTimes(1);
+    expect(mockCancelNow).toHaveBeenCalledWith("sub_1");
     expect(mockDeleteCustomer).toHaveBeenCalledWith("cus_1");
+    expect(result.housesClosed).toEqual(["h1"]);
   });
 
   it("closes superAdminId houses too, once each", async () => {

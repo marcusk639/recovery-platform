@@ -51,7 +51,7 @@ jest.mock("../../api/firestore", () => ({
 }));
 
 import {
-  GUEST_PII_FIELDS,
+  GUEST_ARCHIVE_SCRUBBED_FIELDS,
   dischargeResident,
   removeStaffAdmin,
   scrubArchivedGuest,
@@ -64,6 +64,7 @@ const KEPT = {
   houseId: "h1",
   firstName: "A",
   lastName: "B",
+  displayName: "A B",
   rentOwed: 10,
   choreFees: 2,
   moveInDate: "2026-01-01",
@@ -77,12 +78,20 @@ beforeEach(() => jest.clearAllMocks());
 
 describe("memberRecords", () => {
   it("strips contact and health fields from the archived guest", () => {
-    const pii = Object.fromEntries(GUEST_PII_FIELDS.map((k) => [k, "x"]));
+    const pii = Object.fromEntries(GUEST_ARCHIVE_SCRUBBED_FIELDS.map((k) => [k, "x"]));
     const out = scrubGuestForArchive({ ...KEPT, ...pii, userId: "u1" }, NOW);
-    for (const k of GUEST_PII_FIELDS) expect(out).not.toHaveProperty(k);
+    for (const k of GUEST_ARCHIVE_SCRUBBED_FIELDS) expect(out).not.toHaveProperty(k);
     expect(out).toMatchObject(KEPT);
     expect(out.accountDeletedAt).toBe(NOW);
     expect(out.userId).toBeNull();
+  });
+
+  it("keeps the resident's first name, last name and displayName for the house's records", () => {
+    const out = scrubGuestForArchive({ ...KEPT, email: "a@b.c", userId: "u1" }, NOW);
+    expect(out).toMatchObject({ firstName: "A", lastName: "B", displayName: "A B" });
+    expect(GUEST_ARCHIVE_SCRUBBED_FIELDS).not.toContain("firstName");
+    expect(GUEST_ARCHIVE_SCRUBBED_FIELDS).not.toContain("lastName");
+    expect(GUEST_ARCHIVE_SCRUBBED_FIELDS).not.toContain("displayName");
   });
 
   it("strips the resident's Stripe autopay fields", () => {

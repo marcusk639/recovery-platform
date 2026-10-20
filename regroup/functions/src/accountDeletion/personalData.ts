@@ -13,7 +13,7 @@ type PagedQuery = {
 };
 
 /**
- * Delete every doc matching the query (optionally narrowed by `keep`), in pages of
+ * Delete every doc matching the query (optionally narrowed by `shouldDelete`), in pages of
  * at most 400 writes. Pages with a startAfter cursor so pages made up entirely of
  * skipped docs still make progress. Returns the count deleted.
  */
@@ -46,17 +46,29 @@ const isDirectMessage = (ref: {
 }) => ref.parent?.parent?.parent?.id === 'direct-messages';
 
 /**
- * Delete a user's personal Firestore records and Storage avatars. Idempotent:
- * empty queries and missing files are fine. Logs counts only, never identifiers.
+ * Delete a user's personal Firestore records and Storage files: notifications,
+ * applications, direct messages they sent, their FCM device tokens, their
+ * avatars, and the documents uploaded to their resident profile (Storage files
+ * under `houses/{houseId}/guests/{guestId}/documents/` plus the matching
+ * `documents/{docId}` records, which mobile keys by `guestId`).
+ * Idempotent: empty queries and missing files are fine. Logs counts, and the
+ * opaque ids of guests whose house is unknown; never personal details.
  */
 export async function deletePersonalData(
   uid: string,
   guestIds: string[],
   houseIdsByGuest: Record<string, string>,
 ): Promise<void> {
+  const collection = (name: string) => ratsFirestore.collection(name);
+  let documents = 0;
+  for (const guestId of guestIds) {
+    documents += await deleteAllMatching(
+      collection('documents').where('guestId', '==', guestId) as unknown as PagedQuery,
+    );
+  }
   const counts = {
     notifications: await deleteAllMatching(
-      ratsFirestore.collection('notifications').where('userId', '==', uid) as unknown as PagedQuery,
+      collection('notifications').where('userId', '==', uid) as unknown as PagedQuery,
     ),
     applications: await deleteAllMatching(
       ratsFirestore
@@ -68,17 +80,34 @@ export async function deletePersonalData(
       ratsFirestore.collectionGroup('chat').where('senderId', '==', uid) as unknown as PagedQuery,
       isDirectMessage,
     ),
+    // Defensive: no current writer.
     guestWeeks: await deleteAllMatching(
-      ratsFirestore.collection('guest-weeks').where('userId', '==', uid) as unknown as PagedQuery,
+      collection('guest-weeks').where('userId', '==', uid) as unknown as PagedQuery,
     ),
+    documents,
   };
+  // FCM tokens, written by mobile registerDeviceToken as userDeviceTokens/{uid}.
+  await collection('userDeviceTokens').doc(uid).delete();
 
   const bucket = admin.storage().bucket();
   await bucket.file(`users/${uid}/avatar`).delete({ ignoreNotFound: true });
+  const noHouse: string[] = [];
   for (const guestId of guestIds) {
     const houseId = houseIdsByGuest[guestId];
-    if (!houseId) continue;
-    await bucket.deleteFiles({ prefix: `houses/${houseId}/guests/${guestId}/avatar/` });
+    if (!houseId) {
+      noHouse.push(guestId);
+      continue;
+    }
+    const guestPrefix = `houses/${houseId}/guests/${guestId}`;
+    await bucket.deleteFiles({ prefix: `${guestPrefix}/avatar/` });
+    await bucket.deleteFiles({ prefix: `${guestPrefix}/documents/` });
+  }
+  if (noHouse.length > 0) {
+    // Storage paths need the house id, so these guests' avatar and document files stay.
+    logger.warn('accountDeletion: guest has no house; Storage files not removed', {
+      guestIds: noHouse,
+      count: noHouse.length,
+    });
   }
 
   logger.info('accountDeletion: personal data deleted', { ...counts, guests: guestIds.length });

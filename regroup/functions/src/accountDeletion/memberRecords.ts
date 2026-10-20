@@ -7,12 +7,20 @@ import {
   ratsFirestore,
 } from "../api/firestore";
 
-/** Contact and health fields stripped from the guest-archive copy (policy D3). */
-export const GUEST_PII_FIELDS: readonly string[] = [
+/**
+ * Fields removed from the `guest-archive` copy the house keeps after a resident
+ * deletes their account: contact, recovery, health, legal and payment details.
+ *
+ * Deliberately KEPT, because the house needs them for rent and compliance
+ * records (and the deletion screen tells the user so): first and last name,
+ * `displayName` (derived from those names), `houseId`, move-in / move-out /
+ * intake dates, rent owed and chore fees. Every other field not listed here is
+ * also kept, so a new sensitive guest field must be added to this list.
+ */
+export const GUEST_ARCHIVE_SCRUBBED_FIELDS: readonly string[] = [
   "email",
   "phoneNumber",
   "avatar",
-  "displayName",
   "sobrietyDate",
   "drugOfChoice",
   "step",
@@ -44,7 +52,7 @@ export function scrubGuestForArchive(
   now: string,
 ): Record<string, unknown> {
   const out: Record<string, unknown> = { ...guest };
-  for (const field of GUEST_PII_FIELDS) delete out[field];
+  for (const field of GUEST_ARCHIVE_SCRUBBED_FIELDS) delete out[field];
   out.accountDeletedAt = now;
   out.userId = null;
   return out;

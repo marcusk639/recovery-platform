@@ -1,11 +1,11 @@
 import * as admin from 'firebase-admin';
 import { logger } from 'firebase-functions/v2';
 import { ratsFirestore, userCollection } from '../api/firestore';
-import { deleteCustomer } from '../api/stripe';
+import { deleteCustomer } from '../api/stripeDeletion';
 import { closeOperatorAccount, OperatorDeletionUser } from './operatorRecords';
 import { dischargeResident, removeStaffAdmin, scrubArchivedGuest } from './memberRecords';
 import { deletePersonalData } from './personalData';
-import { DeletionTargets, snapshotTargets, TargetUser } from './targets';
+import { DeletionTargets, mergeTargets, snapshotTargets, TargetUser } from './targets';
 
 export type { DeletionTargets } from './targets';
 
@@ -42,16 +42,36 @@ async function deleteAuthUser(uid: string): Promise<void> {
   }
 }
 
-/** Attach the failed step so the callable can log it; never masks the error. */
-function tagStep(err: unknown, step: DeletionStep): unknown {
+/**
+ * Attach the failed step, and whether earlier steps already removed data, so
+ * the callable can log the step and tell the user. Never replaces the error.
+ */
+function tagStep(err: unknown, step: DeletionStep, partial: boolean): unknown {
   if (typeof err === 'object' && err !== null) {
     try {
-      (err as { step?: DeletionStep }).step = step;
+      Object.assign(err, { step, partial });
     } catch {
       // Frozen error objects keep their original shape.
     }
   }
   return err;
+}
+
+/** Whether running `step` for these targets removes anything. */
+function stepActs(step: DeletionStep, t: DeletionTargets): boolean {
+  switch (step) {
+    case 'operator':
+      return t.ownsHouses || t.hasSubscription;
+    case 'members':
+      return (
+        t.guestIds.length > 0 ||
+        t.adminIds.length > 0 ||
+        (t.archivedGuestIds ?? []).length > 0 ||
+        (t.guestCustomerIds ?? []).length > 0
+      );
+    default:
+      return true;
+  }
 }
 
 async function runStep(
@@ -91,9 +111,16 @@ async function runStep(
  * Delete a Regroup account. Runs each step in order, recording progress in
  * `accountDeletions/{uid}` so a failed run resumes where it stopped. Skipped
  * steps (non-operators, users with no member docs) are recorded as completed.
- * The Auth user is deleted last. A failure logs the step plus the error's code
- * and message (Firestore/Storage/Stripe messages carry ids, not personal data),
- * records the step and time (no error text) and is rethrown with `step` set.
+ * The Auth user is deleted last.
+ *
+ * A resumed run merges a fresh snapshot into the stored one, so data created
+ * since the first attempt is included while ids of already-deleted docs are kept.
+ *
+ * A failure, including a failed progress write, logs the step plus the error's
+ * code and message. Those messages are expected to carry ids rather than
+ * personal data, but that is not guaranteed for every dependency. The failure
+ * record holds only the step and time, and the original error is rethrown with
+ * `step` and `partial` (earlier steps already removed data) attached.
  */
 export async function runAccountDeletion(
   uid: string,
@@ -105,40 +132,52 @@ export async function runAccountDeletion(
   const completed: DeletionStep[] = [...(record.completed ?? [])];
 
   const user = await loadUser(uid);
-  let targets = record.targets;
-  if (!targets) {
-    targets = await snapshotTargets(uid, user);
-    await ref.set({ targets, completed, startedAt: now }, { merge: true });
-  }
+  const fresh = await snapshotTargets(uid, user);
+  const targets = record.targets ? mergeTargets(record.targets, fresh) : fresh;
+  await ref.set(
+    record.targets ? { targets } : { targets, completed, startedAt: now },
+    { merge: true },
+  );
 
-  for (const step of DELETION_STEPS) {
-    if (completed.includes(step)) continue;
-    try {
+  const lastStep = DELETION_STEPS[DELETION_STEPS.length - 1];
+  let current: DeletionStep = DELETION_STEPS[0];
+  let stepRan = false;
+  try {
+    for (const step of DELETION_STEPS) {
+      if (completed.includes(step)) continue;
+      current = step;
+      stepRan = false;
       await runStep(step, uid, user, targets, now);
-    } catch (err) {
-      const e = err as { code?: unknown; message?: unknown } | undefined;
-      logger.error('accountDeletion: step failed', {
-        uid,
-        step,
-        code: e?.code,
-        message: e?.message,
-      });
-      try {
-        await ref.set({ lastError: step, failedAt: now }, { merge: true });
-      } catch (recordErr) {
-        logger.error('accountDeletion: failure record not written', {
-          uid,
-          step,
-          code: (recordErr as { code?: unknown } | undefined)?.code,
-        });
-      }
-      throw tagStep(err, step);
+      stepRan = true;
+      await ref.set({ completed: [...completed, step] }, { merge: true });
+      completed.push(step);
     }
-    completed.push(step);
-    await ref.set({ completed }, { merge: true });
+    current = lastStep;
+    stepRan = true;
+    await ref.set({ lastError: null, completedAt: now }, { merge: true });
+  } catch (err) {
+    const partial =
+      completed.some((s) => stepActs(s, targets)) || (stepRan && stepActs(current, targets));
+    const e = err as { code?: unknown; message?: unknown } | undefined;
+    logger.error('accountDeletion: step failed', {
+      uid,
+      step: current,
+      phase: stepRan ? 'record' : 'run',
+      code: e?.code,
+      message: e?.message,
+    });
+    try {
+      await ref.set({ lastError: current, failedAt: now }, { merge: true });
+    } catch (recordErr) {
+      logger.error('accountDeletion: failure record not written', {
+        uid,
+        step: current,
+        code: (recordErr as { code?: unknown } | undefined)?.code,
+      });
+    }
+    throw tagStep(err, current, partial);
   }
 
-  await ref.set({ lastError: null, completedAt: now }, { merge: true });
   logger.info('accountDeletion: complete');
   return { completed };
 }

@@ -64,6 +64,11 @@ jest.mock('../../api/firestore', () => ({
   ratsFirestore: {
     collection: (name: string) => ({
       where: (f: string, _op: string, v: string) => query(name, false, f, v),
+      doc: (id: string) => ({
+        delete: async () => {
+          store = store.filter((d) => d.path !== `${name}/${id}`);
+        },
+      }),
     }),
     collectionGroup: (name: string) => ({
       where: (f: string, _op: string, v: string) => query(name, true, f, v),
@@ -82,6 +87,7 @@ jest.mock('../../api/firestore', () => ({
   },
 }));
 
+import { logger } from 'firebase-functions/v2';
 import { deletePersonalData } from '../../accountDeletion/personalData';
 
 const UID = 'u1';
@@ -154,6 +160,49 @@ describe('deletePersonalData', () => {
   it('skips guests with no known house', async () => {
     await deletePersonalData(UID, ['g1'], {});
     expect(mockDeleteFiles).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      'accountDeletion: guest has no house; Storage files not removed',
+      { guestIds: ['g1'], count: 1 },
+    );
+  });
+
+  it('does not warn when every guest has a house', async () => {
+    await deletePersonalData(UID, ['g1'], { g1: 'h1' });
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it("deletes the user's FCM device tokens doc and nobody else's", async () => {
+    store = [
+      { path: `userDeviceTokens/${UID}`, data: { tokens: ['t1'] } },
+      { path: 'userDeviceTokens/other', data: { tokens: ['t2'] } },
+    ];
+    await deletePersonalData(UID, [], {});
+    expect(paths()).toEqual(['userDeviceTokens/other']);
+  });
+
+  it("deletes the resident's uploaded document records and files", async () => {
+    store = [
+      { path: 'documents/d1', data: { houseId: 'h1', guestId: 'g1', uploadedBy: 'admin' } },
+      { path: 'documents/d2', data: { houseId: 'h9', guestId: 'old1', uploadedBy: 'admin' } },
+      { path: 'documents/d3', data: { houseId: 'h1', guestId: 'gOther', uploadedBy: 'admin' } },
+      { path: 'documents/d4', data: { houseId: 'h1', uploadedBy: 'admin' } },
+    ];
+    await deletePersonalData(UID, ['g1', 'old1'], { g1: 'h1', old1: 'h9' });
+    // House-level docs (no guestId) and other residents' docs stay.
+    expect(paths()).toEqual(['documents/d3', 'documents/d4']);
+    expect(mockDeleteFiles).toHaveBeenCalledWith({ prefix: 'houses/h1/guests/g1/documents/' });
+    expect(mockDeleteFiles).toHaveBeenCalledWith({ prefix: 'houses/h9/guests/old1/documents/' });
+    expect(mockDeleteFiles).not.toHaveBeenCalledWith({ prefix: 'houses/h1/documents/' });
+    expect(logger.info).toHaveBeenCalledWith(
+      'accountDeletion: personal data deleted',
+      expect.objectContaining({ documents: 2, guests: 2 }),
+    );
+  });
+
+  it("still deletes a houseless resident's document records", async () => {
+    store = [{ path: 'documents/d1', data: { houseId: 'h1', guestId: 'g1' } }];
+    await deletePersonalData(UID, ['g1'], {});
+    expect(store).toHaveLength(0);
   });
 
   it('pages through more than 400 documents', async () => {
