@@ -370,11 +370,15 @@ service cloud.firestore {
       //
       // On create the client writes the whole User entity, whose default status
       // is "", so that is permitted; anything already claiming a real status is
-      // not.
+      // not. The houses map is trusted as an ownership/cap record, so a client
+      // may not seed it: it must be absent or empty.
       allow create: if isSameUser(userId) &&
         (!('subscriptionMetadata' in request.resource.data) ||
-          !('status' in request.resource.data.subscriptionMetadata) ||
-          request.resource.data.subscriptionMetadata.status == '');
+          ((!('status' in request.resource.data.subscriptionMetadata) ||
+              request.resource.data.subscriptionMetadata.status == '') &&
+            (!('houses' in request.resource.data.subscriptionMetadata) ||
+              (request.resource.data.subscriptionMetadata.houses is map &&
+                request.resource.data.subscriptionMetadata.houses.size() == 0))));
 
       // affectedKeys() reports only keys whose value actually changed, so a
       // whole-object write that echoes the same metadata back still passes.

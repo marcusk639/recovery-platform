@@ -64,9 +64,9 @@ export const assertCanCreateHouses = (
  * ownerId === uid AND is already in the caller's subscription houses map is
  * treated as created: no house doc is rewritten; the admin doc and the user's
  * housesOwned/subscriptionMetadata are re-applied (lastUpdatedAt is bumped).
- * `subscriptionMetadata.houses` can be seeded by the client when the user doc
- * is created (rules allow status ''); it is only trusted together with
- * `house.ownerId === uid`. A tombstoned (deleted) id is refused.
+ * `subscriptionMetadata.houses` is server-written (rules let a client create it
+ * only empty); ownership is still verified by `house.ownerId === uid`. A
+ * tombstoned (deleted) id is refused.
  *
  * The onboarding flags (orgSetupCompleted/isAdmin/isSuperAdmin) are NOT
  * written here: the callable sets them only after the claims are granted, so
@@ -110,8 +110,8 @@ export const createHousesTx = async (
     // earlier create (a retry). It counts as ours only if ownerId === uid AND
     // the id is already in the subscription houses map; anything else (e.g. a
     // legacy client-created house) is refused. `subscriptionMetadata.houses`
-    // can be seeded by the client when the user doc is created (rules allow
-    // status ''); it is only trusted together with `house.ownerId === uid`.
+    // is server-written (rules let a client create it only empty); ownerId is
+    // still verified.
     const ownerId = (snap.data() as { ownerId?: string } | undefined)?.ownerId;
     const inSubscription = Object.prototype.hasOwnProperty.call(meta.houses ?? {}, ids[i]);
     if (ownerId !== uid || !inSubscription) {

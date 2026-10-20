@@ -3,7 +3,7 @@
 // finishOperatorSetup recovers an operator whose houses exist but whose claim
 // grant / onboarding-flags write never completed (app restarted before a
 // retry). It grants roles only on houses the caller provably owns — candidate
-// ids from housesOwned and the (client-seedable) subscription map whose house
+// ids from housesOwned and the (server-written) subscription map whose house
 // doc has ownerId === uid — and writes the flags only after the grant succeeds.
 
 jest.mock('firebase-functions/v2/https', () => {

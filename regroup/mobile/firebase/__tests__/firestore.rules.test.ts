@@ -2530,6 +2530,58 @@ describe("users/{userId} — subscriptionMetadata is server-owned", () => {
     );
   });
 
+  // The houses map is trusted server-side as an ownership/cap record
+  // (createHouses retries, finishOperatorSetup, the property cap), so a client
+  // may only create it empty.
+  it("allows creating its own user doc with an empty houses map", async () => {
+    await assertSucceeds(
+      setDoc(selfDoc(), {
+        uid: SELF_UID,
+        email: "self@example.com",
+        subscriptionMetadata: { status: "", houses: {} },
+      }),
+    );
+  });
+
+  it("allows creating its own user doc with no houses map", async () => {
+    await assertSucceeds(
+      setDoc(selfDoc(), {
+        uid: SELF_UID,
+        email: "self@example.com",
+        subscriptionMetadata: { status: "", tier: "starter" },
+      }),
+    );
+  });
+
+  it("allows creating its own user doc with no subscriptionMetadata", async () => {
+    await assertSucceeds(
+      setDoc(selfDoc(), { uid: SELF_UID, email: "self@example.com" }),
+    );
+  });
+
+  it("denies creating its own user doc with a seeded houses map", async () => {
+    await assertFails(
+      setDoc(selfDoc(), {
+        uid: SELF_UID,
+        email: "self@example.com",
+        subscriptionMetadata: {
+          status: "",
+          houses: { someHouseId: { numberOfGuests: 0 } },
+        },
+      }),
+    );
+  });
+
+  it("denies a seeded houses map even when status is absent", async () => {
+    await assertFails(
+      setDoc(selfDoc(), {
+        uid: SELF_UID,
+        email: "self@example.com",
+        subscriptionMetadata: { houses: { someHouseId: {} } },
+      }),
+    );
+  });
+
   it("still denies access to another user's document", async () => {
     await seedUser({ status: "active" });
     const otherCtx = testEnv.authenticatedContext(

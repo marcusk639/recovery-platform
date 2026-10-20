@@ -11,9 +11,9 @@ export type FinishOperatorSetupResponse =
 const errorCode = (err: unknown): string | undefined => (err as { code?: string })?.code;
 
 /**
- * Caps the house reads one call can trigger. `subscriptionMetadata.houses` can
- * be seeded by the client when the user doc is created (rules allow status
- * ''); it is only trusted together with `house.ownerId === uid`. Legitimate
+ * Caps the house reads one call can trigger. `subscriptionMetadata.houses` is
+ * server-written (rules let a client create it only empty); ownership is still
+ * verified by `house.ownerId === uid`. Legitimate
  * houses beyond the first MAX_CANDIDATE_HOUSES candidates are not recovered;
  * that case is logged as `truncated`.
  */
@@ -24,8 +24,8 @@ const stringKeys = (ids: unknown): string[] =>
 
 /**
  * Candidate house ids: `housesOwned` first, then the subscription houses map
- * keys, deduped. Both sources are client-influenced, so neither is trusted
- * alone; ownership is verified against the house doc.
+ * keys, deduped. housesOwned is client-writable and the map is server-written;
+ * neither is trusted alone: ownership is verified against the house doc.
  */
 const candidateHouseIds = (user: Partial<User> | undefined): string[] =>
   Array.from(
