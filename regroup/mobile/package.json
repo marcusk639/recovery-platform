@@ -8,6 +8,7 @@
     "check:env:release": "node scripts/check-release-env.js --release",
     "deploy:rules": "cd firebase && firebase deploy --only firestore:rules,storage --project phoenix-cleanhouse",
     "deploy:rules:dry": "cd firebase && firebase deploy --only firestore:rules,storage --project phoenix-cleanhouse --dry-run",
+    "deploy:indexes": "cd firebase && firebase deploy --only firestore:indexes --project phoenix-cleanhouse",
     "fresh-install": "rm -rf $TMPDIR/react-* && watchman watch-del-all && rm -rf ios/build/ModuleCache/* && rm -rf node_modules/ && npm cache clean --force && npm install",
     "ios": "npx react-native run-ios --simulator=\"iPhone 14 Pro\"",
     "lint": "eslint .",
