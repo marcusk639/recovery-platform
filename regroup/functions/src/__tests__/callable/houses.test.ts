@@ -25,12 +25,12 @@ jest.mock('../../util/subscriptionHouses', () => ({
   addHousesToSubscription: (...args: unknown[]) => mockAddHousesToSubscription(...args),
 }));
 
-import { HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import { createHouses } from '../../callable/houses';
 import {
   Doc,
   events,
+  expectCode,
   resetFakeFirestore,
   runTransaction as mockRunTransaction,
   store,
@@ -71,17 +71,6 @@ const seedUser = (extra: Doc = {}) =>
     ...extra,
   });
 
-const expectCode = async (p: Promise<unknown>, code: string, message?: string) => {
-  const err = await p.then(
-    () => {
-      throw new Error('expected rejection');
-    },
-    (e: unknown) => e,
-  );
-  expect(err).toBeInstanceOf(HttpsError);
-  expect((err as HttpsError).code).toBe(code);
-  if (message) expect((err as HttpsError).message).toBe(message);
-};
 
 beforeEach(() => {
   resetFakeFirestore();
@@ -239,6 +228,9 @@ describe('createHouses', () => {
     await expectCode(call([house(H1)]), 'internal');
     const firstHouse = store.get(`houses/${H1}`);
     expect(firstHouse).toBeDefined();
+    // The first attempt recorded the id in the server-owned subscription map,
+    // which is what lets the retry treat the existing house as the caller's.
+    expect(store.get(`users/${UID}`)!.subscriptionMetadata.houses).toHaveProperty(H1);
 
     events.length = 0;
     const res = await call([house(H1, { name: 'Renamed' })]);
@@ -258,6 +250,17 @@ describe('createHouses', () => {
     await expectCode(call([house(H1)]), 'already-exists', 'A house with this id already exists');
     expect(writes()).toHaveLength(0);
     expect(store.get(`houses/${H1}`)).toBe(theirs);
+    expect(mockGrantHouseRoles).not.toHaveBeenCalled();
+  });
+
+  it('rejects a house with ownerId === uid that is not in the subscription map', async () => {
+    // ownerId is client-forgeable; only the server-owned map proves ownership.
+    seedUser();
+    const forged = { id: H1, ownerId: UID, name: 'Forged' };
+    store.set(`houses/${H1}`, forged);
+    await expectCode(call([house(H1)]), 'already-exists', 'A house with this id already exists');
+    expect(writes()).toHaveLength(0);
+    expect(store.get(`houses/${H1}`)).toBe(forged);
     expect(mockGrantHouseRoles).not.toHaveBeenCalled();
   });
 

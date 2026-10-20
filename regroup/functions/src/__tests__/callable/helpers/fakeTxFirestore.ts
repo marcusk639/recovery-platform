@@ -11,6 +11,8 @@
  *   jest.mock('../../api/firestore', () =>
  *     jest.requireActual('./helpers/fakeTxFirestore').apiFirestoreMock());
  */
+import { HttpsError } from 'firebase-functions/v2/https';
+
 export type Doc = Record<string, any>;
 export interface TxEvent {
   op: string;
@@ -86,3 +88,16 @@ export const apiFirestoreMock = () => ({
   adminCollection: makeCollection('admins'),
   createAdminId: () => `admin-new-${++autoId}`,
 });
+
+/** Asserts the promise rejects with an HttpsError of the given code (and message). */
+export const expectCode = async (p: Promise<unknown>, code: string, message?: string) => {
+  const err = await p.then(
+    () => {
+      throw new Error('expected rejection');
+    },
+    (e: unknown) => e,
+  );
+  expect(err).toBeInstanceOf(HttpsError);
+  expect((err as HttpsError).code).toBe(code);
+  if (message) expect((err as HttpsError).message).toBe(message);
+};

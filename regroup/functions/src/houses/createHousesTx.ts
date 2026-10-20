@@ -73,7 +73,18 @@ export const createHousesTx = async (
       newInputs.push(inputs[i]);
       return;
     }
-    if ((snap.data() as { ownerId?: string } | undefined)?.ownerId !== uid) {
+    // An existing house counts as "already created by this caller" only if
+    // ownerId === uid AND the id is already in the caller's subscription map.
+    // ownerId alone is not proof: it is client-forgeable (the house delete and
+    // create rules accept a plain `admin` claim with no field restrictions), so
+    // an admin of another operator's house could delete and recreate it with
+    // ownerId = self, then retry here to be granted superAdmin on it without it
+    // ever counting against their property cap. subscriptionMetadata.houses is
+    // server-owned and is written in the same transaction as the house, so it
+    // can only hold the id if a previous createHouses call really created it.
+    const ownerId = (snap.data() as { ownerId?: string } | undefined)?.ownerId;
+    const inSubscription = Object.prototype.hasOwnProperty.call(meta.houses ?? {}, inputs[i].id);
+    if (ownerId !== uid || !inSubscription) {
       throw new HttpsError('already-exists', 'A house with this id already exists');
     }
   });
