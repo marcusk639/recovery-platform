@@ -31,7 +31,6 @@ import {
   addGuestAuthorization,
 } from "../../services/setup-wizard";
 import { redeemInvitation } from "../../services/invitations";
-import { updateSubscriptionGuests } from "../../services/subscription";
 
 export interface SignUpFormProps {
   createUser: (user: User) => any;
@@ -144,17 +143,13 @@ const SignUpForm = withFormik<SignUpFormProps, SignUpFormValues>({
       }
 
       try {
+        // Occupancy is recorded server-side by redeemInvitation.
         await Promise.all([
           createGuest(newGuest),
           updateUser(createdUser, {
             isGuest: true,
             guestId: newGuest.id,
             email: createdUser.email,
-          }),
-          updateSubscriptionGuests({
-            houseIds: [invitation.houseId],
-            ownerUserId: invitation.ownerId,
-            action: "add",
           }),
         ]);
         props.navigation.navigate(Routes.NewAccount);
