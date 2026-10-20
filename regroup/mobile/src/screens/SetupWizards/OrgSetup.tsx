@@ -20,6 +20,9 @@ import { House } from '../../entities/House';
 import { createHouseId } from '../../services/house';
 import { Routes } from '../../navigation/types';
 import { submitOrgSetup } from './submitOrgSetup';
+import { useOrgSetupBlocker } from '../../hooks/useOrgSetupBlocker';
+import SetupRecoveryPanel from './SetupRecoveryPanel';
+import PlanRequiredPanel from './PlanRequiredPanel';
 import { NEXT_BUTTON_TEXT, NEXT_BUTTON } from './SetupStyles';
 import { each, isEmpty, map } from 'lodash';
 import RatsScrollView from '../../components/rats-scroll-view';
@@ -245,6 +248,14 @@ const OrgSetupForm = withFormik<ManagerSetupProps, Partial<Admin>>({
 
 const OrgSetup: React.FC<ManagerSetupWithForm> = (props) => {
   const setupWizard = useHouseSetupWizard();
+  // While a blocker is set the wizard (and COMPLETE SETUP) is not rendered.
+  const blocker = useOrgSetupBlocker();
+  if (blocker.kind === 'setup-recovery') {
+    return <SetupRecoveryPanel navigation={props.navigation} />;
+  }
+  if (blocker.kind === 'plan-required') {
+    return <PlanRequiredPanel navigation={props.navigation} onCheckAgain={blocker.checkAgain} />;
+  }
   return (
     <RatsScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={SCROLL_CONTAINER}>
       <OrgSetupForm

@@ -475,6 +475,7 @@ describe("setupSlice", () => {
         submittingSuccessful: true,
         submittingFailed: true,
         error: "some error",
+        errorKind: "subscription-required",
         inviteFailures: 3,
         photoFailures: 1,
       };
@@ -729,6 +730,7 @@ describe("setupSlice", () => {
         submittingSuccessful: false,
         submittingFailed: false,
         error: "test error",
+        errorKind: null,
         inviteFailures: 0,
         photoFailures: 0,
       } as SetupState,

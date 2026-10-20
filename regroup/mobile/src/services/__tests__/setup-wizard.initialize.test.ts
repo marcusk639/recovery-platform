@@ -38,6 +38,7 @@ import { uploadHousePhoto } from '../storage';
 import { logException } from '../../util/logging';
 import { initializeHouses } from '../setup-wizard';
 import {
+  CREATE_HOUSES_CONTACT_SUPPORT_MESSAGE,
   CREATE_HOUSES_RETRY_MESSAGE,
   HOUSES_CREATED_RESTART_MESSAGE,
 } from '../setup-wizard-errors';
@@ -93,7 +94,7 @@ describe('initializeHouses — payload', () => {
 });
 
 describe('initializeHouses — createHouses failures', () => {
-  it.each(['failed-precondition', 'already-exists', 'permission-denied', 'invalid-argument'])(
+  it.each(['failed-precondition', 'invalid-argument'])(
     'surfaces the server message for %s',
     async (code) => {
       const err = fnError(code, 'Property limit reached for your plan');
@@ -105,6 +106,27 @@ describe('initializeHouses — createHouses failures', () => {
     },
   );
 
+  // These refusals mean the account is inconsistent; the server logs them with
+  // the uid, and the operator is told to contact support.
+  it.each([
+    ['already-exists', 'A house with this id already exists'],
+    ['permission-denied', 'Admin profile does not belong to this user'],
+  ])('does not pass the %s server message through', async (code, message) => {
+    const err = fnError(code, message);
+    (createHouses as jest.Mock).mockRejectedValueOnce(err);
+    const thrown = await initializeHouses(makeHouses(), operator).catch((e) => e);
+    expect(thrown.message).toBe(CREATE_HOUSES_CONTACT_SUPPORT_MESSAGE);
+    expect(thrown.cause).toBe(err);
+  });
+
+  it('a server "Houses were created" internal error says the houses were created', async () => {
+    const err = fnError('internal', 'Houses were created but access could not be granted.');
+    (createHouses as jest.Mock).mockRejectedValueOnce(err);
+    const thrown = await initializeHouses(makeHouses(), operator).catch((e) => e);
+    expect(thrown.message).toBe(HOUSES_CREATED_RESTART_MESSAGE);
+    expect(thrown.cause).toBe(err);
+  });
+
   it('accepts web-SDK style prefixed codes', async () => {
     (createHouses as jest.Mock).mockRejectedValueOnce(
       fnError('functions/failed-precondition', 'An active subscription is required'),
@@ -115,7 +137,7 @@ describe('initializeHouses — createHouses failures', () => {
   });
 
   it.each([
-    ['internal', fnError('internal', 'Houses were created but access could not be granted.')],
+    ['internal', fnError('internal', 'INTERNAL')],
     ['unavailable (network)', fnError('unavailable', 'Network error')],
     ['unknown', new Error('boom')],
     ['non-Error', 'string rejection'],
