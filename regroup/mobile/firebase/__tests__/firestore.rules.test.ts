@@ -2687,3 +2687,26 @@ describe("houses/{houseId} — subscriptionStatus is server-owned", () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// houses/{houseId} — creation is server-only (createHouses callable)
+// ---------------------------------------------------------------------------
+
+describe("houses/{houseId} — client creation is closed", () => {
+  const newHouse = { id: HOUSE_ID, name: "New House", adminIds: [ADMIN_UID] };
+
+  it("a client cannot create a house even holding superAdmin for its id", async () => {
+    const ctx = testEnv.authenticatedContext(
+      ADMIN_UID,
+      authHouseSuperAdmin(ADMIN_UID, HOUSE_ID),
+    );
+    await assertFails(setDoc(doc(ctx.firestore(), `houses/${HOUSE_ID}`), newHouse));
+  });
+
+  it("a new operator holding only potentialSuperAdmin cannot create a house", async () => {
+    const ctx = testEnv.authenticatedContext(ADMIN_UID, {
+      potentialSuperAdmin: true,
+    });
+    await assertFails(setDoc(doc(ctx.firestore(), `houses/${HOUSE_ID}`), newHouse));
+  });
+});

@@ -193,7 +193,8 @@ service cloud.firestore {
     
     match /houses/{houseId} {
       allow read: if isGuestOrAdmin([houseId]);
-      allow create: if isAdmin([houseId]);
+      // Houses are created only by the server-side createHouses callable.
+      allow create: if false;
       // Hardened 2026-07-05: request.resource does not exist on delete
       // operations (there is no incoming document), so this rule always
       // evaluated to false/error and the "delete house" path was dead —
