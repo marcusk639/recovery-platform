@@ -46,7 +46,7 @@ async function deleteAuthUser(uid: string): Promise<void> {
  * Attach the failed step, and whether earlier steps already removed data, so
  * the callable can log the step and tell the user. Never replaces the error.
  */
-function tagStep(err: unknown, step: DeletionStep, partial: boolean): unknown {
+function tagStep(err: unknown, step: DeletionStep | 'targets', partial: boolean): unknown {
   if (typeof err === 'object' && err !== null) {
     try {
       Object.assign(err, { step, partial });
@@ -55,6 +55,34 @@ function tagStep(err: unknown, step: DeletionStep, partial: boolean): unknown {
     }
   }
   return err;
+}
+
+const hasNew = (before: string[] = [], after: string[] = []) =>
+  after.some((id) => !before.includes(id));
+
+/**
+ * Completed steps that must run again because a resumed run's merged targets
+ * hold something new for them. Steps are idempotent, so re-running is safe.
+ */
+function stepsToReopen(stored: DeletionTargets, merged: DeletionTargets): DeletionStep[] {
+  const steps: DeletionStep[] = [];
+  if ((!stored.ownsHouses && merged.ownsHouses) || (!stored.hasSubscription && merged.hasSubscription)) {
+    steps.push('operator');
+  }
+  const newGuests =
+    hasNew(stored.guestIds, merged.guestIds) ||
+    hasNew(stored.archivedGuestIds, merged.archivedGuestIds);
+  if (
+    newGuests ||
+    hasNew(stored.adminIds, merged.adminIds) ||
+    hasNew(stored.guestCustomerIds, merged.guestCustomerIds)
+  ) {
+    steps.push('members');
+  }
+  if (newGuests || hasNew(Object.keys(stored.houseIdsByGuest), Object.keys(merged.houseIdsByGuest))) {
+    steps.push('personal');
+  }
+  return steps;
 }
 
 /** Whether running `step` for these targets removes anything. */
@@ -114,13 +142,15 @@ async function runStep(
  * The Auth user is deleted last.
  *
  * A resumed run merges a fresh snapshot into the stored one, so data created
- * since the first attempt is included while ids of already-deleted docs are kept.
+ * since the first attempt is included while ids of already-deleted docs are kept;
+ * a completed step that the new data concerns is re-run.
  *
- * A failure, including a failed progress write, logs the step plus the error's
- * code and message. Those messages are expected to carry ids rather than
- * personal data, but that is not guaranteed for every dependency. The failure
- * record holds only the step and time, and the original error is rethrown with
- * `step` and `partial` (earlier steps already removed data) attached.
+ * A failure, including a failed snapshot or progress write (tagged `targets`
+ * for the snapshot phase), logs the step plus the error's code and message.
+ * Those messages are expected to carry ids rather than personal data, but that
+ * is not guaranteed for every dependency. The failure record holds only the
+ * step and time, and the original error is rethrown with `step` and `partial`
+ * (data may already have been removed) attached.
  */
 export async function runAccountDeletion(
   uid: string,
@@ -129,20 +159,25 @@ export async function runAccountDeletion(
   const ref = deletionDoc(uid);
   const recordSnap = await ref.get();
   const record = (recordSnap.exists ? recordSnap.data() : {}) as DeletionRecord;
-  const completed: DeletionStep[] = [...(record.completed ?? [])];
-
+  let completed: DeletionStep[] = [...(record.completed ?? [])];
   const user = await loadUser(uid);
-  const fresh = await snapshotTargets(uid, user);
-  const targets = record.targets ? mergeTargets(record.targets, fresh) : fresh;
-  await ref.set(
-    record.targets ? { targets } : { targets, completed, startedAt: now },
-    { merge: true },
-  );
 
   const lastStep = DELETION_STEPS[DELETION_STEPS.length - 1];
-  let current: DeletionStep = DELETION_STEPS[0];
+  let current: DeletionStep | 'targets' = 'targets';
   let stepRan = false;
+  let targets: DeletionTargets | undefined = record.targets;
   try {
+    const fresh = await snapshotTargets(uid, user);
+    if (record.targets) {
+      targets = mergeTargets(record.targets, fresh);
+      const reopen = stepsToReopen(record.targets, targets);
+      completed = completed.filter((s) => !reopen.includes(s));
+      await ref.set({ targets, completed }, { merge: true });
+    } else {
+      targets = fresh;
+      await ref.set({ targets, completed, startedAt: now }, { merge: true });
+    }
+
     for (const step of DELETION_STEPS) {
       if (completed.includes(step)) continue;
       current = step;
@@ -156,13 +191,17 @@ export async function runAccountDeletion(
     stepRan = true;
     await ref.set({ lastError: null, completedAt: now }, { merge: true });
   } catch (err) {
+    // Over-reports when the failing step's first action failed: the safe direction.
+    const t = targets;
+    const done = [...(record.completed ?? []), ...completed];
     const partial =
-      completed.some((s) => stepActs(s, targets)) || (stepRan && stepActs(current, targets));
+      t !== undefined &&
+      (done.some((s) => stepActs(s, t)) || (current !== 'targets' && stepActs(current, t)));
     const e = err as { code?: unknown; message?: unknown } | undefined;
     logger.error('accountDeletion: step failed', {
       uid,
       step: current,
-      phase: stepRan ? 'record' : 'run',
+      phase: current !== 'targets' && !stepRan ? 'run' : 'record',
       code: e?.code,
       message: e?.message,
     });

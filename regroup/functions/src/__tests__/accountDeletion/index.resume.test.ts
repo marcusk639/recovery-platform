@@ -56,7 +56,8 @@ describe('runAccountDeletion resume', () => {
     });
 
     const err = await failure(runAccountDeletion('u1', NOW));
-    expect(err).toMatchObject({ step: 'members', partial: false });
+    // g1 was already discharged when g2 failed, so the user must be told.
+    expect(err).toMatchObject({ step: 'members', partial: true });
     expect(h.deletions.u1.completed).toEqual(['operator']);
     expect(h.deleteUser).not.toHaveBeenCalled();
 
