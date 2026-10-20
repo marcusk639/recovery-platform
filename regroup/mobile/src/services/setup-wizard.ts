@@ -1,23 +1,39 @@
-import { firestore, functions } from "../../firebase-setup";
+import { functions } from "../../firebase-setup";
 import { houseCollection } from "./house";
 import { Houses } from "../types";
-import { cloneDeep, each, map } from "lodash";
+import { cloneDeep, each, pick } from "lodash";
 import { User } from "../entities/User";
 import { getInitialPhase } from "../util/house";
 import { createInvitation, CreateInvitationResult } from "./invitations";
-import { adminCollection, getAdmin } from "./admin";
-import { userCollection } from "./users";
 import Admin from "../entities/Admin";
 import "@react-native-firebase/firestore";
 import { uploadHousePhoto } from "./storage";
 import { logException } from "../util/logging";
 import { refreshClaims, getAuthUser } from "./users";
 import { Guest } from "../entities/Guest";
-import { updateSubscriptionHouses } from "./subscription";
-import { geohash } from "../util/geolocation";
+import { createHouses, HouseCreatePayload } from "./subscription";
 import { asyncForEach } from "../util/forEach";
 import { getTimezone } from "../../google/timezone";
 import { House } from "../entities/House";
+
+// Whitelist mirrored from the server createHouseInputSchema. imageUrl/avatar
+// are deliberately absent: they are local file URIs until uploaded.
+const HOUSE_PAYLOAD_KEYS = [
+  "id", "name", "lat", "lng", "street", "city", "state", "zip", "country",
+  "timezone", "phoneNumber", "monthlyRent", "weeklyRent", "maximumCapacity",
+  "depositsAndFees", "rentFrequency", "gender", "baths", "wifi",
+  "managerSetupType", "houseType", "phases", "chores", "rooms",
+  "pendingAdminInvites", "pendingGuestInvites", "seniorPeerEmails",
+];
+
+const toPayload = (house: House): HouseCreatePayload => {
+  const payload: any = pick(house, HOUSE_PAYLOAD_KEYS);
+  Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
+  ["pendingAdminInvites", "pendingGuestInvites", "seniorPeerEmails"].forEach(
+    (k) => payload[k] && (payload[k] = Array.from(new Set(payload[k])))
+  );
+  return payload;
+};
 
 export async function addPotentialSuperAdminPrivilege() {
   return functions.httpsCallable("givePotentialSuperAdminPrivilege");
@@ -136,133 +152,62 @@ export const uploadHousePhotos = async (
   return Promise.all(promises);
 };
 
+
 export async function initializeHouses(
   houses: Houses,
   _operator: User,
   inApp: boolean = false
 ) {
-  const batch = firestore.batch();
   const operator = cloneDeep(_operator);
-  // check for an admin account with the operator's email
-  let operatorAdmin: Admin;
-  let adminDoc;
-  if (operator.adminId) {
-    operatorAdmin = await getAdmin(operator.adminId);
-    adminDoc = adminCollection.doc(operatorAdmin.id);
-  } else {
-    // create the admin account for the operator and map it to the house
-    operatorAdmin = new Admin(
-      operator.email.toLowerCase(),
-      operator.firstName,
-      operator.lastName,
-      operator.uid
-    );
-    adminDoc = adminCollection.doc();
-    operatorAdmin.id = adminDoc.id;
-    operator.adminId = operatorAdmin.id;
-  }
-  // if (!operatorAdmin.houseIds)
-  operatorAdmin.houseIds.push(...map(houses, (house) => house.id));
-  if (
-    typeof operatorAdmin.superAdmin === "boolean" ||
-    !operatorAdmin.superAdmin
-  ) {
-    operatorAdmin.superAdmin = [];
-  }
-  operatorAdmin.superAdmin.push(...map(houses, (house) => house.id));
-  // NOTE: addAdminAuthorization is intentionally deferred to AFTER batch.commit().
-  // The CF (post-S2 hardening, regroup-functions commit bb31845) fetches
-  // houses/{id} to verify ownership and rejects with not-found if the house
-  // doc does not yet exist. Granting the claim before committing the batch
-  // therefore fails every new-operator onboarding. See Task 11 review fix.
-  batch.set(adminDoc, operatorAdmin);
 
-  // create the house documents
-  const houseIds: string[] = [];
-  const newHouseDocs: any[] = [];
   await asyncForEach(houses, async (house: House) => {
-    house.adminIds.push(operatorAdmin.id!);
-    house.superAdminIds.push(operatorAdmin.id!);
-    house.pendingAdminInvites!.push(
-      ...Array.from(new Set(house.pendingAdminInvites))
-    );
-    house.pendingGuestInvites!.push(
-      ...Array.from(new Set(house.pendingGuestInvites))
-    );
-    house.geohash = geohash(house.lat, house.lng);
     house.timezone = await getTimezone(house.lat, house.lng);
-    house.ownerId = operator.id!;
-    houseIds.push(house.id);
-    if (!operator.housesOwned) {
-      operator.housesOwned = [];
-    }
-    operator.housesOwned.push(house.id);
-    newHouseDocs.push(houseCollection.doc(house.id));
   });
 
   try {
-    const houseUrls = await uploadHousePhotos(houses);
-    houseUrls.forEach((houseUrl) => {
-      houses[houseUrl.houseId].imageUrl = houseUrl.url;
-      houses[houseUrl.houseId].avatar = houseUrl.url;
-    });
-  } catch (error) {
-    logException(error);
-  }
-
-  newHouseDocs.forEach((doc) => batch.set(doc, houses[doc.id]));
-
-  operator.orgSetupCompleted = true;
-  operator.isAdmin = true;
-  operator.isSuperAdmin = true;
-
-  // Hardened 2026-07-05: this function computed all the right operator
-  // fields (orgSetupCompleted/isAdmin/isSuperAdmin/adminId/housesOwned) but
-  // never wrote them to the user's Firestore doc — only the admin doc and
-  // house docs were batched. Every new operator therefore looked like they
-  // still needed to complete org setup on next login. Included in the same
-  // atomic batch as the admin/house writes since it depends on nothing that
-  // is only known post-commit (unlike the claim grant and invites below).
-  if (operator.id) {
-    batch.update(userCollection.doc(operator.id), {
-      orgSetupCompleted: operator.orgSetupCompleted,
-      isAdmin: operator.isAdmin,
-      isSuperAdmin: operator.isSuperAdmin,
-      adminId: operator.adminId,
-      housesOwned: operator.housesOwned,
-    });
-  }
-
-  let inviteError;
-
-  try {
-    await batch.commit();
-    // Grant the admin claim only after the houses exist in Firestore. The
-    // addAdminAuthorization CF verifies ownership against houses/{id} and
-    // refreshes claims internally; getAuthUser then captures the fresh token.
-    await addAdminAuthorization(operatorAdmin);
+    // The server creates the houses, admin doc, user fields and subscription
+    // map in one transaction and grants admin/superAdmin claims.
+    const { houseIds, admin, subscriptionMetadata } = await createHouses(
+      Object.values(houses).map(toPayload)
+    );
     const token = await getAuthUser(true);
-    // Send the invites only after the houses are persisted. The createInvitation
-    // CF (post-Task-10) fetches houses/{id} server-side and throws not-found if
-    // missing. Calling sendAllInvites before batch.commit() therefore failed
-    // every new-operator onboarding silently (the error was swallowed into
-    // inviteError and the operator received no invitation emails).
+
+    // Best-effort: setup is already complete without photos.
+    try {
+      const houseUrls = await uploadHousePhotos(houses);
+      await Promise.all(
+        houseUrls.map(({ houseId, url }) => {
+          houses[houseId].imageUrl = url;
+          houses[houseId].avatar = url;
+          return houseCollection
+            .doc(houseId)
+            .update({ imageUrl: url, avatar: url });
+        })
+      );
+    } catch (error) {
+      logException(error);
+    }
+
+    let inviteError;
     try {
       await sendAllInvites(houses, operator);
     } catch (error) {
       inviteError = error;
     }
-    const user = await updateSubscriptionHouses({
-      ownerUserId: operator.id!,
-      houseIds: houseIds,
-      amountToAdjust: houseIds.length,
-      action: "add",
-    });
+
     return {
       houses,
       inviteError,
-      admin: operatorAdmin,
-      user: { ...operator, subscriptionMetadata: user.subscriptionMetadata },
+      admin,
+      user: {
+        ...operator,
+        orgSetupCompleted: true,
+        isAdmin: true,
+        isSuperAdmin: true,
+        adminId: admin.id,
+        housesOwned: [...(operator.housesOwned ?? []), ...houseIds],
+        subscriptionMetadata,
+      },
       token,
     };
   } catch (error) {
