@@ -83,7 +83,7 @@ describe("DeleteAccount", () => {
     const { getByTestId, getByText } = setup();
     expect(
       getByText(
-        "This permanently deletes your Regroup login, your profile, notifications, applications, uploaded documents, and direct messages you sent. Your house keeps your name, dates and rent records for its records, without your contact, recovery or health details. Messages you posted in house group chat stay. If you have a Regroup subscription it is cancelled immediately, and houses you own are closed. This cannot be undone."
+        "This permanently deletes your Regroup login, your profile, notifications, applications, feedback, uploaded documents, and direct messages you sent. Your house keeps your name, dates and rent records for its records, without your contact, recovery or health details. Messages you posted in house group chat stay. If you hold a house officer role, your seat is vacated; votes you cast still count but are no longer linked to you. If you have a Regroup subscription it is cancelled immediately, and houses you own are closed. This cannot be undone."
       )
     ).toBeTruthy();
     fireEvent.press(getByTestId("delete-account-button"));

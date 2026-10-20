@@ -18,7 +18,7 @@ const GENERIC_MESSAGE = "We couldn't delete your account. Try again.";
 /** Callable codes whose message is written for the user (stale sign-in, demo account). */
 const SERVER_MESSAGE_CODES = ["permission-denied", "failed-precondition"];
 export const DELETE_ACCOUNT_DESCRIPTION =
-  "This permanently deletes your Regroup login, your profile, notifications, applications, uploaded documents, and direct messages you sent. Your house keeps your name, dates and rent records for its records, without your contact, recovery or health details. Messages you posted in house group chat stay. If you have a Regroup subscription it is cancelled immediately, and houses you own are closed. This cannot be undone.";
+  "This permanently deletes your Regroup login, your profile, notifications, applications, feedback, uploaded documents, and direct messages you sent. Your house keeps your name, dates and rent records for its records, without your contact, recovery or health details. Messages you posted in house group chat stay. If you hold a house officer role, your seat is vacated; votes you cast still count but are no longer linked to you. If you have a Regroup subscription it is cancelled immediately, and houses you own are closed. This cannot be undone.";
 
 /** RN Firebase reports callable codes bare or `functions/`-prefixed depending on version. */
 const callableCode = (err: any): string | undefined =>
