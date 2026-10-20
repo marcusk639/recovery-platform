@@ -24,8 +24,11 @@ export const applyBundleDiscount = async (userId: string): Promise<void> => {
   await functions.httpsCallable('applyBundleDiscount')({ userId });
 };
 
+// The client never sends a house id: `requestKey` is an idempotency key (the
+// local wizard id) and the server derives the real id from (uid, requestKey).
 export type HouseCreatePayload = Record<string, unknown> & {
-  id: string;
+  requestKey: string;
+  id?: never;
   name: string;
   lat: number | string;
   lng: number | string;
@@ -33,6 +36,8 @@ export type HouseCreatePayload = Record<string, unknown> & {
 
 export interface CreateHousesResult {
   houseIds: string[];
+  /** requestKey (local wizard id) → server-derived house id. */
+  idMap: Record<string, string>;
   admin: Admin;
   subscriptionMetadata: OperatorSubscription;
 }

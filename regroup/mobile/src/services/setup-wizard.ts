@@ -17,9 +17,11 @@ import { getTimezone } from "../../google/timezone";
 import { House } from "../entities/House";
 
 // Whitelist mirrored from the server createHouseInputSchema. imageUrl/avatar
-// are deliberately absent: they are local file URIs until uploaded.
+// are deliberately absent: they are local file URIs until uploaded. `id` is
+// absent too: the server derives house ids, and the local wizard id is sent
+// only as the idempotency `requestKey`.
 const HOUSE_PAYLOAD_KEYS = [
-  "id", "name", "lat", "lng", "street", "city", "state", "zip", "country",
+  "name", "lat", "lng", "street", "city", "state", "zip", "country",
   "timezone", "phoneNumber", "monthlyRent", "weeklyRent", "maximumCapacity",
   "depositsAndFees", "rentFrequency", "gender", "baths", "wifi",
   "managerSetupType", "houseType", "phases", "chores", "rooms",
@@ -27,7 +29,7 @@ const HOUSE_PAYLOAD_KEYS = [
 ];
 
 const toPayload = (house: House): HouseCreatePayload => {
-  const payload: any = pick(house, HOUSE_PAYLOAD_KEYS);
+  const payload: any = { ...pick(house, HOUSE_PAYLOAD_KEYS), requestKey: house.id };
   Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
   ["pendingAdminInvites", "pendingGuestInvites", "seniorPeerEmails"].forEach(
     (k) => payload[k] && (payload[k] = Array.from(new Set(payload[k])))
@@ -153,6 +155,24 @@ export const uploadHousePhotos = async (
 };
 
 
+/**
+ * Re-key the wizard's houses by the server-derived ids returned in idMap
+ * (local wizard id → server id), so everything after createHouses — photo
+ * upload paths, house updates, invitations, the returned houses — uses the
+ * ids the houses actually have in Firestore.
+ */
+const toServerHouses = (houses: Houses, idMap: Record<string, string>): Houses => {
+  const out: Houses = {};
+  Object.values(houses).forEach((house) => {
+    const id = idMap?.[house.id];
+    if (!id) {
+      throw new Error("createHouses returned no id for a requested house");
+    }
+    out[id] = { ...house, id };
+  });
+  return out;
+};
+
 export async function initializeHouses(
   houses: Houses,
   _operator: User,
@@ -166,19 +186,21 @@ export async function initializeHouses(
 
   try {
     // The server creates the houses, admin doc, user fields and subscription
-    // map in one transaction and grants admin/superAdmin claims.
-    const { houseIds, admin, subscriptionMetadata } = await createHouses(
+    // map in one transaction and grants admin/superAdmin claims. It derives
+    // the house ids; idMap translates our local wizard ids to them.
+    const { houseIds, idMap, admin, subscriptionMetadata } = await createHouses(
       Object.values(houses).map(toPayload)
     );
+    const serverHouses = toServerHouses(houses, idMap);
     const token = await getAuthUser(true);
 
     // Best-effort: setup is already complete without photos.
     try {
-      const houseUrls = await uploadHousePhotos(houses);
+      const houseUrls = await uploadHousePhotos(serverHouses);
       await Promise.all(
         houseUrls.map(({ houseId, url }) => {
-          houses[houseId].imageUrl = url;
-          houses[houseId].avatar = url;
+          serverHouses[houseId].imageUrl = url;
+          serverHouses[houseId].avatar = url;
           return houseCollection
             .doc(houseId)
             .update({ imageUrl: url, avatar: url });
@@ -190,13 +212,13 @@ export async function initializeHouses(
 
     let inviteError;
     try {
-      await sendAllInvites(houses, operator);
+      await sendAllInvites(serverHouses, operator);
     } catch (error) {
       inviteError = error;
     }
 
     return {
-      houses,
+      houses: serverHouses,
       inviteError,
       admin,
       user: {

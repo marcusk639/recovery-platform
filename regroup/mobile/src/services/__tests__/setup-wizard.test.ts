@@ -73,9 +73,13 @@ jest.mock("../admin", () => ({
   createAdminId: jest.fn(() => "generated-admin-id"),
 }));
 
+// Like the real helper: uploads to houses/{house.id}/photo and echoes the id.
+const mockEchoUpload = (_uri: string, house: { id: string }) =>
+  Promise.resolve({ houseId: house.id, url: "https://mock-photo-url" });
+
 jest.mock("../storage", () => ({
-  uploadHousePhoto: jest.fn(() =>
-    Promise.resolve({ houseId: "h1", url: "https://mock-photo-url" })
+  uploadHousePhoto: jest.fn((uri: string, house: { id: string }) =>
+    mockEchoUpload(uri, house)
   ),
 }));
 
@@ -87,10 +91,13 @@ jest.mock("../users", () => ({
   },
 }));
 
+// The server derives house ids; idMap maps the local wizard id (requestKey)
+// "h1" to the server id "server-h1".
 jest.mock("../subscription", () => ({
   createHouses: jest.fn(() =>
     Promise.resolve({
-      houseIds: ["h1"],
+      houseIds: ["server-h1"],
+      idMap: { h1: "server-h1" },
       admin: { id: "server-admin-id" },
       subscriptionMetadata: { plan: "pro" },
     })
@@ -423,6 +430,10 @@ describe("setup-wizard service", () => {
       (invitationsService.createInvitation as jest.Mock).mockResolvedValue({
         token: "mock-token",
       });
+      // Undo the uploadHousePhotos suite's persistent mockResolvedValue.
+      (storageService.uploadHousePhoto as jest.Mock).mockImplementation(
+        mockEchoUpload
+      );
     });
 
     const withPhoto = () => {
@@ -443,13 +454,14 @@ describe("setup-wizard service", () => {
         .calls[0];
       expect(payloads).toHaveLength(1);
       expect(payloads[0]).toMatchObject({
-        id: "h1",
+        requestKey: "h1",
         name: "House One",
         lat: 41.8781,
         lng: -87.6298,
         timezone: "America/Chicago",
         pendingAdminInvites: ["admin@test.com"],
       });
+      expect(payloads[0]).not.toHaveProperty("id");
       expect(payloads[0]).not.toHaveProperty("imageUrl");
       expect(payloads[0]).not.toHaveProperty("avatar");
       expect(payloads[0]).not.toHaveProperty("ownerId");
@@ -483,7 +495,7 @@ describe("setup-wizard service", () => {
         isAdmin: true,
         isSuperAdmin: true,
         adminId: "server-admin-id",
-        housesOwned: ["old", "h1"],
+        housesOwned: ["old", "server-h1"],
         subscriptionMetadata: { plan: "pro" },
       });
     });
@@ -491,15 +503,15 @@ describe("setup-wizard service", () => {
     it("does not duplicate housesOwned when the server returns an id already owned (retry)", async () => {
       const result = await initializeHouses(
         makeHouses(),
-        makeUser({ housesOwned: ["old", "h1"] } as any)
+        makeUser({ housesOwned: ["old", "server-h1"] } as any)
       );
 
-      expect(result.user.housesOwned).toEqual(["old", "h1"]);
+      expect(result.user.housesOwned).toEqual(["old", "server-h1"]);
     });
 
     it("writes uploaded photo urls to the house after the claim refresh", async () => {
       (storageService.uploadHousePhoto as jest.Mock).mockResolvedValueOnce({
-        houseId: "h1",
+        houseId: "server-h1",
         url: "https://mock-photo-url",
       });
 
@@ -509,6 +521,42 @@ describe("setup-wizard service", () => {
         imageUrl: "https://mock-photo-url",
         avatar: "https://mock-photo-url",
       });
+    });
+
+    it("photos and invites use the server id from idMap", async () => {
+      const { houseCollection } = require("../house");
+      const result = await initializeHouses(withPhoto(), makeUser());
+
+      const [, uploaded] = (storageService.uploadHousePhoto as jest.Mock).mock
+        .calls[0];
+      // storage.uploadHousePhoto writes to houses/{house.id}/photo.
+      expect(uploaded.id).toBe("server-h1");
+      expect(houseCollection.doc).toHaveBeenCalledWith("server-h1");
+      expect(houseCollection.doc).not.toHaveBeenCalledWith("h1");
+      const inviteHouseIds = (
+        invitationsService.createInvitation as jest.Mock
+      ).mock.calls.map(([arg]) => arg.houseId);
+      expect(inviteHouseIds).toEqual(["server-h1", "server-h1"]);
+      expect(Object.keys(result.houses)).toEqual(["server-h1"]);
+      expect(result.houses["server-h1"]).toMatchObject({
+        id: "server-h1",
+        name: "House One",
+        imageUrl: "https://mock-photo-url",
+      });
+    });
+
+    it("fails setup when idMap is missing a requested house", async () => {
+      (subscriptionService.createHouses as jest.Mock).mockResolvedValueOnce({
+        houseIds: ["server-h1"],
+        idMap: {},
+        admin: { id: "server-admin-id" },
+        subscriptionMetadata: {},
+      });
+
+      await expect(initializeHouses(makeHouses(), makeUser())).rejects.toThrow(
+        "Failed to create houses."
+      );
+      expect(invitationsService.createInvitation).not.toHaveBeenCalled();
     });
 
     it("a failed photo upload still completes setup", async () => {
