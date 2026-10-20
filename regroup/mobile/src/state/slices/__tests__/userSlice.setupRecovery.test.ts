@@ -49,13 +49,15 @@ const incomplete = {
   id: UID,
   uid: UID,
   email: "op@example.com",
-  isSuperAdmin: true,
+  // The real interrupted-setup shape: isSuperAdmin is written only with the
+  // onboarding flags, so before recovery only potentialSuperAdmin is set.
+  isSuperAdmin: false,
   potentialSuperAdmin: true,
   orgSetupCompleted: false,
   housesOwned: ["h1"],
   subscriptionMetadata: { houses: { h1: {} } },
 };
-const completed = { ...incomplete, isAdmin: true, orgSetupCompleted: true };
+const completed = { ...incomplete, isAdmin: true, isSuperAdmin: true, orgSetupCompleted: true };
 
 const buildStore = () => configureStore({ reducer: { user: userReducer } });
 const routeFor = (user: unknown) => improvedNavigationService.getInitialNavigation(user as any);
