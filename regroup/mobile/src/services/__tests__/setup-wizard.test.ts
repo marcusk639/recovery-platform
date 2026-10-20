@@ -488,6 +488,15 @@ describe("setup-wizard service", () => {
       });
     });
 
+    it("does not duplicate housesOwned when the server returns an id already owned (retry)", async () => {
+      const result = await initializeHouses(
+        makeHouses(),
+        makeUser({ housesOwned: ["old", "h1"] } as any)
+      );
+
+      expect(result.user.housesOwned).toEqual(["old", "h1"]);
+    });
+
     it("writes uploaded photo urls to the house after the claim refresh", async () => {
       (storageService.uploadHousePhoto as jest.Mock).mockResolvedValueOnce({
         houseId: "h1",

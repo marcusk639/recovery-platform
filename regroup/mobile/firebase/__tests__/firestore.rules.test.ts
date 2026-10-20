@@ -1933,13 +1933,34 @@ describe("houses/{houseId} — delete", () => {
     return doc(ctx.firestore(), `houses/${HOUSE_ID}`);
   }
 
-  test("ALLOW an admin of the house to delete it", async () => {
+  // Hardened 2026-10-20: a plain admin used to be able to delete the house,
+  // after which createHouses saw the id as free and minted superAdmin on it
+  // for the caller (delete-and-reclaim). Delete is superAdmin-only now.
+  test("DENY a plain admin of the house deleting it (delete-and-reclaim)", async () => {
     await seedHouse();
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
       authHouseAdmin(ADMIN_UID, HOUSE_ID),
     );
-    await assertSucceeds(deleteDoc(houseRef(ctx)));
+    await assertFails(deleteDoc(houseRef(ctx)));
+  });
+
+  test("DENY a superAdmin of a DIFFERENT house deleting it", async () => {
+    await seedHouse();
+    const ctx = testEnv.authenticatedContext(
+      ADMIN_UID,
+      authHouseSuperAdmin(ADMIN_UID, HOUSE_ID_OTHER),
+    );
+    await assertFails(deleteDoc(houseRef(ctx)));
+  });
+
+  test("DENY the demo account deleting a non-demo house even as superAdmin", async () => {
+    await seedHouse();
+    const ctx = testEnv.authenticatedContext("demoAccountUid", {
+      ...authHouseSuperAdmin("demoAccountUid", HOUSE_ID),
+      email: "demo_user@appdemo.net",
+    });
+    await assertFails(deleteDoc(houseRef(ctx)));
   });
 
   // Regression coverage for 2026-07-07: this rule used isHouseAdmin(houseId)
@@ -2708,5 +2729,82 @@ describe("houses/{houseId} — client creation is closed", () => {
       potentialSuperAdmin: true,
     });
     await assertFails(setDoc(doc(ctx.firestore(), `houses/${HOUSE_ID}`), newHouse));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// houses/{houseId} — authorization fields (2026-10-20)
+//
+// superAdminId is the operator's uid, written only by createHouses; the oxford
+// and analytics callables authorize on it, so no client role may change it.
+// superAdminIds and adminId are authorization fields like adminIds/ownerId:
+// a plain admin or guest must not be able to write them; a superAdmin still
+// manages them (as it manages adminIds today).
+// ---------------------------------------------------------------------------
+describe("houses/{houseId} — update: authorization fields", () => {
+  const seedHouse = async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `houses/${HOUSE_ID}`), {
+        name: "Test House",
+        ownerId: ADMIN_UID,
+        superAdminId: ADMIN_UID,
+        adminId: "admin-doc-1",
+        adminIds: ["admin-doc-1"],
+        superAdminIds: ["admin-doc-1"],
+      });
+    });
+  };
+
+  const houseDocAs = (uid: string, claims: object) =>
+    doc(testEnv.authenticatedContext(uid, claims).firestore(), `houses/${HOUSE_ID}`);
+
+  const roles: Array<[string, () => object, string]> = [
+    ["admin", () => authHouseAdmin(OTHER_UID, HOUSE_ID), OTHER_UID],
+    ["guest", () => authHouseGuest(GUEST_UID, HOUSE_ID), GUEST_UID],
+  ];
+
+  it.each([
+    ...roles,
+    ["SUPERADMIN", () => authHouseSuperAdmin(OTHER_UID, HOUSE_ID), OTHER_UID],
+  ] as Array<[string, () => object, string]>)(
+    "denies a %s writing superAdminId",
+    async (_role, claims, uid) => {
+      await seedHouse();
+      await assertFails(updateDoc(houseDocAs(uid, claims()), { superAdminId: uid }));
+    },
+  );
+
+  it.each(roles)("denies a %s writing superAdminIds", async (_role, claims, uid) => {
+    await seedHouse();
+    await assertFails(
+      updateDoc(houseDocAs(uid, claims()), { superAdminIds: ["admin-doc-1", "evil"] }),
+    );
+  });
+
+  it.each(roles)("denies a %s writing adminId", async (_role, claims, uid) => {
+    await seedHouse();
+    await assertFails(updateDoc(houseDocAs(uid, claims()), { adminId: "evil" }));
+  });
+
+  it("allows a superAdmin managing superAdminIds and adminId", async () => {
+    await seedHouse();
+    await assertSucceeds(
+      updateDoc(houseDocAs(ADMIN_UID, authHouseSuperAdmin(ADMIN_UID, HOUSE_ID)), {
+        superAdminIds: ["admin-doc-1", "admin-doc-2"],
+        adminId: "admin-doc-2",
+      }),
+    );
+  });
+
+  it("still allows an admin a non-authz edit that echoes the authz fields unchanged", async () => {
+    await seedHouse();
+    await assertSucceeds(
+      updateDoc(houseDocAs(OTHER_UID, authHouseAdmin(OTHER_UID, HOUSE_ID)), {
+        name: "Renamed",
+        superAdminId: ADMIN_UID,
+        superAdminIds: ["admin-doc-1"],
+        adminId: "admin-doc-1",
+      }),
+    );
   });
 });

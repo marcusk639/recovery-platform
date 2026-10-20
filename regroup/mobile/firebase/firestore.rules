@@ -205,7 +205,14 @@ service cloud.firestore {
       // inconsistent with every sibling rule in this match block (create,
       // update, read all use isAdmin([houseId]), which also grants
       // superAdmin) — a superAdmin who can edit a house couldn't delete it.
-      allow delete: if isAdmin([houseId]);
+      //
+      // Hardened 2026-10-20: delete now requires superAdmin of THIS house. With
+      // isAdmin a plain admin could delete another operator's house, and the
+      // id would then read as free to createHouses (delete-and-reclaim, minting
+      // superAdmin for the caller). The server also tombstones deleted ids
+      // (houseTombstones, written by the onHouseDeleted trigger), which
+      // createHouses refuses. Demo scoping matches isAdmin.
+      allow delete: if hasSuperAdminRoleInHouse([houseId]) && isDemoScopedHouses([houseId]);
       // Hardened 2026-07-14: this used to let ANY admin (not just
       // superAdmin) write financial/ownership fields (stripeAccountId,
       // stripeStatus, monthlyRent, weeklyRent, adminIds, ownerId) — only
@@ -231,12 +238,16 @@ service cloud.firestore {
       // bypasses rules. stripeAccountApi records which Stripe Accounts API owns
       // stripeAccountId; every server read and close dispatches on it, so a
       // client flipping it would stop status syncing and break disconnect.
+      // superAdminId is the operator's uid (set by createHouses); oxford and
+      // analytics callables authorize on it, so no client may write it.
+      // superAdminIds and adminId are authorization fields like adminIds/ownerId:
+      // only a superAdmin of the house may change them.
       allow update: if isDemoScopedHouses([houseId]) &&
         !request.resource.data.diff(resource.data).affectedKeys()
-          .hasAny(['subscriptionStatus', 'guestGraceEndsAt', 'stripeAccountApi']) &&
+          .hasAny(['subscriptionStatus', 'guestGraceEndsAt', 'stripeAccountApi', 'superAdminId']) &&
         (hasSuperAdminRoleInHouse([houseId]) ||
           ((hasAdminRoleInHouse([houseId]) || hasGuestRoleInHouse([houseId])) && !request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['stripeAccountId', 'stripeStatus', 'monthlyRent', 'weeklyRent', 'adminIds', 'ownerId'])));
+            .hasAny(['stripeAccountId', 'stripeStatus', 'monthlyRent', 'weeklyRent', 'adminIds', 'ownerId', 'superAdminIds', 'adminId'])));
       
       match /chat/{chatId} {
         allow read, write: if isGuest([houseId]) || isAdmin([houseId]);

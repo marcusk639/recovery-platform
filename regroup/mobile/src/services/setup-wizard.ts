@@ -205,7 +205,8 @@ export async function initializeHouses(
         isAdmin: true,
         isSuperAdmin: true,
         adminId: admin.id,
-        housesOwned: [...(operator.housesOwned ?? []), ...houseIds],
+        // A retry returns ids the operator already owns; keep the list unique.
+        housesOwned: Array.from(new Set([...(operator.housesOwned ?? []), ...houseIds])),
         subscriptionMetadata,
       },
       token,
