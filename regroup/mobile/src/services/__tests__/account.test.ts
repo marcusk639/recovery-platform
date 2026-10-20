@@ -30,7 +30,7 @@ jest.mock("../../util/logging", () => ({
   logException: (...a: any[]) => mockLogException(...a),
 }));
 
-import { deleteMyAccount } from "../account";
+import { deleteMyAccount, DELETION_UNCONFIRMED_CODE } from "../account";
 
 describe("deleteMyAccount", () => {
   beforeEach(() => {
@@ -107,9 +107,44 @@ describe("deleteMyAccount", () => {
 
   it("treats a callable error as success when the account is already gone", async () => {
     mockCallable.mockRejectedValue({ code: "functions/deadline-exceeded" });
-    mockReload.mockRejectedValue({ code: "auth/user-token-expired" });
+    mockReload.mockRejectedValue({ code: "auth/user-not-found" });
     await expect(deleteMyAccount("pw")).resolves.toBeUndefined();
     expect(mockSignOut).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["auth/user-token-expired", "auth/user-disabled"])(
+    "does not report success after a callable error when reload says %s",
+    async (code) => {
+      mockCallable.mockRejectedValue({ code: "functions/deadline-exceeded" });
+      mockReload.mockRejectedValue({ code });
+      await expect(deleteMyAccount("pw")).rejects.toMatchObject({
+        code: DELETION_UNCONFIRMED_CODE,
+        message: "We couldn't confirm your account was deleted. Sign in again to check.",
+      });
+      expect(mockSignOut).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it.each(["auth/user-disabled", "auth/user-token-expired"])(
+    "does not report success when re-auth fails with %s and the account can't be confirmed gone",
+    async (code) => {
+      mockReauth.mockRejectedValue({ code });
+      mockReload.mockRejectedValue({ code });
+      await expect(deleteMyAccount("pw")).rejects.toThrow(
+        "We couldn't confirm your account was deleted. Sign in again to check."
+      );
+      expect(mockCallable).not.toHaveBeenCalled();
+      expect(mockSignOut).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it("still rejects unconfirmed when sign-out also fails", async () => {
+    mockCallable.mockRejectedValue({ code: "functions/internal" });
+    mockReload.mockRejectedValue({ code: "auth/user-token-expired" });
+    mockSignOut.mockRejectedValue(new Error("signout"));
+    await expect(deleteMyAccount("pw")).rejects.toMatchObject({
+      code: DELETION_UNCONFIRMED_CODE,
+    });
   });
 
   it("rejects a callable error when the account still exists", async () => {
