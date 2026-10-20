@@ -73,7 +73,12 @@
 
 ### B5b: Ship B1–B3
 
-- [ ] **5b.1** After the B1, B2 and B3 PRs merge, repeat 5a.2 (the B1 rules change) and 5a.3 (`createHouses` and `deleteAccount`). There is no migration.
+- [ ] **5b.1** After the B1, B2 and B3 PRs merge, deploy in this order:
+  1. **Rules first.** Repeat 5a.2. This release closes client house creation, restricts house delete to superAdmins, and guards `superAdminId`/`superAdminIds`/`adminId`. It must be live before the new functions, because `createHouses` running against the old, looser rules can be abused to mint superAdmin. Old app builds can't create houses today anyway, so closing the rule costs them nothing.
+  2. **Indexes, and wait.** Run `cd regroup/mobile && npm run deploy:indexes` (added by B3). In the console, wait until the collection-group single-field indexes on `applications.applicantUid` and `chat.senderId` show `READY`. Until they do, every account deletion fails at its personal-data step.
+  3. **Functions.** Repeat 5a.3, which now includes `createHouses`, the house-delete tombstone trigger and `deleteAccount`.
+  4. **App.** The new mobile build (B6) is released only after steps 1–3 are live. Otherwise the wizard calls a callable that doesn't exist yet.
+  There is no migration.
 - [ ] **5b.2 Smoke test (live).** On a fresh operator account:
   - sign up on web and finish monthly checkout;
   - complete the mobile setup wizard, and expect the house to be created;
