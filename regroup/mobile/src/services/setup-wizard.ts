@@ -2,8 +2,8 @@ import { functions } from "../../firebase-setup";
 import { Houses } from "../types";
 import { cloneDeep, each, pick } from "lodash";
 import { User } from "../entities/User";
-import { getInitialPhase } from "../util/house";
 import { createInvitation, CreateInvitationResult } from "./invitations";
+import { allInvitesFailed, InviteFailure, sendAllInvites } from "./setup-wizard-invites";
 import Admin from "../entities/Admin";
 import "@react-native-firebase/firestore";
 import { uploadHousePhoto } from "./storage";
@@ -61,66 +61,8 @@ export async function addGuestAuthorization(guest: Guest) {
   return refreshClaims();
 }
 
-export interface SendInvitesResult {
-  sent: number;
-  failed: number;
-}
-
-/**
- * Sends every pending invitation. Each invitation settles independently, so
- * one failure does not stop the others; the caller gets the counts.
- */
-export async function sendAllInvites(
-  houses: Houses,
-  _operator: User,
-  guest: boolean = true,
-  admin: boolean = true,
-  seniorPeer: boolean = true
-): Promise<SendInvitesResult> {
-  const calls: Promise<CreateInvitationResult>[] = [];
-  each(houses, (house) => {
-    const initialPhase = getInitialPhase(house);
-    if (house.pendingAdminInvites && admin) {
-      house.pendingAdminInvites.forEach((email) => {
-        calls.push(
-          createInvitation({
-            email,
-            houseId: house.id,
-            role: "admin",
-            initialPhase: initialPhase?.name,
-          })
-        );
-      });
-    }
-    if (house.pendingGuestInvites && guest) {
-      house.pendingGuestInvites.forEach((email) => {
-        calls.push(
-          createInvitation({
-            email,
-            houseId: house.id,
-            role: "guest",
-            initialPhase: initialPhase?.name,
-          })
-        );
-      });
-    }
-    if (house.seniorPeerEmails && seniorPeer) {
-      house.seniorPeerEmails.forEach((email) => {
-        calls.push(
-          createInvitation({
-            email,
-            houseId: house.id,
-            role: "senior-peer",
-            initialPhase: initialPhase?.name,
-          })
-        );
-      });
-    }
-  });
-  const results = await Promise.allSettled(calls);
-  const failed = results.filter((r) => r.status === "rejected").length;
-  return { sent: results.length - failed, failed };
-}
+export { sendAllInvites } from "./setup-wizard-invites";
+export type { InviteFailure, SendInvitesResult } from "./setup-wizard-invites";
 
 /**
  * Issue a single admin invitation. The server (createInvitation CF) generates
@@ -156,8 +98,7 @@ export const createGuestInvite = (
   });
 };
 
-// Rejects on the first failed upload. initializeHouses uses applyHousePhotos
-// (setup-wizard-photos.ts), which settles each house independently.
+// Unused by the wizard (photos go through setup-wizard-photos.ts).
 export const uploadHousePhotos = async (
   houses: Houses
 ): Promise<{ houseId: string; url: string }[]> => {
@@ -189,16 +130,6 @@ const toServerHouses = (houses: Houses, idMap: Record<string, string>): Houses =
   return out;
 };
 
-const countPendingInvites = (houses: Houses): number =>
-  Object.values(houses).reduce(
-    (n, h) =>
-      n +
-      (h.pendingAdminInvites?.length ?? 0) +
-      (h.pendingGuestInvites?.length ?? 0) +
-      (h.seniorPeerEmails?.length ?? 0),
-    0
-  );
-
 export async function initializeHouses(
   houses: Houses,
   _operator: User,
@@ -211,7 +142,8 @@ export async function initializeHouses(
   });
 
   // (a) The server creates the houses, admin doc, user fields and subscription
-  // map in one transaction and grants admin/superAdmin claims. It derives the
+  // map in one transaction, grants admin/superAdmin claims, then sets the
+  // onboarding flags (orgSetupCompleted/isAdmin/isSuperAdmin). It derives the
   // house ids; idMap translates our local wizard ids to them.
   let created: Awaited<ReturnType<typeof createHouses>>;
   try {
@@ -242,29 +174,36 @@ export async function initializeHouses(
 
   const serverIds = Object.keys(serverHouses).join(",");
   let inviteError;
-  let inviteFailures = 0;
+  let failures: InviteFailure[] = [];
   try {
-    const { sent, failed } = await sendAllInvites(serverHouses, operator);
-    inviteFailures = failed;
-    if (failed > 0) {
+    const sent = await sendAllInvites(serverHouses, operator);
+    failures = sent.failures;
+    if (sent.failed > 0) {
       logException(
         new Error("initializeHouses: invitations failed"),
-        `houses=${serverIds} sent=${sent} failed=${failed}`
+        `houses=${serverIds} sent=${sent.sent} failed=${sent.failed}`
       );
     }
   } catch (error) {
     inviteError = error;
-    inviteFailures = countPendingInvites(serverHouses);
+    failures = allInvitesFailed(serverHouses);
+    // Not the raw error: its message may quote an email address.
     logException(
-      error,
-      `initializeHouses: invitations threw houses=${serverIds} count=${inviteFailures}`
+      new Error("initializeHouses: invitations threw"),
+      `houses=${serverIds} count=${failures.length} name=${(error as Error)?.name}`
     );
   }
+  // House names are for the on-device notice only; never log them.
+  const failedInvites = failures.map((f) => ({
+    ...f,
+    houseName: serverHouses[f.houseId]?.name ?? "",
+  }));
 
   return {
     houses: serverHouses,
     inviteError,
-    inviteFailures,
+    inviteFailures: failures.length,
+    failedInvites,
     photoFailures,
     admin,
     user: {

@@ -8,7 +8,9 @@ import { logException } from '../util/logging';
  * and writes the download URL to the house. Setup is already complete without
  * photos, so nothing here throws. Mutates `houses` in place: a house whose
  * upload or update failed gets imageUrl/avatar '' (never a local file:// path).
- * Logs house id + stage only. Returns the number of houses whose photo failed.
+ * The log message carries house id + stage; the logged error carries only the
+ * original error's code/name, since its message may hold the local file path.
+ * Returns the number of houses whose photo failed.
  */
 export const applyHousePhotos = async (houses: Houses): Promise<number> => {
   const withPhoto = Object.values(houses).filter((house) => !!house.imageUrl);
@@ -17,7 +19,13 @@ export const applyHousePhotos = async (houses: Houses): Promise<number> => {
     failures += 1;
     houses[houseId].imageUrl = '';
     houses[houseId].avatar = '';
-    logException(error, `initializeHouses: photo failed house=${houseId} stage=${stage}`);
+    const { code, name } = (error ?? {}) as { code?: unknown; name?: unknown };
+    logException(
+      new Error(
+        `photo ${stage} failed code=${String(code ?? 'unknown')} name=${String(name ?? '')}`,
+      ),
+      `initializeHouses: photo failed house=${houseId} stage=${stage}`,
+    );
   };
 
   const uploads = await Promise.allSettled(

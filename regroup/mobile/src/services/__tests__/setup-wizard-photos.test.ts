@@ -18,7 +18,7 @@ const houses = (): Houses =>
     a: { id: 'a', name: 'A', imageUrl: 'file://a.jpg', avatar: 'file://a.jpg' },
     b: { id: 'b', name: 'B', imageUrl: 'file://b.jpg' },
     c: { id: 'c', name: 'C', imageUrl: '' },
-  }) as unknown as Houses;
+  } as unknown as Houses);
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -52,6 +52,20 @@ describe('applyHousePhotos', () => {
       expect.any(Error),
       'initializeHouses: photo failed house=a stage=upload',
     );
+  });
+
+  it('logs only the upload error code/name, never its message (it may hold the local file path)', async () => {
+    (uploadHousePhoto as jest.Mock).mockRejectedValueOnce(
+      Object.assign(new Error('file:///var/mobile/Containers/photo.jpg does not exist'), {
+        code: 'storage/unknown',
+      }),
+    );
+    await applyHousePhotos(houses());
+
+    const [logged] = (logException as jest.Mock).mock.calls[0];
+    expect(logged.message).toContain('storage/unknown');
+    expect(logged.message).not.toContain('file://');
+    expect(logged.message).not.toContain('photo.jpg');
   });
 
   it('a failed house update counts as a failure and clears the url', async () => {

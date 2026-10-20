@@ -387,6 +387,10 @@ describe("setup-wizard service", () => {
       await expect(sendAllInvites(makeHouses(), makeUser())).resolves.toEqual({
         sent: 0,
         failed: 2,
+        failures: [
+          { houseId: "h1", role: "admin" },
+          { houseId: "h1", role: "guest" },
+        ],
       });
     });
 
@@ -398,6 +402,7 @@ describe("setup-wizard service", () => {
       await expect(sendAllInvites(makeHouses(), makeUser())).resolves.toEqual({
         sent: 1,
         failed: 1,
+        failures: [{ houseId: "h1", role: "admin" }],
       });
       expect(invitationsService.createInvitation).toHaveBeenCalledTimes(2);
     });

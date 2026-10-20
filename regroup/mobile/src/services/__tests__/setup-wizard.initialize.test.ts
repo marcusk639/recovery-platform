@@ -57,7 +57,7 @@ const makeHouses = (extra: Record<string, unknown> = {}): Houses =>
       pendingGuestInvites: ['g@test.com'],
       ...extra,
     },
-  }) as unknown as Houses;
+  } as unknown as Houses);
 const created = {
   houseIds: ['server-h1'],
   idMap: { h1: 'server-h1' },
@@ -187,9 +187,69 @@ describe('initializeHouses — invitations', () => {
     expect(logged).not.toContain('@test.com');
   });
 
+  it('names the failed house/role pairs and logs each rejection code without emails', async () => {
+    (createInvitation as jest.Mock)
+      .mockRejectedValueOnce(fnError('invalid-argument', 'bad address a@test.com'))
+      .mockRejectedValueOnce(new Error('g@test.com unreachable'));
+    const result = await initializeHouses(makeHouses(), operator);
+
+    expect(result.inviteFailures).toBe(2);
+    expect(result.failedInvites).toEqual([
+      { houseId: 'server-h1', houseName: 'House One', role: 'admin' },
+      { houseId: 'server-h1', houseName: 'House One', role: 'guest' },
+    ]);
+    const messages = (logException as jest.Mock).mock.calls.map(([, m]) => m);
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/house=server-h1 role=admin code=invalid-argument/),
+        expect.stringMatching(/house=server-h1 role=guest code=unknown/),
+      ]),
+    );
+    const logged = JSON.stringify((logException as jest.Mock).mock.calls, (_k, v) =>
+      v instanceof Error ? v.message : v,
+    );
+    expect(logged).not.toContain('@test.com');
+    expect(logged).not.toContain('House One');
+  });
+
+  const threeLists = () => makeHouses({ seniorPeerEmails: ['s@test.com'] });
+  const loggedText = () =>
+    JSON.stringify((logException as jest.Mock).mock.calls, (_k, v) =>
+      v instanceof Error ? `${v.message} ${v.stack ?? ''}` : v,
+    );
+
+  it('counts every list when createInvitation throws synchronously', async () => {
+    (createInvitation as jest.Mock).mockImplementation(({ email }: { email: string }) => {
+      throw new Error(`cannot invite ${email}`);
+    });
+    const result = await initializeHouses(threeLists(), operator);
+
+    expect(result.inviteFailures).toBe(3);
+    expect(result.failedInvites.map((f: { role: string }) => f.role).sort()).toEqual([
+      'admin',
+      'guest',
+      'senior-peer',
+    ]);
+    expect(loggedText()).not.toContain('@test.com');
+  });
+
+  it('counts every list when sendAllInvites itself throws synchronously', async () => {
+    const { getInitialPhase } = jest.requireMock('../../util/house');
+    (getInitialPhase as jest.Mock).mockImplementationOnce(() => {
+      throw new Error('phase lookup failed for a@test.com');
+    });
+    const result = await initializeHouses(threeLists(), operator);
+
+    expect(result.inviteError).toBeDefined();
+    expect(result.inviteFailures).toBe(3);
+    expect(result.failedInvites).toHaveLength(3);
+    expect(loggedText()).not.toContain('@test.com');
+  });
+
   it('reports zero failures when every invitation is sent', async () => {
     const result = await initializeHouses(makeHouses(), operator);
     expect(result.inviteFailures).toBe(0);
+    expect(result.failedInvites).toEqual([]);
     expect(logException).not.toHaveBeenCalled();
   });
 });
