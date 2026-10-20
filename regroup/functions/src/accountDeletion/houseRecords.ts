@@ -97,33 +97,22 @@ export async function unlinkStaffNoteAuthor(uid: string): Promise<number> {
 /**
  * Scrub `admin-archive` copies of the user's staff admin record (written by
  * mobile `deleteAdmin`, which copies the whole admin doc): contact fields go,
- * names and house links stay, as for `guest-archive`. Matched by `userId`, and
- * by the user's admin ids for legacy copies that have no `userId`.
+ * names and house links stay, as for `guest-archive`. Matched only by
+ * `userId == uid`; legacy copies with no `userId` cannot be attributed safely
+ * and are left alone.
  */
-export async function scrubArchivedAdmins(
-  uid: string,
-  adminIds: string[],
-  now: string,
-): Promise<number> {
+export async function scrubArchivedAdmins(uid: string, now: string): Promise<number> {
   const archive = ratsFirestore.collection('admin-archive');
   const linked = await archive.where('userId', '==', uid).get();
-  const docs = new Map<string, Data>(linked.docs.map((d) => [d.id, d.data() ?? {}]));
-  for (const id of unique(adminIds)) {
-    if (docs.has(id)) continue;
-    const snap = await archive.doc(id).get();
-    const data = snap.exists ? (snap.data() ?? {}) : undefined;
-    // Linked to another user (the user's own were matched above), or already scrubbed.
-    if (!data || data.userId || data.accountDeletedAt) continue;
-    docs.set(id, data);
-  }
-  for (const [id, data] of docs) {
+  for (const doc of linked.docs) {
+    const data = doc.data() ?? {};
     const out: Data = { ...data };
     for (const field of ADMIN_ARCHIVE_SCRUBBED_FIELDS) delete out[field];
     out.userId = null;
     out.accountDeletedAt = data.accountDeletedAt ?? now;
-    await archive.doc(id).set(out);
+    await archive.doc(doc.id).set(out);
   }
-  return docs.size;
+  return linked.docs.length;
 }
 
 /** The members-step work on house records, for one user. */
@@ -131,7 +120,6 @@ export async function unlinkHouseRecords(
   uid: string,
   guestIds: string[],
   houseIdsByGuest: Record<string, string>,
-  adminIds: string[],
   now: string,
 ): Promise<void> {
   const houses = guestIds.map((g) => houseIdsByGuest[g]).filter(Boolean);
@@ -139,7 +127,7 @@ export async function unlinkHouseRecords(
     officerSeats: await vacateOfficerSeats(uid, now),
     votes: await unlinkCastVotes(guestIds, houses),
     staffNotes: await unlinkStaffNoteAuthor(uid),
-    archivedAdmins: await scrubArchivedAdmins(uid, adminIds, now),
+    archivedAdmins: await scrubArchivedAdmins(uid, now),
   };
   logger.info('accountDeletion: house records unlinked', counts);
 }

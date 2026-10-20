@@ -119,7 +119,6 @@ async function runStep(
         uid,
         [...targets.guestIds, ...(targets.archivedGuestIds ?? [])],
         targets.houseIdsByGuest,
-        [...targets.adminIds, ...(user.adminId ? [user.adminId] : [])],
         now,
       );
       return;

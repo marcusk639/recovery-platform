@@ -189,16 +189,22 @@ describe('scrubArchivedAdmins', () => {
   it("removes contact details from the user's archived admin records, keeping names", async () => {
     fake.store = [
       { path: 'admin-archive/a1', data: { ...adminDoc, ...contact, userId: 'u1' } },
-      // Legacy copy without userId, matched by the user's admin id.
-      { path: 'admin-archive/a0', data: { ...adminDoc, ...contact, userId: '' } },
+      { path: 'admin-archive/a3', data: { ...adminDoc, ...contact, userId: 'u1' } },
     ];
-    expect(await scrubArchivedAdmins('u1', ['a0'], NOW)).toBe(2);
+    expect(await scrubArchivedAdmins('u1', NOW)).toBe(2);
     const scrubbed = { ...adminDoc, userId: null, accountDeletedAt: NOW };
     expect(at('admin-archive/a1')).toEqual(scrubbed);
-    expect(at('admin-archive/a0')).toEqual(scrubbed);
+    expect(at('admin-archive/a3')).toEqual(scrubbed);
   });
 
-  it("never touches another user's archived admin, even by id, and is idempotent", async () => {
+  it('leaves legacy copies with no userId alone: they cannot be attributed safely', async () => {
+    const legacy: Doc = { path: 'admin-archive/a0', data: { ...adminDoc, ...contact, userId: '' } };
+    fake.store = clone([legacy]);
+    expect(await scrubArchivedAdmins('u1', NOW)).toBe(0);
+    expect(at('admin-archive/a0')).toEqual(legacy.data);
+  });
+
+  it("never touches another user's archived admin, and is idempotent", async () => {
     const others: Doc[] = [
       { path: 'admin-archive/a2', data: { ...adminDoc, ...contact, userId: 'u2' } },
     ];
@@ -206,9 +212,9 @@ describe('scrubArchivedAdmins', () => {
       ...clone(others),
       { path: 'admin-archive/a1', data: { ...contact, userId: 'u1' } },
     ];
-    await scrubArchivedAdmins('u1', ['a1', 'a2', 'missing'], NOW);
+    await scrubArchivedAdmins('u1', NOW);
     const afterFirst = clone(fake.store);
-    expect(await scrubArchivedAdmins('u1', ['a1', 'a2'], '2027-01-01T00:00:00.000Z')).toBe(0);
+    expect(await scrubArchivedAdmins('u1', '2027-01-01T00:00:00.000Z')).toBe(0);
     expect(fake.store).toEqual(afterFirst);
     expect(at('admin-archive/a2')).toEqual(others[0].data);
   });
@@ -222,7 +228,7 @@ describe('unlinkHouseRecords', () => {
       { path: 'staffNotes/s1', data: { authorId: 'u1', authorName: 'A' } },
       { path: 'admin-archive/a1', data: { userId: 'u1', email: 'a@example.com' } },
     ];
-    await unlinkHouseRecords('u1', ['g1', 'nohouse'], { g1: 'h1' }, ['a1'], NOW);
+    await unlinkHouseRecords('u1', ['g1', 'nohouse'], { g1: 'h1' }, NOW);
     expect(at('houses/h1/votes/v1')).toEqual({ voterIds: [], results: { yes: 1 } });
     expect(logger.info).toHaveBeenCalledWith('accountDeletion: house records unlinked', {
       officerSeats: 1,

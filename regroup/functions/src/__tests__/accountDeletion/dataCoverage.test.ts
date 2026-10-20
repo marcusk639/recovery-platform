@@ -150,6 +150,7 @@ jest.mock('../../api/firestore', () => require('./fakeFirestore').firestoreModul
 import { DELETION_STEPS } from '../../accountDeletion';
 import { unlinkHouseRecords } from '../../accountDeletion/houseRecords';
 import { deletePersonalData } from '../../accountDeletion/personalData';
+import { snapshotTargets } from '../../accountDeletion/targets';
 import { Doc, fake } from './fakeFirestore';
 
 /** The same record for a second user (u2, guest g2) that must never be touched. */
@@ -192,13 +193,36 @@ describe('account deletion data coverage', () => {
     const others = [...house, ...retained].map(otherUsers);
     fake.store = [...house, ...retained].map(toDoc).concat(others.map(toDoc));
 
-    await unlinkHouseRecords('u1', ['g1'], { g1: 'h1' }, ['a1'], NOW);
+    await unlinkHouseRecords('u1', ['g1'], { g1: 'h1' }, NOW);
     const afterFirst = JSON.parse(JSON.stringify(fake.store));
-    await unlinkHouseRecords('u1', ['g1'], { g1: 'h1' }, ['a1'], '2027-01-01T00:00:00.000Z');
+    await unlinkHouseRecords('u1', ['g1'], { g1: 'h1' }, '2027-01-01T00:00:00.000Z');
 
     expect(fake.store).toEqual(afterFirst);
     for (const e of house) expect(at(e.path)).toEqual(e.after);
     for (const d of [...retained, ...others]) expect(at(d.path)).toEqual(d.data);
+  });
+
+  it("ignores users/{uid} pointers to another person's unlinked records", async () => {
+    // users/{uid}.guestId / .adminId are client-writable; these docs have no userId.
+    const theirs: Doc[] = [
+      { path: 'guests/gX', data: { houseId: 'h1', email: 'x@example.com' } },
+      { path: 'admins/aX', data: { email: 'x@example.com' } },
+      { path: 'admin-archive/aX', data: { userId: '', email: 'x@example.com', phoneNumber: '1' } },
+      { path: 'houses/h1/votes/vX', data: { voterIds: ['gX'], individualVotes: { gX: 'yes' } } },
+      { path: 'documents/dX', data: { guestId: 'gX' } },
+    ];
+    fake.store = theirs.map(toDoc);
+    const user = { id: 'u1', guestId: 'gX', adminId: 'aX' } as { id: string };
+
+    const targets = await snapshotTargets('u1', user);
+    expect(targets).toMatchObject({ guestIds: [], adminIds: [], archivedGuestIds: [] });
+    await unlinkHouseRecords('u1', targets.guestIds, targets.houseIdsByGuest, NOW);
+    await deletePersonalData('u1', targets.guestIds, targets.houseIdsByGuest);
+
+    expect(fake.store.map(toDoc).sort((a, b) => (a.path < b.path ? -1 : 1))).toEqual(
+      theirs.map(toDoc).sort((a, b) => (a.path < b.path ? -1 : 1)),
+    );
+    expect(storageDeletes.some((p) => p.includes('gX'))).toBe(false);
   });
 
   it('the personal step removes the deleted Storage prefixes only', async () => {

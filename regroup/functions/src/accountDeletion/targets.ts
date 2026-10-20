@@ -19,10 +19,13 @@ export interface DeletionTargets {
   guestCustomerIds?: string[];
 }
 
+/**
+ * `users/{uid}.guestId` / `.adminId` are deliberately NOT used: the users rule
+ * lets the client write them, so a pointer could name someone else's record.
+ * Every target comes from a server query keyed on the uid.
+ */
 export interface TargetUser {
   id: string;
-  guestId?: string;
-  adminId?: string;
   subscriptionMetadata?: { subscriptionId?: string; customerId?: string };
 }
 
@@ -30,36 +33,17 @@ type Doc = { id: string; exists?: boolean; data(): unknown };
 
 const dedupe = (ids: string[]): string[] => [...new Set(ids.filter(Boolean))];
 
-/**
- * The doc named by a `users/{uid}` pointer, when it exists but carries no
- * `userId` (legacy records). Docs linked to another user are ignored.
- */
-async function unlinkedDoc(
-  collection: { doc(id: string): { get(): Promise<Doc> } },
-  id: string | undefined,
-): Promise<Doc | undefined> {
-  if (!id) return undefined;
-  const snap = await collection.doc(id).get();
-  if (!snap.exists) return undefined;
-  const data = (snap.data() ?? {}) as { userId?: unknown };
-  return data.userId ? undefined : snap;
-}
-
 export async function snapshotTargets(uid: string, user: TargetUser): Promise<DeletionTargets> {
-  const [guests, admins, owned, superAdmin, archived, legacyGuest, legacyAdmin] = await Promise.all(
-    [
-      guestCollection.where('userId', '==', uid).get(),
-      adminCollection.where('userId', '==', uid).get(),
-      houseCollection.where('ownerId', '==', uid).get(),
-      houseCollection.where('superAdminId', '==', uid).get(),
-      ratsFirestore.collection('guest-archive').where('userId', '==', uid).get(),
-      unlinkedDoc(guestCollection, user.guestId),
-      unlinkedDoc(adminCollection, user.adminId),
-    ],
-  );
+  const [guests, admins, owned, superAdmin, archived] = await Promise.all([
+    guestCollection.where('userId', '==', uid).get(),
+    adminCollection.where('userId', '==', uid).get(),
+    houseCollection.where('ownerId', '==', uid).get(),
+    houseCollection.where('superAdminId', '==', uid).get(),
+    ratsFirestore.collection('guest-archive').where('userId', '==', uid).get(),
+  ]);
 
-  const guestDocs: Doc[] = [...guests.docs, ...(legacyGuest ? [legacyGuest] : [])];
-  const adminDocs: Doc[] = [...admins.docs, ...(legacyAdmin ? [legacyAdmin] : [])];
+  const guestDocs: Doc[] = guests.docs;
+  const adminDocs: Doc[] = admins.docs;
   const houseIdsByGuest: Record<string, string> = {};
   const guestCustomerIds: string[] = [];
   for (const doc of [...guestDocs, ...archived.docs]) {

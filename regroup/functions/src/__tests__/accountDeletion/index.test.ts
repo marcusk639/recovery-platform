@@ -143,19 +143,14 @@ describe('runAccountDeletion', () => {
     await runAccountDeletion('u1', NOW);
 
     expect(h.unlinkHouse).toHaveBeenCalledTimes(1);
-    expect(h.unlinkHouse).toHaveBeenCalledWith(
-      'u1',
-      ['g1', 'old1'],
-      { g1: 'h1', old1: 'h9' },
-      ['a1', 'a0'],
-      NOW,
-    );
+    // The users/{uid}.adminId pointer is client-writable and is not passed on.
+    expect(h.unlinkHouse).toHaveBeenCalledWith('u1', ['g1', 'old1'], { g1: 'h1', old1: 'h9' }, NOW);
   });
 
   it('unlinks uid-keyed house records even with no member docs', async () => {
     await runAccountDeletion('u1', NOW);
 
-    expect(h.unlinkHouse).toHaveBeenCalledWith('u1', [], {}, [], NOW);
+    expect(h.unlinkHouse).toHaveBeenCalledWith('u1', [], {}, NOW);
   });
 
   it('scrubs pre-existing guest-archive docs of a former resident', async () => {
@@ -198,21 +193,16 @@ describe('runAccountDeletion', () => {
     expect(h.closeOperator).toHaveBeenCalledTimes(1);
   });
 
-  it('falls back to users/{uid}.guestId and .adminId for docs without userId', async () => {
+  it('ignores client-writable users/{uid}.guestId and .adminId pointers to unlinked docs', async () => {
+    // gL / aL have no userId: they may be another person's legacy records.
     h.users.u1 = { id: 'u1', guestId: 'gL', adminId: 'aL' };
     h.guests = { gL: { houseId: 'h1' }, g1: { userId: 'u1', houseId: 'h2' } };
     h.admins = { aL: {} };
 
     await runAccountDeletion('u1', NOW);
 
-    expect(h.calls).toEqual([
-      'discharge:g1',
-      'discharge:gL',
-      'removeStaff:aL',
-      'personal',
-      'userDoc',
-      'auth',
-    ]);
+    expect(h.calls).toEqual(['discharge:g1', 'personal', 'userDoc', 'auth']);
+    expect(h.deletions.u1.targets).toMatchObject({ guestIds: ['g1'], adminIds: [] });
   });
 
   it('ignores a users/{uid} pointer to a doc linked to someone else, and dedupes', async () => {
