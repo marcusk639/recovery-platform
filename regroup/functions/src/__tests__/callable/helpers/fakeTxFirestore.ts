@@ -113,8 +113,11 @@ export const runTransaction = jest.fn(async (fn: (tx: unknown) => Promise<unknow
   return result;
 });
 
+/** Batched non-transactional read; each doc is recorded as `directGet`. */
+export const getAll = jest.fn(async (...refs: Ref[]) => Promise.all(refs.map((ref) => ref.get())));
+
 export const apiFirestoreMock = () => ({
-  ratsFirestore: { runTransaction },
+  ratsFirestore: { runTransaction, getAll },
   userCollection: makeCollection('users'),
   houseCollection: makeCollection('houses'),
   houseTombstoneCollection: makeCollection('houseTombstones'),

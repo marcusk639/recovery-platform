@@ -26,12 +26,13 @@ jest.mock('../../util/claims', () => ({
 }));
 
 import { logger } from 'firebase-functions';
-import { finishOperatorSetup } from '../../callable/finishOperatorSetup';
+import { finishOperatorSetup, MAX_CANDIDATE_HOUSES } from '../../callable/finishOperatorSetup';
 import { OPERATOR_SETUP_FIELDS } from '../../houses/operatorSetup';
 import {
   events,
   expectCode,
   failNextUpdate,
+  getAll,
   resetFakeFirestore,
   store,
 } from './helpers/fakeTxFirestore';
@@ -177,7 +178,7 @@ describe('finishOperatorSetup', () => {
     );
   });
 
-  it('is idempotent: a second call re-grants the same houses and leaves the flags set', async () => {
+  it('is idempotent: a second call completes without re-granting and leaves the flags set', async () => {
     seedUser({ h1: {} });
     seedHouse('h1');
 
@@ -185,10 +186,38 @@ describe('finishOperatorSetup', () => {
     const afterFirst = { ...user() };
     const second = await call();
 
-    expect(second).toEqual(first);
-    expect(mockGrantHouseRoles).toHaveBeenCalledTimes(2);
-    expect(mockGrantHouseRoles).toHaveBeenNthCalledWith(2, UID, ['h1']);
+    expect(first).toEqual({ completed: true, houseIds: ['h1'] });
+    expect(second).toEqual({ completed: true, houseIds: [] });
+    expect(mockGrantHouseRoles).toHaveBeenCalledTimes(1);
     expect(user()).toEqual(afterFirst);
+  });
+
+  it('returns completed with no grant, reads or writes for an already-completed operator', async () => {
+    seedUser({ h1: {} }, { orgSetupCompleted: true });
+    seedHouse('h1');
+
+    await expect(call()).resolves.toEqual({ completed: true, houseIds: [] });
+    expect(mockGrantHouseRoles).not.toHaveBeenCalled();
+    expect(getAll).not.toHaveBeenCalled();
+    expect(events.filter((e) => e.op === 'directGet').map((e) => e.path)).toEqual([
+      `users/${UID}`,
+    ]);
+    expect(writes()).toHaveLength(0);
+  });
+
+  it(`reads at most ${MAX_CANDIDATE_HOUSES} candidate houses in one getAll and grants only owned ones`, async () => {
+    const ids = Array.from({ length: 40 }, (_, i) => `h${String(i).padStart(2, '0')}`);
+    seedUser(Object.fromEntries(ids.map((id) => [id, {}])));
+    // Owned: h00, h10, h20 (inside the cap) and h30 (beyond it).
+    ids.forEach((id, i) => seedHouse(id, i % 10 === 0 ? UID : 'other-uid'));
+
+    await expect(call()).resolves.toEqual({ completed: true, houseIds: ['h00', 'h10', 'h20'] });
+
+    expect(getAll).toHaveBeenCalledTimes(1);
+    expect(getAll.mock.calls[0]).toHaveLength(MAX_CANDIDATE_HOUSES);
+    const houseReads = events.filter((e) => e.op === 'directGet' && e.path.startsWith('houses/'));
+    expect(houseReads).toHaveLength(MAX_CANDIDATE_HOUSES);
+    expect(mockGrantHouseRoles).toHaveBeenCalledWith(UID, ['h00', 'h10', 'h20']);
   });
 
   it('a retry after a failed grant completes setup', async () => {
