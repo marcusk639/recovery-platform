@@ -85,13 +85,20 @@ const GuestInvites: React.FC<Props> = ({ navigation }) => {
               houseId: updatedHouse.id,
               values: updatedHouse,
             });
-            await sendAllInvites(
+            const sendResult = await sendAllInvites(
               { [updatedHouse.id]: updatedHouse },
               user as User,
               true,
               false,
               false
             );
+            // sendAllInvites settles each invitation and reports failures as
+            // a count rather than rejecting; surface them as a failure.
+            if (sendResult?.failed) {
+              throw new Error(
+                `${sendResult.failed} guest invitation(s) could not be sent`
+              );
+            }
             setSendingEmails(false, true, false);
             navigation.goBack();
           } catch (error) {

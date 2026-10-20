@@ -379,14 +379,27 @@ describe("setup-wizard service", () => {
       expect(roles).not.toContain("guest");
     });
 
-    it("propagates errors from createInvitation", async () => {
+    it("counts failed invitations instead of rejecting", async () => {
       (invitationsService.createInvitation as jest.Mock).mockRejectedValue(
         new Error("Email service down")
       );
 
-      await expect(sendAllInvites(makeHouses(), makeUser())).rejects.toThrow(
-        "Email service down"
-      );
+      await expect(sendAllInvites(makeHouses(), makeUser())).resolves.toEqual({
+        sent: 0,
+        failed: 2,
+      });
+    });
+
+    it("keeps sending the rest when one invitation fails", async () => {
+      (invitationsService.createInvitation as jest.Mock)
+        .mockRejectedValueOnce(new Error("Email service down"))
+        .mockResolvedValueOnce({ token: "ok" });
+
+      await expect(sendAllInvites(makeHouses(), makeUser())).resolves.toEqual({
+        sent: 1,
+        failed: 1,
+      });
+      expect(invitationsService.createInvitation).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -553,8 +566,9 @@ describe("setup-wizard service", () => {
         subscriptionMetadata: {},
       });
 
+      // The houses exist server-side; never claim they were not created.
       await expect(initializeHouses(makeHouses(), makeUser())).rejects.toThrow(
-        "Failed to create houses."
+        "Your houses were created. Please restart the app to finish setup."
       );
       expect(invitationsService.createInvitation).not.toHaveBeenCalled();
     });
@@ -568,16 +582,18 @@ describe("setup-wizard service", () => {
 
       expect(result.admin).toBeDefined();
       expect(result.inviteError).toBeUndefined();
+      expect(result.photoFailures).toBe(1);
+      expect(result.inviteFailures).toBe(0);
       expect(invitationsService.createInvitation).toHaveBeenCalled();
     });
 
-    it("throws 'Failed to create houses.' when createHouses rejects", async () => {
+    it("throws a generic retry message when createHouses rejects without a code", async () => {
       (subscriptionService.createHouses as jest.Mock).mockRejectedValueOnce(
         new Error("failed-precondition")
       );
 
       await expect(initializeHouses(makeHouses(), makeUser())).rejects.toThrow(
-        "Failed to create houses."
+        "We couldn't finish creating your houses. Please try again."
       );
       expect(usersService.getAuthUser).not.toHaveBeenCalled();
     });

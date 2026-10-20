@@ -31,7 +31,7 @@ export default interface ManagerSetupProps {
   startHouseSetup?: (house?: House) => void;
   removeHouse?: (houseId?: string) => void;
   updateHouse?: (house: Partial<House> & { id: string }) => void;
-  submitHouse?: () => void;
+  submitHouse?: () => Promise<unknown> | void;
   resetSetup?: () => void;
   setupHouse?: (house: House) => void;
   phase?: PhaseConfiguration;

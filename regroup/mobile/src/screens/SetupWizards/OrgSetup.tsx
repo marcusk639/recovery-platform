@@ -33,6 +33,7 @@ import {
 } from "../../components/card-list/card-list";
 import Admin from "../../entities/Admin";
 import { getAddressDisplay } from "../../util/address";
+import { notifySetupCompletion } from "../../util/setupNotice";
 import Section from "../../components/rats-interactable-section";
 
 import { RatsText } from "../../components/rats-text";
@@ -257,9 +258,7 @@ const OrgSetupForm = withFormik<ManagerSetupProps, Partial<Admin>>({
   mapPropsToValues: (props) => initialValues,
   handleSubmit: async (values, formikBag) => {
     try {
-      if (formikBag.props.submitHouse) {
-        await formikBag.props.submitHouse();
-      }
+      const result = await formikBag.props.submitHouse?.();
       // Hardened 2026-07-07: clear the wizard's staged Redux state now that
       // it's been persisted, so a future re-entry into this wizard (e.g. via
       // HouseSettings/ManagerSettings -> OperatorSetupWizard) doesn't start
@@ -268,6 +267,8 @@ const OrgSetupForm = withFormik<ManagerSetupProps, Partial<Admin>>({
       if (formikBag.props.navigation) {
         navigateToMainTab(formikBag.props.navigation, Routes.House);
       }
+      // Invites/photos are best effort: setup is done, but say what to redo.
+      notifySetupCompletion(result);
     } catch (error) {
       // submitHouse's rejection already updates Redux (submittingFailed +
       // error), which OrgSetupFormView's loading-modal effect surfaces to

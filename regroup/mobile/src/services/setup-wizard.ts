@@ -1,5 +1,4 @@
 import { functions } from "../../firebase-setup";
-import { houseCollection } from "./house";
 import { Houses } from "../types";
 import { cloneDeep, each, pick } from "lodash";
 import { User } from "../entities/User";
@@ -12,18 +11,23 @@ import { logException } from "../util/logging";
 import { refreshClaims, getAuthUser } from "./users";
 import { Guest } from "../entities/Guest";
 import { createHouses, HouseCreatePayload } from "./subscription";
+import { applyHousePhotos } from "./setup-wizard-photos";
+import { housesCreatedError, toCreateHousesError } from "./setup-wizard-errors";
 import { asyncForEach } from "../util/forEach";
 import { getTimezone } from "../../google/timezone";
 import { House } from "../entities/House";
 
-// Whitelist mirrored from the server createHouseInputSchema. imageUrl/avatar
-// are deliberately absent: they are local file URIs until uploaded. `id` is
-// absent too: the server derives house ids, and the local wizard id is sent
-// only as the idempotency `requestKey`.
-const HOUSE_PAYLOAD_KEYS = [
+// Whitelist mirrored from the server createHouseInputSchema (every schema key
+// except `requestKey`, which toPayload adds). imageUrl/avatar are deliberately
+// absent: they are local file URIs until uploaded. `id` is absent too: the
+// server derives house ids, and the local wizard id is sent only as the
+// idempotency `requestKey`. Keep this a plain string-literal array: the
+// functions suite parses it from this file to check it against the schema
+// (regroup/functions/src/__tests__/houses/mobilePayloadKeys.drift.test.ts).
+export const HOUSE_PAYLOAD_KEYS = [
   "name", "lat", "lng", "street", "city", "state", "zip", "country",
   "timezone", "phoneNumber", "monthlyRent", "weeklyRent", "maximumCapacity",
-  "depositsAndFees", "rentFrequency", "gender", "baths", "wifi",
+  "depositsAndFees", "rentFrequency", "gender", "baths", "wifi", "certified",
   "managerSetupType", "houseType", "phases", "chores", "rooms",
   "pendingAdminInvites", "pendingGuestInvites", "seniorPeerEmails",
 ];
@@ -57,13 +61,22 @@ export async function addGuestAuthorization(guest: Guest) {
   return refreshClaims();
 }
 
+export interface SendInvitesResult {
+  sent: number;
+  failed: number;
+}
+
+/**
+ * Sends every pending invitation. Each invitation settles independently, so
+ * one failure does not stop the others; the caller gets the counts.
+ */
 export async function sendAllInvites(
   houses: Houses,
   _operator: User,
   guest: boolean = true,
   admin: boolean = true,
   seniorPeer: boolean = true
-): Promise<CreateInvitationResult[]> {
+): Promise<SendInvitesResult> {
   const calls: Promise<CreateInvitationResult>[] = [];
   each(houses, (house) => {
     const initialPhase = getInitialPhase(house);
@@ -104,7 +117,9 @@ export async function sendAllInvites(
       });
     }
   });
-  return Promise.all(calls);
+  const results = await Promise.allSettled(calls);
+  const failed = results.filter((r) => r.status === "rejected").length;
+  return { sent: results.length - failed, failed };
 }
 
 /**
@@ -141,6 +156,8 @@ export const createGuestInvite = (
   });
 };
 
+// Rejects on the first failed upload. initializeHouses uses applyHousePhotos
+// (setup-wizard-photos.ts), which settles each house independently.
 export const uploadHousePhotos = async (
   houses: Houses
 ): Promise<{ houseId: string; url: string }[]> => {
@@ -153,7 +170,6 @@ export const uploadHousePhotos = async (
   });
   return Promise.all(promises);
 };
-
 
 /**
  * Re-key the wizard's houses by the server-derived ids returned in idMap
@@ -173,6 +189,16 @@ const toServerHouses = (houses: Houses, idMap: Record<string, string>): Houses =
   return out;
 };
 
+const countPendingInvites = (houses: Houses): number =>
+  Object.values(houses).reduce(
+    (n, h) =>
+      n +
+      (h.pendingAdminInvites?.length ?? 0) +
+      (h.pendingGuestInvites?.length ?? 0) +
+      (h.seniorPeerEmails?.length ?? 0),
+    0
+  );
+
 export async function initializeHouses(
   houses: Houses,
   _operator: User,
@@ -184,57 +210,73 @@ export async function initializeHouses(
     house.timezone = await getTimezone(house.lat, house.lng);
   });
 
+  // (a) The server creates the houses, admin doc, user fields and subscription
+  // map in one transaction and grants admin/superAdmin claims. It derives the
+  // house ids; idMap translates our local wizard ids to them.
+  let created: Awaited<ReturnType<typeof createHouses>>;
   try {
-    // The server creates the houses, admin doc, user fields and subscription
-    // map in one transaction and grants admin/superAdmin claims. It derives
-    // the house ids; idMap translates our local wizard ids to them.
-    const { houseIds, idMap, admin, subscriptionMetadata } = await createHouses(
-      Object.values(houses).map(toPayload)
-    );
-    const serverHouses = toServerHouses(houses, idMap);
-    const token = await getAuthUser(true);
-
-    // Best-effort: setup is already complete without photos.
-    try {
-      const houseUrls = await uploadHousePhotos(serverHouses);
-      await Promise.all(
-        houseUrls.map(({ houseId, url }) => {
-          serverHouses[houseId].imageUrl = url;
-          serverHouses[houseId].avatar = url;
-          return houseCollection
-            .doc(houseId)
-            .update({ imageUrl: url, avatar: url });
-        })
-      );
-    } catch (error) {
-      logException(error);
-    }
-
-    let inviteError;
-    try {
-      await sendAllInvites(serverHouses, operator);
-    } catch (error) {
-      inviteError = error;
-    }
-
-    return {
-      houses: serverHouses,
-      inviteError,
-      admin,
-      user: {
-        ...operator,
-        orgSetupCompleted: true,
-        isAdmin: true,
-        isSuperAdmin: true,
-        adminId: admin.id,
-        // A retry returns ids the operator already owns; keep the list unique.
-        housesOwned: Array.from(new Set([...(operator.housesOwned ?? []), ...houseIds])),
-        subscriptionMetadata,
-      },
-      token,
-    };
+    created = await createHouses(Object.values(houses).map(toPayload));
   } catch (error) {
-    logException(error);
-    throw new Error("Failed to create houses.");
+    logException(error, "initializeHouses: createHouses failed");
+    throw toCreateHousesError(error);
   }
+  const { houseIds, idMap, admin, subscriptionMetadata } = created;
+
+  // (b) The houses now exist server-side: nothing below may report that they
+  // were not created.
+  let serverHouses: Houses;
+  let token;
+  try {
+    serverHouses = toServerHouses(houses, idMap);
+    token = await getAuthUser(true);
+  } catch (error) {
+    logException(
+      error,
+      `initializeHouses: post-create step failed houses=${houseIds.join(",")}`
+    );
+    throw housesCreatedError(error);
+  }
+
+  // Best-effort: setup is already complete without photos.
+  const photoFailures = await applyHousePhotos(serverHouses);
+
+  const serverIds = Object.keys(serverHouses).join(",");
+  let inviteError;
+  let inviteFailures = 0;
+  try {
+    const { sent, failed } = await sendAllInvites(serverHouses, operator);
+    inviteFailures = failed;
+    if (failed > 0) {
+      logException(
+        new Error("initializeHouses: invitations failed"),
+        `houses=${serverIds} sent=${sent} failed=${failed}`
+      );
+    }
+  } catch (error) {
+    inviteError = error;
+    inviteFailures = countPendingInvites(serverHouses);
+    logException(
+      error,
+      `initializeHouses: invitations threw houses=${serverIds} count=${inviteFailures}`
+    );
+  }
+
+  return {
+    houses: serverHouses,
+    inviteError,
+    inviteFailures,
+    photoFailures,
+    admin,
+    user: {
+      ...operator,
+      orgSetupCompleted: true,
+      isAdmin: true,
+      isSuperAdmin: true,
+      adminId: admin.id,
+      // A retry returns ids the operator already owns; keep the list unique.
+      housesOwned: Array.from(new Set([...(operator.housesOwned ?? []), ...houseIds])),
+      subscriptionMetadata,
+    },
+    token,
+  };
 }

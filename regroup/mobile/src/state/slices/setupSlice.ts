@@ -32,6 +32,11 @@ export interface SetupState {
   submittingSuccessful: boolean;
   submittingFailed: boolean;
   error: string | null;
+
+  // Best-effort steps of the last successful submitHouseSetup that failed
+  // (the houses were still created). Shown as a non-blocking notice.
+  inviteFailures: number;
+  photoFailures: number;
 }
 
 /**
@@ -51,6 +56,8 @@ const initialState: SetupState = {
   submittingSuccessful: false,
   submittingFailed: false,
   error: null,
+  inviteFailures: 0,
+  photoFailures: 0,
 };
 
 /**
@@ -317,10 +324,14 @@ const setupSlice = createSlice({
         state.submitting = true;
         state.submittingFailed = false;
         state.error = null;
+        state.inviteFailures = 0;
+        state.photoFailures = 0;
       })
-      .addCase(submitHouseSetup.fulfilled, (state) => {
+      .addCase(submitHouseSetup.fulfilled, (state, action) => {
         state.submitting = false;
         state.submittingSuccessful = true;
+        state.inviteFailures = action.payload?.inviteFailures ?? 0;
+        state.photoFailures = action.payload?.photoFailures ?? 0;
       })
       .addCase(submitHouseSetup.rejected, (state, action) => {
         state.submitting = false;
@@ -381,6 +392,10 @@ export const selectSubmittingFailed = (state: { setup: SetupState }) =>
   state.setup.submittingFailed;
 export const selectSetupError = (state: { setup: SetupState }) =>
   state.setup.error;
+export const selectInviteFailures = (state: { setup: SetupState }) =>
+  state.setup.inviteFailures;
+export const selectPhotoFailures = (state: { setup: SetupState }) =>
+  state.setup.photoFailures;
 
 /**
  * Reducer

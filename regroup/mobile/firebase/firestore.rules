@@ -195,23 +195,11 @@ service cloud.firestore {
       allow read: if isGuestOrAdmin([houseId]);
       // Houses are created only by the server-side createHouses callable.
       allow create: if false;
-      // Hardened 2026-07-05: request.resource does not exist on delete
-      // operations (there is no incoming document), so this rule always
-      // evaluated to false/error and the "delete house" path was dead —
-      // no admin could ever delete a house. houseId (the path segment) is
-      // the same value the rest of this match block already uses.
-      //
-      // Hardened 2026-07-07: used isHouseAdmin(houseId) (admin claim only),
-      // inconsistent with every sibling rule in this match block (create,
-      // update, read all use isAdmin([houseId]), which also grants
-      // superAdmin) — a superAdmin who can edit a house couldn't delete it.
-      //
-      // Hardened 2026-10-20: delete now requires superAdmin of THIS house. With
-      // isAdmin a plain admin could delete another operator's house, and the
-      // id would then read as free to createHouses (delete-and-reclaim, minting
-      // superAdmin for the caller). The server also tombstones deleted ids
-      // (houseTombstones, written by the onHouseDeleted trigger), which
-      // createHouses refuses. Demo scoping matches isAdmin.
+      // Delete is superAdmin-of-this-house only, so a plain admin cannot
+      // destroy the operator's house. Deleted ids are tombstoned server-side
+      // (houseTombstones) and createHouses refuses them. Demo scoping matches
+      // isAdmin. Uses the houseId path segment: request.resource does not
+      // exist on delete.
       allow delete: if hasSuperAdminRoleInHouse([houseId]) && isDemoScopedHouses([houseId]);
       // Hardened 2026-07-14: this used to let ANY admin (not just
       // superAdmin) write financial/ownership fields (stripeAccountId,
@@ -238,10 +226,11 @@ service cloud.firestore {
       // bypasses rules. stripeAccountApi records which Stripe Accounts API owns
       // stripeAccountId; every server read and close dispatches on it, so a
       // client flipping it would stop status syncing and break disconnect.
-      // superAdminId is the operator's uid (set by createHouses); oxford and
-      // analytics callables authorize on it, so no client may write it.
-      // superAdminIds and adminId are authorization fields like adminIds/ownerId:
-      // only a superAdmin of the house may change them.
+      // superAdminId is the operator's uid (set by createHouses); server
+      // callables and triggers resolve the operator through it, so no client
+      // may write it. superAdminIds is an authorization field like
+      // adminIds/ownerId: only a superAdmin of the house may change it.
+      // adminId is a legacy field, blocked defensively the same way.
       allow update: if isDemoScopedHouses([houseId]) &&
         !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny(['subscriptionStatus', 'guestGraceEndsAt', 'stripeAccountApi', 'superAdminId']) &&

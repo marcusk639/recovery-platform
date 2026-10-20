@@ -1933,9 +1933,8 @@ describe("houses/{houseId} — delete", () => {
     return doc(ctx.firestore(), `houses/${HOUSE_ID}`);
   }
 
-  // Hardened 2026-10-20: a plain admin used to be able to delete the house,
-  // after which createHouses saw the id as free and minted superAdmin on it
-  // for the caller (delete-and-reclaim). Delete is superAdmin-only now.
+  // Delete is superAdmin-only so a plain admin cannot destroy the operator's
+  // house; deleted ids are tombstoned server-side and never re-created.
   test("DENY a plain admin of the house deleting it (delete-and-reclaim)", async () => {
     await seedHouse();
     const ctx = testEnv.authenticatedContext(
@@ -2733,13 +2732,13 @@ describe("houses/{houseId} — client creation is closed", () => {
 });
 
 // ---------------------------------------------------------------------------
-// houses/{houseId} — authorization fields (2026-10-20)
+// houses/{houseId} — authorization fields
 //
-// superAdminId is the operator's uid, written only by createHouses; the oxford
-// and analytics callables authorize on it, so no client role may change it.
-// superAdminIds and adminId are authorization fields like adminIds/ownerId:
-// a plain admin or guest must not be able to write them; a superAdmin still
-// manages them (as it manages adminIds today).
+// superAdminId is the operator's uid, written only by createHouses; server
+// callables and triggers resolve the operator through it, so no client role
+// may change it. superAdminIds (and the legacy adminId, blocked defensively)
+// are authorization fields like adminIds/ownerId: a plain admin or guest must
+// not write them; a superAdmin still manages them.
 // ---------------------------------------------------------------------------
 describe("houses/{houseId} — update: authorization fields", () => {
   const seedHouse = async () => {
@@ -2806,5 +2805,50 @@ describe("houses/{houseId} — update: authorization fields", () => {
         adminId: "admin-doc-1",
       }),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// houseTombstones/{houseId} — server-only (no client rule, default deny)
+// ---------------------------------------------------------------------------
+describe("houseTombstones/{houseId} — server-only", () => {
+  const tombstonePath = `houseTombstones/${HOUSE_ID}`;
+  const superAdminCtx = () =>
+    testEnv.authenticatedContext(ADMIN_UID, authHouseSuperAdmin(ADMIN_UID, HOUSE_ID));
+  const seedTombstone = async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), tombstonePath), {
+        deletedAt: "2026-10-20T00:00:00.000Z",
+      });
+    });
+  };
+
+  it("a superAdmin of the house cannot read its tombstone", async () => {
+    await seedTombstone();
+    await assertFails(getDoc(doc(superAdminCtx().firestore(), tombstonePath)));
+  });
+
+  it("a superAdmin of the house cannot create or overwrite its tombstone", async () => {
+    await assertFails(
+      setDoc(doc(superAdminCtx().firestore(), tombstonePath), { deletedAt: "x" }),
+    );
+    await seedTombstone();
+    await assertFails(
+      updateDoc(doc(superAdminCtx().firestore(), tombstonePath), { deletedAt: "x" }),
+    );
+  });
+
+  it("a superAdmin of the house cannot delete its tombstone", async () => {
+    await seedTombstone();
+    await assertFails(deleteDoc(doc(superAdminCtx().firestore(), tombstonePath)));
+  });
+
+  it("other clients cannot read or delete it either", async () => {
+    await seedTombstone();
+    const admin = testEnv.authenticatedContext(OTHER_UID, authHouseAdmin(OTHER_UID, HOUSE_ID));
+    await assertFails(getDoc(doc(admin.firestore(), tombstonePath)));
+    await assertFails(deleteDoc(doc(admin.firestore(), tombstonePath)));
+    const anon = testEnv.unauthenticatedContext();
+    await assertFails(getDoc(doc(anon.firestore(), tombstonePath)));
   });
 });
