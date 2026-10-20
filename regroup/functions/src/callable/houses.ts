@@ -14,13 +14,15 @@ const createHousesSchema = z.object({
     .array(createHouseInputSchema)
     .min(1)
     .max(10)
-    .refine((houses) => new Set(houses.map((h) => h.id)).size === houses.length, {
-      message: 'House ids must be unique',
+    .refine((houses) => new Set(houses.map((h) => h.requestKey)).size === houses.length, {
+      message: 'House requestKeys must be unique',
     }),
 });
 
 export interface CreateHousesResponse {
   houseIds: string[];
+  /** requestKey → server-derived house id. */
+  idMap: Record<string, string>;
   admin: Admin;
   subscriptionMetadata: OperatorSubscription;
 }
@@ -32,8 +34,10 @@ export interface CreateHousesResponse {
  * commits. The client cannot write a house itself because it does not yet hold
  * the house-scoped claim the Firestore rules require.
  *
- * Safe to retry with the same ids: houses this operator already owns are not
- * rewritten, and the claims are granted again.
+ * House ids are derived by the server from (uid, requestKey); the client never
+ * chooses one and maps its requestKeys to the created ids via `idMap`. Safe to
+ * retry with the same requestKeys: they derive the same ids, houses this
+ * operator already owns are not rewritten, and the claims are granted again.
  */
 export const createHouses = onCall(async (request): Promise<CreateHousesResponse> => {
   if (!request.auth) {
@@ -63,6 +67,7 @@ export const createHouses = onCall(async (request): Promise<CreateHousesResponse
 
   return {
     houseIds: result.houseIds,
+    idMap: result.idMap,
     admin: result.admin as Admin,
     subscriptionMetadata: result.subscriptionMetadata,
   };

@@ -8,7 +8,8 @@ import { z } from 'zod';
  * stripe*, isDemoHouse, oxfordEnabled, ...) can never come from the client.
  * `certified` is client-supplied: the wizard asks the operator, and the
  * operator (superAdmin) can already set it via a house update. Nested wizard
- * structures are intentionally permissive.
+ * structures are intentionally permissive. The house id is never client input
+ * (see requestKey below).
  */
 // Numeric (or numeric string), range-checked after coercion.
 const coordinate = (min: number, max: number) =>
@@ -28,7 +29,13 @@ const emails = z.array(z.string().max(320)).max(200);
 
 export const createHouseInputSchema = z
   .object({
-    id: z.string().regex(/^[A-Za-z0-9]{20}$/),
+    // Idempotency key, not an id: the house id is derived server-side from
+    // (uid, requestKey) in houseId.ts. A client-sent `id` is stripped.
+    requestKey: z
+      .string()
+      .min(1)
+      .max(64)
+      .regex(/^[A-Za-z0-9_-]+$/),
     name: z.string().min(1).max(120),
     lat: coordinate(-90, 90),
     lng: coordinate(-180, 180),
@@ -64,6 +71,8 @@ export const createHouseInputSchema = z
 export type CreateHouseInput = z.infer<typeof createHouseInputSchema>;
 
 export interface BuildHouseContext {
+  /** Server-derived (deriveHouseId); stored as the doc's `id` field. */
+  houseId: string;
   ownerUid: string;
   adminId: string;
   subscriptionStatus: 'active' | 'trialing';
@@ -74,7 +83,8 @@ export function buildHouseDoc(
   input: CreateHouseInput,
   ctx: BuildHouseContext,
 ): Record<string, unknown> {
-  const { lat, lng, ...rest } = input;
+  // requestKey is request metadata, not a house field.
+  const { lat, lng, requestKey: _requestKey, ...rest } = input;
   const latNum = Number(lat);
   const lngNum = Number(lng);
   return {
@@ -88,6 +98,7 @@ export function buildHouseDoc(
     health: {},
     awaitingVerification: [],
     ...rest,
+    id: ctx.houseId,
     lat: latNum,
     lng: lngNum,
     geohash: encode(latNum, lngNum),

@@ -27,6 +27,7 @@ jest.mock('../../util/subscriptionHouses', () => ({
 
 import { logger } from 'firebase-functions';
 import { createHouses } from '../../callable/houses';
+import { deriveHouseId } from '../../houses/houseId';
 import {
   Doc,
   events,
@@ -40,11 +41,13 @@ import {
 const handler = createHouses as unknown as (req: unknown) => Promise<any>;
 
 const UID = 'operator-uid';
-const H1 = 'aaaaaaaaaaaaaaaaaaa1';
-const H2 = 'aaaaaaaaaaaaaaaaaaa2';
-const house = (id: string, extra: Doc = {}) => ({
-  id,
-  name: `House ${id}`,
+// Clients send requestKeys; house ids are server-derived from (uid, key).
+const [K1, K2] = ['wizard-key-1', 'wizard-key-2'];
+const H1 = deriveHouseId(UID, K1);
+const H2 = deriveHouseId(UID, K2);
+const house = (requestKey: string, extra: Doc = {}) => ({
+  requestKey,
+  name: `House ${requestKey}`,
   lat: 30.2672,
   lng: -97.7431,
   ...extra,
@@ -71,7 +74,6 @@ const seedUser = (extra: Doc = {}) =>
     ...extra,
   });
 
-
 beforeEach(() => {
   resetFakeFirestore();
   jest.clearAllMocks();
@@ -91,7 +93,7 @@ beforeEach(() => {
 
 describe('createHouses', () => {
   it('rejects unauthenticated callers', async () => {
-    await expectCode(call([house(H1)], null), 'unauthenticated');
+    await expectCode(call([house(K1)], null), 'unauthenticated');
     expect(mockRunTransaction).not.toHaveBeenCalled();
   });
 
@@ -103,7 +105,7 @@ describe('createHouses', () => {
   ])('denies without an active or trialing tier subscription (%s)', async (_label, meta) => {
     seedUser({ subscriptionMetadata: meta });
     await expectCode(
-      call([house(H1)]),
+      call([house(K1)]),
       'failed-precondition',
       'An active subscription is required to create a house',
     );
@@ -114,13 +116,13 @@ describe('createHouses', () => {
   it('rejects invalid input', async () => {
     seedUser();
     await expectCode(call([]), 'invalid-argument');
-    await expectCode(call([house(H1), house(H1)]), 'invalid-argument');
+    await expectCode(call([house(K1), house(K1)]), 'invalid-argument');
     expect(writes()).toHaveLength(0);
   });
 
   it('creates houses, admin doc and user fields in one transaction', async () => {
     seedUser({ subscriptionMetadata: activeMeta({ status: 'active' }) });
-    const res = await call([house(H1, { subscriptionStatus: 'canceled' }), house(H2)]);
+    const res = await call([house(K1, { subscriptionStatus: 'canceled' }), house(K2)]);
 
     expect(mockRunTransaction).toHaveBeenCalledTimes(1);
     const creates = events.filter((e) => e.op === 'create');
@@ -172,13 +174,14 @@ describe('createHouses', () => {
     expect(lastGet).toBeLessThan(firstWrite);
 
     expect(res.houseIds).toEqual([H1, H2]);
+    expect(res.idMap).toEqual({ [K1]: H1, [K2]: H2 });
     expect(res.subscriptionMetadata.houses).toHaveProperty(H1);
     expect(store.get(`houses/${H1}`)).toBeDefined();
   });
 
   it('grants admin and superAdmin claims after the transaction', async () => {
     seedUser();
-    await call([house(H1), house(H2)]);
+    await call([house(K1), house(K2)]);
     expect(mockGrantHouseRoles).toHaveBeenCalledWith(UID, [H1, H2]);
     const ops = events.map((e) => e.op);
     expect(ops.indexOf('grantHouseRoles')).toBeGreaterThan(ops.indexOf('commit'));
@@ -199,7 +202,7 @@ describe('createHouses', () => {
       houseIds: ['old'],
       superAdmin: ['old'],
     });
-    const res = await call([house(H1)]);
+    const res = await call([house(K1)]);
 
     const sets = events.filter((e) => e.op === 'set');
     expect(sets).toHaveLength(1);
@@ -217,15 +220,15 @@ describe('createHouses', () => {
   it('rejects an admin doc that belongs to another user', async () => {
     seedUser({ adminId: 'admin-x' });
     store.set('admins/admin-x', { id: 'admin-x', userId: 'someone-else', houseIds: [] });
-    await expectCode(call([house(H1)]), 'permission-denied');
+    await expectCode(call([house(K1)]), 'permission-denied');
     expect(writes()).toHaveLength(0);
     expect(mockGrantHouseRoles).not.toHaveBeenCalled();
   });
 
-  it('retrying with the same ids re-grants claims without rewriting houses', async () => {
+  it('retrying with the same requestKeys re-grants claims without rewriting houses', async () => {
     seedUser();
     mockGrantHouseRoles.mockRejectedValueOnce(new Error('auth down'));
-    await expectCode(call([house(H1)]), 'internal');
+    await expectCode(call([house(K1)]), 'internal');
     const firstHouse = store.get(`houses/${H1}`);
     expect(firstHouse).toBeDefined();
     // The first attempt recorded the id in the server-owned subscription map,
@@ -233,7 +236,7 @@ describe('createHouses', () => {
     expect(store.get(`users/${UID}`)!.subscriptionMetadata.houses).toHaveProperty(H1);
 
     events.length = 0;
-    const res = await call([house(H1, { name: 'Renamed' })]);
+    const res = await call([house(K1, { name: 'Renamed' })]);
     expect(events.filter((e) => e.op === 'create')).toHaveLength(0);
     expect(store.get(`houses/${H1}`)).toBe(firstHouse);
     expect(mockGrantHouseRoles).toHaveBeenLastCalledWith(UID, [H1]);
@@ -243,11 +246,11 @@ describe('createHouses', () => {
     expect(res.admin.houseIds).toEqual([H1]);
   });
 
-  it('rejects an id owned by another operator', async () => {
+  it("rejects a derived id that already holds another operator's house", async () => {
     seedUser();
     const theirs = { id: H1, ownerId: 'other-uid', name: 'Theirs' };
     store.set(`houses/${H1}`, theirs);
-    await expectCode(call([house(H1)]), 'already-exists', 'A house with this id already exists');
+    await expectCode(call([house(K1)]), 'already-exists', 'A house with this id already exists');
     expect(writes()).toHaveLength(0);
     expect(store.get(`houses/${H1}`)).toBe(theirs);
     expect(mockGrantHouseRoles).not.toHaveBeenCalled();
@@ -258,7 +261,7 @@ describe('createHouses', () => {
     seedUser();
     const forged = { id: H1, ownerId: UID, name: 'Forged' };
     store.set(`houses/${H1}`, forged);
-    await expectCode(call([house(H1)]), 'already-exists', 'A house with this id already exists');
+    await expectCode(call([house(K1)]), 'already-exists', 'A house with this id already exists');
     expect(writes()).toHaveLength(0);
     expect(store.get(`houses/${H1}`)).toBe(forged);
     expect(mockGrantHouseRoles).not.toHaveBeenCalled();
@@ -271,7 +274,7 @@ describe('createHouses', () => {
       throw new RealHttpsError('failed-precondition', 'Property limit reached for your plan');
     });
     await expectCode(
-      call([house(H1)]),
+      call([house(K1)]),
       'failed-precondition',
       'Property limit reached for your plan',
     );
@@ -284,7 +287,7 @@ describe('createHouses', () => {
     seedUser();
     mockGrantHouseRoles.mockRejectedValueOnce(new Error('auth down'));
     await expectCode(
-      call([house(H1)]),
+      call([house(K1)]),
       'internal',
       'Houses were created but access could not be granted. Try again.',
     );

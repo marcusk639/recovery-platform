@@ -2,13 +2,14 @@ import { encode } from 'ngeohash';
 import { buildHouseDoc, createHouseInputSchema } from '../../houses/houseInput';
 
 const ctx = {
+  houseId: 'ServerDerivedId00001',
   ownerUid: 'owner-uid',
   adminId: 'admin-id',
   subscriptionStatus: 'trialing' as const,
   now: '2026-10-20T00:00:00.000Z',
 };
 const base = {
-  id: 'abcdefghij0123456789',
+  requestKey: 'local-wizard_id-1',
   name: 'Maple House',
   lat: 30.2672,
   lng: -97.7431,
@@ -93,8 +94,24 @@ describe('houseInput', () => {
     expect(build({ lat: '30.2672', lng: '-97.7431' }).geohash).toBe(encode(30.2672, -97.7431));
   });
 
-  it('rejects an id that is not a 20-char auto-id', () => {
-    expect(createHouseInputSchema.safeParse({ ...base, id: '../users/x' }).success).toBe(false);
+  it('rejects a requestKey that is not 1-64 chars of [A-Za-z0-9_-]', () => {
+    const parse = (requestKey: unknown) =>
+      createHouseInputSchema.safeParse({ ...base, requestKey }).success;
+    expect(parse('../users/x')).toBe(false);
+    expect(parse('a:b')).toBe(false);
+    expect(parse('')).toBe(false);
+    expect(parse('x'.repeat(65))).toBe(false);
+    expect(parse(undefined)).toBe(false);
+    expect(parse('x'.repeat(64))).toBe(true);
+    expect(parse('Ab_9-z')).toBe(true);
+  });
+
+  it('strips a client-sent id; the doc id comes from the server context', () => {
+    const parsed = createHouseInputSchema.parse({ ...base, id: 'aaaaaaaaaaaaaaaaaaa1' });
+    expect(parsed).not.toHaveProperty('id');
+    const doc = buildHouseDoc(parsed, ctx);
+    expect(doc.id).toBe(ctx.houseId);
+    expect(doc).not.toHaveProperty('requestKey');
   });
 
   it('rejects missing name and non-numeric coordinates', () => {
