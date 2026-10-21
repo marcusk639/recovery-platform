@@ -119,7 +119,18 @@ export const firestoreModule = {
   },
 };
 
+/** Stand-in for api/stripeDeletion's error; index.ts checks it with instanceof. */
+class HarnessBillingNotVerifiedError extends Error {
+  constructor(
+    readonly reason: string,
+    readonly subscriptionId: string,
+  ) {
+    super(`operator subscription not verified (${reason})`);
+  }
+}
+
 export const stripeModule = {
+  BillingNotVerifiedError: HarnessBillingNotVerifiedError,
   deleteCustomer: recorded((a) => `deleteCustomer:${a[0]}`, h.deleteCustomer),
   // The label carries the uid, so a call with the wrong uid, or a return to the
   // unchecked deleteCustomer, fails the orchestration tests. The ownership check

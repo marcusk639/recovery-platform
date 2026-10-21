@@ -1,7 +1,7 @@
 import * as admin from 'firebase-admin';
 import { logger } from 'firebase-functions/v2';
 import { ratsFirestore, userCollection } from '../api/firestore';
-import { deleteGuestCustomer } from '../api/stripeDeletion';
+import { BillingNotVerifiedError, deleteGuestCustomer } from '../api/stripeDeletion';
 import { unlinkHouseRecords } from './houseRecords';
 import { closeOperatorAccount, OperatorDeletionUser } from './operatorRecords';
 import { dischargeResident, removeStaffAdmin, scrubArchivedGuest } from './memberRecords';
@@ -151,8 +151,9 @@ async function runStep(
  * A failure, including a failed snapshot or progress write (tagged `targets`
  * for the snapshot phase), logs the step plus the error's code and message.
  * Those messages are expected to carry ids rather than personal data, but that
- * is not guaranteed for every dependency. The failure record holds only the
- * step and time, and the original error is rethrown with `step` and `partial`
+ * is not guaranteed for every dependency. The failure record holds the step and
+ * time (plus the unverified subscription id and reason when billing could not
+ * be verified), and the original error is rethrown with `step` and `partial`
  * (data may already have been removed) attached.
  */
 export async function runAccountDeletion(
@@ -195,11 +196,12 @@ export async function runAccountDeletion(
     await ref.set({ lastError: null, completedAt: now }, { merge: true });
   } catch (err) {
     // Over-reports when the failing step's first action failed: the safe direction.
+    // An unverified operator subscription is thrown before that step acts.
     const t = targets;
     const done = [...(record.completed ?? []), ...completed];
-    const partial =
-      t !== undefined &&
-      (done.some((s) => stepActs(s, t)) || (current !== 'targets' && stepActs(current, t)));
+    const billingUnverified = err instanceof BillingNotVerifiedError ? err : undefined;
+    const actedInStep = !billingUnverified && current !== 'targets' && t !== undefined && stepActs(current, t);
+    const partial = t !== undefined && (done.some((s) => stepActs(s, t)) || actedInStep);
     const e = err as { code?: unknown; message?: unknown } | undefined;
     logger.error('accountDeletion: step failed', {
       uid,
@@ -209,7 +211,20 @@ export async function runAccountDeletion(
       message: e?.message,
     });
     try {
-      await ref.set({ lastError: current, failedAt: now }, { merge: true });
+      await ref.set(
+        {
+          lastError: current,
+          failedAt: now,
+          // Durable trail for support: the subscription was not cancelled.
+          ...(billingUnverified && {
+            billingUnverified: {
+              subscriptionId: billingUnverified.subscriptionId,
+              reason: billingUnverified.reason,
+            },
+          }),
+        },
+        { merge: true },
+      );
     } catch (recordErr) {
       logger.error('accountDeletion: failure record not written', {
         uid,

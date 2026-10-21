@@ -17,7 +17,8 @@ export interface DeletionTargets {
   archivedGuestIds?: string[];
   /**
    * Stripe customer ids found on the user's guest and guest-archive docs.
-   * Unverified (those docs are client-creatable): deleteGuestCustomer checks
+   * Unverified (guest docs are client-creatable and house admins can edit
+   * them; archive docs are copies of guest docs): deleteGuestCustomer checks
    * Stripe ownership before deleting.
    */
   guestCustomerIds?: string[];

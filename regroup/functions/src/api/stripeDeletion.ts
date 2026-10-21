@@ -4,16 +4,34 @@ import { isResourceMissing } from '../util/stripe';
 
 /**
  * Stripe calls used by account deletion. Kept apart from `api/stripe.ts` so that
- * file does not grow. Every tolerated failure is logged as a warning with the
- * Stripe id and error code only, so an unexpected "already gone" is visible.
+ * file does not grow. Every log here carries ids and codes only. A missing
+ * object is tolerated and logged as a warning, so an unexpected "already gone"
+ * is visible.
  *
  * Billing ids reach deletion from client-writable docs (guest docs, and a user
  * doc its owner can delete and recreate), so an id alone proves nothing. The
  * only ownership proof is `metadata.userId`, which the server sets when it
  * creates a subscription. Billing that is not provably the caller's is never
- * cancelled or deleted: it is skipped and logged as an error (ids only) for
- * manual follow-up.
+ * cancelled or deleted. An unverifiable operator subscription stops the
+ * deletion (BillingNotVerifiedError) so the user is not told it was cancelled
+ * while it keeps billing; an unproven customer is skipped and logged as an
+ * error for manual follow-up.
  */
+
+/**
+ * The operator's stored subscription could not be tied to their uid, so it was
+ * not cancelled. Thrown before the operator step acts, so nothing in that step
+ * was removed. Carries ids and a reason only.
+ */
+export class BillingNotVerifiedError extends Error {
+  constructor(
+    readonly reason: 'metadata-mismatch' | 'subscription-missing',
+    readonly subscriptionId: string,
+  ) {
+    super(`operator subscription not verified (${reason})`);
+    this.name = 'BillingNotVerifiedError';
+  }
+}
 
 const ENDED_SUBSCRIPTION_STATUSES = new Set(['canceled', 'incomplete_expired']);
 
@@ -115,11 +133,14 @@ type OperatorSubscription = StripeObject & { customer?: string | { id?: string }
 
 /**
  * Cancels the operator's subscription now and deletes their customer, but only
- * a subscription whose metadata.userId is the account being deleted (both
- * subscription-creation paths set it), and only the customer that subscription
- * bills. The ids come from the user doc, which its owner can delete and
- * recreate with someone else's ids. A customer with no provable subscription is
- * skipped and logged.
+ * a subscription whose metadata.userId is the account being deleted (every
+ * subscription-creation path in api/stripe.ts sets it), and only the customer
+ * that subscription bills. The ids come from the user doc, which could carry
+ * someone else's ids. A stored subscription that is missing in Stripe or tied
+ * to another uid throws BillingNotVerifiedError: it may be the user's own
+ * (created without metadata, or a wrong Stripe key) and still billing, so the
+ * deletion must not report it cancelled. A customer with no provable
+ * subscription is skipped and logged.
  */
 export const closeOperatorBilling = async (
   uid: string,
@@ -136,12 +157,12 @@ export const closeOperatorBilling = async (
     () => stripe.subscriptions.retrieve(subscriptionId),
   );
   if (!subscription) {
-    if (customerId) logNotOwned('operator-customer', uid, customerId, 'subscription-missing');
-    return;
+    logNotOwned('operator-subscription', uid, subscriptionId, 'subscription-missing');
+    throw new BillingNotVerifiedError('subscription-missing', subscriptionId);
   }
   if (subscription.metadata?.userId !== uid) {
     logNotOwned('operator-subscription', uid, subscriptionId, 'metadata-mismatch');
-    return;
+    throw new BillingNotVerifiedError('metadata-mismatch', subscriptionId);
   }
   await cancelSubscriptionNow(subscriptionId);
   if (!customerId) return;

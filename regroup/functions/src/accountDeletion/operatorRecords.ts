@@ -9,8 +9,10 @@ export interface OperatorDeletionUser {
 }
 
 /**
- * Account-deletion "operator" step. Cancels the operator's subscription now,
- * deletes their Stripe customer, and closes every house they own. Owned houses
+ * Account-deletion "operator" step. Cancels the operator's subscription now and
+ * deletes their Stripe customer, when Stripe ties them to this uid (otherwise
+ * the step stops before acting; see closeOperatorBilling), then closes every
+ * house they own. Owned houses
  * are those with `ownerId` or `superAdminId` equal to the user; guests are
  * untouched.
  *

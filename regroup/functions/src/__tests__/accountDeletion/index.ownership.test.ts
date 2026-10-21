@@ -54,9 +54,10 @@ describe('account deletion with planted billing ids', () => {
     );
   });
 
-  it("does not cancel an operator's subscription planted in the attacker's user doc", async () => {
-    // A user may delete and recreate their own user doc, so before the rules fix
-    // it could carry another operator's ids.
+  it("stops without cancelling a subscription that is not the user's, and records why", async () => {
+    // Planted ids (a user doc recreated before the rules fix) and an operator's
+    // own subscription that lacks metadata look the same here: either way it is
+    // not cancelled, so the deletion must not complete and claim it was.
     h.users = {
       attacker: {
         id: 'attacker',
@@ -69,11 +70,21 @@ describe('account deletion with planted billing ids', () => {
       customer: 'cus_victim',
     });
 
-    const result = await runAccountDeletion('attacker', NOW);
+    const err = await runAccountDeletion('attacker', NOW).catch((e) => e);
 
-    expect(result.completed).toEqual(ALL);
-    expect(mockStripe.subscriptions.retrieve).toHaveBeenCalledWith('sub_victim');
+    expect(err).toMatchObject({
+      name: 'BillingNotVerifiedError',
+      step: 'operator',
+      partial: false,
+    });
     expect(mockStripe.subscriptions.cancel).not.toHaveBeenCalled();
     expect(mockStripe.customers.del).not.toHaveBeenCalled();
+    expect(h.deletions.attacker).toMatchObject({
+      lastError: 'operator',
+      billingUnverified: { subscriptionId: 'sub_victim', reason: 'metadata-mismatch' },
+    });
+    expect(h.deletions.attacker.completed).toEqual([]);
+    expect(h.users.attacker).toBeDefined();
+    expect(h.deleteUser).not.toHaveBeenCalled();
   });
 });

@@ -24,7 +24,11 @@ jest.mock('stripe', () =>
 );
 
 import { logger } from 'firebase-functions';
-import { closeOperatorBilling, deleteGuestCustomer } from '../../api/stripeDeletion';
+import {
+  BillingNotVerifiedError,
+  closeOperatorBilling,
+  deleteGuestCustomer,
+} from '../../api/stripeDeletion';
 
 const error = jest.spyOn(logger, 'error').mockImplementation(() => undefined);
 jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
@@ -78,6 +82,7 @@ describe('deleteGuestCustomer', () => {
     mockCustomersRetrieve.mockRejectedValueOnce(missing());
     await expect(deleteGuestCustomer(UID, 'cus_gone')).resolves.toBeUndefined();
     expect(mockCustomersDel).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
   });
 
   it('rethrows other retrieve failures so the step is retried', async () => {
@@ -107,13 +112,17 @@ describe('closeOperatorBilling', () => {
     expect(mockCustomersDel).toHaveBeenCalledWith('cus_1');
   });
 
-  it('neither cancels nor deletes a planted subscription owned by someone else', async () => {
+  it('stops, neither cancelling nor deleting, for a subscription tied to someone else', async () => {
     mockSubscriptionsRetrieve.mockResolvedValue({
       id: 'sub_victim',
       metadata: { userId: 'victim-uid' },
       customer: 'cus_victim',
     });
-    await closeOperatorBilling(UID, 'sub_victim', 'cus_victim');
+    await expect(closeOperatorBilling(UID, 'sub_victim', 'cus_victim')).rejects.toMatchObject({
+      name: 'BillingNotVerifiedError',
+      reason: 'metadata-mismatch',
+      subscriptionId: 'sub_victim',
+    });
     expect(mockSubscriptionsCancel).not.toHaveBeenCalled();
     expect(mockCustomersDel).not.toHaveBeenCalled();
     notOwned('operator-subscription', 'sub_victim', 'metadata-mismatch');
@@ -127,15 +136,21 @@ describe('closeOperatorBilling', () => {
     notOwned('operator-customer', 'cus_victim', 'not-subscription-customer');
   });
 
-  it.each([
-    ['no subscription id', undefined, 'no-subscription'],
-    ['a missing subscription', 'sub_gone', 'subscription-missing'],
-  ])('does not delete a customer with %s', async (_label, subscriptionId, reason) => {
+  it('skips a customer stored with no subscription id', async () => {
+    await closeOperatorBilling(UID, undefined, 'cus_1');
+    expect(mockCustomersDel).not.toHaveBeenCalled();
+    notOwned('operator-customer', 'cus_1', 'no-subscription');
+  });
+
+  it('stops for a stored subscription Stripe does not have (it may still bill elsewhere)', async () => {
+    // A wrong or test-mode key also answers resource_missing for a live subscription.
     mockSubscriptionsRetrieve.mockRejectedValue(missing());
-    await closeOperatorBilling(UID, subscriptionId, 'cus_1');
+    const err = await closeOperatorBilling(UID, 'sub_gone', 'cus_1').catch((e) => e);
+    expect(err).toBeInstanceOf(BillingNotVerifiedError);
+    expect(err).toMatchObject({ reason: 'subscription-missing', subscriptionId: 'sub_gone' });
     expect(mockCustomersDel).not.toHaveBeenCalled();
     expect(mockSubscriptionsCancel).not.toHaveBeenCalled();
-    notOwned('operator-customer', 'cus_1', reason);
+    notOwned('operator-subscription', 'sub_gone', 'subscription-missing');
   });
 
   it('does nothing when no billing ids are stored', async () => {
