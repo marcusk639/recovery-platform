@@ -86,10 +86,10 @@ Each subproject documents its own architecture in its CLAUDE.md (see [Subproject
 - Stripe product ID is exported as `productIdGroup` from `functions/src/utils/stripe.ts` (env: `STRIPE_PRODUCT_ID_GROUP`). Price ID is fetched at runtime via `getDefaultPriceForProduct()` — never hardcode it.
 - Firestore `groups` document stores `stripeProductIdGroup` (product ID, e.g. `prod_xxx`) and `stripePriceIdGroup` (price ID, e.g. `price_xxx`). These are distinct fields — do not conflate them.
 - `stripeSubscriptionAttempt` (internal bookkeeping, `requestAdminAccessWithSubscription` only) — increments each time a compensated subscription-creation attempt is canceled, folded into the Stripe idempotency key so a retry after a real cancellation doesn't replay the canceled subscription's cached response. Never read/written by mobile or web clients.
-- `requestAdminAccessWithSubscription`'s group-document Stripe fields (`stripeCustomerId`, `stripeSubscriptionId`, `subscriptionStatus`, etc.) are written exactly once, atomically, inside the same Firestore transaction that grants `admins`/`isClaimed` — never speculatively beforehand. This is deliberate: a losing concurrent caller's Stripe identifiers must never be observable anywhere, so there's nothing for a race to corrupt. See `docs/superpowers/specs/2026-07-13-admin-claim-write-ordering-redesign-design.md` for the full design.
+- `requestAdminAccessWithSubscription`'s group-document Stripe fields (`stripeCustomerId`, `stripeSubscriptionId`, `subscriptionStatus`, etc.) are written exactly once, atomically, inside the same Firestore transaction that grants `admins`/`isClaimed` — never speculatively beforehand. This is deliberate: a losing concurrent caller's Stripe identifiers must never be observable anywhere, so there's nothing for a race to corrupt.
 - `SubscriptionStatus` type uses Stripe's spelling: `'canceled'` (one L). Non-Stripe statuses (e.g. business meeting handoffs) use `'cancelled'` (two L's).
 - Intergroup subscriptions use `productIdIntergroupA` (env: `STRIPE_PRODUCT_ID_INTERGROUP_A`, tier A = up to 10 groups) and `productIdIntergroupB` (env: `STRIPE_PRODUCT_ID_INTERGROUP_B`, tier B = unlimited, stored as `maxGroups: 9999`). Checkout goes through the `createIntergroup` callable. Upgrades from tier A to tier B go through the `upgradeIntergroupTier` callable.
-- Treatment center onboarding also uses `createIntergroup` with `type: "treatment_center"`. The callable accepts optional `successUrl` / `cancelUrl` to redirect to the correct web page after payment. `successUrl` / `cancelUrl` are validated against a server-side allow-list (`ALLOWED_REDIRECT_ORIGINS` in `functions/src/callable/createIntergroup.ts`) — see `docs/LAUNCH_BLOCKERS.md` #5 when switching domains.
+- Treatment center onboarding also uses `createIntergroup` with `type: "treatment_center"`. The callable accepts optional `successUrl` / `cancelUrl` to redirect to the correct web page after payment. `successUrl` / `cancelUrl` are validated against a server-side allow-list (`ALLOWED_REDIRECT_ORIGINS` in `functions/src/callable/createIntergroup.ts`) — see `docs/go-to-market/project-management.md` HG-P1-2 when switching domains.
 - Intergroup documents (`intergroups/{intergroupId}`) use two distinct user-ID fields: `createdBy` (the original creator's UID, immutable) and `adminUids` (array of UIDs with admin access — used by `upgradeIntergroupTier` and other admin-gated callables for permission checks). The creator is added to `adminUids` on creation; additional admins can be added later.
 - Each Stripe product must have a **default price** set in the Stripe Dashboard. If no default price is configured, `getDefaultPriceForProduct()` throws `'Product X has no default price set'` and all checkouts for that product fail at runtime. Verify after creating any new Stripe product (group, intergroup tier A, intergroup tier B).
 
@@ -99,10 +99,9 @@ Each subproject documents its own architecture in its CLAUDE.md (see [Subproject
 
 ## Testing Notes
 
-- Mobile tests use Jest with `react-native` preset. Firebase modules are mocked in `jest.setup.js`.
-- Firestore security rules tests: `npm run test:rules` wraps `firebase emulators:exec --only firestore` — it starts/stops the emulator automatically (no manual emulator needed).
-- E2E tests use Detox (iOS): `npm run test:e2e:build` then `npm run test:e2e:test`.
-- E2E tests (Android): `npm run test:e2e:build:android` then `npm run test:e2e:test:android`.
+See `mobile/CLAUDE.md` and `functions/CLAUDE.md` for test commands.
+
+- Android CI: the `homegroups-maestro-smoke` job (`.github/workflows/ci.yml`, Java 17) currently fails compiling `@react-native-firebase/auth` (Java source level). Flows live in `mobile/maestro/flows/`.
 
 ---
 
@@ -110,20 +109,19 @@ Each subproject documents its own architecture in its CLAUDE.md (see [Subproject
 
 - `shared-types.ts` / `shared-utils.ts` at the project root are **only** used by admin/migration scripts in `scripts/`. They are not imported by `mobile/` or `functions/`.
 - `scripts/` contains one-off data migration and seeding scripts (not regular dev tooling). Run with `ts-node` from within `scripts/`.
-- `web/src/lib/deepLinks.js` exports `WEB_ORIGIN` — this constant and three related files must all change together when switching to a custom domain. See `docs/LAUNCH_BLOCKERS.md` #5 for the full list.
+- `web/src/lib/deepLinks.js` exports `WEB_ORIGIN` — it and the other origin files (9 in all) must change together when switching to a custom domain. See `docs/go-to-market/project-management.md` HG-P1-2 for the full list.
 
 ---
 
 ## Key Docs
 
-| File                           | Purpose                                                                            |
-| ------------------------------ | ---------------------------------------------------------------------------------- |
-| `README.md`                    | Feature breakdown, data model, architecture overview                               |
-| `docs/DEVELOPMENT.md`          | Full local setup guide                                                             |
-| `docs/SECURITY_RULES.md`       | Firestore rules explanation                                                        |
-| `docs/BILLING_AND_PAYMENTS.md` | Stripe payment system design                                                       |
-| `firestore.rules`              | Deployed security rules — changes require `firebase deploy --only firestore:rules` |
-| `storage.rules`                | Deployed security rules — changes require `firebase deploy --only storage:rules`   |
+| File                                      | Purpose                                                                            |
+| ----------------------------------------- | ---------------------------------------------------------------------------------- |
+| `README.md`                               | Feature breakdown, data model, architecture overview                               |
+| `docs/technical/`                         | Development, security-rules and billing docs                                       |
+| `docs/go-to-market/project-management.md` | Launch blockers and work plan (supersedes `docs/operations/launch-blockers.md`)    |
+| `firestore.rules`                         | Deployed security rules — changes require `firebase deploy --only firestore:rules` |
+| `storage.rules`                           | Deployed security rules — changes require `firebase deploy --only storage:rules`   |
 
 ---
 
@@ -143,12 +141,9 @@ Each subproject documents its own architecture in its CLAUDE.md (see [Subproject
 
 ### Skills (`.claude/skills/`)
 
-- `/deploy-functions` — Build, type-check, test, and deploy only changed Cloud Functions
-- `/test-rules` — Start Firebase emulator if needed and run Firestore security rules tests
-- `/run-emulators` — Start the Firebase emulator suite
-- `/e2e-run` — Run Detox end-to-end tests
 - `/iterative-review` — Iterative parallel code review loop tuned for RN + Firebase + Functions
 - `/business-strategy` — Business strategy / planning skill
+- Run/deploy/rules workflows are root skills: `homegroups-run-functions`, `homegroups-run-mobile`, `homegroups-run-web`, `homegroups-test-rules`
 
 ### Subagents (`.claude/agents/`)
 

@@ -9,19 +9,25 @@ npm run build                   # TypeScript compile
 npm test                        # Jest unit tests (run in band)
 npm run test:watch              # Jest watch mode
 npm run test:coverage           # Jest with coverage
-npm run serve                   # Build + start Firebase emulator
+npm run serve                   # Build + legacy `firebase serve --only functions`
+npm run preflight:billing       # Billing preflight (also the firebase.json predeploy hook)
+npm run stripe:listen           # Forward Stripe events to local stripeEvents + handleStripeConnectWebhook
 npm run deploy                  # Deploy all functions
 npm run deploy:batched          # Batch deploy (preferred for large changesets)
 ```
 
-**Migration scripts** (run after build):
+**Migration scripts** (each runs `npm run build` first; dry-run is the default, `--apply` writes for the cents migrations):
 
 ```bash
 npm run migrate:dry-run         # Dry-run guest weeks migration
 npm run migrate:run             # Apply guest weeks migration
 npm run migrate:house-sub:dry-run
 npm run migrate:house-sub:run
+npm run migrate:payment-cents:dry-run   # / :apply
+npm run migrate:balance-cents:dry-run   # / :apply
 ```
+
+Jest config is the `jest` key in `package.json` (no `jest.config.js`). Firestore rules tests live in `../mobile/firebase/__tests__/`, not here.
 
 > **Node ≥ 23 gotcha:** the firebase-admin → jsonwebtoken → jwa chain loads `buffer-equal-constant-time`, which crashes on Node ≥ 23 (SlowBuffer removed; no upstream fix exists). Jest maps it to `test-shims/buffer-equal-constant-time.js` so `npm test` works on any Node; deployed runtime is Node 22 (`engines`). Non-Jest local scripts that load firebase-admin auth still need Node ≤ 22.
 
@@ -42,24 +48,30 @@ src/
     invitations.ts  createInvitation, peekInvitation, redeemInvitation
     compliance.ts   complianceExport (tier-gated compliance export, RG-SPEC-09)
     analytics.ts    rentRoiMetrics (tier-gated rent-collection ROI metrics, RG-TRACK)
+    account.ts      deleteAccount
+    houses.ts       createHouses
+    finishOperatorSetup.ts, getTierCatalog.ts
   triggers/
     firestore/      Firestore document write triggers
-    rtdb/           Realtime Database triggers
+  accountDeletion/  Resumable deleteAccount orchestrator (targets, *Records, personalData)
+  houses/           createHouses transaction, houseId, operatorSetup
   http/
     stripeConnect.ts  Stripe Connect account event endpoints (stripeConnectReauth, stripeConnectReturn)
     universal.ts    Generic health-check catch-all (/health, /healthz -> 200; else 404) — no SSR logic.
                     The Angular SSR `universal` handler lives in the separate
                     `regroup/web/functions/src/index.ts` codebase, not here.
   webhooks/
+    transferReversals.ts
     stripeWebhook.ts  Stripe webhook receiver (signature-verified); exports stripeWebhook
                       (deployed as `stripeEvents`) and handleStripeConnectWebhook
   scheduled/
     officerTermReminder.ts
     overdueRentNotification.ts
     scheduledRentCollection.ts
+    rentAttempts.ts, rentDestination.ts
     index.ts        Also defines updateDisputes (daily 2am UTC), weeklyTransfers
                      (Sundays 8am UTC), warmWebsite (every 5 min)
-  api/              Internal API helpers
+  api/              Internal API helpers (stripe, recoveryApi, stripeDeletion, firestore, cardValidation)
   entities/         TypeScript interfaces (House, Guest, Subscription, etc.)
   types/            Shared type definitions
   util/             Shared utilities (logging, formatting)
@@ -73,28 +85,9 @@ src/
 
 All Stripe amounts are in **US cents** (integers). `50000` = $500.00. Convert only at the UI boundary — never inside function logic.
 
-### Bundle discounts (legacy per-house subscriptions only)
+### Bundle discounts (dormant)
 
-Multi-house operators on the **legacy per-house** subscription get an automatic
-stacking coupon: 3–4 houses → `regroup-bundle-3` (10% off), 5+ → `regroup-bundle-5`
-(15% off). The logic lives in `api/stripe.ts` (`getBundleCoupon`,
-`applyBundleDiscountToSubscription`, `removeBundleDiscount`). **It is now dormant.**
-The automatic trigger lived in the legacy branch of `updateSubscriptionHouses`,
-deleted with the rest of the per-house model; the only remaining entry point is the
-`applyBundleDiscount` callable, which early-returns for any sub carrying a `tier`.
-Every surviving subscription is a tier sub, so it never fires. Kept deliberately
-rather than deleted — do not wire it to tiers without a pricing decision, because
-tier level already prices multi-property. The discount was keyed off the count of
-`subscriptionMetadata.houses` and removed when it dropped below 3. Coupons are
-`duration: forever`.
-
-**Do not apply bundles to tier subscriptions.** The 6-tier model prices
-multi-property via the tier (Professional/Enterprise/Network), so per-house bundle
-coupons would double-discount. `applyBundleDiscount` deliberately early-returns for
-any sub carrying a `tier` (locked decision, pricing gate P-6 — legacy-only). When
-re-touching this path, keep the tier skip. The two coupons exist in Stripe **test
-mode**; live coupons are pending a Dashboard create (the `rk_live_` key can't write
-coupons).
+`api/stripe.ts` (`getBundleCoupon`, `applyBundleDiscountToSubscription`, `removeBundleDiscount`) is legacy per-house code and never fires: the `applyBundleDiscount` callable early-returns for any sub carrying a `tier`, and every surviving sub is a tier sub. Do not wire it to tiers without a pricing decision (tier level already prices multi-property; pricing gate P-6). Coupons exist in Stripe test mode only.
 
 ### Tier capabilities (value ladder, P-7/P-8)
 
@@ -194,7 +187,7 @@ The legacy `STRIPE_HOUSE_PRICE_ID` / `STRIPE_GUEST_PRICE_ID` / `STRIPE_OXFORD_PR
 
 ### Firestore gotchas
 
-**No script in this repo deploys regroup's Firestore indexes.** `regroup/mobile/firebase/firestore.indexes.json` is the source of truth (wired via `mobile/firebase/firebase.json`), but `mobile`'s `deploy:rules` is only `--only firestore:rules,storage`. A `balance`→`rentOwed` rename in `6e67faf` (2026-06-01) left the committed index stale, and `scheduledRentCollection` threw `FAILED_PRECONDITION` on every single run for months while Cloud Scheduler went unwatched. After changing any composite query, deploy `--only firestore:indexes` explicitly and confirm the index reports READY.
+**Indexes are NOT deployed by `deploy:rules`.** `regroup/mobile/firebase/firestore.indexes.json` is the source of truth (wired via `mobile/firebase/firebase.json`); `mobile`'s `deploy:rules` is only `--only firestore:rules,storage`. Deploy indexes with `cd ../mobile && npm run deploy:indexes`. A `balance`→`rentOwed` rename in `6e67faf` (2026-06-01) left the committed index stale, and `scheduledRentCollection` threw `FAILED_PRECONDITION` on every single run for months while Cloud Scheduler went unwatched. After changing any composite query, run `deploy:indexes` and confirm the index reports READY.
 
 Never key a document on a timestamp or counter — Firestore shards by key range, so sequential keys concentrate writes on one range instead of spreading them. Use `collection.doc()` auto-ids and keep the time in a `createdAt` field.
 

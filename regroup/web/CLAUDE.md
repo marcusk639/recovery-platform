@@ -27,7 +27,9 @@ npm run e2e                       # Protractor E2E tests
 ```bash
 npm run build:ssr                 # Production build + SSR server bundle
 npm run build                     # Full build: Angular prod + copy hosting + SSR + functions
-npm run deploy                    # firebase deploy (hosting + functions)
+npm run deploy                    # firebase deploy --only hosting,functions:web:ssr
+npm run serve:ssr                 # run dist/sapp/server/main.js
+npm run test:scripts              # node --test scripts/copy-ssr-to-functions.test.js
 npm run build:deploy              # Build + deploy in one command
 ```
 
@@ -94,21 +96,7 @@ health-check catch-all (`/health`, `/healthz`) with no SSR logic, despite the na
 
 All **callable** functions consumed by `CloudFunctionService` (`src/app/services/functions/cloud-function.service.ts`) are implemented in the sibling `../functions/` directory within the monorepo (deployed to the same `phoenix-cleanhouse` Firebase project). Modifications to callable logic belong in `../functions/` (see `../functions/CLAUDE.md`), not here.
 
-`CloudFunctionService` wraps nine callables, but **only three are reachable from the UI** — the rest are wrappers with no caller. Verify before assuming a wrapper is live:
-
-| Callable                         | Reached from                                                    |
-| -------------------------------- | --------------------------------------------------------------- |
-| `createOperatorSubscription`     | `BillingInfoComponent.buy()` → `AuthService.subscribeOperator`  |
-| `getTierCatalog`                 | `TierCatalogService` ← `SignupComponent`, `TierPickerComponent` |
-| `createBillingPortalSession`     | `MyAccountComponent.openBillingPortal`                          |
-| `updatePaymentInfo`              | **no caller** — card updates happen in the Stripe-hosted portal |
-| `cancelUserSubscription`         | **no caller** — cancellation happens in the Stripe portal       |
-| `reactivateOperatorSubscription` | **no caller**                                                   |
-| `getPaymentMethod`               | **no caller**                                                   |
-| `verifyUserEmail`                | **no caller**                                                   |
-| `sendConfirmationEmail`          | **no caller**                                                   |
-
-Billing self-service is therefore delegated to the Stripe portal rather than built in Angular. Do not "wire up" an unreached wrapper without first confirming the portal does not already own that flow. The former standalone `regroup-functions` repo has been merged into the monorepo and archived at `regroup/_legacy/regroup-functions` — do not edit the archived copy.
+`CloudFunctionService` wraps nine callables, but only three are reachable from the UI: `createOperatorSubscription` (`BillingInfoComponent.buy()`), `getTierCatalog` (`TierCatalogService`), and `createBillingPortalSession` (`MyAccountComponent.openBillingPortal`). The other six (`updatePaymentInfo`, `cancelUserSubscription`, `reactivateOperatorSubscription`, `getPaymentMethod`, `verifyUserEmail`, `sendConfirmationEmail`) have no caller; billing self-service is delegated to the Stripe portal, so confirm that before wiring one up. The former standalone `regroup-functions` repo has been merged into the monorepo and archived at `regroup/_legacy/regroup-functions` — do not edit the archived copy.
 
 ### Data Layer
 
@@ -147,22 +135,15 @@ Flat route structure in `app-routing.module.ts`. Default route (`/`) renders `Th
 ## Gotchas
 
 - **`--openssl-legacy-provider` required**: Every build/serve command sets `NODE_OPTIONS=--openssl-legacy-provider` because the Angular 9 toolchain uses a legacy OpenSSL hash function. Running `ng serve` directly without this flag will fail.
-- **Functions build copies Angular dist**: `functions/package.json` build script runs `rm -r ./dist && cp -r ../dist .` — it copies the root Angular build output into `functions/dist/` so the SSR function can serve it. The Angular app must be built before the functions.
+- **Functions build copies Angular dist**: `functions/package.json` build is `tsc && cd .. && npm run build:copy-to-functions` (`scripts/copy-ssr-to-functions.js`), which copies the Angular build output into the functions package. The Angular app must be built before the functions.
 - **Firebase API key in source**: `src/environments/environment.ts` contains the Firebase config with API key inline. This is expected — Firebase API keys are meant to be public (security enforced via Firestore rules and Auth). Do not move them to `.env`.
 - **Protractor for E2E**: This project uses Protractor (Angular 9 era), not Playwright or Cypress.
 - **TSLint, not ESLint**: Linting uses TSLint (`tslint.json`), which is deprecated but matches the Angular 9 toolchain.
-- **No `firestore.rules` in this repo**: Firestore security rules are not checked into this repo. The `security-reviewer` agent flags this as CRITICAL. Treat any new client-side write to a new collection as needing a rule (managed elsewhere).
-- **SSR safety**: Any code path that touches `window`, `document`, jQuery, or `Stripe` must be guarded with `isPlatformBrowser(this.platformId)`. The `universal` Cloud Function executes components in Node — unguarded browser-only code throws there. Existing guards live in `AuthGuard`, `MyAccountComponent.openBillingPortal`, header components.
+- **No `firestore.rules` in `web/`**: the shared Regroup rules live in `../mobile/firebase/firestore.rules` (a `security-reviewer` "no rules" flag scoped to `web/` is a false positive). Any new client-side write to a new collection needs a rule there.
+- **SSR safety**: Any code path that touches `window`, `document`, jQuery, or `Stripe` must be guarded with `isPlatformBrowser(this.platformId)`. The `ssr` Cloud Function executes components in Node — unguarded browser-only code throws there. Existing guards live in `AuthGuard`, `MyAccountComponent.openBillingPortal`, header components.
 
 ---
 
-## Claude Code Automations (this repo)
+## Claude Code Automations
 
-- **Hooks** (`.claude/settings.json`):
-  - `PreToolUse` Edit|Write → `.claude/hooks/block-prod-env.sh` blocks edits to `environment.prod.ts`.
-  - `PostToolUse` Edit|Write → `.claude/hooks/lint-on-edit.sh` runs TSLint on edited `.ts` files (informational, non-blocking).
-- **Agent**: `.claude/agents/security/security-reviewer.md` — invoke after editing auth flows, `my-account` component, or any callable that handles PII/Stripe data.
-- **Skills**:
-  - `firebase-deploy` — `npm run build` then `firebase deploy`; supports `--functions-only` / `--hosting-only`.
-  - `new-firestore-service` — scaffolds a service extending `BaseFirestoreService<T>` + spec + entity.
-- **MCP** (`.mcp.json`): `context7` for live library docs.
+Hooks in `.claude/settings.json`: `block-prod-env.sh` blocks edits to `environment.prod.ts`; `lint-on-edit.sh` runs TSLint on edited `.ts` files (non-blocking). Agent: `.claude/agents/security/security-reviewer.md`.

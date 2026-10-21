@@ -1,185 +1,42 @@
 # Recovery Platform
 
-A flat monorepo consolidating four recovery-focused products and one shared API service. Each product operates independently today; recovery-api is the intended cross-app integration layer for the future.
+Flat monorepo of independent recovery products plus a shared API. Each product has its own Firebase project, Auth and Firestore, and its own CLAUDE.md files (product root, plus `web/`, `mobile/` and `functions/` where they exist). Read those before substantial work.
 
-## Platform Overview
+| Directory         | Product                     | Firebase project                                              |
+| ----------------- | --------------------------- | ------------------------------------------------------------- |
+| `recovery-api/`   | Cross-app API (Functions)   | `recovery-platform`                                           |
+| `homegroups/`     | Homegroups (12-step groups) | `recovery-connect-cad4b` (e2e alias `homegroups-e2e`)         |
+| `regroup/`        | Regroup (sober living)      | `phoenix-cleanhouse`                                          |
+| `detox-recovery/` | NextStep Recovery (Next.js) | `nextsteprecovery-1d5c2` (no `.firebaserc`: pass `--project`) |
 
-The recovery platform serves individuals and organizations in the addiction recovery ecosystem — from people seeking detox guidance, to sober living house operators, to 12-step group administrators. Products share a common referral concept via the shared API but otherwise maintain separate Firebase projects, auth systems, and data stores.
+`shared/` does not exist yet; the helpers it would hold are duplicated in `homegroups/functions/src/utils/` and `regroup/functions/src/util/`.
 
-## Products
+## Cross-product rules
 
-| Directory         | Marketed Name             | Stack                                                         | Firebase Project                                     | Target User                                 |
-| ----------------- | ------------------------- | ------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------- |
-| `recovery-api/`   | (internal service)        | Firebase Functions v2 (TypeScript)                            | `recovery-platform`                                  | Cross-app API layer                         |
-| `homegroups/`     | Homegroups                | React Native (TypeScript) + Firebase + Redux Toolkit + Stripe | `recovery-connect-cad4b`                             | 12-step group admins and members            |
-| `regroup/`        | Regroup (Tentative Title) | React Native 0.72 + Firebase Cloud Functions + Angular web    | `phoenix-cleanhouse`                                 | Sober living house operators and residents  |
-| `detox-recovery/` | NextStep Recovery         | Next.js 15                                                    | `nextsteprecovery-1d5c2` (alias `nextstep-recovery`) | Individuals/families seeking detox guidance |
-| `shared/`         | (not yet created)         | n/a                                                           | n/a                                                  | Reserved name for future shared types/utilities — **this directory does not exist yet**; the duplicated helpers it was meant to hold still live in both `homegroups/functions/src/utils/` and `regroup/functions/src/util/` |
+- **Data isolation:** never query one product's Firestore from another. Cross-product flows (referrals, identity) go through recovery-api; see `recovery-api/CLAUDE.md`. Its app-id registry `recovery-api/src/config/apps.ts` is the source of truth.
+- **Vocabulary differs per product:** "meeting" is a 12-step meeting in homegroups but a house meeting in regroup; regroup's "guest" = resident. Use `homegroups:meeting` / `regroup:meeting` when ambiguous. More in `docs/ecosystem/vocabulary.md`.
+- **Privacy:** never log PII (names, contact info, health or recovery status) anywhere. Log full error objects server-side; return only sanitized messages to clients.
+- **Secrets:** no `.env` or secret values in git; use env vars or Firebase Secret Manager.
+- **Emulators:** ports differ per package; read that package's `firebase.json`. recovery-api is offset (functions 5002, firestore 8082, auth 9100) so it can run beside one product. Don't run two products' emulators at once.
+- **Coverage floors** (recovery-api, homegroups/functions, detox-recovery jest configs) are ratchets: raise them, never lower them.
+- **Mutation-kill counts** measure test coupling, not correctness. On money paths, get an independent reviewer reasoning from the domain model.
 
-## Directory Map
+## Git hooks (local only, not re-checked by CI)
 
-Each product has its own CLAUDE.md with product-specific context:
+Install per clone with `./scripts/install-git-hooks.sh`.
 
-- [homegroups/CLAUDE.md](homegroups/CLAUDE.md)
-- [regroup/CLAUDE.md](regroup/CLAUDE.md)
-- [detox-recovery/CLAUDE.md](detox-recovery/CLAUDE.md)
-- [recovery-api/CLAUDE.md](recovery-api/CLAUDE.md)
-
-`homegroups/` and `regroup/` share the same three-subproject layout, each with its own CLAUDE.md:
-
-- `web/` — the website / web app (homegroups: React; regroup: Angular)
-- `mobile/` — the React Native mobile app (iOS + Android)
-- `functions/` — the Firebase Cloud Functions backend
-
-## Integration Map
-
-**Current state:** All four products are independent. Each has its own Firebase project, its own Auth instance, and its own Firestore database. There is no cross-product data access.
-
-**recovery-api callable functions (Phase 1 — service-key auth):**
-
-- `createReferral` — create a cross-app referral
-- `getReferrals` — list referrals submitted by the calling service on behalf of a user
-- `getReferral` — fetch a single referral by ID (ownership enforced)
-- `getUserProfile` — fetch a user profile by UID
-- `updateUserProfile` — update a user profile
-- `findMeetings` — search the shared public meeting directory by location (geohash radius query, optional day/type filters)
-
-**Auth model (Phase 1):** `X-Service-Key` header + `X-App-Id` + `X-User-Uid` for service-to-service requests. Phase 2 will add Firebase custom token auth (`request.auth` with `appId` claim). See `recovery-api/CLAUDE.md` for full auth details.
-
-**Intended future state:** recovery-api becomes the integration bus. Products that need to refer users to other products (e.g., homegroups referring a member to a sober living house) do so via `POST /api/referrals` rather than direct Firestore cross-queries. Cross-app user identity reconciliation will route through recovery-api.
-
-## Shared Domain Vocabulary
-
-These terms appear across multiple products with different meanings. Use the product-prefixed form when context is ambiguous.
-
-| Term          | homegroups meaning                                                                                                                                                                                                                                                                                   | regroup meaning                                                    | Notes                                                                     |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| **meeting**   | A 12-step AA/NA meeting                                                                                                                                                                                                                                                                              | A house staff or resident meeting                                  | Use `homegroups:meeting` or `regroup:meeting` in cross-product contexts   |
-| **group**     | A homegroup — an autonomous 12-step unit                                                                                                                                                                                                                                                             | Not a primary concept                                              |                                                                           |
-| **member**    | A member of a homegroup                                                                                                                                                                                                                                                                              | A resident/guest in a sober living house                           |                                                                           |
-| **house**     | Not used                                                                                                                                                                                                                                                                                             | A sober living house (primary entity)                              |                                                                           |
-| **guest**     | Not used                                                                                                                                                                                                                                                                                             | A resident in a sober living house; Firestore collection: `guests` | Synonym: resident                                                         |
-| **resident**  | Not used                                                                                                                                                                                                                                                                                             | Synonym for guest in regroup                                       |                                                                           |
-| **homegroup** | homegroups product only: a self-governing 12-step group                                                                                                                                                                                                                                              | Not used                                                           |                                                                           |
-| **referral**  | Cross-product: a user referred from one app to another via `recovery-api /api/referrals`. Canonical app-ids (`recovery-api/src/config/apps.ts`): `homegroups`, `phoenix-cleanhouse`, `nextstep-recovery`, `treatment-center` (target-only). `sober-living` is a legacy alias → `phoenix-cleanhouse`. | Same                                                               | Managed exclusively through recovery-api; the app-id registry is the SSOT |
-
-## Cross-Cutting Rules
-
-These rules apply to all products in the monorepo without exception.
-
-**Privacy**
-
-- Never log PII (names, contact info, health data, recovery status) to Cloud Functions logs, server logs, or client console in any product.
-- Error messages surfaced to API consumers must be sanitized — never propagate raw internal error details.
-
-**Error logging**
-
-- Log full error objects server-side for debugging.
-- Log sanitized, user-safe messages client-side and in API responses.
-
-**Secrets**
-
-- No `.env` files or secret values committed to source control.
-- All products use environment variables or Firebase Secret Manager exclusively.
-
-**Firebase emulator port conventions**
-
-- Firestore: `8080`
-- Functions: `5001`
-- Auth: `9099`
-- Storage: `9199`
-- Do not run two products' emulators simultaneously — port conflicts will occur.
-
-**Data isolation**
-
-- Each product has its own Firebase project and independent Firestore.
-- Never cross-query Firestore across products.
-- Cross-product data flows must go through recovery-api.
-
-**Quality gates**
-
-- Source files (`.ts`/`.tsx`/`.js`/`.jsx`) are capped at **300 lines**. Enforced mechanically by the pre-commit hook (`scripts/git-hooks/pre-commit`): new files over the cap are blocked; pre-existing oversized files warn on modification (legacy mobile debt is ratcheted down, not frozen). Split by extracting components, services, or per-function modules.
-- Secrets are scanned at commit time (blocking) by the same hook — Stripe/Anthropic/OpenRouter/AWS/GitHub key patterns, private keys, and Google `AIza` keys outside Firebase client config files.
-- Commit scopes name the product: `fix(regroup-mobile):`, never `fix(mobile):` — two RN apps and three functions packages make a bare `mobile`/`web`/`functions` scope unreadable in `git log`. Blocked by the `commit-msg` hook.
-- Git hooks are versioned in `scripts/git-hooks/` and installed per-clone with `./scripts/install-git-hooks.sh` (run it after cloning or after editing a hook).
-- Jest `coverageThreshold` floors (recovery-api, homegroups/functions, detox-recovery) are ratchets: raise them as coverage grows, never lower them to make a run pass.
-- Mutation-kill counts are evidence about **test coupling, not correctness** — tightly-pinned tests ratify wrong behaviour as firmly as right behaviour. On money paths, get an independent reviewer reasoning from the domain model.
+- **pre-commit:** blocks secrets (Stripe, Anthropic, OpenRouter, AWS, GitHub, private keys, `AIza` outside Firebase client config). Blocks new source files over **300 lines**; oversized legacy files warn. Split by extracting modules.
+- **commit-msg:** the scope must name the product, e.g. `fix(regroup-mobile):`, never a bare `mobile`, `web` or `functions`.
+- **pre-push:** runs `npm test` in each changed package among recovery-api, detox-recovery, homegroups/functions and regroup/functions. The result is cached per HEAD SHA.
+- The currently installed `.git/hooks/pre-commit` also runs `.claude/agent-gates/verify-diff.sh`, which blocks deleted or renamed test files and test-count drops. The versioned `scripts/git-hooks/pre-commit` does not, so reinstalling drops that gate.
 
 ## Gotchas
 
-- **Do real work in a worktree off `origin/main`**, and confirm a file's committed state with `git show origin/main:<path>` rather than trusting the working tree. The main checkout is often parked on a detached HEAD or a feature branch behind `origin/main`, which makes files that exist on `main` read as missing or untracked. (History: `feat/regroup-tier-billing` was a stale branch that reverted PRs #54–#61; its five salvageable fixes landed via #68 and PRs #54–#61 are all on `main`, so that branch is no longer a live hazard — but it still exists locally, so do not merge it.)
-- PRs land as **squash merges**, so `git merge-base --is-ancestor` and three-dot diffs report a fully-merged branch as unmerged. The only reliable "is this merged" check is a two-dot diff restricted to the paths the branch itself changed, run against **`origin/<branch>`, not the local ref** — a local branch checked out in another worktree does not advance when the resolution is pushed from elsewhere, and a stale local ref makes a merged branch look unmerged all over again:
-
-  ```bash
-  B=origin/<branch>
-  git diff origin/main..$B -- $(git diff --name-only $(git merge-base $B origin/main)..$B) | wc -l
-  ```
-
-  Residual `0` proves it is merged. Residual non-zero is **inconclusive, not a verdict**: it also fires when a later PR edited the same paths. Disambiguate by looking for the branch's own distinctive contribution on `main` — a file or symbol it introduced — rather than by diff size. GitHub's PR state is the authority; this is a local heuristic.
-
-- Use `git -C <path> …`, never `cd <path> && git …`. If the path does not exist the `cd` fails and the git command silently runs in the main checkout, on the stale branch.
-- Ignore minified bundles and build artifacts (`**/public/`, `*.min.js`, `*-es5.js`, `*-es2015.js`, `lib/`, `dist/`, `build/`, `.next/`) when counting, searching, or reading source — they are regenerated on rebuild. `regroup/web/public/` alone holds ~1.15M lines of vendor bundles; real hand-written source platform-wide is ~380K lines.
-- `homegroups/mobile` and `regroup/mobile` postinstall runs `pod install`; on a machine without working Xcode CLT, `npm ci` fails there — use `npm ci --ignore-scripts` for JS-only work (Jest/ESLint need only JS deps).
-
----
-
-## Model Tier Policy (80/15/5 Rule)
-
-### Tier A — Reasoning (5% of tasks) — Claude Opus / Sonnet full context
-
-Use ONLY for:
-
-- Cross-product architectural decisions affecting multiple modules
-- Security-critical code (auth, token handling, PII flows)
-- Complex bugs requiring deep multi-file causal reasoning
-- Final review of client-facing or legally sensitive output
-- Anything requiring genuine architectural judgment
-
-### Tier B — Planning (15% of tasks) — Claude Sonnet or OpenRouter Auto
-
-Use for:
-
-- Single-module feature implementation
-- Database schema changes and migrations
-- Code reviews of non-trivial PRs
-- Research synthesis and strategy document drafting
-- Debugging with a clear hypothesis
-
-### Tier C — Execution (80% of tasks) — OpenRouter DeepSeek V4 Flash or Haiku
-
-Use for:
-
-- Test stub generation and boilerplate
-- Repetitive file patches and linting fixes
-- Type annotation passes
-- Document reformatting and collateral variations
-- Firebase function scaffolding from established patterns
-- Content calendar generation, email drafts, standard templates
-
-### Anti-pattern guard
-
-NEVER use Tier A for tasks completable by Tier C.
-When in doubt, start at Tier C and escalate if output quality is insufficient.
-
-## Recovery Platform Tier Calibration
-
-Tier A tasks in this repo:
-
-- Cross-product integration changes (recovery-api ↔ homegroups/regroup)
-- Firebase security rules changes (affects all users)
-- Stripe webhook and payment logic
-- Redux state architecture changes in mobile apps
-
-Tier B tasks:
-
-- Single-product feature implementation
-- Firestore query optimization
-- React/RN component implementation from defined spec
-
-Tier C tasks:
-
-- Firebase function boilerplate (copy established pattern from existing function)
-- Jest test stubs for new service functions
-- Maestro flow generation for new screens (copy from e2e-maestro/ patterns)
-- Angular/React component props updates
-- Package.json script additions
+- **Work in a worktree off `origin/main`.** The main checkout is often on a stale branch or detached HEAD. Confirm committed state with `git show origin/main:<path>`, not the working tree. Don't merge the local `feat/regroup-tier-billing` branch.
+- **Use `git -C <path> …`, never `cd <path> && git …`.** If the `cd` fails, git silently runs in the main checkout.
+- **PRs land as squash merges**, so `merge-base --is-ancestor` and three-dot diffs report merged branches as unmerged. Check with a two-dot diff of the branch's own paths against `origin/<branch>`:
+  `B=origin/<branch>; git diff origin/main..$B -- $(git diff --name-only $(git merge-base $B origin/main)..$B) | wc -l`
+  `0` means merged. Non-zero is inconclusive, because later PRs may have edited the same paths. GitHub's PR state is the authority.
+- **Skip build output and vendor bundles** (`**/public/`, `*.min.js`, `lib/`, `dist/`, `build/`, `.next/`) when searching or counting. `regroup/web/public/` alone is about 1.15M lines.
+- **`homegroups/mobile` and `regroup/mobile` postinstall runs `pod install`.** For JS-only work (Jest, ESLint) use `npm ci --ignore-scripts`.
+- **zsh:** `$var:r`, `:h` and `:t` are path modifiers. Write `"${c}:path"` in `git show` loops.

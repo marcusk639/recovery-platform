@@ -7,11 +7,13 @@ This directory contains the Firebase Cloud Functions backend for Homegroups. Loa
 ```bash
 npm run build                     # TypeScript compile
 npm test                          # Jest unit tests
-npm run test:rules                # Firestore security rules (requires emulator)
+npm run test:rules                # whole Jest suite inside the Firestore emulator (emulators:exec); includes src/tests/security-rules.test.ts
+npm run test:rules:storage        # same, Storage emulator (src/tests/security-rules-storage.test.ts)
 npm run deploy                    # Deploy all functions
 npm run deploy:changed            # Deploy only changed functions (preferred)
 npm run deploy:batch              # Batch deploy with script
 npm run deploy:from               # Deploy from a specific function onward
+npm run deploy:batch:dry           # Dry run of batch deploy
 npm run deploy:list               # List functions that would be deployed
 ```
 
@@ -26,8 +28,9 @@ HTTP-only functions live in `src/http/` and are NOT callables:
 
 - `getMeetingAttendance.ts` — authenticated via `Authorization: Bearer <RATS_API_KEY>` (NOT Firebase Auth). The only function using this bearer-token pattern.
 - `stripeWebhook.ts` — exports both `stripeWebhook` and `stripeConnectWebhook`; authenticated via Stripe signature verification.
+- `googlePlacesProxy.ts` — Places API proxy.
 
-Shared utilities live in `src/utils/`: `firebase.ts`, `stripe.ts`, `stripeUtils.ts`, `location.ts`. All exports are wired through `src/index.ts`.
+Shared utilities live in `src/utils/` (notably `callableWrapper.ts`, `claims.ts`, `subscriptionGuard.ts`, `rateLimit.ts`, `stripe.ts`). All exports are wired through `src/index.ts`.
 
 ### Callable auth/validation
 
@@ -35,11 +38,9 @@ All callables use the shared `requireAuth`/`validateData` wrapper from `src/util
 
 ## Domain Rules
 
-### Stripe-related code that lives here
+### Stripe
 
-- `productIdGroup`, `productIdIntergroupA`, `productIdIntergroupB` are all exported from `src/utils/stripe.ts`. Price IDs must be fetched at runtime via `getDefaultPriceForProduct()` — never hardcoded.
-- The `createIntergroup` callable handles both intergroup tier-A/B checkout AND treatment-center onboarding (`type: "treatment_center"`). It accepts optional `successUrl` / `cancelUrl` validated against `ALLOWED_REDIRECT_ORIGINS`.
-- The `upgradeIntergroupTier` callable handles tier-A → tier-B upgrades and checks `adminUids` on the intergroup document.
+See `../CLAUDE.md` (Stripe / Subscriptions) for product IDs, `getDefaultPriceForProduct()` and `createIntergroup` / `upgradeIntergroupTier`.
 
 ### Custom JWT Claims
 
@@ -65,15 +66,9 @@ The v1 form `functions.https.onCall(config, handler)` accepts the config object 
 
 ### Facility / Treatment-Center Dashboard
 
-Three callables in `src/callable/`:
-
-- `getFacilityEngagementMetrics` — engagement aggregation
-- `getFacilityStats` — anonymized stats
-- `exportFacilityComplianceReport` — export
-
-All three gate on `intergroup.adminUids.includes(request.auth.uid)`.
+`getFacilityEngagementMetrics`, `getFacilityStats` and `exportFacilityComplianceReport` all gate on `intergroup.adminUids.includes(request.auth.uid)`.
 
 ## Testing
 
 - Unit tests: `npm test` (Jest).
-- Firestore rules tests: `npm run test:rules` wraps `firebase emulators:exec --only firestore` — emulator starts/stops automatically.
+- Rules tests: `test:rules` / `test:rules:storage` (see Commands). CI: Node 22, Java 21 for the rules jobs.

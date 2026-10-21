@@ -28,21 +28,18 @@ Per-area commands, architecture, and domain rules live in subdirectory CLAUDE.md
 
 ---
 
-## Firebase Emulators (from regroup/ root)
+## Firebase config
 
-```bash
-firebase emulators:start    # Firestore :8080, Functions :5001, Auth :9099
-# UI at http://localhost:4000
-```
+Rules, indexes and emulators live in `mobile/firebase/` (its own `firebase.json`; no `.firebaserc` there). The project pin is `regroup/.firebaserc` -> `phoenix-cleanhouse`. `regroup/firebase.json` only wires `functions.predeploy` to run `scripts/preflight-billing.js`. Start emulators from `mobile/firebase/` (auth 9099, firestore 8080, database 9000, storage 9199, UI 4000; no functions port).
 
-Emulator config is in `firebase.json` at this directory level.
+Commits from this repo's installed hook also run `.claude/agent-gates/verify-diff.sh` (blocks deleted/renamed test files and test-count drops — keep a moved test in its original file).
+
+Account deletion is a resumable orchestrator in `functions/src/accountDeletion/`. Stripe ownership is proven only by `metadata.userId`. The property cap counts keys of `users/{uid}.subscriptionMetadata.houses`.
 
 ---
 
 ## Cross-Product Rules
 
-- **Never log PII** (guest names, contact info, health data) to Cloud Functions logs or client console.
-- **Firebase emulator ports** for this product: Firestore 8080, Functions 5001, Auth 9099 (same as homegroups — do not run both simultaneously without port overrides).
 - **Service key** for Cloud Functions: `functions/service-key.json` (gitignored). Download from Firebase Console under `phoenix-cleanhouse`.
 - **Stripe** amounts are in **US cents** (integers). `50000` = $500.00. Convert at the UI boundary only.
 - **Subscription model:** 6-tier flat monthly pricing (`SUBSCRIPTION_TIERS` in `functions/src/config.ts`: Traditional 69/129/249, Oxford 49/89/299), selected at checkout and gated by `TIER_BILLING_ENABLED` / `isTierBillingEnabled()`. **The legacy per-house + per-guest quantity model has been deleted** (2026-09-30) — no operators remained on it. A subscription with no `tier` now raises `failed-precondition` rather than silently no-opping. `OperatorSubscription` tracks Stripe `customerId`/`subscriptionId`; tier subs carry a single `subscriptionItemId`, not the old `items.houseItemId`/`guestItemId` pair.
@@ -51,10 +48,11 @@ Emulator config is in `firebase.json` at this directory level.
 
 ## Key Docs
 
-| File                                           | Purpose                                                     |
-| ---------------------------------------------- | ----------------------------------------------------------- |
-| `mobile/CLAUDE.md`                             | RN app deep-dive                                            |
-| `functions/CLAUDE.md`                          | Cloud Functions architecture                                |
-| `FUNCTION_AUDIT.md`                            | Audit of current function inventory                         |
-| `../regroup/docs/go-to-market/roadmap.md`      | Product roadmap (GTM SSOT; sources consolidated 2026-06-10) |
-| `../regroup/docs/go-to-market/monetization.md` | Pricing and subscription model (GTM SSOT)                   |
+| File                                | Purpose                                                     |
+| ----------------------------------- | ----------------------------------------------------------- |
+| `mobile/CLAUDE.md`                  | RN app deep-dive                                            |
+| `functions/CLAUDE.md`               | Cloud Functions architecture                                |
+| `web/CLAUDE.md`                     | Angular web + SSR                                           |
+| `FUNCTION_AUDIT.md`                 | Audit of current function inventory                         |
+| `docs/go-to-market/roadmap.md`      | Product roadmap (GTM SSOT; sources consolidated 2026-06-10) |
+| `docs/go-to-market/monetization.md` | Pricing and subscription model (GTM SSOT)                   |
