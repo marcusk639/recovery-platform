@@ -136,8 +136,13 @@ service cloud.firestore {
     match /guests/{guestId} {
       allow read: if isGuest([resource.data.houseId]) || isAdmin([resource.data.houseId]); // need to adjust house search to not query guests (data needs to be aggregated on the house documents)
 
-      // Create is unrestricted between self and admin (no diff to compare).
-      allow create: if isSameUser(request.resource.data.userId) || isAdmin([request.resource.data.houseId]);
+      // Self-create (invite signup) may not set the Stripe payment fields, so a
+      // resident cannot plant a co-resident's customer id on their own doc.
+      // Admin create and update stay unrestricted (house admins can still set
+      // them); account deletion checks Stripe ownership server-side.
+      allow create: if (isSameUser(request.resource.data.userId) &&
+                        !request.resource.data.keys().hasAny(['stripeCustomerId', 'defaultPaymentMethodId'])) ||
+                       isAdmin([request.resource.data.houseId]);
 
       // Update has two distinct branches:
       //
@@ -371,11 +376,17 @@ service cloud.firestore {
       // On create the client writes the whole User entity, whose default status
       // is "", so that is permitted; anything already claiming a real status is
       // not. The houses map is trusted as an ownership/cap record, so a client
-      // may not seed it: it must be absent or empty.
+      // may not seed it: it must be absent or empty. The Stripe ids must be
+      // absent or empty too: the owner can delete and recreate this doc, and
+      // account deletion reads them (the server still checks Stripe ownership).
       allow create: if isSameUser(userId) &&
         (!('subscriptionMetadata' in request.resource.data) ||
           ((!('status' in request.resource.data.subscriptionMetadata) ||
               request.resource.data.subscriptionMetadata.status == '') &&
+            (!('customerId' in request.resource.data.subscriptionMetadata) ||
+              request.resource.data.subscriptionMetadata.customerId == '') &&
+            (!('subscriptionId' in request.resource.data.subscriptionMetadata) ||
+              request.resource.data.subscriptionMetadata.subscriptionId == '') &&
             (!('houses' in request.resource.data.subscriptionMetadata) ||
               (request.resource.data.subscriptionMetadata.houses is map &&
                 request.resource.data.subscriptionMetadata.houses.size() == 0))));

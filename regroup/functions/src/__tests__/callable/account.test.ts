@@ -20,7 +20,8 @@ jest.mock('../../accountDeletion', () => ({
 import { logger } from 'firebase-functions';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { deleteAccount, PARTIAL_MESSAGE } from '../../callable/account';
+import { BILLING_UNVERIFIED_MESSAGE, deleteAccount, PARTIAL_MESSAGE } from '../../callable/account';
+import { BillingNotVerifiedError } from '../../api/stripeDeletion';
 
 const handler = deleteAccount as unknown as (req: any) => Promise<any>;
 const nowSec = () => Math.floor(Date.now() / 1000);
@@ -120,6 +121,23 @@ describe('deleteAccount', () => {
     expect(PARTIAL_MESSAGE).toBe(
       'Part of your account was already removed. Please try again; contact support if this keeps happening.',
     );
+  });
+
+  it('tells the user an unverified subscription was not cancelled, as failed-precondition', async () => {
+    // failed-precondition messages are shown as-is by the app.
+    mockRun.mockRejectedValue(
+      Object.assign(new BillingNotVerifiedError('metadata-mismatch', 'sub_1'), {
+        step: 'operator',
+        partial: false,
+      }),
+    );
+    const err = await handler(req()).catch((e: unknown) => e);
+    expect(err).toMatchObject({
+      code: 'failed-precondition',
+      message: BILLING_UNVERIFIED_MESSAGE,
+      details: { partial: false },
+    });
+    expect(BILLING_UNVERIFIED_MESSAGE).toContain('has not been cancelled');
   });
 
   it('uses the plain retry message when nothing was removed yet', async () => {

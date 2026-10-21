@@ -22,6 +22,7 @@ export const h = {
   deletePersonal: jest.fn(),
   unlinkHouse: jest.fn(),
   deleteCustomer: jest.fn(),
+  deleteGuestCustomer: jest.fn(),
   deleteUser: jest.fn(),
   userDelete: jest.fn(),
 };
@@ -44,6 +45,7 @@ export function resetHarness(): void {
   h.deletePersonal.mockResolvedValue(undefined);
   h.unlinkHouse.mockResolvedValue(undefined);
   h.deleteCustomer.mockResolvedValue(undefined);
+  h.deleteGuestCustomer.mockResolvedValue(undefined);
   h.deleteUser.mockImplementation(async () => {
     h.calls.push('auth');
   });
@@ -117,8 +119,26 @@ export const firestoreModule = {
   },
 };
 
+/** Stand-in for api/stripeDeletion's error; index.ts checks it with instanceof. */
+class HarnessBillingNotVerifiedError extends Error {
+  constructor(
+    readonly reason: string,
+    readonly subscriptionId: string,
+  ) {
+    super(`operator subscription not verified (${reason})`);
+  }
+}
+
 export const stripeModule = {
+  BillingNotVerifiedError: HarnessBillingNotVerifiedError,
   deleteCustomer: recorded((a) => `deleteCustomer:${a[0]}`, h.deleteCustomer),
+  // The label carries the uid, so a call with the wrong uid, or a return to the
+  // unchecked deleteCustomer, fails the orchestration tests. The ownership check
+  // itself is tested in api/stripe.guestCustomer.test.ts.
+  deleteGuestCustomer: recorded(
+    (a) => `deleteGuestCustomer:${a[0]}:${a[1]}`,
+    h.deleteGuestCustomer,
+  ),
 };
 
 export const operatorModule = {

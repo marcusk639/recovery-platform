@@ -1,7 +1,7 @@
 import * as admin from "firebase-admin";
 import { logger } from "firebase-functions/v2";
 import { houseCollection } from "../api/firestore";
-import { cancelSubscriptionNow, deleteCustomer } from "../api/stripeDeletion";
+import { closeOperatorBilling } from "../api/stripeDeletion";
 
 export interface OperatorDeletionUser {
   id: string;
@@ -9,18 +9,22 @@ export interface OperatorDeletionUser {
 }
 
 /**
- * Account-deletion "operator" step. Cancels the operator's subscription now,
- * deletes their Stripe customer, and closes every house they own. Owned houses
+ * Account-deletion "operator" step. Cancels the operator's subscription now and
+ * deletes their Stripe customer, when Stripe ties them to this uid (otherwise
+ * the step stops before acting; see closeOperatorBilling), then closes every
+ * house they own. Owned houses
  * are those with `ownerId` or `superAdminId` equal to the user; guests are
  * untouched.
  *
  * The house's Stripe Connect account is unlinked, not deleted: it belongs to
  * the operator's business and may still have payouts or disputes in flight.
  *
- * The cancel is attempted whenever a subscription id is stored, whatever the
- * stored `status` says: that status can be stale, and the Stripe helpers treat
- * an already-cancelled subscription or an already-deleted customer as done
- * (logging a warning), which also makes this step safe to re-run.
+ * Billing is closed by closeOperatorBilling, which acts only on a subscription
+ * Stripe ties to this uid (metadata.userId) and the customer it bills: the ids
+ * here come from the user doc, which its owner can delete and recreate. The
+ * cancel is attempted whatever the stored `status` says (it can be stale); an
+ * already-cancelled subscription or already-deleted customer counts as done,
+ * which also makes this step safe to re-run.
  * Logs ids and counts only.
  */
 export const closeOperatorAccount = async (
@@ -29,8 +33,7 @@ export const closeOperatorAccount = async (
 ): Promise<{ housesClosed: string[] }> => {
   const { subscriptionId, customerId } = user.subscriptionMetadata ?? {};
 
-  if (subscriptionId) await cancelSubscriptionNow(subscriptionId);
-  if (customerId) await deleteCustomer(customerId);
+  await closeOperatorBilling(user.id, subscriptionId, customerId);
 
   const [owned, superAdmin] = await Promise.all([
     houseCollection.where("ownerId", "==", user.id).get(),

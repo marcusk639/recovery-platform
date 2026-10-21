@@ -15,14 +15,22 @@ export interface DeletionTargets {
   hasSubscription: boolean;
   /** `guest-archive` docs still linked to the user (former residents). */
   archivedGuestIds?: string[];
-  /** Platform Stripe customers created for the user's rent autopay. */
+  /**
+   * Stripe customer ids found on the user's guest and guest-archive docs.
+   * Unverified (guest docs are client-creatable and house admins can edit
+   * them; archive docs are copies of guest docs): deleteGuestCustomer checks
+   * Stripe ownership before deleting.
+   */
   guestCustomerIds?: string[];
 }
 
 /**
  * `users/{uid}.guestId` / `.adminId` are deliberately NOT used: the users rule
  * lets the client write them, so a pointer could name someone else's record.
- * Every target comes from a server query keyed on the uid.
+ * Every target comes from a server query keyed on the uid. That scopes which
+ * docs are read, not what they contain: a user can create a guest doc with
+ * their own userId and foreign field values, so ids read from these docs
+ * (Stripe ids especially) are checked again before anything is deleted.
  */
 export interface TargetUser {
   id: string;

@@ -2,12 +2,15 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import { STRIPE_SECRET_KEY } from '../config';
 import { runAccountDeletion } from '../accountDeletion';
+import { BillingNotVerifiedError } from '../api/stripeDeletion';
 
 const MAX_AUTH_AGE_SECONDS = 300;
 // Shared App Review demo login; mirrors isDemoAccount() in mobile/firebase/firestore.rules.
 export const DEMO_ACCOUNT_EMAIL = 'demo_user@appdemo.net';
 
 const RETRY_MESSAGE = "We couldn't finish deleting your account. Try again.";
+export const BILLING_UNVERIFIED_MESSAGE =
+  "We couldn't confirm your Regroup subscription with our payment provider, so it has not been cancelled. Please contact support to finish deleting your account.";
 export const PARTIAL_MESSAGE =
   'Part of your account was already removed. Please try again; contact support if this keeps happening.';
 
@@ -17,7 +20,9 @@ export const PARTIAL_MESSAGE =
  * The `failed-precondition` (stale sign-in) and `permission-denied` (demo)
  * messages are written for the user and shown as-is by the app. A failed run
  * returns `internal` with a fixed message; when earlier steps already removed
- * data it says so and sets `details.partial`, so the app can show it.
+ * data it says so and sets `details.partial`, so the app can show it. A
+ * subscription that cannot be verified as the caller's returns
+ * `failed-precondition` (shown as-is) saying it was not cancelled.
  */
 export const deleteAccount = onCall({ secrets: [STRIPE_SECRET_KEY] }, async (request) => {
   if (!request.auth) {
@@ -48,6 +53,11 @@ export const deleteAccount = onCall({ secrets: [STRIPE_SECRET_KEY] }, async (req
       code: typeof e?.code === 'string' ? e.code : undefined,
       step: typeof e?.step === 'string' ? e.step : undefined,
     });
+    if (err instanceof BillingNotVerifiedError) {
+      throw new HttpsError('failed-precondition', BILLING_UNVERIFIED_MESSAGE, {
+        partial: e.partial === true,
+      });
+    }
     if (e?.partial === true) {
       throw new HttpsError('internal', PARTIAL_MESSAGE, { partial: true });
     }

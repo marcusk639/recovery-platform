@@ -66,8 +66,11 @@ describe('runAccountDeletion resume', () => {
 
     expect(result.completed).toEqual(ALL);
     expect(discharged).toEqual(['g1', 'g2']);
-    // Re-run deleteCustomer on an already-deleted customer resolves (the helper tolerates it).
-    expect(h.deleteCustomer.mock.calls).toEqual([['cus_g'], ['cus_g']]);
+    // The re-run checks and deletes again; the helper treats an already-deleted customer as done.
+    expect(h.deleteGuestCustomer.mock.calls).toEqual([
+      ['u1', 'cus_g'],
+      ['u1', 'cus_g'],
+    ]);
     expect(h.deletePersonal).toHaveBeenCalledTimes(1);
     expect(h.deletePersonal).toHaveBeenCalledWith('u1', ['g1', 'g2'], { g1: 'h1', g2: 'h2' });
   });
@@ -213,7 +216,7 @@ describe('runAccountDeletion isolation', () => {
       guestCustomerIds: [],
     });
     expect(h.closeOperator).not.toHaveBeenCalled();
-    expect(h.deleteCustomer).not.toHaveBeenCalled();
+    expect(h.deleteGuestCustomer).not.toHaveBeenCalled();
     expect(h.deleteUser.mock.calls).toEqual([['u1']]);
     expect(u2Data()).toBe(before);
   });
