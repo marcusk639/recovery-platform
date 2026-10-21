@@ -1,15 +1,17 @@
 # Security note — E2E test credentials
 
-**Severity: HIGH (production exposure).** Status: literal removed from the repo
-(2026-10-20); **pending user rotation** of the accounts that used it.
+**Severity: HIGH at discovery; now resolved.** The literal was removed from the
+repo and the affected accounts were rotated on 2026-10-20.
 
 ## The issue
 
 A shared e2e test password was committed to this repository in dozens of tracked
 files (seed fixtures, READMEs, docs, and every Maestro flow/subflow). The same
-password also unlocked the test personas in the **real `phoenix-cleanhouse`**
-and **`homegroups-e2e`** Firebase projects, because the local helper scripts
-provisioned those accounts using the same hardcoded constant.
+password unlocked the Homegroups test personas in the `homegroups-e2e` Firebase
+project. An earlier version of this note said the Regroup personas
+(`*@rats-e2e.com`, `operator@example.com`) also existed in production
+`phoenix-cleanhouse`. A lookup on 2026-10-20 found none of them there, and none
+of the Homegroups personas in production `recovery-connect-cad4b`.
 
 ## Current state
 
@@ -18,8 +20,8 @@ provisioned those accounts using the same hardcoded constant.
   anywhere, and do not rely on history rewriting to contain it.
 - Every runner now reads the password from the `E2E_TEST_PASSWORD` environment
   variable and fails fast when it is unset. There is no committed fallback.
-- Production and e2e Firebase test accounts that used the old value must be
-  rotated (or deleted) by the user. Status: **pending user rotation**.
+- 2026-10-20: the four `@homegroups-e2e.com` accounts in `homegroups-e2e` were
+  given a new random password. No other project had any of the accounts.
 
 ## Where the new password lives
 
@@ -27,7 +29,8 @@ Never commit it. It is stored outside the repo:
 
 - Regroup: `~/.config/regroup-e2e/e2e-test-password`
 - Homegroups: `~/.config/homegroups-e2e/e2e-test-password`
-- CI: repository secret `E2E_TEST_PASSWORD`
+- CI: the repository secrets `REGROUP_E2E_TEST_PASSWORD` and
+  `HOMEGROUPS_E2E_TEST_PASSWORD`. Each Maestro job maps its secret to `E2E_TEST_PASSWORD`.
 
 Local use:
 

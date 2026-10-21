@@ -251,7 +251,7 @@ jobs:
           app-file: regroup/mobile/android/app/build/outputs/apk/debug/app-debug.apk
           flow-file: e2e-maestro/regroup/login-and-view-dashboard.yaml
           env: |
-            E2E_TEST_PASSWORD=${{ secrets.E2E_TEST_PASSWORD }}
+            E2E_TEST_PASSWORD=${{ secrets.REGROUP_E2E_TEST_PASSWORD }}
 
   homegroups-maestro-smoke:
     name: Maestro Cloud — smoke tests (homegroups Android)
@@ -292,4 +292,4 @@ jobs:
           app-file: homegroups/mobile/android/app/build/outputs/apk/debug/app-debug.apk
           flow-file: homegroups/mobile/maestro/flows/invite-code-join.yaml
           env: |
-            E2E_TEST_PASSWORD=${{ secrets.E2E_TEST_PASSWORD }}
+            E2E_TEST_PASSWORD=${{ secrets.HOMEGROUPS_E2E_TEST_PASSWORD }}
