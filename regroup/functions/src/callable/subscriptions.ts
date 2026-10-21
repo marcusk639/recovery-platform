@@ -561,6 +561,19 @@ export const updateSubscriptionHouses = onCall(
           );
         }
       }
+      if (action === "remove") {
+        // The map is the property-cap count createHouses enforces. Freeing a
+        // slot for a house that still exists would let an operator exceed the
+        // plan by repeating remove + create. Refused whatever the ownerId:
+        // a superAdmin can rewrite ownerId on their own house. Deleted houses
+        // leave the map via the onHouseDeleted trigger.
+        if (await getHouse(houseIds[0])) {
+          throw new HttpsError(
+            "failed-precondition",
+            "Delete the house before removing it from your plan",
+          );
+        }
+      }
       const updatedMeta =
         action === "add"
           ? addHousesToSubscription(houseMeta, houseIds ?? [])

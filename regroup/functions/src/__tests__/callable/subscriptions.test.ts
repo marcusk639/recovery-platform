@@ -1122,17 +1122,42 @@ describe("tier subscriptions skip Stripe quantity updates", () => {
     },
   );
 
-  it("does not read houses when removing one from the subscription map", async () => {
+  it("removes a deleted house from the subscription map", async () => {
     mockGetUser.mockResolvedValue(tierUserUnderCap);
     mockUpdateUser.mockResolvedValue(undefined);
+    mockGetHouse.mockResolvedValueOnce(undefined as any);
     await call(updateSubscriptionHouses, {
       ownerUserId: "user-1",
       action: "remove",
       houseIds: ["house-1"],
     });
-    expect(mockGetHouse).not.toHaveBeenCalled();
-    expect(mockUpdateUser).toHaveBeenCalled();
+    expect(mockGetHouse).toHaveBeenCalledWith("house-1");
+    expect(mockUpdateUser).toHaveBeenCalledWith(
+      "user-1",
+      expect.objectContaining({
+        subscriptionMetadata: expect.objectContaining({ houses: {} }),
+      }),
+    );
   });
+
+  it.each([
+    ["owned by the caller", { id: "house-1", ownerId: "user-1" }],
+    ["whose ownerId was rewritten", { id: "house-1", ownerId: "someone-else" }],
+  ])(
+    "refuses to remove a house that still exists (%s), so the cap cannot be bypassed",
+    async (_label, houseDoc) => {
+      mockGetUser.mockResolvedValue(tierUserUnderCap);
+      mockGetHouse.mockResolvedValueOnce(houseDoc as any);
+      await expect(
+        call(updateSubscriptionHouses, {
+          ownerUserId: "user-1",
+          action: "remove",
+          houseIds: ["house-1"],
+        }),
+      ).rejects.toMatchObject({ code: "failed-precondition" });
+      expect(mockUpdateUser).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     [

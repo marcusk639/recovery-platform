@@ -40,7 +40,10 @@ import {
 const handler = finishOperatorSetup as unknown as (req: unknown) => Promise<any>;
 
 const UID = 'operator-uid';
-const call = (data: unknown = undefined) => handler({ auth: { uid: UID, token: {} }, data });
+const call = (data: unknown = undefined, token: Record<string, unknown> = {}) =>
+  handler({ auth: { uid: UID, token }, data });
+const roles = (ids: string[]) => Object.fromEntries(ids.map((id) => [id, true]));
+const grantedToken = (ids: string[]) => ({ admin: roles(ids), superAdmin: roles(ids) });
 const user = () => store.get(`users/${UID}`)!;
 
 const seedUser = (houses: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
@@ -241,7 +244,7 @@ describe('finishOperatorSetup', () => {
 
     const first = await call();
     const afterFirst = { ...user() };
-    const second = await call();
+    const second = await call(undefined, grantedToken(['h1']));
 
     expect(first).toEqual({ completed: true, houseIds: ['h1'] });
     expect(second).toEqual({ completed: true, houseIds: [] });
@@ -253,7 +256,10 @@ describe('finishOperatorSetup', () => {
     seedUser({ h1: {} }, { orgSetupCompleted: true });
     seedHouse('h1');
 
-    await expect(call()).resolves.toEqual({ completed: true, houseIds: [] });
+    await expect(call(undefined, grantedToken(['h1']))).resolves.toEqual({
+      completed: true,
+      houseIds: [],
+    });
     expect(mockGrantHouseRoles).not.toHaveBeenCalled();
     expect(getAll).not.toHaveBeenCalled();
     expect(events.filter((e) => e.op === 'directGet').map((e) => e.path)).toEqual([`users/${UID}`]);
