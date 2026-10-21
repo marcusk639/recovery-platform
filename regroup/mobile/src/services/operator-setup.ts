@@ -2,7 +2,9 @@
 // finished (the claim grant or onboarding-flags write failed and the app
 // restarted before a retry). Without this, login routes them to an empty setup
 // wizard, where re-entering a house mints a new id and hits the plan's
-// property cap. See the finishOperatorSetup callable in regroup/functions.
+// property cap. It also repairs claims for a completed operator whose later
+// add-house claim grant failed. See the finishOperatorSetup callable in
+// regroup/functions.
 import * as Sentry from '@sentry/react-native';
 import { functions } from '../../firebase-setup';
 import { User } from '../entities/User';
@@ -13,10 +15,13 @@ export type FinishOperatorSetupResult =
   | { completed: true; houseIds: string[] };
 
 /**
- * - not-needed: needsSetupRecovery is false; the server was not called.
- * - completed:  the server finished setup.
+ * - not-needed: needsSetupRecovery is false (the server was not called), or a
+ *               completed operator's claims repair granted nothing, so there
+ *               is no new claim to refresh the token for.
+ * - completed:  the server finished setup or granted missing claims.
  * - incomplete: the server found no house this uid owns; the wizard is right.
- * - failed:     the callable threw; the operator must not reach the wizard.
+ * - failed:     the callable threw. For an incomplete setup the operator must
+ *               not reach the wizard; for a completed operator it is logged.
  */
 export type SetupRecoveryOutcome = 'not-needed' | 'completed' | 'incomplete' | 'failed';
 
@@ -42,7 +47,10 @@ const hasHouseClaim = (claim: unknown, houseId: string): boolean =>
  * A house in the subscription map lacks admin or superAdmin in the token:
  * a house added after setup was created but its claim grant failed. The map
  * (server-written; deleted houses leave it) is used rather than housesOwned so
- * a stale client-side list cannot trigger a server call on every login.
+ * a stale client-side list cannot trigger the call. That limits repeat calls
+ * but does not remove them: a map house the server will not grant (ownerId
+ * rewritten, or past its candidate cap) still asks on each login, without a
+ * token refresh (see finishOperatorSetup's repairOnly).
  */
 export const hasUngrantedHouses = (user: Partial<User>, claims: HouseRoleClaims): boolean =>
   Object.keys(user.subscriptionMetadata?.houses ?? {}).some(
@@ -71,17 +79,22 @@ export const needsSetupRecovery = (
 };
 
 /**
- * Asks the server to finish setup for the houses the caller owns. Never
+ * Asks the server to finish setup for the houses the caller owns, or, with
+ * `repairOnly` (a completed operator), to grant missing house claims. Never
  * throws. On `completed` the caller must refresh the ID token and reload the
- * user (see loadRecoveredUser).
+ * user (see loadRecoveredUser). A repair that granted nothing is `not-needed`;
+ * without repairOnly an empty grant still counts as completed, because the
+ * client's user doc may lag a server that already finished setup.
  */
 export const finishOperatorSetup = async (
   uid: string | undefined,
-): Promise<Exclude<SetupRecoveryOutcome, 'not-needed'>> => {
+  { repairOnly = false }: { repairOnly?: boolean } = {},
+): Promise<SetupRecoveryOutcome> => {
   try {
     const result = await functions.httpsCallable('finishOperatorSetup')();
-    if ((result?.data as FinishOperatorSetupResult | undefined)?.completed === true) {
-      return 'completed';
+    const data = result?.data as FinishOperatorSetupResult | undefined;
+    if (data?.completed === true) {
+      return repairOnly && !data.houseIds?.length ? 'not-needed' : 'completed';
     }
     // uid and a reason tag only: no names, emails or house details.
     Sentry.captureMessage('finishOperatorSetup: server found no owned houses', {
@@ -91,7 +104,7 @@ export const finishOperatorSetup = async (
     });
     return 'incomplete';
   } catch (error) {
-    logException(error, 'finishOperatorSetup failed; blocking the setup wizard');
+    logException(error, 'finishOperatorSetup failed');
     return 'failed';
   }
 };
@@ -101,7 +114,9 @@ export const finishOperatorSetupIfNeeded = async (
   user: Partial<User> | null | undefined,
   claims?: HouseRoleClaims,
 ): Promise<SetupRecoveryOutcome> =>
-  needsSetupRecovery(user, claims) ? finishOperatorSetup(user?.id ?? user?.uid) : 'not-needed';
+  needsSetupRecovery(user, claims)
+    ? finishOperatorSetup(user?.id ?? user?.uid, { repairOnly: user?.orgSetupCompleted === true })
+    : 'not-needed';
 
 export interface RecoveredUserLoaders {
   /** Force-refreshes the ID token so the new house claims are present. */

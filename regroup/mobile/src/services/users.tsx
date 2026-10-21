@@ -156,9 +156,14 @@ export async function getUserFinishingSetup(
 ): Promise<{ user: User; setupRecoveryFailed: boolean }> {
   const user = await getUser(userId);
   // A completed operator is checked for a house whose claim grant failed. A
-  // token read failure skips that check; it must not fail the login.
+  // token read failure skips that check (logged); it must not fail the login.
   const claims = user.orgSetupCompleted
-    ? (await getAuthUser().catch(() => undefined))?.claims
+    ? (
+        await getAuthUser().catch((error) => {
+          logException(error, "operator claims check: token read failed");
+          return undefined;
+        })
+      )?.claims
     : undefined;
   const outcome = await finishOperatorSetupIfNeeded(user, claims);
   if (outcome !== "completed") {

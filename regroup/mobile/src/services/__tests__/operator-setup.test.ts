@@ -72,6 +72,15 @@ describe("needsSetupRecovery for a completed operator", () => {
     expect(needsSetupRecovery(user, granted)).toBe(false);
   });
 
+  it.each([
+    ["a completed operator's repair", true, "not-needed"],
+    ["an incomplete setup (the user doc may lag the server)", false, "completed"],
+  ])("treats an empty grant for %s as %s", async (_label, completedSetup, expected) => {
+    mockCallable.mockResolvedValueOnce({ data: { completed: true, houseIds: [] } });
+    const user = incompleteOperator({ orgSetupCompleted: completedSetup });
+    await expect(finishOperatorSetupIfNeeded(user, {})).resolves.toBe(expected);
+  });
+
   it("calls the server when a completed operator's map house lacks claims", async () => {
     mockCallable.mockResolvedValueOnce({ data: { completed: true, houseIds: ["h1"] } });
     await expect(finishOperatorSetupIfNeeded(completed, {})).resolves.toBe("completed");

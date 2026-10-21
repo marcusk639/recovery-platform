@@ -186,7 +186,9 @@ describe.each([
 
   it('does not call finishOperatorSetup for a completed operator whose token has every house', async () => {
     seedUserDocs(completed);
-    mockGetIdTokenResult.mockResolvedValue({ claims: { admin: { h1: true }, superAdmin: { h1: true } } });
+    mockGetIdTokenResult.mockResolvedValue({
+      claims: { admin: { h1: true }, superAdmin: { h1: true } },
+    });
     const store = buildStore();
     await store.dispatch(thunk() as any);
 
@@ -204,6 +206,24 @@ describe.each([
     expect(order).toEqual(expect.arrayContaining(['finishOperatorSetup', 'token:true']));
     expect(store.getState().user.setupRecoveryFailed).toBe(false);
     expect(routeFor(store.getState().user.user).initialRoute).toBe(Routes.Main);
+  });
+
+  it('skips the recovery token refresh and reload when the repair granted nothing', async () => {
+    seedUserDocs(completed);
+    mockCallable.mockResolvedValueOnce({ data: { completed: true, houseIds: [] } });
+    await buildStore().dispatch(thunk() as any);
+    expect(functions.httpsCallable).toHaveBeenCalledWith('finishOperatorSetup');
+    expect(order).toEqual(['getUser', 'token:false', 'token:true']); // the thunk's own refresh
+  });
+
+  it('logs a failed claims read for a completed operator and still logs in', async () => {
+    seedUserDocs(completed);
+    mockGetIdTokenResult.mockRejectedValueOnce(new Error('token read failed'));
+    const store = buildStore();
+    await store.dispatch(thunk() as any);
+    expect(logException).toHaveBeenCalled();
+    expect(functions.httpsCallable).not.toHaveBeenCalled();
+    expect(store.getState().user.loggedIn).toBe(true);
   });
 
   it('a failed repair for a completed operator does not flag setupRecoveryFailed', async () => {
