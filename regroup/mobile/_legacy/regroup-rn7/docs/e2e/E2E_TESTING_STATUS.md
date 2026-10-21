@@ -178,7 +178,7 @@ For authentication tests to fully work, you need a test account:
 
 **Create in Firebase Console:**
 - Email: `test@rats-e2e.com`
-- Password: `TestPassword123!`
+- Password: `$E2E_TEST_PASSWORD`
 - Role: House Manager with test house
 
 **Or via test script:**

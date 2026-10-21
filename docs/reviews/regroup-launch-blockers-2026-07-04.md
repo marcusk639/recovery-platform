@@ -16,7 +16,7 @@ These have a plausible path to real user harm (data leakage, wrong data written,
 
 ### 2. Live production credential — RESOLVED 2026-07-04 (#27)
 
-**Closed.** All 5 `*@rats-e2e.com` accounts (including `test-manager@rats-e2e.com`, which carried an `admin` claim) were deleted from `phoenix-cleanhouse` Firebase Auth using `regroup/mobile/scripts/delete-e2e-prod-accounts.ts`, then independently re-verified by re-running the script's dry-run mode — all 5 emails now return `not-found` against production. The exposed `TestPassword123!` no longer unlocks anything real. E2E continues to run emulator-only via `reset-and-seed.sh`; the prod-writer script that originally created these accounts was lost in a machine change and was deliberately not recreated, so there's no remaining code path that provisions test personas in production. No further action needed on this item.
+**Closed.** All 5 `*@rats-e2e.com` accounts (including `test-manager@rats-e2e.com`, which carried an `admin` claim) were deleted from `phoenix-cleanhouse` Firebase Auth using `regroup/mobile/scripts/delete-e2e-prod-accounts.ts`, then independently re-verified by re-running the script's dry-run mode — all 5 emails now return `not-found` against production. The exposed `$E2E_TEST_PASSWORD` no longer unlocks anything real. E2E continues to run emulator-only via `reset-and-seed.sh`; the prod-writer script that originally created these accounts was lost in a machine change and was deliberately not recreated, so there's no remaining code path that provisions test personas in production. No further action needed on this item.
 
 ### 3. `SignUpWebView` has no origin validation on its `onMessage` handler (#28)
 

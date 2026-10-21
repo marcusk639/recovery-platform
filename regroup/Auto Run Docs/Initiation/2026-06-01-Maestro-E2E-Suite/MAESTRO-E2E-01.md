@@ -33,8 +33,8 @@ This phase bootstraps the entire Maestro E2E suite from scratch. It creates the 
 
 - [ ] Write the shared helper subflows in `mobile/.maestro/_helpers/`:
   - `launch.yaml` — launches the app fresh (clears state), grants notification + location permissions, waits for the landing/splash screen to settle. Use `appId: com.rats.dev`. Include `clearState: true` on launchApp.
-  - `login-as-manager.yaml` — calls `runFlow: _helpers/launch.yaml`, navigates to the login screen (taps through any landing/welcome screen), enters `test-manager@rats-e2e.com` / `TestPassword123!`, taps the login button, and waits for `house-tab` to be visible (indicating successful auth).
-  - `login-as-guest.yaml` — same pattern but uses `test-guest-a@rats-e2e.com` / `TestPassword123!`.
+  - `login-as-manager.yaml` — calls `runFlow: _helpers/launch.yaml`, navigates to the login screen (taps through any landing/welcome screen), enters `test-manager@rats-e2e.com` / `$E2E_TEST_PASSWORD`, taps the login button, and waits for `house-tab` to be visible (indicating successful auth).
+  - `login-as-guest.yaml` — same pattern but uses `test-guest-a@rats-e2e.com` / `$E2E_TEST_PASSWORD`.
   - `logout.yaml` — navigates to profile/settings and taps a logout button (use text matching "Log Out" or "Sign Out" as a fallback). If the app uses a drawer, open it first.
 
 - [ ] Before writing `auth/login.yaml`, inspect the live app screen:
@@ -48,7 +48,7 @@ This phase bootstraps the entire Maestro E2E suite from scratch. It creates the 
   - Top-level: `appId: com.rats.dev`
   - Use `runFlow` to call `../_helpers/launch.yaml` as the setup step
   - Navigate from the landing screen to the login screen using the actual IDs/text discovered in the inspection step
-  - Enter `${EMAIL}` / `${PASSWORD}` using `env` variables with defaults `test-guest-a@rats-e2e.com` / `TestPassword123!`
+  - Enter `${EMAIL}` / `${PASSWORD}` using `env` variables with defaults `test-guest-a@rats-e2e.com` / `$E2E_TEST_PASSWORD`
   - Assert the `house-tab` element is visible after login (indicating main app loaded)
   - Add a second scenario block for the "invalid credentials" case: enter `wrong@test.com` / `WrongPass123!`, assert an error message is visible, assert still on the login screen
   - Add a third scenario for "empty fields": tap submit with no input, assert validation error text is visible

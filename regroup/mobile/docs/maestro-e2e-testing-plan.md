@@ -79,7 +79,7 @@ is fetchable as `<url>.md`; full corpus at `https://docs.maestro.dev/llms-full.t
   `storage().useEmulator('127.0.0.1', 9199)`. **This decouples E2E from the missing staging
   project (P0-7)** — Maestro can run entirely against the emulator.
 - **Seed/test-account infra to reuse:** `e2e/setup/seedTestData.js` (`npm run seed-e2e`),
-  `e2e/setup/testAccounts.json` (e.g. `test-guest-a@rats-e2e.com` / `TestPassword123!`,
+  `e2e/setup/testAccounts.json` (e.g. `test-guest-a@rats-e2e.com` / `$E2E_TEST_PASSWORD`,
   roles guest/manager, `houseId: test-house-123`), `e2e/setup/{testActivities,testDisputes}.json`,
   `scripts/create-e2e-auth-users.js`, `scripts/cleanup-e2e-accounts.js`.
 - **App identity (per-platform appId differs):** iOS bundle `com.rats.dev`

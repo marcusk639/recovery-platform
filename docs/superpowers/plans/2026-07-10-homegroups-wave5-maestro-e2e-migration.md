@@ -134,7 +134,7 @@ testOutputDir: maestro/output
 #       file: ../subflows/login.yaml
 #       env:
 #         EMAIL: test-admin@homegroups-e2e.com
-#         PASSWORD: TestPassword123!
+#         PASSWORD: $E2E_TEST_PASSWORD
 #
 # NOTE: unlike regroup/mobile, homegroups has NO "IS_E2E_TEST" launch argument anywhere in
 # src/ — there is no emulator-routing launch flag. EMAIL/PASSWORD must be real credentials
@@ -285,7 +285,7 @@ appId: org.recoveryconnect
     file: ../subflows/login.yaml
     env:
       EMAIL: test-unclaimed-member@homegroups-e2e.com
-      PASSWORD: TestPassword123!
+      PASSWORD: $E2E_TEST_PASSWORD
 - tapOn: "Home"
 - extendedWaitUntil:
     visible:
@@ -363,7 +363,7 @@ appId: org.recoveryconnect
     file: ../subflows/login.yaml
     env:
       EMAIL: test-admin@homegroups-e2e.com
-      PASSWORD: TestPassword123!
+      PASSWORD: $E2E_TEST_PASSWORD
 - tapOn: "Home"
 - extendedWaitUntil:
     visible:
@@ -450,11 +450,11 @@ appId: org.recoveryconnect
 - hideKeyboard
 - tapOn:
     id: "register-password-input"
-- inputText: "TestPassword123!"
+- inputText: "$E2E_TEST_PASSWORD"
 - hideKeyboard
 - tapOn:
     id: "register-confirm-password-input"
-- inputText: "TestPassword123!"
+- inputText: "$E2E_TEST_PASSWORD"
 - hideKeyboard
 - tapOn:
     id: "register-next-button"
@@ -526,7 +526,7 @@ appId: org.recoveryconnect
     file: ../subflows/login.yaml
     env:
       EMAIL: test-admin@homegroups-e2e.com
-      PASSWORD: TestPassword123!
+      PASSWORD: $E2E_TEST_PASSWORD
 - tapOn: "Home"
 - extendedWaitUntil:
     visible:
@@ -604,7 +604,7 @@ appId: org.recoveryconnect
     file: ../subflows/login.yaml
     env:
       EMAIL: test-admin@homegroups-e2e.com
-      PASSWORD: TestPassword123!
+      PASSWORD: $E2E_TEST_PASSWORD
 - tapOn: "Home"
 - extendedWaitUntil:
     visible:
@@ -694,7 +694,7 @@ appId: org.recoveryconnect
     file: ../subflows/login.yaml
     env:
       EMAIL: test-admin@homegroups-e2e.com
-      PASSWORD: TestPassword123!
+      PASSWORD: $E2E_TEST_PASSWORD
 - tapOn: "Home"
 - extendedWaitUntil:
     visible:
@@ -770,7 +770,7 @@ appId: org.recoveryconnect
     file: ../subflows/login.yaml
     env:
       EMAIL: test-treasurer@homegroups-e2e.com
-      PASSWORD: TestPassword123!
+      PASSWORD: $E2E_TEST_PASSWORD
 - tapOn: "Home"
 - extendedWaitUntil:
     visible:

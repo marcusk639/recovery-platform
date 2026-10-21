@@ -167,7 +167,7 @@ so it was skipped. If a future flow needs Storage: Console → Storage → Get S
   writes the 4 personas + groups/members/meeting/servicePosition/invite. Idempotent.
 - `clean-e2e-votes.js` — deletes `group_conscience_votes` for `e2e-admin-group` between runs.
 
-Personas (all password `TestPassword123!`): `test-admin@`, `test-unclaimed-member@`,
+Personas (all password `$E2E_TEST_PASSWORD`): `test-admin@`, `test-unclaimed-member@`,
 `test-treasurer@`, `test-filler@` `homegroups-e2e.com`.
 
 ---

@@ -40,3 +40,7 @@ before removing `continue-on-error: true` from the CI job.
 Detox (`homegroups/mobile/e2e/`) is not being removed. Per `e2e-maestro/README.md`,
 both frameworks coexist; migrate a Detox spec's coverage to Maestro only once the
 equivalent Maestro flow is proven reliable in CI.
+
+## Credentials
+
+Flows read the shared test password from `E2E_TEST_PASSWORD`; it is never committed. Export it before running, e.g. `export E2E_TEST_PASSWORD="$(cat ~/.config/homegroups-e2e/e2e-test-password)"`, and pass `-e E2E_TEST_PASSWORD="$E2E_TEST_PASSWORD"` to `maestro test`.

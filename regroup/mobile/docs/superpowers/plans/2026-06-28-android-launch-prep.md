@@ -263,7 +263,7 @@ Expected: a count > 0 (the seeded users exist in Auth).
 curl -s -X POST \
   "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=fake-key" \
   -H "Content-Type: application/json" \
-  -d '{"email":"test-manager@rats-e2e.com","password":"TestPassword123!","returnSecureToken":true}' \
+  -d '{"email":"test-manager@rats-e2e.com","password":"$E2E_TEST_PASSWORD","returnSecureToken":true}' \
   | python3 -m json.tool | grep -E "idToken|error"
 ```
 
@@ -360,7 +360,7 @@ cd regroup/mobile
 # With emulator running from test-prep.sh and app installed on E2E-iPhone:
 maestro test -e APP_ID=com.rats.dev maestro/subflows/login.yaml \
   -e EMAIL=test-manager@rats-e2e.com \
-  -e PASSWORD=TestPassword123!
+  -e PASSWORD=$E2E_TEST_PASSWORD
 ```
 
 Expected: flow reaches `house-tab` visible assertion without errors.
@@ -371,7 +371,7 @@ Expected: flow reaches `house-tab` visible assertion without errors.
 # With the Android emulator running and app installed:
 maestro test -e APP_ID=com.regroup.app maestro/subflows/login.yaml \
   -e EMAIL=test-manager@rats-e2e.com \
-  -e PASSWORD=TestPassword123!
+  -e PASSWORD=$E2E_TEST_PASSWORD
 ```
 
 Expected: same result — `house-tab` visible.
@@ -876,7 +876,7 @@ Expected: `Flow completed` with no failures. The `initial-landing-screen` is vis
 ```bash
 cd regroup/mobile
 maestro test -e APP_ID=com.regroup.app -e EMAIL=test-manager@rats-e2e.com \
-  -e PASSWORD=TestPassword123! maestro/subflows/login.yaml
+  -e PASSWORD=$E2E_TEST_PASSWORD maestro/subflows/login.yaml
 ```
 
 Expected: flow completes, `house-tab` visible.

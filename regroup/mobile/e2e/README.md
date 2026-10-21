@@ -101,10 +101,10 @@ npm run seed-e2e
 ```
 
 ### Test Accounts
-- **Guest A**: `test-guest-a@rats-e2e.com` / `TestPassword123!`
-- **Guest B**: `test-guest-b@rats-e2e.com` / `TestPassword123!`
-- **Manager**: `test-manager@rats-e2e.com` / `TestPassword123!`
-- **Multi-House User**: `test-multi-house@rats-e2e.com` / `TestPassword123!`
+- **Guest A**: `test-guest-a@rats-e2e.com` / `$E2E_TEST_PASSWORD`
+- **Guest B**: `test-guest-b@rats-e2e.com` / `$E2E_TEST_PASSWORD`
+- **Manager**: `test-manager@rats-e2e.com` / `$E2E_TEST_PASSWORD`
+- **Multi-House User**: `test-multi-house@rats-e2e.com` / `$E2E_TEST_PASSWORD`
 
 ### Test Houses
 - `test-house-123`: Main test house

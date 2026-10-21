@@ -183,7 +183,7 @@ Not standalone: `run-all.yaml` (suite wrapper), `debug-login.yaml`,
 | `test-oxford-operator`         | Oxford operator               |
 | `applicant1`                   | Pending application           |
 
-Password for all: `TestPassword123!`. It also seeds houses, activities,
+Password for all: `$E2E_TEST_PASSWORD`. It also seeds houses, activities,
 disputes, and an application. Creation is idempotent (looks up by email first).
 
 > A separate script, `scripts/create-e2e-auth-users.js`, writes to the **real** > `phoenix-cleanhouse` project — `reset-and-seed.sh` deliberately does not call

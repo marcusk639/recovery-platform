@@ -57,7 +57,7 @@ Tests that can't find elements log warnings and pass. The suite cannot reliably 
 
 - T-M1: Activity system test plan (150-200 unit + 50-70 integration tests) is entirely unimplemented — all checkboxes unchecked; unclear if the underlying migration was completed
 - T-M2: TDD practice applies only to feature code — no tests written for Firestore security rules, Cloud Function authorization, or E2E infrastructure changes
-- T-M3: Test credentials (`TestPassword123!`) committed to git in `e2e/setup/testAccounts.json`; no per-test Firestore data cleanup (tests can pollute each other)
+- T-M3: Test credentials (`$E2E_TEST_PASSWORD`) committed to git in `e2e/setup/testAccounts.json`; no per-test Firestore data cleanup (tests can pollute each other)
 - T-M4: Oxford governance entirely absent from test plans — OfficerManagement, BusinessMeetings, OxfordVoting quorum logic, EESTracker all have 0 integration/E2E tests
 
 ---

@@ -33,7 +33,7 @@
 | `test-guest-a@rats-e2e.com`     | resident             | guest flows (activities, chores, meetings, rent payment, disputes)                 |
 | `test-guest-b@rats-e2e.com`     | resident             | second-party flows (dispute challenge, direct chat)                                |
 
-Password (all): `TestPassword123!`
+Password (all): `$E2E_TEST_PASSWORD`
 
 ### Session model
 

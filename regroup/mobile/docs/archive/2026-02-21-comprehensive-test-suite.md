@@ -1412,9 +1412,9 @@ In Firebase Console → Authentication, search for:
 **Step 2: If any accounts are missing, create them**
 
 In Firebase Console → Authentication → Add User:
-- Email: `test-guest-a@rats-e2e.com`, Password: `TestPassword123!`
-- Email: `test-operator@rats-e2e.com`, Password: `TestPassword123!`
-- Email: `test-manager@rats-e2e.com`, Password: `TestPassword123!`
+- Email: `test-guest-a@rats-e2e.com`, Password: `$E2E_TEST_PASSWORD`
+- Email: `test-operator@rats-e2e.com`, Password: `$E2E_TEST_PASSWORD`
+- Email: `test-manager@rats-e2e.com`, Password: `$E2E_TEST_PASSWORD`
 
 **Step 3: Seed Firestore test data**
 

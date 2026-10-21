@@ -162,7 +162,7 @@ All 31 Critical findings are listed below, grouped by theme.
 
 **Performance:** `disputes` map in house document grows unboundedly, `subscriptionMetadata` loaded once at login never refreshed (lapsed subs show as active mid-session), 13 independent `useAppSelector` calls in App.tsx, wildcard lodash imports blocking Metro tree-shaking.
 
-**Testing:** Activity system test plan (150-200 unit + 50-70 integration tests) entirely unimplemented — all checkboxes unchecked; test credentials committed to git (`TestPassword123!`); no per-test Firestore data cleanup; Oxford governance (OfficerManagement, BusinessMeetings, OxfordVoting, EESTracker) has 0 integration/E2E tests.
+**Testing:** Activity system test plan (150-200 unit + 50-70 integration tests) entirely unimplemented — all checkboxes unchecked; test credentials committed to git (`$E2E_TEST_PASSWORD`); no per-test Firestore data cleanup; Oxford governance (OfficerManagement, BusinessMeetings, OxfordVoting, EESTracker) has 0 integration/E2E tests.
 
 **Documentation:** Oxford screen implementation status ambiguous (ACTIVE_PLAN "unknown if implemented," GTM "ready now"); `payment.ts` and `payments.ts` both exist (Sprint 5 Task 1 incomplete); three incompatible pricing documents with no canonical designation; `ACTIVITY_SYSTEM_MIGRATION.md` status still reads "Final Recommendation" — should read "Completed" or "Abandoned."
 

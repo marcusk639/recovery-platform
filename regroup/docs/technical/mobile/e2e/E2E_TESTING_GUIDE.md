@@ -478,7 +478,7 @@ Located in `e2e/setup/testAccounts.json`:
 - `test-manager@rats-e2e.com` - Manager/admin user
 - `test-multi-house@rats-e2e.com` - User with multiple house access
 
-**Password for all:** `TestPassword123!`
+**Password for all:** `$E2E_TEST_PASSWORD`
 
 ### Seeding Custom Data
 

@@ -12,7 +12,7 @@
 
 3. **Email Verification Disabled — Accounts Auto-Verified** (CVSS 7.5, CWE-287) — `src/services/EnhancedAuthService.ts` — Line 179 says "Email verification removed" but line 75 still rejects unverified users. Without verification, attackers register with emails they don't own. Especially sensitive for sober living health data.
 
-4. **Hardcoded E2E Test Credentials Against Production Firebase** (CVSS 7.2, CWE-798) — `e2e/helpers/auth.js` lines 110-131, `scripts/seed-e2e-users.js` — Test accounts with known passwords (`TestPassword123!`) exist in production Firebase (`phoenix-cleanhouse`). Anyone with repo access can authenticate as admin in production.
+4. **Hardcoded E2E Test Credentials Against Production Firebase** (CVSS 7.2, CWE-798) — `e2e/helpers/auth.js` lines 110-131, `scripts/seed-e2e-users.js` — Test accounts with known passwords (`$E2E_TEST_PASSWORD`) exist in production Firebase (`phoenix-cleanhouse`). Anyone with repo access can authenticate as admin in production.
 
 5. **Deep Link Invitation Parameters Not Signed** (CVSS 7.5, CWE-345) — `src/services/native-deep-links.ts` lines 26-39 — Invitation URLs encode `invitationType`, `houseId`, `email` directly. Attacker crafts URL with `invitationType=admin` to gain admin access. No server-side validation or token-based verification.
 
