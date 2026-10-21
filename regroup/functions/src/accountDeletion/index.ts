@@ -1,7 +1,7 @@
 import * as admin from 'firebase-admin';
 import { logger } from 'firebase-functions/v2';
 import { ratsFirestore, userCollection } from '../api/firestore';
-import { deleteCustomer } from '../api/stripeDeletion';
+import { deleteGuestCustomer } from '../api/stripeDeletion';
 import { unlinkHouseRecords } from './houseRecords';
 import { closeOperatorAccount, OperatorDeletionUser } from './operatorRecords';
 import { dischargeResident, removeStaffAdmin, scrubArchivedGuest } from './memberRecords';
@@ -111,7 +111,7 @@ async function runStep(
       if (targets.ownsHouses || targets.hasSubscription) await closeOperatorAccount(user, now);
       return;
     case 'members':
-      for (const customerId of targets.guestCustomerIds ?? []) await deleteCustomer(customerId);
+      for (const customerId of targets.guestCustomerIds ?? []) await deleteGuestCustomer(uid, customerId);
       for (const guestId of targets.guestIds) await dischargeResident(guestId, now);
       for (const guestId of targets.archivedGuestIds ?? []) await scrubArchivedGuest(guestId, now);
       for (const adminId of targets.adminIds) await removeStaffAdmin(adminId);

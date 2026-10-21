@@ -1,3 +1,4 @@
+import * as admin from 'firebase-admin';
 import { logger } from 'firebase-functions';
 import { stripe } from './stripe';
 import { isResourceMissing } from '../util/stripe';
@@ -58,4 +59,54 @@ export const deleteCustomer = async (customerId: string): Promise<void> => {
       code: stripeCode(err),
     });
   }
+};
+
+type GuestCustomer = {
+  deleted?: boolean;
+  email?: string | null;
+  metadata?: Record<string, string> | null;
+};
+
+/**
+ * Stripe ties the customer to this account: metadata.userId is the uid, or
+ * the customer's email is this account's verified Firebase Auth email (Auth
+ * emails are unique, and verified means the account holder controls it).
+ */
+const isOwnedBy = async (uid: string, customer: GuestCustomer): Promise<boolean> => {
+  if (customer.metadata?.userId === uid) return true;
+  const email = customer.email?.trim().toLowerCase();
+  if (!email) return false;
+  const account = await admin.auth().getUser(uid);
+  return account.emailVerified === true && account.email?.trim().toLowerCase() === email;
+};
+
+/**
+ * Deletes a resident's rent-autopay customer, but only one Stripe ties to the
+ * account being deleted. The id comes from guest docs, which a user can create
+ * for themselves (signup) and house admins can edit, so the id alone proves
+ * nothing: deleting it unchecked let a user delete someone else's customer and
+ * saved card by copying its id into a guest doc of their own. A customer not
+ * tied to this account is skipped and logged with ids only, never deleted.
+ */
+export const deleteGuestCustomer = async (uid: string, customerId: string): Promise<void> => {
+  let customer: GuestCustomer;
+  try {
+    customer = (await stripe.customers.retrieve(customerId)) as GuestCustomer;
+  } catch (err) {
+    if (!isResourceMissing(err)) throw err;
+    logger.warn('deleteGuestCustomer: customer missing, treated as deleted', {
+      customerId,
+      code: stripeCode(err),
+    });
+    return;
+  }
+  if (customer.deleted) return;
+  if (!(await isOwnedBy(uid, customer))) {
+    logger.warn('deleteGuestCustomer: customer not tied to this account, skipped', {
+      uid,
+      customerId,
+    });
+    return;
+  }
+  await deleteCustomer(customerId);
 };

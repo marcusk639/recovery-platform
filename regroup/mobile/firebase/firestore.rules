@@ -136,8 +136,13 @@ service cloud.firestore {
     match /guests/{guestId} {
       allow read: if isGuest([resource.data.houseId]) || isAdmin([resource.data.houseId]); // need to adjust house search to not query guests (data needs to be aggregated on the house documents)
 
-      // Create is unrestricted between self and admin (no diff to compare).
-      allow create: if isSameUser(request.resource.data.userId) || isAdmin([request.resource.data.houseId]);
+      // Self-create (invite signup) may not set the Stripe payment fields:
+      // account deletion and rent collection act on them, so a self-made doc
+      // carrying a co-resident's customer id would point those at someone
+      // else's card. Admin create is unrestricted (no diff to compare).
+      allow create: if (isSameUser(request.resource.data.userId) &&
+                        !request.resource.data.keys().hasAny(['stripeCustomerId', 'defaultPaymentMethodId'])) ||
+                       isAdmin([request.resource.data.houseId]);
 
       // Update has two distinct branches:
       //

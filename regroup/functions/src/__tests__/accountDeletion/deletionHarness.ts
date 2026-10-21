@@ -119,6 +119,12 @@ export const firestoreModule = {
 
 export const stripeModule = {
   deleteCustomer: recorded((a) => `deleteCustomer:${a[0]}`, h.deleteCustomer),
+  // The ownership check is tested in api/stripe.deletion.test.ts; here only the
+  // customer id reaches h.deleteCustomer, so orchestration assertions are unchanged.
+  deleteGuestCustomer: recorded(
+    (a) => `deleteCustomer:${a[1]}`,
+    jest.fn((_uid: unknown, customerId: unknown) => h.deleteCustomer(customerId)),
+  ),
 };
 
 export const operatorModule = {
