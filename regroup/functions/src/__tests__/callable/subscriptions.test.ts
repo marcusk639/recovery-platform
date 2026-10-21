@@ -88,6 +88,15 @@ jest.mock("../../api/firestore", () => ({
   app: {},
 }));
 
+// The houses-preserving transaction is tested in util/operatorSubscriptionWrite.test.ts;
+// here it delegates to mockUpdateUser so write assertions stay in one place.
+jest.mock("../../util/operatorSubscriptionWrite", () => ({
+  writeOperatorSubscription: async (uid: string, meta: object) => {
+    await mockUpdateUser(uid, { subscriptionMetadata: meta });
+    return meta;
+  },
+}));
+
 jest.mock("../../util/email", () => ({
   sendEmail: jest.fn(),
   regroupEmail: "admin@regroup-app.com",

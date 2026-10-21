@@ -43,6 +43,7 @@ import {
   removeHouseFromSubscription,
 } from "../util/subscriptionHouses";
 import { grantPotentialSuperAdminClaim } from "../util/superAdminClaim";
+import { writeOperatorSubscription } from "../util/operatorSubscriptionWrite";
 import {
   getHouse,
   getUser,
@@ -258,14 +259,14 @@ export const createOperatorSubscription = onCall(
         maxResidents: tierConfig.maxResidents,
         maxProperties: tierConfig.maxProperties,
       };
-      await updateUser(data.user.id!, {
-        // Tier subscriptions have no house/guest items or houses map; the single
-        // subscriptionItemId is the billing handle. Cast to the entity type —
-        // legacy-only fields (items/houses/plan) are intentionally absent, but
-        // oxfordEnabled is included so mobile Oxford gating keeps working.
-        subscriptionMetadata:
-          persistedTierMetadata as unknown as OperatorSubscription,
-      });
+      // The single subscriptionItemId is the billing handle; legacy-only fields
+      // (items/plan) are intentionally absent, but oxfordEnabled is included so
+      // mobile Oxford gating keeps working. The stored houses map is kept: it is
+      // the property-cap count (see writeOperatorSubscription).
+      const writtenTierMetadata = await writeOperatorSubscription(
+        data.user.id!,
+        persistedTierMetadata,
+      );
       await upsertSubscriptionDoc({
         houseId: "",
         stripeCustomerId: tierMetadata.customerId,
@@ -282,7 +283,7 @@ export const createOperatorSubscription = onCall(
         text: `A new user has subscribed to Regroup: Sober Living App\nUser ID: ${data.user.id}\nUser email: ${data.user.email}`,
         subject: "New user subscription",
       });
-      return finishCheckout(data.user, persistedTierMetadata);
+      return finishCheckout(data.user, writtenTierMetadata);
     }
 
     const firestoreUser = await getUser(data.user.id);
@@ -306,16 +307,14 @@ export const createOperatorSubscription = onCall(
     // hard-coding 'active'. Fall back to 'pending' only if no status came back.
     // W11: Always include lastUpdatedAt.
     const resolvedStatus = metadata.status || "pending";
-    await updateUser(data.user.id!, {
-      subscriptionMetadata: {
-        ...metadata,
-        status: resolvedStatus,
-        lastUpdatedAt: new Date().toISOString(),
-        houseType: data.houseType,
-        tier: data.tier,
-        maxResidents: tierConfig.maxResidents,
-        maxProperties: tierConfig.maxProperties,
-      },
+    await writeOperatorSubscription(data.user.id!, {
+      ...metadata,
+      status: resolvedStatus,
+      lastUpdatedAt: new Date().toISOString(),
+      houseType: data.houseType,
+      tier: data.tier,
+      maxResidents: tierConfig.maxResidents,
+      maxProperties: tierConfig.maxProperties,
     });
 
     // Seed the `subscriptions` collection so the Stripe webhook handlers

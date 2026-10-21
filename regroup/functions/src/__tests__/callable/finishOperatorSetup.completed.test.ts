@@ -25,7 +25,7 @@ jest.mock('../../util/claims', () => ({
 }));
 
 import { logger } from 'firebase-functions';
-import { finishOperatorSetup } from '../../callable/finishOperatorSetup';
+import { finishOperatorSetup, MAX_CANDIDATE_HOUSES } from '../../callable/finishOperatorSetup';
 import { events, expectCode, getAll, resetFakeFirestore, store } from './helpers/fakeTxFirestore';
 
 const handler = finishOperatorSetup as unknown as (req: unknown) => Promise<any>;
@@ -111,5 +111,33 @@ describe('finishOperatorSetup for a completed operator', () => {
 
     await expectCode(call({}), 'internal');
     await expect(call({})).resolves.toEqual({ completed: true, houseIds: ['h1'] });
+  });
+
+  it('checks subscription-map houses before housesOwned, so junk ids cannot crowd out the real one', async () => {
+    const junk = Array.from({ length: MAX_CANDIDATE_HOUSES + 5 }, (_, i) => `junk${i}`);
+    seedCompletedOperator(['real']);
+    store.set(`users/${UID}`, { ...user(), housesOwned: [...junk, 'real'] });
+    seedHouse('real');
+
+    await expect(call({})).resolves.toEqual({ completed: true, houseIds: ['real'] });
+    expect(mockGrantHouseRoles).toHaveBeenCalledWith(UID, ['real']);
+    expect(logger.info).toHaveBeenCalledWith('operator.setup.claims_repaired', {
+      uid: UID,
+      houseIds: ['real'],
+      truncated: true,
+    });
+  });
+
+  it('logs a PII-free warning when ungranted candidates exist but none is owned', async () => {
+    seedCompletedOperator(['theirs']);
+    seedHouse('theirs', 'other-uid');
+
+    await expect(call({})).resolves.toEqual({ completed: true, houseIds: [] });
+    expect(mockGrantHouseRoles).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith('operator.setup.claims_repair_nothing_owned', {
+      uid: UID,
+      ungrantedCount: 1,
+      truncated: false,
+    });
   });
 });

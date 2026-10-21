@@ -1,4 +1,5 @@
 import { onDocumentDeleted } from 'firebase-functions/v2/firestore';
+import { logger } from 'firebase-functions';
 import { houseTombstoneCollection, ratsFirestore, userCollection } from '../../api/firestore';
 import type OperatorSubscription from '../../entities/OperatorSubscription';
 import { removeHouseFromSubscription } from '../../util/subscriptionHouses';
@@ -13,19 +14,53 @@ export const deletedAtFor = (eventTime: string | undefined): string => {
  * Frees the deleted house's slot in its owner's subscription houses map (the
  * property-cap count), in a transaction so it cannot race createHouses.
  * updateSubscriptionHouses refuses to remove a house that still exists, so
- * this is the only path that frees a slot. A no-op if the owner doc or the
- * map entry is already gone, so redelivery is safe.
+ * this is the only path that frees a slot. Returns false when the owner doc or
+ * the map entry is already gone (so redelivery is safe), true when it freed one.
  */
-export const releaseSubscriptionSlot = async (ownerId: string, houseId: string): Promise<void> => {
+export const releaseSubscriptionSlot = async (
+  ownerId: string,
+  houseId: string,
+): Promise<boolean> => {
   const ref = userCollection.doc(ownerId);
-  await ratsFirestore.runTransaction(async (tx) => {
+  return ratsFirestore.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     const meta = snap.data()?.subscriptionMetadata as OperatorSubscription | undefined;
     if (!meta?.houses || !(houseId in meta.houses)) {
-      return;
+      return false;
     }
     tx.update(ref, { subscriptionMetadata: removeHouseFromSubscription(meta, houseId) });
+    return true;
   });
+};
+
+/**
+ * Releases the slot, logging (ids only) when none was freed: a house without
+ * an ownerId, or one whose ownerId was rewritten before the delete, leaves its
+ * slot in the original owner's map, where the operator would hit the cap with
+ * no other signal (a redelivery after a successful release also logs it).
+ * A failure is logged with its code and rethrown so the event is retried.
+ */
+const releaseSlotFor = async (houseId: string, ownerId: unknown): Promise<void> => {
+  if (typeof ownerId !== 'string' || ownerId === '') {
+    logger.warn('house.delete.slot_not_released', { houseId, reason: 'no-owner' });
+    return;
+  }
+  try {
+    if (!(await releaseSubscriptionSlot(ownerId, houseId))) {
+      logger.warn('house.delete.slot_not_released', {
+        houseId,
+        ownerId,
+        reason: 'not-in-owner-map',
+      });
+    }
+  } catch (err) {
+    logger.error('house.delete.slot_release_failed', {
+      houseId,
+      ownerId,
+      code: (err as { code?: unknown })?.code,
+    });
+    throw err;
+  }
 };
 
 /**
@@ -43,8 +78,6 @@ export const onHouseDeleted = onDocumentDeleted(
     const houseId = event.params.houseId;
     await houseTombstoneCollection.doc(houseId).set({ deletedAt: deletedAtFor(event.time) });
     const ownerId = (event.data?.data() as { ownerId?: unknown } | undefined)?.ownerId;
-    if (typeof ownerId === 'string' && ownerId !== '') {
-      await releaseSubscriptionSlot(ownerId, houseId);
-    }
+    await releaseSlotFor(houseId, ownerId);
   },
 );

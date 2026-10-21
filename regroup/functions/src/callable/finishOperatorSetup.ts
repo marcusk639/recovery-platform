@@ -76,24 +76,39 @@ const hasHouseClaim = (claim: unknown, houseId: string): boolean =>
  * For an operator whose setup is already complete: a house added later can be
  * created (and hold a cap slot) while its claim grant failed. Grants only the
  * owned candidates missing admin or superAdmin from the caller's ID token, so
- * a fully granted operator costs no house reads and no grant. A stale token
- * can only cause a redundant, idempotent grant. Flags are already set.
+ * a fully granted operator costs no house reads and no grant. Subscription-map
+ * keys (server-written, where createHouses records an added house) come
+ * before client-writable housesOwned, so junk housesOwned ids cannot push the
+ * real house past MAX_CANDIDATE_HOUSES. A stale token can cause a redundant
+ * grant, or skip one whose claim was since removed. Flags are already set.
  */
 const grantMissingRoles = async (
   uid: string,
   user: Partial<User>,
   token: Record<string, unknown>,
 ): Promise<FinishOperatorSetupResponse> => {
-  const ungranted = candidateHouseIds(user).filter(
+  const candidates = Array.from(
+    new Set([
+      ...Object.keys(user.subscriptionMetadata?.houses ?? {}),
+      ...stringKeys(user.housesOwned),
+    ]),
+  );
+  const ungranted = candidates.filter(
     (id) => !hasHouseClaim(token.admin, id) || !hasHouseClaim(token.superAdmin, id),
   );
   const houseIds = await ownedHouseIds(uid, ungranted.slice(0, MAX_CANDIDATE_HOUSES));
+  const truncated = ungranted.length > MAX_CANDIDATE_HOUSES;
   if (houseIds.length > 0) {
     await grantOrThrow(uid, houseIds);
-    logger.info('operator.setup.claims_repaired', {
+    logger.info('operator.setup.claims_repaired', { uid, houseIds, truncated });
+  } else if (ungranted.length > 0) {
+    // Ungranted candidates, none provably owned (e.g. an ownerId rewritten
+    // after the house entered the map). Nothing to grant; logged so a client
+    // that keeps asking is visible.
+    logger.warn('operator.setup.claims_repair_nothing_owned', {
       uid,
-      houseIds,
-      truncated: ungranted.length > MAX_CANDIDATE_HOUSES,
+      ungrantedCount: ungranted.length,
+      truncated,
     });
   }
   return { completed: true, houseIds };
