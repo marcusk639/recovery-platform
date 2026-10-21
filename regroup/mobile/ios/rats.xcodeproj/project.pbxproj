@@ -13,22 +13,6 @@
 		13B07FC11A68108700A75B9A /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 13B07FB71A68108700A75B9A /* main.m */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		8C92AB3162CCD524B8FCB020 /* Pods_rats.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 28C5AC90C686EB0AD6261F80 /* Pods_rats.framework */; };
-		C72D30C229AC208600C706E9 /* Fontisto.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C72D30B229AC208300C706E9 /* Fontisto.ttf */; };
-		C72D30C329AC208600C706E9 /* Ionicons.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C72D30B329AC208300C706E9 /* Ionicons.ttf */; };
-		C72D30C429AC208600C706E9 /* FontAwesome.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C72D30B429AC208300C706E9 /* FontAwesome.ttf */; };
-		C72D30C529AC208600C706E9 /* FontAwesome5_Brands.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C72D30B529AC208300C706E9 /* FontAwesome5_Brands.ttf */; };
-		C72D30C629AC208600C706E9 /* FontAwesome5_Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C72D30B629AC208300C706E9 /* FontAwesome5_Regular.ttf */; };
-		C72D30C729AC208600C706E9 /* Foundation.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C72D30B729AC208400C706E9 /* Foundation.ttf */; };
-		C72D30C829AC208600C706E9 /* Feather.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C72D30B829AC208400C706E9 /* Feather.ttf */; };
-		C72D30C929AC208600C706E9 /* SimpleLineIcons.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C72D30B929AC208400C706E9 /* SimpleLineIcons.ttf */; };
-		C72D30CA29AC208600C706E9 /* AntDesign.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C72D30BA29AC208400C706E9 /* AntDesign.ttf */; };
-		C72D30CB29AC208600C706E9 /* Zocial.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C72D30BB29AC208400C706E9 /* Zocial.ttf */; };
-		C72D30CC29AC208600C706E9 /* FontAwesome5_Solid.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C72D30BC29AC208400C706E9 /* FontAwesome5_Solid.ttf */; };
-		C72D30CD29AC208600C706E9 /* MaterialIcons.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C72D30BD29AC208500C706E9 /* MaterialIcons.ttf */; };
-		C72D30CE29AC208600C706E9 /* EvilIcons.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C72D30BE29AC208500C706E9 /* EvilIcons.ttf */; };
-		C72D30CF29AC208600C706E9 /* Octicons.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C72D30BF29AC208500C706E9 /* Octicons.ttf */; };
-		C72D30D029AC208600C706E9 /* MaterialCommunityIcons.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C72D30C029AC208500C706E9 /* MaterialCommunityIcons.ttf */; };
-		C72D30D129AC208600C706E9 /* Entypo.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C72D30C129AC208500C706E9 /* Entypo.ttf */; };
 		C72D30ED29AC20C300C706E9 /* Oswald-ExtraLight.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C72D30D229AC20BE00C706E9 /* Oswald-ExtraLight.ttf */; };
 		C72D30EE29AC20C300C706E9 /* Roboto-Light.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C72D30D329AC20BF00C706E9 /* Roboto-Light.ttf */; };
 		C72D30EF29AC20C300C706E9 /* Oswald-Demi-BoldItalic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C72D30D429AC20BF00C706E9 /* Oswald-Demi-BoldItalic.ttf */; };
@@ -409,39 +393,26 @@
 				C72D30F929AC20C300C706E9 /* Oswald-Heavy.ttf in Resources */,
 				C72D30FF29AC20C300C706E9 /* Oswald-Light.ttf in Resources */,
 				C72D30F829AC20C300C706E9 /* Roboto-LightItalic.ttf in Resources */,
-				C72D30C329AC208600C706E9 /* Ionicons.ttf in Resources */,
 				C7C4100F29B84BD200D7FD41 /* AppIcon.appiconset in Resources */,
 				C72D310429AC20C300C706E9 /* Oswald-MediumItalic.ttf in Resources */,
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
-				C72D30CD29AC208600C706E9 /* MaterialIcons.ttf in Resources */,
 				C72D310229AC20C300C706E9 /* Oswald-Bold.ttf in Resources */,
 				C72D30F329AC20C300C706E9 /* Oswald-LightItalic.ttf in Resources */,
-				C72D30C829AC208600C706E9 /* Feather.ttf in Resources */,
 				C72D310529AC20C300C706E9 /* Oswald-DemiBold.ttf in Resources */,
 				C72D30F129AC20C300C706E9 /* Roboto-MediumItalic.ttf in Resources */,
-				C72D30C629AC208600C706E9 /* FontAwesome5_Regular.ttf in Resources */,
-				C72D30CF29AC208600C706E9 /* Octicons.ttf in Resources */,
 				C72D30F729AC20C300C706E9 /* Roboto-Thin.ttf in Resources */,
 				C72D310029AC20C300C706E9 /* Roboto-ThinItalic.ttf in Resources */,
 				C72D310E29AC397E00C706E9 /* Quicksand-Medium.ttf in Resources */,
 				C773058329D293D300661D01 /* CleanHouseBlack.png in Resources */,
 				C72D310329AC20C300C706E9 /* Roboto-Bold.ttf in Resources */,
 				C72D310C29AC397E00C706E9 /* Quicksand-Regular.ttf in Resources */,
-				C72D30D129AC208600C706E9 /* Entypo.ttf in Resources */,
-				C72D30CE29AC208600C706E9 /* EvilIcons.ttf in Resources */,
 				C72D30F429AC20C300C706E9 /* Roboto-Italic.ttf in Resources */,
-				C72D30CB29AC208600C706E9 /* Zocial.ttf in Resources */,
-				C72D30C929AC208600C706E9 /* SimpleLineIcons.ttf in Resources */,
-				C72D30C729AC208600C706E9 /* Foundation.ttf in Resources */,
 				C72D30EE29AC20C300C706E9 /* Roboto-Light.ttf in Resources */,
 				C72D30F229AC20C300C706E9 /* Oswald-BoldItalic.ttf in Resources */,
 				C72D30EF29AC20C300C706E9 /* Oswald-Demi-BoldItalic.ttf in Resources */,
-				C72D30CC29AC208600C706E9 /* FontAwesome5_Solid.ttf in Resources */,
 				C72D310F29AC397E00C706E9 /* Quicksand-Bold.ttf in Resources */,
 				C72D30FB29AC20C300C706E9 /* Oswald-Stencil.ttf in Resources */,
-				C72D30CA29AC208600C706E9 /* AntDesign.ttf in Resources */,
 				C7D5FF8329AAB02F006434CB /* GoogleService-Info.plist in Resources */,
-				C72D30C229AC208600C706E9 /* Fontisto.ttf in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				C72D30FD29AC20C300C706E9 /* Oswald-Extra-LightItalic.ttf in Resources */,
 				C72D310729AC20C300C706E9 /* Roboto-BlackItalic.ttf in Resources */,
@@ -451,11 +422,8 @@
 				C72D30ED29AC20C300C706E9 /* Oswald-ExtraLight.ttf in Resources */,
 				C72D310D29AC397E00C706E9 /* Quicksand-Light.ttf in Resources */,
 				C72D30FE29AC20C300C706E9 /* Oswald-HeavyItalic.ttf in Resources */,
-				C72D30C529AC208600C706E9 /* FontAwesome5_Brands.ttf in Resources */,
-				C72D30D029AC208600C706E9 /* MaterialCommunityIcons.ttf in Resources */,
 				C72D310129AC20C300C706E9 /* Roboto.ttf in Resources */,
 				C72D30F029AC20C300C706E9 /* Roboto-Black.ttf in Resources */,
-				C72D30C429AC208600C706E9 /* FontAwesome.ttf in Resources */,
 				C75BB9FF2D80F88C005B7ECE /* PrivacyInfo.xcprivacy in Resources */,
 				C72D30FC29AC20C300C706E9 /* Roboto-BoldItalic.ttf in Resources */,
 				C72D30F529AC20C300C706E9 /* Oswald-RegularItalic.ttf in Resources */,
@@ -662,7 +630,7 @@
 					"$(inherited)",
 				);
 				INFOPLIST_FILE = ratsTests/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 12.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -687,7 +655,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				COPY_PHASE_STRIP = NO;
 				INFOPLIST_FILE = ratsTests/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 12.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -718,7 +686,7 @@
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = rats/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
-				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -752,7 +720,7 @@
 				DEVELOPMENT_TEAM = D8K3FS4HAX;
 				INFOPLIST_FILE = rats/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
-				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -831,7 +799,7 @@
 					"${PODS_CONFIGURATION_BUILD_DIR}/React-NativeModulesApple/React_NativeModulesApple.framework/Headers",
 					"${PODS_CONFIGURATION_BUILD_DIR}/React-graphics/React_graphics.framework/Headers/react/renderer/graphics/platform/ios",
 				);
-				IPHONEOS_DEPLOYMENT_TARGET = 12.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					/usr/lib/swift,
 					"$(inherited)",
@@ -911,7 +879,7 @@
 					"${PODS_CONFIGURATION_BUILD_DIR}/React-NativeModulesApple/React_NativeModulesApple.framework/Headers",
 					"${PODS_CONFIGURATION_BUILD_DIR}/React-graphics/React_graphics.framework/Headers/react/renderer/graphics/platform/ios",
 				);
-				IPHONEOS_DEPLOYMENT_TARGET = 12.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					/usr/lib/swift,
 					"$(inherited)",
