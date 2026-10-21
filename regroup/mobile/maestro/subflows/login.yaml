@@ -6,7 +6,7 @@
 #     file: ../subflows/login.yaml
 #     env:
 #       EMAIL: test-manager@rats-e2e.com
-#       PASSWORD: TestPassword123!
+#       PASSWORD: ${E2E_TEST_PASSWORD}
 #
 # Selector path ported from e2e/helpers/auth.js (Detox).
 appId: ${APP_ID}

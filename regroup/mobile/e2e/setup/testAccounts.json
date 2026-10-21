@@ -1,9 +1,9 @@
 {
+  "_note": "Passwords are not stored here. Use the E2E_TEST_PASSWORD env var for every account.",
   "accounts": [
     {
       "id": "guest-a",
       "email": "test-guest-a@rats-e2e.com",
-      "password": "TestPassword123!",
       "firstName": "Test",
       "lastName": "GuestA",
       "role": "guest",
@@ -13,7 +13,6 @@
     {
       "id": "guest-b",
       "email": "test-guest-b@rats-e2e.com",
-      "password": "TestPassword123!",
       "firstName": "Test",
       "lastName": "GuestB",
       "role": "guest",
@@ -23,7 +22,6 @@
     {
       "id": "manager",
       "email": "test-manager@rats-e2e.com",
-      "password": "TestPassword123!",
       "firstName": "Test",
       "lastName": "Manager",
       "role": "admin",
@@ -33,7 +31,6 @@
     {
       "id": "multi-house-user",
       "email": "test-multi-house@rats-e2e.com",
-      "password": "TestPassword123!",
       "firstName": "Multi",
       "lastName": "House",
       "roles": {
@@ -45,13 +42,14 @@
     {
       "id": "oxford-operator",
       "email": "test-oxford-operator@rats-e2e.com",
-      "password": "TestPassword123!",
       "firstName": "Oxford",
       "lastName": "Operator",
       "role": "admin",
       "houseId": "test-house-oxford",
       "phone": "555-0400",
-      "subscriptionMetadata": { "oxfordEnabled": true }
+      "subscriptionMetadata": {
+        "oxfordEnabled": true
+      }
     }
   ]
 }

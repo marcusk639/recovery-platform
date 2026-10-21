@@ -12,7 +12,7 @@ tags:
     file: ../subflows/login.yaml
     env:
       EMAIL: test-manager@rats-e2e.com
-      PASSWORD: TestPassword123!
+      PASSWORD: ${E2E_TEST_PASSWORD}
 - extendedWaitUntil:
     visible:
       id: "main-app-screen"

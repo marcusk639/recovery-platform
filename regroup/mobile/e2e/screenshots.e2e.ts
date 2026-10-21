@@ -11,12 +11,15 @@
  *
  * Test account prerequisites:
  *   - test-manager@rats-e2e.com must have at least one house with guests
- *   - E2E_TEST_PASSWORD env var must be set (falls back to 'TestPassword123!')
+ *   - E2E_TEST_PASSWORD env var must be set (no fallback; throws if unset)
  */
 
 import { device, element, by, waitFor } from 'detox';
 
-const E2E_PASSWORD = process.env.E2E_TEST_PASSWORD || 'TestPassword123!';
+const E2E_PASSWORD = process.env.E2E_TEST_PASSWORD;
+if (!E2E_PASSWORD) {
+  throw new Error('E2E_TEST_PASSWORD is not set');
+}
 
 describe('App Store Screenshots', () => {
   beforeAll(async () => {

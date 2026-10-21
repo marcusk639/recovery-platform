@@ -12,7 +12,7 @@ tags:
     file: ../subflows/login.yaml
     env:
       EMAIL: test-guest-a@rats-e2e.com
-      PASSWORD: TestPassword123!
+      PASSWORD: ${E2E_TEST_PASSWORD}
 - tapOn:
     id: "guest-tab"
 - extendedWaitUntil:

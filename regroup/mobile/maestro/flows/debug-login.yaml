@@ -24,7 +24,7 @@ appId: ${APP_ID}
 - inputText: "test-guest-a@rats-e2e.com"
 - tapOn:
     text: "Password"
-- inputText: "TestPassword123!"
+- inputText: ${E2E_TEST_PASSWORD}
 - tapOn:
     text: "SIGN IN"
 - extendedWaitUntil:
