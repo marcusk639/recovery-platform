@@ -22,6 +22,7 @@ export const h = {
   deletePersonal: jest.fn(),
   unlinkHouse: jest.fn(),
   deleteCustomer: jest.fn(),
+  deleteGuestCustomer: jest.fn(),
   deleteUser: jest.fn(),
   userDelete: jest.fn(),
 };
@@ -44,6 +45,7 @@ export function resetHarness(): void {
   h.deletePersonal.mockResolvedValue(undefined);
   h.unlinkHouse.mockResolvedValue(undefined);
   h.deleteCustomer.mockResolvedValue(undefined);
+  h.deleteGuestCustomer.mockResolvedValue(undefined);
   h.deleteUser.mockImplementation(async () => {
     h.calls.push('auth');
   });
@@ -119,11 +121,12 @@ export const firestoreModule = {
 
 export const stripeModule = {
   deleteCustomer: recorded((a) => `deleteCustomer:${a[0]}`, h.deleteCustomer),
-  // The ownership check is tested in api/stripe.deletion.test.ts; here only the
-  // customer id reaches h.deleteCustomer, so orchestration assertions are unchanged.
+  // The label carries the uid, so a call with the wrong uid, or a return to the
+  // unchecked deleteCustomer, fails the orchestration tests. The ownership check
+  // itself is tested in api/stripe.guestCustomer.test.ts.
   deleteGuestCustomer: recorded(
-    (a) => `deleteCustomer:${a[1]}`,
-    jest.fn((_uid: unknown, customerId: unknown) => h.deleteCustomer(customerId)),
+    (a) => `deleteGuestCustomer:${a[0]}:${a[1]}`,
+    h.deleteGuestCustomer,
   ),
 };
 

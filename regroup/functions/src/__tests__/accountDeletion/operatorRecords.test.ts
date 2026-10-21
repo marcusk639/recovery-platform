@@ -1,5 +1,5 @@
-const mockCancelNow = jest.fn();
-const mockDeleteCustomer = jest.fn();
+// closeOperatorBilling's ownership check is tested in api/stripe.guestCustomer.test.ts.
+const mockCloseBilling = jest.fn();
 const mockWhere = jest.fn();
 const mockGet = jest.fn();
 const mockUpdates: Array<{ id: string; data: Record<string, unknown> }> = [];
@@ -17,8 +17,7 @@ jest.mock("firebase-functions/v2", () => ({
 }));
 
 jest.mock("../../api/stripeDeletion", () => ({
-  cancelSubscriptionNow: (...a: unknown[]) => mockCancelNow(...a),
-  deleteCustomer: (...a: unknown[]) => mockDeleteCustomer(...a),
+  closeOperatorBilling: (...a: unknown[]) => mockCloseBilling(...a),
 }));
 
 jest.mock("../../api/firestore", () => ({
@@ -41,20 +40,18 @@ const houseDoc = (id: string) => ({
 beforeEach(() => {
   jest.clearAllMocks();
   mockUpdates.length = 0;
-  mockCancelNow.mockResolvedValue(undefined);
-  mockDeleteCustomer.mockResolvedValue(undefined);
+  mockCloseBilling.mockResolvedValue(undefined);
   mockWhere.mockReturnValue({ get: mockGet });
   mockGet.mockResolvedValue({ docs: [] });
 });
 
 describe("closeOperatorAccount", () => {
-  it("cancels the subscription now and deletes the customer", async () => {
+  it("closes billing for the deleting uid with the stored ids", async () => {
     await closeOperatorAccount(
       { id: "u1", subscriptionMetadata: { subscriptionId: "sub_1", customerId: "cus_1" } },
       NOW,
     );
-    expect(mockCancelNow).toHaveBeenCalledWith("sub_1");
-    expect(mockDeleteCustomer).toHaveBeenCalledWith("cus_1");
+    expect(mockCloseBilling).toHaveBeenCalledWith("u1", "sub_1", "cus_1");
   });
 
   it("closes every owned house and unlinks Connect", async () => {
@@ -76,29 +73,24 @@ describe("closeOperatorAccount", () => {
     }
   });
 
-  it("treats a missing Stripe subscription as already cancelled", async () => {
-    // The helper resolves when the subscription is already gone.
-    mockCancelNow.mockResolvedValue(undefined);
+  it("still closes houses when billing resolves without acting (missing subscription)", async () => {
     mockGet.mockResolvedValue({ docs: [houseDoc("h1")] });
     const result = await closeOperatorAccount(
       { id: "u1", subscriptionMetadata: { subscriptionId: "sub_gone" } },
       NOW,
     );
     expect(result.housesClosed).toEqual(["h1"]);
-    expect(mockDeleteCustomer).not.toHaveBeenCalled();
+    expect(mockCloseBilling).toHaveBeenCalledWith("u1", "sub_gone", undefined);
   });
 
   it("is a no-op for a user who owns nothing and has no subscription", async () => {
     const result = await closeOperatorAccount({ id: "u1" }, NOW);
     expect(result).toEqual({ housesClosed: [] });
-    expect(mockCancelNow).not.toHaveBeenCalled();
-    expect(mockDeleteCustomer).not.toHaveBeenCalled();
+    expect(mockCloseBilling).toHaveBeenCalledWith("u1", undefined, undefined);
     expect(mockUpdates).toHaveLength(0);
   });
 
   it("still cancels a subscription recorded as canceled (stored status may be stale)", async () => {
-    // cancelSubscriptionNow is idempotent: it resolves for an already-ended subscription.
-    mockCancelNow.mockResolvedValue(undefined);
     mockGet.mockResolvedValue({ docs: [houseDoc("h1")] });
     const result = await closeOperatorAccount(
       {
@@ -107,9 +99,8 @@ describe("closeOperatorAccount", () => {
       },
       NOW,
     );
-    expect(mockCancelNow).toHaveBeenCalledTimes(1);
-    expect(mockCancelNow).toHaveBeenCalledWith("sub_1");
-    expect(mockDeleteCustomer).toHaveBeenCalledWith("cus_1");
+    expect(mockCloseBilling).toHaveBeenCalledTimes(1);
+    expect(mockCloseBilling).toHaveBeenCalledWith("u1", "sub_1", "cus_1");
     expect(result.housesClosed).toEqual(["h1"]);
   });
 

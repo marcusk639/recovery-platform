@@ -1,17 +1,18 @@
 /**
- * Firestore Security Rules Tests — guests/{guestId} self-create payment fields
+ * Firestore Security Rules Tests — client-seeded Stripe billing ids
  *
- * A user may create their own guest doc (invite signup), but not with the
- * Stripe payment fields. Account deletion deletes the customer on every guest
- * doc whose userId is the caller, and rent collection charges it, so a
- * self-made doc carrying a co-resident's stripeCustomerId pointed both at
- * someone else's card. House admins still create guests with any field.
+ * Account deletion acts on Stripe ids read from a user's own guest docs and
+ * user doc, and a user can create both (invite signup; the user doc can be
+ * deleted and recreated). These pin that a client cannot seed those ids on
+ * create or add them to a guest doc later. The server also checks Stripe
+ * ownership (metadata.userId) before cancelling or deleting anything; house
+ * admins can still set guest payment fields.
  *
  * Requires the Firebase Firestore emulator running on port 8080.
  *
  * Setup:
  *   cd firebase && firebase emulators:start --only firestore
- *   npx jest --config jest.config.rules.js firebase/__tests__/guestPaymentFields.rules.test.ts
+ *   npx jest --config jest.config.rules.js firebase/__tests__/billingIds.rules.test.ts
  */
 
 import {
@@ -20,7 +21,7 @@ import {
   assertFails,
   RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, updateDoc } from 'firebase/firestore';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -81,6 +82,43 @@ describe('guests self-create payment fields', () => {
         ...signupGuest,
         stripeCustomerId: 'cus_1',
         defaultPaymentMethodId: 'pm_1',
+      }),
+    );
+  });
+});
+
+describe("guests self-update payment fields", () => {
+  it.each([["stripeCustomerId"], ["defaultPaymentMethodId"]])(
+    "BLOCKS a resident adding %s to their own guest doc",
+    async (field) => {
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        await setDoc(doc(ctx.firestore(), "guests/g1"), signupGuest);
+      });
+      const ctx = testEnv.authenticatedContext(SELF_UID);
+      await assertFails(updateDoc(doc(ctx.firestore(), "guests/g1"), { [field]: "planted" }));
+    },
+  );
+});
+
+describe("users self-create Stripe ids", () => {
+  // The client writes the whole User entity on create; its defaults are "".
+  const defaults = { status: "", customerId: "", subscriptionId: "", houses: {} };
+
+  it("lets a user create their doc with the default empty billing ids", async () => {
+    const ctx = testEnv.authenticatedContext(SELF_UID);
+    await assertSucceeds(
+      setDoc(doc(ctx.firestore(), `users/${SELF_UID}`), { subscriptionMetadata: defaults }),
+    );
+  });
+
+  it.each([
+    ["customerId", { customerId: "cus_victim" }],
+    ["subscriptionId", { subscriptionId: "sub_victim" }],
+  ])("BLOCKS a user creating their doc with a seeded %s", async (_label, seeded) => {
+    const ctx = testEnv.authenticatedContext(SELF_UID);
+    await assertFails(
+      setDoc(doc(ctx.firestore(), `users/${SELF_UID}`), {
+        subscriptionMetadata: { ...defaults, ...seeded },
       }),
     );
   });

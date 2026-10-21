@@ -180,9 +180,13 @@ describe('runAccountDeletion', () => {
 
     await runAccountDeletion('u1', NOW);
 
-    expect(h.deleteCustomer).toHaveBeenCalledTimes(1);
-    expect(h.deleteCustomer).toHaveBeenCalledWith('cus_g');
-    expect(h.calls.indexOf('deleteCustomer:cus_g')).toBeLessThan(h.calls.indexOf('discharge:g1'));
+    // Through the ownership check, for the deleting uid; never the unchecked delete.
+    expect(h.deleteGuestCustomer).toHaveBeenCalledTimes(1);
+    expect(h.deleteGuestCustomer).toHaveBeenCalledWith('u1', 'cus_g');
+    expect(h.deleteCustomer).not.toHaveBeenCalled();
+    expect(h.calls.indexOf('deleteGuestCustomer:u1:cus_g')).toBeLessThan(
+      h.calls.indexOf('discharge:g1'),
+    );
   });
 
   it('runs the operator step for a superAdminId-only house', async () => {
