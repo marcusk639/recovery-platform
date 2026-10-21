@@ -56,8 +56,13 @@ describe('isDemo', () => {
     expect(isDemo('')).toBe(false);
   });
 
-  it('is case-sensitive — returns false for upper-cased demo email', () => {
-    expect(isDemo('Demo_User@appdemo.net')).toBe(false);
+  it('is case-insensitive like the deleteAccount callable — true for mixed-case demo email', () => {
+    expect(isDemo('Demo_User@appdemo.net')).toBe(true);
+    expect(isDemo('DEMO_USER@APPDEMO.NET')).toBe(true);
+  });
+
+  it('returns false for a missing email instead of throwing', () => {
+    expect(isDemo(undefined as unknown as string)).toBe(false);
   });
 
   it('returns false for a partial match of the demo email', () => {

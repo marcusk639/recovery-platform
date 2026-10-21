@@ -590,6 +590,32 @@ describe("PersonalScreen", () => {
       const { getByText } = renderScreen({ admin: BASE_ADMIN });
       expect(getByText("Two-Factor Authentication")).toBeTruthy();
     });
+
+    it('shows "Delete account" for a real signed-in user', () => {
+      const { getByText } = renderScreen({ admin: BASE_ADMIN });
+      expect(getByText("Delete account")).toBeTruthy();
+    });
+
+    it('hides "Delete account" for the demo account', () => {
+      const { isDemo } = require("../../../util/user");
+      (isDemo as jest.Mock).mockImplementation(
+        (e: string) => e === "demo_user@appdemo.net"
+      );
+      const { queryByText } = renderScreen({
+        user: { ...BASE_USER_ADMIN, email: "demo_user@appdemo.net" },
+        admin: BASE_ADMIN,
+      });
+      expect(queryByText("Delete account")).toBeNull();
+      (isDemo as jest.Mock).mockImplementation(() => false);
+    });
+
+    it('hides "Delete account" for users with no email (anonymous)', () => {
+      const { queryByText } = renderScreen({
+        user: { ...BASE_USER_GUEST, email: "" },
+        admin: BASE_ADMIN,
+      });
+      expect(queryByText("Delete account")).toBeNull();
+    });
   });
 
   // ─── Navigation ────────────────────────────────────────────────────────────
@@ -662,10 +688,12 @@ describe("PersonalScreen", () => {
   describe("Add Home demo guard", () => {
     it("calls showPopover instead of navigating for a demo user", () => {
       const { isDemo } = require("../../../util/user");
-      (isDemo as jest.Mock).mockReturnValueOnce(true);
+      // Render also consults isDemo (Delete account gating), so a Once value would be consumed early.
+      (isDemo as jest.Mock).mockReturnValue(true);
 
       const { getByText } = renderScreen({ admin: SUPER_ADMIN });
       fireEvent.press(getByText("Add Home"));
+      (isDemo as jest.Mock).mockReturnValue(false);
       expect(mockShowPopover).toHaveBeenCalledWith(
         "Add Home",
         "This functionality is disabled in demo mode."

@@ -75,6 +75,7 @@ export enum Routes {
 
   // Security Routes
   TwoFactorSetup = 'twoFactorSetup',
+  DeleteAccount = 'deleteAccount',
 
   // Payment Routes
   ResidentPayment = 'residentPayment',
@@ -230,6 +231,7 @@ export type RootStackParamList = {
 
   // Security screens
   [Routes.TwoFactorSetup]: undefined;
+  [Routes.DeleteAccount]: undefined;
 
   // Payment screens
   [Routes.ResidentPayment]: { amount?: number };

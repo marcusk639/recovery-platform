@@ -28,6 +28,10 @@ export const mapValuesToUser = (
   newUser.lastName = values.lastName;
 };
 
+// Shared App Review demo login. Compared lower-cased, like the deleteAccount
+// callable (functions/src/callable/account.ts), so both sides agree.
+export const DEMO_ACCOUNT_EMAIL = 'demo_user@appdemo.net';
+
 export const isDemo = (username: string) => {
-  return username === 'demo_user@appdemo.net';
+  return (username ?? '').toLowerCase() === DEMO_ACCOUNT_EMAIL;
 };

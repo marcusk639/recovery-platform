@@ -81,6 +81,7 @@ import BalanceDashboard from '../screens/BalanceDashboard/BalanceDashboard';
 import RentPaymentScreen from '../screens/RentPayment/RentPaymentScreen';
 import PaymentWebView from '../screens/RentPayment/PaymentWebView';
 import TwoFactorSetup from '../screens/Personal/TwoFactorSetup';
+import DeleteAccount from '../screens/Personal/DeleteAccount';
 import NotificationsScreen from '../screens/Notifications/Notifications';
 import TreasuryDashboard from '../screens/Treasury/TreasuryDashboard';
 import FinancialRecordForm from '../screens/Treasury/FinancialRecordForm';
@@ -530,6 +531,10 @@ export const RootNavigator = ({
       <RootStack.Screen
         name={Routes.TwoFactorSetup}
         component={TwoFactorSetup}
+      />
+      <RootStack.Screen
+        name={Routes.DeleteAccount}
+        component={DeleteAccount}
       />
     </RootStack.Group>
   </RootStack.Navigator>

@@ -69,11 +69,7 @@ function makeFinancialRecord(balance: number): FinancialRecord {
   } as FinancialRecord;
 }
 
-function makeDrugTest(
-  result: DrugTest['result'],
-  guestId = 'g1',
-  daysBack = 5,
-): DrugTest {
+function makeDrugTest(result: DrugTest['result'], guestId = 'g1', daysBack = 5): DrugTest {
   return {
     id: `dt-${Math.random()}`,
     guestId,
@@ -113,11 +109,7 @@ describe('computeDemocraticCondition', () => {
 
   it('passes when average participation >= 80%', () => {
     // 5/5 = 100% each — 3 votes needed
-    const votes = [
-      makeVote({ id: 'v1' }),
-      makeVote({ id: 'v2' }),
-      makeVote({ id: 'v3' }),
-    ];
+    const votes = [makeVote({ id: 'v1' }), makeVote({ id: 'v2' }), makeVote({ id: 'v3' })];
     const result = computeDemocraticCondition(votes, [], 5, NOW);
     expect(result.status).toBe('pass');
     expect(result.metric).toBeCloseTo(1.0);
@@ -171,14 +163,33 @@ describe('computeDemocraticCondition', () => {
       results: { yes: 4, no: 4 }, // 8 voters
       individualVotes: {},
     });
-    const votes = [
-      anonVote,
-      { ...anonVote, id: 'v2' },
-      { ...anonVote, id: 'v3' },
-    ];
+    const votes = [anonVote, { ...anonVote, id: 'v2' }, { ...anonVote, id: 'v3' }];
     // 8/10 = 80% — exactly at threshold
     const result = computeDemocraticCondition(votes, [], 10, NOW);
     expect(result.status).toBe('pass');
+  });
+
+  it('keeps participation when a deleted account removes its individualVotes entry', () => {
+    const full = [makeVote(), makeVote({ id: 'v2' }), makeVote({ id: 'v3' })];
+    // Account deletion drops u5's ballot entry; the results tally (4 + 1) is unchanged.
+    const scrubbed = full.map((v) => ({
+      ...v,
+      individualVotes: { u1: 'yes', u2: 'yes', u3: 'yes', u4: 'yes' },
+      voterIds: ['u1', 'u2', 'u3', 'u4'],
+    }));
+    const before = computeDemocraticCondition(full, [], 6, NOW);
+    const after = computeDemocraticCondition(scrubbed, [], 6, NOW);
+    // 5/6 = 83%: still passes; with the old count (4/6 = 67%) it would fail.
+    expect(after.status).toBe('pass');
+    expect(after.metric).toBeCloseTo(5 / 6);
+    expect(after).toEqual(before);
+  });
+
+  it('falls back to individualVotes when a legacy tally is short', () => {
+    const legacy = makeVote({ results: {} });
+    const votes = [legacy, { ...legacy, id: 'v2' }, { ...legacy, id: 'v3' }];
+    const result = computeDemocraticCondition(votes, [], 5, NOW);
+    expect(result.metric).toBeCloseTo(1);
   });
 });
 
@@ -262,12 +273,7 @@ describe('computeZeroToleranceCondition', () => {
       createdAt: daysAgo(8), // 2 days after test
       closedAt: daysAgo(7),
     });
-    const result = computeZeroToleranceCondition(
-      [test],
-      [expulsionVote],
-      inHouse,
-      NOW,
-    );
+    const result = computeZeroToleranceCondition([test], [expulsionVote], inHouse, NOW);
     expect(result.status).toBe('pass');
   });
 
@@ -286,12 +292,7 @@ describe('computeZeroToleranceCondition', () => {
       createdAt: daysAgo(2), // 18 days after test — exceeds 14-day grace
       closedAt: daysAgo(1),
     });
-    const result = computeZeroToleranceCondition(
-      [test],
-      [lateVote],
-      inHouse,
-      NOW,
-    );
+    const result = computeZeroToleranceCondition([test], [lateVote], inHouse, NOW);
     expect(result.status).toBe('fail');
   });
 
