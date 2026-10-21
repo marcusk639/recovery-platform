@@ -46,7 +46,7 @@ const hasHouseClaim = (claim: unknown, houseId: string): boolean =>
 /**
  * A house in the subscription map lacks admin or superAdmin in the token:
  * a house added after setup was created but its claim grant failed. The map
- * (server-written; deleted houses leave it) is used rather than housesOwned so
+ * (server-written; deleted houses normally leave it) is used rather than housesOwned so
  * a stale client-side list cannot trigger the call. That limits repeat calls
  * but does not remove them: a map house the server will not grant (ownerId
  * rewritten, or past its candidate cap) still asks on each login, without a
@@ -125,10 +125,11 @@ export interface RecoveredUserLoaders {
 }
 
 /**
- * After a completed recovery: refresh the token, then reload the user. Neither
- * may fail the login. A refresh failure is logged and ignored. If the reload
- * throws or still shows setup incomplete (replica lag), the first read is
- * returned with the flags the server just set, so the operator is not sent
+ * After a completed recovery or claims repair: refresh the token (new house
+ * claims), then reload the user. Neither may fail the login. A refresh failure
+ * is logged and ignored. If the reload throws or still shows setup incomplete
+ * (replica lag), the first read is returned with the onboarding flags (just
+ * set by the server, or already set for a repair), so the operator is not sent
  * back into the wizard.
  */
 export const loadRecoveredUser = async (

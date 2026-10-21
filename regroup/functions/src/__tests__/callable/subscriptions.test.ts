@@ -88,13 +88,18 @@ jest.mock("../../api/firestore", () => ({
   app: {},
 }));
 
-// The houses-preserving transaction is tested in util/operatorSubscriptionWrite.test.ts;
-// here it delegates to mockUpdateUser so write assertions stay in one place.
+// The houses-preserving transaction is tested in util/operatorSubscriptionWrite.test.ts.
+// Here it is a spy that also records the write on mockUpdateUser (so existing
+// write assertions hold) and returns a sentinel houses map: a path that went
+// back to a plain updateUser would skip the spy and lose the sentinel.
+const KEPT_HOUSES = { "kept-house": { numberOfGuests: 1 } };
+const mockWriteOperatorSubscription = jest.fn(async (uid: string, meta: object) => {
+  await mockUpdateUser(uid, { subscriptionMetadata: meta });
+  return { ...meta, houses: KEPT_HOUSES };
+});
 jest.mock("../../util/operatorSubscriptionWrite", () => ({
-  writeOperatorSubscription: async (uid: string, meta: object) => {
-    await mockUpdateUser(uid, { subscriptionMetadata: meta });
-    return meta;
-  },
+  writeOperatorSubscription: (uid: string, meta: object) =>
+    mockWriteOperatorSubscription(uid, meta),
 }));
 
 jest.mock("../../util/email", () => ({
@@ -427,6 +432,49 @@ describe("createOperatorSubscription — potentialSuperAdmin claim grant (W7)", 
       fakeUser.id,
     );
     expect(result).toMatchObject({ claimGranted: true });
+  });
+
+  it("writes a tier subscription through writeOperatorSubscription and returns the kept houses map", async () => {
+    process.env.TIER_BILLING_ENABLED = "true";
+    process.env.STRIPE_PRICE_TRAD_STARTER = "price_starter";
+    mockGetUser.mockResolvedValue(fakeUser);
+    mockInitializeTierCustomer.mockResolvedValue({
+      customerId: "cus_tier",
+      subscriptionId: "sub_tier",
+      status: "trialing",
+      tier: "starter",
+    });
+    const result = await call(createOperatorSubscription, {
+      user: fakeUser,
+      paymentMethod: "pm_test",
+      houseType: "traditional",
+      tier: "starter",
+    });
+    expect(mockWriteOperatorSubscription).toHaveBeenCalledWith(
+      fakeUser.id,
+      expect.objectContaining({ subscriptionId: "sub_tier", tier: "starter" }),
+    );
+    expect(result.subscriptionMetadata.houses).toEqual(KEPT_HOUSES);
+  });
+
+  it("writes a legacy subscription through writeOperatorSubscription", async () => {
+    delete process.env.TIER_BILLING_ENABLED;
+    mockGetUser.mockResolvedValue(fakeUser);
+    mockInitializeCustomer.mockResolvedValue({
+      customerId: "cus_new",
+      subscriptionId: "sub_new",
+      status: "trialing",
+    });
+    await call(createOperatorSubscription, {
+      user: fakeUser,
+      paymentMethod: "pm_test",
+      houseType: "traditional",
+      tier: "professional",
+    });
+    expect(mockWriteOperatorSubscription).toHaveBeenCalledWith(
+      fakeUser.id,
+      expect.objectContaining({ subscriptionId: "sub_new", status: "trialing" }),
+    );
   });
 
   it("does not grant a claim when subscription creation is rejected before Stripe is called", async () => {

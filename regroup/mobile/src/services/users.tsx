@@ -156,7 +156,8 @@ export async function getUserFinishingSetup(
 ): Promise<{ user: User; setupRecoveryFailed: boolean }> {
   const user = await getUser(userId);
   // A completed operator is checked for a house whose claim grant failed. A
-  // token read failure skips that check (logged); it must not fail the login.
+  // failed token read (logged) or no signed-in user skips the check; neither
+  // may fail the login.
   const claims = user.orgSetupCompleted
     ? (
         await getAuthUser().catch((error) => {

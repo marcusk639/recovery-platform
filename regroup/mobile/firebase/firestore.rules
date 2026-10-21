@@ -386,7 +386,11 @@ service cloud.firestore {
         !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny(['subscriptionMetadata']);
 
-      allow delete: if isSameUser(userId);
+      // No client deletes. The doc holds the server-written subscriptionMetadata
+      // (houses map = property-cap count, Stripe ids); a delete-and-recreate
+      // would reset it, letting an operator at the cap subscribe again with an
+      // empty map. Account deletion runs server-side (deleteAccount callable).
+      allow delete: if false;
     }
     
     match /notifications/{notificationId} {

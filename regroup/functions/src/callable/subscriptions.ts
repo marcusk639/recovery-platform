@@ -564,8 +564,9 @@ export const updateSubscriptionHouses = onCall(
         // The map is the property-cap count createHouses enforces. Freeing a
         // slot for a house that still exists would let an operator exceed the
         // plan by repeating remove + create. Refused whatever the ownerId:
-        // a superAdmin can rewrite ownerId on their own house. Deleted houses
-        // leave the map via the onHouseDeleted trigger.
+        // a superAdmin can rewrite ownerId on their own house. A deleted house
+        // leaves the map through the onHouseDeleted trigger, or through this
+        // remove once its doc is gone.
         if (await getHouse(houseIds[0])) {
           throw new HttpsError(
             "failed-precondition",
