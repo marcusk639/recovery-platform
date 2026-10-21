@@ -27,6 +27,7 @@ interface Ref {
   path: string;
   get: () => Promise<{ exists: boolean; id: string; data: () => Doc | undefined }>;
   update: (data: Doc) => Promise<void>;
+  set: (data: Doc) => Promise<void>;
 }
 
 export const store = new Map<string, Doc>();
@@ -68,6 +69,10 @@ const makeRef = (collection: string, id: string): Ref => {
       if (!store.has(path)) throw new Error(`NOT_FOUND ${path}`);
       events.push({ op: 'directUpdate', path, data });
       store.set(path, { ...store.get(path), ...data });
+    },
+    set: async (data: Doc) => {
+      events.push({ op: 'directSet', path, data });
+      store.set(path, data);
     },
   };
 };

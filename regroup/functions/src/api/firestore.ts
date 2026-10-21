@@ -198,7 +198,7 @@ export async function getUser(id: string) {
 // while preserving FieldValue sentinels (serverTimestamp/increment/delete),
 // Date, and Timestamp objects — unlike JSON.parse(JSON.stringify(...)), which
 // silently collapses sentinels to {} and converts Dates to ISO strings.
-function stripUndefinedDeep<T>(value: T): T {
+export function stripUndefinedDeep<T>(value: T): T {
   if (
     value === null ||
     typeof value !== 'object' ||

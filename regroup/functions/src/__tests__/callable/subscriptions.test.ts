@@ -88,6 +88,20 @@ jest.mock("../../api/firestore", () => ({
   app: {},
 }));
 
+// The houses-preserving transaction is tested in util/operatorSubscriptionWrite.test.ts.
+// Here it is a spy that also records the write on mockUpdateUser (so existing
+// write assertions hold) and returns a sentinel houses map: a path that went
+// back to a plain updateUser would skip the spy and lose the sentinel.
+const KEPT_HOUSES = { "kept-house": { numberOfGuests: 1 } };
+const mockWriteOperatorSubscription = jest.fn(async (uid: string, meta: object) => {
+  await mockUpdateUser(uid, { subscriptionMetadata: meta });
+  return { ...meta, houses: KEPT_HOUSES };
+});
+jest.mock("../../util/operatorSubscriptionWrite", () => ({
+  writeOperatorSubscription: (uid: string, meta: object) =>
+    mockWriteOperatorSubscription(uid, meta),
+}));
+
 jest.mock("../../util/email", () => ({
   sendEmail: jest.fn(),
   regroupEmail: "admin@regroup-app.com",
@@ -418,6 +432,49 @@ describe("createOperatorSubscription — potentialSuperAdmin claim grant (W7)", 
       fakeUser.id,
     );
     expect(result).toMatchObject({ claimGranted: true });
+  });
+
+  it("writes a tier subscription through writeOperatorSubscription and returns the kept houses map", async () => {
+    process.env.TIER_BILLING_ENABLED = "true";
+    process.env.STRIPE_PRICE_TRAD_STARTER = "price_starter";
+    mockGetUser.mockResolvedValue(fakeUser);
+    mockInitializeTierCustomer.mockResolvedValue({
+      customerId: "cus_tier",
+      subscriptionId: "sub_tier",
+      status: "trialing",
+      tier: "starter",
+    });
+    const result = await call(createOperatorSubscription, {
+      user: fakeUser,
+      paymentMethod: "pm_test",
+      houseType: "traditional",
+      tier: "starter",
+    });
+    expect(mockWriteOperatorSubscription).toHaveBeenCalledWith(
+      fakeUser.id,
+      expect.objectContaining({ subscriptionId: "sub_tier", tier: "starter" }),
+    );
+    expect(result.subscriptionMetadata.houses).toEqual(KEPT_HOUSES);
+  });
+
+  it("writes a legacy subscription through writeOperatorSubscription", async () => {
+    delete process.env.TIER_BILLING_ENABLED;
+    mockGetUser.mockResolvedValue(fakeUser);
+    mockInitializeCustomer.mockResolvedValue({
+      customerId: "cus_new",
+      subscriptionId: "sub_new",
+      status: "trialing",
+    });
+    await call(createOperatorSubscription, {
+      user: fakeUser,
+      paymentMethod: "pm_test",
+      houseType: "traditional",
+      tier: "professional",
+    });
+    expect(mockWriteOperatorSubscription).toHaveBeenCalledWith(
+      fakeUser.id,
+      expect.objectContaining({ subscriptionId: "sub_new", status: "trialing" }),
+    );
   });
 
   it("does not grant a claim when subscription creation is rejected before Stripe is called", async () => {
@@ -1122,17 +1179,42 @@ describe("tier subscriptions skip Stripe quantity updates", () => {
     },
   );
 
-  it("does not read houses when removing one from the subscription map", async () => {
+  it("removes a deleted house from the subscription map", async () => {
     mockGetUser.mockResolvedValue(tierUserUnderCap);
     mockUpdateUser.mockResolvedValue(undefined);
+    mockGetHouse.mockResolvedValueOnce(undefined as any);
     await call(updateSubscriptionHouses, {
       ownerUserId: "user-1",
       action: "remove",
       houseIds: ["house-1"],
     });
-    expect(mockGetHouse).not.toHaveBeenCalled();
-    expect(mockUpdateUser).toHaveBeenCalled();
+    expect(mockGetHouse).toHaveBeenCalledWith("house-1");
+    expect(mockUpdateUser).toHaveBeenCalledWith(
+      "user-1",
+      expect.objectContaining({
+        subscriptionMetadata: expect.objectContaining({ houses: {} }),
+      }),
+    );
   });
+
+  it.each([
+    ["owned by the caller", { id: "house-1", ownerId: "user-1" }],
+    ["whose ownerId was rewritten", { id: "house-1", ownerId: "someone-else" }],
+  ])(
+    "refuses to remove a house that still exists (%s), so the cap cannot be bypassed",
+    async (_label, houseDoc) => {
+      mockGetUser.mockResolvedValue(tierUserUnderCap);
+      mockGetHouse.mockResolvedValueOnce(houseDoc as any);
+      await expect(
+        call(updateSubscriptionHouses, {
+          ownerUserId: "user-1",
+          action: "remove",
+          houseIds: ["house-1"],
+        }),
+      ).rejects.toMatchObject({ code: "failed-precondition" });
+      expect(mockUpdateUser).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     [

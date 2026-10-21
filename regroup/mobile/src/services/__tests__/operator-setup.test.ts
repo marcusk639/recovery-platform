@@ -51,6 +51,43 @@ describe("needsSetupRecovery", () => {
   });
 });
 
+describe("needsSetupRecovery for a completed operator", () => {
+  const completed = incompleteOperator({ orgSetupCompleted: true });
+  const granted = { admin: { h1: true }, superAdmin: { h1: true } };
+  it.each([
+    ["no claims available", undefined, false],
+    ["every map house has both roles", granted, false],
+    ["a map house has no roles", {}, true],
+    ["a map house has admin but not superAdmin", { admin: { h1: true } }, true],
+    ["claims set to non-objects", { admin: true, superAdmin: "h1" }, true],
+  ])("%s → %s", (_label, claims, expected) => {
+    expect(needsSetupRecovery(completed, claims as any)).toBe(expected);
+  });
+
+  it("ignores housesOwned entries missing from the subscription map", () => {
+    const user = incompleteOperator({
+      orgSetupCompleted: true,
+      housesOwned: ["h1", "stale"],
+    });
+    expect(needsSetupRecovery(user, granted)).toBe(false);
+  });
+
+  it.each([
+    ["a completed operator's repair", true, "not-needed"],
+    ["an incomplete setup (the user doc may lag the server)", false, "completed"],
+  ])("treats an empty grant for %s as %s", async (_label, completedSetup, expected) => {
+    mockCallable.mockResolvedValueOnce({ data: { completed: true, houseIds: [] } });
+    const user = incompleteOperator({ orgSetupCompleted: completedSetup });
+    await expect(finishOperatorSetupIfNeeded(user, {})).resolves.toBe(expected);
+  });
+
+  it("calls the server when a completed operator's map house lacks claims", async () => {
+    mockCallable.mockResolvedValueOnce({ data: { completed: true, houseIds: ["h1"] } });
+    await expect(finishOperatorSetupIfNeeded(completed, {})).resolves.toBe("completed");
+    expect(functions.httpsCallable).toHaveBeenCalledWith("finishOperatorSetup");
+  });
+});
+
 describe("finishOperatorSetupIfNeeded", () => {
   it("does not call the server when the operator owns no houses", async () => {
     const user = incompleteOperator({ housesOwned: [], subscriptionMetadata: {} });
