@@ -146,16 +146,25 @@ export async function getUser(userId: string): Promise<User> {
  * getUser for the login paths: an operator whose houses exist but whose setup
  * never finished is completed server-side first, then the token is refreshed
  * (new house claims) and the user reloaded, so routing sees a completed
- * operator instead of sending them to an empty setup wizard. If the recovery
- * call failed, `setupRecoveryFailed` tells OrgSetup to block the wizard.
+ * operator instead of sending them to an empty setup wizard. A completed
+ * operator holding a house without claims (a later add-house grant failed)
+ * gets the missing roles granted the same way. If recovery of an incomplete
+ * setup failed, `setupRecoveryFailed` tells OrgSetup to block the wizard.
  */
 export async function getUserFinishingSetup(
   userId: string
 ): Promise<{ user: User; setupRecoveryFailed: boolean }> {
   const user = await getUser(userId);
-  const outcome = await finishOperatorSetupIfNeeded(user);
+  // A completed operator is checked for a house whose claim grant failed. A
+  // token read failure skips that check; it must not fail the login.
+  const claims = user.orgSetupCompleted
+    ? (await getAuthUser().catch(() => undefined))?.claims
+    : undefined;
+  const outcome = await finishOperatorSetupIfNeeded(user, claims);
   if (outcome !== "completed") {
-    return { user, setupRecoveryFailed: outcome === "failed" };
+    // Only an incomplete setup has a wizard to block.
+    const setupRecoveryFailed = outcome === "failed" && !user.orgSetupCompleted;
+    return { user, setupRecoveryFailed };
   }
   const recovered = await loadRecoveredUser(user, {
     refreshToken: () => getAuthUser(true),

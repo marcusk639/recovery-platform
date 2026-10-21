@@ -9,7 +9,8 @@ import { User } from '../entities/User';
 import { logException } from '../util/logging';
 
 export type FinishOperatorSetupResult =
-  { completed: false } | { completed: true; houseIds: string[] };
+  | { completed: false }
+  | { completed: true; houseIds: string[] };
 
 /**
  * - not-needed: needsSetupRecovery is false; the server was not called.
@@ -26,13 +27,43 @@ export const OPERATOR_SETUP_FIELDS = {
   isSuperAdmin: true,
 } as const;
 
+/** The house-role claims read from the caller's ID token. */
+export interface HouseRoleClaims {
+  admin?: unknown;
+  superAdmin?: unknown;
+}
+
+const hasHouseClaim = (claim: unknown, houseId: string): boolean =>
+  typeof claim === 'object' &&
+  claim !== null &&
+  (claim as Record<string, unknown>)[houseId] === true;
+
 /**
- * Not anonymous, setup incomplete, and the user doc lists houses in
- * housesOwned or the subscription houses map.
+ * A house in the subscription map lacks admin or superAdmin in the token:
+ * a house added after setup was created but its claim grant failed. The map
+ * (server-written; deleted houses leave it) is used rather than housesOwned so
+ * a stale client-side list cannot trigger a server call on every login.
  */
-export const needsSetupRecovery = (user: Partial<User> | null | undefined): boolean => {
-  if (!user || user.isAnonymous || user.orgSetupCompleted) {
+export const hasUngrantedHouses = (user: Partial<User>, claims: HouseRoleClaims): boolean =>
+  Object.keys(user.subscriptionMetadata?.houses ?? {}).some(
+    (id) => !hasHouseClaim(claims.admin, id) || !hasHouseClaim(claims.superAdmin, id),
+  );
+
+/**
+ * Not anonymous, and either setup is incomplete with houses listed in
+ * housesOwned or the subscription houses map, or setup is complete and the
+ * token is missing roles on a house in the map. Without claims a completed
+ * operator is not checked.
+ */
+export const needsSetupRecovery = (
+  user: Partial<User> | null | undefined,
+  claims?: HouseRoleClaims,
+): boolean => {
+  if (!user || user.isAnonymous) {
     return false;
+  }
+  if (user.orgSetupCompleted) {
+    return claims !== undefined && hasUngrantedHouses(user, claims);
   }
   const owned = user.housesOwned?.length ?? 0;
   const inPlan = Object.keys(user.subscriptionMetadata?.houses ?? {}).length;
@@ -68,8 +99,9 @@ export const finishOperatorSetup = async (
 /** finishOperatorSetup, but only for a user who needsSetupRecovery. */
 export const finishOperatorSetupIfNeeded = async (
   user: Partial<User> | null | undefined,
+  claims?: HouseRoleClaims,
 ): Promise<SetupRecoveryOutcome> =>
-  needsSetupRecovery(user) ? finishOperatorSetup(user?.id ?? user?.uid) : 'not-needed';
+  needsSetupRecovery(user, claims) ? finishOperatorSetup(user?.id ?? user?.uid) : 'not-needed';
 
 export interface RecoveredUserLoaders {
   /** Force-refreshes the ID token so the new house claims are present. */
