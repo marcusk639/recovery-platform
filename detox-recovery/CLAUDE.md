@@ -4,7 +4,7 @@ This is the **Detox Recovery** product within the `recovery-platform` monorepo (
 
 **Target users:** Individuals or families seeking detox/treatment guidance. Non-clinical peer support only.
 
-**Production:** https://nextsteprecovery.io (Firebase App Hosting — `nextsteprecovery-1d5c2` backend, alias `nextstep-recovery`)
+**Production:** https://nextsteprecovery.io (Firebase App Hosting — backendId `nextstep-recovery` in project `nextsteprecovery-1d5c2`, `us-central1`)
 
 ---
 
@@ -16,7 +16,9 @@ npm run build        # production build
 npm run lint         # ESLint
 npm run test         # Jest (all tests)
 npm run test:watch   # Jest watch mode
-npm run test:coverage # Jest with v8 coverage report
+npm run test:coverage # Jest with v8 coverage report (floor 90/78/92/90 — ratchet, never lower)
+npm run typecheck    # tsc --noEmit (CI gate)
+npm run pdfs         # generate PDF products (scripts/generate-pdfs.mjs)
 npm run setup:env       # create .env.local from template
 npm run verify:services # smoke-test external service credentials
 
@@ -33,18 +35,7 @@ npx jest --testNamePattern="renders"
 
 ### Pages and API routes (`app/`)
 
-| Route                 | Purpose                                            |
-| --------------------- | -------------------------------------------------- |
-| `/`                   | Home — hero, service ladder preview, trust signals |
-| `/services`           | Full service tier listing                          |
-| `/consulting`         | B2B consulting offers + lead magnet                |
-| `/resources`          | Downloadable products and lead magnets             |
-| `/contact`            | Contact form (accepts `?interest=` query param)    |
-| `/thank-you`          | Post-purchase confirmation (accepts `?type=call`)  |
-| `/privacy`            | Privacy policy                                     |
-| `/terms`              | Terms of service                                   |
-| `POST /api/contact`   | Sends email via Resend                             |
-| `POST /api/subscribe` | Adds subscriber to MailerLite group by tag         |
+Pages mirror `app/` directories. Non-obvious query params: `/contact?interest=` pre-fills the interest dropdown; `/thank-you?type=call`. API: `POST /api/contact` (Resend email) and `POST /api/subscribe` (MailerLite group by tag).
 
 ### Data layer (`lib/`)
 
@@ -61,7 +52,7 @@ All site content lives in static typed data files — no CMS, no database:
 
 `products-data.ts` has an `availability?: "coming-soon"` field on `Product`. Set it for any product that isn't deliverable yet — `ProductCard` renders a disabled "Available soon" button instead of the CTA. The 5 paid PDFs are currently gated this way pending content writing.
 
-**PDF delivery platform:** Lemon Squeezy (not Stripe) — handles file delivery, VAT, and confirmation email in one step. Do not create new Stripe payment links for PDF products. See `docs/manual-tasks/2026-05-23-lemon-squeezy-migration.md`.
+**PDF delivery platform:** Lemon Squeezy (not Stripe) — handles file delivery, VAT, and confirmation email in one step. Do not create new Stripe payment links for PDF products. See `docs/operations/manual-tasks/2026-05-23-lemon-squeezy-migration.md`.
 
 ### Components (`components/`)
 
@@ -94,7 +85,7 @@ if (!checkHoneypot(body).ok)     → 200 { success: true }   (silent drop)
 
 Every user-facing form must include `<HoneypotInput />` from `components/forms/HoneypotInput.tsx`. The 4 production forms (Contact, Newsletter, LeadMagnet, B2BLeadMagnet) already do. When adding a new form, add it.
 
-The silent-success contract (honeypot trip, missing env vars, MailerLite idempotent dupes — all return `200 { success: true }`) is documented in `docs/api.md`. **Do not "fix" the silent honeypot drop by returning `400` — it defeats the anti-bot design.**
+The silent-success contract (honeypot trip, missing env vars, MailerLite idempotent dupes — all return `200 { success: true }`) is documented in `docs/technical/api.md`. **Do not "fix" the silent honeypot drop by returning `400` — it defeats the anti-bot design.**
 
 ### Contact form pre-fill pattern
 
@@ -104,33 +95,22 @@ The silent-success contract (honeypot trip, missing env vars, MailerLite idempot
 
 Mirrors source structure: `__tests__/components/`, `__tests__/api/`, `__tests__/pages/`. Uses `@testing-library/react` with `jest-environment-jsdom`. API route tests mock `node-fetch`/`Resend` and assert on `NextResponse` behavior.
 
-### Business planning docs (`docs/`)
+### Business context
 
-`docs/` contains business context referenced for product decisions:
-
-- `financial-model-master-2026-05-24.md` — canonical financial model (service tier pricing, capacity ceiling, launch timeline)
-- `business-case-2026-05-24.md` — strategic partner business case
-- `market-opportunity-analysis-2026-05-24.md` — TAM/SAM/SOM and competitive landscape
-- `roadmap-2026-05-24.md` — feature roadmap
+See `docs/go-to-market/{monetization,roadmap}.md`. Older financial-model and business-case docs live in `docs/_archive/` and `_legacy/` and are historical.
 
 ### Disabled integrations
 
-`app/api/contact/route.ts` has referral firing logic for `recovery-api` (triggers on "Sober Living / Housing" and "12-Step / Homegroup Support" contact interests). It is intentionally disabled — env vars are commented out in `apphosting.yaml` pending partner agreement negotiation. Do not activate without explicit instruction.
+`app/api/contact/route.ts` has referral firing logic for `recovery-api` (triggers on "Sober Living / Housing" and "12-Step / Homegroup Support" contact interests). It is intentionally disabled — env vars are commented out in `apphosting.yaml` pending partner agreement negotiation. Do not activate without explicit instruction. Enablement runbook: `../docs/ecosystem/referral-enablement.md`.
 
 When activated, detox originates referrals to recovery-api as app-id `nextstep-recovery` with system uid `detox-anon` (anonymous lead capture — no detox user account). recovery-api resolves the display-name `toApp` to a canonical app-id via its registry (`recovery-api/src/config/apps.ts`). Requests must send `X-App-Id` and `X-User-Uid` headers, not just `X-Service-Key`.
 
-The referral is dispatched via `Promise.allSettled([sendEmailPromise, referralPromise])` — both run in parallel, both are awaited, and referral rejection is logged but does not fail the user response. **Do not refactor this to `void fireReferral(...)`.** Firebase App Hosting (Cloud Run) throttles background CPU after the handler returns, so a fire-and-forget POST may be cut mid-handshake. There is no `waitUntil()` equivalent here. See `docs/architecture.md` "Referral Routing" for the full rationale.
+The referral is dispatched via `Promise.allSettled([sendEmailPromise, referralPromise])` — both run in parallel, both are awaited, and referral rejection is logged but does not fail the user response. **Do not refactor this to `void fireReferral(...)`.** Firebase App Hosting (Cloud Run) throttles background CPU after the handler returns, so a fire-and-forget POST may be cut mid-handshake. There is no `waitUntil()` equivalent here. See `docs/technical/architecture.md` "Referral Routing" for the full rationale.
 
 ## Deployment
-
-**Production:** https://nextsteprecovery.io (Firebase App Hosting — `nextsteprecovery-1d5c2` backend, alias `nextstep-recovery`, `us-central1`)
 
 `firebase deploy` must be run in the **user's terminal** (`! firebase deploy`) — the `firebase` CLI is not in Claude's shell PATH.
 
 ## Important constraints
 
 This is a **non-clinical peer support** site. Copy and UX must never imply medical advice, diagnosis, or treatment. `REFERRAL_CONDITIONS` drives the `ReferralTriggers` component — conditions on that list always point users to emergency/medical care, not to site services.
-
-<claude-mem-context>
-
-</claude-mem-context>

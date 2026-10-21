@@ -14,6 +14,9 @@ npm run typecheck    # TypeScript type check without emitting
 npm test             # Run Jest 29 tests
 npm run test:watch   # Jest in watch mode
 npm run test:coverage # Jest with coverage
+npm run lint         # eslint src
+npm run seed         # build + seed directoryMeetings (lib/scripts/seedDirectory.js)
+npm run migrate:na   # build + migrate NA meetings (lib/scripts/migrateNaMeetings.js)
 ```
 
 ## Architecture
@@ -36,7 +39,9 @@ src/
 │                      findMeetings — geohash-bounded search of the shared directoryMeetings collection
 │                      identity (Phase 2 scaffold — all code commented out, not deployed)
 ├── http/              health — GET /health liveness probe returning {ok: true, ts: <iso>}
-└── triggers/          onUserWrite (Phase 2 scaffold — inactive)
+└── triggers/          refreshDirectory — LIVE onSchedule 'every day 03:00'; geohash-cell slice refresh
+                       (7-run cycle) + 30-day stale prune of directoryMeetings
+                       onUserWrite (Phase 2 scaffold — inactive)
 ```
 
 ## Auth Model
@@ -61,3 +66,5 @@ src/
   **canonical app-id**, never a display name or alias. Resolve at the boundary with `resolveAppId()`.
 - The registry (`config/apps.ts`) is the only place to add/rename an app. `sober-living` is a
   retained legacy alias for `phoenix-cleanhouse`; do not reintroduce it as a standalone app-id.
+- Emulator ports are offset (functions 5002, firestore 8082, auth 9100, UI 4001) so recovery-api can run beside another product's emulators.
+- Jest coverage floor (`jest.config.cjs`: 80/75/78/80 statements/branches/functions/lines) is a ratchet — raise it, never lower it.

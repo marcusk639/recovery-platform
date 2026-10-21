@@ -21,6 +21,9 @@ npm run ios                           # iPhone 14 Pro simulator
 npm run android
 npm run pod:install                   # CocoaPods
 npm run lint
+npm run typecheck                     # / typecheck:ratchet
+npm run deploy:rules                  # firestore rules + storage ONLY
+npm run deploy:indexes                # indexes are NOT in deploy:rules
 ```
 
 ## Emulator-backed suites
@@ -43,6 +46,8 @@ cd firebase && firebase emulators:exec --only firestore,auth \
   --project demo-test \
   "cd .. && npx jest --config jest.config.integration.js --no-coverage --forceExit"
 ```
+
+Rules, storage rules and indexes live in `mobile/firebase/` (`firestore.rules`, `storage.rules`, `firestore.indexes.json`; rules tests in `firebase/__tests__/`). The project pin is `../.firebaserc`; there is no `.firebaserc` here. `firebase/firebase.json` references `database.rules.json`, which does not exist.
 
 Integration tests alias `firebase-setup` to `src/integration/firebase-admin-setup.ts`;
 unit tests alias it to the mock. Getting that wrong makes every integration test
