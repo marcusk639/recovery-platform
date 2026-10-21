@@ -13,7 +13,7 @@
 #       file: ../subflows/login.yaml
 #       env:
 #         EMAIL: test-admin@homegroups-e2e.com
-#         PASSWORD: TestPassword123!
+#         PASSWORD: ${E2E_TEST_PASSWORD}
 appId: org.recoveryconnect
 ---
 - launchApp:

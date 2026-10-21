@@ -4,7 +4,7 @@
  * (1) create-or-signin the Auth users (Email/Password must be enabled) to get UIDs;
  * (2) write 16 Firestore docs via REST commit with an OWNER token minted from the firebase-tools
  * refresh token (bypasses rules). Requires `firebase login`. Usage: node homegroups/scripts/seed-e2e.js
- * Personas (pw TestPassword123!): test-admin@, test-unclaimed-member@, test-treasurer@, test-filler@.
+ * Personas (pw from $E2E_TEST_PASSWORD): test-admin@, test-unclaimed-member@, test-treasurer@, test-filler@.
  * Doc shapes live in seed-e2e-data.js.
  */
 const https = require('https');
@@ -14,7 +14,10 @@ const path = require('path');
 const { EMAILS, buildWrites } = require('./seed-e2e-data');
 
 const PROJECT = 'homegroups-e2e';
-const PASSWORD = 'TestPassword123!';
+const PASSWORD = process.env.E2E_TEST_PASSWORD;
+if (!PASSWORD) {
+  throw new Error('E2E_TEST_PASSWORD is not set (see ~/.config/homegroups-e2e/e2e-test-password)');
+}
 // firebase-tools public OAuth client (open-source; not a real secret).
 const CLIENT_ID = '563584335869-fgrhgmd47bqnekij5i8b5pr03ho849e6.apps.googleusercontent.com';
 const CLIENT_SECRET = 'j9iVZfS8kkCEFUPaAeJV0sAi';

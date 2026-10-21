@@ -63,10 +63,10 @@ appId: org.recoveryconnect
 - inputText: ${EMAIL}
 - tapOn:
     id: "auth-modal-password-input"
-- inputText: "TestPassword123!"
+- inputText: ${E2E_TEST_PASSWORD}
 - tapOn:
     id: "auth-modal-confirm-password-input"
-- inputText: "TestPassword123!"
+- inputText: ${E2E_TEST_PASSWORD}
 - tapOn:
     id: "auth-modal-signup-button"
 # iOS "Save Password?" dialog appears after submit and can cover group-list-screen. The session

@@ -23,7 +23,7 @@ appId: org.recoveryconnect
     file: ../subflows/login.yaml
     env:
       EMAIL: test-treasurer@homegroups-e2e.com
-      PASSWORD: TestPassword123!
+      PASSWORD: ${E2E_TEST_PASSWORD}
 # bottom-tab label not matchable on iOS; login already lands on Home/group-list.
 - tapOn:
     text: "Home"
