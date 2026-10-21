@@ -109,6 +109,16 @@ describe("GuestInvites", () => {
     expect(mockNavigation.goBack).not.toHaveBeenCalled();
   });
 
+  it("surfaces a failure when sendAllInvites reports failed invitations", async () => {
+    mockSendAllInvites.mockResolvedValueOnce({ sent: 0, failed: 1 } as any);
+    const { mockNavigation } = renderScreen();
+
+    await capturedOnSubmit({ guestEmails: ["a@b.com"] }, {});
+
+    expect(mockLogException).toHaveBeenCalled();
+    expect(mockNavigation.goBack).not.toHaveBeenCalled();
+  });
+
   it("logs and surfaces a failure instead of crashing when sendAllInvites fails", async () => {
     mockSendAllInvites.mockRejectedValueOnce(new Error("email service down"));
     const { mockNavigation } = renderScreen();

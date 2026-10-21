@@ -1933,13 +1933,33 @@ describe("houses/{houseId} — delete", () => {
     return doc(ctx.firestore(), `houses/${HOUSE_ID}`);
   }
 
-  test("ALLOW an admin of the house to delete it", async () => {
+  // Delete is superAdmin-only so a plain admin cannot destroy the operator's
+  // house; deleted ids are tombstoned server-side and never re-created.
+  test("DENY a plain admin of the house deleting it (delete-and-reclaim)", async () => {
     await seedHouse();
     const ctx = testEnv.authenticatedContext(
       ADMIN_UID,
       authHouseAdmin(ADMIN_UID, HOUSE_ID),
     );
-    await assertSucceeds(deleteDoc(houseRef(ctx)));
+    await assertFails(deleteDoc(houseRef(ctx)));
+  });
+
+  test("DENY a superAdmin of a DIFFERENT house deleting it", async () => {
+    await seedHouse();
+    const ctx = testEnv.authenticatedContext(
+      ADMIN_UID,
+      authHouseSuperAdmin(ADMIN_UID, HOUSE_ID_OTHER),
+    );
+    await assertFails(deleteDoc(houseRef(ctx)));
+  });
+
+  test("DENY the demo account deleting a non-demo house even as superAdmin", async () => {
+    await seedHouse();
+    const ctx = testEnv.authenticatedContext("demoAccountUid", {
+      ...authHouseSuperAdmin("demoAccountUid", HOUSE_ID),
+      email: "demo_user@appdemo.net",
+    });
+    await assertFails(deleteDoc(houseRef(ctx)));
   });
 
   // Regression coverage for 2026-07-07: this rule used isHouseAdmin(houseId)
@@ -2510,6 +2530,58 @@ describe("users/{userId} — subscriptionMetadata is server-owned", () => {
     );
   });
 
+  // The houses map is trusted server-side as an ownership/cap record
+  // (createHouses retries, finishOperatorSetup, the property cap), so a client
+  // may only create it empty.
+  it("allows creating its own user doc with an empty houses map", async () => {
+    await assertSucceeds(
+      setDoc(selfDoc(), {
+        uid: SELF_UID,
+        email: "self@example.com",
+        subscriptionMetadata: { status: "", houses: {} },
+      }),
+    );
+  });
+
+  it("allows creating its own user doc with no houses map", async () => {
+    await assertSucceeds(
+      setDoc(selfDoc(), {
+        uid: SELF_UID,
+        email: "self@example.com",
+        subscriptionMetadata: { status: "", tier: "starter" },
+      }),
+    );
+  });
+
+  it("allows creating its own user doc with no subscriptionMetadata", async () => {
+    await assertSucceeds(
+      setDoc(selfDoc(), { uid: SELF_UID, email: "self@example.com" }),
+    );
+  });
+
+  it("denies creating its own user doc with a seeded houses map", async () => {
+    await assertFails(
+      setDoc(selfDoc(), {
+        uid: SELF_UID,
+        email: "self@example.com",
+        subscriptionMetadata: {
+          status: "",
+          houses: { someHouseId: { numberOfGuests: 0 } },
+        },
+      }),
+    );
+  });
+
+  it("denies a seeded houses map even when status is absent", async () => {
+    await assertFails(
+      setDoc(selfDoc(), {
+        uid: SELF_UID,
+        email: "self@example.com",
+        subscriptionMetadata: { houses: { someHouseId: {} } },
+      }),
+    );
+  });
+
   it("still denies access to another user's document", async () => {
     await seedUser({ status: "active" });
     const otherCtx = testEnv.authenticatedContext(
@@ -2685,5 +2757,150 @@ describe("houses/{houseId} — subscriptionStatus is server-owned", () => {
         subscriptionStatus: "active",
       }),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// houses/{houseId} — creation is server-only (createHouses callable)
+// ---------------------------------------------------------------------------
+
+describe("houses/{houseId} — client creation is closed", () => {
+  const newHouse = { id: HOUSE_ID, name: "New House", adminIds: [ADMIN_UID] };
+
+  it("a client cannot create a house even holding superAdmin for its id", async () => {
+    const ctx = testEnv.authenticatedContext(
+      ADMIN_UID,
+      authHouseSuperAdmin(ADMIN_UID, HOUSE_ID),
+    );
+    await assertFails(setDoc(doc(ctx.firestore(), `houses/${HOUSE_ID}`), newHouse));
+  });
+
+  it("a new operator holding only potentialSuperAdmin cannot create a house", async () => {
+    const ctx = testEnv.authenticatedContext(ADMIN_UID, {
+      potentialSuperAdmin: true,
+    });
+    await assertFails(setDoc(doc(ctx.firestore(), `houses/${HOUSE_ID}`), newHouse));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// houses/{houseId} — authorization fields
+//
+// superAdminId is the operator's uid, written only by createHouses; server
+// callables and triggers resolve the operator through it, so no client role
+// may change it. superAdminIds (and the legacy adminId, blocked defensively)
+// are authorization fields like adminIds/ownerId: a plain admin or guest must
+// not write them; a superAdmin still manages them.
+// ---------------------------------------------------------------------------
+describe("houses/{houseId} — update: authorization fields", () => {
+  const seedHouse = async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `houses/${HOUSE_ID}`), {
+        name: "Test House",
+        ownerId: ADMIN_UID,
+        superAdminId: ADMIN_UID,
+        adminId: "admin-doc-1",
+        adminIds: ["admin-doc-1"],
+        superAdminIds: ["admin-doc-1"],
+      });
+    });
+  };
+
+  const houseDocAs = (uid: string, claims: object) =>
+    doc(testEnv.authenticatedContext(uid, claims).firestore(), `houses/${HOUSE_ID}`);
+
+  const roles: Array<[string, () => object, string]> = [
+    ["admin", () => authHouseAdmin(OTHER_UID, HOUSE_ID), OTHER_UID],
+    ["guest", () => authHouseGuest(GUEST_UID, HOUSE_ID), GUEST_UID],
+  ];
+
+  it.each([
+    ...roles,
+    ["SUPERADMIN", () => authHouseSuperAdmin(OTHER_UID, HOUSE_ID), OTHER_UID],
+  ] as Array<[string, () => object, string]>)(
+    "denies a %s writing superAdminId",
+    async (_role, claims, uid) => {
+      await seedHouse();
+      await assertFails(updateDoc(houseDocAs(uid, claims()), { superAdminId: uid }));
+    },
+  );
+
+  it.each(roles)("denies a %s writing superAdminIds", async (_role, claims, uid) => {
+    await seedHouse();
+    await assertFails(
+      updateDoc(houseDocAs(uid, claims()), { superAdminIds: ["admin-doc-1", "evil"] }),
+    );
+  });
+
+  it.each(roles)("denies a %s writing adminId", async (_role, claims, uid) => {
+    await seedHouse();
+    await assertFails(updateDoc(houseDocAs(uid, claims()), { adminId: "evil" }));
+  });
+
+  it("allows a superAdmin managing superAdminIds and adminId", async () => {
+    await seedHouse();
+    await assertSucceeds(
+      updateDoc(houseDocAs(ADMIN_UID, authHouseSuperAdmin(ADMIN_UID, HOUSE_ID)), {
+        superAdminIds: ["admin-doc-1", "admin-doc-2"],
+        adminId: "admin-doc-2",
+      }),
+    );
+  });
+
+  it("still allows an admin a non-authz edit that echoes the authz fields unchanged", async () => {
+    await seedHouse();
+    await assertSucceeds(
+      updateDoc(houseDocAs(OTHER_UID, authHouseAdmin(OTHER_UID, HOUSE_ID)), {
+        name: "Renamed",
+        superAdminId: ADMIN_UID,
+        superAdminIds: ["admin-doc-1"],
+        adminId: "admin-doc-1",
+      }),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// houseTombstones/{houseId} — server-only (no client rule, default deny)
+// ---------------------------------------------------------------------------
+describe("houseTombstones/{houseId} — server-only", () => {
+  const tombstonePath = `houseTombstones/${HOUSE_ID}`;
+  const superAdminCtx = () =>
+    testEnv.authenticatedContext(ADMIN_UID, authHouseSuperAdmin(ADMIN_UID, HOUSE_ID));
+  const seedTombstone = async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), tombstonePath), {
+        deletedAt: "2026-10-20T00:00:00.000Z",
+      });
+    });
+  };
+
+  it("a superAdmin of the house cannot read its tombstone", async () => {
+    await seedTombstone();
+    await assertFails(getDoc(doc(superAdminCtx().firestore(), tombstonePath)));
+  });
+
+  it("a superAdmin of the house cannot create or overwrite its tombstone", async () => {
+    await assertFails(
+      setDoc(doc(superAdminCtx().firestore(), tombstonePath), { deletedAt: "x" }),
+    );
+    await seedTombstone();
+    await assertFails(
+      updateDoc(doc(superAdminCtx().firestore(), tombstonePath), { deletedAt: "x" }),
+    );
+  });
+
+  it("a superAdmin of the house cannot delete its tombstone", async () => {
+    await seedTombstone();
+    await assertFails(deleteDoc(doc(superAdminCtx().firestore(), tombstonePath)));
+  });
+
+  it("other clients cannot read or delete it either", async () => {
+    await seedTombstone();
+    const admin = testEnv.authenticatedContext(OTHER_UID, authHouseAdmin(OTHER_UID, HOUSE_ID));
+    await assertFails(getDoc(doc(admin.firestore(), tombstonePath)));
+    await assertFails(deleteDoc(doc(admin.firestore(), tombstonePath)));
+    const anon = testEnv.unauthenticatedContext();
+    await assertFails(getDoc(doc(anon.firestore(), tombstonePath)));
   });
 });

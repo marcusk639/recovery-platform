@@ -82,6 +82,9 @@ import setupReducer, {
   createHouse,
   updateHouseConfig,
   completeSetup,
+  submitHouseSetup,
+  selectInviteFailures,
+  selectPhotoFailures,
   selectCurrentStep,
   selectOrganization,
   selectSelectedHouse,
@@ -472,6 +475,9 @@ describe("setupSlice", () => {
         submittingSuccessful: true,
         submittingFailed: true,
         error: "some error",
+        errorKind: "subscription-required",
+        inviteFailures: 3,
+        photoFailures: 1,
       };
       const state = setupReducer(dirtyState, resetSetupState());
       expect(state).toEqual(initialState);
@@ -662,6 +668,43 @@ describe("setupSlice", () => {
   });
 
   // ---------------------------------------------------------------------------
+  // Async thunks — submitHouseSetup (best-effort failure counts)
+  // ---------------------------------------------------------------------------
+  describe("submitHouseSetup thunk", () => {
+    const arg = { houses: {}, operator: { id: "op" } as any };
+    const payload = (inviteFailures: number, photoFailures: number) =>
+      ({ inviteFailures, photoFailures } as any);
+
+    it("starts with zero failures", () => {
+      expect(initialState.inviteFailures).toBe(0);
+      expect(initialState.photoFailures).toBe(0);
+    });
+
+    it("stores inviteFailures and photoFailures on fulfilled", () => {
+      const state = setupReducer(
+        initialState,
+        submitHouseSetup.fulfilled(payload(2, 1), "", arg)
+      );
+      expect(state.submittingSuccessful).toBe(true);
+      expect(state.inviteFailures).toBe(2);
+      expect(state.photoFailures).toBe(1);
+      const root = { setup: state };
+      expect(selectInviteFailures(root)).toBe(2);
+      expect(selectPhotoFailures(root)).toBe(1);
+    });
+
+    it("resets the counts when a new submission starts", () => {
+      const done = setupReducer(
+        initialState,
+        submitHouseSetup.fulfilled(payload(2, 1), "", arg)
+      );
+      const state = setupReducer(done, submitHouseSetup.pending("", arg));
+      expect(state.inviteFailures).toBe(0);
+      expect(state.photoFailures).toBe(0);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // Selectors
   // ---------------------------------------------------------------------------
   describe("selectors", () => {
@@ -687,6 +730,9 @@ describe("setupSlice", () => {
         submittingSuccessful: false,
         submittingFailed: false,
         error: "test error",
+        errorKind: null,
+        inviteFailures: 0,
+        photoFailures: 0,
       } as SetupState,
     };
 

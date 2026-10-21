@@ -75,12 +75,15 @@ jest.mock("../../api/stripe", () => ({
 const mockGetUser = jest.fn();
 const mockUpdateUser = jest.fn();
 const mockGetHousesByAttributes = jest.fn();
+// Default: every house is owned by the test caller ("user-1").
+const mockGetHouse = jest.fn(async (id: string) => ({ id, ownerId: "user-1" }));
 const mockUpsertSubscriptionDoc = jest.fn();
 
 jest.mock("../../api/firestore", () => ({
   getUser: mockGetUser,
   updateUser: mockUpdateUser,
   getHousesByAttributes: mockGetHousesByAttributes,
+  getHouse: (id: string) => mockGetHouse(id),
   upsertSubscriptionDoc: mockUpsertSubscriptionDoc,
   app: {},
 }));
@@ -1095,6 +1098,75 @@ describe("tier subscriptions skip Stripe quantity updates", () => {
         }),
       }),
     );
+  });
+
+  it.each([
+    ["owned by another operator", { id: "house-2", ownerId: "someone-else" }],
+    ["missing", undefined],
+  ])(
+    "rejects adding a house %s to the subscription map",
+    async (_label, houseDoc) => {
+      // The map is createHouses' proof of ownership on retry; letting any id in
+      // would let a caller later claim superAdmin on someone else's house.
+      mockGetUser.mockResolvedValue(tierUserUnderCap);
+      mockGetHouse.mockResolvedValueOnce(houseDoc as any);
+      await expect(
+        call(updateSubscriptionHouses, {
+          ownerUserId: "user-1",
+          action: "add",
+          houseIds: ["house-2"],
+        }),
+      ).rejects.toMatchObject({ code: "permission-denied" });
+      expect(mockGetHouse).toHaveBeenCalledWith("house-2");
+      expect(mockUpdateUser).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not read houses when removing one from the subscription map", async () => {
+    mockGetUser.mockResolvedValue(tierUserUnderCap);
+    mockUpdateUser.mockResolvedValue(undefined);
+    await call(updateSubscriptionHouses, {
+      ownerUserId: "user-1",
+      action: "remove",
+      houseIds: ["house-1"],
+    });
+    expect(mockGetHouse).not.toHaveBeenCalled();
+    expect(mockUpdateUser).toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "an owned house mixed with another operator's",
+      { id: "house-3", ownerId: "someone-else" },
+    ],
+    ["an owned house mixed with a missing one", undefined],
+  ])("rejects a batch adding %s", async (_label, secondDoc) => {
+    // One bad id denies the whole batch: no partial map update.
+    mockGetUser.mockResolvedValue(tierUserUnderCap);
+    mockGetHouse
+      .mockResolvedValueOnce({ id: "house-2", ownerId: "user-1" })
+      .mockResolvedValueOnce(secondDoc as any);
+    await expect(
+      call(updateSubscriptionHouses, {
+        ownerUserId: "user-1",
+        action: "add",
+        houseIds: ["house-2", "house-3"],
+      }),
+    ).rejects.toMatchObject({ code: "permission-denied" });
+    expect(mockGetHouse).toHaveBeenCalledTimes(2);
+    expect(mockUpdateUser).not.toHaveBeenCalled();
+  });
+
+  it("rejects removing with an empty houseIds list", async () => {
+    mockGetUser.mockResolvedValue(tierUserUnderCap);
+    await expect(
+      call(updateSubscriptionHouses, {
+        ownerUserId: "user-1",
+        action: "remove",
+        houseIds: [],
+      }),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
+    expect(mockUpdateUser).not.toHaveBeenCalled();
   });
 
   it("denies a second property on a tier without the multiProperty capability (P-7)", async () => {

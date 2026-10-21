@@ -8,6 +8,10 @@ import { User } from "../../entities/User";
 import * as houseService from "../../services/house";
 import * as orgService from "../../services/organization";
 import { initializeHouses } from "../../services/setup-wizard";
+import { isSubscriptionRequiredError } from "../../services/setup-wizard-errors";
+
+/** createHouses failures OrgSetup handles specially (see setup-wizard-errors). */
+export type SetupErrorKind = "subscription-required";
 
 /**
  * Setup State Interface
@@ -32,6 +36,12 @@ export interface SetupState {
   submittingSuccessful: boolean;
   submittingFailed: boolean;
   error: string | null;
+  errorKind: SetupErrorKind | null;
+
+  // Best-effort steps of the last successful submitHouseSetup that failed
+  // (the houses were still created). Shown as a non-blocking notice.
+  inviteFailures: number;
+  photoFailures: number;
 }
 
 /**
@@ -51,6 +61,9 @@ const initialState: SetupState = {
   submittingSuccessful: false,
   submittingFailed: false,
   error: null,
+  errorKind: null,
+  inviteFailures: 0,
+  photoFailures: 0,
 };
 
 /**
@@ -104,13 +117,9 @@ export const completeSetup = createAsyncThunk<
 });
 
 /**
- * Submit all houses configured in the wizard — creates the admin doc, house
- * docs, grants the admin claim, and sends invites (see initializeHouses).
- *
- * Added 2026-07-05 as part of wiring OrgSetup's "COMPLETE SETUP" button:
- * previously nothing in the app called initializeHouses at all, so houses
- * built through the setup wizard were held only in Redux and discarded the
- * moment a user navigated away or closed the app.
+ * Submit all wizard houses via initializeHouses (server-side createHouses,
+ * then best-effort photos and invites). Resolves with
+ * inviteFailures/photoFailures.
  */
 export const submitHouseSetup = createAsyncThunk<
   Awaited<ReturnType<typeof initializeHouses>>,
@@ -213,6 +222,7 @@ const setupSlice = createSlice({
       state.submittingSuccessful = false;
       state.submittingFailed = false;
       state.error = null;
+      state.errorKind = null;
     },
 
     // Hardened 2026-07-07: submitHouse (useHouseSetupWizard.ts) guards against
@@ -317,15 +327,23 @@ const setupSlice = createSlice({
         state.submitting = true;
         state.submittingFailed = false;
         state.error = null;
+        state.errorKind = null;
+        state.inviteFailures = 0;
+        state.photoFailures = 0;
       })
-      .addCase(submitHouseSetup.fulfilled, (state) => {
+      .addCase(submitHouseSetup.fulfilled, (state, action) => {
         state.submitting = false;
         state.submittingSuccessful = true;
+        state.inviteFailures = action.payload?.inviteFailures ?? 0;
+        state.photoFailures = action.payload?.photoFailures ?? 0;
       })
       .addCase(submitHouseSetup.rejected, (state, action) => {
         state.submitting = false;
         state.submittingFailed = true;
         state.error = action.error.message || "Failed to submit house setup";
+        state.errorKind = isSubscriptionRequiredError(action.error)
+          ? "subscription-required"
+          : null;
       });
   },
 });
@@ -353,34 +371,7 @@ export const {
   resetSetupState,
 } = setupSlice.actions;
 
-/**
- * Selectors
- */
-export const selectCurrentStep = (state: { setup: SetupState }) =>
-  state.setup.currentStep;
-export const selectOrganization = (state: { setup: SetupState }) =>
-  state.setup.organization;
-export const selectSelectedHouse = (state: { setup: SetupState }) =>
-  state.setup.selectedHouse;
-export const selectHouses = (state: { setup: SetupState }) =>
-  state.setup.houses;
-export const selectSelectedPhase = (state: { setup: SetupState }) =>
-  state.setup.selectedPhase;
-export const selectSelectedChore = (state: { setup: SetupState }) =>
-  state.setup.selectedChore;
-export const selectSetupGuests = (state: { setup: SetupState }) =>
-  state.setup.guests;
-export const selectSetupAdmins = (state: { setup: SetupState }) =>
-  state.setup.admins;
-export const selectInApp = (state: { setup: SetupState }) => state.setup.inApp;
-export const selectSubmitting = (state: { setup: SetupState }) =>
-  state.setup.submitting;
-export const selectSubmittingSuccessful = (state: { setup: SetupState }) =>
-  state.setup.submittingSuccessful;
-export const selectSubmittingFailed = (state: { setup: SetupState }) =>
-  state.setup.submittingFailed;
-export const selectSetupError = (state: { setup: SetupState }) =>
-  state.setup.error;
+export * from "./setupSelectors";
 
 /**
  * Reducer

@@ -69,6 +69,13 @@ class ImprovedNavigationService {
         : UserState.SUPER_ADMIN_INCOMPLETE;
     }
 
+    // An operator who signed up but has not finished setup: the user-doc
+    // potentialSuperAdmin flag is set at signup, while isSuperAdmin is written
+    // only once setup completes (same rule as useSubscriptionGate).
+    if (user.potentialSuperAdmin === true && !user.orgSetupCompleted) {
+      return UserState.SUPER_ADMIN_INCOMPLETE;
+    }
+
     return UserState.NO_USER;
   }
 

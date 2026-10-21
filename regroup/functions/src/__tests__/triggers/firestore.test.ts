@@ -118,6 +118,7 @@ jest.mock("../../util/date", () => ({
 import {
   notify,
   notifyNewHouseCreated,
+  onHouseDeleted,
   sendContactEmail,
   sendSubscriptionUpdateEmail,
   reportBug,
@@ -234,6 +235,21 @@ describe("notifyNewHouseCreated", () => {
     expect(callArg.text).toContain("Sunrise House");
     expect(callArg.text).toContain("house-99");
     expect(callArg.text).toContain("admin-1");
+  });
+
+  it("reports createdAt for server-created houses, falling back to createdDate", async () => {
+    await (notifyNewHouseCreated as Function)(
+      makeEvent({ name: "N", id: "h", createdAt: "2026-10-20T00:00:00.000Z" }),
+    );
+    expect(mockSendEmail.mock.calls[0][0].text).toContain("2026-10-20T00:00:00.000Z");
+    await (notifyNewHouseCreated as Function)(
+      makeEvent({ name: "N", id: "h", createdDate: "2026-02-23" }),
+    );
+    expect(mockSendEmail.mock.calls[1][0].text).toContain("2026-02-23");
+  });
+
+  it("exports the house tombstone trigger alongside the other firestore triggers", () => {
+    expect(typeof onHouseDeleted).toBe("function");
   });
 
   it("returns early and does not send an email when event.data is missing", async () => {

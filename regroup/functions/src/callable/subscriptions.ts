@@ -35,12 +35,16 @@ import {
 } from "../util/stripe";
 import {
   withinResidentCap,
-  withinPropertyCap,
   totalResidents,
 } from "../util/tierCaps";
-import { tierAllows, isTierAvailableForSale } from "../util/tierPricing";
+import { isTierAvailableForSale } from "../util/tierPricing";
+import {
+  addHousesToSubscription,
+  removeHouseFromSubscription,
+} from "../util/subscriptionHouses";
 import { grantPotentialSuperAdminClaim } from "../util/superAdminClaim";
 import {
+  getHouse,
   getUser,
   updateUser,
   upsertSubscriptionDoc,
@@ -530,6 +534,9 @@ export const updateSubscriptionHouses = onCall(
     const amount = !isNil(data.amountToAdjust) ? data.amountToAdjust : 1;
     logger.info("Updating user subscription. User", data.ownerUserId);
     const { ownerUserId, action, houseIds } = data;
+    if (action === "remove" && (houseIds ?? []).length === 0) {
+      throw new HttpsError("invalid-argument", "houseIds must not be empty");
+    }
     const user = await getUser(ownerUserId);
     logger.info("User retrieved", { userId: user.id });
 
@@ -538,69 +545,26 @@ export const updateSubscriptionHouses = onCall(
     // and persist the houses map instead of touching Stripe items.
     const houseMeta = user.subscriptionMetadata;
     if (houseMeta?.tier) {
-      const houses = houseMeta.houses ?? {};
-      let updatedMeta: OperatorSubscription;
       if (action === "add") {
-        // P-7: a second property requires the multiProperty capability. Resolve
-        // it once, fail-closed: a mismatched/grandfathered tier makes tierAllows
-        // throw, which must deny the capability (and log) rather than surface a
-        // 500 to the operator.
-        let allowsMultiProperty = false;
-        try {
-          allowsMultiProperty = tierAllows(
-            houseMeta.houseType as HouseType,
-            houseMeta.tier as TierKey,
-            "multiProperty",
+        // The subscription houses map is what createHouses accepts as proof of
+        // ownership on retry, so only a house this caller owns may enter it.
+        // ownerId is set by createHouses and only a superAdmin of the house can
+        // change it (rules deny client house creates and admin/guest ownerId
+        // writes). ownerUserId is request.auth.uid (checked above).
+        const added = await Promise.all(
+          (houseIds ?? []).map((id) => getHouse(id)),
+        );
+        if (added.some((h) => !h || h.ownerId !== ownerUserId)) {
+          throw new HttpsError(
+            "permission-denied",
+            "You can only add houses you own",
           );
-        } catch (err) {
-          logger.error("updateSubscriptionHouses: tierAllows threw", {
-            userId: user.id,
-            houseType: houseMeta.houseType,
-            tier: houseMeta.tier,
-            err: (err as Error)?.message,
-          });
-          allowsMultiProperty = false;
         }
-        // Check the cap per newly-added house so a multi-id batch cannot exceed
-        // the property cap in a single call (each new id must fit under the cap).
-        const added = { ...houses };
-        for (const id of houseIds ?? []) {
-          if (id in added) continue;
-          // Checked before the numeric cap so single-property tiers get a
-          // capability-specific message; the cap still bounds multi-property
-          // tiers (e.g. Professional adding a 4th house past maxProperties=3).
-          if (Object.keys(added).length >= 1 && !allowsMultiProperty) {
-            throw new HttpsError(
-              "failed-precondition",
-              "Your plan does not include multiple properties — upgrade to add more houses",
-            );
-          }
-          if (
-            !withinPropertyCap(
-              Object.keys(added).length,
-              houseMeta.maxProperties ?? null,
-            )
-          ) {
-            throw new HttpsError(
-              "failed-precondition",
-              "Property limit reached for your plan",
-            );
-          }
-          added[id] = { numberOfGuests: 0 };
-        }
-        updatedMeta = {
-          ...houseMeta,
-          houses: added,
-          lastUpdatedAt: new Date().toISOString(),
-        } as unknown as OperatorSubscription;
-      } else {
-        const { [houseIds[0]]: _removed, ...remaining } = houses;
-        updatedMeta = {
-          ...houseMeta,
-          houses: remaining,
-          lastUpdatedAt: new Date().toISOString(),
-        } as unknown as OperatorSubscription;
       }
+      const updatedMeta =
+        action === "add"
+          ? addHousesToSubscription(houseMeta, houseIds ?? [])
+          : removeHouseFromSubscription(houseMeta, houseIds[0]);
       await updateUser(user.id!, { subscriptionMetadata: updatedMeta });
       logger.info("Tier subscription house occupancy updated", {
         ownerUserId,

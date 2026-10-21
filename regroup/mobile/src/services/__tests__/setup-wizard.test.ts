@@ -50,9 +50,14 @@ jest.mock("../../../firebase-setup", () => {
   };
 });
 
+const mockHouseUpdate = jest.fn(() => Promise.resolve());
+
 jest.mock("../house", () => ({
   houseCollection: {
-    doc: jest.fn(() => ({ id: "house-doc-id" })),
+    doc: jest.fn((id?: string) => ({
+      id: id ?? "house-doc-id",
+      update: mockHouseUpdate,
+    })),
   },
 }));
 
@@ -68,9 +73,13 @@ jest.mock("../admin", () => ({
   createAdminId: jest.fn(() => "generated-admin-id"),
 }));
 
+// Like the real helper: uploads to houses/{house.id}/photo and echoes the id.
+const mockEchoUpload = (_uri: string, house: { id: string }) =>
+  Promise.resolve({ houseId: house.id, url: "https://mock-photo-url" });
+
 jest.mock("../storage", () => ({
-  uploadHousePhoto: jest.fn(() =>
-    Promise.resolve({ houseId: "h1", url: "https://mock-photo-url" })
+  uploadHousePhoto: jest.fn((uri: string, house: { id: string }) =>
+    mockEchoUpload(uri, house)
   ),
 }));
 
@@ -82,9 +91,16 @@ jest.mock("../users", () => ({
   },
 }));
 
+// The server derives house ids; idMap maps the local wizard id (requestKey)
+// "h1" to the server id "server-h1".
 jest.mock("../subscription", () => ({
-  updateSubscriptionHouses: jest.fn(() =>
-    Promise.resolve({ subscriptionMetadata: { plan: "pro" } })
+  createHouses: jest.fn(() =>
+    Promise.resolve({
+      houseIds: ["server-h1"],
+      idMap: { h1: "server-h1" },
+      admin: { id: "server-admin-id" },
+      subscriptionMetadata: { plan: "pro" },
+    })
   ),
 }));
 
@@ -116,9 +132,11 @@ jest.mock("../../../google/timezone", () => ({
 
 import { firestore, functions } from "../../../firebase-setup";
 import * as adminService from "../admin";
+import * as subscriptionService from "../subscription";
+import * as usersService from "../users";
+import * as storageService from "../storage";
 import * as invitationsService from "../invitations";
 import { getAdmin } from "../admin";
-import { userCollection } from "../users";
 import {
   addPotentialSuperAdminPrivilege,
   addAdminAuthorization,
@@ -361,14 +379,32 @@ describe("setup-wizard service", () => {
       expect(roles).not.toContain("guest");
     });
 
-    it("propagates errors from createInvitation", async () => {
+    it("counts failed invitations instead of rejecting", async () => {
       (invitationsService.createInvitation as jest.Mock).mockRejectedValue(
         new Error("Email service down")
       );
 
-      await expect(sendAllInvites(makeHouses(), makeUser())).rejects.toThrow(
-        "Email service down"
-      );
+      await expect(sendAllInvites(makeHouses(), makeUser())).resolves.toEqual({
+        sent: 0,
+        failed: 2,
+        failures: [
+          { houseId: "h1", role: "admin" },
+          { houseId: "h1", role: "guest" },
+        ],
+      });
+    });
+
+    it("keeps sending the rest when one invitation fails", async () => {
+      (invitationsService.createInvitation as jest.Mock)
+        .mockRejectedValueOnce(new Error("Email service down"))
+        .mockResolvedValueOnce({ token: "ok" });
+
+      await expect(sendAllInvites(makeHouses(), makeUser())).resolves.toEqual({
+        sent: 1,
+        failed: 1,
+        failures: [{ houseId: "h1", role: "admin" }],
+      });
+      expect(invitationsService.createInvitation).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -407,47 +443,164 @@ describe("setup-wizard service", () => {
   // ── initializeHouses ──────────────────────────────────────────────────────
 
   describe("initializeHouses", () => {
-    it("persists orgSetupCompleted/isAdmin/isSuperAdmin/adminId/housesOwned to the operator's user doc, in the same batch as the admin/house writes", async () => {
-      const houses = makeHouses();
-      const operator = makeUser({ id: "operator-id", adminId: undefined });
-
-      await initializeHouses(houses, operator);
-
-      const mockBatch = (firestore as any)._mockBatch;
-
-      // The operator doc must be updated via batch.update (not a separate
-      // write) so it commits atomically with the admin/house docs.
-      expect(userCollection.doc).toHaveBeenCalledWith("operator-id");
-      const userDocUpdateCall = mockBatch.update.mock.calls.find(
-        ([doc]: [any]) => doc?.id === "user-doc-id"
+    beforeEach(() => {
+      // clearAllMocks keeps implementations; undo the earlier persistent reject.
+      (invitationsService.createInvitation as jest.Mock).mockResolvedValue({
+        token: "mock-token",
+      });
+      // Undo the uploadHousePhotos suite's persistent mockResolvedValue.
+      (storageService.uploadHousePhoto as jest.Mock).mockImplementation(
+        mockEchoUpload
       );
-      expect(userDocUpdateCall).toBeDefined();
-      expect(userDocUpdateCall[1]).toEqual(
-        expect.objectContaining({
-          orgSetupCompleted: true,
-          isAdmin: true,
-          isSuperAdmin: true,
-          adminId: expect.any(String),
-          housesOwned: expect.arrayContaining(["h1"]),
-        })
-      );
-
-      // The batch must commit once, after all writes (including the user
-      // doc update) have been queued — this is what makes the write atomic.
-      expect(mockBatch.commit).toHaveBeenCalledTimes(1);
     });
 
-    it("does not attempt to update the user doc when the operator has no id", async () => {
+    const withPhoto = () => {
       const houses = makeHouses();
-      const operator = makeUser({ id: undefined });
+      houses.h1.imageUrl = "file://local/photo.jpg";
+      return houses;
+    };
 
-      await initializeHouses(houses, operator);
+    it("calls createHouses with sanitised payloads and no local image URIs", async () => {
+      const houses = withPhoto();
+      (houses.h1 as any).ownerId = "evil";
+      (houses.h1 as any).avatar = "file://local/avatar.jpg";
 
-      const mockBatch = (firestore as any)._mockBatch;
-      const userDocUpdateCall = mockBatch.update.mock.calls.find(
-        ([doc]: [any]) => doc?.id === "user-doc-id"
+      await initializeHouses(houses, makeUser());
+
+      expect(subscriptionService.createHouses).toHaveBeenCalledTimes(1);
+      const [payloads] = (subscriptionService.createHouses as jest.Mock).mock
+        .calls[0];
+      expect(payloads).toHaveLength(1);
+      expect(payloads[0]).toMatchObject({
+        requestKey: "h1",
+        name: "House One",
+        lat: 41.8781,
+        lng: -87.6298,
+        timezone: "America/Chicago",
+        pendingAdminInvites: ["admin@test.com"],
+      });
+      expect(payloads[0]).not.toHaveProperty("id");
+      expect(payloads[0]).not.toHaveProperty("imageUrl");
+      expect(payloads[0]).not.toHaveProperty("avatar");
+      expect(payloads[0]).not.toHaveProperty("ownerId");
+      expect(payloads[0]).not.toHaveProperty("adminIds");
+    });
+
+    it("refreshes the token before uploading photos and sending invites", async () => {
+      await initializeHouses(withPhoto(), makeUser());
+
+      const order = (m: jest.Mock) => m.mock.invocationCallOrder[0];
+      const create = order(subscriptionService.createHouses as jest.Mock);
+      const refresh = order(usersService.getAuthUser as jest.Mock);
+      const upload = order(storageService.uploadHousePhoto as jest.Mock);
+      const invite = order(invitationsService.createInvitation as jest.Mock);
+      expect(usersService.getAuthUser).toHaveBeenCalledWith(true);
+      expect(create).toBeLessThan(refresh);
+      expect(refresh).toBeLessThan(upload);
+      expect(upload).toBeLessThan(invite);
+    });
+
+    it("does not write houses, admins or users from the client", async () => {
+      const result = await initializeHouses(
+        makeHouses(),
+        makeUser({ housesOwned: ["old"] } as any)
       );
-      expect(userDocUpdateCall).toBeUndefined();
+
+      expect(firestore.batch).not.toHaveBeenCalled();
+      expect(result.admin).toEqual({ id: "server-admin-id" });
+      expect(result.user).toMatchObject({
+        orgSetupCompleted: true,
+        isAdmin: true,
+        isSuperAdmin: true,
+        adminId: "server-admin-id",
+        housesOwned: ["old", "server-h1"],
+        subscriptionMetadata: { plan: "pro" },
+      });
+    });
+
+    it("does not duplicate housesOwned when the server returns an id already owned (retry)", async () => {
+      const result = await initializeHouses(
+        makeHouses(),
+        makeUser({ housesOwned: ["old", "server-h1"] } as any)
+      );
+
+      expect(result.user.housesOwned).toEqual(["old", "server-h1"]);
+    });
+
+    it("writes uploaded photo urls to the house after the claim refresh", async () => {
+      (storageService.uploadHousePhoto as jest.Mock).mockResolvedValueOnce({
+        houseId: "server-h1",
+        url: "https://mock-photo-url",
+      });
+
+      await initializeHouses(withPhoto(), makeUser());
+
+      expect(mockHouseUpdate).toHaveBeenCalledWith({
+        imageUrl: "https://mock-photo-url",
+        avatar: "https://mock-photo-url",
+      });
+    });
+
+    it("photos and invites use the server id from idMap", async () => {
+      const { houseCollection } = require("../house");
+      const result = await initializeHouses(withPhoto(), makeUser());
+
+      const [, uploaded] = (storageService.uploadHousePhoto as jest.Mock).mock
+        .calls[0];
+      // storage.uploadHousePhoto writes to houses/{house.id}/photo.
+      expect(uploaded.id).toBe("server-h1");
+      expect(houseCollection.doc).toHaveBeenCalledWith("server-h1");
+      expect(houseCollection.doc).not.toHaveBeenCalledWith("h1");
+      const inviteHouseIds = (
+        invitationsService.createInvitation as jest.Mock
+      ).mock.calls.map(([arg]) => arg.houseId);
+      expect(inviteHouseIds).toEqual(["server-h1", "server-h1"]);
+      expect(Object.keys(result.houses)).toEqual(["server-h1"]);
+      expect(result.houses["server-h1"]).toMatchObject({
+        id: "server-h1",
+        name: "House One",
+        imageUrl: "https://mock-photo-url",
+      });
+    });
+
+    it("fails setup when idMap is missing a requested house", async () => {
+      (subscriptionService.createHouses as jest.Mock).mockResolvedValueOnce({
+        houseIds: ["server-h1"],
+        idMap: {},
+        admin: { id: "server-admin-id" },
+        subscriptionMetadata: {},
+      });
+
+      // The houses exist server-side; never claim they were not created.
+      await expect(initializeHouses(makeHouses(), makeUser())).rejects.toThrow(
+        "Your houses were created. Tap Complete Setup again or restart the app to finish."
+      );
+      expect(invitationsService.createInvitation).not.toHaveBeenCalled();
+    });
+
+    it("a failed photo upload still completes setup", async () => {
+      (storageService.uploadHousePhoto as jest.Mock).mockRejectedValueOnce(
+        new Error("upload failed")
+      );
+
+      const result = await initializeHouses(withPhoto(), makeUser());
+
+      expect(result.admin).toBeDefined();
+      expect(result.inviteError).toBeUndefined();
+      expect(result.photoFailures).toBe(1);
+      expect(result.inviteFailures).toBe(0);
+      expect(invitationsService.createInvitation).toHaveBeenCalled();
+    });
+
+    it("throws a generic retry message when createHouses rejects without a code", async () => {
+      (subscriptionService.createHouses as jest.Mock).mockRejectedValueOnce(
+        new Error("failed-precondition")
+      );
+
+      await expect(initializeHouses(makeHouses(), makeUser())).rejects.toThrow(
+        "We couldn't finish creating your houses. Please try again."
+      );
+      expect(usersService.getAuthUser).not.toHaveBeenCalled();
     });
   });
 });

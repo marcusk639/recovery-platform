@@ -1,11 +1,11 @@
-import React, { useState, useCallback, useEffect } from "react";
-import { View, ViewStyle } from "react-native";
+import React, { useState, useCallback, useEffect } from 'react';
+import { View, ViewStyle } from 'react-native';
 // Phase 3.3: Migrated from withLoadingModal to useModal hook
-import { useModal } from "../../context";
-import { useHouseSetupWizard } from "../../hooks/useHouseSetupWizard";
-import { withFormik } from "formik";
-import ManagerSetupProps, { ManagerSetupWithForm } from "./ManagerSetupEntity";
-import { useNotification } from "../../context";
+import { useModal } from '../../context';
+import { useHouseSetupWizard } from '../../hooks/useHouseSetupWizard';
+import { withFormik } from 'formik';
+import ManagerSetupProps, { ManagerSetupWithForm } from './ManagerSetupEntity';
+import { useNotification } from '../../context';
 import {
   normalize,
   color,
@@ -15,33 +15,33 @@ import {
   HEADER,
   fontSize,
   CARD_NO_ELEVATION,
-} from "../../styles/theme";
-import { House } from "../../entities/House";
-import { createHouseId } from "../../services/house";
-import { Routes } from "../../navigation/types";
-import { navigateToMainTab } from "../../navigation/authNavigation";
-import { NEXT_BUTTON_TEXT, NEXT_BUTTON } from "./SetupStyles";
-import { each, isEmpty, map } from "lodash";
-import RatsScrollView from "../../components/rats-scroll-view";
-import RatsButton from "../../components/rats-button/rats-button";
-import ScreenHeader from "../../components/screen-header";
-import SetupHeader from "../../components/setup-header";
-import HelpIcon from "../../components/help-icon";
-import {
-  ActivityItem,
-  ActivityItemWithButtons,
-} from "../../components/card-list/card-list";
-import Admin from "../../entities/Admin";
-import { getAddressDisplay } from "../../util/address";
-import Section from "../../components/rats-interactable-section";
+} from '../../styles/theme';
+import { House } from '../../entities/House';
+import { createHouseId } from '../../services/house';
+import { Routes } from '../../navigation/types';
+import { submitOrgSetup } from './submitOrgSetup';
+import { useOrgSetupBlocker } from '../../hooks/useOrgSetupBlocker';
+import SetupRecoveryPanel from './SetupRecoveryPanel';
+import PlanRequiredPanel from './PlanRequiredPanel';
+import { NEXT_BUTTON_TEXT, NEXT_BUTTON } from './SetupStyles';
+import { each, isEmpty, map } from 'lodash';
+import RatsScrollView from '../../components/rats-scroll-view';
+import RatsButton from '../../components/rats-button/rats-button';
+import ScreenHeader from '../../components/screen-header';
+import SetupHeader from '../../components/setup-header';
+import HelpIcon from '../../components/help-icon';
+import { ActivityItem, ActivityItemWithButtons } from '../../components/card-list/card-list';
+import Admin from '../../entities/Admin';
+import { getAddressDisplay } from '../../util/address';
+import Section from '../../components/rats-interactable-section';
 
-import { RatsText } from "../../components/rats-text";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { RatsText } from '../../components/rats-text';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 export const WIZARD_BUTTON_CONTAINER: ViewStyle = {
   margin: normalize(10),
-  position: "absolute",
+  position: 'absolute',
   bottom: 0,
   right: 0,
 };
@@ -75,8 +75,7 @@ const OrgSetupFormView: React.FC<OrgSetupFormViewProps> = (props) => {
   } = setupWizard;
 
   // Phase 3.3: Use hooks instead of HOCs
-  const { showLoadingModal, hideLoadingModal, setLoadingModalState } =
-    useModal();
+  const { showLoadingModal, hideLoadingModal, setLoadingModalState } = useModal();
   const { notify, showPopover } = useNotification();
 
   const [collapsedHouses, setCollapsedHouses] = useState<{
@@ -86,22 +85,15 @@ const OrgSetupFormView: React.FC<OrgSetupFormViewProps> = (props) => {
   const [errors, setErrors] = useState<{ [houseId: string]: string }>({});
 
   useEffect(() => {
-    const loadingMessage = "Processing...";
-    const errorMessage = submittingFailed
-      ? "House submission failed"
-      : undefined;
+    const loadingMessage = 'Processing...';
+    const errorMessage = submittingFailed ? 'House submission failed' : undefined;
     setLoadingModalState(
       submitting || false,
       submittingSuccessful || false,
       loadingMessage,
-      errorMessage
+      errorMessage,
     );
-  }, [
-    submitting,
-    submittingSuccessful,
-    submittingFailed,
-    setLoadingModalState,
-  ]);
+  }, [submitting, submittingSuccessful, submittingFailed, setLoadingModalState]);
 
   const onCloseMenu = useCallback(() => {
     setSelectedHouse(null);
@@ -111,7 +103,7 @@ const OrgSetupFormView: React.FC<OrgSetupFormViewProps> = (props) => {
     (house: House) => () => {
       setSelectedHouse(house);
     },
-    []
+    [],
   );
 
   const editHouse = useCallback(
@@ -119,14 +111,14 @@ const OrgSetupFormView: React.FC<OrgSetupFormViewProps> = (props) => {
       startHouseSetup?.(house);
       navigation.navigate(Routes.OperatorSetupWizard);
     },
-    [startHouseSetup, navigation]
+    [startHouseSetup, navigation],
   );
 
   const deleteHouse = useCallback(
     (house: House) => () => {
       removeHouse?.(house.id);
     },
-    [removeHouse]
+    [removeHouse],
   );
 
   const addHouse = useCallback(() => {
@@ -140,13 +132,12 @@ const OrgSetupFormView: React.FC<OrgSetupFormViewProps> = (props) => {
     const newErrors: Record<string, string> = {};
     let valid = true;
     each(houses, (house) => {
-      const location =
-        house.name && house.street && house.city && house.state && house.zip;
+      const location = house.name && house.street && house.city && house.state && house.zip;
       const number = house.phoneNumber;
       const gender = house.gender;
       if (!location || !number || !gender) {
         valid = false;
-        newErrors[house.id] = "This house is missing some information";
+        newErrors[house.id] = 'This house is missing some information';
       }
     });
     setErrors(newErrors);
@@ -161,8 +152,8 @@ const OrgSetupFormView: React.FC<OrgSetupFormViewProps> = (props) => {
 
   const renderHelp = useCallback(() => {
     showPopover(
-      "ORG SETUP",
-      "Here you can set up your organization. You can add houses, managers, and other information."
+      'ORG SETUP',
+      'Here you can set up your organization. You can add houses, managers, and other information.',
     );
   }, [showPopover]);
 
@@ -187,23 +178,18 @@ const OrgSetupFormView: React.FC<OrgSetupFormViewProps> = (props) => {
             }}
             boxedIconName="home"
             boxedIconBackground={color.dark_blue}
-            description={getAddressDisplay(
-              house.street,
-              undefined,
-              undefined,
-              undefined
-            )}
+            description={getAddressDisplay(house.street, undefined, undefined, undefined)}
             descriptionHeader={house.name}
             error={errors[house.id]}
           />
         </View>
-      ) : null
+      ) : null,
     );
   };
 
   return (
     <SafeAreaView
-      edges={["bottom"]}
+      edges={['bottom']}
       style={{ flex: 1, backgroundColor: color.white }}
       testID="org-setup-screen"
     >
@@ -211,9 +197,9 @@ const OrgSetupFormView: React.FC<OrgSetupFormViewProps> = (props) => {
         <ScreenHeader
           renderBackButton
           icon={<HelpIcon helpFn={renderHelp} />}
-          header={"org.setup.header"}
+          header={'org.setup.header'}
         />
-        <View style={{ flex: 1, justifyContent: "space-between" }}>
+        <View style={{ flex: 1, justifyContent: 'space-between' }}>
           <View style={[SETUP_HEADER]}>
             <RatsText text="House setup" style={{ ...HEADER, marginLeft: 0 }} />
             <RatsText
@@ -251,42 +237,27 @@ const OrgSetupFormView: React.FC<OrgSetupFormViewProps> = (props) => {
   );
 };
 
-const initialValues = { firstName: "", lastName: "" };
+const initialValues = { firstName: '', lastName: '' };
 
 const OrgSetupForm = withFormik<ManagerSetupProps, Partial<Admin>>({
   mapPropsToValues: (props) => initialValues,
-  handleSubmit: async (values, formikBag) => {
-    try {
-      if (formikBag.props.submitHouse) {
-        await formikBag.props.submitHouse();
-      }
-      // Hardened 2026-07-07: clear the wizard's staged Redux state now that
-      // it's been persisted, so a future re-entry into this wizard (e.g. via
-      // HouseSettings/ManagerSettings -> OperatorSetupWizard) doesn't start
-      // from a stale prior session's selectedHouse/houses.
-      formikBag.props.resetSetup?.();
-      if (formikBag.props.navigation) {
-        navigateToMainTab(formikBag.props.navigation, Routes.House);
-      }
-    } catch (error) {
-      // submitHouse's rejection already updates Redux (submittingFailed +
-      // error), which OrgSetupFormView's loading-modal effect surfaces to
-      // the operator. Deliberately do not navigate away here — the operator
-      // would otherwise lose their house list with no indication anything
-      // went wrong.
-    }
-  },
+  handleSubmit: (values, formikBag) => submitOrgSetup(formikBag.props),
   validationSchema: null,
   //@ts-ignore
 })(OrgSetupFormView);
 
 const OrgSetup: React.FC<ManagerSetupWithForm> = (props) => {
   const setupWizard = useHouseSetupWizard();
+  // While a blocker is set the wizard (and COMPLETE SETUP) is not rendered.
+  const blocker = useOrgSetupBlocker();
+  if (blocker.kind === 'setup-recovery') {
+    return <SetupRecoveryPanel navigation={props.navigation} />;
+  }
+  if (blocker.kind === 'plan-required') {
+    return <PlanRequiredPanel navigation={props.navigation} onCheckAgain={blocker.checkAgain} />;
+  }
   return (
-    <RatsScrollView
-      keyboardShouldPersistTaps="handled"
-      contentContainerStyle={SCROLL_CONTAINER}
-    >
+    <RatsScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={SCROLL_CONTAINER}>
       <OrgSetupForm
         {...props}
         submitHouse={setupWizard.submitHouse}

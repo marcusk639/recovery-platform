@@ -31,6 +31,8 @@ export * from './callable/analytics';
 
 // Callable functions — Invitations (server-issued invitation tokens)
 export { createInvitation, peekInvitation, redeemInvitation } from './callable/invitations';
+export { createHouses } from './callable/houses';
+export { finishOperatorSetup } from './callable/finishOperatorSetup';
 
 // HTTP handlers
 export * from './http/stripeConnect';

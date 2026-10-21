@@ -14,6 +14,7 @@ import { guestCollection } from "./guest";
 import { adminCollection } from "./admin";
 import { uploadUserAvatar } from "./storage";
 import { logException } from "../util/logging";
+import { finishOperatorSetupIfNeeded, loadRecoveredUser } from "./operator-setup";
 import { SimpleValidationService } from "./SimpleValidationService";
 // import { EmailConfirmationPayload } from '../entities/Email'; // Email verification removed
 
@@ -139,6 +140,28 @@ export async function sendForgotPasswordEmail(email: string): Promise<void> {
 
 export async function getUser(userId: string): Promise<User> {
   return crud.get<User>(userCollection, userId);
+}
+
+/**
+ * getUser for the login paths: an operator whose houses exist but whose setup
+ * never finished is completed server-side first, then the token is refreshed
+ * (new house claims) and the user reloaded, so routing sees a completed
+ * operator instead of sending them to an empty setup wizard. If the recovery
+ * call failed, `setupRecoveryFailed` tells OrgSetup to block the wizard.
+ */
+export async function getUserFinishingSetup(
+  userId: string
+): Promise<{ user: User; setupRecoveryFailed: boolean }> {
+  const user = await getUser(userId);
+  const outcome = await finishOperatorSetupIfNeeded(user);
+  if (outcome !== "completed") {
+    return { user, setupRecoveryFailed: outcome === "failed" };
+  }
+  const recovered = await loadRecoveredUser(user, {
+    refreshToken: () => getAuthUser(true),
+    reloadUser: () => getUser(userId),
+  });
+  return { user: recovered, setupRecoveryFailed: false };
 }
 
 export async function createAnonUser(anonUser: User) {

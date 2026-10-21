@@ -2,11 +2,16 @@
 
 // Must mock firebase-admin before importing anything that uses it
 const mockGetUser = jest.fn();
+// Stable ref so grantHouseRoles tests can assert on the single write.
+const mockSetCustomUserClaims = jest.fn();
 jest.mock('firebase-admin', () => ({
-  auth: jest.fn(() => ({ getUser: mockGetUser })),
+  auth: jest.fn(() => ({
+    getUser: mockGetUser,
+    setCustomUserClaims: mockSetCustomUserClaims,
+  })),
 }));
 
-import { createClaims, deleteClaim } from '../../util/claims';
+import { createClaims, deleteClaim, grantHouseRoles } from '../../util/claims';
 
 const mockUser = (claims: Record<string, any> = {}) => ({
   customClaims: claims,
@@ -95,5 +100,53 @@ describe('deleteClaim', () => {
     );
     const result = await deleteClaim('user-1', ['house-1'], 'guest');
     expect(result.guest).toEqual({ 'house-2': true });
+  });
+});
+describe('grantHouseRoles', () => {
+  it('adds the houses to both admin and superAdmin', async () => {
+    mockGetUser.mockResolvedValue(mockUser({ admin: { a: true } }));
+    await grantHouseRoles('user-1', ['h1']);
+    expect(mockSetCustomUserClaims).toHaveBeenCalledWith('user-1', {
+      admin: { a: true, h1: true },
+      superAdmin: { h1: true },
+      guest: {},
+    });
+  });
+
+  it('preserves guest claims and potentialSuperAdmin', async () => {
+    mockGetUser.mockResolvedValue(
+      mockUser({ guest: { g: true }, potentialSuperAdmin: true })
+    );
+    await grantHouseRoles('user-1', ['h1']);
+    expect(mockSetCustomUserClaims).toHaveBeenCalledWith('user-1', {
+      admin: { h1: true },
+      superAdmin: { h1: true },
+      guest: { g: true },
+      potentialSuperAdmin: true,
+    });
+  });
+
+  it('writes claims exactly once and reads the user once', async () => {
+    mockGetUser.mockResolvedValue(mockUser({}));
+    await grantHouseRoles('user-1', ['h1', 'h2']);
+    expect(mockGetUser).toHaveBeenCalledTimes(1);
+    expect(mockSetCustomUserClaims).toHaveBeenCalledTimes(1);
+  });
+
+  it('migrates a legacy array-shaped claim to the map shape', async () => {
+    mockGetUser.mockResolvedValue(mockUser({ admin: ['a'] }));
+    await grantHouseRoles('user-1', ['h1']);
+    expect(mockSetCustomUserClaims.mock.calls[0][1].admin).toEqual({
+      a: true,
+      h1: true,
+    });
+  });
+
+  it('does not write an undefined potentialSuperAdmin key', async () => {
+    mockGetUser.mockResolvedValue(mockUser({}));
+    await grantHouseRoles('user-1', ['h1']);
+    expect(mockSetCustomUserClaims.mock.calls[0][1]).not.toHaveProperty(
+      'potentialSuperAdmin'
+    );
   });
 });

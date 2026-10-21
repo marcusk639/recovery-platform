@@ -1,23 +1,45 @@
-import { firestore, functions } from "../../firebase-setup";
-import { houseCollection } from "./house";
+import { functions } from "../../firebase-setup";
 import { Houses } from "../types";
-import { cloneDeep, each, map } from "lodash";
+import { cloneDeep, each, pick } from "lodash";
 import { User } from "../entities/User";
-import { getInitialPhase } from "../util/house";
 import { createInvitation, CreateInvitationResult } from "./invitations";
-import { adminCollection, getAdmin } from "./admin";
-import { userCollection } from "./users";
+import { allInvitesFailed, InviteFailure, sendAllInvites } from "./setup-wizard-invites";
 import Admin from "../entities/Admin";
 import "@react-native-firebase/firestore";
 import { uploadHousePhoto } from "./storage";
 import { logException } from "../util/logging";
 import { refreshClaims, getAuthUser } from "./users";
 import { Guest } from "../entities/Guest";
-import { updateSubscriptionHouses } from "./subscription";
-import { geohash } from "../util/geolocation";
+import { createHouses, HouseCreatePayload } from "./subscription";
+import { applyHousePhotos } from "./setup-wizard-photos";
+import { housesCreatedError, toCreateHousesError } from "./setup-wizard-errors";
 import { asyncForEach } from "../util/forEach";
 import { getTimezone } from "../../google/timezone";
 import { House } from "../entities/House";
+
+// Whitelist mirrored from the server createHouseInputSchema (every schema key
+// except `requestKey`, which toPayload adds). imageUrl/avatar are deliberately
+// absent: they are local file URIs until uploaded. `id` is absent too: the
+// server derives house ids, and the local wizard id is sent only as the
+// idempotency `requestKey`. Keep this a plain string-literal array: the
+// functions suite parses it from this file to check it against the schema
+// (regroup/functions/src/__tests__/houses/mobilePayloadKeys.drift.test.ts).
+export const HOUSE_PAYLOAD_KEYS = [
+  "name", "lat", "lng", "street", "city", "state", "zip", "country",
+  "timezone", "phoneNumber", "monthlyRent", "weeklyRent", "maximumCapacity",
+  "depositsAndFees", "rentFrequency", "gender", "baths", "wifi", "certified",
+  "managerSetupType", "houseType", "phases", "chores", "rooms",
+  "pendingAdminInvites", "pendingGuestInvites", "seniorPeerEmails",
+];
+
+const toPayload = (house: House): HouseCreatePayload => {
+  const payload: any = { ...pick(house, HOUSE_PAYLOAD_KEYS), requestKey: house.id };
+  Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
+  ["pendingAdminInvites", "pendingGuestInvites", "seniorPeerEmails"].forEach(
+    (k) => payload[k] && (payload[k] = Array.from(new Set(payload[k])))
+  );
+  return payload;
+};
 
 export async function addPotentialSuperAdminPrivilege() {
   return functions.httpsCallable("givePotentialSuperAdminPrivilege");
@@ -39,55 +61,8 @@ export async function addGuestAuthorization(guest: Guest) {
   return refreshClaims();
 }
 
-export async function sendAllInvites(
-  houses: Houses,
-  _operator: User,
-  guest: boolean = true,
-  admin: boolean = true,
-  seniorPeer: boolean = true
-): Promise<CreateInvitationResult[]> {
-  const calls: Promise<CreateInvitationResult>[] = [];
-  each(houses, (house) => {
-    const initialPhase = getInitialPhase(house);
-    if (house.pendingAdminInvites && admin) {
-      house.pendingAdminInvites.forEach((email) => {
-        calls.push(
-          createInvitation({
-            email,
-            houseId: house.id,
-            role: "admin",
-            initialPhase: initialPhase?.name,
-          })
-        );
-      });
-    }
-    if (house.pendingGuestInvites && guest) {
-      house.pendingGuestInvites.forEach((email) => {
-        calls.push(
-          createInvitation({
-            email,
-            houseId: house.id,
-            role: "guest",
-            initialPhase: initialPhase?.name,
-          })
-        );
-      });
-    }
-    if (house.seniorPeerEmails && seniorPeer) {
-      house.seniorPeerEmails.forEach((email) => {
-        calls.push(
-          createInvitation({
-            email,
-            houseId: house.id,
-            role: "senior-peer",
-            initialPhase: initialPhase?.name,
-          })
-        );
-      });
-    }
-  });
-  return Promise.all(calls);
-}
+export { sendAllInvites } from "./setup-wizard-invites";
+export type { InviteFailure, SendInvitesResult } from "./setup-wizard-invites";
 
 /**
  * Issue a single admin invitation. The server (createInvitation CF) generates
@@ -123,6 +98,7 @@ export const createGuestInvite = (
   });
 };
 
+// Unused by the wizard (photos go through setup-wizard-photos.ts).
 export const uploadHousePhotos = async (
   houses: Houses
 ): Promise<{ houseId: string; url: string }[]> => {
@@ -136,137 +112,110 @@ export const uploadHousePhotos = async (
   return Promise.all(promises);
 };
 
+/**
+ * Re-key the wizard's houses by the server-derived ids returned in idMap
+ * (local wizard id → server id), so everything after createHouses — photo
+ * upload paths, house updates, invitations, the returned houses — uses the
+ * ids the houses actually have in Firestore.
+ */
+const toServerHouses = (houses: Houses, idMap: Record<string, string>): Houses => {
+  const out: Houses = {};
+  Object.values(houses).forEach((house) => {
+    const id = idMap?.[house.id];
+    if (!id) {
+      throw new Error("createHouses returned no id for a requested house");
+    }
+    out[id] = { ...house, id };
+  });
+  return out;
+};
+
 export async function initializeHouses(
   houses: Houses,
   _operator: User,
   inApp: boolean = false
 ) {
-  const batch = firestore.batch();
   const operator = cloneDeep(_operator);
-  // check for an admin account with the operator's email
-  let operatorAdmin: Admin;
-  let adminDoc;
-  if (operator.adminId) {
-    operatorAdmin = await getAdmin(operator.adminId);
-    adminDoc = adminCollection.doc(operatorAdmin.id);
-  } else {
-    // create the admin account for the operator and map it to the house
-    operatorAdmin = new Admin(
-      operator.email.toLowerCase(),
-      operator.firstName,
-      operator.lastName,
-      operator.uid
-    );
-    adminDoc = adminCollection.doc();
-    operatorAdmin.id = adminDoc.id;
-    operator.adminId = operatorAdmin.id;
-  }
-  // if (!operatorAdmin.houseIds)
-  operatorAdmin.houseIds.push(...map(houses, (house) => house.id));
-  if (
-    typeof operatorAdmin.superAdmin === "boolean" ||
-    !operatorAdmin.superAdmin
-  ) {
-    operatorAdmin.superAdmin = [];
-  }
-  operatorAdmin.superAdmin.push(...map(houses, (house) => house.id));
-  // NOTE: addAdminAuthorization is intentionally deferred to AFTER batch.commit().
-  // The CF (post-S2 hardening, regroup-functions commit bb31845) fetches
-  // houses/{id} to verify ownership and rejects with not-found if the house
-  // doc does not yet exist. Granting the claim before committing the batch
-  // therefore fails every new-operator onboarding. See Task 11 review fix.
-  batch.set(adminDoc, operatorAdmin);
 
-  // create the house documents
-  const houseIds: string[] = [];
-  const newHouseDocs: any[] = [];
   await asyncForEach(houses, async (house: House) => {
-    house.adminIds.push(operatorAdmin.id!);
-    house.superAdminIds.push(operatorAdmin.id!);
-    house.pendingAdminInvites!.push(
-      ...Array.from(new Set(house.pendingAdminInvites))
-    );
-    house.pendingGuestInvites!.push(
-      ...Array.from(new Set(house.pendingGuestInvites))
-    );
-    house.geohash = geohash(house.lat, house.lng);
     house.timezone = await getTimezone(house.lat, house.lng);
-    house.ownerId = operator.id!;
-    houseIds.push(house.id);
-    if (!operator.housesOwned) {
-      operator.housesOwned = [];
-    }
-    operator.housesOwned.push(house.id);
-    newHouseDocs.push(houseCollection.doc(house.id));
   });
 
+  // (a) The server creates the houses, admin doc, user fields and subscription
+  // map in one transaction, grants admin/superAdmin claims, then sets the
+  // onboarding flags (orgSetupCompleted/isAdmin/isSuperAdmin). It derives the
+  // house ids; idMap translates our local wizard ids to them.
+  let created: Awaited<ReturnType<typeof createHouses>>;
   try {
-    const houseUrls = await uploadHousePhotos(houses);
-    houseUrls.forEach((houseUrl) => {
-      houses[houseUrl.houseId].imageUrl = houseUrl.url;
-      houses[houseUrl.houseId].avatar = houseUrl.url;
-    });
+    created = await createHouses(Object.values(houses).map(toPayload));
   } catch (error) {
-    logException(error);
+    logException(error, "initializeHouses: createHouses failed");
+    throw toCreateHousesError(error);
+  }
+  const { houseIds, idMap, admin, subscriptionMetadata } = created;
+
+  // (b) The houses now exist server-side: nothing below may report that they
+  // were not created.
+  let serverHouses: Houses;
+  let token;
+  try {
+    serverHouses = toServerHouses(houses, idMap);
+    token = await getAuthUser(true);
+  } catch (error) {
+    logException(
+      error,
+      `initializeHouses: post-create step failed houses=${houseIds.join(",")}`
+    );
+    throw housesCreatedError(error);
   }
 
-  newHouseDocs.forEach((doc) => batch.set(doc, houses[doc.id]));
+  // Best-effort: setup is already complete without photos.
+  const photoFailures = await applyHousePhotos(serverHouses);
 
-  operator.orgSetupCompleted = true;
-  operator.isAdmin = true;
-  operator.isSuperAdmin = true;
-
-  // Hardened 2026-07-05: this function computed all the right operator
-  // fields (orgSetupCompleted/isAdmin/isSuperAdmin/adminId/housesOwned) but
-  // never wrote them to the user's Firestore doc — only the admin doc and
-  // house docs were batched. Every new operator therefore looked like they
-  // still needed to complete org setup on next login. Included in the same
-  // atomic batch as the admin/house writes since it depends on nothing that
-  // is only known post-commit (unlike the claim grant and invites below).
-  if (operator.id) {
-    batch.update(userCollection.doc(operator.id), {
-      orgSetupCompleted: operator.orgSetupCompleted,
-      isAdmin: operator.isAdmin,
-      isSuperAdmin: operator.isSuperAdmin,
-      adminId: operator.adminId,
-      housesOwned: operator.housesOwned,
-    });
-  }
-
+  const serverIds = Object.keys(serverHouses).join(",");
   let inviteError;
-
+  let failures: InviteFailure[] = [];
   try {
-    await batch.commit();
-    // Grant the admin claim only after the houses exist in Firestore. The
-    // addAdminAuthorization CF verifies ownership against houses/{id} and
-    // refreshes claims internally; getAuthUser then captures the fresh token.
-    await addAdminAuthorization(operatorAdmin);
-    const token = await getAuthUser(true);
-    // Send the invites only after the houses are persisted. The createInvitation
-    // CF (post-Task-10) fetches houses/{id} server-side and throws not-found if
-    // missing. Calling sendAllInvites before batch.commit() therefore failed
-    // every new-operator onboarding silently (the error was swallowed into
-    // inviteError and the operator received no invitation emails).
-    try {
-      await sendAllInvites(houses, operator);
-    } catch (error) {
-      inviteError = error;
+    const sent = await sendAllInvites(serverHouses, operator);
+    failures = sent.failures;
+    if (sent.failed > 0) {
+      logException(
+        new Error("initializeHouses: invitations failed"),
+        `houses=${serverIds} sent=${sent.sent} failed=${sent.failed}`
+      );
     }
-    const user = await updateSubscriptionHouses({
-      ownerUserId: operator.id!,
-      houseIds: houseIds,
-      amountToAdjust: houseIds.length,
-      action: "add",
-    });
-    return {
-      houses,
-      inviteError,
-      admin: operatorAdmin,
-      user: { ...operator, subscriptionMetadata: user.subscriptionMetadata },
-      token,
-    };
   } catch (error) {
-    logException(error);
-    throw new Error("Failed to create houses.");
+    inviteError = error;
+    failures = allInvitesFailed(serverHouses);
+    // Not the raw error: its message may quote an email address.
+    logException(
+      new Error("initializeHouses: invitations threw"),
+      `houses=${serverIds} count=${failures.length} name=${(error as Error)?.name}`
+    );
   }
+  // House names are for the on-device notice only; never log them.
+  const failedInvites = failures.map((f) => ({
+    ...f,
+    houseName: serverHouses[f.houseId]?.name ?? "",
+  }));
+
+  return {
+    houses: serverHouses,
+    inviteError,
+    inviteFailures: failures.length,
+    failedInvites,
+    photoFailures,
+    admin,
+    user: {
+      ...operator,
+      orgSetupCompleted: true,
+      isAdmin: true,
+      isSuperAdmin: true,
+      adminId: admin.id,
+      // A retry returns ids the operator already owns; keep the list unique.
+      housesOwned: Array.from(new Set([...(operator.housesOwned ?? []), ...houseIds])),
+      subscriptionMetadata,
+    },
+    token,
+  };
 }

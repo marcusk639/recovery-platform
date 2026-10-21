@@ -85,3 +85,31 @@ export const deleteClaim = async (
     potentialSuperAdmin,
   };
 };
+
+/**
+ * Grants admin AND superAdmin on every given house in a single read-modify-write
+ * of the user's custom claims (both roles built from one snapshot, set once).
+ * Not atomic with respect to concurrent claim writers: a claim written for the
+ * same user between the read and the set is overwritten.
+ */
+export const grantHouseRoles = async (
+  userId: string,
+  houseIds: string[]
+): Promise<void> => {
+  const currentUser = await auth().getUser(userId);
+  const { potentialSuperAdmin, ...current } = parseCurrentClaims(
+    currentUser?.customClaims
+  );
+  const admin: Record<string, true> = { ...current.admin };
+  const superAdmin: Record<string, true> = { ...current.superAdmin };
+  for (const houseId of houseIds) {
+    admin[houseId] = true;
+    superAdmin[houseId] = true;
+  }
+  await auth().setCustomUserClaims(userId, {
+    ...current,
+    admin,
+    superAdmin,
+    ...(potentialSuperAdmin !== undefined ? { potentialSuperAdmin } : {}),
+  });
+};
