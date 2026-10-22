@@ -10,7 +10,7 @@ import { WEEKLY_TRANSFER_TIMEZONES, FALLBACK_TIMEZONE } from '../util/timezones'
  */
 export async function runWeeklyTransfers(now: Date = new Date()): Promise<{ transfers: number }> {
   logger.info('weeklyTransfers: starting consolidated weekly run', {
-    scheduledTime: now.toISOString(),
+    scheduledTime: Number.isNaN(now.getTime()) ? undefined : now.toISOString(),
     timezones: WEEKLY_TRANSFER_TIMEZONES,
   });
 

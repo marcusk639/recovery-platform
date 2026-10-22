@@ -71,4 +71,16 @@ describe('weeklyTransfers wrapper', () => {
     });
     expect(transferStats).toHaveBeenCalledTimes(PASSES);
   });
+
+  it('still runs every pass when scheduleTime is missing', async () => {
+    (transferStats as jest.Mock).mockClear();
+    await (weeklyTransfers as unknown as (e: unknown) => Promise<void>)({});
+    expect(transferStats).toHaveBeenCalledTimes(PASSES);
+  });
+
+  it('does not throw on an invalid date', async () => {
+    (transferStats as jest.Mock).mockClear();
+    await expect(runWeeklyTransfers(new Date('nope'))).resolves.toBeDefined();
+    expect(transferStats).toHaveBeenCalledTimes(PASSES);
+  });
 });

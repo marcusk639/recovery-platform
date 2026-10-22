@@ -22,6 +22,7 @@ export async function runDisputeUpdates(_now: Date = new Date()): Promise<{ upda
       });
     } catch (error) {
       logger.error('updateDisputes: failed processing house', error);
+      // Mirrors the original bail-out: stop without awaiting queued transactions.
       return { updated: 0 };
     }
   }
