@@ -27,6 +27,8 @@ export interface Case {
   /** Collections the handler is known to write for this event. */
   mayWrite?: string[];
   arrange?: () => void;
+  /** The Stripe charge lookup answers resource_missing. */
+  missingCharge?: boolean;
 }
 
 export const evt = (type: string, object: Record<string, unknown>, extra = {}) => ({
@@ -118,6 +120,7 @@ export function buildCases(
         status: 'needs_response',
       }),
       arrange: () => mockChargesRetrieve.mockRejectedValue(resourceMissing()),
+      missingCharge: true,
     },
     {
       name: 'charge.refunded for an unknown payment intent',
@@ -132,12 +135,14 @@ export function buildCases(
       event: evt('charge.refunded', { ...noTransferCharge, amount_refunded: 500 }),
       mayWrite: ['payments'],
       arrange: () => mockChargesRetrieve.mockRejectedValue(resourceMissing()),
+      missingCharge: true,
     },
     {
       name: 'charge.refund.updated for a charge Stripe cannot find',
       handler: platform,
       event: evt('charge.refund.updated', { id: 're_unknown', charge: 'ch_unknown' }),
       arrange: () => mockChargesRetrieve.mockRejectedValue(resourceMissing()),
+      missingCharge: true,
     },
     {
       name: 'charge.dispute.closed (won) for a charge Stripe cannot find',
@@ -148,6 +153,7 @@ export function buildCases(
         status: 'won',
       }),
       arrange: () => mockChargesRetrieve.mockRejectedValue(resourceMissing()),
+      missingCharge: true,
     },
     {
       name: 'invoice.payment_succeeded for an unknown subscription',

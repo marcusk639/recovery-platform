@@ -16,6 +16,10 @@ const mockWrites: string[] = [];
 const mockConstructEvent = jest.fn();
 const mockChargesRetrieve = jest.fn();
 const mockRefundsList = jest.fn();
+const mockCreateReversal = jest.fn();
+const mockListReversals = jest.fn();
+const mockTransfersRetrieve = jest.fn();
+const mockTransfersCreate = jest.fn();
 const mockSubscriptionsRetrieve = jest.fn();
 const mockV2AccountsRetrieve = jest.fn();
 
@@ -37,6 +41,7 @@ jest.mock('firebase-admin', () => {
     return {
       ...query,
       doc: jest.fn((id: string) => ({
+        path: `${col}/${id}`,
         get: jest.fn(() =>
           Promise.resolve({
             exists: false,
@@ -55,12 +60,11 @@ jest.mock('firebase-admin', () => {
     runTransaction: jest.fn(async (fn: (txn: any) => Promise<unknown>) =>
       fn({
         get: jest.fn(() => Promise.resolve({ exists: false, get: () => undefined })),
-        // The only txn.set on these paths is the idempotency claim.
-        set: jest.fn(() => {
-          mockWrites.push('webhookEvents/claim:set');
+        set: jest.fn((ref: { path: string }) => {
+          mockWrites.push(`${ref.path}:txn-set`);
         }),
-        update: jest.fn(() => {
-          mockWrites.push('txn:update');
+        update: jest.fn((ref: { path: string }) => {
+          mockWrites.push(`${ref.path}:txn-update`);
         }),
       }),
     ),
@@ -111,10 +115,10 @@ jest.mock('stripe', () =>
     charges: { retrieve: mockChargesRetrieve },
     refunds: { list: mockRefundsList },
     transfers: {
-      retrieve: jest.fn(),
-      createReversal: jest.fn(),
-      listReversals: jest.fn(),
-      create: jest.fn(),
+      retrieve: mockTransfersRetrieve,
+      createReversal: mockCreateReversal,
+      listReversals: mockListReversals,
+      create: mockTransfersCreate,
       list: jest.fn(),
     },
     subscriptions: { retrieve: mockSubscriptionsRetrieve },
@@ -124,7 +128,13 @@ jest.mock('stripe', () =>
 
 import { logger } from 'firebase-functions';
 import { stripeWebhook, handleStripeConnectWebhook } from '../../webhooks/stripeWebhook';
-import { buildCases, evt, type Handler } from './unknownObjectCases';
+import {
+  buildCases,
+  evt,
+  noTransferCharge,
+  resourceMissing,
+  type Handler,
+} from './unknownObjectCases';
 
 const makeReq = (body: unknown = {}) => ({
   method: 'POST',
@@ -158,7 +168,7 @@ beforeEach(() => {
 describe('webhooks about unknown objects', () => {
   it.each(cases)(
     'acknowledges with 2xx and writes only what it must: $name',
-    async ({ handler, event, mayWrite = [], arrange }) => {
+    async ({ handler, event, mayWrite = [], arrange, missingCharge }) => {
       arrange?.();
       mockConstructEvent.mockReturnValue(event);
       const res = makeRes();
@@ -176,6 +186,14 @@ describe('webhooks about unknown objects', () => {
         expect(mayWrite).toContain(col);
       }
       expect(mockWrites.some((w) => w.startsWith('batch:'))).toBe(false);
+      if (missingCharge) {
+        expect(logger.info).toHaveBeenCalledWith(
+          expect.stringContaining('charge not found in Stripe'),
+          expect.objectContaining({ chargeId: 'ch_unknown' }),
+        );
+        expect(mockCreateReversal).not.toHaveBeenCalled();
+        expect(mockTransfersCreate).not.toHaveBeenCalled();
+      }
       expect(logger.error).not.toHaveBeenCalledWith(
         expect.stringContaining('event handler threw'),
         expect.anything(),
@@ -201,4 +219,52 @@ describe('webhooks about unknown objects', () => {
       expect(mockWrites).toEqual([]);
     },
   );
+
+  // resource_missing is acknowledged ONLY for the charge lookup. Anything else
+  // must stay a 500 so Stripe retries a reversal that did not happen.
+  describe('errors that must still be retried (500)', () => {
+    const refund = evt('charge.refunded', { ...noTransferCharge, amount_refunded: 500 });
+    const run = async (event: Record<string, unknown>) => {
+      mockConstructEvent.mockReturnValue(event);
+      const res = makeRes();
+      await platform(makeReq(event), res);
+      return res;
+    };
+
+    it('charges.retrieve rejecting parameter_invalid', async () => {
+      mockChargesRetrieve.mockRejectedValue(
+        Object.assign(new Error('bad'), {
+          type: 'StripeInvalidRequestError',
+          code: 'parameter_invalid',
+        }),
+      );
+      const res = await run(refund);
+      expect(res.status).toHaveBeenCalledWith(500);
+    });
+
+    it('charges.retrieve rejecting resource_missing from a non-request error type', async () => {
+      mockChargesRetrieve.mockRejectedValue(
+        Object.assign(new Error('api'), { type: 'StripeAPIError', code: 'resource_missing' }),
+      );
+      const res = await run(refund);
+      expect(res.status).toHaveBeenCalledWith(500);
+    });
+
+    it('createReversal rejecting resource_missing on a known charge', async () => {
+      mockChargesRetrieve.mockResolvedValue({
+        ...noTransferCharge,
+        transfer: 'tr_stale',
+        application_fee_amount: 0,
+      });
+      mockRefundsList.mockResolvedValue({
+        data: [{ id: 're_1', status: 'succeeded', amount: 500 }],
+      });
+      mockListReversals.mockResolvedValue({ data: [] });
+      mockTransfersRetrieve.mockResolvedValue({ id: 'tr_stale', amount: 5000, amount_reversed: 0 });
+      mockCreateReversal.mockRejectedValue(resourceMissing());
+      const res = await run(refund);
+      expect(mockCreateReversal).toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(500);
+    });
+  });
 });

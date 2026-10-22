@@ -25,6 +25,7 @@
  */
 import type Stripe from 'stripe';
 import { logger } from 'firebase-functions';
+import { isResourceMissing } from '../util/stripe';
 
 /** Dispute statuses in which Stripe has taken the disputed money from the platform. */
 const FUNDS_WITHDRAWN: ReadonlySet<Stripe.Dispute.Status> = new Set([
@@ -59,6 +60,31 @@ async function existingReversals(
   return (await stripe.transfers.listReversals(transferId, { limit: 100 })).data;
 }
 
+/**
+ * Retrieves the charge a refund or dispute event points at. Stripe answering
+ * resource_missing for a charge on a signed event is unexpected, not routine:
+ * we acknowledge it only so Stripe stops retrying something that cannot succeed.
+ * Scoped to this one lookup on purpose. A resource_missing from any later call
+ * (a stale transfer, a deleted destination) means a reversal we should have made
+ * is not happening, so those errors keep propagating and Stripe retries.
+ */
+async function retrieveChargeOrNull(
+  stripe: Stripe,
+  chargeId: string,
+  eventType: string,
+): Promise<Stripe.Charge | null> {
+  try {
+    return await stripe.charges.retrieve(chargeId);
+  } catch (err) {
+    if (!isResourceMissing(err)) throw err;
+    logger.info('transferReversals: charge not found in Stripe, ignoring event', {
+      eventType,
+      chargeId,
+    });
+    return null;
+  }
+}
+
 /** Reversible amount left on the transfer, so a reversal can't overshoot. */
 async function remainingOnTransfer(stripe: Stripe, transferId: string): Promise<Stripe.Transfer> {
   return stripe.transfers.retrieve(transferId);
@@ -72,7 +98,8 @@ export async function reverseTransfersForRefunds(
   stripe: Stripe,
   chargeId: string,
 ): Promise<number> {
-  const charge = await stripe.charges.retrieve(chargeId);
+  const charge = await retrieveChargeOrNull(stripe, chargeId, 'charge.refunded');
+  if (!charge) return 0;
   const transferId = transferIdOf(charge);
   if (!transferId) {
     logger.info(
@@ -135,7 +162,8 @@ export async function reverseTransferForDispute(
 
   const chargeId = chargeIdOf(dispute);
   if (!chargeId) return false;
-  const charge = await stripe.charges.retrieve(chargeId);
+  const charge = await retrieveChargeOrNull(stripe, chargeId, 'charge.dispute.created');
+  if (!charge) return false;
   const transferId = transferIdOf(charge);
   if (!transferId) {
     logger.info(
@@ -185,7 +213,8 @@ export async function restoreTransferAfterWonDispute(
 
   const chargeId = chargeIdOf(dispute);
   if (!chargeId) return false;
-  const charge = await stripe.charges.retrieve(chargeId);
+  const charge = await retrieveChargeOrNull(stripe, chargeId, 'charge.dispute.closed');
+  if (!charge) return false;
   const transferId = transferIdOf(charge);
   if (!transferId) return false;
 

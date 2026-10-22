@@ -689,27 +689,6 @@ async function handlePaymentIntentFailed(
 // Event handler: charge.dispute.created
 // ---------------------------------------------------------------------------
 
-/**
- * Runs a transfer-reversal step for a charge. Stripe answering resource_missing
- * means the charge (or its transfer) is not one this account can see — an event
- * meant for another listener on a shared sandbox. Retrying cannot fix that, so
- * acknowledge it with an ids-only info line instead of a 500.
- */
-async function ignoreIfChargeMissing(
-  eventType: string,
-  chargeId: string,
-  work: () => Promise<unknown>,
-): Promise<void> {
-  try {
-    await work();
-  } catch (err) {
-    if (!isResourceMissing(err)) throw err;
-    logger.info(`${eventType}: charge or transfer not found in Stripe, ignored`, {
-      chargeId,
-    });
-  }
-}
-
 async function handleDisputeCreated(
   dispute: Stripe.Dispute,
   stripeClient: Stripe,
@@ -773,9 +752,7 @@ async function handleDisputeCreated(
 
   // Stripe debits the disputed amount from the platform. Pull the house's
   // share back from its transfer (returned if the dispute is won).
-  await ignoreIfChargeMissing("charge.dispute.created", chargeId, () =>
-    reverseTransferForDispute(stripeClient, dispute),
-  );
+  await reverseTransferForDispute(stripeClient, dispute);
 }
 
 // ---------------------------------------------------------------------------
@@ -819,9 +796,7 @@ async function handleChargeRefunded(
 
   // A refund is paid from the platform balance; reverse the house's share of
   // the transfer so the house doesn't keep refunded rent.
-  await ignoreIfChargeMissing("charge.refunded", charge.id, () =>
-    reverseTransfersForRefunds(stripeClient, charge.id),
-  );
+  await reverseTransfersForRefunds(stripeClient, charge.id);
 }
 
 // ---------------------------------------------------------------------------
@@ -1553,26 +1528,16 @@ export const stripeWebhook = onRequest(
             typeof refund.charge === "string"
               ? refund.charge
               : refund.charge?.id;
-          if (chargeId)
-            await ignoreIfChargeMissing("charge.refund.updated", chargeId, () =>
-              reverseTransfersForRefunds(getStripe(), chargeId),
-            );
+          if (chargeId) await reverseTransfersForRefunds(getStripe(), chargeId);
           break;
         }
 
-        case "charge.dispute.closed": {
-          const dispute = event.data.object as Stripe.Dispute;
-          const disputeChargeId =
-            typeof dispute.charge === "string"
-              ? dispute.charge
-              : (dispute.charge?.id ?? "");
-          await ignoreIfChargeMissing(
-            "charge.dispute.closed",
-            disputeChargeId,
-            () => restoreTransferAfterWonDispute(getStripe(), dispute),
+        case "charge.dispute.closed":
+          await restoreTransferAfterWonDispute(
+            getStripe(),
+            event.data.object as Stripe.Dispute,
           );
           break;
-        }
 
         // --- Subscription events (RATS platform) ---
         case "invoice.payment_succeeded":
