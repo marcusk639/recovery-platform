@@ -1497,6 +1497,7 @@ export const stripeWebhook = onRequest(
     });
 
     const reversalCtx: EventContext = {
+      eventId: event.id,
       eventType: event.type,
       account: event.account,
       livemode: event.livemode,

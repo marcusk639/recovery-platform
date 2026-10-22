@@ -187,9 +187,13 @@ describe('webhooks about unknown objects', () => {
       }
       expect(mockWrites.some((w) => w.startsWith('batch:'))).toBe(false);
       if (missingCharge) {
-        expect(logger.info).toHaveBeenCalledWith(
+        expect(logger.warn).toHaveBeenCalledWith(
           expect.stringContaining('charge not found in Stripe'),
-          expect.objectContaining({ chargeId: 'ch_unknown' }),
+          expect.objectContaining({
+            chargeId: 'ch_unknown',
+            eventId: 'evt_unknown_1',
+            reason: 'connected-account',
+          }),
         );
         expect(mockCreateReversal).not.toHaveBeenCalled();
         expect(mockTransfersCreate).not.toHaveBeenCalled();

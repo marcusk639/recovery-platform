@@ -65,6 +65,7 @@ async function existingReversals(
 
 /** What the webhook knows about the event that triggered a reversal step. */
 export interface EventContext {
+  eventId: string;
   eventType: string;
   /** event.account: set when a connected-account event reached the platform handler. */
   account?: string | null;
@@ -103,14 +104,18 @@ async function retrieveChargeOrNull(
     if (!isResourceMissing(err)) throw err;
     const otherMode = ctx.livemode !== undefined && ctx.livemode !== ctx.deployedLivemode;
     if (ctx.account || otherMode) {
-      logger.info('transferReversals: charge not found in Stripe, event not ours; ignoring', {
+      // warn, not info: this skips a reversal on a money path.
+      logger.warn('transferReversals: charge not found in Stripe, event not ours; ignoring', {
+        eventId: ctx.eventId,
         eventType: ctx.eventType,
         chargeId,
         account: ctx.account ?? null,
+        reason: ctx.account ? 'connected-account' : 'other-mode',
       });
       return null;
     }
     logger.error('transferReversals: charge not found for a same-mode platform event', {
+      eventId: ctx.eventId,
       eventType: ctx.eventType,
       chargeId,
     });

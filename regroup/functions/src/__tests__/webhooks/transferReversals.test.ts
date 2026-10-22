@@ -15,6 +15,7 @@ jest.mock('firebase-functions', () => ({
 }));
 
 import type Stripe from 'stripe';
+import { logger } from 'firebase-functions';
 import {
   houseNetShare,
   restoreTransferAfterWonDispute,
@@ -22,7 +23,7 @@ import {
   reverseTransfersForRefunds,
 } from '../../webhooks/transferReversals';
 
-const ctx = { eventType: 'test', deployedLivemode: false };
+const ctx = { eventId: 'evt_test', eventType: 'test', deployedLivemode: false };
 const CHARGE_AMOUNT = 50000; // $500 rent
 const APP_FEE = 1500; // $15 platform fee → the house netted $485
 
@@ -310,11 +311,22 @@ describe('missing charge', () => {
     await expect(
       reverseTransfersForRefunds(missing(), 'ch_1', { ...ctx, account: 'acct_1' }),
     ).resolves.toBe(0);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('charge not found in Stripe'),
+      expect.objectContaining({ eventId: 'evt_test', reason: 'connected-account' }),
+    );
   });
   it('acknowledges an event whose livemode differs from the key', async () => {
     await expect(
       reverseTransfersForRefunds(missing(), 'ch_1', { ...ctx, livemode: true }),
     ).resolves.toBe(0);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('charge not found in Stripe'),
+      expect.objectContaining({ eventId: 'evt_test', reason: 'other-mode' }),
+    );
+  });
+  it('rethrows for a platform event without livemode (treated as same-mode)', async () => {
+    await expect(reverseTransfersForRefunds(missing(), 'ch_1', ctx)).rejects.toThrow('gone');
   });
   it('rethrows for a same-mode platform event', async () => {
     await expect(
