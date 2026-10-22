@@ -16,6 +16,7 @@ function writeTempConfig(config: unknown): string {
 }
 
 const valid = {
+  paywall: { enabled: true },
   shared: { TIER_BILLING_ENABLED: "true" },
   perEnv: {
     production: { A: "1", B: "2" },
@@ -52,9 +53,26 @@ describe("loadLaunchConfig", () => {
       ...valid,
       perEnv: { ...valid.perEnv, "e2e-staging": { A: "1" } },
     };
-    expect(() => loadLaunchConfig(writeTempConfig(bad))).toThrow(/B/);
+    expect(() => loadLaunchConfig(writeTempConfig(bad))).toThrow(/"e2e-staging".*"B"/);
   });
-  it.each(["sk_live_x", "rk_test_x", "whsec_x"])(
+  it("throws when paywall is missing or not a boolean", () => {
+    const { paywall: _p, ...noPaywall } = valid;
+    expect(() => loadLaunchConfig(writeTempConfig(noPaywall))).toThrow(/paywall/);
+    expect(() =>
+      loadLaunchConfig(writeTempConfig({ ...valid, paywall: { enabled: "yes" } })),
+    ).toThrow(/paywall/);
+  });
+  it("throws on non-string or multi-line values", () => {
+    for (const bad of [1, "a\nb"]) {
+      const cfg = { ...valid, shared: { TIER_BILLING_ENABLED: bad } };
+      expect(() => loadLaunchConfig(writeTempConfig(cfg))).toThrow(/single-line/);
+    }
+  });
+  it.each(["risk_level", "task_queue"])("accepts innocent value %s", (v) => {
+    const cfg = { ...valid, shared: { X: v } };
+    expect(() => loadLaunchConfig(writeTempConfig(cfg))).not.toThrow();
+  });
+  it.each(["sk_live_x", "sk_test_x", "rk_test_x", "whsec_x"])(
     "throws when a value contains %s",
     (secret) => {
       const bad = { ...valid, shared: { TIER_BILLING_ENABLED: secret } };

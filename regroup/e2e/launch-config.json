@@ -1,4 +1,7 @@
 {
+  "paywall": {
+    "enabled": true
+  },
   "shared": {
     "TIER_BILLING_ENABLED": "true",
     "CONNECT_ACCOUNTS_API": "v1"

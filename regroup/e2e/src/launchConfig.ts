@@ -10,7 +10,7 @@ export type LaunchConfig = {
 };
 
 const ENV_NAMES: EnvName[] = ["production", "e2e-emulator", "e2e-staging"];
-const SECRET_PATTERN = /sk_|rk_|whsec_/;
+const SECRET_PATTERN = /(^|[^A-Za-z0-9])(sk|rk)_(live|test)_|whsec_/;
 const DEFAULT_CONFIG_PATH = path.join(__dirname, "..", "launch-config.json");
 
 // Generated file names -> the environment each one is rendered from.
@@ -38,15 +38,22 @@ export function loadLaunchConfig(configPath = DEFAULT_CONFIG_PATH): LaunchConfig
     }
   }
 
+  if (typeof raw.paywall?.enabled !== "boolean") {
+    throw new Error("launch config paywall.enabled must be a boolean");
+  }
+
   const values = [
     ...Object.values(shared),
     ...ENV_NAMES.flatMap((e) => Object.values(perEnv[e])),
   ];
+  if (values.some((v) => typeof v !== "string" || /[\r\n]/.test(v))) {
+    throw new Error("launch config values must be single-line strings");
+  }
   if (values.some((v) => SECRET_PATTERN.test(v))) {
     throw new Error("launch config must not contain secret values");
   }
 
-  return { shared, perEnv, paywallEnabled: shared.TIER_BILLING_ENABLED === "true" };
+  return { shared, perEnv, paywallEnabled: raw.paywall.enabled };
 }
 
 export function functionsEnvFor(env: EnvName): Record<string, string> {
