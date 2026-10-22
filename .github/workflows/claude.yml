@@ -25,12 +25,38 @@ jobs:
       id-token: write
       actions: read # Required for Claude to read CI results on PRs
     steps:
+      # Agent-authored e2e-fix/* PRs must not reach the secret-bearing steps below.
+      # Review events carry the head ref in the payload; issue_comment needs a lookup;
+      # plain issues have no PR, so nothing to skip.
+      - name: Skip e2e-fix branches
+        id: pr-head
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          REVIEW_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_IS_PR: ${{ github.event.issue.pull_request != null }}
+        run: |
+          head_ref=""
+          if [ "$EVENT_NAME" = "issue_comment" ] && [ "$ISSUE_IS_PR" = "true" ]; then
+            head_ref=$(gh api "repos/${{ github.repository }}/pulls/${ISSUE_NUMBER}" --jq '.head.ref')
+          elif [ "$EVENT_NAME" = "pull_request_review" ] || [ "$EVENT_NAME" = "pull_request_review_comment" ]; then
+            head_ref="$REVIEW_HEAD_REF"
+          fi
+          case "$head_ref" in
+            e2e-fix/*) echo "skip=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "skip=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
       - name: Checkout repository
+        if: steps.pr-head.outputs.skip != 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Run Claude Code
+        if: steps.pr-head.outputs.skip != 'true'
         id: claude
         uses: anthropics/claude-code-action@v1
         with:
