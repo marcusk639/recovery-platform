@@ -88,7 +88,7 @@
    - Add emulator wiring in `src` behind an `IS_E2E_TEST` gate **copied from** `regroup/mobile/src/config/firebase-emulator.ts` (Auth:9099, Firestore:8080, Functions:5001, host `127.0.0.1`). Wire it into the Firebase init in `homegroups/mobile/src/services/firebase/config.ts`.
    - Create `homegroups/mobile/maestro/` mirroring regroup: `config.yaml` (copy from skill template; `disableAnimations:true`, `flows:[flows/*]`, `testOutputDir: maestro/output`), `utils/launch-app.yaml`, `subflows/login.yaml`, `subflows/logout.yaml`.
    - Create a seed script `homegroups/mobile/e2e/setup/seedTestData.js` (Admin SDK against emulator, `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080`, `FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099`, project `recovery-connect-cad4b`) seeding: a seeker (none), a member user + a group + membership, an admin/super-admin user + an admin group with treasury/meetings. **Mirror the claim-shape used by `onMemberWrite`** (memberGroups/adminGroups/treasurerGroups arrays in claims) — see `mem:deep-dive/homegroups`.
-   - Create `homegroups/mobile/e2e/setup/testAccounts.json` (e.g. `seeker`, `member@hg-e2e.com`, `admin@hg-e2e.com`, password `TestPassword123!`).
+   - Create `homegroups/mobile/e2e/setup/testAccounts.json` (e.g. `seeker`, `member@hg-e2e.com`, `admin@hg-e2e.com`, password `$E2E_TEST_PASSWORD`).
    - Copy `scripts/e2e-run.template.sh` → `homegroups/mobile/scripts/e2e-run.sh`; add npm scripts `maestro:seed`, `maestro:ios`, `maestro:smoke:ios` modeled on regroup's `package.json`.
 3. **Both:** document the local loop in each app's `docs/e2e/README.md`: T1 emulators → T2 seed → T2 `npm run ios` (debug, emulator gate) → T3 `npm run maestro:smoke:ios`.
 

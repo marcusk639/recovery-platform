@@ -1258,7 +1258,7 @@
   - inputText: "test@example.com"
   - tapOn:
       id: "password-input"
-  - inputText: "TestPassword123!"
+  - inputText: "$E2E_TEST_PASSWORD"
   - tapOn: "Log In"
 
   - assertVisible: "My Groups"
@@ -1358,7 +1358,7 @@
   - inputText: "operator@example.com"
   - tapOn:
       id: "password-input"
-  - inputText: "TestPassword123!"
+  - inputText: "$E2E_TEST_PASSWORD"
   - tapOn: "Log In"
 
   - assertVisible: "My Houses"

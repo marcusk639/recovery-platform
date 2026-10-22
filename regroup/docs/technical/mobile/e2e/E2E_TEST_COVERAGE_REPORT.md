@@ -201,10 +201,10 @@ Examples:
 
 | ID | Email | Password | Role | Houses | Purpose |
 |----|-------|----------|------|--------|---------|
-| guest-a | test-guest-a@rats-e2e.com | TestPassword123! | Guest | test-house-123 | Primary guest testing |
-| guest-b | test-guest-b@rats-e2e.com | TestPassword123! | Guest | test-house-123 | Cross-user testing |
-| manager | test-manager@rats-e2e.com | TestPassword123! | Admin | test-house-123 | Admin feature testing |
-| multi-house-user | test-multi-house@rats-e2e.com | TestPassword123! | Admin/Guest | test-house-a (admin)<br>test-house-b (guest) | Role switching testing |
+| guest-a | test-guest-a@rats-e2e.com | $E2E_TEST_PASSWORD | Guest | test-house-123 | Primary guest testing |
+| guest-b | test-guest-b@rats-e2e.com | $E2E_TEST_PASSWORD | Guest | test-house-123 | Cross-user testing |
+| manager | test-manager@rats-e2e.com | $E2E_TEST_PASSWORD | Admin | test-house-123 | Admin feature testing |
+| multi-house-user | test-multi-house@rats-e2e.com | $E2E_TEST_PASSWORD | Admin/Guest | test-house-a (admin)<br>test-house-b (guest) | Role switching testing |
 
 ### Test Houses (3 houses)
 

@@ -247,7 +247,7 @@ describe('App Store Screenshots', () => {
     await element(by.id('login-email-input')).typeText(
       'test-manager@rats-e2e.com',
     );
-    await element(by.id('login-password-input')).typeText('TestPassword123!');
+    await element(by.id('login-password-input')).typeText('$E2E_TEST_PASSWORD');
     await element(by.id('login-submit-button')).tap();
     await waitFor(element(by.id('house-overview-screen')))
       .toBeVisible()

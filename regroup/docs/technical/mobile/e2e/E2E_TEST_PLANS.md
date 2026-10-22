@@ -172,7 +172,7 @@ Existing user logs into the app.
 describe('Login Flow', () => {
   it('should log in successfully with valid credentials', async () => {
     await element(by.id('email-input')).typeText('test@rats-e2e.com');
-    await element(by.id('password-input')).typeText('TestPassword123!');
+    await element(by.id('password-input')).typeText('$E2E_TEST_PASSWORD');
     await element(by.id('login-button')).tap();
 
     // Verify user lands on main app
@@ -949,7 +949,7 @@ describe('Dispute Creation', () => {
   it('should allow guest to dispute another guest activity', async () => {
     // Prerequisite: Guest A has logged a chore activity
     // Login as Guest B
-    await loginAsTestUser('test-guest-b@rats-e2e.com', 'TestPassword123!');
+    await loginAsTestUser('test-guest-b@rats-e2e.com', '$E2E_TEST_PASSWORD');
 
     // Navigate to Activities screen
     await element(by.id('activities-tab')).tap();
@@ -1000,7 +1000,7 @@ describe('Dispute Creation', () => {
 ```javascript
 it('should allow admin to approve a dispute', async () => {
   // Login as admin
-  await loginAsTestUser('test-manager@rats-e2e.com', 'TestPassword123!');
+  await loginAsTestUser('test-manager@rats-e2e.com', '$E2E_TEST_PASSWORD');
 
   // Navigate to Disputes screen
   await element(by.id('disputes-tab')).tap();
@@ -1042,7 +1042,7 @@ it('should allow admin to approve a dispute', async () => {
 #### 8.3: Admin Rejects Dispute
 ```javascript
 it('should allow admin to reject an invalid dispute', async () => {
-  await loginAsTestUser('test-manager@rats-e2e.com', 'TestPassword123!');
+  await loginAsTestUser('test-manager@rats-e2e.com', '$E2E_TEST_PASSWORD');
 
   await element(by.id('disputes-tab')).tap();
   await waitFor(element(by.id('disputes-screen')))
@@ -1075,7 +1075,7 @@ it('should allow admin to reject an invalid dispute', async () => {
 #### 8.4: Guest Cannot Dispute Own Activity (Negative Case)
 ```javascript
 it('should NOT allow guest to dispute their own activity', async () => {
-  await loginAsTestUser('test-guest-a@rats-e2e.com', 'TestPassword123!');
+  await loginAsTestUser('test-guest-a@rats-e2e.com', '$E2E_TEST_PASSWORD');
 
   await element(by.id('activities-tab')).tap();
   await waitFor(element(by.id('activities-screen')))
@@ -1094,7 +1094,7 @@ it('should NOT allow guest to dispute their own activity', async () => {
 #### 8.5: Guest Cannot Resolve Disputes (Negative Case)
 ```javascript
 it('should NOT allow guest to resolve disputes', async () => {
-  await loginAsTestUser('test-guest-a@rats-e2e.com', 'TestPassword123!');
+  await loginAsTestUser('test-guest-a@rats-e2e.com', '$E2E_TEST_PASSWORD');
 
   await element(by.id('disputes-tab')).tap();
   await waitFor(element(by.id('disputes-screen')))
@@ -1115,7 +1115,7 @@ it('should NOT allow guest to resolve disputes', async () => {
 it('should allow guest to challenge a dispute decision', async () => {
   // Guest A's activity was disputed by Guest B, and admin rejected the dispute
   // Guest B wants to challenge the rejection
-  await loginAsTestUser('test-guest-b@rats-e2e.com', 'TestPassword123!');
+  await loginAsTestUser('test-guest-b@rats-e2e.com', '$E2E_TEST_PASSWORD');
 
   await element(by.id('disputes-tab')).tap();
   await waitFor(element(by.id('disputes-screen')))
@@ -1207,7 +1207,7 @@ Admins verify guest activities to ensure they were completed properly. This is e
 ```javascript
 describe('Activity Verification', () => {
   it('should allow admin to verify a guest activity', async () => {
-    await loginAsTestUser('test-manager@rats-e2e.com', 'TestPassword123!');
+    await loginAsTestUser('test-manager@rats-e2e.com', '$E2E_TEST_PASSWORD');
 
     // Navigate to Activities
     await element(by.id('activities-tab')).tap();
@@ -1255,7 +1255,7 @@ describe('Activity Verification', () => {
 #### 9.2: Admin Rejects Activity with Reason
 ```javascript
 it('should allow admin to reject an activity with reason', async () => {
-  await loginAsTestUser('test-manager@rats-e2e.com', 'TestPassword123!');
+  await loginAsTestUser('test-manager@rats-e2e.com', '$E2E_TEST_PASSWORD');
 
   await element(by.id('activities-tab')).tap();
   await waitFor(element(by.id('activities-screen')))
@@ -1289,7 +1289,7 @@ it('should allow admin to reject an activity with reason', async () => {
 #### 9.3: Batch Verification of Multiple Activities
 ```javascript
 it('should allow admin to verify multiple activities at once', async () => {
-  await loginAsTestUser('test-manager@rats-e2e.com', 'TestPassword123!');
+  await loginAsTestUser('test-manager@rats-e2e.com', '$E2E_TEST_PASSWORD');
 
   await element(by.id('activities-tab')).tap();
   await waitFor(element(by.id('activities-screen')))
@@ -1326,7 +1326,7 @@ it('should allow admin to verify multiple activities at once', async () => {
 #### 9.4: Guest Cannot Verify Own Activities (Negative Case)
 ```javascript
 it('should NOT allow guest to verify their own activities', async () => {
-  await loginAsTestUser('test-guest-a@rats-e2e.com', 'TestPassword123!');
+  await loginAsTestUser('test-guest-a@rats-e2e.com', '$E2E_TEST_PASSWORD');
 
   await element(by.id('activities-tab')).tap();
   await waitFor(element(by.id('activities-screen')))
@@ -1345,7 +1345,7 @@ it('should NOT allow guest to verify their own activities', async () => {
 ```javascript
 it('should notify guest when their activity is verified', async () => {
   // Admin verifies activity
-  await loginAsTestUser('test-manager@rats-e2e.com', 'TestPassword123!');
+  await loginAsTestUser('test-manager@rats-e2e.com', '$E2E_TEST_PASSWORD');
   await element(by.id('activities-tab')).tap();
 
   const activityId = 'test-guest-notification-activity';
@@ -1354,7 +1354,7 @@ it('should notify guest when their activity is verified', async () => {
 
   // Logout and login as guest
   await logout();
-  await loginAsTestUser('test-guest-a@rats-e2e.com', 'TestPassword123!');
+  await loginAsTestUser('test-guest-a@rats-e2e.com', '$E2E_TEST_PASSWORD');
 
   // Check notifications
   await element(by.id('notifications-tab')).tap();
@@ -1375,7 +1375,7 @@ it('should notify guest when their activity is verified', async () => {
 #### 9.6: Verified Activities Count Toward Phase Requirements
 ```javascript
 it('should count verified activities toward phase progression', async () => {
-  await loginAsTestUser('test-guest-a@rats-e2e.com', 'TestPassword123!');
+  await loginAsTestUser('test-guest-a@rats-e2e.com', '$E2E_TEST_PASSWORD');
 
   // Navigate to phase progress screen
   await element(by.id('profile-tab')).tap();
@@ -1396,13 +1396,13 @@ it('should count verified activities toward phase progression', async () => {
 
   // Admin verifies the chore
   await logout();
-  await loginAsTestUser('test-manager@rats-e2e.com', 'TestPassword123!');
+  await loginAsTestUser('test-manager@rats-e2e.com', '$E2E_TEST_PASSWORD');
   await element(by.id('activities-tab')).tap();
   // ... verify the new chore ...
 
   // Login back as guest and check progress
   await logout();
-  await loginAsTestUser('test-guest-a@rats-e2e.com', 'TestPassword123!');
+  await loginAsTestUser('test-guest-a@rats-e2e.com', '$E2E_TEST_PASSWORD');
   await element(by.id('profile-tab')).tap();
   await element(by.id('phase-progress-button')).tap();
 
@@ -1463,7 +1463,7 @@ The app has three main roles: Guest, Admin (Manager), and SuperAdmin (Operator).
 ```javascript
 describe('Authorization - Role-Based Access Control', () => {
   it('should NOT show admin features to guest users', async () => {
-    await loginAsTestUser('test-guest-a@rats-e2e.com', 'TestPassword123!');
+    await loginAsTestUser('test-guest-a@rats-e2e.com', '$E2E_TEST_PASSWORD');
 
     // Navigate to various screens and verify admin features are hidden
 
@@ -1497,7 +1497,7 @@ describe('Authorization - Role-Based Access Control', () => {
 #### 10.2: Guest Cannot View Other Guests' Private Data
 ```javascript
 it('should NOT allow guest to view other guests private information', async () => {
-  await loginAsTestUser('test-guest-a@rats-e2e.com', 'TestPassword123!');
+  await loginAsTestUser('test-guest-a@rats-e2e.com', '$E2E_TEST_PASSWORD');
 
   // Navigate to house members list
   await element(by.id('house-tab')).tap();
@@ -1525,7 +1525,7 @@ it('should NOT allow guest to view other guests private information', async () =
 #### 10.3: Admin Can Access Admin Features
 ```javascript
 it('should show admin features to manager users', async () => {
-  await loginAsTestUser('test-manager@rats-e2e.com', 'TestPassword123!');
+  await loginAsTestUser('test-manager@rats-e2e.com', '$E2E_TEST_PASSWORD');
 
   // Activities screen should show verify button
   await element(by.id('activities-tab')).tap();
@@ -1560,7 +1560,7 @@ it('should show admin features to manager users', async () => {
 #### 10.4: Admin Can View All Guest Data
 ```javascript
 it('should allow admin to view all guest information', async () => {
-  await loginAsTestUser('test-manager@rats-e2e.com', 'TestPassword123!');
+  await loginAsTestUser('test-manager@rats-e2e.com', '$E2E_TEST_PASSWORD');
 
   await element(by.id('house-tab')).tap();
   await element(by.id('members-list-button')).tap();
@@ -1585,7 +1585,7 @@ it('should allow admin to view all guest information', async () => {
 #### 10.5: Guest Cannot Modify House Settings (Negative Case)
 ```javascript
 it('should NOT allow guest to modify house settings', async () => {
-  await loginAsTestUser('test-guest-a@rats-e2e.com', 'TestPassword123!');
+  await loginAsTestUser('test-guest-a@rats-e2e.com', '$E2E_TEST_PASSWORD');
 
   // Try to access house settings (should not be visible in menu)
   await element(by.id('menu-button')).tap();
@@ -1600,7 +1600,7 @@ it('should NOT allow guest to modify house settings', async () => {
 #### 10.6: Manager Cannot Access SuperAdmin Features (Negative Case)
 ```javascript
 it('should NOT allow manager to access operator features', async () => {
-  await loginAsTestUser('test-manager@rats-e2e.com', 'TestPassword123!');
+  await loginAsTestUser('test-manager@rats-e2e.com', '$E2E_TEST_PASSWORD');
 
   // Navigate to settings
   await element(by.id('menu-button')).tap();
@@ -1620,7 +1620,7 @@ it('should NOT allow manager to access operator features', async () => {
 #### 10.7: SuperAdmin Can Access Operator Features
 ```javascript
 it('should show operator features to superadmin users', async () => {
-  await loginAsTestUser('test-operator@rats-e2e.com', 'TestPassword123!');
+  await loginAsTestUser('test-operator@rats-e2e.com', '$E2E_TEST_PASSWORD');
 
   await element(by.id('menu-button')).tap();
   await element(by.id('settings-button')).tap();
@@ -1640,7 +1640,7 @@ it('should show operator features to superadmin users', async () => {
 ```javascript
 it('should apply correct role when user switches between houses', async () => {
   // User is Admin in House A, Guest in House B
-  await loginAsTestUser('test-multi-house-user@rats-e2e.com', 'TestPassword123!');
+  await loginAsTestUser('test-multi-house-user@rats-e2e.com', '$E2E_TEST_PASSWORD');
 
   // Start in House A (admin role)
   await expect(element(by.id('verify-activities-button'))).toBeVisible();
@@ -1734,7 +1734,7 @@ Medication tracking is the 5th activity type (alongside chores, meetings, work, 
 ```javascript
 describe('Medication Tracking', () => {
   it('should allow guest to log medication taken', async () => {
-    await loginAsTestUser('test-guest-a@rats-e2e.com', 'TestPassword123!');
+    await loginAsTestUser('test-guest-a@rats-e2e.com', '$E2E_TEST_PASSWORD');
 
     // Navigate to medication tracking
     await element(by.id('profile-tab')).tap();
@@ -1782,7 +1782,7 @@ describe('Medication Tracking', () => {
 #### 11.2: Medication Activity Appears in Activity Log
 ```javascript
 it('should show medication as activity in activity log', async () => {
-  await loginAsTestUser('test-guest-a@rats-e2e.com', 'TestPassword123!');
+  await loginAsTestUser('test-guest-a@rats-e2e.com', '$E2E_TEST_PASSWORD');
 
   // Log a medication first
   await element(by.id('profile-tab')).tap();
@@ -1816,7 +1816,7 @@ it('should show medication as activity in activity log', async () => {
 ```javascript
 it('should allow admin to verify medication activity', async () => {
   // Guest logs medication
-  await loginAsTestUser('test-guest-a@rats-e2e.com', 'TestPassword123!');
+  await loginAsTestUser('test-guest-a@rats-e2e.com', '$E2E_TEST_PASSWORD');
   await element(by.id('profile-tab')).tap();
   await element(by.id('medication-tracking-button')).tap();
   await element(by.id('log-medication-button')).tap();
@@ -1827,7 +1827,7 @@ it('should allow admin to verify medication activity', async () => {
 
   // Logout and login as admin
   await logout();
-  await loginAsTestUser('test-manager@rats-e2e.com', 'TestPassword123!');
+  await loginAsTestUser('test-manager@rats-e2e.com', '$E2E_TEST_PASSWORD');
 
   // Navigate to activities
   await element(by.id('activities-tab')).tap();
@@ -1856,7 +1856,7 @@ it('should allow admin to verify medication activity', async () => {
 #### 11.4: Medication Counts Toward Phase Requirements
 ```javascript
 it('should count verified medications toward phase progression', async () => {
-  await loginAsTestUser('test-guest-a@rats-e2e.com', 'TestPassword123!');
+  await loginAsTestUser('test-guest-a@rats-e2e.com', '$E2E_TEST_PASSWORD');
 
   // Check initial medication phase progress
   await element(by.id('profile-tab')).tap();
@@ -1879,12 +1879,12 @@ it('should count verified medications toward phase progression', async () => {
 
   // Admin verifies
   await logout();
-  await loginAsTestUser('test-manager@rats-e2e.com', 'TestPassword123!');
+  await loginAsTestUser('test-manager@rats-e2e.com', '$E2E_TEST_PASSWORD');
   // ... verify medication activity ...
 
   // Check updated progress
   await logout();
-  await loginAsTestUser('test-guest-a@rats-e2e.com', 'TestPassword123!');
+  await loginAsTestUser('test-guest-a@rats-e2e.com', '$E2E_TEST_PASSWORD');
   await element(by.id('profile-tab')).tap();
   await element(by.id('phase-progress-button')).tap();
 
@@ -1896,7 +1896,7 @@ it('should count verified medications toward phase progression', async () => {
 #### 11.5: Medication Compliance Visualization
 ```javascript
 it('should show medication compliance chart', async () => {
-  await loginAsTestUser('test-guest-a@rats-e2e.com', 'TestPassword123!');
+  await loginAsTestUser('test-guest-a@rats-e2e.com', '$E2E_TEST_PASSWORD');
 
   await element(by.id('profile-tab')).tap();
   await element(by.id('medication-tracking-button')).tap();
@@ -1922,7 +1922,7 @@ it('should show medication compliance chart', async () => {
 #### 11.6: Guest Cannot Log Medication for Others (Negative Case)
 ```javascript
 it('should NOT allow guest to log medication for other guests', async () => {
-  await loginAsTestUser('test-guest-a@rats-e2e.com', 'TestPassword123!');
+  await loginAsTestUser('test-guest-a@rats-e2e.com', '$E2E_TEST_PASSWORD');
 
   await element(by.id('profile-tab')).tap();
   await element(by.id('medication-tracking-button')).tap();
@@ -1966,33 +1966,33 @@ For authentication and user flow tests, create test accounts:
 
 **Manager Account:**
 - Email: `test-manager@rats-e2e.com`
-- Password: `TestPassword123!`
+- Password: `$E2E_TEST_PASSWORD`
 - Role: House Manager
 - House: Test House (ID: `test-house-123`)
 
 **Guest Account:**
 - Email: `test-guest@rats-e2e.com`
-- Password: `TestPassword123!`
+- Password: `$E2E_TEST_PASSWORD`
 - Role: Guest
 - House: Test House (ID: `test-house-123`)
 
 **Guest Account A (for dispute/verification tests):**
 - Email: `test-guest-a@rats-e2e.com`
-- Password: `TestPassword123!`
+- Password: `$E2E_TEST_PASSWORD`
 - Role: Guest
 - House: Test House (ID: `test-house-123`)
 - Purpose: Creates activities that can be disputed/verified
 
 **Guest Account B (for dispute tests):**
 - Email: `test-guest-b@rats-e2e.com`
-- Password: `TestPassword123!`
+- Password: `$E2E_TEST_PASSWORD`
 - Role: Guest
 - House: Test House (ID: `test-house-123`)
 - Purpose: Disputes Guest A's activities
 
 **Multi-House User (for authorization tests):**
 - Email: `test-multi-house-user@rats-e2e.com`
-- Password: `TestPassword123!`
+- Password: `$E2E_TEST_PASSWORD`
 - Roles:
   - Admin in Test House A (ID: `test-house-a`)
   - Guest in Test House B (ID: `test-house-b`)
@@ -2000,7 +2000,7 @@ For authentication and user flow tests, create test accounts:
 
 **Operator Account:**
 - Email: `test-operator@rats-e2e.com`
-- Password: `TestPassword123!`
+- Password: `$E2E_TEST_PASSWORD`
 - Role: Operator/Org Admin
 - Organization: Test Org (ID: `test-org-123`)
 - Purpose: Tests SuperAdmin-only features

@@ -1,106 +1,65 @@
 # Security note — E2E test credentials
 
-**Severity: HIGH (production exposure).** Status: needs manual rotation in the
-Firebase Console (see checklist).
+**Severity: HIGH at discovery; now resolved.** The literal was removed from the
+repo and the affected accounts were rotated on 2026-10-20.
 
 ## The issue
 
-The E2E test password `TestPassword123!` is committed to the repository in **18
-tracked files** (the seed fixture, the README, and every Maestro flow/subflow —
-full list at the bottom). That password also unlocks the same test personas in
-the **real `phoenix-cleanhouse` Firebase project**, because the local helper
-`scripts/create-e2e-auth-users.js` (untracked) provisions those accounts in
-production using the real `service-key.json` and the same hardcoded constant
-(`const PASSWORD = 'TestPassword123!'`).
+A shared e2e test password was committed to this repository in dozens of tracked
+files (seed fixtures, READMEs, docs, and every Maestro flow/subflow). The same
+password unlocked the Homegroups test personas in the `homegroups-e2e` Firebase
+project. An earlier version of this note said the Regroup personas
+(`*@rats-e2e.com`, `operator@example.com`) also existed in production
+`phoenix-cleanhouse`. A lookup on 2026-10-20 found none of them there, and none
+of the Homegroups personas in production `recovery-connect-cad4b`.
 
-Net effect: anyone with read access to this repo has the production password for
-the test personas — including `test-manager@rats-e2e.com`, which carries an
-`admin` role claim.
+## Current state
 
-## Risk assessment
+- The literal has been removed from every tracked file at `HEAD`. It remains in
+  **git history** and must be treated as **compromised**. Do not reuse it
+  anywhere, and do not rely on history rewriting to contain it.
+- Every runner now reads the password from the `E2E_TEST_PASSWORD` environment
+  variable and fails fast when it is unset. There is no committed fallback.
+- 2026-10-20: the four `@homegroups-e2e.com` accounts in `homegroups-e2e` were
+  given a new random password. No other project had any of the accounts.
 
-- **Real exposure:** production test accounts in `phoenix-cleanhouse` are
-  reachable with a repo-public password. Blast radius is bounded (scoped test
-  personas, gated by Firestore rules), but the `admin` persona is non-trivial.
-- **Not exposed:** the production **service-account key** (`service-key.json`)
-  is gitignored and not in version control. The prod-writer scripts
-  (`create-e2e-auth-users.js`, `seed-e2e-users.js`) are also untracked.
-- **Emulator-only side:** the committed password unlocking the **local
-  emulator** personas is low-risk on its own — those are throwaway accounts in a
-  local Firebase emulator. The problem is the _reuse_ of that password for
-  production, not the commit itself.
+## Where the new password lives
 
-## Why we did NOT just gitignore `testAccounts.json`
+Never commit it. It is stored outside the repo:
 
-Removing one file from tracking does not remove the secret: the same password is
-committed in 17 other tracked files (every login flow). Gitignoring
-`testAccounts.json` would give false assurance and break seeding on fresh clones
-without reducing exposure. The effective fix is to **decouple production from the
-committed test password and rotate production**, below.
+- Regroup: `~/.config/regroup-e2e/e2e-test-password`
+- Homegroups: `~/.config/homegroups-e2e/e2e-test-password`
+- CI: the repository secrets `REGROUP_E2E_TEST_PASSWORD` and
+  `HOMEGROUPS_E2E_TEST_PASSWORD`. Each Maestro job maps its secret to `E2E_TEST_PASSWORD`.
 
-## Remediation checklist
+Local use:
 
-1. **Rotate or remove the production test accounts** (do this first):
-   - In the Firebase Console for `phoenix-cleanhouse` → Authentication, either
-     **delete** the `*@rats-e2e.com` test users (preferred — they should not live
-     in production), or **reset their passwords** to a value that is NOT in the
-     repo.
-2. **Decouple the prod-writer from the committed password.** Change
-   `regroup/mobile/scripts/create-e2e-auth-users.js` to require an env var with
-   no committed default, so the repo password can never be pushed to prod again:
-
-   ```js
-   // before
-   const PASSWORD = 'TestPassword123!';
-
-   // after
-   const PASSWORD = process.env.E2E_PROD_PASSWORD;
-   if (!PASSWORD) {
-     console.error(
-       'Set E2E_PROD_PASSWORD (do not reuse the committed emulator password).',
-     );
-     process.exit(1);
-   }
-   ```
-
-   Run it as: `E2E_PROD_PASSWORD='…' node scripts/create-e2e-auth-users.js`.
-
-3. **Keep the emulator password committed — but only the emulator.** The
-   `TestPassword123!` value in `testAccounts.json` and the Maestro flows is fine
-   to keep in the repo _as long as it is never reused for a real project_. It
-   only needs to satisfy Firebase's minimum password policy for the local
-   emulator. Do not "rotate" it casually: it is coupled across 18 files (see
-   below), so changing it means updating all of them together.
-4. **Confirm guards stay in place:**
-   - `service-key.json` remains gitignored (verify: `git check-ignore regroup/mobile/scripts/service-key.json`).
-   - `reset-and-seed.sh` continues to call `seedTestData.js` (emulator) and
-     **never** `create-e2e-auth-users.js` (prod).
-
-## Where the emulator password lives (the coupled set)
-
-If you ever change the emulator test password, update all of these together:
-
-```
-e2e/setup/testAccounts.json          # the seed fixture (source of truth)
-e2e/README.md
-e2e/screenshots.e2e.ts
-maestro/subflows/login.yaml
-maestro/flows/signup.yaml
-maestro/flows/debug-login.yaml
-maestro/flows/guest-home.yaml
-maestro/flows/guest-log-chore.yaml
-maestro/flows/guest-activity-dispute.yaml
-maestro/flows/guest-payment-history.yaml
-maestro/flows/guest-rent-payment.yaml
-maestro/flows/operator-setup-wizard.yaml
-maestro/flows/operator-applications.yaml
-maestro/flows/operator-manage-guests.yaml
-maestro/flows/operator-house-settings.yaml
-maestro/flows/operator-disputes.yaml
-maestro/flows/oxford-dashboard.yaml
-maestro/flows/oxford-onboarding.yaml
+```bash
+export E2E_TEST_PASSWORD="$(cat ~/.config/regroup-e2e/e2e-test-password)"
 ```
 
-A cleaner long-term design is to have the flows read the password from a Maestro
-env var (`-e PASSWORD=…`) sourced from `testAccounts.json`, so there is a single
-source of truth — but that is a refactor, not a security fix.
+## How each runner receives it
+
+- Maestro flows pass `PASSWORD: ${E2E_TEST_PASSWORD}` to `subflows/login.yaml`
+  (and type `${E2E_TEST_PASSWORD}` directly in signup/debug flows). Maestro
+  resolves it from `-e E2E_TEST_PASSWORD=...` on the command line.
+- `regroup/mobile` `maestro:*` npm scripts and `maestro/scripts/run-flows.sh`
+  require `E2E_TEST_PASSWORD` and forward it with `-e`.
+- `e2e/screenshots.e2e.ts` and `homegroups/scripts/seed-e2e.js` read
+  `process.env.E2E_TEST_PASSWORD` and throw if it is unset.
+- `e2e/setup/testAccounts.json` no longer carries a password field; consumers
+  must take it from `E2E_TEST_PASSWORD`.
+- CI (`maestro-smoke` jobs) injects `${{ secrets.E2E_TEST_PASSWORD }}` via the
+  Maestro Cloud action `env` input.
+
+## Rotation checklist (user)
+
+1. In the Firebase Console for `phoenix-cleanhouse` and `homegroups-e2e`
+   Authentication, **delete** the e2e test users (preferred for production) or
+   **reset their passwords** to the new value.
+2. Store the new value at the paths above and in the `E2E_TEST_PASSWORD` CI
+   secret.
+3. Keep prod-writer scripts (`create-e2e-auth-users.js`, untracked) reading the
+   password from the environment, never a literal.
+4. Confirm `service-key.json` stays gitignored
+   (`git check-ignore regroup/mobile/scripts/service-key.json`).

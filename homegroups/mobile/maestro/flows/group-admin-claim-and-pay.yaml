@@ -13,7 +13,7 @@ appId: org.recoveryconnect
     file: ../subflows/login.yaml
     env:
       EMAIL: test-unclaimed-member@homegroups-e2e.com
-      PASSWORD: TestPassword123!
+      PASSWORD: ${E2E_TEST_PASSWORD}
 - tapOn: "Home"
 - extendedWaitUntil:
     visible:

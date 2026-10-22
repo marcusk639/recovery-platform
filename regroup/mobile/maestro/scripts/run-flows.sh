@@ -26,7 +26,8 @@
 #   --sim <udid>  Target a specific simulator UDID (default: E2E-iPhone).
 #   -h, --help    Show this help.
 #
-# Env overrides: APP_ID (default com.rats.dev), SIM_UDID.
+# Env: E2E_TEST_PASSWORD (required; the shared e2e test account password, see
+#      e2e/SECURITY-test-credentials.md). Overrides: APP_ID (default com.rats.dev), SIM_UDID.
 #
 set -uo pipefail # intentionally NOT -e: we continue through individual flow failures
 
@@ -89,6 +90,9 @@ blue()  { printf '\033[0;34m%s\033[0m\n' "$*"; }
 # ── preflight ──────────────────────────────────────────────────────────────────
 fail() { red "✗ $1"; [[ -n "${2:-}" ]] && echo "  → $2"; exit 1; }
 
+[[ -n "${E2E_TEST_PASSWORD:-}" ]] || fail "E2E_TEST_PASSWORD is not set" \
+  "export E2E_TEST_PASSWORD=\"\$(cat ~/.config/regroup-e2e/e2e-test-password)\""
+
 command -v maestro >/dev/null || fail "maestro CLI not found on PATH" \
   "Install: curl -fsSL https://get.maestro.mobile.dev | bash"
 
@@ -142,7 +146,7 @@ run_flow() {
   local name="$1" log="${OUT_DIR}/${1}.log" rc
   : >"${log}" # truncate once; attempts are appended so a driver-drop trace survives a retry
   for attempt in 1 2; do
-    maestro test -e APP_ID="${APP_ID}" "${FLOWS_DIR}/${name}.yaml" 2>&1 | tee -a "${log}"
+    maestro test -e APP_ID="${APP_ID}" -e E2E_TEST_PASSWORD="${E2E_TEST_PASSWORD}" "${FLOWS_DIR}/${name}.yaml" 2>&1 | tee -a "${log}"
     rc=${PIPESTATUS[0]}
     [[ ${rc} -eq 0 ]] && return 0
     if [[ ${attempt} -eq 1 ]] && grep -qE "${DRIVER_ERR_RE}" "${log}"; then

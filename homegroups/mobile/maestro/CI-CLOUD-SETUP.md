@@ -15,9 +15,9 @@ The Android **debug** APK is wired to the **production** Firebase project `recov
 
 | Persona email                              | Password           | Required state                                                                                                                                                               | Flows                                                                 |
 | ------------------------------------------ | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `test-admin@homegroups-e2e.com`            | `TestPassword123!` | Admin of ≥1 group; that group has ≥1 meeting on its schedule (for QR)                                                                                                        | conscience-vote, group-creation, invite-code-join, qr-meeting-checkin |
-| `test-unclaimed-member@homegroups-e2e.com` | `TestPassword123!` | A **member** (not admin) of an **unclaimed** group — so `shouldShowClaimGroupButton = isGroupUnclaimed() && !isCurrentUserAdmin()` is true                                   | group-admin-claim-and-pay                                             |
-| `test-treasurer@homegroups-e2e.com`        | `TestPassword123!` | Holds the **Treasurer** role on a group that is **subscribed** (an unsubscribed group redirects to SubscriptionUpgrade) and where the user is admin enough to reach Treasury | treasurer-handoff-completion                                          |
+| `test-admin@homegroups-e2e.com`            | `$E2E_TEST_PASSWORD` | Admin of ≥1 group; that group has ≥1 meeting on its schedule (for QR)                                                                                                        | conscience-vote, group-creation, invite-code-join, qr-meeting-checkin |
+| `test-unclaimed-member@homegroups-e2e.com` | `$E2E_TEST_PASSWORD` | A **member** (not admin) of an **unclaimed** group — so `shouldShowClaimGroupButton = isGroupUnclaimed() && !isCurrentUserAdmin()` is true                                   | group-admin-claim-and-pay                                             |
+| `test-treasurer@homegroups-e2e.com`        | `$E2E_TEST_PASSWORD` | Holds the **Treasurer** role on a group that is **subscribed** (an unsubscribed group redirects to SubscriptionUpgrade) and where the user is admin enough to reach Treasury | treasurer-handoff-completion                                          |
 
 Plus, not tied to a persona:
 
@@ -30,7 +30,7 @@ Referenced by the CI job already. **Confirm it's set** in the repo's GitHub Acti
 
 ## 3. Credential hygiene
 
-The password `TestPassword123!` is committed in the flow files. That's acceptable **only** for a throwaway test project (option A). If you go with prod (option B), I'll refactor the flows to read `PASSWORD` from a `${E2E_PASSWORD}` env var and have CI inject it from a secret so no valid prod credential lives in git.
+The flows read the password from the `E2E_TEST_PASSWORD` env var (never committed); CI injects it from the `E2E_TEST_PASSWORD` secret.
 
 ## 4. Live-run risks to watch on the first cloud run (from the audit)
 

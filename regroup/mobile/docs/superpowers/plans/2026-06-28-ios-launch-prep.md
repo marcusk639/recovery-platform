@@ -485,7 +485,7 @@ Expected: `Flow completed` — `initial-landing-screen` visible within 30s.
 ```bash
 maestro test -e APP_ID=com.rats.dev \
   -e EMAIL=test-manager@rats-e2e.com \
-  -e PASSWORD=TestPassword123! \
+  -e PASSWORD=$E2E_TEST_PASSWORD \
   maestro/subflows/login.yaml
 ```
 
@@ -808,7 +808,7 @@ In App Store Connect → Regroup → App Store tab, ensure all of these are fill
 - [ ] **Pricing and Availability**: price (Free if app is free; or subscription tier), territories
 - [ ] **App Privacy** (Data Safety): fill out the questionnaire. For Regroup: Health & Fitness (sobriety), Financial Info (payments), Contact Info, Identifiers (user ID)
 - [ ] **Age Rating questionnaire**: complete IARC. Answer No to most items; set the age rating to 17+ due to substance-related content.
-- [ ] **App Review Information**: provide a test account (`test-manager@rats-e2e.com` / `TestPassword123!`) and notes explaining the app requires a pre-seeded house to function
+- [ ] **App Review Information**: provide a test account (`test-manager@rats-e2e.com` / `$E2E_TEST_PASSWORD`) and notes explaining the app requires a pre-seeded house to function
 
 - [ ] **Step 2: Select the TestFlight build for submission**
 
@@ -821,7 +821,7 @@ In "App Review Information":
 ```
 Demo account for review:
 Email: test-manager@rats-e2e.com
-Password: TestPassword123!
+Password: $E2E_TEST_PASSWORD
 
 This account has pre-configured test data (house, guests, activities).
 The app connects to production Firebase on first launch.
@@ -886,7 +886,7 @@ cd regroup/mobile
 maestro test \
   -e APP_ID=com.rats.dev \
   -e EMAIL=test-manager@rats-e2e.com \
-  -e PASSWORD=TestPassword123! \
+  -e PASSWORD=$E2E_TEST_PASSWORD \
   maestro/subflows/login.yaml
 ```
 
@@ -909,7 +909,7 @@ xcrun simctl io booted screenshot fastlane/screenshots/ios/en-US/02_login.png
 
 # Login via Maestro, then capture logged-in screens:
 maestro test -e APP_ID=com.rats.dev -e EMAIL=test-manager@rats-e2e.com \
-  -e PASSWORD=TestPassword123! maestro/subflows/login.yaml
+  -e PASSWORD=$E2E_TEST_PASSWORD maestro/subflows/login.yaml
 
 # 3. Operator dashboard (house tab)
 xcrun simctl io booted screenshot fastlane/screenshots/ios/en-US/03_operator_dashboard.png
@@ -920,7 +920,7 @@ xcrun simctl io booted screenshot fastlane/screenshots/ios/en-US/04_residents.pn
 
 # 5. Guest home (login as guest-a)
 maestro test -e APP_ID=com.rats.dev -e EMAIL=test-guest-a@rats-e2e.com \
-  -e PASSWORD=TestPassword123! maestro/subflows/login.yaml
+  -e PASSWORD=$E2E_TEST_PASSWORD maestro/subflows/login.yaml
 xcrun simctl io booted screenshot fastlane/screenshots/ios/en-US/05_guest_home.png
 
 # Verify dimensions are 1290x2796

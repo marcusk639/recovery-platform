@@ -96,7 +96,7 @@ This runs `e2e/setup/seedTestData.js` against the emulator and creates the
 `testAccounts.json` users (with **map-shaped** role claims so Firestore rules engage),
 plus houses/activities/disputes. Re-run any time to reset seeded entities.
 
-Accounts (password `TestPassword123!`):
+Accounts (password `$E2E_TEST_PASSWORD`):
 
 | Email                           | Role                                            | House            |
 | ------------------------------- | ----------------------------------------------- | ---------------- |
@@ -189,7 +189,7 @@ maestro record        # record a session to video (handy for flaky-flow triage)
       file: ../subflows/login.yaml
       env:
         EMAIL: test-manager@rats-e2e.com
-        PASSWORD: TestPassword123!
+        PASSWORD: $E2E_TEST_PASSWORD
   ```
 
 ### Output artifacts
