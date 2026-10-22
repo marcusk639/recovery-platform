@@ -76,7 +76,7 @@ export const CONNECT_EVENTS = [
 
 const FORBIDDEN_HOST_PARTS = ['phoenix-cleanhouse', 'regroup-app.com', 'recovery-connect'];
 
-/** Fixed rule, never operator input: https, hostname contains regroup-e2e, no production names. */
+/** Fixed rule, never operator input: https://<region>-regroup-e2e.cloudfunctions.net/<name>, no port or credentials. */
 export function isAllowedWebhookUrl(url: string): boolean {
   let parsed: URL;
   try {
@@ -87,7 +87,13 @@ export function isAllowedWebhookUrl(url: string): boolean {
   const host = parsed.hostname.toLowerCase();
   return (
     parsed.protocol === 'https:' &&
-    host.includes('regroup-e2e') &&
+    /^[a-z0-9-]+-regroup-e2e\.cloudfunctions\.net$/.test(host) &&
+    parsed.port === '' &&
+    parsed.search === '' &&
+    parsed.hash === '' &&
+    parsed.username === '' &&
+    parsed.password === '' &&
+    /^\/[A-Za-z0-9_-]+$/.test(parsed.pathname) &&
     !FORBIDDEN_HOST_PARTS.some((part) => host.includes(part))
   );
 }
@@ -97,7 +103,7 @@ export function assertWebhookUrls(platformUrl: string, connectUrl: string): void
   for (const url of [platformUrl, connectUrl]) {
     if (!isAllowedWebhookUrl(url)) {
       throw new Error(
-        `Webhook URL not allowed (https, host with regroup-e2e, no production hosts): ${url}`,
+        `Webhook URL not allowed (https://<x>-regroup-e2e.cloudfunctions.net/<name>): ${url}`,
       );
     }
   }

@@ -4,14 +4,15 @@ import {
   assertWebhookUrls,
   ensureCatalog,
   ensureWebhooks,
+  isAllowedWebhookUrl,
   PRODUCTION_SANDBOX_ACCOUNT_ID,
   PLATFORM_EVENTS,
   CONNECT_EVENTS,
 } from '../stripeSandbox';
 import { makeStripe } from './helpers/mockStripe';
 
-const PLATFORM_URL = 'https://regroup-e2e.example/stripeWebhook';
-const CONNECT_URL = 'https://regroup-e2e.example/stripeConnectWebhook';
+const PLATFORM_URL = 'https://us-central1-regroup-e2e.cloudfunctions.net/stripeWebhook';
+const CONNECT_URL = 'https://us-central1-regroup-e2e.cloudfunctions.net/stripeConnectWebhook';
 
 describe('ensureCatalog', () => {
   it('creates each object once across two runs', async () => {
@@ -111,14 +112,31 @@ describe('ensureWebhooks', () => {
 });
 
 describe('assertWebhookUrls', () => {
-  it('accepts https regroup-e2e hosts', () => {
+  it('accepts https regroup-e2e cloudfunctions hosts', () => {
     expect(() => assertWebhookUrls(PLATFORM_URL, CONNECT_URL)).not.toThrow();
+    expect(
+      isAllowedWebhookUrl('https://us-central1-regroup-e2e.cloudfunctions.net/stripeWebhook'),
+    ).toBe(true);
+  });
+
+  it('refuses lookalike hosts, ports, credentials and odd paths', () => {
+    const bad = [
+      'https://x-regroup-e2e.attacker.example/stripeWebhook',
+      'https://us-central1-regroup-e2e.cloudfunctions.net:8443/x',
+      'https://user:pw@us-central1-regroup-e2e.cloudfunctions.net/x',
+      'https://user@us-central1-regroup-e2e.cloudfunctions.net/x',
+      'https://us-central1-regroup-e2e.cloudfunctions.net/a/b',
+      'https://us-central1-regroup-e2e.cloudfunctions.net/',
+      'https://us-central1-regroup-e2e.cloudfunctions.net/x?y=1',
+      'not a url',
+    ];
+    for (const url of bad) expect(isAllowedWebhookUrl(url)).toBe(false);
   });
 
   it('refuses production, non-https, non-e2e and identical URLs', () => {
     const prod = 'https://us-central1-phoenix-cleanhouse.cloudfunctions.net/stripeWebhook';
     expect(() => assertWebhookUrls(prod, CONNECT_URL)).toThrow(/not allowed/);
-    expect(() => assertWebhookUrls(PLATFORM_URL, 'http://regroup-e2e.example/c')).toThrow(
+    expect(() => assertWebhookUrls(PLATFORM_URL, 'http://us-central1-regroup-e2e.cloudfunctions.net/c')).toThrow(
       /not allowed/,
     );
     expect(() => assertWebhookUrls('https://example.com/x', CONNECT_URL)).toThrow(/not allowed/);

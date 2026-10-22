@@ -29,7 +29,26 @@ function writeSecretFile(file: string, content: string): void {
 
 function readJsonObject(file: string): Record<string, string> {
   if (!fs.existsSync(file)) return {};
-  return JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, string>;
+  const parsed: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error('not an object');
+  }
+  return parsed as Record<string, string>;
+}
+
+/** Merge into the secrets file; if it is corrupt, park the one-time secret elsewhere, then fail. */
+function persistSecret(dir: string, kind: string, secret: string): void {
+  const file = path.join(dir, 'stripe-e2e-webhook-secrets.json');
+  let existing: Record<string, string>;
+  try {
+    existing = readJsonObject(file);
+  } catch {
+    const rescue = path.join(dir, `stripe-e2e-webhook-secret-${kind}-${Date.now()}.json`);
+    writeSecretFile(rescue, JSON.stringify({ [kind]: secret }, null, 2) + '\n');
+    console.error(`Existing secrets file is corrupt; saved the new ${kind} secret to ${rescue}`);
+    throw new Error(`Corrupt ${file}; recover the ${kind} secret from ${rescue}.`);
+  }
+  writeSecretFile(file, JSON.stringify({ ...existing, [kind]: secret }, null, 2) + '\n');
 }
 
 function pinAccount(accountFile: string, accountId: string, confirm?: string): void {
@@ -66,14 +85,10 @@ export async function runSetup(deps: SetupDeps): Promise<{ pricesFile: string }>
   await assertSandboxHygiene(stripe);
   const prices = await ensureCatalog(stripe);
 
-  const secretsFile = path.join(deps.outDir, 'stripe-e2e-webhook-secrets.json');
   await ensureWebhooks(stripe, {
     platformUrl: deps.platformUrl,
     connectUrl: deps.connectUrl,
-    onSecret: (kind, secret) => {
-      const merged = { ...readJsonObject(secretsFile), [kind]: secret };
-      writeSecretFile(secretsFile, JSON.stringify(merged, null, 2) + '\n');
-    },
+    onSecret: (kind, secret) => persistSecret(deps.outDir, kind, secret),
   });
 
   const pricesFile = path.join(deps.outDir, 'stripe-e2e-prices.json');

@@ -6,8 +6,8 @@ import { runSetup } from '../stripeSandboxRun';
 import { makeStripe } from './helpers/mockStripe';
 
 const urls = {
-  platformUrl: 'https://regroup-e2e.example/stripeWebhook',
-  connectUrl: 'https://regroup-e2e.example/stripeConnectWebhook',
+  platformUrl: 'https://us-central1-regroup-e2e.cloudfunctions.net/stripeWebhook',
+  connectUrl: 'https://us-central1-regroup-e2e.cloudfunctions.net/stripeConnectWebhook',
 };
 
 describe('runSetup', () => {
@@ -46,7 +46,7 @@ describe('runSetup', () => {
     await expect(
       runSetup({
         ...key,
-        platformUrl: 'http://regroup-e2e.example/a',
+        platformUrl: 'http://us-central1-regroup-e2e.cloudfunctions.net/a',
         connectUrl: urls.connectUrl,
       }),
     ).rejects.toThrow(/not allowed/);
@@ -153,5 +153,24 @@ describe('runSetup', () => {
       platform: 'whsec_mock',
       connect: 'whsec_mock',
     });
+  });
+
+  it('parks a one-time secret in a separate 600 file when the secrets file is corrupt, then fails', async () => {
+    const { stripe } = makeStripe();
+    fs.mkdirSync(outDir, { recursive: true });
+    fs.writeFileSync(path.join(outDir, 'stripe-e2e-webhook-secrets.json'), '{not json');
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await expect(runSetup(base(stripe))).rejects.toThrow(/Corrupt/);
+
+    const rescue = fs.readdirSync(outDir).filter((f) => f.startsWith('stripe-e2e-webhook-secret-'));
+    expect(rescue).toHaveLength(1);
+    const rescuePath = path.join(outDir, rescue[0]);
+    expect(JSON.parse(fs.readFileSync(rescuePath, 'utf8'))).toEqual({ platform: 'whsec_mock' });
+    expect(fs.statSync(rescuePath).mode & 0o777).toBe(0o600);
+    const logged = errors.mock.calls.flat().join('\n');
+    expect(logged).toContain(rescuePath);
+    expect(logged).not.toContain('whsec_');
+    errors.mockRestore();
   });
 });
