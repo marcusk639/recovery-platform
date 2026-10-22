@@ -1,66 +1,17 @@
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
-import type Stripe from 'stripe';
 import {
   assertSandboxAccount,
   assertSandboxHygiene,
+  assertWebhookUrls,
   ensureCatalog,
   ensureWebhooks,
   PRODUCTION_SANDBOX_ACCOUNT_ID,
   PLATFORM_EVENTS,
   CONNECT_EVENTS,
 } from '../stripeSandbox';
-import { runSetup } from '../stripeSandboxRun';
+import { makeStripe } from './helpers/mockStripe';
 
-type Store = Record<string, any>;
-
-function missing(): Error {
-  return Object.assign(new Error('No such object'), { code: 'resource_missing' });
-}
-
-function makeStripe(opts: { accountId?: string; endpoints?: any[] } = {}) {
-  const products: Store = {};
-  const prices: Store = {};
-  const coupons: Store = {};
-  const endpoints: any[] = [...(opts.endpoints ?? [])];
-  const mock = {
-    accounts: { retrieve: jest.fn(async () => ({ id: opts.accountId ?? 'acct_new' })) },
-    products: {
-      retrieve: jest.fn(async (id: string) => {
-        if (!products[id]) throw missing();
-        return products[id];
-      }),
-      create: jest.fn(async (p: any) => (products[p.id] = { ...p })),
-    },
-    prices: {
-      list: jest.fn(async ({ lookup_keys }: any) => ({
-        data: prices[lookup_keys[0]] ? [prices[lookup_keys[0]]] : [],
-      })),
-      create: jest.fn(
-        async (p: any) => (prices[p.lookup_key] = { ...p, id: `price_${p.lookup_key}` }),
-      ),
-    },
-    coupons: {
-      retrieve: jest.fn(async (id: string) => {
-        if (!coupons[id]) throw missing();
-        return coupons[id];
-      }),
-      create: jest.fn(async (c: any) => (coupons[c.id] = { ...c })),
-    },
-    webhookEndpoints: {
-      list: jest.fn(async () => ({ data: endpoints, has_more: false })),
-      create: jest.fn(async (e: any) => {
-        const created = { ...e, id: `we_${endpoints.length}`, secret: 'whsec_mock' };
-        endpoints.push(created);
-        return created;
-      }),
-      update: jest.fn(),
-      del: jest.fn(),
-    },
-  };
-  return { mock, stripe: mock as unknown as Stripe, products, prices, coupons, endpoints };
-}
+const PLATFORM_URL = 'https://regroup-e2e.example/stripeWebhook';
+const CONNECT_URL = 'https://regroup-e2e.example/stripeConnectWebhook';
 
 describe('ensureCatalog', () => {
   it('creates each object once across two runs', async () => {
@@ -99,6 +50,26 @@ describe('ensureCatalog', () => {
     expect(coupons['regroup-bundle-3']).toMatchObject({ percent_off: 10, duration: 'forever' });
     expect(coupons['regroup-bundle-5']).toMatchObject({ percent_off: 15, duration: 'forever' });
   });
+
+  it('throws when a reused price has a different amount, interval or product', async () => {
+    for (const patch of [
+      { unit_amount: 1 },
+      { recurring: { interval: 'year' } },
+      { product: 'prod_other' },
+    ]) {
+      const { stripe, prices } = makeStripe();
+      await ensureCatalog(stripe);
+      Object.assign(prices['regroup_tier_trad_starter_monthly'], patch);
+      await expect(ensureCatalog(stripe)).rejects.toThrow(/regroup_tier_trad_starter_monthly/);
+    }
+  });
+
+  it('throws when a reused coupon has a different percentage', async () => {
+    const { stripe, coupons } = makeStripe();
+    await ensureCatalog(stripe);
+    coupons['regroup-bundle-5'].percent_off = 20;
+    await expect(ensureCatalog(stripe)).rejects.toThrow(/regroup-bundle-5/);
+  });
 });
 
 describe('ensureWebhooks', () => {
@@ -106,9 +77,11 @@ describe('ensureWebhooks', () => {
     const { mock, stripe } = makeStripe();
     const secrets: string[] = [];
     const opts = {
-      platformUrl: 'https://e2e.example/stripeWebhook',
-      connectUrl: 'https://e2e.example/stripeConnectWebhook',
-      onSecret: (kind: string) => secrets.push(kind),
+      platformUrl: PLATFORM_URL,
+      connectUrl: CONNECT_URL,
+      onSecret: (kind: string) => {
+        secrets.push(kind);
+      },
     };
     await ensureWebhooks(stripe, opts);
     await ensureWebhooks(stripe, opts);
@@ -122,15 +95,57 @@ describe('ensureWebhooks', () => {
     expect(mock.webhookEndpoints.update).not.toHaveBeenCalled();
     expect(mock.webhookEndpoints.del).not.toHaveBeenCalled();
   });
+
+  it('throws on a reused endpoint that is disabled or has other events, without updating', async () => {
+    for (const patch of [{ status: 'disabled' }, { enabled_events: ['charge.refunded'] }]) {
+      const { mock, stripe, endpoints } = makeStripe();
+      await ensureWebhooks(stripe, { platformUrl: PLATFORM_URL, connectUrl: CONNECT_URL });
+      Object.assign(endpoints[0], patch);
+      await expect(
+        ensureWebhooks(stripe, { platformUrl: PLATFORM_URL, connectUrl: CONNECT_URL }),
+      ).rejects.toThrow(/does not match/);
+      expect(mock.webhookEndpoints.update).not.toHaveBeenCalled();
+      expect(mock.webhookEndpoints.del).not.toHaveBeenCalled();
+    }
+  });
+});
+
+describe('assertWebhookUrls', () => {
+  it('accepts https regroup-e2e hosts', () => {
+    expect(() => assertWebhookUrls(PLATFORM_URL, CONNECT_URL)).not.toThrow();
+  });
+
+  it('refuses production, non-https, non-e2e and identical URLs', () => {
+    const prod = 'https://us-central1-phoenix-cleanhouse.cloudfunctions.net/stripeWebhook';
+    expect(() => assertWebhookUrls(prod, CONNECT_URL)).toThrow(/not allowed/);
+    expect(() => assertWebhookUrls(PLATFORM_URL, 'http://regroup-e2e.example/c')).toThrow(
+      /not allowed/,
+    );
+    expect(() => assertWebhookUrls('https://example.com/x', CONNECT_URL)).toThrow(/not allowed/);
+    expect(() => assertWebhookUrls('https://regroup-e2e-regroup-app.com/x', CONNECT_URL)).toThrow(
+      /not allowed/,
+    );
+    expect(() => assertWebhookUrls(PLATFORM_URL, PLATFORM_URL)).toThrow(/differ/);
+  });
+
+  it('refuses URLs when ensureWebhooks is called directly, with no Stripe calls', async () => {
+    const { mock, stripe } = makeStripe();
+    await expect(
+      ensureWebhooks(stripe, {
+        platformUrl: 'https://us-central1-phoenix-cleanhouse.cloudfunctions.net/w',
+        connectUrl: CONNECT_URL,
+      }),
+    ).rejects.toThrow(/not allowed/);
+    expect(mock.webhookEndpoints.list).not.toHaveBeenCalled();
+    expect(mock.webhookEndpoints.create).not.toHaveBeenCalled();
+  });
 });
 
 describe('assertSandboxHygiene', () => {
-  const allowed = ['https://e2e.example/'];
-
   it('throws on an enabled endpoint at phoenix-cleanhouse and never mutates', async () => {
     const { mock, stripe } = makeStripe({
       endpoints: [
-        { id: 'we_ok', url: 'https://e2e.example/stripeWebhook', status: 'enabled' },
+        { id: 'we_ok', url: PLATFORM_URL, status: 'enabled' },
         {
           id: 'we_bad',
           url: 'https://us-central1-phoenix-cleanhouse.cloudfunctions.net/stripeWebhook',
@@ -138,7 +153,7 @@ describe('assertSandboxHygiene', () => {
         },
       ],
     });
-    await expect(assertSandboxHygiene(stripe, allowed)).rejects.toThrow(/we_bad/);
+    await expect(assertSandboxHygiene(stripe)).rejects.toThrow(/we_bad/);
     expect(mock.webhookEndpoints.update).not.toHaveBeenCalled();
     expect(mock.webhookEndpoints.del).not.toHaveBeenCalled();
   });
@@ -147,20 +162,22 @@ describe('assertSandboxHygiene', () => {
     const { mock, stripe } = makeStripe({
       endpoints: [
         { id: 'we_off', url: 'https://elsewhere.example/x', status: 'disabled' },
-        { id: 'we_ok', url: 'https://e2e.example/stripeWebhook', status: 'enabled' },
+        { id: 'we_ok', url: PLATFORM_URL, status: 'enabled' },
       ],
     });
-    await expect(assertSandboxHygiene(stripe, allowed)).resolves.toBeUndefined();
+    await expect(assertSandboxHygiene(stripe)).resolves.toBeUndefined();
     expect(mock.webhookEndpoints.update).not.toHaveBeenCalled();
     expect(mock.webhookEndpoints.del).not.toHaveBeenCalled();
   });
 });
 
 describe('assertSandboxAccount', () => {
-  it('refuses live keys without touching Stripe', async () => {
+  it('refuses live and non-test keys without touching Stripe', async () => {
     const { mock, stripe } = makeStripe();
     await expect(assertSandboxAccount(stripe, 'sk_live_abc')).rejects.toThrow(/live/i);
     await expect(assertSandboxAccount(stripe, 'rk_live_abc')).rejects.toThrow(/live/i);
+    await expect(assertSandboxAccount(stripe, 'pk_test_abc')).rejects.toThrow(/not an sk_test/);
+    await expect(assertSandboxAccount(stripe, 'garbage')).rejects.toThrow(/not an sk_test/);
     expect(mock.accounts.retrieve).not.toHaveBeenCalled();
   });
 
@@ -171,53 +188,8 @@ describe('assertSandboxAccount', () => {
     );
   });
 
-  it('accepts a fresh test account', async () => {
+  it('returns the id of a fresh test account', async () => {
     const { stripe } = makeStripe();
-    await expect(assertSandboxAccount(stripe, 'sk_test_abc')).resolves.toBeUndefined();
-  });
-});
-
-describe('runSetup', () => {
-  const urls = {
-    platformUrl: 'https://e2e.example/stripeWebhook',
-    connectUrl: 'https://e2e.example/stripeConnectWebhook',
-  };
-  let outDir: string;
-  beforeEach(() => {
-    outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'e2e-stripe-'));
-  });
-
-  it('refuses an sk_live_ key before creating a client', async () => {
-    const createStripe = jest.fn();
-    await expect(
-      runSetup({ readKey: () => 'sk_live_zzz', createStripe, outDir, ...urls }),
-    ).rejects.toThrow(/live/i);
-    expect(createStripe).not.toHaveBeenCalled();
-  });
-
-  it('refuses the old sandbox account id and writes nothing', async () => {
-    const { mock, stripe } = makeStripe({ accountId: PRODUCTION_SANDBOX_ACCOUNT_ID });
-    await expect(
-      runSetup({ readKey: () => 'sk_test_zzz', createStripe: () => stripe, outDir, ...urls }),
-    ).rejects.toThrow(PRODUCTION_SANDBOX_ACCOUNT_ID);
-    expect(mock.products.create).not.toHaveBeenCalled();
-    expect(fs.readdirSync(outDir)).toEqual([]);
-  });
-
-  it('writes price ids and webhook secrets with mode 600', async () => {
-    const { stripe } = makeStripe();
-    await runSetup({ readKey: () => 'sk_test_zzz', createStripe: () => stripe, outDir, ...urls });
-
-    const pricesFile = path.join(outDir, 'stripe-e2e-prices.json');
-    const secretsFile = path.join(outDir, 'stripe-e2e-webhook-secrets.json');
-    expect(JSON.parse(fs.readFileSync(pricesFile, 'utf8')).STRIPE_PRICE_TRAD_STARTER).toMatch(
-      /^price_/,
-    );
-    expect(JSON.parse(fs.readFileSync(secretsFile, 'utf8'))).toEqual({
-      platform: 'whsec_mock',
-      connect: 'whsec_mock',
-    });
-    expect(fs.statSync(pricesFile).mode & 0o777).toBe(0o600);
-    expect(fs.statSync(secretsFile).mode & 0o777).toBe(0o600);
+    await expect(assertSandboxAccount(stripe, 'sk_test_abc')).resolves.toBe('acct_new');
   });
 });

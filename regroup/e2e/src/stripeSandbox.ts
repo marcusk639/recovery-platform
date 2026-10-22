@@ -74,6 +74,36 @@ export const CONNECT_EVENTS = [
   'account.application.deauthorized',
 ] as Stripe.WebhookEndpointCreateParams.EnabledEvent[];
 
+const FORBIDDEN_HOST_PARTS = ['phoenix-cleanhouse', 'regroup-app.com', 'recovery-connect'];
+
+/** Fixed rule, never operator input: https, hostname contains regroup-e2e, no production names. */
+export function isAllowedWebhookUrl(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  const host = parsed.hostname.toLowerCase();
+  return (
+    parsed.protocol === 'https:' &&
+    host.includes('regroup-e2e') &&
+    !FORBIDDEN_HOST_PARTS.some((part) => host.includes(part))
+  );
+}
+
+/** Pure validation; call before any Stripe client exists. */
+export function assertWebhookUrls(platformUrl: string, connectUrl: string): void {
+  for (const url of [platformUrl, connectUrl]) {
+    if (!isAllowedWebhookUrl(url)) {
+      throw new Error(
+        `Webhook URL not allowed (https, host with regroup-e2e, no production hosts): ${url}`,
+      );
+    }
+  }
+  if (platformUrl === connectUrl) throw new Error('Platform and connect webhook URLs must differ.');
+}
+
 const isMissing = (err: unknown): boolean =>
   (err as { code?: string } | null)?.code === 'resource_missing';
 
@@ -90,8 +120,22 @@ async function ensurePrice(
   stripe: Stripe,
   params: { lookupKey: string; product: string; amountCents: number; interval: 'month' | 'year' },
 ): Promise<string> {
-  const existing = await stripe.prices.list({ lookup_keys: [params.lookupKey], limit: 1 });
-  if (existing.data[0]) return existing.data[0].id;
+  const existing = (await stripe.prices.list({ lookup_keys: [params.lookupKey], limit: 1 }))
+    .data[0];
+  if (existing) {
+    const productId =
+      typeof existing.product === 'string' ? existing.product : existing.product?.id;
+    if (
+      existing.unit_amount !== params.amountCents ||
+      existing.recurring?.interval !== params.interval ||
+      productId !== params.product
+    ) {
+      throw new Error(
+        `Existing price ${params.lookupKey} does not match the catalogue; not updating.`,
+      );
+    }
+    return existing.id;
+  }
   const created = await stripe.prices.create({
     lookup_key: params.lookupKey,
     product: params.product,
@@ -104,15 +148,20 @@ async function ensurePrice(
 }
 
 async function ensureCoupon(stripe: Stripe, id: string, percentOff: number): Promise<void> {
+  let existing: Stripe.Coupon | undefined;
   try {
-    await stripe.coupons.retrieve(id);
+    existing = await stripe.coupons.retrieve(id);
   } catch (err) {
     if (!isMissing(err)) throw err;
+  }
+  if (!existing) {
     await stripe.coupons.create({ id, percent_off: percentOff, duration: 'forever' });
+  } else if (existing.percent_off !== percentOff) {
+    throw new Error(`Existing coupon ${id} is not ${percentOff}% off; not updating.`);
   }
 }
 
-/** Idempotent: products by fixed id, prices by lookup_key, coupons by id. */
+/** Idempotent: products by fixed id, prices by lookup_key, coupons by id. Verifies reuse, never updates. */
 export async function ensureCatalog(stripe: Stripe): Promise<PriceIds> {
   const ids: PriceIds = {};
   for (const tier of TIERS) {
@@ -148,8 +197,11 @@ export async function ensureCatalog(stripe: Stripe): Promise<PriceIds> {
 export type WebhookOptions = {
   platformUrl: string;
   connectUrl: string;
-  /** Called only when an endpoint is newly created; Stripe reveals the secret once. */
-  onSecret?: (kind: 'platform' | 'connect', secret: string) => void;
+  /**
+   * Awaited right after each endpoint is created, because Stripe reveals the
+   * secret once. Only called for newly created endpoints.
+   */
+  onSecret?: (kind: 'platform' | 'connect', secret: string) => void | Promise<void>;
 };
 
 async function listEndpoints(stripe: Stripe): Promise<Stripe.WebhookEndpoint[]> {
@@ -158,30 +210,48 @@ async function listEndpoints(stripe: Stripe): Promise<Stripe.WebhookEndpoint[]> 
   return page.data;
 }
 
+function assertEndpointMatches(
+  endpoint: Stripe.WebhookEndpoint,
+  events: readonly string[],
+  connect: boolean,
+): void {
+  const have = [...endpoint.enabled_events].sort().join(',');
+  const want = [...events].sort().join(',');
+  // Stripe does not always echo the connect flag back; only compare when present.
+  const flag = (endpoint as { connect?: boolean }).connect;
+  if (endpoint.status !== 'enabled' || have !== want || (flag !== undefined && flag !== connect)) {
+    throw new Error(
+      `Existing webhook endpoint ${endpoint.id} does not match the e2e spec; not updating.`,
+    );
+  }
+}
+
 export async function ensureWebhooks(stripe: Stripe, opts: WebhookOptions): Promise<void> {
+  assertWebhookUrls(opts.platformUrl, opts.connectUrl);
   const existing = await listEndpoints(stripe);
   const specs = [
     { kind: 'platform' as const, url: opts.platformUrl, events: PLATFORM_EVENTS, connect: false },
     { kind: 'connect' as const, url: opts.connectUrl, events: CONNECT_EVENTS, connect: true },
   ];
   for (const spec of specs) {
-    if (existing.some((e) => e.url === spec.url)) continue;
+    const found = existing.find((e) => e.url === spec.url);
+    if (found) {
+      assertEndpointMatches(found, spec.events, spec.connect);
+      continue;
+    }
     const created = await stripe.webhookEndpoints.create({
       url: spec.url,
       enabled_events: spec.events,
       ...(spec.connect ? { connect: true } : {}),
     });
-    if (created.secret) opts.onSecret?.(spec.kind, created.secret);
+    if (created.secret) await opts.onSecret?.(spec.kind, created.secret);
   }
 }
 
-/** Read-only: throws when an enabled endpoint points outside the allowed prefixes. */
-export async function assertSandboxHygiene(
-  stripe: Stripe,
-  allowedUrlPrefixes: string[],
-): Promise<void> {
+/** Read-only: throws when an enabled endpoint violates the fixed allowlist rule. */
+export async function assertSandboxHygiene(stripe: Stripe): Promise<void> {
   const offenders = (await listEndpoints(stripe)).filter(
-    (e) => e.status === 'enabled' && !allowedUrlPrefixes.some((p) => e.url.startsWith(p)),
+    (e) => e.status === 'enabled' && !isAllowedWebhookUrl(e.url),
   );
   if (offenders.length > 0) {
     const list = offenders.map((e) => `${e.id} -> ${e.url}`).join(', ');
@@ -189,12 +259,21 @@ export async function assertSandboxHygiene(
   }
 }
 
-export async function assertSandboxAccount(stripe: Stripe, key: string): Promise<void> {
+/** Key shape check; needs no Stripe call. */
+export function assertTestKey(key: string): void {
   if (/^(sk|rk)_live_/.test(key)) throw new Error('Refusing to run with a live-mode Stripe key.');
+  if (!/^(sk|rk)_test_/.test(key))
+    throw new Error('Refusing to run: key is not an sk_test_/rk_test_ key.');
+}
+
+/** Returns the account id after confirming this is not the production-pointing sandbox. */
+export async function assertSandboxAccount(stripe: Stripe, key: string): Promise<string> {
+  assertTestKey(key);
   const account = await stripe.accounts.retrieve();
   if (account.id === PRODUCTION_SANDBOX_ACCOUNT_ID) {
     throw new Error(
       `Refusing to run against ${PRODUCTION_SANDBOX_ACCOUNT_ID}: it hosts production-pointing webhooks.`,
     );
   }
+  return account.id;
 }

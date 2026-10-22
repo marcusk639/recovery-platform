@@ -4,11 +4,14 @@ import * as path from 'path';
 import Stripe from 'stripe';
 import { runSetup } from '../src/stripeSandboxRun';
 
-// Usage: npx ts-node scripts/stripe-sandbox-setup.ts --platform-url <url> --connect-url <url>
+// Usage: npx ts-node scripts/stripe-sandbox-setup.ts --platform-url <url> --connect-url <url> [--confirm-account acct_...]
 const configDir = path.join(os.homedir(), '.config', 'regroup-e2e');
-const arg = (name: string): string => {
+const optionalArg = (name: string): string | undefined => {
   const i = process.argv.indexOf(`--${name}`);
-  const value = i >= 0 ? process.argv[i + 1] : undefined;
+  return i >= 0 ? process.argv[i + 1] : undefined;
+};
+const arg = (name: string): string => {
+  const value = optionalArg(name);
   if (!value) throw new Error(`Missing --${name}`);
   return value;
 };
