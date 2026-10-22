@@ -231,6 +231,17 @@ describe('webhooks about unknown objects', () => {
       return res;
     };
 
+    it('a missing charge on a same-mode platform event (no account) is retried, not acked', async () => {
+      mockChargesRetrieve.mockRejectedValue(resourceMissing());
+      const res = await run({ ...refund, livemode: false });
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('same-mode platform event'),
+        expect.objectContaining({ chargeId: 'ch_unknown', eventType: 'charge.refunded' }),
+      );
+      expect(mockCreateReversal).not.toHaveBeenCalled();
+    });
+
     it('charges.retrieve rejecting parameter_invalid', async () => {
       mockChargesRetrieve.mockRejectedValue(
         Object.assign(new Error('bad'), {
