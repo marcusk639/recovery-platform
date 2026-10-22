@@ -15,7 +15,7 @@ export const ALLOWED_RETURN_ORIGINS = [
 
 /**
  * Effective allowlist: the comma-separated ALLOWED_RETURN_ORIGINS env var when
- * it yields at least one entry, otherwise the production default. Read on every
+ * it yields at least one entry (each normalised to a URL origin), otherwise the production default. Read on every
  * call so config changes and tests take effect without a module reload.
  */
 export function allowedReturnOrigins(): string[] {
@@ -23,7 +23,18 @@ export function allowedReturnOrigins(): string[] {
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
-  return configured.length > 0 ? configured : [...ALLOWED_RETURN_ORIGINS];
+  if (configured.length === 0) return [...ALLOWED_RETURN_ORIGINS];
+  // Normalise to URL origins so "https://x.app/" matches what safeReturnUrlSchema
+  // compares against. An entry that is not a URL can never match, so it is
+  // dropped; a list of only such entries yields an empty (deny-all) allowlist
+  // rather than silently falling back to production.
+  return configured.flatMap((origin) => {
+    try {
+      return [new URL(origin).origin];
+    } catch {
+      return [];
+    }
+  });
 }
 
 // Rejects any URL whose origin is not in allowedReturnOrigins() (also rejects
