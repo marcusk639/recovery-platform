@@ -98,7 +98,7 @@ handler functions, each verified with its own signing secret.
 **Endpoint ID:** `we_1TnPYQKsstp3aqoPA6Zv8Knd`  
 **URL:** `https://us-central1-phoenix-cleanhouse.cloudfunctions.net/stripeWebhook`  
 **Env Var:** `STRIPE_WEBHOOK_SECRET` — set via `firebase functions:secrets:set STRIPE_WEBHOOK_SECRET`  
-**Secret (copy now — not shown again):** `whsec_HvhPdx1bTds92NDfOJu10hgYagFklbXJ`  
+**Secret:** stored only in Firebase Secret Manager (see Env Var above); never commit it.  
 
 **Listened events:**
 - `payment_intent.succeeded`
@@ -119,7 +119,7 @@ handler functions, each verified with its own signing secret.
 **Endpoint ID:** `we_1TnPYRKsstp3aqoPhoIKwfts`  
 **URL:** `https://us-central1-phoenix-cleanhouse.cloudfunctions.net/handleStripeConnectWebhook`  
 **Env Var:** `STRIPE_CONNECT_WEBHOOK_SECRET` — set via `firebase functions:secrets:set STRIPE_CONNECT_WEBHOOK_SECRET`  
-**Secret (copy now — not shown again):** `whsec_XQhlIq6H0UDjVZ6Bt9w2MDoI1bgenLHK`  
+**Secret:** stored only in Firebase Secret Manager (see Env Var above); never commit it.  
 
 **Listened events:**
 - `account.updated`
