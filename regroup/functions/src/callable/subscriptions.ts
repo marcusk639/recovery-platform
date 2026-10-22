@@ -51,7 +51,7 @@ import {
   upsertSubscriptionDoc,
   type SubscriptionDoc,
 } from "../api/firestore";
-import { parseInput } from "../validation";
+import { parseInput, safeReturnUrlSchema } from "../validation";
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
 const safeUrlSchema = z
@@ -61,27 +61,6 @@ const safeUrlSchema = z
     (url) =>
       !/^javascript:/i.test(url) && /^[a-z][a-z0-9+\-.]*:\/\//i.test(url),
     { message: "URL scheme not allowed" },
-  );
-
-const ALLOWED_PORTAL_RETURN_ORIGINS = [
-  "https://regroup-app.com",
-  "https://phoenix-cleanhouse.web.app",
-  "https://phoenix-cleanhouse.firebaseapp.com",
-  "http://localhost:4200",
-];
-
-const safeReturnUrlSchema = z
-  .string()
-  .min(1)
-  .refine(
-    (url) => {
-      try {
-        return ALLOWED_PORTAL_RETURN_ORIGINS.includes(new URL(url).origin);
-      } catch {
-        return false;
-      }
-    },
-    { message: "returnUrl must use an allowed origin" },
   );
 
 const subscriptionMetadataMinSchema = z.object({

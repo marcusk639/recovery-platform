@@ -3,7 +3,9 @@ import { HttpsError } from "firebase-functions/v2/https";
 
 // Origins permitted as Stripe return/refresh redirect targets. Shared by the
 // billing portal and Stripe Connect onboarding so both enforce the same
-// open-redirect allowlist.
+// open-redirect allowlist. This is the production default; deployments override
+// it via the comma-separated ALLOWED_RETURN_ORIGINS env var (see
+// allowedReturnOrigins()).
 export const ALLOWED_RETURN_ORIGINS = [
   "https://regroup-app.com",
   "https://phoenix-cleanhouse.web.app",
@@ -11,7 +13,20 @@ export const ALLOWED_RETURN_ORIGINS = [
   "http://localhost:4200",
 ];
 
-// Rejects any URL whose origin is not in ALLOWED_RETURN_ORIGINS (also rejects
+/**
+ * Effective allowlist: the comma-separated ALLOWED_RETURN_ORIGINS env var when
+ * it yields at least one entry, otherwise the production default. Read on every
+ * call so config changes and tests take effect without a module reload.
+ */
+export function allowedReturnOrigins(): string[] {
+  const configured = (process.env.ALLOWED_RETURN_ORIGINS ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  return configured.length > 0 ? configured : [...ALLOWED_RETURN_ORIGINS];
+}
+
+// Rejects any URL whose origin is not in allowedReturnOrigins() (also rejects
 // non-URL / javascript: values, which fail URL parsing or origin matching).
 export const safeReturnUrlSchema = z
   .string()
@@ -19,7 +34,7 @@ export const safeReturnUrlSchema = z
   .refine(
     (url) => {
       try {
-        return ALLOWED_RETURN_ORIGINS.includes(new URL(url).origin);
+        return allowedReturnOrigins().includes(new URL(url).origin);
       } catch {
         return false;
       }
