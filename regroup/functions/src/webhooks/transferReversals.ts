@@ -68,9 +68,12 @@ export interface EventContext {
   eventType: string;
   /** event.account: set when a connected-account event reached the platform handler. */
   account?: string | null;
-  /** event.livemode, when Stripe sent it. */
+  /** event.livemode, when Stripe sent it. Absent is treated as same-mode. */
   livemode?: boolean;
-  /** Whether the deployed STRIPE_SECRET_KEY is a live-mode key. */
+  /**
+   * deployedStripeMode() === 'live': true unless the deployed key is a test key
+   * (an unset or unrecognised key counts as live).
+   */
   deployedLivemode: boolean;
 }
 
@@ -78,11 +81,13 @@ export interface EventContext {
  * Retrieves the charge a refund or dispute event points at.
  *
  * resource_missing is acknowledged (null) only when the event was never ours to
- * act on: it carries a connected-account id, or its livemode differs from the
- * deployed key's. Otherwise it is rethrown after an error log. A signed,
- * same-mode platform event whose charge the key cannot see means a wrong key
- * or account, and acknowledging would mark the event done and drop the reversal
- * for good; a 500 lets Stripe retry until that is fixed.
+ * act on: it carries a connected-account id, or it carries a livemode that
+ * differs from the deployed mode. verifyStripeWebhook already rejects
+ * other-mode events, so that second branch is defence in depth; don't relax
+ * the verifier on the strength of it. Otherwise it is rethrown after an error log.
+ * A signed, same-mode platform event whose charge the key cannot see means a
+ * wrong key or account, and acknowledging would mark the event done and drop
+ * the reversal for good; a 500 lets Stripe retry until that is fixed.
  *
  * Scoped to this one lookup on purpose: resource_missing from any later call (a
  * stale transfer, a deleted destination) also propagates.

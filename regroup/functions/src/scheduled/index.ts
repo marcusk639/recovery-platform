@@ -8,8 +8,7 @@
  *   functions.pubsub.schedule(cron).timeZone(tz).onRun(async (context) => {})
  *   → onSchedule({ schedule: cron, timeZone: tz }, async (event) => {})
  *
- * The `event` parameter replaces `context`. The handler bodies live in the helper files alongside this one
- * (disputeUpdates, weeklyTransfers, warmWebsite and the rent/officer modules).
+ * The `event` parameter replaces `context`. The handler bodies live in sibling modules.
  */
 
 import { onSchedule } from "firebase-functions/v2/scheduler";
@@ -20,9 +19,8 @@ import { runWarmWebsite } from "./warmWebsite";
 // ============================================================================
 // updateDisputes
 // ============================================================================
-// Runs daily at 2 AM UTC. Automatically resolves disputes that have been
-// outstanding for more than 2 days. No explicit timezone was set in the v1
-// definition — UTC is preserved here.
+// Runs daily at 2 AM UTC; see runDisputeUpdates. No explicit timezone was set
+// in the v1 definition — UTC is preserved here.
 // ============================================================================
 
 export const updateDisputes = onSchedule(

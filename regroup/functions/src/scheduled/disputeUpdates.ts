@@ -5,8 +5,8 @@ import { House } from '../entities/House';
 import { runDisputeTransaction } from '../util/disputes';
 
 /**
- * Automatically resolves disputes that have been outstanding for more than
- * 2 days. Body of the `updateDisputes` scheduled function.
+ * Runs runDisputeTransaction (util/disputes, which owns the resolution rule)
+ * over every house's disputes. Body of the `updateDisputes` scheduled function.
  */
 export async function runDisputeUpdates(_now: Date = new Date()): Promise<{ updated: number }> {
   logger.info('Retrieving all houses...');
@@ -22,7 +22,7 @@ export async function runDisputeUpdates(_now: Date = new Date()): Promise<{ upda
       });
     } catch (error) {
       logger.error('updateDisputes: failed processing house', error);
-      // Mirrors the original bail-out: stop without awaiting queued transactions.
+      // Bails on the first malformed house without awaiting transactions already queued.
       return { updated: 0 };
     }
   }
