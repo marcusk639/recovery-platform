@@ -120,7 +120,7 @@ describe('production return origins', () => {
     );
     const block = /export const ALLOWED_RETURN_ORIGINS = \[([^\]]*)\]/.exec(source);
     expect(block).not.toBeNull();
-    const defaults = [...block![1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    const defaults = [...block![1].matchAll(/(["'])([^"']+)\1/g)].map((m) => m[2]);
     expect(defaults.length).toBeGreaterThan(0);
     expect(functionsEnvFor('production').ALLOWED_RETURN_ORIGINS.split(',')).toEqual(defaults);
   });
