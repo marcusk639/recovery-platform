@@ -18,6 +18,9 @@ jobs:
     #   github.event.pull_request.user.login == 'new-developer' ||
     #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
 
+    # Agent-authored e2e-fix/* PRs never get the secret-bearing review job.
+    if: ${{ !startsWith(github.head_ref, 'e2e-fix/') }}
+
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -30,6 +33,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Run Claude Code Review
         id: claude-review
