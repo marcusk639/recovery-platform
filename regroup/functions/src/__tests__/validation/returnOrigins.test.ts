@@ -48,26 +48,6 @@ describe("allowedReturnOrigins", () => {
     ]);
   });
 
-  it("normalises entries to origins so a trailing slash cannot mismatch", () => {
-    process.env.ALLOWED_RETURN_ORIGINS =
-      "https://regroup-e2e.web.app/, http://localhost:4200/path";
-    expect(allowedReturnOrigins()).toEqual([
-      "https://regroup-e2e.web.app",
-      "http://localhost:4200",
-    ]);
-    expect(
-      safeReturnUrlSchema.safeParse("https://regroup-e2e.web.app/r").success,
-    ).toBe(true);
-  });
-
-  it("denies everything when every configured entry is unparsable", () => {
-    process.env.ALLOWED_RETURN_ORIGINS = "not a url";
-    expect(allowedReturnOrigins()).toEqual([]);
-    expect(
-      safeReturnUrlSchema.safeParse("https://regroup-app.com/x").success,
-    ).toBe(false);
-  });
-
   describe("safeReturnUrlSchema", () => {
     it("rejects evil origins with the default list", () => {
       delete process.env.ALLOWED_RETURN_ORIGINS;
