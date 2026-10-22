@@ -120,3 +120,17 @@ describe("assertSafeEnvFileName", () => {
     expect(() => assertSafeEnvFileName(".env.regroup-e2e")).not.toThrow();
   });
 });
+
+describe("production return origins", () => {
+  it("match the production default in functions/src/validation", () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, "..", "..", "..", "functions", "src", "validation", "index.ts"),
+      "utf8",
+    );
+    const block = /export const ALLOWED_RETURN_ORIGINS = \[([^\]]*)\]/.exec(source);
+    expect(block).not.toBeNull();
+    const defaults = [...block![1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    expect(defaults.length).toBeGreaterThan(0);
+    expect(functionsEnvFor("production").ALLOWED_RETURN_ORIGINS.split(",")).toEqual(defaults);
+  });
+});
