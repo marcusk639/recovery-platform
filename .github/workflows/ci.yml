@@ -150,6 +150,28 @@ jobs:
       - name: Test
         run: cd regroup/functions && npm test -- --forceExit
 
+  regroup-e2e:
+    name: regroup/e2e — jest
+    runs-on: ubuntu-latest
+    # hashFiles() is unavailable in job-level `if:`, so each step is guarded and the
+    # job is a no-op until the regroup/e2e package exists on this branch.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        if: hashFiles('regroup/e2e/package.json') != ''
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: regroup/e2e/package-lock.json
+      - name: Install dependencies
+        if: hashFiles('regroup/e2e/package.json') != ''
+        run: cd regroup/e2e && npm ci
+      - name: Test
+        if: hashFiles('regroup/e2e/package.json') != ''
+        run: cd regroup/e2e && npx jest
+
   regroup-mobile:
     name: regroup/mobile — test
     runs-on: ubuntu-latest

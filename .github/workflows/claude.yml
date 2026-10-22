@@ -34,13 +34,20 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           EVENT_NAME: ${{ github.event_name }}
           REVIEW_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          REPO: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
-          ISSUE_IS_PR: ${{ github.event.issue.pull_request != null }}
         run: |
           head_ref=""
-          if [ "$EVENT_NAME" = "issue_comment" ] && [ "$ISSUE_IS_PR" = "true" ]; then
-            head_ref=$(gh api "repos/${{ github.repository }}/pulls/${ISSUE_NUMBER}" --jq '.head.ref')
-          elif [ "$EVENT_NAME" = "pull_request_review" ] || [ "$EVENT_NAME" = "pull_request_review_comment" ]; then
+          if [ "$EVENT_NAME" = "issue_comment" ]; then
+            # Any lookup failure exits non-zero (bash -e), failing the step and
+            # skipping every later step: fail-closed.
+            pr_url=$(gh api "repos/${REPO}/issues/${ISSUE_NUMBER}" --jq '.pull_request.url // empty')
+            if [ -n "$pr_url" ]; then
+              head_ref=$(gh api "repos/${REPO}/pulls/${ISSUE_NUMBER}" --jq '.head.ref')
+            fi
+          elif [ "$EVENT_NAME" = "pull_request_review" ]; then
+            head_ref="$REVIEW_HEAD_REF"
+          elif [ "$EVENT_NAME" = "pull_request_review_comment" ]; then
             head_ref="$REVIEW_HEAD_REF"
           fi
           case "$head_ref" in
