@@ -27,12 +27,14 @@ import {
   STRIPE_CONNECT_TEST_WEBHOOK_SECRET,
 } from "../config";
 import {
+  deployedStripeMode,
   webhookSecretCandidates,
   type WebhookSecretCandidate,
 } from "../util/stripeWebhookSecrets";
 import { verifyStripeWebhook } from "../util/verifyStripeWebhook";
 import {
   restoreTransferAfterWonDispute,
+  type EventContext,
   reverseTransferForDispute,
   reverseTransfersForRefunds,
 } from "./transferReversals";
@@ -692,6 +694,7 @@ async function handlePaymentIntentFailed(
 async function handleDisputeCreated(
   dispute: Stripe.Dispute,
   stripeClient: Stripe,
+  ctx: EventContext,
 ): Promise<void> {
   const chargeId =
     typeof dispute.charge === "string" ? dispute.charge : dispute.charge?.id;
@@ -752,7 +755,7 @@ async function handleDisputeCreated(
 
   // Stripe debits the disputed amount from the platform. Pull the house's
   // share back from its transfer (returned if the dispute is won).
-  await reverseTransferForDispute(stripeClient, dispute);
+  await reverseTransferForDispute(stripeClient, dispute, ctx);
 }
 
 // ---------------------------------------------------------------------------
@@ -768,6 +771,7 @@ async function handleDisputeCreated(
 async function handleChargeRefunded(
   charge: Stripe.Charge,
   stripeClient: Stripe,
+  ctx: EventContext,
 ): Promise<void> {
   const paymentIntentId =
     typeof charge.payment_intent === "string"
@@ -796,7 +800,7 @@ async function handleChargeRefunded(
 
   // A refund is paid from the platform balance; reverse the house's share of
   // the transfer so the house doesn't keep refunded rent.
-  await reverseTransfersForRefunds(stripeClient, charge.id);
+  await reverseTransfersForRefunds(stripeClient, charge.id, ctx);
 }
 
 // ---------------------------------------------------------------------------
@@ -1492,6 +1496,14 @@ export const stripeWebhook = onRequest(
       type: event.type,
     });
 
+    const reversalCtx: EventContext = {
+      eventId: event.id,
+      eventType: event.type,
+      account: event.account,
+      livemode: event.livemode,
+      deployedLivemode: deployedStripeMode() === "live",
+    };
+
     try {
       switch (event.type) {
         // --- Payment events (Stripe Connect) ---
@@ -1511,6 +1523,7 @@ export const stripeWebhook = onRequest(
           await handleDisputeCreated(
             event.data.object as Stripe.Dispute,
             getStripe(),
+            reversalCtx,
           );
           break;
 
@@ -1518,6 +1531,7 @@ export const stripeWebhook = onRequest(
           await handleChargeRefunded(
             event.data.object as Stripe.Charge,
             getStripe(),
+            reversalCtx,
           );
           break;
 
@@ -1528,7 +1542,8 @@ export const stripeWebhook = onRequest(
             typeof refund.charge === "string"
               ? refund.charge
               : refund.charge?.id;
-          if (chargeId) await reverseTransfersForRefunds(getStripe(), chargeId);
+          if (chargeId)
+            await reverseTransfersForRefunds(getStripe(), chargeId, reversalCtx);
           break;
         }
 
@@ -1536,6 +1551,7 @@ export const stripeWebhook = onRequest(
           await restoreTransferAfterWonDispute(
             getStripe(),
             event.data.object as Stripe.Dispute,
+            reversalCtx,
           );
           break;
 

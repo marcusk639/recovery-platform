@@ -15,6 +15,7 @@ jest.mock('firebase-functions', () => ({
 }));
 
 import type Stripe from 'stripe';
+import { logger } from 'firebase-functions';
 import {
   houseNetShare,
   restoreTransferAfterWonDispute,
@@ -22,6 +23,7 @@ import {
   reverseTransfersForRefunds,
 } from '../../webhooks/transferReversals';
 
+const ctx = { eventId: 'evt_test', eventType: 'test', deployedLivemode: false };
 const CHARGE_AMOUNT = 50000; // $500 rent
 const APP_FEE = 1500; // $15 platform fee → the house netted $485
 
@@ -126,7 +128,7 @@ describe('reverseTransfersForRefunds', () => {
   it("reverses the house's net share of a full refund", async () => {
     const { stripe, createReversal } = fakeStripe({ refunds: [refund('re_1', CHARGE_AMOUNT)] });
 
-    await reverseTransfersForRefunds(stripe, 'ch_1');
+    await reverseTransfersForRefunds(stripe, 'ch_1', ctx);
 
     expect(createReversal).toHaveBeenCalledWith(
       'tr_1',
@@ -141,7 +143,7 @@ describe('reverseTransfersForRefunds', () => {
   it('reverses a partial refund pro rata', async () => {
     const { stripe, createReversal } = fakeStripe({ refunds: [refund('re_1', 10000)] });
 
-    await reverseTransfersForRefunds(stripe, 'ch_1');
+    await reverseTransfersForRefunds(stripe, 'ch_1', ctx);
 
     expect(createReversal).toHaveBeenCalledWith(
       'tr_1',
@@ -155,10 +157,10 @@ describe('reverseTransfersForRefunds', () => {
     // charge weeks later re-scans the first. The reversal's metadata is the
     // durable record.
     const f = fakeStripe({ refunds: [refund('re_1', 10000)] });
-    await reverseTransfersForRefunds(f.stripe, 'ch_1');
+    await reverseTransfersForRefunds(f.stripe, 'ch_1', ctx);
 
     f.state.refunds.push(refund('re_2', 5000));
-    await reverseTransfersForRefunds(f.stripe, 'ch_1');
+    await reverseTransfersForRefunds(f.stripe, 'ch_1', ctx);
 
     expect(f.createReversal).toHaveBeenCalledTimes(2);
     expect(f.state.reversals.map((r) => r.metadata.refundId)).toEqual(['re_1', 're_2']);
@@ -169,7 +171,7 @@ describe('reverseTransfersForRefunds', () => {
       refunds: [refund('re_1', 10000, { transfer_reversal: 'trr_from_dashboard' })],
     });
 
-    await reverseTransfersForRefunds(stripe, 'ch_1');
+    await reverseTransfersForRefunds(stripe, 'ch_1', ctx);
 
     expect(createReversal).not.toHaveBeenCalled();
   });
@@ -177,7 +179,7 @@ describe('reverseTransfersForRefunds', () => {
   it.each(['pending', 'failed', 'canceled'])('waits for a %s refund to succeed', async (status) => {
     const { stripe, createReversal } = fakeStripe({ refunds: [refund('re_1', 10000, { status })] });
 
-    await reverseTransfersForRefunds(stripe, 'ch_1');
+    await reverseTransfersForRefunds(stripe, 'ch_1', ctx);
 
     expect(createReversal).not.toHaveBeenCalled();
   });
@@ -188,7 +190,7 @@ describe('reverseTransfersForRefunds', () => {
       refunds: [refund('re_1', 10000)],
     });
 
-    await reverseTransfersForRefunds(stripe, 'ch_1');
+    await reverseTransfersForRefunds(stripe, 'ch_1', ctx);
 
     expect(createReversal).not.toHaveBeenCalled();
   });
@@ -197,7 +199,7 @@ describe('reverseTransfersForRefunds', () => {
     const f = fakeStripe({ refunds: [refund('re_1', CHARGE_AMOUNT)] });
     f.state.transfer.amount_reversed = 45000; // e.g. a dispute already pulled most of it
 
-    await reverseTransfersForRefunds(f.stripe, 'ch_1');
+    await reverseTransfersForRefunds(f.stripe, 'ch_1', ctx);
 
     expect(f.createReversal).toHaveBeenCalledWith(
       'tr_1',
@@ -213,7 +215,7 @@ describe('reverseTransferForDispute', () => {
     async (status) => {
       const { stripe, createReversal } = fakeStripe();
 
-      await reverseTransferForDispute(stripe, dispute(status));
+      await reverseTransferForDispute(stripe, dispute(status), ctx);
 
       expect(createReversal).toHaveBeenCalledWith(
         'tr_1',
@@ -231,7 +233,7 @@ describe('reverseTransferForDispute', () => {
     async (status) => {
       const { stripe, createReversal } = fakeStripe();
 
-      await reverseTransferForDispute(stripe, dispute(status));
+      await reverseTransferForDispute(stripe, dispute(status), ctx);
 
       expect(createReversal).not.toHaveBeenCalled();
     },
@@ -239,8 +241,8 @@ describe('reverseTransferForDispute', () => {
 
   it('reverses a dispute only once', async () => {
     const f = fakeStripe();
-    await reverseTransferForDispute(f.stripe, dispute('needs_response'));
-    await reverseTransferForDispute(f.stripe, dispute('under_review'));
+    await reverseTransferForDispute(f.stripe, dispute('needs_response'), ctx);
+    await reverseTransferForDispute(f.stripe, dispute('under_review'), ctx);
 
     expect(f.createReversal).toHaveBeenCalledTimes(1);
   });
@@ -249,9 +251,9 @@ describe('reverseTransferForDispute', () => {
 describe('restoreTransferAfterWonDispute', () => {
   it('returns exactly what the dispute reversal took, to the same house', async () => {
     const f = fakeStripe();
-    await reverseTransferForDispute(f.stripe, dispute('needs_response'));
+    await reverseTransferForDispute(f.stripe, dispute('needs_response'), ctx);
 
-    await restoreTransferAfterWonDispute(f.stripe, dispute('won'));
+    await restoreTransferAfterWonDispute(f.stripe, dispute('won'), ctx);
 
     expect(f.createTransfer).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -266,19 +268,19 @@ describe('restoreTransferAfterWonDispute', () => {
 
   it('restores only once', async () => {
     const f = fakeStripe();
-    await reverseTransferForDispute(f.stripe, dispute('needs_response'));
+    await reverseTransferForDispute(f.stripe, dispute('needs_response'), ctx);
 
-    await restoreTransferAfterWonDispute(f.stripe, dispute('won'));
-    await restoreTransferAfterWonDispute(f.stripe, dispute('won'));
+    await restoreTransferAfterWonDispute(f.stripe, dispute('won'), ctx);
+    await restoreTransferAfterWonDispute(f.stripe, dispute('won'), ctx);
 
     expect(f.createTransfer).toHaveBeenCalledTimes(1);
   });
 
   it('does nothing for a lost dispute', async () => {
     const f = fakeStripe();
-    await reverseTransferForDispute(f.stripe, dispute('needs_response'));
+    await reverseTransferForDispute(f.stripe, dispute('needs_response'), ctx);
 
-    await restoreTransferAfterWonDispute(f.stripe, dispute('lost'));
+    await restoreTransferAfterWonDispute(f.stripe, dispute('lost'), ctx);
 
     expect(f.createTransfer).not.toHaveBeenCalled();
   });
@@ -286,8 +288,49 @@ describe('restoreTransferAfterWonDispute', () => {
   it('does nothing when no reversal was ever made for the dispute', async () => {
     const f = fakeStripe();
 
-    await restoreTransferAfterWonDispute(f.stripe, dispute('won'));
+    await restoreTransferAfterWonDispute(f.stripe, dispute('won'), ctx);
 
     expect(f.createTransfer).not.toHaveBeenCalled();
+  });
+});
+
+describe('missing charge', () => {
+  const missing = () =>
+    ({
+      charges: {
+        retrieve: jest.fn().mockRejectedValue(
+          Object.assign(new Error('gone'), {
+            type: 'StripeInvalidRequestError',
+            code: 'resource_missing',
+          }),
+        ),
+      },
+    }) as unknown as Stripe;
+
+  it('acknowledges an event for a connected account', async () => {
+    await expect(
+      reverseTransfersForRefunds(missing(), 'ch_1', { ...ctx, account: 'acct_1' }),
+    ).resolves.toBe(0);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('charge not found in Stripe'),
+      expect.objectContaining({ eventId: 'evt_test', reason: 'connected-account' }),
+    );
+  });
+  it('acknowledges an event whose livemode differs from the key', async () => {
+    await expect(
+      reverseTransfersForRefunds(missing(), 'ch_1', { ...ctx, livemode: true }),
+    ).resolves.toBe(0);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('charge not found in Stripe'),
+      expect.objectContaining({ eventId: 'evt_test', reason: 'other-mode' }),
+    );
+  });
+  it('rethrows for a platform event without livemode (treated as same-mode)', async () => {
+    await expect(reverseTransfersForRefunds(missing(), 'ch_1', ctx)).rejects.toThrow('gone');
+  });
+  it('rethrows for a same-mode platform event', async () => {
+    await expect(
+      reverseTransfersForRefunds(missing(), 'ch_1', { ...ctx, livemode: false }),
+    ).rejects.toThrow('gone');
   });
 });

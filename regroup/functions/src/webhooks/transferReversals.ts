@@ -21,10 +21,14 @@
  * reversals are checked before creating one. Idempotency keys still guard
  * concurrent retries of the same event.
  *
- * Stripe errors propagate, so the webhook releases the event for retry.
+ * Stripe errors propagate, so the webhook releases the event for retry. The one
+ * exception is a charge lookup that answers resource_missing for an event that
+ * belongs to a connected account or to the other Stripe mode: that event was never
+ * ours to act on, so it is acknowledged (see retrieveChargeOrNull).
  */
 import type Stripe from 'stripe';
 import { logger } from 'firebase-functions';
+import { isResourceMissing } from '../util/stripe';
 
 /** Dispute statuses in which Stripe has taken the disputed money from the platform. */
 const FUNDS_WITHDRAWN: ReadonlySet<Stripe.Dispute.Status> = new Set([
@@ -59,6 +63,66 @@ async function existingReversals(
   return (await stripe.transfers.listReversals(transferId, { limit: 100 })).data;
 }
 
+/** What the webhook knows about the event that triggered a reversal step. */
+export interface EventContext {
+  eventId: string;
+  eventType: string;
+  /** event.account: set when a connected-account event reached the platform handler. */
+  account?: string | null;
+  /** event.livemode, when Stripe sent it. Absent is treated as same-mode. */
+  livemode?: boolean;
+  /**
+   * deployedStripeMode() === 'live': true unless the deployed key is a test key
+   * (an unset or unrecognised key counts as live).
+   */
+  deployedLivemode: boolean;
+}
+
+/**
+ * Retrieves the charge a refund or dispute event points at.
+ *
+ * resource_missing is acknowledged (null) only when the event was never ours to
+ * act on: it carries a connected-account id, or it carries a livemode that
+ * differs from the deployed mode. verifyStripeWebhook already rejects
+ * other-mode events, so that second branch is defence in depth; don't relax
+ * the verifier on the strength of it. Otherwise it is rethrown after an error log.
+ * A signed, same-mode platform event whose charge the key cannot see means a
+ * wrong key or account, and acknowledging would mark the event done and drop
+ * the reversal for good; a 500 lets Stripe retry until that is fixed.
+ *
+ * Scoped to this one lookup on purpose: resource_missing from any later call (a
+ * stale transfer, a deleted destination) also propagates.
+ */
+async function retrieveChargeOrNull(
+  stripe: Stripe,
+  chargeId: string,
+  ctx: EventContext,
+): Promise<Stripe.Charge | null> {
+  try {
+    return await stripe.charges.retrieve(chargeId);
+  } catch (err) {
+    if (!isResourceMissing(err)) throw err;
+    const otherMode = ctx.livemode !== undefined && ctx.livemode !== ctx.deployedLivemode;
+    if (ctx.account || otherMode) {
+      // warn, not info: this skips a reversal on a money path.
+      logger.warn('transferReversals: charge not found in Stripe, event not ours; ignoring', {
+        eventId: ctx.eventId,
+        eventType: ctx.eventType,
+        chargeId,
+        account: ctx.account ?? null,
+        reason: ctx.account ? 'connected-account' : 'other-mode',
+      });
+      return null;
+    }
+    logger.error('transferReversals: charge not found for a same-mode platform event', {
+      eventId: ctx.eventId,
+      eventType: ctx.eventType,
+      chargeId,
+    });
+    throw err;
+  }
+}
+
 /** Reversible amount left on the transfer, so a reversal can't overshoot. */
 async function remainingOnTransfer(stripe: Stripe, transferId: string): Promise<Stripe.Transfer> {
   return stripe.transfers.retrieve(transferId);
@@ -71,8 +135,10 @@ async function remainingOnTransfer(stripe: Stripe, transferId: string): Promise<
 export async function reverseTransfersForRefunds(
   stripe: Stripe,
   chargeId: string,
+  ctx: EventContext,
 ): Promise<number> {
-  const charge = await stripe.charges.retrieve(chargeId);
+  const charge = await retrieveChargeOrNull(stripe, chargeId, ctx);
+  if (!charge) return 0;
   const transferId = transferIdOf(charge);
   if (!transferId) {
     logger.info(
@@ -130,12 +196,14 @@ export async function reverseTransfersForRefunds(
 export async function reverseTransferForDispute(
   stripe: Stripe,
   dispute: Stripe.Dispute,
+  ctx: EventContext,
 ): Promise<boolean> {
   if (!FUNDS_WITHDRAWN.has(dispute.status)) return false;
 
   const chargeId = chargeIdOf(dispute);
   if (!chargeId) return false;
-  const charge = await stripe.charges.retrieve(chargeId);
+  const charge = await retrieveChargeOrNull(stripe, chargeId, ctx);
+  if (!charge) return false;
   const transferId = transferIdOf(charge);
   if (!transferId) {
     logger.info(
@@ -180,12 +248,14 @@ export async function reverseTransferForDispute(
 export async function restoreTransferAfterWonDispute(
   stripe: Stripe,
   dispute: Stripe.Dispute,
+  ctx: EventContext,
 ): Promise<boolean> {
   if (dispute.status !== 'won') return false;
 
   const chargeId = chargeIdOf(dispute);
   if (!chargeId) return false;
-  const charge = await stripe.charges.retrieve(chargeId);
+  const charge = await retrieveChargeOrNull(stripe, chargeId, ctx);
+  if (!charge) return false;
   const transferId = transferIdOf(charge);
   if (!transferId) return false;
 
