@@ -77,6 +77,41 @@ describe('loadLaunchConfig', () => {
       expect(() => loadLaunchConfig(writeTempConfig(bad))).toThrow(/secret/i);
     },
   );
+  it.each([
+    ['a string', 'abc'],
+    ['an array', ['x']],
+    ['null', null],
+  ])('throws when shared is %s', (_label, shared) => {
+    const bad = { ...valid, shared };
+    expect(() => loadLaunchConfig(writeTempConfig(bad))).toThrow(/"shared" must be an object/);
+  });
+  it('throws when an env section is not an object', () => {
+    const bad = { ...valid, perEnv: { ...valid.perEnv, production: ['A=1'] } };
+    expect(() => loadLaunchConfig(writeTempConfig(bad))).toThrow(
+      /"perEnv.production" must be an object/,
+    );
+  });
+  it('throws on an unknown env name', () => {
+    const bad = { ...valid, perEnv: { ...valid.perEnv, 'e2e-stagin': { A: '1', B: '2' } } };
+    expect(() => loadLaunchConfig(writeTempConfig(bad))).toThrow(/unknown env "e2e-stagin"/);
+  });
+  it('throws when an env key would silently override a shared key', () => {
+    const bad = {
+      ...valid,
+      shared: { A: '0' },
+    };
+    expect(() => loadLaunchConfig(writeTempConfig(bad))).toThrow(/"A".*both shared and perEnv/);
+  });
+  it.each(['', 'lower_case', 'A=B', 'HAS SPACE'])('throws on invalid key %p', (key) => {
+    const bad = { ...valid, shared: { [key]: 'x' } };
+    expect(() => loadLaunchConfig(writeTempConfig(bad))).toThrow(/invalid key/);
+  });
+  it('names the file when the JSON is malformed', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'launch-config-'));
+    const file = path.join(dir, 'launch-config.json');
+    fs.writeFileSync(file, '{ not json');
+    expect(() => loadLaunchConfig(file)).toThrow(file);
+  });
 });
 
 describe('writeFunctionsEnvFiles', () => {
