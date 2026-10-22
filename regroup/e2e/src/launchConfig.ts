@@ -1,7 +1,7 @@
-import * as fs from "fs";
-import * as path from "path";
+import * as fs from 'fs';
+import * as path from 'path';
 
-export type EnvName = "production" | "e2e-emulator" | "e2e-staging";
+export type EnvName = 'production' | 'e2e-emulator' | 'e2e-staging';
 
 export type LaunchConfig = {
   shared: Record<string, string>;
@@ -9,19 +9,19 @@ export type LaunchConfig = {
   paywallEnabled: boolean;
 };
 
-const ENV_NAMES: EnvName[] = ["production", "e2e-emulator", "e2e-staging"];
+const ENV_NAMES: EnvName[] = ['production', 'e2e-emulator', 'e2e-staging'];
 const SECRET_PATTERN = /(^|[^A-Za-z0-9])(sk|rk)_(live|test)_|whsec_/;
-const DEFAULT_CONFIG_PATH = path.join(__dirname, "..", "launch-config.json");
+const DEFAULT_CONFIG_PATH = path.join(__dirname, '..', 'launch-config.json');
 
 // Generated file names -> the environment each one is rendered from.
 const GENERATED_FILES: Record<string, EnvName> = {
-  ".env.demo-regroup-e2e": "e2e-emulator",
-  ".env.regroup-e2e": "e2e-staging",
+  '.env.demo-regroup-e2e': 'e2e-emulator',
+  '.env.regroup-e2e': 'e2e-staging',
 };
-const FORBIDDEN_FILES = [".env", ".env.phoenix-cleanhouse"];
+const FORBIDDEN_FILES = ['.env', '.env.phoenix-cleanhouse'];
 
 export function loadLaunchConfig(configPath = DEFAULT_CONFIG_PATH): LaunchConfig {
-  const raw = JSON.parse(fs.readFileSync(configPath, "utf8"));
+  const raw = JSON.parse(fs.readFileSync(configPath, 'utf8'));
   const shared: Record<string, string> = raw.shared ?? {};
   const perEnv = raw.perEnv as Record<EnvName, Record<string, string>>;
 
@@ -38,19 +38,16 @@ export function loadLaunchConfig(configPath = DEFAULT_CONFIG_PATH): LaunchConfig
     }
   }
 
-  if (typeof raw.paywall?.enabled !== "boolean") {
-    throw new Error("launch config paywall.enabled must be a boolean");
+  if (typeof raw.paywall?.enabled !== 'boolean') {
+    throw new Error('launch config paywall.enabled must be a boolean');
   }
 
-  const values = [
-    ...Object.values(shared),
-    ...ENV_NAMES.flatMap((e) => Object.values(perEnv[e])),
-  ];
-  if (values.some((v) => typeof v !== "string" || /[\r\n]/.test(v))) {
-    throw new Error("launch config values must be single-line strings");
+  const values = [...Object.values(shared), ...ENV_NAMES.flatMap((e) => Object.values(perEnv[e]))];
+  if (values.some((v) => typeof v !== 'string' || /[\r\n]/.test(v))) {
+    throw new Error('launch config values must be single-line strings');
   }
   if (values.some((v) => SECRET_PATTERN.test(v))) {
-    throw new Error("launch config must not contain secret values");
+    throw new Error('launch config must not contain secret values');
   }
 
   return { shared, perEnv, paywallEnabled: raw.paywall.enabled };
@@ -72,7 +69,7 @@ export function writeFunctionsEnvFiles(functionsDir: string): string[] {
     assertSafeEnvFileName(name);
     const body = Object.entries(functionsEnvFor(env))
       .map(([k, v]) => `${k}=${v}`)
-      .join("\n");
+      .join('\n');
     const file = path.join(functionsDir, name);
     fs.writeFileSync(
       file,
