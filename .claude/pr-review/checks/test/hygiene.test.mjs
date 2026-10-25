@@ -33,8 +33,10 @@ before(() => {
   put('big.ts', 'x\n'.repeat(301));
   put('small.ts', 'x\n'.repeat(10));
   put('big.md', 'x\n'.repeat(400));
-  put('fail.sh', 'echo "violation one"\necho "violation two"\nexit 1\n');
+  put('fail.sh', 'echo "[TAG] violation one"\necho "noise"\necho "[TAG] violation two"\nexit 1\n');
   put('ok.sh', 'exit 0\n');
+  put('silent1.sh', 'echo noise\nexit 1\n');
+  put('crash.sh', 'exit 2\n');
 });
 after(() => rmSync(root, { recursive: true, force: true }));
 
@@ -60,6 +62,9 @@ test('checkSecrets flags an added secret without echoing it', () => {
   assert.equal(facts[0].line, 1);
   assert.ok(!facts[0].note.includes(FAKE_SK_TEST.slice(0, 7)));
   assert.ok(!facts[0].note.includes(FAKE_SK_TEST.slice(7)));
+  const scrubbed = redact('const k = "' + FAKE_SK_TEST + '";');
+  assert.ok(!scrubbed.includes(FAKE_SK_TEST.slice(0, 7)));
+  assert.ok(!scrubbed.includes(FAKE_SK_TEST.slice(6)));
 });
 
 test('checkSecrets skips binary files and clean lines', () => {
@@ -114,7 +119,36 @@ test('runVerifyDiff: exit 1 yields stdout lines; exit 0 and missing yield []', (
   const f = runVerifyDiff('abc', root, join(root, 'fail.sh'));
   assert.equal(f.length, 2);
   assert.equal(f[0].check, 'verify-diff');
-  assert.equal(f[0].note, 'violation one');
+  assert.equal(f[0].note, '[TAG] violation one');
   assert.deepEqual(runVerifyDiff('abc', root, join(root, 'ok.sh')), []);
   assert.deepEqual(runVerifyDiff('abc', root, join(root, 'nope.sh')), []);
+});
+
+test('redact removes a PEM body, with and without an END line', () => {
+  const body = 'MIIEvQIBADANBgkqhkiG9w0BAQEFAASC';
+  const full = redact(FAKE_PEM + '\n' + body + '\n-----END ' + 'RSA PRIVATE KEY-----\nafter');
+  assert.ok(!full.includes(body));
+  assert.ok(full.endsWith('\nafter'));
+  assert.ok(!redact(FAKE_PEM + '\n' + body).includes(body));
+});
+
+test('identifiers containing a prefix are untouched and not flagged', () => {
+  for (const id of ['task_test_fixtures', 'capture_screenshotOfTheWholePage()']) {
+    assert.equal(redact(id), id);
+    assert.deepEqual(checkSecrets([file({ added: add('const x = ' + id + ';') })]), []);
+  }
+  assert.equal(redact('k=' + FAKE_SK_TEST), 'k=sk_tes…');
+});
+
+test('SECRET_PATTERNS are stateless (non-global)', () => {
+  assert.ok(SECRET_PATTERNS.every((r) => !r.global && !r.sticky));
+});
+
+test('runVerifyDiff reports unavailable on silent failure or crash', () => {
+  for (const s of ['silent1.sh', 'crash.sh']) {
+    const f = runVerifyDiff('abc', root, join(root, s));
+    assert.equal(f.length, 1);
+    assert.equal(f[0].note, 'verify-diff unavailable');
+  }
+  assert.equal(runVerifyDiff('abc', root, 'fail.sh').length, 2);
 });

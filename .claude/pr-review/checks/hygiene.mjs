@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { SECRET_PATTERNS, redact } from './lib/redact.mjs';
 
 const CODE = /\.(?:ts|tsx|js|jsx|mjs)$/;
@@ -19,7 +19,7 @@ export function checkSecrets(files) {
   for (const f of files) {
     if (f.binary) continue;
     for (const a of f.added) {
-      if (SECRET_PATTERNS.some((re) => ((re.lastIndex = 0), re.test(a.text)))) {
+      if (SECRET_PATTERNS.some((re) => re.test(a.text))) {
         facts.push(fact('secrets', f.file, a.line, 'added line matches a secret pattern; rotate and remove it'));
       }
     }
@@ -70,18 +70,24 @@ export function checkSelfEdit(files) {
 }
 
 export function runVerifyDiff(baseSha, repoRoot, scriptPath) {
-  if (!scriptPath || !existsSync(scriptPath)) return [];
-  let out;
+  if (!scriptPath) return [];
+  const script = resolve(repoRoot, scriptPath);
+  if (!existsSync(script)) return [];
+  const unavailable = () => [fact('verify-diff', 'verify-diff.sh', null, 'verify-diff unavailable')];
   try {
-    execFileSync('bash', [scriptPath, baseSha], { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    execFileSync('bash', [script, baseSha], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 60000,
+    });
     return [];
   } catch (err) {
-    if (err.status !== 1) throw err;
-    out = String(err.stdout ?? '');
+    if (err.status !== 1) return unavailable();
+    const facts = String(err.stdout ?? '')
+      .split('\n')
+      .filter((l) => /^\s*\[/.test(l))
+      .map((l) => fact('verify-diff', 'verify-diff.sh', null, l.trim()));
+    return facts.length ? facts : unavailable();
   }
-  return out
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .map((l) => fact('verify-diff', 'verify-diff.sh', null, l));
 }
