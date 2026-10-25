@@ -2,8 +2,8 @@
 // Runs from the base-SHA checkout after the model has finished, so nothing the
 // model wrote can change this code. Logs status codes only, always exits 0.
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { dirname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { upsertSummary } from './lib/gh.mjs';
 import { nextLedger, sanitizeLedger } from './lib/ledger.mjs';
 import { renderSummary, validateFindings } from './lib/render.mjs';
@@ -22,17 +22,28 @@ function strings(list) {
   return Array.isArray(list) ? list.filter((s) => typeof s === 'string') : [];
 }
 
-function str(v) {
-  return typeof v === 'string' ? v : null;
+function sha(v) {
+  return typeof v === 'string' && SHA_RE.test(v) ? v : null;
 }
 
-export function composeBody({ state, findingsText, narrative, outcome, executionLog, headSha, baseSha }) {
+// Link types publish will carry forward: only those routing.json defines.
+export function knownLinkTypes() {
+  try {
+    const path = join(dirname(fileURLToPath(import.meta.url)), '../routing.json');
+    return JSON.parse(readFileSync(path, 'utf8')).map((r) => r.linkType).filter((t) => typeof t === 'string');
+  } catch {
+    return [];
+  }
+}
+
+export function composeBody({ state, findingsText, narrative, outcome, executionLog, headSha, baseSha, idKey, linkTypes = knownLinkTypes() }) {
   const s = state && typeof state === 'object' && !Array.isArray(state) ? state : {};
+  const known = new Set(linkTypes);
   const prior = {
-    lastReviewedSha: str(s.lastReviewedSha),
-    lastBaseSha: str(s.lastBaseSha),
-    linkTypesSeen: strings(s.linkTypesSeen),
-    ledger: sanitizeLedger(s.ledger),
+    lastReviewedSha: sha(s.lastReviewedSha),
+    lastBaseSha: sha(s.lastBaseSha),
+    linkTypesSeen: [...new Set(strings(s.linkTypesSeen).filter((t) => known.has(t)))],
+    ledger: sanitizeLedger(s.ledger, idKey),
   };
   // Tier "none" (Task 9) runs no model: success with nothing new to report.
   const noModel = s.tier === 'none';
@@ -51,12 +62,12 @@ export function composeBody({ state, findingsText, narrative, outcome, execution
     });
   }
   const findings = parsed.value;
-  const reviewed = SHA_RE.test(findings.reviewedSha) ? findings.reviewedSha : headSha;
+  const reviewed = sha(findings.reviewedSha) ?? sha(headSha);
   const ledger = {
-    lastReviewedSha: reviewed ?? null,
-    lastBaseSha: baseSha ?? null,
+    lastReviewedSha: reviewed,
+    lastBaseSha: sha(baseSha),
     linkTypesSeen: prior.linkTypesSeen,
-    ledger: nextLedger(prior.ledger, findings.findings),
+    ledger: nextLedger(prior.ledger, findings.findings, idKey),
   };
   return renderSummary({
     state: { ...s, headSha: reviewed },
@@ -75,9 +86,11 @@ function readOptional(path) {
   }
 }
 
-function readState(out) {
+// Reads facts' snapshot (STATE_FILE, outside the model's --add-dir), never
+// OUT/state.json, which the model can overwrite.
+function readState(path) {
   try {
-    return JSON.parse(readFileSync(join(out, 'state.json'), 'utf8'));
+    return path ? JSON.parse(readFileSync(path, 'utf8')) : null;
   } catch {
     return null;
   }
@@ -85,16 +98,17 @@ function readState(out) {
 
 async function main() {
   try {
-    const { REPO, PR, HEAD_SHA, BASE_SHA, ACTION_OUTCOME, EXECUTION_FILE, OUT } = process.env;
+    const { REPO, PR, HEAD_SHA, BASE_SHA, ACTION_OUTCOME, EXECUTION_FILE, OUT, STATE_FILE, PR_REVIEW_ID_KEY } = process.env;
     const out = OUT || '.';
     const body = composeBody({
-      state: readState(out),
+      state: readState(STATE_FILE),
       findingsText: readOptional(join(out, 'findings.json')),
       narrative: readOptional(join(out, 'summary.md')) ?? '',
       outcome: ACTION_OUTCOME,
       executionLog: EXECUTION_FILE ? readOptional(EXECUTION_FILE) : null,
       headSha: HEAD_SHA,
       baseSha: BASE_SHA,
+      idKey: PR_REVIEW_ID_KEY || null,
     });
     await upsertSummary(REPO, PR, body);
   } catch (err) {

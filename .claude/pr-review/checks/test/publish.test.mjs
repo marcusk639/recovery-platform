@@ -9,16 +9,19 @@ const FAKE_WHSEC = 'whsec' + '_' + 'A'.repeat(16);
 const HEAD = 'c'.repeat(40);
 const BASE = 'd'.repeat(40);
 const SEC_FILE = 'regroup/functions/src/callable/payments.ts';
+const KEY = 'test-id-key';
+const OLD = 'e'.repeat(40);
+const OLDBASE = 'f'.repeat(40);
 
 const L = [
-  { id: opaqueId('c9:a.ts:x'), slug: 'c9:a.ts:x', title: 'Swallowed error', severity: 'Medium', status: 'open', security: false, runsSinceResolved: 0 },
-  { id: opaqueId('c1:b.ts:y'), severity: 'High', status: 'open', security: true, runsSinceResolved: 0 },
+  { id: opaqueId('c9:a.ts:x', KEY), slug: 'c9:a.ts:x', title: 'Swallowed error', severity: 'Medium', status: 'open', security: false, runsSinceResolved: 0 },
+  { id: opaqueId('c1:b.ts:y', KEY), severity: 'High', status: 'open', security: true, runsSinceResolved: 0 },
 ];
 
 function state(over = {}) {
   return {
-    lastReviewedSha: 'old',
-    lastBaseSha: 'oldbase',
+    lastReviewedSha: OLD,
+    lastBaseSha: OLDBASE,
     ledger: L,
     linkTypesSeen: ['callable'],
     inlineSlugs: [],
@@ -60,7 +63,7 @@ test('publish redacts secrets and withholds security paths', () => {
     '## Checked and fine',
     '- callable names match',
   ].join('\n');
-  const body = composeBody({ state: state(), findingsText: findingsText([secFinding]), narrative, outcome: 'success', headSha: HEAD, baseSha: BASE });
+  const body = composeBody({ state: state(), findingsText: findingsText([secFinding]), narrative, outcome: 'success', headSha: HEAD, baseSha: BASE, idKey: KEY });
   assert.ok(body.includes('whsec_…'));
   assert.ok(!body.includes(FAKE_WHSEC));
   assert.ok(!body.includes(SEC_FILE));
@@ -71,12 +74,12 @@ test('publish redacts secrets and withholds security paths', () => {
 
 test('publish keeps prior state when findings.json is invalid', () => {
   const text = findingsText([secFinding]).slice(0, 60);
-  const body = composeBody({ state: state(), findingsText: text, narrative: '', outcome: 'success', headSha: HEAD, baseSha: BASE });
+  const body = composeBody({ state: state(), findingsText: text, narrative: '', outcome: 'success', headSha: HEAD, baseSha: BASE, idKey: KEY });
   assert.ok(body.includes('review did not complete (failed)'));
   const m = decodeLedger(body);
   assert.deepEqual(m.ledger, L);
-  assert.equal(m.lastReviewedSha, 'old');
-  assert.equal(m.lastBaseSha, 'oldbase');
+  assert.equal(m.lastReviewedSha, OLD);
+  assert.equal(m.lastBaseSha, OLDBASE);
   assert.deepEqual(m.linkTypesSeen, ['callable']);
   assert.ok(body.includes('Swallowed error'));
   assert.ok(body.includes('Security-relevant issue (High)'));
@@ -84,9 +87,9 @@ test('publish keeps prior state when findings.json is invalid', () => {
 });
 
 test('failed action keeps prior state even with valid findings', () => {
-  const body = composeBody({ state: state(), findingsText: findingsText([]), narrative: '', outcome: 'failure', headSha: HEAD, baseSha: BASE });
+  const body = composeBody({ state: state(), findingsText: findingsText([]), narrative: '', outcome: 'failure', headSha: HEAD, baseSha: BASE, idKey: KEY });
   assert.ok(body.includes('review did not complete (failed)'));
-  assert.equal(decodeLedger(body).lastReviewedSha, 'old');
+  assert.equal(decodeLedger(body).lastReviewedSha, OLD);
 });
 
 test('rate limit in the execution log is reported as rate-limited', () => {
@@ -94,36 +97,88 @@ test('rate limit in the execution log is reported as rate-limited', () => {
   assert.equal(failureReason('error: Rate limit exceeded'), 'rate-limited');
   assert.equal(failureReason('max turns'), 'failed');
   assert.equal(failureReason(null), 'failed');
-  const body = composeBody({ state: state(), findingsText: null, narrative: '', outcome: 'failure', executionLog: 'rate_limit_error', headSha: HEAD, baseSha: BASE });
+  const body = composeBody({ state: state(), findingsText: null, narrative: '', outcome: 'failure', executionLog: 'rate_limit_error', headSha: HEAD, baseSha: BASE, idKey: KEY });
   assert.ok(body.includes('review did not complete (rate-limited)'));
 });
 
 test('success writes the new marker: current findings win over prior entries', () => {
   const reReported = { ...secFinding, slug: 'c1:b.ts:y', severity: 'Critical', locations: [{ file: 'b.ts', line: 1, side: 'changed' }] };
-  const body = composeBody({ state: state(), findingsText: findingsText([reReported]), narrative: '', outcome: 'success', headSha: HEAD, baseSha: BASE });
+  const body = composeBody({ state: state(), findingsText: findingsText([reReported]), narrative: '', outcome: 'success', headSha: HEAD, baseSha: BASE, idKey: KEY });
   const m = decodeLedger(body);
   assert.equal(m.lastReviewedSha, HEAD);
   assert.equal(m.lastBaseSha, BASE);
   assert.deepEqual(m.linkTypesSeen, ['callable']);
   assert.equal(m.ledger.length, 2);
-  assert.deepEqual(m.ledger.find((e) => e.id === opaqueId('c1:b.ts:y')), {
-    id: opaqueId('c1:b.ts:y'), severity: 'Critical', status: 'open', security: true, runsSinceResolved: 0,
+  assert.deepEqual(m.ledger.find((e) => e.id === opaqueId('c1:b.ts:y', KEY)), {
+    id: opaqueId('c1:b.ts:y', KEY), severity: 'Critical', status: 'open', security: true, runsSinceResolved: 0,
   });
   assert.ok(m.ledger.some((e) => e.slug === 'c9:a.ts:x'));
 });
 
 test('malformed prior ledger entries are dropped and security entries reshaped', () => {
-  const dirty = [...L, 'junk', { id: 'nothex', severity: 'High', status: 'open', security: false }, { id: opaqueId('c1:z.ts:z'), severity: 'Low', status: 'open', security: true, runsSinceResolved: 0, slug: 'leak', title: 'leak' }];
-  const body = composeBody({ state: state({ ledger: dirty }), findingsText: null, narrative: '', outcome: 'failure', headSha: HEAD, baseSha: BASE });
+  const dirty = [...L, 'junk', { id: 'nothex', severity: 'High', status: 'open', security: false }, { id: opaqueId('c1:z.ts:z', KEY), severity: 'Low', status: 'open', security: true, runsSinceResolved: 0, slug: 'leak', title: 'leak' }];
+  const body = composeBody({ state: state({ ledger: dirty }), findingsText: null, narrative: '', outcome: 'failure', headSha: HEAD, baseSha: BASE, idKey: KEY });
   const m = decodeLedger(body);
   assert.equal(m.ledger.length, 3);
   assert.ok(!JSON.stringify(m.ledger).includes('leak'));
 });
 
 test('missing state on success still produces a decodable marker', () => {
-  const body = composeBody({ state: null, findingsText: findingsText([]), narrative: '', outcome: 'success', headSha: HEAD, baseSha: BASE });
+  const body = composeBody({ state: null, findingsText: findingsText([]), narrative: '', outcome: 'success', headSha: HEAD, baseSha: BASE, idKey: KEY });
   const m = decodeLedger(body);
   assert.equal(m.lastReviewedSha, HEAD);
   assert.deepEqual(m.ledger, []);
   assert.match(body, /No issues found/);
+});
+
+test('keyed ids: same slug and key match, a different key does not', () => {
+  assert.equal(opaqueId('c1:x.ts:y', KEY), opaqueId('c1:x.ts:y', KEY));
+  assert.notEqual(opaqueId('c1:x.ts:y', KEY), opaqueId('c1:x.ts:y', 'other-key'));
+  assert.notEqual(opaqueId('c1:x.ts:y', KEY), opaqueId('c1:x.ts:y'));
+});
+
+test('without the id key the ledger has no security entries but the pointer still renders', () => {
+  const body = composeBody({ state: state(), findingsText: findingsText([secFinding]), narrative: '', outcome: 'success', headSha: HEAD, baseSha: BASE });
+  const m = decodeLedger(body);
+  assert.equal(m.ledger.filter((e) => e.security).length, 0);
+  assert.ok(m.ledger.some((e) => e.slug === 'c9:a.ts:x'));
+  assert.ok(body.includes('Security-relevant issue (High) in regroup/functions payments; details sent privately'));
+  const failed = decodeLedger(composeBody({ state: state(), findingsText: null, narrative: '', outcome: 'failure', headSha: HEAD, baseSha: BASE }));
+  assert.equal(failed.ledger.filter((e) => e.security).length, 0);
+});
+
+test('an id that was security stays security when re-reported as non-security', () => {
+  const again = { ...secFinding, slug: 'c1:b.ts:y', security: false, title: 'Now looks harmless', locations: [{ file: 'b.ts', line: 2, side: 'changed' }] };
+  const m = decodeLedger(composeBody({ state: state(), findingsText: findingsText([again]), narrative: '', outcome: 'success', headSha: HEAD, baseSha: BASE, idKey: KEY }));
+  const e = m.ledger.find((x) => x.id === opaqueId('c1:b.ts:y', KEY));
+  assert.deepEqual(Object.keys(e).sort(), ['id', 'runsSinceResolved', 'security', 'severity', 'status']);
+  assert.ok(!JSON.stringify(m.ledger).includes('Now looks harmless'));
+});
+
+test('prior SHAs must be 40-hex and linkTypesSeen is limited to routing.json types', () => {
+  const s = state({ lastReviewedSha: 'old', lastBaseSha: 'x'.repeat(40), linkTypesSeen: ['callable', 'y'.repeat(5000), 'callable', 7] });
+  const m = decodeLedger(composeBody({ state: s, findingsText: null, narrative: '', outcome: 'failure', headSha: HEAD, baseSha: BASE, idKey: KEY }));
+  assert.equal(m.lastReviewedSha, null);
+  assert.equal(m.lastBaseSha, null);
+  assert.deepEqual(m.linkTypesSeen, ['callable']);
+});
+
+test('non-security finding text naming a security file is withheld, case and slashes ignored', () => {
+  const other = {
+    ...secFinding,
+    slug: 'c9:regroup/functions/src/util/log.ts:logIt',
+    class: 9,
+    severity: 'Medium',
+    security: false,
+    title: 'Error swallowed near PAYMENTS.TS',
+    why: 'See regroup\\functions\\src\\callable\\payments.ts for the caller',
+    fix: 'Rethrow',
+    locations: [{ file: 'regroup/functions/src/util/log.ts', line: 3, side: 'changed' }],
+  };
+  const narrative = 'Touched Regroup\\Functions\\src\\callable\\Payments.ts today\nOther line';
+  const body = composeBody({ state: state(), findingsText: findingsText([secFinding, other]), narrative, outcome: 'success', headSha: HEAD, baseSha: BASE, idKey: KEY });
+  assert.doesNotMatch(body, /payments\.ts/i);
+  assert.ok(body.includes('(withheld)'));
+  assert.ok(body.includes('Other line'));
+  assert.ok(body.includes('narrative withheld'));
 });

@@ -7,12 +7,30 @@ const STRING_FIELDS = ['slug', 'package', 'area', 'title', 'feature', 'why', 'fi
 const SLUG_RE = /^c([1-9]|1[0-4]):[^\s>]+:[^\s>]+$/;
 const PACKAGE_RE = /^[A-Za-z0-9_-]{1,40}(?:\/[A-Za-z0-9_-]{1,40})?$/;
 const AREA_RE = /^[A-Za-z0-9 _-]{1,40}$/;
+// Bounds keep rendering, truncation and the ledger marker cheap whatever the model wrote.
+export const MAX_FINDINGS = 200;
+const MAX_LOCATIONS = 10;
+const FIELD_CAPS = { package: 100, area: 100, title: 300, feature: 300, why: 2000, fix: 2000 };
+
+function capFinding(f) {
+  const out = { ...f, locations: f.locations.slice(0, MAX_LOCATIONS).map((l) => ({ ...l, file: l.file.slice(0, 300) })) };
+  for (const [k, n] of Object.entries(FIELD_CAPS)) out[k] = f[k].slice(0, n);
+  return out;
+}
+
+// Keeps at most MAX_FINDINGS, dropping the lowest severities first (stable within a severity).
+function capFindings(list) {
+  if (list.length <= MAX_FINDINGS) return list.map(capFinding);
+  const ranked = list.map((f, i) => [SEVERITIES.indexOf(f.severity), i]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const keep = new Set(ranked.slice(0, MAX_FINDINGS).map(([, i]) => i));
+  return list.filter((_, i) => keep.has(i)).map(capFinding);
+}
 
 function findingError(f, i) {
   const at = `findings[${i}]`;
   if (!f || typeof f !== 'object' || Array.isArray(f)) return `${at} is not an object`;
   for (const k of STRING_FIELDS) if (typeof f[k] !== 'string' || !f[k].trim()) return `${at}.${k} missing`;
-  if (!SLUG_RE.test(f.slug)) return `${at}.slug malformed`;
+  if (f.slug.length > 300 || !SLUG_RE.test(f.slug)) return `${at}.slug malformed`;
   if (!Number.isInteger(f.class) || f.class < 1 || f.class > 14) return `${at}.class out of range`;
   if (!SEVERITIES.includes(f.severity)) return `${at}.severity invalid`;
   if (!CONFIDENCES.includes(f.confidence)) return `${at}.confidence invalid`;
@@ -46,7 +64,7 @@ export function validateFindings(json) {
     const error = findingError(v.findings[i], i);
     if (error) return { ok: false, error };
   }
-  return { ok: true, value: v };
+  return { ok: true, value: { reviewedSha: v.reviewedSha, findings: capFindings(v.findings), resolvedSlugs: v.resolvedSlugs.slice(0, MAX_FINDINGS) } };
 }
 
 // The only public text a security finding ever gets. Package and area are

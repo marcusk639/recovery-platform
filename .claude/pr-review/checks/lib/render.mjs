@@ -28,13 +28,41 @@ function where(l) {
   return `\`${clean(file, 300)}${l.line > 0 ? `:${l.line}` : ''}\` (${l.side})`;
 }
 
-function renderFinding(f) {
+const slashes = (s) => String(s ?? '').replace(/\\/g, '/');
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// Full paths and basenames of every security location, lower-cased with '/'
+// separators, longest first so a full path is matched before its basename.
+function securityNeedles(findings) {
+  const out = new Set();
+  for (const f of findings.filter((x) => x.security)) {
+    for (const l of f.locations) {
+      const file = slashes(l.file).toLowerCase();
+      out.add(file);
+      out.add(file.split('/').pop());
+    }
+  }
+  return [...out].filter(Boolean).sort((a, b) => b.length - a.length);
+}
+
+const mentions = (text, needles) => {
+  const t = slashes(text).toLowerCase();
+  return needles.some((n) => t.includes(n));
+};
+
+function withhold(text, needles) {
+  let t = slashes(text);
+  for (const n of needles) t = t.replace(new RegExp(escapeRe(n), 'gi'), '(withheld)');
+  return t;
+}
+
+function renderFinding(f, needles) {
   if (f.security) return `- ${redact(securityPointer(f))}`;
   return [
-    `- **${clean(f.title, 200)}** (confidence: ${f.confidence})${f.inlinePosted ? ' (inline comment posted)' : ''}`,
+    `- **${clean(withhold(f.title, needles), 200)}** (confidence: ${f.confidence})${f.inlinePosted ? ' (inline comment posted)' : ''}`,
     `  - Where: ${f.locations.map(where).join('; ')}`,
-    `  - Why: ${clean(f.why)}`,
-    `  - Fix: ${clean(f.fix)}`,
+    `  - Why: ${clean(withhold(f.why, needles))}`,
+    `  - Fix: ${clean(withhold(f.fix, needles))}`,
     `  - Feature at risk: ${clean(f.feature, 200)}`,
   ].join('\n');
 }
@@ -44,24 +72,11 @@ function renderPriorEntry(e) {
   return `- **${clean(e.title || e.slug, 200)}** (${e.severity}, from an earlier review)`;
 }
 
-function securityNeedles(findings) {
-  const out = new Set();
-  for (const f of findings.filter((x) => x.security)) {
-    for (const l of f.locations) {
-      const file = String(l.file);
-      out.add(file);
-      const base = file.split('/').pop();
-      if (base) out.add(base);
-    }
-  }
-  return [...out].filter(Boolean);
-}
-
 // Drops every narrative line naming a security finding's file, then redacts.
 export function withholdNarrative(narrative, findings) {
   const needles = securityNeedles(findings);
   const lines = String(narrative ?? '').split('\n');
-  const kept = lines.filter((line) => !needles.some((n) => line.includes(n)));
+  const kept = lines.filter((line) => !mentions(line, needles));
   let text = kept.join('\n').trim();
   if (kept.length < lines.length) text = `${text}\n\n${WITHHELD}`.trim();
   return neutralise(redact(text));
@@ -137,5 +152,6 @@ export function renderSummary({ state, findings, narrative, outcome, ledger, rea
     `Reviewed commit \`${clean(sha, 7)}\`. ${countsHeadline(list)}`,
     '_Advisory only: not a required check. Security-relevant findings show only a pointer here._',
   ].join('\n\n');
-  return assemble(head, groupBySeverity(list, renderFinding), withholdNarrative(narrative, list), markerText);
+  const needles = securityNeedles(list);
+  return assemble(head, groupBySeverity(list, (f) => renderFinding(f, needles)), withholdNarrative(narrative, list), markerText);
 }

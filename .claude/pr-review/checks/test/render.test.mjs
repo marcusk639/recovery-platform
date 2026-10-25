@@ -5,6 +5,7 @@ import { SUMMARY_MARKER, decodeLedger } from '../lib/markers.mjs';
 import { opaqueId, toLedgerEntry } from '../lib/ledger.mjs';
 
 const SHA = 'a'.repeat(40);
+const KEY = 'k';
 
 function finding(over = {}) {
   return {
@@ -50,7 +51,7 @@ function render(findings, narrative = '', outcome = 'success') {
     findings: { reviewedSha: SHA, findings, resolvedSlugs: [] },
     narrative,
     outcome,
-    ledger: marker(findings.map(toLedgerEntry)),
+    ledger: marker(findings.map((f) => toLedgerEntry(f, KEY))),
   });
 }
 
@@ -129,14 +130,14 @@ test('validateFindings accepts the contract and rejects bad input', () => {
 });
 
 test('ledger entries: opaque id and security entries carry no detail', () => {
-  assert.match(opaqueId('c1:x:y'), /^[0-9a-f]{16}$/);
-  assert.equal(opaqueId('c1:x:y'), opaqueId('c1:x:y'));
-  const s = toLedgerEntry(SEC);
+  assert.match(opaqueId('c1:x:y', KEY), /^[0-9a-f]{16}$/);
+  assert.equal(toLedgerEntry(SEC), null, 'no key: no security entry');
+  const s = toLedgerEntry(SEC, KEY);
   assert.deepEqual(Object.keys(s).sort(), ['id', 'runsSinceResolved', 'security', 'severity', 'status']);
-  assert.deepEqual(s, { id: opaqueId(SEC.slug), severity: 'High', status: 'open', security: true, runsSinceResolved: 0 });
-  const n = toLedgerEntry(finding());
+  assert.deepEqual(s, { id: opaqueId(SEC.slug, KEY), severity: 'High', status: 'open', security: true, runsSinceResolved: 0 });
+  const n = toLedgerEntry(finding(), KEY);
   assert.deepEqual(n, {
-    id: opaqueId(finding().slug),
+    id: opaqueId(finding().slug, KEY),
     slug: finding().slug,
     title: finding().title,
     severity: 'High',
@@ -144,4 +145,21 @@ test('ledger entries: opaque id and security entries carry no detail', () => {
     security: false,
     runsSinceResolved: 0,
   });
+});
+
+test('validateFindings caps count, locations and field lengths', () => {
+  const sevs = ['Low', 'Critical', 'Medium', 'High'];
+  const many = Array.from({ length: 260 }, (_, i) => finding({ slug: `c9:f${i}.ts:h${i}`, severity: sevs[i % 4] }));
+  const r = validateFindings({ reviewedSha: SHA, findings: many, resolvedSlugs: [] });
+  assert.equal(r.ok, true);
+  assert.equal(r.value.findings.length, 200);
+  assert.equal(r.value.findings.filter((f) => f.severity === 'Low').length, 260 / 4 - 60);
+  const loc = { file: 'a.ts', line: 1, side: 'changed' };
+  const big = finding({ locations: Array(30).fill(loc), why: 'w'.repeat(9000), fix: 'f'.repeat(9000), title: 't'.repeat(900) });
+  const one = validateFindings({ reviewedSha: SHA, findings: [big], resolvedSlugs: [] }).value.findings[0];
+  assert.equal(one.locations.length, 10);
+  assert.equal(one.why.length, 2000);
+  assert.equal(one.fix.length, 2000);
+  assert.equal(one.title.length, 300);
+  assert.equal(validateFindings({ reviewedSha: SHA, findings: [finding({ slug: 'c1:' + 'a'.repeat(400) + ':x' })], resolvedSlugs: [] }).ok, false);
 });

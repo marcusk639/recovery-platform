@@ -1,7 +1,9 @@
 // Findings ledger entries carried in the summary comment's hidden marker (public).
 // Security entries hold only an opaque id, severity and status: never a slug,
-// title, file or mechanism.
-import { createHash } from 'node:crypto';
+// title, file or mechanism. Ids are keyed (HMAC with PR_REVIEW_ID_KEY, held only
+// by the publish step): slugs are guessable from the public diff, so a plain hash
+// of one could be brute-forced back to the security finding's file and symbol.
+import { createHash, createHmac } from 'node:crypto';
 import { redact } from './redact.mjs';
 
 export const SEVERITIES = ['Critical', 'High', 'Medium', 'Low'];
@@ -10,17 +12,19 @@ const ID_RE = /^[0-9a-f]{16}$/;
 const MAX_TITLE = 120;
 const MAX_SLUG = 200;
 
-export function opaqueId(slug) {
-  return createHash('sha256').update(String(slug), 'utf8').digest('hex').slice(0, 16);
+export function opaqueId(slug, key) {
+  const h = key ? createHmac('sha256', String(key)) : createHash('sha256');
+  return h.update(String(slug), 'utf8').digest('hex').slice(0, 16);
 }
 
 function securityEntry(id, severity, status, runsSinceResolved) {
   return { id, severity, status, security: true, runsSinceResolved };
 }
 
-export function toLedgerEntry(finding) {
-  const id = opaqueId(finding.slug);
-  if (finding.security) return securityEntry(id, finding.severity, 'open', 0);
+// Without a key, security findings get no ledger entry at all (never an unkeyed id).
+export function toLedgerEntry(finding, key) {
+  if (finding.security) return key ? securityEntry(opaqueId(finding.slug, key), finding.severity, 'open', 0) : null;
+  const id = opaqueId(finding.slug, key);
   return {
     id,
     slug: redact(finding.slug).slice(0, MAX_SLUG),
@@ -52,12 +56,12 @@ export function sanitizeEntry(e) {
   };
 }
 
-export function sanitizeLedger(list) {
+export function sanitizeLedger(list, key) {
   const seen = new Set();
   const out = [];
   for (const raw of Array.isArray(list) ? list : []) {
     const e = sanitizeEntry(raw);
-    if (!e || seen.has(e.id)) continue;
+    if (!e || seen.has(e.id) || (e.security && !key)) continue;
     seen.add(e.id);
     out.push(e);
   }
@@ -78,14 +82,18 @@ export function fitMarker(payload, encode, maxLen) {
   return { ...p, ledger: kept };
 }
 
-// Prior entries not re-reported this run, then the current findings (current wins).
-export function nextLedger(prior, findings) {
+// Prior entries not re-reported this run, then the current findings (current
+// wins). An id that was security stays security, so a later non-security
+// re-report cannot publish its slug or title.
+export function nextLedger(prior, findings, key) {
+  const old = sanitizeLedger(prior, key);
+  const wasSecurity = new Set(old.filter((e) => e.security).map((e) => e.id));
   const byId = new Map();
   for (const f of findings) {
-    const e = toLedgerEntry(f);
-    if (!byId.has(e.id)) byId.set(e.id, e);
+    let e = toLedgerEntry(f, key);
+    if (!e || byId.has(e.id)) continue;
+    if (!e.security && wasSecurity.has(e.id)) e = securityEntry(e.id, e.severity, e.status, e.runsSinceResolved);
+    byId.set(e.id, e);
   }
-  const current = [...byId.values()];
-  const ids = new Set(byId.keys());
-  return [...sanitizeLedger(prior).filter((e) => !ids.has(e.id)), ...current];
+  return [...old.filter((e) => !byId.has(e.id)), ...byId.values()];
 }

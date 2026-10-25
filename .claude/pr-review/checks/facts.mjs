@@ -14,6 +14,7 @@ const MAX_PER_CHECK = 30;
 const MAX_LINE = 500;
 const MAX_CONTEXT = 12000;
 const MAX_COMMENT = 2000;
+const MAX_TITLE = 300;
 const bytes = (s) => Buffer.byteLength(s);
 const list = (xs) => (xs.length ? xs.map((x) => `- ${x}`).join('\n') : '- none');
 
@@ -35,7 +36,7 @@ function renderResult(r) {
   return lines.join('\n');
 }
 
-export function buildFacts({ files = [], routeResult, results = [], prContext = '' }) {
+export function buildFacts({ files = [], routeResult, results = [], prContext = '', title }) {
   const head = [
     '# Pre-check facts',
     '',
@@ -51,7 +52,8 @@ export function buildFacts({ files = [], routeResult, results = [], prContext = 
     list(routeResult.classes),
     '',
   ].join('\n');
-  const context = `\n\n## PR context\n${clip(prContext || 'PR context unavailable', MAX_CONTEXT)}\n`;
+  const titleLine = `PR title: ${clip(redact(String(title ?? '')).replace(/\s+/g, ' ').trim() || 'unavailable', MAX_TITLE)}`;
+  const context = `\n\n## PR context\n${titleLine}\n\n${clip(prContext || 'PR context unavailable', MAX_CONTEXT)}\n`;
   const budget = MAX_BYTES - bytes(head) - bytes(context) - bytes('## Facts\n') - 100;
   const body = results.map(renderResult).filter(Boolean).join('\n') || '- none';
   let facts = body;
@@ -104,10 +106,22 @@ function runChecks({ files, repoRoot, baseSha, title, verifyScript }) {
   });
 }
 
+// A copy outside the model's --add-dir: publish trusts only this one, since the
+// model can Write OUT/state.json.
+export function snapshotPath(env = process.env) {
+  if (env.STATE_FILE) return env.STATE_FILE;
+  return env.RUNNER_TEMP ? join(env.RUNNER_TEMP, 'pr-review-state', 'state.json') : null;
+}
+
 function writeOutputs(out, text, state) {
   mkdirSync(out, { recursive: true });
   writeFileSync(join(out, 'facts.md'), text);
   writeFileSync(join(out, 'state.json'), JSON.stringify(state, null, 2));
+  const snap = snapshotPath();
+  if (snap) {
+    mkdirSync(dirname(snap), { recursive: true });
+    writeFileSync(snap, JSON.stringify(state));
+  }
   if (process.env.GITHUB_OUTPUT) {
     appendFileSync(process.env.GITHUB_OUTPUT, `tier=${state.tier}\nmax_turns=${state.maxTurns}\n`);
   }
@@ -141,11 +155,11 @@ async function main() {
       body = null;
     }
     const prContext = body === null ? 'PR context unavailable' : await gatherContext(REPO, PR, body);
-    writeOutputs(out, buildFacts({ files, routeResult: route(paths), results, prContext }), state);
+    writeOutputs(out, buildFacts({ files, routeResult: route(paths), results, prContext, title: PR_TITLE }), state);
   } catch (err) {
     process.stdout.write(`facts failed: ${err?.name ?? 'Error'}\n`);
     const empty = { packages: [], linkTypes: [], classes: [] };
-    writeOutputs(out, buildFacts({ routeResult: empty, results: [{ check: 'facts', error: err }], prContext: 'PR context unavailable' }), state);
+    writeOutputs(out, buildFacts({ routeResult: empty, results: [{ check: 'facts', error: err }], prContext: 'PR context unavailable', title: PR_TITLE }), state);
   }
 }
 

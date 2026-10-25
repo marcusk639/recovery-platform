@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildFacts } from '../facts.mjs';
+import { buildFacts, snapshotPath } from '../facts.mjs';
 
 const base = {
   files: [{ file: 'a.ts', status: 'M' }],
@@ -42,4 +42,17 @@ test('renders facts with file and line', () => {
   const out = buildFacts({ ...base, results: [{ check: 'k', facts: [{ check: 'k', file: 'a.ts', line: 7, note: 'hello' }] }] });
   assert.match(out, /a\.ts:7/);
   assert.match(out, /hello/);
+});
+
+test('PR context carries the redacted PR title', () => {
+  const secret = 'whsec' + '_' + 'B'.repeat(16);
+  const out = buildFacts({ ...base, title: `ci: add ${secret}\nsecond line` });
+  assert.match(out, /## PR context\nPR title: ci: add whsec_… second line/);
+  assert.ok(!out.includes(secret));
+});
+
+test('state snapshot lives outside OUT', () => {
+  assert.equal(snapshotPath({ STATE_FILE: '/x/s.json', RUNNER_TEMP: '/t' }), '/x/s.json');
+  assert.equal(snapshotPath({ RUNNER_TEMP: '/t' }), '/t/pr-review-state/state.json');
+  assert.equal(snapshotPath({}), null);
 });

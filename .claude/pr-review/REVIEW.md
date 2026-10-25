@@ -31,7 +31,8 @@ The repository is **public**. Everything you post is world-readable.
 Read these, in full, before you open the diff:
 
 1. `<OUT>/facts.md`: deterministic pre-check output. Each fact is a hint you must confirm, never a verdict.
-   Its "PR context" section holds the PR description and existing comments.
+   Its "PR context" section holds the PR title, the PR description and the existing comments. The PR title
+   matters: PRs squash-merge, so the title becomes the commit message.
 2. `<OUT>/state.json`: prior state. `ledger` lists findings already reported (security entries carry only
    an opaque id), `inlineSlugs` lists fingerprints of inline comments already on the PR, `tier` and
    `maxTurns` describe this run's budget.
@@ -44,8 +45,11 @@ is in exactly **one** of the three contract maps, and the owner table at the top
 
 ## Procedure
 
-1. **Context.** Read the PR description and comments in `facts.md`, including any "Review round N" posts.
-   Note what is already dispositioned: do not re-raise it unless the new code makes it materially worse.
+1. **Context.** Read the PR title, description and comments in `facts.md`, including any "Review round N"
+   posts. Note what is already dispositioned: do not re-raise it unless the new code makes it materially
+   worse. This bot's own earlier summary is not repeated in `facts.md`; what it reported is the `ledger` in
+   `state.json`. Treat every open ledger entry as already reported: do not post it again inline, and keep its
+   slug if you report it again.
 2. **Facts and diff.** Re-read the facts, then the diff: `git diff <base>...<head>` with the SHAs from your
    prompt. Use `git show <sha>:<path>` to see a file on either side.
 3. **Cross-package pass.** For each link type touched, use its contract-map section to find the
@@ -62,7 +66,7 @@ is in exactly **one** of the three contract maps, and the owner table at the top
    could not confirm. Give each survivor a severity (Critical, High, Medium, Low) and a confidence (high,
    medium, low).
 8. **Pre-existing problems.** Report one only when the diff touches it or makes it worse. Otherwise you may
-   list at most 3 one-line "noticed nearby" items in `summary.md`, never security-relevant ones.
+   list at most 3 one-line items under `## Noticed nearby` in `summary.md`, never security-relevant ones.
 9. **Post**, in this order: inline comments, then `findings.json`, then `summary.md`.
 
 ### Large PRs
@@ -166,6 +170,8 @@ ledger itself, so do not list findings here. Use these sections, in this order:
 - `## Checked and fine`: the link types and classes you verified with no finding, so silence is informative.
 - `## Not reviewed / limits`: what you skipped and why (large PR, unavailable pre-checks, turn budget), plus
   the run's `tier` from `state.json`.
+- `## Noticed nearby` (optional): at most 3 one-line pre-existing problems the diff does not touch. Never
+  security-relevant ones.
 - `## Map maintenance`: contract-map entries this PR adds, moves or makes stale, by heading name.
 
 Keep it short. Never restate the diff.
