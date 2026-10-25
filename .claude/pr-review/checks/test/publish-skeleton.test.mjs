@@ -1,17 +1,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { renderSkeleton } from '../publish.mjs';
+import { composeBody } from '../publish.mjs';
 import { SUMMARY_MARKER } from '../lib/markers.mjs';
 
-test('skeleton success', () => {
-  const s = renderSkeleton({ headSha: 'abc1234', outcome: 'success' });
+const HEAD = 'abc1234' + '0'.repeat(33);
+const ok = JSON.stringify({ reviewedSha: HEAD, findings: [], resolvedSlugs: [] });
+
+test('summary on success names the reviewed commit', () => {
+  const s = composeBody({ state: null, findingsText: ok, narrative: '', outcome: 'success', headSha: HEAD, baseSha: 'b' });
   assert.ok(s.startsWith(SUMMARY_MARKER));
-  assert.ok(s.includes('reviewer online'));
   assert.ok(s.includes('abc1234'));
 });
 
-test('skeleton failure', () => {
-  const s = renderSkeleton({ headSha: 'abc1234', outcome: 'failure' });
+test('summary on failure says the review did not complete', () => {
+  const s = composeBody({ state: null, findingsText: ok, narrative: '', outcome: 'failure', headSha: HEAD, baseSha: 'b' });
   assert.ok(s.startsWith(SUMMARY_MARKER));
   assert.ok(s.includes('review did not complete'));
 });
