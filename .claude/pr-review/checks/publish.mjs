@@ -10,6 +10,7 @@ import { decodeLedger, rawLedgerMarker } from './lib/markers.mjs';
 import { mergeLedger, opaqueId, sanitizeLedger, visibleEntries } from './lib/ledger.mjs';
 import { renderSummary, validateFindings } from './lib/render.mjs';
 import { securityNeedles, touchesSecurityFile } from './lib/needles.mjs';
+import { deliverAdvisories } from './advisories.mjs';
 
 const SHA_RE = /^[0-9a-f]{40}$/i;
 const RATE_RE = /rate.?limit|usage limit/i;
@@ -62,6 +63,17 @@ function newSlugs(findings, prior, idKey, needles) {
 
 const isObject = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
 
+export const DELIVERED = 'details sent privately';
+export const NOT_DELIVERED = 'details could not be delivered privately; re-run after fixing the advisory token';
+
+// The validated findings of a completed review, or null when publish will show
+// the failure banner instead. Shared by composeBody and advisory delivery.
+function completedFindings(state, findingsText, outcome) {
+  if (!isObject(state) || outcome !== 'success' || state.tier === 'none') return null;
+  const parsed = validateFindings(findingsText ?? '');
+  return parsed.ok ? parsed.value : null;
+}
+
 // Without a trusted snapshot: always the failure banner, with prior state from
 // the existing summary comment (fallback.state, sanitized as usual) or, if its
 // marker does not decode, that marker re-emitted verbatim (fallback.rawMarker).
@@ -77,7 +89,7 @@ function untrustedBody(fallback, idKey, linkTypes) {
   return renderSummary({ state: {}, findings: null, narrative: '', outcome: 'failure', reason: 'failed', ledger, rawMarker: fallback?.rawMarker ?? null });
 }
 
-export function composeBody({ state, findingsText, narrative, outcome, executionLog, headSha, baseSha, idKey, linkTypes = knownLinkTypes(), fallback }) {
+export function composeBody({ state, findingsText, narrative, outcome, executionLog, headSha, baseSha, idKey, linkTypes = knownLinkTypes(), fallback, securityClause = DELIVERED }) {
   // A missing or invalid snapshot fails closed, whatever the action outcome.
   if (!isObject(state)) return untrustedBody(fallback, idKey, linkTypes);
   const s = state;
@@ -90,12 +102,11 @@ export function composeBody({ state, findingsText, narrative, outcome, execution
     ledger: sanitizeLedger(s.ledger, idKey),
   };
   if (s.tier === 'none' && outcome === 'skipped') return noChangeBody(prior, headSha, baseSha);
-  const parsed = validateFindings(findingsText ?? '');
   // Tier "none" never runs the model, so a "success" alongside it is not trusted.
-  if (outcome !== 'success' || s.tier === 'none' || !parsed.ok) {
+  const findings = completedFindings(s, findingsText, outcome);
+  if (!findings) {
     return renderSummary({ state: s, findings: null, narrative: '', outcome: 'failure', reason: failureReason(executionLog), ledger: prior });
   }
-  const findings = parsed.value;
   // Built once; prior security entries carry no files, so current findings only.
   const needles = securityNeedles(findings.findings);
   const reviewed = sha(findings.reviewedSha) ?? sha(headSha);
@@ -118,6 +129,7 @@ export function composeBody({ state, findingsText, narrative, outcome, execution
     newSlugs: newSlugs(findings.findings, prior, idKey, needles),
     carried: visible.filter((e) => e.status === 'open' && !touched.has(e.id)),
     resolved: visible.filter((e) => e.status === 'resolved'),
+    securityClause,
   });
 }
 
@@ -154,9 +166,24 @@ export async function priorFromComment(repo, pr, list = listIssueComments) {
   return isObject(payload) ? { state: payload } : { state: {}, rawMarker: rawLedgerMarker(summary.body) };
 }
 
+// Security findings go to draft advisories first (advisoryToken only there,
+// never to the comment calls), so the public pointer says whether that worked.
+async function deliver(repo, pr, snapshot, rest, deliverFn) {
+  const findings = completedFindings(snapshot, rest.findingsText, rest.outcome);
+  const security = (findings?.findings ?? []).filter((f) => f.security);
+  if (!security.length) return DELIVERED;
+  try {
+    const res = await deliverFn(repo, pr, security, rest.advisoryToken || null, undefined, rest.idKey || null);
+    return res?.delivered === true ? DELIVERED : NOT_DELIVERED;
+  } catch (err) {
+    console.log(`advisories failed: ${Number.isInteger(err?.status) ? err.status : 'unknown'}`);
+    return NOT_DELIVERED;
+  }
+}
+
 // Without a trusted snapshot and without the comment, nothing is posted: the
 // old comment (and its marker) stays as it was.
-export async function publish({ repo, pr, snapshot, ...rest }, deps = { listIssueComments, upsertSummary }) {
+export async function publish({ repo, pr, snapshot, advisoryToken, ...rest }, deps = { listIssueComments, upsertSummary }) {
   let fallback;
   if (!isObject(snapshot)) {
     fallback = await priorFromComment(repo, pr, deps.listIssueComments);
@@ -165,12 +192,13 @@ export async function publish({ repo, pr, snapshot, ...rest }, deps = { listIssu
       return;
     }
   }
-  await deps.upsertSummary(repo, pr, composeBody({ ...rest, state: snapshot, fallback }));
+  const securityClause = await deliver(repo, pr, snapshot, { ...rest, advisoryToken }, deps.deliverAdvisories ?? deliverAdvisories);
+  await deps.upsertSummary(repo, pr, composeBody({ ...rest, state: snapshot, fallback, securityClause }));
 }
 
 async function main() {
   try {
-    const { REPO, PR, HEAD_SHA, BASE_SHA, ACTION_OUTCOME, EXECUTION_FILE, OUT, STATE_FILE, PR_REVIEW_ID_KEY } = process.env;
+    const { REPO, PR, HEAD_SHA, BASE_SHA, ACTION_OUTCOME, EXECUTION_FILE, OUT, STATE_FILE, PR_REVIEW_ID_KEY, ADVISORY_TOKEN } = process.env;
     const out = OUT || '.';
     await publish({
       repo: REPO,
@@ -183,6 +211,8 @@ async function main() {
       headSha: HEAD_SHA,
       baseSha: BASE_SHA,
       idKey: PR_REVIEW_ID_KEY || null,
+      // Advisory requests only; never passed to the summary comment calls.
+      advisoryToken: ADVISORY_TOKEN || null,
     });
   } catch (err) {
     // Never log bodies, tokens or messages; status only.

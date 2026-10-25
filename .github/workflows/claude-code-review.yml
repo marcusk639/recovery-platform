@@ -117,6 +117,9 @@ jobs:
           EXECUTION_FILE: ${{ steps.review.outputs.execution_file }}
           # Publish only: keys the ledger's opaque ids. Never given to facts or the model.
           PR_REVIEW_ID_KEY: ${{ secrets.PR_REVIEW_ID_KEY }}
+          # Publish only: fine-grained PAT, "Repository security advisories: write" on
+          # this repo. Used for draft advisories only; never given to the model or comments.
+          ADVISORY_TOKEN: ${{ secrets.SECURITY_ADVISORY_TOKEN }}
         run: |
           if [ -f .review-publish/.claude/pr-review/checks/publish.mjs ]; then
             node .review-publish/.claude/pr-review/checks/publish.mjs

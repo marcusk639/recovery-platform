@@ -32,9 +32,9 @@ function where(l) {
 
 export const WITHHELD_TITLE = '(withheld: touches a security-relevant file)';
 
-function renderFinding(f, needles, isNew) {
+function renderFinding(f, needles, isNew, clause) {
   // The security pointer keeps its exact fixed public form: never tagged.
-  if (f.security) return `- ${redact(securityPointer(f))}`;
+  if (f.security) return `- ${redact(securityPointer(f, clause))}`;
   const fresh = isNew ? ' (new)' : '';
   if (touchesSecurityFile(f, needles)) return `- **${WITHHELD_TITLE}** (confidence: ${f.confidence})${fresh}`;
   return [
@@ -166,7 +166,7 @@ function renderPrior(ledger, markerText, banner, withResolved) {
 
 // rawMarker: an existing marker re-emitted verbatim when publish has no
 // decodable prior state (it only ever comes from rawLedgerMarker's pattern).
-export function renderSummary({ state, findings, narrative, outcome, ledger, reason = 'failed', needles, note = '', newSlugs = new Set(), carried = [], resolved = [], rawMarker = null }) {
+export function renderSummary({ state, findings, narrative, outcome, ledger, reason = 'failed', needles, note = '', newSlugs = new Set(), carried = [], resolved = [], rawMarker = null, securityClause }) {
   const markerText = rawMarker ?? encodeLedger(fitMarker(ledger, encodeLedger, MAX_MARKER));
   if (outcome === 'none') return renderPrior(ledger, markerText, `${clean(note, 200)}\n\n${ADVISORY}`, true);
   const ok = outcome === 'success' && findings && Array.isArray(findings.findings);
@@ -180,7 +180,7 @@ export function renderSummary({ state, findings, narrative, outcome, ledger, rea
     ADVISORY,
   ].join('\n\n');
   const n = needles ?? securityNeedles(list);
-  const groups = groupBySeverity(list, (f) => renderFinding(f, n, newSlugs.has(f.slug)));
+  const groups = groupBySeverity(list, (f) => renderFinding(f, n, newSlugs.has(f.slug), securityClause));
   const extra = [renderCarried(carried), renderResolved(resolved)];
   return assemble(head, groups, withholdNarrative(narrative, list, n), markerText, extra);
 }

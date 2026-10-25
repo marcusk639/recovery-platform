@@ -22,7 +22,17 @@ export async function ghRequest(method, path, body, token = process.env.GH_TOKEN
   }
   if (res.status === 204) return null;
   const text = await res.text();
-  return text ? JSON.parse(text) : null;
+  const data = text ? JSON.parse(text) : null;
+  // Cursor-paginated endpoints (security advisories) expose the rel="next" link
+  // as a non-enumerable `next` path on array results; same host only.
+  const next = nextPath(res.headers?.get?.('link'));
+  if (Array.isArray(data) && next) Object.defineProperty(data, 'next', { value: next });
+  return data;
+}
+
+export function nextPath(link) {
+  const m = /<([^>]+)>\s*;\s*rel="next"/.exec(String(link ?? ''));
+  return m && m[1].startsWith(`${API}/`) ? m[1].slice(API.length) : null;
 }
 
 async function paginate(path) {
