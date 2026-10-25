@@ -25,10 +25,10 @@ Flat monorepo of independent recovery products plus a shared API. Each product h
 
 Install per clone with `./scripts/install-git-hooks.sh`.
 
-- **pre-commit:** blocks secrets (Stripe, Anthropic, OpenRouter, AWS, GitHub, private keys, `AIza` outside Firebase client config). Blocks new source files over **300 lines**; oversized legacy files warn. Split by extracting modules.
+- **pre-commit:** blocks secrets (Stripe incl. `whsec_`/`sk_test_`/`rk_live_`, Anthropic, OpenRouter, AWS, GitHub, private keys, `AIza` outside allowlisted Firebase client config). Blocks new source files over **300 lines**; oversized legacy files warn. Split by extracting modules. Runs `.claude/agent-gates/verify-diff.sh --staged`, which blocks deleted test files, tests renamed to non-runnable paths, added `.skip`/`.only`/`.todo`, assert-true assertions, test-count drops (renames included) and any `.snap` change. Touching `regroup/scripts/stripe-product-values.md` is blocked until its `whsec_` secrets are scrubbed, and so is a merge commit that brings in changes to it. Edit `scripts/git-hooks/`, never `.git/hooks/`; session-check warns on drift.
 - **commit-msg:** the scope must name the product, e.g. `fix(regroup-mobile):`, never a bare `mobile`, `web` or `functions`.
 - **pre-push:** runs `npm test` in each changed package among recovery-api, detox-recovery, homegroups/functions and regroup/functions. The result is cached per HEAD SHA.
-- The currently installed `.git/hooks/pre-commit` also runs `.claude/agent-gates/verify-diff.sh`, which blocks deleted or renamed test files and test-count drops. The versioned `scripts/git-hooks/pre-commit` does not, so reinstalling drops that gate.
+- **`.claude/rules/*.md`** are path-scoped with `paths:` frontmatter, the only key Claude Code reads. Any other key (e.g. `globs:`) is ignored and the rule loads every session; session-check warns on it. Rules are guidance, not enforcement: anything that must hold belongs in a hook or CI.
 
 ## Gotchas
 

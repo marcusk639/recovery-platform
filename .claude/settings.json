@@ -1,4 +1,54 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(npm test)",
+      "Bash(npm test -- *)",
+      "Bash(npm run test)",
+      "Bash(npm run test -- *)",
+      "Bash(npm run test:coverage)",
+      "Bash(npm run lint)",
+      "Bash(npm run typecheck)",
+      "Bash(npm run typecheck:ratchet)",
+      "Bash(npx tsc --noEmit)",
+      "Bash(npx tsc --noEmit -p *)",
+      "Bash(npx prettier --check *)"
+    ],
+    "deny": [
+      "Bash(rm -rf /)",
+      "Bash(rm -rf ~)",
+      "Bash(rm -rf .)",
+      "Bash(rm -rf ..)",
+      "Bash(git push *--force*)",
+      "Bash(git push -f*)",
+      "Bash(git push * -f)",
+      "Bash(git push * -f *)",
+      "Bash(git push * +*)",
+      "Bash(git push *--no-verify*)",
+      "Bash(git commit *--no-verify*)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean -*f*)",
+      "Bash(git checkout -- .)",
+      "Bash(git checkout .)",
+      "Bash(git restore .)",
+      "Bash(git -C * push *--force*)",
+      "Bash(git -C * push -f*)",
+      "Bash(git -C * push * -f)",
+      "Bash(git -C * push * -f *)",
+      "Bash(git -C * push * +*)",
+      "Bash(git -C * push *--no-verify*)",
+      "Bash(git -C * commit *--no-verify*)",
+      "Bash(git -C * reset --hard*)",
+      "Bash(git -C * clean -*f*)",
+      "Bash(git -C * checkout -- .)",
+      "Bash(git -C * checkout .)",
+      "Bash(git -C * restore .)",
+      "Bash(chmod -R 777 *)",
+      "Bash(sh)",
+      "Bash(bash)",
+      "Bash(zsh)",
+      "Bash(npm publish*)"
+    ]
+  },
   "hooks": {
     "PostToolUse": [
       {
