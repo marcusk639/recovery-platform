@@ -68,7 +68,8 @@ export function sanitizeLedger(list, key) {
   const out = [];
   for (const raw of Array.isArray(list) ? list : []) {
     const e = sanitizeEntry(raw);
-    if (!e || seen.has(e.id) || (e.security && !key)) continue;
+    // Security and withheld ids are only safe keyed; unkeyed they are omitted.
+    if (!e || seen.has(e.id) || ((e.security || e.withheld) && !key)) continue;
     seen.add(e.id);
     out.push(e);
   }
@@ -102,11 +103,13 @@ export function nextLedger(prior, findings, key, needles = []) {
     if (touchesSecurityFile(f, needles)) g.withheld = true;
     groups.set(f.slug, g);
   }
-  const old = sanitizeLedger(prior, key).map((e) =>
-    !e.security && !e.withheld && (mentions(e.slug, needles) || mentions(e.title, needles))
-      ? withheldEntry(e.id, e.severity, e.status, e.runsSinceResolved)
-      : e,
-  );
+  const old = sanitizeLedger(prior, key)
+    .map((e) =>
+      !e.security && !e.withheld && (mentions(e.slug, needles) || mentions(e.title, needles))
+        ? key && withheldEntry(e.id, e.severity, e.status, e.runsSinceResolved)
+        : e,
+    )
+    .filter(Boolean);
   const wasSecurity = new Set(old.filter((e) => e.security).map((e) => e.id));
   const touched = new Set();
   const current = [];
@@ -116,7 +119,7 @@ export function nextLedger(prior, findings, key, needles = []) {
     if (security || wasSecurity.has(id)) {
       if (key) current.push(securityEntry(id, f.severity, 'open', 0));
     } else if (withheld) {
-      current.push(withheldEntry(id, f.severity, 'open', 0));
+      if (key) current.push(withheldEntry(id, f.severity, 'open', 0));
     } else {
       current.push(toLedgerEntry(f, key));
     }

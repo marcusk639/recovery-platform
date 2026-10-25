@@ -248,3 +248,34 @@ test('resolvedSlugs entries over 300 characters are rejected', () => {
   const body = composeBody({ state: state(), findingsText: text, narrative: '', outcome: 'success', headSha: HEAD, baseSha: BASE, idKey: KEY });
   assert.ok(body.includes('review did not complete (failed)'));
 });
+
+test('ledger without the id key: no withheld entry and no needle', () => {
+  const located = nonSec({ slug: `c9:${SEC_FILE}:otherFn`, locations: [{ file: SEC_FILE, line: 90, side: 'changed' }] });
+  const titled = nonSec({ slug: 'c9:regroup/functions/src/util/x.ts:y', title: 'Near payments.ts' });
+  const priorMention = { id: opaqueId(`c9:${SEC_FILE}:old`), slug: `c9:${SEC_FILE}:old`, title: 't', severity: 'Low', status: 'open', security: false, runsSinceResolved: 0 };
+  const priorWithheld = { id: opaqueId('c9:w.ts:w', KEY), severity: 'Low', status: 'open', security: false, runsSinceResolved: 0, withheld: true };
+  const body = composeBody({
+    state: state({ ledger: [...L, priorMention, priorWithheld] }),
+    findingsText: findingsText([secFinding, located, titled]),
+    narrative: '',
+    outcome: 'success',
+    headSha: HEAD,
+    baseSha: BASE,
+  });
+  noNeedle(body);
+  const ledger = decodeLedger(body).ledger;
+  assert.equal(ledger.filter((e) => e.withheld || e.security).length, 0);
+  assert.ok(!ledger.some((e) => e.id === opaqueId(located.slug)));
+  assert.ok(ledger.some((e) => e.slug === 'c9:a.ts:x'));
+  assert.ok(body.includes('(withheld: touches a security-relevant file)'));
+});
+
+test('disguised security file names in a non-security title are withheld', () => {
+  for (const disguise of ['payments​.ts', 'payments&#46;ts', 'payments%2Ets', 'payments&period;ts', 'Payments&#x2E;TS']) {
+    const f = nonSec({ title: `Error near ${disguise}` });
+    const body = composeBody({ state: state(), findingsText: findingsText([secFinding, f]), narrative: '', outcome: 'success', headSha: HEAD, baseSha: BASE, idKey: KEY });
+    assert.ok(body.includes('(withheld: touches a security-relevant file)'), disguise);
+    assert.ok(!body.includes('Error near'), disguise);
+    assert.ok(decodeLedger(body).ledger.find((x) => x.id === opaqueId(f.slug, KEY)).withheld, disguise);
+  }
+});
