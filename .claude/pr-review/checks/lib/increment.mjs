@@ -29,7 +29,7 @@ function baseDriftChanged(lastBaseSha, baseSha, prLinkTypes, cwd) {
   }
 }
 
-// Every git failure degrades safely: unreachable -> full; patch-id/drift failure -> treated as changed.
+// Every git failure degrades safely: unreachable -> full; diff-hash/drift failure -> treated as changed.
 export function computeIncrement({ lastReviewedSha, lastBaseSha, baseSha, headSha, prPaths, cwd }) {
   const last = SHA_RE.test(lastReviewedSha ?? '') ? lastReviewedSha : null;
   const lastBase = SHA_RE.test(lastBaseSha ?? '') ? lastBaseSha : null;
@@ -42,9 +42,20 @@ export function computeIncrement({ lastReviewedSha, lastBaseSha, baseSha, headSh
   }
   try {
     // Only this PR's files: a merge from base pulls other PRs' files into last..head.
-    const prSet = new Set(lines(git(['diff', '--name-only', `${baseSha}...${headSha}`], cwd)));
-    const incrementFiles = lines(git(['diff', '--name-only', `${last}..${headSha}`], cwd)).filter((f) => prSet.has(f));
-    const incrementDiff = parseUnifiedDiff(git(['diff', '-M', '--no-color', `${last}..${headSha}`], cwd)).filter((f) => prSet.has(f.file));
+    // Union with the previously reviewed set so a file reverted to base content stays in.
+    // If that set cannot be computed, keep last..head unfiltered (safe side).
+    let inPr = () => true;
+    try {
+      const prSet = new Set([
+        ...lines(git(['diff', '--name-only', `${baseSha}...${headSha}`], cwd)),
+        ...lines(git(['diff', '--name-only', `${lastBase}...${last}`], cwd)),
+      ]);
+      inPr = (f) => prSet.has(f);
+    } catch {
+      // unfiltered
+    }
+    const incrementFiles = lines(git(['diff', '--name-only', `${last}..${headSha}`], cwd)).filter(inPr);
+    const incrementDiff = parseUnifiedDiff(git(['diff', '-M', '--no-color', `${last}..${headSha}`], cwd)).filter((f) => inPr(f.file));
     // Same base + non-empty increment can never be "PR unchanged".
     const comparable = lastBase && lastBase !== baseSha;
     const before = comparable ? diffHash(`${lastBase}...${last}`, cwd) : null;

@@ -83,3 +83,47 @@ test('missing old base degrades to changed, not unchanged', () => {
   assert.equal(r.reachable, true);
   assert.equal(r.prPatchIdUnchanged, false);
 });
+
+const tierOf = (r, last, seen = ['callable']) => classify({ ...r, lastReviewedSha: last, linkTypesSeen: seen, prFileCount: 10 });
+
+test('reverting a PR-modified file to base content stays in the increment', () => {
+  g('checkout', '-q', '-B', 'rv', SHAS.base0);
+  put('seed.txt', 'changed');
+  const q1 = commit('q1');
+  put('seed.txt', 's');
+  const q2 = commit('q2');
+  const r = computeIncrement(args({ prPaths: ['seed.txt'], lastReviewedSha: q1, lastBaseSha: SHAS.base0, baseSha: SHAS.base0, headSha: q2 }));
+  assert.deepEqual(r.incrementFiles, ['seed.txt']);
+  assert.notEqual(tierOf(r, q1), 'none');
+  // merge base and revert in one push
+  g('checkout', '-q', '-B', 'rv2', q1);
+  g('merge', '-q', '--no-edit', 'main');
+  put('seed.txt', 's');
+  const q3 = commit('q3');
+  const m = computeIncrement(args({ prPaths: ['seed.txt'], lastReviewedSha: q1, lastBaseSha: SHAS.base0, baseSha: SHAS.base1, headSha: q3 }));
+  assert.deepEqual(m.incrementFiles, ['seed.txt']);
+  assert.notEqual(tierOf(m, q1), 'none');
+});
+
+test('deleting a PR-added file stays in the increment', () => {
+  g('checkout', '-q', '-B', 'del', SHAS.p2);
+  g('rm', '-q', 'recovery-api/src/callable/x.ts');
+  const d = commit('del');
+  const r = computeIncrement(args({ lastReviewedSha: SHAS.p2, lastBaseSha: SHAS.base0, baseSha: SHAS.base0, headSha: d }));
+  assert.deepEqual(r.incrementFiles, ['recovery-api/src/callable/x.ts']);
+  assert.notEqual(tierOf(r, SHAS.p2), 'none');
+});
+
+test('pure base merge: none without counterpart drift, base-drift with it', () => {
+  g('checkout', '-q', '-B', 'b2', SHAS.base0);
+  put('other/z.txt', 'z');
+  const base2 = commit('base2');
+  g('checkout', '-q', '-B', 'pm', SHAS.p2);
+  g('merge', '-q', '--no-edit', base2);
+  const head = g('rev-parse', 'HEAD');
+  const none = computeIncrement(args({ lastReviewedSha: SHAS.p2, lastBaseSha: SHAS.base0, baseSha: base2, headSha: head }));
+  assert.deepEqual(none.incrementFiles, []);
+  assert.equal(tierOf(none, SHAS.p2), 'none');
+  const drift = computeIncrement(args({ lastReviewedSha: SHAS.p2, lastBaseSha: SHAS.base0, baseSha: SHAS.base1, headSha: SHAS.p3 }));
+  assert.equal(tierOf(drift, SHAS.p2), 'base-drift');
+});
