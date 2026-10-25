@@ -20,6 +20,8 @@ test('patch-id unchanged, no counterpart change gives none', () =>
   assert.equal(classify({ ...base, prPatchIdUnchanged: true }), 'none'));
 test('patch-id unchanged with counterpart change gives base-drift', () =>
   assert.equal(classify({ ...base, prPatchIdUnchanged: true, baseDriftCounterpartsChanged: true }), 'base-drift'));
+test('empty own increment after base merge with counterpart drift gives base-drift', () =>
+  assert.equal(classify({ ...base, incrementFiles: [], prPatchIdUnchanged: true, baseDriftCounterpartsChanged: true }), 'base-drift'));
 test('docs-only increment gives light', () => assert.equal(classify({ ...base, incrementFiles: ['README.md'] }), 'light'));
 test('lockfile-only increment gives light', () =>
   assert.equal(classify({ ...base, incrementFiles: ['pkg/pnpm-lock.yaml', 'package-lock.json'] }), 'light'));

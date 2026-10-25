@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { classify } from '../lib/tier.mjs';
 import { computeIncrement } from '../lib/increment.mjs';
 
 let root;
@@ -40,6 +41,26 @@ test('increment lists only files after the last reviewed sha', () => {
   assert.deepEqual(r.incrementDiff.map((f) => f.file), ['README.md']);
   assert.deepEqual(r.incrementLinkTypes, []);
   assert.equal(r.prPatchIdUnchanged, false);
+});
+
+test('whitespace-only re-indent with same base is not unchanged', () => {
+  g('checkout', '-q', '-b', 'ws', SHAS.p1);
+  put('recovery-api/src/callable/x.yml', 'a:\n  b: 1\n');
+  const w1 = commit('w1');
+  put('recovery-api/src/callable/x.yml', 'a:\n    b: 1\n');
+  const w2 = commit('w2');
+  const r = computeIncrement(args({ lastReviewedSha: w1, lastBaseSha: SHAS.base0, baseSha: SHAS.base0, headSha: w2 }));
+  assert.deepEqual(r.incrementFiles, ['recovery-api/src/callable/x.yml']);
+  assert.equal(r.prPatchIdUnchanged, false);
+  assert.equal(classify({ ...r, lastReviewedSha: w1, linkTypesSeen: ['callable'], prFileCount: 4 }) !== 'none', true);
+  assert.notEqual(classify({ ...r, lastReviewedSha: w1, linkTypesSeen: ['callable'], prFileCount: 4 }), 'base-drift');
+  g('checkout', '-q', 'pr');
+});
+
+test('merge from base: increment excludes other PRs files', () => {
+  const r = computeIncrement(args({ lastReviewedSha: SHAS.p2, lastBaseSha: SHAS.base0, baseSha: SHAS.base1, headSha: SHAS.p3 }));
+  assert.deepEqual(r.incrementFiles, []);
+  assert.deepEqual(r.incrementDiff, []);
 });
 
 test('unreachable or invalid last sha is not reachable', () => {

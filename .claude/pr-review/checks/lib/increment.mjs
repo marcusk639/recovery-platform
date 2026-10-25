@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { git, parseUnifiedDiff } from './diff.mjs';
 import { matches } from './glob.mjs';
@@ -8,12 +8,11 @@ const TABLE = JSON.parse(readFileSync(new URL('../../routing.json', import.meta.
 const SHA_RE = /^[0-9a-f]{40}$/;
 const lines = (s) => s.split('\n').filter(Boolean);
 
-function patchId(diffArgs, cwd) {
+// Exact-diff hash (not patch-id: that strips whitespace, hiding re-indents).
+function diffHash(range, cwd) {
   try {
-    const diff = git(diffArgs, cwd);
-    if (!diff) return null;
-    const out = execFileSync('git', ['patch-id', '--stable'], { cwd, input: diff, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
-    return out.trim().split(/\s+/)[0] || null;
+    const diff = git(['diff', '--no-color', '-M', range], cwd);
+    return diff ? createHash('sha256').update(diff).digest('hex') : null;
   } catch {
     return null;
   }
@@ -42,10 +41,14 @@ export function computeIncrement({ lastReviewedSha, lastBaseSha, baseSha, headSh
     return none;
   }
   try {
-    const incrementFiles = lines(git(['diff', '--name-only', `${last}..${headSha}`], cwd));
-    const incrementDiff = parseUnifiedDiff(git(['diff', '-M', '--no-color', `${last}..${headSha}`], cwd));
-    const before = lastBase ? patchId(['diff', `${lastBase}...${last}`], cwd) : null;
-    const after = before ? patchId(['diff', `${baseSha}...${headSha}`], cwd) : null;
+    // Only this PR's files: a merge from base pulls other PRs' files into last..head.
+    const prSet = new Set(lines(git(['diff', '--name-only', `${baseSha}...${headSha}`], cwd)));
+    const incrementFiles = lines(git(['diff', '--name-only', `${last}..${headSha}`], cwd)).filter((f) => prSet.has(f));
+    const incrementDiff = parseUnifiedDiff(git(['diff', '-M', '--no-color', `${last}..${headSha}`], cwd)).filter((f) => prSet.has(f.file));
+    // Same base + non-empty increment can never be "PR unchanged".
+    const comparable = lastBase && lastBase !== baseSha;
+    const before = comparable ? diffHash(`${lastBase}...${last}`, cwd) : null;
+    const after = before ? diffHash(`${baseSha}...${headSha}`, cwd) : null;
     const drift = baseDriftChanged(lastBase, baseSha, route(prPaths).linkTypes, cwd);
     return {
       reachable: true,

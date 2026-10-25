@@ -23,7 +23,8 @@ export function classify({
   baseDriftCounterpartsChanged,
 }) {
   if (!lastReviewedSha || !reachable) return 'full';
-  if (incrementFiles.length === 0) return 'none';
+  // A merge from base leaves this PR's own increment empty yet can still need base-drift.
+  if (incrementFiles.length === 0 && !(prPatchIdUnchanged && baseDriftCounterpartsChanged)) return 'none';
   if (prPatchIdUnchanged) return baseDriftCounterpartsChanged ? 'base-drift' : 'none';
   if (incrementLinkTypes.length === 0 && incrementFiles.every(isLight)) return 'light';
   const unseen = incrementLinkTypes.some((t) => !linkTypesSeen.includes(t));

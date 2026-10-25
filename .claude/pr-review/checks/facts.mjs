@@ -42,7 +42,8 @@ function renderResult(r) {
 function tierSection(tier, driftFiles) {
   if (!tier) return [];
   const out = ['## Review tier', tier];
-  if (tier !== 'full') out.push('', 'Incremental: the files and checks below cover only changes since the last reviewed commit.');
+  if (tier === 'none') out.push('', 'No review ran: nothing in the PR changed since the last reviewed commit.');
+  else if (tier !== 'full') out.push('', 'Incremental: the files and checks below cover only changes since the last reviewed commit.');
   if (tier === 'base-drift') out.push('', 'Counterpart files changed on the base branch:', list(driftFiles.slice(0, MAX_PER_CHECK)));
   return [...out, ''];
 }
