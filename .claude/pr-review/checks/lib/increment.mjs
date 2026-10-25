@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { git, parseUnifiedDiff } from './diff.mjs';
+import { filterDiffText, git, parseUnifiedDiff } from './diff.mjs';
 import { matches } from './glob.mjs';
 import { route } from './routing.mjs';
 
@@ -33,7 +33,7 @@ function baseDriftChanged(lastBaseSha, baseSha, prLinkTypes, cwd) {
 export function computeIncrement({ lastReviewedSha, lastBaseSha, baseSha, headSha, prPaths, cwd }) {
   const last = SHA_RE.test(lastReviewedSha ?? '') ? lastReviewedSha : null;
   const lastBase = SHA_RE.test(lastBaseSha ?? '') ? lastBaseSha : null;
-  const none = { reachable: false, incrementFiles: [], incrementDiff: [], incrementLinkTypes: [], prPatchIdUnchanged: false, baseDriftCounterpartsChanged: false, driftFiles: [] };
+  const none = { reachable: false, incrementFiles: [], incrementDiff: [], incrementText: '', incrementLinkTypes: [], prPatchIdUnchanged: false, baseDriftCounterpartsChanged: false, driftFiles: [] };
   if (!last) return none;
   try {
     git(['merge-base', '--is-ancestor', last, headSha], cwd);
@@ -55,7 +55,10 @@ export function computeIncrement({ lastReviewedSha, lastBaseSha, baseSha, headSh
       // unfiltered
     }
     const incrementFiles = lines(git(['diff', '--name-only', `${last}..${headSha}`], cwd)).filter(inPr);
-    const incrementDiff = parseUnifiedDiff(git(['diff', '-M', '--no-color', `${last}..${headSha}`], cwd)).filter((f) => inPr(f.file));
+    const rawIncrement = git(['diff', '-M', '--no-color', `${last}..${headSha}`], cwd);
+    const incrementDiff = parseUnifiedDiff(rawIncrement).filter((f) => inPr(f.file));
+    // The same filtered increment as text, for the model's OUT/increment.diff.
+    const incrementText = filterDiffText(rawIncrement, inPr);
     // Same base + non-empty increment can never be "PR unchanged".
     const comparable = lastBase && lastBase !== baseSha;
     const before = comparable ? diffHash(`${lastBase}...${last}`, cwd) : null;
@@ -65,6 +68,7 @@ export function computeIncrement({ lastReviewedSha, lastBaseSha, baseSha, headSh
       reachable: true,
       incrementFiles,
       incrementDiff,
+      incrementText,
       incrementLinkTypes: route(incrementFiles).linkTypes,
       prPatchIdUnchanged: Boolean(before && after && before === after),
       baseDriftCounterpartsChanged: drift === true || (Array.isArray(drift) && drift.length > 0),

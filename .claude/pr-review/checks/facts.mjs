@@ -8,6 +8,7 @@ import { ghRequest, listIssueComments, listReviewComments } from './lib/gh.mjs';
 import { loadState } from './lib/state.mjs';
 import { classify, MAX_TURNS } from './lib/tier.mjs';
 import { computeIncrement } from './lib/increment.mjs';
+import { writeMaterial } from './lib/material.mjs';
 import { SUMMARY_MARKER } from './lib/markers.mjs';
 import { checkExports, checkRegion, checkQueriesVsIndexes, checkStoragePaths, checkCollectionsVsRules, checkTwins } from './contracts.mjs';
 import { checkSecrets, checkPiiLogs, checkNewFileSize, checkTitleScope, checkSelfEdit, runVerifyDiff } from './hygiene.mjs';
@@ -84,10 +85,18 @@ export function buildFacts({ files = [], routeResult, results = [], prContext = 
   return `${head}\n## Facts\n${facts}${context}`;
 }
 
-async function gatherContext(repo, pr, body) {
+// Only maintainers' words reach the model: the repo is public, so any other
+// commenter could otherwise plant instructions in the PR context.
+export const TRUSTED_ASSOCIATIONS = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
+const trusted = (x) => TRUSTED_ASSOCIATIONS.has(x?.author_association);
+
+export async function gatherContext(repo, pr, pull, list = listIssueComments) {
   try {
-    const comments = (await listIssueComments(repo, pr)).filter((c) => !String(c.body ?? '').startsWith(SUMMARY_MARKER));
-    const parts = [`PR description:\n${redact(String(body ?? ''))}`];
+    const body = trusted(pull)
+      ? `PR description:\n${redact(String(pull?.body ?? ''))}`
+      : 'PR description withheld: the PR author is not a repository maintainer.';
+    const comments = (await list(repo, pr)).filter((c) => trusted(c) && !String(c.body ?? '').startsWith(SUMMARY_MARKER));
+    const parts = [body];
     for (const c of comments) parts.push(`Comment:\n${redact(String(c.body ?? '')).slice(0, MAX_COMMENT)}`);
     return parts.join('\n\n');
   } catch {
@@ -95,7 +104,7 @@ async function gatherContext(repo, pr, body) {
   }
 }
 
-function runChecks({ files, repoRoot, baseSha, title, verifyScript }) {
+function runChecks({ files, repoRoot, baseSha, headSha, title, verifyScript }) {
   const checks = [
     ['checkExports', () => checkExports(files, repoRoot)],
     ['checkRegion', () => checkRegion(files, repoRoot)],
@@ -108,7 +117,7 @@ function runChecks({ files, repoRoot, baseSha, title, verifyScript }) {
     ['checkNewFileSize', () => checkNewFileSize(files, repoRoot)],
     ['checkTitleScope', () => checkTitleScope(title)],
     ['checkSelfEdit', () => checkSelfEdit(files)],
-    ['runVerifyDiff', () => runVerifyDiff(baseSha, repoRoot, verifyScript)],
+    ['runVerifyDiff', () => runVerifyDiff(baseSha, repoRoot, verifyScript, headSha)],
   ];
   return checks.map(([check, fn]) => {
     try {
@@ -167,6 +176,8 @@ async function main() {
     headSha: HEAD_SHA,
     baseSha: BASE_SHA,
     pr: Number(PR),
+    // Publish treats claude[bot] review comments from here on as this run's.
+    runStartedAt: new Date().toISOString(),
   };
   const out = OUT || '.';
   try {
@@ -179,14 +190,16 @@ async function main() {
     const files = tier === 'full' ? prFiles : inc.incrementDiff;
     const factPaths = [...new Set(files.flatMap((f) => [f.oldFile, f.file]).filter(Boolean))];
     const verifyScript = join(dirname(fileURLToPath(import.meta.url)), '../../agent-gates/verify-diff.sh');
-    const results = tier === 'none' ? [] : runChecks({ files, repoRoot, baseSha: BASE_SHA, title: PR_TITLE, verifyScript });
-    let body = '';
+    const results = tier === 'none' ? [] : runChecks({ files, repoRoot, baseSha: BASE_SHA, headSha: HEAD_SHA, title: PR_TITLE, verifyScript });
+    let pull = null;
     try {
-      body = (await ghRequest('GET', `/repos/${REPO}/pulls/${PR}`)).body ?? '';
+      pull = await ghRequest('GET', `/repos/${REPO}/pulls/${PR}`);
     } catch {
-      body = null;
+      pull = null;
     }
-    const prContext = body === null ? 'PR context unavailable' : await gatherContext(REPO, PR, body);
+    const prContext = pull ? await gatherContext(REPO, PR, pull) : 'PR context unavailable';
+    mkdirSync(out, { recursive: true });
+    if (tier !== 'none') writeMaterial(out, { baseSha: BASE_SHA, headSha: HEAD_SHA, tier, incrementText: inc.incrementText, cwd: repoRoot });
     const routeResult = route(factPaths);
     recordRun(state, tier, routeResult);
     const text = buildFacts({ files, routeResult, results, prContext, title: PR_TITLE, tier, driftFiles: inc.driftFiles });
@@ -195,6 +208,12 @@ async function main() {
     process.stdout.write(`facts failed: ${err?.name ?? 'Error'}\n`);
     const empty = { packages: [], linkTypes: [], classes: [] };
     recordRun(state, 'full', empty);
+    try {
+      mkdirSync(out, { recursive: true });
+      writeMaterial(out, { baseSha: BASE_SHA, headSha: HEAD_SHA, tier: 'full', cwd: process.cwd() });
+    } catch {
+      // the model reports the missing material
+    }
     writeOutputs(out, buildFacts({ routeResult: empty, results: [{ check: 'facts', error: err }], prContext: 'PR context unavailable', title: PR_TITLE, tier: 'full' }), state);
   }
 }

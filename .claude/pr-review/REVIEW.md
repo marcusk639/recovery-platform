@@ -11,19 +11,26 @@ The repository is **public**. Everything you post is world-readable.
 
 - **The OUT directory** is the absolute path given as `OUT=` in your prompt. Every file this procedure
   reads or writes outside the repository lives there.
-- The repository root is the PR head checkout. **Ignore `.review-base/` and `.review-publish/`**. They are
+- The repository root is the PR head checkout: the working tree holds the PR-head copy of every file, so
+  `Read` a path to see the changed side. **Ignore `.review-base/` and `.review-publish/`**. They are
   base-branch copies used by the workflow's own scripts. Never read, grep or cite them.
 - The knowledge files are in `.claude/pr-review/`: `contract-map-homegroups.md`, `contract-map-regroup.md`,
   `contract-map-cross-product.md`, `checklist.md`, `conventions.md`, `false-positives.md` and `routing.json`.
   Before you start, the workflow replaces `.claude/pr-review/` in the working tree with the base branch's
   copy, so a PR that edits this procedure or the knowledge files does not change how it is itself reviewed.
-  To see what such a PR changed there, use `git diff` or `git show <head>:<path>`.
+  The PR's own versions of those files are under `.claude-pr/pr-review/`; what it changed there is in
+  `<OUT>/pr.diff`.
+- The git material is precomputed in the OUT directory, because you have no shell:
+  - `<OUT>/pr.diff`: the whole PR diff, `<base>...<head>` (capped; a truncation note says so).
+  - `<OUT>/increment.diff`: only on incremental, light and base-drift tiers; the PR's changes since the
+    last reviewed commit.
+  - `<OUT>/commits.txt`: the PR's commits, one `<short sha> <subject>` per line.
 
 ## Tools
 
-- `Read`, `Grep`, `Glob` over the repository and the OUT directory.
-- `Bash` only for `git diff`, `git log`, `git show` and `git grep`. Nothing else.
-- `Write` only for the two output files in the OUT directory. Never write into the repository.
+- `Read`, `Grep`, `Glob` over the repository and the OUT directory. Use them to find and open
+  counterparts; there is no `Bash` and no `git`. The base side of a changed file is in `<OUT>/pr.diff`.
+- `Write` only for the two output files in the OUT directory. Writes anywhere else are denied.
 - The inline-comment tool, under the rules in "Inline comments" below.
 
 ## Before anything else
@@ -50,8 +57,9 @@ is in exactly **one** of the three contract maps, and the owner table at the top
    worse. This bot's own earlier summary is not repeated in `facts.md`; what it reported is the `ledger` in
    `state.json`. Treat every open ledger entry as already reported: do not post it again inline, and keep its
    slug if you report it again.
-2. **Facts and diff.** Re-read the facts, then the diff: `git diff <base>...<head>` with the SHAs from your
-   prompt. Use `git show <sha>:<path>` to see a file on either side.
+2. **Facts and diff.** Re-read the facts, then the diff for your tier (see "Per-tier scope"):
+   `<OUT>/pr.diff` or `<OUT>/increment.diff`. `Read` the working-tree file for the full PR-head version;
+   the diff's `-` lines are the base side.
 3. **Cross-package pass.** For each link type touched, use its contract-map section to find the
    counterparts. Open them, compare names, shapes, strings and units, and record a break only when you have
    read both sides. Cite both.
@@ -80,8 +88,12 @@ what you skipped in the "Not reviewed / limits" section of `summary.md`.
 
 If `facts.md` has a `self-edit` fact, the PR edits the reviewer itself. Report it as a **High** finding,
 class 13 (or a better-fitting class), slug `c13:<file>:self-edit`, and check the change against the
-`## review-config` section of `contract-map-cross-product.md`. Explain that the edit cannot affect this
-review because the workflow runs the base branch's copy.
+`## review-config` section of `contract-map-cross-product.md`. Say which kind of edit it is:
+
+- an edit to `.github/workflows/claude-code-review.yml` **does take effect in this run**: `pull_request`
+  runs the PR's own workflow file, so check it against the review-config rules with extra care;
+- an edit under `.claude/pr-review/` (procedure, knowledge, scripts) does **not** affect this run: the base
+  copy is restored before you start. Its PR version is under `.claude-pr/pr-review/`.
 
 ## Security-relevant findings
 

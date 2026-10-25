@@ -117,7 +117,7 @@ Model to follow: recovery-api logs only zod issue paths, never input values.
 
 ## review-config
 
-The reviewer's knowledge and scripts run from the base branch, so a PR's edits to them don't apply to its own review.
+The reviewer's knowledge and scripts run from the base branch, so a PR's edits to them don't apply to its own review. The workflow file is the exception: `pull_request` runs the PR's own copy, so an edit to it does take effect in that PR's run.
 
 | If this changes                                                        | Check                                                                                                                                                                                                                                           |
 | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

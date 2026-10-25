@@ -83,6 +83,23 @@ export function parseUnifiedDiff(text) {
   return files;
 }
 
+export function prDiffText(baseSha, headSha, cwd) {
+  return git(['diff', '--no-color', '-M', `${baseSha}...${headSha}`], cwd);
+}
+
 export function prDiff(baseSha, headSha, cwd) {
-  return parseUnifiedDiff(git(['diff', '-M', '--no-color', `${baseSha}...${headSha}`], cwd));
+  return parseUnifiedDiff(prDiffText(baseSha, headSha, cwd));
+}
+
+// The raw diff text restricted to the files keep(file) accepts (file = new
+// path, or old path for a deletion), cut at each "diff --git" header.
+export function filterDiffText(text, keep) {
+  const chunks = String(text ?? '').split(/(?=^diff --git )/m);
+  return chunks
+    .filter((c) => {
+      if (!c.startsWith('diff --git ')) return false;
+      const [f] = parseUnifiedDiff(c);
+      return Boolean(f) && keep(f.file);
+    })
+    .join('');
 }

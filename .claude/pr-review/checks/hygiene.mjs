@@ -2,11 +2,18 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { SECRET_PATTERNS, redact } from './lib/redact.mjs';
+import { git } from './lib/diff.mjs';
 
 const CODE = /\.(?:ts|tsx|js|jsx|mjs)$/;
 const PII = /email|clientEmail|clientName|displayName|phone|sobrietyDate|address|request\.data|req\.body/;
 const LOG_CALL = /\b(?:logger|console)\./;
+const WORKFLOW = '.github/workflows/claude-code-review.yml';
 const SELF_EDIT = /^(?:\.github\/workflows\/claude-code-review\.yml|\.claude\/pr-review\/.*)$/;
+// pull_request runs the PR's own workflow file; .claude/pr-review/** is restored from base.
+const SELF_EDIT_NOTE = {
+  workflow: 'PR edits the review workflow; this edit takes effect in this run (pull_request runs the PR\'s workflow file)',
+  scripts: 'PR edits the review agent\'s scripts or knowledge; this edit does not affect this run (the base copy is restored)',
+};
 
 const fact = (check, file, line, note) => {
   const f = { check, file, note: redact(note) };
@@ -66,16 +73,29 @@ export function checkTitleScope(title) {
 export function checkSelfEdit(files) {
   return files
     .filter((f) => SELF_EDIT.test(f.file) || (f.oldFile && SELF_EDIT.test(f.oldFile)))
-    .map((f) => fact('self-edit', f.file, null, 'PR edits the review agent itself; its own scripts run from the base SHA, not this change'));
+    .map((f) => {
+      const workflow = f.file === WORKFLOW || f.oldFile === WORKFLOW;
+      return fact('self-edit', f.file, null, workflow ? SELF_EDIT_NOTE.workflow : SELF_EDIT_NOTE.scripts);
+    });
 }
 
-export function runVerifyDiff(baseSha, repoRoot, scriptPath) {
+// verify-diff compares against the PR's fork point: base.sha itself may have
+// moved past it, which would blame the PR for base-branch changes.
+export function runVerifyDiff(baseSha, repoRoot, scriptPath, headSha) {
   if (!scriptPath) return [];
   const script = resolve(repoRoot, scriptPath);
   if (!existsSync(script)) return [];
   const unavailable = () => [fact('verify-diff', 'verify-diff.sh', null, 'verify-diff unavailable')];
+  let since = baseSha;
+  if (headSha) {
+    try {
+      since = git(['merge-base', baseSha, headSha], repoRoot).trim();
+    } catch {
+      return unavailable();
+    }
+  }
   try {
-    execFileSync('bash', [script, baseSha], {
+    execFileSync('bash', [script, since], {
       cwd: repoRoot,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],

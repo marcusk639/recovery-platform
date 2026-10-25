@@ -1,5 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -113,6 +114,36 @@ test('checkSelfEdit', () => {
   assert.equal(checkSelfEdit([file({ file: '.claude/pr-review/REVIEW.md' })]).length, 1);
   assert.equal(checkSelfEdit([file({ file: '.github/workflows/claude-code-review.yml' })]).length, 1);
   assert.deepEqual(checkSelfEdit([file({ file: 'regroup/a.ts' })]), []);
+});
+
+test('checkSelfEdit says the workflow edit takes effect and the scripts edit does not', () => {
+  const [wf] = checkSelfEdit([file({ file: '.github/workflows/claude-code-review.yml' })]);
+  assert.match(wf.note, /takes effect in this run/);
+  const [scripts] = checkSelfEdit([file({ file: '.claude/pr-review/checks/facts.mjs' })]);
+  assert.match(scripts.note, /does not affect this run/);
+});
+
+test('runVerifyDiff passes the merge-base of base and head, not base', () => {
+  const repo = join(root, 'mb-repo');
+  mkdirSync(repo, { recursive: true });
+  const g = (...a) => execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...a], { cwd: repo, encoding: 'utf8' }).trim();
+  const commitFile = (name) => {
+    writeFileSync(join(repo, name), `${name}\n`);
+    g('add', name);
+    g('commit', '-q', '-m', name);
+    return g('rev-parse', 'HEAD');
+  };
+  g('init', '-q', '-b', 'main');
+  const fork = commitFile('seed.txt');
+  g('checkout', '-q', '-b', 'pr');
+  const head = commitFile('pr.txt');
+  g('checkout', '-q', 'main');
+  const base = commitFile('later.txt');
+  writeFileSync(join(root, 'echo.sh'), 'echo "[ARG] $1"\nexit 1\n');
+  const [f] = runVerifyDiff(base, repo, join(root, 'echo.sh'), head);
+  assert.equal(f.note, `[ARG] ${fork}`);
+  const bad = runVerifyDiff('0'.repeat(40), repo, join(root, 'echo.sh'), head);
+  assert.deepEqual(bad.map((x) => x.note), ['verify-diff unavailable']);
 });
 
 test('runVerifyDiff: exit 1 yields stdout lines; exit 0 and missing yield []', () => {
