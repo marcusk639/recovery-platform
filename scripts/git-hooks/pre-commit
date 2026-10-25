@@ -21,7 +21,9 @@ FAIL=0
 
 # --- 1. Secret scan (BLOCKING) -------------------------------------------
 # Firebase client config files (native plist/json and the two web apps' config
-# modules, matched by exact path) carry public-by-design AIza keys; test files
+# modules, matched by exact path) and the homegroups iOS AppDelegate (Google Maps
+# SDK key, the same key AndroidManifest.xml carries) hold public-by-design client
+# AIza keys, which ship in the app or bundle; restrict them in GCP. Test files
 # may contain known-bad fixtures (e.g. google-apikeys.test.ts regression test).
 #
 # whsec_/sk_test_/rk_live_ added 2026-09-28: a doc-vs-code audit found two live
@@ -33,7 +35,7 @@ FAIL=0
 # (the scan reads staged content). The secrets stay in git history regardless;
 # rotating them is what closes the exposure.
 SECRET_PATTERNS='sk-or-v1-[A-Za-z0-9]{16,}|sk-ant-[A-Za-z0-9_-]{16,}|sk_live_[A-Za-z0-9]{16,}|sk_test_[A-Za-z0-9]{16,}|rk_live_[A-Za-z0-9]{16,}|whsec_[A-Za-z0-9]{16,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|-----BEGIN [A-Z ]*PRIVATE KEY-----|AIza[0-9A-Za-z_-]{35}'
-ALLOWLIST='GoogleService-Info[^/]*\.plist$|google-services[^/]*\.json$|AndroidManifest\.xml$|\.test\.(ts|tsx|js)$|__tests__/|package-lock\.json$|\.env\.example$|env\.example$|^regroup/web/src/environments/environment(\.prod)?\.ts$|^homegroups/web/src/lib/firebase\.js$'
+ALLOWLIST='GoogleService-Info[^/]*\.plist$|google-services[^/]*\.json$|AndroidManifest\.xml$|\.test\.(ts|tsx|js)$|__tests__/|package-lock\.json$|\.env\.example$|env\.example$|^regroup/web/src/environments/environment(\.prod)?\.ts$|^homegroups/web/src/lib/firebase\.js$|^homegroups/mobile/ios/RecoveryConnect/AppDelegate\.mm$'
 
 while IFS= read -r f; do
   echo "$f" | grep -qE "$ALLOWLIST" && continue
@@ -76,8 +78,9 @@ done <<< "$STAGED"
 # agent whose opening move is destructive is ungated in-process. A git hook runs
 # outside the agent and cannot be raced. Applies to every author equally: if a
 # test must legitimately change, make the change deliberately and say why in the
-# commit message, or bypass with --no-verify. CI does not re-run this gate, so a
-# bypass is final; reviewers are the only remaining check.
+# commit message, or bypass with --no-verify. A bypass is not final: the
+# test-tamper workflow re-runs this gate on every PR, and only the
+# test-change-approved label skips it there.
 #
 # Degrades gracefully: if the gate script is absent (e.g. committing on a branch
 # that predates .claude/agent-gates/), warn instead of blocking.

@@ -1,0 +1,44 @@
+name: Test-tamper gate
+
+# Re-runs .claude/agent-gates/verify-diff.sh on every PR, so a commit made with
+# `git commit --no-verify` cannot slip a deleted, renamed-away, skipped or hollowed
+# test past review. Kept out of ci.yml so that adding or removing the override
+# label re-runs only this job.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-tamper-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  verify-diff:
+    name: test-tamper gate (verify-diff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Skipped by the test-change-approved label
+        if: contains(github.event.pull_request.labels.*.name, 'test-change-approved')
+        run: echo "::notice::test-change-approved label present; test-tamper gate skipped. The PR description should say which test changes are intended."
+      - name: verify-diff against the PR base
+        if: ${{ !contains(github.event.pull_request.labels.*.name, 'test-change-approved') }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        # The gate script comes from the base commit, not the PR, so a PR cannot
+        # weaken the check that is judging it. A PR that changes verify-diff.sh is
+        # still checked by the old version; the new one applies once merged.
+        run: |
+          GATE="$RUNNER_TEMP/verify-diff.sh"
+          if ! git show "$BASE_SHA:.claude/agent-gates/verify-diff.sh" > "$GATE"; then
+            echo "::warning::verify-diff.sh not found at the base commit; gate skipped"
+            exit 0
+          fi
+          chmod +x "$GATE"
+          "$GATE" "$(git merge-base "$BASE_SHA" HEAD)"
