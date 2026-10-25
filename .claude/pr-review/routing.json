@@ -81,7 +81,7 @@
   {
     "linkType": "push",
     "paths": [
-      "homegroups/functions/src/utils/notif*",
+      "homegroups/functions/src/callable/**",
       "regroup/functions/src/util/notif*",
       "regroup/functions/src/scheduled/**",
       "homegroups/functions/src/triggers/**",

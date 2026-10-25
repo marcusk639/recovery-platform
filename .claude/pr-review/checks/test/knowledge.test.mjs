@@ -31,16 +31,31 @@ test('knowledge paths exist', () => {
   assert.deepEqual(missing, []);
 });
 
+const table = JSON.parse(readFileSync(join(reviewDir, 'routing.json'), 'utf8'));
+const linkTypes = new Set(table.map((e) => e.linkType));
+// Single-token kebab-case `## heading` lines; multi-word intro headings are ignored.
+const mapHeadings = (name) => [...read(name).matchAll(/^## ([a-z0-9]+(?:-[a-z0-9]+)*)\s*$/gm)].map((m) => m[1]);
+
+test('routing.json is not empty', () => {
+  assert.ok(Array.isArray(table) && table.length > 0, 'routing.json has no link types');
+});
+
 test('every routing linkType has a heading in exactly one contract map', () => {
-  const table = JSON.parse(readFileSync(join(reviewDir, 'routing.json'), 'utf8'));
-  const headings = MAPS.map((name) => {
-    const set = new Set();
-    for (const m of read(name).matchAll(/^## (\S+)\s*$/gm)) set.add(m[1]);
-    return set;
-  });
-  for (const { linkType } of table) {
+  const headings = MAPS.map((name) => new Set(mapHeadings(name)));
+  for (const linkType of linkTypes) {
     const count = headings.filter((s) => s.has(linkType)).length;
     assert.equal(count, 1, `${linkType} appears in ${count} contract maps`);
+  }
+});
+
+test('contract maps have no duplicate or unknown link-type headings', () => {
+  for (const name of MAPS) {
+    const seen = new Set();
+    for (const h of mapHeadings(name)) {
+      assert.ok(!seen.has(h), `${name}: duplicate heading ## ${h}`);
+      seen.add(h);
+      assert.ok(linkTypes.has(h), `${name}: ## ${h} is not a routing.json linkType`);
+    }
   }
 });
 
