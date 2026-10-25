@@ -147,6 +147,12 @@ function writeOutputs(out, text, state) {
   }
 }
 
+// This run's routed link types (the files it considered) ride in both
+// OUT/state.json and the snapshot; publish adds them to linkTypesSeen on success.
+export function recordRun(state, tier, routeResult) {
+  return Object.assign(state, { tier, maxTurns: MAX_TURNS[tier], runLinkTypes: [...(routeResult?.linkTypes ?? [])] });
+}
+
 async function main() {
   const { REPO, PR, BASE_SHA, HEAD_SHA, OUT, PR_TITLE } = process.env;
   const state = {
@@ -154,6 +160,7 @@ async function main() {
     lastBaseSha: null,
     ledger: [],
     linkTypesSeen: [],
+    runLinkTypes: [],
     inlineSlugs: [],
     tier: 'full',
     maxTurns: MAX_TURNS.full,
@@ -169,8 +176,6 @@ async function main() {
     const paths = [...new Set(prFiles.flatMap((f) => [f.oldFile, f.file]).filter(Boolean))];
     const inc = computeIncrement({ ...state, baseSha: BASE_SHA, headSha: HEAD_SHA, prPaths: paths, cwd: repoRoot });
     const tier = classify({ ...state, ...inc, prFileCount: paths.length });
-    state.tier = tier;
-    state.maxTurns = MAX_TURNS[tier];
     const files = tier === 'full' ? prFiles : inc.incrementDiff;
     const factPaths = [...new Set(files.flatMap((f) => [f.oldFile, f.file]).filter(Boolean))];
     const verifyScript = join(dirname(fileURLToPath(import.meta.url)), '../../agent-gates/verify-diff.sh');
@@ -182,13 +187,14 @@ async function main() {
       body = null;
     }
     const prContext = body === null ? 'PR context unavailable' : await gatherContext(REPO, PR, body);
-    const text = buildFacts({ files, routeResult: route(factPaths), results, prContext, title: PR_TITLE, tier, driftFiles: inc.driftFiles });
+    const routeResult = route(factPaths);
+    recordRun(state, tier, routeResult);
+    const text = buildFacts({ files, routeResult, results, prContext, title: PR_TITLE, tier, driftFiles: inc.driftFiles });
     writeOutputs(out, text, state);
   } catch (err) {
     process.stdout.write(`facts failed: ${err?.name ?? 'Error'}\n`);
-    state.tier = 'full';
-    state.maxTurns = MAX_TURNS.full;
     const empty = { packages: [], linkTypes: [], classes: [] };
+    recordRun(state, 'full', empty);
     writeOutputs(out, buildFacts({ routeResult: empty, results: [{ check: 'facts', error: err }], prContext: 'PR context unavailable', title: PR_TITLE, tier: 'full' }), state);
   }
 }

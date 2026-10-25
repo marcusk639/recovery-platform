@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildFacts, snapshotPath } from '../facts.mjs';
+import { buildFacts, snapshotPath, recordRun } from '../facts.mjs';
 
 const base = {
   files: [{ file: 'a.ts', status: 'M' }],
@@ -63,4 +63,10 @@ test('incremental tier is stated and drift files listed', () => {
   assert.match(out, /only changes since the last reviewed commit/);
   assert.match(out, /- homegroups\/mobile\/src\/a\.ts/);
   assert.doesNotMatch(buildFacts({ ...base, tier: 'full' }), /only changes since/);
+});
+
+test('recordRun stores tier, turns and this run link types for state and snapshot', () => {
+  const s = recordRun({ linkTypesSeen: ['push'] }, 'incremental', { linkTypes: ['callable', 'storage'] });
+  assert.deepEqual([s.tier, s.maxTurns, s.runLinkTypes, s.linkTypesSeen], ['incremental', 40, ['callable', 'storage'], ['push']]);
+  assert.deepEqual(recordRun({}, 'full', { linkTypes: [] }).runLinkTypes, []);
 });

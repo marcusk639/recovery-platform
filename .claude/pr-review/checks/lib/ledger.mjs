@@ -76,26 +76,53 @@ export function sanitizeLedger(list, key) {
   return out;
 }
 
-const RANK = (e) => (e.status === 'open' ? 0 : 4) + SEVERITIES.indexOf(e.severity);
+export const VISIBLE_RUNS = 5;
 
-// Keeps the encoded marker under maxLen: first drops non-security titles, then
-// the lowest-priority entries (closed before open, Low before Critical).
-export function fitMarker(payload, encode, maxLen) {
-  let p = payload;
-  if (encode(p).length <= maxLen) return p;
-  p = { ...p, ledger: p.ledger.map((e) => ('title' in e ? { ...e, title: '' } : e)) };
-  if (encode(p).length <= maxLen) return p;
-  const kept = [...p.ledger].sort((a, b) => RANK(a) - RANK(b));
-  while (kept.length && encode({ ...p, ledger: kept }).length > maxLen) kept.pop();
-  return { ...p, ledger: kept };
+// What the summary may show: open entries, and resolved ones for VISIBLE_RUNS reviews.
+export function visibleEntries(ledger) {
+  return (ledger ?? []).filter((e) => e.status !== 'resolved' || e.runsSinceResolved < VISIBLE_RUNS);
 }
 
-// Prior entries not re-reported this run, then the current findings (current
-// wins). Findings are grouped by slug: if any finding in a group, or the prior
-// entry with that id, is security, the entry is security (dropped when there is
-// no key). A non-security entry that names a security file anywhere is
-// written withheld, with no slug or title.
-export function nextLedger(prior, findings, key, needles = []) {
+const closed = (e) => e.status !== 'open';
+const RANK = (e) => (e.status === 'open' ? 0 : 4) + SEVERITIES.indexOf(e.severity);
+
+// Keeps the encoded marker under maxLen: first drops closed entries (oldest
+// resolved first), then non-security titles, then the lowest-priority entries.
+export function fitMarker(payload, encode, maxLen) {
+  const fits = (ledger) => encode({ ...payload, ledger }).length <= maxLen;
+  if (fits(payload.ledger)) return payload;
+  let kept = [...payload.ledger];
+  const byAge = kept.filter(closed).sort((a, b) => b.runsSinceResolved - a.runsSinceResolved);
+  for (const e of byAge) {
+    if (fits(kept)) return { ...payload, ledger: kept };
+    kept = kept.filter((k) => k !== e);
+  }
+  if (fits(kept)) return { ...payload, ledger: kept };
+  kept = kept.map((e) => ('title' in e ? { ...e, title: '' } : e)).sort((a, b) => RANK(a) - RANK(b));
+  while (kept.length && !fits(kept)) kept.pop();
+  return { ...payload, ledger: kept };
+}
+
+function withStatus(e, status, runsSinceResolved) {
+  return { ...e, status, runsSinceResolved };
+}
+
+// An entry not re-reported this run: resolvedSlugs resolve it (age 0), an
+// already-resolved one ages by a run, anything else keeps its status.
+function age(e, resolvedIds) {
+  if (e.status === 'resolved') return withStatus(e, 'resolved', e.runsSinceResolved + 1);
+  return resolvedIds.has(e.id) ? withStatus(e, 'resolved', 0) : e;
+}
+
+// Prior entries plus this run's findings, matched by id (keyed opaqueId of the
+// slug). Tier "none" ran no model, so the ledger is returned as it was. Findings
+// are grouped by slug: if any finding in a group, or the prior entry with that
+// id, is security, the entry is security (dropped when there is no key). A
+// non-security entry that names a security file anywhere is written withheld,
+// with no slug or title. A finding reported this run is open even if its slug is
+// also listed as resolved.
+export function mergeLedger(prior, findings, resolvedSlugs, tier, { key = null, needles = [] } = {}) {
+  if (tier === 'none') return sanitizeLedger(prior, key);
   const groups = new Map();
   for (const f of findings) {
     const g = groups.get(f.slug) ?? { f, security: false, withheld: false };
@@ -111,6 +138,7 @@ export function nextLedger(prior, findings, key, needles = []) {
     )
     .filter(Boolean);
   const wasSecurity = new Set(old.filter((e) => e.security).map((e) => e.id));
+  const resolvedIds = new Set((resolvedSlugs ?? []).map((s) => opaqueId(s, key)));
   const touched = new Set();
   const current = [];
   for (const { f, security, withheld } of groups.values()) {
@@ -124,5 +152,5 @@ export function nextLedger(prior, findings, key, needles = []) {
       current.push(toLedgerEntry(f, key));
     }
   }
-  return [...old.filter((e) => !touched.has(e.id)), ...current];
+  return [...old.filter((e) => !touched.has(e.id)).map((e) => age(e, resolvedIds)), ...current];
 }
