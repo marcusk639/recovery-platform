@@ -61,3 +61,27 @@ test('parseUnifiedDiff handles rename, delete, binary, spaces', () => {
     { line: 2, text: '++ not a header' },
   ]);
 });
+
+test('parseUnifiedDiff records removed lines with old line numbers', () => {
+  const files = parseUnifiedDiff(`diff --git a/m.ts b/m.ts
+--- a/m.ts
++++ b/m.ts
+@@ -5,3 +5,3 @@
+ keep
+-old
++new
+ keep
+diff --git a/gone.ts b/gone.ts
+deleted file mode 100644
+--- a/gone.ts
++++ /dev/null
+@@ -1,2 +0,0 @@
+-one
+-two
+`);
+  assert.deepEqual(files[0].removed, [{ line: 6, text: 'old' }]);
+  assert.deepEqual(files[1].removed, [
+    { line: 1, text: 'one' },
+    { line: 2, text: 'two' },
+  ]);
+});

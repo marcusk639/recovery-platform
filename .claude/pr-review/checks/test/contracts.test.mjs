@@ -64,6 +64,21 @@ test('checkExports names client files that call the function', () => {
   assert.match(facts[0].note, /regroup\/mobile\/src\/a\.ts/);
 });
 
+test('checkExports reports removed exports with remaining client refs', () => {
+  const del = file('regroup/functions/src/foo.ts', [], {
+    status: 'D',
+    removed: [{ line: 3, text: 'export const foo = onCall(async () => {' }],
+  });
+  const facts = checkExports([del], root);
+  assert.equal(facts.length, 1);
+  assert.match(facts[0].note, /^export removed:/);
+  assert.match(facts[0].note, /regroup\/mobile\/src\/a\.ts/);
+  const re = file('regroup/functions/src/foo.ts', ['export const foo = onCall(x'], {
+    removed: [{ line: 3, text: 'export const foo = onCall(y' }],
+  });
+  assert.ok(checkExports([re], root).every((f) => !f.note.startsWith('export removed')));
+});
+
 test('checkExports ignores non-callable exports', () => {
   assert.deepEqual(checkExports([file('r/f.ts', ['export const foo = 1;'])], root), []);
 });

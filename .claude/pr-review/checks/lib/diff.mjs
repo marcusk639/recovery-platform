@@ -30,6 +30,7 @@ export function parseUnifiedDiff(text) {
   let oldLeft = 0;
   let newLeft = 0;
   let newLine = 0;
+  let oldLine = 0;
   for (const line of text.split('\n')) {
     if (cur && (oldLeft > 0 || newLeft > 0)) {
       const c = line[0];
@@ -39,6 +40,7 @@ export function parseUnifiedDiff(text) {
         continue;
       }
       if (c === '-') {
+        cur.removed.push({ line: oldLine++, text: line.slice(1) });
         oldLeft--;
         continue;
       }
@@ -46,13 +48,14 @@ export function parseUnifiedDiff(text) {
         oldLeft--;
         newLeft--;
         newLine++;
+        oldLine++;
         continue;
       }
       if (c === '\\') continue;
       oldLeft = newLeft = 0;
     }
     if (line.startsWith('diff --git ')) {
-      cur = { ...headerPaths(line.slice(11)), status: 'M', binary: false, added: [] };
+      cur = { ...headerPaths(line.slice(11)), status: 'M', binary: false, added: [], removed: [] };
       files.push(cur);
     } else if (!cur) {
       continue;
@@ -68,6 +71,7 @@ export function parseUnifiedDiff(text) {
     else {
       const m = /^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(line);
       if (m) {
+        oldLine = Number(m[0].match(/^@@ -(\d+)/)[1]);
         oldLeft = m[1] === undefined ? 1 : Number(m[1]);
         newLine = Number(m[2]);
         newLeft = m[3] === undefined ? 1 : Number(m[3]);

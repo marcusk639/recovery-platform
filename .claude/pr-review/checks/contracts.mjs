@@ -32,29 +32,49 @@ const CODE = /\.(?:ts|tsx|js|jsx|mjs)$/;
 const FN_EXPORT = /export const (\w+) = (?:onCall|onRequest|onSchedule|functions\.)/;
 const CLIENT_SPECS = [':(glob)*/mobile/src/**', ':(glob)*/web/src/**', 'homegroups/mobile/App.tsx'];
 
-// Note: the parsed diff carries added lines only, so removed exports are not seen.
+function clientHits(name, repoRoot) {
+  try {
+    return git(['grep', '-l', '-w', '-F', '-e', name, '--', ...CLIENT_SPECS], repoRoot)
+      .split('\n')
+      .filter(Boolean);
+  } catch (err) {
+    if (err.status === 1) return []; // git grep: no match
+    throw err;
+  }
+}
+
+const list = (hits) => `${hits.slice(0, 10).join(', ')}${hits.length > 10 ? ` (+${hits.length - 10} more)` : ''}`;
+
 export function checkExports(files, repoRoot) {
   const facts = [];
   for (const f of files) {
     if (f.binary || !CODE.test(f.file)) continue;
+    const addedNames = new Set();
     for (const a of f.added) {
       const m = FN_EXPORT.exec(a.text);
       if (!m) continue;
-      let hits = [];
-      try {
-        hits = git(['grep', '-l', '-w', '-F', '-e', m[1], '--', ...CLIENT_SPECS], repoRoot)
-          .split('\n')
-          .filter(Boolean);
-      } catch {
-        // git grep exits 1 on no match
-      }
+      addedNames.add(m[1]);
+      const hits = clientHits(m[1], repoRoot);
       facts.push({
         check: 'exports',
         file: f.file,
         line: a.line,
         note: hits.length
-          ? `'${m[1]}' referenced in: ${hits.slice(0, 10).join(', ')}${hits.length > 10 ? ` (+${hits.length - 10} more)` : ''}`
+          ? `'${m[1]}' referenced in: ${list(hits)}`
           : `'${m[1]}' not referenced in any mobile/web src or homegroups/mobile/App.tsx`,
+      });
+    }
+    for (const r of f.removed ?? []) {
+      const m = FN_EXPORT.exec(r.text);
+      if (!m || addedNames.has(m[1])) continue;
+      const hits = clientHits(m[1], repoRoot);
+      facts.push({
+        check: 'exports',
+        file: f.file,
+        line: r.line,
+        note: hits.length
+          ? `export removed: '${m[1]}' still referenced in: ${list(hits)}`
+          : `export removed: no client references found for '${m[1]}'`,
       });
     }
   }
