@@ -17,7 +17,7 @@ function decodeOnce(s) {
 }
 
 // Repeats a few times so double-encoding (%252E, &amp;#46;) does not help either.
-function normalise(s) {
+export function normalise(s) {
   let t = String(s ?? '').replace(/&amp;/gi, '&');
   for (let i = 0; i < 3; i++) {
     const next = decodeOnce(t).replace(/%25/g, '%').replace(/&amp;/gi, '&');

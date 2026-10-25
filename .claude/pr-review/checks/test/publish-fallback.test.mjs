@@ -13,7 +13,7 @@ const BOT = { login: 'github-actions[bot]' };
 
 const PRIOR = [
   { id: opaqueId('c9:a.ts:x', KEY), slug: 'c9:a.ts:x', title: 'Swallowed error', severity: 'Medium', status: 'open', security: false, runsSinceResolved: 0 },
-  { id: opaqueId('c1:b.ts:y', KEY), severity: 'High', status: 'open', security: true, runsSinceResolved: 0 },
+  { id: opaqueId('c1:b.ts:y', KEY), severity: 'High', status: 'open', security: true, runsSinceResolved: 0, fileIds: [] },
 ];
 const PAYLOAD = { lastReviewedSha: OLD, lastBaseSha: OLDBASE, linkTypesSeen: ['callable'], ledger: PRIOR };
 const findingsText = JSON.stringify({ reviewedSha: HEAD, findings: [], resolvedSlugs: [] });

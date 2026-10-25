@@ -75,7 +75,7 @@ test('no id key gives no-key and makes zero requests', async () => {
 
 test('no security findings delivers trivially with zero requests', async () => {
   const m = mock();
-  assert.deepEqual(await deliverAdvisories(REPO, 7, [], '', m.request, KEY), { delivered: true });
+  assert.deepEqual(await deliverAdvisories(REPO, 7, [], '', m.request, KEY), { delivered: true, resolvedIds: [] });
   assert.equal(m.calls.length, 0);
 });
 
@@ -84,7 +84,7 @@ test('an existing advisory with a matching id gets one PATCH and no POST', async
   const existing = { ghsa_id: 'GHSA-aaaa-bbbb-cccc', description: original };
   const m = mock({ pages: [[{ ghsa_id: 'GHSA-other', description: 'pr-review-id: 0000000000000000' }, existing]] });
   const res = await deliverAdvisories(REPO, 7, [sec()], TOKEN, m.request, KEY);
-  assert.deepEqual(res, { delivered: true });
+  assert.deepEqual(res, { delivered: true, resolvedIds: [] });
   assert.equal(m.calls[0].method, 'GET');
   assert.equal(m.calls[0].path, `/repos/${REPO}/security-advisories?state=draft&per_page=100`);
   const writes = m.calls.filter((c) => c.method !== 'GET');
@@ -100,7 +100,7 @@ test('the "Also touched by" note is appended once per PR', async () => {
   const own = { ghsa_id: 'GHSA-bbbb-cccc-dddd', description: `d\n\nPull request: #7\npr-review-id: ${opaqueId('c4:x.ts:y', KEY)}` };
   const m = mock({ pages: [[touched, own]] });
   const res = await deliverAdvisories(REPO, 7, [sec(), sec({ slug: 'c4:x.ts:y', class: 4 })], TOKEN, m.request, KEY);
-  assert.deepEqual(res, { delivered: true });
+  assert.deepEqual(res, { delivered: true, resolvedIds: [] });
   assert.equal(m.calls.filter((c) => c.method !== 'GET').length, 0);
 });
 
@@ -114,7 +114,7 @@ test('#7 is not mistaken for #70', async () => {
 test('a new id gets one POST with the full private detail', async () => {
   const m = mock({ pages: [[]] });
   const res = await deliverAdvisories(REPO, 7, [sec()], TOKEN, m.request, KEY);
-  assert.deepEqual(res, { delivered: true });
+  assert.deepEqual(res, { delivered: true, resolvedIds: [] });
   const posts = m.calls.filter((c) => c.method === 'POST');
   assert.equal(posts.length, 1);
   const { path, body } = posts[0];
@@ -142,7 +142,7 @@ test('the draft listing is followed across pages', async () => {
   const existing = { ghsa_id: 'GHSA-aaaa-bbbb-cccc', description: `d\n\nPull request: #3\npr-review-id: ${ID}` };
   const m = mock({ pages: [page1, [existing]] });
   await deliverAdvisories(REPO, 7, [sec()], TOKEN, m.request, KEY);
-  const gets = m.calls.filter((c) => c.method === 'GET');
+  const gets = m.calls.filter((c) => c.method === 'GET' && c.path.includes('state=draft'));
   assert.equal(gets.length, 2);
   assert.equal(gets[1].path, page1.next);
   assert.equal(m.calls.filter((c) => c.method === 'POST').length, 0);
@@ -154,7 +154,9 @@ test('a next link off the advisories path is never followed', async () => {
   Object.defineProperty(page1, 'next', { value: '/user/repos' });
   const m = mock({ pages: [page1] });
   await deliverAdvisories(REPO, 7, [sec()], TOKEN, m.request, KEY);
-  assert.equal(m.calls.filter((c) => c.method === 'GET').length, 1);
+  // One GET per state, none following the foreign link.
+  assert.equal(m.calls.filter((c) => c.method === 'GET').length, 4);
+  assert.ok(m.calls.filter((c) => c.method === 'GET').every((c) => c.path.startsWith(`/repos/${REPO}/security-advisories?state=`)));
 });
 
 test('nextPath keeps only same-host rel=next links', () => {

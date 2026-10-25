@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { renderSummary, validateFindings, securityPointer } from '../lib/render.mjs';
 import { SUMMARY_MARKER, decodeLedger } from '../lib/markers.mjs';
 import { opaqueId, toLedgerEntry } from '../lib/ledger.mjs';
+import { fileId } from '../lib/fileids.mjs';
 
 const SHA = 'a'.repeat(40);
 const KEY = 'k';
@@ -133,8 +134,8 @@ test('ledger entries: opaque id and security entries carry no detail', () => {
   assert.match(opaqueId('c1:x:y', KEY), /^[0-9a-f]{16}$/);
   assert.equal(toLedgerEntry(SEC), null, 'no key: no security entry');
   const s = toLedgerEntry(SEC, KEY);
-  assert.deepEqual(Object.keys(s).sort(), ['id', 'runsSinceResolved', 'security', 'severity', 'status']);
-  assert.deepEqual(s, { id: opaqueId(SEC.slug, KEY), severity: 'High', status: 'open', security: true, runsSinceResolved: 0 });
+  assert.deepEqual(Object.keys(s).sort(), ['fileIds', 'id', 'runsSinceResolved', 'security', 'severity', 'status']);
+  assert.deepEqual(s, { id: opaqueId(SEC.slug, KEY), severity: 'High', status: 'open', security: true, runsSinceResolved: 0, fileIds: [fileId(SEC.locations[0].file, KEY)] });
   const n = toLedgerEntry(finding(), KEY);
   assert.deepEqual(n, {
     id: opaqueId(finding().slug, KEY),
@@ -182,4 +183,16 @@ test('over the cap, earlier-review sections are trimmed before this run\'s Low f
   for (let i = 0; i < 15; i++) assert.ok(body.includes(`**Low ${i}**`), `Low ${i} kept`);
   assert.doesNotMatch(body, /more Low finding\(s\) not shown/);
   assert.match(body, /more resolved finding\(s\) not shown/);
+});
+
+test('an oversized raw marker is not re-emitted; an encoded empty ledger is', () => {
+  const huge = `<!-- pr-review:ledger v1 ${'A'.repeat(40000)} -->`;
+  const ledger = { lastReviewedSha: null, lastBaseSha: null, linkTypesSeen: [], ledger: [] };
+  const body = renderSummary({ state: {}, findings: null, narrative: '', outcome: 'failure', ledger, rawMarker: huge });
+  assert.ok(body.startsWith(SUMMARY_MARKER));
+  assert.ok(!body.includes('A'.repeat(1000)));
+  assert.deepEqual(decodeLedger(body).ledger, []);
+  assert.ok(body.length <= 60000);
+  const small = `<!-- pr-review:ledger v1 ${'A'.repeat(40)} -->`;
+  assert.ok(renderSummary({ state: {}, findings: null, narrative: '', outcome: 'failure', ledger, rawMarker: small }).includes(small));
 });

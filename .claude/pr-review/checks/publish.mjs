@@ -4,12 +4,14 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { listIssueComments, upsertSummary } from './lib/gh.mjs';
+import { ghRequest, listIssueComments, listReviewComments, upsertSummary } from './lib/gh.mjs';
 import { findSummary } from './lib/state.mjs';
 import { decodeLedger, rawLedgerMarker } from './lib/markers.mjs';
-import { mergeLedger, opaqueId, sanitizeLedger, visibleEntries } from './lib/ledger.mjs';
+import { markResolved, mergeLedger, opaqueId, sanitizeLedger, visibleEntries } from './lib/ledger.mjs';
 import { renderSummary, validateFindings } from './lib/render.mjs';
-import { securityNeedles, touchesSecurityFile } from './lib/needles.mjs';
+import { mentions, touchesSecurityFile } from './lib/needles.mjs';
+import { isPriorSecurityPath, priorFileIds, runNeedles } from './lib/fileids.mjs';
+import { guardInlineComments } from './lib/inline-guard.mjs';
 import { deliverAdvisories } from './advisories.mjs';
 
 const SHA_RE = /^[0-9a-f]{40}$/i;
@@ -42,14 +44,14 @@ export function knownLinkTypes() {
 
 // Tier "none" (facts found nothing new; the review step was skipped): only the
 // SHAs move. The ledger and linkTypesSeen stay as they were.
-function noChangeBody(prior, headSha, baseSha) {
+function noChangeBody(prior, headSha, baseSha, notices) {
   const head = sha(headSha) ?? prior.lastReviewedSha;
   const base = sha(baseSha) ?? prior.lastBaseSha;
   const since = String(prior.lastReviewedSha ?? head ?? '').slice(0, 7);
   const baseMoved = Boolean(prior.lastBaseSha && base && base !== prior.lastBaseSha);
   const note = baseMoved ? `Base updated; no counterpart changes since \`${since}\`.` : `No new changes since \`${since}\`.`;
   const ledger = { ...prior, lastReviewedSha: head, lastBaseSha: base };
-  return renderSummary({ state: {}, findings: null, narrative: '', outcome: 'none', note, ledger });
+  return renderSummary({ state: {}, findings: null, narrative: '', outcome: 'none', note, ledger, notices });
 }
 
 // Findings to mark "(new)": none on a first review. Without the id key,
@@ -77,7 +79,7 @@ function completedFindings(state, findingsText, outcome) {
 // Without a trusted snapshot: always the failure banner, with prior state from
 // the existing summary comment (fallback.state, sanitized as usual) or, if its
 // marker does not decode, that marker re-emitted verbatim (fallback.rawMarker).
-function untrustedBody(fallback, idKey, linkTypes) {
+function untrustedBody(fallback, idKey, linkTypes, notices) {
   const p = isObject(fallback?.state) ? fallback.state : {};
   const known = new Set(linkTypes);
   const ledger = {
@@ -86,12 +88,14 @@ function untrustedBody(fallback, idKey, linkTypes) {
     linkTypesSeen: [...new Set(strings(p.linkTypesSeen).filter((t) => known.has(t)))],
     ledger: sanitizeLedger(p.ledger, idKey),
   };
-  return renderSummary({ state: {}, findings: null, narrative: '', outcome: 'failure', reason: 'failed', ledger, rawMarker: fallback?.rawMarker ?? null });
+  return renderSummary({ state: {}, findings: null, narrative: '', outcome: 'failure', reason: 'failed', ledger, rawMarker: fallback?.rawMarker ?? null, notices });
 }
 
-export function composeBody({ state, findingsText, narrative, outcome, executionLog, headSha, baseSha, idKey, linkTypes = knownLinkTypes(), fallback, securityClause = DELIVERED }) {
+// resolvedIds: security ids whose advisory was dispositioned (advisories.mjs).
+// notices: fixed lines from publish itself (e.g. the inline guard).
+export function composeBody({ state, findingsText, narrative, outcome, executionLog, headSha, baseSha, idKey, linkTypes = knownLinkTypes(), fallback, securityClause = DELIVERED, resolvedIds = [], notices = [] }) {
   // A missing or invalid snapshot fails closed, whatever the action outcome.
-  if (!isObject(state)) return untrustedBody(fallback, idKey, linkTypes);
+  if (!isObject(state)) return untrustedBody(fallback, idKey, linkTypes, notices);
   const s = state;
   const known = new Set(linkTypes);
   const types = (list) => strings(list).filter((t) => known.has(t));
@@ -101,16 +105,21 @@ export function composeBody({ state, findingsText, narrative, outcome, execution
     linkTypesSeen: [...new Set(types(s.linkTypesSeen))],
     ledger: sanitizeLedger(s.ledger, idKey),
   };
-  if (s.tier === 'none' && outcome === 'skipped') return noChangeBody(prior, headSha, baseSha);
+  if (s.tier === 'none' && outcome === 'skipped') return noChangeBody(prior, headSha, baseSha, notices);
   // Tier "none" never runs the model, so a "success" alongside it is not trusted.
   const findings = completedFindings(s, findingsText, outcome);
   if (!findings) {
-    return renderSummary({ state: s, findings: null, narrative: '', outcome: 'failure', reason: failureReason(executionLog), ledger: prior });
+    return renderSummary({ state: s, findings: null, narrative: '', outcome: 'failure', reason: failureReason(executionLog), ledger: prior, notices });
   }
-  // Built once; prior security entries carry no files, so current findings only.
-  const needles = securityNeedles(findings.findings);
-  const reviewed = sha(findings.reviewedSha) ?? sha(headSha);
-  const merged = mergeLedger(prior.ledger, findings.findings, findings.resolvedSlugs, s.tier, { key: idKey, needles });
+  // Built once: current security files plus paths hashing to prior security fileIds.
+  const needles = runNeedles(findings.findings, [narrative], priorFileIds(prior.ledger), idKey);
+  // The trusted head (workflow env, then snapshot); the model's reviewedSha is ignored.
+  const reviewed = sha(headSha) ?? sha(s.headSha) ?? prior.lastReviewedSha;
+  const dispositioned = new Set(resolvedIds);
+  const merged = markResolved(
+    mergeLedger(prior.ledger, findings.findings, findings.resolvedSlugs, s.tier, { key: idKey, needles }),
+    (e) => e.security && dispositioned.has(e.id),
+  );
   const ledger = {
     lastReviewedSha: reviewed,
     lastBaseSha: sha(baseSha),
@@ -130,6 +139,7 @@ export function composeBody({ state, findingsText, narrative, outcome, execution
     carried: visible.filter((e) => e.status === 'open' && !touched.has(e.id)),
     resolved: visible.filter((e) => e.status === 'resolved'),
     securityClause,
+    notices,
   });
 }
 
@@ -168,17 +178,45 @@ export async function priorFromComment(repo, pr, list = listIssueComments) {
 
 // Security findings go to draft advisories first (advisoryToken only there,
 // never to the comment calls), so the public pointer says whether that worked.
+// Prior open security ids are looked up too, so a dispositioned advisory
+// resolves its ledger entry (needs the key and the token, like delivery).
 async function deliver(repo, pr, snapshot, rest, deliverFn) {
   const findings = completedFindings(snapshot, rest.findingsText, rest.outcome);
-  const security = (findings?.findings ?? []).filter((f) => f.security);
-  if (!security.length) return DELIVERED;
+  if (!findings) return { clause: DELIVERED, resolvedIds: [] };
+  const security = findings.findings.filter((f) => f.security);
+  const priorIds = rest.idKey ? sanitizeLedger(snapshot.ledger, rest.idKey).filter((e) => e.security && e.status === 'open').map((e) => e.id) : [];
+  if (!security.length && !priorIds.length) return { clause: DELIVERED, resolvedIds: [] };
   try {
-    const res = await deliverFn(repo, pr, security, rest.advisoryToken || null, undefined, rest.idKey || null);
-    return res?.delivered === true ? DELIVERED : NOT_DELIVERED;
+    const res = await deliverFn(repo, pr, security, rest.advisoryToken || null, undefined, rest.idKey || null, priorIds);
+    const resolvedIds = Array.isArray(res?.resolvedIds) ? res.resolvedIds : [];
+    return { clause: res?.delivered === true ? DELIVERED : NOT_DELIVERED, resolvedIds };
   } catch (err) {
     console.log(`advisories failed: ${Number.isInteger(err?.status) ? err.status : 'unknown'}`);
-    return NOT_DELIVERED;
+    return { clause: NOT_DELIVERED, resolvedIds: [] };
   }
+}
+
+export const INLINE_NOTICE = '> an inline comment could not be removed automatically; please review';
+
+// Runs whatever the outcome: the model may have posted before failing.
+async function guardInline(repo, pr, snapshot, rest, deps) {
+  if (!deps.listReviewComments) return [];
+  let comments;
+  try {
+    comments = await deps.listReviewComments(repo, pr);
+  } catch (err) {
+    console.log(`inline guard: listing failed: ${Number.isInteger(err?.status) ? err.status : 'unknown'}`);
+    return [INLINE_NOTICE];
+  }
+  const findings = completedFindings(snapshot, rest.findingsText, rest.outcome)?.findings ?? [];
+  const key = rest.idKey || null;
+  const ids = priorFileIds(sanitizeLedger(snapshot?.ledger, key));
+  const needles = runNeedles(findings, [], ids, key);
+  const isSecurityPath = (t) => mentions(t, needles) || isPriorSecurityPath(t, ids, key);
+  const runStartedAt = isObject(snapshot) ? snapshot.runStartedAt : null;
+  const res = await guardInlineComments({ repo, comments, findings, headSha: sha(rest.headSha), runStartedAt, isSecurityPath, request: deps.request ?? ghRequest });
+  console.log(`inline guard: removed ${res.removed}, failed ${res.failed}`);
+  return res.failed ? [INLINE_NOTICE] : [];
 }
 
 // Without a trusted snapshot and without the comment, nothing is posted: the
@@ -192,14 +230,16 @@ export async function publish({ repo, pr, snapshot, advisoryToken, ...rest }, de
       return;
     }
   }
-  const securityClause = await deliver(repo, pr, snapshot, { ...rest, advisoryToken }, deps.deliverAdvisories ?? deliverAdvisories);
-  await deps.upsertSummary(repo, pr, composeBody({ ...rest, state: snapshot, fallback, securityClause }));
+  const notices = await guardInline(repo, pr, snapshot, rest, deps);
+  const { clause, resolvedIds } = await deliver(repo, pr, snapshot, { ...rest, advisoryToken }, deps.deliverAdvisories ?? deliverAdvisories);
+  await deps.upsertSummary(repo, pr, composeBody({ ...rest, state: snapshot, fallback, securityClause: clause, resolvedIds, notices }));
 }
 
 async function main() {
   try {
     const { REPO, PR, HEAD_SHA, BASE_SHA, ACTION_OUTCOME, EXECUTION_FILE, OUT, STATE_FILE, PR_REVIEW_ID_KEY, ADVISORY_TOKEN } = process.env;
     const out = OUT || '.';
+    const deps = { listIssueComments, upsertSummary, listReviewComments, request: ghRequest };
     await publish({
       repo: REPO,
       pr: PR,
@@ -213,7 +253,7 @@ async function main() {
       idKey: PR_REVIEW_ID_KEY || null,
       // Advisory requests only; never passed to the summary comment calls.
       advisoryToken: ADVISORY_TOKEN || null,
-    });
+    }, deps);
   } catch (err) {
     // Never log bodies, tokens or messages; status only.
     console.log(`publish failed: ${err?.status ?? 'unknown'}`);

@@ -3,23 +3,22 @@
 // title, file or mechanism. Ids are keyed (HMAC with PR_REVIEW_ID_KEY, held only
 // by the publish step): slugs are guessable from the public diff, so a plain hash
 // of one could be brute-forced back to the security finding's file and symbol.
-import { createHash, createHmac } from 'node:crypto';
 import { redact } from './redact.mjs';
 import { mentions, touchesSecurityFile } from './needles.mjs';
+import { ID_RE, opaqueId } from './ids.mjs';
+import { cleanFileIds, fileIdsOf } from './fileids.mjs';
+
+export { opaqueId };
 
 export const SEVERITIES = ['Critical', 'High', 'Medium', 'Low'];
 const STATUSES = ['open', 'resolved', 'superseded'];
-const ID_RE = /^[0-9a-f]{16}$/;
 const MAX_TITLE = 120;
 const MAX_SLUG = 200;
 
-export function opaqueId(slug, key) {
-  const h = key ? createHmac('sha256', String(key)) : createHash('sha256');
-  return h.update(String(slug), 'utf8').digest('hex').slice(0, 16);
-}
-
-function securityEntry(id, severity, status, runsSinceResolved) {
-  return { id, severity, status, security: true, runsSinceResolved };
+// fileIds: keyed hashes of the security finding's files, so later runs can
+// withhold non-security findings on those files without the path being public.
+function securityEntry(id, severity, status, runsSinceResolved, fileIds = []) {
+  return { id, severity, status, security: true, runsSinceResolved, fileIds: cleanFileIds(fileIds) };
 }
 
 // A non-security finding that names a security file: no slug or title in public.
@@ -29,7 +28,7 @@ function withheldEntry(id, severity, status, runsSinceResolved) {
 
 // Without a key, security findings get no ledger entry at all (never an unkeyed id).
 export function toLedgerEntry(finding, key) {
-  if (finding.security) return key ? securityEntry(opaqueId(finding.slug, key), finding.severity, 'open', 0) : null;
+  if (finding.security) return key ? securityEntry(opaqueId(finding.slug, key), finding.severity, 'open', 0, fileIdsOf([finding], key)) : null;
   const id = opaqueId(finding.slug, key);
   return {
     id,
@@ -49,7 +48,7 @@ export function sanitizeEntry(e) {
   if (typeof e.id !== 'string' || !ID_RE.test(e.id)) return null;
   if (!SEVERITIES.includes(e.severity) || !STATUSES.includes(e.status)) return null;
   const runs = Number.isInteger(e.runsSinceResolved) && e.runsSinceResolved >= 0 ? e.runsSinceResolved : 0;
-  if (e.security === true) return securityEntry(e.id, e.severity, e.status, runs);
+  if (e.security === true) return securityEntry(e.id, e.severity, e.status, runs, e.fileIds);
   if (e.security === false && e.withheld === true) return withheldEntry(e.id, e.severity, e.status, runs);
   if (e.security !== false || typeof e.slug !== 'string' || typeof e.title !== 'string') return null;
   return {
@@ -128,7 +127,8 @@ export function mergeLedger(prior, findings, resolvedSlugs, tier, { key = null, 
   if (tier === 'none') return sanitizeLedger(prior, key);
   const groups = new Map();
   for (const f of findings) {
-    const g = groups.get(f.slug) ?? { f, security: false, withheld: false };
+    const g = groups.get(f.slug) ?? { f, security: false, withheld: false, all: [] };
+    g.all.push(f);
     if (f.security && !g.security) Object.assign(g, { f, security: true });
     if (touchesSecurityFile(f, needles)) g.withheld = true;
     groups.set(f.slug, g);
@@ -140,15 +140,16 @@ export function mergeLedger(prior, findings, resolvedSlugs, tier, { key = null, 
         : e,
     )
     .filter(Boolean);
-  const wasSecurity = new Set(old.filter((e) => e.security).map((e) => e.id));
+  const wasSecurity = new Map(old.filter((e) => e.security).map((e) => [e.id, e]));
   const resolvedIds = new Set((resolvedSlugs ?? []).map((s) => opaqueId(s, key)));
   const touched = new Set();
   const current = [];
-  for (const { f, security, withheld } of groups.values()) {
+  for (const { f, security, withheld, all } of groups.values()) {
     const id = opaqueId(f.slug, key);
     touched.add(id);
     if (security || wasSecurity.has(id)) {
-      if (key) current.push(securityEntry(id, f.severity, 'open', 0));
+      const fileIds = [...fileIdsOf(all, key), ...(wasSecurity.get(id)?.fileIds ?? [])];
+      if (key) current.push(securityEntry(id, f.severity, 'open', 0, fileIds));
     } else if (withheld) {
       if (key) current.push(withheldEntry(id, f.severity, 'open', 0));
     } else {
@@ -156,4 +157,10 @@ export function mergeLedger(prior, findings, resolvedSlugs, tier, { key = null, 
     }
   }
   return [...old.filter((e) => !touched.has(e.id)).map((e) => age(e, resolvedIds)), ...current];
+}
+
+// Dispositioned outside the review (an advisory closed, a maintainer's reply):
+// open entries matching pred become resolved this run.
+export function markResolved(ledger, pred) {
+  return ledger.map((e) => (e.status === 'open' && pred(e) ? withStatus(e, 'resolved', 0) : e));
 }

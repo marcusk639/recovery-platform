@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { composeBody, failureReason } from '../publish.mjs';
 import { decodeLedger } from '../lib/markers.mjs';
 import { opaqueId } from '../lib/ledger.mjs';
+import { fileId } from '../lib/fileids.mjs';
 
 // Built at runtime so this source holds no secret-shaped literal.
 const FAKE_WHSEC = 'whsec' + '_' + 'A'.repeat(16);
@@ -15,7 +16,7 @@ const OLDBASE = 'f'.repeat(40);
 
 const L = [
   { id: opaqueId('c9:a.ts:x', KEY), slug: 'c9:a.ts:x', title: 'Swallowed error', severity: 'Medium', status: 'open', security: false, runsSinceResolved: 0 },
-  { id: opaqueId('c1:b.ts:y', KEY), severity: 'High', status: 'open', security: true, runsSinceResolved: 0 },
+  { id: opaqueId('c1:b.ts:y', KEY), severity: 'High', status: 'open', security: true, runsSinceResolved: 0, fileIds: [] },
 ];
 
 function state(over = {}) {
@@ -110,7 +111,7 @@ test('success writes the new marker: current findings win over prior entries', (
   assert.deepEqual(m.linkTypesSeen, ['callable']);
   assert.equal(m.ledger.length, 2);
   assert.deepEqual(m.ledger.find((e) => e.id === opaqueId('c1:b.ts:y', KEY)), {
-    id: opaqueId('c1:b.ts:y', KEY), severity: 'Critical', status: 'open', security: true, runsSinceResolved: 0,
+    id: opaqueId('c1:b.ts:y', KEY), severity: 'Critical', status: 'open', security: true, runsSinceResolved: 0, fileIds: [fileId('b.ts', KEY)],
   });
   assert.ok(m.ledger.some((e) => e.slug === 'c9:a.ts:x'));
 });
@@ -152,7 +153,8 @@ test('an id that was security stays security when re-reported as non-security', 
   const again = { ...secFinding, slug: 'c1:b.ts:y', security: false, title: 'Now looks harmless', locations: [{ file: 'b.ts', line: 2, side: 'changed' }] };
   const m = decodeLedger(composeBody({ state: state(), findingsText: findingsText([again]), narrative: '', outcome: 'success', headSha: HEAD, baseSha: BASE, idKey: KEY }));
   const e = m.ledger.find((x) => x.id === opaqueId('c1:b.ts:y', KEY));
-  assert.deepEqual(Object.keys(e).sort(), ['id', 'runsSinceResolved', 'security', 'severity', 'status']);
+  assert.deepEqual(Object.keys(e).sort(), ['fileIds', 'id', 'runsSinceResolved', 'security', 'severity', 'status']);
+  assert.deepEqual(e.fileIds, [fileId('b.ts', KEY)]);
   assert.ok(!JSON.stringify(m.ledger).includes('Now looks harmless'));
 });
 
@@ -231,7 +233,7 @@ test('ledger: a same-run slug collision stays security, with or without the key'
     const keyed = composeBody({ state: state(), findingsText: findingsText(order), narrative: '', outcome: 'success', headSha: HEAD, baseSha: BASE, idKey: KEY });
     noNeedle(keyed);
     const e = decodeLedger(keyed).ledger.find((x) => x.id === opaqueId(secFinding.slug, KEY));
-    assert.deepEqual(e, { id: e.id, severity: 'High', status: 'open', security: true, runsSinceResolved: 0 });
+    assert.deepEqual({ ...e, fileIds: [...e.fileIds].sort() }, { id: e.id, severity: 'High', status: 'open', security: true, runsSinceResolved: 0, fileIds: [...new Set([fileId(SEC_FILE, KEY), fileId(f.locations[0].file, KEY)])].sort() });
     const unkeyed = composeBody({ state: state(), findingsText: findingsText(order), narrative: '', outcome: 'success', headSha: HEAD, baseSha: BASE });
     noNeedle(unkeyed);
     assert.ok(!decodeLedger(unkeyed).ledger.some((x) => x.id === opaqueId(secFinding.slug)));

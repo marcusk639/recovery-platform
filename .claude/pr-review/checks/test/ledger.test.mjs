@@ -36,7 +36,7 @@ const merge = (prior, findings, resolved = [], tier = 'incremental', key = KEY) 
 
 test('a security finding yields an entry with exactly the security keys', () => {
   const [e] = merge([], [SEC]);
-  assert.deepEqual(Object.keys(e), ['id', 'severity', 'status', 'security', 'runsSinceResolved']);
+  assert.deepEqual(Object.keys(e), ['id', 'severity', 'status', 'security', 'runsSinceResolved', 'fileIds']);
   assert.equal(e.id, opaqueId(SEC.slug, KEY));
 });
 
@@ -106,7 +106,7 @@ test('fitMarker trims the oldest resolved entries first', () => {
 
 const PRIOR = [
   { id: opaqueId('c9:a.ts:x', KEY), slug: 'c9:a.ts:x', title: 'Swallowed error', severity: 'Medium', status: 'open', security: false, runsSinceResolved: 0 },
-  { id: opaqueId('c1:b.ts:y', KEY), severity: 'High', status: 'open', security: true, runsSinceResolved: 0 },
+  { id: opaqueId('c1:b.ts:y', KEY), severity: 'High', status: 'open', security: true, runsSinceResolved: 0, fileIds: [] },
   { id: opaqueId('c9:c.ts:z', KEY), slug: 'c9:c.ts:z', title: 'Old fixed thing', severity: 'Low', status: 'resolved', security: false, runsSinceResolved: 2 },
 ];
 
@@ -153,7 +153,7 @@ test('success lists resolved titles, ignores security resolutions and marks new 
   const m = decodeLedger(body);
   assert.equal(m.ledger.find((e) => e.slug === 'c9:a.ts:x').status, 'resolved');
   const sec = m.ledger.find((e) => e.security);
-  assert.deepEqual(sec, { id: opaqueId('c1:b.ts:y', KEY), severity: 'High', status: 'open', security: true, runsSinceResolved: 0 });
+  assert.deepEqual(sec, { id: opaqueId('c1:b.ts:y', KEY), severity: 'High', status: 'open', security: true, runsSinceResolved: 0, fileIds: [] });
   assert.equal(m.ledger.find((e) => e.slug === 'c9:c.ts:z').runsSinceResolved, 3);
   assert.match(body, /### Resolved since last review/);
   assert.match(body, /Swallowed error/);

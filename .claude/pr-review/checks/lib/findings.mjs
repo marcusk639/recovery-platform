@@ -6,14 +6,17 @@ const SIDES = ['changed', 'counterpart'];
 const STRING_FIELDS = ['slug', 'package', 'area', 'title', 'feature', 'why', 'fix'];
 const SLUG_RE = /^c([1-9]|1[0-4]):[^\s>]+:[^\s>]+$/;
 const PACKAGE_RE = /^[A-Za-z0-9_-]{1,40}(?:\/[A-Za-z0-9_-]{1,40})?$/;
-const AREA_RE = /^[A-Za-z0-9 _-]{1,40}$/;
+const AREA_WORD = /^[a-z0-9-]{1,20}$/;
+// Checklist classes that are security-relevant by definition (REVIEW.md); the
+// model's own flag cannot clear them.
+export const SECURITY_CLASSES = new Set([1, 4, 7, 11, 14]);
 // Bounds keep rendering, truncation and the ledger marker cheap whatever the model wrote.
 export const MAX_FINDINGS = 200;
 const MAX_LOCATIONS = 10;
 const FIELD_CAPS = { package: 100, area: 100, title: 300, feature: 300, why: 2000, fix: 2000 };
 
 function capFinding(f) {
-  const out = { ...f, locations: f.locations.slice(0, MAX_LOCATIONS).map((l) => ({ ...l, file: l.file.slice(0, 300) })) };
+  const out = { ...f, security: f.security || SECURITY_CLASSES.has(f.class), locations: f.locations.slice(0, MAX_LOCATIONS).map((l) => ({ ...l, file: l.file.slice(0, 300) })) };
   for (const [k, n] of Object.entries(FIELD_CAPS)) out[k] = f[k].slice(0, n);
   return out;
 }
@@ -69,9 +72,18 @@ export function validateFindings(json) {
 
 // The only public text a security finding ever gets. Package and area are
 // whitelisted so a file name, line or mechanism cannot ride along in them.
+export function safePackage(pkg) {
+  return typeof pkg === 'string' && PACKAGE_RE.test(pkg.trim()) ? pkg.trim() : null;
+}
+
+// At most two short plain words; anything richer (a symbol, a file, a
+// mechanism) becomes "general".
+export function safeArea(area) {
+  const words = String(area ?? '').trim().toLowerCase().split(/\s+/);
+  return words.length <= 2 && words.every((w) => AREA_WORD.test(w)) ? words.join(' ') : 'general';
+}
+
 export function securityPointer({ severity, package: pkg, area }, clause = 'details sent privately') {
   const sev = SEVERITIES.includes(severity) ? severity : 'High';
-  const p = typeof pkg === 'string' && PACKAGE_RE.test(pkg.trim()) ? pkg.trim() : 'an unnamed package';
-  const a = typeof area === 'string' && AREA_RE.test(area.trim()) ? area.trim() : 'area';
-  return `Security-relevant issue (${sev}) in ${p} ${a}; ${clause}`;
+  return `Security-relevant issue (${sev}) in ${safePackage(pkg) ?? 'an unnamed package'} ${safeArea(area)}; ${clause}`;
 }

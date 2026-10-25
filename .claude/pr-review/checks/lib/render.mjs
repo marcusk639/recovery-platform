@@ -117,7 +117,7 @@ function build(head, groups, dropped, narrative, extra) {
 // Truncates narrative first, then the earlier-review sections (last section
 // first), then Low, then Medium findings; hard-cuts last.
 function assemble(head, groups, narrative, markerText, sections = []) {
-  const room = MAX_BODY - markerText.length - 2;
+  const room = Math.max(0, MAX_BODY - markerText.length - 2);
   const extra = sections.filter(Boolean).map((s) => ({ ...s, lines: [...s.lines] }));
   const g = { ...groups, Low: [...groups.Low], Medium: [...groups.Medium] };
   const dropped = { Critical: 0, High: 0, Medium: 0, Low: 0 };
@@ -142,7 +142,9 @@ function assemble(head, groups, narrative, markerText, sections = []) {
       text = build(head, g, dropped, narr, extra);
     }
   }
-  if (text.length > room) text = `${text.slice(0, room - TRUNC.length - 2)}\n${TRUNC}`;
+  if (text.length > room) text = `${text.slice(0, Math.max(0, room - TRUNC.length - 2))}\n${TRUNC}`;
+  // The summary marker must stay the first line whatever was cut.
+  if (!text.startsWith(SUMMARY_MARKER)) text = `${SUMMARY_MARKER}\n${text}`;
   // Whole-body pass; redaction only ever shortens text, so the cap still holds.
   return `${redact(text)}\n\n${markerText}`;
 }
@@ -151,13 +153,14 @@ const ADVISORY = '_Advisory only: not a required check. Security-relevant findin
 
 // Failure keeps the last completed review's open findings; tier "none" (no
 // model run, outcome "none") also lists what that review resolved.
-function renderPrior(ledger, markerText, banner, withResolved) {
+function renderPrior(ledger, markerText, banner, withResolved, notices = []) {
   const visible = visibleEntries(ledger.ledger ?? []);
   const open = visible.filter((e) => e.status === 'open');
   const head = [
     SUMMARY_MARKER,
     '## PR review (advisory)',
     banner,
+    ...notices,
     open.length ? 'Open findings from the last completed review:' : 'No open findings were recorded by an earlier completed review.',
   ].join('\n\n');
   const extra = withResolved ? [renderResolved(visible.filter((e) => e.status === 'resolved'))] : [];
@@ -166,11 +169,14 @@ function renderPrior(ledger, markerText, banner, withResolved) {
 
 // rawMarker: an existing marker re-emitted verbatim when publish has no
 // decodable prior state (it only ever comes from rawLedgerMarker's pattern).
-export function renderSummary({ state, findings, narrative, outcome, ledger, reason = 'failed', needles, note = '', newSlugs = new Set(), carried = [], resolved = [], rawMarker = null, securityClause }) {
-  const markerText = rawMarker ?? encodeLedger(fitMarker(ledger, encodeLedger, MAX_MARKER));
-  if (outcome === 'none') return renderPrior(ledger, markerText, `${clean(note, 200)}\n\n${ADVISORY}`, true);
+// notices: fixed, code-written lines (never model text) shown under the banner.
+export function renderSummary({ state, findings, narrative, outcome, ledger, reason = 'failed', needles, note = '', newSlugs = new Set(), carried = [], resolved = [], rawMarker = null, securityClause, notices = [] }) {
+  // An oversized raw marker is dropped for an encoded (sanitized) ledger.
+  const raw = rawMarker && rawMarker.length <= MAX_MARKER ? rawMarker : null;
+  const markerText = raw ?? encodeLedger(fitMarker(ledger, encodeLedger, MAX_MARKER));
+  if (outcome === 'none') return renderPrior(ledger, markerText, `${clean(note, 200)}\n\n${ADVISORY}`, true, notices);
   const ok = outcome === 'success' && findings && Array.isArray(findings.findings);
-  if (!ok) return renderPrior(ledger, markerText, `> ⚠ review did not complete (${reason}) — will retry on next push`, false);
+  if (!ok) return renderPrior(ledger, markerText, `> ⚠ review did not complete (${reason}) — will retry on next push`, false, notices);
   const list = findings.findings;
   const sha = String(findings.reviewedSha || state?.headSha || '').slice(0, 7);
   const head = [
@@ -178,6 +184,7 @@ export function renderSummary({ state, findings, narrative, outcome, ledger, rea
     '## PR review (advisory)',
     `Reviewed commit \`${clean(sha, 7)}\`. ${countsHeadline(list)}`,
     ADVISORY,
+    ...notices,
   ].join('\n\n');
   const n = needles ?? securityNeedles(list);
   const groups = groupBySeverity(list, (f) => renderFinding(f, n, newSlugs.has(f.slug), securityClause));
