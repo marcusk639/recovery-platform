@@ -1,6 +1,6 @@
 ---
 description: Provider tree, state management, navigation, entities, domain concepts
-globs: "src/**/*.{ts,tsx}"
+paths: "src/**/*.{ts,tsx}"
 ---
 
 # Architecture

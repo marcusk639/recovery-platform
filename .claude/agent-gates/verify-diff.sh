@@ -20,10 +20,10 @@ set -uo pipefail
 
 MODE="${1:-HEAD}"
 if [ "$MODE" = "--staged" ]; then
-  DIFF=(git diff --cached)
+  DIFF=(git -c core.quotePath=false diff --cached)
   LABEL="staged index"
 else
-  DIFF=(git diff "$MODE")
+  DIFF=(git -c core.quotePath=false diff "$MODE")
   LABEL="working tree vs $MODE"
 fi
 
@@ -45,6 +45,19 @@ while IFS= read -r f; do
   printf '%s' "$f" | grep -qE "$TEST_PATH_RE" && report "TEST-DELETED" "$f"
 done < <("${DIFF[@]}" --diff-filter=D --name-only 2>/dev/null)
 
+# ---------- 1b. test files renamed to a path no runner picks up ----------
+# With rename detection on (git's default), `git mv foo.test.ts foo.ts.bak` shows
+# as R, not D, so check 1 never sees it. The destination must still be runnable:
+# TEST_PATH_RE alone would accept `__tests__/foo.ts.bak`, which jest ignores.
+# Renames that keep the test runnable are fine; check 3 still counts their cases.
+RUNNABLE_RE='(\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$|/maestro/.*\.ya?ml$)'
+while IFS=$'\t' read -r _ old new; do
+  [ -z "$old" ] && continue
+  printf '%s' "$old" | grep -qE "$TEST_PATH_RE" || continue
+  printf '%s' "$new" | grep -qE "$RUNNABLE_RE" && continue
+  report "TEST-RENAMED-AWAY" "$old -> $new"
+done < <("${DIFF[@]}" -M --diff-filter=R --name-status 2>/dev/null)
+
 # ---------- 2. skip/only/todo or hollow assertions ADDED to test files ----------
 while IFS= read -r f; do
   [ -z "$f" ] && continue
@@ -58,16 +71,19 @@ while IFS= read -r f; do
 done < <("${DIFF[@]}" --diff-filter=ACMR --name-only 2>/dev/null)
 
 # ---------- 3. net loss of test cases ----------
-while IFS= read -r f; do
-  [ -z "$f" ] && continue
+# Includes renames: diffing old and new paths together keeps the rename pair, so
+# `git mv a.test.ts b.test.ts` plus deleted cases is counted, not waved through.
+while IFS=$'\t' read -r status a b; do
+  [ -z "$a" ] && continue
+  if [ "${status#R}" != "$status" ]; then f="$b"; PATHS=("$a" "$b"); else f="$a"; PATHS=("$a"); fi
   printf '%s' "$f" | grep -qE "$TEST_PATH_RE" || continue
-  D="$("${DIFF[@]}" -U0 -- "$f" 2>/dev/null)"
+  D="$("${DIFF[@]}" -M -U0 -- "${PATHS[@]}" 2>/dev/null)"
   ADD=$(printf '%s' "$D" | grep '^+' | grep -v '^+++' | grep -cE '^\+[[:space:]]*(it|test)[[:space:]]*\(')
   DEL=$(printf '%s' "$D" | grep '^-' | grep -v '^---' | grep -cE '^-[[:space:]]*(it|test)[[:space:]]*\(')
   if [ "$DEL" -gt "$ADD" ]; then
     report "TEST-COUNT-DROP" "$f removes $((DEL - ADD)) more test case(s) than it adds"
   fi
-done < <("${DIFF[@]}" --diff-filter=M --name-only 2>/dev/null)
+done < <("${DIFF[@]}" -M --diff-filter=MR --name-status 2>/dev/null)
 
 # ---------- 4. snapshot churn ----------
 SNAP=$("${DIFF[@]}" --name-only 2>/dev/null | grep -c '\.snap$')
