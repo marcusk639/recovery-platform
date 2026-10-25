@@ -123,12 +123,13 @@ test('malformed prior ledger entries are dropped and security entries reshaped',
   assert.ok(!JSON.stringify(m.ledger).includes('leak'));
 });
 
-test('missing state on success still produces a decodable marker', () => {
+test('missing state on success fails closed with a decodable marker', () => {
   const body = composeBody({ state: null, findingsText: findingsText([]), narrative: '', outcome: 'success', headSha: HEAD, baseSha: BASE, idKey: KEY });
   const m = decodeLedger(body);
-  assert.equal(m.lastReviewedSha, HEAD);
+  assert.equal(m.lastReviewedSha, null);
   assert.deepEqual(m.ledger, []);
-  assert.match(body, /No issues found/);
+  assert.match(body, /review did not complete \(failed\)/);
+  assert.doesNotMatch(body, /No issues found/);
 });
 
 test('keyed ids: same slug and key match, a different key does not', () => {

@@ -108,10 +108,13 @@ function withStatus(e, status, runsSinceResolved) {
 }
 
 // An entry not re-reported this run: resolvedSlugs resolve it (age 0), an
-// already-resolved one ages by a run, anything else keeps its status.
+// already-resolved one ages by a run, anything else keeps its status. Security
+// and withheld entries are resolved only via the private channel, so the public
+// resolved count cannot be used to test guesses at their slugs.
 function age(e, resolvedIds) {
   if (e.status === 'resolved') return withStatus(e, 'resolved', e.runsSinceResolved + 1);
-  return resolvedIds.has(e.id) ? withStatus(e, 'resolved', 0) : e;
+  const resolvable = !e.security && !e.withheld && resolvedIds.has(e.id);
+  return resolvable ? withStatus(e, 'resolved', 0) : e;
 }
 
 // Prior entries plus this run's findings, matched by id (keyed opaqueId of the

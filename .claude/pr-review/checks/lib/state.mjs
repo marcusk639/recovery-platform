@@ -17,14 +17,19 @@ function fromPayload(p) {
   };
 }
 
+// The one summary comment: posted by the workflow bot, first line the marker.
+export function findSummary(comments) {
+  return (comments ?? []).find(
+    (c) => c?.user?.login === SUMMARY_AUTHOR && typeof c.body === 'string' && c.body.startsWith(SUMMARY_MARKER),
+  );
+}
+
 // The prior ledger passes through in shape; publish re-sanitizes it with the key.
 export async function loadState(repo, pr, { listIssueComments, listReviewComments }) {
   const state = EMPTY();
   try {
     const comments = await listIssueComments(repo, pr);
-    const summary = comments.find(
-      (c) => c.user?.login === SUMMARY_AUTHOR && typeof c.body === 'string' && c.body.startsWith(SUMMARY_MARKER),
-    );
+    const summary = findSummary(comments);
     if (summary) Object.assign(state, fromPayload(decodeLedger(summary.body)));
   } catch {
     // keep defaults

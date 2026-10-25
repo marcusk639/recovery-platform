@@ -163,3 +163,23 @@ test('validateFindings caps count, locations and field lengths', () => {
   assert.equal(one.title.length, 300);
   assert.equal(validateFindings({ reviewedSha: SHA, findings: [finding({ slug: 'c1:' + 'a'.repeat(400) + ':x' })], resolvedSlugs: [] }).ok, false);
 });
+
+test('over the cap, earlier-review sections are trimmed before this run\'s Low findings', () => {
+  const lows = Array.from({ length: 15 }, (_, i) => finding({ slug: `c9:x.ts:low${i}`, severity: 'Low', title: `Low ${i}`, why: 'w'.repeat(1400), fix: 'f'.repeat(1400) }));
+  const entry = (i, status) => ({ id: opaqueId(`c9:e.ts:${status}${i}`, KEY), slug: `c9:e.ts:${status}${i}`, title: 'T'.repeat(190), severity: 'Medium', status, security: false, runsSinceResolved: 0 });
+  const carried = Array.from({ length: 50 }, (_, i) => entry(i, 'open'));
+  const resolved = Array.from({ length: 50 }, (_, i) => entry(i, 'resolved'));
+  const body = renderSummary({
+    state: { headSha: SHA },
+    findings: { reviewedSha: SHA, findings: lows, resolvedSlugs: [] },
+    narrative: '',
+    outcome: 'success',
+    ledger: marker([]),
+    carried,
+    resolved,
+  });
+  assert.ok(body.length <= 60000);
+  for (let i = 0; i < 15; i++) assert.ok(body.includes(`**Low ${i}**`), `Low ${i} kept`);
+  assert.doesNotMatch(body, /more Low finding\(s\) not shown/);
+  assert.match(body, /more resolved finding\(s\) not shown/);
+});

@@ -7,7 +7,7 @@ const HEAD = 'abc1234' + '0'.repeat(33);
 const ok = JSON.stringify({ reviewedSha: HEAD, findings: [], resolvedSlugs: [] });
 
 test('summary on success names the reviewed commit', () => {
-  const s = composeBody({ state: null, findingsText: ok, narrative: '', outcome: 'success', headSha: HEAD, baseSha: 'b' });
+  const s = composeBody({ state: {}, findingsText: ok, narrative: '', outcome: 'success', headSha: HEAD, baseSha: 'b' });
   assert.ok(s.startsWith(SUMMARY_MARKER));
   assert.ok(s.includes('abc1234'));
 });

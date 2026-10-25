@@ -19,6 +19,12 @@ export function decodeLedger(body) {
   }
 }
 
+// The marker text exactly as posted (base64 charset only), or null.
+export function rawLedgerMarker(body) {
+  const m = LEDGER_RE.exec(String(body ?? ''));
+  return m && /^[A-Za-z0-9+/]+={0,2}$/.test(m[1]) ? m[0] : null;
+}
+
 export function extractInlineSlugs(bodies) {
   const slugs = [];
   for (const b of bodies ?? []) {

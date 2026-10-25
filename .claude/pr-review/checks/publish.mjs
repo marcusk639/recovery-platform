@@ -4,7 +4,9 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { upsertSummary } from './lib/gh.mjs';
+import { listIssueComments, upsertSummary } from './lib/gh.mjs';
+import { findSummary } from './lib/state.mjs';
+import { decodeLedger, rawLedgerMarker } from './lib/markers.mjs';
 import { mergeLedger, opaqueId, sanitizeLedger, visibleEntries } from './lib/ledger.mjs';
 import { renderSummary, validateFindings } from './lib/render.mjs';
 import { securityNeedles, touchesSecurityFile } from './lib/needles.mjs';
@@ -58,9 +60,27 @@ function newSlugs(findings, prior, idKey, needles) {
   return new Set(findings.filter((f) => comparable(f) && !ids.has(opaqueId(f.slug, idKey))).map((f) => f.slug));
 }
 
-export function composeBody({ state, findingsText, narrative, outcome, executionLog, headSha, baseSha, idKey, linkTypes = knownLinkTypes() }) {
-  const valid = Boolean(state) && typeof state === 'object' && !Array.isArray(state);
-  const s = valid ? state : {};
+const isObject = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
+
+// Without a trusted snapshot: always the failure banner, with prior state from
+// the existing summary comment (fallback.state, sanitized as usual) or, if its
+// marker does not decode, that marker re-emitted verbatim (fallback.rawMarker).
+function untrustedBody(fallback, idKey, linkTypes) {
+  const p = isObject(fallback?.state) ? fallback.state : {};
+  const known = new Set(linkTypes);
+  const ledger = {
+    lastReviewedSha: sha(p.lastReviewedSha),
+    lastBaseSha: sha(p.lastBaseSha),
+    linkTypesSeen: [...new Set(strings(p.linkTypesSeen).filter((t) => known.has(t)))],
+    ledger: sanitizeLedger(p.ledger, idKey),
+  };
+  return renderSummary({ state: {}, findings: null, narrative: '', outcome: 'failure', reason: 'failed', ledger, rawMarker: fallback?.rawMarker ?? null });
+}
+
+export function composeBody({ state, findingsText, narrative, outcome, executionLog, headSha, baseSha, idKey, linkTypes = knownLinkTypes(), fallback }) {
+  // A missing or invalid snapshot fails closed, whatever the action outcome.
+  if (!isObject(state)) return untrustedBody(fallback, idKey, linkTypes);
+  const s = state;
   const known = new Set(linkTypes);
   const types = (list) => strings(list).filter((t) => known.has(t));
   const prior = {
@@ -69,8 +89,7 @@ export function composeBody({ state, findingsText, narrative, outcome, execution
     linkTypesSeen: [...new Set(types(s.linkTypesSeen))],
     ledger: sanitizeLedger(s.ledger, idKey),
   };
-  // A missing snapshot is never the no-change path.
-  if (valid && s.tier === 'none' && outcome === 'skipped') return noChangeBody(prior, headSha, baseSha);
+  if (s.tier === 'none' && outcome === 'skipped') return noChangeBody(prior, headSha, baseSha);
   const parsed = validateFindings(findingsText ?? '');
   // Tier "none" never runs the model, so a "success" alongside it is not trusted.
   if (outcome !== 'success' || s.tier === 'none' || !parsed.ok) {
@@ -120,12 +139,43 @@ function readState(path) {
   }
 }
 
+// Prior state from the existing summary comment (same author and marker rule
+// as loadState). null when the comments cannot be read.
+export async function priorFromComment(repo, pr, list = listIssueComments) {
+  let comments;
+  try {
+    comments = await list(repo, pr);
+  } catch {
+    return null;
+  }
+  const summary = findSummary(comments);
+  if (!summary) return { state: {} };
+  const payload = decodeLedger(summary.body);
+  return isObject(payload) ? { state: payload } : { state: {}, rawMarker: rawLedgerMarker(summary.body) };
+}
+
+// Without a trusted snapshot and without the comment, nothing is posted: the
+// old comment (and its marker) stays as it was.
+export async function publish({ repo, pr, snapshot, ...rest }, deps = { listIssueComments, upsertSummary }) {
+  let fallback;
+  if (!isObject(snapshot)) {
+    fallback = await priorFromComment(repo, pr, deps.listIssueComments);
+    if (!fallback) {
+      console.log('publish skipped: no trusted state');
+      return;
+    }
+  }
+  await deps.upsertSummary(repo, pr, composeBody({ ...rest, state: snapshot, fallback }));
+}
+
 async function main() {
   try {
     const { REPO, PR, HEAD_SHA, BASE_SHA, ACTION_OUTCOME, EXECUTION_FILE, OUT, STATE_FILE, PR_REVIEW_ID_KEY } = process.env;
     const out = OUT || '.';
-    const body = composeBody({
-      state: readState(STATE_FILE),
+    await publish({
+      repo: REPO,
+      pr: PR,
+      snapshot: readState(STATE_FILE),
       findingsText: readOptional(join(out, 'findings.json')),
       narrative: readOptional(join(out, 'summary.md')) ?? '',
       outcome: ACTION_OUTCOME,
@@ -134,7 +184,6 @@ async function main() {
       baseSha: BASE_SHA,
       idKey: PR_REVIEW_ID_KEY || null,
     });
-    await upsertSummary(REPO, PR, body);
   } catch (err) {
     // Never log bodies, tokens or messages; status only.
     console.log(`publish failed: ${err?.status ?? 'unknown'}`);

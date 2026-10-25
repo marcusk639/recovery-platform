@@ -33,8 +33,9 @@ function where(l) {
 export const WITHHELD_TITLE = '(withheld: touches a security-relevant file)';
 
 function renderFinding(f, needles, isNew) {
+  // The security pointer keeps its exact fixed public form: never tagged.
+  if (f.security) return `- ${redact(securityPointer(f))}`;
   const fresh = isNew ? ' (new)' : '';
-  if (f.security) return `- ${redact(securityPointer(f))}${fresh}`;
   if (touchesSecurityFile(f, needles)) return `- **${WITHHELD_TITLE}** (confidence: ${f.confidence})${fresh}`;
   return [
     `- **${clean(f.title, 200)}** (confidence: ${f.confidence})${fresh}${f.inlinePosted ? ' (inline comment posted)' : ''}`,
@@ -51,14 +52,20 @@ function renderPriorEntry(e) {
   return `- **${clean(e.title || e.slug, 200)}** (${e.severity}, from an earlier review)`;
 }
 
-function capped(lines, what) {
-  const extra = lines.length - MAX_SECTION;
-  return extra > 0 ? [...lines.slice(0, MAX_SECTION), `- ${TRUNC} ${extra} more ${what} not shown`] : lines;
+// A trimmable section: assemble() pops its lines before dropping findings.
+function section(heading, lines, what, footer = []) {
+  return { heading, lines: lines.slice(0, MAX_SECTION), dropped: Math.max(0, lines.length - MAX_SECTION), what, footer };
+}
+
+function renderSection(s) {
+  if (!s || (!s.lines.length && !s.dropped && !s.footer.length)) return '';
+  const body = [...s.lines, ...(s.dropped ? [`- ${TRUNC} ${s.dropped} more ${s.what} not shown`] : []), ...s.footer];
+  return [s.heading, body.join('\n')].join('\n\n');
 }
 
 // Ledger entries only: security and withheld ones are counted, never named.
 function renderResolved(entries) {
-  if (!entries.length) return '';
+  if (!entries.length) return null;
   const hidden = entries.filter((e) => e.security || e.withheld).length;
   const named = entries
     .filter((e) => !e.security && !e.withheld)
@@ -66,14 +73,13 @@ function renderResolved(entries) {
       const when = e.runsSinceResolved === 0 ? 'this review' : `${e.runsSinceResolved} review(s) ago`;
       return `- **${clean(e.title || e.slug, 200)}** (${e.severity}, resolved ${when})`;
     });
-  const lines = capped(named, 'resolved finding(s)');
-  if (hidden) lines.push(`- ${hidden} security-relevant or withheld finding(s) resolved; details not shown`);
-  return ['### Resolved since last review', lines.join('\n')].join('\n\n');
+  const footer = hidden ? [`- ${hidden} security-relevant or withheld finding(s) resolved; details not shown`] : [];
+  return section('### Resolved since last review', named, 'resolved finding(s)', footer);
 }
 
 function renderCarried(entries) {
-  if (!entries.length) return '';
-  return ['### Still open from earlier reviews', capped(entries.map(renderPriorEntry), 'open finding(s)').join('\n')].join('\n\n');
+  if (!entries.length) return null;
+  return section('### Still open from earlier reviews', entries.map(renderPriorEntry), 'open finding(s)');
 }
 
 // Drops every narrative line naming a security finding's file, then redacts.
@@ -103,14 +109,16 @@ function build(head, groups, dropped, narrative, extra) {
     out.push(`### ${s}`, groups[s].join('\n'));
     if (dropped[s]) out.push(`- ${TRUNC} ${dropped[s]} more ${s} finding(s) not shown`);
   }
-  out.push(...extra);
+  out.push(...extra.map(renderSection));
   if (narrative) out.push(narrative);
   return out.filter((x) => x !== '').join('\n\n');
 }
 
-// Truncates narrative first, then Low, then Medium findings; hard-cuts last.
-function assemble(head, groups, narrative, markerText, extra = []) {
+// Truncates narrative first, then the earlier-review sections (last section
+// first), then Low, then Medium findings; hard-cuts last.
+function assemble(head, groups, narrative, markerText, sections = []) {
   const room = MAX_BODY - markerText.length - 2;
+  const extra = sections.filter(Boolean).map((s) => ({ ...s, lines: [...s.lines] }));
   const g = { ...groups, Low: [...groups.Low], Medium: [...groups.Medium] };
   const dropped = { Critical: 0, High: 0, Medium: 0, Low: 0 };
   let narr = narrative;
@@ -119,6 +127,13 @@ function assemble(head, groups, narrative, markerText, extra = []) {
     const budget = room - build(head, g, dropped, '', extra).length - TRUNC.length - 4;
     narr = budget > 200 ? `${narr.slice(0, budget)}\n${TRUNC}` : TRUNC;
     text = build(head, g, dropped, narr, extra);
+  }
+  for (const s of [...extra].reverse()) {
+    while (text.length > room && s.lines.length) {
+      s.lines.pop();
+      s.dropped++;
+      text = build(head, g, dropped, narr, extra);
+    }
   }
   for (const sev of ['Low', 'Medium']) {
     while (text.length > room && g[sev].length) {
@@ -149,9 +164,10 @@ function renderPrior(ledger, markerText, banner, withResolved) {
   return assemble(head, groupBySeverity(open, renderPriorEntry), '', markerText, extra);
 }
 
-export function renderSummary({ state, findings, narrative, outcome, ledger, reason = 'failed', needles, note = '', newSlugs = new Set(), carried = [], resolved = [] }) {
-  const payload = fitMarker(ledger, encodeLedger, MAX_MARKER);
-  const markerText = encodeLedger(payload);
+// rawMarker: an existing marker re-emitted verbatim when publish has no
+// decodable prior state (it only ever comes from rawLedgerMarker's pattern).
+export function renderSummary({ state, findings, narrative, outcome, ledger, reason = 'failed', needles, note = '', newSlugs = new Set(), carried = [], resolved = [], rawMarker = null }) {
+  const markerText = rawMarker ?? encodeLedger(fitMarker(ledger, encodeLedger, MAX_MARKER));
   if (outcome === 'none') return renderPrior(ledger, markerText, `${clean(note, 200)}\n\n${ADVISORY}`, true);
   const ok = outcome === 'success' && findings && Array.isArray(findings.findings);
   if (!ok) return renderPrior(ledger, markerText, `> ⚠ review did not complete (${reason}) — will retry on next push`, false);

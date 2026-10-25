@@ -49,15 +49,21 @@ test('the same slug on two runs yields one entry', () => {
 });
 
 test('resolvedSlugs resolves; five more merges hide it but the ledger keeps it', () => {
-  let l = merge([], [finding(), SEC]);
-  l = merge(l, [], [finding().slug, SEC.slug]);
+  const other = finding({ slug: 'c9:regroup/mobile/src/b.ts:save' });
+  let l = merge([], [finding(), other]);
+  l = merge(l, [], [finding().slug, other.slug]);
   assert.deepEqual(l.map((e) => [e.status, e.runsSinceResolved]), [['resolved', 0], ['resolved', 0]]);
-  assert.deepEqual(Object.keys(l.find((e) => e.security)), ['id', 'severity', 'status', 'security', 'runsSinceResolved']);
   for (let i = 0; i < 5; i++) l = merge(l, []);
   assert.equal(l.length, 2);
   assert.ok(l.every((e) => e.runsSinceResolved === 5));
   assert.deepEqual(visibleEntries(l), []);
   assert.equal(visibleEntries(merge(merge([], [finding()]), [], [finding().slug])).length, 1);
+});
+
+test('resolvedSlugs naming security or withheld entries are ignored (private channel only)', () => {
+  const withheld = { id: opaqueId('c9:w.ts:q', KEY), severity: 'Low', status: 'open', security: false, runsSinceResolved: 0, withheld: true };
+  const l = merge([...merge([], [SEC]), withheld], [], [SEC.slug, 'c9:w.ts:q']);
+  assert.deepEqual(l.map((e) => e.status), ['open', 'open']);
 });
 
 test('an open entry not re-reported stays open; a resolvedSlug repeated does not reset its age', () => {
@@ -142,18 +148,24 @@ function successBody(findings, resolvedSlugs = [], over = {}) {
   return compose({ state: snap({ tier: 'incremental', ...over }), findingsText, outcome: 'success' });
 }
 
-test('success lists resolved titles, counts security resolutions and marks new findings', () => {
+test('success lists resolved titles, ignores security resolutions and marks new findings', () => {
   const body = successBody([finding({ slug: 'c9:n.ts:fresh', title: 'Fresh problem' })], ['c9:a.ts:x', 'c1:b.ts:y']);
   const m = decodeLedger(body);
   assert.equal(m.ledger.find((e) => e.slug === 'c9:a.ts:x').status, 'resolved');
   const sec = m.ledger.find((e) => e.security);
-  assert.deepEqual(sec, { id: opaqueId('c1:b.ts:y', KEY), severity: 'High', status: 'resolved', security: true, runsSinceResolved: 0 });
+  assert.deepEqual(sec, { id: opaqueId('c1:b.ts:y', KEY), severity: 'High', status: 'open', security: true, runsSinceResolved: 0 });
   assert.equal(m.ledger.find((e) => e.slug === 'c9:c.ts:z').runsSinceResolved, 3);
   assert.match(body, /### Resolved since last review/);
   assert.match(body, /Swallowed error/);
-  assert.match(body, /1 security-relevant or withheld finding\(s\) resolved/);
+  assert.doesNotMatch(body, /security-relevant or withheld finding\(s\) resolved/);
   assert.match(body, /Fresh problem\*\* \(confidence: high\) \(new\)/);
   assert.ok(!body.includes('c1:b.ts:y'));
+});
+
+test('a new security finding keeps the exact pointer form, with no (new)', () => {
+  const body = successBody([SEC]);
+  assert.ok(body.includes('- Security-relevant issue (High) in regroup/mobile rent; details sent privately\n'));
+  assert.doesNotMatch(body, /\(new\)/);
 });
 
 test('a re-reported finding is not marked new; an untouched open one is still shown', () => {
@@ -170,9 +182,10 @@ test('success unions linkTypesSeen with the run link types; failure keeps the pr
   assert.deepEqual(decodeLedger(failed).linkTypesSeen, ['callable']);
 });
 
-test('a resolved withheld entry is counted, never named', () => {
-  const withheld = { id: opaqueId('c9:w.ts:q', KEY), severity: 'Low', status: 'open', security: false, runsSinceResolved: 0, withheld: true };
-  const body = successBody([], ['c9:w.ts:q'], { ledger: [withheld] });
-  assert.match(body, /1 security-relevant or withheld finding\(s\) resolved/);
+test('already-resolved security and withheld entries are counted, never named', () => {
+  const withheld = { id: opaqueId('c9:w.ts:q', KEY), severity: 'Low', status: 'resolved', security: false, runsSinceResolved: 0, withheld: true };
+  const sec = { id: opaqueId('c1:b.ts:y', KEY), severity: 'High', status: 'resolved', security: true, runsSinceResolved: 1 };
+  const body = successBody([], [], { ledger: [withheld, sec] });
+  assert.match(body, /2 security-relevant or withheld finding\(s\) resolved/);
   assert.ok(!body.includes('w.ts'));
 });
