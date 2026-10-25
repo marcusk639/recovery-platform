@@ -53,6 +53,6 @@ test('PR context carries the redacted PR title', () => {
 
 test('state snapshot lives outside OUT', () => {
   assert.equal(snapshotPath({ STATE_FILE: '/x/s.json', RUNNER_TEMP: '/t' }), '/x/s.json');
-  assert.equal(snapshotPath({ RUNNER_TEMP: '/t' }), '/t/pr-review-state/state.json');
+  assert.equal(snapshotPath({ RUNNER_TEMP: '/t' }), '/t/prstate-snapshot/state.json');
   assert.equal(snapshotPath({}), null);
 });

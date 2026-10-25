@@ -26,7 +26,7 @@ jobs:
     env:
       OUT: ${{ runner.temp }}/pr-review
       # Trusted copy of state.json, outside the model's --add-dir.
-      STATE_FILE: ${{ runner.temp }}/pr-review-state/state.json
+      STATE_FILE: ${{ runner.temp }}/prstate-snapshot/state.json
     steps:
       - name: Checkout PR head
         uses: actions/checkout@v4
@@ -125,4 +125,6 @@ jobs:
 
       - name: Cleanup
         if: always()
-        run: rm -rf "$OUT" "${{ runner.temp }}/pr-review-state"
+        run: |
+          chmod -R u+w "${{ runner.temp }}/prstate-snapshot" 2>/dev/null || true
+          rm -rf "$OUT" "${{ runner.temp }}/prstate-snapshot"

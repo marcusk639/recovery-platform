@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { prDiff } from './lib/diff.mjs';
@@ -110,7 +110,7 @@ function runChecks({ files, repoRoot, baseSha, title, verifyScript }) {
 // model can Write OUT/state.json.
 export function snapshotPath(env = process.env) {
   if (env.STATE_FILE) return env.STATE_FILE;
-  return env.RUNNER_TEMP ? join(env.RUNNER_TEMP, 'pr-review-state', 'state.json') : null;
+  return env.RUNNER_TEMP ? join(env.RUNNER_TEMP, 'prstate-snapshot', 'state.json') : null;
 }
 
 function writeOutputs(out, text, state) {
@@ -119,8 +119,15 @@ function writeOutputs(out, text, state) {
   writeFileSync(join(out, 'state.json'), JSON.stringify(state, null, 2));
   const snap = snapshotPath();
   if (snap) {
-    mkdirSync(dirname(snap), { recursive: true });
-    writeFileSync(snap, JSON.stringify(state));
+    try {
+      mkdirSync(dirname(snap), { recursive: true });
+      writeFileSync(snap, JSON.stringify(state));
+      // Read-only from here on; the workflow's cleanup restores write before rm.
+      chmodSync(snap, 0o444);
+      chmodSync(dirname(snap), 0o555);
+    } catch {
+      process.stdout.write('facts: state snapshot unavailable\n');
+    }
   }
   if (process.env.GITHUB_OUTPUT) {
     appendFileSync(process.env.GITHUB_OUTPUT, `tier=${state.tier}\nmax_turns=${state.maxTurns}\n`);

@@ -178,7 +178,73 @@ test('non-security finding text naming a security file is withheld, case and sla
   const narrative = 'Touched Regroup\\Functions\\src\\callable\\Payments.ts today\nOther line';
   const body = composeBody({ state: state(), findingsText: findingsText([secFinding, other]), narrative, outcome: 'success', headSha: HEAD, baseSha: BASE, idKey: KEY });
   assert.doesNotMatch(body, /payments\.ts/i);
-  assert.ok(body.includes('(withheld)'));
+  assert.ok(body.includes('(withheld: touches a security-relevant file)'));
+  noNeedle(body);
   assert.ok(body.includes('Other line'));
   assert.ok(body.includes('narrative withheld'));
+});
+
+function noNeedle(body) {
+  const json = JSON.stringify(decodeLedger(body)).toLowerCase();
+  for (const n of [SEC_FILE.toLowerCase(), 'payments.ts']) assert.ok(!json.includes(n), `ledger contains ${n}`);
+}
+
+const nonSec = (over) => ({
+  ...secFinding,
+  slug: 'c9:regroup/functions/src/util/log.ts:logIt',
+  class: 9,
+  severity: 'Medium',
+  security: false,
+  title: 'Swallowed error',
+  why: 'w',
+  fix: 'f',
+  feature: 'Logging',
+  locations: [{ file: 'regroup/functions/src/util/log.ts', line: 3, side: 'changed' }],
+  ...over,
+});
+
+const WITHHELD_KEYS = ['id', 'runsSinceResolved', 'security', 'severity', 'status', 'withheld'];
+
+test('ledger: a non-security title naming a security file is stored withheld', () => {
+  const f = nonSec({ title: 'Error swallowed near Payments.TS' });
+  const body = composeBody({ state: state(), findingsText: findingsText([secFinding, f]), narrative: '', outcome: 'success', headSha: HEAD, baseSha: BASE, idKey: KEY });
+  noNeedle(body);
+  const e = decodeLedger(body).ledger.find((x) => x.id === opaqueId(f.slug, KEY));
+  assert.deepEqual(Object.keys(e).sort(), WITHHELD_KEYS);
+  assert.equal(e.withheld, true);
+  assert.ok(body.includes('(withheld: touches a security-relevant file)'));
+  assert.ok(!body.includes('Error swallowed near'));
+});
+
+test('ledger: a non-security finding located in a security file is withheld everywhere', () => {
+  const f = nonSec({ slug: `c9:${SEC_FILE}:otherFn`, locations: [{ file: SEC_FILE, line: 90, side: 'changed' }] });
+  const body = composeBody({ state: state(), findingsText: findingsText([secFinding, f]), narrative: '', outcome: 'success', headSha: HEAD, baseSha: BASE, idKey: KEY });
+  noNeedle(body);
+  assert.doesNotMatch(body, /payments\.ts/i);
+  assert.ok(!body.includes('Logging'));
+});
+
+test('ledger: a same-run slug collision stays security, with or without the key', () => {
+  const f = nonSec({ slug: secFinding.slug, title: 'Collides' });
+  for (const order of [[f, secFinding], [secFinding, f]]) {
+    const keyed = composeBody({ state: state(), findingsText: findingsText(order), narrative: '', outcome: 'success', headSha: HEAD, baseSha: BASE, idKey: KEY });
+    noNeedle(keyed);
+    const e = decodeLedger(keyed).ledger.find((x) => x.id === opaqueId(secFinding.slug, KEY));
+    assert.deepEqual(e, { id: e.id, severity: 'High', status: 'open', security: true, runsSinceResolved: 0 });
+    const unkeyed = composeBody({ state: state(), findingsText: findingsText(order), narrative: '', outcome: 'success', headSha: HEAD, baseSha: BASE });
+    noNeedle(unkeyed);
+    assert.ok(!decodeLedger(unkeyed).ledger.some((x) => x.id === opaqueId(secFinding.slug)));
+  }
+});
+
+test('withheld prior entries survive a failed run in their exact shape', () => {
+  const w = { id: opaqueId('c9:q.ts:q', KEY), severity: 'Low', status: 'open', security: false, runsSinceResolved: 1, withheld: true, slug: 'x', title: 'y' };
+  const m = decodeLedger(composeBody({ state: state({ ledger: [w] }), findingsText: null, narrative: '', outcome: 'failure', headSha: HEAD, baseSha: BASE, idKey: KEY }));
+  assert.deepEqual(m.ledger, [{ id: w.id, severity: 'Low', status: 'open', security: false, runsSinceResolved: 1, withheld: true }]);
+});
+
+test('resolvedSlugs entries over 300 characters are rejected', () => {
+  const text = JSON.stringify({ reviewedSha: HEAD, findings: [], resolvedSlugs: ['c1:' + 'a'.repeat(400) + ':x'] });
+  const body = composeBody({ state: state(), findingsText: text, narrative: '', outcome: 'success', headSha: HEAD, baseSha: BASE, idKey: KEY });
+  assert.ok(body.includes('review did not complete (failed)'));
 });

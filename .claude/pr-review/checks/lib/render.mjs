@@ -5,6 +5,7 @@ import { SUMMARY_MARKER, encodeLedger } from './markers.mjs';
 import { redact } from './redact.mjs';
 import { SEVERITIES, fitMarker } from './ledger.mjs';
 import { validateFindings, securityPointer } from './findings.mjs';
+import { securityNeedles, mentions, touchesSecurityFile } from './needles.mjs';
 
 export { validateFindings, securityPointer };
 
@@ -28,53 +29,28 @@ function where(l) {
   return `\`${clean(file, 300)}${l.line > 0 ? `:${l.line}` : ''}\` (${l.side})`;
 }
 
-const slashes = (s) => String(s ?? '').replace(/\\/g, '/');
-const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-// Full paths and basenames of every security location, lower-cased with '/'
-// separators, longest first so a full path is matched before its basename.
-function securityNeedles(findings) {
-  const out = new Set();
-  for (const f of findings.filter((x) => x.security)) {
-    for (const l of f.locations) {
-      const file = slashes(l.file).toLowerCase();
-      out.add(file);
-      out.add(file.split('/').pop());
-    }
-  }
-  return [...out].filter(Boolean).sort((a, b) => b.length - a.length);
-}
-
-const mentions = (text, needles) => {
-  const t = slashes(text).toLowerCase();
-  return needles.some((n) => t.includes(n));
-};
-
-function withhold(text, needles) {
-  let t = slashes(text);
-  for (const n of needles) t = t.replace(new RegExp(escapeRe(n), 'gi'), '(withheld)');
-  return t;
-}
+export const WITHHELD_TITLE = '(withheld: touches a security-relevant file)';
 
 function renderFinding(f, needles) {
   if (f.security) return `- ${redact(securityPointer(f))}`;
+  if (touchesSecurityFile(f, needles)) return `- **${WITHHELD_TITLE}** (confidence: ${f.confidence})`;
   return [
-    `- **${clean(withhold(f.title, needles), 200)}** (confidence: ${f.confidence})${f.inlinePosted ? ' (inline comment posted)' : ''}`,
+    `- **${clean(f.title, 200)}** (confidence: ${f.confidence})${f.inlinePosted ? ' (inline comment posted)' : ''}`,
     `  - Where: ${f.locations.map(where).join('; ')}`,
-    `  - Why: ${clean(withhold(f.why, needles))}`,
-    `  - Fix: ${clean(withhold(f.fix, needles))}`,
+    `  - Why: ${clean(f.why)}`,
+    `  - Fix: ${clean(f.fix)}`,
     `  - Feature at risk: ${clean(f.feature, 200)}`,
   ].join('\n');
 }
 
 function renderPriorEntry(e) {
   if (e.security) return `- Security-relevant issue (${e.severity}) reported earlier; details sent privately`;
+  if (e.withheld) return `- **${WITHHELD_TITLE}** (${e.severity}, from an earlier review)`;
   return `- **${clean(e.title || e.slug, 200)}** (${e.severity}, from an earlier review)`;
 }
 
 // Drops every narrative line naming a security finding's file, then redacts.
-export function withholdNarrative(narrative, findings) {
-  const needles = securityNeedles(findings);
+export function withholdNarrative(narrative, findings, needles = securityNeedles(findings)) {
   const lines = String(narrative ?? '').split('\n');
   const kept = lines.filter((line) => !mentions(line, needles));
   let text = kept.join('\n').trim();
@@ -128,7 +104,7 @@ function assemble(head, groups, narrative, markerText) {
   return `${redact(text)}\n\n${markerText}`;
 }
 
-export function renderSummary({ state, findings, narrative, outcome, ledger, reason = 'failed' }) {
+export function renderSummary({ state, findings, narrative, outcome, ledger, reason = 'failed', needles }) {
   const payload = fitMarker(ledger, encodeLedger, MAX_MARKER);
   const markerText = encodeLedger(payload);
   const ok = outcome === 'success' && findings && Array.isArray(findings.findings);
@@ -152,6 +128,6 @@ export function renderSummary({ state, findings, narrative, outcome, ledger, rea
     `Reviewed commit \`${clean(sha, 7)}\`. ${countsHeadline(list)}`,
     '_Advisory only: not a required check. Security-relevant findings show only a pointer here._',
   ].join('\n\n');
-  const needles = securityNeedles(list);
-  return assemble(head, groupBySeverity(list, (f) => renderFinding(f, needles)), withholdNarrative(narrative, list), markerText);
+  const n = needles ?? securityNeedles(list);
+  return assemble(head, groupBySeverity(list, (f) => renderFinding(f, n)), withholdNarrative(narrative, list, n), markerText);
 }

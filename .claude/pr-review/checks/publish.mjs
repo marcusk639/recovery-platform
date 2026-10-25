@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { upsertSummary } from './lib/gh.mjs';
 import { nextLedger, sanitizeLedger } from './lib/ledger.mjs';
 import { renderSummary, validateFindings } from './lib/render.mjs';
+import { securityNeedles } from './lib/needles.mjs';
 
 const SHA_RE = /^[0-9a-f]{40}$/i;
 const RATE_RE = /rate.?limit|usage limit/i;
@@ -62,12 +63,14 @@ export function composeBody({ state, findingsText, narrative, outcome, execution
     });
   }
   const findings = parsed.value;
+  // Built once; prior security entries carry no files, so current findings only.
+  const needles = securityNeedles(findings.findings);
   const reviewed = sha(findings.reviewedSha) ?? sha(headSha);
   const ledger = {
     lastReviewedSha: reviewed,
     lastBaseSha: sha(baseSha),
     linkTypesSeen: prior.linkTypesSeen,
-    ledger: nextLedger(prior.ledger, findings.findings, idKey),
+    ledger: nextLedger(prior.ledger, findings.findings, idKey, needles),
   };
   return renderSummary({
     state: { ...s, headSha: reviewed },
@@ -75,6 +78,7 @@ export function composeBody({ state, findingsText, narrative, outcome, execution
     narrative: noModel ? '' : narrative,
     outcome: 'success',
     ledger,
+    needles,
   });
 }
 

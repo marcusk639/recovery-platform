@@ -57,7 +57,7 @@ export function validateFindings(json) {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return { ok: false, error: 'not an object' };
   if (typeof v.reviewedSha !== 'string') return { ok: false, error: 'reviewedSha missing' };
   if (!Array.isArray(v.findings)) return { ok: false, error: 'findings not an array' };
-  if (!Array.isArray(v.resolvedSlugs) || v.resolvedSlugs.some((s) => typeof s !== 'string')) {
+  if (!Array.isArray(v.resolvedSlugs) || v.resolvedSlugs.some((s) => typeof s !== 'string' || s.length > 300)) {
     return { ok: false, error: 'resolvedSlugs invalid' };
   }
   for (let i = 0; i < v.findings.length; i++) {
