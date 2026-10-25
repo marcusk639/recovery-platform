@@ -20,7 +20,7 @@ test('loadState tolerates corrupt ledger marker', async () => {
 
 test('loadState defaults with no summary', async () => {
   const s = await loadState('o/r', 1, { listIssueComments: none, listReviewComments: none });
-  assert.deepEqual(s, { lastReviewedSha: null, lastBaseSha: null, ledger: [], linkTypesSeen: [], inlineSlugs: [] });
+  assert.deepEqual(s, { lastReviewedSha: null, lastBaseSha: null, ledger: [], linkTypesSeen: [], inlineSlugs: [], acknowledgedSlugs: [] });
 });
 
 test('loadState reads a valid marker from the bot summary', async () => {
@@ -74,4 +74,24 @@ test('loadState survives API failure with defaults', async () => {
   const s = await loadState('o/r', 1, { listIssueComments: boom, listReviewComments: boom });
   assert.equal(s.lastReviewedSha, null);
   assert.deepEqual(s.inlineSlugs, []);
+});
+
+test('acknowledgedSlugs: a maintainer reply in a claude[bot] fp thread acknowledges its slug', async () => {
+  const fp = (slug) => `x <!-- pr-review:fp=${slug} -->`;
+  const s = await loadState('o/r', 1, {
+    listIssueComments: none,
+    listReviewComments: async () => [
+      { id: 10, user: { login: 'claude[bot]' }, body: fp('c9:a.ts:acked') },
+      { id: 11, in_reply_to_id: 10, user: { login: 'm' }, author_association: 'MEMBER', body: 'intended' },
+      { id: 20, user: { login: 'claude[bot]' }, body: fp('c9:b.ts:stranger') },
+      { id: 21, in_reply_to_id: 20, user: { login: 'x' }, author_association: 'NONE', body: 'ack' },
+      { id: 30, user: { login: 'claude[bot]' }, body: fp('c9:c.ts:owner') },
+      { id: 31, in_reply_to_id: 30, user: { login: 'o' }, author_association: 'OWNER', body: 'fine' },
+      { id: 40, user: { login: 'mallory' }, body: fp('c9:d.ts:fake') },
+      { id: 41, in_reply_to_id: 40, user: { login: 'm' }, author_association: 'MEMBER', body: 'ok' },
+      { id: 50, user: { login: 'claude[bot]' }, body: fp('c9:e.ts:none') },
+      { id: 51, in_reply_to_id: 50, user: { login: 'claude[bot]' }, author_association: 'COLLABORATOR', body: 'self' },
+    ],
+  });
+  assert.deepEqual(s.acknowledgedSlugs, ['c9:a.ts:acked', 'c9:c.ts:owner']);
 });

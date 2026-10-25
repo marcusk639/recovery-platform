@@ -162,3 +162,14 @@ test('a failed deletion is counted and publish adds a generic summary line', asy
   assert.ok(logs.some((l) => l === 'inline guard: removed 0, failed 1'));
   assert.ok(!logs.join('\n').includes(SEC_FILE));
 });
+
+// I8
+test('acknowledged non-security slugs are resolved in the ledger; security entries are not', () => {
+  const open = { id: opaqueId('c9:a.ts:x', KEY), slug: 'c9:a.ts:x', title: 'Swallowed error', severity: 'Medium', status: 'open', security: false, runsSinceResolved: 0 };
+  const state = snap({ ledger: [open, priorSec], acknowledgedSlugs: ['c9:a.ts:x', SEC.slug, 7] });
+  const body = composeBody({ state, findingsText: text([]), narrative: '', outcome: 'success', headSha: HEAD, baseSha: BASE, idKey: KEY });
+  const m = decodeLedger(body);
+  assert.equal(m.ledger.find((e) => e.slug === 'c9:a.ts:x').status, 'resolved');
+  assert.equal(m.ledger.find((e) => e.security).status, 'open');
+  assert.match(body, /Swallowed error\*\* \(Medium, resolved this review\)/);
+});

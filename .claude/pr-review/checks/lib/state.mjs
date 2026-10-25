@@ -4,7 +4,11 @@ const SUMMARY_AUTHOR = 'github-actions[bot]';
 const INLINE_AUTHOR = 'claude[bot]';
 const SHA_RE = /^[0-9a-f]{40}$/;
 
-const EMPTY = () => ({ lastReviewedSha: null, lastBaseSha: null, ledger: [], linkTypesSeen: [], inlineSlugs: [] });
+const TRUSTED = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
+const FP_RE = /<!-- pr-review:fp=([^ >]+) -->/;
+const MAX_ACK = 200;
+
+const EMPTY = () => ({ lastReviewedSha: null, lastBaseSha: null, ledger: [], linkTypesSeen: [], inlineSlugs: [], acknowledgedSlugs: [] });
 const sha = (v) => (typeof v === 'string' && SHA_RE.test(v) ? v : null);
 
 function fromPayload(p) {
@@ -24,6 +28,21 @@ export function findSummary(comments) {
   );
 }
 
+// Slugs of claude[bot] inline comments a maintainer replied to in-thread: the
+// finding is dispositioned (REVIEW.md: do not re-raise; publish resolves it).
+export function acknowledgedSlugs(reviewComments) {
+  const all = reviewComments ?? [];
+  const replied = new Set(
+    all.filter((c) => c?.user?.login !== INLINE_AUTHOR && TRUSTED.has(c?.author_association) && c.in_reply_to_id != null).map((c) => c.in_reply_to_id),
+  );
+  const out = [];
+  for (const c of all) {
+    const m = c?.user?.login === INLINE_AUTHOR && replied.has(c.id) ? FP_RE.exec(String(c.body ?? '')) : null;
+    if (m && !out.includes(m[1])) out.push(m[1]);
+  }
+  return out.slice(0, MAX_ACK);
+}
+
 // The prior ledger passes through in shape; publish re-sanitizes it with the key.
 export async function loadState(repo, pr, { listIssueComments, listReviewComments }) {
   const state = EMPTY();
@@ -37,6 +56,7 @@ export async function loadState(repo, pr, { listIssueComments, listReviewComment
   try {
     const reviews = await listReviewComments(repo, pr);
     state.inlineSlugs = extractInlineSlugs(reviews.filter((c) => c.user?.login === INLINE_AUTHOR).map((c) => c.body));
+    state.acknowledgedSlugs = acknowledgedSlugs(reviews);
   } catch {
     // keep defaults
   }

@@ -115,10 +115,13 @@ export function composeBody({ state, findingsText, narrative, outcome, execution
   const needles = runNeedles(findings.findings, [narrative], priorFileIds(prior.ledger), idKey);
   // The trusted head (workflow env, then snapshot); the model's reviewedSha is ignored.
   const reviewed = sha(headSha) ?? sha(s.headSha) ?? prior.lastReviewedSha;
+  // Dispositioned outside the review: a closed/withdrawn/published advisory
+  // (security), or a maintainer's reply to the inline comment (non-security).
   const dispositioned = new Set(resolvedIds);
+  const acked = new Set(strings(s.acknowledgedSlugs));
   const merged = markResolved(
     mergeLedger(prior.ledger, findings.findings, findings.resolvedSlugs, s.tier, { key: idKey, needles }),
-    (e) => e.security && dispositioned.has(e.id),
+    (e) => (e.security ? dispositioned.has(e.id) : !e.withheld && acked.has(e.slug)),
   );
   const ledger = {
     lastReviewedSha: reviewed,

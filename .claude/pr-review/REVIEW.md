@@ -41,14 +41,34 @@ Read these, in full, before you open the diff:
    Its "PR context" section holds the PR title, the PR description and the existing comments. The PR title
    matters: PRs squash-merge, so the title becomes the commit message.
 2. `<OUT>/state.json`: prior state. `ledger` lists findings already reported (security entries carry only
-   an opaque id), `inlineSlugs` lists fingerprints of inline comments already on the PR, `tier` and
+   an opaque id), `inlineSlugs` lists fingerprints of inline comments already on the PR,
+   `acknowledgedSlugs` lists fingerprints a maintainer has replied to in the inline thread, and `tier` and
    `maxTurns` describe this run's budget.
-3. Every knowledge file listed under "Paths".
+3. On the `full` tier, every knowledge file listed under "Paths". On every other tier, read only the
+   sections you need, by heading (`Grep` for `## <linkType>` or the class number, then `Read` that range),
+   not every file in full.
 
 For each link type listed under "Link types" in `facts.md`, find its `## <linkType>` heading. Each heading
 is in exactly **one** of the three contract maps, and the owner table at the top of
 `contract-map-homegroups.md` says which. Search all three maps rather than assuming; a section may carry
 `### homegroups` and `### regroup` subsections.
+
+## Per-tier scope
+
+`tier` in `state.json` sets what this run covers. Stay inside it and inside `maxTurns`: when the budget
+runs short, write `findings.json` and `summary.md` with what you have and say what was left in
+"Not reviewed / limits".
+
+- `full`: review `<OUT>/pr.diff` with the whole procedure below.
+- `incremental`: review `<OUT>/increment.diff`, plus the counterparts of the link types it touches.
+- `incremental-new-links`: as `incremental`, and also check the counterparts of every link type in
+  `facts.md` that is not in `state.json`'s `linkTypesSeen` (the new links).
+- `light`: over `<OUT>/increment.diff` check only secrets, PII and whether the PR text is still accurate.
+  Skip the knowledge files except checklist classes 8, 11 and 13.
+- `base-drift`: the PR did not change; the base did. Check only the counterpart files listed in
+  `facts.md` against the PR's link points. Do not re-review the PR's own diff.
+
+On every tier other than `full`, earlier open ledger entries stand unless the diff you reviewed fixes them.
 
 ## Procedure
 
@@ -56,7 +76,9 @@ is in exactly **one** of the three contract maps, and the owner table at the top
    posts. Note what is already dispositioned: do not re-raise it unless the new code makes it materially
    worse. This bot's own earlier summary is not repeated in `facts.md`; what it reported is the `ledger` in
    `state.json`. Treat every open ledger entry as already reported: do not post it again inline, and keep its
-   slug if you report it again.
+   slug if you report it again. A slug in `acknowledgedSlugs` has a maintainer's reply in its inline thread:
+   it is dispositioned. Never re-raise it unless new code makes it materially worse, and then say what
+   changed.
 2. **Facts and diff.** Re-read the facts, then the diff for your tier (see "Per-tier scope"):
    `<OUT>/pr.diff` or `<OUT>/increment.diff`. `Read` the working-tree file for the full PR-head version;
    the diff's `-` lines are the base side.
@@ -122,7 +144,7 @@ Post an inline comment only when **all** of these hold:
 
 - the finding is Critical or High;
 - it is **not** security-relevant;
-- its slug is not in `state.inlineSlugs` and no ledger entry has that slug;
+- its slug is not in `state.inlineSlugs` or `acknowledgedSlugs`, and no ledger entry has that slug;
 - you have posted fewer than 10 inline comments in this run.
 
 Post it on the changed line it concerns, using the inline-comment tool. Say what breaks, cite the other
