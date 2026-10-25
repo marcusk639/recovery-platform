@@ -4,7 +4,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { prDiff } from './lib/diff.mjs';
 import { route } from './lib/routing.mjs';
 import { redact } from './lib/redact.mjs';
-import { ghRequest, listIssueComments } from './lib/gh.mjs';
+import { ghRequest, listIssueComments, listReviewComments } from './lib/gh.mjs';
+import { loadState } from './lib/state.mjs';
+import { classify, MAX_TURNS } from './lib/tier.mjs';
+import { computeIncrement } from './lib/increment.mjs';
 import { SUMMARY_MARKER } from './lib/markers.mjs';
 import { checkExports, checkRegion, checkQueriesVsIndexes, checkStoragePaths, checkCollectionsVsRules, checkTwins } from './contracts.mjs';
 import { checkSecrets, checkPiiLogs, checkNewFileSize, checkTitleScope, checkSelfEdit, runVerifyDiff } from './hygiene.mjs';
@@ -36,10 +39,19 @@ function renderResult(r) {
   return lines.join('\n');
 }
 
-export function buildFacts({ files = [], routeResult, results = [], prContext = '', title }) {
+function tierSection(tier, driftFiles) {
+  if (!tier) return [];
+  const out = ['## Review tier', tier];
+  if (tier !== 'full') out.push('', 'Incremental: the files and checks below cover only changes since the last reviewed commit.');
+  if (tier === 'base-drift') out.push('', 'Counterpart files changed on the base branch:', list(driftFiles.slice(0, MAX_PER_CHECK)));
+  return [...out, ''];
+}
+
+export function buildFacts({ files = [], routeResult, results = [], prContext = '', title, tier, driftFiles = [] }) {
   const head = [
     '# Pre-check facts',
     '',
+    ...tierSection(tier, driftFiles),
     `Changed files: ${files.length}`,
     '',
     '## Packages',
@@ -143,18 +155,25 @@ async function main() {
     linkTypesSeen: [],
     inlineSlugs: [],
     tier: 'full',
-    maxTurns: 60,
+    maxTurns: MAX_TURNS.full,
     headSha: HEAD_SHA,
     baseSha: BASE_SHA,
     pr: Number(PR),
   };
   const out = OUT || '.';
   try {
+    Object.assign(state, await loadState(REPO, PR, { listIssueComments, listReviewComments }));
     const repoRoot = process.cwd();
-    const files = prDiff(BASE_SHA, HEAD_SHA, repoRoot);
-    const paths = [...new Set(files.flatMap((f) => [f.oldFile, f.file]).filter(Boolean))];
+    const prFiles = prDiff(BASE_SHA, HEAD_SHA, repoRoot);
+    const paths = [...new Set(prFiles.flatMap((f) => [f.oldFile, f.file]).filter(Boolean))];
+    const inc = computeIncrement({ ...state, baseSha: BASE_SHA, headSha: HEAD_SHA, prPaths: paths, cwd: repoRoot });
+    const tier = classify({ ...state, ...inc, prFileCount: paths.length });
+    state.tier = tier;
+    state.maxTurns = MAX_TURNS[tier];
+    const files = tier === 'full' ? prFiles : inc.incrementDiff;
+    const factPaths = [...new Set(files.flatMap((f) => [f.oldFile, f.file]).filter(Boolean))];
     const verifyScript = join(dirname(fileURLToPath(import.meta.url)), '../../agent-gates/verify-diff.sh');
-    const results = runChecks({ files, repoRoot, baseSha: BASE_SHA, title: PR_TITLE, verifyScript });
+    const results = tier === 'none' ? [] : runChecks({ files, repoRoot, baseSha: BASE_SHA, title: PR_TITLE, verifyScript });
     let body = '';
     try {
       body = (await ghRequest('GET', `/repos/${REPO}/pulls/${PR}`)).body ?? '';
@@ -162,11 +181,14 @@ async function main() {
       body = null;
     }
     const prContext = body === null ? 'PR context unavailable' : await gatherContext(REPO, PR, body);
-    writeOutputs(out, buildFacts({ files, routeResult: route(paths), results, prContext, title: PR_TITLE }), state);
+    const text = buildFacts({ files, routeResult: route(factPaths), results, prContext, title: PR_TITLE, tier, driftFiles: inc.driftFiles });
+    writeOutputs(out, text, state);
   } catch (err) {
     process.stdout.write(`facts failed: ${err?.name ?? 'Error'}\n`);
+    state.tier = 'full';
+    state.maxTurns = MAX_TURNS.full;
     const empty = { packages: [], linkTypes: [], classes: [] };
-    writeOutputs(out, buildFacts({ routeResult: empty, results: [{ check: 'facts', error: err }], prContext: 'PR context unavailable', title: PR_TITLE }), state);
+    writeOutputs(out, buildFacts({ routeResult: empty, results: [{ check: 'facts', error: err }], prContext: 'PR context unavailable', title: PR_TITLE, tier: 'full' }), state);
   }
 }
 

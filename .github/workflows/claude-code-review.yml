@@ -80,6 +80,7 @@ jobs:
 
       - name: Review
         id: review
+        if: steps.facts.outputs.tier != 'none'
         continue-on-error: true
         uses: anthropics/claude-code-action@v1
         with:

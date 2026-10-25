@@ -56,3 +56,11 @@ test('state snapshot lives outside OUT', () => {
   assert.equal(snapshotPath({ RUNNER_TEMP: '/t' }), '/t/prstate-snapshot/state.json');
   assert.equal(snapshotPath({}), null);
 });
+
+test('incremental tier is stated and drift files listed', () => {
+  const out = buildFacts({ ...base, tier: 'base-drift', driftFiles: ['homegroups/mobile/src/a.ts'] });
+  assert.match(out, /## Review tier\nbase-drift/);
+  assert.match(out, /only changes since the last reviewed commit/);
+  assert.match(out, /- homegroups\/mobile\/src\/a\.ts/);
+  assert.doesNotMatch(buildFacts({ ...base, tier: 'full' }), /only changes since/);
+});
