@@ -21,9 +21,11 @@ Flat monorepo of independent recovery products plus a shared API. Each product h
 - **Coverage floors** (recovery-api, homegroups/functions, detox-recovery jest configs) are ratchets: raise them, never lower them.
 - **Mutation-kill counts** measure test coupling, not correctness. On money paths, get an independent reviewer reasoning from the domain model.
 
-## Git hooks (local only, not re-checked by CI)
+## Git hooks (local only; CI re-checks only the test-tamper gate)
 
 Install per clone with `./scripts/install-git-hooks.sh`.
+
+The `test-tamper` workflow re-runs verify-diff on every PR, using the script from the base commit. Skip it only with the `test-change-approved` label, and say in the PR description which test changes are intended.
 
 - **pre-commit:** blocks secrets (Stripe incl. `whsec_`/`sk_test_`/`rk_live_`, Anthropic, OpenRouter, AWS, GitHub, private keys, `AIza` outside allowlisted Firebase client config). Blocks new source files over **300 lines**; oversized legacy files warn. Split by extracting modules. Runs `.claude/agent-gates/verify-diff.sh --staged`, which blocks deleted test files, tests renamed to non-runnable paths, added `.skip`/`.only`/`.todo`, assert-true assertions, test-count drops (renames included) and any `.snap` change. Touching `regroup/scripts/stripe-product-values.md` is blocked until its `whsec_` secrets are scrubbed, and so is a merge commit that brings in changes to it. Edit `scripts/git-hooks/`, never `.git/hooks/`; session-check warns on drift.
 - **commit-msg:** the scope must name the product, e.g. `fix(regroup-mobile):`, never a bare `mobile`, `web` or `functions`.

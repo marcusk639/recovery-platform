@@ -17,7 +17,9 @@ Stack: Angular 9 · Firebase (Hosting, Cloud Functions, Auth, Firestore) · Stri
 ```bash
 npm start                         # Dev server on 0.0.0.0 (requires --openssl-legacy-provider)
 npm run dev:ssr                   # Dev server with SSR
-npm test                          # Karma unit tests
+npx tsc --noEmit -p tsconfig.spec.json  # What CI runs: typecheck the specs
+# npm test (ng test) cannot run: angular.json points Karma at karma.conf.js,
+# which has never existed. Specs are typechecked, not executed.
 npm run lint                      # TSLint
 npm run e2e                       # Protractor E2E tests
 ```
