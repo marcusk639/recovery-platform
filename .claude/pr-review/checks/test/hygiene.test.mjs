@@ -152,3 +152,17 @@ test('runVerifyDiff reports unavailable on silent failure or crash', () => {
   }
   assert.equal(runVerifyDiff('abc', root, 'fail.sh').length, 2);
 });
+
+test('secrets after an underscore are redacted and flagged', () => {
+  const FAKE_SK_LIVE = 'sk' + '_live_' + 'y'.repeat(24);
+  const out = redact('KEY_' + FAKE_SK_LIVE);
+  assert.ok(!out.includes(FAKE_SK_LIVE.slice(0, 7)));
+  assert.ok(!out.includes(FAKE_SK_LIVE.slice(6)));
+  assert.equal(checkSecrets([file({ added: add('const KEY_' + FAKE_SK_LIVE + ';') })]).length, 1);
+});
+
+test('re_ family needs a digit in the body', () => {
+  const plain = 'my_re_' + 'a'.repeat(25);
+  assert.equal(redact(plain), plain);
+  assert.equal(redact('x=re_' + 'a'.repeat(20) + '7'), 'x=re_aaa…');
+});

@@ -2,8 +2,8 @@
 // Patterns are assembled from parts so this source holds no secret-shaped literal
 // (the repo pre-commit secret scan would otherwise flag it).
 const P = (...parts) => new RegExp(parts.join(''));
-// Left boundary: a prefix inside a longer identifier (task_test_x, capture_foo) is not a secret.
-const B = '(?<![A-Za-z0-9_])';
+// Left boundary: a prefix glued to a letter/digit (task_test_x, capture_foo) is not a secret; '_' before it is allowed (KEY_sk_live_...).
+const B = '(?<![A-Za-z0-9])';
 
 export const SECRET_PATTERNS = [
   P(B, 'whsec', '_', '[A-Za-z0-9]{8,}'),
@@ -15,7 +15,7 @@ export const SECRET_PATTERNS = [
   P(B, 'AKIA', '[0-9A-Z]{16}'),
   P(B, 'gh[posu]', '_', '[A-Za-z0-9]{20,}'),
   P(B, 'SG', '\\.', '[\\w-]{20,}', '\\.', '[\\w-]{20,}'),
-  P(B, 're', '_', '[A-Za-z0-9]{20,}'),
+  P(B, 're', '_', '(?=[A-Za-z0-9]*\\d)', '[A-Za-z0-9]{20,}'),
   P(B, 'AIza', '[0-9A-Za-z_-]{35}'),
   P('-----BEGIN [A-Z ]*PRIVATE KEY-----[\\s\\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)'),
 ];
