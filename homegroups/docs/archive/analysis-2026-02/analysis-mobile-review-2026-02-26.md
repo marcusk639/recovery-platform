@@ -38,7 +38,7 @@
 
 **C1 — Hardcoded Google Maps API key**
 `mobile/src/components/groups/LocationPicker.tsx:24`
-Key `AIzaSyAyjHVwL4AcgLGdo1O7mmRFJLLHgpNOC5A` is committed to source and extractable from the built APK/IPA. A comment on line 22 acknowledges it should be in config. Move to environment variables or native config files with API key restrictions in Google Cloud Console.
+Key `<GOOGLE_MAPS_API_KEY>` is committed to source and extractable from the built APK/IPA. A comment on line 22 acknowledges it should be in config. Move to environment variables or native config files with API key restrictions in Google Cloud Console.
 
 **C2 — Hardcoded Google OAuth client IDs**
 `mobile/src/services/firebase/auth.ts:234-239`

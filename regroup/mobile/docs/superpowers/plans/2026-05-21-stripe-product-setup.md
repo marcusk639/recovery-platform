@@ -246,7 +246,7 @@ stripe login --interactive
 Or set the live secret key explicitly:
 
 ```bash
-export STRIPE_API_KEY=sk_live_xxxxxxxxxxxxxxxxxxxxxxxx
+export STRIPE_API_KEY=<STRIPE_LIVE_SECRET_KEY>
 ```
 
 - [ ] **Step 2: Repeat Tasks 1 and 2 in live mode**
