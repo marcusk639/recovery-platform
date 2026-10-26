@@ -1,4 +1,8 @@
 apply plugin: "com.android.application"
+// Needed even without Kotlin sources: it adds the kotlin.platform.type=androidJvm
+// attribute, without which Gradle resolves AndroidX Lifecycle 2.8+ to its
+// -desktop variant (no ReportFragment) and release builds crash on launch.
+apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 apply plugin: 'com.google.gms.google-services' // <- Add this line
 
