@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import type Stripe from 'stripe';
@@ -22,9 +23,14 @@ export type SetupDeps = {
 
 /** Temp file created 0600, then renamed over the target. */
 function writeSecretFile(file: string, content: string): void {
-  const tmp = `${file}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, content, { mode: 0o600, flag: 'wx' });
-  fs.renameSync(tmp, file);
+  const tmp = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
+  try {
+    fs.writeFileSync(tmp, content, { mode: 0o600, flag: 'wx' });
+    fs.renameSync(tmp, file);
+  } catch (err) {
+    fs.rmSync(tmp, { force: true });
+    throw err;
+  }
 }
 
 function readJsonObject(file: string): Record<string, string> {
@@ -69,7 +75,8 @@ function pinAccount(accountFile: string, accountId: string, confirm?: string): v
 
 /**
  * Order: URL and key validation (no Stripe), account guard and pin, hygiene,
- * catalogue, webhooks (each secret persisted as it is created). Never logs secrets.
+ * catalogue and prices file, webhooks (each secret persisted as it is created;
+ * an existing endpoint whose secret was never saved is refused). Never logs secrets.
  */
 export async function runSetup(deps: SetupDeps): Promise<{ pricesFile: string }> {
   assertWebhookUrls(deps.platformUrl, deps.connectUrl);
@@ -84,14 +91,15 @@ export async function runSetup(deps: SetupDeps): Promise<{ pricesFile: string }>
 
   await assertSandboxHygiene(stripe);
   const prices = await ensureCatalog(stripe);
+  const pricesFile = path.join(deps.outDir, 'stripe-e2e-prices.json');
+  writeSecretFile(pricesFile, JSON.stringify(prices, null, 2) + '\n');
 
+  const secretsFile = path.join(deps.outDir, 'stripe-e2e-webhook-secrets.json');
   await ensureWebhooks(stripe, {
     platformUrl: deps.platformUrl,
     connectUrl: deps.connectUrl,
     onSecret: (kind, secret) => persistSecret(deps.outDir, kind, secret),
+    hasSecret: (kind) => typeof readJsonObject(secretsFile)[kind] === 'string',
   });
-
-  const pricesFile = path.join(deps.outDir, 'stripe-e2e-prices.json');
-  writeSecretFile(pricesFile, JSON.stringify(prices, null, 2) + '\n');
   return { pricesFile };
 }

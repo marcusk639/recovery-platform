@@ -214,6 +214,12 @@ export type WebhookOptions = {
    * secret once. Only called for newly created endpoints.
    */
   onSecret?: (kind: 'platform' | 'connect', secret: string) => void | Promise<void>;
+  /**
+   * Whether the secret of an existing endpoint was saved. An endpoint created
+   * by a run that died before saving its secret cannot be reused: Stripe will
+   * not reveal that secret again.
+   */
+  hasSecret?: (kind: 'platform' | 'connect') => boolean;
 };
 
 async function listEndpoints(stripe: Stripe): Promise<Stripe.WebhookEndpoint[]> {
@@ -249,6 +255,12 @@ export async function ensureWebhooks(stripe: Stripe, opts: WebhookOptions): Prom
     const found = existing.find((e) => e.url === spec.url);
     if (found) {
       assertEndpointMatches(found, spec.events, spec.connect);
+      if (opts.hasSecret && !opts.hasSecret(spec.kind)) {
+        throw new Error(
+          `Webhook endpoint ${found.id} exists but its ${spec.kind} signing secret was not saved. ` +
+            'Delete that endpoint in the Stripe Dashboard and rerun.',
+        );
+      }
       continue;
     }
     const created = await stripe.webhookEndpoints.create({

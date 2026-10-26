@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { PRODUCTION_SANDBOX_ACCOUNT_ID } from '../stripeSandbox';
+import { PLATFORM_EVENTS, PRODUCTION_SANDBOX_ACCOUNT_ID } from '../stripeSandbox';
 import { runSetup } from '../stripeSandboxRun';
 import { makeStripe } from './helpers/mockStripe';
 
@@ -153,6 +153,31 @@ describe('runSetup', () => {
       platform: 'whsec_mock',
       connect: 'whsec_mock',
     });
+  });
+
+  it('refuses to reuse an endpoint whose secret was never saved, naming it', async () => {
+    const { mock, stripe } = makeStripe({
+      endpoints: [
+        {
+          id: 'we_orphan',
+          url: urls.platformUrl,
+          status: 'enabled',
+          enabled_events: [...PLATFORM_EVENTS],
+        },
+      ],
+    });
+    await expect(runSetup(base(stripe))).rejects.toThrow(/we_orphan.*secret.*not saved/);
+    expect(mock.webhookEndpoints.create).not.toHaveBeenCalled();
+    expect(fs.existsSync(path.join(outDir, 'stripe-e2e-webhook-secrets.json'))).toBe(false);
+  });
+
+  it('leaves no temp file behind when a write fails', async () => {
+    const { stripe } = makeStripe();
+    const blocker = path.join(outDir, 'stripe-e2e-prices.json');
+    fs.mkdirSync(blocker);
+    fs.writeFileSync(path.join(blocker, 'keep'), 'x');
+    await expect(runSetup(base(stripe))).rejects.toThrow();
+    expect(fs.readdirSync(outDir).filter((f) => f.endsWith('.tmp'))).toEqual([]);
   });
 
   it('parks a one-time secret in a separate 600 file when the secrets file is corrupt, then fails', async () => {
