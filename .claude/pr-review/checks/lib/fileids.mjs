@@ -54,8 +54,11 @@ export function hashedNeedles(candidates, ids, key) {
 export const isPriorSecurityPath = (path, ids, key) => Boolean(key && ids?.size && ids.has(fileId(path, key)));
 
 // This run's needles: current security findings' files plus any candidate
-// path that hashes to a prior security fileId.
-export function runNeedles(findings, texts, ids, key) {
-  const all = new Set([...securityNeedles(findings), ...hashedNeedles(candidatePaths(findings, texts), ids, key)]);
+// path that hashes to a prior security fileId. paths: the PR's changed files
+// (facts' trusted list), so a prior security file this PR touches is found by
+// its full path even where public text names only its basename.
+export function runNeedles(findings, texts, ids, key, paths = []) {
+  const candidates = [...candidatePaths(findings, texts), ...(paths ?? []).filter((p) => typeof p === 'string').map(normalise)];
+  const all = new Set([...securityNeedles(findings), ...hashedNeedles(candidates, ids, key)]);
   return [...all].sort((a, b) => b.length - a.length);
 }
