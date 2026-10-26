@@ -7,7 +7,8 @@
   },
   "scripts": {
     "test": "jest",
-    "e2e:gen-env": "ts-node scripts/gen-env.ts"
+    "e2e:gen-env": "ts-node scripts/gen-env.ts",
+    "e2e:stripe-setup": "ts-node scripts/stripe-sandbox-setup.ts"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",
@@ -16,5 +17,8 @@
     "ts-jest": "^29.4.6",
     "ts-node": "^10.9.2",
     "typescript": "^5.1.6"
+  },
+  "dependencies": {
+    "stripe": "^20.4.1"
   }
 }

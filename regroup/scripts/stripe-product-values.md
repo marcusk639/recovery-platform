@@ -81,10 +81,12 @@ tier-based subscriptions skip bundle discounts (`subscriptions.ts` line 784).
 | Coupon ID          | Discount | Condition                     | Duration |
 | ------------------ | -------- | ----------------------------- | -------- |
 | `regroup-bundle-3` | 10% off  | 3+ houses (`houseCount >= 3`) | forever  |
-| `regroup-bundle-5` | 20% off  | 5+ houses (`houseCount >= 5`) | forever  |
+| `regroup-bundle-5` | 15% off  | 5+ houses (`houseCount >= 5`) | forever  |
 
 > Coupons use **fixed string IDs** (not generated). The code references them
-> by literal string — no env var needed. Verify they exist in the Stripe Dashboard.
+> by literal string — no env var needed. Percentages follow pricing decision P-6
+> (`docs/launch-readiness/regroup-pricing-revision-plan.md`). As of 2026-10-26 they
+> exist in the test sandboxes but not in live mode (go-live runbook RG-P1-5).
 
 ---
 
