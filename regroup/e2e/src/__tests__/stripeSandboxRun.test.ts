@@ -195,6 +195,7 @@ describe('runSetup', () => {
     fs.writeFileSync(path.join(outDir, 'stripe-e2e-webhook-secrets.json'), '{not json');
     await expect(runSetup(base(stripe))).rejects.toThrow(/Corrupt/);
     expect(mock.webhookEndpoints.create).not.toHaveBeenCalled();
+    expect(mock.products.create).not.toHaveBeenCalled();
   });
 
   it('parks a one-time secret in a separate 600 file when the secrets file turns corrupt, then fails', async () => {

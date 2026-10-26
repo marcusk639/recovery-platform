@@ -141,7 +141,7 @@ function pinAccount(accountFile: string, accountId: string, confirm?: string): v
 
 /**
  * Order: URL and key validation (no Stripe), account guard, hygiene (read-only),
- * account pin, catalogue, webhooks (each secret persisted as it is created). Never logs secrets.
+ * account pin, secrets-file check/migration, catalogue, webhooks (each secret persisted as it is created). Never logs secrets.
  */
 export type SetupResult = { pricesFile: string; pricesEnvFile: string; secretsFile: string };
 
@@ -171,10 +171,12 @@ export async function runSetup(deps: SetupDeps): Promise<SetupResult> {
   fs.chmodSync(deps.outDir, 0o700);
   pinAccount(path.join(deps.outDir, 'stripe-e2e-account.txt'), accountId, deps.confirmAccount);
 
-  const prices = await ensureCatalog(stripe);
-
+  // Before any Stripe write: a corrupt or conflicting secrets file stops the run here.
   const secretsFile = path.join(deps.outDir, SECRETS_FILE_NAME);
   migrateSecretsFile(secretsFile);
+
+  const prices = await ensureCatalog(stripe);
+
   const webhooks = await ensureWebhooks(stripe, {
     platformUrl: deps.platformUrl,
     connectUrl: deps.connectUrl,
