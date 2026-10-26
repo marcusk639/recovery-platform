@@ -22,6 +22,7 @@ const hooks = (extra = {}) => ({
   apiVersion: API,
   onSecret: () => undefined,
   secretStatus: () => 'saved' as const,
+  secretsFile: '/tmp/stripe-e2e-webhook-secrets.json',
   ...extra,
 });
 
@@ -141,15 +142,14 @@ describe('ensureWebhooks', () => {
     }
   });
 
-  it('throws on a reused endpoint that is disabled or has other events, without updating', async () => {
-    for (const patch of [{ status: 'disabled' }, { enabled_events: ['charge.refunded'] }]) {
-      const { mock, stripe, endpoints } = makeStripe();
-      await ensureWebhooks(stripe, hooks());
-      Object.assign(endpoints[0], patch);
-      await expect(ensureWebhooks(stripe, hooks())).rejects.toThrow(/does not match/);
-      expect(mock.webhookEndpoints.update).not.toHaveBeenCalled();
-      expect(mock.webhookEndpoints.del).not.toHaveBeenCalled();
-    }
+  // A disabled endpoint is ignored rather than reused (stripeSandboxRecovery.test.ts).
+  it('throws on a reused endpoint that has other events, without updating', async () => {
+    const { mock, stripe, endpoints } = makeStripe();
+    await ensureWebhooks(stripe, hooks());
+    endpoints[0].enabled_events = ['charge.refunded'];
+    await expect(ensureWebhooks(stripe, hooks())).rejects.toThrow(/does not match/);
+    expect(mock.webhookEndpoints.update).not.toHaveBeenCalled();
+    expect(mock.webhookEndpoints.del).not.toHaveBeenCalled();
   });
 
   it('refuses to reuse an endpoint on another (or the account default) API version', async () => {

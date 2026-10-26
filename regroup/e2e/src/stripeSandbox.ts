@@ -27,7 +27,7 @@ const tier = (key: string, label: string, amountCents: number, envVar: string): 
 });
 
 // Source: regroup/functions/src/config.ts SUBSCRIPTION_TIERS.
-export const TIERS: TierSpec[] = [
+export const TIERS: readonly TierSpec[] = [
   tier('trad_starter', 'Traditional Starter', 6900, 'STRIPE_PRICE_TRAD_STARTER'),
   tier('trad_professional', 'Traditional Professional', 12900, 'STRIPE_PRICE_TRAD_PROFESSIONAL'),
   tier('trad_enterprise', 'Traditional Enterprise', 24900, 'STRIPE_PRICE_TRAD_ENTERPRISE'),

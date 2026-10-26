@@ -3,6 +3,7 @@ import * as path from 'path';
 import type Stripe from 'stripe';
 import { pinnedStripeApiVersion } from './launchConfig';
 import type { SetupDeps } from './stripeSandboxRun';
+import type { Kind, SecretsFile } from './stripeWebhooks';
 
 export const KEY_FILE_NAME = 'stripe-e2e-sandbox-key.txt';
 const FLAGS = ['platform-url', 'connect-url', 'confirm-account'] as const;
@@ -64,21 +65,44 @@ export function buildSetupDeps(
 
 const shQuote = (s: string): string => `'${s.replace(/'/g, `'\\''`)}'`;
 
+const SECRET_NAMES: Record<Kind, string> = {
+  platform: 'STRIPE_TEST_WEBHOOK_SECRET',
+  connect: 'STRIPE_CONNECT_TEST_WEBHOOK_SECRET',
+};
+
+// Each snippet prints only a value of the expected shape and exits 1 otherwise (missing,
+// junk or unreadable), so with pipefail a bad file never stores an empty secret.
+const JSON_FIELD_SNIPPET =
+  'let v;try{v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))[process.argv[2]]}catch{process.exit(1)}' +
+  'if(typeof v!=="string"||!/^whsec_[A-Za-z0-9]+$/.test(v))process.exit(1);process.stdout.write(v)';
+const KEY_SNIPPET =
+  'let k;try{k=require("fs").readFileSync(process.argv[1],"utf8").trim()}catch{process.exit(1)}' +
+  'if(!/^sk_test_[A-Za-z0-9]+$/.test(k))process.exit(1);process.stdout.write(k)';
+
 /**
  * Operator follow-ups after a run. Names and paths only: each value is piped from
- * its file into `secrets:set --data-file -`, so none reaches the terminal.
+ * its file into `secrets:set --data-file -`, so none reaches the terminal. Webhook
+ * secrets are listed only for the endpoints this run created.
  */
-export function formatNextSteps(files: { secretsFile: string; keyFile: string }): string {
+export function formatNextSteps(files: {
+  secretsFile: string;
+  keyFile: string;
+  createdKinds: readonly Kind[];
+}): string {
   const set = (name: string) =>
     `firebase functions:secrets:set ${name} --project regroup-e2e --data-file -`;
-  const fromJson = (field: string) =>
-    `node -e 'process.stdout.write(require(process.argv[1]).${field})' ${shQuote(files.secretsFile)}`;
-  const key = `node -e 'process.stdout.write(require("fs").readFileSync(process.argv[1], "utf8").trim())' ${shQuote(files.keyFile)}`;
+  const fromJson = (field: keyof SecretsFile) =>
+    `set -o pipefail; node -e '${JSON_FIELD_SNIPPET}' ${shQuote(files.secretsFile)} ${field}`;
+  const key = `set -o pipefail; node -e '${KEY_SNIPPET}' ${shQuote(files.keyFile)}`;
+  const webhookLines = files.createdKinds.length
+    ? [
+        '1. Store the signing secret of each webhook endpoint created this run:',
+        ...files.createdKinds.map((kind) => `   ${fromJson(kind)} | ${set(SECRET_NAMES[kind])}`),
+      ]
+    : ['1. No webhook endpoint was created; webhook secrets are unchanged.'];
   return [
     'Next steps for regroup-e2e (no secret values are printed):',
-    '1. Only if a webhook endpoint was created this run, store its signing secret:',
-    `   ${fromJson('platform')} | ${set('STRIPE_TEST_WEBHOOK_SECRET')}`,
-    `   ${fromJson('connect')} | ${set('STRIPE_CONNECT_TEST_WEBHOOK_SECRET')}`,
+    ...webhookLines,
     '2. STRIPE_SECRET_KEY must hold this sandbox test key:',
     `   ${key} | ${set('STRIPE_SECRET_KEY')}`,
     '3. Regenerate the staging env with the price ids: npm run e2e:gen-env',

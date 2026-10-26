@@ -221,6 +221,7 @@ describe('CLI', () => {
     const text = formatNextSteps({
       secretsFile: secretsFile(),
       keyFile: '/k/stripe-e2e-sandbox-key.txt',
+      createdKinds: ['platform', 'connect'],
     });
     for (const name of [
       'STRIPE_TEST_WEBHOOK_SECRET',
@@ -231,6 +232,7 @@ describe('CLI', () => {
     }
     expect(text).toMatch(/npm run e2e:gen-env/);
     expect(text).toMatch(/[Rr]edeploy/);
-    expect(text).not.toMatch(/whsec_|sk_test_|sk_live_/);
+    // The shape checks name the prefixes; no value-shaped string may appear.
+    expect(text).not.toMatch(/(whsec|sk_test|sk_live)_[A-Za-z0-9]{4,}/);
   });
 });

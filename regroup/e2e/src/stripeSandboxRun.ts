@@ -6,8 +6,10 @@ import { assertSandboxAccount, assertTestKey, ensureCatalog } from './stripeSand
 import {
   assertSandboxHygiene,
   assertWebhookUrls,
+  endpointIdKey,
   ensureWebhooks,
   type Kind,
+  type SecretsFile,
   type SecretStatus,
 } from './stripeWebhooks';
 
@@ -49,8 +51,8 @@ function writeSecretFile(file: string, content: string): void {
 }
 
 /**
- * {} when the file is absent. Errors name the file only: a JSON.parse message
- * quotes the input, which here holds webhook secrets.
+ * {} when the file is absent. Every value must be a string. Errors name the file
+ * only: a JSON.parse message quotes the input, which here holds webhook secrets.
  */
 function readJsonObject(file: string): Record<string, string> {
   let text: string;
@@ -70,8 +72,13 @@ function readJsonObject(file: string): Record<string, string> {
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     throw new UnusableFileError(`${file} must be a JSON object`);
   }
+  if (Object.values(parsed).some((v) => typeof v !== 'string')) {
+    throw new UnusableFileError(`${file} must map each key to a string`);
+  }
   return parsed as Record<string, string>;
 }
+
+const readSecretsFile = (file: string): SecretsFile => readJsonObject(file) as SecretsFile;
 
 /**
  * The secrets file could not take the one-time secret: park it in its own 0600
@@ -80,7 +87,7 @@ function readJsonObject(file: string): Record<string, string> {
  */
 function rescueSecret(
   dir: string,
-  entry: Record<string, string>,
+  entry: SecretsFile,
   kind: Kind,
   cause: string,
 ): never {
@@ -90,14 +97,44 @@ function rescueSecret(
   } catch (writeErr) {
     throw new Error(
       `${cause}, and the ${kind} secret could not be saved elsewhere (${codeOf(writeErr)}); ` +
-        `delete the new ${kind} webhook endpoint in the Stripe Dashboard and rerun.`,
+        `reveal the signing secret of endpoint ${entry[endpointIdKey(kind)]} in the Stripe Dashboard ` +
+        `and add it with its endpoint id to ${SECRETS_FILE}, or delete the new ${kind} webhook ` +
+        'endpoint in the Stripe Dashboard and rerun.',
     );
   }
   console.error(`${cause}; saved the new ${kind} secret to ${rescue}`);
-  throw new Error(`${cause}; recover the ${kind} secret from ${rescue}.`);
+  throw new Error(
+    `${cause}; recover the ${kind} secret from ${rescue}: merge both keys into ` +
+      `${SECRETS_FILE} before rerunning.`,
+  );
 }
 
-const endpointIdKey = (kind: Kind): string => `${kind}EndpointId`;
+const RESCUE_FILE = (kind: Kind) => new RegExp(`^stripe-e2e-webhook-secret-${kind}-\\d+\\.json$`);
+
+/** A rescue file holding this endpoint's secret (or, from before ids, an unbound one). */
+function findRescue(dir: string, kind: Kind, endpointId: string): string | undefined {
+  let names: string[];
+  try {
+    names = fs.readdirSync(dir).filter((n) => RESCUE_FILE(kind).test(n)).sort();
+  } catch {
+    return undefined;
+  }
+  for (const name of names) {
+    const file = path.join(dir, name);
+    let saved: SecretsFile;
+    try {
+      saved = readSecretsFile(file);
+    } catch {
+      continue;
+    }
+    const secret = saved[kind];
+    const recorded = saved[endpointIdKey(kind)];
+    if (secret && WEBHOOK_SECRET.test(secret) && (recorded ?? endpointId) === endpointId) {
+      return file;
+    }
+  }
+  return undefined;
+}
 
 /**
  * Merge the secret and the id of the endpoint it belongs to into the secrets file
@@ -105,10 +142,10 @@ const endpointIdKey = (kind: Kind): string => `${kind}EndpointId`;
  */
 function persistSecret(dir: string, kind: Kind, secret: string, endpointId: string): void {
   const file = path.join(dir, SECRETS_FILE);
-  const entry = { [kind]: secret, [endpointIdKey(kind)]: endpointId };
-  let existing: Record<string, string>;
+  const entry: SecretsFile = { [kind]: secret, [endpointIdKey(kind)]: endpointId };
+  let existing: SecretsFile;
   try {
-    existing = readJsonObject(file);
+    existing = readSecretsFile(file);
   } catch (err) {
     if (!(err instanceof UnusableFileError)) throw err;
     rescueSecret(dir, entry, kind, `Corrupt or unreadable secrets file (${err.message})`);
@@ -123,19 +160,20 @@ function persistSecret(dir: string, kind: Kind, secret: string, endpointId: stri
 /**
  * 'saved': a whsec_ secret recorded for exactly this endpoint. 'unbound': a whsec_
  * secret with no endpoint id, from a file written before ids were recorded; its
- * endpoint may be live. 'missing': anything else, including a secret recorded for
- * a different (deleted) endpoint.
+ * endpoint may be live. Otherwise a rescue file holding this endpoint's secret, or
+ * 'missing' (including a secret recorded for an endpoint id other than this one,
+ * for example one since deleted).
  */
-function secretStatusFor(
-  saved: Record<string, string>,
-  kind: Kind,
-  endpointId: string,
-): SecretStatus {
+function secretStatusFor(dir: string, kind: Kind, endpointId: string): SecretStatus {
+  const saved = readSecretsFile(path.join(dir, SECRETS_FILE));
   const secret = saved[kind];
-  if (typeof secret !== 'string' || !WEBHOOK_SECRET.test(secret)) return 'missing';
-  const recorded = saved[endpointIdKey(kind)];
-  if (recorded === undefined) return 'unbound';
-  return recorded === endpointId ? 'saved' : 'missing';
+  if (secret !== undefined && WEBHOOK_SECRET.test(secret)) {
+    const recorded = saved[endpointIdKey(kind)];
+    if (recorded === undefined) return 'unbound';
+    if (recorded === endpointId) return 'saved';
+  }
+  const rescued = findRescue(dir, kind, endpointId);
+  return rescued ? { rescued } : 'missing';
 }
 
 function pinAccount(accountFile: string, accountId: string, confirm?: string): void {
@@ -155,7 +193,7 @@ function pinAccount(accountFile: string, accountId: string, confirm?: string): v
     return;
   }
   if (confirm !== accountId) {
-    // Never echo the retrieved id: the operator must supply it independently.
+    // The id is fixed by the allowlist; --confirm-account is a deliberate operator acknowledgement, not a secret.
     throw new Error(
       'First run needs --confirm-account <the e2e sandbox account id>, copied from the Stripe Dashboard.',
     );
@@ -167,17 +205,17 @@ function pinAccount(accountFile: string, accountId: string, confirm?: string): v
  * Order: URL and key validation (no Stripe); the secrets file must be usable before
  * any Stripe write; account guard (the e2e sandbox only); hygiene; account pin;
  * catalogue and prices file; webhooks (each secret persisted with its endpoint id as
- * it is created; an existing endpoint without a secret saved for it is refused).
- * Never logs secrets.
+ * it is created; an existing endpoint without a secret saved for it is refused, with
+ * recovery steps). Returns the kinds whose endpoints this run created. Never logs secrets.
  */
 export async function runSetup(
   deps: SetupDeps,
-): Promise<{ pricesFile: string; secretsFile: string }> {
+): Promise<{ pricesFile: string; secretsFile: string; createdKinds: Kind[] }> {
   assertWebhookUrls(deps.platformUrl, deps.connectUrl);
   const key = deps.readKey().trim();
   assertTestKey(key);
   const secretsFile = path.join(deps.outDir, SECRETS_FILE);
-  readJsonObject(secretsFile);
+  readSecretsFile(secretsFile);
 
   const stripe = deps.createStripe(key, deps.apiVersion);
   const accountId = await assertSandboxAccount(stripe, key);
@@ -191,13 +229,17 @@ export async function runSetup(
   const pricesFile = path.join(deps.outDir, 'stripe-e2e-prices.json');
   writeSecretFile(pricesFile, JSON.stringify(prices, null, 2) + '\n');
 
+  const createdKinds: Kind[] = [];
   await ensureWebhooks(stripe, {
     platformUrl: deps.platformUrl,
     connectUrl: deps.connectUrl,
     apiVersion: deps.apiVersion,
-    onSecret: (kind, secret, endpointId) => persistSecret(deps.outDir, kind, secret, endpointId),
-    secretStatus: (kind, endpointId) =>
-      secretStatusFor(readJsonObject(secretsFile), kind, endpointId),
+    secretsFile,
+    onSecret: (kind, secret, endpointId) => {
+      persistSecret(deps.outDir, kind, secret, endpointId);
+      createdKinds.push(kind);
+    },
+    secretStatus: (kind, endpointId) => secretStatusFor(deps.outDir, kind, endpointId),
   });
-  return { pricesFile, secretsFile };
+  return { pricesFile, secretsFile, createdKinds };
 }

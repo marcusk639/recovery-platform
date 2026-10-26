@@ -96,13 +96,13 @@ describe('saved webhook secrets', () => {
     expect(mock.webhookEndpoints.del).not.toHaveBeenCalled();
   });
 
-  it('still says delete when the saved secret belongs to a different endpoint', async () => {
+  it('says to reveal the secret (not delete) when the saved one belongs to a different endpoint', async () => {
     fs.writeFileSync(
       secretsFile(),
       JSON.stringify({ platform: 'whsec_abc123', platformEndpointId: 'we_old' }),
     );
     const { stripe } = makeStripe({ endpoints: [platformEndpoint] });
-    await expect(runSetup(base(stripe))).rejects.toThrow(/we_p.*platform.*not saved.*Delete/);
+    await expect(runSetup(base(stripe))).rejects.toThrow(/we_p.*platform.*not saved.*Reveal/);
   });
 
   it('names the file but never quotes a secret when the secrets file is corrupt', async () => {

@@ -20,9 +20,15 @@ Promise.resolve()
     ),
   )
   .then(
-    ({ pricesFile, secretsFile }) => {
+    ({ pricesFile, secretsFile, createdKinds }) => {
       console.log(`wrote ${pricesFile}`);
-      console.log(formatNextSteps({ secretsFile, keyFile: path.join(configDir, KEY_FILE_NAME) }));
+      console.log(
+        formatNextSteps({
+          secretsFile,
+          keyFile: path.join(configDir, KEY_FILE_NAME),
+          createdKinds,
+        }),
+      );
     },
     (err: Error) => {
       console.error(err.message);
