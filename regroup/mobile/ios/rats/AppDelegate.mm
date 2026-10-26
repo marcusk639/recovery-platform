@@ -10,7 +10,37 @@
 // #import <Detox/Detox-Swift.h>
 // #endif
 
+@interface AppDelegate ()
+
+@property (nonatomic, copy) NSDictionary *appLaunchOptions;
+
+@end
+
 @implementation AppDelegate
+
+- (UIViewController *)rootViewControllerForConnectionOptions:(UISceneConnectionOptions *)connectionOptions
+{
+  if (self.bridge == nil) {
+    // Rebuild the launch options React Native reads for Linking.getInitialURL().
+    NSMutableDictionary *options = [self.appLaunchOptions mutableCopy];
+    NSURL *url = connectionOptions.URLContexts.anyObject.URL;
+    if (url) {
+      options[UIApplicationLaunchOptionsURLKey] = url;
+    }
+    NSUserActivity *activity = connectionOptions.userActivities.anyObject;
+    if (activity) {
+      options[UIApplicationLaunchOptionsUserActivityDictionaryKey] = @{
+        UIApplicationLaunchOptionsUserActivityTypeKey : activity.activityType,
+        @"UIApplicationLaunchOptionsUserActivityKey" : activity,
+      };
+    }
+    // RCTAppDelegate creates the bridge, the root view and a scene-less window.
+    [super application:UIApplication.sharedApplication didFinishLaunchingWithOptions:options];
+  }
+  UIViewController *rootViewController = self.window.rootViewController;
+  self.window.rootViewController = nil;
+  return rootViewController;
+}
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
@@ -34,7 +64,10 @@
   // They will be passed down to the ViewController used by React Native.
   self.initialProps = @{};
 
-  [super application:application didFinishLaunchingWithOptions:launchOptions];
+  // React Native starts when the window scene connects (SceneDelegate): under the
+  // UIScene lifecycle, which the iOS 27 SDK requires, a URL or universal link that
+  // launched the app arrives in the scene's connection options, not launchOptions.
+  self.appLaunchOptions = launchOptions ?: @{};
 
   // Define UNUserNotificationCenter
   UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
@@ -84,19 +117,41 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
   [RNCPushNotificationIOS didReceiveNotificationResponse:response];
 }
 
-- (BOOL)application:(UIApplication *)application
-   openURL:(NSURL *)url
-   options:(NSDictionary<UIApplicationOpenURLOptionsKey,id> *)options
+@end
+
+// Under the UIScene lifecycle UIKit delivers URLs and universal links to the scene
+// delegate; the UIApplicationDelegate openURL/continueUserActivity methods are not called.
+@implementation SceneDelegate
+
+- (void)scene:(UIScene *)scene
+    willConnectToSession:(UISceneSession *)session
+                 options:(UISceneConnectionOptions *)connectionOptions
 {
-  return [RCTLinkingManager application:application openURL:url options:options];
+  if (![scene isKindOfClass:[UIWindowScene class]]) {
+    return;
+  }
+  AppDelegate *appDelegate = (AppDelegate *)UIApplication.sharedApplication.delegate;
+  UIViewController *rootViewController = [appDelegate rootViewControllerForConnectionOptions:connectionOptions];
+  self.window = [[UIWindow alloc] initWithWindowScene:(UIWindowScene *)scene];
+  self.window.rootViewController = rootViewController;
+  // React Native and its libraries reach the window through the app delegate.
+  appDelegate.window = self.window;
+  [self.window makeKeyAndVisible];
 }
 
-- (BOOL)application:(UIApplication *)application continueUserActivity:(nonnull NSUserActivity *)userActivity
- restorationHandler:(nonnull void (^)(NSArray<id<UIUserActivityRestoring>> * _Nullable))restorationHandler
+- (void)scene:(UIScene *)scene openURLContexts:(NSSet<UIOpenURLContext *> *)URLContexts
 {
- return [RCTLinkingManager application:application
-                  continueUserActivity:userActivity
-                    restorationHandler:restorationHandler];
+  for (UIOpenURLContext *context in URLContexts) {
+    [RCTLinkingManager application:UIApplication.sharedApplication openURL:context.URL options:@{}];
+  }
+}
+
+- (void)scene:(UIScene *)scene continueUserActivity:(NSUserActivity *)userActivity
+{
+  [RCTLinkingManager application:UIApplication.sharedApplication
+            continueUserActivity:userActivity
+              restorationHandler:^(NSArray<id<UIUserActivityRestoring>> *_Nullable restorableObjects){
+              }];
 }
 
 @end
