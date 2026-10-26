@@ -211,14 +211,18 @@ class ActivityOfflineQueue {
     logFn: (activity: QueuedActivity) => Promise<void>,
     userId: string,
   ): Promise<{ synced: number; failed: number }> {
+    // Before the first await, so a clearUser that lands during the read is seen.
+    const generation = this.generationOf(userId);
     const pending = await this.getPending(userId);
+    if (this.generationOf(userId) !== generation) {
+      return { synced: 0, failed: 0 };
+    }
     if (pending.length === 0) {
       return { synced: 0, failed: 0 };
     }
 
     let synced = 0;
     let failed = 0;
-    const generation = this.generationOf(userId);
     // Delta against the queue as it is when we finish, not the snapshot we started with.
     const doneIds = new Set<string>(); // synced or dead-lettered
     const retryCounts = new Map<string, number>();

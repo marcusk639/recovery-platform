@@ -443,6 +443,20 @@ describe('ActivityOfflineQueue — flush concurrency', () => {
     expect(stored()).toEqual([]);
   });
 
+  it('clearUser while flush is still reading the queue stops it before any item', async () => {
+    const { offlineQueue } = offlineQueueModule;
+    seed([q('a1', 'A', 1), q('a2', 'A', 2)]);
+    const logFn = jest.fn().mockResolvedValue(undefined);
+
+    // flush is suspended in its first storage read when clearUser runs.
+    const flushing = offlineQueue.flush(logFn, 'A');
+    await offlineQueue.clearUser('A');
+    await flushing;
+
+    expect(logFn).not.toHaveBeenCalled();
+    expect(stored()).toEqual([]);
+  });
+
   it('a failing in-flight item after clearUser does not resurrect it either', async () => {
     const { offlineQueue } = offlineQueueModule;
     seed([q('a1', 'A', 1), q('a2', 'A', 2)]);
