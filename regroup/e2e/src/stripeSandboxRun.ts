@@ -85,12 +85,7 @@ const readSecretsFile = (file: string): SecretsFile => readJsonObject(file) as S
  * file and fail. If even that fails, the secret is gone and the endpoint must be
  * recreated. Messages carry error codes and paths only.
  */
-function rescueSecret(
-  dir: string,
-  entry: SecretsFile,
-  kind: Kind,
-  cause: string,
-): never {
+function rescueSecret(dir: string, entry: SecretsFile, kind: Kind, cause: string): never {
   const rescue = path.join(dir, `stripe-e2e-webhook-secret-${kind}-${Date.now()}.json`);
   try {
     writeSecretFile(rescue, JSON.stringify(entry, null, 2) + '\n');
@@ -115,7 +110,10 @@ const RESCUE_FILE = (kind: Kind) => new RegExp(`^stripe-e2e-webhook-secret-${kin
 function findRescue(dir: string, kind: Kind, endpointId: string): string | undefined {
   let names: string[];
   try {
-    names = fs.readdirSync(dir).filter((n) => RESCUE_FILE(kind).test(n)).sort();
+    names = fs
+      .readdirSync(dir)
+      .filter((n) => RESCUE_FILE(kind).test(n))
+      .sort();
   } catch {
     return undefined;
   }
