@@ -6,8 +6,8 @@ import { runSetup } from '../stripeSandboxRun';
 import { makeStripe } from './helpers/mockStripe';
 
 const urls = {
-  platformUrl: 'https://us-central1-regroup-e2e.cloudfunctions.net/stripeWebhook',
-  connectUrl: 'https://us-central1-regroup-e2e.cloudfunctions.net/stripeConnectWebhook',
+  platformUrl: 'https://us-central1-regroup-e2e.cloudfunctions.net/stripeEvents',
+  connectUrl: 'https://us-central1-regroup-e2e.cloudfunctions.net/handleStripeConnectWebhook',
 };
 
 describe('runSetup', () => {
@@ -52,7 +52,7 @@ describe('runSetup', () => {
     ).rejects.toThrow(/not allowed/);
     await expect(
       runSetup({ ...key, platformUrl: urls.platformUrl, connectUrl: urls.platformUrl }),
-    ).rejects.toThrow(/differ/);
+    ).rejects.toThrow(/not allowed/);
     expect(createStripe).not.toHaveBeenCalled();
   });
 
@@ -104,7 +104,7 @@ describe('runSetup', () => {
       endpoints: [
         {
           id: 'we_prod',
-          url: 'https://us-central1-phoenix-cleanhouse.cloudfunctions.net/stripeWebhook',
+          url: 'https://us-central1-phoenix-cleanhouse.cloudfunctions.net/stripeEvents',
           status: 'enabled',
         },
       ],

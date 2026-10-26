@@ -11,8 +11,8 @@ import {
 } from '../stripeSandbox';
 import { makeStripe } from './helpers/mockStripe';
 
-const PLATFORM_URL = 'https://us-central1-regroup-e2e.cloudfunctions.net/stripeWebhook';
-const CONNECT_URL = 'https://us-central1-regroup-e2e.cloudfunctions.net/stripeConnectWebhook';
+const PLATFORM_URL = 'https://us-central1-regroup-e2e.cloudfunctions.net/stripeEvents';
+const CONNECT_URL = 'https://us-central1-regroup-e2e.cloudfunctions.net/handleStripeConnectWebhook';
 
 describe('ensureCatalog', () => {
   it('creates each object once across two runs', async () => {
@@ -115,7 +115,7 @@ describe('assertWebhookUrls', () => {
   it('accepts https regroup-e2e cloudfunctions hosts', () => {
     expect(() => assertWebhookUrls(PLATFORM_URL, CONNECT_URL)).not.toThrow();
     expect(
-      isAllowedWebhookUrl('https://us-central1-regroup-e2e.cloudfunctions.net/stripeWebhook'),
+      isAllowedWebhookUrl('https://us-central1-regroup-e2e.cloudfunctions.net/stripeEvents'),
     ).toBe(true);
   });
 
@@ -133,17 +133,84 @@ describe('assertWebhookUrls', () => {
     for (const url of bad) expect(isAllowedWebhookUrl(url)).toBe(false);
   });
 
-  it('refuses production, non-https, non-e2e and identical URLs', () => {
-    const prod = 'https://us-central1-phoenix-cleanhouse.cloudfunctions.net/stripeWebhook';
-    expect(() => assertWebhookUrls(prod, CONNECT_URL)).toThrow(/not allowed/);
-    expect(() => assertWebhookUrls(PLATFORM_URL, 'http://us-central1-regroup-e2e.cloudfunctions.net/c')).toThrow(
-      /not allowed/,
+  it('pins the host to <gcp-region>-regroup-e2e exactly (FORBIDDEN_HOST_PARTS stays)', () => {
+    for (const host of [
+      'phoenix-cleanhouse-regroup-e2e',
+      'us-central1-evil-regroup-e2e',
+      'evil-regroup-e2e',
+      'us-central-regroup-e2e',
+      'regroup-e2e',
+    ]) {
+      expect(isAllowedWebhookUrl(`https://${host}.cloudfunctions.net/stripeEvents`)).toBe(false);
+    }
+    for (const region of ['us-central1', 'europe-west1', 'northamerica-northeast1']) {
+      expect(
+        isAllowedWebhookUrl(`https://${region}-regroup-e2e.cloudfunctions.net/stripeEvents`),
+      ).toBe(true);
+    }
+  });
+
+  it('keeps FORBIDDEN_HOST_PARTS as a second check behind the host pattern', () => {
+    // Matches the region shape, so only the forbidden-part check rejects it.
+    expect(
+      isAllowedWebhookUrl('https://recovery-connect1-regroup-e2e.cloudfunctions.net/stripeEvents'),
+    ).toBe(false);
+  });
+
+  it('subscribes account.updated on the connect endpoint only', () => {
+    expect(PLATFORM_EVENTS).not.toContain('account.updated');
+    expect(CONNECT_EVENTS).toContain('account.updated');
+  });
+
+  it('pins each endpoint to its deployed function path', () => {
+    const base = 'https://us-central1-regroup-e2e.cloudfunctions.net';
+    expect(() => assertWebhookUrls(`${base}/stripeWebhook`, CONNECT_URL)).toThrow(/\/stripeEvents/);
+    expect(() => assertWebhookUrls(PLATFORM_URL, `${base}/stripeConnectWebhook`)).toThrow(
+      /\/handleStripeConnectWebhook/,
     );
+    // Swapped: each path is only valid for its own endpoint.
+    expect(() => assertWebhookUrls(CONNECT_URL, PLATFORM_URL)).toThrow(/not allowed/);
+    expect(isAllowedWebhookUrl(`${base}/stripeWebhook`)).toBe(false);
+    expect(isAllowedWebhookUrl(`${base}/handleStripeConnectWebhook`)).toBe(true);
+  });
+
+  it('refuses any input that does not round-trip through URL unchanged', () => {
+    const host = 'us-central1-regroup-e2e.cloudfunctions.net';
+    const variants = [
+      ` https://${host}/stripeEvents`,
+      `https://${host}/stripeEvents `,
+      `https://${host}/stripe\tEvents`,
+      `https://${host}/stripe\nEvents`,
+      `https://${host}\\stripeEvents`,
+      `https://${host}/x/../stripeEvents`,
+      `https://${host}/%2e/stripeEvents`,
+      `https://${host}/%2E%2E/stripeEvents`,
+      `https://US-CENTRAL1-regroup-e2e.cloudfunctions.net/stripeEvents`,
+      `HTTPS://${host}/stripeEvents`,
+      `https://${host}:443/stripeEvents`,
+      `https://${host}/stripeEvents?`,
+      `https://${host}/stripeEvents#`,
+      `https://${host}./stripeEvents`,
+      `https://us-central1-regroup-e2e.cloudfunctions.ｎｅｔ/stripeEvents`,
+      `https://us-central1-regroup-ｅ2e.cloudfunctions.net/stripeEvents`,
+    ];
+    for (const url of variants) {
+      expect([url, isAllowedWebhookUrl(url)]).toEqual([url, false]);
+      expect(() => assertWebhookUrls(url, CONNECT_URL)).toThrow(/not allowed/);
+    }
+  });
+
+  it('refuses production, non-https, non-e2e and identical URLs', () => {
+    const prod = 'https://us-central1-phoenix-cleanhouse.cloudfunctions.net/stripeEvents';
+    expect(() => assertWebhookUrls(prod, CONNECT_URL)).toThrow(/not allowed/);
+    expect(() =>
+      assertWebhookUrls(PLATFORM_URL, 'http://us-central1-regroup-e2e.cloudfunctions.net/c'),
+    ).toThrow(/not allowed/);
     expect(() => assertWebhookUrls('https://example.com/x', CONNECT_URL)).toThrow(/not allowed/);
     expect(() => assertWebhookUrls('https://regroup-e2e-regroup-app.com/x', CONNECT_URL)).toThrow(
       /not allowed/,
     );
-    expect(() => assertWebhookUrls(PLATFORM_URL, PLATFORM_URL)).toThrow(/differ/);
+    expect(() => assertWebhookUrls(PLATFORM_URL, PLATFORM_URL)).toThrow(/not allowed/);
   });
 
   it('refuses URLs when ensureWebhooks is called directly, with no Stripe calls', async () => {
@@ -166,7 +233,7 @@ describe('assertSandboxHygiene', () => {
         { id: 'we_ok', url: PLATFORM_URL, status: 'enabled' },
         {
           id: 'we_bad',
-          url: 'https://us-central1-phoenix-cleanhouse.cloudfunctions.net/stripeWebhook',
+          url: 'https://us-central1-phoenix-cleanhouse.cloudfunctions.net/stripeEvents',
           status: 'enabled',
         },
       ],

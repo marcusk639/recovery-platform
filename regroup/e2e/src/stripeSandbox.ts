@@ -3,7 +3,10 @@ import type Stripe from 'stripe';
 /** The pre-existing sandbox whose webhooks point at production. Never touch it. */
 export const PRODUCTION_SANDBOX_ACCOUNT_ID = 'acct_1RXiFg2KPgAtfsl6';
 
-/** Maps price env var names (regroup/functions/.env.example) to Stripe price ids. */
+/**
+ * Maps price env var names (regroup/functions/src/config.ts SUBSCRIPTION_TIERS
+ * priceEnvVar/annualPriceEnvVar, and regroup/scripts/stripe-prices.env) to Stripe price ids.
+ */
 export type PriceIds = Record<string, string>;
 
 type TierSpec = {
@@ -53,7 +56,9 @@ const COUPONS = [
   { id: 'regroup-bundle-5', percent_off: 15 },
 ];
 
-// Source: regroup/functions/src/webhooks/stripeWebhook.ts switch statements.
+// Source: regroup/functions/src/webhooks/stripeWebhook.ts switch statements, minus
+// account.updated: production's platform endpoint does not subscribe to it
+// (scripts/stripe-product-values.md section 4a); it arrives via the Connect endpoint.
 export const PLATFORM_EVENTS = [
   'payment_intent.succeeded',
   'payment_intent.payment_failed',
@@ -65,7 +70,6 @@ export const PLATFORM_EVENTS = [
   'invoice.payment_failed',
   'customer.subscription.deleted',
   'customer.subscription.updated',
-  'account.updated',
   'payout.failed',
 ] as Stripe.WebhookEndpointCreateParams.EnabledEvent[];
 
@@ -74,40 +78,67 @@ export const CONNECT_EVENTS = [
   'account.application.deauthorized',
 ] as Stripe.WebhookEndpointCreateParams.EnabledEvent[];
 
+// Load-bearing even though HOST_PATTERN already excludes these: it is the
+// independent second check if the pattern is ever loosened.
 const FORBIDDEN_HOST_PARTS = ['phoenix-cleanhouse', 'regroup-app.com', 'recovery-connect'];
 
-/** Fixed rule, never operator input: https://<region>-regroup-e2e.cloudfunctions.net/<name>, no port or credentials. */
-export function isAllowedWebhookUrl(url: string): boolean {
+/** <gcp-region>-regroup-e2e, e.g. us-central1-regroup-e2e. Project id is exact. */
+const HOST_PATTERN = /^[a-z]+-[a-z]+[0-9]+-regroup-e2e\.cloudfunctions\.net$/;
+
+/**
+ * Deployed function names (regroup/functions/src/index.ts): the platform
+ * handler is exported as `stripeEvents`; the Connect one as-is.
+ */
+export const WEBHOOK_PATHS = {
+  platform: '/stripeEvents',
+  connect: '/handleStripeConnectWebhook',
+} as const;
+
+const EXPECTED_SHAPE = 'https://<region>-regroup-e2e.cloudfunctions.net';
+
+/**
+ * Fixed rule, never operator input. The string must already be the canonical
+ * WHATWG href (so nothing normalises differently between here and Stripe) and
+ * equal https://<region>-regroup-e2e.cloudfunctions.net<path> character for
+ * character: no port, credentials, query, fragment, or empty `?`/`#`.
+ */
+function matchesWebhookRule(url: string, paths: readonly string[]): boolean {
   let parsed: URL;
   try {
     parsed = new URL(url);
   } catch {
     return false;
   }
-  const host = parsed.hostname.toLowerCase();
+  const host = parsed.hostname;
   return (
+    parsed.href === url &&
     parsed.protocol === 'https:' &&
-    /^[a-z0-9-]+-regroup-e2e\.cloudfunctions\.net$/.test(host) &&
-    parsed.port === '' &&
-    parsed.search === '' &&
-    parsed.hash === '' &&
-    parsed.username === '' &&
-    parsed.password === '' &&
-    /^\/[A-Za-z0-9_-]+$/.test(parsed.pathname) &&
-    !FORBIDDEN_HOST_PARTS.some((part) => host.includes(part))
+    HOST_PATTERN.test(host) &&
+    !FORBIDDEN_HOST_PARTS.some((part) => host.includes(part)) &&
+    paths.includes(parsed.pathname) &&
+    url === `https://${host}${parsed.pathname}`
   );
+}
+
+/** True for either e2e endpoint URL; used to judge endpoints already in the sandbox. */
+export function isAllowedWebhookUrl(url: string): boolean {
+  return matchesWebhookRule(url, Object.values(WEBHOOK_PATHS));
 }
 
 /** Pure validation; call before any Stripe client exists. */
 export function assertWebhookUrls(platformUrl: string, connectUrl: string): void {
-  for (const url of [platformUrl, connectUrl]) {
-    if (!isAllowedWebhookUrl(url)) {
+  const checks = [
+    ['Platform', platformUrl, WEBHOOK_PATHS.platform],
+    ['Connect', connectUrl, WEBHOOK_PATHS.connect],
+  ] as const;
+  for (const [label, url, expectedPath] of checks) {
+    if (!matchesWebhookRule(url, [expectedPath])) {
       throw new Error(
-        `Webhook URL not allowed (https://<x>-regroup-e2e.cloudfunctions.net/<name>): ${url}`,
+        `${label} webhook URL not allowed: expected ${EXPECTED_SHAPE}${expectedPath}, got ${JSON.stringify(url)}`,
       );
     }
   }
-  if (platformUrl === connectUrl) throw new Error('Platform and connect webhook URLs must differ.');
+  // Identical URLs cannot pass: each endpoint is pinned to a different path.
 }
 
 const isMissing = (err: unknown): boolean =>
