@@ -292,7 +292,9 @@ async function listEndpoints(stripe: Stripe): Promise<Stripe.WebhookEndpoint[]> 
     .list({ limit: 100 })
     .autoPagingToArray({ limit: MAX_ENDPOINTS });
   if (all.length >= MAX_ENDPOINTS) {
-    throw new Error(`${MAX_ENDPOINTS}+ webhook endpoints; the list may be truncated, refusing to guess.`);
+    throw new Error(
+      `${MAX_ENDPOINTS}+ webhook endpoints; the list may be truncated, refusing to guess.`,
+    );
   }
   return all;
 }

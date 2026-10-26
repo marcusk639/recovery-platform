@@ -49,7 +49,9 @@ describe('webhook endpoint pagination', () => {
     const page = await stripe.webhookEndpoints.list({ limit: 100 });
     expect(page.data).toHaveLength(100);
     expect(page.has_more).toBe(true);
-    const all = await stripe.webhookEndpoints.list({ limit: 100 }).autoPagingToArray({ limit: 10000 });
+    const all = await stripe.webhookEndpoints
+      .list({ limit: 100 })
+      .autoPagingToArray({ limit: 10000 });
     expect(all).toHaveLength(250);
   });
 

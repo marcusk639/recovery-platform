@@ -61,7 +61,8 @@ export function formatNextSteps(files: {
 }): string {
   const fromJson = (name: string) =>
     `node -e 'process.stdout.write(require(process.argv[1]).${name})' ${shQuote(files.secretsFile)}`;
-  const set = (name: string) => `firebase functions:secrets:set ${name} --project regroup-e2e --data-file -`;
+  const set = (name: string) =>
+    `firebase functions:secrets:set ${name} --project regroup-e2e --data-file -`;
   const key = `node -e 'process.stdout.write(require("fs").readFileSync(process.argv[1], "utf8").trim())' ${shQuote(files.keyFile)}`;
   return [
     'Next steps for regroup-e2e (no secret values are printed):',

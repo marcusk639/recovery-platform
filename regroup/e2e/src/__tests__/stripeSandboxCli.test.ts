@@ -22,7 +22,11 @@ describe('buildSetupDeps', () => {
   });
 
   it('leaves confirmAccount undefined when omitted and requires both URLs', () => {
-    const deps = buildSetupDeps(['--platform-url', 'https://a', '--connect-url', 'https://b'], '/cfg', create);
+    const deps = buildSetupDeps(
+      ['--platform-url', 'https://a', '--connect-url', 'https://b'],
+      '/cfg',
+      create,
+    );
     expect(deps.confirmAccount).toBeUndefined();
     expect(() => buildSetupDeps(['--platform-url', 'https://a'], '/cfg', create)).toThrow(
       /--connect-url/,
@@ -30,8 +34,14 @@ describe('buildSetupDeps', () => {
   });
 
   it('reads the key from the fixed key file path only', () => {
-    const deps = buildSetupDeps(['--platform-url', 'a', '--connect-url', 'b'], '/nonexistent-cfg', create);
-    expect(() => deps.readKey()).toThrow(path.join('/nonexistent-cfg', 'stripe-e2e-sandbox-key.txt'));
+    const deps = buildSetupDeps(
+      ['--platform-url', 'a', '--connect-url', 'b'],
+      '/nonexistent-cfg',
+      create,
+    );
+    expect(() => deps.readKey()).toThrow(
+      path.join('/nonexistent-cfg', 'stripe-e2e-sandbox-key.txt'),
+    );
   });
 
   it('rejects a flag with a missing value or a value that is another flag', () => {
@@ -39,9 +49,9 @@ describe('buildSetupDeps', () => {
     expect(() => buildSetupDeps(['--connect-url', url, '--platform-url'], '/cfg', create)).toThrow(
       /--platform-url needs a value/,
     );
-    expect(() =>
-      buildSetupDeps(['--platform-url', '--connect-url', url], '/cfg', create),
-    ).toThrow(/--platform-url needs a value/);
+    expect(() => buildSetupDeps(['--platform-url', '--connect-url', url], '/cfg', create)).toThrow(
+      /--platform-url needs a value/,
+    );
     expect(() =>
       buildSetupDeps(
         ['--platform-url', url, '--connect-url', url, '--confirm-account', '--x'],
@@ -50,7 +60,11 @@ describe('buildSetupDeps', () => {
       ),
     ).toThrow(/--confirm-account needs a value/);
     expect(() =>
-      buildSetupDeps(['--platform-url', url, '--connect-url', url, '--confirm-account'], '/cfg', create),
+      buildSetupDeps(
+        ['--platform-url', url, '--connect-url', url, '--confirm-account'],
+        '/cfg',
+        create,
+      ),
     ).toThrow(/--confirm-account needs a value/);
   });
 
@@ -64,16 +78,19 @@ describe('buildSetupDeps', () => {
       return { dir, file };
     };
 
-    it.each([0o644, 0o640, 0o604])('warns (without the key) when the key file is mode %o', (mode) => {
-      const { dir, file } = keyDir(mode);
-      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-      expect(buildSetupDeps(argv, dir, create).readKey()).toContain('sk_test_secretvalue');
-      const logged = warn.mock.calls.flat().join('\n');
-      expect(logged).toContain(file);
-      expect(logged).toMatch(/chmod 600/);
-      expect(logged).not.toContain('sk_test_');
-      warn.mockRestore();
-    });
+    it.each([0o644, 0o640, 0o604])(
+      'warns (without the key) when the key file is mode %o',
+      (mode) => {
+        const { dir, file } = keyDir(mode);
+        const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+        expect(buildSetupDeps(argv, dir, create).readKey()).toContain('sk_test_secretvalue');
+        const logged = warn.mock.calls.flat().join('\n');
+        expect(logged).toContain(file);
+        expect(logged).toMatch(/chmod 600/);
+        expect(logged).not.toContain('sk_test_');
+        warn.mockRestore();
+      },
+    );
 
     it('stays quiet for a 600 key file', () => {
       const { dir } = keyDir(0o600);
@@ -92,14 +109,15 @@ describe('buildSetupDeps', () => {
     };
     const text = formatNextSteps(files);
 
-    it.each(['STRIPE_TEST_WEBHOOK_SECRET', 'STRIPE_CONNECT_TEST_WEBHOOK_SECRET', 'STRIPE_SECRET_KEY'])(
-      'pipes %s into secrets:set for regroup-e2e via --data-file -',
-      (name) => {
-        const line = text.split('\n').find((l) => l.includes(`secrets:set ${name} `));
-        expect(line).toBeDefined();
-        expect(line).toContain('--project regroup-e2e --data-file -');
-      },
-    );
+    it.each([
+      'STRIPE_TEST_WEBHOOK_SECRET',
+      'STRIPE_CONNECT_TEST_WEBHOOK_SECRET',
+      'STRIPE_SECRET_KEY',
+    ])('pipes %s into secrets:set for regroup-e2e via --data-file -', (name) => {
+      const line = text.split('\n').find((l) => l.includes(`secrets:set ${name} `));
+      expect(line).toBeDefined();
+      expect(line).toContain('--project regroup-e2e --data-file -');
+    });
 
     it('shell-quotes paths, points at gen-env, says to redeploy, prints no values', () => {
       expect(text).toContain(`'/cfg dir/it'\\''s/stripe-e2e-webhook-secrets.json'`);

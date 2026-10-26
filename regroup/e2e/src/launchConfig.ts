@@ -101,7 +101,11 @@ export function assertSafeEnvFileName(name: string): void {
 export type EnvOverlays = Partial<Record<EnvName, Record<string, string>>>;
 
 /** Same rules as launch-config values, plus: an overlay may only ADD keys. */
-function assertOverlay(env: EnvName, base: Record<string, string>, overlay: Record<string, string>) {
+function assertOverlay(
+  env: EnvName,
+  base: Record<string, string>,
+  overlay: Record<string, string>,
+) {
   for (const [key, value] of Object.entries(overlay)) {
     if (!ENV_KEY_PATTERN.test(key)) throw new Error(`overlay for ${env} has invalid key "${key}"`);
     if (key in base) {
@@ -110,7 +114,8 @@ function assertOverlay(env: EnvName, base: Record<string, string>, overlay: Reco
     if (typeof value !== 'string' || /[\r\n]/.test(value)) {
       throw new Error(`overlay value for "${key}" must be a single-line string`);
     }
-    if (SECRET_PATTERN.test(value)) throw new Error(`overlay for ${env} must not contain secret values`);
+    if (SECRET_PATTERN.test(value))
+      throw new Error(`overlay for ${env} must not contain secret values`);
   }
 }
 
