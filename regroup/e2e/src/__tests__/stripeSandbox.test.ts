@@ -21,7 +21,7 @@ const hooks = (extra = {}) => ({
   connectUrl: CONNECT_URL,
   apiVersion: API,
   onSecret: () => undefined,
-  hasSecret: () => true,
+  secretStatus: () => 'saved' as const,
   ...extra,
 });
 
@@ -292,6 +292,8 @@ describe('assertSandboxAccount', () => {
 
   it('returns the id of a fresh test account', async () => {
     const { stripe } = makeStripe();
-    await expect(assertSandboxAccount(stripe, 'sk_test_abc')).resolves.toBe('acct_1UUsyi44OQke4tKl');
+    await expect(assertSandboxAccount(stripe, 'sk_test_abc')).resolves.toBe(
+      'acct_1UUsyi44OQke4tKl',
+    );
   });
 });

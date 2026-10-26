@@ -8,6 +8,7 @@ import {
   assertWebhookUrls,
   ensureWebhooks,
   type Kind,
+  type SecretStatus,
 } from './stripeWebhooks';
 
 const WEBHOOK_SECRET = /^whsec_[A-Za-z0-9]+$/;
@@ -119,14 +120,22 @@ function persistSecret(dir: string, kind: Kind, secret: string, endpointId: stri
   }
 }
 
-/** A whsec_ secret saved for exactly this endpoint; a secret of a deleted endpoint does not count. */
-function secretSavedFor(saved: Record<string, string>, kind: Kind, endpointId: string): boolean {
+/**
+ * 'saved': a whsec_ secret recorded for exactly this endpoint. 'unbound': a whsec_
+ * secret with no endpoint id, from a file written before ids were recorded; its
+ * endpoint may be live. 'missing': anything else, including a secret recorded for
+ * a different (deleted) endpoint.
+ */
+function secretStatusFor(
+  saved: Record<string, string>,
+  kind: Kind,
+  endpointId: string,
+): SecretStatus {
   const secret = saved[kind];
-  return (
-    typeof secret === 'string' &&
-    WEBHOOK_SECRET.test(secret) &&
-    saved[endpointIdKey(kind)] === endpointId
-  );
+  if (typeof secret !== 'string' || !WEBHOOK_SECRET.test(secret)) return 'missing';
+  const recorded = saved[endpointIdKey(kind)];
+  if (recorded === undefined) return 'unbound';
+  return recorded === endpointId ? 'saved' : 'missing';
 }
 
 function pinAccount(accountFile: string, accountId: string, confirm?: string): void {
@@ -187,7 +196,8 @@ export async function runSetup(
     connectUrl: deps.connectUrl,
     apiVersion: deps.apiVersion,
     onSecret: (kind, secret, endpointId) => persistSecret(deps.outDir, kind, secret, endpointId),
-    hasSecret: (kind, endpointId) => secretSavedFor(readJsonObject(secretsFile), kind, endpointId),
+    secretStatus: (kind, endpointId) =>
+      secretStatusFor(readJsonObject(secretsFile), kind, endpointId),
   });
   return { pricesFile, secretsFile };
 }

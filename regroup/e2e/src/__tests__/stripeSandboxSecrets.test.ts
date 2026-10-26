@@ -84,6 +84,27 @@ describe('saved webhook secrets', () => {
     },
   );
 
+  it('tells an old-format file (secret, no endpoint id) to add the id, never to delete the endpoint', async () => {
+    fs.writeFileSync(secretsFile(), JSON.stringify({ platform: 'whsec_abc123' }));
+    const { mock, stripe } = makeStripe({ endpoints: [platformEndpoint] });
+    const message = await messageOf(runSetup(base(stripe)));
+    expect(message).toMatch(/"platformEndpointId": "we_p"/);
+    expect(message).toMatch(/Do not delete the endpoint/);
+    expect(message).not.toMatch(/Delete that endpoint|delete it and rerun/);
+    expect(message).not.toContain('whsec_');
+    expect(mock.webhookEndpoints.create).not.toHaveBeenCalled();
+    expect(mock.webhookEndpoints.del).not.toHaveBeenCalled();
+  });
+
+  it('still says delete when the saved secret belongs to a different endpoint', async () => {
+    fs.writeFileSync(
+      secretsFile(),
+      JSON.stringify({ platform: 'whsec_abc123', platformEndpointId: 'we_old' }),
+    );
+    const { stripe } = makeStripe({ endpoints: [platformEndpoint] });
+    await expect(runSetup(base(stripe))).rejects.toThrow(/we_p.*platform.*not saved.*Delete/);
+  });
+
   it('names the file but never quotes a secret when the secrets file is corrupt', async () => {
     fs.writeFileSync(secretsFile(), '{"platform": whsec_leakme}');
     const { stripe } = makeStripe({ endpoints: [platformEndpoint] });

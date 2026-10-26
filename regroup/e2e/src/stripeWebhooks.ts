@@ -93,10 +93,14 @@ export type WebhookOptions = {
   /**
    * Whether a secret was saved for THIS endpoint. An endpoint created by a run
    * that died before saving its secret, or a secret left over from a deleted
-   * endpoint, cannot be reused: Stripe will not reveal the secret again.
+   * endpoint, cannot be reused: Stripe will not reveal the secret again. A secret
+   * saved before endpoint ids were recorded ('unbound') may belong to a live
+   * endpoint, so the operator is told to record the id, not to delete anything.
    */
-  hasSecret: (kind: Kind, endpointId: string) => boolean;
+  secretStatus: (kind: Kind, endpointId: string) => SecretStatus;
 };
+
+export type SecretStatus = 'saved' | 'unbound' | 'missing';
 
 async function listEndpoints(stripe: Stripe): Promise<Stripe.WebhookEndpoint[]> {
   const page = await stripe.webhookEndpoints.list({ limit: 100 });
@@ -144,7 +148,16 @@ export async function ensureWebhooks(stripe: Stripe, opts: WebhookOptions): Prom
     const found = existing.find((e) => e.url === spec.url);
     if (found) {
       assertEndpointMatches(found, spec, opts.apiVersion);
-      if (!opts.hasSecret(spec.kind, found.id)) {
+      const status = opts.secretStatus(spec.kind, found.id);
+      if (status === 'unbound') {
+        throw new Error(
+          `The secrets file has a ${spec.kind} signing secret but no ${spec.kind}EndpointId ` +
+            '(it predates endpoint ids). Do not delete the endpoint: its secret may be deployed. ' +
+            `If that secret belongs to ${found.id}, add "${spec.kind}EndpointId": "${found.id}" ` +
+            'to the secrets file and rerun.',
+        );
+      }
+      if (status !== 'saved') {
         throw new Error(
           `Webhook endpoint ${found.id} exists but its ${spec.kind} signing secret was not saved ` +
             'for this endpoint. Delete that endpoint in the Stripe Dashboard and rerun.',
