@@ -106,6 +106,7 @@ import { ModalComponent } from './components/modal/modal.component';
 import { AuthGuard } from './guards/auth.guard';
 import { TierPickerComponent } from './components/pricing/tier-picker/tier-picker.component';
 import { OrderSummaryComponent } from './components/pricing/order-summary/order-summary.component';
+import { emulatorProviders } from './emulator-providers';
 
 @NgModule({
   declarations: [
@@ -216,7 +217,14 @@ import { OrderSummaryComponent } from './components/pricing/order-summary/order-
     ReactiveFormsModule,
     NgxStripeModule.forRoot(environment.stripePublishableKey),
   ],
-  providers: [AuthService, ContactService, SubscriptionService, AuthGuard],
+  providers: [
+    AuthService,
+    ContactService,
+    SubscriptionService,
+    AuthGuard,
+    // Empty unless the environment sets useEmulators (only e2e-emulator does).
+    ...emulatorProviders(environment),
+  ],
   bootstrap: [AppComponent],
 })
 export class AppModule {}

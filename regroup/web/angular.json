@@ -56,6 +56,22 @@
                   "maximumError": "10kb"
                 }
               ]
+            },
+            "e2e-emulator": {
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.e2e-emulator.ts"
+                }
+              ]
+            },
+            "e2e-staging": {
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.e2e-staging.ts"
+                }
+              ]
             }
           }
         },
@@ -67,6 +83,12 @@
           "configurations": {
             "production": {
               "browserTarget": "sapp:build:production"
+            },
+            "e2e-emulator": {
+              "browserTarget": "sapp:build:e2e-emulator"
+            },
+            "e2e-staging": {
+              "browserTarget": "sapp:build:e2e-staging"
             }
           }
         },
