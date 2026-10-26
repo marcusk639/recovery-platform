@@ -92,6 +92,12 @@ target 'rats' do
           config.build_settings['HEADER_SEARCH_PATHS'] << '"$(PODS_ROOT)/RCT-Folly"'
         end
 
+        # RN 0.72 Yoga.podspec compiles with -Werror, and newer clang (seen with Xcode 27.1) flags the
+        # `operator"" _pt` spelling in YGValue.h as deprecated, failing Release builds.
+        if target.name == 'Yoga'
+          config.build_settings['OTHER_CPLUSPLUSFLAGS'] = '$(inherited) -Wno-deprecated-literal-operator'
+        end
+
         # Fix for react-native-html-to-pdf codegen spec header
         if target.name == 'HtmlToPdf'
           config.build_settings['HEADER_SEARCH_PATHS'] ||= ['$(inherited)']
