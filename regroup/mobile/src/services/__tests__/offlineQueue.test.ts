@@ -372,3 +372,167 @@ describe('ActivityOfflineQueue — when AsyncStorage fails (in-memory fallback)'
     expect(pending).toHaveLength(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Suite 4 — flush racing clearUser / other writers (stateful fake storage)
+// ---------------------------------------------------------------------------
+
+describe('ActivityOfflineQueue — flush concurrency', () => {
+  let offlineQueueModule: typeof import('../offlineQueue');
+  let store: string | null;
+
+  const stored = (): Array<{ id: string; loggedBy: string; retryCount: number }> =>
+    store
+      ? JSON.parse(store, (_k, v) =>
+          typeof v === 'string' && v.startsWith('__DATE__') ? new Date(v.slice(8)) : v,
+        )
+      : [];
+
+  const seed = (items: object[]) => {
+    store = encodeQueue(items);
+  };
+
+  const q = (id: string, loggedBy: string, queuedAt: number, retryCount = 0) => ({
+    ...makeItem({ loggedBy }),
+    id,
+    queuedAt,
+    retryCount,
+  });
+
+  /** A logFn whose calls stay pending until released one by one. */
+  const deferredLogFn = () => {
+    const calls: string[] = [];
+    const releases: Array<{ resolve: () => void; reject: (e: Error) => void }> = [];
+    const fn = jest.fn((activity: { id: string }) => {
+      calls.push(activity.id);
+      return new Promise<void>((resolve, reject) => releases.push({ resolve, reject }));
+    });
+    return { fn, calls, releases };
+  };
+
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  beforeEach(() => {
+    store = null;
+    mockGetItem.mockReset();
+    mockSetItem.mockReset();
+    mockGetItem.mockImplementation(async () => store);
+    mockSetItem.mockImplementation(async (_k, v) => {
+      store = v;
+    });
+    offlineQueueModule = require('../offlineQueue');
+    offlineQueueModule.offlineQueue._resetForTesting();
+  });
+
+  it('clearUser during a pending flush stops further items and does not resurrect cleared ones', async () => {
+    const { offlineQueue } = offlineQueueModule;
+    seed([q('a1', 'A', 1), q('a2', 'A', 2), q('a3', 'A', 3)]);
+    const log = deferredLogFn();
+
+    const flushing = offlineQueue.flush(log.fn, 'A');
+    await tick();
+    expect(log.calls).toEqual(['a1']);
+
+    await offlineQueue.clearUser('A'); // does not wait for the in-flight logFn
+    expect(stored()).toEqual([]);
+
+    log.releases[0].resolve();
+    await flushing;
+
+    expect(log.calls).toEqual(['a1']); // a2 / a3 never logged
+    expect(stored()).toEqual([]);
+  });
+
+  it('a failing in-flight item after clearUser does not resurrect it either', async () => {
+    const { offlineQueue } = offlineQueueModule;
+    seed([q('a1', 'A', 1), q('a2', 'A', 2)]);
+    const log = deferredLogFn();
+
+    const flushing = offlineQueue.flush(log.fn, 'A');
+    await tick();
+    await offlineQueue.clearUser('A');
+    log.releases[0].reject(new Error('offline'));
+    await flushing;
+
+    expect(log.calls).toEqual(['a1']);
+    expect(stored()).toEqual([]);
+  });
+
+  it("an enqueue by another user during a flush survives the flush's save", async () => {
+    const { offlineQueue } = offlineQueueModule;
+    seed([q('a1', 'A', 1), q('a2', 'A', 2)]);
+    const log = deferredLogFn();
+
+    const flushing = offlineQueue.flush(log.fn, 'A');
+    await tick();
+    const bId = await offlineQueue.enqueue(makeItem({ loggedBy: 'B' }));
+
+    log.releases[0].resolve();
+    await tick();
+    log.releases[1].resolve();
+    const result = await flushing;
+
+    expect(result).toEqual({ synced: 2, failed: 0 });
+    expect(stored().map((i) => i.id)).toEqual([bId]);
+  });
+
+  it('clear by A then enqueue by B then old flush ending leaves only B items', async () => {
+    const { offlineQueue } = offlineQueueModule;
+    seed([q('a1', 'A', 1), q('a2', 'A', 2), q('a3', 'A', 3)]);
+    const log = deferredLogFn();
+
+    const flushing = offlineQueue.flush(log.fn, 'A');
+    await tick();
+    await offlineQueue.clearUser('A');
+    const bId = await offlineQueue.enqueue(makeItem({ loggedBy: 'B' }));
+    log.releases[0].resolve();
+    await flushing;
+
+    expect(log.calls).toEqual(['a1']);
+    expect(stored().map((i) => i.id)).toEqual([bId]);
+  });
+
+  it('a later flush for the same user works after an earlier clear', async () => {
+    const { offlineQueue } = offlineQueueModule;
+    await offlineQueue.clearUser('A');
+    const id = await offlineQueue.enqueue(makeItem({ loggedBy: 'A' }));
+    const logFn = jest.fn().mockResolvedValue(undefined);
+
+    const result = await offlineQueue.flush(logFn, 'A');
+
+    expect(result).toEqual({ synced: 1, failed: 0 });
+    expect(logFn).toHaveBeenCalledWith(expect.objectContaining({ id }));
+    expect(stored()).toEqual([]);
+  });
+
+  it('keeps flush semantics: sync removes, failure bumps retryCount, dead-letter drops, others untouched', async () => {
+    const { offlineQueue } = offlineQueueModule;
+    seed([q('ok', 'A', 1), q('flaky', 'A', 2, 0), q('dead', 'A', 3, 2), q('other', 'B', 4, 1)]);
+    const logFn = jest.fn(async (activity: { id: string }) => {
+      if (activity.id !== 'ok') {
+        throw new Error('offline');
+      }
+    });
+
+    const result = await offlineQueue.flush(logFn, 'A');
+
+    expect(result).toEqual({ synced: 1, failed: 2 });
+    expect(logFn).toHaveBeenCalledTimes(3);
+    expect(stored().map((i) => [i.id, i.retryCount])).toEqual([
+      ['flaky', 1],
+      ['other', 1],
+    ]);
+  });
+
+  it('concurrent enqueues do not lose items', async () => {
+    const { offlineQueue } = offlineQueueModule;
+    const ids = await Promise.all(
+      Array.from({ length: 10 }, () => offlineQueue.enqueue(makeItem())),
+    );
+    expect(
+      stored()
+        .map((i) => i.id)
+        .sort(),
+    ).toEqual([...ids].sort());
+  });
+});

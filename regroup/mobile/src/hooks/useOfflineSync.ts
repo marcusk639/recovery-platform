@@ -151,10 +151,19 @@ export function useOfflineSync(): UseOfflineSyncResult {
 
     if (netInfo) {
       netInfoUnsubscribe = netInfo.addEventListener((state) => {
-        // isConnected turns true before the link can reach the internet (captive
-        // portal, weak signal). Flushing then fails every item and burns its retry
-        // budget, so also require reachability unless NetInfo has not decided yet.
-        const isConnected = (state.isConnected ?? false) && state.isInternetReachable !== false;
+        // NetInfo emits (connected, reachable=null) the moment a link comes up and
+        // only later settles on true/false (captive portal, weak signal). Flushing
+        // at the undecided stage burns every item's retry budget, so ignore those
+        // events entirely: no flush and no update to the previous-state ref.
+        // A lost link (isConnected false) is always decisive, whatever the reachability.
+        const linkUp = state.isConnected ?? false;
+        if (
+          linkUp &&
+          (state.isInternetReachable === null || state.isInternetReachable === undefined)
+        ) {
+          return;
+        }
+        const isConnected = linkUp && state.isInternetReachable === true;
         const wasConnected = prevIsConnectedRef.current;
         prevIsConnectedRef.current = isConnected;
 

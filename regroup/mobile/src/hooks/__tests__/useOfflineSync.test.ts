@@ -339,14 +339,14 @@ describe('useOfflineSync', () => {
       await waitFor(() => expect(mockGetPending).toHaveBeenCalledTimes(1));
 
       // First event: wasConnected is null → initialisation guard, no flush.
-      simulateNetInfo(false);
+      simulateNetInfo(false, false);
       await act(async () => {
         await new Promise((resolve) => setTimeout(resolve, 10));
       });
       expect(mockMutate).toHaveBeenCalledTimes(0);
 
-      // Reconnect: false → true — SHOULD flush.
-      simulateNetInfo(true);
+      // Reconnect: false → true (reachability confirmed) — SHOULD flush.
+      simulateNetInfo(true, true);
       await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1));
     });
 
@@ -358,9 +358,9 @@ describe('useOfflineSync', () => {
       await waitFor(() => expect(mockGetPending).toHaveBeenCalledTimes(1));
 
       // First event: initialisation guard (wasConnected === null) → no flush.
-      simulateNetInfo(true);
+      simulateNetInfo(true, true);
       // Second event: true → true → no flush.
-      simulateNetInfo(true);
+      simulateNetInfo(true, true);
 
       await act(async () => {
         await new Promise((resolve) => setTimeout(resolve, 20));
@@ -388,8 +388,10 @@ describe('useOfflineSync', () => {
 
       await waitFor(() => expect(mockGetPending).toHaveBeenCalledTimes(1));
 
-      simulateNetInfo(false);
-      // Link is up but NetInfo reports no internet (captive portal, weak signal).
+      // NetInfo's real captive-portal sequence: reachability is undecided
+      // (null) when the link comes up, then settles on false.
+      simulateNetInfo(false, false);
+      simulateNetInfo(true, null);
       simulateNetInfo(true, false);
 
       await act(async () => {
@@ -406,8 +408,8 @@ describe('useOfflineSync', () => {
 
       await waitFor(() => expect(mockGetPending).toHaveBeenCalledTimes(1));
 
-      simulateNetInfo(false);
-      simulateNetInfo(true, false);
+      simulateNetInfo(false, false);
+      simulateNetInfo(true, null);
       simulateNetInfo(true, true);
 
       await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1));

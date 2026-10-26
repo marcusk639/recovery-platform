@@ -36,6 +36,19 @@
     }
     // RCTAppDelegate creates the bridge, the root view and a scene-less window.
     [super application:UIApplication.sharedApplication didFinishLaunchingWithOptions:options];
+  } else {
+    // The scene was discarded and reconnected while the process (and bridge) lived.
+    // UIKit does not call scene:openURLContexts: / continueUserActivity: for
+    // connection options, so forward them to React Native's Linking here.
+    for (UIOpenURLContext *context in connectionOptions.URLContexts) {
+      [RCTLinkingManager application:UIApplication.sharedApplication openURL:context.URL options:@{}];
+    }
+    for (NSUserActivity *activity in connectionOptions.userActivities) {
+      [RCTLinkingManager application:UIApplication.sharedApplication
+                continueUserActivity:activity
+                  restorationHandler:^(NSArray<id<UIUserActivityRestoring>> *_Nullable restorableObjects){
+                  }];
+    }
   }
   UIViewController *rootViewController = self.window.rootViewController;
   self.window.rootViewController = nil;

@@ -92,6 +92,26 @@ function deserialize(raw: string): QueuedActivity[] {
 class ActivityOfflineQueue {
   private memoryQueue: QueuedActivity[] = [];
 
+  /** Tail of the promise chain that serialises load-modify-save sections. */
+  private lockTail: Promise<unknown> = Promise.resolve();
+
+  /** Per-user counter bumped by clearUser; lets an in-flight flush notice a clear. */
+  private clearGeneration = new Map<string, number>();
+
+  /**
+   * Run fn after every earlier locked section has finished. Only wrap short
+   * load-modify-save sections in this — never a logFn network await.
+   */
+  private withLock<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.lockTail.then(fn, fn);
+    this.lockTail = run.catch(() => undefined);
+    return run;
+  }
+
+  private generationOf(userId: string): number {
+    return this.clearGeneration.get(userId) ?? 0;
+  }
+
   /**
    * Load the persisted queue from AsyncStorage (or the in-memory copy if the read fails).
    */
@@ -125,7 +145,6 @@ class ActivityOfflineQueue {
    * @returns The local ID assigned to the queued item.
    */
   async enqueue(activity: Omit<QueuedActivity, 'id' | 'queuedAt' | 'retryCount'>): Promise<string> {
-    const queue = await this.load();
     const id = generateId();
     const item: QueuedActivity = {
       ...activity,
@@ -133,8 +152,11 @@ class ActivityOfflineQueue {
       queuedAt: Date.now(),
       retryCount: 0,
     };
-    queue.push(item);
-    await this.save(queue);
+    await this.withLock(async () => {
+      const queue = await this.load();
+      queue.push(item);
+      await this.save(queue);
+    });
     return id;
   }
 
@@ -142,9 +164,10 @@ class ActivityOfflineQueue {
    * Remove a successfully synced item from the queue.
    */
   async remove(id: string): Promise<void> {
-    const queue = await this.load();
-    const filtered = queue.filter((item) => item.id !== id);
-    await this.save(filtered);
+    await this.withLock(async () => {
+      const queue = await this.load();
+      await this.save(queue.filter((item) => item.id !== id));
+    });
   }
 
   /**
@@ -163,8 +186,13 @@ class ActivityOfflineQueue {
    * the session on a shared device.
    */
   async clearUser(userId: string): Promise<void> {
-    const queue = await this.load();
-    await this.save(queue.filter((item) => item.loggedBy !== userId));
+    // Bump synchronously so an in-flight flush stops before its next item, even
+    // while this call is still waiting for the lock.
+    this.clearGeneration.set(userId, this.generationOf(userId) + 1);
+    await this.withLock(async () => {
+      const queue = await this.load();
+      await this.save(queue.filter((item) => item.loggedBy !== userId));
+    });
   }
 
   /**
@@ -190,18 +218,18 @@ class ActivityOfflineQueue {
 
     let synced = 0;
     let failed = 0;
-
-    // Load the full queue once so we can mutate it.
-    const queue = await this.load();
+    const generation = this.generationOf(userId);
+    // Delta against the queue as it is when we finish, not the snapshot we started with.
+    const doneIds = new Set<string>(); // synced or dead-lettered
+    const retryCounts = new Map<string, number>();
 
     for (const item of pending) {
-      const idx = queue.findIndex((q) => q.id === item.id);
-      if (idx === -1) continue; // Removed by another concurrent flush (unlikely).
+      // clearUser ran (sign-out): stop, so nothing is replayed under another account.
+      if (this.generationOf(userId) !== generation) break;
 
       try {
         await logFn(item);
-        // Success — remove from queue.
-        queue.splice(idx, 1);
+        doneIds.add(item.id);
         synced++;
       } catch {
         const newRetryCount = item.retryCount + 1;
@@ -210,17 +238,23 @@ class ActivityOfflineQueue {
           console.warn(
             `[OfflineQueue] Dropping activity ${item.id} after ${MAX_RETRY_COUNT} failed attempts.`,
           );
-          queue.splice(idx, 1);
-          failed++;
+          doneIds.add(item.id);
         } else {
-          // Keep in queue with incremented retryCount.
-          queue[idx] = { ...queue[idx], retryCount: newRetryCount };
-          failed++;
+          retryCounts.set(item.id, newRetryCount);
         }
+        failed++;
       }
     }
 
-    await this.save(queue);
+    // Re-read under the lock and touch only our own items that are still present;
+    // an id that is gone (cleared or removed meanwhile) is never re-added.
+    await this.withLock(async () => {
+      const current = await this.load();
+      const next = current
+        .filter((q) => !doneIds.has(q.id))
+        .map((q) => (retryCounts.has(q.id) ? { ...q, retryCount: retryCounts.get(q.id)! } : q));
+      await this.save(next);
+    });
     return { synced, failed };
   }
 
@@ -231,6 +265,8 @@ class ActivityOfflineQueue {
    */
   _resetForTesting(): void {
     this.memoryQueue = [];
+    this.lockTail = Promise.resolve();
+    this.clearGeneration.clear();
   }
 }
 
