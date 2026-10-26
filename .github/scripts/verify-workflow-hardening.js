@@ -86,8 +86,8 @@ for (const [id, job] of Object.entries(claude.jobs)) {
   );
   check(!("continue-on-error" in first), `claude.yml: ${id}: lookup step must not set continue-on-error`);
   check(
-    first.env && typeof first.env.GH_TOKEN === "string" && first.env.GH_TOKEN.includes("secrets.GITHUB_TOKEN"),
-    `claude.yml: ${id}: lookup step must use GITHUB_TOKEN`,
+    first.env && typeof first.env.GH_TOKEN === "string" && first.env.GH_TOKEN.includes("secrets.GH_TOKEN"),
+    `claude.yml: ${id}: lookup step must use GH_TOKEN`,
   );
   check(job.permissions && job.permissions["pull-requests"] === "read", `claude.yml: ${id}: needs pull-requests: read`);
   steps.slice(1).forEach((s, i) =>
