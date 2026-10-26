@@ -1,5 +1,12 @@
 import type Stripe from 'stripe';
 
+/**
+ * Mirrors PINNED_API_VERSION in regroup/functions/src/util/stripeApiVersion.ts
+ * (not imported: separate package). Webhook payloads are rendered in the
+ * endpoint's api_version, so the e2e endpoints are pinned to what the functions speak.
+ */
+export const STRIPE_API_VERSION = '2026-01-28.clover';
+
 /** The pre-existing sandbox whose webhooks point at production. Never touch it. */
 export const PRODUCTION_SANDBOX_ACCOUNT_ID = 'acct_1RXiFg2KPgAtfsl6';
 
@@ -278,6 +285,12 @@ function assertEndpointMatches(
       `Existing webhook endpoint ${endpoint.id} does not match the e2e spec; not updating.`,
     );
   }
+  if (endpoint.api_version && endpoint.api_version !== STRIPE_API_VERSION) {
+    throw new Error(
+      `Existing webhook endpoint ${endpoint.id} has api_version ${endpoint.api_version}, ` +
+        `expected ${STRIPE_API_VERSION}; not updating.`,
+    );
+  }
 }
 
 export async function ensureWebhooks(
@@ -301,6 +314,7 @@ export async function ensureWebhooks(
     const created = await stripe.webhookEndpoints.create({
       url: spec.url,
       enabled_events: spec.events,
+      api_version: STRIPE_API_VERSION,
       ...(spec.connect ? { connect: true } : {}),
     });
     const name = WEBHOOK_SECRET_NAMES[spec.kind];
