@@ -88,3 +88,10 @@ test('the decoded marker holds no secret and no security file, even from a tampe
     assert.ok(!body.includes(FAKE_WHSEC), 'no secret in the body');
   }
 });
+
+test('without the key resolved security and withheld entries are not aged either', () => {
+  const ledger = [{ ...PRIOR_SEC, status: 'resolved', runsSinceResolved: 1 }, { ...PRIOR_WITHHELD, status: 'resolved', runsSinceResolved: 3 }];
+  assert.deepEqual(mergeLedger(ledger, [], [], 'incremental', { key: null, needles: [] }), ledger);
+  const keyed = mergeLedger(ledger, [], [], 'incremental', { key: KEY, needles: [] });
+  assert.deepEqual(keyed.map((e) => e.runsSinceResolved), [2, 4]);
+});

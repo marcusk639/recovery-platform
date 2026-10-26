@@ -8,6 +8,7 @@ import { ghRequest } from './gh.mjs';
 import { redact } from './redact.mjs';
 import { fpMarker } from './markers.mjs';
 import { securitySlugsOf, unsafeInline } from './inline-guard.mjs';
+import { securityNeedles, touchesSecurityFile } from './needles.mjs';
 
 export const MAX_INLINE = 10;
 const MAX_BODY = 4000;
@@ -40,7 +41,8 @@ export function parseInline(text) {
 // HTML comments are neutralised so model text cannot plant another fp marker.
 const neutralise = (s) => s.replace(/<!--/g, '&lt;!--').replace(/-->/g, '--&gt;');
 
-export function selectInline({ entries, findings, changedFiles, postedSlugs, isSecurityPath = () => false }) {
+// needles: the summary's security-file needles (runNeedles), for touchesSecurityFile.
+export function selectInline({ entries, findings, changedFiles, postedSlugs, isSecurityPath = () => false, needles = securityNeedles(findings) }) {
   const bySlug = new Map((findings ?? []).map((f) => [f.slug, f]));
   const files = new Set(changedFiles ?? []);
   const seen = new Set(postedSlugs ?? []);
@@ -48,7 +50,9 @@ export function selectInline({ entries, findings, changedFiles, postedSlugs, isS
   const out = [];
   for (const e of entries ?? []) {
     const f = bySlug.get(e.slug);
-    if (!f || f.security || !INLINE_SEVERITIES.has(f.severity)) continue;
+    // Same withholding predicate as the summary: a finding it would withhold
+    // never gets a public inline comment.
+    if (!f || f.security || !INLINE_SEVERITIES.has(f.severity) || touchesSecurityFile(f, needles)) continue;
     if (!files.has(e.path) || seen.has(e.slug)) continue;
     const body = `${neutralise(e.body.trim()).slice(0, MAX_BODY)}\n\n${fpMarker(e.slug)}`;
     const c = { slug: e.slug, path: e.path, line: e.line, side: e.side, body };

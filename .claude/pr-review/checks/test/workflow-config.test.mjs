@@ -50,3 +50,19 @@ test('model writes and edits are allowed only under OUT; workspace writes and ed
   assert.ok(deny.includes('Edit(/${{ github.workspace }}/**)'));
   assert.ok(deny.includes('Bash'));
 });
+
+test('the model cannot write runner command files or the state snapshot', () => {
+  const deny = /--disallowedTools "([^"]+)"/.exec(wf)?.[1].split(',') ?? [];
+  for (const dir of ['_runner_file_commands', 'prstate-snapshot']) {
+    assert.ok(deny.includes(`Write(/\${{ runner.temp }}/${dir}/**)`), `Write ${dir}`);
+    assert.ok(deny.includes(`Edit(/\${{ runner.temp }}/${dir}/**)`), `Edit ${dir}`);
+  }
+});
+
+test('Publish clears NODE_OPTIONS in its own env and runs node with --no-warnings only', () => {
+  const start = wf.indexOf('- name: Publish');
+  const step = wf.slice(start, wf.indexOf('- name:', start + 1));
+  assert.match(step, /\n {10}NODE_OPTIONS: ""\n/);
+  const nodes = [...step.matchAll(/^\s*node (.*)$/gm)].map((m) => m[1]);
+  assert.deepEqual(nodes, ['--no-warnings .review-publish/.claude/pr-review/checks/publish.mjs']);
+});

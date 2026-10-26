@@ -190,7 +190,7 @@ No `WebFetch`/`WebSearch`, no package managers. The builder confirms in a real r
 
 "Hidden" only means not rendered. The block can be read through the API and the raw comment, so it is public. **Security findings' ledger entries carry only an opaque ID** (a hash of the fingerprint), severity and status. Their claim, file and anchor live only in the advisory (§7.9).
 
-**Every inline comment also carries its own hidden fingerprint marker**, opaque for security findings. Duplicate detection reads the actual inline comments on the PR as well as the ledger. This prevents duplicates when a run is cancelled or fails after posting but before the summary is updated. Order within a run: the model computes findings and writes its outputs; publish then posts new inline comments, delivers security advisories, and rewrites the summary and ledger. The markers make any partial run recoverable.
+**Every inline comment also carries its own hidden fingerprint marker** (security findings never get inline comments). Duplicate detection reads the actual inline comments on the PR as well as the ledger. This prevents duplicates when a run is cancelled or fails after posting but before the summary is updated. Order within a run: the model computes findings and writes its outputs; publish then posts new inline comments, delivers security advisories, and rewrites the summary and ledger. The markers make any partial run recoverable.
 
 Existing inline review threads, including Marcus's replies and resolved state, are read too. A finding Marcus has resolved or replied to is never re-raised unless new code makes it materially worse.
 

@@ -112,8 +112,10 @@ function withStatus(e, status, runsSinceResolved) {
 // An entry not re-reported this run: resolvedSlugs resolve it (age 0), an
 // already-resolved one ages by a run, anything else keeps its status. Security
 // and withheld entries are resolved only via the private channel, so the public
-// resolved count cannot be used to test guesses at their slugs.
-function age(e, resolvedIds) {
+// resolved count cannot be used to test guesses at their slugs. Without the key
+// they are frozen: carried fully untouched, not even aged.
+function age(e, resolvedIds, key) {
+  if (!key && (e.security || e.withheld)) return e;
   if (e.status === 'resolved') return withStatus(e, 'resolved', e.runsSinceResolved + 1);
   const resolvable = !e.security && !e.withheld && resolvedIds.has(e.id);
   return resolvable ? withStatus(e, 'resolved', 0) : e;
@@ -160,7 +162,7 @@ export function mergeLedger(prior, findings, resolvedSlugs, tier, { key = null, 
       current.push(toLedgerEntry(f, key));
     }
   }
-  return [...old.filter((e) => !touched.has(e.id)).map((e) => age(e, resolvedIds)), ...current];
+  return [...old.filter((e) => !touched.has(e.id)).map((e) => age(e, resolvedIds, key)), ...current];
 }
 
 // Dispositioned outside the review (an advisory closed, a maintainer's reply):

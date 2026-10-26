@@ -175,3 +175,11 @@ test('findings.json may omit inlinePosted; a non-boolean value is still rejected
   assert.equal(validateFindings({ reviewedSha: HEAD, findings: [noFlag], resolvedSlugs: [] }).ok, true);
   assert.equal(validateFindings({ reviewedSha: HEAD, findings: [{ ...HIGH, inlinePosted: 'yes' }], resolvedSlugs: [] }).ok, false);
 });
+
+test('selectInline drops a finding the summary would withhold (it names a security file)', () => {
+  const near = finding(`c9:${A}:near`, { why: `same flow as ${SEC_FILE}` });
+  const out = selectInline({ entries: [entry(near.slug)], findings: [near, SEC], changedFiles: [A, SEC_FILE], postedSlugs: [] });
+  assert.deepEqual(out, []);
+  const clean = finding(`c9:${A}:clean`);
+  assert.equal(selectInline({ entries: [entry(clean.slug)], findings: [clean, SEC], changedFiles: [A], postedSlugs: [] }).length, 1);
+});

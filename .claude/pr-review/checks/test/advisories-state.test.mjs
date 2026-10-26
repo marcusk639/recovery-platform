@@ -170,3 +170,15 @@ test('a real closed advisory resolves its id; one without a state resolves nothi
   const res = await deliverAdvisories(REPO, 7, [], TOKEN, m.request, KEY, [ID, other]);
   assert.deepEqual(res.resolvedIds, [ID]);
 });
+
+test('after a reopen, a closed advisory sharing its id with an open draft does not resolve the entry', async () => {
+  const m = byState({
+    closed: [{ ghsa_id: 'GHSA-ffff-ffff-ffff', state: 'closed', description: `x\n\n${footer(3, ID)}` }],
+    draft: [{ ghsa_id: 'GHSA-aaaa-aaaa-aaaa', state: 'draft', description: `Reopened\n\n${footer(7, ID)}` }],
+  });
+  const res = await deliverAdvisories(REPO, 7, [], TOKEN, m.request, KEY, [ID]);
+  assert.equal(res.delivered, true);
+  assert.deepEqual(res.resolvedIds, []);
+  const closedOnly = byState({ closed: [{ ghsa_id: 'GHSA-ffff-ffff-ffff', state: 'closed', description: `x\n\n${footer(3, ID)}` }] });
+  assert.deepEqual((await deliverAdvisories(REPO, 7, [], TOKEN, closedOnly.request, KEY, [ID])).resolvedIds, [ID]);
+});

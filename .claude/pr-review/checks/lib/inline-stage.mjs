@@ -22,7 +22,8 @@ function securityPathTest(findings, snapshot, key) {
   const ids = priorFileIds(sanitizeLedger(isObject(snapshot) ? snapshot.ledger : [], key));
   const needles = runNeedles(findings, [], ids, key);
   const namesPrior = (t) => candidatePaths([], [t]).some((p) => isPriorSecurityPath(p, ids, key));
-  return (t) => mentions(t, needles) || isPriorSecurityPath(t, ids, key) || namesPrior(t);
+  const test = (t) => mentions(t, needles) || isPriorSecurityPath(t, ids, key) || namesPrior(t);
+  return { test, needles };
 }
 
 async function list(deps, repo, pr) {
@@ -40,7 +41,7 @@ export async function runInline({ repo, pr, snapshot, findings, inlineText, idKe
   if (!deps.listReviewComments) return { posted, notices: [] };
   const notices = [];
   const key = idKey || null;
-  const isSecurityPath = securityPathTest(findings ?? [], snapshot, key);
+  const { test: isSecurityPath, needles } = securityPathTest(findings ?? [], snapshot, key);
   const before = findings ? await list(deps, repo, pr) : null;
   if (findings && before) {
     const ours = before.filter((c) => c?.user?.login === BOT_AUTHOR).map((c) => c.body);
@@ -50,6 +51,7 @@ export async function runInline({ repo, pr, snapshot, findings, inlineText, idKe
       changedFiles: strings(snapshot?.changedFiles),
       postedSlugs: extractInlineSlugs(ours),
       isSecurityPath,
+      needles,
     });
     const res = await postInlineReview({ repo, pr, headSha, comments, request: deps.request });
     for (const s of res.posted) posted.add(s);

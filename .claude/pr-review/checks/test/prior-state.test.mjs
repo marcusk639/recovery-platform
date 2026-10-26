@@ -105,3 +105,15 @@ test('a failed retry is logged by status only', async () => {
   assert.ok(logs.includes('::warning::pr-review summary update failed (403)'));
   assert.ok(!logs.some((l) => l.includes('secret body')));
 });
+
+test('with the old marker re-emitted, the headline never says "No issues found"', async () => {
+  const { posted } = await run({ comments: [summary(BAD_MARKER)] });
+  assert.doesNotMatch(posted[0], /No issues found/);
+  assert.match(posted[0], /prior findings could not be read; earlier open findings may still apply/);
+  const failedSnap = snap({ priorRawMarker: BAD_MARKER });
+  const deps = { listIssueComments: async () => { throw new Error('x'); }, upsertSummary: async (r, p, b) => out.push(b), deliverAdvisories: async () => ({ delivered: true, resolvedIds: [] }) };
+  const out = [];
+  await publish({ repo: 'o/r', pr: 7, snapshot: failedSnap, findingsText: null, narrative: '', outcome: 'failure', headSha: HEAD, baseSha: BASE, idKey: KEY }, deps);
+  assert.match(out[0], /Prior findings could not be read; earlier open findings may still apply\./);
+  assert.doesNotMatch(out[0], /No open findings were recorded/);
+});

@@ -116,7 +116,10 @@ export async function deliverAdvisories(repo, pr, securityFindings, token, reque
     // An id reported again in this run is still open, whatever its advisory says.
     const reported = new Set(findings.map((f) => opaqueId(f.slug, key)));
     const wanted = new Set(prior.filter((id) => !reported.has(id)));
-    resolvedIds = [...new Set(known.filter((a) => DISPOSITIONED.has(a.state) && wanted.has(a.footer.id)).map((a) => a.footer.id))];
+    // After a reopen the dispositioned advisory and the new draft share an id:
+    // while any draft holds the id, it stays open.
+    const drafted = new Set(known.filter((a) => a.state === 'draft' && a.footer.id).map((a) => a.footer.id));
+    resolvedIds = [...new Set(known.filter((a) => DISPOSITIONED.has(a.state) && wanted.has(a.footer.id) && !drafted.has(a.footer.id)).map((a) => a.footer.id))];
     const done = new Set();
     for (const f of findings) {
       const id = opaqueId(f.slug, key);

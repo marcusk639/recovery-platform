@@ -104,8 +104,13 @@ const CHECK_RE = /^[A-Za-z][A-Za-z0-9-]{0,39}$/;
 
 // This run's findings and the open entries carried from earlier reviews are
 // counted apart; "No issues found" only when nothing at all is open.
-function headline(sha, tier, list, carried) {
+export const PRIOR_UNREAD = 'prior findings could not be read; earlier open findings may still apply';
+
+// priorUnread: the old marker is re-emitted because it could not be read, so
+// "nothing open" cannot be claimed.
+function headline(sha, tier, list, carried, priorUnread = false) {
   const head = `Reviewed \`${clean(sha, 7)}\` (${tierName(tier)}):`;
+  if (priorUnread) return `${head} ${list.length} reported this run${bySeverity(list)}; ${PRIOR_UNREAD}.`;
   if (!list.length && !carried.length) return `${head} No issues found.`;
   return `${head} ${list.length} reported this run${bySeverity(list)}; ${carried.length} still open from earlier reviews${bySeverity(carried)}.`;
 }
@@ -171,7 +176,7 @@ const ADVISORY = '_Advisory only: not a required check. Security-relevant findin
 
 // Failure keeps the last completed review's open findings; tier "none" (no
 // model run, outcome "none") also lists what that review resolved.
-function renderPrior(ledger, markerText, banner, withResolved, notices = []) {
+function renderPrior(ledger, markerText, banner, withResolved, notices = [], priorUnread = false) {
   const visible = visibleEntries(ledger.ledger ?? []);
   const open = visible.filter((e) => e.status === 'open');
   const head = [
@@ -179,7 +184,11 @@ function renderPrior(ledger, markerText, banner, withResolved, notices = []) {
     '## PR review (advisory)',
     banner,
     ...notices,
-    open.length ? 'Open findings from the last completed review:' : 'No open findings were recorded by an earlier completed review.',
+    priorUnread
+      ? `${PRIOR_UNREAD[0].toUpperCase()}${PRIOR_UNREAD.slice(1)}.`
+      : open.length
+        ? 'Open findings from the last completed review:'
+        : 'No open findings were recorded by an earlier completed review.',
   ].join('\n\n');
   const extra = withResolved ? [renderResolved(visible.filter((e) => e.status === 'resolved'))] : [];
   return assemble(head, groupBySeverity(open, renderPriorEntry), '', markerText, extra);
@@ -192,15 +201,15 @@ export function renderSummary({ state, findings, narrative, outcome, ledger, rea
   // An oversized raw marker is dropped for an encoded (sanitized) ledger.
   const raw = rawMarker && rawMarker.length <= MAX_MARKER ? rawMarker : null;
   const markerText = raw ?? encodeLedger(fitMarker(ledger, encodeLedger, MAX_MARKER));
-  if (outcome === 'none') return renderPrior(ledger, markerText, `${clean(note, 200)}\n\n${ADVISORY}`, true, notices);
+  if (outcome === 'none') return renderPrior(ledger, markerText, `${clean(note, 200)}\n\n${ADVISORY}`, true, notices, Boolean(raw));
   const ok = outcome === 'success' && findings && Array.isArray(findings.findings);
-  if (!ok) return renderPrior(ledger, markerText, `> ⚠ review did not complete (${reason}) — will retry on next push`, false, notices);
+  if (!ok) return renderPrior(ledger, markerText, `> ⚠ review did not complete (${reason}) — will retry on next push`, false, notices, Boolean(raw));
   const list = findings.findings;
   const sha = String(findings.reviewedSha || state?.headSha || '').slice(0, 7);
   const head = [
     SUMMARY_MARKER,
     '## PR review (advisory)',
-    headline(sha, state?.tier, list, carried),
+    headline(sha, state?.tier, list, carried, Boolean(raw)),
     tierLine(state),
     ADVISORY,
     ...notices,
