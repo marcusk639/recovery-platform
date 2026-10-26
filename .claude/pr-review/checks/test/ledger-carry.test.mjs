@@ -28,7 +28,7 @@ const PRIOR_WITHHELD = { id: opaqueId('c9:w.ts:w', KEY), severity: 'Low', status
 
 const needles = [SEC_FILE, 'payments.ts'];
 const state = (over = {}) => ({ lastReviewedSha: OLD, lastBaseSha: BASE, ledger: [], linkTypesSeen: [], runLinkTypes: [], inlineSlugs: [], tier: 'incremental', maxTurns: 40, headSha: HEAD, baseSha: BASE, pr: 7, ...over });
-const text = (findings, resolvedSlugs = []) => JSON.stringify({ reviewedSha: HEAD, findings, resolvedSlugs });
+const text = (findings, resolvedSlugs = []) => JSON.stringify({ reviewedSha: HEAD, findings, resolvedSlugs, complete: true });
 const compose = (over) => composeBody({ state: state(), findingsText: text([]), narrative: '', outcome: 'success', headSha: HEAD, baseSha: BASE, idKey: KEY, ...over });
 
 test('I2: a prior public entry naming a security file is left exactly as it was', () => {
@@ -39,7 +39,7 @@ test('I2: a prior public entry naming a security file is left exactly as it was'
 test('I2: re-reporting an already-public slug on a security file keeps the public entry, not a withheld one', () => {
   const again = finding({ slug: PUBLIC_NEAR.slug, severity: 'High', locations: [{ file: SEC_FILE, line: 50, side: 'changed' }] });
   const merged = mergeLedger([{ ...PUBLIC_NEAR, status: 'resolved', runsSinceResolved: 1 }], [SEC, again], [], 'incremental', { key: KEY, needles });
-  const e = merged.find((x) => x.id === PUBLIC_NEAR.id);
+  const e = merged.find((x) => x.slug === PUBLIC_NEAR.slug);
   assert.equal(e.withheld, undefined);
   assert.equal(e.slug, PUBLIC_NEAR.slug);
   assert.equal(e.title, PUBLIC_NEAR.title, 'the already-public title, not the new text');

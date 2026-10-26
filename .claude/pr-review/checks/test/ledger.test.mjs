@@ -144,7 +144,7 @@ test('skipped outside tier none, a failed tier none, or a missing snapshot is a 
 });
 
 function successBody(findings, resolvedSlugs = [], over = {}) {
-  const findingsText = JSON.stringify({ reviewedSha: HEAD, findings, resolvedSlugs });
+  const findingsText = JSON.stringify({ reviewedSha: HEAD, findings, resolvedSlugs, complete: true });
   return compose({ state: snap({ tier: 'incremental', ...over }), findingsText, outcome: 'success' });
 }
 

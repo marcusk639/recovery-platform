@@ -173,6 +173,11 @@ export function recordRun(state, tier, routeResult, results = []) {
   return Object.assign(state, { tier, maxTurns: MAX_TURNS[tier], runLinkTypes: [...(routeResult?.linkTypes ?? [])], unavailableChecks: unavailableChecks(results) });
 }
 
+function recordMaterial(state, m) {
+  state.prDiffAvailable = m.prDiff;
+  state.prDiffTruncated = m.prDiffTruncated;
+}
+
 async function main() {
   const { REPO, PR, BASE_SHA, HEAD_SHA, PR_TITLE } = process.env;
   const run = runPaths();
@@ -199,6 +204,9 @@ async function main() {
     pr: Number(PR),
     // The inline guard's fallback run start when the workflow's is missing.
     runStartedAt: new Date().toISOString(),
+    // Whether OUT/pr.diff holds the real, whole diff; otherwise the review is labelled partial.
+    prDiffAvailable: false,
+    prDiffTruncated: false,
   };
   try {
     Object.assign(state, await loadState(REPO, PR, { listIssueComments, listReviewComments }));
@@ -220,7 +228,7 @@ async function main() {
     }
     const prContext = pull ? await gatherContext(REPO, PR, pull) : 'PR context unavailable';
     mkdirSync(out, { recursive: true });
-    if (tier !== 'none') writeMaterial(out, { baseSha: BASE_SHA, headSha: HEAD_SHA, tier, incrementText: inc.incrementText, cwd: repoRoot });
+    if (tier !== 'none') recordMaterial(state, writeMaterial(out, { baseSha: BASE_SHA, headSha: HEAD_SHA, tier, incrementText: inc.incrementText, cwd: repoRoot }));
     const routeResult = route(factPaths);
     recordRun(state, tier, routeResult, results);
     const text = buildFacts({ files, routeResult, results, prContext, title: PR_TITLE, tier, driftFiles: inc.driftFiles });
@@ -231,7 +239,7 @@ async function main() {
     recordRun(state, 'full', empty, [{ check: 'facts', error: err }]);
     try {
       mkdirSync(out, { recursive: true });
-      writeMaterial(out, { baseSha: BASE_SHA, headSha: HEAD_SHA, tier: 'full', cwd: process.cwd() });
+      recordMaterial(state, writeMaterial(out, { baseSha: BASE_SHA, headSha: HEAD_SHA, tier: 'full', cwd: process.cwd() }));
     } catch {
       // the model reports the missing material
     }

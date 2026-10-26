@@ -73,10 +73,10 @@ jobs:
           if [ -f .review-base/.claude/pr-review/checks/facts.mjs ]; then
             node .review-base/.claude/pr-review/checks/facts.mjs
           else
-            echo "pr-review scripts not on base yet"
-            mkdir -p "$OUT"
-            echo "tier=full" >> "$GITHUB_OUTPUT"
-            echo "max_turns=10" >> "$GITHUB_OUTPUT"
+            # No scripts on base means no publish either: skip the model run.
+            echo "pr-review scripts not on base yet; review skipped"
+            echo "tier=none" >> "$GITHUB_OUTPUT"
+            echo "max_turns=0" >> "$GITHUB_OUTPUT"
           fi
 
       # The model reads REVIEW.md and the knowledge files from the working tree,
@@ -148,12 +148,14 @@ jobs:
           EXECUTION_FILE: ${{ steps.review.outputs.execution_file }}
           # Publish only: keys the ledger's opaque ids. Never given to facts or the model.
           PR_REVIEW_ID_KEY: ${{ secrets.PR_REVIEW_ID_KEY }}
-          # Publish only: fine-grained PAT, "Repository security advisories: write" on
+          # Publish only: fine-grained PAT, "Repository security advisories: Read and write" on
           # this repo. Used for draft advisories only; never given to the model or comments.
           ADVISORY_TOKEN: ${{ secrets.SECURITY_ADVISORY_TOKEN }}
           # Step env overrides GITHUB_ENV: nothing an earlier step exported can
-          # preload code into this secret-bearing node process.
+          # preload code into this secret-bearing node process (NODE_OPTIONS)
+          # or into the bash shell that launches it (BASH_ENV).
           NODE_OPTIONS: ""
+          BASH_ENV: ""
         run: |
           if [ -f .review-publish/.claude/pr-review/checks/publish.mjs ]; then
             node --no-warnings .review-publish/.claude/pr-review/checks/publish.mjs

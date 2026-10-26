@@ -137,8 +137,9 @@ test('ledger entries: opaque id and security entries carry no detail', () => {
   assert.deepEqual(Object.keys(s).sort(), ['fileIds', 'id', 'runsSinceResolved', 'security', 'severity', 'status']);
   assert.deepEqual(s, { id: opaqueId(SEC.slug, KEY), severity: 'High', status: 'open', security: true, runsSinceResolved: 0, fileIds: [fileId(SEC.locations[0].file, KEY)] });
   const n = toLedgerEntry(finding(), KEY);
+  // Public entries show their slug anyway, so their id is never keyed.
   assert.deepEqual(n, {
-    id: opaqueId(finding().slug, KEY),
+    id: opaqueId(finding().slug, null),
     slug: finding().slug,
     title: finding().title,
     severity: 'High',

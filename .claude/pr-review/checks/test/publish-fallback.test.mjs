@@ -16,7 +16,7 @@ const PRIOR = [
   { id: opaqueId('c1:b.ts:y', KEY), severity: 'High', status: 'open', security: true, runsSinceResolved: 0, fileIds: [] },
 ];
 const PAYLOAD = { lastReviewedSha: OLD, lastBaseSha: OLDBASE, linkTypesSeen: ['callable'], ledger: PRIOR };
-const findingsText = JSON.stringify({ reviewedSha: HEAD, findings: [], resolvedSlugs: [] });
+const findingsText = JSON.stringify({ reviewedSha: HEAD, findings: [], resolvedSlugs: [], complete: true });
 
 function run(comments, over = {}) {
   const posted = [];

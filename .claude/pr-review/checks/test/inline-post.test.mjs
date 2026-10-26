@@ -28,7 +28,7 @@ const MED = finding(`c9:${B}:save`, { severity: 'Medium', locations: [{ file: B,
 const SEC = finding(`c1:${SEC_FILE}:charge`, { class: 1, security: true, locations: [{ file: SEC_FILE, line: 9, side: 'changed' }] });
 const entry = (slug, over = {}) => ({ slug, path: A, line: 3, side: 'RIGHT', body: 'This breaks the feed. See b.ts:2.', ...over });
 
-test('parseInline keeps well-formed entries only, at most MAX_INLINE', () => {
+test('parseInline keeps every well-formed entry; selectInline caps at MAX_INLINE', () => {
   assert.deepEqual(parseInline('not json'), []);
   assert.deepEqual(parseInline('{"slug":"x"}'), []);
   const bad = [
@@ -41,7 +41,7 @@ test('parseInline keeps well-formed entries only, at most MAX_INLINE', () => {
   ];
   assert.deepEqual(parseInline(JSON.stringify(bad)), []);
   const many = Array.from({ length: 15 }, () => entry(HIGH.slug));
-  assert.equal(parseInline(JSON.stringify(many)).length, MAX_INLINE);
+  assert.equal(parseInline(JSON.stringify(many)).length, 15, 'validated before any cap');
   assert.deepEqual(parseInline(JSON.stringify([{ ...entry(HIGH.slug), extra: 1 }])), [entry(HIGH.slug)]);
 });
 
@@ -106,23 +106,30 @@ test('postInlineReview posts one COMMENT review on the head; a 422 retries comme
   } finally {
     console.log = orig;
   }
-  assert.deepEqual(await postInlineReview({ repo: 'o/r', pr: 7, headSha: null, comments: [c1], request: ok.request }), { posted: [], failed: 0 });
+  assert.deepEqual(await postInlineReview({ repo: 'o/r', pr: 7, headSha: null, comments: [c1], request: ok.request }), { posted: [], failed: 1 }, 'no head: counted as failed, never a silent zero');
 });
 
 const snap = (over = {}) => ({ lastReviewedSha: OLD, lastBaseSha: BASE, ledger: [], linkTypesSeen: [], runLinkTypes: [], inlineSlugs: [], tier: 'full', maxTurns: 60, headSha: HEAD, baseSha: BASE, pr: 7, changedFiles: [A, B, SEC_FILE], ...over });
 const gha = (id, body, over = {}) => ({ id, user: { login: 'github-actions[bot]' }, body, commit_id: HEAD, original_commit_id: HEAD, created_at: '2026-10-25T10:05:00Z', path: A, ...over });
 
+// Comments publish posts show up in later listings (as on GitHub), so the
+// guard sees them; run() returns them as `posted`.
 async function run(over = {}, comments = []) {
-  const r = recorder();
+  const live = [...comments];
+  const r = recorder((m, p, b) => {
+    for (const c of m === 'POST' ? b?.comments ?? [] : []) live.push(gha(1000 + live.length, c.body, { path: c.path, created_at: '2026-10-25T10:06:00Z' }));
+    return null;
+  });
   let summary = null;
   const deps = {
     listIssueComments: async () => [],
     upsertSummary: async (repo, pr, body) => { summary = body; },
     deliverAdvisories: async () => ({ delivered: true, resolvedIds: [] }),
-    listReviewComments: async () => comments,
+    listReviewComments: async () => [...live],
     request: r.request,
+    report: () => {},
   };
-  const findingsText = JSON.stringify({ reviewedSha: HEAD, findings: [HIGH, { ...MED, inlinePosted: true }, SEC], resolvedSlugs: [] });
+  const findingsText = JSON.stringify({ reviewedSha: HEAD, findings: [HIGH, { ...MED, inlinePosted: true }, SEC], resolvedSlugs: [], complete: true });
   const inlineText = JSON.stringify([entry(HIGH.slug), entry(MED.slug, { path: B })]);
   const orig = console.log;
   console.log = () => {};
@@ -131,7 +138,7 @@ async function run(over = {}, comments = []) {
   } finally {
     console.log = orig;
   }
-  return { calls: r.calls, summary };
+  return { calls: r.calls, summary, posted: live.slice(comments.length) };
 }
 
 test('publish posts inline.json survivors as a review and marks only those findings posted', async () => {
@@ -166,7 +173,8 @@ test('the model has no inline-comment tool: it is not allowed and is explicitly 
   const deny = /--disallowedTools "([^"]+)"/.exec(wf)?.[1].split(',') ?? [];
   assert.ok(!allow.some((t) => t.includes('inline_comment')));
   assert.ok(deny.includes('mcp__github_inline_comment__create_inline_comment'));
-  assert.match(wf, /fromOut\('inline\.json'\)|inline\.json/);
+  const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../publish.mjs'), 'utf8');
+  assert.match(src, /inlineText: fromOut\('inline\.json'\)/, 'publish reads the model\'s inline.json from OUT');
 });
 
 test('findings.json may omit inlinePosted; a non-boolean value is still rejected', async () => {

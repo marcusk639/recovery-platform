@@ -75,7 +75,8 @@ export function validateFindings(json) {
     const error = findingError(v.findings[i], i);
     if (error) return { ok: false, error };
   }
-  return { ok: true, value: { reviewedSha: v.reviewedSha, findings: capFindings(v.findings), resolvedSlugs: v.resolvedSlugs.slice(0, MAX_FINDINGS) } };
+  // complete: the model's last write (REVIEW.md); a run cut off before it is not a completed review.
+  return { ok: true, value: { reviewedSha: v.reviewedSha, findings: capFindings(v.findings), resolvedSlugs: v.resolvedSlugs.slice(0, MAX_FINDINGS), complete: v.complete === true } };
 }
 
 // The only public text a security finding ever gets. Package and area are

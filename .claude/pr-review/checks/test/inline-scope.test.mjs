@@ -34,7 +34,7 @@ function recorder() {
   const calls = [];
   return { calls, request: async (method, path) => (calls.push({ method, path }), null) };
 }
-const deleted = (r) => r.calls.map((c) => Number(c.path.split('/').pop())).sort((a, b) => a - b);
+const deleted = (r) => r.calls.filter((c) => c.method === 'DELETE').map((c) => Number(c.path.split('/').pop())).sort((a, b) => a - b);
 
 async function guard(comments, over = {}) {
   const r = recorder();
@@ -66,7 +66,7 @@ test('a github-actions[bot] thread reply without a fingerprint is kept', async (
 test('a this-run top-level comment without a fingerprint is deleted', async () => {
   const { res, ids } = await guard([bot(1, 'no marker'), bot(2, 'ok <!-- pr-review:fp=c9:regroup/mobile/src/a.ts:load -->')]);
   assert.deepEqual(ids, [1]);
-  assert.deepEqual(res, { removed: 1, failed: 0 });
+  assert.deepEqual({ removed: res.removed, failed: res.failed }, { removed: 1, failed: 0 });
 });
 
 test('human comments are never touched, whatever they say', async () => {
@@ -88,7 +88,7 @@ test('forced security holds if either the class or the slug prefix is a security
   assert.equal(isForcedSecurity(9, 'c14:a.ts:x'), true);
   assert.equal(isForcedSecurity(9, 'c1x:a.ts:x'), false);
   const f = { slug: 'c4:regroup/mobile/src/a.ts:auth', class: 9, severity: 'Medium', confidence: 'high', security: false, package: 'regroup/mobile', area: 'auth', title: 't', feature: 'f', locations: [{ file: 'regroup/mobile/src/a.ts', line: 3, side: 'changed' }], why: 'w', fix: 'x', inlinePosted: true };
-  const v = validateFindings(JSON.stringify({ reviewedSha: HEAD, findings: [f], resolvedSlugs: [] }));
+  const v = validateFindings(JSON.stringify({ reviewedSha: HEAD, findings: [f], resolvedSlugs: [], complete: true }));
   assert.equal(v.value.findings[0].security, true, 'slug prefix forces security in capFinding');
 });
 
@@ -111,7 +111,7 @@ async function publishWith(comments, over = {}) {
     listReviewComments: async () => comments,
     request: r.request,
   };
-  const findingsText = JSON.stringify({ reviewedSha: HEAD, findings: [], resolvedSlugs: [] });
+  const findingsText = JSON.stringify({ reviewedSha: HEAD, findings: [], resolvedSlugs: [], complete: true });
   const orig = console.log;
   console.log = () => {};
   try {

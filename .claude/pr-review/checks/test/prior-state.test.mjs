@@ -36,7 +36,7 @@ test('loadState flags a failed comment read and an undecodable marker as priorUn
 });
 
 const snap = (over = {}) => ({ lastReviewedSha: null, lastBaseSha: null, ledger: [], linkTypesSeen: [], runLinkTypes: [], inlineSlugs: [], tier: 'full', maxTurns: 60, headSha: HEAD, baseSha: BASE, pr: 7, priorUnavailable: true, ...over });
-const findingsText = JSON.stringify({ reviewedSha: HEAD, findings: [], resolvedSlugs: [] });
+const findingsText = JSON.stringify({ reviewedSha: HEAD, findings: [], resolvedSlugs: [], complete: true });
 
 async function run({ comments, snapshot = snap(), upsert } = {}) {
   const posted = [];
@@ -116,4 +116,33 @@ test('with the old marker re-emitted, the headline never says "No issues found"'
   await publish({ repo: 'o/r', pr: 7, snapshot: failedSnap, findingsText: null, narrative: '', outcome: 'failure', headSha: HEAD, baseSha: BASE, idKey: KEY }, deps);
   assert.match(out[0], /Prior findings could not be read; earlier open findings may still apply\./);
   assert.doesNotMatch(out[0], /No open findings were recorded/);
+});
+
+test('a summary missing on the re-read does not wipe a history facts saw: the old marker is re-emitted', async () => {
+  const { posted } = await run({ comments: [], snapshot: snap({ priorUnavailableReason: 'marker-undecodable', priorRawMarker: BAD_MARKER }) });
+  assert.equal(posted.length, 1);
+  assert.ok(posted[0].endsWith(BAD_MARKER), 'old marker kept verbatim');
+  assert.match(posted[0], BANNER);
+  assert.doesNotMatch(posted[0], /No issues found/);
+});
+
+test('comments unreadable to facts and no summary on the re-read: a first review', async () => {
+  const { posted } = await run({ comments: [], snapshot: snap({ priorUnavailableReason: 'comments-unreadable' }) });
+  assert.match(posted[0], /No issues found/);
+  assert.doesNotMatch(posted[0], BANNER);
+});
+
+test('tier none with an unreadable marker re-emits it instead of an empty ledger', async () => {
+  const posted = [];
+  const deps = { listIssueComments: async () => [summary(BAD_MARKER)], upsertSummary: async (r, p, b) => posted.push(b), deliverAdvisories: async () => ({ delivered: true, resolvedIds: [] }), report: () => {} };
+  const orig = console.log;
+  console.log = () => {};
+  try {
+    await publish({ repo: 'o/r', pr: 7, snapshot: snap({ tier: 'none', priorUnavailableReason: 'marker-undecodable', priorRawMarker: BAD_MARKER }), findingsText: null, narrative: null, outcome: 'skipped', headSha: HEAD, baseSha: BASE, idKey: KEY }, deps);
+  } finally {
+    console.log = orig;
+  }
+  assert.ok(posted[0].endsWith(BAD_MARKER));
+  assert.match(posted[0], BANNER);
+  assert.match(posted[0], /Prior findings could not be read/);
 });

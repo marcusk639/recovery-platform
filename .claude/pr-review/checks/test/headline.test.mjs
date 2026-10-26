@@ -13,7 +13,7 @@ const OLD = 'e'.repeat(40);
 const entry = (slug, severity, over = {}) => ({ id: opaqueId(slug, KEY), slug, title: `T ${slug}`, severity, status: 'open', security: false, runsSinceResolved: 0, ...over });
 const state = (over = {}) => ({ lastReviewedSha: OLD, lastBaseSha: BASE, ledger: [], linkTypesSeen: [], runLinkTypes: [], inlineSlugs: [], tier: 'incremental', maxTurns: 40, headSha: HEAD, baseSha: BASE, pr: 7, ...over });
 const finding = (slug, severity) => ({ slug, class: 9, severity, confidence: 'high', security: false, package: 'p', area: 'a', title: 't', feature: 'f', locations: [{ file: 'a.ts', line: 1, side: 'changed' }], why: 'w', fix: 'x' });
-const text = (findings) => JSON.stringify({ reviewedSha: HEAD, findings, resolvedSlugs: [] });
+const text = (findings) => JSON.stringify({ reviewedSha: HEAD, findings, resolvedSlugs: [], complete: true });
 const compose = (over) => composeBody({ state: state(), findingsText: text([]), narrative: '', outcome: 'success', headSha: HEAD, baseSha: BASE, idKey: KEY, ...over });
 
 test('nothing new but carried findings open: no "No issues found", counts and tier shown', () => {

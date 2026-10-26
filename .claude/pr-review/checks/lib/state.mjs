@@ -53,10 +53,15 @@ export async function loadState(repo, pr, { listIssueComments, listReviewComment
   try {
     const comments = await listIssueComments(repo, pr);
     const summary = findSummary(comments);
-    const payload = summary ? decodeLedger(summary.body) : null;
+    const decoded = summary ? decodeLedger(summary.body) : null;
+    // Only a plain object is a ledger; an array or a marker outside the
+    // base64 charset is unreadable, never "no history".
+    const payload = decoded && !Array.isArray(decoded) ? decoded : null;
     const raw = summary && !payload ? rawLedgerMarker(summary.body) : null;
     if (payload) Object.assign(state, fromPayload(payload));
-    else if (raw) Object.assign(state, { priorUnavailable: true, priorUnavailableReason: 'marker-undecodable', priorRawMarker: raw });
+    else if (raw || /pr-review:ledger/.test(String(summary?.body ?? ''))) {
+      Object.assign(state, { priorUnavailable: true, priorUnavailableReason: 'marker-undecodable', ...(raw ? { priorRawMarker: raw } : {}) });
+    }
   } catch {
     Object.assign(state, { priorUnavailable: true, priorUnavailableReason: 'comments-unreadable' });
   }

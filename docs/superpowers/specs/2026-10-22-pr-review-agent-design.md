@@ -70,17 +70,14 @@ Why now:
 
 - **Triggers:** `pull_request` `opened`, `synchronize`, `ready_for_review`, `reopened`. _My call:_ skip draft PRs (review once they're marked ready).
 - **Concurrency:** one group per PR with `cancel-in-progress: true`, so a new push supersedes a running review.
-- **Steps:**
-  1. Checkout PR head at full depth, `persist-credentials: false`.
-  2. Checkout the base SHA into `./.review-base`.
-  3. Run the pre-checks from `./.review-base` against the PR diff, writing a facts file (§7.4).
-  4. Run `claude-code-action@v1` with:
-     - `claude_code_oauth_token`
-     - a short `prompt` pointing at `.claude/pr-review/REVIEW.md` and the facts file
-     - `claude_args`: `--model` for Opus, `--max-turns` (_my call:_ start around 60 and tune from real runs), `--strict-mcp-config`, and an explicit `--allowedTools` list (§7.6).
-     - no posting tools for the model: it writes `findings.json`, `inline.json` and `summary.md` into `OUT`, and a later model-free publish step posts the summary and inline comments as `github-actions[bot]` (§7.7)
-  5. If the review wrote any security details to the runner-local file, run the advisory step (§7.9). It runs no model and holds the only advisory-capable token.
-  6. Always run a final step that, if the action failed or hit a subscription rate limit, updates the summary to say so ("review skipped: rate-limited / failed — will retry on next push") and leaves the last-reviewed SHA unchanged. A failed review must never look like a clean one.
+- **Steps** (as built):
+  1. **Run start** records `RUN_STARTED_AT` and sets `OUT` and `STATE_FILE` through `GITHUB_ENV` before anything the model can trigger.
+  2. Checkout the PR head at full depth, `persist-credentials: false`. Clear `./.review-base`, then check out the base SHA into it (so a `.review-base/` shipped in the PR is never reused).
+  3. **Facts** runs `facts.mjs` from `./.review-base` against the PR diff: it writes `facts.md`, `state.json` and the git material into `OUT`, and a read-only trusted snapshot to `STATE_FILE` (§7.4, §7.8). If the base has no scripts yet, it outputs tier `none`, so the model never runs.
+  4. **Restore reviewer knowledge from base** replaces the working tree's `.claude/pr-review/` with the base copy; the action itself also restores `.claude/`, `.mcp.json` and `CLAUDE.md` from base.
+  5. **Review** runs `claude-code-action@v1` unless the tier is `none`, with `settings: {"disableAllHooks": true}`, a short `prompt` pointing at `.claude/pr-review/REVIEW.md` and `OUT`, and `claude_args`: `--model opus`, `--max-turns` from the tier, `--strict-mcp-config`, `--add-dir <OUT>` and the tool lists of §7.6. The model has no posting tool: it writes `inline.json`, `summary.md` and `findings.json` (last, with `"complete": true`) into `OUT`.
+  6. **Publish** always runs, from a fresh base checkout in `./.review-publish`, with no model. It is the only step holding `PR_REVIEW_ID_KEY` and `SECURITY_ADVISORY_TOKEN`, and its own `env` clears `NODE_OPTIONS` and `BASH_ENV`. It first checks the PR's current head: a run for a head the PR has moved past (for example a re-run of an older run) posts nothing and reports "superseded". Otherwise it posts inline comments, delivers security advisories (§7.9) and rewrites the summary (§7.7). If the action failed, hit a rate limit, or stopped before writing `summary.md` and then `findings.json` with `complete: true`, the summary says "review did not complete (failed / rate-limited / incomplete) — will retry on next push" and the last-reviewed SHA is unchanged. A failed review never looks like a clean one. Anything that leaves the summary stale emits a `::warning::`, and every run writes one status line to the job summary.
+  7. **Cleanup** removes `OUT` and the snapshot.
 - **Limits:** a job `timeout-minutes` cap (_my call:_ 30). For PRs over about 60 changed files or 5k lines, the reviewer prioritises high-risk paths (§7.3 routing) and states in the summary what it did not review.
 
 ### 7.2 Knowledge files (`.claude/pr-review/`, committed, base-branch-controlled)
@@ -149,15 +146,15 @@ Pre-check failures must not fail the job. A broken script yields a "pre-check un
 
 ### 7.5 Review procedure (in `REVIEW.md`)
 
-1. Read the PR title, body and existing comments, including Marcus's "Review round N" posts and any prior summary by this bot. Note what is already dispositioned.
-2. Read the facts file, then the diff (`gh pr diff` / `git diff base...head`).
+1. Read the PR title, body and maintainers' comments (from `facts.md`), including Marcus's "Review round N" posts, and the ledger, inline fingerprints and acknowledged slugs in `state.json` (this bot's earlier summary is not repeated). Note what is already dispositioned.
+2. Read the facts file, then the diff for the tier: `<OUT>/pr.diff` or `<OUT>/increment.diff` (precomputed; the model has no shell).
 3. **Cross-package pass:** for each link type touched, use the contract map to find the counterparts. Open them, compare shapes and strings, and record a break only with both sides cited.
 4. **Feature-impact pass:** name the user-facing features each changed area serves.
 5. **Repo-specific pass:** apply the routed checklist classes and the conventions, honouring `false-positives.md`.
 6. **General pass:** correctness, edge cases, error handling, security, test quality, PR-text accuracy.
 7. **Verification pass:** before posting, re-open every cited location to confirm it exists and says what the finding claims. Drop or downgrade anything unconfirmed. Assign each surviving finding a severity (Critical/High/Medium/Low) and a confidence (high/medium/low).
 8. **Pre-existing problems:** report one only when the diff touches it or makes it worse. Otherwise allow at most a short "noticed nearby" list of up to 3 one-liners.
-9. Write the outputs (`inline.json`, `findings.json`, `summary.md`); publish posts them (§7.7).
+9. Write the outputs in this order: `inline.json`, `summary.md`, then `findings.json` with `"complete": true` as the last write. Publish posts them (§7.7); a run cut off before the last write is published as incomplete.
 
 ### 7.6 Tools allowed
 
@@ -171,7 +168,7 @@ No `WebFetch`/`WebSearch`, no package managers. The builder confirms in a real r
 ### 7.7 Output
 
 - **One summary comment per PR, updated in place on each run**, posted by the model-free publish step as `github-actions[bot]` (the workflow `GITHUB_TOKEN`), and found again by its first-line marker and author. If the update fails, publish retries once with a minimal fixed banner that keeps the previous ledger marker. The comment must stay under GitHub's ~65k-character limit. Resolved findings collapse to one line each, and after about 5 runs they drop out of the visible text, keeping only their opaque ledger entry. The comment contains:
-  - an advisory headline naming the reviewed commit and tier, this run's findings by severity and the findings still open from earlier reviews by severity; "No issues found" only when nothing is open at all
+  - an advisory headline naming the reviewed commit and tier, this run's findings by severity and the findings still open from earlier reviews by severity; "No issues found" only when nothing is open at all and the review was complete. When facts failed or `pr.diff` could not be produced or was cut at its size cap, the headline says "partial review" and never "No issues found".
   - a fixed line with the tier and the pre-checks that were unavailable
   - **Features touched**
   - **Cross-package impact:** a table of link → other side → status (ok / broken / unverified)
@@ -179,7 +176,7 @@ No `WebFetch`/`WebSearch`, no package managers. The builder confirms in a real r
   - **Checked and fine:** link types touched and verified, so silence is informative
   - **Not reviewed / limits** (large PRs, unavailable pre-checks)
   - **Map maintenance** notes
-- **Inline comments:** only for Critical/High, non-security findings, at most 10 per run, posted by publish (never by the model). The model writes `<OUT>/inline.json` (`slug`, `path`, `line`, `side`, `body`). Publish keeps an entry only if its slug is such a finding in `findings.json`, its path is one of the PR's changed files, and no fp-marked comment for the slug exists yet; it applies the inline guard's predicate (security slug or class, prior security files, secret patterns) to the exact body as a pre-filter, appends the fingerprint marker itself and posts the survivors as one `COMMENT` review on the head. A post-hoc guard then deletes any of this run's `github-actions[bot]` review comments that fail the same predicate. Never re-post a finding already in the ledger (§7.8).
+- **Inline comments:** only for Critical/High, non-security findings, at most 10 per run, posted by publish (never by the model). The model writes `<OUT>/inline.json` (`slug`, `path`, `line`, `side`, `body`). Publish keeps an entry only if its slug is such a finding in `findings.json`, its path is one of the PR's changed files, and no fp-marked comment for the slug exists yet; it applies the inline guard's predicate (security slug or class, prior security files, secret patterns) to the exact body as a pre-filter, appends the fingerprint marker itself and posts the survivors as one `COMMENT` review on the head. Entries are validated before the cap of 10 is applied, bodies are redacted before they are cut to length, and dropped entries are counted by reason in the log; when a comment for a Critical or High finding is dropped (malformed, outside the changed files, over the cap) or `inline.json` cannot be read, the summary says so. Only a `422` (a line outside the diff) is retried one comment at a time; any other failure is not retried, so a review that did post is never duplicated. A post-hoc guard then deletes any of this run's `github-actions[bot]` review comments that fail the same predicate, and a deleted comment is not reported as posted. Publish does not check the ledger: not re-posting a finding already in it (§7.8) is the model's job, by `REVIEW.md`.
 
 ### 7.8 Every push, without duplication
 
@@ -188,7 +185,11 @@ No `WebFetch`/`WebSearch`, no package managers. The builder confirms in a real r
 - the last reviewed head SHA
 - a **findings ledger**: one entry per finding with a stable fingerprint (rule/class, file, symbol or hunk anchor, short claim), severity and status (`open`, `resolved`, `superseded`); inline comments are matched by their own fingerprint markers rather than by stored comment IDs
 
-"Hidden" only means not rendered. The block can be read through the API and the raw comment, so it is public. **Security findings' ledger entries carry only an opaque ID** (a hash of the fingerprint), severity and status. Their claim, file and anchor live only in the advisory (§7.9).
+"Hidden" only means not rendered. The block can be read through the API and the raw comment, so it is public. **Security findings' ledger entries carry only an opaque ID**, severity, status and keyed hashes of their files. Their claim, file and anchor live only in the advisory (§7.9). Non-security findings that name a security file are stored the same way ("withheld"). Those IDs are keyed with `PR_REVIEW_ID_KEY` (HMAC), because slugs are guessable from the public diff; without the key no such entry is created and existing ones are carried unchanged. Public entries already show their slug, so their ID is an unkeyed hash and they are matched by slug: a run before the key exists, or after it is rotated, still matches them.
+
+**Resolution.** A public entry resolves when the model lists its slug in `resolvedSlugs` or when a maintainer replies to its inline comment. Security entries resolve only when their advisory is closed, withdrawn or published, and withheld entries only through that private channel too, never through `resolvedSlugs`. A finding reported again in the same run stays open.
+
+**Prior state that cannot be read** never becomes "no history": facts flags it, publish re-reads the comment, and if the marker still cannot be decoded (or the summary is missing although facts saw a marker) the old marker is re-emitted verbatim with a notice; if no marker is known at all, the full summary is not rewritten: publish warns and, only if it can now find the existing summary and carry its marker over, replaces it with the minimal "could not be updated" banner that keeps that marker. It never creates a summary in that case, so a listing that missed the comment cannot cost the history.
 
 **Every inline comment also carries its own hidden fingerprint marker** (security findings never get inline comments). Duplicate detection reads the actual inline comments on the PR as well as the ledger. This prevents duplicates when a run is cancelled or fails after posting but before the summary is updated. Order within a run: the model computes findings and writes its outputs; publish then posts new inline comments, delivers security advisories, and rewrites the summary and ledger. The markers make any partial run recoverable.
 
@@ -198,7 +199,7 @@ Existing inline review threads, including Marcus's replies and resolved state, a
 
 | Increment                                                                                      | Run                                                                                                                                                                                                                                                                    |
 | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Empty diff since the last reviewed SHA                                                         | No model run. Update the SHA in the summary.                                                                                                                                                                                                                           |
+| Empty diff since the last reviewed SHA                                                         | No model run (tier `none`). Update the SHA in the summary; an unreadable old marker is re-emitted as it was.                                                                                                                                                          |
 | Only a merge/rebase from `main`, with the PR's own changes unchanged (same exact-diff hash)    | **Base-drift check only:** for each link point the PR's changes touch, check whether the new base changed the other side (e.g. `main` renamed a callable the PR's new client calls). Uses a low turn cap, and runs no model if no PR link point's counterpart changed. |
 | Only docs, comments, formatting or lockfiles, with no link-type triggers                       | Light pass over the increment only, mainly secrets, PII and PR-text accuracy. Low turn cap.                                                                                                                                                                            |
 | Code changes that don't touch new link types                                                   | Review the increment's hunks and the code they call or are called by. Re-check open ledger findings whose files changed and mark them resolved if fixed.                                                                                                               |
@@ -216,8 +217,8 @@ A finding counts as security-relevant if it is in classes 1, 4, 7, 11 or 14, if 
 - Public surfaces show only a pointer with severity and package or area, e.g. "Security-relevant issue (High) in `regroup/functions` payments area; details sent privately". No `file:line`, mechanism, exploit path or suggested fix. Secret values are never posted anywhere.
 - Full details go to a **draft GitHub repository security advisory**, which only Marcus can read. One advisory per distinct issue, deduplicated **repo-wide**: before creating one, list existing draft advisories and match the opaque ID, which is stored in the advisory body. A known weakness touched by many PRs keeps one advisory, and later PRs append a short "also touched by #N" note.
 - **Mechanism:**
-  - The model never holds an advisory-capable token. During the review Claude writes security details to a runner-local file (e.g. `$RUNNER_TEMP/security-findings.json`). That file is never uploaded as an artifact (artifacts on a public repo are downloadable), never `cat`-ed or echoed, and is deleted at job end.
-  - A separate later step creates or updates the advisories from it using `gh api`. That step runs no model and uses a fine-grained PAT secret (e.g. `SECURITY_ADVISORY_TOKEN`) scoped to this repo with only "Repository security advisories: write". `GITHUB_TOKEN` has no advisory scope. Marcus creates the PAT, and the builder documents the exact steps.
+  - The model never holds an advisory-capable token. It writes security findings, with `"security": true`, only to `<OUT>/findings.json` on the runner. That file is never uploaded as an artifact (artifacts on a public repo are downloadable), never `cat`-ed or echoed, and `OUT` is deleted at job end.
+  - The publish step (no model) creates or updates the draft advisories through the REST API with a fine-grained PAT secret, `SECURITY_ADVISORY_TOKEN`, scoped to this repo with only "Repository security advisories: Read and write". `GITHUB_TOKEN` has no advisory scope. Marcus creates the PAT. Advisories are delivered only for a completed review (§7.7), and also when the summary cannot be rewritten, since they do not depend on it.
   - The PAT must not be passed to the action, so it never reaches the model; it is set only in the publish step's environment.
 - If the advisory step fails or the secret is missing, the public pointer says "details could not be delivered privately; re-run after fixing the advisory token". The details are still never written to logs or comments.
 - Replay PRs for security classes **plant fake, clearly-labelled weaknesses on throwaway branches, never real ones**. They are judged on two things: the public pointer reveals nothing beyond severity and area, and the advisory holds the correct detail from both sides. They run only after the advisory path has been proven on one harmless test finding.
@@ -225,7 +226,7 @@ A finding counts as security-relevant if it is in classes 1, 4, 7, 11 or 14, if 
 
 ### 7.10 Delivery order and rollback
 
-Each stage merges before the next, because the action loads `.claude/` from base:
+As built, stages 1–4 landed together in PR #119; the order below is the original plan. Each stage merges before the next, because the action loads `.claude/` from base:
 
 1. **Skeleton.** Replace the workflow with a minimal version: permissions, guards, hook suppression, `--strict-mcp-config`, a tool allowlist, and a trivial prompt that posts a sticky "reviewer online" summary plus one inline comment. Verify on a test PR that posting works, hooks and project MCP servers don't run, and there are no permission denials. This retires the old bot's failure mode before anything else is built.
 2. **Knowledge files and pre-checks** (§7.2–7.4), and the real procedure (§7.5–7.7).

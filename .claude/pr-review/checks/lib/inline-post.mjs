@@ -1,9 +1,11 @@
 // Inline comments, posted by publish (the model has no inline tool). The model
 // writes OUT/inline.json: [{slug, path, line, side: "RIGHT"|"LEFT", body}].
 // Publish keeps an entry only when its slug is a non-security Critical/High
-// finding in findings.json, its path is one of the PR's changed files (facts'
-// trusted list), the slug has no fp comment yet, and the guard's predicate
-// passes on the exact body to be posted. It appends the fp marker itself.
+// finding in findings.json that the summary would not withhold, its path is
+// one of the PR's changed files (facts' trusted list), the slug has no fp
+// comment yet, and the guard's predicate passes on the exact body to be
+// posted; at most MAX_INLINE. It appends the fp marker itself. It does not
+// check the ledger: leaving out slugs already in it is the model's job.
 import { ghRequest } from './gh.mjs';
 import { redact } from './redact.mjs';
 import { fpMarker } from './markers.mjs';
@@ -26,23 +28,56 @@ function valid(e) {
   return Number.isInteger(e.line) && e.line > 0 && SIDES.has(e.side) && typeof e.body === 'string' && e.body.trim() !== '';
 }
 
-// Malformed file or entries are dropped, never fatal: at worst nothing is posted.
-export function parseInline(text) {
+// Entries read from one inline.json, bounded so a huge file stays cheap.
+export const MAX_ENTRIES = 100;
+const pick = ({ slug, path, line, side, body }) => ({ slug, path, line, side, body });
+
+// Validates every entry before anything is capped, so a bad entry never pushes
+// a good one out. Malformed file or entries are dropped, never fatal; the
+// caller counts them. present: the model wrote the file at all.
+export function readInline(text) {
+  const none = { entries: [], invalidSlugs: [], invalid: 0, malformed: false, present: text != null };
+  if (text == null) return none;
   let v;
   try {
-    v = JSON.parse(String(text ?? ''));
+    v = JSON.parse(String(text));
   } catch {
-    return [];
+    return { ...none, malformed: true };
   }
-  if (!Array.isArray(v)) return [];
-  return v.slice(0, MAX_INLINE).filter(valid).map(({ slug, path, line, side, body }) => ({ slug, path, line, side, body }));
+  if (!Array.isArray(v)) return { ...none, malformed: true };
+  const entries = [];
+  const invalidSlugs = [];
+  let invalid = Math.max(0, v.length - MAX_ENTRIES);
+  for (const e of v.slice(0, MAX_ENTRIES)) {
+    if (valid(e)) entries.push(pick(e));
+    else {
+      invalid++;
+      if (typeof e?.slug === 'string') invalidSlugs.push(e.slug);
+    }
+  }
+  return { entries, invalidSlugs, invalid, malformed: false, present: true };
+}
+
+export function parseInline(text) {
+  return readInline(text).entries;
 }
 
 // HTML comments are neutralised so model text cannot plant another fp marker.
 const neutralise = (s) => s.replace(/<!--/g, '&lt;!--').replace(/-->/g, '--&gt;');
 
+// A finding that may get a public inline comment: the same withholding
+// predicate as the summary, so a finding it would withhold never gets one.
+export function inlineEligible(f, needles) {
+  return Boolean(f) && !f.security && INLINE_SEVERITIES.has(f.severity) && !touchesSecurityFile(f, needles);
+}
+
+export const newDrops = () => ({ notFinding: 0, ineligible: 0, path: 0, duplicate: 0, unsafe: 0, overCap: 0, lost: [] });
+
 // needles: the summary's security-file needles (runNeedles), for touchesSecurityFile.
-export function selectInline({ entries, findings, changedFiles, postedSlugs, isSecurityPath = () => false, needles = securityNeedles(findings) }) {
+// drops (optional) counts every entry left out, by reason; drops.lost lists the
+// slugs of eligible findings whose comment was dropped for a reason the
+// maintainer should hear about (not in the changed files, over the cap).
+export function selectInline({ entries, findings, changedFiles, postedSlugs, isSecurityPath = () => false, needles = securityNeedles(findings), drops = newDrops() }) {
   const bySlug = new Map((findings ?? []).map((f) => [f.slug, f]));
   const files = new Set(changedFiles ?? []);
   const seen = new Set(postedSlugs ?? []);
@@ -50,16 +85,26 @@ export function selectInline({ entries, findings, changedFiles, postedSlugs, isS
   const out = [];
   for (const e of entries ?? []) {
     const f = bySlug.get(e.slug);
-    // Same withholding predicate as the summary: a finding it would withhold
-    // never gets a public inline comment.
-    if (!f || f.security || !INLINE_SEVERITIES.has(f.severity) || touchesSecurityFile(f, needles)) continue;
-    if (!files.has(e.path) || seen.has(e.slug)) continue;
-    const body = `${neutralise(e.body.trim()).slice(0, MAX_BODY)}\n\n${fpMarker(e.slug)}`;
-    const c = { slug: e.slug, path: e.path, line: e.line, side: e.side, body };
-    if (unsafeInline(c, securitySlugs, isSecurityPath)) continue;
-    seen.add(e.slug);
-    out.push({ ...c, body: redact(body) });
-    if (out.length >= MAX_INLINE) break;
+    if (!f) drops.notFinding++;
+    else if (!inlineEligible(f, needles)) drops.ineligible++;
+    else if (seen.has(e.slug)) drops.duplicate++;
+    else if (!files.has(e.path)) {
+      drops.path++;
+      drops.lost.push(e.slug);
+    } else {
+      const text = neutralise(e.body.trim());
+      const c = { slug: e.slug, path: e.path, line: e.line, side: e.side, body: `${text}\n\n${fpMarker(e.slug)}` };
+      // The guard predicate sees the whole unredacted body (a quoted secret drops the comment).
+      if (unsafeInline(c, securitySlugs, isSecurityPath)) drops.unsafe++;
+      else if (out.length >= MAX_INLINE) {
+        drops.overCap++;
+        drops.lost.push(e.slug);
+      } else {
+        seen.add(e.slug);
+        // Redacted before the cap, so a secret straddling the cut cannot survive as a fragment.
+        out.push({ ...c, body: redact(`${redact(text).slice(0, MAX_BODY)}\n\n${fpMarker(e.slug)}`) });
+      }
+    }
   }
   return out;
 }
@@ -67,10 +112,13 @@ export function selectInline({ entries, findings, changedFiles, postedSlugs, isS
 const status = (err) => (Number.isInteger(err?.status) ? err.status : 'unknown');
 
 // One COMMENT review on the head (GH_TOKEN, as github-actions[bot]). GitHub
-// rejects the whole review when one line is outside the diff (422), so a
-// failed batch is retried one comment per review.
+// rejects the whole review when one line is outside the diff (422), so only
+// then is the batch retried one comment per review. Any other failure (5xx, a
+// timeout) may have posted the review anyway, so it is not retried: a retry
+// could post every comment twice.
 export async function postInlineReview({ repo, pr, headSha, comments, request = ghRequest }) {
-  if (!headSha || !comments?.length) return { posted: [], failed: 0 };
+  if (!comments?.length) return { posted: [], failed: 0 };
+  if (!headSha) return { posted: [], failed: comments.length };
   const path = `/repos/${repo}/pulls/${pr}/reviews`;
   const payload = (cs) => ({ commit_id: headSha, event: 'COMMENT', body: REVIEW_BODY, comments: cs.map(({ path: p, line, side, body }) => ({ path: p, line, side, body })) });
   try {
@@ -78,6 +126,7 @@ export async function postInlineReview({ repo, pr, headSha, comments, request = 
     return { posted: comments.map((c) => c.slug), failed: 0 };
   } catch (err) {
     console.log(`inline post: review failed: ${status(err)}`);
+    if (err?.status !== 422) return { posted: [], failed: comments.length };
   }
   const posted = [];
   let failed = 0;
