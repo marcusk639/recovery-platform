@@ -80,6 +80,7 @@ import {
   createUserWithEmail,
   signInWithEmail,
   signOut,
+  SIGN_OUT_FLUSH_TIMEOUT_MS,
   sendForgotPasswordEmail,
   anonymouslyLogin,
   userCollection,
@@ -683,6 +684,20 @@ describe("users service", () => {
         (flushOfflineActivities as jest.Mock).mockRejectedValue(new Error('offline'));
         await signOut();
         expect(order).toEqual(['clear', 'signOut']);
+      });
+
+      it('gives up on a flush that never settles and still clears and signs out', async () => {
+        // Offline Firestore writes stay pending until the device reconnects.
+        jest.useFakeTimers();
+        try {
+          (flushOfflineActivities as jest.Mock).mockImplementation(() => new Promise(() => {}));
+          const done = signOut();
+          await jest.advanceTimersByTimeAsync(SIGN_OUT_FLUSH_TIMEOUT_MS);
+          await done;
+          expect(order).toEqual(['clear', 'signOut']);
+        } finally {
+          jest.useRealTimers();
+        }
       });
 
       it('still signs out when clearing the queue throws', async () => {

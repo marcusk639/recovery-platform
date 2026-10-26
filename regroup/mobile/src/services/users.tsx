@@ -114,15 +114,30 @@ export async function convertAnonymousUser(
   return signInWithEmail(email, password);
 }
 
+/** Longest a sign-out waits for the offline queue flush. */
+export const SIGN_OUT_FLUSH_TIMEOUT_MS = 5000;
+
 export async function signOut() {
   const uid = auth().currentUser?.uid;
   if (uid) {
     // Queued activities can hold residents' medication data: replay them once
     // (best effort), then remove them so they never outlive this session.
+    // Offline Firestore writes stay pending until reconnect, so cap the wait.
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      await flushOfflineActivities(uid);
+      await Promise.race([
+        flushOfflineActivities(uid),
+        new Promise((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error('offline queue flush timed out')),
+            SIGN_OUT_FLUSH_TIMEOUT_MS,
+          );
+        }),
+      ]);
     } catch (error) {
       logException(error, 'sign-out: offline queue flush failed');
+    } finally {
+      clearTimeout(timer);
     }
     try {
       await offlineQueue.clearUser(uid);
