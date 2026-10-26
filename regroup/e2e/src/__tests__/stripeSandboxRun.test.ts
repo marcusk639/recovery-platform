@@ -116,6 +116,20 @@ describe('runSetup', () => {
     expect(mock.webhookEndpoints.del).not.toHaveBeenCalled();
   });
 
+  it('runs hygiene before pinning, so a hygiene failure leaves no pin file', async () => {
+    const { stripe } = makeStripe({
+      endpoints: [
+        {
+          id: 'we_prod',
+          url: 'https://us-central1-phoenix-cleanhouse.cloudfunctions.net/stripeEvents',
+          status: 'enabled',
+        },
+      ],
+    });
+    await expect(runSetup(base(stripe))).rejects.toThrow(/we_prod/);
+    expect(fs.existsSync(path.join(outDir, 'stripe-e2e-account.txt'))).toBe(false);
+  });
+
   it('writes price ids and webhook secrets with mode 600 in a 700 directory', async () => {
     fs.chmodSync(outDir, 0o755);
     const { stripe } = makeStripe();

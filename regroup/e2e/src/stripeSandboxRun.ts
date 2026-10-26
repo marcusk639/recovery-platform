@@ -139,8 +139,8 @@ function pinAccount(accountFile: string, accountId: string, confirm?: string): v
 }
 
 /**
- * Order: URL and key validation (no Stripe), account guard and pin, hygiene,
- * catalogue, webhooks (each secret persisted as it is created). Never logs secrets.
+ * Order: URL and key validation (no Stripe), account guard, hygiene (read-only),
+ * account pin, catalogue, webhooks (each secret persisted as it is created). Never logs secrets.
  */
 export async function runSetup(deps: SetupDeps): Promise<{ pricesFile: string }> {
   assertWebhookUrls(deps.platformUrl, deps.connectUrl);
@@ -149,11 +149,13 @@ export async function runSetup(deps: SetupDeps): Promise<{ pricesFile: string }>
   const stripe = deps.createStripe(key);
   const accountId = await assertSandboxAccount(stripe, key);
 
+  // Read-only, so it runs before anything is written, including the pin.
+  await assertSandboxHygiene(stripe);
+
   fs.mkdirSync(deps.outDir, { recursive: true, mode: 0o700 });
   fs.chmodSync(deps.outDir, 0o700);
   pinAccount(path.join(deps.outDir, 'stripe-e2e-account.txt'), accountId, deps.confirmAccount);
 
-  await assertSandboxHygiene(stripe);
   const prices = await ensureCatalog(stripe);
 
   const secretsFile = path.join(deps.outDir, SECRETS_FILE_NAME);

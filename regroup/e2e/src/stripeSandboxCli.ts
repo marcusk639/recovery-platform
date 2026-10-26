@@ -5,8 +5,26 @@ import type { SetupDeps } from './stripeSandboxRun';
 
 const optionalArg = (argv: string[], name: string): string | undefined => {
   const i = argv.indexOf(`--${name}`);
-  return i >= 0 ? argv[i + 1] : undefined;
+  if (i < 0) return undefined;
+  const value = argv[i + 1];
+  if (value === undefined || value === '' || value.startsWith('--')) {
+    throw new Error(`--${name} needs a value`);
+  }
+  return value;
 };
+
+export const KEY_FILE_NAME = 'stripe-e2e-sandbox-key.txt';
+
+/** Reads the key; warns (never fails, never echoes it) when group/world can read the file. */
+function readKeyFile(file: string): string {
+  const mode = fs.statSync(file).mode & 0o777;
+  if (mode & 0o077) {
+    console.warn(
+      `Warning: ${file} is mode ${mode.toString(8)} (group/world readable); run: chmod 600 ${file}`,
+    );
+  }
+  return fs.readFileSync(file, 'utf8');
+}
 
 /** Maps CLI args to runSetup deps; kept out of the script so the wiring is testable. */
 export function buildSetupDeps(
@@ -20,7 +38,7 @@ export function buildSetupDeps(
     return value;
   };
   return {
-    readKey: () => fs.readFileSync(path.join(configDir, 'stripe-e2e-sandbox-key.txt'), 'utf8'),
+    readKey: () => readKeyFile(path.join(configDir, KEY_FILE_NAME)),
     createStripe,
     outDir: configDir,
     platformUrl: required('platform-url'),
