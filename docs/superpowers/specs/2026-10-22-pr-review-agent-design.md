@@ -52,10 +52,10 @@ Why now:
 ## 6. Constraints
 
 - `anthropics/claude-code-action@v1`. Workflow permissions: `contents: read`, `pull-requests: write` (needed to post), `issues: read`, `id-token: write`. The checkout uses `persist-credentials: false`. Keep the existing `if: !startsWith(github.head_ref, 'e2e-fix/')`, and add a same-repo guard (`github.event.pull_request.head.repo.full_name == github.repository`), because forks don't receive secrets.
-- On PRs the action restores `.claude/`, `.mcp.json`, `CLAUDE.md` and related files from the base branch, and puts the PR's copies under `.claude-pr/`. Everything else stays at PR head. Consequences:
-  - Reviewer knowledge lives under `.claude/` so it is base-branch-controlled. A PR that edits it is reviewed with the old version, which is intended. The reviewer may read `.claude-pr/` to comment on such edits.
+- On PRs the action restores `.claude/`, `.mcp.json`, `CLAUDE.md` and related files from the base branch. Everything else stays at PR head. The workflow does not rely on that: before the review step it replaces `.claude/pr-review/` in the working tree with the base checkout's copy itself ("Restore reviewer knowledge from base"). Consequences:
+  - Reviewer knowledge lives under `.claude/pr-review/` so it is base-branch-controlled. A PR that edits it is reviewed with the old version, which is intended. No PR copy is kept in the working tree (the action's `.claude-pr/` snapshot is its own config, not the PR's version): the reviewer reads such edits from the precomputed `<OUT>/pr.diff`.
   - The base-branch `.claude/settings.json` defines `SessionStart`, `PostToolUse` and `Stop` hooks written for Marcus's machine. **They must not run in the review job.** Suppress them through the action's `settings` input or `claude_args`, never by editing `.claude/settings.json`, which would also change Marcus's local sessions. The builder picks the mechanism and verifies it in a real run.
-  - `.mcp.json` declares servers (firebase, context7, stripe, github, sentry) that must not start in CI. The action always sets `enableAllProjectMcpServers: true`, so pass `--strict-mcp-config`. The first skeleton run (§7.10) must prove two things: that it keeps the `.mcp.json` servers from starting, and that the action's own inline-comment server still loads.
+  - `.mcp.json` declares servers (firebase, context7, stripe, github, sentry) that must not start in CI. The action always sets `enableAllProjectMcpServers: true`, so pass `--strict-mcp-config`. The first skeleton run (§7.10) must prove that it keeps the `.mcp.json` servers from starting. The model gets no MCP tools at all: the action's inline-comment tool is denied, and inline comments are posted by the publish step (§7.7).
 - Any deterministic pre-check script runs from a **base-branch checkout** (a second `actions/checkout` of the base SHA into a separate directory). It reads the PR diff as text. It uses Node built-ins or POSIX tools only, with no dependency install.
 - `fetch-depth` must allow `git diff <base>...<head>` locally. The current `fetch-depth: 1` does not.
 - Repo rules for the change itself:
@@ -78,7 +78,7 @@ Why now:
      - `claude_code_oauth_token`
      - a short `prompt` pointing at `.claude/pr-review/REVIEW.md` and the facts file
      - `claude_args`: `--model` for Opus, `--max-turns` (_my call:_ start around 60 and tune from real runs), `--strict-mcp-config`, and an explicit `--allowedTools` list (§7.6).
-     - **no `github_token` input**, so comments post as `claude[bot]` and the sticky comment works (§7.7)
+     - no posting tools for the model: it writes `findings.json`, `inline.json` and `summary.md` into `OUT`, and a later model-free publish step posts the summary and inline comments as `github-actions[bot]` (§7.7)
   5. If the review wrote any security details to the runner-local file, run the advisory step (§7.9). It runs no model and holds the only advisory-capable token.
   6. Always run a final step that, if the action failed or hit a subscription rate limit, updates the summary to say so ("review skipped: rate-limited / failed — will retry on next push") and leaves the last-reviewed SHA unchanged. A failed review must never look like a clean one.
 - **Limits:** a job `timeout-minutes` cap (_my call:_ 30). For PRs over about 60 changed files or 5k lines, the reviewer prioritises high-risk paths (§7.3 routing) and states in the summary what it did not review.
@@ -157,39 +157,40 @@ Pre-check failures must not fail the job. A broken script yields a "pre-check un
 6. **General pass:** correctness, edge cases, error handling, security, test quality, PR-text accuracy.
 7. **Verification pass:** before posting, re-open every cited location to confirm it exists and says what the finding claims. Drop or downgrade anything unconfirmed. Assign each surviving finding a severity (Critical/High/Medium/Low) and a confidence (high/medium/low).
 8. **Pre-existing problems:** report one only when the diff touches it or makes it worse. Otherwise allow at most a short "noticed nearby" list of up to 3 one-liners.
-9. Post (§7.7).
+9. Write the outputs (`inline.json`, `findings.json`, `summary.md`); publish posts them (§7.7).
 
 ### 7.6 Tools allowed
 
-- `Read`, `Grep`, `Glob`.
-- `Bash` restricted to read-only commands: `gh pr view`, `gh pr diff`, `gh api` GETs for PR comments and reviews, `git diff`/`log`/`show`/`grep`, and reading the facts file.
-- The action's inline-comment tool.
-- The minimum write commands needed to create or update the one summary comment.
+- `Read`, `Grep`, `Glob` over the repository and `OUT`. Reads of the workspace `.git/**` (the action writes its app token into `.git/config`) and of `//proc/**` are denied.
+- `Write` and `Edit` only under `OUT` (`Write(//<OUT>/**)`, `Edit(//<OUT>/**)`); both are denied anywhere in the workspace.
+- **No `Bash`.** The facts step precomputes the git material the model needs: `<OUT>/pr.diff`, `<OUT>/increment.diff` and `<OUT>/commits.txt`, plus `facts.md` and `state.json`.
+- No inline-comment tool and no comment-writing commands: the model proposes inline comments in `<OUT>/inline.json`.
 
-No `Edit`/`Write` to the repo, no `WebFetch`/`WebSearch`, no package managers. The builder confirms in a real run that nothing posts as `permission_denied`. That was the old bot's silent failure.
+No `WebFetch`/`WebSearch`, no package managers. The builder confirms in a real run that nothing posts as `permission_denied`. That was the old bot's silent failure.
 
 ### 7.7 Output
 
-- **One summary comment per PR, updated in place on each run**, via the action's `use_sticky_comment`. That option only works with the action's own `claude[bot]` identity, so no custom `github_token` may be passed. The comment must stay under GitHub's ~65k-character limit. Resolved findings collapse to one line each, and after about 5 runs they drop out of the visible text, keeping only their opaque ledger entry. The comment contains:
-  - an advisory headline: findings by severity, or "no issues found"
+- **One summary comment per PR, updated in place on each run**, posted by the model-free publish step as `github-actions[bot]` (the workflow `GITHUB_TOKEN`), and found again by its first-line marker and author. If the update fails, publish retries once with a minimal fixed banner that keeps the previous ledger marker. The comment must stay under GitHub's ~65k-character limit. Resolved findings collapse to one line each, and after about 5 runs they drop out of the visible text, keeping only their opaque ledger entry. The comment contains:
+  - an advisory headline naming the reviewed commit and tier, this run's findings by severity and the findings still open from earlier reviews by severity; "No issues found" only when nothing is open at all
+  - a fixed line with the tier and the pre-checks that were unavailable
   - **Features touched**
   - **Cross-package impact:** a table of link → other side → status (ok / broken / unverified)
   - **Findings by severity:** each with confidence, both-side `file:line`, why it breaks, a suggested fix, and the feature at risk
   - **Checked and fine:** link types touched and verified, so silence is informative
   - **Not reviewed / limits** (large PRs, unavailable pre-checks)
   - **Map maintenance** notes
-- **Inline comments:** only for Critical/High findings, at most 10 per run. Never re-post a finding already in the ledger (§7.8).
+- **Inline comments:** only for Critical/High, non-security findings, at most 10 per run, posted by publish (never by the model). The model writes `<OUT>/inline.json` (`slug`, `path`, `line`, `side`, `body`). Publish keeps an entry only if its slug is such a finding in `findings.json`, its path is one of the PR's changed files, and no fp-marked comment for the slug exists yet; it applies the inline guard's predicate (security slug or class, prior security files, secret patterns) to the exact body as a pre-filter, appends the fingerprint marker itself and posts the survivors as one `COMMENT` review on the head. A post-hoc guard then deletes any of this run's `github-actions[bot]` review comments that fail the same predicate. Never re-post a finding already in the ledger (§7.8).
 
 ### 7.8 Every push, without duplication
 
 **State.** The summary comment carries a hidden, machine-readable block (for example an HTML comment holding JSON) with:
 
 - the last reviewed head SHA
-- a **findings ledger**: one entry per finding with a stable fingerprint (rule/class, file, symbol or hunk anchor, short claim), severity, status (`open`, `resolved`, `superseded`) and the IDs of any inline comments posted for it
+- a **findings ledger**: one entry per finding with a stable fingerprint (rule/class, file, symbol or hunk anchor, short claim), severity and status (`open`, `resolved`, `superseded`); inline comments are matched by their own fingerprint markers rather than by stored comment IDs
 
 "Hidden" only means not rendered. The block can be read through the API and the raw comment, so it is public. **Security findings' ledger entries carry only an opaque ID** (a hash of the fingerprint), severity and status. Their claim, file and anchor live only in the advisory (§7.9).
 
-**Every inline comment also carries its own hidden fingerprint marker**, opaque for security findings. Duplicate detection reads the actual inline comments on the PR as well as the ledger. This prevents duplicates when a run is cancelled or fails after posting but before the summary is updated. Order within a run: compute findings, post new inline comments, then rewrite the summary and ledger. The markers make any partial run recoverable.
+**Every inline comment also carries its own hidden fingerprint marker**, opaque for security findings. Duplicate detection reads the actual inline comments on the PR as well as the ledger. This prevents duplicates when a run is cancelled or fails after posting but before the summary is updated. Order within a run: the model computes findings and writes its outputs; publish then posts new inline comments, delivers security advisories, and rewrites the summary and ledger. The markers make any partial run recoverable.
 
 Existing inline review threads, including Marcus's replies and resolved state, are read too. A finding Marcus has resolved or replied to is never re-raised unless new code makes it materially worse.
 
@@ -198,7 +199,7 @@ Existing inline review threads, including Marcus's replies and resolved state, a
 | Increment                                                                                      | Run                                                                                                                                                                                                                                                                    |
 | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Empty diff since the last reviewed SHA                                                         | No model run. Update the SHA in the summary.                                                                                                                                                                                                                           |
-| Only a merge/rebase from `main`, with the PR's own changes unchanged (same patch-ids)          | **Base-drift check only:** for each link point the PR's changes touch, check whether the new base changed the other side (e.g. `main` renamed a callable the PR's new client calls). Uses a low turn cap, and runs no model if no PR link point's counterpart changed. |
+| Only a merge/rebase from `main`, with the PR's own changes unchanged (same exact-diff hash)    | **Base-drift check only:** for each link point the PR's changes touch, check whether the new base changed the other side (e.g. `main` renamed a callable the PR's new client calls). Uses a low turn cap, and runs no model if no PR link point's counterpart changed. |
 | Only docs, comments, formatting or lockfiles, with no link-type triggers                       | Light pass over the increment only, mainly secrets, PII and PR-text accuracy. Low turn cap.                                                                                                                                                                            |
 | Code changes that don't touch new link types                                                   | Review the increment's hunks and the code they call or are called by. Re-check open ledger findings whose files changed and mark them resolved if fixed.                                                                                                               |
 | Code changes that touch link types not seen in earlier runs, or a large share of the PR        | Full review of the increment plus the cross-package pass for the newly touched links.                                                                                                                                                                                  |
@@ -217,7 +218,7 @@ A finding counts as security-relevant if it is in classes 1, 4, 7, 11 or 14, if 
 - **Mechanism:**
   - The model never holds an advisory-capable token. During the review Claude writes security details to a runner-local file (e.g. `$RUNNER_TEMP/security-findings.json`). That file is never uploaded as an artifact (artifacts on a public repo are downloadable), never `cat`-ed or echoed, and is deleted at job end.
   - A separate later step creates or updates the advisories from it using `gh api`. That step runs no model and uses a fine-grained PAT secret (e.g. `SECURITY_ADVISORY_TOKEN`) scoped to this repo with only "Repository security advisories: write". `GITHUB_TOKEN` has no advisory scope. Marcus creates the PAT, and the builder documents the exact steps.
-  - The PAT must not be passed to the action, both so it never reaches the model and because passing a `github_token` breaks the sticky comment (§7.7).
+  - The PAT must not be passed to the action, so it never reaches the model; it is set only in the publish step's environment.
 - If the advisory step fails or the secret is missing, the public pointer says "details could not be delivered privately; re-run after fixing the advisory token". The details are still never written to logs or comments.
 - Replay PRs for security classes **plant fake, clearly-labelled weaknesses on throwaway branches, never real ones**. They are judged on two things: the public pointer reveals nothing beyond severity and area, and the advisory holds the correct detail from both sides. They run only after the advisory path has been proven on one harmless test finding.
 - No secret values and no PII anywhere in posted text.
@@ -276,7 +277,7 @@ Each stage merges before the next, because the action loads `.claude/` from base
 - Knowledge files are hand-maintained, with "map maintenance" nudges; no auto-regeneration.
 - The pre-design analysis stays out of the repo (in `.git/pr-review-analysis/`) because the repo is public.
 - The same-repo guard is added because forks can't use the token.
-- **The workflow file can be edited by the PR under review.** For `pull_request` events GitHub runs the workflow from the PR. The threat model is accidental edits by Marcus's own agents, not adversarial PRs: forks are excluded and only collaborators push branches. So this gap is accepted rather than redesigned around `pull_request_target`. The reviewer flags, as a High finding, any PR that touches `.github/workflows/claude-code-review.yml` or the files under `.claude/pr-review/` (visible via `.claude-pr/`).
+- **The workflow file can be edited by the PR under review.** For `pull_request` events GitHub runs the workflow from the PR. The threat model is accidental edits by Marcus's own agents, not adversarial PRs: forks are excluded and only collaborators push branches. So this gap is accepted rather than redesigned around `pull_request_target`. The reviewer flags, as a High finding, any PR that touches `.github/workflows/claude-code-review.yml` or the files under `.claude/pr-review/` (read from `<OUT>/pr.diff`, since the working tree holds the base copy).
 - **Order of testing.** The PR that introduces `.claude/pr-review/` is reviewed without those files, because the action loads `.claude/` from base. It is merged first, then acceptance criteria 1–2 (including the replay set) run against `main`.
 - Security details go to draft repository security advisories, deduplicated repo-wide. They are created by a separate step without a model, using a narrowly scoped PAT that Marcus creates (§7.9).
 - The hidden ledger is treated as public, so security entries in it are opaque IDs only.
