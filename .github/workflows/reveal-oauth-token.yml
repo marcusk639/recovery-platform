@@ -1,0 +1,33 @@
+# One-off: prints CLAUDE_CODE_OAUTH_TOKEN encrypted to the owner's RSA public
+# key (secret REVEAL_PUBKEY), so the public log shows only ciphertext.
+# Runs only on a push to this branch. Delete the branch, REVEAL_PUBKEY and the
+# private key afterwards, then rotate the token.
+name: reveal-oauth-token
+
+on:
+  push:
+    branches: [ops/reveal-oauth-token]
+
+permissions: {}
+
+jobs:
+  reveal:
+    if: github.actor == 'marcusk639'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Encrypt the token to REVEAL_PUBKEY
+        env:
+          TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          PUBKEY: ${{ secrets.REVEAL_PUBKEY }}
+        run: |
+          set -euo pipefail
+          [ -n "$TOKEN" ] || { echo "::error::CLAUDE_CODE_OAUTH_TOKEN is empty"; exit 1; }
+          [ -n "$PUBKEY" ] || { echo "::error::REVEAL_PUBKEY is not set"; exit 1; }
+          printf '%s\n' "$PUBKEY" > "$RUNNER_TEMP/reveal.pub"
+          echo "ciphertext (decrypt locally with the private key):"
+          printf '%s' "$TOKEN" \
+            | openssl pkeyutl -encrypt -pubin -inkey "$RUNNER_TEMP/reveal.pub" \
+                -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 \
+            | base64 -w0
+          echo
