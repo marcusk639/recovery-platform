@@ -6,7 +6,7 @@
  *
  * Storage strategy:
  *   - Persists to AsyncStorage so queued activities survive an app restart.
- *   - Falls back to an in-memory array if the AsyncStorage native module is unusable.
+ *   - Keeps an in-memory copy, used when an AsyncStorage read or write fails.
  *
  * Connectivity strategy:
  *   - Does not require @react-native-community/netinfo.
@@ -39,24 +39,6 @@ export interface QueuedActivity {
 const MAX_RETRY_COUNT = 3;
 
 const STORAGE_KEY = '@rats_offline_activity_queue';
-
-// ---------------------------------------------------------------------------
-// AsyncStorage — imported statically. Never hide a require from Metro: in a
-// release bundle an unknown module is reported as fatal, bypassing try/catch.
-// ---------------------------------------------------------------------------
-
-type AsyncStorageLike = {
-  getItem(key: string): Promise<string | null>;
-  setItem(key: string, value: string): Promise<void>;
-};
-
-function tryGetAsyncStorage(): AsyncStorageLike | null {
-  const impl = AsyncStorage as AsyncStorageLike | undefined;
-  if (impl && typeof impl.getItem === 'function' && typeof impl.setItem === 'function') {
-    return impl;
-  }
-  return null;
-}
 
 // ---------------------------------------------------------------------------
 // Simple UUID generation (no external dependency)
@@ -109,34 +91,13 @@ function deserialize(raw: string): QueuedActivity[] {
 
 class ActivityOfflineQueue {
   private memoryQueue: QueuedActivity[] = [];
-  private storage: AsyncStorageLike | null = null;
-  private storageChecked = false;
-
-  // Lazy-initialize so tests can mock require before instantiation.
-  private getStorage(): AsyncStorageLike | null {
-    if (!this.storageChecked) {
-      this.storage = tryGetAsyncStorage();
-      this.storageChecked = true;
-      if (!this.storage) {
-        console.warn(
-          '[OfflineQueue] @react-native-async-storage/async-storage is not available. ' +
-            'Queued activities will be stored in memory only and will not survive app restarts.',
-        );
-      }
-    }
-    return this.storage;
-  }
 
   /**
-   * Load the persisted queue from AsyncStorage (or return the in-memory queue).
+   * Load the persisted queue from AsyncStorage (or the in-memory copy if the read fails).
    */
   async load(): Promise<QueuedActivity[]> {
-    const storage = this.getStorage();
-    if (!storage) {
-      return [...this.memoryQueue];
-    }
     try {
-      const raw = await storage.getItem(STORAGE_KEY);
+      const raw = await AsyncStorage.getItem(STORAGE_KEY);
       if (!raw) return [];
       const parsed = deserialize(raw);
       this.memoryQueue = parsed;
@@ -148,14 +109,12 @@ class ActivityOfflineQueue {
   }
 
   /**
-   * Persist the supplied queue to AsyncStorage (or update the in-memory queue).
+   * Persist the supplied queue to AsyncStorage, keeping an in-memory copy.
    */
   async save(queue: QueuedActivity[]): Promise<void> {
     this.memoryQueue = [...queue];
-    const storage = this.getStorage();
-    if (!storage) return;
     try {
-      await storage.setItem(STORAGE_KEY, serialize(queue));
+      await AsyncStorage.setItem(STORAGE_KEY, serialize(queue));
     } catch (err) {
       console.warn('[OfflineQueue] Failed to save queue to storage:', err);
     }
@@ -256,8 +215,6 @@ class ActivityOfflineQueue {
    * @internal
    */
   _resetForTesting(): void {
-    this.storageChecked = false;
-    this.storage = null;
     this.memoryQueue = [];
   }
 }

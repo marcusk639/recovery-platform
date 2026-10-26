@@ -27,7 +27,10 @@ import { useFlushOfflineQueue } from '../state/queries/useFlushOfflineQueue';
 // ---------------------------------------------------------------------------
 
 type NetInfoSubscription = () => void;
-type NetInfoChangeHandler = (state: { isConnected: boolean | null }) => void;
+type NetInfoChangeHandler = (state: {
+  isConnected: boolean | null;
+  isInternetReachable?: boolean | null;
+}) => void;
 
 interface NetInfoLike {
   addEventListener(handler: NetInfoChangeHandler): NetInfoSubscription;
@@ -136,13 +139,16 @@ export function useOfflineSync(): UseOfflineSyncResult {
 
     const appStateSubscription = AppState.addEventListener('change', handleAppStateChange);
 
-    // --- NetInfo listener (optional) ---
+    // --- NetInfo listener ---
     const netInfo = tryGetNetInfo();
     let netInfoUnsubscribe: NetInfoSubscription | null = null;
 
     if (netInfo) {
       netInfoUnsubscribe = netInfo.addEventListener((state) => {
-        const isConnected = state.isConnected ?? false;
+        // isConnected turns true before the link can reach the internet (captive
+        // portal, weak signal). Flushing then fails every item and burns its retry
+        // budget, so also require reachability unless NetInfo has not decided yet.
+        const isConnected = (state.isConnected ?? false) && state.isInternetReachable !== false;
         const wasConnected = prevIsConnectedRef.current;
         prevIsConnectedRef.current = isConnected;
 

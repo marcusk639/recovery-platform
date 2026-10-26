@@ -227,24 +227,30 @@ describe('ActivityOfflineQueue — with AsyncStorage', () => {
 // Suite 3 — Queue WITHOUT AsyncStorage (in-memory fallback)
 // ---------------------------------------------------------------------------
 
-describe('ActivityOfflineQueue — without AsyncStorage (in-memory fallback)', () => {
+describe('ActivityOfflineQueue — when AsyncStorage fails (in-memory fallback)', () => {
   let offlineQueueModule: typeof import('../offlineQueue');
 
   beforeAll(() => {
-    // Override the mock with a module that has no getItem/setItem, simulating
-    // an unusable AsyncStorage native module.
+    // Override the mock so every AsyncStorage call rejects; the queue keeps
+    // working from its in-memory copy.
     jest.doMock('@react-native-async-storage/async-storage', () => ({
       __esModule: true,
-      default: {},
+      default: {
+        getItem: () => Promise.reject(new Error('storage unavailable')),
+        setItem: () => Promise.reject(new Error('storage unavailable')),
+      },
     }));
 
-    // Force a fresh require so offlineQueue.ts re-runs its lazy storage check.
+    // Force a fresh require so offlineQueue.ts imports the failing mock.
     jest.resetModules();
 
     // Re-register the mock AFTER resetModules.
     jest.doMock('@react-native-async-storage/async-storage', () => ({
       __esModule: true,
-      default: {},
+      default: {
+        getItem: () => Promise.reject(new Error('storage unavailable')),
+        setItem: () => Promise.reject(new Error('storage unavailable')),
+      },
     }));
 
     offlineQueueModule = require('../offlineQueue');

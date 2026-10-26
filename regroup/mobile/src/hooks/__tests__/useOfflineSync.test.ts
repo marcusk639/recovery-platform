@@ -48,7 +48,9 @@ jest.mock('../../state/queries/useFlushOfflineQueue', () => ({
 // mockNetInfo.enabled  — controls whether addEventListener is exposed
 // ---------------------------------------------------------------------------
 const mockNetInfo = {
-  handler: null as ((state: { isConnected: boolean | null }) => void) | null,
+  handler: null as
+    | ((state: { isConnected: boolean | null; isInternetReachable?: boolean | null }) => void)
+    | null,
   unsub: jest.fn(),
   enabled: false,
 };
@@ -60,7 +62,12 @@ jest.mock('@react-native-community/netinfo', () => ({
     if (!mockNetInfo.enabled) {
       return undefined;
     }
-    return (handler: (state: { isConnected: boolean | null }) => void) => {
+    return (
+      handler: (state: {
+        isConnected: boolean | null;
+        isInternetReachable?: boolean | null;
+      }) => void,
+    ) => {
       mockNetInfo.handler = handler;
       return mockNetInfo.unsub;
     };
@@ -84,10 +91,10 @@ function simulateAppState(nextState: AppStateStatus) {
   }
 }
 
-function simulateNetInfo(isConnected: boolean) {
+function simulateNetInfo(isConnected: boolean, isInternetReachable?: boolean | null) {
   if (mockNetInfo.handler) {
     act(() => {
-      mockNetInfo.handler!({ isConnected });
+      mockNetInfo.handler!({ isConnected, isInternetReachable });
     });
   }
 }
@@ -361,6 +368,38 @@ describe('useOfflineSync', () => {
       unmount();
 
       expect(mockNetInfo.unsub).toHaveBeenCalledTimes(1);
+    });
+
+    it('does NOT flush on reconnect while the internet is unreachable', async () => {
+      mockGetPending.mockResolvedValue([{ id: 'net3' }]);
+
+      renderHook(() => useOfflineSync());
+
+      await waitFor(() => expect(mockGetPending).toHaveBeenCalledTimes(1));
+
+      simulateNetInfo(false);
+      // Link is up but NetInfo reports no internet (captive portal, weak signal).
+      simulateNetInfo(true, false);
+
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      });
+
+      expect(mockMutate).not.toHaveBeenCalled();
+    });
+
+    it('flushes once reachability is confirmed after a reconnect', async () => {
+      mockGetPending.mockResolvedValue([{ id: 'net4' }]);
+
+      renderHook(() => useOfflineSync());
+
+      await waitFor(() => expect(mockGetPending).toHaveBeenCalledTimes(1));
+
+      simulateNetInfo(false);
+      simulateNetInfo(true, false);
+      simulateNetInfo(true, true);
+
+      await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1));
     });
   });
 });
