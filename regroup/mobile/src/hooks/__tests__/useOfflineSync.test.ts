@@ -5,11 +5,11 @@
  *   - AppState.addEventListener  (configured on the preset's mock via beforeEach)
  *   - offlineQueue               (via jest.mock)
  *   - useFlushOfflineQueue       (via jest.mock)
- *   - @react-native-community/netinfo  (virtual mock, see NetInfo section)
+ *   - @react-native-community/netinfo  (mock, see NetInfo section)
  *
  * Strategy for NetInfo:
- *   The hook calls require('@react-native-community/netinfo') lazily inside
- *   the useEffect so we can control it via a virtual jest.mock whose factory
+ *   The hook reads NetInfo.addEventListener inside the useEffect, so we can
+ *   control it via a jest.mock whose factory
  *   closes over a mutable "mock" prefixed state object. Jest allows variables
  *   whose names start with "mock" (case-insensitive) in mock factories.
  */
@@ -40,7 +40,7 @@ jest.mock('../../state/queries/useFlushOfflineQueue', () => ({
 }));
 
 // ---------------------------------------------------------------------------
-// NetInfo virtual mock
+// NetInfo mock
 //
 // The factory references only "mock"-prefixed names (allowed by Jest).
 // mockNetInfo.handler  — set by the hook when it calls addEventListener
@@ -53,23 +53,19 @@ const mockNetInfo = {
   enabled: false,
 };
 
-jest.mock(
-  '@react-native-community/netinfo',
-  () => ({
-    // When enabled, addEventListener captures the handler the hook passes in.
-    // When not enabled, addEventListener is undefined so tryGetNetInfo() returns null.
-    get addEventListener() {
-      if (!mockNetInfo.enabled) {
-        return undefined;
-      }
-      return (handler: (state: { isConnected: boolean | null }) => void) => {
-        mockNetInfo.handler = handler;
-        return mockNetInfo.unsub;
-      };
-    },
-  }),
-  { virtual: true },
-);
+jest.mock('@react-native-community/netinfo', () => ({
+  // When enabled, addEventListener captures the handler the hook passes in.
+  // When not enabled, addEventListener is undefined so tryGetNetInfo() returns null.
+  get addEventListener() {
+    if (!mockNetInfo.enabled) {
+      return undefined;
+    }
+    return (handler: (state: { isConnected: boolean | null }) => void) => {
+      mockNetInfo.handler = handler;
+      return mockNetInfo.unsub;
+    };
+  },
+}));
 
 // ---------------------------------------------------------------------------
 // AppState helpers
@@ -150,11 +146,7 @@ describe('useOfflineSync', () => {
     });
 
     it('sets pendingCount to the actual queue size', async () => {
-      mockGetPending.mockResolvedValueOnce([
-        { id: 'a' },
-        { id: 'b' },
-        { id: 'c' },
-      ]);
+      mockGetPending.mockResolvedValueOnce([{ id: 'a' }, { id: 'b' }, { id: 'c' }]);
 
       const { result } = renderHook(() => useOfflineSync());
 
@@ -184,7 +176,7 @@ describe('useOfflineSync', () => {
       simulateAppState('background');
 
       await act(async () => {
-        await new Promise(resolve => setTimeout(resolve, 10));
+        await new Promise((resolve) => setTimeout(resolve, 10));
       });
 
       expect(mockMutate).not.toHaveBeenCalled();
@@ -199,7 +191,7 @@ describe('useOfflineSync', () => {
       simulateAppState('active');
 
       await act(async () => {
-        await new Promise(resolve => setTimeout(resolve, 10));
+        await new Promise((resolve) => setTimeout(resolve, 10));
       });
 
       expect(mockMutate).not.toHaveBeenCalled();
@@ -231,7 +223,7 @@ describe('useOfflineSync', () => {
       simulateAppState('active');
 
       await act(async () => {
-        await new Promise(resolve => setTimeout(resolve, 20));
+        await new Promise((resolve) => setTimeout(resolve, 20));
       });
 
       expect(mockMutate).not.toHaveBeenCalled();
@@ -244,9 +236,7 @@ describe('useOfflineSync', () => {
       await waitFor(() => expect(mockGetPending).toHaveBeenCalledTimes(1));
 
       // getPending during maybeFlush → 1 item; after flush completes → 0 items
-      mockGetPending
-        .mockResolvedValueOnce([{ id: 'y' }])
-        .mockResolvedValueOnce([]);
+      mockGetPending.mockResolvedValueOnce([{ id: 'y' }]).mockResolvedValueOnce([]);
 
       simulateAppState('background');
       simulateAppState('active');
@@ -287,7 +277,7 @@ describe('useOfflineSync', () => {
       simulateAppState('active'); // Second trigger: should be blocked
 
       await act(async () => {
-        await new Promise(resolve => setTimeout(resolve, 20));
+        await new Promise((resolve) => setTimeout(resolve, 20));
       });
 
       expect(mockMutate).toHaveBeenCalledTimes(1);
@@ -314,7 +304,7 @@ describe('useOfflineSync', () => {
   // -------------------------------------------------------------------------
   // NetInfo integration (simulated)
   //
-  // Set mockNetInfo.enabled = true so the virtual mock exposes addEventListener.
+  // Set mockNetInfo.enabled = true so the mock exposes addEventListener.
   // The hook's tryGetNetInfo() runs at effect-mount time, so the flag must be
   // set before renderHook() is called.
   // -------------------------------------------------------------------------
@@ -333,7 +323,7 @@ describe('useOfflineSync', () => {
       // First event: wasConnected is null → initialisation guard, no flush.
       simulateNetInfo(false);
       await act(async () => {
-        await new Promise(resolve => setTimeout(resolve, 10));
+        await new Promise((resolve) => setTimeout(resolve, 10));
       });
       expect(mockMutate).toHaveBeenCalledTimes(0);
 
@@ -355,7 +345,7 @@ describe('useOfflineSync', () => {
       simulateNetInfo(true);
 
       await act(async () => {
-        await new Promise(resolve => setTimeout(resolve, 20));
+        await new Promise((resolve) => setTimeout(resolve, 20));
       });
 
       expect(mockMutate).not.toHaveBeenCalled();

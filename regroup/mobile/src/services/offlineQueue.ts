@@ -5,14 +5,15 @@
  * then retries them when connectivity returns.
  *
  * Storage strategy:
- *   - Uses AsyncStorage if @react-native-async-storage/async-storage is installed.
- *   - Falls back to an in-memory array if AsyncStorage is not available.
+ *   - Persists to AsyncStorage so queued activities survive an app restart.
+ *   - Falls back to an in-memory array if the AsyncStorage native module is unusable.
  *
  * Connectivity strategy:
  *   - Does not require @react-native-community/netinfo.
  *   - Detects offline errors by inspecting the Firestore error code/message.
  */
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ActivityType, ActivityData } from '../entities/ActivityModel';
 
 // ---------------------------------------------------------------------------
@@ -40,8 +41,8 @@ const MAX_RETRY_COUNT = 3;
 const STORAGE_KEY = '@rats_offline_activity_queue';
 
 // ---------------------------------------------------------------------------
-// AsyncStorage — loaded lazily so the module does not crash if the package is
-// absent from node_modules.
+// AsyncStorage — imported statically. Never hide a require from Metro: in a
+// release bundle an unknown module is reported as fatal, bypassing try/catch.
 // ---------------------------------------------------------------------------
 
 type AsyncStorageLike = {
@@ -50,23 +51,11 @@ type AsyncStorageLike = {
 };
 
 function tryGetAsyncStorage(): AsyncStorageLike | null {
-  try {
-    // Hide from Metro's static require collector. A string-literal require of a
-    // non-installed package registers an unresolvable slot in the dependency map,
-    // producing require(undefined) at runtime which crashes even inside try/catch
-    // (same issue fixed in useOfflineSync.ts for @react-native-community/netinfo).
-    // Aliasing `require` prevents Metro from registering the dependency slot.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const dynamicRequire = require as (name: string) => unknown;
-    const mod: any = dynamicRequire('@react-native-async-storage/async-storage');
-    const impl = mod?.default ?? mod;
-    if (impl && typeof impl.getItem === 'function' && typeof impl.setItem === 'function') {
-      return impl as AsyncStorageLike;
-    }
-    return null;
-  } catch {
-    return null;
+  const impl = AsyncStorage as AsyncStorageLike | undefined;
+  if (impl && typeof impl.getItem === 'function' && typeof impl.setItem === 'function') {
+    return impl;
   }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -131,7 +120,7 @@ class ActivityOfflineQueue {
       if (!this.storage) {
         console.warn(
           '[OfflineQueue] @react-native-async-storage/async-storage is not available. ' +
-          'Queued activities will be stored in memory only and will not survive app restarts.',
+            'Queued activities will be stored in memory only and will not survive app restarts.',
         );
       }
     }
@@ -176,9 +165,7 @@ class ActivityOfflineQueue {
    * Add an activity to the queue and persist.
    * @returns The local ID assigned to the queued item.
    */
-  async enqueue(
-    activity: Omit<QueuedActivity, 'id' | 'queuedAt' | 'retryCount'>,
-  ): Promise<string> {
+  async enqueue(activity: Omit<QueuedActivity, 'id' | 'queuedAt' | 'retryCount'>): Promise<string> {
     const queue = await this.load();
     const id = generateId();
     const item: QueuedActivity = {
@@ -197,7 +184,7 @@ class ActivityOfflineQueue {
    */
   async remove(id: string): Promise<void> {
     const queue = await this.load();
-    const filtered = queue.filter(item => item.id !== id);
+    const filtered = queue.filter((item) => item.id !== id);
     await this.save(filtered);
   }
 
@@ -234,7 +221,7 @@ class ActivityOfflineQueue {
     const queue = await this.load();
 
     for (const item of pending) {
-      const idx = queue.findIndex(q => q.id === item.id);
+      const idx = queue.findIndex((q) => q.id === item.id);
       if (idx === -1) continue; // Removed by another concurrent flush (unlikely).
 
       try {
@@ -286,7 +273,7 @@ export const offlineQueue = new ActivityOfflineQueue();
  * See https://firebase.google.com/docs/reference/js/firestore_.firestoreerrorcode
  */
 const OFFLINE_ERROR_CODES = new Set([
-  'unavailable',       // Firestore SDK: service is currently unavailable
+  'unavailable', // Firestore SDK: service is currently unavailable
   'deadline-exceeded', // Request deadline exceeded — likely network issue
 ]);
 
@@ -295,7 +282,7 @@ const OFFLINE_ERROR_MESSAGES = [
   'failed to get',
   'client is offline',
   'could not reach cloud firestore',
-  'backend didn\'t respond',
+  "backend didn't respond",
   'transport errored',
 ];
 
@@ -314,5 +301,5 @@ export function isNetworkError(error: unknown): boolean {
 
   // Fall back to message inspection.
   const message = typeof err.message === 'string' ? err.message.toLowerCase() : '';
-  return OFFLINE_ERROR_MESSAGES.some(fragment => message.includes(fragment));
+  return OFFLINE_ERROR_MESSAGES.some((fragment) => message.includes(fragment));
 }

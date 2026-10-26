@@ -6,9 +6,8 @@
  * offline activity queue and flushes any pending items so they are synced to
  * Firestore without the user needing to take any action.
  *
- * If @react-native-community/netinfo is installed it also listens for the
- * isConnected transition from false → true and triggers a flush on reconnect.
- * This is loaded dynamically so the hook does not crash when netinfo is absent.
+ * It also listens (via @react-native-community/netinfo) for the isConnected
+ * transition from false → true and triggers a flush on reconnect.
  *
  * Returns { pendingCount } so callers can optionally render a sync badge.
  *
@@ -18,12 +17,13 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
+import NetInfo from '@react-native-community/netinfo';
 import { offlineQueue } from '../services/offlineQueue';
 import { useFlushOfflineQueue } from '../state/queries/useFlushOfflineQueue';
 
 // ---------------------------------------------------------------------------
-// NetInfo — loaded lazily so the module does not crash when the package is
-// absent from node_modules.
+// NetInfo — imported statically. Never hide a require from Metro: in a release
+// bundle an unknown module is reported as fatal, bypassing try/catch.
 // ---------------------------------------------------------------------------
 
 type NetInfoSubscription = () => void;
@@ -34,26 +34,11 @@ interface NetInfoLike {
 }
 
 function tryGetNetInfo(): NetInfoLike | null {
-  try {
-    // @react-native-community/netinfo is intentionally NOT installed. A require
-    // that Metro can statically analyze (a literal, or even a `const` bound to a
-    // string — Metro constant-folds those) registers an unresolvable dependency
-    // slot, which Metro drops from this module's dependency map and shifts every
-    // sibling import after it. That made `useFlushOfflineQueue` (imported below)
-    // resolve to the wrong module at runtime ("useFlushOfflineQueue is not a
-    // function"). Aliasing `require` to a value hides the call from Metro's
-    // static collector entirely, so the dependency map stays intact. At runtime
-    // the aliased require throws for the unbundled module and is caught here.
-    const dynamicRequire = require as (name: string) => unknown;
-    const mod: any = dynamicRequire('@react-native-community/netinfo');
-    const impl = mod?.default ?? mod;
-    if (impl && typeof impl.addEventListener === 'function') {
-      return impl as NetInfoLike;
-    }
-    return null;
-  } catch {
-    return null;
+  const impl = NetInfo as unknown as NetInfoLike | undefined;
+  if (impl && typeof impl.addEventListener === 'function') {
+    return impl;
   }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -121,7 +106,7 @@ export function useOfflineSync(): UseOfflineSyncResult {
       await new Promise<void>((resolve, reject) => {
         flushRef.current(undefined, {
           onSuccess: () => resolve(),
-          onError: err => reject(err),
+          onError: (err) => reject(err),
         });
       });
       // Refresh count again after flush completes so the badge is up to date.
@@ -149,17 +134,14 @@ export function useOfflineSync(): UseOfflineSyncResult {
       }
     };
 
-    const appStateSubscription = AppState.addEventListener(
-      'change',
-      handleAppStateChange,
-    );
+    const appStateSubscription = AppState.addEventListener('change', handleAppStateChange);
 
     // --- NetInfo listener (optional) ---
     const netInfo = tryGetNetInfo();
     let netInfoUnsubscribe: NetInfoSubscription | null = null;
 
     if (netInfo) {
-      netInfoUnsubscribe = netInfo.addEventListener(state => {
+      netInfoUnsubscribe = netInfo.addEventListener((state) => {
         const isConnected = state.isConnected ?? false;
         const wasConnected = prevIsConnectedRef.current;
         prevIsConnectedRef.current = isConnected;

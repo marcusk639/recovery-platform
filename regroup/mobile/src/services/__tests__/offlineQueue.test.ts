@@ -1,34 +1,26 @@
 /**
  * Tests for ActivityOfflineQueue and isNetworkError.
  *
- * Because @react-native-async-storage/async-storage is NOT installed in this
- * project, all mocks are declared as virtual mocks so Jest doesn't try to
- * resolve the real package from node_modules.
+ * AsyncStorage is mocked so the tests can inspect what the queue persists.
  */
 
 import { ActivityType } from '../../entities/ActivityModel';
 
 // ---------------------------------------------------------------------------
-// Virtual mock for AsyncStorage — installed before any module under test is
-// require()'d so that offlineQueue.ts's lazy require() sees our mock.
+// Mock for AsyncStorage — installed before any module under test is
+// require()'d so that offlineQueue.ts's import sees our mock.
 // ---------------------------------------------------------------------------
 
 const mockGetItem = jest.fn<Promise<string | null>, [string]>();
 const mockSetItem = jest.fn<Promise<void>, [string, string]>();
 
-// `{ virtual: true }` tells Jest to create a stand-in module even though the
-// real package is absent from node_modules.
-jest.mock(
-  '@react-native-async-storage/async-storage',
-  () => ({
-    __esModule: true,
-    default: {
-      getItem: mockGetItem,
-      setItem: mockSetItem,
-    },
-  }),
-  { virtual: true },
-);
+jest.mock('@react-native-async-storage/async-storage', () => ({
+  __esModule: true,
+  default: {
+    getItem: mockGetItem,
+    setItem: mockSetItem,
+  },
+}));
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -46,9 +38,7 @@ const makeItem = (overrides = {}) => ({
 
 /** Serialise the way offlineQueue.ts does (Date → __DATE__ISO). */
 const encodeQueue = (items: object[]) =>
-  JSON.stringify(items, (_k, v) =>
-    v instanceof Date ? `__DATE__${v.toISOString()}` : v,
-  );
+  JSON.stringify(items, (_k, v) => (v instanceof Date ? `__DATE__${v.toISOString()}` : v));
 
 // ---------------------------------------------------------------------------
 // Suite 1 — isNetworkError
@@ -123,9 +113,7 @@ describe('ActivityOfflineQueue — with AsyncStorage', () => {
   });
 
   it('enqueue() appends to existing persisted items', async () => {
-    const existing = [
-      { ...makeItem(), id: 'offline_existing_1', queuedAt: 1000, retryCount: 0 },
-    ];
+    const existing = [{ ...makeItem(), id: 'offline_existing_1', queuedAt: 1000, retryCount: 0 }];
     mockGetItem.mockResolvedValue(encodeQueue(existing));
 
     await offlineQueueModule.offlineQueue.enqueue(makeItem({ guestId: 'guest-2' }));
@@ -212,9 +200,7 @@ describe('ActivityOfflineQueue — with AsyncStorage', () => {
 
   it('flush() drops items that have reached MAX_RETRY_COUNT (dead letter)', async () => {
     // retryCount is 2 — one more failure should reach MAX (3) and drop the item.
-    const items = [
-      { ...makeItem(), id: 'offline_dead', queuedAt: 1000, retryCount: 2 },
-    ];
+    const items = [{ ...makeItem(), id: 'offline_dead', queuedAt: 1000, retryCount: 2 }];
     mockGetItem.mockResolvedValue(encodeQueue(items));
 
     const logFn = jest.fn().mockRejectedValue(new Error('Persistent failure'));
@@ -245,44 +231,34 @@ describe('ActivityOfflineQueue — without AsyncStorage (in-memory fallback)', (
   let offlineQueueModule: typeof import('../offlineQueue');
 
   beforeAll(() => {
-    // Override the virtual mock so that require() of async-storage throws,
-    // simulating the package being absent.
-    jest.doMock(
-      '@react-native-async-storage/async-storage',
-      () => {
-        throw new Error('Module not found');
-      },
-      { virtual: true },
-    );
+    // Override the mock with a module that has no getItem/setItem, simulating
+    // an unusable AsyncStorage native module.
+    jest.doMock('@react-native-async-storage/async-storage', () => ({
+      __esModule: true,
+      default: {},
+    }));
 
     // Force a fresh require so offlineQueue.ts re-runs its lazy storage check.
     jest.resetModules();
 
-    // Re-register the virtual mock AFTER resetModules.
-    jest.doMock(
-      '@react-native-async-storage/async-storage',
-      () => {
-        throw new Error('Module not found');
-      },
-      { virtual: true },
-    );
+    // Re-register the mock AFTER resetModules.
+    jest.doMock('@react-native-async-storage/async-storage', () => ({
+      __esModule: true,
+      default: {},
+    }));
 
     offlineQueueModule = require('../offlineQueue');
     offlineQueueModule.offlineQueue._resetForTesting();
   });
 
   afterAll(() => {
-    // Restore the normal (working) virtual mock and reset module registry so
+    // Restore the normal (working) mock and reset module registry so
     // subsequent test files start clean.
     jest.resetModules();
-    jest.doMock(
-      '@react-native-async-storage/async-storage',
-      () => ({
-        __esModule: true,
-        default: { getItem: mockGetItem, setItem: mockSetItem },
-      }),
-      { virtual: true },
-    );
+    jest.doMock('@react-native-async-storage/async-storage', () => ({
+      __esModule: true,
+      default: { getItem: mockGetItem, setItem: mockSetItem },
+    }));
   });
 
   beforeEach(() => {
