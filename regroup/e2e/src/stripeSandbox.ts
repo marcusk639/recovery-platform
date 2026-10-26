@@ -164,8 +164,26 @@ async function ensurePrice(
   stripe: Stripe,
   params: { lookupKey: string; product: string; amountCents: number; interval: 'month' | 'year' },
 ): Promise<string> {
-  const existing = (await stripe.prices.list({ lookup_keys: [params.lookupKey], limit: 1 }))
-    .data[0];
+  // Ask for both states explicitly: an archived price keeps its lookup_key, and
+  // reusing it (or creating a second) would leave staging on a dead price.
+  const [active, archived] = await Promise.all(
+    [true, false].map(
+      async (state) =>
+        (await stripe.prices.list({ lookup_keys: [params.lookupKey], active: state, limit: 10 }))
+          .data,
+    ),
+  );
+  if (archived.length > 0) {
+    throw new Error(
+      `Archived price ${archived.map((p) => p.id).join(', ')} holds lookup_key ${params.lookupKey}. ` +
+        `Reactivate it in the Stripe Dashboard if its amount and interval are right, ` +
+        `or remove its lookup_key, then rerun.`,
+    );
+  }
+  if (active.length > 1) {
+    throw new Error(`Several active prices hold lookup_key ${params.lookupKey}; not guessing.`);
+  }
+  const existing = active[0];
   if (existing) {
     const productId =
       typeof existing.product === 'string' ? existing.product : existing.product?.id;
@@ -265,10 +283,18 @@ export type WebhookOptions = {
 export type EnsuredEndpoint = { id: string; url: string; created: boolean };
 export type EnsuredWebhooks = Record<WebhookKind, EnsuredEndpoint>;
 
+/** stripe-node's autoPagingToArray ceiling. */
+const MAX_ENDPOINTS = 10000;
+
+/** Every endpoint in the account, across all pages (hygiene and reuse both need the full set). */
 async function listEndpoints(stripe: Stripe): Promise<Stripe.WebhookEndpoint[]> {
-  const page = await stripe.webhookEndpoints.list({ limit: 100 });
-  if (page.has_more) throw new Error('More than 100 webhook endpoints; refusing to guess.');
-  return page.data;
+  const all = await stripe.webhookEndpoints
+    .list({ limit: 100 })
+    .autoPagingToArray({ limit: MAX_ENDPOINTS });
+  if (all.length >= MAX_ENDPOINTS) {
+    throw new Error(`${MAX_ENDPOINTS}+ webhook endpoints; the list may be truncated, refusing to guess.`);
+  }
+  return all;
 }
 
 function assertEndpointMatches(
