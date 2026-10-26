@@ -84,13 +84,29 @@ test('dedupe matches only the code-written footer, not an id quoted in model tex
   assert.equal(footerOf(decoy.description).id, opaqueId('other', KEY));
 });
 
-test('a matched non-draft advisory is never patched and not re-created', async () => {
+test('a matched non-draft advisory is never patched: a new draft reopens it, and its id is not resolved', async () => {
   for (const state of ['published', 'closed', 'withdrawn']) {
     const m = byState({ closed: [{ ghsa_id: 'GHSA-ffff-ffff-ffff', state, description: `x\n\n${footer(3, ID)}` }] });
-    const res = await deliverAdvisories(REPO, 7, [sec()], TOKEN, m.request, KEY);
+    const res = await deliverAdvisories(REPO, 7, [sec()], TOKEN, m.request, KEY, [ID]);
     assert.equal(res.delivered, true);
-    assert.equal(m.calls.filter((c) => c.method !== 'GET').length, 0, state);
+    assert.deepEqual(res.resolvedIds, [], `${state}: reported this run, so not resolved`);
+    const writes = m.calls.filter((c) => c.method !== 'GET');
+    assert.deepEqual(writes.map((c) => c.method), ['POST'], state);
+    const d = writes[0].body.description;
+    assert.match(d, new RegExp(`Reopened: previously ${state} advisory GHSA-ffff-ffff-ffff`));
+    assert.equal(footerOf(d).id, ID, 'same footer id');
   }
+});
+
+test('dedupe prefers the draft when a dispositioned advisory shares its id', async () => {
+  const m = byState({
+    closed: [{ ghsa_id: 'GHSA-ffff-ffff-ffff', state: 'closed', description: `x\n\n${footer(3, ID)}` }],
+    draft: [{ ghsa_id: 'GHSA-aaaa-aaaa-aaaa', state: 'draft', description: `y\n\n${footer(7, ID)}` }],
+  });
+  const res = await deliverAdvisories(REPO, 7, [sec()], TOKEN, m.request, KEY, [ID]);
+  assert.equal(res.delivered, true);
+  assert.equal(m.calls.filter((c) => c.method !== 'GET').length, 0, 'the draft already names #7');
+  assert.deepEqual(res.resolvedIds, []);
 });
 
 test('model text cannot plant footer lines in the advisory body', () => {

@@ -1,4 +1,4 @@
-import { BOT_AUTHOR, SUMMARY_MARKER, decodeLedger, extractInlineSlugs } from './markers.mjs';
+import { BOT_AUTHOR, SUMMARY_MARKER, decodeLedger, extractInlineSlugs, rawLedgerMarker } from './markers.mjs';
 
 // Both the summary and the inline comments are posted by publish.
 const SUMMARY_AUTHOR = BOT_AUTHOR;
@@ -45,14 +45,20 @@ export function acknowledgedSlugs(reviewComments) {
 }
 
 // The prior ledger passes through in shape; publish re-sanitizes it with the key.
+// When the summary cannot be read, or its marker is base64 that does not
+// decode, the state is flagged priorUnavailable (with the raw marker when
+// there is one) so publish never treats the empty defaults as "no history".
 export async function loadState(repo, pr, { listIssueComments, listReviewComments }) {
   const state = EMPTY();
   try {
     const comments = await listIssueComments(repo, pr);
     const summary = findSummary(comments);
-    if (summary) Object.assign(state, fromPayload(decodeLedger(summary.body)));
+    const payload = summary ? decodeLedger(summary.body) : null;
+    const raw = summary && !payload ? rawLedgerMarker(summary.body) : null;
+    if (payload) Object.assign(state, fromPayload(payload));
+    else if (raw) Object.assign(state, { priorUnavailable: true, priorUnavailableReason: 'marker-undecodable', priorRawMarker: raw });
   } catch {
-    // keep defaults
+    Object.assign(state, { priorUnavailable: true, priorUnavailableReason: 'comments-unreadable' });
   }
   try {
     const reviews = await listReviewComments(repo, pr);

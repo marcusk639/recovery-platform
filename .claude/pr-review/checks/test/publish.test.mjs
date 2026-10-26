@@ -139,14 +139,14 @@ test('keyed ids: same slug and key match, a different key does not', () => {
   assert.notEqual(opaqueId('c1:x.ts:y', KEY), opaqueId('c1:x.ts:y'));
 });
 
-test('without the id key the ledger has no security entries but the pointer still renders', () => {
+test('without the id key no security entry is added, prior ones are carried, and the pointer says why', () => {
   const body = composeBody({ state: state(), findingsText: findingsText([secFinding]), narrative: '', outcome: 'success', headSha: HEAD, baseSha: BASE });
   const m = decodeLedger(body);
-  assert.equal(m.ledger.filter((e) => e.security).length, 0);
+  assert.deepEqual(m.ledger.filter((e) => e.security), [L[1]]);
   assert.ok(m.ledger.some((e) => e.slug === 'c9:a.ts:x'));
-  assert.ok(body.includes('Security-relevant issue (High) in regroup/functions payments; details sent privately'));
+  assert.ok(body.includes('Security-relevant issue (High) in regroup/functions payments; details could not be delivered privately; id key unavailable'));
   const failed = decodeLedger(composeBody({ state: state(), findingsText: null, narrative: '', outcome: 'failure', headSha: HEAD, baseSha: BASE }));
-  assert.equal(failed.ledger.filter((e) => e.security).length, 0);
+  assert.deepEqual(failed.ledger.filter((e) => e.security), [L[1]]);
 });
 
 test('an id that was security stays security when re-reported as non-security', () => {
@@ -252,13 +252,12 @@ test('resolvedSlugs entries over 300 characters are rejected', () => {
   assert.ok(body.includes('review did not complete (failed)'));
 });
 
-test('ledger without the id key: no withheld entry and no needle', () => {
+test('ledger without the id key: no new withheld entry and no needle; prior ones carried', () => {
   const located = nonSec({ slug: `c9:${SEC_FILE}:otherFn`, locations: [{ file: SEC_FILE, line: 90, side: 'changed' }] });
   const titled = nonSec({ slug: 'c9:regroup/functions/src/util/x.ts:y', title: 'Near payments.ts' });
-  const priorMention = { id: opaqueId(`c9:${SEC_FILE}:old`), slug: `c9:${SEC_FILE}:old`, title: 't', severity: 'Low', status: 'open', security: false, runsSinceResolved: 0 };
   const priorWithheld = { id: opaqueId('c9:w.ts:w', KEY), severity: 'Low', status: 'open', security: false, runsSinceResolved: 0, withheld: true };
   const body = composeBody({
-    state: state({ ledger: [...L, priorMention, priorWithheld] }),
+    state: state({ ledger: [...L, priorWithheld] }),
     findingsText: findingsText([secFinding, located, titled]),
     narrative: '',
     outcome: 'success',
@@ -267,7 +266,7 @@ test('ledger without the id key: no withheld entry and no needle', () => {
   });
   noNeedle(body);
   const ledger = decodeLedger(body).ledger;
-  assert.equal(ledger.filter((e) => e.withheld || e.security).length, 0);
+  assert.deepEqual(ledger.filter((e) => e.withheld || e.security), [L[1], priorWithheld]);
   assert.ok(!ledger.some((e) => e.id === opaqueId(located.slug)));
   assert.ok(ledger.some((e) => e.slug === 'c9:a.ts:x'));
   assert.ok(body.includes('(withheld: touches a security-relevant file)'));

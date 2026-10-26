@@ -1,10 +1,12 @@
 // Findings ledger entries carried in the summary comment's hidden marker (public).
-// Security entries hold only an opaque id, severity and status: never a slug,
-// title, file or mechanism. Ids are keyed (HMAC with PR_REVIEW_ID_KEY, held only
-// by the publish step): slugs are guessable from the public diff, so a plain hash
-// of one could be brute-forced back to the security finding's file and symbol.
+// Security entries hold only an opaque id, severity, status and keyed fileIds:
+// never a slug, title, file or mechanism. When the key is present, ids are keyed
+// (HMAC with PR_REVIEW_ID_KEY, held only by the publish step): slugs are
+// guessable from the public diff, so a plain hash of one could be brute-forced
+// back to the security finding's file and symbol. Without the key no security
+// or withheld entry is ever created; existing ones are carried unchanged.
 import { redact } from './redact.mjs';
-import { mentions, touchesSecurityFile } from './needles.mjs';
+import { touchesSecurityFile } from './needles.mjs';
 import { ID_RE, opaqueId } from './ids.mjs';
 import { cleanFileIds, fileIdsOf } from './fileids.mjs';
 
@@ -67,8 +69,9 @@ export function sanitizeLedger(list, key) {
   const out = [];
   for (const raw of Array.isArray(list) ? list : []) {
     const e = sanitizeEntry(raw);
-    // Security and withheld ids are only safe keyed; unkeyed they are omitted.
-    if (!e || seen.has(e.id) || ((e.security || e.withheld) && !key)) continue;
+    // Security and withheld entries pass through even without the key: they are
+    // already opaque, and dropping them would erase them from the ledger.
+    if (!e || seen.has(e.id)) continue;
     seen.add(e.id);
     out.push(e);
   }
@@ -119,10 +122,12 @@ function age(e, resolvedIds) {
 // Prior entries plus this run's findings, matched by id (keyed opaqueId of the
 // slug). Tier "none" ran no model, so the ledger is returned as it was. Findings
 // are grouped by slug: if any finding in a group, or the prior entry with that
-// id, is security, the entry is security (dropped when there is no key). A
-// non-security entry that names a security file anywhere is written withheld,
-// with no slug or title. A finding reported this run is open even if its slug is
-// also listed as resolved.
+// id, is security, the entry is security (not created when there is no key). A
+// new non-security entry that names a security file anywhere is written
+// withheld, with no slug or title. A prior entry that is already public stays
+// public (rewriting it withheld would point at the file through the comment's
+// edit history), keeping its public slug and title when re-reported. A finding
+// reported this run is open even if its slug is also listed as resolved.
 export function mergeLedger(prior, findings, resolvedSlugs, tier, { key = null, needles = [] } = {}) {
   if (tier === 'none') return sanitizeLedger(prior, key);
   const groups = new Map();
@@ -135,14 +140,9 @@ export function mergeLedger(prior, findings, resolvedSlugs, tier, { key = null, 
     if (touchesSecurityFile(f, needles)) g.withheld = true;
     groups.set(f.slug, g);
   }
-  const old = sanitizeLedger(prior, key)
-    .map((e) =>
-      !e.security && !e.withheld && (mentions(e.slug, needles) || mentions(e.title, needles))
-        ? key && withheldEntry(e.id, e.severity, e.status, e.runsSinceResolved)
-        : e,
-    )
-    .filter(Boolean);
+  const old = sanitizeLedger(prior, key);
   const wasSecurity = new Map(old.filter((e) => e.security).map((e) => [e.id, e]));
+  const wasPublic = new Map(old.filter((e) => !e.security && !e.withheld).map((e) => [e.id, e]));
   const resolvedIds = new Set((resolvedSlugs ?? []).map((s) => opaqueId(s, key)));
   const touched = new Set();
   const current = [];
@@ -152,6 +152,8 @@ export function mergeLedger(prior, findings, resolvedSlugs, tier, { key = null, 
     if (security || wasSecurity.has(id)) {
       const fileIds = [...fileIdsOf(all, key), ...(wasSecurity.get(id)?.fileIds ?? [])];
       if (key) current.push(securityEntry(id, f.severity, 'open', 0, fileIds));
+    } else if (withheld && wasPublic.has(id)) {
+      current.push({ ...wasPublic.get(id), severity: f.severity, status: 'open', runsSinceResolved: 0 });
     } else if (withheld) {
       if (key) current.push(withheldEntry(id, f.severity, 'open', 0));
     } else {

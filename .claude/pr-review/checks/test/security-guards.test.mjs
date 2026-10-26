@@ -94,17 +94,17 @@ test('a later non-security finding on a prior security file is withheld though t
   assert.deepEqual(m.ledger.find((e) => e.security).fileIds, priorSec.fileIds);
 });
 
-test('without the key prior fileIds do nothing and security entries are omitted', () => {
+test('without the key prior fileIds do nothing; the prior security entry is carried unchanged', () => {
   const near = finding({ slug: 'c9:regroup/mobile/src/a.ts:x' });
   const body = composeBody({ state: snap(), findingsText: text([near]), narrative: '', outcome: 'success', headSha: HEAD, baseSha: BASE, idKey: null });
-  assert.ok(!decodeLedger(body).ledger.some((e) => e.security));
+  assert.deepEqual(decodeLedger(body).ledger.filter((e) => e.security), [priorSec]);
 });
 
 // Minor: trusted head for lastReviewedSha.
 test('lastReviewedSha is the trusted head, not the model-written reviewedSha', () => {
   const body = composeBody({ state: snap({ ledger: [] }), findingsText: text([], 'a'.repeat(40)), narrative: '', outcome: 'success', headSha: HEAD, baseSha: BASE, idKey: KEY });
   assert.equal(decodeLedger(body).lastReviewedSha, HEAD);
-  assert.match(body, /Reviewed commit `ccccccc`/);
+  assert.match(body, /Reviewed `ccccccc`/);
 });
 
 // I2

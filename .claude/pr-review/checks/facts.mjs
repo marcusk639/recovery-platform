@@ -42,11 +42,19 @@ function renderResult(r) {
   return lines.join('\n');
 }
 
+const INCREMENTAL = 'Incremental: the files and checks below cover only changes since the last reviewed commit.';
+const TIER_NOTE = {
+  incremental: INCREMENTAL,
+  'incremental-new-links': INCREMENTAL,
+  light: 'Light: only docs, lockfiles or images changed since the last reviewed commit; the files and checks below cover just those.',
+  'base-drift': 'Base drift: the PR is unchanged since the last reviewed commit and only the base branch moved, so the files and checks below cover no PR changes.',
+};
+
 function tierSection(tier, driftFiles) {
   if (!tier) return [];
   const out = ['## Review tier', tier];
   if (tier === 'none') out.push('', 'No review ran: nothing in the PR changed since the last reviewed commit.');
-  else if (tier !== 'full') out.push('', 'Incremental: the files and checks below cover only changes since the last reviewed commit.');
+  else if (TIER_NOTE[tier]) out.push('', TIER_NOTE[tier]);
   if (tier === 'base-drift') out.push('', 'Counterpart files changed on the base branch:', list(driftFiles.slice(0, MAX_PER_CHECK)));
   return [...out, ''];
 }
@@ -134,6 +142,13 @@ function tierOutput(tier, maxTurns) {
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `tier=${tier}\nmax_turns=${maxTurns}\n`);
 }
 
+const UNAVAILABLE_RE = /(^|\s)unavailable(:|$)/;
+
+// Checks that did not run: they threw, or reported themselves unavailable.
+export function unavailableChecks(results) {
+  return results.filter((r) => r.error || (r.facts ?? []).some((f) => UNAVAILABLE_RE.test(String(f.note ?? '')))).map((r) => r.check);
+}
+
 // The snapshot (STATE_FILE) is a copy outside the model's --add-dir: publish
 // trusts only this one, since the model can Write OUT/state.json.
 function writeOutputs({ out, stateFile }, text, state) {
@@ -154,8 +169,8 @@ function writeOutputs({ out, stateFile }, text, state) {
 
 // This run's routed link types (the files it considered) ride in both
 // OUT/state.json and the snapshot; publish adds them to linkTypesSeen on success.
-export function recordRun(state, tier, routeResult) {
-  return Object.assign(state, { tier, maxTurns: MAX_TURNS[tier], runLinkTypes: [...(routeResult?.linkTypes ?? [])] });
+export function recordRun(state, tier, routeResult, results = []) {
+  return Object.assign(state, { tier, maxTurns: MAX_TURNS[tier], runLinkTypes: [...(routeResult?.linkTypes ?? [])], unavailableChecks: unavailableChecks(results) });
 }
 
 async function main() {
@@ -207,13 +222,13 @@ async function main() {
     mkdirSync(out, { recursive: true });
     if (tier !== 'none') writeMaterial(out, { baseSha: BASE_SHA, headSha: HEAD_SHA, tier, incrementText: inc.incrementText, cwd: repoRoot });
     const routeResult = route(factPaths);
-    recordRun(state, tier, routeResult);
+    recordRun(state, tier, routeResult, results);
     const text = buildFacts({ files, routeResult, results, prContext, title: PR_TITLE, tier, driftFiles: inc.driftFiles });
     writeOutputs(run, text, state);
   } catch (err) {
     process.stdout.write(`facts failed: ${err?.name ?? 'Error'}\n`);
     const empty = { packages: [], linkTypes: [], classes: [] };
-    recordRun(state, 'full', empty);
+    recordRun(state, 'full', empty, [{ check: 'facts', error: err }]);
     try {
       mkdirSync(out, { recursive: true });
       writeMaterial(out, { baseSha: BASE_SHA, headSha: HEAD_SHA, tier: 'full', cwd: process.cwd() });

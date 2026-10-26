@@ -10,7 +10,7 @@ import { securityNeedles, mentions, touchesSecurityFile } from './needles.mjs';
 export { validateFindings, securityPointer };
 
 export const MAX_BODY = 60000;
-const MAX_MARKER = 30000;
+export const MAX_MARKER = 30000;
 const MAX_FIELD = 1500;
 const TRUNC = '(truncated)';
 const WITHHELD = '(some narrative withheld: security)';
@@ -91,11 +91,29 @@ export function withholdNarrative(narrative, findings, needles = securityNeedles
   return neutralise(redact(text));
 }
 
-function countsHeadline(findings) {
-  const parts = SEVERITIES.map((s) => [s, findings.filter((f) => f.severity === s).length])
+function bySeverity(items) {
+  const parts = SEVERITIES.map((s) => [s, items.filter((f) => f.severity === s).length])
     .filter(([, n]) => n > 0)
     .map(([s, n]) => `${n} ${s}`);
-  return parts.length ? `${parts.join(', ')}.` : 'No issues found.';
+  return parts.length ? ` (${parts.join(', ')})` : '';
+}
+
+const TIERS = new Set(['full', 'incremental', 'incremental-new-links', 'light', 'base-drift', 'none']);
+const tierName = (t) => (TIERS.has(t) ? t : 'unknown');
+const CHECK_RE = /^[A-Za-z][A-Za-z0-9-]{0,39}$/;
+
+// This run's findings and the open entries carried from earlier reviews are
+// counted apart; "No issues found" only when nothing at all is open.
+function headline(sha, tier, list, carried) {
+  const head = `Reviewed \`${clean(sha, 7)}\` (${tierName(tier)}):`;
+  if (!list.length && !carried.length) return `${head} No issues found.`;
+  return `${head} ${list.length} reported this run${bySeverity(list)}; ${carried.length} still open from earlier reviews${bySeverity(carried)}.`;
+}
+
+// Fixed text: the tier and the names of pre-checks facts could not run.
+function tierLine(state) {
+  const checks = (Array.isArray(state?.unavailableChecks) ? state.unavailableChecks : []).filter((c) => typeof c === 'string' && CHECK_RE.test(c)).slice(0, 20);
+  return `Tier: \`${tierName(state?.tier)}\`; unavailable pre-checks: ${checks.length ? checks.join(', ') : 'none'}.`;
 }
 
 function groupBySeverity(items, render) {
@@ -182,7 +200,8 @@ export function renderSummary({ state, findings, narrative, outcome, ledger, rea
   const head = [
     SUMMARY_MARKER,
     '## PR review (advisory)',
-    `Reviewed commit \`${clean(sha, 7)}\`. ${countsHeadline(list)}`,
+    headline(sha, state?.tier, list, carried),
+    tierLine(state),
     ADVISORY,
     ...notices,
   ].join('\n\n');

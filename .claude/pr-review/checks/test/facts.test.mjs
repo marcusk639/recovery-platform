@@ -59,11 +59,14 @@ test('OUT and STATE_FILE are both required: no fallback to "." or RUNNER_TEMP', 
   assert.equal(runPaths({}), null);
 });
 
-test('incremental tier is stated and drift files listed', () => {
+test('each non-full tier states its own scope; base-drift lists drift files', () => {
   const out = buildFacts({ ...base, tier: 'base-drift', driftFiles: ['homegroups/mobile/src/a.ts'] });
   assert.match(out, /## Review tier\nbase-drift/);
-  assert.match(out, /only changes since the last reviewed commit/);
+  assert.match(out, /Base drift: the PR is unchanged/);
+  assert.doesNotMatch(out, /Incremental:/);
   assert.match(out, /- homegroups\/mobile\/src\/a\.ts/);
+  assert.match(buildFacts({ ...base, tier: 'light' }), /Light: only docs, lockfiles or images changed/);
+  assert.match(buildFacts({ ...base, tier: 'incremental' }), /only changes since the last reviewed commit/);
   assert.doesNotMatch(buildFacts({ ...base, tier: 'full' }), /only changes since/);
 });
 
