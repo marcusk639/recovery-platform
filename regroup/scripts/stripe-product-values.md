@@ -150,6 +150,22 @@ old one is live delivers every event twice. Rotate from the Dashboard instead:
    `gcloud run revisions describe <revision> --region us-central1 --project phoenix-cleanhouse`,
    and that deliveries return 200 before the old secret expires.
 
+The two endpoints have different secrets. Copy each one from the page of the
+endpoint whose URL ends in `/stripeEvents` or `/handleStripeConnectWebhook`, and
+before redeploying check that the two stored values differ (this prints no
+secret):
+
+```bash
+for s in STRIPE_WEBHOOK_SECRET STRIPE_CONNECT_WEBHOOK_SECRET; do
+  gcloud secrets versions access latest --secret $s --project phoenix-cleanhouse | shasum -a 256 | cut -c1-12
+done   # two different hashes expected
+```
+
+If they match, one endpoint will reject every event once its old secret
+expires. After the rotation, disable the superseded versions with
+`gcloud secrets versions disable <n> --secret <name> --project phoenix-cleanhouse`,
+but only versions that no running revision uses.
+
 ---
 
 ## 5. Keys & Secrets (Dashboard-only — cannot be scripted)
