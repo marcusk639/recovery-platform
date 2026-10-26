@@ -29,11 +29,8 @@ FAIL=0
 # whsec_/sk_test_/rk_live_ added 2026-09-28: a doc-vs-code audit found two live
 # Stripe webhook signing secrets committed in regroup/scripts/stripe-product-values.md
 # (commit 5b9fbd7) — a class this scan could not previously catch.
-#
-# That file is deliberately NOT allowlisted: any commit that touches it is
-# blocked until the secrets are scrubbed, and the scrubbing commit itself passes
-# (the scan reads staged content). The secrets stay in git history regardless;
-# rotating them is what closes the exposure.
+# They were scrubbed from the file on 2026-10-26 but remain in git history of a
+# public repo, so rotating them in Stripe is what closes the exposure.
 SECRET_PATTERNS='sk-or-v1-[A-Za-z0-9]{16,}|sk-ant-[A-Za-z0-9_-]{16,}|sk_live_[A-Za-z0-9]{16,}|sk_test_[A-Za-z0-9]{16,}|rk_live_[A-Za-z0-9]{16,}|whsec_[A-Za-z0-9]{16,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|-----BEGIN [A-Z ]*PRIVATE KEY-----|AIza[0-9A-Za-z_-]{35}'
 ALLOWLIST='GoogleService-Info[^/]*\.plist$|google-services[^/]*\.json$|AndroidManifest\.xml$|\.test\.(ts|tsx|js)$|__tests__/|package-lock\.json$|\.env\.example$|env\.example$|^regroup/web/src/environments/environment(\.prod)?\.ts$|^homegroups/web/src/lib/firebase\.js$|^homegroups/mobile/ios/RecoveryConnect/AppDelegate\.mm$'
 

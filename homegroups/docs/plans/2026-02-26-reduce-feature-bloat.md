@@ -121,7 +121,7 @@ git commit -m "fix: privacy defaults to false for sobrietyDate and phoneNumber i
 
 ### Task 2: Remove hardcoded Google Maps API key (CRITICAL — extractable from APK)
 
-**Why:** The key `AIzaSyAyjHVwL4AcgLGdo1O7mmRFJLLHgpNOC5A` in source can be extracted from the built APK via `strings` or decompilation. The comment in the file even acknowledges it should not be there.
+**Why:** The key `<GOOGLE_MAPS_API_KEY>` in source can be extracted from the built APK via `strings` or decompilation. The comment in the file even acknowledges it should not be there.
 
 **Files:**
 
@@ -142,7 +142,7 @@ Open `mobile/src/components/groups/LocationPicker.tsx`. Find line ~24 where the 
 
 ```typescript
 // BEFORE (hardcoded):
-const GOOGLE_MAPS_API_KEY = "AIzaSyAyjHVwL4AcgLGdo1O7mmRFJLLHgpNOC5A";
+const GOOGLE_MAPS_API_KEY = "<GOOGLE_MAPS_API_KEY>";
 
 // AFTER (from env):
 import { GOOGLE_MAPS_API_KEY } from "@env";
@@ -153,7 +153,7 @@ import { GOOGLE_MAPS_API_KEY } from "@env";
 Add to `mobile/.env` (never commit this file — it should already be in .gitignore):
 
 ```
-GOOGLE_MAPS_API_KEY=AIzaSyAyjHVwL4AcgLGdo1O7mmRFJLLHgpNOC5A
+GOOGLE_MAPS_API_KEY=<GOOGLE_MAPS_API_KEY>
 ```
 
 Add to `mobile/.env.example` (committed, no real value):
