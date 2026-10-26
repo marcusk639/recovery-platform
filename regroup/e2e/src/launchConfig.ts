@@ -166,3 +166,18 @@ export function overlaysFromArgv(argv: string[]): EnvOverlays {
   if (!file || file.startsWith('--')) throw new Error('--staging-env needs a value');
   return { 'e2e-staging': parseEnvFragment(fs.readFileSync(file, 'utf8')) };
 }
+
+/**
+ * gen-env without --staging-env rewrites .env.regroup-e2e with no price ids.
+ * Warn rather than fail; only checks whether the default fragment exists, never reads it.
+ */
+export function stagingOverlayWarning(
+  overlays: EnvOverlays,
+  defaultFragment: string,
+): string | undefined {
+  if (overlays['e2e-staging']) return undefined;
+  const state = fs.existsSync(defaultFragment)
+    ? `${defaultFragment} exists; to include it run: npm run e2e:gen-env -- --staging-env '${defaultFragment.replace(/'/g, `'\\''`)}'`
+    : `${defaultFragment} not found (run e2e:stripe-sandbox-setup to create it), then pass it with --staging-env`;
+  return `Warning: .env.regroup-e2e generated without --staging-env, so it has no Stripe price ids. ${state}.`;
+}

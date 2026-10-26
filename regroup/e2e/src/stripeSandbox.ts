@@ -299,6 +299,14 @@ async function listEndpoints(stripe: Stripe): Promise<Stripe.WebhookEndpoint[]> 
   return all;
 }
 
+const AFTER_RERUN = '(then re-run the printed secrets:set commands and redeploy).';
+const RECREATE_ONE =
+  'Delete this endpoint in the Stripe Dashboard for this sandbox account, then rerun; ' +
+  `the script recreates it and stores the new signing secret ${AFTER_RERUN}`;
+const RECREATE_OFFENDERS =
+  'Delete these endpoint(s) in the Stripe Dashboard for this sandbox account, then rerun; ' +
+  `the script recreates the e2e endpoints and stores the new signing secrets ${AFTER_RERUN}`;
+
 function assertEndpointMatches(
   endpoint: Stripe.WebhookEndpoint,
   events: readonly string[],
@@ -310,13 +318,14 @@ function assertEndpointMatches(
   const flag = (endpoint as { connect?: boolean }).connect;
   if (endpoint.status !== 'enabled' || have !== want || (flag !== undefined && flag !== connect)) {
     throw new Error(
-      `Existing webhook endpoint ${endpoint.id} does not match the e2e spec; not updating.`,
+      `Existing webhook endpoint ${endpoint.id} (${endpoint.url}) does not match the e2e spec; ` +
+        `not updating. ${RECREATE_ONE}`,
     );
   }
   if (endpoint.api_version && endpoint.api_version !== STRIPE_API_VERSION) {
     throw new Error(
-      `Existing webhook endpoint ${endpoint.id} has api_version ${endpoint.api_version}, ` +
-        `expected ${STRIPE_API_VERSION}; not updating.`,
+      `Existing webhook endpoint ${endpoint.id} (${endpoint.url}) has api_version ` +
+        `${endpoint.api_version}, expected ${STRIPE_API_VERSION}; not updating. ${RECREATE_ONE}`,
     );
   }
 }
@@ -365,7 +374,9 @@ export async function assertSandboxHygiene(stripe: Stripe): Promise<void> {
   );
   if (offenders.length > 0) {
     const list = offenders.map((e) => `${e.id} -> ${e.url}`).join(', ');
-    throw new Error(`Sandbox has enabled webhook endpoints outside the e2e allowlist: ${list}`);
+    throw new Error(
+      `Sandbox has enabled webhook endpoints outside the e2e allowlist: ${list}. ${RECREATE_OFFENDERS}`,
+    );
   }
 }
 
