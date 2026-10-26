@@ -91,9 +91,13 @@ jest.mock("firebase-functions/v2/https", () => {
   const actual = jest.requireActual("firebase-functions/v2/https");
   return {
     ...actual,
-    onRequest: jest.fn((_optsOrHandler: any, handler?: any) =>
-      typeof _optsOrHandler === "function" ? _optsOrHandler : handler,
-    ),
+    onRequest: jest.fn((_optsOrHandler: any, handler?: any) => {
+      if (typeof _optsOrHandler === "function") return _optsOrHandler;
+      // Recorded on globalThis: onRequest runs at import time, before any
+      // beforeEach jest.clearAllMocks() could wipe calls recorded on the mock.
+      ((globalThis as any).__connectOnRequestOptions ??= []).push(_optsOrHandler);
+      return handler;
+    }),
   };
 });
 
@@ -515,5 +519,18 @@ describe("universal", () => {
     expect(new Date(responseArg.timestamp).toISOString()).toBe(
       responseArg.timestamp,
     );
+  });
+});
+
+describe("Connect redirect handlers — public invoker", () => {
+  // Stripe sends a house operator's browser to these URLs, unauthenticated. With
+  // no allUsers invoker on the Cloud Run service the browser gets 403 before the
+  // handler runs (stripeConnectReauth did, through 2026-10-26).
+  it("stripeConnectReauth and stripeConnectReturn both declare invoker: public", () => {
+    const opts = ((globalThis as any).__connectOnRequestOptions ?? []) as Array<{
+      invoker?: unknown;
+    }>;
+    expect(opts).toHaveLength(2);
+    for (const o of opts) expect(o.invoker).toBe("public");
   });
 });

@@ -2666,3 +2666,20 @@ describe("webhook diagnostics", () => {
     });
   });
 });
+
+describe("webhook handlers — public invoker", () => {
+  // Stripe calls these URLs unauthenticated. Without `invoker: "public"` in the
+  // options, a deploy can leave the Cloud Run service with no allUsers invoker
+  // binding, and Stripe gets 403 before the handler runs: handleStripeConnectWebhook
+  // answered every delivery with 403 from at least 2026-09-29 to 2026-10-26.
+  it.each([
+    ["stripeWebhook (deployed as stripeEvents)", "STRIPE_WEBHOOK_SECRET"],
+    ["handleStripeConnectWebhook", "STRIPE_CONNECT_WEBHOOK_SECRET"],
+  ])("%s declares invoker: public", (_name, secret) => {
+    const opts = recordedOnRequestOptions().find((o) =>
+      (o.secrets ?? []).includes(secret),
+    ) as { invoker?: unknown } | undefined;
+    expect(opts).toBeDefined();
+    expect(opts!.invoker).toBe("public");
+  });
+});
