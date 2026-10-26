@@ -39,16 +39,11 @@ export function candidatePaths(findings, texts = []) {
   return [...out].filter(Boolean);
 }
 
-// The candidates that hash to a prior security fileId, as needles (path + basename).
+// The candidates that hash to a prior security fileId, as needles (full paths;
+// mentions() matches their basename only as a bare token).
 export function hashedNeedles(candidates, ids, key) {
   if (!key || !ids?.size) return [];
-  const out = new Set();
-  for (const c of candidates) {
-    if (!ids.has(fileId(c, key))) continue;
-    out.add(c);
-    out.add(c.split('/').pop());
-  }
-  return [...out].filter(Boolean);
+  return [...new Set(candidates.filter((c) => c && ids.has(fileId(c, key))))];
 }
 
 export const isPriorSecurityPath = (path, ids, key) => Boolean(key && ids?.size && ids.has(fileId(path, key)));

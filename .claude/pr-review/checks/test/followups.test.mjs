@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { publish } from '../publish.mjs';
 import { opaqueId } from '../lib/ledger.mjs';
 import { fileId } from '../lib/fileids.mjs';
+import { mentions, touchesSecurityFile } from '../lib/needles.mjs';
 
 const HEAD = 'c'.repeat(40);
 const BASE = 'd'.repeat(40);
@@ -118,4 +119,48 @@ test('the review prompt points the model at REVIEW.md and the same OUT the model
   assert.match(step, /prompt: \|\n\s+Follow \.claude\/pr-review\/REVIEW\.md\. OUT=\$\{\{ runner\.temp \}\}\/pr-review\./);
   assert.match(step, /--add-dir \$\{\{ runner\.temp \}\}\/pr-review\n/);
   assert.match(step, /Write\(\/\$\{\{ runner\.temp \}\}\/pr-review\/\*\*\)/);
+});
+
+// Basename needles match only as a bare token; a location or slug file must
+// equal the security file exactly. Prior security file: regroup/functions/src/index.ts.
+const IDX = 'regroup/functions/src/index.ts';
+const OTHER_IDX = 'regroup/mobile/src/screens/index.ts';
+const WEB_IDX = 'homegroups/web/src/index.tsx';
+const priorIdx = { id: opaqueId(`c1:${IDX}:charge`, KEY), severity: 'High', status: 'open', security: true, runsSinceResolved: 0, fileIds: [fileId(IDX, KEY)] };
+const idxSnap = (over = {}) => snap({ ledger: [priorIdx], changedFiles: [A, IDX, OTHER_IDX, WEB_IDX], ...over });
+
+test('mentions: a basename matches only as a bare token; path suffixes and the full path still match', () => {
+  const n = [IDX];
+  for (const t of ['see index.ts.', 'in `index.ts`:', 'functions/src/index.ts here', 'https://x/blob/main/regroup/functions/src/index.ts#L3', 'INDEX.TS']) assert.equal(mentions(t, n), true, t);
+  for (const t of ['other/index.ts', OTHER_IDX, WEB_IDX, 'index.tsx', 'my-index.ts', 'index.ts.bak', `${IDX}x`]) assert.equal(mentions(t, n), false, t);
+});
+
+test('touchesSecurityFile: a location or slug file must be the security file itself, not one sharing its basename', () => {
+  const n = [IDX];
+  const other = finding(`c9:${OTHER_IDX}:load`, { locations: [{ file: OTHER_IDX, line: 3, side: 'changed' }] });
+  assert.equal(touchesSecurityFile(other, n), false);
+  const same = finding(`c9:${A}:load`, { locations: [{ file: IDX, line: 3, side: 'changed' }] });
+  assert.equal(touchesSecurityFile(same, n), true);
+  assert.equal(touchesSecurityFile(finding(`c9:${IDX}:load`), n), true, 'slug file');
+});
+
+test('summary: narrative naming other index files is kept; a bare index.ts is withheld', async () => {
+  const narrative = `## Checked and fine\n- ${WEB_IDX} renders\n- ${OTHER_IDX} exports ok\n- other/index.ts unchanged\n- index.ts wiring fine`;
+  const { summary } = await run({ inline: [], narrative, snapshot: idxSnap() });
+  assert.match(summary, /homegroups\/web\/src\/index\.tsx renders/);
+  assert.match(summary, /screens\/index\.ts exports ok/);
+  assert.match(summary, /other\/index\.ts unchanged/);
+  assert.doesNotMatch(summary, /index\.ts wiring fine/);
+});
+
+test('a finding located in a different index.ts is public and gets its inline comment', async () => {
+  const f = finding(`c9:${OTHER_IDX}:load`, { title: 'Screens index drops an export', locations: [{ file: OTHER_IDX, line: 3, side: 'changed' }] });
+  const { summary, posts } = await run({ findings: [f], inline: [entry(f.slug, { path: OTHER_IDX })], snapshot: idxSnap() });
+  assert.match(summary, /Screens index drops an export/);
+  assert.equal(posts.length, 1);
+});
+
+test('a prior security file this PR does not change gives no basename needle', async () => {
+  const { summary } = await run({ inline: [], narrative: '## Checked and fine\n- index.ts wiring fine', snapshot: idxSnap({ changedFiles: [A] }) });
+  assert.match(summary, /index\.ts wiring fine/);
 });
