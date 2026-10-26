@@ -1,7 +1,7 @@
 // Keyed hashes of security findings' files ("fileIds"), carried in the public
 // ledger instead of paths. A later run hashes the paths it sees (finding
 // locations, slug file parts, path-like narrative tokens) and treats any match
-// as a security file, so R12 withholding outlasts the run that found it.
+// as a security file, so withholding outlasts the run that found it.
 import { ID_RE, opaqueId } from './ids.mjs';
 import { normalise, securityNeedles } from './needles.mjs';
 
