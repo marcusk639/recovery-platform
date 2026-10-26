@@ -31,19 +31,23 @@ export function normalise(s) {
   return t.replace(/\\/g, '/').toLowerCase();
 }
 
-// One path-like string, canonical: normalised and trimmed, '//' collapsed,
-// './' segments dropped, leading './', '../' and '/' (and a file:// scheme or a
-// drive letter) stripped, trailing sentence dots removed. unanchored: it was
-// absolute or climbed with '../', so where it starts in the repo is unknown.
+// One path-like string, canonical: normalised and trimmed; a line (:N, :N:N),
+// anchor (#...) or query (?...) suffix and a trailing '~' backup marker
+// dropped; '//' collapsed; '.' and '..' segments resolved (posix, never above
+// the start); a leading '/', '~/', file:// scheme or drive letter stripped;
+// trailing sentence dots removed. unanchored: it was absolute, home-relative
+// or climbed above its start, so where it begins in the repo is unknown.
 function parseNormalised(t) {
-  let s = t.trim().replace(/^file:\/\//, '');
-  const absolute = s.startsWith('/') || /^[a-z]:\//.test(s);
-  s = s.replace(/^[a-z]:\//, '/');
-  const parts = s.split('/').filter((x) => x !== '' && x !== '.');
+  let s = t.trim().replace(/^file:\/\//, '').replace(/[#?].*$/, '').replace(/:\d+(:\d+)?$/, '').replace(/~+$/, '');
+  const absolute = s.startsWith('/') || s.startsWith('~/') || /^[a-z]:\//.test(s);
+  s = s.replace(/^~\//, '/').replace(/^[a-z]:\//, '/');
+  const parts = [];
   let up = false;
-  while (parts[0] === '..') {
-    parts.shift();
-    up = true;
+  for (const x of s.split('/')) {
+    if (x === '' || x === '.') continue;
+    if (x !== '..') parts.push(x);
+    else if (parts.length) parts.pop();
+    else up = true;
   }
   if (parts.length) parts[parts.length - 1] = parts[parts.length - 1].replace(/\.+$/, '');
   return { parts: parts.filter(Boolean), unanchored: absolute || up };
@@ -57,10 +61,11 @@ export const pathKey = (p) => parsePath(p).parts.join('/');
 // The path and each shorter suffix of it at a '/' boundary.
 export const suffixPaths = (parts) => parts.map((_, k) => parts.slice(k).join('/'));
 
-// Path-like tokens of a text (holding a '.' or '/'), parsed. Token characters
-// stop at whitespace, quotes, ':', '#', '@', brackets of prose and the like, so
-// index.ts:12, `src/index.ts` and @src/index.ts all yield the path itself.
-const TOKEN_RE = /[a-z0-9_.\-/[\]+~$%]+/g;
+// Path-like tokens of a text (holding a '.' or '/'), parsed. Tokens stop at
+// whitespace, quotes, ':', '#', '@', brackets, parentheses, '+', '$' and '~',
+// so [index.ts](u), index.ts:12, `src/index.ts` and ~/src/index.ts all yield
+// the path itself (a '~/' start counts as absolute, like '/').
+const TOKEN_RE = /[a-z0-9_.\-/%]+/g;
 export function pathTokens(text) {
   return (normalise(text).match(TOKEN_RE) ?? []).filter((t) => /[./]/.test(t)).map(parseNormalised);
 }
@@ -83,18 +88,25 @@ function commonSuffix(a, b) {
 // '/'-boundary suffix of the other (src/index.ts, /repo/<path>), or an
 // unanchored path shares at least its last two segments (/x/src/index.ts).
 // other/index.ts or index.tsx never names src/index.ts.
+// A root-level file (one segment) is named only by itself: a relative nested
+// path sharing its basename (regroup/firebase.json) is a different file.
 function names(p, n) {
   if (!p.parts.length || !n.length) return false;
   const k = commonSuffix(p.parts, n);
+  if (n.length === 1 && !p.unanchored) return k === 1 && p.parts.length === 1;
   return k === n.length || k === p.parts.length || (p.unanchored && k >= 2);
 }
 
 const WORD = /[a-z0-9_]/;
 
 // The full path anywhere (even inside text the tokens split), unless continued
-// on the right: a word character next, or '.'/'-' then one (index.ts.bak).
+// on the right: a word character next, or '.'/'-' then one (index.ts.bak). A
+// root-level (one-segment) path must also not continue a longer path on the left.
+const PATH_CHAR = /[a-z0-9_.\-/]/;
 function occurs(t, n) {
+  const root = !n.includes('/');
   for (let i = t.indexOf(n); i !== -1; i = t.indexOf(n, i + 1)) {
+    if (root && i > 0 && PATH_CHAR.test(t[i - 1])) continue;
     const c = t[i + n.length] ?? '';
     if (!WORD.test(c) && !((c === '.' || c === '-') && WORD.test(t[i + n.length + 1] ?? ''))) return true;
   }
