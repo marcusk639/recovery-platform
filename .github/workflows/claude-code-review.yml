@@ -10,8 +10,10 @@ concurrency:
 
 jobs:
   review:
-    # Skip drafts, agent-authored e2e-fix/* PRs (they never get the
-    # secret-bearing review job), forks and Dependabot (its runs get no secrets).
+    # Skipped for drafts; for agent-authored e2e-fix/* PRs, whose head an agent
+    # wrote, so it must never steer this secret-bearing job; and for fork and
+    # Dependabot PRs, whose pull_request runs get no secrets, so publish could
+    # not post anyway.
     if: >-
       ${{ !github.event.pull_request.draft
       && !startsWith(github.head_ref, 'e2e-fix/')
