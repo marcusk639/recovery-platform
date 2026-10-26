@@ -20,6 +20,8 @@ const FAKE_SK_TEST = 'sk' + '_test_' + 'x'.repeat(24);
 const FAKE_AKIA = 'AKIA' + 'B'.repeat(16);
 const FAKE_GH = 'gh' + 'p_' + 'c'.repeat(24);
 const FAKE_PEM = '-----BEGIN ' + 'RSA PRIVATE KEY-----';
+const FAKE_GH_PAT = 'github' + '_pat_' + 'D'.repeat(11) + '_' + 'e'.repeat(30);
+const FAKE_GHR = 'gh' + 'r_' + 'f'.repeat(24);
 
 const file = (over) => ({ file: 'a.ts', oldFile: 'a.ts', status: 'M', binary: false, added: [], removed: [], ...over });
 const add = (...texts) => texts.map((text, i) => ({ line: i + 1, text }));
@@ -46,7 +48,7 @@ test('redact truncates a secret to its first 6 chars plus ellipsis', () => {
 });
 
 test('redact covers each pattern family and is pure on clean text', () => {
-  for (const s of [FAKE_SK_TEST, FAKE_AKIA, FAKE_GH, FAKE_PEM]) {
+  for (const s of [FAKE_SK_TEST, FAKE_AKIA, FAKE_GH, FAKE_PEM, FAKE_GH_PAT, FAKE_GHR]) {
     const out = redact('v ' + s + ' end');
     assert.ok(!out.includes(s), s.slice(0, 8));
     assert.ok(out.includes('…'));
@@ -146,13 +148,13 @@ test('runVerifyDiff passes the merge-base of base and head, not base', () => {
   assert.deepEqual(bad.map((x) => x.note), ['verify-diff unavailable']);
 });
 
-test('runVerifyDiff: exit 1 yields stdout lines; exit 0 and missing yield []', () => {
+test('runVerifyDiff: exit 1 yields stdout lines; exit 0 yields []; a missing script is unavailable', () => {
   const f = runVerifyDiff('abc', root, join(root, 'fail.sh'));
   assert.equal(f.length, 2);
   assert.equal(f[0].check, 'verify-diff');
   assert.equal(f[0].note, '[TAG] violation one');
   assert.deepEqual(runVerifyDiff('abc', root, join(root, 'ok.sh')), []);
-  assert.deepEqual(runVerifyDiff('abc', root, join(root, 'nope.sh')), []);
+  assert.deepEqual(runVerifyDiff('abc', root, join(root, 'nope.sh')).map((x) => x.note), ['verify-diff unavailable']);
 });
 
 test('redact removes a PEM body, with and without an END line', () => {

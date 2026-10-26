@@ -282,3 +282,13 @@ test('disguised security file names in a non-security title are withheld', () =>
     assert.ok(decodeLedger(body).ledger.find((x) => x.id === opaqueId(f.slug, KEY)).withheld, disguise);
   }
 });
+
+test('an upper-case HEAD_SHA is lower-cased, so later comparisons still match', () => {
+  const body = composeBody({ state: state(), findingsText: findingsText([]), narrative: '', outcome: 'success', headSha: HEAD.toUpperCase(), baseSha: BASE.toUpperCase(), idKey: KEY });
+  const p = decodeLedger(body);
+  assert.equal(p.lastReviewedSha, HEAD);
+  assert.equal(p.lastBaseSha, BASE);
+  assert.match(body, /`ccccccc`/);
+  const none = composeBody({ state: state({ tier: 'none', lastReviewedSha: 'A'.repeat(40) }), findingsText: null, narrative: '', outcome: 'skipped', headSha: HEAD.toUpperCase(), baseSha: BASE, idKey: KEY });
+  assert.equal(decodeLedger(none).lastReviewedSha, HEAD);
+});

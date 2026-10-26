@@ -85,3 +85,31 @@ deleted file mode 100644
     { line: 2, text: 'two' },
   ]);
 });
+
+// A PR can mark any file binary in .gitattributes (`-diff`); its content must
+// still reach the pre-checks and the model's pr.diff.
+test('prDiffText shows content of a file a PR marks -diff in .gitattributes', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { prDiffText } = await import('../lib/diff.mjs');
+  const root = mkdtempSync(join(tmpdir(), 'difftext-'));
+  const g = (...a) => execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...a], { cwd: root, encoding: 'utf8' }).trim();
+  try {
+    g('init', '-q', '-b', 'main');
+    writeFileSync(join(root, 'seed.txt'), 's\n');
+    g('add', '-A');
+    g('commit', '-q', '-m', 'base');
+    const base = g('rev-parse', 'HEAD');
+    writeFileSync(join(root, '.gitattributes'), 'hidden.ts -diff\n');
+    writeFileSync(join(root, 'hidden.ts'), 'export const hiddenValue = 1;\n');
+    g('add', '-A');
+    g('commit', '-q', '-m', 'pr');
+    const text = prDiffText(base, g('rev-parse', 'HEAD'), root);
+    assert.match(text, /\+export const hiddenValue = 1;/);
+    assert.doesNotMatch(text, /Binary files/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

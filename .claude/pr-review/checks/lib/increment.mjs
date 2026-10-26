@@ -11,7 +11,7 @@ const lines = (s) => s.split('\n').filter(Boolean);
 // Exact-diff hash (not patch-id: that strips whitespace, hiding re-indents).
 function diffHash(range, cwd) {
   try {
-    const diff = git(['diff', '--no-color', '-M', range], cwd);
+    const diff = git(['diff', '--text', '--no-textconv', '--no-color', '-M', range], cwd);
     return diff ? createHash('sha256').update(diff).digest('hex') : null;
   } catch {
     return null;
@@ -22,7 +22,7 @@ function baseDriftChanged(lastBaseSha, baseSha, prLinkTypes, cwd) {
   if (!lastBaseSha || lastBaseSha === baseSha) return false;
   try {
     const patterns = TABLE.filter((e) => prLinkTypes.includes(e.linkType)).flatMap((e) => e.counterparts ?? []);
-    const drift = lines(git(['diff', '--name-only', lastBaseSha, baseSha], cwd));
+    const drift = lines(git(['diff', '--text', '--no-textconv', '--name-only', lastBaseSha, baseSha], cwd));
     return drift.filter((f) => patterns.some((p) => matches(f, p)));
   } catch {
     return true; // cannot tell: treat as changed
@@ -33,7 +33,7 @@ function baseDriftChanged(lastBaseSha, baseSha, prLinkTypes, cwd) {
 export function computeIncrement({ lastReviewedSha, lastBaseSha, baseSha, headSha, prPaths, cwd }) {
   const last = SHA_RE.test(lastReviewedSha ?? '') ? lastReviewedSha : null;
   const lastBase = SHA_RE.test(lastBaseSha ?? '') ? lastBaseSha : null;
-  const none = { reachable: false, incrementFiles: [], incrementDiff: [], incrementText: '', incrementLinkTypes: [], prPatchIdUnchanged: false, baseDriftCounterpartsChanged: false, driftFiles: [] };
+  const none = { reachable: false, incrementFiles: [], incrementDiff: [], incrementText: '', incrementLinkTypes: [], prDiffUnchanged: false, baseDriftCounterpartsChanged: false, driftFiles: [] };
   if (!last) return none;
   try {
     git(['merge-base', '--is-ancestor', last, headSha], cwd);
@@ -47,15 +47,15 @@ export function computeIncrement({ lastReviewedSha, lastBaseSha, baseSha, headSh
     let inPr = () => true;
     try {
       const prSet = new Set([
-        ...lines(git(['diff', '--name-only', `${baseSha}...${headSha}`], cwd)),
-        ...lines(git(['diff', '--name-only', `${lastBase}...${last}`], cwd)),
+        ...lines(git(['diff', '--text', '--no-textconv', '--name-only', `${baseSha}...${headSha}`], cwd)),
+        ...lines(git(['diff', '--text', '--no-textconv', '--name-only', `${lastBase}...${last}`], cwd)),
       ]);
       inPr = (f) => prSet.has(f);
     } catch {
       // unfiltered
     }
-    const incrementFiles = lines(git(['diff', '--name-only', `${last}..${headSha}`], cwd)).filter(inPr);
-    const rawIncrement = git(['diff', '-M', '--no-color', `${last}..${headSha}`], cwd);
+    const incrementFiles = lines(git(['diff', '--text', '--no-textconv', '--name-only', `${last}..${headSha}`], cwd)).filter(inPr);
+    const rawIncrement = git(['diff', '--text', '--no-textconv', '-M', '--no-color', `${last}..${headSha}`], cwd);
     const incrementDiff = parseUnifiedDiff(rawIncrement).filter((f) => inPr(f.file));
     // The same filtered increment as text, for the model's OUT/increment.diff.
     const incrementText = filterDiffText(rawIncrement, inPr);
@@ -70,7 +70,7 @@ export function computeIncrement({ lastReviewedSha, lastBaseSha, baseSha, headSh
       incrementDiff,
       incrementText,
       incrementLinkTypes: route(incrementFiles).linkTypes,
-      prPatchIdUnchanged: Boolean(before && after && before === after),
+      prDiffUnchanged: Boolean(before && after && before === after),
       baseDriftCounterpartsChanged: drift === true || (Array.isArray(drift) && drift.length > 0),
       driftFiles: Array.isArray(drift) ? drift : [],
     };

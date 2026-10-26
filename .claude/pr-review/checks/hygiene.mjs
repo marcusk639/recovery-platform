@@ -84,8 +84,8 @@ export function checkSelfEdit(files) {
 export function runVerifyDiff(baseSha, repoRoot, scriptPath, headSha) {
   if (!scriptPath) return [];
   const script = resolve(repoRoot, scriptPath);
-  if (!existsSync(script)) return [];
   const unavailable = () => [fact('verify-diff', 'verify-diff.sh', null, 'verify-diff unavailable')];
+  if (!existsSync(script)) return unavailable();
   let since = baseSha;
   if (headSha) {
     try {

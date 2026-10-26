@@ -40,7 +40,7 @@ test('increment lists only files after the last reviewed sha', () => {
   assert.deepEqual(r.incrementFiles, ['README.md']);
   assert.deepEqual(r.incrementDiff.map((f) => f.file), ['README.md']);
   assert.deepEqual(r.incrementLinkTypes, []);
-  assert.equal(r.prPatchIdUnchanged, false);
+  assert.equal(r.prDiffUnchanged, false);
 });
 
 test('whitespace-only re-indent with same base is not unchanged', () => {
@@ -51,7 +51,7 @@ test('whitespace-only re-indent with same base is not unchanged', () => {
   const w2 = commit('w2');
   const r = computeIncrement(args({ lastReviewedSha: w1, lastBaseSha: SHAS.base0, baseSha: SHAS.base0, headSha: w2 }));
   assert.deepEqual(r.incrementFiles, ['recovery-api/src/callable/x.yml']);
-  assert.equal(r.prPatchIdUnchanged, false);
+  assert.equal(r.prDiffUnchanged, false);
   assert.equal(classify({ ...r, lastReviewedSha: w1, linkTypesSeen: ['callable'], prFileCount: 4 }) !== 'none', true);
   assert.notEqual(classify({ ...r, lastReviewedSha: w1, linkTypesSeen: ['callable'], prFileCount: 4 }), 'base-drift');
   g('checkout', '-q', 'pr');
@@ -70,10 +70,10 @@ test('unreachable or invalid last sha is not reachable', () => {
   }
 });
 
-test('base merge with same PR patch is patch-id unchanged and reports counterpart drift', () => {
+test('base merge with same PR patch has an unchanged PR diff and reports counterpart drift', () => {
   const r = computeIncrement(args({ lastReviewedSha: SHAS.p2, lastBaseSha: SHAS.base0, baseSha: SHAS.base1, headSha: SHAS.p3 }));
   assert.equal(r.reachable, true);
-  assert.equal(r.prPatchIdUnchanged, true);
+  assert.equal(r.prDiffUnchanged, true);
   assert.equal(r.baseDriftCounterpartsChanged, true);
   assert.deepEqual(r.driftFiles, ['homegroups/mobile/src/a.ts']);
 });
@@ -81,7 +81,7 @@ test('base merge with same PR patch is patch-id unchanged and reports counterpar
 test('missing old base degrades to changed, not unchanged', () => {
   const r = computeIncrement(args({ lastReviewedSha: SHAS.p2, lastBaseSha: 'e'.repeat(40), baseSha: SHAS.base1, headSha: SHAS.p3 }));
   assert.equal(r.reachable, true);
-  assert.equal(r.prPatchIdUnchanged, false);
+  assert.equal(r.prDiffUnchanged, false);
 });
 
 const tierOf = (r, last, seen = ['callable']) => classify({ ...r, lastReviewedSha: last, linkTypesSeen: seen, prFileCount: 10 });
@@ -126,4 +126,18 @@ test('pure base merge: none without counterpart drift, base-drift with it', () =
   assert.equal(tierOf(none, SHAS.p2), 'none');
   const drift = computeIncrement(args({ lastReviewedSha: SHAS.p2, lastBaseSha: SHAS.base0, baseSha: SHAS.base1, headSha: SHAS.p3 }));
   assert.equal(tierOf(drift, SHAS.p2), 'base-drift');
+});
+
+test('base moved and PR content changed: diff hashes differ, tier is not none', () => {
+  g('checkout', '-q', '-B', 'mv', SHAS.p3);
+  put('recovery-api/src/callable/x.ts', 'export const x = 2;\n');
+  const head = commit('p4');
+  const r = computeIncrement(args({ lastReviewedSha: SHAS.p2, lastBaseSha: SHAS.base0, baseSha: SHAS.base1, headSha: head }));
+  assert.equal(r.reachable, true);
+  assert.equal(r.prDiffUnchanged, false, 'hashes of base0...p2 and base1...p4 differ');
+  assert.deepEqual(r.incrementFiles, ['recovery-api/src/callable/x.ts']);
+  const tier = tierOf(r, SHAS.p2);
+  assert.notEqual(tier, 'none');
+  assert.notEqual(tier, 'base-drift');
+  g('checkout', '-q', 'pr');
 });

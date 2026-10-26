@@ -44,19 +44,34 @@ function contextLines(root, f) {
   return text.split('\n').map((t, i) => ({ line: i + 1, text: t }));
 }
 
+// One fact per index file that cannot be read or parsed, so the model knows
+// the check did not run rather than reading silence as "no missing index".
+function indexGroups(root, product, facts, reported) {
+  const path = CONFIG[product].indexes;
+  const unavailable = (why) => {
+    if (!reported.has(path)) facts.push({ check: 'queries-vs-indexes', file: path, line: null, note: `queries-vs-indexes unavailable: index file ${why}` });
+    reported.add(path);
+    return null;
+  };
+  const text = readText(root, path);
+  if (text === null) return unavailable('missing');
+  try {
+    const list = JSON.parse(text).indexes ?? [];
+    if (!Array.isArray(list)) return unavailable('unparsable');
+    return new Set(list.map((i) => i?.collectionGroup));
+  } catch {
+    return unavailable('unparsable');
+  }
+}
+
 export function checkQueriesVsIndexes(files, root) {
   const facts = [];
+  const reported = new Set();
   for (const f of files) {
     const product = productOf(f.file);
     if (!product || !eligible(f)) continue;
-    const idxText = readText(root, CONFIG[product].indexes);
-    if (idxText === null) continue;
-    let groups;
-    try {
-      groups = new Set((JSON.parse(idxText).indexes ?? []).map((i) => i.collectionGroup));
-    } catch {
-      continue;
-    }
+    const groups = indexGroups(root, product, facts, reported);
+    if (!groups) continue;
     const ctx = contextLines(root, f);
     const byLine = new Map(ctx.map((c, i) => [c.line, i]));
     const addedLines = new Set(f.added.map((a) => a.line));

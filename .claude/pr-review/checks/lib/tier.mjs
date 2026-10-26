@@ -18,14 +18,14 @@ export function classify({
   incrementFiles = [],
   incrementLinkTypes = [],
   linkTypesSeen = [],
-  prPatchIdUnchanged,
+  prDiffUnchanged,
   prFileCount = 0,
   baseDriftCounterpartsChanged,
 }) {
   if (!lastReviewedSha || !reachable) return 'full';
   // A merge from base leaves this PR's own increment empty yet can still need base-drift.
-  if (incrementFiles.length === 0 && !(prPatchIdUnchanged && baseDriftCounterpartsChanged)) return 'none';
-  if (prPatchIdUnchanged) return baseDriftCounterpartsChanged ? 'base-drift' : 'none';
+  if (incrementFiles.length === 0 && !(prDiffUnchanged && baseDriftCounterpartsChanged)) return 'none';
+  if (prDiffUnchanged) return baseDriftCounterpartsChanged ? 'base-drift' : 'none';
   if (incrementLinkTypes.length === 0 && incrementFiles.every(isLight)) return 'light';
   const unseen = incrementLinkTypes.some((t) => !linkTypesSeen.includes(t));
   if (unseen || incrementFiles.length >= 0.5 * prFileCount) return 'incremental-new-links';

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildFacts, snapshotPath, recordRun } from '../facts.mjs';
+import { buildFacts, recordRun } from '../facts.mjs';
+import { runPaths } from '../lib/paths.mjs';
 
 const base = {
   files: [{ file: 'a.ts', status: 'M' }],
@@ -51,10 +52,11 @@ test('PR context carries the redacted PR title', () => {
   assert.ok(!out.includes(secret));
 });
 
-test('state snapshot lives outside OUT', () => {
-  assert.equal(snapshotPath({ STATE_FILE: '/x/s.json', RUNNER_TEMP: '/t' }), '/x/s.json');
-  assert.equal(snapshotPath({ RUNNER_TEMP: '/t' }), '/t/prstate-snapshot/state.json');
-  assert.equal(snapshotPath({}), null);
+test('OUT and STATE_FILE are both required: no fallback to "." or RUNNER_TEMP', () => {
+  assert.deepEqual(runPaths({ OUT: '/t/o', STATE_FILE: '/x/s.json', RUNNER_TEMP: '/t' }), { out: '/t/o', stateFile: '/x/s.json' });
+  assert.equal(runPaths({ STATE_FILE: '/x/s.json', RUNNER_TEMP: '/t' }), null);
+  assert.equal(runPaths({ OUT: '/t/o', RUNNER_TEMP: '/t' }), null);
+  assert.equal(runPaths({}), null);
 });
 
 test('incremental tier is stated and drift files listed', () => {

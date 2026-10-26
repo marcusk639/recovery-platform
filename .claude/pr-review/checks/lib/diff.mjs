@@ -84,7 +84,7 @@ export function parseUnifiedDiff(text) {
 }
 
 export function prDiffText(baseSha, headSha, cwd) {
-  return git(['diff', '--no-color', '-M', `${baseSha}...${headSha}`], cwd);
+  return git(['diff', '--text', '--no-textconv', '--no-color', '-M', `${baseSha}...${headSha}`], cwd);
 }
 
 export function prDiff(baseSha, headSha, cwd) {

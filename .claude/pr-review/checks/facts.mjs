@@ -10,6 +10,7 @@ import { classify, MAX_TURNS } from './lib/tier.mjs';
 import { computeIncrement } from './lib/increment.mjs';
 import { writeMaterial } from './lib/material.mjs';
 import { SUMMARY_MARKER } from './lib/markers.mjs';
+import { runPaths } from './lib/paths.mjs';
 import { checkExports, checkRegion, checkQueriesVsIndexes, checkStoragePaths, checkCollectionsVsRules, checkTwins } from './contracts.mjs';
 import { checkSecrets, checkPiiLogs, checkNewFileSize, checkTitleScope, checkSelfEdit, runVerifyDiff } from './hygiene.mjs';
 
@@ -128,32 +129,26 @@ function runChecks({ files, repoRoot, baseSha, headSha, title, verifyScript }) {
   });
 }
 
-// A copy outside the model's --add-dir: publish trusts only this one, since the
-// model can Write OUT/state.json.
-export function snapshotPath(env = process.env) {
-  if (env.STATE_FILE) return env.STATE_FILE;
-  return env.RUNNER_TEMP ? join(env.RUNNER_TEMP, 'prstate-snapshot', 'state.json') : null;
+function tierOutput(tier, maxTurns) {
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `tier=${tier}\nmax_turns=${maxTurns}\n`);
 }
 
-function writeOutputs(out, text, state) {
+// The snapshot (STATE_FILE) is a copy outside the model's --add-dir: publish
+// trusts only this one, since the model can Write OUT/state.json.
+function writeOutputs({ out, stateFile }, text, state) {
   mkdirSync(out, { recursive: true });
   writeFileSync(join(out, 'facts.md'), text);
   writeFileSync(join(out, 'state.json'), JSON.stringify(state, null, 2));
-  const snap = snapshotPath();
-  if (snap) {
-    try {
-      mkdirSync(dirname(snap), { recursive: true });
-      writeFileSync(snap, JSON.stringify(state));
-      // Read-only from here on; the workflow's cleanup restores write before rm.
-      chmodSync(snap, 0o444);
-      chmodSync(dirname(snap), 0o555);
-    } catch {
-      process.stdout.write('facts: state snapshot unavailable\n');
-    }
+  try {
+    mkdirSync(dirname(stateFile), { recursive: true });
+    writeFileSync(stateFile, JSON.stringify(state));
+    // Read-only from here on; the workflow's cleanup restores write before rm.
+    chmodSync(stateFile, 0o444);
+    chmodSync(dirname(stateFile), 0o555);
+  } catch {
+    process.stdout.write('facts: state snapshot unavailable\n');
   }
-  if (process.env.GITHUB_OUTPUT) {
-    appendFileSync(process.env.GITHUB_OUTPUT, `tier=${state.tier}\nmax_turns=${state.maxTurns}\n`);
-  }
+  tierOutput(state.tier, state.maxTurns);
 }
 
 // This run's routed link types (the files it considered) ride in both
@@ -163,7 +158,15 @@ export function recordRun(state, tier, routeResult) {
 }
 
 async function main() {
-  const { REPO, PR, BASE_SHA, HEAD_SHA, OUT, PR_TITLE } = process.env;
+  const { REPO, PR, BASE_SHA, HEAD_SHA, PR_TITLE } = process.env;
+  const run = runPaths();
+  if (!run) {
+    // Fail closed: no material, no snapshot, and the review step is skipped.
+    process.stdout.write('facts failed: OUT or STATE_FILE unset\n');
+    tierOutput('none', 0);
+    return;
+  }
+  const { out } = run;
   const state = {
     lastReviewedSha: null,
     lastBaseSha: null,
@@ -179,7 +182,6 @@ async function main() {
     // Publish treats claude[bot] review comments from here on as this run's.
     runStartedAt: new Date().toISOString(),
   };
-  const out = OUT || '.';
   try {
     Object.assign(state, await loadState(REPO, PR, { listIssueComments, listReviewComments }));
     const repoRoot = process.cwd();
@@ -203,7 +205,7 @@ async function main() {
     const routeResult = route(factPaths);
     recordRun(state, tier, routeResult);
     const text = buildFacts({ files, routeResult, results, prContext, title: PR_TITLE, tier, driftFiles: inc.driftFiles });
-    writeOutputs(out, text, state);
+    writeOutputs(run, text, state);
   } catch (err) {
     process.stdout.write(`facts failed: ${err?.name ?? 'Error'}\n`);
     const empty = { packages: [], linkTypes: [], classes: [] };
@@ -214,7 +216,7 @@ async function main() {
     } catch {
       // the model reports the missing material
     }
-    writeOutputs(out, buildFacts({ routeResult: empty, results: [{ check: 'facts', error: err }], prContext: 'PR context unavailable', title: PR_TITLE, tier: 'full' }), state);
+    writeOutputs(run, buildFacts({ routeResult: empty, results: [{ check: 'facts', error: err }], prContext: 'PR context unavailable', title: PR_TITLE, tier: 'full' }), state);
   }
 }
 

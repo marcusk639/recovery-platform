@@ -147,3 +147,22 @@ test('TWIN_PAIRS paths all differ per side', () => {
     assert.ok(r.startsWith('regroup/functions/src/'));
   }
 });
+
+test('checkQueriesVsIndexes reports a missing or unparsable index file as unavailable', () => {
+  const lines = ["db.collection('groups')", ".where('a','==',1)", ".orderBy('b')"];
+  // homegroups has no index file in this fixture.
+  const missing = checkQueriesVsIndexes([file('homegroups/mobile/src/g.ts', lines), file('homegroups/mobile/src/h.ts', lines)], root);
+  assert.equal(missing.length, 1, 'one unavailable fact per index file');
+  assert.match(missing[0].note, /unavailable/);
+  assert.equal(missing[0].file, 'homegroups/firestore.indexes.json');
+  const broken = mkdtempSync(join(tmpdir(), 'contracts-bad-'));
+  try {
+    mkdirSync(join(broken, 'regroup/mobile/firebase'), { recursive: true });
+    writeFileSync(join(broken, 'regroup/mobile/firebase/firestore.indexes.json'), '{ not json');
+    const bad = checkQueriesVsIndexes([file('regroup/mobile/src/h.ts', lines)], broken);
+    assert.equal(bad.length, 1);
+    assert.match(bad[0].note, /unavailable/);
+  } finally {
+    rmSync(broken, { recursive: true, force: true });
+  }
+});

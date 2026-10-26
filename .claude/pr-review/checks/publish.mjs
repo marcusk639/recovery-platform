@@ -13,6 +13,7 @@ import { mentions, touchesSecurityFile } from './lib/needles.mjs';
 import { candidatePaths, isPriorSecurityPath, priorFileIds, runNeedles } from './lib/fileids.mjs';
 import { guardInlineComments } from './lib/inline-guard.mjs';
 import { deliverAdvisories } from './advisories.mjs';
+import { runPaths } from './lib/paths.mjs';
 
 const SHA_RE = /^[0-9a-f]{40}$/i;
 const RATE_RE = /rate.?limit|usage limit/i;
@@ -28,8 +29,9 @@ function strings(list) {
   return Array.isArray(list) ? list.filter((s) => typeof s === 'string') : [];
 }
 
+// Lower-cased so comparisons with git and the API (always lower case) match.
 function sha(v) {
-  return typeof v === 'string' && SHA_RE.test(v) ? v : null;
+  return typeof v === 'string' && SHA_RE.test(v) ? v.toLowerCase() : null;
 }
 
 // Link types publish will carry forward: only those routing.json defines.
@@ -158,7 +160,7 @@ function readOptional(path) {
 // OUT/state.json, which the model can overwrite.
 function readState(path) {
   try {
-    return path ? JSON.parse(readFileSync(path, 'utf8')) : null;
+    return JSON.parse(readFileSync(path, 'utf8'));
   } catch {
     return null;
   }
@@ -244,15 +246,19 @@ export async function publish({ repo, pr, snapshot, advisoryToken, ...rest }, de
 
 async function main() {
   try {
-    const { REPO, PR, HEAD_SHA, BASE_SHA, ACTION_OUTCOME, EXECUTION_FILE, OUT, STATE_FILE, PR_REVIEW_ID_KEY, ADVISORY_TOKEN, RUN_STARTED_AT } = process.env;
-    const out = OUT || '.';
+    const { REPO, PR, HEAD_SHA, BASE_SHA, ACTION_OUTCOME, EXECUTION_FILE, PR_REVIEW_ID_KEY, ADVISORY_TOKEN, RUN_STARTED_AT } = process.env;
+    // Fail closed without OUT and STATE_FILE: no snapshot, no model output, so
+    // the failure banner (prior state from the comment) or nothing at all.
+    const run = runPaths();
+    if (!run) console.log('publish: OUT or STATE_FILE unset');
+    const fromOut = (name) => (run ? readOptional(join(run.out, name)) : null);
     const deps = { listIssueComments, upsertSummary, listReviewComments, request: ghRequest };
     await publish({
       repo: REPO,
       pr: PR,
-      snapshot: readState(STATE_FILE),
-      findingsText: readOptional(join(out, 'findings.json')),
-      narrative: readOptional(join(out, 'summary.md')) ?? '',
+      snapshot: run ? readState(run.stateFile) : null,
+      findingsText: fromOut('findings.json'),
+      narrative: fromOut('summary.md') ?? '',
       outcome: ACTION_OUTCOME,
       executionLog: EXECUTION_FILE ? readOptional(EXECUTION_FILE) : null,
       headSha: HEAD_SHA,
