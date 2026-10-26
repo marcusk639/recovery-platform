@@ -1,127 +1,107 @@
-# recovery-platform — New Machine Setup
+# New Machine Setup
 
-Multi-app recovery platform. Primary app is **Regroup** — a Firebase + React Native + web platform for recovery housing.
+How to get `recovery-platform` running on a fresh machine. For what the repo contains and day-to-day commands, see [README.md](README.md). For conventions, see [CLAUDE.md](CLAUDE.md).
 
-## Active Branch
+## 1. Tools
+
+| Tool                 | Version | Notes                                                                                 |
+| -------------------- | ------- | ------------------------------------------------------------------------------------- |
+| Node.js              | 22      | Required by every Cloud Functions package; satisfies every other package's `engines`. |
+| npm                  | bundled | Each package has its own lockfile. There is no workspace tool.                        |
+| Firebase CLI         | latest  | `npm install -g firebase-tools`                                                       |
+| JDK                  | —       | For the Firestore emulator; the Firebase CLI reports the version it needs.            |
+| Xcode + CocoaPods    | —       | iOS builds of `homegroups/mobile` and `regroup/mobile` (bare React Native, not Expo). |
+| Android Studio + JDK | —       | Android builds.                                                                       |
+| Maestro CLI          | —       | Only for mobile E2E flows ([e2e-maestro/README.md](e2e-maestro/README.md)).           |
+
+## 2. Clone and install hooks
 
 ```bash
 git clone https://github.com/marcusk639/recovery-platform.git
 cd recovery-platform
-git checkout test/e2e-launch-prep
-```
-
-## Repository Structure
-
-| Directory       | What it is                                                               |
-| --------------- | ------------------------------------------------------------------------ |
-| `regroup/`      | **Primary app** — Firebase Functions + React Native mobile + Next.js web |
-| `homegroups/`   | Homegroups sub-app                                                       |
-| `recovery-api/` | Standalone recovery API                                                  |
-| `shared/`       | Shared utilities                                                         |
-| `scripts/`      | Utility scripts                                                          |
-| `e2e-maestro/`  | Maestro mobile E2E tests                                                 |
-
----
-
-## Git Hooks (run once per clone)
-
-```bash
 ./scripts/install-git-hooks.sh
 ```
 
-Installs the versioned hooks from `scripts/git-hooks/` into `.git/hooks/`:
+Work happens in git worktrees off `origin/main`, not on long-lived branches. See the Gotchas in [CLAUDE.md](CLAUDE.md).
 
-- **pre-commit** — blocking secret scan + 300-line file-size ratchet on staged files
-- **pre-push** — runs unit tests for changed packages (recovery-api, detox-recovery, homegroups/functions, regroup/functions), cached by HEAD SHA so unchanged pushes skip the run
+## 3. Install the packages you need
 
-Re-run the installer after editing anything in `scripts/git-hooks/`. Deliberate bypass: `--no-verify`.
-
----
-
-## Regroup App Setup
-
-This is the main app. All commands below run from `regroup/`.
-
-### Prerequisites
-
-| Tool          | Version | Install                                |
-| ------------- | ------- | -------------------------------------- |
-| Node.js       | ≥18     | `brew install node`                    |
-| npm           | bundled | —                                      |
-| Firebase CLI  | latest  | `npm install -g firebase-tools`        |
-| Expo CLI      | latest  | `npm install -g expo-cli` (for mobile) |
-| iOS Simulator | —       | Xcode from Mac App Store               |
-
-### Install
+Install each package from its own directory:
 
 ```bash
-cd regroup
+for p in recovery-api homegroups/functions regroup/functions detox-recovery homegroups/web regroup/web; do
+  (cd "$p" && npm ci)
+done
 
-# Firebase Functions
-cd functions && npm install && cd ..
-
-# Web
-cd web && npm install && cd ..
-
-# Mobile
-cd mobile && npm install && cd ..
+# Mobile apps: full install runs `pod install`; use --ignore-scripts for JS-only work.
+(cd homegroups/mobile && npm ci)
+(cd regroup/mobile && npm ci)
 ```
 
-### Environment
+The session-start check (`scripts/session-check.sh`) warns about any package whose `node_modules` is missing.
 
-```bash
-# Functions env (secrets)
-cp functions/.env.example functions/.env.local 2>/dev/null || touch functions/.env.local
-# Fill from 1Password "recovery-platform"
-```
+## 4. Environment files
 
-Key secrets (retrieve from 1Password "recovery-platform"):
+Every package with runtime configuration has a tracked example. Copy it and fill in values:
 
-| Variable                | Source                                      |
-| ----------------------- | ------------------------------------------- |
-| `STRIPE_SECRET_KEY`     | Stripe dashboard → Developers → API keys    |
-| `STRIPE_WEBHOOK_SECRET` | Stripe dashboard → Webhooks                 |
-| `STRIPE_PRICE_*`        | See `scripts/stripe-prices.env` (committed) |
-| `INTERNAL_API_KEY`      | Any random string                           |
-| `RESEND_API_KEY`        | resend.com                                  |
+| Package                | Example file           | Copy to                 | Holds                                                     |
+| ---------------------- | ---------------------- | ----------------------- | --------------------------------------------------------- |
+| `recovery-api`         | `env.example`          | `.env`                  | Admin credentials path, project ID, API key, CORS origins |
+| `homegroups/functions` | `.env.example`         | `.env.local` (emulator) | Stripe keys and price IDs, cross-app API key              |
+| `regroup/functions`    | `.env.example`         | `.env` (per its header) | Stripe, SendGrid, Maps, tier prices, rent-fee settings    |
+| `detox-recovery`       | `env.example`          | `.env.local`            | Resend, MailerLite, checkout/booking URLs, recovery-api   |
+| `homegroups/mobile`    | `.env.example`         | `.env`                  | Maps key, Stripe test publishable key                     |
+| `regroup/mobile`       | `.env.example`         | `.env`                  | Maps key                                                  |
+| `homegroups/mobile`    | `e2e/.env.e2e.example` | `e2e/.env.e2e`          | E2E test account                                          |
 
-Stripe price IDs (test mode) are documented in `scripts/stripe-product-values.md` and `scripts/stripe-prices.env`.
+`regroup/web` and `homegroups/web` read their public Firebase client config from source (`src/environments/`, `src/lib/firebase.js`).
 
-### Firebase
+All real `.env*` files are gitignored. Never commit one, and never paste a secret into docs. The pre-commit hook blocks the common key formats, but it can't catch everything.
+
+## 5. Secrets
+
+Deployed functions read their secrets from **Firebase Secret Manager**, not from env files:
+
+| Package                | Secrets (`defineSecret`)                                                                                                                     |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `recovery-api`         | `GOOGLE_MAPS_API_KEY`, `RECOVERY_PLATFORM_API_KEY`                                                                                           |
+| `homegroups/functions` | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `SENDGRID_API_KEY`, `GOOGLE_MAPS_API_KEY`, `RATS_API_KEY`, `RECOVERY_PLATFORM_API_KEY`         |
+| `regroup/functions`    | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_CONNECT_WEBHOOK_SECRET`, `STRIPE_CLIENT_ID`, `SENDGRID_API_KEY`, `GOOGLE_MAPS_API_KEY` |
+
+Set or rotate one with `firebase functions:secrets:set <NAME> --project <id>`. Local values for the emulator go in the package's `.env.local`. Get them from the team password manager (1Password vault `recovery-platform`), not from git history.
+
+E2E test passwords are never committed. CI reads `REGROUP_E2E_TEST_PASSWORD` and `HOMEGROUPS_E2E_TEST_PASSWORD`. Locally, export `E2E_TEST_PASSWORD` before running Maestro flows.
+
+## 6. Firebase projects
 
 ```bash
 firebase login
-firebase use regroup-app   # check firebase.json for project ID
 ```
 
-### Start (local emulators)
+Each product deploys to its own project. The aliases are in the `.firebaserc` next to the product's `firebase.json`:
+
+| Product           | Directory with `.firebaserc` | Project(s)                                                         |
+| ----------------- | ---------------------------- | ------------------------------------------------------------------ |
+| Homegroups        | `homegroups/`                | `recovery-connect-cad4b` (default), `homegroups-e2e` (alias `e2e`) |
+| Regroup           | `regroup/`, `regroup/web/`   | `phoenix-cleanhouse`                                               |
+| recovery-api      | `recovery-api/`              | `recovery-platform`                                                |
+| NextStep Recovery | none                         | `nextsteprecovery-1d5c2`. Pass `--project` explicitly.             |
+
+Run emulators from the product directory. Ports differ per product; see that product's `firebase.json`. Don't run two products' emulators at once.
+
+## 7. Mobile native setup
 
 ```bash
-cd regroup
-firebase emulators:start   # Functions + Firestore + Auth emulators
+cd regroup/mobile/ios && pod install && cd -      # same for homegroups/mobile/ios
+cd regroup/mobile && npm start                    # Metro
+npm run ios                                       # or: npm run android
 ```
 
-### Start (mobile)
+`GoogleService-Info.plist` and `google-services.json` are committed public client config; you don't need to download them.
+
+## 8. Verify
 
 ```bash
-cd regroup/mobile
-npx expo start
-# Press 'i' for iOS simulator, 'a' for Android
+bash scripts/session-check.sh                     # hooks current, deps installed, rule frontmatter valid
+(cd recovery-api && npm test)                     # any package's suite
 ```
-
-### Start (web)
-
-```bash
-cd regroup/web
-npm run dev    # localhost:3000
-```
-
----
-
-## Notes
-
-- `regroup/functions/.local.env` is gitignored — secrets only, never commit
-- `scripts/stripe-prices.env` contains test-mode Stripe price IDs (safe, committed)
-- `PATHFINDER-*` and `.git-workflow/` directories are tool state — do not commit
-- Secrets backup is in iCloud Drive dev-env-backup (see NEW-MACHINE-SETUP-PLAN.md Phase 4)
-- Firebase project ID: check `regroup/firebase.json`
