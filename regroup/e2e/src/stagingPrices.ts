@@ -14,10 +14,19 @@ export function readStagingPrices(file: string): Record<string, string> {
       `${file} not found. Run scripts/stripe-sandbox-setup.ts first; it writes the e2e sandbox price ids there.`,
     );
   }
+  let text: string;
+  try {
+    text = fs.readFileSync(file, 'utf8');
+  } catch (err) {
+    throw new Error(
+      `cannot read ${file} (${(err as NodeJS.ErrnoException).code ?? 'unknown error'})`,
+    );
+  }
   let parsed: unknown;
   try {
-    parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+    parsed = JSON.parse(text);
   } catch {
+    // JSON.parse quotes the input; the file name is enough.
     throw new Error(`${file} is not valid JSON`);
   }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {

@@ -5,6 +5,8 @@ import { buildSetupDeps } from '../src/stripeSandboxCli';
 import { runSetup } from '../src/stripeSandboxRun';
 
 // Usage: npx ts-node scripts/stripe-sandbox-setup.ts --platform-url <url> --connect-url <url> [--confirm-account acct_...]
+// Reads the sandbox key from ~/.config/regroup-e2e/stripe-e2e-sandbox-key.txt and writes
+// stripe-e2e-account.txt, stripe-e2e-prices.json and stripe-e2e-webhook-secrets.json there (0600).
 const configDir = path.join(os.homedir(), '.config', 'regroup-e2e');
 
 Promise.resolve()

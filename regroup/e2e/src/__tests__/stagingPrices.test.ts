@@ -39,6 +39,11 @@ describe('readStagingPrices', () => {
     expect(() => readStagingPrices(missing)).toThrow(/stripe-sandbox-setup/);
   });
 
+  it('reports a file that exists but cannot be read by error code, not as bad JSON', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'staging-prices-'));
+    expect(() => readStagingPrices(dir)).toThrow(/cannot read .*\(EISDIR\)/);
+  });
+
   it('names the file when the JSON is malformed or not an object', () => {
     for (const bad of ['{ nope', '["price_x"]', 'null']) {
       const file = writePrices(bad);

@@ -3,7 +3,17 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type Stripe from 'stripe';
 import { assertSandboxAccount, assertTestKey, ensureCatalog } from './stripeSandbox';
-import { assertSandboxHygiene, assertWebhookUrls, ensureWebhooks } from './stripeWebhooks';
+import {
+  assertSandboxHygiene,
+  assertWebhookUrls,
+  ensureWebhooks,
+  type Kind,
+} from './stripeWebhooks';
+
+const WEBHOOK_SECRET = /^whsec_[A-Za-z0-9]+$/;
+const ACCOUNT_ID = /^acct_[A-Za-z0-9]+$/;
+const codeOf = (err: unknown): string =>
+  (err as NodeJS.ErrnoException | null)?.code ?? 'unknown error';
 
 export type SetupDeps = {
   readKey: () => string;
@@ -27,7 +37,11 @@ function writeSecretFile(file: string, content: string): void {
     fs.writeFileSync(tmp, content, { mode: 0o600, flag: 'wx' });
     fs.renameSync(tmp, file);
   } catch (err) {
-    fs.rmSync(tmp, { force: true });
+    try {
+      fs.rmSync(tmp, { force: true });
+    } catch {
+      // The write error is what the operator needs; a failed cleanup must not replace it.
+    }
     throw err;
   }
 }
@@ -57,35 +71,53 @@ function readJsonObject(file: string): Record<string, string> {
   return parsed as Record<string, string>;
 }
 
-/** Merge into the secrets file; if it cannot be used, park the one-time secret elsewhere, then fail. */
-function persistSecret(dir: string, kind: string, secret: string): void {
+/**
+ * The secrets file could not take the one-time secret: park it in its own 0600
+ * file and fail. If even that fails, the secret is gone and the endpoint must be
+ * recreated. Messages carry error codes and paths only.
+ */
+function rescueSecret(dir: string, kind: Kind, secret: string, cause: string): never {
+  const rescue = path.join(dir, `stripe-e2e-webhook-secret-${kind}-${Date.now()}.json`);
+  try {
+    writeSecretFile(rescue, JSON.stringify({ [kind]: secret }, null, 2) + '\n');
+  } catch (writeErr) {
+    throw new Error(
+      `${cause}, and the ${kind} secret could not be saved elsewhere (${codeOf(writeErr)}); ` +
+        `delete the new ${kind} webhook endpoint in the Stripe Dashboard and rerun.`,
+    );
+  }
+  console.error(`${cause}; saved the new ${kind} secret to ${rescue}`);
+  throw new Error(`${cause}; recover the ${kind} secret from ${rescue}.`);
+}
+
+/** Merge into the secrets file; if it cannot be read or written, rescue the secret, then fail. */
+function persistSecret(dir: string, kind: Kind, secret: string): void {
   const file = path.join(dir, 'stripe-e2e-webhook-secrets.json');
   let existing: Record<string, string>;
   try {
     existing = readJsonObject(file);
   } catch (err) {
     if (!(err instanceof UnusableFileError)) throw err;
-    const rescue = path.join(dir, `stripe-e2e-webhook-secret-${kind}-${Date.now()}.json`);
-    try {
-      writeSecretFile(rescue, JSON.stringify({ [kind]: secret }, null, 2) + '\n');
-    } catch (writeErr) {
-      const code = (writeErr as NodeJS.ErrnoException).code ?? 'unknown error';
-      throw new Error(
-        `Corrupt or unreadable secrets file (${err.message}) and the ${kind} secret could not be ` +
-          `saved elsewhere (${code}); delete the new ${kind} webhook endpoint in the Stripe Dashboard and rerun.`,
-      );
-    }
-    console.error(
-      `Secrets file unusable (${err.message}); saved the new ${kind} secret to ${rescue}`,
-    );
-    throw new Error(`Corrupt or unreadable ${file}; recover the ${kind} secret from ${rescue}.`);
+    rescueSecret(dir, kind, secret, `Corrupt or unreadable secrets file (${err.message})`);
   }
-  writeSecretFile(file, JSON.stringify({ ...existing, [kind]: secret }, null, 2) + '\n');
+  try {
+    writeSecretFile(file, JSON.stringify({ ...existing, [kind]: secret }, null, 2) + '\n');
+  } catch (err) {
+    rescueSecret(dir, kind, secret, `Cannot write ${file} (${codeOf(err)})`);
+  }
 }
 
 function pinAccount(accountFile: string, accountId: string, confirm?: string): void {
   if (fs.existsSync(accountFile)) {
-    const stored = fs.readFileSync(accountFile, 'utf8').trim();
+    let stored: string;
+    try {
+      stored = fs.readFileSync(accountFile, 'utf8').trim();
+    } catch (err) {
+      throw new Error(`${accountFile} is unreadable (${codeOf(err)}); fix or delete it.`);
+    }
+    if (!ACCOUNT_ID.test(stored)) {
+      throw new Error(`${accountFile} is malformed (not an acct_ id); fix or delete it.`);
+    }
     if (stored !== accountId) {
       throw new Error(`Account ${accountId} differs from the pinned e2e account ${stored}.`);
     }
@@ -126,7 +158,10 @@ export async function runSetup(deps: SetupDeps): Promise<{ pricesFile: string }>
     connectUrl: deps.connectUrl,
     apiVersion: deps.apiVersion,
     onSecret: (kind, secret) => persistSecret(deps.outDir, kind, secret),
-    hasSecret: (kind) => typeof readJsonObject(secretsFile)[kind] === 'string',
+    hasSecret: (kind) => {
+      const saved = readJsonObject(secretsFile)[kind];
+      return typeof saved === 'string' && WEBHOOK_SECRET.test(saved);
+    },
   });
   return { pricesFile };
 }

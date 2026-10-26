@@ -59,7 +59,7 @@ export function assertWebhookUrls(platformUrl: string, connectUrl: string): void
   if (platformUrl === connectUrl) throw new Error('Platform and connect webhook URLs must differ.');
 }
 
-type Kind = 'platform' | 'connect';
+export type Kind = 'platform' | 'connect';
 
 export type WebhookOptions = {
   platformUrl: string;
@@ -76,7 +76,7 @@ export type WebhookOptions = {
    * by a run that died before saving its secret cannot be reused: Stripe will
    * not reveal that secret again.
    */
-  hasSecret?: (kind: Kind) => boolean;
+  hasSecret: (kind: Kind) => boolean;
 };
 
 async function listEndpoints(stripe: Stripe): Promise<Stripe.WebhookEndpoint[]> {
@@ -125,7 +125,7 @@ export async function ensureWebhooks(stripe: Stripe, opts: WebhookOptions): Prom
     const found = existing.find((e) => e.url === spec.url);
     if (found) {
       assertEndpointMatches(found, spec, opts.apiVersion);
-      if (opts.hasSecret && !opts.hasSecret(spec.kind)) {
+      if (!opts.hasSecret(spec.kind)) {
         throw new Error(
           `Webhook endpoint ${found.id} exists but its ${spec.kind} signing secret was not saved. ` +
             'Delete that endpoint in the Stripe Dashboard and rerun.',
@@ -149,13 +149,22 @@ export async function ensureWebhooks(stripe: Stripe, opts: WebhookOptions): Prom
   }
 }
 
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return '(unparseable URL)';
+  }
+}
+
 /** Read-only: throws when an enabled endpoint violates the fixed allowlist rule. */
 export async function assertSandboxHygiene(stripe: Stripe): Promise<void> {
   const offenders = (await listEndpoints(stripe)).filter(
     (e) => e.status === 'enabled' && !isAllowedWebhookUrl(e.url),
   );
   if (offenders.length > 0) {
-    const list = offenders.map((e) => `${e.id} -> ${e.url}`).join(', ');
+    // Host only: an endpoint URL can carry credentials or tokens in its userinfo, path or query.
+    const list = offenders.map((e) => `${e.id} -> ${hostOf(e.url)}`).join(', ');
     throw new Error(`Sandbox has enabled webhook endpoints outside the e2e allowlist: ${list}`);
   }
 }

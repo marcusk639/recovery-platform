@@ -21,6 +21,7 @@ const hooks = (extra = {}) => ({
   connectUrl: CONNECT_URL,
   apiVersion: API,
   onSecret: () => undefined,
+  hasSecret: () => true,
   ...extra,
 });
 
@@ -134,6 +135,7 @@ describe('ensureWebhooks', () => {
   it('pins every created endpoint to the given API version', async () => {
     const { mock, stripe } = makeStripe();
     await ensureWebhooks(stripe, hooks());
+    expect(mock.webhookEndpoints.create).toHaveBeenCalledTimes(2);
     for (const [params] of mock.webhookEndpoints.create.mock.calls as any[]) {
       expect(params.api_version).toBe(API);
     }

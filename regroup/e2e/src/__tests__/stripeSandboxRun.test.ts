@@ -250,7 +250,7 @@ describe('runSetup', () => {
     const corruptDir = fs.mkdtempSync(path.join(os.tmpdir(), 'e2e-stripe-'));
     fs.writeFileSync(
       path.join(corruptDir, 'stripe-e2e-webhook-secrets.json'),
-      '{"platform": "whsec_leakme" oops}',
+      '{"platform": whsec_leakme}',
     );
     const withEndpoint = makeStripe({
       endpoints: [existing('we_p', urls.platformUrl, PLATFORM_EVENTS, null)],

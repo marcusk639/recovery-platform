@@ -35,11 +35,19 @@ function assertSection(value: unknown, name: string): asserts value is Record<st
 }
 
 export function loadLaunchConfig(configPath = DEFAULT_CONFIG_PATH): LaunchConfig {
+  let text: string;
+  try {
+    text = fs.readFileSync(configPath, 'utf8');
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code ?? 'unknown error';
+    throw new Error(`cannot read launch config ${configPath} (${code})`);
+  }
   let raw;
   try {
-    raw = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  } catch (err) {
-    throw new Error(`cannot read launch config ${configPath}: ${(err as Error).message}`);
+    raw = JSON.parse(text);
+  } catch {
+    // JSON.parse quotes the input, which could hold a pasted secret; name the file only.
+    throw new Error(`launch config ${configPath} is not valid JSON`);
   }
   const shared: unknown = raw.shared === undefined ? {} : raw.shared;
   assertSection(shared, 'shared');
@@ -121,9 +129,15 @@ function withExtras(env: EnvName, extras: Record<string, string>): Record<string
   return { ...base, ...extras };
 }
 
-export function writeFunctionsEnvFiles(functionsDir: string, extras: EnvExtras = {}): string[] {
+/** Writes the generated env files (all, or only those for `only`); returns their paths. */
+export function writeFunctionsEnvFiles(
+  functionsDir: string,
+  extras: EnvExtras = {},
+  only?: readonly EnvName[],
+): string[] {
+  const targets = Object.entries(GENERATED_FILES).filter(([, env]) => !only || only.includes(env));
   // Build and check every file before writing any, so a bad extra leaves nothing half-written.
-  const files = Object.entries(GENERATED_FILES).map(([name, env]) => {
+  const files = targets.map(([name, env]) => {
     assertSafeEnvFileName(name);
     const body = Object.entries(withExtras(env, extras[env] ?? {}))
       .map(([k, v]) => `${k}=${v}`)

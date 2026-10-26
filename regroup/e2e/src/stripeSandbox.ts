@@ -14,21 +14,23 @@ type TierSpec = {
   annualEnvVar: string;
 };
 
+const tier = (key: string, label: string, amountCents: number, envVar: string): TierSpec => ({
+  key,
+  label,
+  amountCents,
+  envVar,
+  annualEnvVar: `${envVar}_ANNUAL`,
+});
+
 // Source: regroup/functions/src/config.ts SUBSCRIPTION_TIERS.
 export const TIERS: TierSpec[] = [
-  ['trad_starter', 'Traditional Starter', 6900, 'STRIPE_PRICE_TRAD_STARTER'],
-  ['trad_professional', 'Traditional Professional', 12900, 'STRIPE_PRICE_TRAD_PROFESSIONAL'],
-  ['trad_enterprise', 'Traditional Enterprise', 24900, 'STRIPE_PRICE_TRAD_ENTERPRISE'],
-  ['oxford_standard', 'Oxford Standard', 4900, 'STRIPE_PRICE_OXFORD_STANDARD'],
-  ['oxford_plus', 'Oxford Plus', 8900, 'STRIPE_PRICE_OXFORD_PLUS'],
-  ['oxford_network', 'Oxford Network', 29900, 'STRIPE_PRICE_OXFORD_NETWORK'],
-].map(([key, label, amountCents, envVar]) => ({
-  key: key as string,
-  label: label as string,
-  amountCents: amountCents as number,
-  envVar: envVar as string,
-  annualEnvVar: `${envVar}_ANNUAL`,
-}));
+  tier('trad_starter', 'Traditional Starter', 6900, 'STRIPE_PRICE_TRAD_STARTER'),
+  tier('trad_professional', 'Traditional Professional', 12900, 'STRIPE_PRICE_TRAD_PROFESSIONAL'),
+  tier('trad_enterprise', 'Traditional Enterprise', 24900, 'STRIPE_PRICE_TRAD_ENTERPRISE'),
+  tier('oxford_standard', 'Oxford Standard', 4900, 'STRIPE_PRICE_OXFORD_STANDARD'),
+  tier('oxford_plus', 'Oxford Plus', 8900, 'STRIPE_PRICE_OXFORD_PLUS'),
+  tier('oxford_network', 'Oxford Network', 29900, 'STRIPE_PRICE_OXFORD_NETWORK'),
+];
 
 // Source: regroup/functions/src/api/stripe.ts (legacy per-house plans, $49 / $79).
 const LEGACY_PRICES = [
