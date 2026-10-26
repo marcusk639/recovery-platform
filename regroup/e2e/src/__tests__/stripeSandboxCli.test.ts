@@ -1,4 +1,5 @@
 import * as path from 'path';
+import { pinnedStripeApiVersion } from '../launchConfig';
 import { buildSetupDeps } from '../stripeSandboxCli';
 
 describe('buildSetupDeps', () => {
@@ -20,15 +21,31 @@ describe('buildSetupDeps', () => {
   });
 
   it('leaves confirmAccount undefined when omitted and requires both URLs', () => {
-    const deps = buildSetupDeps(['--platform-url', 'https://a', '--connect-url', 'https://b'], '/cfg', create);
+    const deps = buildSetupDeps(
+      ['--platform-url', 'https://a', '--connect-url', 'https://b'],
+      '/cfg',
+      create,
+    );
     expect(deps.confirmAccount).toBeUndefined();
     expect(() => buildSetupDeps(['--platform-url', 'https://a'], '/cfg', create)).toThrow(
       /--connect-url/,
     );
   });
 
+  it('pins the Stripe API version from launch-config.json', () => {
+    const deps = buildSetupDeps(['--platform-url', 'a', '--connect-url', 'b'], '/cfg', create);
+    expect(deps.apiVersion).toBe(pinnedStripeApiVersion());
+    expect(deps.apiVersion).toMatch(/^\d{4}-\d{2}-\d{2}\./);
+  });
+
   it('reads the key from the fixed key file path only', () => {
-    const deps = buildSetupDeps(['--platform-url', 'a', '--connect-url', 'b'], '/nonexistent-cfg', create);
-    expect(() => deps.readKey()).toThrow(path.join('/nonexistent-cfg', 'stripe-e2e-sandbox-key.txt'));
+    const deps = buildSetupDeps(
+      ['--platform-url', 'a', '--connect-url', 'b'],
+      '/nonexistent-cfg',
+      create,
+    );
+    expect(() => deps.readKey()).toThrow(
+      path.join('/nonexistent-cfg', 'stripe-e2e-sandbox-key.txt'),
+    );
   });
 });

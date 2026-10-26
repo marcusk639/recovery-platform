@@ -59,72 +59,20 @@ const COUPONS = [
   { id: 'regroup-bundle-5', percent_off: 15 },
 ];
 
-// Source: regroup/functions/src/webhooks/stripeWebhook.ts switch statements.
-export const PLATFORM_EVENTS = [
-  'payment_intent.succeeded',
-  'payment_intent.payment_failed',
-  'charge.dispute.created',
-  'charge.dispute.closed',
-  'charge.refunded',
-  'charge.refund.updated',
-  'invoice.payment_succeeded',
-  'invoice.payment_failed',
-  'customer.subscription.deleted',
-  'customer.subscription.updated',
-  'account.updated',
-  'payout.failed',
-] as Stripe.WebhookEndpointCreateParams.EnabledEvent[];
-
-export const CONNECT_EVENTS = [
-  'account.updated',
-  'account.application.deauthorized',
-] as Stripe.WebhookEndpointCreateParams.EnabledEvent[];
-
-const FORBIDDEN_HOST_PARTS = ['phoenix-cleanhouse', 'regroup-app.com', 'recovery-connect'];
-
-/** Fixed rule, never operator input: https://<region>-regroup-e2e.cloudfunctions.net/<name>, no port or credentials. */
-export function isAllowedWebhookUrl(url: string): boolean {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return false;
-  }
-  const host = parsed.hostname.toLowerCase();
-  return (
-    parsed.protocol === 'https:' &&
-    /^[a-z0-9-]+-regroup-e2e\.cloudfunctions\.net$/.test(host) &&
-    parsed.port === '' &&
-    parsed.search === '' &&
-    parsed.hash === '' &&
-    parsed.username === '' &&
-    parsed.password === '' &&
-    /^\/[A-Za-z0-9_-]+$/.test(parsed.pathname) &&
-    !FORBIDDEN_HOST_PARTS.some((part) => host.includes(part))
-  );
-}
-
-/** Pure validation; call before any Stripe client exists. */
-export function assertWebhookUrls(platformUrl: string, connectUrl: string): void {
-  for (const url of [platformUrl, connectUrl]) {
-    if (!isAllowedWebhookUrl(url)) {
-      throw new Error(
-        `Webhook URL not allowed (https://<x>-regroup-e2e.cloudfunctions.net/<name>): ${url}`,
-      );
-    }
-  }
-  if (platformUrl === connectUrl) throw new Error('Platform and connect webhook URLs must differ.');
-}
-
 const isMissing = (err: unknown): boolean =>
   (err as { code?: string } | null)?.code === 'resource_missing';
 
 async function ensureProduct(stripe: Stripe, id: string, name: string): Promise<void> {
+  let existing: Stripe.Product | undefined;
   try {
-    await stripe.products.retrieve(id);
+    existing = await stripe.products.retrieve(id);
   } catch (err) {
     if (!isMissing(err)) throw err;
+  }
+  if (!existing) {
     await stripe.products.create({ id, name });
+  } else if (!existing.active) {
+    throw new Error(`Existing product ${id} is archived; not updating.`);
   }
 }
 
@@ -138,6 +86,8 @@ async function ensurePrice(
     const productId =
       typeof existing.product === 'string' ? existing.product : existing.product?.id;
     if (
+      !existing.active ||
+      existing.currency !== 'usd' ||
       existing.unit_amount !== params.amountCents ||
       existing.recurring?.interval !== params.interval ||
       productId !== params.product
@@ -168,12 +118,22 @@ async function ensureCoupon(stripe: Stripe, id: string, percentOff: number): Pro
   }
   if (!existing) {
     await stripe.coupons.create({ id, percent_off: percentOff, duration: 'forever' });
-  } else if (existing.percent_off !== percentOff) {
-    throw new Error(`Existing coupon ${id} is not ${percentOff}% off; not updating.`);
+  } else if (
+    existing.percent_off !== percentOff ||
+    !existing.valid ||
+    existing.duration !== 'forever'
+  ) {
+    throw new Error(
+      `Existing coupon ${id} is not a valid ${percentOff}% forever coupon; not updating.`,
+    );
   }
 }
 
-/** Idempotent: products by fixed id, prices by lookup_key, coupons by id. Verifies reuse, never updates. */
+/**
+ * Idempotent: products by fixed id, prices by lookup_key, coupons by id. Never updates;
+ * reuse requires an active product, an active usd price with the catalogue amount,
+ * interval and product, and a valid forever coupon at the catalogue percentage.
+ */
 export async function ensureCatalog(stripe: Stripe): Promise<PriceIds> {
   const ids: PriceIds = {};
   for (const tier of TIERS) {
@@ -204,83 +164,6 @@ export async function ensureCatalog(stripe: Stripe): Promise<PriceIds> {
   }
   for (const coupon of COUPONS) await ensureCoupon(stripe, coupon.id, coupon.percent_off);
   return ids;
-}
-
-export type WebhookOptions = {
-  platformUrl: string;
-  connectUrl: string;
-  /**
-   * Awaited right after each endpoint is created, because Stripe reveals the
-   * secret once. Only called for newly created endpoints.
-   */
-  onSecret?: (kind: 'platform' | 'connect', secret: string) => void | Promise<void>;
-  /**
-   * Whether the secret of an existing endpoint was saved. An endpoint created
-   * by a run that died before saving its secret cannot be reused: Stripe will
-   * not reveal that secret again.
-   */
-  hasSecret?: (kind: 'platform' | 'connect') => boolean;
-};
-
-async function listEndpoints(stripe: Stripe): Promise<Stripe.WebhookEndpoint[]> {
-  const page = await stripe.webhookEndpoints.list({ limit: 100 });
-  if (page.has_more) throw new Error('More than 100 webhook endpoints; refusing to guess.');
-  return page.data;
-}
-
-function assertEndpointMatches(
-  endpoint: Stripe.WebhookEndpoint,
-  events: readonly string[],
-  connect: boolean,
-): void {
-  const have = [...endpoint.enabled_events].sort().join(',');
-  const want = [...events].sort().join(',');
-  // Stripe does not always echo the connect flag back; only compare when present.
-  const flag = (endpoint as { connect?: boolean }).connect;
-  if (endpoint.status !== 'enabled' || have !== want || (flag !== undefined && flag !== connect)) {
-    throw new Error(
-      `Existing webhook endpoint ${endpoint.id} does not match the e2e spec; not updating.`,
-    );
-  }
-}
-
-export async function ensureWebhooks(stripe: Stripe, opts: WebhookOptions): Promise<void> {
-  assertWebhookUrls(opts.platformUrl, opts.connectUrl);
-  const existing = await listEndpoints(stripe);
-  const specs = [
-    { kind: 'platform' as const, url: opts.platformUrl, events: PLATFORM_EVENTS, connect: false },
-    { kind: 'connect' as const, url: opts.connectUrl, events: CONNECT_EVENTS, connect: true },
-  ];
-  for (const spec of specs) {
-    const found = existing.find((e) => e.url === spec.url);
-    if (found) {
-      assertEndpointMatches(found, spec.events, spec.connect);
-      if (opts.hasSecret && !opts.hasSecret(spec.kind)) {
-        throw new Error(
-          `Webhook endpoint ${found.id} exists but its ${spec.kind} signing secret was not saved. ` +
-            'Delete that endpoint in the Stripe Dashboard and rerun.',
-        );
-      }
-      continue;
-    }
-    const created = await stripe.webhookEndpoints.create({
-      url: spec.url,
-      enabled_events: spec.events,
-      ...(spec.connect ? { connect: true } : {}),
-    });
-    if (created.secret) await opts.onSecret?.(spec.kind, created.secret);
-  }
-}
-
-/** Read-only: throws when an enabled endpoint violates the fixed allowlist rule. */
-export async function assertSandboxHygiene(stripe: Stripe): Promise<void> {
-  const offenders = (await listEndpoints(stripe)).filter(
-    (e) => e.status === 'enabled' && !isAllowedWebhookUrl(e.url),
-  );
-  if (offenders.length > 0) {
-    const list = offenders.map((e) => `${e.id} -> ${e.url}`).join(', ');
-    throw new Error(`Sandbox has enabled webhook endpoints outside the e2e allowlist: ${list}`);
-  }
 }
 
 /** Key shape check; needs no Stripe call. */

@@ -2,24 +2,23 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import type Stripe from 'stripe';
-import {
-  assertSandboxAccount,
-  assertSandboxHygiene,
-  assertTestKey,
-  assertWebhookUrls,
-  ensureCatalog,
-  ensureWebhooks,
-} from './stripeSandbox';
+import { assertSandboxAccount, assertTestKey, ensureCatalog } from './stripeSandbox';
+import { assertSandboxHygiene, assertWebhookUrls, ensureWebhooks } from './stripeWebhooks';
 
 export type SetupDeps = {
   readKey: () => string;
-  createStripe: (key: string) => Stripe;
+  createStripe: (key: string, apiVersion: string) => Stripe;
   outDir: string;
   platformUrl: string;
   connectUrl: string;
+  /** Pinned Stripe API version for the client and for every webhook endpoint created. */
+  apiVersion: string;
   /** Required on the first run; must equal the retrieved account id. */
   confirmAccount?: string;
 };
+
+/** A file that exists but cannot be used; its message never contains the file's content. */
+class UnusableFileError extends Error {}
 
 /** Temp file created 0600, then renamed over the target. */
 function writeSecretFile(file: string, content: string): void {
@@ -33,26 +32,53 @@ function writeSecretFile(file: string, content: string): void {
   }
 }
 
+/**
+ * {} when the file is absent. Errors name the file only: a JSON.parse message
+ * quotes the input, which here holds webhook secrets.
+ */
 function readJsonObject(file: string): Record<string, string> {
-  if (!fs.existsSync(file)) return {};
-  const parsed: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
+  let text: string;
+  try {
+    text = fs.readFileSync(file, 'utf8');
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') return {};
+    throw new UnusableFileError(`cannot read ${file} (${code ?? 'unknown error'})`);
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new UnusableFileError(`${file} is not valid JSON`);
+  }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw new Error('not an object');
+    throw new UnusableFileError(`${file} must be a JSON object`);
   }
   return parsed as Record<string, string>;
 }
 
-/** Merge into the secrets file; if it is corrupt, park the one-time secret elsewhere, then fail. */
+/** Merge into the secrets file; if it cannot be used, park the one-time secret elsewhere, then fail. */
 function persistSecret(dir: string, kind: string, secret: string): void {
   const file = path.join(dir, 'stripe-e2e-webhook-secrets.json');
   let existing: Record<string, string>;
   try {
     existing = readJsonObject(file);
-  } catch {
+  } catch (err) {
+    if (!(err instanceof UnusableFileError)) throw err;
     const rescue = path.join(dir, `stripe-e2e-webhook-secret-${kind}-${Date.now()}.json`);
-    writeSecretFile(rescue, JSON.stringify({ [kind]: secret }, null, 2) + '\n');
-    console.error(`Existing secrets file is corrupt; saved the new ${kind} secret to ${rescue}`);
-    throw new Error(`Corrupt ${file}; recover the ${kind} secret from ${rescue}.`);
+    try {
+      writeSecretFile(rescue, JSON.stringify({ [kind]: secret }, null, 2) + '\n');
+    } catch (writeErr) {
+      const code = (writeErr as NodeJS.ErrnoException).code ?? 'unknown error';
+      throw new Error(
+        `Corrupt or unreadable secrets file (${err.message}) and the ${kind} secret could not be ` +
+          `saved elsewhere (${code}); delete the new ${kind} webhook endpoint in the Stripe Dashboard and rerun.`,
+      );
+    }
+    console.error(
+      `Secrets file unusable (${err.message}); saved the new ${kind} secret to ${rescue}`,
+    );
+    throw new Error(`Corrupt or unreadable ${file}; recover the ${kind} secret from ${rescue}.`);
   }
   writeSecretFile(file, JSON.stringify({ ...existing, [kind]: secret }, null, 2) + '\n');
 }
@@ -82,7 +108,7 @@ export async function runSetup(deps: SetupDeps): Promise<{ pricesFile: string }>
   assertWebhookUrls(deps.platformUrl, deps.connectUrl);
   const key = deps.readKey().trim();
   assertTestKey(key);
-  const stripe = deps.createStripe(key);
+  const stripe = deps.createStripe(key, deps.apiVersion);
   const accountId = await assertSandboxAccount(stripe, key);
 
   fs.mkdirSync(deps.outDir, { recursive: true, mode: 0o700 });
@@ -98,6 +124,7 @@ export async function runSetup(deps: SetupDeps): Promise<{ pricesFile: string }>
   await ensureWebhooks(stripe, {
     platformUrl: deps.platformUrl,
     connectUrl: deps.connectUrl,
+    apiVersion: deps.apiVersion,
     onSecret: (kind, secret) => persistSecret(deps.outDir, kind, secret),
     hasSecret: (kind) => typeof readJsonObject(secretsFile)[kind] === 'string',
   });

@@ -1,10 +1,12 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { PLATFORM_EVENTS, PRODUCTION_SANDBOX_ACCOUNT_ID } from '../stripeSandbox';
+import { PRODUCTION_SANDBOX_ACCOUNT_ID } from '../stripeSandbox';
+import { CONNECT_EVENTS, PLATFORM_EVENTS } from '../stripeWebhooks';
 import { runSetup } from '../stripeSandboxRun';
 import { makeStripe } from './helpers/mockStripe';
 
+const API = '2026-01-28.clover';
 const urls = {
   platformUrl: 'https://us-central1-regroup-e2e.cloudfunctions.net/stripeWebhook',
   connectUrl: 'https://us-central1-regroup-e2e.cloudfunctions.net/stripeConnectWebhook',
@@ -21,8 +23,23 @@ describe('runSetup', () => {
     createStripe: () => stripe as never,
     outDir,
     confirmAccount: 'acct_new',
+    apiVersion: API,
     ...urls,
     ...extra,
+  });
+  const secretsFile = () => path.join(outDir, 'stripe-e2e-webhook-secrets.json');
+  const existing = (
+    id: string,
+    url: string,
+    events: readonly string[],
+    application: string | null,
+  ) => ({
+    id,
+    url,
+    status: 'enabled',
+    enabled_events: [...events],
+    api_version: API,
+    application,
   });
 
   it('refuses a production URL with zero Stripe calls', async () => {
@@ -32,6 +49,7 @@ describe('runSetup', () => {
         readKey: () => 'sk_test_zzz',
         createStripe,
         outDir,
+        apiVersion: API,
         platformUrl: 'https://us-central1-phoenix-cleanhouse.cloudfunctions.net/w',
         connectUrl: urls.connectUrl,
       }),
@@ -42,7 +60,7 @@ describe('runSetup', () => {
 
   it('refuses http and identical URLs before creating a client', async () => {
     const createStripe = jest.fn();
-    const key = { readKey: () => 'sk_test_zzz', createStripe, outDir };
+    const key = { readKey: () => 'sk_test_zzz', createStripe, outDir, apiVersion: API };
     await expect(
       runSetup({
         ...key,
@@ -59,9 +77,9 @@ describe('runSetup', () => {
   it('refuses live and non-test keys before creating a client', async () => {
     const createStripe = jest.fn();
     for (const key of ['sk_live_zzz', 'rk_live_zzz', 'pk_test_zzz']) {
-      await expect(runSetup({ readKey: () => key, createStripe, outDir, ...urls })).rejects.toThrow(
-        /live|not an sk_test/i,
-      );
+      await expect(
+        runSetup({ readKey: () => key, createStripe, outDir, apiVersion: API, ...urls }),
+      ).rejects.toThrow(/live|not an sk_test/i);
     }
     expect(createStripe).not.toHaveBeenCalled();
   });
@@ -157,18 +175,95 @@ describe('runSetup', () => {
 
   it('refuses to reuse an endpoint whose secret was never saved, naming it', async () => {
     const { mock, stripe } = makeStripe({
-      endpoints: [
-        {
-          id: 'we_orphan',
-          url: urls.platformUrl,
-          status: 'enabled',
-          enabled_events: [...PLATFORM_EVENTS],
-        },
-      ],
+      endpoints: [existing('we_orphan', urls.platformUrl, PLATFORM_EVENTS, null)],
     });
     await expect(runSetup(base(stripe))).rejects.toThrow(/we_orphan.*secret.*not saved/);
     expect(mock.webhookEndpoints.create).not.toHaveBeenCalled();
-    expect(fs.existsSync(path.join(outDir, 'stripe-e2e-webhook-secrets.json'))).toBe(false);
+    expect(fs.existsSync(secretsFile())).toBe(false);
+  });
+
+  it('checks each endpoint secret separately: a saved platform secret does not cover connect', async () => {
+    const { mock, stripe } = makeStripe({
+      endpoints: [
+        existing('we_platform', urls.platformUrl, PLATFORM_EVENTS, null),
+        existing('we_connect', urls.connectUrl, CONNECT_EVENTS, 'ca_x'),
+      ],
+    });
+    fs.writeFileSync(secretsFile(), JSON.stringify({ platform: 'whsec_saved' }));
+    await expect(runSetup(base(stripe))).rejects.toThrow(/we_connect.*connect.*not saved/);
+    expect(mock.webhookEndpoints.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses a sandbox with more than one page of endpoints, creating nothing', async () => {
+    const { mock, stripe } = makeStripe();
+    mock.webhookEndpoints.list.mockResolvedValue({ data: [], has_more: true });
+    await expect(runSetup(base(stripe))).rejects.toThrow(/refusing to guess/);
+    expect(mock.products.create).not.toHaveBeenCalled();
+    expect(mock.webhookEndpoints.create).not.toHaveBeenCalled();
+  });
+
+  it('changes nothing when run twice', async () => {
+    const { mock, stripe } = makeStripe();
+    await runSetup(base(stripe));
+    const counts = () => [
+      mock.products.create.mock.calls.length,
+      mock.prices.create.mock.calls.length,
+      mock.coupons.create.mock.calls.length,
+      mock.webhookEndpoints.create.mock.calls.length,
+    ];
+    const before = counts();
+    const secrets = fs.readFileSync(secretsFile());
+    await runSetup(base(stripe));
+    expect(counts()).toEqual(before);
+    expect(fs.readFileSync(secretsFile()).equals(secrets)).toBe(true);
+  });
+
+  it('never prints a webhook secret or puts one in an error message', async () => {
+    const spies = (['log', 'error', 'warn'] as const).map((m) =>
+      jest.spyOn(console, m).mockImplementation(() => undefined),
+    );
+    const messages: string[] = [];
+    const attempt = async (deps: Parameters<typeof runSetup>[0]) => {
+      try {
+        await runSetup(deps);
+      } catch (err) {
+        messages.push((err as Error).message);
+      }
+    };
+
+    await attempt(base(makeStripe().stripe));
+
+    const blockedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'e2e-stripe-'));
+    fs.mkdirSync(path.join(blockedDir, 'stripe-e2e-prices.json'));
+    fs.writeFileSync(path.join(blockedDir, 'stripe-e2e-prices.json', 'keep'), 'x');
+    await attempt(base(makeStripe().stripe, { outDir: blockedDir }));
+
+    const failing = makeStripe();
+    const create = failing.mock.webhookEndpoints.create.getMockImplementation()!;
+    failing.mock.webhookEndpoints.create
+      .mockImplementationOnce(create)
+      .mockRejectedValueOnce(new Error('connect create failed'));
+    const failDir = fs.mkdtempSync(path.join(os.tmpdir(), 'e2e-stripe-'));
+    await attempt(base(failing.stripe, { outDir: failDir }));
+
+    // A hand-damaged secrets file next to an existing endpoint: JSON.parse would quote it.
+    const corruptDir = fs.mkdtempSync(path.join(os.tmpdir(), 'e2e-stripe-'));
+    fs.writeFileSync(
+      path.join(corruptDir, 'stripe-e2e-webhook-secrets.json'),
+      '{"platform": "whsec_leakme" oops}',
+    );
+    const withEndpoint = makeStripe({
+      endpoints: [existing('we_p', urls.platformUrl, PLATFORM_EVENTS, null)],
+    });
+    await attempt(base(withEndpoint.stripe, { outDir: corruptDir }));
+
+    const logged = spies.flatMap((s) => s.mock.calls.flat().map(String));
+    spies.forEach((s) => s.mockRestore());
+    expect(messages.length).toBeGreaterThanOrEqual(3);
+    expect(messages.find((m) => m.includes('stripe-e2e-webhook-secrets.json'))).toMatch(
+      /not valid JSON/,
+    );
+    for (const text of [...messages, ...logged]) expect(text).not.toMatch(/whsec_/);
   });
 
   it('leaves no temp file behind when a write fails', async () => {

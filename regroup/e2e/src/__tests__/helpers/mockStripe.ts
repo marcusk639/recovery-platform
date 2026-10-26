@@ -19,14 +19,15 @@ export function makeStripe(opts: { accountId?: string; endpoints?: any[] } = {})
         if (!products[id]) throw missing();
         return products[id];
       }),
-      create: jest.fn(async (p: any) => (products[p.id] = { ...p })),
+      create: jest.fn(async (p: any) => (products[p.id] = { ...p, active: true })),
     },
     prices: {
       list: jest.fn(async ({ lookup_keys }: any) => ({
         data: prices[lookup_keys[0]] ? [prices[lookup_keys[0]]] : [],
       })),
       create: jest.fn(
-        async (p: any) => (prices[p.lookup_key] = { ...p, id: `price_${p.lookup_key}` }),
+        async (p: any) =>
+          (prices[p.lookup_key] = { ...p, active: true, id: `price_${p.lookup_key}` }),
       ),
     },
     coupons: {
@@ -34,12 +35,19 @@ export function makeStripe(opts: { accountId?: string; endpoints?: any[] } = {})
         if (!coupons[id]) throw missing();
         return coupons[id];
       }),
-      create: jest.fn(async (c: any) => (coupons[c.id] = { ...c })),
+      create: jest.fn(async (c: any) => (coupons[c.id] = { ...c, valid: true })),
     },
     webhookEndpoints: {
       list: jest.fn(async () => ({ data: endpoints, has_more: false })),
-      create: jest.fn(async (e: any) => {
-        const created = { ...e, status: 'enabled', id: `we_${endpoints.length}`, secret: 'whsec_mock' };
+      // Like Stripe: the object has no `connect` field; a Connect endpoint carries `application`.
+      create: jest.fn(async ({ connect, ...e }: any) => {
+        const created = {
+          ...e,
+          application: connect ? 'ca_mock' : null,
+          status: 'enabled',
+          id: `we_${endpoints.length}`,
+          secret: 'whsec_mock',
+        };
         endpoints.push(created);
         return created;
       }),

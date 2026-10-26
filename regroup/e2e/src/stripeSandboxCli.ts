@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type Stripe from 'stripe';
+import { pinnedStripeApiVersion } from './launchConfig';
 import type { SetupDeps } from './stripeSandboxRun';
 
 const optionalArg = (argv: string[], name: string): string | undefined => {
@@ -12,7 +13,7 @@ const optionalArg = (argv: string[], name: string): string | undefined => {
 export function buildSetupDeps(
   argv: string[],
   configDir: string,
-  createStripe: (key: string) => Stripe,
+  createStripe: (key: string, apiVersion: string) => Stripe,
 ): SetupDeps {
   const required = (name: string): string => {
     const value = optionalArg(argv, name);
@@ -26,5 +27,6 @@ export function buildSetupDeps(
     platformUrl: required('platform-url'),
     connectUrl: required('connect-url'),
     confirmAccount: optionalArg(argv, 'confirm-account'),
+    apiVersion: pinnedStripeApiVersion(),
   };
 }
