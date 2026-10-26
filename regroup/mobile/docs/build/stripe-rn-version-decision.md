@@ -8,7 +8,7 @@ Date: 2026-10-21. Scope: `@stripe/stripe-react-native` in `regroup/mobile`, Reac
 
 The `package.json` range `^0.44.0` already resolves to 0.44.0 (it is the only 0.44.x release), and
 `package-lock.json` pins it. The mismatch is on the iOS side: `ios/Podfile.lock` was generated with
-0.67.0 (native Stripe iOS 25.17.0). The fix is to regenerate the iOS pods against 0.44.0 (Task 2),
+0.67.0 (native Stripe iOS 25.17.0). The fix is to regenerate the iOS pods against 0.44.0 (done in the same PR),
 not to raise the JS package.
 
 ## Why only 0.44.0 fits
@@ -37,12 +37,12 @@ Source: published npm tarballs (`npm pack`), inspected directly.
 
 ## App-side constraints (unchanged by this decision)
 
-- `ios/Podfile`: `platform :ios, '13.0'` matches 0.44.0's iOS 13.0 minimum.
+- `ios/Podfile`: `platform :ios, '15.0'`, above 0.44.0's iOS 13.0 minimum. It was 13.0; the same PR raised it because Xcode 27.1 cannot build for older targets.
 - `android/build.gradle`: `minSdkVersion 23`, `compileSdkVersion 34`, AGP 8.1.1, Kotlin 2.1.20.
   The root `stripeVersion = "21.14.0"` override takes precedence over the wrapper's `21.10.+`
   default. The comments there record why higher native versions break 0.44.0's Kotlin.
 - The Android pin and the iOS pods are independent: iOS pulls Stripe iOS `~> 24.11.0` from the
-  wrapper's podspec. Task 2 must regenerate `Podfile.lock` and verify an iOS build.
+  wrapper's podspec. The same PR regenerates `Podfile.lock` and verifies an iOS build.
 
 ## History: PR #63
 
@@ -56,7 +56,7 @@ iOS lockfile is what must change. No version above 0.44.0 is safe until React Na
 ## Fallback
 
 0.43.0 (next lower version with plain `ReactPackage`): native Android 21.6.+, iOS 24.7.0. Use it only
-if iOS 24.11.0 fails to build under Task 2. It would need the Android `stripeVersion` pin rechecked.
+if iOS 24.11.0 fails to build. It would need the Android `stripeVersion` pin rechecked.
 
 ## Evidence
 

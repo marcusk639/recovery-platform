@@ -85,3 +85,6 @@ maestro/output/
 # Maestro helper scripts are hand-written source, not compiled output — re-include
 # them despite the blanket **/*.js rule in regroup/.gitignore.
 !maestro/scripts/*.js
+
+# Build docs live under docs/build/ and are tracked.
+!docs/build/
