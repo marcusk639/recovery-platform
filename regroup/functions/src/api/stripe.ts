@@ -343,7 +343,7 @@ export const updateGuestSubscriptionAmount = async (
  * house count. If no discount tier is reached, removes any existing coupon.
  *
  * Coupon tiers:
- *   houseCount >= 5  → regroup-bundle-5  (20% off, forever)
+ *   houseCount >= 5  → regroup-bundle-5  (15% off, forever)
  *   houseCount >= 3  → regroup-bundle-3  (10% off, forever)
  *   houseCount < 3   → no coupon (removes any existing one)
  */

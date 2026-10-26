@@ -52,8 +52,8 @@ export const PRICE_ENV_VARS: readonly string[] = [
   ...LEGACY_PRICES.map((legacy) => legacy.envVar),
 ];
 
-// Source: api/stripe.ts bundleCouponIds; percentages per docs/go-to-market/monetization.md
-// (the "20%" in an api/stripe.ts comment is stale).
+// Source: api/stripe.ts bundleCouponIds; percentages per pricing decision P-6
+// (docs/launch-readiness/regroup-pricing-revision-plan.md, docs/go-to-market/monetization.md).
 const COUPONS = [
   { id: 'regroup-bundle-3', percent_off: 10 },
   { id: 'regroup-bundle-5', percent_off: 15 },
