@@ -7,7 +7,8 @@ import FirebaseStorage from '@react-native-firebase/storage';
 import { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import { FirebaseStorageTypes } from '@react-native-firebase/storage';
-import { connectToEmulators } from './src/config/firebase-emulator';
+import { connectToEmulators, emulatorHost, emulatorPorts } from './src/config/firebase-emulator';
+import { e2eVariant } from './src/config/env';
 
 // const app = firebase.app();
 const auth = FirebaseAuth();
@@ -15,12 +16,18 @@ const messaging = FirebaseMessaging();
 const storage = FirebaseStorage();
 const functions = FirebaseFunctions();
 
-// E2E only: route Auth/Firestore/Storage to the local emulator when launched
-// with the IS_E2E_TEST flag. Must run before any Firestore/Auth usage below.
-// Guarded by __DEV__ so production builds never call it (and never log).
-if (__DEV__) {
-  connectToEmulators();
-}
+// E2E emulator builds only: route Auth, Firestore, Storage and Functions to the
+// local emulators. The gate is the bundle-time E2E_VARIANT, not __DEV__ or a
+// launch argument, so no other build reaches connectToEmulators. It wires the
+// SDKs synchronously, before the Firestore settings call below.
+//
+// Deliberately no catch and no fallback: if an emulator is unreachable this
+// promise rejects, and index.js reports that as fatal. It must never carry on
+// against the project in the native Firebase config.
+const emulatorConnection: Promise<void> =
+  e2eVariant() === 'emulator'
+    ? connectToEmulators({ host: emulatorHost(), ports: emulatorPorts() })
+    : Promise.resolve();
 
 export const callHttpsFunction = (name: string, payload: any) => {
   return FirebaseFunctions().httpsCallable(name)(payload);
@@ -36,6 +43,7 @@ firestore.settings({ ignoreUndefinedProperties: true });
 // notifications.android.createChannel(channel);
 
 export {
+  emulatorConnection,
   firestore,
   auth,
   messaging,

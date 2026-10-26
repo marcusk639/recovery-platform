@@ -26,6 +26,7 @@ import notifee from "@notifee/react-native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../../navigation/types";
 import { DeepLinkTester } from "../../components/DeepLinkTester";
+import { isE2EBuild } from "../../config/env";
 import { logDebug, logError, logWarn } from "../../util/simple-debug-logger";
 import { wait } from "../../util/display";
 import { useAppSelector, useAppDispatch } from "../../state/store";
@@ -339,7 +340,7 @@ export const withSplash = <P extends object>(
       return (
         <View style={splashStyles.container}>
           <RatsLogo />
-          <DeepLinkTester visible={__DEV__} />
+          <DeepLinkTester visible={isE2EBuild()} />
         </View>
       );
     } else {

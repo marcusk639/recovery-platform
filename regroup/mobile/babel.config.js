@@ -11,7 +11,16 @@
 // base URLs, and API keys whose protection is server-side referrer/bundle-id
 // restriction rather than secrecy. Never add a Stripe secret key, a webhook
 // signing secret, or a service-account credential.
-const BUNDLED_ENV = ['STRIPE_PUBLISHABLE_KEY', 'RATS_WEB_URL', 'GOOGLE_MAPS_API_KEY'];
+//
+// E2E_VARIANT ('emulator' | 'staging', unset for every other build) is read via
+// e2eVariant() in src/config/env.ts. Being bundle-time is the point: no launch
+// argument can turn a store build into an e2e build.
+const BUNDLED_ENV = [
+  'STRIPE_PUBLISHABLE_KEY',
+  'RATS_WEB_URL',
+  'GOOGLE_MAPS_API_KEY',
+  'E2E_VARIANT',
+];
 
 // Under Jest the substitution is skipped so tests can set process.env and
 // re-require a module. src/services/__tests__/google-apikeys.test.ts and

@@ -3,9 +3,9 @@
  * @lint-ignore-every XPLATJSCOPYRIGHT1
  */
 
-// Must run before any Firebase module is imported so useEmulator() fires first.
-import { connectToEmulators } from './src/config/firebase-emulator';
-connectToEmulators();
+// Imported first so that, in an e2e emulator build, firebase-setup points every
+// Firebase SDK at the local emulators before any other module can use one.
+import { emulatorConnection } from './firebase-setup';
 
 import { AppRegistry } from 'react-native';
 import React from 'react';
@@ -18,6 +18,14 @@ import './i18n';
 import { NavigationContainer } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { navigationRef } from './src/navigation/service';
+
+// An e2e emulator build whose emulators do not answer must stop, not carry on.
+// reportFatalError shows the red screen in debug and crashes a release build.
+// In every other build emulatorConnection is already resolved.
+emulatorConnection.catch((error) => {
+  global.ErrorUtils.reportFatalError(error);
+});
+
 // Save the original method
 // const originalCreateView = UIManager.createView;
 

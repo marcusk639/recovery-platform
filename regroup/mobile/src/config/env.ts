@@ -53,3 +53,26 @@ export const isLiveStripeKey = (key: string = stripePublishableKey()): boolean =
  */
 export const webBaseUrl = (): string =>
   ((process.env.RATS_WEB_URL as string | undefined) ?? DEFAULT_WEB_BASE_URL).replace(/\/+$/, '');
+
+export type E2EVariant = 'emulator' | 'staging';
+
+const E2E_VARIANTS: readonly E2EVariant[] = ['emulator', 'staging'];
+
+/**
+ * The e2e build variant baked into this bundle, or null for every other build.
+ *
+ * 'emulator' builds route Firebase to local emulators (see
+ * src/config/firebase-emulator.ts); 'staging' builds talk to the deployed e2e
+ * project, which comes from the variant's native Firebase config, not from JS.
+ *
+ * This is a bundle-time value, so nothing a launcher passes at runtime can turn
+ * a store build into an e2e build. An unrecognised value reads as null rather
+ * than as an e2e build: the e2e-only relaxations stay off.
+ */
+export const e2eVariant = (): E2EVariant | null => {
+  const variant = process.env.E2E_VARIANT;
+  return E2E_VARIANTS.find((known) => known === variant) ?? null;
+};
+
+/** True only for a bundle built as an e2e variant. Independent of __DEV__. */
+export const isE2EBuild = (): boolean => e2eVariant() !== null;
