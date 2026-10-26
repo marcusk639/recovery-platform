@@ -142,27 +142,31 @@ old one is live delivers every event twice. Rotate from the Dashboard instead:
    expiry long enough to finish the steps below (Stripe signs with both secrets
    until then).
 2. Store the new value: `firebase functions:secrets:set STRIPE_WEBHOOK_SECRET`
-   (or `STRIPE_CONNECT_WEBHOOK_SECRET`) in `phoenix-cleanhouse`.
-3. Redeploy the function that uses it (`stripeEvents` or
+   (or `STRIPE_CONNECT_WEBHOOK_SECRET`) in `phoenix-cleanhouse`. The two
+   endpoints have different secrets: copy each one from the page of the endpoint
+   whose URL ends in `/stripeEvents` or `/handleStripeConnectWebhook`.
+3. Before redeploying, check that the two stored values differ. This prints no
+   secret, and stops if a read fails or comes back empty:
+
+   ```bash
+   for s in STRIPE_WEBHOOK_SECRET STRIPE_CONNECT_WEBHOOK_SECRET; do
+     v=$(gcloud secrets versions access latest --secret "$s" --project phoenix-cleanhouse) \
+       || { echo "$s: read failed, stop"; break; }
+     [ -n "$v" ] || { echo "$s: empty, stop"; break; }
+     printf '%s' "$v" | shasum -a 256 | cut -c1-12
+   done; unset v   # two different hashes expected
+   ```
+
+   A hash of `e3b0c44298fc` means an empty read, not a secret.
+4. Redeploy the function that uses it (`stripeEvents` or
    `handleStripeConnectWebhook`). A deployed function keeps the secret version
    it was deployed with, so storing a new version alone changes nothing.
-4. Confirm the running revision uses the new version, e.g.
+5. Confirm the running revision uses the new version, e.g.
    `gcloud run revisions describe <revision> --region us-central1 --project phoenix-cleanhouse`,
    and that deliveries return 200 before the old secret expires.
 
-The two endpoints have different secrets. Copy each one from the page of the
-endpoint whose URL ends in `/stripeEvents` or `/handleStripeConnectWebhook`, and
-before redeploying check that the two stored values differ (this prints no
-secret):
-
-```bash
-for s in STRIPE_WEBHOOK_SECRET STRIPE_CONNECT_WEBHOOK_SECRET; do
-  gcloud secrets versions access latest --secret $s --project phoenix-cleanhouse | shasum -a 256 | cut -c1-12
-done   # two different hashes expected
-```
-
-If they match, one endpoint will reject every event once its old secret
-expires. After the rotation, disable the superseded versions with
+If the two hashes in step 3 match, one endpoint will reject every event once
+its old secret expires. After the rotation, disable the superseded versions with
 `gcloud secrets versions disable <n> --secret <name> --project phoenix-cleanhouse`,
 but only versions that no running revision uses.
 
