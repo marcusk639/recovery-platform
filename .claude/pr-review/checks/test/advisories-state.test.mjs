@@ -138,7 +138,7 @@ test('publish marks dispositioned security entries resolved in the ledger', asyn
   };
   const prior = { id: ID, severity: 'High', status: 'open', security: true, runsSinceResolved: 0, fileIds: [] };
   const snapshot = { lastReviewedSha: 'e'.repeat(40), lastBaseSha: HEAD, ledger: [prior], linkTypesSeen: [], tier: 'incremental', headSha: HEAD, baseSha: HEAD, pr: 7 };
-  const findingsText = JSON.stringify({ reviewedSha: HEAD, findings: [], resolvedSlugs: [] });
+  const findingsText = JSON.stringify({ reviewedSha: HEAD, findings: [], resolvedSlugs: [], complete: true });
   await publish({ repo: REPO, pr: 7, snapshot, findingsText, narrative: '', outcome: 'success', headSha: HEAD, baseSha: HEAD, idKey: KEY, advisoryToken: TOKEN }, deps);
   assert.deepEqual(seen[0][6], [ID], 'prior open security ids are passed for lookup');
   const e = decodeLedger(posted[0]).ledger.find((x) => x.id === ID);

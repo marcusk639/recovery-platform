@@ -52,7 +52,7 @@ const secFinding = {
 };
 
 function findingsText(findings) {
-  return JSON.stringify({ reviewedSha: HEAD, findings, resolvedSlugs: [] });
+  return JSON.stringify({ reviewedSha: HEAD, findings, resolvedSlugs: [], complete: true });
 }
 
 test('publish redacts secrets and withholds security paths', () => {

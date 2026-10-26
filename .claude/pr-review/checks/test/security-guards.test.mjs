@@ -35,7 +35,7 @@ function finding(over = {}) {
   };
 }
 const SEC = finding({ slug: `c1:${SEC_FILE}:createCharge`, class: 1, severity: 'High', security: true, title: 'Trusted client account', locations: [{ file: SEC_FILE, line: 30, side: 'changed' }] });
-const text = (findings, reviewedSha = HEAD) => JSON.stringify({ reviewedSha, findings, resolvedSlugs: [] });
+const text = (findings, reviewedSha = HEAD) => JSON.stringify({ reviewedSha, findings, resolvedSlugs: [], complete: true });
 
 // I3
 test('classes 1, 4, 7, 11 and 14 are forced security whatever the model said', () => {
@@ -134,7 +134,7 @@ test('the inline guard deletes security, forced-class, unmarked and secret-beari
   ];
   const r = recorder();
   const res = await guardInlineComments({ repo: 'o/r', comments, findings: [SEC], headSha: HEAD, runStartedAt: RUN, isSecurityPath: (p) => p === SEC_FILE, request: r.request });
-  assert.deepEqual(res, { removed: 5, failed: 0 });
+  assert.deepEqual({ removed: res.removed, failed: res.failed }, { removed: 5, failed: 0 });
   assert.deepEqual(r.calls.map((c) => c.path).sort(), [1, 2, 3, 4, 6].map((id) => `/repos/o/r/pulls/comments/${id}`).sort());
   assert.ok(r.calls.every((c) => c.method === 'DELETE'));
 });

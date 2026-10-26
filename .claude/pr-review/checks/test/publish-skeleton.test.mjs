@@ -4,7 +4,7 @@ import { composeBody } from '../publish.mjs';
 import { SUMMARY_MARKER } from '../lib/markers.mjs';
 
 const HEAD = 'abc1234' + '0'.repeat(33);
-const ok = JSON.stringify({ reviewedSha: HEAD, findings: [], resolvedSlugs: [] });
+const ok = JSON.stringify({ reviewedSha: HEAD, findings: [], resolvedSlugs: [], complete: true });
 
 test('summary on success names the reviewed commit', () => {
   const s = composeBody({ state: {}, findingsText: ok, narrative: '', outcome: 'success', headSha: HEAD, baseSha: 'b' });

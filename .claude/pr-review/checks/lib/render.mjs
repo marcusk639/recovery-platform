@@ -106,13 +106,17 @@ const CHECK_RE = /^[A-Za-z][A-Za-z0-9-]{0,39}$/;
 // counted apart; "No issues found" only when nothing at all is open.
 export const PRIOR_UNREAD = 'prior findings could not be read; earlier open findings may still apply';
 
+export const PARTIAL = 'partial review: the pre-checks were unavailable or the PR diff was missing or truncated, so issues may have been missed';
+
 // priorUnread: the old marker is re-emitted because it could not be read, so
-// "nothing open" cannot be claimed.
-function headline(sha, tier, list, carried, priorUnread = false) {
-  const head = `Reviewed \`${clean(sha, 7)}\` (${tierName(tier)}):`;
-  if (priorUnread) return `${head} ${list.length} reported this run${bySeverity(list)}; ${PRIOR_UNREAD}.`;
-  if (!list.length && !carried.length) return `${head} No issues found.`;
-  return `${head} ${list.length} reported this run${bySeverity(list)}; ${carried.length} still open from earlier reviews${bySeverity(carried)}.`;
+// "nothing open" cannot be claimed. partial: facts failed or pr.diff is
+// missing or truncated, so "No issues found" cannot be claimed either.
+function headline(sha, tier, list, carried, priorUnread = false, partial = false) {
+  const head = `Reviewed \`${clean(sha, 7)}\` (${tierName(tier)}${partial ? ', partial review' : ''}):`;
+  const tail = partial ? `; ${PARTIAL}.` : '.';
+  if (priorUnread) return `${head} ${list.length} reported this run${bySeverity(list)}; ${PRIOR_UNREAD}${tail}`;
+  if (!list.length && !carried.length && !partial) return `${head} No issues found.`;
+  return `${head} ${list.length} reported this run${bySeverity(list)}; ${carried.length} still open from earlier reviews${bySeverity(carried)}${tail}`;
 }
 
 // Fixed text: the tier and the names of pre-checks facts could not run.
@@ -165,11 +169,13 @@ function assemble(head, groups, narrative, markerText, sections = []) {
       text = build(head, g, dropped, narr, extra);
     }
   }
+  // Whole-body pass before the hard cut, so the cut cannot split a secret into
+  // a fragment too short to match; redaction only ever shortens text.
+  text = redact(text);
   if (text.length > room) text = `${text.slice(0, Math.max(0, room - TRUNC.length - 2))}\n${TRUNC}`;
   // The summary marker must stay the first line whatever was cut.
   if (!text.startsWith(SUMMARY_MARKER)) text = `${SUMMARY_MARKER}\n${text}`;
-  // Whole-body pass; redaction only ever shortens text, so the cap still holds.
-  return `${redact(text)}\n\n${markerText}`;
+  return `${text}\n\n${markerText}`;
 }
 
 const ADVISORY = '_Advisory only: not a required check. Security-relevant findings show only a pointer here._';
@@ -197,7 +203,7 @@ function renderPrior(ledger, markerText, banner, withResolved, notices = [], pri
 // rawMarker: an existing marker re-emitted verbatim when publish has no
 // decodable prior state (it only ever comes from rawLedgerMarker's pattern).
 // notices: fixed, code-written lines (never model text) shown under the banner.
-export function renderSummary({ state, findings, narrative, outcome, ledger, reason = 'failed', needles, note = '', newSlugs = new Set(), carried = [], resolved = [], rawMarker = null, securityClause, notices = [] }) {
+export function renderSummary({ state, findings, narrative, outcome, ledger, reason = 'failed', needles, note = '', newSlugs = new Set(), carried = [], resolved = [], rawMarker = null, securityClause, notices = [], partial = false }) {
   // An oversized raw marker is dropped for an encoded (sanitized) ledger.
   const raw = rawMarker && rawMarker.length <= MAX_MARKER ? rawMarker : null;
   const markerText = raw ?? encodeLedger(fitMarker(ledger, encodeLedger, MAX_MARKER));
@@ -209,7 +215,7 @@ export function renderSummary({ state, findings, narrative, outcome, ledger, rea
   const head = [
     SUMMARY_MARKER,
     '## PR review (advisory)',
-    headline(sha, state?.tier, list, carried, Boolean(raw)),
+    headline(sha, state?.tier, list, carried, Boolean(raw), partial),
     tierLine(state),
     ADVISORY,
     ...notices,

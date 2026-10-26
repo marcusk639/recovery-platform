@@ -207,7 +207,7 @@ function runPublish(deliver, over = {}) {
     },
   };
   const snapshot = { lastReviewedSha: null, lastBaseSha: null, ledger: [], linkTypesSeen: [], inlineSlugs: [], tier: 'full', maxTurns: 60, headSha: HEAD, baseSha: HEAD, pr: 7 };
-  const findingsText = JSON.stringify({ reviewedSha: HEAD, findings: [sec()], resolvedSlugs: [] });
+  const findingsText = JSON.stringify({ reviewedSha: HEAD, findings: [sec()], resolvedSlugs: [], complete: true });
   const input = { repo: REPO, pr: 7, snapshot, findingsText, narrative: '', outcome: 'success', headSha: HEAD, baseSha: HEAD, idKey: KEY, advisoryToken: TOKEN, ...over };
   return publish(input, deps).then(() => ({ posted, seen }));
 }
@@ -247,7 +247,7 @@ test('a delivery that throws still publishes with the failure pointer', async ()
     },
   };
   const snapshot = { ledger: [], tier: 'full', headSha: HEAD, baseSha: HEAD, pr: 7 };
-  const findingsText = JSON.stringify({ reviewedSha: HEAD, findings: [sec()], resolvedSlugs: [] });
+  const findingsText = JSON.stringify({ reviewedSha: HEAD, findings: [sec()], resolvedSlugs: [], complete: true });
   await captureLogs(() => publish({ repo: REPO, pr: 7, snapshot, findingsText, narrative: '', outcome: 'success', headSha: HEAD, baseSha: HEAD, idKey: KEY, advisoryToken: TOKEN }, deps));
   assert.match(posted[0], /details could not be delivered privately/);
 });

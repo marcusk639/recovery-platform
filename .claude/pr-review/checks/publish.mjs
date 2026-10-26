@@ -3,75 +3,64 @@
 // comment from OUT/{findings.json,summary.md} and the trusted STATE_FILE
 // snapshot (never OUT/state.json). Runs from a fresh base-SHA checkout after
 // the model has finished, so nothing the model wrote can change this code.
-// Logs status codes only, always exits 0.
+// A run for a head the PR has moved past posts nothing. Logs status codes
+// only, warns on anything that leaves the summary stale, writes one status
+// line to the job summary, and always exits 0.
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ghRequest, listIssueComments, listReviewComments, upsertSummary } from './lib/gh.mjs';
 import { encodeLedger } from './lib/markers.mjs';
-import { fitMarker, markResolved, mergeLedger, opaqueId, sanitizeLedger, visibleEntries } from './lib/ledger.mjs';
-import { MAX_MARKER, renderSummary, validateFindings } from './lib/render.mjs';
+import { fitMarker, ledgerSlug, markResolved, mergeLedger, opaqueId, reportedBy, visibleEntries } from './lib/ledger.mjs';
+import { MAX_MARKER, renderSummary } from './lib/render.mjs';
+import { completedFindings, completion, failureReason, isPartial, outcomeLabel } from './lib/completion.mjs';
+import { DELIVERED, NOT_DELIVERED, NO_KEY, deliver } from './lib/deliver.mjs';
 import { isObject, priorFromComment, priorPayload, resolvePrior, sha, strings } from './lib/prior.mjs';
-import { postSummary } from './lib/summary-post.mjs';
+import { currentHead, fallbackSummary, postSummary, statusOf } from './lib/summary-post.mjs';
+import { stepSummary, warn } from './lib/status.mjs';
 import { touchesSecurityFile } from './lib/needles.mjs';
 import { priorFileIds, runNeedles } from './lib/fileids.mjs';
 import { runInline, INLINE_NOTICE } from './lib/inline-stage.mjs';
 import { deliverAdvisories } from './advisories.mjs';
 import { runPaths } from './lib/paths.mjs';
 
-export { INLINE_NOTICE, priorFromComment };
-
-const RATE_RE = /rate.?limit|usage limit/i;
-// Only the tail holds the final result; earlier turns may quote PR code about rate limiting.
-const LOG_TAIL = 4000;
-
-export function failureReason(executionLog) {
-  const tail = String(executionLog ?? '').slice(-LOG_TAIL);
-  return RATE_RE.test(tail) ? 'rate-limited' : 'failed';
-}
+export { INLINE_NOTICE, priorFromComment, failureReason };
 
 // Link types publish will carry forward: only those routing.json defines.
+// null when routing.json cannot be read: prior link types are then carried
+// through unfiltered rather than erased.
 export function knownLinkTypes() {
   try {
     const path = join(dirname(fileURLToPath(import.meta.url)), '../routing.json');
     return JSON.parse(readFileSync(path, 'utf8')).map((r) => r.linkType).filter((t) => typeof t === 'string');
   } catch {
-    return [];
+    warn('routing.json unreadable; link types carried through unfiltered');
+    return null;
   }
 }
 
 // Tier "none" (facts found nothing new; the review step was skipped): only the
-// SHAs move. The ledger and linkTypesSeen stay as they were.
-function noChangeBody(prior, headSha, baseSha, notices) {
+// SHAs move. The ledger and linkTypesSeen stay as they were; an old marker that
+// could not be read is re-emitted verbatim rather than replaced by an empty one.
+function noChangeBody(prior, headSha, baseSha, notices, rawMarker) {
   const head = sha(headSha) ?? prior.lastReviewedSha;
   const base = sha(baseSha) ?? prior.lastBaseSha;
   const since = String(prior.lastReviewedSha ?? head ?? '').slice(0, 7);
   const baseMoved = Boolean(prior.lastBaseSha && base && base !== prior.lastBaseSha);
   const note = baseMoved ? `Base updated; no counterpart changes since \`${since}\`.` : `No new changes since \`${since}\`.`;
   const ledger = { ...prior, lastReviewedSha: head, lastBaseSha: base };
-  return renderSummary({ state: {}, findings: null, narrative: '', outcome: 'none', note, ledger, notices });
+  return renderSummary({ state: {}, findings: null, narrative: '', outcome: 'none', note, ledger, notices, rawMarker });
 }
 
 // Findings to mark "(new)": none on a first review. Without the id key,
 // security and withheld findings have no prior entry to compare against.
 function newSlugs(findings, prior, idKey, needles) {
   if (!prior.lastReviewedSha) return new Set();
-  const ids = new Set(prior.ledger.map((e) => e.id));
   const comparable = (f) => idKey || (!f.security && !touchesSecurityFile(f, needles));
-  return new Set(findings.filter((f) => comparable(f) && !ids.has(opaqueId(f.slug, idKey))).map((f) => f.slug));
+  return new Set(findings.filter((f) => comparable(f) && !prior.ledger.some(reportedBy([f], idKey))).map((f) => f.slug));
 }
 
-export const DELIVERED = 'details sent privately';
-export const NOT_DELIVERED = 'details could not be delivered privately; re-run after fixing the advisory token';
-export const NO_KEY = 'details could not be delivered privately; id key unavailable';
-
-// The validated findings of a completed review, or null when publish will show
-// the failure banner instead. Shared by composeBody and advisory delivery.
-function completedFindings(state, findingsText, outcome) {
-  if (!isObject(state) || outcome !== 'success' || state.tier === 'none') return null;
-  const parsed = validateFindings(findingsText ?? '');
-  return parsed.ok ? parsed.value : null;
-}
+export { DELIVERED, NOT_DELIVERED, NO_KEY };
 
 // Without a trusted snapshot: always the failure banner, with prior state from
 // the existing summary comment (fallback.state, sanitized as usual) or, if its
@@ -99,31 +88,33 @@ export function composeBody({ state, findingsText, narrative, outcome, execution
   // A missing or invalid snapshot fails closed, whatever the action outcome.
   if (!isObject(state)) return untrustedBody(fallback, idKey, linkTypes, notices);
   const s = state;
-  const known = new Set(linkTypes);
-  const types = (list) => strings(list).filter((t) => known.has(t));
+  const known = new Set(linkTypes ?? []);
+  const types = (list) => strings(list).filter((t) => !linkTypes || known.has(t));
   const prior = priorPayload(s, idKey, linkTypes);
-  if (s.tier === 'none' && outcome === 'skipped') return noChangeBody(prior, headSha, baseSha, notices);
+  if (s.tier === 'none' && outcome === 'skipped') return noChangeBody(prior, headSha, baseSha, notices, rawMarker);
   // Tier "none" never runs the model, so a "success" alongside it is not trusted.
-  const completed = completedFindings(s, findingsText, outcome);
+  const { findings: completed, reason } = completion(s, findingsText, outcome, narrative);
   if (!completed) {
     const lines = [...notices, ...frozenNotice(idKey, prior.ledger, [], [])];
-    return renderSummary({ state: s, findings: null, narrative: '', outcome: 'failure', reason: failureReason(executionLog), ledger: prior, notices: lines, rawMarker });
+    return renderSummary({ state: s, findings: null, narrative: '', outcome: 'failure', reason: reason ?? failureReason(executionLog), ledger: prior, notices: lines, rawMarker });
   }
   // Only what publish itself posted counts; the model's own flag is ignored.
   const findings = { ...completed, findings: completed.findings.map((f) => ({ ...f, inlinePosted: inlinePosted.has(f.slug) })) };
   // Built once: current security files plus paths hashing to prior security fileIds.
-  const needles = runNeedles(findings.findings, [narrative], priorFileIds(prior.ledger), idKey);
+  const needles = runNeedles(findings.findings, [narrative ?? ''], priorFileIds(prior.ledger), idKey);
   // The trusted head (workflow env, then snapshot); the model's reviewedSha is ignored.
   const reviewed = sha(headSha) ?? sha(s.headSha) ?? prior.lastReviewedSha;
-  const touched = new Set(findings.findings.map((f) => opaqueId(f.slug, idKey)));
+  // Entries this run re-reports: by keyed id (security, withheld) or by slug (public).
+  const reported = reportedBy(findings.findings, idKey);
+  const keyed = new Set(findings.findings.map((f) => opaqueId(f.slug, idKey)));
   // Dispositioned outside the review: a closed/withdrawn/published advisory
   // (security), or a maintainer's reply to the inline comment (non-security).
   // An id reported again in this run stays open.
-  const dispositioned = new Set(resolvedIds.filter((id) => !touched.has(id)));
-  const acked = new Set(strings(s.acknowledgedSlugs));
+  const dispositioned = new Set(resolvedIds.filter((id) => !keyed.has(id)));
+  const acked = new Set(strings(s.acknowledgedSlugs).map(ledgerSlug));
   const merged = markResolved(
     mergeLedger(prior.ledger, findings.findings, findings.resolvedSlugs, s.tier, { key: idKey, needles }),
-    (e) => (e.security ? dispositioned.has(e.id) : !e.withheld && acked.has(e.slug) && !touched.has(e.id)),
+    (e) => (e.security ? dispositioned.has(e.id) : !e.withheld && acked.has(e.slug) && !reported(e)),
   );
   const ledger = {
     lastReviewedSha: reviewed,
@@ -140,11 +131,12 @@ export function composeBody({ state, findingsText, narrative, outcome, execution
     ledger,
     needles,
     newSlugs: newSlugs(findings.findings, prior, idKey, needles),
-    carried: visible.filter((e) => e.status === 'open' && !touched.has(e.id)),
+    carried: visible.filter((e) => e.status === 'open' && !reported(e)),
     resolved: visible.filter((e) => e.status === 'resolved'),
     securityClause: idKey ? securityClause : NO_KEY,
     notices: [...notices, ...frozenNotice(idKey, prior.ledger, findings.findings, needles)],
     rawMarker,
+    partial: isPartial(s),
   });
 }
 
@@ -166,26 +158,6 @@ function readState(path) {
   }
 }
 
-// Security findings go to draft advisories first (advisoryToken only there,
-// never to the comment calls), so the public pointer says whether that worked.
-// Prior open security ids are looked up too, so a dispositioned advisory
-// resolves its ledger entry (needs the key and the token, like delivery).
-async function deliver(repo, pr, snapshot, rest, deliverFn) {
-  const findings = completedFindings(snapshot, rest.findingsText, rest.outcome);
-  if (!findings) return { clause: DELIVERED, resolvedIds: [] };
-  const security = findings.findings.filter((f) => f.security);
-  const priorIds = rest.idKey ? sanitizeLedger(snapshot.ledger, rest.idKey).filter((e) => e.security && e.status === 'open').map((e) => e.id) : [];
-  if (!security.length && !priorIds.length) return { clause: DELIVERED, resolvedIds: [] };
-  try {
-    const res = await deliverFn(repo, pr, security, rest.advisoryToken || null, undefined, rest.idKey || null, priorIds);
-    const resolvedIds = Array.isArray(res?.resolvedIds) ? res.resolvedIds : [];
-    return { clause: res?.delivered === true ? DELIVERED : NOT_DELIVERED, resolvedIds };
-  } catch (err) {
-    console.log(`advisories failed: ${Number.isInteger(err?.status) ? err.status : 'unknown'}`);
-    return { clause: NOT_DELIVERED, resolvedIds: [] };
-  }
-}
-
 // The marker the summary carried before this run, for the minimal retry body.
 function previousMarker(snapshot, fallback, rawMarker, idKey) {
   if (rawMarker) return rawMarker;
@@ -196,29 +168,83 @@ function previousMarker(snapshot, fallback, rawMarker, idKey) {
 
 // Without a trusted snapshot and without the comment, nothing is posted: the
 // old comment (and its marker) stays as it was. The same holds when facts could
-// not read the prior state and publish cannot either.
-export async function publish({ repo, pr, snapshot: trusted, advisoryToken, ...rest }, deps = { listIssueComments, upsertSummary }) {
+// not read the prior state and publish cannot either. Both cases warn; the
+// second also tries the minimal banner, which only ever replaces a summary it
+// found and keeps that summary's marker.
+async function publishRun({ repo, pr, snapshot: trusted, advisoryToken, ...rest }, deps) {
+  const head = sha(rest.headSha);
+  const check = await currentHead(repo, pr, deps.request);
+  if (head && check.sha && check.sha !== head) {
+    console.log('::notice::pr-review superseded: the PR head has moved on; nothing posted');
+    return `superseded: the PR head moved past ${head.slice(0, 7)}; nothing posted`;
+  }
+  const extra = [];
+  if (!head || !check.sha) {
+    warn(`head not verified (${head ? check.error : 'HEAD_SHA missing'}); publishing without the stale-run check`);
+    extra.push('head unverified');
+  }
   let fallback;
   if (!isObject(trusted)) {
     fallback = await priorFromComment(repo, pr, deps.listIssueComments);
-    if (!fallback) {
-      console.log('publish skipped: no trusted state');
-      return;
+    // An existing marker that cannot be read and cannot be carried over: never
+    // replace it with an empty ledger.
+    if (!fallback || (fallback.unreadable && !fallback.rawMarker)) {
+      warn('summary not updated: no trusted state and the summary comment could not be read');
+      return 'skipped: no trusted state and the summary comment could not be read';
     }
   }
   const prior = await resolvePrior(repo, pr, trusted, deps.listIssueComments);
   const snapshot = prior.snapshot;
-  const findings = completedFindings(snapshot, rest.findingsText, rest.outcome)?.findings ?? null;
-  const inline = await runInline({ repo, pr, snapshot, findings, inlineText: rest.inlineText, idKey: rest.idKey, headSha: sha(rest.headSha), runStartedAt: rest.runStartedAt }, deps);
+  const raw = prior.rawMarker ?? fallback?.rawMarker ?? null;
+  const oversized = Boolean(raw && raw.length > MAX_MARKER);
+  if (prior.skip || oversized) {
+    // Checked before anything is posted. Advisories still go out: they are
+    // private and do not depend on the summary.
+    const { clause } = await deliver(repo, pr, snapshot, { ...rest, advisoryToken }, deps.deliverAdvisories ?? deliverAdvisories);
+    const why = oversized ? 'the old marker is too large to carry over' : 'prior review state unavailable';
+    warn(`summary not updated: ${why}`);
+    const minimal = await fallbackSummary(repo, pr, head ?? sha(snapshot?.headSha), deps, oversized ? 'marker too large' : 'prior state unavailable');
+    return `skipped: ${why}; inline comments not posted; advisories ${clause === DELIVERED ? 'ok' : 'not delivered'}${minimal ? '; minimal summary posted' : ''}`;
+  }
+  if (raw) {
+    warn('ledger not updated: prior review state unreadable; old marker re-emitted');
+    extra.push('ledger frozen (prior state unreadable)');
+  }
+  const headSha = head ?? sha(snapshot?.headSha);
+  const findings = completedFindings(snapshot, rest.findingsText, rest.outcome, rest.narrative)?.findings ?? null;
+  const inline = await runInline({ repo, pr, snapshot, findings, inlineText: rest.inlineText, idKey: rest.idKey, headSha, runStartedAt: rest.runStartedAt }, deps);
+  if (inline.notPosted) {
+    warn(`${inline.notPosted} inline comment(s) not posted`);
+    extra.push(`${inline.notPosted} inline comment(s) not posted`);
+  }
   const { clause, resolvedIds } = await deliver(repo, pr, snapshot, { ...rest, advisoryToken }, deps.deliverAdvisories ?? deliverAdvisories);
-  if (prior.skip) {
-    console.log('publish skipped: prior state unavailable');
-    return;
+  if (clause === NOT_DELIVERED) {
+    warn('security advisories not delivered');
+    extra.push('advisories not delivered');
   }
   const notices = [...(prior.notice ? [prior.notice] : []), ...inline.notices];
   const body = composeBody({ ...rest, state: snapshot, fallback, securityClause: clause, resolvedIds, notices, inlinePosted: inline.posted, rawMarker: prior.rawMarker ?? null });
-  const headSha = sha(rest.headSha) ?? sha(snapshot?.headSha);
-  await postSummary(repo, pr, body, deps.upsertSummary, { headSha, previousMarker: previousMarker(snapshot, fallback, prior.rawMarker, rest.idKey || null) });
+  const ok = await postSummary(repo, pr, body, deps.upsertSummary, { headSha, previousMarker: previousMarker(snapshot, fallback, prior.rawMarker, rest.idKey || null) });
+  const label = outcomeLabel(snapshot, rest);
+  const tail = extra.map((e) => `; ${e}`).join('');
+  return ok ? `summary updated: ${label}; ${inline.posted.size} inline comment(s) posted${tail}` : `summary update failed (${label}); minimal banner attempted${tail}`;
+}
+
+// Returns the status line it also writes to the job summary (deps.report).
+export async function publish(args, deps = { listIssueComments, upsertSummary }) {
+  const report = deps.report ?? stepSummary;
+  let status;
+  try {
+    status = await publishRun(args, deps);
+  } catch (err) {
+    // Never log bodies, tokens or messages; status only.
+    const code = statusOf(err);
+    warn(`publish failed (${code}); the summary may be stale`);
+    const minimal = await fallbackSummary(args.repo, args.pr, sha(args.headSha), deps, code);
+    status = `publish failed (${code})${minimal ? '; minimal summary posted' : ''}`;
+  }
+  report(status);
+  return status;
 }
 
 async function main() {
@@ -227,7 +253,7 @@ async function main() {
     // Fail closed without OUT and STATE_FILE: no snapshot, no model output, so
     // the failure banner (prior state from the comment) or nothing at all.
     const run = runPaths();
-    if (!run) console.log('publish: OUT or STATE_FILE unset');
+    if (!run) warn('OUT or STATE_FILE unset; publishing the failure banner only');
     const fromOut = (name) => (run ? readOptional(join(run.out, name)) : null);
     const deps = { listIssueComments, upsertSummary, listReviewComments, request: ghRequest };
     await publish({
@@ -236,7 +262,8 @@ async function main() {
       snapshot: run ? readState(run.stateFile) : null,
       findingsText: fromOut('findings.json'),
       inlineText: fromOut('inline.json'),
-      narrative: fromOut('summary.md') ?? '',
+      // null when the model never wrote it: the review is then not complete.
+      narrative: fromOut('summary.md'),
       outcome: ACTION_OUTCOME,
       executionLog: EXECUTION_FILE ? readOptional(EXECUTION_FILE) : null,
       headSha: HEAD_SHA,
@@ -248,7 +275,8 @@ async function main() {
     }, deps);
   } catch (err) {
     // Never log bodies, tokens or messages; status only.
-    console.log(`publish failed: ${err?.status ?? 'unknown'}`);
+    warn(`publish failed (${statusOf(err)})`);
+    stepSummary(`publish failed (${statusOf(err)})`);
   }
   process.exit(0);
 }

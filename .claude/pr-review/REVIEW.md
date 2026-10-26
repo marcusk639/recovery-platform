@@ -11,8 +11,10 @@ The repository is **public**. Everything you post is world-readable.
 
 - **The OUT directory** is the absolute path given as `OUT=` in your prompt. Every file this procedure
   reads or writes outside the repository lives there.
-- The repository root is the PR head checkout: the working tree holds the PR-head copy of every file, so
-  `Read` a path to see the changed side. **Ignore `.review-base/` and `.review-publish/`**. `.review-base/`
+- The repository root is the PR head checkout: the working tree holds the PR-head copy of every file
+  except `.claude/`, `.mcp.json` and `CLAUDE.md`, which the workflow and the action restore from the base
+  branch before you start. `Read` any other path to see the changed side; for those three, the PR's changes
+  are only in `<OUT>/pr.diff`. **Ignore `.review-base/` and `.review-publish/`**. `.review-base/`
   is a base-branch copy the workflow's facts script runs from; `.review-publish/` is checked out fresh
   only after you finish, for the publish script. Never read, grep or cite either.
 - The knowledge files are in `.claude/pr-review/`: `contract-map-homegroups.md`, `contract-map-regroup.md`,
@@ -63,7 +65,7 @@ is in exactly **one** of the three contract maps, and the owner table at the top
 ## Per-tier scope
 
 `tier` in `state.json` sets what this run covers. Stay inside it and inside `maxTurns`: when the budget
-runs short, write `findings.json` and `summary.md` with what you have and say what was left in
+runs short, write `summary.md` and then `findings.json` with what you have, and say what was left in
 "Not reviewed / limits".
 
 - `full`: review `<OUT>/pr.diff` with the whole procedure below.
@@ -76,7 +78,10 @@ runs short, write `findings.json` and `summary.md` with what you have and say wh
   PR's link types from `<OUT>/pr.diff` and check them against the drifted counterpart files listed in
   `facts.md`. Do not re-review the PR's own diff.
 
-On every tier, an earlier open ledger entry stays open unless you list its slug in `resolvedSlugs`.
+On every tier, an earlier open non-security ledger entry stays open unless you list its slug in
+`resolvedSlugs` or a maintainer has replied to its inline comment (its slug is in `acknowledgedSlugs`;
+publish resolves it). Security and withheld entries carry no slug and never resolve through
+`resolvedSlugs`: publish resolves them when their private advisory is closed, withdrawn or published.
 
 ## Procedure
 
@@ -105,7 +110,10 @@ On every tier, an earlier open ledger entry stays open unless you list its slug 
    medium, low).
 8. **Pre-existing problems.** Report one only when the diff touches it or makes it worse. Otherwise you may
    list at most 3 one-line items under `## Noticed nearby` in `summary.md`, never security-relevant ones.
-9. **Write**, in this order: `inline.json`, then `findings.json`, then `summary.md`.
+9. **Write**, in this order: `inline.json`, then `summary.md`, then `findings.json` with `"complete": true`.
+   `findings.json` is always your last write. A run that stops before it (turn limit, error) is published
+   as "review did not complete", never as a clean review, so if the budget runs short, write `summary.md`
+   and then `findings.json` with what you have rather than reading further.
 
 ### Large PRs
 
@@ -172,9 +180,13 @@ Write them to `<OUT>/inline.json` as one JSON array (write `[]` when there are n
 
 - `slug` is the finding's slug in `findings.json`. `path` is a file the PR changes; `line` is a line of
   the diff on that file: `side` `RIGHT` for the PR-head side, `LEFT` for a removed line.
-- `body` is plain text: no HTML comments and no fingerprint. The publish step appends the `fp` marker,
-  drops any entry that breaks the rules above or touches a security-relevant file, and posts the rest as
-  one review. It records which were posted; you never set that yourself.
+- `body` is plain text: no HTML comments and no fingerprint. The publish step appends the `fp` marker and
+  posts the survivors as one review. It drops an entry whose slug is not a non-security Critical or High
+  finding in `findings.json`, whose `path` is not a changed file, whose slug already has an inline comment,
+  that touches a security-relevant file or quotes a secret, or that comes after the first 10. It does
+  **not** check the ledger or `acknowledgedSlugs`: leaving those slugs out is your job. It records which
+  were posted; you never set that yourself. The summary counts Critical or High comments dropped as malformed,
+  outside the changed files or over the limit; drops for security reasons are not announced.
 
 ## Slugs
 
@@ -208,13 +220,16 @@ Write it with the `Write` tool, as one JSON object, exactly this shape:
       "fix": "The suggested fix"
     }
   ],
-  "resolvedSlugs": []
+  "resolvedSlugs": [],
+  "complete": true
 }
 ```
 
 - `class` is 1–14 from `checklist.md`. `severity` is `Critical`, `High`, `Medium` or `Low`. `confidence` is
   `high`, `medium` or `low`. `side` is `changed` or `counterpart`. Every field is required.
 - `resolvedSlugs` lists slugs of earlier non-security ledger findings you confirmed are now fixed.
+- `complete` is `true` only when this is your last write and `summary.md` is already written. Without it
+  the run is published as "review did not complete".
 - No findings: write `"findings": []`. A file that does not parse is treated as a failed run.
 
 ## `<OUT>/summary.md`

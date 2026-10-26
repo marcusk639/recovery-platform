@@ -43,6 +43,8 @@ export async function guardInlineComments({ repo, comments, findings = [], headS
   const securitySlugs = securitySlugsOf(findings);
   let removed = 0;
   let failed = 0;
+  // Slugs whose comment was deleted: publish must not report them as posted.
+  const removedSlugs = [];
   for (const c of comments ?? []) {
     if (!thisRun(c, headSha, runStartedAt) || !unsafeInline(c, securitySlugs, isSecurityPath)) continue;
     if (!Number.isInteger(c.id)) {
@@ -52,10 +54,12 @@ export async function guardInlineComments({ repo, comments, findings = [], headS
     try {
       await request('DELETE', `/repos/${repo}/pulls/comments/${c.id}`);
       removed++;
+      const m = FP_RE.exec(String(c.body ?? ''));
+      if (m) removedSlugs.push(m[1]);
     } catch (err) {
       failed++;
       console.log(`inline guard: delete failed: ${Number.isInteger(err?.status) ? err.status : 'unknown'}`);
     }
   }
-  return { removed, failed };
+  return { removed, failed, removedSlugs };
 }

@@ -66,3 +66,35 @@ test('Publish clears NODE_OPTIONS in its own env and runs node with --no-warning
   const nodes = [...step.matchAll(/^\s*node (.*)$/gm)].map((m) => m[1]);
   assert.deepEqual(nodes, ['--no-warnings .review-publish/.claude/pr-review/checks/publish.mjs']);
 });
+
+test('Publish also clears BASH_ENV in its own env', () => {
+  const start = wf.indexOf('- name: Publish');
+  const step = wf.slice(start, wf.indexOf('- name:', start + 1));
+  assert.match(step, /\n {10}BASH_ENV: ""\n/);
+});
+
+test('without scripts on base, Facts outputs tier none so the model never runs', () => {
+  const start = wf.indexOf('- name: Facts');
+  const step = wf.slice(start, wf.indexOf('- name:', start + 1));
+  const fallback = step.slice(step.indexOf('else'));
+  assert.match(fallback, /echo "tier=none" >> "\$GITHUB_OUTPUT"/);
+  assert.doesNotMatch(fallback, /tier=full/);
+  assert.match(wf, /- name: Review\n\s+id: review\n\s+if: steps\.facts\.outputs\.tier != 'none'/);
+});
+
+test('the model runs with --strict-mcp-config and all hooks disabled', () => {
+  assert.match(wf, /\n\s+--strict-mcp-config\n/);
+  assert.match(wf, /settings: '\{"disableAllHooks": true\}'/);
+});
+
+test('the model is denied MultiEdit, NotebookEdit, WebFetch and WebSearch', () => {
+  const deny = /--disallowedTools "([^"]+)"/.exec(wf)?.[1].split(',') ?? [];
+  for (const t of ['Bash', 'MultiEdit', 'NotebookEdit', 'WebFetch', 'WebSearch']) assert.ok(deny.includes(t), t);
+});
+
+test('the base checkout path is cleared before the trusted-scripts checkout', () => {
+  const clear = wf.indexOf('- name: Clear base checkout path');
+  assert.ok(clear > 0);
+  assert.match(wf.slice(clear, wf.indexOf('- name:', clear + 1)), /run: rm -rf \.review-base\n/);
+  assert.ok(clear < wf.indexOf('- name: Checkout base (trusted scripts)'));
+});

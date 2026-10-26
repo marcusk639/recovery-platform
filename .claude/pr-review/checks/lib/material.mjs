@@ -19,21 +19,25 @@ export function capText(text, max) {
 
 function attempt(fn, what) {
   try {
-    return fn();
+    return { text: fn(), ok: true };
   } catch {
-    return `[${what} unavailable]\n`;
+    return { text: `[${what} unavailable]\n`, ok: false };
   }
 }
 
+// Returns { prDiff, prDiffTruncated }: whether pr.diff holds the real diff
+// (not the "unavailable" stand-in) and whether it was cut at MAX_DIFF. facts
+// records both so publish can label the review partial.
 export function writeMaterial(out, { baseSha, headSha, tier, incrementText = '', cwd }) {
-  const prText = attempt(() => prDiffText(baseSha, headSha, cwd) || '[no changes]\n', 'pr diff');
-  writeFileSync(join(out, 'pr.diff'), capText(prText, MAX_DIFF));
+  const pr = attempt(() => prDiffText(baseSha, headSha, cwd) || '[no changes]\n', 'pr diff');
+  writeFileSync(join(out, 'pr.diff'), capText(pr.text, MAX_DIFF));
   const log = attempt(() => git(['log', '--no-color', '--format=%h %s', `${baseSha}..${headSha}`], cwd) || '[no commits]\n', 'commit list');
-  writeFileSync(join(out, 'commits.txt'), capText(log, MAX_COMMITS));
+  writeFileSync(join(out, 'commits.txt'), capText(log.text, MAX_COMMITS));
   const incPath = join(out, 'increment.diff');
   if (INCREMENT_TIERS.has(tier)) {
     writeFileSync(incPath, capText(incrementText || '[no changes in this PR\'s files since the last reviewed commit]\n', MAX_DIFF));
   } else {
     rmSync(incPath, { force: true });
   }
+  return { prDiff: pr.ok, prDiffTruncated: pr.ok && Buffer.byteLength(String(pr.text)) > MAX_DIFF };
 }
