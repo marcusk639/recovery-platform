@@ -20,6 +20,12 @@ import { AppState, AppStateStatus } from 'react-native';
 // ---------------------------------------------------------------------------
 // Mock: offlineQueue
 // ---------------------------------------------------------------------------
+const mockCurrentUser: { uid: string } | null = { uid: 'test-uid' };
+jest.mock('@react-native-firebase/auth', () => ({
+  __esModule: true,
+  default: () => ({ currentUser: mockCurrentUser }),
+}));
+
 const mockGetPending = jest.fn();
 jest.mock('../../services/offlineQueue', () => ({
   offlineQueue: {
@@ -143,6 +149,11 @@ describe('useOfflineSync', () => {
   // Mount behaviour
   // -------------------------------------------------------------------------
   describe('on mount', () => {
+    it("passes the signed-in user's uid to getPending()", async () => {
+      renderHook(() => useOfflineSync());
+      await waitFor(() => expect(mockGetPending).toHaveBeenCalledWith('test-uid'));
+    });
+
     it('calls getPending() to initialise pendingCount', async () => {
       mockGetPending.mockResolvedValueOnce([]);
 

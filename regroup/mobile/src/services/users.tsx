@@ -13,6 +13,8 @@ import Admin from "../entities/Admin";
 import { guestCollection } from "./guest";
 import { adminCollection } from "./admin";
 import { uploadUserAvatar } from "./storage";
+import { flushOfflineActivities } from './activity';
+import { offlineQueue } from './offlineQueue';
 import { logException } from "../util/logging";
 import { finishOperatorSetupIfNeeded, loadRecoveredUser } from "./operator-setup";
 import { SimpleValidationService } from "./SimpleValidationService";
@@ -113,6 +115,21 @@ export async function convertAnonymousUser(
 }
 
 export async function signOut() {
+  const uid = auth().currentUser?.uid;
+  if (uid) {
+    // Queued activities can hold residents' medication data: replay them once
+    // (best effort), then remove them so they never outlive this session.
+    try {
+      await flushOfflineActivities(uid);
+    } catch (error) {
+      logException(error, 'sign-out: offline queue flush failed');
+    }
+    try {
+      await offlineQueue.clearUser(uid);
+    } catch (error) {
+      logException(error, 'sign-out: offline queue clear failed');
+    }
+  }
   return auth().signOut();
 }
 

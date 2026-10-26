@@ -844,3 +844,22 @@ export function subscribeToHouseActivities(
       onUpdate(activities);
     });
 }
+
+/**
+ * Replay the given user's queued offline activities. Other users' items on a
+ * shared device are left untouched.
+ */
+export async function flushOfflineActivities(
+  userId: string,
+): Promise<{ synced: number; failed: number }> {
+  return offlineQueue.flush(async (item) => {
+    await logActivity(
+      item.guestId,
+      item.houseId,
+      item.type,
+      item.data,
+      item.loggedBy,
+      item.timestamp,
+    );
+  }, userId);
+}

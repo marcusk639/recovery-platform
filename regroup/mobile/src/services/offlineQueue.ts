@@ -148,27 +148,42 @@ class ActivityOfflineQueue {
   }
 
   /**
-   * Return all pending items in the queue, sorted by queuedAt (oldest first).
+   * Return pending items sorted by queuedAt (oldest first). When userId is
+   * given, only that user's items (loggedBy === userId) are returned.
    */
-  async getPending(): Promise<QueuedActivity[]> {
+  async getPending(userId?: string): Promise<QueuedActivity[]> {
     const queue = await this.load();
-    return [...queue].sort((a, b) => a.queuedAt - b.queuedAt);
+    const scoped = userId === undefined ? queue : queue.filter((i) => i.loggedBy === userId);
+    return [...scoped].sort((a, b) => a.queuedAt - b.queuedAt);
   }
 
   /**
-   * Attempt to flush all pending items to Firestore using the supplied logFn.
+   * Remove every queued item logged by userId (sign-out / account deletion).
+   * Queued items can hold residents' medication data, so they must not outlive
+   * the session on a shared device.
+   */
+  async clearUser(userId: string): Promise<void> {
+    const queue = await this.load();
+    await this.save(queue.filter((item) => item.loggedBy !== userId));
+  }
+
+  /**
+   * Attempt to flush the given user's pending items to Firestore using logFn.
+   * Items logged by other users are neither replayed nor modified.
    *
    * - Items that sync successfully are removed from the queue.
    * - Items that fail have their retryCount incremented and are kept in the queue.
    * - Items whose retryCount has reached MAX_RETRY_COUNT are dropped (dead letter).
    *
    * @param logFn - Async function that writes one queued activity to Firestore.
+   * @param userId - Only items with loggedBy === userId are processed.
    * @returns Counts of successfully synced and permanently failed items.
    */
   async flush(
     logFn: (activity: QueuedActivity) => Promise<void>,
+    userId: string,
   ): Promise<{ synced: number; failed: number }> {
-    const pending = await this.getPending();
+    const pending = await this.getPending(userId);
     if (pending.length === 0) {
       return { synced: 0, failed: 0 };
     }

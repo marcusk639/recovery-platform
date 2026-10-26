@@ -1,5 +1,6 @@
 import FirebaseAuth from '@react-native-firebase/auth';
 import { auth, functions } from '../../firebase-setup';
+import { offlineQueue } from './offlineQueue';
 import { logException } from '../util/logging';
 
 /**
@@ -42,6 +43,14 @@ async function checkAccount(user: CurrentUser): Promise<AccountState> {
 
 /** Sign-out after deletion (or an unconfirmed one) must not mask the outcome. */
 async function signOutQuietly(): Promise<void> {
+  try {
+    const uid = auth.currentUser?.uid;
+    if (uid) {
+      await offlineQueue.clearUser(uid);
+    }
+  } catch (err) {
+    logException(err, 'Offline queue clear failed after account deletion');
+  }
   try {
     await auth.signOut();
   } catch (err) {

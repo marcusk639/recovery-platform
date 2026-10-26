@@ -17,6 +17,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
+import auth from '@react-native-firebase/auth';
 import NetInfo from '@react-native-community/netinfo';
 import { offlineQueue } from '../services/offlineQueue';
 import { useFlushOfflineQueue } from '../state/queries/useFlushOfflineQueue';
@@ -78,7 +79,12 @@ export function useOfflineSync(): UseOfflineSyncResult {
    */
   const refreshPendingCount = async () => {
     try {
-      const pending = await offlineQueue.getPending();
+      const uid = auth().currentUser?.uid;
+      if (!uid) {
+        setPendingCount(0);
+        return 0;
+      }
+      const pending = await offlineQueue.getPending(uid);
       setPendingCount(pending.length);
       return pending.length;
     } catch {

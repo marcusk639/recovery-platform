@@ -46,6 +46,14 @@ jest.mock("../storage", () => ({
   uploadUserAvatar: jest.fn(),
 }));
 
+jest.mock('../offlineQueue', () => ({
+  offlineQueue: { clearUser: jest.fn() },
+}));
+
+jest.mock('../activity', () => ({
+  flushOfflineActivities: jest.fn(),
+}));
+
 jest.mock("../../util/logging", () => ({
   logException: jest.fn(),
 }));
@@ -78,6 +86,8 @@ import {
 } from "../users";
 import { User } from "../../entities/User";
 import auth from "@react-native-firebase/auth";
+import { offlineQueue } from '../offlineQueue';
+import { flushOfflineActivities } from '../activity';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -638,6 +648,56 @@ describe("users service", () => {
       await signOut();
 
       expect(getMockAuth().signOut).toHaveBeenCalledTimes(1);
+    });
+
+    describe('offline queue', () => {
+      const order: string[] = [];
+      beforeEach(() => {
+        order.length = 0;
+        (getMockAuth() as any).currentUser = { uid: 'u1' };
+        (flushOfflineActivities as jest.Mock).mockReset().mockImplementation(async () => {
+          order.push('flush');
+          return { synced: 0, failed: 0 };
+        });
+        (offlineQueue.clearUser as jest.Mock).mockReset().mockImplementation(async () => {
+          order.push('clear');
+        });
+        const mockAuth = getMockAuth();
+        mockAuth.signOut.mockReset();
+        mockAuth.signOut.mockImplementation(async () => {
+          order.push('signOut');
+        });
+      });
+      afterEach(() => {
+        (getMockAuth() as any).currentUser = null;
+      });
+
+      it("flushes once, clears the user's queue, then signs out", async () => {
+        await signOut();
+        expect(flushOfflineActivities).toHaveBeenCalledWith('u1');
+        expect(offlineQueue.clearUser).toHaveBeenCalledWith('u1');
+        expect(order).toEqual(['flush', 'clear', 'signOut']);
+      });
+
+      it('still clears and signs out when the flush throws', async () => {
+        (flushOfflineActivities as jest.Mock).mockRejectedValue(new Error('offline'));
+        await signOut();
+        expect(order).toEqual(['clear', 'signOut']);
+      });
+
+      it('still signs out when clearing the queue throws', async () => {
+        (offlineQueue.clearUser as jest.Mock).mockRejectedValue(new Error('storage'));
+        await signOut();
+        expect(order).toEqual(['flush', 'signOut']);
+      });
+
+      it('skips flush and clear when nobody is signed in', async () => {
+        (getMockAuth() as any).currentUser = null;
+        await signOut();
+        expect(flushOfflineActivities).not.toHaveBeenCalled();
+        expect(offlineQueue.clearUser).not.toHaveBeenCalled();
+        expect(order).toEqual(['signOut']);
+      });
     });
 
     it("propagates auth errors", async () => {

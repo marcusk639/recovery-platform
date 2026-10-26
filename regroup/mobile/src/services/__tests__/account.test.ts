@@ -6,6 +6,7 @@ const mockSignOut = jest.fn();
 const mockCredential = jest.fn();
 const mockReload = jest.fn();
 const mockLogException = jest.fn();
+const mockClearUser = jest.fn();
 
 jest.mock("@react-native-firebase/auth", () => ({
   __esModule: true,
@@ -16,6 +17,7 @@ jest.mock("@react-native-firebase/auth", () => ({
 jest.mock("../../../firebase-setup", () => ({
   auth: {
     currentUser: {
+      uid: 'uid-1',
       email: "a@b.com",
       reauthenticateWithCredential: (...a: any[]) => mockReauth(...a),
       getIdToken: (...a: any[]) => mockGetIdToken(...a),
@@ -24,6 +26,10 @@ jest.mock("../../../firebase-setup", () => ({
     signOut: () => mockSignOut(),
   },
   functions: { httpsCallable: (name: string) => () => mockCallable(name) },
+}));
+
+jest.mock('../offlineQueue', () => ({
+  offlineQueue: { clearUser: (...a: any[]) => mockClearUser(...a) },
 }));
 
 jest.mock("../../util/logging", () => ({
@@ -45,6 +51,7 @@ describe("deleteMyAccount", () => {
     });
     mockSignOut.mockImplementation(async () => void calls.push("signOut"));
     mockReload.mockImplementation(async () => void calls.push("reload"));
+    mockClearUser.mockResolvedValue(undefined);
   });
 
   it("re-authenticates, refreshes the token, calls deleteAccount, then signs out", async () => {
@@ -53,6 +60,21 @@ describe("deleteMyAccount", () => {
     expect(mockReauth).toHaveBeenCalledWith("cred");
     expect(mockGetIdToken).toHaveBeenCalledWith(true);
     expect(calls).toEqual(["reauth", "token", "call:deleteAccount", "signOut"]);
+  });
+
+  it("clears the deleted user's offline queue before signing out", async () => {
+    mockClearUser.mockImplementation(async () => {
+      calls.push('clearQueue');
+    });
+    await deleteMyAccount('pw');
+    expect(mockClearUser).toHaveBeenCalledWith('uid-1');
+    expect(calls.slice(-2)).toEqual(['clearQueue', 'signOut']);
+  });
+
+  it('still signs out and resolves when clearing the offline queue throws', async () => {
+    mockClearUser.mockRejectedValue(new Error('storage down'));
+    await expect(deleteMyAccount('pw')).resolves.toBeUndefined();
+    expect(mockSignOut).toHaveBeenCalledTimes(1);
   });
 
   it("rejects without calling anything when there is no email", async () => {

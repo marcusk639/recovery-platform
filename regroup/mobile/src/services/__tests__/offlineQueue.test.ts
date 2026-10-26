@@ -163,7 +163,7 @@ describe('ActivityOfflineQueue — with AsyncStorage', () => {
     mockGetItem.mockResolvedValue(encodeQueue(items));
 
     const logFn = jest.fn().mockResolvedValue(undefined);
-    const result = await offlineQueueModule.offlineQueue.flush(logFn);
+    const result = await offlineQueueModule.offlineQueue.flush(logFn, 'user-1');
 
     expect(logFn).toHaveBeenCalledTimes(2);
     expect(result.synced).toBe(2);
@@ -186,7 +186,7 @@ describe('ActivityOfflineQueue — with AsyncStorage', () => {
       }
     });
 
-    const result = await offlineQueueModule.offlineQueue.flush(logFn);
+    const result = await offlineQueueModule.offlineQueue.flush(logFn, 'user-1');
 
     expect(result.synced).toBe(1);
     expect(result.failed).toBe(1);
@@ -204,7 +204,7 @@ describe('ActivityOfflineQueue — with AsyncStorage', () => {
     mockGetItem.mockResolvedValue(encodeQueue(items));
 
     const logFn = jest.fn().mockRejectedValue(new Error('Persistent failure'));
-    const result = await offlineQueueModule.offlineQueue.flush(logFn);
+    const result = await offlineQueueModule.offlineQueue.flush(logFn, 'user-1');
 
     expect(result.synced).toBe(0);
     expect(result.failed).toBe(1);
@@ -216,10 +216,76 @@ describe('ActivityOfflineQueue — with AsyncStorage', () => {
   it('flush() returns { synced: 0, failed: 0 } when queue is empty', async () => {
     mockGetItem.mockResolvedValue(null);
     const logFn = jest.fn();
-    const result = await offlineQueueModule.offlineQueue.flush(logFn);
+    const result = await offlineQueueModule.offlineQueue.flush(logFn, 'user-1');
 
     expect(logFn).not.toHaveBeenCalled();
     expect(result).toEqual({ synced: 0, failed: 0 });
+  });
+
+  // -------------------------------------------------------------------------
+  // Per-user scoping
+  // -------------------------------------------------------------------------
+
+  const twoUserQueue = () => [
+    { ...makeItem({ loggedBy: 'u1' }), id: 'offline_u1_a', queuedAt: 1000, retryCount: 0 },
+    { ...makeItem({ loggedBy: 'u2' }), id: 'offline_u2_a', queuedAt: 1500, retryCount: 1 },
+    { ...makeItem({ loggedBy: 'u1' }), id: 'offline_u1_b', queuedAt: 2000, retryCount: 0 },
+  ];
+
+  it("flush(logFn, 'u1') only replays u1's items and leaves u2's untouched", async () => {
+    mockGetItem.mockResolvedValue(encodeQueue(twoUserQueue()));
+    const logFn = jest.fn().mockResolvedValue(undefined);
+
+    const result = await offlineQueueModule.offlineQueue.flush(logFn, 'u1');
+
+    expect(result).toEqual({ synced: 2, failed: 0 });
+    expect(logFn.mock.calls.map((c) => c[0].id)).toEqual(['offline_u1_a', 'offline_u1_b']);
+    const saved = JSON.parse(mockSetItem.mock.calls[mockSetItem.mock.calls.length - 1][1]);
+    expect(saved).toHaveLength(1);
+    expect(saved[0].id).toBe('offline_u2_a');
+    expect(saved[0].retryCount).toBe(1);
+  });
+
+  it("flush(logFn, 'u1') does not touch other users' retryCount when u1's items fail", async () => {
+    mockGetItem.mockResolvedValue(encodeQueue(twoUserQueue()));
+    const logFn = jest.fn().mockRejectedValue(new Error('Network error'));
+
+    const result = await offlineQueueModule.offlineQueue.flush(logFn, 'u1');
+
+    expect(result).toEqual({ synced: 0, failed: 2 });
+    const saved = JSON.parse(mockSetItem.mock.calls[mockSetItem.mock.calls.length - 1][1]);
+    const byId = Object.fromEntries(saved.map((i: { id: string }) => [i.id, i]));
+    expect(byId.offline_u2_a.retryCount).toBe(1);
+    expect(byId.offline_u1_a.retryCount).toBe(1);
+  });
+
+  it('flush() never calls logFn when the user has no items', async () => {
+    mockGetItem.mockResolvedValue(encodeQueue(twoUserQueue()));
+    const logFn = jest.fn();
+
+    const result = await offlineQueueModule.offlineQueue.flush(logFn, 'nobody');
+
+    expect(logFn).not.toHaveBeenCalled();
+    expect(result).toEqual({ synced: 0, failed: 0 });
+  });
+
+  it("clearUser('u1') removes only u1's items", async () => {
+    mockGetItem.mockResolvedValue(encodeQueue(twoUserQueue()));
+
+    await offlineQueueModule.offlineQueue.clearUser('u1');
+
+    const saved = JSON.parse(mockSetItem.mock.calls[mockSetItem.mock.calls.length - 1][1]);
+    expect(saved.map((i: { id: string }) => i.id)).toEqual(['offline_u2_a']);
+  });
+
+  it("getPending('u1') filters to that user's items", async () => {
+    mockGetItem.mockResolvedValue(encodeQueue(twoUserQueue()));
+
+    const forU1 = await offlineQueueModule.offlineQueue.getPending('u1');
+    const all = await offlineQueueModule.offlineQueue.getPending();
+
+    expect(forU1.map((i) => i.id)).toEqual(['offline_u1_a', 'offline_u1_b']);
+    expect(all).toHaveLength(3);
   });
 });
 
@@ -289,7 +355,7 @@ describe('ActivityOfflineQueue — when AsyncStorage fails (in-memory fallback)'
     await offlineQueueModule.offlineQueue.enqueue(makeItem({ guestId: 'guest-2' }));
 
     const logFn = jest.fn().mockResolvedValue(undefined);
-    const result = await offlineQueueModule.offlineQueue.flush(logFn);
+    const result = await offlineQueueModule.offlineQueue.flush(logFn, 'user-1');
 
     expect(result.synced).toBe(2);
     expect(result.failed).toBe(0);
