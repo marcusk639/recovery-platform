@@ -46,6 +46,12 @@ const LEGACY_PRICES = [
   },
 ];
 
+/** Every price env var ensureCatalog fills: the keys of stripe-e2e-prices.json. */
+export const PRICE_ENV_VARS: readonly string[] = [
+  ...TIERS.flatMap((tier) => [tier.envVar, tier.annualEnvVar]),
+  ...LEGACY_PRICES.map((legacy) => legacy.envVar),
+];
+
 // Source: api/stripe.ts bundleCouponIds; percentages per docs/go-to-market/monetization.md
 // (the "20%" in an api/stripe.ts comment is stale).
 const COUPONS = [

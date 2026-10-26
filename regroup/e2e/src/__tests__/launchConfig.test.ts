@@ -136,6 +136,43 @@ describe('writeFunctionsEnvFiles', () => {
     writeFunctionsEnvFiles(dir);
     expect(fs.readFileSync(path.join(dir, '.env.regroup-e2e'), 'utf8')).toMatch(/^# GENERATED/);
   });
+  it('appends per-env extras only to that env file', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gen-env-'));
+    writeFunctionsEnvFiles(dir, { 'e2e-staging': { STRIPE_PRICE_TRAD_STARTER: 'price_abc' } });
+    const read = (f: string) => fs.readFileSync(path.join(dir, f), 'utf8');
+    expect(read('.env.regroup-e2e')).toMatch(/^STRIPE_PRICE_TRAD_STARTER=price_abc$/m);
+    expect(read('.env.regroup-e2e')).toMatch(/^ALLOWED_RETURN_ORIGINS=/m);
+    expect(read('.env.demo-regroup-e2e')).not.toMatch(/STRIPE_PRICE_TRAD_STARTER/);
+  });
+  it('refuses an extra that would override a launch-config key, writing nothing', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gen-env-'));
+    expect(() =>
+      writeFunctionsEnvFiles(dir, { 'e2e-staging': { TIER_BILLING_ENABLED: 'false' } }),
+    ).toThrow(/TIER_BILLING_ENABLED.*launch-config/);
+    expect(fs.readdirSync(dir)).toEqual([]);
+  });
+  it.each([
+    ['a secret', { X: 'sk_test_abc' }, /secret/i],
+    ['a multi-line value', { X: 'a\nB=1' }, /single-line/],
+    ['an invalid key', { 'bad key': 'x' }, /invalid key/],
+  ])('refuses an extra with %s', (_label, extra, error) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gen-env-'));
+    expect(() => writeFunctionsEnvFiles(dir, { 'e2e-staging': extra })).toThrow(error);
+  });
+});
+
+describe('Stripe API version', () => {
+  it('matches the version pinned in functions/src/util/stripeApiVersion.ts', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '..', '..', '..', 'functions', 'src', 'util', 'stripeApiVersion.ts'),
+      'utf8',
+    );
+    const pinned = /const PINNED_API_VERSION = (["'])([^"']+)\1/.exec(source);
+    expect(pinned).not.toBeNull();
+    for (const env of ['production', 'e2e-staging', 'e2e-emulator'] as const) {
+      expect(functionsEnvFor(env).STRIPE_API_VERSION).toBe(pinned![2]);
+    }
+  });
 });
 
 describe('assertSafeEnvFileName', () => {
