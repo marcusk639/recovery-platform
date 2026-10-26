@@ -5,6 +5,8 @@ import {
   assertSafeEnvFileName,
   functionsEnvFor,
   loadLaunchConfig,
+  overlaysFromArgv,
+  parseEnvFragment,
   writeFunctionsEnvFiles,
 } from '../launchConfig';
 
@@ -158,5 +160,52 @@ describe('production return origins', () => {
     const defaults = [...block![1].matchAll(/(["'])([^"']+)\1/g)].map((m) => m[2]);
     expect(defaults.length).toBeGreaterThan(0);
     expect(functionsEnvFor('production').ALLOWED_RETURN_ORIGINS.split(',')).toEqual(defaults);
+  });
+});
+
+describe('staging env overlay', () => {
+  const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'gen-env-'));
+  const read = (dir: string, name: string) => fs.readFileSync(path.join(dir, name), 'utf8');
+
+  it('merges an overlay into .env.regroup-e2e only', () => {
+    const dir = tmp();
+    writeFunctionsEnvFiles(dir, { 'e2e-staging': { STRIPE_PRICE_TRAD_STARTER: 'price_123' } });
+    expect(read(dir, '.env.regroup-e2e')).toMatch(/^STRIPE_PRICE_TRAD_STARTER=price_123$/m);
+    expect(read(dir, '.env.regroup-e2e')).toMatch(/^# GENERATED/);
+    expect(read(dir, '.env.demo-regroup-e2e')).not.toContain('STRIPE_PRICE_TRAD_STARTER');
+  });
+
+  it('refuses overlay keys that would override launch-config, secrets, bad keys and multi-line values', () => {
+    const bad: Record<string, string>[] = [
+      { TIER_BILLING_ENABLED: 'false' },
+      { CONNECT_BASE_URL: 'https://x' },
+      { STRIPE_WEBHOOK_SECRET: 'whsec_x' },
+      { STRIPE_SECRET_KEY: 'sk_test_x' },
+      { lower: 'x' },
+      { A: 'x\ny' },
+    ];
+    for (const overlay of bad) {
+      const dir = tmp();
+      expect(() => writeFunctionsEnvFiles(dir, { 'e2e-staging': overlay })).toThrow();
+      expect(fs.readdirSync(dir)).toEqual([]);
+    }
+  });
+
+  it('parses a dotenv fragment, skipping comments and blanks, rejecting junk', () => {
+    expect(parseEnvFragment('# c\n\nA=1\nB=price_x=y\n')).toEqual({ A: '1', B: 'price_x=y' });
+    expect(() => parseEnvFragment('not a pair\n')).toThrow(/line 1/);
+    expect(() => parseEnvFragment('A=1\nA=2\n')).toThrow(/duplicate/i);
+  });
+
+  it('reads --staging-env from argv, and nothing without it', () => {
+    const dir = tmp();
+    const file = path.join(dir, 'p.env');
+    fs.writeFileSync(file, 'STRIPE_PRICE_OXFORD_PLUS=price_9\n');
+    expect(overlaysFromArgv(['--staging-env', file])).toEqual({
+      'e2e-staging': { STRIPE_PRICE_OXFORD_PLUS: 'price_9' },
+    });
+    expect(overlaysFromArgv([])).toEqual({});
+    expect(() => overlaysFromArgv(['--staging-env'])).toThrow(/needs a value/);
+    expect(() => overlaysFromArgv(['--staging-env', '--x'])).toThrow(/needs a value/);
   });
 });

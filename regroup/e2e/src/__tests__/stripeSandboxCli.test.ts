@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { buildSetupDeps } from '../stripeSandboxCli';
+import { buildSetupDeps, formatNextSteps } from '../stripeSandboxCli';
 
 describe('buildSetupDeps', () => {
   const create = jest.fn();
@@ -81,6 +81,31 @@ describe('buildSetupDeps', () => {
       buildSetupDeps(argv, dir, create).readKey();
       expect(warn).not.toHaveBeenCalled();
       warn.mockRestore();
+    });
+  });
+
+  describe('formatNextSteps', () => {
+    const files = {
+      secretsFile: "/cfg dir/it's/stripe-e2e-webhook-secrets.json",
+      pricesEnvFile: '/cfg/stripe-e2e-prices.env',
+      keyFile: '/cfg/stripe-e2e-sandbox-key.txt',
+    };
+    const text = formatNextSteps(files);
+
+    it.each(['STRIPE_TEST_WEBHOOK_SECRET', 'STRIPE_CONNECT_TEST_WEBHOOK_SECRET', 'STRIPE_SECRET_KEY'])(
+      'pipes %s into secrets:set for regroup-e2e via --data-file -',
+      (name) => {
+        const line = text.split('\n').find((l) => l.includes(`secrets:set ${name} `));
+        expect(line).toBeDefined();
+        expect(line).toContain('--project regroup-e2e --data-file -');
+      },
+    );
+
+    it('shell-quotes paths, points at gen-env, says to redeploy, prints no values', () => {
+      expect(text).toContain(`'/cfg dir/it'\\''s/stripe-e2e-webhook-secrets.json'`);
+      expect(text).toContain("npm run e2e:gen-env -- --staging-env '/cfg/stripe-e2e-prices.env'");
+      expect(text).toMatch(/redeploy the functions afterwards/i);
+      expect(text).not.toMatch(/whsec_|sk_test_/);
     });
   });
 });

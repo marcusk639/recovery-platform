@@ -150,6 +150,25 @@ describe('runSetup', () => {
     expect(fs.readdirSync(outDir).filter((f) => f.endsWith('.tmp'))).toEqual([]);
   });
 
+  it('emits a dotenv fragment of every price id plus STRIPE_API_VERSION, mode 600', async () => {
+    const { stripe } = makeStripe();
+    const result = await runSetup(base(stripe));
+
+    expect(result.pricesEnvFile).toBe(path.join(outDir, 'stripe-e2e-prices.env'));
+    expect(result.secretsFile).toBe(path.join(outDir, 'stripe-e2e-webhook-secrets.json'));
+    const prices = JSON.parse(fs.readFileSync(result.pricesFile, 'utf8'));
+    const lines = fs
+      .readFileSync(result.pricesEnvFile, 'utf8')
+      .split('\n')
+      .filter((l) => l && !l.startsWith('#'));
+    const env = Object.fromEntries(lines.map((l) => l.split('=') as [string, string]));
+    expect(env).toEqual({ ...prices, STRIPE_API_VERSION: '2026-01-28.clover' });
+    expect(Object.keys(env)).toHaveLength(15);
+    // TIER_BILLING_ENABLED already comes from launch-config.json shared.
+    expect(env).not.toHaveProperty('TIER_BILLING_ENABLED');
+    expect(fs.statSync(result.pricesEnvFile).mode & 0o777).toBe(0o600);
+  });
+
   it('keeps the first secret when a crash follows the first endpoint, then merges on re-run', async () => {
     const { mock, stripe } = makeStripe();
     const create = mock.webhookEndpoints.create.getMockImplementation()!;
