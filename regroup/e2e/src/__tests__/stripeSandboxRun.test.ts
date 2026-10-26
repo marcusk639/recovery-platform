@@ -8,9 +8,13 @@ import { makeStripe } from './helpers/mockStripe';
 
 const API = '2026-01-28.clover';
 const urls = {
-  platformUrl: 'https://us-central1-regroup-e2e.cloudfunctions.net/stripeWebhook',
-  connectUrl: 'https://us-central1-regroup-e2e.cloudfunctions.net/stripeConnectWebhook',
+  platformUrl: 'https://us-central1-regroup-e2e.cloudfunctions.net/stripeEvents',
+  connectUrl: 'https://us-central1-regroup-e2e.cloudfunctions.net/handleStripeConnectWebhook',
 };
+
+// The mock gives created endpoints ids we_0, we_1 in creation order (platform first).
+const PLATFORM_SAVED = { platform: 'whsec_mock', platformEndpointId: 'we_0' };
+const BOTH_SAVED = { ...PLATFORM_SAVED, connect: 'whsec_mock', connectEndpointId: 'we_1' };
 
 describe('runSetup', () => {
   let outDir: string;
@@ -22,7 +26,7 @@ describe('runSetup', () => {
     readKey: () => 'sk_test_zzz',
     createStripe: () => stripe as never,
     outDir,
-    confirmAccount: 'acct_new',
+    confirmAccount: 'acct_1UUsyi44OQke4tKl',
     apiVersion: API,
     ...urls,
     ...extra,
@@ -70,7 +74,7 @@ describe('runSetup', () => {
     ).rejects.toThrow(/not allowed/);
     await expect(
       runSetup({ ...key, platformUrl: urls.platformUrl, connectUrl: urls.platformUrl }),
-    ).rejects.toThrow(/differ/);
+    ).rejects.toThrow(/Connect webhook URL not allowed/);
     expect(createStripe).not.toHaveBeenCalled();
   });
 
@@ -94,7 +98,7 @@ describe('runSetup', () => {
   it('refuses a first run without a matching --confirm-account', async () => {
     const { mock, stripe } = makeStripe();
     await expect(runSetup(base(stripe, { confirmAccount: undefined }))).rejects.toThrow(
-      /--confirm-account acct_new/,
+      /--confirm-account <the e2e sandbox account id>/,
     );
     await expect(runSetup(base(stripe, { confirmAccount: 'acct_other' }))).rejects.toThrow(
       /--confirm-account/,
@@ -107,13 +111,12 @@ describe('runSetup', () => {
     const first = makeStripe();
     await runSetup(base(first.stripe));
     const account = path.join(outDir, 'stripe-e2e-account.txt');
-    expect(fs.readFileSync(account, 'utf8').trim()).toBe('acct_new');
+    expect(fs.readFileSync(account, 'utf8').trim()).toBe('acct_1UUsyi44OQke4tKl');
     expect(fs.statSync(account).mode & 0o777).toBe(0o600);
 
-    const other = makeStripe({ accountId: 'acct_different' });
-    await expect(
-      runSetup(base(other.stripe, { confirmAccount: 'acct_different' })),
-    ).rejects.toThrow(/pinned/);
+    fs.writeFileSync(account, 'acct_1Different0000\n');
+    const other = makeStripe();
+    await expect(runSetup(base(other.stripe))).rejects.toThrow(/pinned/);
     expect(other.mock.products.create).not.toHaveBeenCalled();
   });
 
@@ -122,7 +125,7 @@ describe('runSetup', () => {
       endpoints: [
         {
           id: 'we_prod',
-          url: 'https://us-central1-phoenix-cleanhouse.cloudfunctions.net/stripeWebhook',
+          url: 'https://us-central1-phoenix-cleanhouse.cloudfunctions.net/stripeEvents',
           status: 'enabled',
         },
       ],
@@ -144,10 +147,7 @@ describe('runSetup', () => {
     expect(JSON.parse(fs.readFileSync(pricesFile, 'utf8')).STRIPE_PRICE_TRAD_STARTER).toMatch(
       /^price_/,
     );
-    expect(JSON.parse(fs.readFileSync(secretsFile, 'utf8'))).toEqual({
-      platform: 'whsec_mock',
-      connect: 'whsec_mock',
-    });
+    expect(JSON.parse(fs.readFileSync(secretsFile, 'utf8'))).toEqual(BOTH_SAVED);
     expect(fs.statSync(pricesFile).mode & 0o777).toBe(0o600);
     expect(fs.statSync(secretsFile).mode & 0o777).toBe(0o600);
     expect(fs.statSync(outDir).mode & 0o777).toBe(0o700);
@@ -163,14 +163,11 @@ describe('runSetup', () => {
 
     await expect(runSetup(base(stripe))).rejects.toThrow('boom');
     const secretsFile = path.join(outDir, 'stripe-e2e-webhook-secrets.json');
-    expect(JSON.parse(fs.readFileSync(secretsFile, 'utf8'))).toEqual({ platform: 'whsec_mock' });
+    expect(JSON.parse(fs.readFileSync(secretsFile, 'utf8'))).toEqual(PLATFORM_SAVED);
 
     await runSetup(base(stripe));
     expect(mock.webhookEndpoints.create).toHaveBeenCalledTimes(3);
-    expect(JSON.parse(fs.readFileSync(secretsFile, 'utf8'))).toEqual({
-      platform: 'whsec_mock',
-      connect: 'whsec_mock',
-    });
+    expect(JSON.parse(fs.readFileSync(secretsFile, 'utf8'))).toEqual(BOTH_SAVED);
   });
 
   it('refuses to reuse an endpoint whose secret was never saved, naming it', async () => {
@@ -189,7 +186,7 @@ describe('runSetup', () => {
         existing('we_connect', urls.connectUrl, CONNECT_EVENTS, 'ca_x'),
       ],
     });
-    fs.writeFileSync(secretsFile(), JSON.stringify({ platform: 'whsec_saved' }));
+    fs.writeFileSync(secretsFile(), JSON.stringify({ platform: 'whsec_saved', platformEndpointId: 'we_platform' }));
     await expect(runSetup(base(stripe))).rejects.toThrow(/we_connect.*connect.*not saved/);
     expect(mock.webhookEndpoints.create).not.toHaveBeenCalled();
   });
@@ -275,10 +272,13 @@ describe('runSetup', () => {
     expect(fs.readdirSync(outDir).filter((f) => f.endsWith('.tmp'))).toEqual([]);
   });
 
-  it('parks a one-time secret in a separate 600 file when the secrets file is corrupt, then fails', async () => {
-    const { stripe } = makeStripe();
-    fs.mkdirSync(outDir, { recursive: true });
-    fs.writeFileSync(path.join(outDir, 'stripe-e2e-webhook-secrets.json'), '{not json');
+  it('parks a one-time secret in a 600 file when the secrets file is damaged mid-run, then fails', async () => {
+    const { mock, stripe } = makeStripe();
+    const create = mock.webhookEndpoints.create.getMockImplementation()!;
+    mock.webhookEndpoints.create.mockImplementationOnce(async (p: unknown) => {
+      fs.writeFileSync(secretsFile(), '{not json');
+      return create(p);
+    });
     const errors = jest.spyOn(console, 'error').mockImplementation(() => undefined);
 
     await expect(runSetup(base(stripe))).rejects.toThrow(/Corrupt/);
@@ -286,7 +286,7 @@ describe('runSetup', () => {
     const rescue = fs.readdirSync(outDir).filter((f) => f.startsWith('stripe-e2e-webhook-secret-'));
     expect(rescue).toHaveLength(1);
     const rescuePath = path.join(outDir, rescue[0]);
-    expect(JSON.parse(fs.readFileSync(rescuePath, 'utf8'))).toEqual({ platform: 'whsec_mock' });
+    expect(JSON.parse(fs.readFileSync(rescuePath, 'utf8'))).toEqual(PLATFORM_SAVED);
     expect(fs.statSync(rescuePath).mode & 0o777).toBe(0o600);
     const logged = errors.mock.calls.flat().join('\n');
     expect(logged).toContain(rescuePath);

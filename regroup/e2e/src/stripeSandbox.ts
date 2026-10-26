@@ -2,6 +2,10 @@ import type Stripe from 'stripe';
 
 /** The pre-existing sandbox whose webhooks point at production. Never touch it. */
 export const PRODUCTION_SANDBOX_ACCOUNT_ID = 'acct_1RXiFg2KPgAtfsl6';
+/** The live production account (regroup-app.com). Its sk_test_ keys must be refused too. */
+export const LIVE_PRODUCTION_ACCOUNT_ID = 'acct_1GfryQKsstp3aqoP';
+/** The only account this setup may touch: the dedicated e2e sandbox behind regroup-e2e. */
+export const E2E_SANDBOX_ACCOUNT_ID = 'acct_1UUsyi44OQke4tKl';
 
 /** Maps price env var names (regroup/functions/.env.example) to Stripe price ids. */
 export type PriceIds = Record<string, string>;
@@ -175,13 +179,26 @@ export function assertTestKey(key: string): void {
     throw new Error('Refusing to run: key is not an sk_test_/rk_test_ key.');
 }
 
-/** Returns the account id after confirming this is not the production-pointing sandbox. */
+/**
+ * Returns the account id after confirming it is the e2e sandbox. An allowlist,
+ * not a denylist: a test key of any other account, including production's, is refused.
+ */
 export async function assertSandboxAccount(stripe: Stripe, key: string): Promise<string> {
   assertTestKey(key);
   const account = await stripe.accounts.retrieve();
   if (account.id === PRODUCTION_SANDBOX_ACCOUNT_ID) {
     throw new Error(
       `Refusing to run against ${PRODUCTION_SANDBOX_ACCOUNT_ID}: it hosts production-pointing webhooks.`,
+    );
+  }
+  if (account.id === LIVE_PRODUCTION_ACCOUNT_ID) {
+    throw new Error(
+      `Refusing to run against ${LIVE_PRODUCTION_ACCOUNT_ID}: it is the live production account (regroup-app.com).`,
+    );
+  }
+  if (account.id !== E2E_SANDBOX_ACCOUNT_ID) {
+    throw new Error(
+      `Refusing to run against ${account.id}: only the e2e sandbox ${E2E_SANDBOX_ACCOUNT_ID} is allowed.`,
     );
   }
   return account.id;

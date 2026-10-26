@@ -25,8 +25,8 @@ const mocked = {
 // Failure paths where a one-time webhook secret or a hand-edited file could leak or be lost.
 const API = '2026-01-28.clover';
 const urls = {
-  platformUrl: 'https://us-central1-regroup-e2e.cloudfunctions.net/stripeWebhook',
-  connectUrl: 'https://us-central1-regroup-e2e.cloudfunctions.net/stripeConnectWebhook',
+  platformUrl: 'https://us-central1-regroup-e2e.cloudfunctions.net/stripeEvents',
+  connectUrl: 'https://us-central1-regroup-e2e.cloudfunctions.net/handleStripeConnectWebhook',
 };
 
 let outDir: string;
@@ -44,7 +44,7 @@ const base = (stripe: unknown, extra = {}) => ({
   readKey: () => 'sk_test_zzz',
   createStripe: () => stripe as never,
   outDir,
-  confirmAccount: 'acct_new',
+  confirmAccount: 'acct_1UUsyi44OQke4tKl',
   apiVersion: API,
   ...urls,
   ...extra,
@@ -94,10 +94,16 @@ describe('saved webhook secrets', () => {
   });
 
   it('says to delete the new endpoint when neither the secrets file nor a rescue file can be written', async () => {
-    fs.writeFileSync(secretsFile(), '{not json');
+    const { mock, stripe } = makeStripe();
+    const create = mock.webhookEndpoints.create.getMockImplementation()!;
+    // Damaged after the up-front check, so the failure happens with a secret in hand.
+    mock.webhookEndpoints.create.mockImplementationOnce(async (p: unknown) => {
+      actualFs.writeFileSync(secretsFile(), '{not json');
+      return create(p);
+    });
     failWrites((f) => f.includes('webhook-secret-'), 'EACCES');
     const errors = jest.spyOn(console, 'error').mockImplementation(() => undefined);
-    const message = await messageOf(runSetup(base(makeStripe().stripe)));
+    const message = await messageOf(runSetup(base(stripe)));
     expect(message).toMatch(/delete the new platform webhook endpoint/);
     expect(message).toMatch(/EACCES/);
     expect([message, ...errors.mock.calls.flat().map(String)].join('\n')).not.toMatch(/whsec_/);
@@ -113,6 +119,7 @@ describe('saved webhook secrets', () => {
     expect(rescue).toHaveLength(1);
     expect(JSON.parse(fs.readFileSync(path.join(outDir, rescue[0]), 'utf8'))).toEqual({
       platform: 'whsec_mock',
+      platformEndpointId: 'we_0',
     });
     expect(fs.statSync(path.join(outDir, rescue[0])).mode & 0o777).toBe(0o600);
     expect([message, ...errors.mock.calls.flat().map(String)].join('\n')).not.toMatch(/whsec_/);

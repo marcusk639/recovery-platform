@@ -1,4 +1,5 @@
 import type Stripe from 'stripe';
+import { E2E_SANDBOX_ACCOUNT_ID } from '../../stripeSandbox';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Store = Record<string, any>;
@@ -13,7 +14,7 @@ export function makeStripe(opts: { accountId?: string; endpoints?: any[] } = {})
   const coupons: Store = {};
   const endpoints: any[] = [...(opts.endpoints ?? [])];
   const mock = {
-    accounts: { retrieve: jest.fn(async () => ({ id: opts.accountId ?? 'acct_new' })) },
+    accounts: { retrieve: jest.fn(async () => ({ id: opts.accountId ?? E2E_SANDBOX_ACCOUNT_ID })) },
     products: {
       retrieve: jest.fn(async (id: string) => {
         if (!products[id]) throw missing();

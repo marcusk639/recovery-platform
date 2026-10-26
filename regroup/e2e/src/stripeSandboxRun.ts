@@ -11,6 +11,7 @@ import {
 } from './stripeWebhooks';
 
 const WEBHOOK_SECRET = /^whsec_[A-Za-z0-9]+$/;
+export const SECRETS_FILE = 'stripe-e2e-webhook-secrets.json';
 const ACCOUNT_ID = /^acct_[A-Za-z0-9]+$/;
 const codeOf = (err: unknown): string =>
   (err as NodeJS.ErrnoException | null)?.code ?? 'unknown error';
@@ -76,10 +77,15 @@ function readJsonObject(file: string): Record<string, string> {
  * file and fail. If even that fails, the secret is gone and the endpoint must be
  * recreated. Messages carry error codes and paths only.
  */
-function rescueSecret(dir: string, kind: Kind, secret: string, cause: string): never {
+function rescueSecret(
+  dir: string,
+  entry: Record<string, string>,
+  kind: Kind,
+  cause: string,
+): never {
   const rescue = path.join(dir, `stripe-e2e-webhook-secret-${kind}-${Date.now()}.json`);
   try {
-    writeSecretFile(rescue, JSON.stringify({ [kind]: secret }, null, 2) + '\n');
+    writeSecretFile(rescue, JSON.stringify(entry, null, 2) + '\n');
   } catch (writeErr) {
     throw new Error(
       `${cause}, and the ${kind} secret could not be saved elsewhere (${codeOf(writeErr)}); ` +
@@ -90,21 +96,37 @@ function rescueSecret(dir: string, kind: Kind, secret: string, cause: string): n
   throw new Error(`${cause}; recover the ${kind} secret from ${rescue}.`);
 }
 
-/** Merge into the secrets file; if it cannot be read or written, rescue the secret, then fail. */
-function persistSecret(dir: string, kind: Kind, secret: string): void {
-  const file = path.join(dir, 'stripe-e2e-webhook-secrets.json');
+const endpointIdKey = (kind: Kind): string => `${kind}EndpointId`;
+
+/**
+ * Merge the secret and the id of the endpoint it belongs to into the secrets file
+ * in one write; if the file cannot be read or written, rescue both, then fail.
+ */
+function persistSecret(dir: string, kind: Kind, secret: string, endpointId: string): void {
+  const file = path.join(dir, SECRETS_FILE);
+  const entry = { [kind]: secret, [endpointIdKey(kind)]: endpointId };
   let existing: Record<string, string>;
   try {
     existing = readJsonObject(file);
   } catch (err) {
     if (!(err instanceof UnusableFileError)) throw err;
-    rescueSecret(dir, kind, secret, `Corrupt or unreadable secrets file (${err.message})`);
+    rescueSecret(dir, entry, kind, `Corrupt or unreadable secrets file (${err.message})`);
   }
   try {
-    writeSecretFile(file, JSON.stringify({ ...existing, [kind]: secret }, null, 2) + '\n');
+    writeSecretFile(file, JSON.stringify({ ...existing, ...entry }, null, 2) + '\n');
   } catch (err) {
-    rescueSecret(dir, kind, secret, `Cannot write ${file} (${codeOf(err)})`);
+    rescueSecret(dir, entry, kind, `Cannot write ${file} (${codeOf(err)})`);
   }
+}
+
+/** A whsec_ secret saved for exactly this endpoint; a secret of a deleted endpoint does not count. */
+function secretSavedFor(saved: Record<string, string>, kind: Kind, endpointId: string): boolean {
+  const secret = saved[kind];
+  return (
+    typeof secret === 'string' &&
+    WEBHOOK_SECRET.test(secret) &&
+    saved[endpointIdKey(kind)] === endpointId
+  );
 }
 
 function pinAccount(accountFile: string, accountId: string, confirm?: string): void {
@@ -124,44 +146,48 @@ function pinAccount(accountFile: string, accountId: string, confirm?: string): v
     return;
   }
   if (confirm !== accountId) {
+    // Never echo the retrieved id: the operator must supply it independently.
     throw new Error(
-      `First run needs --confirm-account ${accountId} (retrieved id must be confirmed).`,
+      'First run needs --confirm-account <the e2e sandbox account id>, copied from the Stripe Dashboard.',
     );
   }
   writeSecretFile(accountFile, `${accountId}\n`);
 }
 
 /**
- * Order: URL and key validation (no Stripe), account guard and pin, hygiene,
- * catalogue and prices file, webhooks (each secret persisted as it is created;
- * an existing endpoint whose secret was never saved is refused). Never logs secrets.
+ * Order: URL and key validation (no Stripe); the secrets file must be usable before
+ * any Stripe write; account guard (the e2e sandbox only); hygiene; account pin;
+ * catalogue and prices file; webhooks (each secret persisted with its endpoint id as
+ * it is created; an existing endpoint without a secret saved for it is refused).
+ * Never logs secrets.
  */
-export async function runSetup(deps: SetupDeps): Promise<{ pricesFile: string }> {
+export async function runSetup(
+  deps: SetupDeps,
+): Promise<{ pricesFile: string; secretsFile: string }> {
   assertWebhookUrls(deps.platformUrl, deps.connectUrl);
   const key = deps.readKey().trim();
   assertTestKey(key);
+  const secretsFile = path.join(deps.outDir, SECRETS_FILE);
+  readJsonObject(secretsFile);
+
   const stripe = deps.createStripe(key, deps.apiVersion);
   const accountId = await assertSandboxAccount(stripe, key);
+  await assertSandboxHygiene(stripe);
 
   fs.mkdirSync(deps.outDir, { recursive: true, mode: 0o700 });
   fs.chmodSync(deps.outDir, 0o700);
   pinAccount(path.join(deps.outDir, 'stripe-e2e-account.txt'), accountId, deps.confirmAccount);
 
-  await assertSandboxHygiene(stripe);
   const prices = await ensureCatalog(stripe);
   const pricesFile = path.join(deps.outDir, 'stripe-e2e-prices.json');
   writeSecretFile(pricesFile, JSON.stringify(prices, null, 2) + '\n');
 
-  const secretsFile = path.join(deps.outDir, 'stripe-e2e-webhook-secrets.json');
   await ensureWebhooks(stripe, {
     platformUrl: deps.platformUrl,
     connectUrl: deps.connectUrl,
     apiVersion: deps.apiVersion,
-    onSecret: (kind, secret) => persistSecret(deps.outDir, kind, secret),
-    hasSecret: (kind) => {
-      const saved = readJsonObject(secretsFile)[kind];
-      return typeof saved === 'string' && WEBHOOK_SECRET.test(saved);
-    },
+    onSecret: (kind, secret, endpointId) => persistSecret(deps.outDir, kind, secret, endpointId),
+    hasSecret: (kind, endpointId) => secretSavedFor(readJsonObject(secretsFile), kind, endpointId),
   });
-  return { pricesFile };
+  return { pricesFile, secretsFile };
 }

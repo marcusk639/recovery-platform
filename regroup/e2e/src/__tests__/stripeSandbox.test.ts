@@ -13,8 +13,8 @@ import {
 } from '../stripeWebhooks';
 import { makeStripe } from './helpers/mockStripe';
 
-const PLATFORM_URL = 'https://us-central1-regroup-e2e.cloudfunctions.net/stripeWebhook';
-const CONNECT_URL = 'https://us-central1-regroup-e2e.cloudfunctions.net/stripeConnectWebhook';
+const PLATFORM_URL = 'https://us-central1-regroup-e2e.cloudfunctions.net/stripeEvents';
+const CONNECT_URL = 'https://us-central1-regroup-e2e.cloudfunctions.net/handleStripeConnectWebhook';
 const API = '2026-01-28.clover';
 const hooks = (extra = {}) => ({
   platformUrl: PLATFORM_URL,
@@ -189,15 +189,15 @@ describe('assertWebhookUrls', () => {
   it('accepts https regroup-e2e cloudfunctions hosts', () => {
     expect(() => assertWebhookUrls(PLATFORM_URL, CONNECT_URL)).not.toThrow();
     expect(
-      isAllowedWebhookUrl('https://us-central1-regroup-e2e.cloudfunctions.net/stripeWebhook'),
+      isAllowedWebhookUrl('https://us-central1-regroup-e2e.cloudfunctions.net/stripeEvents'),
     ).toBe(true);
   });
 
   it('refuses lookalike hosts, ports, credentials and odd paths', () => {
     const bad = [
       'https://x-regroup-e2e.attacker.example/stripeWebhook',
-      'https://us-central1-evil-regroup-e2e.cloudfunctions.net/stripeWebhook',
-      'https://evil-regroup-e2e.cloudfunctions.net/stripeWebhook',
+      'https://us-central1-evil-regroup-e2e.cloudfunctions.net/stripeEvents',
+      'https://evil-regroup-e2e.cloudfunctions.net/stripeEvents',
       'https://us-central1-regroup-e2e.cloudfunctions.net:8443/x',
       'https://user:pw@us-central1-regroup-e2e.cloudfunctions.net/x',
       'https://user@us-central1-regroup-e2e.cloudfunctions.net/x',
@@ -210,7 +210,7 @@ describe('assertWebhookUrls', () => {
   });
 
   it('refuses production, non-https, non-e2e and identical URLs', () => {
-    const prod = 'https://us-central1-phoenix-cleanhouse.cloudfunctions.net/stripeWebhook';
+    const prod = 'https://us-central1-phoenix-cleanhouse.cloudfunctions.net/stripeEvents';
     expect(() => assertWebhookUrls(prod, CONNECT_URL)).toThrow(/not allowed/);
     expect(() =>
       assertWebhookUrls(PLATFORM_URL, 'http://us-central1-regroup-e2e.cloudfunctions.net/c'),
@@ -219,7 +219,7 @@ describe('assertWebhookUrls', () => {
     expect(() => assertWebhookUrls('https://regroup-e2e-regroup-app.com/x', CONNECT_URL)).toThrow(
       /not allowed/,
     );
-    expect(() => assertWebhookUrls(PLATFORM_URL, PLATFORM_URL)).toThrow(/differ/);
+    expect(() => assertWebhookUrls(PLATFORM_URL, PLATFORM_URL)).toThrow(/Connect webhook URL/);
   });
 
   it('refuses URLs when ensureWebhooks is called directly, with no Stripe calls', async () => {
@@ -242,7 +242,7 @@ describe('assertSandboxHygiene', () => {
         { id: 'we_ok', url: PLATFORM_URL, status: 'enabled' },
         {
           id: 'we_bad',
-          url: 'https://us-central1-phoenix-cleanhouse.cloudfunctions.net/stripeWebhook',
+          url: 'https://us-central1-phoenix-cleanhouse.cloudfunctions.net/stripeEvents',
           status: 'enabled',
         },
       ],
@@ -292,6 +292,6 @@ describe('assertSandboxAccount', () => {
 
   it('returns the id of a fresh test account', async () => {
     const { stripe } = makeStripe();
-    await expect(assertSandboxAccount(stripe, 'sk_test_abc')).resolves.toBe('acct_new');
+    await expect(assertSandboxAccount(stripe, 'sk_test_abc')).resolves.toBe('acct_1UUsyi44OQke4tKl');
   });
 });

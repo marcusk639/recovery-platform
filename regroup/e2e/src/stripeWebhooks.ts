@@ -1,6 +1,7 @@
 import type Stripe from 'stripe';
 
-// Source: regroup/functions/src/webhooks/stripeWebhook.ts switch statements.
+// Source: regroup/functions/src/webhooks/stripeWebhook.ts switch statements. Matches the
+// production platform endpoint: account.updated arrives via the Connect endpoint, as in production.
 export const PLATFORM_EVENTS = [
   'payment_intent.succeeded',
   'payment_intent.payment_failed',
@@ -12,7 +13,6 @@ export const PLATFORM_EVENTS = [
   'invoice.payment_failed',
   'customer.subscription.deleted',
   'customer.subscription.updated',
-  'account.updated',
   'payout.failed',
 ] as Stripe.WebhookEndpointCreateParams.EnabledEvent[];
 
@@ -25,41 +25,60 @@ const FORBIDDEN_HOST_PARTS = ['phoenix-cleanhouse', 'regroup-app.com', 'recovery
 // <region>-regroup-e2e, where a region is e.g. us-central1: no other project id can match.
 const E2E_FUNCTIONS_HOST = /^[a-z]+-[a-z]+[0-9]+-regroup-e2e\.cloudfunctions\.net$/;
 
-/** Fixed rule, never operator input: https://<region>-regroup-e2e.cloudfunctions.net/<name>, no port or credentials. */
-export function isAllowedWebhookUrl(url: string): boolean {
+export type Kind = 'platform' | 'connect';
+
+/**
+ * Deployed function names (regroup/functions/src/index.ts): the platform handler is
+ * exported as `stripeEvents`, the Connect one as-is.
+ */
+export const WEBHOOK_PATHS: Record<Kind, string> = {
+  platform: '/stripeEvents',
+  connect: '/handleStripeConnectWebhook',
+};
+
+/**
+ * Fixed rule, never operator input. The string must already be the canonical WHATWG
+ * href (nothing normalises differently here and at Stripe) and equal
+ * https://<region>-regroup-e2e.cloudfunctions.net<path> character for character:
+ * no port, credentials, query, fragment, or empty `?`/`#`.
+ */
+function matchesWebhookRule(url: string, paths: readonly string[]): boolean {
   let parsed: URL;
   try {
     parsed = new URL(url);
   } catch {
     return false;
   }
-  const host = parsed.hostname.toLowerCase();
+  const host = parsed.hostname;
   return (
+    parsed.href === url &&
     parsed.protocol === 'https:' &&
     E2E_FUNCTIONS_HOST.test(host) &&
-    parsed.port === '' &&
-    parsed.search === '' &&
-    parsed.hash === '' &&
-    parsed.username === '' &&
-    parsed.password === '' &&
-    /^\/[A-Za-z0-9_-]+$/.test(parsed.pathname) &&
-    !FORBIDDEN_HOST_PARTS.some((part) => host.includes(part))
+    !FORBIDDEN_HOST_PARTS.some((part) => host.includes(part)) &&
+    paths.includes(parsed.pathname) &&
+    url === `https://${host}${parsed.pathname}`
   );
 }
 
-/** Pure validation; call before any Stripe client exists. */
+/** True for either e2e endpoint URL; used to judge endpoints already in the sandbox. */
+export function isAllowedWebhookUrl(url: string): boolean {
+  return matchesWebhookRule(url, Object.values(WEBHOOK_PATHS));
+}
+
+/** Pure validation; call before any Stripe client exists. Swapped or misspelt paths fail. */
 export function assertWebhookUrls(platformUrl: string, connectUrl: string): void {
-  for (const url of [platformUrl, connectUrl]) {
-    if (!isAllowedWebhookUrl(url)) {
+  const checks: [string, string, string][] = [
+    ['Platform', platformUrl, WEBHOOK_PATHS.platform],
+    ['Connect', connectUrl, WEBHOOK_PATHS.connect],
+  ];
+  for (const [label, url, expectedPath] of checks) {
+    if (!matchesWebhookRule(url, [expectedPath])) {
       throw new Error(
-        `Webhook URL not allowed (https://<region>-regroup-e2e.cloudfunctions.net/<name>): ${url}`,
+        `${label} webhook URL not allowed: expected https://<region>-regroup-e2e.cloudfunctions.net${expectedPath}`,
       );
     }
   }
-  if (platformUrl === connectUrl) throw new Error('Platform and connect webhook URLs must differ.');
 }
-
-export type Kind = 'platform' | 'connect';
 
 export type WebhookOptions = {
   platformUrl: string;
@@ -70,13 +89,13 @@ export type WebhookOptions = {
    * Awaited right after each endpoint is created, because Stripe reveals the
    * secret once. Only called for newly created endpoints.
    */
-  onSecret: (kind: Kind, secret: string) => void | Promise<void>;
+  onSecret: (kind: Kind, secret: string, endpointId: string) => void | Promise<void>;
   /**
-   * Whether the secret of an existing endpoint was saved. An endpoint created
-   * by a run that died before saving its secret cannot be reused: Stripe will
-   * not reveal that secret again.
+   * Whether a secret was saved for THIS endpoint. An endpoint created by a run
+   * that died before saving its secret, or a secret left over from a deleted
+   * endpoint, cannot be reused: Stripe will not reveal the secret again.
    */
-  hasSecret: (kind: Kind) => boolean;
+  hasSecret: (kind: Kind, endpointId: string) => boolean;
 };
 
 async function listEndpoints(stripe: Stripe): Promise<Stripe.WebhookEndpoint[]> {
@@ -125,10 +144,10 @@ export async function ensureWebhooks(stripe: Stripe, opts: WebhookOptions): Prom
     const found = existing.find((e) => e.url === spec.url);
     if (found) {
       assertEndpointMatches(found, spec, opts.apiVersion);
-      if (!opts.hasSecret(spec.kind)) {
+      if (!opts.hasSecret(spec.kind, found.id)) {
         throw new Error(
-          `Webhook endpoint ${found.id} exists but its ${spec.kind} signing secret was not saved. ` +
-            'Delete that endpoint in the Stripe Dashboard and rerun.',
+          `Webhook endpoint ${found.id} exists but its ${spec.kind} signing secret was not saved ` +
+            'for this endpoint. Delete that endpoint in the Stripe Dashboard and rerun.',
         );
       }
       continue;
@@ -145,7 +164,7 @@ export async function ensureWebhooks(stripe: Stripe, opts: WebhookOptions): Prom
           'delete it in the Stripe Dashboard and rerun.',
       );
     }
-    await opts.onSecret(spec.kind, created.secret);
+    await opts.onSecret(spec.kind, created.secret, created.id);
   }
 }
 
