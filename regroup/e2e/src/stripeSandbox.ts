@@ -231,6 +231,20 @@ export async function ensureCatalog(stripe: Stripe): Promise<PriceIds> {
   return ids;
 }
 
+export type WebhookKind = 'platform' | 'connect';
+
+/**
+ * The secret names regroup-e2e's functions read. Staging runs on a test key, so
+ * only the TEST names pass the mode guard (functions/src/util/stripeWebhookSecrets.ts,
+ * util/verifyStripeWebhook.ts); the live names would reject every event.
+ */
+export const WEBHOOK_SECRET_NAMES = {
+  platform: 'STRIPE_TEST_WEBHOOK_SECRET',
+  connect: 'STRIPE_CONNECT_TEST_WEBHOOK_SECRET',
+} as const satisfies Record<WebhookKind, string>;
+
+export type WebhookSecretName = (typeof WEBHOOK_SECRET_NAMES)[WebhookKind];
+
 export type WebhookOptions = {
   platformUrl: string;
   connectUrl: string;
@@ -238,8 +252,11 @@ export type WebhookOptions = {
    * Awaited right after each endpoint is created, because Stripe reveals the
    * secret once. Only called for newly created endpoints.
    */
-  onSecret?: (kind: 'platform' | 'connect', secret: string) => void | Promise<void>;
+  onSecret?: (name: WebhookSecretName, secret: string) => void | Promise<void>;
 };
+
+export type EnsuredEndpoint = { id: string; url: string; created: boolean };
+export type EnsuredWebhooks = Record<WebhookKind, EnsuredEndpoint>;
 
 async function listEndpoints(stripe: Stripe): Promise<Stripe.WebhookEndpoint[]> {
   const page = await stripe.webhookEndpoints.list({ limit: 100 });
@@ -263,17 +280,22 @@ function assertEndpointMatches(
   }
 }
 
-export async function ensureWebhooks(stripe: Stripe, opts: WebhookOptions): Promise<void> {
+export async function ensureWebhooks(
+  stripe: Stripe,
+  opts: WebhookOptions,
+): Promise<EnsuredWebhooks> {
   assertWebhookUrls(opts.platformUrl, opts.connectUrl);
   const existing = await listEndpoints(stripe);
   const specs = [
     { kind: 'platform' as const, url: opts.platformUrl, events: PLATFORM_EVENTS, connect: false },
     { kind: 'connect' as const, url: opts.connectUrl, events: CONNECT_EVENTS, connect: true },
   ];
+  const result = {} as EnsuredWebhooks;
   for (const spec of specs) {
     const found = existing.find((e) => e.url === spec.url);
     if (found) {
       assertEndpointMatches(found, spec.events, spec.connect);
+      result[spec.kind] = { id: found.id, url: spec.url, created: false };
       continue;
     }
     const created = await stripe.webhookEndpoints.create({
@@ -281,8 +303,17 @@ export async function ensureWebhooks(stripe: Stripe, opts: WebhookOptions): Prom
       enabled_events: spec.events,
       ...(spec.connect ? { connect: true } : {}),
     });
-    if (created.secret) await opts.onSecret?.(spec.kind, created.secret);
+    const name = WEBHOOK_SECRET_NAMES[spec.kind];
+    if (!created.secret) {
+      throw new Error(
+        `Created webhook endpoint ${created.id} but Stripe returned no signing secret. ` +
+          `Roll the signing secret for ${created.id} in the Stripe Dashboard, then set it as ${name}.`,
+      );
+    }
+    await opts.onSecret?.(name, created.secret);
+    result[spec.kind] = { id: created.id, url: spec.url, created: true };
   }
+  return result;
 }
 
 /** Read-only: throws when an enabled endpoint violates the fixed allowlist rule. */

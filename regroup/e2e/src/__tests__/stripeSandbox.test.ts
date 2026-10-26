@@ -92,7 +92,7 @@ describe('ensureWebhooks', () => {
     expect(platform.enabled_events).toEqual(PLATFORM_EVENTS);
     expect(connect.enabled_events).toEqual(CONNECT_EVENTS);
     expect(connect.connect).toBe(true);
-    expect(secrets).toEqual(['platform', 'connect']);
+    expect(secrets).toEqual(['STRIPE_TEST_WEBHOOK_SECRET', 'STRIPE_CONNECT_TEST_WEBHOOK_SECRET']);
     expect(mock.webhookEndpoints.update).not.toHaveBeenCalled();
     expect(mock.webhookEndpoints.del).not.toHaveBeenCalled();
   });
@@ -108,6 +108,34 @@ describe('ensureWebhooks', () => {
       expect(mock.webhookEndpoints.update).not.toHaveBeenCalled();
       expect(mock.webhookEndpoints.del).not.toHaveBeenCalled();
     }
+  });
+});
+
+describe('ensureWebhooks secrets', () => {
+  it('throws when Stripe returns a created endpoint without a secret', async () => {
+    const { mock, stripe } = makeStripe();
+    const create = mock.webhookEndpoints.create.getMockImplementation()!;
+    mock.webhookEndpoints.create.mockImplementationOnce(async (e: any) => {
+      const { secret: _s, ...rest } = await create(e);
+      return rest;
+    });
+    const onSecret = jest.fn();
+    await expect(
+      ensureWebhooks(stripe, { platformUrl: PLATFORM_URL, connectUrl: CONNECT_URL, onSecret }),
+    ).rejects.toThrow(/no signing secret.*STRIPE_TEST_WEBHOOK_SECRET/);
+    expect(onSecret).not.toHaveBeenCalled();
+    expect(mock.webhookEndpoints.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns each endpoint id and whether it was created', async () => {
+    const { stripe } = makeStripe();
+    const opts = { platformUrl: PLATFORM_URL, connectUrl: CONNECT_URL };
+    const first = await ensureWebhooks(stripe, opts);
+    const second = await ensureWebhooks(stripe, opts);
+    expect(first.platform).toMatchObject({ url: PLATFORM_URL, created: true });
+    expect(first.connect).toMatchObject({ url: CONNECT_URL, created: true });
+    expect(second.platform).toEqual({ ...first.platform, created: false });
+    expect(second.connect).toEqual({ ...first.connect, created: false });
   });
 });
 

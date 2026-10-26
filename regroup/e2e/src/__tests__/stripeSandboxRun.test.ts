@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { PRODUCTION_SANDBOX_ACCOUNT_ID } from '../stripeSandbox';
+import { CONNECT_EVENTS, PLATFORM_EVENTS, PRODUCTION_SANDBOX_ACCOUNT_ID } from '../stripeSandbox';
 import { runSetup } from '../stripeSandboxRun';
 import { makeStripe } from './helpers/mockStripe';
 
@@ -127,8 +127,8 @@ describe('runSetup', () => {
       /^price_/,
     );
     expect(JSON.parse(fs.readFileSync(secretsFile, 'utf8'))).toEqual({
-      platform: 'whsec_mock',
-      connect: 'whsec_mock',
+      STRIPE_TEST_WEBHOOK_SECRET: 'whsec_mock',
+      STRIPE_CONNECT_TEST_WEBHOOK_SECRET: 'whsec_mock',
     });
     expect(fs.statSync(pricesFile).mode & 0o777).toBe(0o600);
     expect(fs.statSync(secretsFile).mode & 0o777).toBe(0o600);
@@ -145,20 +145,34 @@ describe('runSetup', () => {
 
     await expect(runSetup(base(stripe))).rejects.toThrow('boom');
     const secretsFile = path.join(outDir, 'stripe-e2e-webhook-secrets.json');
-    expect(JSON.parse(fs.readFileSync(secretsFile, 'utf8'))).toEqual({ platform: 'whsec_mock' });
+    expect(JSON.parse(fs.readFileSync(secretsFile, 'utf8'))).toEqual({
+      STRIPE_TEST_WEBHOOK_SECRET: 'whsec_mock',
+    });
 
     await runSetup(base(stripe));
     expect(mock.webhookEndpoints.create).toHaveBeenCalledTimes(3);
     expect(JSON.parse(fs.readFileSync(secretsFile, 'utf8'))).toEqual({
-      platform: 'whsec_mock',
-      connect: 'whsec_mock',
+      STRIPE_TEST_WEBHOOK_SECRET: 'whsec_mock',
+      STRIPE_CONNECT_TEST_WEBHOOK_SECRET: 'whsec_mock',
     });
   });
 
-  it('parks a one-time secret in a separate 600 file when the secrets file is corrupt, then fails', async () => {
-    const { stripe } = makeStripe();
-    fs.mkdirSync(outDir, { recursive: true });
+  it('fails on a corrupt secrets file before creating any endpoint', async () => {
+    const { mock, stripe } = makeStripe();
     fs.writeFileSync(path.join(outDir, 'stripe-e2e-webhook-secrets.json'), '{not json');
+    await expect(runSetup(base(stripe))).rejects.toThrow(/Corrupt/);
+    expect(mock.webhookEndpoints.create).not.toHaveBeenCalled();
+  });
+
+  it('parks a one-time secret in a separate 600 file when the secrets file turns corrupt, then fails', async () => {
+    const { mock, stripe } = makeStripe();
+    const secretsFile = path.join(outDir, 'stripe-e2e-webhook-secrets.json');
+    const create = mock.webhookEndpoints.create.getMockImplementation()!;
+    // Corrupted between the up-front read and the first persist.
+    mock.webhookEndpoints.create.mockImplementationOnce(async (e: unknown) => {
+      fs.writeFileSync(secretsFile, '{not json');
+      return create(e);
+    });
     const errors = jest.spyOn(console, 'error').mockImplementation(() => undefined);
 
     await expect(runSetup(base(stripe))).rejects.toThrow(/Corrupt/);
@@ -166,11 +180,84 @@ describe('runSetup', () => {
     const rescue = fs.readdirSync(outDir).filter((f) => f.startsWith('stripe-e2e-webhook-secret-'));
     expect(rescue).toHaveLength(1);
     const rescuePath = path.join(outDir, rescue[0]);
-    expect(JSON.parse(fs.readFileSync(rescuePath, 'utf8'))).toEqual({ platform: 'whsec_mock' });
+    expect(JSON.parse(fs.readFileSync(rescuePath, 'utf8'))).toEqual({
+      STRIPE_TEST_WEBHOOK_SECRET: 'whsec_mock',
+    });
     expect(fs.statSync(rescuePath).mode & 0o777).toBe(0o600);
     const logged = errors.mock.calls.flat().join('\n');
     expect(logged).toContain(rescuePath);
     expect(logged).not.toContain('whsec_');
     errors.mockRestore();
+  });
+
+  const existingEndpoints = () => [
+    {
+      id: 'we_p',
+      url: urls.platformUrl,
+      status: 'enabled',
+      enabled_events: [...PLATFORM_EVENTS],
+    },
+    { id: 'we_c', url: urls.connectUrl, status: 'enabled', enabled_events: [...CONNECT_EVENTS] },
+  ];
+
+  it('migrates legacy platform/connect keys to the functions secret names, keeping values', async () => {
+    const { mock, stripe } = makeStripe({ endpoints: existingEndpoints() });
+    const secretsFile = path.join(outDir, 'stripe-e2e-webhook-secrets.json');
+    fs.writeFileSync(
+      secretsFile,
+      JSON.stringify({ platform: 'whsec_old_p', connect: 'whsec_old_c' }),
+      { mode: 0o600 },
+    );
+    const spies = (['log', 'info', 'warn', 'error'] as const).map((m) =>
+      jest.spyOn(console, m).mockImplementation(() => undefined),
+    );
+
+    await runSetup(base(stripe));
+
+    expect(mock.webhookEndpoints.create).not.toHaveBeenCalled();
+    expect(JSON.parse(fs.readFileSync(secretsFile, 'utf8'))).toEqual({
+      STRIPE_TEST_WEBHOOK_SECRET: 'whsec_old_p',
+      STRIPE_CONNECT_TEST_WEBHOOK_SECRET: 'whsec_old_c',
+    });
+    expect(fs.statSync(secretsFile).mode & 0o777).toBe(0o600);
+    const logged = spies.flatMap((s) => s.mock.calls.flat()).join('\n');
+    expect(logged).not.toContain('whsec_');
+    spies.forEach((s) => s.mockRestore());
+  });
+
+  it('refuses to guess when a legacy key and its new name disagree', async () => {
+    const { stripe } = makeStripe({ endpoints: existingEndpoints() });
+    fs.writeFileSync(
+      path.join(outDir, 'stripe-e2e-webhook-secrets.json'),
+      JSON.stringify({ platform: 'whsec_a', STRIPE_TEST_WEBHOOK_SECRET: 'whsec_b' }),
+    );
+    const err = await runSetup(base(stripe)).catch((e: Error) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toMatch(/platform.*STRIPE_TEST_WEBHOOK_SECRET/);
+    expect((err as Error).message).not.toContain('whsec_');
+  });
+
+  it('fails with an actionable error when an endpoint exists but its secret was never saved', async () => {
+    const { mock, stripe } = makeStripe({ endpoints: existingEndpoints() });
+    const err = await runSetup(base(stripe)).catch((e: Error) => e);
+    expect(err).toBeInstanceOf(Error);
+    const msg = (err as Error).message;
+    expect(msg).toMatch(/roll the signing secret for we_p/i);
+    expect(msg).toContain('STRIPE_TEST_WEBHOOK_SECRET');
+    expect(msg).toContain('we_c');
+    expect(msg).toContain('STRIPE_CONNECT_TEST_WEBHOOK_SECRET');
+    expect(msg).not.toContain('whsec_');
+    expect(mock.webhookEndpoints.create).not.toHaveBeenCalled();
+  });
+
+  it('names only the endpoint whose secret is missing', async () => {
+    const { stripe } = makeStripe({ endpoints: existingEndpoints() });
+    fs.writeFileSync(
+      path.join(outDir, 'stripe-e2e-webhook-secrets.json'),
+      JSON.stringify({ STRIPE_TEST_WEBHOOK_SECRET: 'whsec_p' }),
+    );
+    const err = (await runSetup(base(stripe)).catch((e: Error) => e)) as Error;
+    expect(err.message).toContain('we_c');
+    expect(err.message).not.toContain('we_p');
   });
 });

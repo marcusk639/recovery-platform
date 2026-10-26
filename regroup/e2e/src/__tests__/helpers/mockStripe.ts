@@ -39,9 +39,10 @@ export function makeStripe(opts: { accountId?: string; endpoints?: any[] } = {})
     webhookEndpoints: {
       list: jest.fn(async () => ({ data: endpoints, has_more: false })),
       create: jest.fn(async (e: any) => {
-        const created = { ...e, status: 'enabled', id: `we_${endpoints.length}`, secret: 'whsec_mock' };
-        endpoints.push(created);
-        return created;
+        // Like Stripe, the secret is only on the create response, never on list.
+        const stored = { ...e, status: 'enabled', id: `we_${endpoints.length}` };
+        endpoints.push(stored);
+        return { ...stored, secret: 'whsec_mock' };
       }),
       update: jest.fn(),
       del: jest.fn(),
