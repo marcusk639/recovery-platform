@@ -47,7 +47,9 @@ Read these, in full, before you open the diff:
    Its "PR context" section holds the PR title, the PR description and the existing comments. The PR title
    matters: PRs squash-merge, so the title becomes the commit message.
 2. `<OUT>/state.json`: prior state. `ledger` lists findings already reported (security and withheld
-   entries carry only an opaque id, severity and status, never a slug or title), `inlineSlugs` lists
+   entries carry only an opaque id, severity and status, never a slug or title; security entries also
+   carry `fileIds`, keyed hashes of their files that publish uses to keep those files out of public text),
+   `inlineSlugs` lists
    fingerprints of inline comments the publish step already posted on the PR,
    `acknowledgedSlugs` lists fingerprints a maintainer has replied to in the inline thread, and `tier` and
    `maxTurns` describe this run's budget.
@@ -55,18 +57,15 @@ Read these, in full, before you open the diff:
    sections you need, by heading (`Grep` for `## <linkType>` or the class number, then `Read` that range),
    not every file in full.
 
-For each link type listed under "Link types" in `facts.md`, find its `## <linkType>` heading. On
-`base-drift`, Link types may be empty: take the PR's link types from `<OUT>/pr.diff` and check them
-against the drifted counterpart files listed in `facts.md`. Each heading
-is in exactly **one** of the three contract maps, and the owner table at the top of
+For each link type listed under "Link types" in `facts.md` (on `base-drift`, see "Per-tier scope"),
+find its `## <linkType>` heading. Each heading is in exactly **one** of the three contract maps, and the owner table at the top of
 `contract-map-homegroups.md` says which. Search all three maps rather than assuming; a section may carry
 `### homegroups` and `### regroup` subsections.
 
 ## Per-tier scope
 
-`tier` in `state.json` sets what this run covers. Stay inside it and inside `maxTurns`: when the budget
-runs short, write `summary.md` and then `findings.json` with what you have, and say what was left in
-"Not reviewed / limits".
+`tier` in `state.json` sets what this run covers. Stay inside it and inside `maxTurns` (step 9 under
+"Procedure" says what to do when the budget runs short), and say what was left in "Not reviewed / limits".
 
 - `full`: review `<OUT>/pr.diff` with the whole procedure below.
 - `incremental`: review `<OUT>/increment.diff`, plus the counterparts of the link types it touches.
@@ -80,8 +79,10 @@ runs short, write `summary.md` and then `findings.json` with what you have, and 
 
 On every tier, an earlier open non-security ledger entry stays open unless you list its slug in
 `resolvedSlugs` or a maintainer has replied to its inline comment (its slug is in `acknowledgedSlugs`;
-publish resolves it). Security and withheld entries carry no slug and never resolve through
-`resolvedSlugs`: publish resolves them when their private advisory is closed, withdrawn or published.
+publish resolves it). Security entries carry no slug and never resolve through `resolvedSlugs`: publish
+resolves them when their private advisory is closed, withdrawn or published. Withheld entries
+(non-security findings on a security-relevant file) carry no slug either and have no advisory or inline
+comment, so no run resolves them: they stay listed as open, without detail.
 
 ## Procedure
 
