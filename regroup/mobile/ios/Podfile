@@ -6,7 +6,7 @@ require Pod::Executable.execute_command('node', ['-p',
   )', __dir__]).strip
 
 $RNFirebaseAsStaticFramework = true
-platform :ios, '13.0'
+platform :ios, '15.0'
 prepare_react_native_project!
 
 # If you are using a `react-native-flipper` your iOS build will fail when `NO_FLIPPER=1` is set.
@@ -82,7 +82,7 @@ target 'rats' do
       end
       target.build_configurations.each do |config|
         config.build_settings['SWIFT_VERSION'] = '5.0'
-        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
         config.build_settings["CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES"] = true
         
         # Fix for Folly header issues
@@ -90,6 +90,13 @@ target 'rats' do
           config.build_settings['HEADER_SEARCH_PATHS'] ||= ['$(inherited)']
           config.build_settings['HEADER_SEARCH_PATHS'] << '"$(PODS_ROOT)/boost"'
           config.build_settings['HEADER_SEARCH_PATHS'] << '"$(PODS_ROOT)/RCT-Folly"'
+        end
+
+        # RN 0.72 Yoga.podspec compiles with -Werror, and newer clang (seen with Xcode 27.1) flags the
+        # `operator"" _pt` spelling in YGValue.h as deprecated, failing Release builds.
+        if target.name == 'Yoga'
+          flags = config.build_settings['OTHER_CPLUSPLUSFLAGS'] || '$(inherited)'
+          config.build_settings['OTHER_CPLUSPLUSFLAGS'] = "#{flags} -Wno-deprecated-literal-operator"
         end
 
         # Fix for react-native-html-to-pdf codegen spec header
