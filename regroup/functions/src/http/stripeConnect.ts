@@ -41,7 +41,9 @@ const getStripe = (): Stripe => (_stripe ??= createStripeClient());
 // ---------------------------------------------------------------------------
 
 export const stripeConnectReauth = onRequest(
-  { secrets: [STRIPE_SECRET_KEY] },
+  // A browser lands here from Stripe, unauthenticated; without this a deploy can
+  // leave the service with no allUsers invoker and the redirect gets 403.
+  { invoker: "public", secrets: [STRIPE_SECRET_KEY] },
   async (req, res) => {
     const stripeAccountId = req.query.stripeAccountId as string | undefined;
 
@@ -145,7 +147,7 @@ function renderReturnPage(status: string | undefined): string {
 }
 
 export const stripeConnectReturn = onRequest(
-  { secrets: [STRIPE_SECRET_KEY] },
+  { invoker: "public", secrets: [STRIPE_SECRET_KEY] },
   async (req, res) => {
     const stripeAccountId = req.query.stripeAccountId as string | undefined;
 

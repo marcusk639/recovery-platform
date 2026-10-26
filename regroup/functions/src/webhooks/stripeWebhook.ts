@@ -1380,6 +1380,9 @@ async function markEventFailed(eventId: string): Promise<boolean> {
 
 export const stripeWebhook = onRequest(
   {
+    // Stripe calls this URL unauthenticated; without this a deploy can leave the
+    // service with no allUsers invoker and every delivery gets 403.
+    invoker: "public",
     secrets: [
       STRIPE_SECRET_KEY,
       STRIPE_WEBHOOK_SECRET,
@@ -1675,6 +1678,7 @@ async function handleAccountDeauthorized(accountId: string): Promise<void> {
 
 export const handleStripeConnectWebhook = onRequest(
   {
+    invoker: "public",
     secrets: [
       STRIPE_SECRET_KEY,
       STRIPE_CONNECT_WEBHOOK_SECRET,
