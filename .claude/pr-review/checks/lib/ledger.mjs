@@ -129,7 +129,9 @@ export function mergeLedger(prior, findings, resolvedSlugs, tier, { key = null, 
   for (const f of findings) {
     const g = groups.get(f.slug) ?? { f, security: false, withheld: false, all: [] };
     g.all.push(f);
-    if (f.security && !g.security) Object.assign(g, { f, security: true });
+    // A security finding wins the slug; among several, the most severe one.
+    const graver = !g.security || SEVERITIES.indexOf(f.severity) < SEVERITIES.indexOf(g.f.severity);
+    if (f.security && graver) Object.assign(g, { f, security: true });
     if (touchesSecurityFile(f, needles)) g.withheld = true;
     groups.set(f.slug, g);
   }

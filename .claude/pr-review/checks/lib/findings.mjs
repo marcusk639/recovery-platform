@@ -10,13 +10,20 @@ const AREA_WORD = /^[a-z0-9-]{1,20}$/;
 // Checklist classes that are security-relevant by definition (REVIEW.md); the
 // model's own flag cannot clear them.
 export const SECURITY_CLASSES = new Set([1, 4, 7, 11, 14]);
+const SLUG_CLASS_RE = /^c(\d{1,2}):/;
+
+// Forced security: the finding's class OR its slug's class prefix (`c<n>:`) is
+// a security class. capFinding and the inline guard share this predicate.
+export function isForcedSecurity(cls, slug) {
+  return SECURITY_CLASSES.has(cls) || SECURITY_CLASSES.has(Number(SLUG_CLASS_RE.exec(String(slug ?? ''))?.[1]));
+}
 // Bounds keep rendering, truncation and the ledger marker cheap whatever the model wrote.
 export const MAX_FINDINGS = 200;
 const MAX_LOCATIONS = 10;
 const FIELD_CAPS = { package: 100, area: 100, title: 300, feature: 300, why: 2000, fix: 2000 };
 
 function capFinding(f) {
-  const out = { ...f, security: f.security || SECURITY_CLASSES.has(f.class), locations: f.locations.slice(0, MAX_LOCATIONS).map((l) => ({ ...l, file: l.file.slice(0, 300) })) };
+  const out = { ...f, security: f.security || isForcedSecurity(f.class, f.slug), locations: f.locations.slice(0, MAX_LOCATIONS).map((l) => ({ ...l, file: l.file.slice(0, 300) })) };
   for (const [k, n] of Object.entries(FIELD_CAPS)) out[k] = f[k].slice(0, n);
   return out;
 }

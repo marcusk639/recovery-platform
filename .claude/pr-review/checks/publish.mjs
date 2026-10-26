@@ -10,7 +10,7 @@ import { decodeLedger, rawLedgerMarker } from './lib/markers.mjs';
 import { markResolved, mergeLedger, opaqueId, sanitizeLedger, visibleEntries } from './lib/ledger.mjs';
 import { renderSummary, validateFindings } from './lib/render.mjs';
 import { mentions, touchesSecurityFile } from './lib/needles.mjs';
-import { isPriorSecurityPath, priorFileIds, runNeedles } from './lib/fileids.mjs';
+import { candidatePaths, isPriorSecurityPath, priorFileIds, runNeedles } from './lib/fileids.mjs';
 import { guardInlineComments } from './lib/inline-guard.mjs';
 import { deliverAdvisories } from './advisories.mjs';
 
@@ -215,8 +215,12 @@ async function guardInline(repo, pr, snapshot, rest, deps) {
   const key = rest.idKey || null;
   const ids = priorFileIds(sanitizeLedger(snapshot?.ledger, key));
   const needles = runNeedles(findings, [], ids, key);
-  const isSecurityPath = (t) => mentions(t, needles) || isPriorSecurityPath(t, ids, key);
-  const runStartedAt = isObject(snapshot) ? snapshot.runStartedAt : null;
+  // A comment body can name a prior security file only by path, so its
+  // path-like tokens are hashed against the prior fileIds too (keyed only).
+  const namesPrior = (t) => candidatePaths([], [t]).some((p) => isPriorSecurityPath(p, ids, key));
+  const isSecurityPath = (t) => mentions(t, needles) || isPriorSecurityPath(t, ids, key) || namesPrior(t);
+  // The workflow's run start (captured before the review step), else facts'.
+  const runStartedAt = rest.runStartedAt || (isObject(snapshot) ? snapshot.runStartedAt : null);
   const res = await guardInlineComments({ repo, comments, findings, headSha: sha(rest.headSha), runStartedAt, isSecurityPath, request: deps.request ?? ghRequest });
   console.log(`inline guard: removed ${res.removed}, failed ${res.failed}`);
   return res.failed ? [INLINE_NOTICE] : [];
@@ -240,7 +244,7 @@ export async function publish({ repo, pr, snapshot, advisoryToken, ...rest }, de
 
 async function main() {
   try {
-    const { REPO, PR, HEAD_SHA, BASE_SHA, ACTION_OUTCOME, EXECUTION_FILE, OUT, STATE_FILE, PR_REVIEW_ID_KEY, ADVISORY_TOKEN } = process.env;
+    const { REPO, PR, HEAD_SHA, BASE_SHA, ACTION_OUTCOME, EXECUTION_FILE, OUT, STATE_FILE, PR_REVIEW_ID_KEY, ADVISORY_TOKEN, RUN_STARTED_AT } = process.env;
     const out = OUT || '.';
     const deps = { listIssueComments, upsertSummary, listReviewComments, request: ghRequest };
     await publish({
@@ -253,6 +257,7 @@ async function main() {
       executionLog: EXECUTION_FILE ? readOptional(EXECUTION_FILE) : null,
       headSha: HEAD_SHA,
       baseSha: BASE_SHA,
+      runStartedAt: RUN_STARTED_AT || null,
       idKey: PR_REVIEW_ID_KEY || null,
       // Advisory requests only; never passed to the summary comment calls.
       advisoryToken: ADVISORY_TOKEN || null,

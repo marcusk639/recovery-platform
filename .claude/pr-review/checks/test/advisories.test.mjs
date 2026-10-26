@@ -81,7 +81,7 @@ test('no security findings delivers trivially with zero requests', async () => {
 
 test('an existing advisory with a matching id gets one PATCH and no POST', async () => {
   const original = `old detail\n\nPull request: #3\npr-review-id: ${ID}`;
-  const existing = { ghsa_id: 'GHSA-aaaa-bbbb-cccc', description: original };
+  const existing = { ghsa_id: 'GHSA-aaaa-bbbb-cccc', state: 'draft', description: original };
   const m = mock({ pages: [[{ ghsa_id: 'GHSA-other', description: 'pr-review-id: 0000000000000000' }, existing]] });
   const res = await deliverAdvisories(REPO, 7, [sec()], TOKEN, m.request, KEY);
   assert.deepEqual(res, { delivered: true, resolvedIds: [] });
@@ -96,8 +96,8 @@ test('an existing advisory with a matching id gets one PATCH and no POST', async
 });
 
 test('the "Also touched by" note is appended once per PR', async () => {
-  const touched = { ghsa_id: 'GHSA-aaaa-bbbb-cccc', description: `d\n\nPull request: #3\npr-review-id: ${ID}\n\nAlso touched by #7` };
-  const own = { ghsa_id: 'GHSA-bbbb-cccc-dddd', description: `d\n\nPull request: #7\npr-review-id: ${opaqueId('c4:x.ts:y', KEY)}` };
+  const touched = { ghsa_id: 'GHSA-aaaa-bbbb-cccc', state: 'draft', description: `d\n\nPull request: #3\npr-review-id: ${ID}\n\nAlso touched by #7` };
+  const own = { ghsa_id: 'GHSA-bbbb-cccc-dddd', state: 'draft', description: `d\n\nPull request: #7\npr-review-id: ${opaqueId('c4:x.ts:y', KEY)}` };
   const m = mock({ pages: [[touched, own]] });
   const res = await deliverAdvisories(REPO, 7, [sec(), sec({ slug: 'c4:x.ts:y', class: 4 })], TOKEN, m.request, KEY);
   assert.deepEqual(res, { delivered: true, resolvedIds: [] });
@@ -105,7 +105,7 @@ test('the "Also touched by" note is appended once per PR', async () => {
 });
 
 test('#7 is not mistaken for #70', async () => {
-  const touched = { ghsa_id: 'GHSA-aaaa-bbbb-cccc', description: `d\n\nPull request: #70\npr-review-id: ${ID}\n\nAlso touched by #71` };
+  const touched = { ghsa_id: 'GHSA-aaaa-bbbb-cccc', state: 'draft', description: `d\n\nPull request: #70\npr-review-id: ${ID}\n\nAlso touched by #71` };
   const m = mock({ pages: [[touched]] });
   await deliverAdvisories(REPO, 7, [sec()], TOKEN, m.request, KEY);
   assert.equal(m.calls.filter((c) => c.method === 'PATCH').length, 1);
@@ -139,7 +139,7 @@ test('the draft listing is followed across pages', async () => {
   const filler = Array.from({ length: 100 }, (_, i) => ({ ghsa_id: `GHSA-f${i}`, description: 'x' }));
   const page1 = Object.assign(filler, {});
   Object.defineProperty(page1, 'next', { value: `/repos/${REPO}/security-advisories?state=draft&per_page=100&after=abc` });
-  const existing = { ghsa_id: 'GHSA-aaaa-bbbb-cccc', description: `d\n\nPull request: #3\npr-review-id: ${ID}` };
+  const existing = { ghsa_id: 'GHSA-aaaa-bbbb-cccc', state: 'draft', description: `d\n\nPull request: #3\npr-review-id: ${ID}` };
   const m = mock({ pages: [page1, [existing]] });
   await deliverAdvisories(REPO, 7, [sec()], TOKEN, m.request, KEY);
   const gets = m.calls.filter((c) => c.method === 'GET' && c.path.includes('state=draft'));
@@ -155,7 +155,7 @@ test('a next link off the advisories path is never followed', async () => {
   const m = mock({ pages: [page1] });
   await deliverAdvisories(REPO, 7, [sec()], TOKEN, m.request, KEY);
   // One GET per state, none following the foreign link.
-  assert.equal(m.calls.filter((c) => c.method === 'GET').length, 4);
+  assert.equal(m.calls.filter((c) => c.method === 'GET').length, 3);
   assert.ok(m.calls.filter((c) => c.method === 'GET').every((c) => c.path.startsWith(`/repos/${REPO}/security-advisories?state=`)));
 });
 

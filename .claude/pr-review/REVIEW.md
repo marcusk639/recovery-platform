@@ -18,8 +18,8 @@ The repository is **public**. Everything you post is world-readable.
   `contract-map-cross-product.md`, `checklist.md`, `conventions.md`, `false-positives.md` and `routing.json`.
   Before you start, the workflow replaces `.claude/pr-review/` in the working tree with the base branch's
   copy, so a PR that edits this procedure or the knowledge files does not change how it is itself reviewed.
-  The PR's own versions of those files are under `.claude-pr/pr-review/`; what it changed there is in
-  `<OUT>/pr.diff`.
+  No PR copy of those files is kept: read what the PR changed under `.claude/pr-review/**` from
+  `<OUT>/pr.diff`. `.claude-pr/`, if present, is the action's own config snapshot, not the PR's version.
 - The git material is precomputed in the OUT directory, because you have no shell:
   - `<OUT>/pr.diff`: the whole PR diff, `<base>...<head>` (capped; a truncation note says so).
   - `<OUT>/increment.diff`: only on incremental, light and base-drift tiers; the PR's changes since the
@@ -115,7 +115,7 @@ class 13 (or a better-fitting class), slug `c13:<file>:self-edit`, and check the
 - an edit to `.github/workflows/claude-code-review.yml` **does take effect in this run**: `pull_request`
   runs the PR's own workflow file, so check it against the review-config rules with extra care;
 - an edit under `.claude/pr-review/` (procedure, knowledge, scripts) does **not** affect this run: the base
-  copy is restored before you start. Its PR version is under `.claude-pr/pr-review/`.
+  copy is restored before you start. Review its PR version from `<OUT>/pr.diff`.
 
 ## Security-relevant findings
 

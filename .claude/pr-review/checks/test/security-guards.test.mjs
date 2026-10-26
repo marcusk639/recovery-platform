@@ -109,7 +109,7 @@ test('lastReviewedSha is the trusted head, not the model-written reviewedSha', (
 
 // I2
 const RUN = '2026-10-25T10:00:00Z';
-const bot = (id, body, over = {}) => ({ id, user: { login: 'claude[bot]' }, body, commit_id: HEAD, created_at: '2026-10-25T10:05:00Z', path: 'regroup/mobile/src/a.ts', ...over });
+const bot = (id, body, over = {}) => ({ id, user: { login: 'claude[bot]' }, body, commit_id: HEAD, original_commit_id: HEAD, created_at: '2026-10-25T10:05:00Z', path: 'regroup/mobile/src/a.ts', ...over });
 
 function recorder(failIds = []) {
   const calls = [];
@@ -130,7 +130,7 @@ test('the inline guard deletes security, forced-class, unmarked and secret-beari
     bot(5, 'ok <!-- pr-review:fp=c9:regroup/mobile/src/a.ts:load -->'),
     bot(6, 'on a security file <!-- pr-review:fp=c9:x.ts:y -->', { path: SEC_FILE }),
     { ...bot(7, 'no marker'), user: { login: 'mallory' } },
-    bot(8, 'old run, no marker', { commit_id: OLD, created_at: '2026-10-24T10:00:00Z' }),
+    bot(8, 'old run, no marker', { commit_id: OLD, original_commit_id: OLD, created_at: '2026-10-24T10:00:00Z' }),
   ];
   const r = recorder();
   const res = await guardInlineComments({ repo: 'o/r', comments, findings: [SEC], headSha: HEAD, runStartedAt: RUN, isSecurityPath: (p) => p === SEC_FILE, request: r.request });

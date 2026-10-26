@@ -1,19 +1,24 @@
 // Technical guard for the model's inline comments (REVIEW.md rules are only
-// instructions). This run's claude[bot] review comments are deleted when they
-// carry a security fingerprint (by findings.json or by checklist class), carry
-// no fingerprint at all, match a secret pattern, or sit on / name a security
-// file. Logs counts only; never a path, body or id.
+// instructions). This run's top-level claude[bot] review comments are deleted
+// when they carry a security fingerprint (by findings.json or by checklist
+// class), carry no fingerprint at all, match a secret pattern, or sit on / name
+// a security file. Logs counts only; never a path, body or id.
 import { ghRequest } from './gh.mjs';
 import { SECRET_PATTERNS } from './redact.mjs';
-import { SECURITY_CLASSES } from './findings.mjs';
+import { isForcedSecurity } from './findings.mjs';
 
 const INLINE_AUTHOR = 'claude[bot]';
 const FP_RE = /<!-- pr-review:fp=([^ >]+) -->/;
-const CLASS_RE = /^c(\d{1,2}):/;
 
+// "This run" needs both: created at or after the run start (captured before
+// the review step) AND first posted on this head. GitHub moves an older
+// comment's commit_id to the new head when its line is unchanged, so only
+// original_commit_id counts. Replies (in_reply_to_id) are never ours: the
+// review model's tool posts top-level comments only, while the same app's
+// @claude workflow replies in threads without a fingerprint.
 function thisRun(c, headSha, runStartedAt) {
-  if (c?.user?.login !== INLINE_AUTHOR) return false;
-  if (headSha && c.commit_id === headSha) return true;
+  if (c?.user?.login !== INLINE_AUTHOR || c.in_reply_to_id != null) return false;
+  if (!headSha || c.original_commit_id !== headSha) return false;
   const start = Date.parse(runStartedAt ?? '');
   const created = Date.parse(c.created_at ?? '');
   return Number.isFinite(start) && Number.isFinite(created) && created >= start;
@@ -24,8 +29,7 @@ function mustDelete(c, securitySlugs, isSecurityPath) {
   const m = FP_RE.exec(body);
   if (!m) return true;
   const slug = m[1];
-  const cls = Number(CLASS_RE.exec(slug)?.[1]);
-  if (securitySlugs.has(slug) || SECURITY_CLASSES.has(cls)) return true;
+  if (securitySlugs.has(slug) || isForcedSecurity(undefined, slug)) return true;
   if (SECRET_PATTERNS.some((re) => new RegExp(re.source).test(body))) return true;
   return Boolean(isSecurityPath(String(c.path ?? '')) || isSecurityPath(String(slug.split(':')[1] ?? '')) || isSecurityPath(body));
 }

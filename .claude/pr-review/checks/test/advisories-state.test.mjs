@@ -41,21 +41,24 @@ function byState(lists = {}) {
   return { request, calls };
 }
 
-test('all four advisory states are listed with the same path guard', async () => {
+test('only the documented state filters are listed, with the same path guard', async () => {
   const m = byState();
   await deliverAdvisories(REPO, 7, [sec()], TOKEN, m.request, KEY);
   const states = m.calls.filter((c) => c.method === 'GET').map((c) => new URLSearchParams(c.path.split('?')[1]).get('state'));
-  assert.deepEqual(states, ['draft', 'published', 'closed', 'withdrawn']);
+  assert.deepEqual(states, ['draft', 'published', 'closed']);
   assert.ok(m.calls.every((c) => c.path.startsWith(`/repos/${REPO}/security-advisories`)));
 });
 
 test('prior security ids whose advisory is closed, withdrawn or published come back resolved', async () => {
   const ids = ['a', 'b', 'c', 'd'].map((x) => opaqueId(`c1:${x}.ts:x`, KEY));
   const m = byState({
-    draft: [{ ghsa_id: 'GHSA-aaaa-aaaa-aaaa', description: `x\n\n${footer(3, ids[0])}` }],
-    closed: [{ ghsa_id: 'GHSA-bbbb-bbbb-bbbb', description: `x\n\n${footer(3, ids[1])}` }],
-    withdrawn: [{ ghsa_id: 'GHSA-cccc-cccc-cccc', description: `x\n\n${footer(3, ids[2])}\n\nAlso touched by #7` }],
-    published: [{ ghsa_id: 'GHSA-dddd-dddd-dddd', description: `x\n\n${footer(3, ids[3])}` }],
+    draft: [{ ghsa_id: 'GHSA-aaaa-aaaa-aaaa', state: 'draft', description: `x\n\n${footer(3, ids[0])}` }],
+    closed: [
+      { ghsa_id: 'GHSA-bbbb-bbbb-bbbb', state: 'closed', description: `x\n\n${footer(3, ids[1])}` },
+      // Withdrawn is not a documented filter value: it is classed by its own state wherever it is listed.
+      { ghsa_id: 'GHSA-cccc-cccc-cccc', state: 'withdrawn', description: `x\n\n${footer(3, ids[2])}\n\nAlso touched by #7` },
+    ],
+    published: [{ ghsa_id: 'GHSA-dddd-dddd-dddd', state: 'published', description: `x\n\n${footer(3, ids[3])}` }],
   });
   const res = await deliverAdvisories(REPO, 7, [], TOKEN, m.request, KEY, ids);
   assert.equal(res.delivered, true);
@@ -83,7 +86,7 @@ test('dedupe matches only the code-written footer, not an id quoted in model tex
 
 test('a matched non-draft advisory is never patched and not re-created', async () => {
   for (const state of ['published', 'closed', 'withdrawn']) {
-    const m = byState({ [state]: [{ ghsa_id: 'GHSA-ffff-ffff-ffff', description: `x\n\n${footer(3, ID)}` }] });
+    const m = byState({ closed: [{ ghsa_id: 'GHSA-ffff-ffff-ffff', state, description: `x\n\n${footer(3, ID)}` }] });
     const res = await deliverAdvisories(REPO, 7, [sec()], TOKEN, m.request, KEY);
     assert.equal(res.delivered, true);
     assert.equal(m.calls.filter((c) => c.method !== 'GET').length, 0, state);
@@ -126,4 +129,28 @@ test('publish marks dispositioned security entries resolved in the ledger', asyn
   assert.equal(e.status, 'resolved');
   assert.equal(e.runsSinceResolved, 0);
   assert.match(posted[0], /1 security-relevant or withheld finding\(s\) resolved/);
+});
+
+// R22: classify by the advisory's own state, never by the query it came back under.
+test('drafts returned for a state=closed query are not resolved and stay patchable', async () => {
+  const draft = { ghsa_id: 'GHSA-gggg-gggg-gggg', state: 'draft', description: `x\n\n${footer(3, ID)}` };
+  // An API that ignores the filter returns the same draft for every query.
+  const m = byState({ draft: [draft], published: [draft], closed: [draft] });
+  const res = await deliverAdvisories(REPO, 7, [sec()], TOKEN, m.request, KEY, [ID]);
+  assert.deepEqual(res.resolvedIds, []);
+  const patches = m.calls.filter((c) => c.method === 'PATCH');
+  assert.equal(patches.length, 1, 'deduped by ghsa_id: one PATCH, not one per query');
+  assert.equal(m.calls.filter((c) => c.method === 'POST').length, 0);
+});
+
+test('a real closed advisory resolves its id; one without a state resolves nothing', async () => {
+  const other = opaqueId('c1:z.ts:z', KEY);
+  const m = byState({
+    closed: [
+      { ghsa_id: 'GHSA-hhhh-hhhh-hhhh', state: 'closed', description: `x\n\n${footer(3, ID)}` },
+      { ghsa_id: 'GHSA-iiii-iiii-iiii', description: `x\n\n${footer(3, other)}` },
+    ],
+  });
+  const res = await deliverAdvisories(REPO, 7, [], TOKEN, m.request, KEY, [ID, other]);
+  assert.deepEqual(res.resolvedIds, [ID]);
 });

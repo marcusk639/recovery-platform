@@ -9,26 +9,36 @@ import { safeArea, safePackage } from './lib/findings.mjs';
 
 const MAX_PAGES = 10;
 const GHSA_RE = /^GHSA(-[0-9a-z]{4}){3}$/;
-// Draft first: the only state an advisory may be PATCHed in.
-const STATES = ['draft', 'published', 'closed', 'withdrawn'];
+// Documented `state` filter values only, draft first. The filter only narrows
+// the query: each advisory is classified by its own `state` in the response.
+const QUERY_STATES = ['draft', 'published', 'closed'];
+// Draft is the only state an advisory may be PATCHed in.
 const DISPOSITIONED = new Set(['published', 'closed', 'withdrawn']);
 const FOOTER_RE = /^(?:pr-review-id:|pull request:|also touched by\b)/i;
 
 const idLine = (id) => `pr-review-id: ${id}`;
 const lines = (text) => String(text ?? '').split('\n').map((l) => l.trim());
 
-// Every advisory in each state, following the cursor `next` link (see gh.mjs)
-// up to MAX_PAGES per state. Only links back to this repo's advisories path
-// are followed. Each item is tagged with the state it was listed under.
+// Every advisory under each queried state, following the cursor `next` link
+// (see gh.mjs) up to MAX_PAGES per query. Only links back to this repo's
+// advisories path are followed. Deduped by ghsa_id, because an API that
+// ignored the filter would return the same advisory for every query.
 async function listAll(repo, token, request) {
   const base = `/repos/${repo}/security-advisories`;
   const all = [];
-  for (const state of STATES) {
+  const seen = new Set();
+  for (const state of QUERY_STATES) {
     let path = `${base}?state=${state}&per_page=100`;
     for (let page = 0; path && page < MAX_PAGES; page++) {
       const items = await request('GET', path, undefined, token);
       if (!Array.isArray(items)) break;
-      for (const a of items) if (a && typeof a === 'object') all.push({ ...a, state });
+      for (const a of items) {
+        if (!a || typeof a !== 'object') continue;
+        const id = typeof a.ghsa_id === 'string' ? a.ghsa_id : null;
+        if (id && seen.has(id)) continue;
+        if (id) seen.add(id);
+        all.push({ ...a, state: typeof a.state === 'string' ? a.state.toLowerCase() : null });
+      }
       const next = typeof items.next === 'string' ? items.next : null;
       path = items.length >= 100 && next?.startsWith(`${base}?`) ? next : null;
     }
