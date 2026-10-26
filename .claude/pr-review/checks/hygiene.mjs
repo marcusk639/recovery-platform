@@ -1,0 +1,113 @@
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { SECRET_PATTERNS, redact } from './lib/redact.mjs';
+import { git } from './lib/diff.mjs';
+
+const CODE = /\.(?:ts|tsx|js|jsx|mjs)$/;
+const PII = /email|clientEmail|clientName|displayName|phone|sobrietyDate|address|request\.data|req\.body/;
+const LOG_CALL = /\b(?:logger|console)\./;
+const WORKFLOW = '.github/workflows/claude-code-review.yml';
+const SELF_EDIT = /^(?:\.github\/workflows\/claude-code-review\.yml|\.claude\/pr-review\/.*)$/;
+// pull_request runs the PR's own workflow file; .claude/pr-review/** is restored from base.
+const SELF_EDIT_NOTE = {
+  workflow: 'PR edits the review workflow; this edit takes effect in this run (pull_request runs the PR\'s workflow file)',
+  scripts: 'PR edits the review agent\'s scripts or knowledge; this edit does not affect this run (the base copy is restored)',
+};
+
+const fact = (check, file, line, note) => {
+  const f = { check, file, note: redact(note) };
+  if (line != null) f.line = line;
+  return f;
+};
+
+export function checkSecrets(files) {
+  const facts = [];
+  for (const f of files) {
+    if (f.binary) continue;
+    for (const a of f.added) {
+      if (SECRET_PATTERNS.some((re) => re.test(a.text))) {
+        facts.push(fact('secrets', f.file, a.line, 'added line matches a secret pattern; rotate and remove it'));
+      }
+    }
+  }
+  return facts;
+}
+
+export function checkPiiLogs(files) {
+  const facts = [];
+  for (const f of files) {
+    if (f.binary) continue;
+    f.added.forEach((a, i) => {
+      if (!LOG_CALL.test(a.text)) return;
+      const window = f.added.slice(i, i + 4).filter((w) => w.line - a.line <= 3);
+      if (window.some((w) => PII.test(w.text))) {
+        facts.push(fact('pii-logs', f.file, a.line, 'log statement near a PII-named field; confirm no PII is logged'));
+      }
+    });
+  }
+  return facts;
+}
+
+export function checkNewFileSize(files, repoRoot) {
+  const facts = [];
+  for (const f of files) {
+    if (f.status !== 'A' || f.binary || !CODE.test(f.file)) continue;
+    const p = join(repoRoot, f.file);
+    if (!existsSync(p)) continue;
+    const text = readFileSync(p, 'utf8');
+    const lines = text.length === 0 ? 0 : text.split('\n').length - (text.endsWith('\n') ? 1 : 0);
+    if (lines > 300) facts.push(fact('file-size', f.file, null, `new file is ${lines} lines (limit 300); split into modules`));
+  }
+  return facts;
+}
+
+export function checkTitleScope(title) {
+  const m = /^\w+\(([^)]*)\)!?:/.exec(String(title ?? ''));
+  if (m && /^(?:mobile|web|functions)$/.test(m[1])) {
+    return [fact('title-scope', 'PR title', null, `scope '${m[1]}' is bare; name the product, e.g. regroup-${m[1]}`)];
+  }
+  return [];
+}
+
+export function checkSelfEdit(files) {
+  return files
+    .filter((f) => SELF_EDIT.test(f.file) || (f.oldFile && SELF_EDIT.test(f.oldFile)))
+    .map((f) => {
+      const workflow = f.file === WORKFLOW || f.oldFile === WORKFLOW;
+      return fact('self-edit', f.file, null, workflow ? SELF_EDIT_NOTE.workflow : SELF_EDIT_NOTE.scripts);
+    });
+}
+
+// verify-diff compares against the PR's fork point: base.sha itself may have
+// moved past it, which would blame the PR for base-branch changes.
+export function runVerifyDiff(baseSha, repoRoot, scriptPath, headSha) {
+  if (!scriptPath) return [];
+  const script = resolve(repoRoot, scriptPath);
+  const unavailable = () => [fact('verify-diff', 'verify-diff.sh', null, 'verify-diff unavailable')];
+  if (!existsSync(script)) return unavailable();
+  let since = baseSha;
+  if (headSha) {
+    try {
+      since = git(['merge-base', baseSha, headSha], repoRoot).trim();
+    } catch {
+      return unavailable();
+    }
+  }
+  try {
+    execFileSync('bash', [script, since], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 60000,
+    });
+    return [];
+  } catch (err) {
+    if (err.status !== 1) return unavailable();
+    const facts = String(err.stdout ?? '')
+      .split('\n')
+      .filter((l) => /^\s*\[/.test(l))
+      .map((l) => fact('verify-diff', 'verify-diff.sh', null, l.trim()));
+    return facts.length ? facts : unavailable();
+  }
+}

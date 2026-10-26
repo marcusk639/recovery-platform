@@ -244,6 +244,21 @@ jobs:
       - name: Test
         run: cd detox-recovery && npm test -- --forceExit
 
+  pr-review-checks:
+    name: pr-review — checks tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Test
+        run: node --test ".claude/pr-review/checks/test/*.test.mjs"
+
   maestro-smoke:
     name: Maestro Cloud — smoke tests (regroup Android)
     needs: [recovery-api, homegroups-functions, regroup-functions, detox-recovery]
