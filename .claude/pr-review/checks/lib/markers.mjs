@@ -1,4 +1,7 @@
 export const SUMMARY_MARKER = '<!-- pr-review:summary -->';
+// The workflow token's identity: it posts the summary comment and, from
+// publish, the inline review comments. The model has no posting tool.
+export const BOT_AUTHOR = 'github-actions[bot]';
 
 const LEDGER_RE = /<!-- pr-review:ledger v1 ([^ >]+) -->/;
 const FP_RE = /<!-- pr-review:fp=([^ >]+) -->/;
@@ -24,6 +27,8 @@ export function rawLedgerMarker(body) {
   const m = LEDGER_RE.exec(String(body ?? ''));
   return m && /^[A-Za-z0-9+/]+={0,2}$/.test(m[1]) ? m[0] : null;
 }
+
+export const fpMarker = (slug) => `<!-- pr-review:fp=${slug} -->`;
 
 export function extractInlineSlugs(bodies) {
   const slugs = [];

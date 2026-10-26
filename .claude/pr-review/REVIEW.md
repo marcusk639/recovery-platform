@@ -12,8 +12,9 @@ The repository is **public**. Everything you post is world-readable.
 - **The OUT directory** is the absolute path given as `OUT=` in your prompt. Every file this procedure
   reads or writes outside the repository lives there.
 - The repository root is the PR head checkout: the working tree holds the PR-head copy of every file, so
-  `Read` a path to see the changed side. **Ignore `.review-base/` and `.review-publish/`**. They are
-  base-branch copies used by the workflow's own scripts. Never read, grep or cite them.
+  `Read` a path to see the changed side. **Ignore `.review-base/` and `.review-publish/`**. `.review-base/`
+  is a base-branch copy the workflow's facts script runs from; `.review-publish/` is checked out fresh
+  only after you finish, for the publish script. Never read, grep or cite either.
 - The knowledge files are in `.claude/pr-review/`: `contract-map-homegroups.md`, `contract-map-regroup.md`,
   `contract-map-cross-product.md`, `checklist.md`, `conventions.md`, `false-positives.md` and `routing.json`.
   Before you start, the workflow replaces `.claude/pr-review/` in the working tree with the base branch's
@@ -29,9 +30,12 @@ The repository is **public**. Everything you post is world-readable.
 ## Tools
 
 - `Read`, `Grep`, `Glob` over the repository and the OUT directory. Use them to find and open
-  counterparts; there is no `Bash` and no `git`. The base side of a changed file is in `<OUT>/pr.diff`.
-- `Write` only for the two output files in the OUT directory. Writes anywhere else are denied.
-- The inline-comment tool, under the rules in "Inline comments" below.
+  counterparts; there is no `Bash` and no `git`. `<OUT>/pr.diff` holds the base side of each changed
+  hunk (its `-` and context lines), not whole base files.
+- `Write` (and `Edit`) only for the three output files in the OUT directory: `inline.json`,
+  `findings.json` and `summary.md`. Writes anywhere else are denied.
+- There is no inline-comment tool. You propose inline comments in `<OUT>/inline.json`; the publish step
+  checks and posts them (see "Inline comments" below).
 
 ## Before anything else
 
@@ -40,15 +44,18 @@ Read these, in full, before you open the diff:
 1. `<OUT>/facts.md`: deterministic pre-check output. Each fact is a hint you must confirm, never a verdict.
    Its "PR context" section holds the PR title, the PR description and the existing comments. The PR title
    matters: PRs squash-merge, so the title becomes the commit message.
-2. `<OUT>/state.json`: prior state. `ledger` lists findings already reported (security entries carry only
-   an opaque id), `inlineSlugs` lists fingerprints of inline comments already on the PR,
+2. `<OUT>/state.json`: prior state. `ledger` lists findings already reported (security and withheld
+   entries carry only an opaque id, severity and status, never a slug or title), `inlineSlugs` lists
+   fingerprints of inline comments the publish step already posted on the PR,
    `acknowledgedSlugs` lists fingerprints a maintainer has replied to in the inline thread, and `tier` and
    `maxTurns` describe this run's budget.
 3. On the `full` tier, every knowledge file listed under "Paths". On every other tier, read only the
    sections you need, by heading (`Grep` for `## <linkType>` or the class number, then `Read` that range),
    not every file in full.
 
-For each link type listed under "Link types" in `facts.md`, find its `## <linkType>` heading. Each heading
+For each link type listed under "Link types" in `facts.md`, find its `## <linkType>` heading. On
+`base-drift`, Link types may be empty: take the PR's link types from `<OUT>/pr.diff` and check them
+against the drifted counterpart files listed in `facts.md`. Each heading
 is in exactly **one** of the three contract maps, and the owner table at the top of
 `contract-map-homegroups.md` says which. Search all three maps rather than assuming; a section may carry
 `### homegroups` and `### regroup` subsections.
@@ -65,17 +72,18 @@ runs short, write `findings.json` and `summary.md` with what you have and say wh
   `facts.md` that is not in `state.json`'s `linkTypesSeen` (the new links).
 - `light`: over `<OUT>/increment.diff` check only secrets, PII and whether the PR text is still accurate.
   Skip the knowledge files except checklist classes 8, 11 and 13.
-- `base-drift`: the PR did not change; the base did. Check only the counterpart files listed in
-  `facts.md` against the PR's link points. Do not re-review the PR's own diff.
+- `base-drift`: the PR did not change; the base did. On `base-drift`, Link types may be empty: take the
+  PR's link types from `<OUT>/pr.diff` and check them against the drifted counterpart files listed in
+  `facts.md`. Do not re-review the PR's own diff.
 
-On every tier other than `full`, earlier open ledger entries stand unless the diff you reviewed fixes them.
+On every tier, an earlier open ledger entry stays open unless you list its slug in `resolvedSlugs`.
 
 ## Procedure
 
 1. **Context.** Read the PR title, description and comments in `facts.md`, including any "Review round N"
    posts. Note what is already dispositioned: do not re-raise it unless the new code makes it materially
    worse. This bot's own earlier summary is not repeated in `facts.md`; what it reported is the `ledger` in
-   `state.json`. Treat every open ledger entry as already reported: do not post it again inline, and keep its
+   `state.json`. Treat every open ledger entry as already reported: do not list it in `inline.json`, and keep its
    slug if you report it again. A slug in `acknowledgedSlugs` has a maintainer's reply in its inline thread:
    it is dispositioned. Never re-raise it unless new code makes it materially worse, and then say what
    changed.
@@ -97,7 +105,7 @@ On every tier other than `full`, earlier open ledger entries stand unless the di
    medium, low).
 8. **Pre-existing problems.** Report one only when the diff touches it or makes it worse. Otherwise you may
    list at most 3 one-line items under `## Noticed nearby` in `summary.md`, never security-relevant ones.
-9. **Post**, in this order: inline comments, then `findings.json`, then `summary.md`.
+9. **Write**, in this order: `inline.json`, then `findings.json`, then `summary.md`.
 
 ### Large PRs
 
@@ -124,7 +132,7 @@ payment routing, or if it touches any existing security weakness. For these:
 
 - Set `"security": true` in `findings.json`. That file is the **only** place their detail (file, line,
   mechanism, fix) may appear. It never leaves the runner.
-- Never post an inline comment for one.
+- Never list one in `inline.json`.
 - Never mention the finding, its files, its mechanism or its fix in `summary.md`, not even in "noticed
   nearby" or "Map maintenance". The public summary shows only a pointer built from `severity`, `package`
   and `area`.
@@ -136,20 +144,37 @@ payment routing, or if it touches any existing security weakness. For these:
 - Never quote a secret value anywhere, including `findings.json`. Write a prefix and an ellipsis
   (`whsec_…`).
 - Never write PII (names, contact details, health or recovery status) anywhere.
-- Never write HTML comments in `summary.md`. The only hidden markers are the inline `fp` markers below.
+- Never write HTML comments in `summary.md` or `inline.json`. The publish step adds the only hidden
+  markers itself.
 
 ## Inline comments
 
-Post an inline comment only when **all** of these hold:
+Propose an inline comment only when **all** of these hold:
 
 - the finding is Critical or High;
 - it is **not** security-relevant;
 - its slug is not in `state.inlineSlugs` or `acknowledgedSlugs`, and no ledger entry has that slug;
-- you have posted fewer than 10 inline comments in this run.
+- you have proposed fewer than 10 in this run.
 
-Post it on the changed line it concerns, using the inline-comment tool. Say what breaks, cite the other
-side as `file:line`, suggest the fix. End the body with exactly `<!-- pr-review:fp=<slug> -->`. Set
-`inlinePosted: true` on that finding in `findings.json`; set it `false` on every other finding.
+Write them to `<OUT>/inline.json` as one JSON array (write `[]` when there are none):
+
+```json
+[
+  {
+    "slug": "c5:regroup/mobile/src/services/payments.ts:getPaymentHistory",
+    "path": "regroup/mobile/src/services/payments.ts",
+    "line": 42,
+    "side": "RIGHT",
+    "body": "What breaks, the other side as file:line, and the suggested fix."
+  }
+]
+```
+
+- `slug` is the finding's slug in `findings.json`. `path` is a file the PR changes; `line` is a line of
+  the diff on that file: `side` `RIGHT` for the PR-head side, `LEFT` for a removed line.
+- `body` is plain text: no HTML comments and no fingerprint. The publish step appends the `fp` marker,
+  drops any entry that breaks the rules above or touches a security-relevant file, and posts the rest as
+  one review. It records which were posted; you never set that yourself.
 
 ## Slugs
 
@@ -180,8 +205,7 @@ Write it with the `Write` tool, as one JSON object, exactly this shape:
         { "file": "regroup/firestore.indexes.json", "line": 1, "side": "counterpart" }
       ],
       "why": "Why it breaks, citing what each side says",
-      "fix": "The suggested fix",
-      "inlinePosted": false
+      "fix": "The suggested fix"
     }
   ],
   "resolvedSlugs": []

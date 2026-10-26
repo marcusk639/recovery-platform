@@ -1,17 +1,22 @@
-// Publishes the one summary comment from OUT/{state.json,findings.json,summary.md}.
-// Runs from the base-SHA checkout after the model has finished, so nothing the
-// model wrote can change this code. Logs status codes only, always exits 0.
+// Publishes the PR review: the inline comments from OUT/inline.json (as one PR
+// review), private advisories for security findings, then the one summary
+// comment from OUT/{findings.json,summary.md} and the trusted STATE_FILE
+// snapshot (never OUT/state.json). Runs from a fresh base-SHA checkout after
+// the model has finished, so nothing the model wrote can change this code.
+// Logs status codes only, always exits 0.
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ghRequest, listIssueComments, listReviewComments, upsertSummary } from './lib/gh.mjs';
+
+export { INLINE_NOTICE };
 import { findSummary } from './lib/state.mjs';
 import { decodeLedger, rawLedgerMarker } from './lib/markers.mjs';
 import { markResolved, mergeLedger, opaqueId, sanitizeLedger, visibleEntries } from './lib/ledger.mjs';
 import { renderSummary, validateFindings } from './lib/render.mjs';
-import { mentions, touchesSecurityFile } from './lib/needles.mjs';
-import { candidatePaths, isPriorSecurityPath, priorFileIds, runNeedles } from './lib/fileids.mjs';
-import { guardInlineComments } from './lib/inline-guard.mjs';
+import { touchesSecurityFile } from './lib/needles.mjs';
+import { priorFileIds, runNeedles } from './lib/fileids.mjs';
+import { runInline, INLINE_NOTICE } from './lib/inline-stage.mjs';
 import { deliverAdvisories } from './advisories.mjs';
 import { runPaths } from './lib/paths.mjs';
 
@@ -95,7 +100,7 @@ function untrustedBody(fallback, idKey, linkTypes, notices) {
 
 // resolvedIds: security ids whose advisory was dispositioned (advisories.mjs).
 // notices: fixed lines from publish itself (e.g. the inline guard).
-export function composeBody({ state, findingsText, narrative, outcome, executionLog, headSha, baseSha, idKey, linkTypes = knownLinkTypes(), fallback, securityClause = DELIVERED, resolvedIds = [], notices = [] }) {
+export function composeBody({ state, findingsText, narrative, outcome, executionLog, headSha, baseSha, idKey, linkTypes = knownLinkTypes(), fallback, securityClause = DELIVERED, resolvedIds = [], notices = [], inlinePosted = new Set() }) {
   // A missing or invalid snapshot fails closed, whatever the action outcome.
   if (!isObject(state)) return untrustedBody(fallback, idKey, linkTypes, notices);
   const s = state;
@@ -109,10 +114,12 @@ export function composeBody({ state, findingsText, narrative, outcome, execution
   };
   if (s.tier === 'none' && outcome === 'skipped') return noChangeBody(prior, headSha, baseSha, notices);
   // Tier "none" never runs the model, so a "success" alongside it is not trusted.
-  const findings = completedFindings(s, findingsText, outcome);
-  if (!findings) {
+  const completed = completedFindings(s, findingsText, outcome);
+  if (!completed) {
     return renderSummary({ state: s, findings: null, narrative: '', outcome: 'failure', reason: failureReason(executionLog), ledger: prior, notices });
   }
+  // Only what publish itself posted counts; the model's own flag is ignored.
+  const findings = { ...completed, findings: completed.findings.map((f) => ({ ...f, inlinePosted: inlinePosted.has(f.slug) })) };
   // Built once: current security files plus paths hashing to prior security fileIds.
   const needles = runNeedles(findings.findings, [narrative], priorFileIds(prior.ledger), idKey);
   // The trusted head (workflow env, then snapshot); the model's reviewedSha is ignored.
@@ -201,33 +208,6 @@ async function deliver(repo, pr, snapshot, rest, deliverFn) {
   }
 }
 
-export const INLINE_NOTICE = '> an inline comment could not be removed automatically; please review';
-
-// Runs whatever the outcome: the model may have posted before failing.
-async function guardInline(repo, pr, snapshot, rest, deps) {
-  if (!deps.listReviewComments) return [];
-  let comments;
-  try {
-    comments = await deps.listReviewComments(repo, pr);
-  } catch (err) {
-    console.log(`inline guard: listing failed: ${Number.isInteger(err?.status) ? err.status : 'unknown'}`);
-    return [INLINE_NOTICE];
-  }
-  const findings = completedFindings(snapshot, rest.findingsText, rest.outcome)?.findings ?? [];
-  const key = rest.idKey || null;
-  const ids = priorFileIds(sanitizeLedger(snapshot?.ledger, key));
-  const needles = runNeedles(findings, [], ids, key);
-  // A comment body can name a prior security file only by path, so its
-  // path-like tokens are hashed against the prior fileIds too (keyed only).
-  const namesPrior = (t) => candidatePaths([], [t]).some((p) => isPriorSecurityPath(p, ids, key));
-  const isSecurityPath = (t) => mentions(t, needles) || isPriorSecurityPath(t, ids, key) || namesPrior(t);
-  // The workflow's run start (captured before the review step), else facts'.
-  const runStartedAt = rest.runStartedAt || (isObject(snapshot) ? snapshot.runStartedAt : null);
-  const res = await guardInlineComments({ repo, comments, findings, headSha: sha(rest.headSha), runStartedAt, isSecurityPath, request: deps.request ?? ghRequest });
-  console.log(`inline guard: removed ${res.removed}, failed ${res.failed}`);
-  return res.failed ? [INLINE_NOTICE] : [];
-}
-
 // Without a trusted snapshot and without the comment, nothing is posted: the
 // old comment (and its marker) stays as it was.
 export async function publish({ repo, pr, snapshot, advisoryToken, ...rest }, deps = { listIssueComments, upsertSummary }) {
@@ -239,9 +219,10 @@ export async function publish({ repo, pr, snapshot, advisoryToken, ...rest }, de
       return;
     }
   }
-  const notices = await guardInline(repo, pr, snapshot, rest, deps);
+  const findings = completedFindings(snapshot, rest.findingsText, rest.outcome)?.findings ?? null;
+  const { posted, notices } = await runInline({ repo, pr, snapshot, findings, inlineText: rest.inlineText, idKey: rest.idKey, headSha: sha(rest.headSha), runStartedAt: rest.runStartedAt }, deps);
   const { clause, resolvedIds } = await deliver(repo, pr, snapshot, { ...rest, advisoryToken }, deps.deliverAdvisories ?? deliverAdvisories);
-  await deps.upsertSummary(repo, pr, composeBody({ ...rest, state: snapshot, fallback, securityClause: clause, resolvedIds, notices }));
+  await deps.upsertSummary(repo, pr, composeBody({ ...rest, state: snapshot, fallback, securityClause: clause, resolvedIds, notices, inlinePosted: posted }));
 }
 
 async function main() {
@@ -258,6 +239,7 @@ async function main() {
       pr: PR,
       snapshot: run ? readState(run.stateFile) : null,
       findingsText: fromOut('findings.json'),
+      inlineText: fromOut('inline.json'),
       narrative: fromOut('summary.md') ?? '',
       outcome: ACTION_OUTCOME,
       executionLog: EXECUTION_FILE ? readOptional(EXECUTION_FILE) : null,

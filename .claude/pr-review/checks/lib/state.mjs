@@ -1,7 +1,8 @@
-import { SUMMARY_MARKER, decodeLedger, extractInlineSlugs } from './markers.mjs';
+import { BOT_AUTHOR, SUMMARY_MARKER, decodeLedger, extractInlineSlugs } from './markers.mjs';
 
-const SUMMARY_AUTHOR = 'github-actions[bot]';
-const INLINE_AUTHOR = 'claude[bot]';
+// Both the summary and the inline comments are posted by publish.
+const SUMMARY_AUTHOR = BOT_AUTHOR;
+const INLINE_AUTHOR = BOT_AUTHOR;
 const SHA_RE = /^[0-9a-f]{40}$/;
 
 const TRUSTED = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
@@ -28,7 +29,7 @@ export function findSummary(comments) {
   );
 }
 
-// Slugs of claude[bot] inline comments a maintainer replied to in-thread: the
+// Slugs of publish's inline comments a maintainer replied to in-thread: the
 // finding is dispositioned (REVIEW.md: do not re-raise; publish resolves it).
 export function acknowledgedSlugs(reviewComments) {
   const all = reviewComments ?? [];

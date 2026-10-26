@@ -44,7 +44,8 @@ function findingError(f, i) {
   if (!Number.isInteger(f.class) || f.class < 1 || f.class > 14) return `${at}.class out of range`;
   if (!SEVERITIES.includes(f.severity)) return `${at}.severity invalid`;
   if (!CONFIDENCES.includes(f.confidence)) return `${at}.confidence invalid`;
-  if (typeof f.security !== 'boolean' || typeof f.inlinePosted !== 'boolean') return `${at} flags invalid`;
+  // inlinePosted is optional and ignored: publish sets it from what it posted.
+  if (typeof f.security !== 'boolean' || (f.inlinePosted !== undefined && typeof f.inlinePosted !== 'boolean')) return `${at} flags invalid`;
   if (!Array.isArray(f.locations) || f.locations.length === 0) return `${at}.locations empty`;
   for (const l of f.locations) {
     if (!l || typeof l.file !== 'string' || !l.file || !Number.isInteger(l.line) || l.line < 0 || !SIDES.includes(l.side)) {

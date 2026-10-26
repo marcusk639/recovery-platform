@@ -21,7 +21,7 @@ const WORKFLOW = join(dirname(fileURLToPath(import.meta.url)), '../../../../.git
 
 const bot = (id, body, over = {}) => ({
   id,
-  user: { login: 'claude[bot]' },
+  user: { login: 'github-actions[bot]' },
   body,
   commit_id: HEAD,
   original_commit_id: HEAD,
@@ -58,7 +58,7 @@ test('a HEAD comment created before the run start is not this run', async () => 
   assert.deepEqual(ids, []);
 });
 
-test('a claude[bot] thread reply without a fingerprint is kept', async () => {
+test('a github-actions[bot] thread reply without a fingerprint is kept', async () => {
   const { ids } = await guard([bot(1, 'Thanks, fixed in the next commit.', { in_reply_to_id: 99 })]);
   assert.deepEqual(ids, []);
 });

@@ -104,17 +104,20 @@ jobs:
           prompt: |
             Follow .claude/pr-review/REVIEW.md. OUT=${{ runner.temp }}/pr-review. Base ${{ github.event.pull_request.base.sha }}, head ${{ github.event.pull_request.head.sha }}. Ignore the .review-base/ and .review-publish/ directories.
           # No shell for the model: facts writes the diff and commit list into OUT.
-          # Write is allowed only under OUT (absolute-path rule, "//" prefix) and
-          # denied anywhere in the workspace, so .git/, .claude/ and the publish
-          # checkout path stay out of reach. Reads of the workspace .git/ are
-          # denied too: the action writes its app token into .git/config.
+          # Write/Edit are allowed only under OUT (absolute-path rules, "//"
+          # prefix) and denied anywhere in the workspace, so .git/, .claude/ and
+          # the publish checkout path stay out of reach. Reads of the workspace
+          # .git/ are denied (the action writes its app token into .git/config),
+          # and so are reads of //proc/** (other processes' environments hold
+          # tokens). No inline-comment tool: the model writes OUT/inline.json and
+          # publish posts it after its own checks.
           claude_args: >-
             --model opus
             --max-turns ${{ steps.facts.outputs.max_turns || 10 }}
             --strict-mcp-config
             --add-dir ${{ runner.temp }}/pr-review
-            --allowedTools "Read,Grep,Glob,Write(/${{ runner.temp }}/pr-review/**),Edit(/${{ runner.temp }}/pr-review/**),mcp__github_inline_comment__create_inline_comment"
-            --disallowedTools "Bash,MultiEdit,NotebookEdit,WebFetch,WebSearch,Write(/${{ github.workspace }}/**),Edit(/${{ github.workspace }}/**),Read(//proc/**),Read(/${{ github.workspace }}/.git/**)"
+            --allowedTools "Read,Grep,Glob,Write(/${{ runner.temp }}/pr-review/**),Edit(/${{ runner.temp }}/pr-review/**)"
+            --disallowedTools "Bash,MultiEdit,NotebookEdit,WebFetch,WebSearch,mcp__github_inline_comment__create_inline_comment,Write(/${{ github.workspace }}/**),Edit(/${{ github.workspace }}/**),Read(//proc/**),Read(/${{ github.workspace }}/.git/**)"
 
       # Fresh every time: whatever exists at this path now (a planted .git, a
       # symlink) must not be reused by the secret-bearing publish step.

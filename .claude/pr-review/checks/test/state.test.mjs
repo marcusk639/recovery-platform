@@ -58,12 +58,14 @@ test('loadState nulls invalid SHAs and rejects array payloads', async () => {
   assert.equal(a.lastReviewedSha, null);
 });
 
-test('inlineSlugs only from claude[bot] review comments', async () => {
+test('inlineSlugs only from github-actions[bot] review comments', async () => {
   const s = await loadState('o/r', 1, {
     listIssueComments: none,
     listReviewComments: async () => [
-      { user: { login: 'claude[bot]' }, body: 'x <!-- pr-review:fp=c1:a:b -->' },
+      { user: { login: 'github-actions[bot]' }, body: 'x <!-- pr-review:fp=c1:a:b -->' },
       { user: { login: 'mallory' }, body: 'x <!-- pr-review:fp=c2:evil:z -->' },
+      // The model can no longer post inline: claude[bot] markers do not count.
+      { user: { login: 'claude[bot]' }, body: 'x <!-- pr-review:fp=c3:old:y -->' },
     ],
   });
   assert.deepEqual(s.inlineSlugs, ['c1:a:b']);
@@ -76,21 +78,21 @@ test('loadState survives API failure with defaults', async () => {
   assert.deepEqual(s.inlineSlugs, []);
 });
 
-test('acknowledgedSlugs: a maintainer reply in a claude[bot] fp thread acknowledges its slug', async () => {
+test('acknowledgedSlugs: a maintainer reply in a github-actions[bot] fp thread acknowledges its slug', async () => {
   const fp = (slug) => `x <!-- pr-review:fp=${slug} -->`;
   const s = await loadState('o/r', 1, {
     listIssueComments: none,
     listReviewComments: async () => [
-      { id: 10, user: { login: 'claude[bot]' }, body: fp('c9:a.ts:acked') },
+      { id: 10, user: { login: 'github-actions[bot]' }, body: fp('c9:a.ts:acked') },
       { id: 11, in_reply_to_id: 10, user: { login: 'm' }, author_association: 'MEMBER', body: 'intended' },
-      { id: 20, user: { login: 'claude[bot]' }, body: fp('c9:b.ts:stranger') },
+      { id: 20, user: { login: 'github-actions[bot]' }, body: fp('c9:b.ts:stranger') },
       { id: 21, in_reply_to_id: 20, user: { login: 'x' }, author_association: 'NONE', body: 'ack' },
-      { id: 30, user: { login: 'claude[bot]' }, body: fp('c9:c.ts:owner') },
+      { id: 30, user: { login: 'github-actions[bot]' }, body: fp('c9:c.ts:owner') },
       { id: 31, in_reply_to_id: 30, user: { login: 'o' }, author_association: 'OWNER', body: 'fine' },
       { id: 40, user: { login: 'mallory' }, body: fp('c9:d.ts:fake') },
       { id: 41, in_reply_to_id: 40, user: { login: 'm' }, author_association: 'MEMBER', body: 'ok' },
-      { id: 50, user: { login: 'claude[bot]' }, body: fp('c9:e.ts:none') },
-      { id: 51, in_reply_to_id: 50, user: { login: 'claude[bot]' }, author_association: 'COLLABORATOR', body: 'self' },
+      { id: 50, user: { login: 'github-actions[bot]' }, body: fp('c9:e.ts:none') },
+      { id: 51, in_reply_to_id: 50, user: { login: 'github-actions[bot]' }, author_association: 'COLLABORATOR', body: 'self' },
     ],
   });
   assert.deepEqual(s.acknowledgedSlugs, ['c9:a.ts:acked', 'c9:c.ts:owner']);

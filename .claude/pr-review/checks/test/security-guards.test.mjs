@@ -109,7 +109,7 @@ test('lastReviewedSha is the trusted head, not the model-written reviewedSha', (
 
 // I2
 const RUN = '2026-10-25T10:00:00Z';
-const bot = (id, body, over = {}) => ({ id, user: { login: 'claude[bot]' }, body, commit_id: HEAD, original_commit_id: HEAD, created_at: '2026-10-25T10:05:00Z', path: 'regroup/mobile/src/a.ts', ...over });
+const bot = (id, body, over = {}) => ({ id, user: { login: 'github-actions[bot]' }, body, commit_id: HEAD, original_commit_id: HEAD, created_at: '2026-10-25T10:05:00Z', path: 'regroup/mobile/src/a.ts', ...over });
 
 function recorder(failIds = []) {
   const calls = [];

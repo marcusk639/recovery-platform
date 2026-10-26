@@ -20,6 +20,7 @@ const MAX_LINE = 500;
 const MAX_CONTEXT = 12000;
 const MAX_COMMENT = 2000;
 const MAX_TITLE = 300;
+const MAX_CHANGED = 3000;
 const bytes = (s) => Buffer.byteLength(s);
 const list = (xs) => (xs.length ? xs.map((x) => `- ${x}`).join('\n') : '- none');
 
@@ -174,12 +175,14 @@ async function main() {
     linkTypesSeen: [],
     runLinkTypes: [],
     inlineSlugs: [],
+    // The PR's changed paths: publish posts inline comments only on these.
+    changedFiles: [],
     tier: 'full',
     maxTurns: MAX_TURNS.full,
     headSha: HEAD_SHA,
     baseSha: BASE_SHA,
     pr: Number(PR),
-    // Publish treats claude[bot] review comments from here on as this run's.
+    // The inline guard's fallback run start when the workflow's is missing.
     runStartedAt: new Date().toISOString(),
   };
   try {
@@ -187,6 +190,7 @@ async function main() {
     const repoRoot = process.cwd();
     const prFiles = prDiff(BASE_SHA, HEAD_SHA, repoRoot);
     const paths = [...new Set(prFiles.flatMap((f) => [f.oldFile, f.file]).filter(Boolean))];
+    state.changedFiles = paths.slice(0, MAX_CHANGED);
     const inc = computeIncrement({ ...state, baseSha: BASE_SHA, headSha: HEAD_SHA, prPaths: paths, cwd: repoRoot });
     const tier = classify({ ...state, ...inc, prFileCount: paths.length });
     const files = tier === 'full' ? prFiles : inc.incrementDiff;
