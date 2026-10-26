@@ -31,7 +31,7 @@ jobs:
       - name: Skip e2e-fix branches
         id: pr-head
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
           EVENT_NAME: ${{ github.event_name }}
           REVIEW_HEAD_REF: ${{ github.event.pull_request.head.ref }}
           REPO: ${{ github.repository }}
