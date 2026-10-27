@@ -37,6 +37,7 @@ import {
 import { logException } from '../util/logging';
 
 import { useActivityModal } from './useActivityModal';
+import { useUndoDisputeDecision } from './useUndoDisputeDecision';
 import { useActivityFilters } from './useActivityFilters';
 import { useActivityMetadata } from './useActivityMetadata';
 
@@ -80,6 +81,8 @@ interface UseBaseActivityScreenReturn {
   rejectDispute: (activity: Activity) => void;
   /** APPROVE (house admins): the activity is marked not done (incomplete). */
   approveDispute: (activity: Activity) => void;
+  /** UNDO DECISION (house admins): reopen a decided dispute, after a confirm. */
+  undoDecision: (activity: Activity) => void;
   updateHouseDisputes: (
     dispute: Dispute,
     resolution: string,
@@ -133,6 +136,7 @@ export const useBaseActivityScreen = (
   const modal = useActivityModal();
   const filtersHook = useActivityFilters(activities, guest);
   const metadata = useActivityMetadata();
+  const { undoDecision } = useUndoDisputeDecision(user?.id);
 
   const updateDisputeMutation = useUpdateDispute();
 
@@ -322,6 +326,20 @@ export const useBaseActivityScreen = (
 
   // ─── Button prop factories ────────────────────────────────────────────────
 
+  // Owner rule: nobody disputes, decides or reopens their own activity — not
+  // the resident whose activity it is (residentUid, stamped server-side, or
+  // the guest doc's account) nor whoever logged it. The rules refuse it too;
+  // this keeps the buttons from offering it.
+  const isOwnActivity = useCallback(
+    (activity: Activity): boolean =>
+      !!user?.id &&
+      (activity.loggedBy === user.id ||
+        activity.residentUid === user.id ||
+        guests[activity.guestId]?.userId === user.id),
+    [user, guests],
+  );
+
+
   const getLeftButtonProps = useCallback(
     (
       activity: Activity,
@@ -360,26 +378,36 @@ export const useBaseActivityScreen = (
           onPress: () => verifyActivity(activity.id),
         };
       }
-      if (isPendingDispute && isAdminUser && disputesOnly) {
+      if (isPendingDispute && isAdminUser && disputesOnly && !isOwnActivity(activity)) {
         return approveButtonProps;
+      }
+      // UNDO DECISION: a decided dispute goes back to pending, and APPROVE /
+      // REJECT show again.
+      if (
+        activity.status === ActivityStatus.RESOLVED &&
+        isAdminUser &&
+        disputesOnly &&
+        !isOwnActivity(activity)
+      ) {
+        return {
+          testID: `undo-dispute-decision-button-${activity.id}`,
+          onPress: () => undoDecision(activity),
+          title: 'UNDO DECISION',
+          style: { ...STAT_BUTTON_TEXT, color: color.baby_blue },
+          containerStyle: {
+            ...STAT_BUTTON,
+            flex: 0.48,
+            borderColor: color.baby_blue,
+          },
+        };
       }
       // CHALLENGE DISPUTE is hidden until the follow-up PR: it writes
       // house.disputes, which residents may no longer write, so it could only
       // fail.
     },
-    [house, approveDispute, verifyActivity],
+    [house, approveDispute, verifyActivity, isOwnActivity, undoDecision],
   );
 
-  // Owner rule: nobody disputes their own activity — not the resident whose
-  // activity it is (the guest doc's account) nor whoever logged it. The
-  // rules refuse it too; this keeps the button from offering it.
-  const isOwnActivity = useCallback(
-    (activity: Activity): boolean =>
-      !!user?.id &&
-      (activity.loggedBy === user.id ||
-        guests[activity.guestId]?.userId === user.id),
-    [user, guests],
-  );
 
   const activityIsDisputable = useCallback(
     (activity: Activity): boolean =>
@@ -428,7 +456,8 @@ export const useBaseActivityScreen = (
       if (
         activity.status === ActivityStatus.DISPUTED &&
         isAdminUser &&
-        disputesOnly
+        disputesOnly &&
+        !isOwnActivity(activity)
       ) {
         return rejectButtonProps;
       }
@@ -438,7 +467,7 @@ export const useBaseActivityScreen = (
         return disputeButtonProps;
       }
     },
-    [activityIsDisputable, house, rejectDispute, modal],
+    [activityIsDisputable, house, rejectDispute, modal, isOwnActivity],
   );
 
   // ─── Return composed interface ────────────────────────────────────────────
@@ -471,6 +500,7 @@ export const useBaseActivityScreen = (
     disputeActivity,
     rejectDispute,
     approveDispute,
+    undoDecision,
     updateHouseDisputes,
 
     // Button props (this hook)

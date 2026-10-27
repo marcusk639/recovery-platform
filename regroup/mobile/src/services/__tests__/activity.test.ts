@@ -903,6 +903,12 @@ describe('Activity Service', () => {
       expect(resolved?.disputedBy).toBe('peer-uid');
       expect(resolved?.disputeResolvedBy).toBe('admin456');
     });
+
+    it('records when the dispute was raised (disputedAt, server time), which tells it apart from a later one', async () => {
+      await disputeActivity(activityId, 'Not done', 'peer-uid');
+      const disputed = mockActivities.find(a => a.id === activityId) as any;
+      expect(disputed?.disputedAt).toEqual(new Date('2024-01-15T10:00:00Z'));
+    });
   });
 
   // ==========================================================================

@@ -612,21 +612,27 @@ describe('Disputes', () => {
 
   // ─── Data rendering ───────────────────────────────────────────────────────
   describe('with disputed activities', () => {
-    it('renders activity items when disputed activities exist', () => {
-      const activity1 = makeActivity('activity-1');
-      const activity2 = makeActivity('activity-2');
+    it('renders pending and decided disputes (decided ones can be undone)', () => {
+      const pending1 = makeActivity('activity-1');
+      const pending2 = makeActivity('activity-2');
+      const decided = { ...makeActivity('activity-3'), status: 'resolved' };
 
-      (useActivities as jest.Mock).mockReturnValue({
-        activities: [activity1, activity2],
+      // One query for DISPUTED, one for RESOLVED (same window).
+      (useActivities as jest.Mock).mockImplementation(({ status }: { status: string }) => ({
+        activities: status === 'disputed' ? [pending1, pending2] : [decided],
         loading: false,
         error: null,
         refetch: jest.fn(),
-      });
+      }));
 
       const store = buildStore();
       const { getByTestId } = renderScreen(store);
       expect(getByTestId('activity-item-activity-1')).toBeTruthy();
       expect(getByTestId('activity-item-activity-2')).toBeTruthy();
+      expect(getByTestId('activity-item-activity-3')).toBeTruthy();
+      expect((useActivities as jest.Mock).mock.calls.map(([o]) => o.status)).toEqual(
+        expect.arrayContaining(['disputed', 'resolved']),
+      );
     });
 
     it('passes disputesOnly=true to RenderActivities', () => {

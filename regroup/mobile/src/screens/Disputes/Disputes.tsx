@@ -56,8 +56,20 @@ const Disputes: React.FC = () => {
     status: ActivityStatus.DISPUTED, // Only disputed activities
     limit: 500,
   });
+  // ...and the decided ones in the same window, so an admin can undo a
+  // decision (UNDO DECISION reopens it; APPROVE / REJECT then show again).
+  const { activities: decidedActivities } = useActivities({
+    houseId: house?.id,
+    startDate: previousWeekStart,
+    endDate,
+    status: ActivityStatus.RESOLVED,
+    limit: 500,
+  });
 
-  const activities = disputedActivitySystemActivities;
+  const activities = useMemo(
+    () => [...disputedActivitySystemActivities, ...decidedActivities],
+    [disputedActivitySystemActivities, decidedActivities],
+  );
 
   const disputes = house?.disputes || {};
 
@@ -82,7 +94,7 @@ const Disputes: React.FC = () => {
   const renderHelp = useCallback(() => {
     showPopover(
       'DISPUTES',
-      'Here you can view all current disputes. Owners, managers and peer leaders can approve a dispute (the activity is marked as not done) or reject it (the activity stands).',
+      'Here you can view current disputes and recent decisions. Owners, managers and peer leaders can approve a dispute (the activity is marked as not done) or reject it (the activity stands), and undo a decision to reopen the dispute.',
     );
   }, [showPopover]);
 

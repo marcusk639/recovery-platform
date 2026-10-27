@@ -352,6 +352,9 @@ export async function disputeActivity(
       // The rules require both to be the caller for a peer dispute.
       disputedBy,
       disputeResolvedBy: disputedBy,
+      // When this dispute was raised (the rules pin it to the server time):
+      // tells it apart from an earlier dispute on the same activity.
+      disputedAt: FirebaseFirestore.FieldValue.serverTimestamp(),
       loggedAt: FirebaseFirestore.FieldValue.serverTimestamp(),
     });
   } catch (error) {

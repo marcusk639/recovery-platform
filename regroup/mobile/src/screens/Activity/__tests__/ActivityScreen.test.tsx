@@ -553,6 +553,37 @@ describe('ActivityScreen', () => {
       expect(queryByTestId('activity-dispute-outcome-plain')).toBeNull();
       expect(within(getByTestId('activity-item-approved')).queryByText('RIGHT:DISPUTE')).toBeNull();
     });
+
+    it('hides the badge while the dispute is pending again (decision undone), and whenever it still counts', () => {
+      mockUseActivities.mockReturnValue({
+        activities: [
+          makeActivity('reopened', {
+            type: 'meeting',
+            loggedBy: 'resident-7',
+            status: 'disputed',
+            disputed: null,
+            incomplete: null,
+            disputeOutcome: null,
+            reopenedBy: 'mgr',
+          }),
+          // Inconsistent legacy data: 'successful' but counted.
+          makeActivity('counted', {
+            type: 'meeting',
+            loggedBy: 'resident-7',
+            status: 'resolved',
+            disputed: 'successful',
+            incomplete: false,
+          }),
+        ],
+        loading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+      const { getByTestId, queryByTestId } = renderScreen();
+      expect(getByTestId('activity-item-reopened')).toBeTruthy();
+      expect(queryByTestId('activity-dispute-outcome-reopened')).toBeNull();
+      expect(queryByTestId('activity-dispute-outcome-counted')).toBeNull();
+    });
   });
 
   // ─── Help popover ─────────────────────────────────────────────────────────
