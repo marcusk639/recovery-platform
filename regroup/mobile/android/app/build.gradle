@@ -235,6 +235,14 @@ androidComponents.onVariants(androidComponents.selector().all()) { variant ->
         ["env", "-u", "E2E_VARIANT", "node"]
     tasks.named(bundleTask).configure { task ->
         task.nodeExecutableAndArgs.set(node)
+        // The release bundle inlines STRIPE_PUBLISHABLE_KEY. The guard's stamp of
+        // it makes a changed key re-run this task instead of leaving it
+        // UP-TO-DATE with the old key (see regroupReleaseGuard below).
+        if (variant.name == "release") {
+            task.dependsOn("regroupReleaseGuard")
+            task.inputs.file(file("${buildDir}/release-guard/key.sha256"))
+                .withPropertyName("releaseGuardKeyStamp")
+        }
     }
 }
 
@@ -278,16 +286,40 @@ tasks.matching { it.name in ["preE2eStagingBuild", "processE2eStagingGoogleServi
 // Release-build guard (scripts/release-guard.js), for the `release` build type
 // only; the e2e build types and debug are not checked. It reads the Firebase
 // project from the values.xml the google-services plugin generated for release
-// (so whichever google-services.json the plugin resolved), and
+// (so whichever google-services.json the plugin resolved), found among that
+// task's declared outputs rather than at a hard-coded path, and
 // STRIPE_PUBLISHABLE_KEY as babel.config.js resolves it for the bundle: the
 // build environment, then regroup/mobile/.env. Fails unless the project is
 // phoenix-cleanhouse and the key is pk_live_, before anything is compiled.
+//
+// On success it writes the key's SHA-256 (never the key) to
+// releaseGuardKeyStamp, an input of the release bundle task (see onVariants
+// above): the bundle inlines the key, and nothing else tells Gradle that a
+// changed key makes the bundle stale.
+def releaseGuardKeyStamp = file("${buildDir}/release-guard/key.sha256")
 def releaseGuard = tasks.register("regroupReleaseGuard", Exec) {
+    // By name: the plugin registers it after this script is evaluated.
     dependsOn "processReleaseGoogleServices"
-    def values = file("${buildDir}/generated/res/google-services/release/values/values.xml")
-    workingDir rootProject.file("..")
-    commandLine "node", "scripts/release-guard.js", "--config", values.absolutePath
+    outputs.file(releaseGuardKeyStamp)
     outputs.upToDateWhen { false }
+    workingDir rootProject.file("..")
+    executable "node"
+    doFirst {
+        def googleServices = tasks.getByName("processReleaseGoogleServices")
+        def generated = googleServices.outputs.files.files.collectMany { output ->
+            def values = new File(output, "values/values.xml")
+            values.isFile() ? [values] : []
+        }
+        if (generated.size() != 1) {
+            throw new GradleException(
+                "Release guard: expected one values/values.xml among the outputs of " +
+                "processReleaseGoogleServices, found ${generated}")
+        }
+        // The guard writes it only on success; a failed run leaves none behind.
+        releaseGuardKeyStamp.delete()
+        args "scripts/release-guard.js", "--config", generated[0].absolutePath,
+            "--key-stamp", releaseGuardKeyStamp.absolutePath
+    }
 }
 tasks.matching { it.name == "preReleaseBuild" }.configureEach {
     dependsOn releaseGuard

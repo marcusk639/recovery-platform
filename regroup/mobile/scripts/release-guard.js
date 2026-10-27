@@ -20,12 +20,14 @@
  * Release configuration only. The e2e build types and Debug are not checked.
  *
  *   node scripts/release-guard.js --config <values.xml | GoogleService-Info.plist | google-services.json>
+ *     [--key-stamp <file>]   on success, write the key's SHA-256 there
  *
  * Never prints the key; only its mode prefix.
  */
 
+const crypto = require('crypto');
 const fs = require('fs');
-const { execFileSync } = require('child_process');
+const path = require('path');
 
 const PRODUCTION_FIREBASE_PROJECT = 'phoenix-cleanhouse';
 const LIVE_KEY_PREFIX = 'pk_live_';
@@ -41,7 +43,11 @@ function checkRelease({ firebaseProjectId, stripePublishableKey, e2eVariant }) {
       `Firebase project is '${firebaseProjectId || ''}'; a release build must use '${PRODUCTION_FIREBASE_PROJECT}'`,
     );
   }
-  if (!stripePublishableKey || !stripePublishableKey.startsWith(LIVE_KEY_PREFIX)) {
+  if (
+    !stripePublishableKey ||
+    !stripePublishableKey.startsWith(LIVE_KEY_PREFIX) ||
+    stripePublishableKey.length === LIVE_KEY_PREFIX.length
+  ) {
     reasons.push(
       `STRIPE_PUBLISHABLE_KEY is ${describeKey(stripePublishableKey)}; a release build requires a ${LIVE_KEY_PREFIX} key`,
     );
@@ -63,6 +69,55 @@ function describeKey(key) {
   return match ? `a ${match[0]} key` : 'not a Stripe publishable key';
 }
 
+/**
+ * The string values of a binary plist's top-level dictionary (bplist00 format:
+ * object table, offset table, 32-byte trailer). Non-string values are skipped.
+ */
+function readBinaryPlistTopLevelStrings(buf) {
+  const trailer = buf.subarray(buf.length - 32);
+  const offsetSize = trailer[6];
+  const refSize = trailer[7];
+  const top = Number(trailer.readBigUInt64BE(16));
+  const table = Number(trailer.readBigUInt64BE(24));
+  const uint = (at, size) => {
+    let value = 0;
+    for (let i = 0; i < size; i++) value = value * 256 + buf[at + i];
+    return value;
+  };
+  const offsetOf = (ref) => uint(table + ref * offsetSize, offsetSize);
+  // An object's length: the marker's low nibble, or a following int object.
+  const lengthAt = (at) => {
+    const nibble = buf[at] & 0x0f;
+    if (nibble !== 0x0f) return [nibble, at + 1];
+    const size = 1 << (buf[at + 1] & 0x0f);
+    return [uint(at + 2, size), at + 2 + size];
+  };
+  const string = (ref) => {
+    const at = offsetOf(ref);
+    const [length, start] = lengthAt(at);
+    switch (buf[at] >> 4) {
+      case 0x5:
+        return buf.subarray(start, start + length).toString('latin1');
+      case 0x6:
+        return Buffer.from(buf.subarray(start, start + length * 2)).swap16().toString('utf16le');
+      default:
+        return undefined;
+    }
+  };
+  const at = offsetOf(top);
+  if (buf[at] >> 4 !== 0xd) {
+    throw new Error('binary plist top-level object is not a dictionary');
+  }
+  const [count, start] = lengthAt(at);
+  const result = {};
+  for (let i = 0; i < count; i++) {
+    const key = string(uint(start + i * refSize, refSize));
+    const value = string(uint(start + (count + i) * refSize, refSize));
+    if (key !== undefined && value !== undefined) result[key] = value;
+  }
+  return result;
+}
+
 /** Reads the Firebase project id from a native config file. */
 function readFirebaseProjectId(file) {
   const raw = fs.readFileSync(file);
@@ -70,14 +125,12 @@ function readFirebaseProjectId(file) {
     return JSON.parse(raw.toString('utf8')).project_info?.project_id;
   }
   if (file.endsWith('.plist')) {
-    // Xcode may copy a plist resource as binary; plutil reads either form.
-    const text =
-      raw.subarray(0, 6).toString('latin1') === 'bplist'
-        ? execFileSync('/usr/bin/plutil', ['-convert', 'xml1', '-o', '-', file], {
-            encoding: 'utf8',
-          })
-        : raw.toString('utf8');
-    return /<key>PROJECT_ID<\/key>\s*<string>([^<]*)<\/string>/.exec(text)?.[1];
+    // Xcode may copy a plist resource as binary. Parsed here rather than with
+    // plutil, which the Linux CI runner does not have.
+    if (raw.subarray(0, 8).toString('latin1') === 'bplist00') {
+      return readBinaryPlistTopLevelStrings(raw).PROJECT_ID;
+    }
+    return /<key>PROJECT_ID<\/key>\s*<string>([^<]*)<\/string>/.exec(raw.toString('utf8'))?.[1];
   }
   if (file.endsWith('.xml')) {
     return /<string name="project_id"[^>]*>([^<]*)<\/string>/.exec(raw.toString('utf8'))?.[1];
@@ -86,8 +139,12 @@ function readFirebaseProjectId(file) {
 }
 
 function main(argv) {
-  const index = argv.indexOf('--config');
-  const config = index === -1 ? undefined : argv[index + 1];
+  const option = (name) => {
+    const index = argv.indexOf(name);
+    return index === -1 ? undefined : argv[index + 1];
+  };
+  const config = option('--config');
+  const keyStamp = option('--key-stamp');
   if (!config) {
     console.error(
       'usage: release-guard.js --config <values.xml | GoogleService-Info.plist | google-services.json>',
@@ -128,13 +185,23 @@ function main(argv) {
     );
     return 1;
   }
+  if (keyStamp) {
+    // A digest of the key the bundle will inline, never the key: the Android
+    // release bundle task takes this file as an input, so a changed key
+    // re-runs the bundle instead of shipping a stale one.
+    fs.mkdirSync(path.dirname(keyStamp), { recursive: true });
+    fs.writeFileSync(
+      keyStamp,
+      `${crypto.createHash('sha256').update(stripePublishableKey).digest('hex')}\n`,
+    );
+  }
   console.log(
     `Release guard OK: Firebase project ${firebaseProjectId}, STRIPE_PUBLISHABLE_KEY is ${describeKey(stripePublishableKey)}`,
   );
   return 0;
 }
 
-module.exports = { checkRelease, readFirebaseProjectId };
+module.exports = { checkRelease, readFirebaseProjectId, readBinaryPlistTopLevelStrings };
 
 if (require.main === module) {
   process.exit(main(process.argv.slice(2)));

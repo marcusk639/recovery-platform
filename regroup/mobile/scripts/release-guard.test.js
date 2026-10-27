@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -26,7 +27,7 @@ describe('checkRelease', () => {
     },
   );
 
-  it.each(['pk_test_x', '', undefined, 'sk_live_x', 'pk_test_placeholder'])(
+  it.each(['pk_test_x', '', undefined, 'sk_live_x', 'pk_test_placeholder', 'pk_live_'])(
     'fails the Stripe key %p',
     (stripePublishableKey) => {
       const result = checkRelease({ firebaseProjectId: PROD, stripePublishableKey });
@@ -90,28 +91,39 @@ const FIXTURES = {
     `<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0">\n<dict>\n` +
     `\t<key>BUNDLE_ID</key>\n\t<string>com.rats.dev</string>\n` +
     `\t<key>PROJECT_ID</key>\n\t<string>${id}</string>\n</dict>\n</plist>\n`,
+  // Binary plists made with `plutil -convert binary1`, as Xcode may copy a plist
+  // resource. Also hold a UTF-16 string, an integer and a bool.
+  'GoogleService-Info.binary.plist': (id) =>
+    fs.readFileSync(path.join(__dirname, '__fixtures__', `GoogleService-Info.${id}.binary.plist`)),
 };
 
 /**
  * Runs the real CLI from an empty directory (plus an optional .env), so a
  * developer's regroup/mobile/.env cannot change the outcome.
  */
-function run({ file = 'values.xml', projectId = PROD, env = {}, dotenv, args } = {}) {
+function run({
+  file = 'values.xml',
+  projectId = PROD,
+  env = {},
+  dotenv,
+  args,
+  extraArgs = [],
+} = {}) {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'release-guard-'));
   const config = path.join(cwd, file);
-  fs.writeFileSync(config, FIXTURES[file](projectId));
+  fs.writeFileSync(config, FIXTURES[file] ? FIXTURES[file](projectId) : `PROJECT_ID=${projectId}\n`);
   if (dotenv !== undefined) {
     fs.writeFileSync(path.join(cwd, '.env'), dotenv);
   }
   const base = { ...process.env };
   delete base.E2E_VARIANT;
   delete base.STRIPE_PUBLISHABLE_KEY;
-  const result = spawnSync(process.execPath, [SCRIPT, ...(args || ['--config', config])], {
+  const result = spawnSync(process.execPath, [SCRIPT, ...(args || ['--config', config, ...extraArgs])], {
     cwd,
     env: { ...base, ...env },
     encoding: 'utf8',
   });
-  return { status: result.status, output: `${result.stdout}${result.stderr}` };
+  return { status: result.status, output: `${result.stdout}${result.stderr}`, cwd };
 }
 
 describe('release-guard CLI', () => {
@@ -179,5 +191,66 @@ describe('release-guard CLI', () => {
   it('fails without --config', () => {
     const { status } = run({ env: { STRIPE_PUBLISHABLE_KEY: 'pk_live_dummy' }, args: [] });
     expect(status).toBe(1);
+  });
+
+  it('fails when E2E_VARIANT is set only in .env', () => {
+    const { status, output } = run({
+      env: { STRIPE_PUBLISHABLE_KEY: 'pk_live_dummy' },
+      dotenv: 'E2E_VARIANT=staging\n',
+    });
+    expect(status).toBe(1);
+    expect(output).toContain('E2E_VARIANT');
+  });
+
+  it('fails when E2E_VARIANT is exported empty', () => {
+    const { status, output } = run({
+      env: { STRIPE_PUBLISHABLE_KEY: 'pk_live_dummy', E2E_VARIANT: '' },
+    });
+    expect(status).toBe(1);
+    expect(output).toContain('E2E_VARIANT');
+  });
+
+  it('fails a config file of an unknown type', () => {
+    const { status, output } = run({
+      file: 'GoogleService-Info.txt',
+      env: { STRIPE_PUBLISHABLE_KEY: 'pk_live_dummy' },
+    });
+    expect(status).toBe(1);
+    expect(output).toContain('unrecognised config file type');
+  });
+
+  describe('--key-stamp', () => {
+    const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex');
+
+    it('writes the SHA-256 of the resolved key, never the key', () => {
+      const { status, cwd } = run({
+        dotenv: 'STRIPE_PUBLISHABLE_KEY=pk_live_fromfile\n',
+        extraArgs: ['--key-stamp', 'out/dir/key.sha256'],
+      });
+      expect(status).toBe(0);
+      const stamp = fs.readFileSync(path.join(cwd, 'out/dir/key.sha256'), 'utf8');
+      expect(stamp).toBe(`${sha256('pk_live_fromfile')}\n`);
+      expect(stamp).not.toContain('pk_live');
+    });
+
+    it('changes when the key changes', () => {
+      const stampFor = (key) => {
+        const { cwd } = run({
+          env: { STRIPE_PUBLISHABLE_KEY: key },
+          extraArgs: ['--key-stamp', 'key.sha256'],
+        });
+        return fs.readFileSync(path.join(cwd, 'key.sha256'), 'utf8');
+      };
+      expect(stampFor('pk_live_a')).not.toBe(stampFor('pk_live_b'));
+    });
+
+    it('is not written when the guard fails', () => {
+      const { status, cwd } = run({
+        env: { STRIPE_PUBLISHABLE_KEY: 'pk_test_x' },
+        extraArgs: ['--key-stamp', 'key.sha256'],
+      });
+      expect(status).toBe(1);
+      expect(fs.existsSync(path.join(cwd, 'key.sha256'))).toBe(false);
+    });
   });
 });
