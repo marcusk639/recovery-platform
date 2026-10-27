@@ -12,6 +12,7 @@ jest.mock('firebase-admin', () => ({
 }));
 
 import {
+  isPlausibleUid,
   holdsHouseRole,
   classifyGuestMembership,
   fetchClaimsByUid,
@@ -41,6 +42,53 @@ describe('holdsHouseRole', () => {
     ['undefined claims', undefined, false],
   ])('%s -> %s', (_label, claims, expected) => {
     expect(holdsHouseRole(claims as any, HOUSE)).toBe(expected);
+  });
+});
+
+describe("isPlausibleUid", () => {
+  it.each([
+    ["a normal uid", "abcDEF123", true],
+    ["128 characters", "a".repeat(128), true],
+    ["129 characters", "a".repeat(129), false],
+    ["a slash", "a/b", false],
+    ["empty", "", false],
+    ["a number", 123, false],
+    ["an object", { uid: "x" }, false],
+  ])("%s -> %s", (_label, value, expected) => {
+    expect(isPlausibleUid(value)).toBe(expected);
+  });
+});
+
+describe("invalid userIds", () => {
+  it("classifies a malformed userId as invalid-userid, not as an account-less doc", () => {
+    const claims = new Map<string, Record<string, unknown> | null>();
+    expect(classifyGuestMembership({ houseId: HOUSE, userId: "a/b" }, claims)).toBe(
+      "invalid-userid",
+    );
+    expect(classifyGuestMembership({ houseId: HOUSE, userId: 42 }, claims)).toBe(
+      "invalid-userid",
+    );
+    expect(classifyGuestMembership({ houseId: HOUSE, userId: null }, claims)).toBe(
+      "no-account",
+    );
+  });
+
+  it("never sends a malformed uid to getUsers", async () => {
+    const authClient = fakeAuth({ ok: { guest: { [HOUSE]: true } } });
+    const result = await fetchClaimsByUid(["ok", "x".repeat(200), "a/b"], authClient);
+    expect(authClient.getUsers).toHaveBeenCalledWith([{ uid: "ok" }]);
+    expect(result.has("a/b")).toBe(false);
+  });
+
+  it("one malformed userId does not stop the rest of the house being counted", async () => {
+    const authClient = fakeAuth({ r1: { guest: { [HOUSE]: true } } });
+    const guests = [
+      { id: "g1", houseId: HOUSE, userId: "r1" },
+      { id: "bad", houseId: HOUSE, userId: "../../etc" },
+      { id: "intake", houseId: HOUSE },
+    ];
+    const kept = await selectLegitimateGuests(guests, HOUSE, authClient);
+    expect(kept.map((g) => g.id)).toEqual(["g1", "intake"]);
   });
 });
 

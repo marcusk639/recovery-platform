@@ -22,6 +22,9 @@
  *   no-claim           the account named by userId has no guest/admin/
  *                      superAdmin claim for the house: the ghost pattern
  *   account-missing    userId names an account that no longer exists
+ *   invalid-userid     userId is not a plausible Firebase uid (not a string,
+ *                      over 128 characters, or contains a slash); never
+ *                      looked up, and not counted by onGuestWrite either
  *   duplicate-account  a second guest doc for the same account in the house
  *   no-house           the doc has no houseId
  * Docs with no userId (admin intake, CSV import) are not flagged: only an
@@ -37,7 +40,12 @@ import {
   fetchClaimsByUid,
 } from '../util/guestMembership';
 
-export type SuspectReason = 'no-claim' | 'account-missing' | 'duplicate-account' | 'no-house';
+export type SuspectReason =
+  | 'no-claim'
+  | 'account-missing'
+  | 'invalid-userid'
+  | 'duplicate-account'
+  | 'no-house';
 
 export interface Suspect {
   guestId: string;
@@ -100,13 +108,27 @@ export async function run(
   return result;
 }
 
+/**
+ * Emulator hosts must be set together. Firestore emulated with real Auth
+ * would look up claims in a real project (or fail without credentials);
+ * Auth emulated with real Firestore would read production guests and judge
+ * them against fake accounts. Returns the refusal message, or null.
+ */
+export function emulatorEnvError(env: NodeJS.ProcessEnv): string | null {
+  const firestore = Boolean(env.FIRESTORE_EMULATOR_HOST);
+  const authHost = Boolean(env.FIREBASE_AUTH_EMULATOR_HOST);
+  if (firestore === authHost) return null;
+  const set = firestore ? 'FIRESTORE_EMULATOR_HOST' : 'FIREBASE_AUTH_EMULATOR_HOST';
+  const unset = firestore ? 'FIREBASE_AUTH_EMULATOR_HOST' : 'FIRESTORE_EMULATOR_HOST';
+  return `${set} is set but ${unset} is not. Set both or neither.`;
+}
+
 if (require.main === module) {
-  // Against a Firestore emulator, Auth must be emulated too, or the claim
-  // lookups would go to a real project (or fail without credentials).
-  if (process.env.FIRESTORE_EMULATOR_HOST && !process.env.FIREBASE_AUTH_EMULATOR_HOST) {
-    console.error(
-      'FIRESTORE_EMULATOR_HOST is set but FIREBASE_AUTH_EMULATOR_HOST is not. Set both.',
-    );
+  // Checked before any read. scriptBootstrap (imported above) only
+  // initializes the Admin SDK; it makes no request.
+  const envError = emulatorEnvError(process.env);
+  if (envError) {
+    console.error(envError);
     process.exit(1);
   }
   run(admin.firestore(), admin.auth()).catch((err) => {

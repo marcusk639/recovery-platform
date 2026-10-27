@@ -19,6 +19,9 @@ import { auth } from 'firebase-admin';
  *   both the old and the new rules, so these count.
  * - userId with a guest, admin or superAdmin claim for the house: a member.
  * - userId with no claim for the house, or no account at all: not counted.
+ * - userId that cannot be a Firebase uid (not a string, over 128 characters,
+ *   or containing a slash): not counted, and never sent to getUsers(), which
+ *   would reject the whole house's lookup over one bad identifier.
  */
 
 /** The subset of the Admin Auth client used here, so tests can pass a fake. */
@@ -28,7 +31,13 @@ export interface ClaimsAuthClient {
   }>;
 }
 
-export type Membership = 'no-account' | 'member' | 'no-claim' | 'account-missing' | 'no-house';
+export type Membership =
+  | 'no-account'
+  | 'member'
+  | 'no-claim'
+  | 'account-missing'
+  | 'invalid-userid'
+  | 'no-house';
 
 interface GuestLike {
   userId?: unknown;
@@ -59,8 +68,29 @@ export function holdsHouseRole(
   });
 }
 
+/** Firebase Auth uids are 1-128 characters; a slash is never valid. */
+const MAX_UID_LENGTH = 128;
+
+/**
+ * True for a value that could be a Firebase uid. getUsers() rejects the whole
+ * call on one malformed identifier, so anything else is filtered out first.
+ */
+export function isPlausibleUid(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= MAX_UID_LENGTH &&
+    !value.includes('/')
+  );
+}
+
+/** No userId at all: undefined, null or "" (admin-entered residents). */
+function hasNoUserId(guest: GuestLike): boolean {
+  return guest.userId === undefined || guest.userId === null || guest.userId === '';
+}
+
 function userIdOf(guest: GuestLike): string | undefined {
-  return typeof guest.userId === 'string' && guest.userId.length > 0 ? guest.userId : undefined;
+  return isPlausibleUid(guest.userId) ? guest.userId : undefined;
 }
 
 /**
@@ -75,8 +105,9 @@ export function classifyGuestMembership(
 ): Membership {
   const house = houseId ?? (typeof guest.houseId === 'string' ? guest.houseId : '');
   if (!house) return 'no-house';
+  if (hasNoUserId(guest)) return 'no-account';
   const uid = userIdOf(guest);
-  if (!uid) return 'no-account';
+  if (!uid) return 'invalid-userid';
   const claims = claimsByUid.get(uid);
   if (claims === null || claims === undefined) return 'account-missing';
   return holdsHouseRole(claims, house) ? 'member' : 'no-claim';
@@ -90,7 +121,7 @@ export async function fetchClaimsByUid(
   uids: string[],
   authClient: ClaimsAuthClient = auth(),
 ): Promise<Map<string, Record<string, unknown> | null>> {
-  const unique = [...new Set(uids)];
+  const unique = [...new Set(uids.filter(isPlausibleUid))];
   const result = new Map<string, Record<string, unknown> | null>();
   for (const uid of unique) result.set(uid, null);
 
