@@ -38,9 +38,11 @@ const mockAssertCanGrantClaimForHouses = jest.fn();
 // Guest docs visible to the NARR tier check: { userId, houseId, status? }.
 const mockGuestDocs: Array<Record<string, unknown>> = [];
 
+const mockAddHouseRoles = jest.fn();
 jest.mock("../../util/claims", () => ({
   createClaims: mockCreateClaims,
   deleteClaim: mockDeleteClaim,
+  addHouseRoles: (...args: unknown[]) => mockAddHouseRoles(...args),
 }));
 
 jest.mock("../../util/user", () => ({
@@ -70,11 +72,15 @@ jest.mock("../../util/authGuard", () => ({
   assertCanGrantClaimForHouses: mockAssertCanGrantClaimForHouses,
 }));
 
-// NARR tier limits are exercised end to end in narrTiers.test.ts; here they
-// pass unless a test says otherwise.
-const mockAssertMayGrantStaffClaim = jest.fn().mockResolvedValue(undefined);
+// Tier limits and role records are exercised end to end in
+// narrTiers.test.ts; here they pass unless a test says otherwise.
+const mockAssertMayGrantTier = jest.fn().mockResolvedValue(undefined);
+const mockRecordRoleGrant = jest.fn().mockResolvedValue(undefined);
+const mockRecordRoleRevoke = jest.fn().mockResolvedValue(undefined);
 jest.mock("../../util/houseRoles", () => ({
-  assertMayGrantStaffClaim: (...args: unknown[]) => mockAssertMayGrantStaffClaim(...args),
+  assertMayGrantTier: (...args: unknown[]) => mockAssertMayGrantTier(...args),
+  recordRoleGrant: (...args: unknown[]) => mockRecordRoleGrant(...args),
+  recordRoleRevoke: (...args: unknown[]) => mockRecordRoleRevoke(...args),
 }));
 
 import {
@@ -91,7 +97,13 @@ const fakeAuth = { uid: "test-user", token: {} };
 const call = (fn: unknown, data: unknown, auth: object | null = fakeAuth) =>
   (fn as Function)({ data, auth: auth ?? undefined });
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockAddHouseRoles.mockResolvedValue(undefined);
+  mockAssertMayGrantTier.mockResolvedValue(undefined);
+  mockRecordRoleGrant.mockResolvedValue(undefined);
+  mockRecordRoleRevoke.mockResolvedValue(undefined);
+});
 
 // ──────────────────────────────────────────────────────────────────────────────
 // addGuestAuthorization
@@ -100,9 +112,6 @@ beforeEach(() => jest.clearAllMocks());
 describe("addGuestAuthorization", () => {
   it("creates guest claims and sets them", async () => {
     mockAssertCanGrantClaimForHouses.mockResolvedValue(undefined);
-    const fakeClaims = { guest: ["house-1"] };
-    mockCreateClaims.mockResolvedValue(fakeClaims);
-    mockSetCustomUserClaims.mockResolvedValue(undefined);
 
     const result = await call(
       addGuestAuthorization,
@@ -113,8 +122,13 @@ describe("addGuestAuthorization", () => {
       },
       { uid: "u1", token: {} },
     );
-    expect(mockCreateClaims).toHaveBeenCalledWith("u1", ["house-1"], "guest");
-    expect(mockSetCustomUserClaims).toHaveBeenCalledWith("u1", fakeClaims);
+    expect(mockAddHouseRoles).toHaveBeenCalledWith("u1", ["house-1"], ["guest"]);
+    expect(mockRecordRoleGrant).toHaveBeenCalledWith("house-1", "u1", "resident", {
+      grantedBy: "u1",
+      via: "addGuestAuthorization",
+    });
+    // A resident grant needs no tier above the existing guard.
+    expect(mockAssertMayGrantTier).not.toHaveBeenCalled();
     expect(result).toBe(true);
   });
 
@@ -131,20 +145,38 @@ describe("addGuestAuthorization", () => {
       },
       { uid: "u1", token: {} },
     );
-    expect(mockCreateClaims).toHaveBeenCalledTimes(2);
-    expect(mockCreateClaims).toHaveBeenNthCalledWith(1, "u1", ["h1"], "guest");
-    expect(mockCreateClaims).toHaveBeenNthCalledWith(
-      2,
-      "u1",
-      ["h1"],
-      "admin",
-      false,
+    // Guest and admin in ONE claims write, never half granted.
+    expect(mockAddHouseRoles).toHaveBeenCalledTimes(1);
+    expect(mockAddHouseRoles).toHaveBeenCalledWith("u1", ["h1"], ["guest", "admin"]);
+    // Making a peer leader needs a manager or above.
+    expect(mockAssertMayGrantTier).toHaveBeenCalledWith(
+      expect.objectContaining({ houseId: "h1", grant: "peerLeader" }),
     );
+    expect(mockRecordRoleGrant).toHaveBeenCalledWith("h1", "u1", "peerLeader", {
+      grantedBy: "u1",
+      via: "addGuestAuthorization",
+    });
+  });
+
+  it("refuses isAdmin when the caller's tier may not make a peer leader, granting nothing", async () => {
+    mockAssertCanGrantClaimForHouses.mockResolvedValue(undefined);
+    mockAssertMayGrantTier.mockRejectedValue(
+      new HttpsError("permission-denied", "Your role in this house cannot make someone a peer leader"),
+    );
+    await expect(
+      call(
+        addGuestAuthorization,
+        { userId: "u2", houseId: "h1", isAdmin: true },
+        { uid: "peer-uid", token: { admin: { h1: true } } },
+      ),
+    ).rejects.toMatchObject({ code: "permission-denied" });
+    expect(mockAddHouseRoles).not.toHaveBeenCalled();
+    expect(mockRecordRoleGrant).not.toHaveBeenCalled();
   });
 
   it("throws internal error when claims creation fails", async () => {
     mockAssertCanGrantClaimForHouses.mockResolvedValue(undefined);
-    mockCreateClaims.mockRejectedValue(new Error("Firebase error"));
+    mockAddHouseRoles.mockRejectedValue(new Error("Firebase error"));
     await expect(
       call(
         addGuestAuthorization,

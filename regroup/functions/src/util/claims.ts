@@ -152,3 +152,37 @@ export const revokeHouseRoles = async (
     ...(potentialSuperAdmin !== undefined ? { potentialSuperAdmin } : {}),
   });
 };
+
+/**
+ * Adds houseIds to each of `roles` in ONE read-modify-write of the user's
+ * claims (so a guest+admin grant is never half applied), keeping
+ * potentialSuperAdmin as it was. Skips the write when nothing changes. Like
+ * revokeHouseRoles, not atomic against a concurrent claims writer.
+ */
+export const addHouseRoles = async (
+  userId: string,
+  houseIds: string[],
+  roles: HouseRole[]
+): Promise<void> => {
+  const currentUser = await auth().getUser(userId);
+  const { potentialSuperAdmin, ...current } = parseCurrentClaims(
+    currentUser?.customClaims
+  );
+  const next = { ...current };
+  let changed = false;
+  for (const role of roles) {
+    const granted: Record<string, true> = { ...current[role] };
+    for (const houseId of houseIds) {
+      if (!Object.prototype.hasOwnProperty.call(granted, houseId)) {
+        granted[houseId] = true;
+        changed = true;
+      }
+    }
+    next[role] = granted;
+  }
+  if (!changed) return;
+  await auth().setCustomUserClaims(userId, {
+    ...next,
+    ...(potentialSuperAdmin !== undefined ? { potentialSuperAdmin } : {}),
+  });
+};

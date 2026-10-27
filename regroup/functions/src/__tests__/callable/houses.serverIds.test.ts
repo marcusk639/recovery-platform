@@ -4,6 +4,8 @@
 // These tests pin that the client can no longer choose an id, which is what
 // closes delete-and-reclaim of another operator's (or a deleted) house id.
 
+// Owner role records (util/houseRoles) are covered in narrTiers.test.ts.
+jest.mock('../../util/houseRoles', () => ({ recordOwnerRoles: jest.fn(async () => undefined) }));
 jest.mock('firebase-functions/v2/https', () => {
   const actual = jest.requireActual('firebase-functions/v2/https');
   return {

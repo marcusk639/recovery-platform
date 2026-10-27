@@ -3,14 +3,18 @@ import { logger } from "firebase-functions";
 import { auth } from "firebase-admin";
 import { z } from "zod";
 import { Guest } from "../entities/Guest";
-import { createClaims, deleteClaim } from "../util/claims";
+import { addHouseRoles, createClaims, deleteClaim } from "../util/claims";
 import Admin from "../entities/Admin";
 import { getGuestsAsUsers } from "../util/user";
 import { Role } from "../entities/Roles";
 import { _verifyUserEmail } from "../util/user";
 import { parseInput } from "../validation";
 import { assertCanGrantClaimForHouses } from "../util/authGuard";
-import { assertMayGrantStaffClaim } from "../util/houseRoles";
+import {
+  assertMayGrantTier,
+  recordRoleGrant,
+  recordRoleRevoke,
+} from "../util/houseRoles";
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
 const guestAuthSchema = z
@@ -71,20 +75,34 @@ export const addGuestAuthorization = onCall(async (request) => {
     callableName: "addGuestAuthorization",
     enforceEntitlement: true,
   });
+  // Tiers (util/houseRoles): making a peer leader needs a manager or above.
+  if (guest.isAdmin) {
+    await assertMayGrantTier({
+      callerUid: request.auth.uid,
+      claims: request.auth.token,
+      houseId: guest.houseId,
+      grant: "peerLeader",
+      callableName: "addGuestAuthorization",
+    });
+  }
 
   try {
-    let userClaims = await createClaims(guest.userId, [guest.houseId], "guest");
-    await auth().setCustomUserClaims(guest.userId, userClaims);
-    if (guest.isAdmin) {
-      userClaims = await createClaims(
-        guest.userId,
-        [guest.houseId],
-        "admin",
-        false,
-      );
-      await auth().setCustomUserClaims(guest.userId, userClaims);
-    }
-    logger.info("Claims created for guest", userClaims);
+    // One claims write: guest and admin together, or nothing.
+    await addHouseRoles(
+      guest.userId,
+      [guest.houseId],
+      guest.isAdmin ? ["guest", "admin"] : ["guest"],
+    );
+    await recordRoleGrant(
+      guest.houseId,
+      guest.userId,
+      guest.isAdmin ? "peerLeader" : "resident",
+      { grantedBy: request.auth.uid, via: "addGuestAuthorization" },
+    );
+    logger.info("Claims created for guest", {
+      houseId: guest.houseId,
+      isAdmin: !!guest.isAdmin,
+    });
     return true;
   } catch (error) {
     logger.error("addGuestAuthorization: failed to set claims", { error });
@@ -136,16 +154,16 @@ export const addAdminAuthorization = onCall(async (request) => {
     callableName: "addAdminAuthorization",
     enforceEntitlement: true,
   });
-  // NARR tiers (util/houseRoles): only the owner makes managers or owners; a
-  // manager may make a resident a peer leader; a peer leader neither.
+  // Tiers (util/houseRoles): an admin grant makes a manager and a superAdmin
+  // grant an owner, both owner-only. Peer leaders are made through
+  // promoteGuestsToAdmin or a senior-peer invitation.
   const superAdminHouses = new Set(adminInput.superAdmin || []);
   for (const houseId of requestedHouses) {
-    await assertMayGrantStaffClaim({
+    await assertMayGrantTier({
       callerUid,
       claims: request.auth.token,
-      targetUid: adminInput.userId,
       houseId,
-      superAdmin: superAdminHouses.has(houseId),
+      grant: superAdminHouses.has(houseId) ? "owner" : "manager",
       callableName: "addAdminAuthorization",
     });
   }
@@ -165,6 +183,14 @@ export const addAdminAuthorization = onCall(async (request) => {
       ...userClaims,
       ...superAdminClaims,
     });
+    for (const houseId of requestedHouses) {
+      await recordRoleGrant(
+        houseId,
+        adminInput.userId,
+        superAdminHouses.has(houseId) ? "owner" : "manager",
+        { grantedBy: callerUid, via: "addAdminAuthorization" },
+      );
+    }
     return true;
   } catch (error) {
     logger.error("addAdminAuthorization: failed to set claims", { error });
@@ -207,6 +233,12 @@ export const deleteAdminAuthorization = onCall(async (request) => {
     );
     await auth().setCustomUserClaims(admin.userId, { ...superAdminClaims });
   }
+  for (const houseId of superAdminHouseIds ?? []) {
+    await recordRoleRevoke(houseId, admin.userId, "superAdmin");
+  }
+  for (const houseId of adminHouseIds ?? []) {
+    await recordRoleRevoke(houseId, admin.userId, "admin");
+  }
 });
 
 export const promoteGuestsToAdmin = onCall(async (request) => {
@@ -238,16 +270,14 @@ export const promoteGuestsToAdmin = onCall(async (request) => {
       }),
     ),
   );
-  // NARR tiers: promoting a resident makes a peer leader (owner or manager
-  // only); promoting a non-resident makes a manager (owner only).
-  for (const [targetUid, houses] of housesByTarget) {
+  // Tiers (util/houseRoles): promoting makes a peer leader (owner or manager).
+  for (const houses of housesByTarget.values()) {
     for (const houseId of houses) {
-      await assertMayGrantStaffClaim({
+      await assertMayGrantTier({
         callerUid: request.auth.uid,
         claims: request.auth.token,
-        targetUid,
         houseId,
-        superAdmin: false,
+        grant: "peerLeader",
         callableName: "promoteGuestsToAdmin",
       });
     }
@@ -262,7 +292,11 @@ export const promoteGuestsToAdmin = onCall(async (request) => {
         "admin",
         false,
       );
-      return auth().setCustomUserClaims(user.uid, claims);
+      await auth().setCustomUserClaims(user.uid, claims);
+      await recordRoleGrant(guest.houseId, user.uid, "peerLeader", {
+        grantedBy: request.auth!.uid,
+        via: "promoteGuestsToAdmin",
+      });
     }),
   );
   return "success";
@@ -306,7 +340,10 @@ export const removePrivilegesForGuests = onCall(async (request) => {
         data.role,
         false,
       );
-      return auth().setCustomUserClaims(user.uid, claims);
+      await auth().setCustomUserClaims(user.uid, claims);
+      if (data.role !== "supporter") {
+        await recordRoleRevoke(guest.houseId, user.uid, data.role);
+      }
     }),
   );
   return "success";

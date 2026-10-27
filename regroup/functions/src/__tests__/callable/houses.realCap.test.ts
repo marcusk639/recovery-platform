@@ -5,6 +5,8 @@
 // transaction and that only newly-created ids count against it. Also covers
 // mixed batches where one requested id is unusable: the whole batch is refused.
 
+// Owner role records (util/houseRoles) are covered in narrTiers.test.ts.
+jest.mock('../../util/houseRoles', () => ({ recordOwnerRoles: jest.fn(async () => undefined) }));
 jest.mock('firebase-functions/v2/https', () => {
   const actual = jest.requireActual('firebase-functions/v2/https');
   return {

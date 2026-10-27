@@ -212,9 +212,12 @@ function batch() {
 }
 
 /**
- * Optimistic like Firestore: docs read through tx.get are versioned; if any
- * changed before the commit, the whole function runs again (up to 5 times),
- * so two racing transactions cannot both act on the same read.
+ * Optimistic like Firestore for DOCUMENT reads: docs read through tx.get(doc)
+ * or tx.getAll are versioned; if any changed before the commit, the whole
+ * function runs again (up to 5 times), so two racing transactions cannot both
+ * act on the same doc read. QUERY reads (tx.get(query)) are NOT versioned
+ * here, unlike Firestore: a doc added to a query's result meanwhile does not
+ * re-run the transaction.
  */
 async function runTransaction<T>(fn: (tx: any) => Promise<T>): Promise<T> {
   for (let attempt = 1; ; attempt++) {
@@ -222,8 +225,13 @@ async function runTransaction<T>(fn: (tx: any) => Promise<T>): Promise<T> {
     const reads = new Map<string, number>();
     const tx = {
       get: async (refOrQuery: { path?: string; get: () => Promise<unknown> }) => {
-        if (refOrQuery.path) reads.set(refOrQuery.path, store.get(refOrQuery.path)?.updateTimeMs ?? -1);
+        if (refOrQuery.path)
+          reads.set(refOrQuery.path, store.get(refOrQuery.path)?.updateTimeMs ?? -1);
         return refOrQuery.get();
+      },
+      getAll: async (...refs: Array<{ path: string; get: () => Promise<unknown> }>) => {
+        for (const r of refs) reads.set(r.path, store.get(r.path)?.updateTimeMs ?? -1);
+        return Promise.all(refs.map((r) => r.get()));
       },
       set: (r: { path: string }, d: Data, o?: { merge?: boolean }) => {
         b.set(r, d, o);
@@ -256,6 +264,8 @@ async function runTransaction<T>(fn: (tx: any) => Promise<T>): Promise<T> {
 export const memDb: any = {
   collection: (name: string) => collectionRef(name),
   doc: (path: string) => docRef(path),
+  getAll: async (...refs: Array<{ get: () => Promise<unknown> }>) =>
+    Promise.all(refs.map((r) => r.get())),
   batch,
   runTransaction,
 };

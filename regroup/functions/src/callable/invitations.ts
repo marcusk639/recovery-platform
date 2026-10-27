@@ -1,12 +1,11 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import * as admin from 'firebase-admin';
-import { auth } from 'firebase-admin';
 import { z } from 'zod';
 import { parseInput } from '../validation';
 import { generateInvitationToken } from '../util/tokens';
 import { sendOneInviteEmail } from '../util/inviteEmails';
-import { createClaims } from '../util/claims';
+import { addHouseRoles } from '../util/claims';
 import {
   assertResidentCapacityAvailable,
   recordResidentAccepted,
@@ -14,7 +13,7 @@ import {
 } from '../util/residentCapacity';
 import { getHouse } from '../api/firestore';
 import { consumeInvitation, releaseInvitation } from '../util/admission';
-import { assertTierMayGrant, houseTierOf, isOxfordHouse } from '../util/houseRoles';
+import { assertTierMayGrant, houseTierOf, INVITATION_TIER, recordRoleGrant } from '../util/houseRoles';
 import { enforceHouseEntitlement } from '../util/entitlement';
 import { Invitation, InvitationRole } from '../entities/Invitation';
 
@@ -113,14 +112,15 @@ export const createInvitation = onCall(async (request) => {
     );
   }
 
-  // NARR tiers (util/houseRoles): the owner may invite a manager, peer
-  // leader or resident; a manager a peer leader or resident; a peer leader
-  // (an admin who is also a resident here) a resident only. Oxford houses
-  // keep their current invitation behaviour for now.
-  if (!isOxfordHouse(house)) {
-    const tier = await houseTierOf(callerUid, callerClaims, input.houseId, house);
-    assertTierMayGrant(tier, input.role, { callableName: 'createInvitation', houseId: input.houseId });
-  }
+  // Tiers (util/houseRoles, from the server-only role record): the owner may
+  // invite a manager, peer leader or resident; a manager a peer leader or
+  // resident; a peer leader a resident only. Oxford houses too, until the
+  // Oxford admission PR.
+  const tier = await houseTierOf(callerUid, callerClaims, input.houseId, house);
+  assertTierMayGrant(tier, INVITATION_TIER[input.role], {
+    callableName: 'createInvitation',
+    houseId: input.houseId,
+  });
 
   // Onboarding new people is product usage. Redeeming an already-sent
   // invitation stays ungated so an invitee mid-flow is not stranded by the
@@ -208,11 +208,13 @@ const redeemInvitationSchema = z.object({ token: z.string().min(1) });
  *  - invitation has not expired
  *  - caller's email (case-insensitive) matches `invitedEmail` on the doc
  *
- * Role mapping mirrors the legacy `addGuestAuthorization` flow:
- *  - role=guest        → guest claim for the house
- *  - role=admin        → admin claim for the house
- *  - role=senior-peer  → BOTH guest and admin claims (two createClaims calls,
- *                        two setCustomUserClaims calls, layered)
+ * Role mapping, set in ONE claims write (addHouseRoles), with the tier
+ * recorded in house-roles (util/houseRoles):
+ *  - role=guest        → guest claim; resident
+ *  - role=admin        → admin claim; manager
+ *  - role=senior-peer  → guest AND admin claims; peer leader
+ * A repeat call by the account that already redeemed it succeeds without
+ * granting again (util/admission consumeInvitation).
  */
 export const redeemInvitation = onCall(async (request) => {
   if (!request.auth) {
@@ -223,8 +225,10 @@ export const redeemInvitation = onCall(async (request) => {
   const callerEmail = ((request.auth.token?.email as string | undefined) ?? '').toLowerCase();
 
   const inv = await fetchInvitationByToken(token);
-  assertInvitationUsable(inv);
+  const retry = !!inv.redeemedAt && (inv as { redeemedByUid?: string }).redeemedByUid === callerUid;
+  if (!retry) assertInvitationUsable(inv);
 
+  // Not checked: email_verified (see "Future consideration" in regroup/functions/CLAUDE.md).
   if (inv.invitedEmail.toLowerCase() !== callerEmail) {
     logger.warn('redeemInvitation: email mismatch', { callerUid });
     throw new HttpsError('permission-denied', 'Invitation was issued to a different email address');
@@ -235,7 +239,7 @@ export const redeemInvitation = onCall(async (request) => {
   // house. Re-derive the owner from the house doc — inv.inviterUid may be
   // an admin, not necessarily the billing owner who holds the subscription.
   let residentOwnerId: string | undefined;
-  if (roleConsumesResidentSlot(inv.role)) {
+  if (!retry && roleConsumesResidentSlot(inv.role)) {
     const house = await getHouse(inv.houseId);
     residentOwnerId = house?.ownerId;
     await assertResidentCapacityAvailable(residentOwnerId, inv.houseId);
@@ -245,28 +249,29 @@ export const redeemInvitation = onCall(async (request) => {
   // redeems of one token only one can go on to grant claims. For a resident
   // role the same commit writes the caller's admission ticket, which the
   // guests self-create rule requires (util/admission).
-  await consumeInvitation(token, callerUid);
+  const { alreadyRedeemed } = await consumeInvitation(token, callerUid);
 
-  // Map role → claims. createClaims is the canonical merger; we call it
-  // once for guest+senior-peer and a second time to layer admin on top
-  // of senior-peer. Mirrors addGuestAuthorization at callable/auth.ts:50-72.
-  // If the grant fails, the redemption and ticket are released so the
-  // invitee can retry.
-  try {
-    if (inv.role === 'guest' || inv.role === 'senior-peer') {
-      const claims = await createClaims(callerUid, [inv.houseId], 'guest', false);
-      await auth().setCustomUserClaims(callerUid, claims);
+  // One claims write: a senior-peer gets guest and admin together or not at
+  // all. If it fails, the redemption and ticket are released so the invitee
+  // can retry.
+  if (!alreadyRedeemed) {
+    const roles: Array<'guest' | 'admin'> =
+      inv.role === 'senior-peer' ? ['guest', 'admin'] : inv.role === 'admin' ? ['admin'] : ['guest'];
+    try {
+      await addHouseRoles(callerUid, [inv.houseId], roles);
+    } catch (err) {
+      await releaseInvitation(token, callerUid, inv.houseId);
+      throw err;
     }
-    if (inv.role === 'admin' || inv.role === 'senior-peer') {
-      const claims = await createClaims(callerUid, [inv.houseId], 'admin', false);
-      await auth().setCustomUserClaims(callerUid, claims);
-    }
-  } catch (err) {
-    await releaseInvitation(token, callerUid, inv.houseId);
-    throw err;
   }
+  // After the grant; a failure here throws, and the retry records it.
+  await recordRoleGrant(inv.houseId, callerUid, INVITATION_TIER[inv.role], {
+    grantedBy: inv.inviterUid,
+    via: 'invitation',
+    invitationId: token,
+  });
 
-  if (roleConsumesResidentSlot(inv.role)) {
+  if (!alreadyRedeemed && roleConsumesResidentSlot(inv.role)) {
     // Best-effort: the claim grant + invitation redemption above already
     // succeeded, so a failure here must not fail the whole call — it would
     // incorrectly report the redemption as failed after access was already

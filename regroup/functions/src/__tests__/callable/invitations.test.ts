@@ -23,6 +23,9 @@ const mockInvitationsDocUpdate = jest.fn();
 // jest.mock factory below.
 const mockSetCustomUserClaims = jest.fn();
 const mockCreateClaims = jest.fn();
+// redeemInvitation grants every claim of the role in ONE addHouseRoles call.
+const mockAddHouseRoles = jest.fn().mockResolvedValue(undefined);
+const mockRecordRoleGrant = jest.fn().mockResolvedValue('resident');
 
 // Guest docs read by the NARR tier check (is the inviter a resident?), and
 // the admission-ticket writes made inside redeemInvitation's transaction.
@@ -78,10 +81,12 @@ const mockHouseTierOf = jest.fn().mockResolvedValue('owner');
 jest.mock('../../util/houseRoles', () => ({
   ...jest.requireActual('../../util/houseRoles'),
   houseTierOf: (...args: unknown[]) => mockHouseTierOf(...args),
+  recordRoleGrant: (...args: unknown[]) => mockRecordRoleGrant(...args),
 }));
 
 jest.mock('../../util/claims', () => ({
   createClaims: (...args: unknown[]) => mockCreateClaims(...args),
+  addHouseRoles: (...args: unknown[]) => mockAddHouseRoles(...args),
 }));
 
 // Resident-capacity dependencies (util/residentCapacity.ts -> api/firestore.ts).
@@ -376,11 +381,12 @@ describe('redeemInvitation', () => {
       { uid: 'alice-uid', token: { email: 'alice@x.com' } },
     );
 
-    expect(mockCreateClaims).toHaveBeenCalledWith('alice-uid', ['house-1'], 'admin', false);
-    expect(mockSetCustomUserClaims).toHaveBeenCalledWith(
-      'alice-uid',
-      expect.objectContaining({ admin: ['house-1'] }),
-    );
+    expect(mockAddHouseRoles).toHaveBeenCalledWith('alice-uid', ['house-1'], ['admin']);
+    expect(mockRecordRoleGrant).toHaveBeenCalledWith('house-1', 'alice-uid', 'manager', {
+      grantedBy: expect.any(String),
+      via: 'invitation',
+      invitationId: 'TEST_TOKEN_FIXED',
+    });
     expect(mockInvitationsDocUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
         redeemedAt: expect.any(String),
@@ -404,6 +410,7 @@ describe('redeemInvitation', () => {
     ).rejects.toMatchObject({ code: 'permission-denied' });
     expect(mockInvitationsDocUpdate).not.toHaveBeenCalled();
     expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+    expect(mockAddHouseRoles).not.toHaveBeenCalled();
   });
 
   it('DENY: already redeemed', async () => {
@@ -469,7 +476,13 @@ describe('redeemInvitation', () => {
       { token: 'T' },
       { uid: 'alice-uid', token: { email: 'alice@x.com' } },
     );
-    expect(mockCreateClaims).toHaveBeenCalledWith('alice-uid', ['house-1'], 'guest', false);
+    expect(mockAddHouseRoles).toHaveBeenCalledWith('alice-uid', ['house-1'], ['guest']);
+    expect(mockRecordRoleGrant).toHaveBeenCalledWith(
+      'house-1',
+      'alice-uid',
+      'resident',
+      expect.objectContaining({ via: 'invitation' }),
+    );
   });
 
   it('role=senior-peer maps to BOTH guest and admin claims', async () => {
@@ -483,10 +496,15 @@ describe('redeemInvitation', () => {
       { token: 'T' },
       { uid: 'alice-uid', token: { email: 'alice@x.com' } },
     );
-    expect(mockCreateClaims).toHaveBeenCalledTimes(2);
-    expect(mockCreateClaims).toHaveBeenNthCalledWith(1, 'alice-uid', ['house-1'], 'guest', false);
-    expect(mockCreateClaims).toHaveBeenNthCalledWith(2, 'alice-uid', ['house-1'], 'admin', false);
-    expect(mockSetCustomUserClaims).toHaveBeenCalledTimes(2);
+    // One claims write: both roles or neither.
+    expect(mockAddHouseRoles).toHaveBeenCalledTimes(1);
+    expect(mockAddHouseRoles).toHaveBeenCalledWith('alice-uid', ['house-1'], ['guest', 'admin']);
+    expect(mockRecordRoleGrant).toHaveBeenCalledWith(
+      'house-1',
+      'alice-uid',
+      'peerLeader',
+      expect.objectContaining({ via: 'invitation' }),
+    );
   });
 });
 
@@ -661,6 +679,8 @@ describe('resident capacity enforcement', () => {
         ),
       ).rejects.toMatchObject({ code: 'failed-precondition' });
       expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+      expect(mockAddHouseRoles).not.toHaveBeenCalled();
+    expect(mockAddHouseRoles).not.toHaveBeenCalled();
       expect(mockInvitationsDocUpdate).not.toHaveBeenCalled();
       expect(mockUpdateUser).not.toHaveBeenCalled();
     });

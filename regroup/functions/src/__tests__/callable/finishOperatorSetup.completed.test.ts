@@ -5,6 +5,8 @@
 // grant fails. The callable grants only owned houses missing from the caller's
 // ID-token claims; a fully granted operator costs no house reads.
 
+// Owner role records (util/houseRoles) are covered in narrTiers.test.ts.
+jest.mock('../../util/houseRoles', () => ({ recordOwnerRoles: jest.fn(async () => undefined) }));
 jest.mock('firebase-functions/v2/https', () => {
   const actual = jest.requireActual('firebase-functions/v2/https');
   return {

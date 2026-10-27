@@ -4,6 +4,7 @@ import { houseCollection, ratsFirestore, userCollection } from '../api/firestore
 import type { User } from '../entities/User';
 import { writeOperatorSetupFlags } from '../houses/operatorSetup';
 import { grantHouseRoles } from '../util/claims';
+import { recordOwnerRoles } from '../util/houseRoles';
 
 export type FinishOperatorSetupResponse =
   { completed: false } | { completed: true; houseIds: string[] };
@@ -54,6 +55,7 @@ const ownedHouseIds = async (uid: string, candidates: string[]): Promise<string[
 const grantOrThrow = async (uid: string, houseIds: string[]): Promise<void> => {
   try {
     await grantHouseRoles(uid, houseIds);
+    await recordOwnerRoles(uid, houseIds, 'finishOperatorSetup');
   } catch (err) {
     logger.error('finishOperatorSetup: claim grant failed', {
       uid,

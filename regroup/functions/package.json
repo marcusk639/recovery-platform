@@ -17,6 +17,8 @@
     "migrate:payment-cents:apply": "npm run build && node lib/scripts/migratePaymentAmountsToCents.js --apply",
     "migrate:balance-cents:dry-run": "npm run build && node lib/scripts/migrateBalanceToCents.js",
     "report:ghost-guests": "npm run build && node lib/scripts/findGhostGuests.js",
+    "migrate:house-roles:dry-run": "npm run build && node lib/scripts/backfillHouseRoles.js",
+    "migrate:house-roles:apply": "npm run build && node lib/scripts/backfillHouseRoles.js --apply",
     "migrate:balance-cents:apply": "npm run build && node lib/scripts/migrateBalanceToCents.js --apply",
     "test": "jest --runInBand",
     "test:watch": "jest --watch",

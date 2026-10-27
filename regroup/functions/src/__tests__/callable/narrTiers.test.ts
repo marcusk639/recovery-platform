@@ -1,10 +1,12 @@
-// NARR invitation and promotion tiers (util/houseRoles), end to end on an
-// in-memory store. "Is a resident" comes from server state: an active guest
-// doc of that account in the house.
-//   owner -> manager, peer leader, resident
-//   manager (admin claim, not a resident) -> peer leader, resident
-//   peer leader (admin claim, a resident) -> resident only
+// House tiers (util/houseRoles), end to end on an in-memory store. A tier
+// comes ONLY from the server-only house-roles/{houseId}_{uid} record plus
+// ownerId / the superAdmin claim. Guest docs, admins docs and houseType are
+// never read, so no client write can raise or keep a tier.
+//   owner -> owner, manager, peer leader, resident
+//   manager -> peer leader, resident
+//   peer leader -> resident only (also: an admin-claim holder with no record)
 const mockSetClaims = jest.fn();
+const mockAddHouseRoles = jest.fn();
 jest.mock('firebase-admin', () => ({
   firestore: () => require('../helpers/memFirestore').memDb,
   auth: () => ({ setCustomUserClaims: (...a: unknown[]) => mockSetClaims(...a) }),
@@ -26,7 +28,8 @@ jest.mock('../../util/inviteEmails', () => ({ sendOneInviteEmail: jest.fn() }));
 jest.mock('../../util/authGuard', () => ({ assertCanGrantClaimForHouses: jest.fn() }));
 jest.mock('../../util/claims', () => ({
   createClaims: jest.fn(async () => ({})),
-  deleteClaim: jest.fn(),
+  deleteClaim: jest.fn(async () => ({})),
+  addHouseRoles: (...a: unknown[]) => mockAddHouseRoles(...a),
 }));
 jest.mock('../../util/user', () => ({
   getGuestsAsUsers: jest.fn(async (guests: Array<{ userId: string }>) =>
@@ -36,26 +39,41 @@ jest.mock('../../util/user', () => ({
 }));
 jest.mock('../../api/firestore', () => ({ getHouse: jest.fn() }));
 
-import { mem } from '../helpers/memFirestore';
+import { mem, memDb } from '../helpers/memFirestore';
 import { createInvitation } from '../../callable/invitations';
-import { addAdminAuthorization, promoteGuestsToAdmin } from '../../callable/auth';
+import {
+  addAdminAuthorization,
+  addGuestAuthorization,
+  deleteAdminAuthorization,
+  promoteGuestsToAdmin,
+  removePrivilegesForGuests,
+} from '../../callable/auth';
+import { houseTierOf, recordOwnerRoles } from '../../util/houseRoles';
 
 const H = 'h';
-const as = (uid: string, claims: Record<string, unknown> = {}) => ({ uid, token: claims });
+type Caller = { uid: string; token: Record<string, unknown> };
+const as = (uid: string, claims: Record<string, unknown> = {}): Caller => ({ uid, token: claims });
 const OWNER = as('owner');
 const MANAGER = as('manager', { admin: { [H]: true } });
-const PEER = as('peer', { admin: { [H]: true } });
-const invite = (caller: { uid: string; token: unknown }, role: string) =>
+const PEER = as('peer', { admin: { [H]: true }, guest: { [H]: true } });
+const invite = (caller: Caller, role: string) =>
   (createInvitation as unknown as Function)({
     data: { email: 'new@x.com', houseId: H, role },
     auth: caller,
   });
+const run = (fn: unknown, data: unknown, caller: Caller) =>
+  (fn as Function)({ data, auth: caller });
 const denied = { code: 'permission-denied' };
+const roleOf = (uid: string) => mem.get(`house-roles/${H}_${uid}`) as any;
+const tier = (c: Caller) => houseTierOf(c.uid, c.token, H, { ownerId: 'owner' });
 
 beforeEach(() => {
   mem.reset();
   mockSetClaims.mockReset();
+  mockAddHouseRoles.mockReset();
   mem.seed(`houses/${H}`, { id: H, ownerId: 'owner', houseType: 'traditional' });
+  mem.seed(`house-roles/${H}_manager`, { tier: 'manager', via: 'invitation' });
+  mem.seed(`house-roles/${H}_peer`, { tier: 'peerLeader', via: 'invitation' });
   mem.seed('guests/peer-doc', { houseId: H, userId: 'peer', status: 'active' });
   mem.seed('guests/res-doc', { houseId: H, userId: 'resident', status: 'active' });
 });
@@ -70,76 +88,132 @@ describe('createInvitation', () => {
     for (const role of refused) await expect(invite(caller, role)).rejects.toMatchObject(denied);
   });
 
-  it('a former peer leader whose resident doc is discharged counts as a manager-tier admin', async () => {
-    mem.seed('guests/peer-doc', { houseId: H, userId: 'peer', status: 'discharged' });
-    await expect(invite(PEER, 'senior-peer')).resolves.toHaveProperty('token');
+  it('an admin-claim holder with no role record is a peer leader (least privilege)', async () => {
+    const legacy = as('legacy', { admin: { [H]: true } });
+    await expect(tier(legacy)).resolves.toBe('peerLeader');
+    await expect(invite(legacy, 'senior-peer')).rejects.toMatchObject(denied);
+    await expect(invite(legacy, 'guest')).resolves.toHaveProperty('token');
   });
 
-  it("a resident field on the inviter's own client data cannot raise the tier", async () => {
-    // Server state says "resident" (active guest doc); no client field is read.
-    await expect(
-      invite(as('peer', { admin: { [H]: true }, resident: false }), 'admin'),
-    ).rejects.toMatchObject(denied);
-  });
-
-  it('Oxford houses keep their current behaviour for now', async () => {
+  it('Oxford houses apply the same tiers (no "any admin may invite anyone")', async () => {
     mem.seed(`houses/${H}`, { id: H, ownerId: 'owner', houseType: 'oxford' });
-    await expect(invite(PEER, 'admin')).resolves.toHaveProperty('token');
+    await expect(invite(PEER, 'admin')).rejects.toMatchObject(denied);
+    await expect(invite(PEER, 'senior-peer')).rejects.toMatchObject(denied);
   });
 });
 
-describe('promoteGuestsToAdmin', () => {
-  const promote = (caller: { uid: string; token: unknown }) =>
-    (promoteGuestsToAdmin as unknown as Function)({
-      data: [{ userId: 'resident', houseId: H, isAdmin: false }],
-      auth: caller,
-    });
-
-  it('the owner or a manager may make a resident a peer leader', async () => {
-    await expect(promote(OWNER)).resolves.toBe('success');
-    await expect(promote(MANAGER)).resolves.toBe('success');
+describe('a peer leader cannot change their own tier through client data (probes C1, B1-B3)', () => {
+  it.each([
+    [
+      'marks their resident doc inactive',
+      async () => mem.seed('guests/peer-doc', { houseId: H, userId: 'peer', status: 'inactive' }),
+    ],
+    [
+      'rewrites the userId on their resident doc',
+      async () =>
+        mem.seed('guests/peer-doc', { houseId: H, userId: 'someone-else', status: 'active' }),
+    ],
+    ['deletes their resident doc', () => memDb.doc('guests/peer-doc').delete()],
+    [
+      'writes an admins doc listing the house',
+      async () => mem.seed('admins/peer', { userId: 'peer', houseIds: [H], superAdmin: [] }),
+    ],
+    [
+      'flips the house to Oxford',
+      async () => mem.seed(`houses/${H}`, { id: H, ownerId: 'owner', houseType: 'oxford' }),
+    ],
+  ])('still a peer leader after it %s', async (_label, act) => {
+    await act();
+    await expect(tier(PEER)).resolves.toBe('peerLeader');
+    await expect(invite(PEER, 'senior-peer')).rejects.toMatchObject(denied);
+    await expect(invite(PEER, 'admin')).rejects.toMatchObject(denied);
   });
 
-  it('a peer leader may not promote anyone', async () => {
+  it("removing a peer leader's guest claim does not change the tier", async () => {
+    await run(
+      removePrivilegesForGuests,
+      { guests: [{ userId: 'peer', houseId: H }], role: 'guest' },
+      OWNER,
+    );
+    expect(roleOf('peer').tier).toBe('peerLeader');
+  });
+});
+
+describe('every grant path records the tier', () => {
+  it('createHouses / finishOperatorSetup record the owner', async () => {
+    await recordOwnerRoles('op', [H], 'createHouses');
+    expect(roleOf('op')).toMatchObject({ tier: 'owner', grantedBy: 'op', via: 'createHouses' });
+  });
+
+  it('addAdminAuthorization by the owner makes a manager (or owner for superAdmin); nobody else may', async () => {
+    await expect(
+      run(addAdminAuthorization, { userId: 'm2', houseIds: [H], superAdmin: [] }, OWNER),
+    ).resolves.toBe(true);
+    expect(roleOf('m2')).toMatchObject({
+      tier: 'manager',
+      grantedBy: 'owner',
+      via: 'addAdminAuthorization',
+    });
+    await expect(
+      run(addAdminAuthorization, { userId: 'o2', houseIds: [H], superAdmin: [H] }, OWNER),
+    ).resolves.toBe(true);
+    expect(roleOf('o2').tier).toBe('owner');
+    for (const c of [MANAGER, PEER]) {
+      await expect(
+        run(addAdminAuthorization, { userId: 'resident', houseIds: [H], superAdmin: [] }, c),
+      ).rejects.toMatchObject(denied);
+    }
+    expect(roleOf('resident')).toBeUndefined();
+  });
+
+  it('promoteGuestsToAdmin makes a peer leader; owner or manager only', async () => {
+    const promote = (c: Caller) =>
+      run(promoteGuestsToAdmin, [{ userId: 'resident', houseId: H }], c);
     await expect(promote(PEER)).rejects.toMatchObject(denied);
     expect(mockSetClaims).not.toHaveBeenCalled();
+    await expect(promote(MANAGER)).resolves.toBe('success');
+    expect(roleOf('resident')).toMatchObject({ tier: 'peerLeader', via: 'promoteGuestsToAdmin' });
   });
 
-  it('promoting someone who is not a resident here (a manager) is owner-only', async () => {
-    const promoteOutsider = (caller: { uid: string; token: unknown }) =>
-      (promoteGuestsToAdmin as unknown as Function)({
-        data: [{ userId: 'outsider', houseId: H, isAdmin: false }],
-        auth: caller,
-      });
-    await expect(promoteOutsider(MANAGER)).rejects.toMatchObject(denied);
-    await expect(promoteOutsider(OWNER)).resolves.toBe('success');
+  it('addGuestAuthorization with isAdmin needs a manager or above and makes a peer leader', async () => {
+    const grant = (c: Caller) =>
+      run(addGuestAuthorization, { userId: 'new', houseId: H, isAdmin: true }, c);
+    await expect(grant(PEER)).rejects.toMatchObject(denied);
+    expect(mockAddHouseRoles).not.toHaveBeenCalled();
+    await expect(grant(MANAGER)).resolves.toBe(true);
+    expect(mockAddHouseRoles).toHaveBeenCalledWith('new', [H], ['guest', 'admin']);
+    expect(roleOf('new')).toMatchObject({ tier: 'peerLeader', via: 'addGuestAuthorization' });
+  });
+
+  it('a grant never lowers a stored tier', async () => {
+    await run(addGuestAuthorization, { userId: 'manager', houseId: H, isAdmin: false }, OWNER);
+    expect(roleOf('manager').tier).toBe('manager');
   });
 });
 
-describe('addAdminAuthorization', () => {
-  const grant = (
-    caller: { uid: string; token: unknown },
-    userId: string,
-    superAdmin: string[] = [],
-  ) =>
-    (addAdminAuthorization as unknown as Function)({
-      data: { userId, houseIds: [H], superAdmin },
-      auth: caller,
-    });
-
-  it('only the owner may make a manager', async () => {
-    await expect(grant(OWNER, 'outsider')).resolves.toBe(true);
-    await expect(grant(MANAGER, 'outsider')).rejects.toMatchObject(denied);
-    await expect(grant(PEER, 'outsider')).rejects.toMatchObject(denied);
+describe('revocations update the record', () => {
+  it('removing admin: a manager loses the record, a peer leader becomes a resident', async () => {
+    await run(
+      deleteAdminAuthorization,
+      { admin: { userId: 'manager' }, adminHouseIds: [H], superAdminHouseIds: [] },
+      OWNER,
+    );
+    expect(roleOf('manager')).toBeUndefined();
+    await run(
+      removePrivilegesForGuests,
+      { guests: [{ userId: 'peer', houseId: H }], role: 'admin' },
+      OWNER,
+    );
+    expect(roleOf('peer').tier).toBe('resident');
   });
 
-  it('a manager may make a resident a peer leader; a peer leader may not', async () => {
-    await expect(grant(MANAGER, 'resident')).resolves.toBe(true);
-    await expect(grant(PEER, 'resident')).rejects.toMatchObject(denied);
-  });
-
-  it('owner (superAdmin) access is owner-only', async () => {
-    await expect(grant(MANAGER, 'resident', [H])).rejects.toMatchObject(denied);
-    await expect(grant(OWNER, 'outsider', [H])).resolves.toBe(true);
+  it('removing owner access leaves a manager', async () => {
+    await recordOwnerRoles('o2', [H], 'createHouses');
+    await run(
+      deleteAdminAuthorization,
+      { admin: { userId: 'o2' }, adminHouseIds: [], superAdminHouseIds: [H] },
+      OWNER,
+    );
+    expect(roleOf('o2').tier).toBe('manager');
   });
 });
