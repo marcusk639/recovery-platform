@@ -24,7 +24,7 @@ import {
   assertFails,
   RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, setDoc, updateDoc, writeBatch, Timestamp, DocumentData } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, writeBatch, Timestamp, DocumentData, serverTimestamp } from 'firebase/firestore';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -97,7 +97,7 @@ const resolution = (outcome: 'approve' | 'reject', by: string): DocumentData => 
   incomplete: outcome === 'approve',
   disputeResult: outcome === 'approve' ? 'success' : 'fail',
   disputeResolvedBy: by,
-  disputeResolvedAt: Timestamp.now(),
+  disputeResolvedAt: serverTimestamp(),
   loggedAt: Timestamp.now(),
 });
 

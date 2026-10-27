@@ -22,7 +22,7 @@ import {
   assertFails,
   RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, setDoc, updateDoc, Timestamp, DocumentData } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, Timestamp, DocumentData, serverTimestamp } from 'firebase/firestore';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -194,8 +194,15 @@ describe('activities update by the logging resident', () => {
 });
 
 describe('activities update by an admin', () => {
-  it('can resolve a dispute (reactivate) and correct the timestamp', async () => {
-    await assertSucceeds(update(houseAdmin(), 'disputed', { status: 'resolved' }));
+  it("can resolve a dispute (an old build's keep, which records the resolver) and correct the timestamp", async () => {
+    await assertFails(update(houseAdmin(), 'disputed', { status: 'resolved' }));
+    await assertSucceeds(
+      update(houseAdmin(), 'disputed', {
+        status: 'resolved',
+        disputeResolvedBy: ADMIN_UID,
+        disputeResolvedAt: serverTimestamp(),
+      }),
+    );
     await assertSucceeds(
       update(houseAdmin(), 'mine', {
         timestamp: Timestamp.fromDate(new Date('2026-01-15T18:00:00Z')),

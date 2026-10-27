@@ -23,7 +23,7 @@ import {
   assertFails,
   RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, setDoc, updateDoc, deleteDoc, Timestamp, DocumentData } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, deleteDoc, Timestamp, DocumentData, serverTimestamp } from 'firebase/firestore';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -132,7 +132,7 @@ describe('no deletion once an activity has dispute history', () => {
       updateDoc(doc(actors.admin(), 'activities/disputed'), {
         status: 'deleted',
         disputeResolvedBy: MGR,
-        disputeResolvedAt: Timestamp.now(),
+        disputeResolvedAt: serverTimestamp(),
         loggedAt: Timestamp.now(),
       }),
     );
@@ -155,7 +155,7 @@ describe('APPROVE and REJECT record a consistent outcome', () => {
     disputeOutcome: 'incomplete-per-residents',
     disputeResult: 'success',
     disputeResolvedBy: MGR,
-    disputeResolvedAt: Timestamp.now(),
+    disputeResolvedAt: serverTimestamp(),
     loggedAt: Timestamp.now(),
   };
 

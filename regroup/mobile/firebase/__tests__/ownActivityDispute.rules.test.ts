@@ -26,7 +26,7 @@ import {
   assertFails,
   RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, setDoc, updateDoc, Timestamp, DocumentData } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, Timestamp, DocumentData, serverTimestamp } from 'firebase/firestore';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -117,7 +117,7 @@ const resolve = (outcome: 'approve' | 'reject', by: string): DocumentData => ({
   incomplete: outcome === 'approve',
   disputeResult: outcome === 'approve' ? 'success' : 'fail',
   disputeResolvedBy: by,
-  disputeResolvedAt: Timestamp.now(),
+  disputeResolvedAt: serverTimestamp(),
   loggedAt: Timestamp.now(),
 });
 
@@ -193,7 +193,7 @@ describe('round-3 probes', () => {
       upd(mgr2(), 'pending', {
         status: 'deleted',
         disputeResolvedBy: MGR2,
-        disputeResolvedAt: Timestamp.now(),
+        disputeResolvedAt: serverTimestamp(),
         loggedAt: Timestamp.now(),
       }),
     );
@@ -204,7 +204,7 @@ describe('round-3 probes', () => {
       upd(mgr(), 'pending', {
         status: 'deleted',
         disputeResolvedBy: MGR,
-        disputeResolvedAt: Timestamp.now(),
+        disputeResolvedAt: serverTimestamp(),
         loggedAt: Timestamp.now(),
       }),
     );

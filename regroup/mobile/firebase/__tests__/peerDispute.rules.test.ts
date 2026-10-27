@@ -55,6 +55,8 @@ const activity = (overrides: Record<string, unknown> = {}) => ({
   status: 'active',
   verified: false,
   loggedBy: OWNER_UID,
+  // Stamped by the onActivityWritten Cloud Function from guests.userId.
+  residentUid: OWNER_UID,
   timestamp: Timestamp.fromDate(new Date('2026-01-14T18:00:00Z')),
   data: { type: 'chore', choreName: 'Kitchen' },
   ...overrides,

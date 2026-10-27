@@ -75,6 +75,8 @@ async function seedActivity() {
     await setDoc(doc(ctx.firestore(), `activities/${ACTIVITY_ID}`), {
       houseId: HOUSE_ID,
       loggedBy: GUEST_UID,
+      // Stamped by the onActivityWritten Cloud Function from guests.userId.
+      residentUid: GUEST_UID,
       type: "meeting",
       verified: false,
       status: "active",
@@ -127,6 +129,7 @@ describe("activities verification fields", () => {
         status: "disputed",
         disputeReason: "x",
         disputedBy: "housemateUser",
+        disputeResolvedBy: "housemateUser",
       }),
     );
   });

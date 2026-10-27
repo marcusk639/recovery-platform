@@ -22,7 +22,7 @@ import {
   assertFails,
   RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, setDoc, updateDoc, Timestamp, DocumentData } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, Timestamp, DocumentData, serverTimestamp } from 'firebase/firestore';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -108,7 +108,7 @@ const resolve = (outcome: 'approve' | 'reject', by: string): DocumentData => ({
   incomplete: outcome === 'approve',
   disputeResult: outcome === 'approve' ? 'success' : 'fail',
   disputeResolvedBy: by,
-  disputeResolvedAt: Timestamp.now(),
+  disputeResolvedAt: serverTimestamp(),
   loggedAt: Timestamp.now(),
 });
 
@@ -174,8 +174,8 @@ describe('resolving: only an open dispute, once', () => {
     await assertFails(upd(mgr(), 'active', resolve('reject', MGR)));
   });
 
-  it('still lets an admin restore an approved activity, and edit other fields', async () => {
-    await assertSucceeds(upd(mgr(), 'approvedByOwner', { status: 'active', incomplete: false }));
+  it('DENIES an admin restoring an approved activity to active (REOPEN is the way back), still lets them edit other fields', async () => {
+    await assertFails(upd(mgr(), 'approvedByOwner', { status: 'active', incomplete: false }));
     await assertSucceeds(upd(mgr(), 'active', { verified: true, verifiedBy: MGR }));
   });
 });

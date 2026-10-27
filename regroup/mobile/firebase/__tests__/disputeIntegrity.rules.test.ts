@@ -30,7 +30,7 @@ import {
   assertFails,
   RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, setDoc, updateDoc, writeBatch, Timestamp, DocumentData } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, writeBatch, Timestamp, DocumentData, serverTimestamp } from 'firebase/firestore';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -155,9 +155,9 @@ describe('only active -> disputed starts a dispute', () => {
     await assertFails(upd(resident(), 'del', { status: 'resolved' }));
   });
 
-  it('lets an admin move a deleted or approved activity (the only way back)', async () => {
+  it('lets an admin restore a deleted, never-disputed activity, but not move a decision back to active (REOPEN is the way back)', async () => {
     await assertSucceeds(upd(manager(), 'del', { status: 'active' }));
-    await assertSucceeds(upd(manager(), 'approved', { status: 'active', incomplete: false }));
+    await assertFails(upd(manager(), 'approved', { status: 'active', incomplete: false }));
   });
 });
 
@@ -207,7 +207,9 @@ describe('the disputer is the caller', () => {
         status: 'resolved',
         disputed: 'rejected',
         incomplete: false,
+        disputeResult: 'fail',
         disputeResolvedBy: OWNER,
+        disputeResolvedAt: serverTimestamp(),
       }),
     );
     await assertSucceeds(
@@ -215,7 +217,9 @@ describe('the disputer is the caller', () => {
         status: 'resolved',
         disputed: 'rejected',
         incomplete: false,
+        disputeResult: 'fail',
         disputeResolvedBy: MGR,
+        disputeResolvedAt: serverTimestamp(),
       }),
     );
   });
