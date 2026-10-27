@@ -355,6 +355,12 @@ service cloud.firestore {
       allow delete: if isAdmin([resource.data.houseId]);
     }
     
+    // LEGACY, UNTRUSTED: older app builds still write /disputes in their
+    // resolve batch (house + guest + /disputes), which must keep succeeding
+    // for their activity write to run. It is display-only. The trusted record
+    // is server-only: activities/{id}/dispute-decisions and dispute-archive
+    // (no rule here matches dispute-archive, so clients can neither read nor
+    // write it).
     match /disputes/{disputeId} {
       // Only house admins and the disputing resident may read a dispute — not
       // every resident of the house. Clients render disputes from the embedded
@@ -580,6 +586,9 @@ service cloud.firestore {
         d.diff(r).affectedKeys().hasOnly(['status', 'reopenedBy', 'reopenedAt', 'disputed', 'incomplete',
           'disputeResult', 'disputeOutcome', 'disputeResolvedBy', 'disputeResolvedAt']) &&
         d.get('reopenedBy', null) == request.auth.uid && d.get('reopenedAt', null) == request.time &&
+        // Cleared to null explicitly, never deleted: the keys stay on record.
+        d.keys().hasAll(['disputed', 'incomplete', 'disputeResult', 'disputeOutcome',
+                         'disputeResolvedBy', 'disputeResolvedAt']) &&
         d.get('disputed', null) == null && d.get('incomplete', null) == null &&
         d.get('disputeResult', null) == null && d.get('disputeOutcome', null) == null &&
         d.get('disputeResolvedBy', null) == null && d.get('disputeResolvedAt', null) == null &&
