@@ -22,7 +22,7 @@ import {
   assertFails,
   RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, setDoc, updateDoc, Timestamp } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, Timestamp, DocumentData } from 'firebase/firestore';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -89,7 +89,7 @@ const otherAdmin = () =>
 type Ctx = ReturnType<typeof resident>;
 const create = (ctx: Ctx, data: Record<string, unknown>) =>
   setDoc(doc(ctx.firestore(), 'activities/new'), data);
-const update = (ctx: Ctx, id: string, data: Record<string, unknown>) =>
+const update = (ctx: Ctx, id: string, data: DocumentData) =>
   updateDoc(doc(ctx.firestore(), `activities/${id}`), data);
 
 describe('activities create', () => {
