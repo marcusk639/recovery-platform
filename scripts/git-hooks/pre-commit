@@ -48,6 +48,7 @@ done <<< "$STAGED"
 # NEW source files over 300 lines are blocked; pre-existing oversized files
 # only warn when modified (the mobile apps carry legacy debt — don't freeze them).
 MAX_LINES=300
+MERGE_HEAD_SHA=$(git rev-parse -q --verify MERGE_HEAD 2>/dev/null || true)
 SRC_RE='\.(ts|tsx|js|jsx)$'
 EXCLUDE_RE='node_modules/|/public/|\.min\.js$|-es(5|2015)\.js$|/dist/|/build/|/\.next/|jest\.setup\.(js|ts)$|\.config\.(js|cjs|mjs|ts)$|\.eslintrc\.js$'
 
@@ -56,7 +57,12 @@ while IFS= read -r f; do
   echo "$f" | grep -qE "$EXCLUDE_RE" && continue
   LINES=$(git show ":$f" 2>/dev/null | wc -l | tr -d ' ')
   [ "$LINES" -le "$MAX_LINES" ] && continue
-  if git -c core.quotePath=false diff --cached --name-only --diff-filter=A | grep -qxF "$f"; then
+  # In a merge, the other branch's files show as added. One staged exactly as it
+  # is on the merged branch is not new here: it went through this ratchet there.
+  if [ -n "$MERGE_HEAD_SHA" ] &&
+    [ "$(git rev-parse -q --verify ":$f" 2>/dev/null)" = "$(git rev-parse -q --verify "$MERGE_HEAD_SHA:$f" 2>/dev/null)" ]; then
+    echo "⚠ $f is $LINES lines (>$MAX_LINES), unchanged from the merged branch" >&2
+  elif git -c core.quotePath=false diff --cached --name-only --diff-filter=A | grep -qxF "$f"; then
     echo "✗ new file $f is $LINES lines (limit $MAX_LINES) — split it before committing" >&2
     FAIL=1
   else
