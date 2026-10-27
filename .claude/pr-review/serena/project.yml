@@ -1,0 +1,22 @@
+# Serena project config for the PR reviewer (spec 2026-10-26 §3.1). Copied from the
+# base branch into the reviewer's source copy; the PR's own .serena/ is never used.
+project_name: "recovery-platform"
+language_servers: ["typescript"]
+encoding: "utf-8"
+ignore_all_files_in_gitignore: true
+ignored_paths:
+  - "**/public/**"
+  - "**/lib/**"
+  - "**/dist/**"
+  - "**/build/**"
+  - "**/.next/**"
+  - "**/_legacy/**"
+  - "**/node_modules/**"
+# No editing tools, and a fixed tool set: shell, memory and onboarding tools never exist.
+read_only: true
+fixed_tools:
+  - find_symbol
+  - find_referencing_symbols
+  - get_symbols_overview
+  - search_for_pattern
+initial_prompt: ""

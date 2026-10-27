@@ -165,6 +165,8 @@ Pre-check failures must not fail the job. A broken script yields a "pre-check un
 
 No `WebFetch`/`WebSearch`, no package managers. The builder confirms in a real run that nothing posts as `permission_denied`. That was the old bot's silent failure.
 
+**Opt-in code navigation.** With the repository variable `PR_REVIEW_SERENA=on`, the reviewer also gets four read-only Serena tools (`find_symbol`, `find_referencing_symbols`, `get_symbols_overview`, `search_for_pattern`). Serena runs as a separate user with an empty environment, no network, and a root-owned copy of the tracked source, and every serena-runner process is killed before Publish. The design is in `2026-10-26-pr-review-serena-and-suggestions.md` §3.
+
 ### 7.7 Output
 
 - **One summary comment per PR, updated in place on each run**, posted by the model-free publish step as `github-actions[bot]` (the workflow `GITHUB_TOKEN`), and found again by its first-line marker and author. If the update fails, publish retries once with a minimal fixed banner that keeps the previous ledger marker. The comment must stay under GitHub's ~65k-character limit. Resolved findings collapse to one line each, and after about 5 runs they drop out of the visible text, keeping only their opaque ledger entry. The comment contains:
