@@ -2,6 +2,14 @@ import { APP_INITIALIZER, Provider } from '@angular/core';
 import { USE_EMULATOR as AUTH_EMULATOR } from '@angular/fire/auth';
 import { USE_EMULATOR as FIRESTORE_EMULATOR } from '@angular/fire/firestore';
 import { USE_EMULATOR as FUNCTIONS_EMULATOR } from '@angular/fire/functions';
+import { AngularFireAnalytics, AngularFireAnalyticsModule } from '@angular/fire/analytics';
+import { AngularFireStorage } from '@angular/fire/storage';
+import { e2eFlags } from '../environments/e2e-flags';
+import {
+  analyticsImports,
+  analyticsProviders,
+  NoopAngularFireAnalytics,
+} from './analytics-providers';
 import { environment as defaultEnvironment } from '../environments/environment';
 import { environment as productionEnvironment } from '../environments/environment.prod';
 import { environment as emulatorEnvironment } from '../environments/environment.e2e-emulator';
@@ -19,6 +27,7 @@ type ProviderObject = {
   provide: unknown;
   useValue?: unknown;
   useFactory?: unknown;
+  useClass?: unknown;
   deps?: unknown[];
   multi?: boolean;
 };
@@ -110,7 +119,8 @@ describe('e2e environments', () => {
       expect(p).toBeDefined();
       expect(p.multi).toBe(true);
       expect(typeof p.useFactory).toBe('function');
-      expect(p.deps.length).toBe(1);
+      expect(p.deps).toEqual([AngularFireStorage]);
+      expect(p.deps[0]).toBe(AngularFireStorage);
     });
 
     it('starts when every emulator is wired and answers', async () => {
@@ -205,6 +215,44 @@ describe('e2e environments', () => {
     it('rejects when storage cannot be pointed at the emulator', async () => {
       const init = initializerOf(emulatorProviders(env, reachable))({ storage: {} });
       await expectAsync(init()).toBeRejectedWithError(/storage/);
+    });
+  });
+
+  describe('analytics', () => {
+    const stubFor = (providers: Provider[]) => findProvider(providers, AngularFireAnalytics);
+    const stagingFlags = { production: false, ...e2eFlags };
+
+    it('the e2e-emulator build provides the no-op AngularFireAnalytics and skips the module', () => {
+      expect(emulatorEnvironment.useAnalytics).toBe(false);
+      expect(stubFor(analyticsProviders(emulatorEnvironment))).toEqual({
+        provide: AngularFireAnalytics,
+        useClass: NoopAngularFireAnalytics,
+      });
+      expect(analyticsImports(emulatorEnvironment)).toEqual([]);
+    });
+
+    // environment.e2e-staging.ts cannot be imported here (it needs the
+    // generated, gitignored config), so this checks the flags it spreads in.
+    it('the e2e-staging build (via the shared e2e flags) provides the stub and skips the module', () => {
+      expect(e2eFlags.useAnalytics).toBe(false);
+      expect(stubFor(analyticsProviders(stagingFlags)).useClass).toBe(NoopAngularFireAnalytics);
+      expect(analyticsImports(stagingFlags)).toEqual([]);
+    });
+
+    it('production and default builds keep the real AngularFireAnalyticsModule and no stub', () => {
+      [productionEnvironment, defaultEnvironment].forEach((env) => {
+        expect(analyticsProviders(env)).toEqual([]);
+        expect(analyticsImports(env)).toEqual([AngularFireAnalyticsModule]);
+      });
+    });
+
+    it('the stub covers every AngularFireAnalytics method the app calls and does nothing', async () => {
+      const stub = new NoopAngularFireAnalytics();
+      await expectAsync(stub.logEvent('landing-page')).toBeResolved();
+      await expectAsync(stub.setUserId('uid-1')).toBeResolved();
+      await expectAsync(stub.setUserProperties({ plan: 'starter' })).toBeResolved();
+      await expectAsync(stub.setCurrentScreen('pricing')).toBeResolved();
+      await expectAsync(stub.setAnalyticsCollectionEnabled(false)).toBeResolved();
     });
   });
 });

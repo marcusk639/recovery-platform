@@ -7,6 +7,7 @@
 // it first. The shape is in ./e2e-staging.generated.example.ts.
 import { e2eStaging } from './e2e-staging.generated';
 import { assertE2eStagingConfig } from './e2e-staging-guard';
+import { e2eFlags } from './e2e-flags';
 
 // Fail closed unless the generated file targets the regroup-e2e project, holds
 // nothing from production (project id, project number, API key, bucket,
@@ -14,6 +15,7 @@ import { assertE2eStagingConfig } from './e2e-staging-guard';
 assertE2eStagingConfig(e2eStaging);
 
 export const environment = {
+  ...e2eFlags,
   production: false,
   appName: 'App Name',
   stripePublishableKey: e2eStaging.stripePublishableKey,

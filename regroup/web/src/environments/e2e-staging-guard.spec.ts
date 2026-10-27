@@ -70,6 +70,11 @@ describe('assertE2eStagingConfig', () => {
     expect(() => assertE2eStagingConfig(cfg)).toThrowError(/authDomain/);
   });
 
+  it('rejects a bucket that only starts with regroup-e2e.', () => {
+    const cfg = withFirebase({ storageBucket: 'regroup-e2e.attacker.example' });
+    expect(() => assertE2eStagingConfig(cfg)).toThrowError(/storage bucket/);
+  });
+
   it('rejects a bucket outside regroup-e2e', () => {
     const cfg = withFirebase({ storageBucket: 'regroup-e2e-other.appspot.com' });
     expect(() => assertE2eStagingConfig(cfg)).toThrowError(/storage bucket/);

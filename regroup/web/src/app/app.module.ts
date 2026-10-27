@@ -5,7 +5,6 @@ import { AngularFirestoreModule } from '@angular/fire/firestore';
 import { AngularFireStorageModule } from '@angular/fire/storage';
 import { AngularFireAuthModule } from '@angular/fire/auth';
 import { AngularFireFunctionsModule } from '@angular/fire/functions';
-import { AngularFireAnalyticsModule } from '@angular/fire/analytics';
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
 import { NgxStripeModule } from 'ngx-stripe';
@@ -107,6 +106,7 @@ import { AuthGuard } from './guards/auth.guard';
 import { TierPickerComponent } from './components/pricing/tier-picker/tier-picker.component';
 import { OrderSummaryComponent } from './components/pricing/order-summary/order-summary.component';
 import { emulatorProviders } from './emulator-providers';
+import { analyticsImports, analyticsProviders } from './analytics-providers';
 
 @NgModule({
   declarations: [
@@ -211,7 +211,8 @@ import { emulatorProviders } from './emulator-providers';
     AngularFirestoreModule, // firestore
     AngularFireAuthModule, // auth
     AngularFireStorageModule, // storage
-    AngularFireAnalyticsModule,
+    // AngularFireAnalyticsModule, except in the e2e builds (useAnalytics: false).
+    ...analyticsImports(environment),
     AngularFireFunctionsModule,
     FormsModule,
     ReactiveFormsModule,
@@ -224,6 +225,8 @@ import { emulatorProviders } from './emulator-providers';
     AuthGuard,
     // Empty unless the environment sets useEmulators (only e2e-emulator does).
     ...emulatorProviders(environment),
+    // A no-op AngularFireAnalytics in the e2e builds; empty otherwise.
+    ...analyticsProviders(environment),
   ],
   bootstrap: [AppComponent],
 })

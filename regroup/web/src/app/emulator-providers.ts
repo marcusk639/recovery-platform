@@ -22,8 +22,10 @@ export interface EmulatorAwareEnvironment {
 export type EmulatorProbe = (url: string) => Promise<void>;
 
 /**
- * Every SDK the app uses. An emulator build must point all of them at the
- * emulator suite; one left out would talk to real Google endpoints.
+ * Every emulated SDK the app uses. An emulator build must point all of them at
+ * the emulator suite; one left out would talk to real Google endpoints.
+ * Analytics has no emulator: the e2e builds do not load it at all and provide a
+ * no-op AngularFireAnalytics instead (see analytics-providers.ts).
  */
 export const REQUIRED_EMULATORS: EmulatorService[] = ['auth', 'firestore', 'storage', 'functions'];
 

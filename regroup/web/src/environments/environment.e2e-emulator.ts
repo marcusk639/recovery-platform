@@ -14,7 +14,10 @@
 // Startup is fail-closed: that APP_INITIALIZER aborts bootstrap unless the
 // project id is a demo- id, all four emulators are configured, and each answers.
 
+import { e2eFlags } from './e2e-flags';
+
 export const environment = {
+  ...e2eFlags,
   production: false,
   appName: 'App Name',
   // Stripe test-mode publishable key (same one environment.ts uses for dev).

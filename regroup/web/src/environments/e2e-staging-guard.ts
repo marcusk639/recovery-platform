@@ -7,6 +7,9 @@ import { environment as production } from './environment.prod';
 
 export const E2E_STAGING_PROJECT_ID = 'regroup-e2e';
 
+/** The project's default bucket, in either of the two forms Firebase issues. */
+export const E2E_STAGING_BUCKETS = ['regroup-e2e.appspot.com', 'regroup-e2e.firebasestorage.app'];
+
 export interface E2eStagingConfig {
   stripePublishableKey: string;
   firebaseConfig: {
@@ -64,17 +67,14 @@ export function assertE2eStagingConfig(cfg: E2eStagingConfig): void {
   if (fb.authDomain !== `${E2E_STAGING_PROJECT_ID}.firebaseapp.com`) {
     fail(`must use authDomain "${E2E_STAGING_PROJECT_ID}.firebaseapp.com"`);
   }
-  if (
-    typeof fb.storageBucket !== 'string' ||
-    fb.storageBucket.indexOf(`${E2E_STAGING_PROJECT_ID}.`) !== 0
-  ) {
-    fail(`must use a "${E2E_STAGING_PROJECT_ID}." storage bucket`);
+  if (E2E_STAGING_BUCKETS.indexOf(fb.storageBucket) === -1) {
+    fail(`must use storage bucket ${E2E_STAGING_BUCKETS.join(' or ')}`);
   }
   if (fb.databaseURL !== undefined) {
     fail('must not set databaseURL (the web app does not use Realtime Database)');
   }
   if (fb.measurementId !== undefined) {
-    fail('must not set measurementId (no Analytics in e2e)');
+    fail('must not set measurementId (e2e builds stub Analytics out and never load it)');
   }
   if (typeof cfg.stripePublishableKey !== 'string' || !/^pk_test_/.test(cfg.stripePublishableKey)) {
     fail('must use a Stripe test-mode (pk_test_) key');
