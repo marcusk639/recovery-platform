@@ -51,16 +51,32 @@ export function printRoleReport(report: RoleBackfillReport, apply: boolean): voi
   );
   if (report.ownerReview.length > 0) {
     console.log(
-      '\nNo primary owner written; owner must choose, then re-run with --primary houseId=uid:',
+      '\nNo primary owner written (exit code 3); owner must choose, then re-run with\n' +
+        '--primary houseId=uid:',
     );
     for (const h of report.ownerReview) console.log(`${h.houseId}\t${h.reason}`);
   }
-  if (report.primaryMismatch.length > 0) {
+  if (report.primaryContradicted.length > 0) {
     console.log(
-      '\nExisting primary records the evidence does not support (left as they are; remove a\n' +
-        'wrong one by hand, then re-run with --primary houseId=uid):\nhouseId\tprimary\treason',
+      '\nExisting primary records the evidence CONTRADICTS (it names another account; left as\n' +
+        'they are, exit code 3). The owner decides; if one is wrong, remove it by hand and\n' +
+        're-run with --primary houseId=uid:\nhouseId\tprimary\treason',
     );
-    for (const m of report.primaryMismatch) console.log(`${m.houseId}\t${m.uid}\t${m.reason}`);
+    for (const m of report.primaryContradicted) console.log(`${m.houseId}\t${m.uid}\t${m.reason}`);
+  }
+  if (report.primaryUnverifiable.length > 0) {
+    console.log(
+      '\nExisting primary records the evidence can neither confirm nor contradict. Review,\n' +
+        'do not delete (e.g. a createHouses record whose claim grant failed):\nhouseId\tprimary\treason',
+    );
+    for (const m of report.primaryUnverifiable) console.log(`${m.houseId}\t${m.uid}\t${m.reason}`);
   }
   if (!apply) console.log('\nNothing was written. Re-run with --apply to commit.');
+}
+
+/** 2: claims lookups failed (re-run); 3: houses or primaries need the owner; else 0. */
+export function exitCodeFor(report: RoleBackfillReport): number {
+  if (report.lookupFailed.length > 0) return 2;
+  if (report.ownerReview.length > 0 || report.primaryContradicted.length > 0) return 3;
+  return 0;
 }

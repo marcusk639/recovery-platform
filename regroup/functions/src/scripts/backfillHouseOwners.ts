@@ -1,23 +1,33 @@
 /**
  * Pass 1 of scripts/backfillHouseRoles: primary owner records.
  *
- * No single house field is trustworthy: before #103's rules any member could
- * write superAdminId, and a superAdmin co-owner could rewrite BOTH
- * superAdminId and ownerId until #145's rules deploy. So a primary is written
- * only when server-written evidence agrees with both fields:
+ * Threat model. Since #103 no client may write superAdminId, and step 0 of
+ * the deploy order makes post-#103 live rules a precondition; before #145's
+ * rules deploy a superAdmin co-owner can still rewrite ownerId. So a co-owner
+ * C holds both fields only if C set superAdminId before #103. The house
+ * fields cannot tell C from the owner; the subscription is the only evidence
+ * that can, and C could list the house on their own subscription by three
+ * routes: before #59 (c4b75501) users/{uid} was writable by its owner, so any
+ * account could write its own subscriptionMetadata.status and houses; before
+ * #103 C could delete and recreate their users doc with a houses map, which
+ * writeOperatorSubscription keeps; and updateSubscriptionHouses added any
+ * house unchecked before #103 and, until the functions deploy, adds any
+ * house whose ownerId is the caller (which C can set). So a primary is
+ * written only when ALL of these hold:
  *   - superAdminId and ownerId are set and equal (uid U);
- *   - U's users/{U}.subscriptionMetadata (server-owned: a client can create it
- *     only with an empty status) has a non-empty status and lists the house in
- *     its houses map, and no other account's subscription lists it;
- *   - U holds a live superAdmin claim for the house (claims are server-set).
+ *   - U's users/{U}.subscriptionMetadata has a non-empty status and lists the
+ *     house, and no other account's subscription lists it;
+ *   - U holds a live superAdmin claim for the house, and no other account
+ *     does (a co-owner always holds one, so any house with a co-owner waits
+ *     for the owner).
  * Otherwise nothing is written and the house is listed with the evidence
  * ("owner must choose"); the owner settles it on a later run with
- * --primary houseId=uid. Residual risk, for the owner's review of the list:
- * before #103 updateSubscriptionHouses added any house id to the caller's map
- * unchecked, so a co-owner who rewrote both fields AND added the house to
- * their own paid subscription, in a house whose owner's subscription does not
- * list it, would still pass. Existing primary records are re-checked against
- * the same evidence and any mismatch is reported, never changed.
+ * --primary houseId=uid (the record is marked chosen and never re-checked).
+ * What still slips through: a sole superAdmin-claim holder C who already
+ * removed the real owner's claim; that owner has lost the house without
+ * this PR too. Existing primary records (not chosen) are re-checked: one the
+ * evidence contradicts (it names another account) is reported; one it can
+ * neither confirm nor contradict is listed for review, never for deletion.
  */
 import type { RoleBackfillReport } from './backfillHouseRoles';
 
@@ -76,30 +86,69 @@ export function ownerOf(
     return choose('no subscription of that account alone lists the house');
   }
   if (!supers.includes(sa)) return choose('that account holds no superAdmin claim here');
+  // A co-owner always holds a superAdmin claim: see the header.
+  if (supers.length > 1) return choose('more than one account holds a superAdmin claim here');
   return { uid: sa, reason: `fields, subscription and claim agree (${evidence})` };
 }
 
-/** --primary houseId=uid, repeatable: the owner's settlement of a listed house. */
+/**
+ * --primary houseId=uid, repeatable: the owner's settlement of a listed house.
+ * Throws (the script exits 1) on a malformed flag, a missing value, a value
+ * that is another flag, or the same house twice.
+ */
 export function parsePrimaryChoices(argv: string[]): Record<string, string> {
   const out: Record<string, string> = {};
   argv.forEach((a, i) => {
+    if (a.startsWith('--primary=')) throw new Error('use --primary houseId=uid (a space, not =)');
     if (a !== '--primary') return;
-    const [house, uid] = (argv[i + 1] ?? '').split('=');
-    if (house && uid) out[house] = uid;
+    const v = argv[i + 1];
+    if (!v || v.startsWith('--')) throw new Error('--primary needs a houseId=uid value');
+    const parts = v.split('=');
+    if (parts.length !== 2 || !parts[0] || !parts[1]) {
+      throw new Error(`--primary value is not houseId=uid: ${v}`);
+    }
+    if (parts[0] in out) throw new Error(`--primary names house ${parts[0]} twice`);
+    out[parts[0]] = parts[1];
   });
   return out;
+}
+
+/**
+ * All houses, after checking every --primary choice names an existing house
+ * and an existing account; throws otherwise (the script exits 1, before any
+ * write).
+ */
+export async function housesCheckingChoices(
+  db: FirebaseFirestore.Firestore,
+  choices: Record<string, string>,
+  claimsOf: Map<string, Claims>,
+): Promise<Map<string, Doc>> {
+  const houses = new Map<string, Doc>();
+  for (const h of (await db.collection('houses').get()).docs) houses.set(h.id, h.data() ?? {});
+  const bad = Object.entries(choices)
+    .filter(([h, uid]) => !houses.has(h) || !claimsOf.has(uid))
+    .map(([h, uid]) => `${h}=${uid}`);
+  if (bad.length > 0)
+    throw new Error(`--primary names an unknown house or account: ${bad.join(',')}`);
+  return houses;
+}
+
+/** An existing primary record: its account and whether the owner chose it. */
+export interface PrimaryRecord {
+  uid: string;
+  chosen: boolean;
 }
 
 export async function primaryOwnerPass(
   db: FirebaseFirestore.Firestore,
   ctx: {
     houses: Map<string, Doc>;
-    /** houseId -> uids holding a primary record already. */
-    primaries: Map<string, string[]>;
+    /** houseId -> primary records already there. */
+    primaries: Map<string, PrimaryRecord[]>;
     claimsOf: Map<string, Claims>;
     choices: Record<string, string>;
     apply: boolean;
-    record: (houseId: string) => Doc;
+    record: (houseId: string, chosen: boolean) => Doc;
     report: RoleBackfillReport;
   },
 ): Promise<void> {
@@ -110,19 +159,16 @@ export async function primaryOwnerPass(
     const choice = ctx.choices[houseId];
     const found = ownerOf(houseId, house, ev);
     if (existing.length > 0) {
-      // Re-check, never change: a wrong primary is removed by hand.
-      const expected = choice ?? found.uid;
-      if (existing.length > 1 || existing[0] !== expected) {
-        report.primaryMismatch.push({
-          houseId,
-          uid: existing.join(','),
-          reason: choice
-            ? `owner chose ${choice}`
-            : found.uid
-              ? `evidence names ${found.uid}`
-              : found.reason,
-        });
-      }
+      // Re-check, never change. An owner-chosen record is not re-checked.
+      const uids = existing.map((p) => p.uid).join(',');
+      const contradicted = (reason: string) =>
+        report.primaryContradicted.push({ houseId, uid: uids, reason });
+      if (existing.length > 1) contradicted('several primary records');
+      else if (choice && choice !== existing[0].uid) {
+        contradicted(`owner chose ${choice}; remove the existing record first`);
+      } else if (choice || existing[0].chosen || found.uid === existing[0].uid) continue;
+      else if (found.uid) contradicted(`evidence names ${found.uid}`);
+      else report.primaryUnverifiable.push({ houseId, uid: uids, reason: found.reason });
       continue;
     }
     let owner = found.uid;
@@ -143,7 +189,11 @@ export async function primaryOwnerPass(
       continue;
     }
     report.owners.push({ uid: owner, houseId, tier: 'owner', reason });
-    if (ctx.apply)
-      await db.collection('house-roles').doc(`${houseId}_${owner}`).set(ctx.record(houseId));
+    if (ctx.apply) {
+      await db
+        .collection('house-roles')
+        .doc(`${houseId}_${owner}`)
+        .set(ctx.record(houseId, !!choice));
+    }
   }
 }

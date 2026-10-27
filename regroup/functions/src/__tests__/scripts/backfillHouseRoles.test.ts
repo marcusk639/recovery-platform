@@ -124,9 +124,11 @@ it('a record created meanwhile (a grant racing the backfill) is skipped, not an 
 });
 
 describe('owner, invitation and stale-record passes', () => {
-  it('records the evidence-backed owner as the PRIMARY owner; another superAdmin is a co-owner', async () => {
+  it('with another superAdmin the house waits for the owner; once chosen, the owner is PRIMARY and the other a co-owner', async () => {
     users.push({ uid: 'co', customClaims: { superAdmin: { [H]: true }, admin: { [H]: true } } });
-    await backfillHouseRoles(memDb, authClient, { apply: true });
+    const first = await backfillHouseRoles(memDb, authClient, { apply: true });
+    expect(first.owners).toEqual([]);
+    await backfillHouseRoles(memDb, authClient, { apply: true, primaryChoices: { [H]: 'owner' } });
     users.pop();
     expect(mem.get(`house-roles/${H}_owner`)).toMatchObject({ tier: 'owner', primary: true });
     expect(mem.get(`house-roles/${H}_co`)).toMatchObject({ tier: 'owner' });
@@ -202,11 +204,9 @@ describe('round 5: one primary owner; races; review order', () => {
   it("the owner's --primary choice on a later run settles a listed house; a uid with no account is refused (C1)", async () => {
     mem.seed(`houses/${H}`, { id: H, ownerId: 'co', superAdminId: 'co' });
     await backfillHouseRoles(memDb, authClient, { apply: true });
-    const bad = await backfillHouseRoles(memDb, authClient, {
-      apply: true,
-      primaryChoices: { [H]: 'x' },
-    });
-    expect(bad.owners).toEqual([]);
+    await expect(
+      backfillHouseRoles(memDb, authClient, { apply: true, primaryChoices: { [H]: 'x' } }),
+    ).rejects.toThrow(/unknown house or account/);
     await backfillHouseRoles(memDb, authClient, { apply: true, primaryChoices: { [H]: 'owner' } });
     expect(mem.get(`house-roles/${H}_owner`)).toMatchObject({ tier: 'owner', primary: true });
   });
