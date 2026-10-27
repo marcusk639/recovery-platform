@@ -7,7 +7,8 @@
 #   scripts/verify-android-variants.sh e2eEmulator     # just one
 #
 # Per APK it asserts:
-#   - the package name;
+#   - the package name, and that the manifest is not debuggable;
+#   - the app label: string/app_name, which the manifest's application label uses;
 #   - assets/index.android.bundle is present (JS bundled, no Metro);
 #   - the bundle carries exactly one E2E bundle marker, with the expected value.
 #     babel.config.js inlines E2E_BUNDLE_MARKER as one whole string literal
@@ -69,6 +70,27 @@ project_id() {
 
 manifest_tree() {
   "$AAPT2" dump xmltree --file AndroidManifest.xml "$1" 2>/dev/null
+}
+
+check_not_debuggable() {
+  if grep -q 'debuggable([^)]*)=true' <<<"$(manifest_tree "$1")"; then
+    fail "manifest is debuggable"
+  else
+    pass "manifest is not debuggable"
+  fi
+}
+
+# Asserts the application label is @string/app_name and that it reads <label>.
+check_label() {
+  local apk="$1" expected="$2" resources app_name_id label_ref value
+  resources="$("$AAPT2" dump resources "$apk" 2>/dev/null)"
+  app_name_id="$(awk '$1 == "resource" && $3 == "string/app_name" { print $2; exit }' <<<"$resources")"
+  label_ref="$(manifest_tree "$apk" | awk '/E: application/ { app = 1 }
+    app && /android:label\(/ { sub(/.*=@/, ""); print; exit }')"
+  expect "application label resource" "$label_ref" "${app_name_id:-<no string/app_name>}"
+  value="$(awk -v id="$app_name_id" '$1 == "resource" && $2 == id { getline; print; exit }' <<<"$resources" |
+    sed -n 's/.*"\(.*\)".*/\1/p')"
+  expect "app_name" "$value" "$expected"
 }
 
 check_bundle() {
@@ -134,9 +156,9 @@ check_emulator_cleartext() {
   expect "cleartext domains" "$domains" "10.0.2.2"
 }
 
-# verify <variant> <package> <project_id> <marker> <cleartext: emulator|none>
+# verify <variant> <package> <label> <project_id> <marker> <cleartext: emulator|none>
 verify() {
-  local variant="$1" package="$2" project="$3" marker="$4" cleartext="$5"
+  local variant="$1" package="$2" label="$3" project="$4" marker="$5" cleartext="$6"
   local apk
   apk="$APK_DIR/$variant/app-$variant.apk"
   echo "$variant ($apk)"
@@ -145,6 +167,8 @@ verify() {
     return
   fi
   expect "package" "$(package_name "$apk")" "$package"
+  check_not_debuggable "$apk"
+  check_label "$apk" "$label"
   check_bundle "$apk" "$marker"
   expect "google-services project_id" "$(project_id "$apk")" "$project"
   if [ "$cleartext" = emulator ]; then
@@ -160,13 +184,13 @@ VARIANTS=("$@")
 for v in "${VARIANTS[@]}"; do
   case "$v" in
     e2eEmulator)
-      verify e2eEmulator com.regroup.app.e2e.emu demo-regroup-e2e \
+      verify e2eEmulator com.regroup.app.e2e.emu "Regroup e2e emu" demo-regroup-e2e \
         regroup-e2e-variant=emulator emulator ;;
     e2eStaging)
-      verify e2eStaging com.regroup.app.e2e.stg regroup-e2e \
+      verify e2eStaging com.regroup.app.e2e.stg "Regroup e2e stg" regroup-e2e \
         regroup-e2e-variant=staging none ;;
     release)
-      verify release com.regroup.app phoenix-cleanhouse \
+      verify release com.regroup.app rats phoenix-cleanhouse \
         regroup-e2e-variant=none none ;;
     *)
       echo "unknown variant: $v (expected e2eEmulator, e2eStaging or release)" >&2

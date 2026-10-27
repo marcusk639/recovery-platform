@@ -26,6 +26,16 @@ npm run deploy:rules                  # firestore rules + storage ONLY
 npm run deploy:indexes                # indexes are NOT in deploy:rules
 ```
 
+## Android e2e build types
+
+```bash
+cd android && ./gradlew assembleE2eEmulator assembleE2eStaging assembleRelease
+../scripts/verify-android-variants.sh   # checks package, label, bundle marker, Firebase project, cleartext
+```
+
+- `e2eEmulator` (`com.regroup.app.e2e.emu`, project `demo-regroup-e2e`, committed config) and `e2eStaging` (`com.regroup.app.e2e.stg`, project `regroup-e2e`) are release builds signed with the debug key. Each bundle task sets `E2E_VARIANT` itself; release bundles run with it removed. Never put `E2E_VARIANT` in `.env` (babel.config.js refuses it).
+- `e2eStaging` copies its `google-services.json` from `~/.config/regroup-e2e/google-services.e2e-staging.json` and fails without it. So does `./gradlew assemble`, or any other task that covers all variants.
+
 ## Emulator-backed suites
 
 Both configs exist again (they were unrunnable: `regroup/.gitignore` ignored all

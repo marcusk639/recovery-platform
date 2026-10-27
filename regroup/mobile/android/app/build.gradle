@@ -169,12 +169,16 @@ android {
         e2eEmulator {
             initWith release
             applicationIdSuffix ".e2e.emu"
+            // Tells the three installed apps apart on a device.
+            resValue "string", "app_name", "Regroup e2e emu"
             signingConfig signingConfigs.debug
             matchingFallbacks = ['release']
         }
         e2eStaging {
             initWith release
             applicationIdSuffix ".e2e.stg"
+            // Tells the three installed apps apart on a device.
+            resValue "string", "app_name", "Regroup e2e stg"
             signingConfig signingConfigs.debug
             matchingFallbacks = ['release']
         }
@@ -207,9 +211,13 @@ android {
 }
 
 // E2E_VARIANT reaches babel.config.js only through the bundler's environment.
-// The React Native Gradle plugin (0.72) has no per-variant env setting, so each
-// e2e bundle task runs node through `env` with the variant set. It is a task
-// input, so changing it re-runs the bundle. Every other variant leaves it unset.
+// The React Native Gradle plugin (0.72) has no per-variant env setting, so every
+// bundled variant runs node through `env`: the e2e ones with E2E_VARIANT set to
+// their variant, every other one (release) with it removed, so a value exported
+// in the build shell (`E2E_VARIANT=emulator ./gradlew assembleRelease`) cannot
+// reach a store bundle. A value in .env is refused by babel.config.js itself.
+// It is a task input, so changing it re-runs the bundle. Debug variants have no
+// bundle task (Metro serves them).
 //
 // This must configure the task after the plugin's own register action, which
 // sets nodeExecutableAndArgs and would overwrite an earlier configureEach. The
@@ -217,12 +225,26 @@ android {
 // later, so it runs later, and tasks.named(...).configure then runs last.
 def e2eBundleVariants = [e2eEmulator: "emulator", e2eStaging: "staging"]
 androidComponents.onVariants(androidComponents.selector().all()) { variant ->
-    def e2eVariant = e2eBundleVariants[variant.name]
-    if (e2eVariant != null) {
-        tasks.named("createBundle${variant.name.capitalize()}JsAndAssets").configure { task ->
-            task.nodeExecutableAndArgs.set(["env", "E2E_VARIANT=${e2eVariant}".toString(), "node"])
-        }
+    def bundleTask = "createBundle${variant.name.capitalize()}JsAndAssets"
+    if (!tasks.names.contains(bundleTask)) {
+        return
     }
+    def e2eVariant = e2eBundleVariants[variant.name]
+    def node = e2eVariant != null ?
+        ["env", "E2E_VARIANT=${e2eVariant}".toString(), "node"] :
+        ["env", "-u", "E2E_VARIANT", "node"]
+    tasks.named(bundleTask).configure { task ->
+        task.nodeExecutableAndArgs.set(node)
+    }
+}
+
+// e2e builds never upload source maps to the production Sentry project (their
+// JS also has Sentry disabled; see src/config/sentry.ts). sentry.gradle sets
+// `enabled true` in its own register action, which can run after this, so
+// `enabled = false` does not stick; an onlyIf predicate is ANDed with Sentry's
+// own and holds whatever the order.
+tasks.matching { it.name ==~ /createBundleE2e.*_SentryUpload_.*/ }.configureEach {
+    onlyIf("e2e builds never upload to Sentry") { false }
 }
 
 // e2eStaging's Firebase config is for the real regroup-e2e project, so it stays

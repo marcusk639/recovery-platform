@@ -8,6 +8,7 @@ import * as Sentry from '@sentry/react-native';
 import { StripeProvider } from '@stripe/stripe-react-native';
 
 import { isStripeConfigured, stripePublishableKey } from './src/config/env';
+import { sentryOptions } from './src/config/sentry';
 import { logException } from './src/util/logging';
 
 // '' when unconfigured, which leaves StripeProvider inert and surfaces the
@@ -30,12 +31,8 @@ import {
   RootStackParamList,
   MainTabParamList,
 } from './src/navigation';
-// Initialize Sentry
-Sentry.init({
-  dsn: 'https://d785dae671464fc3a3a4464c5e7876cc@sentry.io/4306202',
-  environment: __DEV__ ? 'development' : 'production',
-  tracesSampleRate: 0.2,
-});
+// Initialize Sentry. Disabled in e2e builds; see src/config/sentry.ts.
+Sentry.init(sentryOptions());
 
 // Reported after Sentry.init, not beside the constant above: captureException
 // before init is dropped without trace, which is the failure mode this report

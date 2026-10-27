@@ -32,7 +32,17 @@ const isTest = process.env.NODE_ENV === 'test';
 if (!isTest) {
   // Loads .env into process.env so a local `npm run ios` picks the values up.
   // CI and fastlane export them directly, where there is no .env to read.
+  const variantBeforeDotenv = process.env.E2E_VARIANT;
   require('dotenv').config({ quiet: true });
+  // E2E_VARIANT is set per build by the Gradle e2e bundle tasks, never from a
+  // file: a line left in a developer's .env would make every bundle and every
+  // Metro session from that checkout an e2e build. dotenv never overrides an
+  // exported value, so a change here means .env supplied it.
+  if (process.env.E2E_VARIANT !== variantBeforeDotenv) {
+    throw new Error(
+      'E2E_VARIANT must not be set in .env; the e2e build types set it per build. Remove it from .env.',
+    );
+  }
 }
 
 // A mistyped E2E_VARIANT would bundle as a non-e2e build that a harness still

@@ -54,6 +54,16 @@ try {
 
 const problems = [];
 
+// babel.config.js inlines E2E_VARIANT into the bundle. Set in a release or
+// developer environment (an exported shell variable, or a line in .env), it
+// would turn that bundle into an e2e build. Only the Gradle e2e build types
+// set it, on their own bundle tasks.
+if (process.env.E2E_VARIANT !== undefined) {
+  problems.push(
+    'E2E_VARIANT is set; it must be unset outside the e2e build types (check your shell and .env)',
+  );
+}
+
 for (const { name, releaseOnly, validate } of REQUIRED) {
   if (releaseOnly && !RELEASE) {
     continue;
