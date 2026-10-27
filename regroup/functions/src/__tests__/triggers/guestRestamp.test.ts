@@ -46,3 +46,15 @@ describe('onGuestLinkedRestamp', () => {
     ).rejects.toThrow('aborted');
   });
 });
+
+describe('onGuestLinkedRestamp age cutoff (S1)', () => {
+  it('stops retrying an event older than RETRY_CUTOFF_MS', async () => {
+    (restampGuestActivities as jest.Mock).mockClear();
+    await trigger.handler({
+      time: new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString(),
+      params: { guestId: 'g1' },
+      data: { before: snap({ userId: 'x' }), after: snap({ userId: 'u' }) },
+    });
+    expect(restampGuestActivities).not.toHaveBeenCalled();
+  });
+});

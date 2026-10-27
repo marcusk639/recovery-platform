@@ -39,7 +39,7 @@
 import './scriptBootstrap';
 import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
-import { residentUidFrom } from '../activities/residentStamp';
+import { fillStamp, residentUidFrom } from '../activities/residentStamp';
 import { DECISIONS, disputeStamp, millisOf, outcomeOf } from '../activities/disputeDecisions';
 import { mirrorHouseDispute } from '../activities/houseDisputeMirror';
 
@@ -136,7 +136,7 @@ async function stamp(
       ) {
         return false;
       }
-      tx.update(ref, { residentUid });
+      tx.update(ref, residentUid ? fillStamp(residentUid) : { residentUid });
       return true;
     });
     if (!wrote) return;

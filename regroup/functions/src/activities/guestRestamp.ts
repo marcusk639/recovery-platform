@@ -1,22 +1,21 @@
 /**
- * Re-stamps `residentUid` on a guest's activities when the guest's account
- * (guests.userId) changes: linked to an account it had none for, or changed
- * to another one. Runs from the onGuestLinkedRestamp trigger.
+ * Fills `residentUid` on a guest's activities when the guest's account
+ * (guests.userId) is linked or changed. Runs from the onGuestLinkedRestamp
+ * trigger.
  *
- * The rules' owner rule trusts the stamp over the live guest doc, so a stamp
- * taken while the guest doc pointed elsewhere (a senior peer briefly setting
- * their own guest's userId to someone else, then logging an activity) must
- * not outlive the change back. Each activity is re-stamped from the guest
- * doc's CURRENT userId, in a transaction that re-reads both, so events that
- * arrive late or out of order converge on the current account. A cleared
- * userId stamps nothing (the stamp keeps the last known account).
+ * The stamp is immutable once set (see residentStamp): this only fills an
+ * activity whose stamp is absent or null (e.g. logged before the guest had an
+ * account), from the guest doc's CURRENT userId, in a transaction that
+ * re-reads both. A stamped activity is never touched, so pointing a guest doc
+ * at another account (or deleting and recreating it) moves no stamp. A
+ * cleared userId stamps nothing.
  *
- * Idempotent and retry-safe: only activities whose stamp differs are written.
- * The stamp is not part of a week summary's inputs, so this triggers no
- * recompute. Logs ids and counts only.
+ * Idempotent and retry-safe; activities that are already stamped are skipped
+ * without a transaction. The stamp is not part of a week summary's inputs, so
+ * this triggers no recompute. Logs ids and counts only.
  */
 import { logger } from 'firebase-functions';
-import { residentUidFrom } from './residentStamp';
+import { fillStamp, residentUidFrom } from './residentStamp';
 
 type Firestore = FirebaseFirestore.Firestore;
 type Data = Record<string, unknown>;
@@ -43,13 +42,16 @@ export async function restampGuestActivities(
     const page = await (last ? base.startAfter(last) : base).limit(pageSize).get();
     for (const doc of page.docs) {
       scanned++;
+      const existing = doc.data() as Data;
+      if (typeof existing.residentUid === 'string' && existing.residentUid !== '') continue;
       const wrote = await db.runTransaction(async (tx) => {
         const activity = await tx.get(doc.ref);
         const guest = await tx.get(guestRef);
         const uid = residentUidFrom(guest.exists ? (guest.data() as Data) : undefined);
         const data = activity.exists ? (activity.data() as Data) : undefined;
-        if (!uid || !data || data.guestId !== guestId || data.residentUid === uid) return false;
-        tx.update(doc.ref, { residentUid: uid });
+        const isStamped = typeof data?.residentUid === 'string' && data.residentUid !== '';
+        if (!uid || !data || data.guestId !== guestId || isStamped) return false;
+        tx.update(doc.ref, fillStamp(uid));
         return true;
       });
       if (wrote) stamped++;

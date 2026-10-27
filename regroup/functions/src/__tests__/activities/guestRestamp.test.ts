@@ -39,12 +39,15 @@ beforeEach(() => {
 afterEach(() => jest.restoreAllMocks());
 
 describe('restampGuestActivities', () => {
-  it("BREAK 1: re-stamps the guest's activities when the account changes back (x -> pl)", async () => {
-    const r = await restamp({ userId: 'x' }, { userId: 'pl' });
-    expect(r).toEqual({ scanned: 3, stamped: 2 });
+  it('A: an account change never moves a stamp; it only fills an empty one', async () => {
+    // probe7 A: S points their own guest doc at a decoy (or deletes and
+    // recreates it): the stamp on their activity must stay S.
+    db.seed('guests', 'gpl', { houseId: 'h1', userId: 'decoy' });
+    const r = await restamp({ userId: 'pl' }, { userId: 'decoy' });
+    expect(r).toEqual({ scanned: 3, stamped: 1 });
     expect(['c1', 'c2', 'c3'].map((id) => db.read('activities', id)!.residentUid)).toEqual([
-      'pl',
-      'pl',
+      'x',
+      'decoy',
       'pl',
     ]);
     expect(db.read('activities', 'other')!.residentUid).toBe('x');
@@ -59,7 +62,8 @@ describe('restampGuestActivities', () => {
     // The x -> pl event is processed after a later pl -> y change.
     db.seed('guests', 'gpl', { houseId: 'h1', userId: 'y' });
     await restamp({ userId: 'x' }, { userId: 'pl' });
-    expect(db.read('activities', 'c1')!.residentUid).toBe('y');
+    expect(db.read('activities', 'c2')!.residentUid).toBe('y');
+    expect(db.read('activities', 'c1')!.residentUid).toBe('x');
   });
 
   it('does nothing when the account did not change, or was cleared; is idempotent; logs ids only', async () => {

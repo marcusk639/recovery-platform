@@ -160,6 +160,14 @@ export class FakeFirestore {
         if (options?.readOnly) throw new Error('write in a read-only transaction');
         staged.push({ collection: ref.colName, id: ref.id, data });
       },
+      /** Like the Admin SDK: the transaction fails with ALREADY_EXISTS (6) if the doc exists. */
+      create: (ref: { colName: string; id: string }, data: Data) => {
+        if (options?.readOnly) throw new Error('write in a read-only transaction');
+        if (this.col(ref.colName).has(ref.id)) {
+          throw Object.assign(new Error('already exists'), { code: 6 });
+        }
+        staged.push({ collection: ref.colName, id: ref.id, data });
+      },
       /** Dotted field paths; FieldValue.delete() removes the field. */
       update: (ref: { colName: string; id: string }, data: Data) => {
         if (options?.readOnly) throw new Error('write in a read-only transaction');

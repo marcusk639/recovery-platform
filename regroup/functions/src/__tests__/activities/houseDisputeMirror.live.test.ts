@@ -154,7 +154,7 @@ describe('the trusted archive', () => {
     commit({ ...approved, disputeResolvedAt: T1 });
     await deliver(disputed, { ...approved, disputeResolvedAt: T1 });
     const trusted = [...(db.collections.get('dispute-archive') ?? new Map()).keys()];
-    expect(trusted).toEqual([`a1_${disputeStamp(disputed)}_decided_${T1.toMillis()}`]);
+    expect(trusted).toEqual([`a1_decided_${T1.toMillis()}`]);
     expect(db.collections.get('disputes')?.size ?? 0).toBe(0);
   });
 });

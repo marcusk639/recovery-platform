@@ -68,7 +68,7 @@ describe('entering a dispute', () => {
     expect(house().disputes.a1.createdAt).toBe(NOW);
   });
 
-  it("adds nothing when an older build's uuid-keyed entry for the activity exists", async () => {
+  it("replaces an older build's uuid-keyed entry with the server's own (its content is not trusted)", async () => {
     house().disputes['0b7c-uuid'] = {
       id: '0b7c-uuid',
       activityId: 'a1',
@@ -76,8 +76,9 @@ describe('entering a dispute', () => {
       message: 'Kitchen not cleaned', // older builds stored the reason as message
     };
     commit(disputed);
-    expect(await deliver(active, disputed)).toMatchObject({ added: 0, removed: 0 });
-    expect(house().disputes.a1).toBeUndefined();
+    expect(await deliver(active, disputed)).toMatchObject({ added: 1, removed: 1 });
+    expect(house().disputes['0b7c-uuid']).toBeUndefined();
+    expect(house().disputes.a1).toMatchObject({ disputedBy: 'peer-uid', status: 'pending' });
   });
 
   it("uses the guest doc's house, not the activity's", async () => {
@@ -121,7 +122,7 @@ describe('leaving a dispute', () => {
     ['approved', approved],
     ['rejected', rejected],
     ['deleted', { ...disputed, status: 'deleted' }],
-  ])('removes every entry for the activity and archives it as %s', async (outcome, after) => {
+  ])('removes every entry for the activity and archives the decision once, as %s', async (outcome, after) => {
     commit(after);
     const r = await deliver(disputed, after);
 
@@ -132,7 +133,8 @@ describe('leaving a dispute', () => {
       resolutionMessage: outcome,
       houseId: 'h1',
     });
-    expect(archiveOf('0b7c1a2e-uuid_decided_')).toMatchObject({ resolutionMessage: outcome });
+    // The legacy uuid entry is deleted, never archived (its content is not trusted).
+    expect(archives().map(([id]) => id.split('_')[0])).toEqual(['a1']);
   });
 
   it('handles a hard delete of the activity', async () => {
@@ -237,7 +239,8 @@ describe('each entry belongs to one dispute (a legacy restore, then a re-dispute
     const ofA = archives()
       .map(([, v]) => v)
       .filter((v: any) => v.message === 'A says');
-    expect(ofA).toContainEqual(expect.objectContaining({ resolutionMessage: 'superseded' }));
+    // #1 is archived once, from its own decision (no 'superseded' copy).
+    expect(ofA).toHaveLength(1);
     expect(ofA).toContainEqual(
       expect.objectContaining({
         resolutionMessage: 'rejected',

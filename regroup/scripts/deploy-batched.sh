@@ -1,5 +1,9 @@
 #!/bin/bash
-set -e
+# Deploys the functions listed below in batches of five. It does NOT cover
+# every exported function (see docs/launch-readiness/plan-regroup-functions-
+# 2026-10-19.md, item 7): for a full deploy use `firebase deploy --only
+# functions` from regroup/. Stops at the first failed batch and exits non-zero.
+set -euo pipefail
 
 # Navigate to project root (parent of scripts/) so firebase.json is found
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -16,11 +20,11 @@ ALL_FUNCTIONS=(
   connectStripeAccount disconnectStripeAccount getStripeAccountStatus
   createOperatorSubscription reactivateOperatorSubscription cancelUserSubscription
   updateSubscriptionGuests updateSubscriptionHouses
-  sendInviteEmails sendConfirmationEmail
+  sendConfirmationEmail
   stripeConnectReauth stripeConnectReturn universal
   notify notifyNewHouseCreated sendContactEmail sendSubscriptionUpdateEmail
   reportBug submitFeedback
-  onGuestWrite onActivityWritten
+  onGuestWrite onActivityWritten onGuestLinkedRestamp onHouseDeleted
   updateDisputes warmWebsite officerTermReminder weeklyTransfers
 )
 
@@ -37,9 +41,14 @@ for ((i=0; i<TOTAL; i+=BATCH_SIZE)); do
 
   echo ""
   echo "=== Batch $BATCH_NUM / $TOTAL_BATCHES: ${batch[*]} ==="
-  firebase deploy --only "$only_arg" && echo "=== Batch $BATCH_NUM complete ===" || echo "⚠  Batch $BATCH_NUM had errors — continuing"
+  if ! firebase deploy --only "$only_arg"; then
+    echo "✖  Batch $BATCH_NUM / $TOTAL_BATCHES failed: ${batch[*]}" >&2
+    echo "   Later batches were NOT deployed. Fix the error and re-run." >&2
+    exit 1
+  fi
+  echo "=== Batch $BATCH_NUM complete ==="
   sleep 2
 done
 
 echo ""
-echo "All batches attempted."
+echo "All $TOTAL_BATCHES batches deployed."
