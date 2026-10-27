@@ -31,6 +31,9 @@ export function printRoleReport(report: RoleBackfillReport, apply: boolean): voi
   console.log(`Existing records left alone: ${report.existing}`);
   console.log(`Redeemed invitations marked completed: ${report.invitationsStamped}`);
   console.log(`Records ${apply ? 'stamped' : 'to stamp'} with houseId: ${report.houseIdsToStamp}`);
+  console.log(
+    `Recent callable grants left to the stale pass of a later run: ${report.recentSkipped}`,
+  );
   rows(
     `Primary owners ${apply ? 'written' : 'to write'} (evidence agrees, or --primary):`,
     report.owners,
@@ -74,9 +77,13 @@ export function printRoleReport(report: RoleBackfillReport, apply: boolean): voi
   if (!apply) console.log('\nNothing was written. Re-run with --apply to commit.');
 }
 
-/** 2: claims lookups failed (re-run); 3: houses or primaries need the owner; else 0. */
+/**
+ * 2: claims lookups failed (re-run); 3: houses or primaries need the owner
+ * (listed, contradicted or unverifiable); else 0.
+ */
 export function exitCodeFor(report: RoleBackfillReport): number {
   if (report.lookupFailed.length > 0) return 2;
-  if (report.ownerReview.length > 0 || report.primaryContradicted.length > 0) return 3;
+  const owner = [report.ownerReview, report.primaryContradicted, report.primaryUnverifiable];
+  if (owner.some((rows) => rows.length > 0)) return 3;
   return 0;
 }

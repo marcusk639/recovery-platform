@@ -1,7 +1,6 @@
 /**
  * Backfill of server-only role records (util/houseRoles). Dry run is the
- * DEFAULT; writing requires --apply. Run it BEFORE the functions deploy
- * (the old code never reads house-roles) and again right after it.
+ * DEFAULT; writing requires --apply. Deploy order: functions/CLAUDE.md.
  *
  *   # rehearse on the emulators (both hosts, or the script refuses)
  *   FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 \
@@ -14,9 +13,8 @@
  *  0. Every record gets its houseId field.
  *  1. Owners: see scripts/backfillHouseOwners (evidence, --primary
  *     houseId=uid, re-checks). A house never gets a second primary.
- *  2. Invitations: every redeemed invitation without grantCompletedAt gets
- *     one (= redeemedAt), so an old token can never regrant (the redeem
- *     treats a redeemed invitation without grantPending as completed anyway).
+ *  2. Invitations: a redeemed invitation without grantCompletedAt gets one
+ *     (= redeemedAt), so an old token can never regrant.
  *  3. Staff claims, per (account, house) with no record yet:
  *       superAdmin claim -> owner (a co-owner, not primary)
  *       manager ONLY when unambiguous: admin claim, never any guest doc in
@@ -27,16 +25,15 @@
  *         with the reason (every staff-not-resident row included).
  *  4. Stale records: a record whose claims are gone (a departure or removal
  *     done by the old code between runs), checked against the account's
- *     claims re-read just before (lookup errors skip the record; records
- *     granted in the 10 minutes before the run, or after it started, are
- *     skipped: a grant writes the record before the claims), is lowered or
- *     removed:
+ *     claims re-read just before (lookup errors skip the record; records a
+ *     callable granted in the 10 minutes before the run, or after it
+ *     started, are skipped and counted: a grant writes the record before the
+ *     claims; backfill-written records are never skipped), is lowered or removed:
  *     co-owner without superAdmin -> manager (admin) / resident (guest) /
  *     none; manager or peer leader without admin -> resident (guest) / none;
  *     resident without guest -> none. Primary owner records are kept.
- * Existing records are never raised by the backfill, and a record created
- * meanwhile wins (create races are skipped). The review list starts with
- * has-guest-doc and active-resident-isAdmin rows. Output is ids, tiers, reasons.
+ * Records are never raised; a record created meanwhile wins. The review list
+ * starts with resident-staff rows. Output is ids, tiers, reasons.
  */
 import './scriptBootstrap';
 import * as admin from 'firebase-admin';
@@ -86,6 +83,8 @@ export interface RoleBackfillReport {
   houseIdsToStamp: number;
   /** Records the stale pass skipped because the claims lookup failed. */
   lookupFailed: RoleBackfillRow[];
+  /** Callable grants too recent for the stale pass (claims may be in flight). */
+  recentSkipped: number;
 }
 
 const has = (c: Claims | undefined, role: string, houseId: string) =>
@@ -114,6 +113,7 @@ export async function backfillHouseRoles(
     primaryUnverifiable: [],
     houseIdsToStamp: 0,
     lookupFailed: [],
+    recentSkipped: 0,
   };
   const now = (opts.now ?? new Date()).toISOString();
   const recentCutoff = new Date(Date.parse(now) - RECENT_GRANT_MS).toISOString();
@@ -145,7 +145,7 @@ export async function backfillHouseRoles(
     const r = d.data() ?? {};
     if (r.primary === true) {
       const h = houseOf(d.id);
-      const p = { uid: d.id.slice(h.length + 1), chosen: r.chosen === true };
+      const p = { uid: d.id.slice(h.length + 1), chosen: r.chosen === true, tier: r.tier };
       primaries.set(h, [...(primaries.get(h) ?? []), p]);
     }
     if (r.houseId === houseOf(d.id)) continue;
@@ -231,8 +231,9 @@ export async function backfillHouseRoles(
     const i = d.id.lastIndexOf('_');
     const houseId = d.id.slice(0, i);
     const uid = d.id.slice(i + 1);
-    // A grant may have written its record but not yet its claims: skip it.
-    if (typeof r.grantedAt === 'string' && r.grantedAt > recentCutoff) continue;
+    // A callable grant may have written its record but not yet its claims.
+    const recent = typeof r.grantedAt === 'string' && r.grantedAt > recentCutoff;
+    if (r.via !== 'backfill' && recent && ++report.recentSkipped) continue;
     // Re-read this account's live claims right before acting, so a grant made
     // since the listing is never deleted; an unexpected error skips the record.
     let c: Claims;

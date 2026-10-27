@@ -137,6 +137,7 @@ export async function housesCheckingChoices(
 export interface PrimaryRecord {
   uid: string;
   chosen: boolean;
+  tier?: unknown;
 }
 
 export async function primaryOwnerPass(
@@ -166,20 +167,23 @@ export async function primaryOwnerPass(
       if (existing.length > 1) contradicted('several primary records');
       else if (choice && choice !== existing[0].uid) {
         contradicted(`owner chose ${choice}; remove the existing record first`);
+      } else if (choice && !existing[0].chosen && existing[0].tier !== 'owner') {
+        contradicted(`malformed primary record (tier ${String(existing[0].tier)}); fix it by hand`);
       } else if (choice && !existing[0].chosen) {
         // The owner confirms the existing record: mark it chosen (settled).
+        // Not transactional: a record deleted since the listing is reported.
         const { chosen, chosenAt } = ctx.record(houseId, true);
-        report.owners.push({
-          uid: choice,
-          houseId,
-          tier: 'owner',
-          reason: 'owner-chose (--primary): existing record',
-        });
-        if (ctx.apply) {
-          await db
-            .collection('house-roles')
-            .doc(`${houseId}_${choice}`)
-            .update({ chosen, chosenAt });
+        const ref = db.collection('house-roles').doc(`${houseId}_${choice}`);
+        try {
+          if (ctx.apply) await ref.update({ chosen, chosenAt });
+          report.owners.push({
+            uid: choice,
+            houseId,
+            tier: 'owner',
+            reason: 'owner-chose (--primary): existing record',
+          });
+        } catch {
+          contradicted('the primary record changed during the run; re-run');
         }
       } else if (choice || existing[0].chosen || found.uid === existing[0].uid) continue;
       else if (found.uid) contradicted(`evidence names ${found.uid}`);

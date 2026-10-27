@@ -164,7 +164,7 @@ it('a createHouses primary the evidence cannot confirm (its claim grant failed) 
   expect(report.primaryUnverifiable).toEqual([
     { houseId: H, uid: 'owner', reason: expect.stringMatching(/no superAdmin claim/) },
   ]);
-  expect(exitCodeFor(report)).toBe(0);
+  expect(exitCodeFor(report)).toBe(3); // round 9 S-3: a review needs the owner
   const log = jest.spyOn(console, 'log').mockImplementation(() => undefined);
   printRoleReport(report, false);
   const out = log.mock.calls.map((c) => String(c[0])).join('\n');
