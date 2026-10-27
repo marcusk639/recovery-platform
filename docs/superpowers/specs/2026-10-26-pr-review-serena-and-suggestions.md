@@ -130,7 +130,7 @@ The Review step allows `Bash(gh pr diff:*)`, `Bash(gh pr view:*)` and the exact 
   - **Source:** the body comes only from `<OUT>/reply.md`, which must be a regular file (not a symlink) of at most 4,000 bytes. So the model can't post a file it names. `gh pr comment --body-file .git/config` would have posted the app token; with the wrapper, the model's own file access, `Read` and its denies, bounds what can end up in a reply.
   - **Content:** the text must start with `pr-review:` and contain no HTML comment or control characters. It is refused, not redacted, if `redact()` would change it, or if it names a security finding's slug or file (current `findings.json`, including class-forced security findings). The reply is refused until `findings.json` exists and is valid.
   - **Limits:** one reply per run, through an exclusive lock in `$RUNNER_TEMP` claimed before posting. The posted comment ends with `<!-- pr-review:reply -->`, so Publish never mistakes it for the summary.
-- **Residual risk:** a prompt-injected run can still post one reply of its choosing to this PR, but only text that passes these checks. Prior security files from earlier runs (keyed `fileIds`) aren't checked, because the ID key is Publish-only.
+- **Residual risk:** a prompt-injected run can still post one reply of its choosing to this PR, but only text that passes these checks. Prior security files from earlier runs exist only as keyed `fileIds`, and the ID key is Publish-only, so `reply.mjs` can't test a path against them. Instead, while facts' snapshot (`STATE_FILE`) holds any security entry, or the snapshot or the prior state can't be read, it refuses a reply that names any file (a path, or a basename with a code or config extension).
 
 ## 5. Measurement and rollout
 

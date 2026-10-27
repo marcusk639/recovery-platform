@@ -76,6 +76,14 @@ follow links in priority order.
 
 ---
 
+## I'm working on CI or the automated PR review
+
+| What you need to know                          | Read                                       |
+| ---------------------------------------------- | ------------------------------------------ |
+| How the PR review bot works, module by module  | [docs/ci/pr-review.md](ci/pr-review.md)    |
+
+---
+
 ## Product Quick Links
 
 | Product                            | Docs root                                                         | Serves                                      |

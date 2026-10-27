@@ -55,8 +55,9 @@ private, redacts secrets, and can retract its own comments.
   - After `findings.json` is written, write the answer to `<OUT>/reply.md`, then run exactly
     `node .review-base/.claude/pr-review/checks/reply.mjs`, with no arguments.
   - It posts `reply.md` to this PR once. It refuses a text that doesn't start with `pr-review:`, contains
-    an HTML comment or a secret-shaped value, or names a security finding's slug or file. A second call
-    in the same run is also refused.
+    an HTML comment or a secret-shaped value, or names a security finding's slug or file. While the ledger in
+    `state.json` holds any security entry (or the prior state could not be read), it also refuses a text
+    that names any file, so describe the code without a path. A second call in the same run is also refused.
   - The answer holds no findings, severities, security-relevant detail, secrets or PII.
 
   If there is no such question, don't write `reply.md`.

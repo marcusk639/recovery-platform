@@ -4,12 +4,13 @@
 // the body only from <OUT>/reply.md (a regular file, never a symlink), so the model cannot
 // post a file it names (gh pr comment --body-file .git/config would have). The text is
 // refused, never rewritten, if it is secret-shaped or names a security finding's file or
-// slug. Reasons carry no reply text.
+// slug, or names any file while an earlier run's security finding may apply. Reasons carry no
+// reply text.
 import { lstatSync, readFileSync, openSync, closeSync } from 'node:fs';
 import { join } from 'node:path';
 import { redact } from './redact.mjs';
 import { validateFindings, isForcedSecurity } from './findings.mjs';
-import { securityNeedles, mentions } from './needles.mjs';
+import { securityNeedles, mentions, pathTokens } from './needles.mjs';
 
 export const REPLY_MARKER = '<!-- pr-review:reply -->';
 export const REPLY_PREFIX = 'pr-review:';
@@ -65,6 +66,26 @@ function textProblem(text) {
   return null;
 }
 
+// Earlier runs' security files are in the ledger only as keyed fileIds, and the key is
+// Publish-only, so no path can be tested against them here. While facts' snapshot holds a
+// security entry (any status: Publish keeps withholding its files), or the snapshot or the
+// prior state cannot be read, a reply may name no file at all.
+const FILE_EXT = new Set(['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'json', 'rules', 'yml', 'yaml', 'md', 'mdx', 'sh', 'py', 'rb', 'swift', 'm', 'mm', 'h', 'kt', 'java', 'gradle', 'plist', 'xml', 'html', 'css', 'scss', 'env', 'lock', 'toml', 'txt', 'sql', 'pem']);
+const namesFile = (p) => p.parts.length > 1 || FILE_EXT.has(String(p.parts.at(-1) ?? '').split('.').slice(1).pop() ?? '');
+
+function priorSecurityMayApply(env, fs) {
+  if (!env.STATE_FILE) return true;
+  const r = readRegular(env.STATE_FILE, 5_000_000, 'state file', fs);
+  if (r.error) return true;
+  try {
+    const s = JSON.parse(r.text);
+    if (!s || typeof s !== 'object' || Array.isArray(s) || s.priorUnavailable === true || !Array.isArray(s.ledger)) return true;
+    return s.ledger.some((e) => e && typeof e === 'object' && e.security === true);
+  } catch {
+    return true;
+  }
+}
+
 function securityProblem(text, findings) {
   const sec = findings.filter((f) => f?.security || isForcedSecurity(f?.class, f?.slug));
   if (sec.some((f) => typeof f.slug === 'string' && f.slug && text.includes(f.slug))) {
@@ -75,7 +96,7 @@ function securityProblem(text, findings) {
   return null;
 }
 
-// deps: argv (must be empty), env (OUT, RUNNER_TEMP, GITHUB_EVENT_PATH), request(method, path,
+// deps: argv (must be empty), env (OUT, RUNNER_TEMP, GITHUB_EVENT_PATH, STATE_FILE), request(method, path,
 // body), fs (optional, for tests). Returns { posted, reason }; never throws for bad input.
 export async function runReply({ argv = [], env = {}, request, fs = { lstatSync, readFileSync, openSync, closeSync } }) {
   if (argv.length) return refuse('arguments are not accepted; write the text to <OUT>/reply.md');
@@ -96,6 +117,9 @@ export async function runReply({ argv = [], env = {}, request, fs = { lstatSync,
   if (!parsed.ok) return refuse('findings.json is not valid; write it before replying');
   const sec = securityProblem(text, parsed.value.findings);
   if (sec) return refuse(sec);
+  if (pathTokens(text).some(namesFile) && priorSecurityMayApply(env, fs)) {
+    return refuse('reply names a file while an earlier security finding may apply; describe it without a path');
+  }
 
   // One reply per run, claimed before posting so a failed or repeated call cannot post twice.
   try {
