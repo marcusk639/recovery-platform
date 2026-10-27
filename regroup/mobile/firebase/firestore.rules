@@ -240,7 +240,23 @@ service cloud.firestore {
       //    self-writes.
       //
       // See .full-review/02-security-performance.md [S1] for the threat model.
+      // userId says whose record this is: activities, disputes and claims
+      // trust it. It is immutable once set, for every client. An admin may
+      // set it only on a doc that has none (linking an intake record to an
+      // account), and never to their own uid. Audit (PR #145): the app's
+      // only client writer is mapUserToGuest (SignUp self-create, and
+      // NewAccountForm's self-update re-writing the same uid); full-doc
+      // admin writes re-send the existing value.
+      function userIdUnchangedOrLinked() {
+        let before = resource.data.get('userId', '');
+        let after = request.resource.data.get('userId', '');
+        return after == before ||
+          (before == '' && after is string && after != request.auth.uid &&
+           isAdmin([resource.data.houseId]));
+      }
+
       allow update: if
+        userIdUnchangedOrLinked() &&
         request.resource.data.get('createdBy', null) == resource.data.get('createdBy', null) &&
         (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['updatedBy']) ||
          request.resource.data.updatedBy == request.auth.uid) && (
