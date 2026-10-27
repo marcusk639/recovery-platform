@@ -35,6 +35,7 @@ cd android && ./gradlew assembleE2eEmulator assembleE2eStaging assembleRelease
 
 - `e2eEmulator` (`com.regroup.app.e2e.emu`, project `demo-regroup-e2e`, committed config) and `e2eStaging` (`com.regroup.app.e2e.stg`, project `regroup-e2e`) are release builds signed with the debug key. Each bundle task sets `E2E_VARIANT` itself; release bundles run with it removed. Never put `E2E_VARIANT` in `.env` (babel.config.js refuses it).
 - `e2eStaging` copies its `google-services.json` from `~/.config/regroup-e2e/google-services.e2e-staging.json` and fails without it. So does `./gradlew assemble`, or any other task that covers all variants.
+- iOS: the configurations `E2EEmulator` (`com.rats.dev.e2e.emu`) and `E2EStaging` (`com.rats.dev.e2e.stg`), schemes `rats-e2e-emulator` / `rats-e2e-staging`; check builds with `scripts/verify-ios-variants.sh`. On iOS the emulator variant means the `E2EEmulator` configuration: `react-native-launch-arguments` is linked only into the e2e configurations (`react-native.config.js`), so a Debug build served by a Metro started with `E2E_VARIANT` fails with that module's LINKING_ERROR. `E2EStaging` copies `~/.config/regroup-e2e/GoogleService-Info.e2e-staging.plist` and fails without it.
 
 ## Emulator-backed suites
 

@@ -27,8 +27,12 @@
 #   - ATS: only E2EEmulator sets NSAllowsLocalNetworking, and no app sets
 #     NSAllowsArbitraryLoads;
 #   - react-native-launch-arguments is linked into the e2e apps only;
-#   - e2e builds: the build log shows both Sentry phases skipping and no
-#     sentry-cli upload output.
+#   - Crashlytics auto collection: Info.plist sets
+#     rnfirebase_crashlytics_auto_collection_enabled to false in the e2e apps
+#     only;
+#   - e2e builds: the build log shows both Sentry phases skipping for the
+#     reason "E2E configuration <configuration>" (not merely skipping, e.g.
+#     for want of sentry.properties) and no sentry-cli upload output.
 #
 # Exits non-zero if any assertion fails or an app or log is missing.
 set -uo pipefail
@@ -118,27 +122,28 @@ check_launch_arguments() {
   expect "react-native-launch-arguments native module" "$state" "$expected"
 }
 
-# The Sentry phases echo these lines when they skip; sentry-cli's own output
-# appears only when it actually runs.
-SENTRY_SKIP_BUNDLE='Sentry: source map upload skipped'
-SENTRY_SKIP_DSYM='Sentry: debug-files upload skipped'
+# The Sentry phases echo these lines when they skip, with the reason in
+# parentheses; sentry-cli's own output appears only when it actually runs.
 SENTRY_CLI_OUTPUT='Processing react-native sourcemaps|sentry-cli react-native xcode|Found [0-9]+ debug information files?|Uploading debug|> Uploading|sentry-cli.*error'
 
+# check_sentry_skipped <log> <configuration>
 check_sentry_skipped() {
-  local log="$1"
+  local log="$1" reason="(E2E configuration $2)" bundle_line dsym_line
+  bundle_line="Sentry: source map upload skipped $reason"
+  dsym_line="Sentry: debug-files upload skipped $reason"
   if [ ! -f "$log" ]; then
     fail "build log $log missing"
     return
   fi
-  if grep -q "$SENTRY_SKIP_BUNDLE" "$log"; then
-    pass "log: bundle phase skipped Sentry source map upload"
+  if grep -F -q "$bundle_line" "$log"; then
+    pass "log: $bundle_line"
   else
-    fail "log: no '$SENTRY_SKIP_BUNDLE' line"
+    fail "log: no '$bundle_line' line"
   fi
-  if grep -q "$SENTRY_SKIP_DSYM" "$log"; then
-    pass "log: Sentry debug-files phase skipped"
+  if grep -F -q "$dsym_line" "$log"; then
+    pass "log: $dsym_line"
   else
-    fail "log: no '$SENTRY_SKIP_DSYM' line"
+    fail "log: no '$dsym_line' line"
   fi
   # `export` lines are the phase environment dump, not sentry-cli output.
   if grep -v '^ *export ' "$log" | grep -E -q "$SENTRY_CLI_OUTPUT"; then
@@ -152,7 +157,7 @@ check_sentry_skipped() {
 #        <local networking: true|absent> <launch arguments: linked|absent>
 verify() {
   local config="$1" bundle_id="$2" display_name="$3" project="$4" marker="$5"
-  local ats="$6" launch_args="$7" app
+  local ats="$6" launch_args="$7" app crashlytics actual
   app="$DERIVED_DATA/Build/Products/$config-iphonesimulator/rats.app"
   echo "$config ($app)"
   if [ ! -d "$app" ]; then
@@ -166,7 +171,13 @@ verify() {
   check_ats "$app" "$ats"
   check_launch_arguments "$app" "$launch_args"
   case "$config" in
-    E2E*) check_sentry_skipped "$LOG_DIR/$config.log" ;;
+    E2E*) crashlytics=false ;;
+    *) crashlytics=absent ;;
+  esac
+  actual="$(plist_value "$app/Info.plist" rnfirebase_crashlytics_auto_collection_enabled)"
+  expect "Info.plist rnfirebase_crashlytics_auto_collection_enabled" "${actual:-absent}" "$crashlytics"
+  case "$config" in
+    E2E*) check_sentry_skipped "$LOG_DIR/$config.log" "$config" ;;
   esac
 }
 

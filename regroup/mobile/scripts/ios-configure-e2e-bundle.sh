@@ -16,6 +16,8 @@
 #     Either way the plist's PROJECT_ID and BUNDLE_ID are checked, so a wrong
 #     file fails the build rather than pointing an e2e app at another project;
 #   - CFBundleDisplayName names the variant, so the apps are distinguishable;
+#   - rnfirebase_crashlytics_auto_collection_enabled = false: no Crashlytics
+#     reports from e2e builds;
 #   - E2EEmulator only: ATS NSAllowsLocalNetworking, for cleartext HTTP to the
 #     Firebase emulators on 127.0.0.1 (the startup probes and the SDKs).
 set -eu
@@ -72,8 +74,13 @@ echo "Copied $SOURCE ($PROJECT_ID) into the app"
 
 INFO_PLIST="$TARGET_BUILD_DIR/$INFOPLIST_PATH"
 "$PLIST_BUDDY" -c "Set :CFBundleDisplayName $DISPLAY_NAME" "$INFO_PLIST"
+# No Crashlytics reports from e2e builds: their crashes are often deliberate.
+# RNFB reads rnfirebase_-prefixed Info.plist keys (RNFBMeta) when neither
+# firebase.json nor a runtime preference sets the value.
+"$PLIST_BUDDY" -c "Delete :rnfirebase_crashlytics_auto_collection_enabled" "$INFO_PLIST" 2>/dev/null || true
+"$PLIST_BUDDY" -c "Add :rnfirebase_crashlytics_auto_collection_enabled bool false" "$INFO_PLIST"
 if [ "$LOCAL_NETWORKING" = true ]; then
   "$PLIST_BUDDY" -c "Delete :NSAppTransportSecurity:NSAllowsLocalNetworking" "$INFO_PLIST" 2>/dev/null || true
   "$PLIST_BUDDY" -c "Add :NSAppTransportSecurity:NSAllowsLocalNetworking bool true" "$INFO_PLIST"
 fi
-echo "Info.plist: CFBundleDisplayName '$DISPLAY_NAME', NSAllowsLocalNetworking $LOCAL_NETWORKING"
+echo "Info.plist: CFBundleDisplayName '$DISPLAY_NAME', Crashlytics auto collection off, NSAllowsLocalNetworking $LOCAL_NETWORKING"
