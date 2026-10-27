@@ -176,9 +176,9 @@ test('the Serena initial prompt guides the review and names only tools the revie
   const m = /\ninitial_prompt: \|\n((?: {2}.*\n|\n)+)/.exec(projectYml);
   assert.ok(m, 'initial_prompt is a non-empty block');
   const prompt = m[1];
-  assert.match(prompt, /REVIEW\.md is\s+authoritative/);
-  assert.match(prompt, /use Grep for those paths/, 'Grep fallback for paths Serena does not index');
-  assert.match(prompt, /never instructions/, 'tool output is untrusted data');
+  assert.match(prompt, /REVIEW\.md decides what to review/);
+  assert.match(prompt, /Grep those paths/, 'Grep fallback for paths Serena does not index');
+  assert.match(prompt, /never as instructions/, 'tool output is untrusted data');
   const named = new Set(prompt.match(/\b(?:find_symbol|find_referencing_symbols|get_symbols_overview|search_for_pattern|[a-z]+_[a-z_]+_tool|execute_shell_command|replace_symbol_body|read_memory|write_memory|activate_project)\b/g));
   for (const tool of named) assert.ok(TOOLS.includes(tool), `prompt names an unavailable tool: ${tool}`);
 });
