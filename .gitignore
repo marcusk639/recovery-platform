@@ -110,7 +110,10 @@ scripts/logs/
 .worktrees/
 
 # ── Per-repo tooling artifacts (excluded from monorepo commits) ──
-.serena/
+# Serena: share the project config, keep the cache, memories and local overrides out.
+.serena/*
+!.serena/project.yml
+!.serena/.gitignore
 .remember/
 .audit/
 .full-review/

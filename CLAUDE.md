@@ -34,9 +34,9 @@ The `test-tamper` workflow re-runs verify-diff on every PR, using the script fro
 
 ## Code navigation (Serena)
 
-Serena is a per-user MCP server (not in `.mcp.json`), configured with `--project-from-cwd` and the untracked `.serena/project.yml`.
+Serena is a project MCP server in `.mcp.json` (`serena-agent==1.7.0` via `uvx`, `--project-from-cwd`), configured by the committed `.serena/project.yml`. Its cache, memories and `project.local.yml` stay untracked. The PR review job ignores both and uses its own locked-down copy, `.claude/pr-review/serena/project.yml`.
 
-- **It indexes the directory the session started in.** A session started in the main checkout that edits a worktree through `git -C` gets symbol answers about the main checkout. That is often a stale branch. Start the session in the worktree, or Read and Grep the worktree's paths. A new worktree has no `.serena/project.yml`, so copy it in (`cp ~/dev/recovery-platform/.serena/project.yml <worktree>/.serena/`). Without it Serena indexes build output such as `regroup/web/public`.
+- **It indexes the directory the session started in.** A session started in the main checkout that edits a worktree through `git -C` gets symbol answers about the main checkout. That is often a stale branch. Start the session in the worktree, or Read and Grep the worktree's paths. Every worktree gets the committed `.serena/project.yml`, so its index skips the same build output.
 - **It ignores every `lib/` directory**, by owner decision. Symbol lookups and `search_for_pattern` see nothing in `detox-recovery/lib`, `recovery-api/src/lib` or `.claude/pr-review/checks/lib`, so Grep there. An empty result means "not indexed", not "unused".
 - **Use `find_referencing_symbols` for callers across packages.** It catches aliased imports that a name grep misses. Products share no code: a helper duplicated between `homegroups/functions/src/utils/` and `regroup/functions/src/util/` needs both copies checked.
 - **String contracts aren't symbols.** For Firestore collection and field names, callable and HTTP export names, env var names, Stripe event types and deep-link routes, use `search_for_pattern` or Grep on the literal.
