@@ -12,7 +12,7 @@ import { SUMMARY_MARKER } from '../lib/markers.mjs';
 const FAKE_SK = 'sk' + '_live_' + 'A'.repeat(20);
 const SEC_FILE = 'regroup/functions/src/callable/payments.ts';
 
-function setup({ reply = 'pr-review: the index is created in firestore.indexes.json.', findings, event } = {}) {
+function setup({ reply = 'pr-review: the index is created in firestore.indexes.json.', findings, event, state = { ledger: [] } } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'reply-'));
   const out = join(root, 'out');
   const temp = join(root, 'temp');
@@ -26,6 +26,10 @@ function setup({ reply = 'pr-review: the index is created in firestore.indexes.j
     : findings;
   if (f !== null) writeFileSync(join(out, 'findings.json'), JSON.stringify(f));
   const env = { OUT: out, RUNNER_TEMP: temp, GITHUB_EVENT_PATH: eventPath };
+  if (state !== null) {
+    env.STATE_FILE = join(root, 'state.json');
+    writeFileSync(env.STATE_FILE, typeof state === 'string' ? state : JSON.stringify(state));
+  }
   return { root, out, temp, env };
 }
 
@@ -154,4 +158,41 @@ test('a failed post reports the status only and still consumes the run\'s one re
   assert.match(result.reason, /502/);
   const again = await run(s);
   assert.match(again.result.reason, /already/);
+});
+
+// Earlier runs' security files exist only as keyed fileIds, and the key is Publish-only.
+const PRIOR_SECURITY = { ledger: [{ id: 'a'.repeat(16), severity: 'High', status: 'resolved', security: true, runsSinceResolved: 1, fileIds: ['b'.repeat(16)] }] };
+const PATH_REPLIES = [
+  'pr-review: the check lives in regroup/functions/src/callable/payments.ts.',
+  'pr-review: see payments.ts for the check.',
+  'pr-review: the index is created in firestore.indexes.json.',
+];
+
+test('while the ledger holds an earlier security entry, a reply naming any file is refused', async () => {
+  for (const reply of PATH_REPLIES) {
+    const s = setup({ reply, state: PRIOR_SECURITY });
+    const { result, calls } = await run(s);
+    assert.equal(result.posted, false, reply);
+    assert.match(result.reason, /without a path/);
+    assert.equal(calls.length, 0);
+  }
+  const plain = setup({ reply: 'pr-review: yes, e.g. the retry runs once per webhook (v1.7.0 behaviour).', state: PRIOR_SECURITY });
+  assert.equal((await run(plain)).result.posted, true);
+});
+
+test('an unknown prior state counts as an earlier security entry: file names are refused', async () => {
+  const unknown = [null, 'not json', { ledger: [], priorUnavailable: true }, { notALedger: true }];
+  for (const state of unknown) {
+    const s = setup({ reply: PATH_REPLIES[1], state });
+    const { result, calls } = await run(s);
+    assert.equal(result.posted, false, JSON.stringify(state));
+    assert.match(result.reason, /without a path/);
+    assert.equal(calls.length, 0);
+  }
+});
+
+test('a ledger with only public entries does not restrict file names', async () => {
+  const state = { ledger: [{ id: 'c'.repeat(16), slug: 'c5:a/b.ts:x', title: 't', severity: 'Medium', status: 'open', security: false, runsSinceResolved: 0 }] };
+  const s = setup({ reply: PATH_REPLIES[0], state });
+  assert.equal((await run(s)).result.posted, true);
 });
