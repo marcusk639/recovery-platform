@@ -27,6 +27,7 @@ export class FakeFirestore {
   readonly collections = new Map<string, Map<string, Data>>();
   readonly writes: Array<{ collection: string; id: string; data: Data }> = [];
   transactions = 0;
+  readOnlyTransactions = 0;
   readonly queries: Array<{ collection: string; spec: unknown }> = [];
   /** Number of upcoming transactions that should throw instead of committing. */
   failTransactions = 0;
@@ -91,12 +92,15 @@ export class FakeFirestore {
     return { docs, empty: docs.length === 0, size: docs.length };
   }
 
-  async runTransaction<T>(fn: (tx: any) => Promise<T>): Promise<T> {
+  async runTransaction<T>(fn: (tx: any) => Promise<T>, options?: { readOnly?: boolean }): Promise<T> {
     this.transactions++;
+    if (options?.readOnly) this.readOnlyTransactions++;
     const staged: Array<{ collection: string; id: string; data: Data }> = [];
     const tx = {
       get: (target: { get: () => Promise<unknown> }) => target.get(),
       set: (ref: { collection: string; id: string }, data: Data) => {
+        // The real SDK rejects writes in a read-only transaction.
+        if (options?.readOnly) throw new Error('write in a read-only transaction');
         staged.push({ collection: ref.collection, id: ref.id, data });
       },
     };

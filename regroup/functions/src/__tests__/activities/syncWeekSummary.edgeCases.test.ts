@@ -18,6 +18,11 @@ const SUMMARY = `g1_${WEEK}`;
 
 let db: FakeFirestore;
 
+/** Stand-in for the Auth custom-claims check: admin-uid administers h1 only. */
+const deps = {
+  isHouseAdmin: async (uid: string, houseId: string) => uid === 'admin-uid' && houseId === 'h1',
+};
+
 const ts = (iso: string) => Timestamp.fromDate(new Date(iso));
 
 const activity = (overrides: Record<string, unknown> = {}) => ({
@@ -40,7 +45,7 @@ async function write(
 ) {
   if (after) db.seed('activities', id, after);
   else db.collections.get('activities')?.delete(id);
-  return syncWeekSummariesForActivityWrite(asFirestore(db), id, before, after);
+  return syncWeekSummariesForActivityWrite(asFirestore(db), id, before, after, deps);
 }
 
 const summary = (id = SUMMARY) => db.read('week-summaries', id);
@@ -48,6 +53,8 @@ const summary = (id = SUMMARY) => db.read('week-summaries', id);
 beforeEach(() => {
   db = new FakeFirestore();
   db.seed('houses', 'h1', { timezone: 'America/Chicago' });
+  db.seed('guests', 'g1', { houseId: 'h1', userId: 'resident-uid' });
+  db.seed('guests', 'g2', { houseId: 'h1', userId: 'resident2-uid' });
   jest.spyOn(console, 'log').mockImplementation(() => undefined);
   jest.spyOn(console, 'info').mockImplementation(() => undefined);
   jest.spyOn(console, 'warn').mockImplementation(() => undefined);
@@ -77,6 +84,7 @@ describe('time zone', () => {
   });
 
   it('falls back when the house doc does not exist', async () => {
+    db.seed('guests', 'g1', { houseId: 'gone', userId: 'resident-uid' });
     await write('a1', undefined, activity({ houseId: 'gone', timestamp: ts(SUNDAY_NIGHT_PST) }));
     expect(summary(`g1_${NEXT_WEEK}`)!.houseId).toBe('gone');
   });
@@ -99,7 +107,7 @@ describe('bad input and failures', () => {
     expect(summary()).toBeUndefined();
 
     // The retry succeeds.
-    await syncWeekSummariesForActivityWrite(asFirestore(db), 'a1', undefined, activity());
+    await syncWeekSummariesForActivityWrite(asFirestore(db), 'a1', undefined, activity(), deps);
     expect(summary()!.stats.choresCompleted).toBe(1);
   });
 
@@ -118,16 +126,26 @@ describe('bad input and failures', () => {
 });
 
 describe('recomputeWeekSummary', () => {
+  const target = { guestId: 'g1', weekStart: WEEK, timeZone: 'America/Chicago' };
+
   it('reports unchanged when the summary already matches', async () => {
     db.seed('activities', 'a1', activity());
-    const target = { guestId: 'g1', houseId: 'h1', weekStart: WEEK, timeZone: 'America/Chicago' };
-    expect(await recomputeWeekSummary(asFirestore(db), target)).toEqual({
+    expect(await recomputeWeekSummary(asFirestore(db), target, deps)).toMatchObject({
+      skipped: false,
       changed: true,
       activityCount: 1,
     });
-    expect(await recomputeWeekSummary(asFirestore(db), target)).toEqual({
+    expect(await recomputeWeekSummary(asFirestore(db), target, deps)).toMatchObject({
       changed: false,
       activityCount: 1,
     });
+  });
+
+  it('a dry run uses a read-only transaction and writes nothing', async () => {
+    db.seed('activities', 'a1', activity());
+    const r = await recomputeWeekSummary(asFirestore(db), target, { ...deps, write: false });
+    expect(r.changed).toBe(true);
+    expect(db.readOnlyTransactions).toBe(1);
+    expect(summary()).toBeUndefined();
   });
 });

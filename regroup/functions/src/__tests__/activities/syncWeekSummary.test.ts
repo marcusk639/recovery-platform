@@ -19,6 +19,11 @@ const SUMMARY = `g1_${WEEK}`;
 
 let db: FakeFirestore;
 
+/** Stand-in for the Auth custom-claims check: admin-uid administers h1 only. */
+const deps = {
+  isHouseAdmin: async (uid: string, houseId: string) => uid === 'admin-uid' && houseId === 'h1',
+};
+
 const ts = (iso: string) => Timestamp.fromDate(new Date(iso));
 
 const activity = (overrides: Record<string, unknown> = {}) => ({
@@ -41,7 +46,7 @@ async function write(
 ) {
   if (after) db.seed('activities', id, after);
   else db.collections.get('activities')?.delete(id);
-  return syncWeekSummariesForActivityWrite(asFirestore(db), id, before, after);
+  return syncWeekSummariesForActivityWrite(asFirestore(db), id, before, after, deps);
 }
 
 const summary = (id = SUMMARY) => db.read('week-summaries', id);
@@ -49,6 +54,8 @@ const summary = (id = SUMMARY) => db.read('week-summaries', id);
 beforeEach(() => {
   db = new FakeFirestore();
   db.seed('houses', 'h1', { timezone: 'America/Chicago' });
+  db.seed('guests', 'g1', { houseId: 'h1', userId: 'resident-uid' });
+  db.seed('guests', 'g2', { houseId: 'h1', userId: 'resident2-uid' });
   jest.spyOn(console, 'log').mockImplementation(() => undefined);
   jest.spyOn(console, 'info').mockImplementation(() => undefined);
   jest.spyOn(console, 'warn').mockImplementation(() => undefined);
@@ -111,8 +118,8 @@ describe('idempotency and ordering', () => {
   it('a re-delivered create event does not double-count and writes nothing', async () => {
     const a = activity();
     await write('a1', undefined, a);
-    await syncWeekSummariesForActivityWrite(asFirestore(db), 'a1', undefined, a);
-    await syncWeekSummariesForActivityWrite(asFirestore(db), 'a1', undefined, a);
+    await syncWeekSummariesForActivityWrite(asFirestore(db), 'a1', undefined, a, deps);
+    await syncWeekSummariesForActivityWrite(asFirestore(db), 'a1', undefined, a, deps);
 
     expect(summary()!.stats.choresCompleted).toBe(1);
     expect(db.writes.filter((w) => w.collection === 'week-summaries')).toHaveLength(1);
@@ -123,8 +130,8 @@ describe('idempotency and ordering', () => {
     const deleted = activity({ status: 'deleted' });
     db.seed('activities', 'a1', deleted); // final committed state
 
-    await syncWeekSummariesForActivityWrite(asFirestore(db), 'a1', active, deleted);
-    await syncWeekSummariesForActivityWrite(asFirestore(db), 'a1', undefined, active);
+    await syncWeekSummariesForActivityWrite(asFirestore(db), 'a1', active, deleted, deps);
+    await syncWeekSummariesForActivityWrite(asFirestore(db), 'a1', undefined, active, deps);
 
     expect(summary()!.stats.choresCompleted).toBe(0);
     expect(summary()!.activityCount).toBe(0);
@@ -150,7 +157,7 @@ describe('idempotency and ordering', () => {
       activityCount: 1,
     });
 
-    await syncWeekSummariesForActivityWrite(asFirestore(db), 'a1', undefined, a);
+    await syncWeekSummariesForActivityWrite(asFirestore(db), 'a1', undefined, a, deps);
 
     expect(summary()!.stats.choresCompleted).toBe(1);
     expect(summary()!.activityCount).toBe(1);

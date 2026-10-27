@@ -22,6 +22,7 @@ const activity = (overrides: Record<string, unknown> = {}) => ({
   houseId: 'h1',
   type: 'chore',
   status: 'active',
+  loggedBy: 'admin',
   timestamp: ts('2026-01-14T18:00:00Z'),
   data: {},
   ...overrides,
@@ -34,6 +35,9 @@ beforeEach(() => {
   db = new FakeFirestore();
   db.seed('houses', 'h1', { timezone: 'America/Chicago' });
   db.seed('houses', 'h2', { timezone: 'America/Chicago' });
+  for (let i = 0; i < 10; i++) db.seed('guests', `g${i}`, { houseId: 'h1', userId: `g${i}-uid` });
+  db.seed('guests', 'g1', { houseId: 'h1', userId: 'resident' });
+  db.seed('guests', 'g7', { houseId: 'h2', userId: 'g7-uid' });
   output = [];
   jest.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
     output.push(args.join(' '));
@@ -45,7 +49,11 @@ beforeEach(() => {
 
 afterEach(() => jest.restoreAllMocks());
 
-const opts = { from: '2026-01-01', to: '2026-02-01', apply: false };
+// 'admin' administers every house here; the claims check itself is tested in
+// __tests__/activities/activityTrust.test.ts.
+const isHouseAdmin = async (uid: string) => uid === 'admin';
+const NOW = new Date('2026-01-16T12:00:00Z'); // week of 2026-01-12 is still open
+const opts = { from: '2026-01-01', to: '2026-02-01', apply: false, isHouseAdmin, now: NOW };
 const summaryWrites = () => db.writes.filter((w) => w.collection === 'week-summaries');
 
 describe('parseArgs', () => {
@@ -63,6 +71,7 @@ describe('parseArgs', () => {
   it.each([
     [[]],
     [['--from', '2026-01-01']],
+    [['--to', '2026-02-01']],
     [['--from', '2026-1-1', '--to', '2026-02-01']],
     [['--from', '2026-02-01', '--to', '2026-01-01']],
     [['--from', '2026-01-01', '--to', '2026-02-01', '--house']],
@@ -145,11 +154,11 @@ describe('run', () => {
 
   it('limits to one house with --house', async () => {
     db.seed('activities', 'a1', activity());
-    db.seed('activities', 'a2', activity({ guestId: 'g2', houseId: 'h2' }));
+    db.seed('activities', 'a2', activity({ guestId: 'g7', houseId: 'h2' }));
     const counts = await run(asFirestore(db), { ...opts, apply: true, houseId: 'h2' });
     expect(counts.summaries).toBe(1);
     expect(db.read('week-summaries', `g1_${WEEK}`)).toBeUndefined();
-    expect(db.read('week-summaries', `g2_${WEEK}`)).toBeDefined();
+    expect(db.read('week-summaries', `g7_${WEEK}`)).toBeDefined();
   });
 
   it('leaves activities outside the range alone', async () => {
@@ -177,10 +186,58 @@ describe('run', () => {
   });
 });
 
+describe('dry-run report', () => {
+  it('uses read-only transactions, so a production dry run takes no write locks', async () => {
+    db.seed('activities', 'a1', activity());
+    await run(asFirestore(db), opts);
+    expect(db.readOnlyTransactions).toBe(db.transactions);
+    expect(db.transactions).toBeGreaterThan(0);
+  });
+
+  it('reports suspected duplicates (same guest, type and data within 10 min) by id, without removing them', async () => {
+    const loggedAt = (iso: string) => ts(iso);
+    db.seed('activities', 'first', activity({ loggedAt: loggedAt('2026-01-14T18:00:05Z') }));
+    db.seed('activities', 'retry', activity({ loggedAt: loggedAt('2026-01-14T18:01:30Z') }));
+    db.seed('activities', 'later', activity({ loggedAt: loggedAt('2026-01-14T19:30:00Z') }));
+    db.seed('activities', 'other', activity({ type: 'meeting', loggedAt: loggedAt('2026-01-14T18:01:00Z') }));
+
+    const counts = await run(asFirestore(db), opts);
+
+    expect(counts.suspectedDuplicates).toBe(1);
+    expect(output.join('\n')).toContain('retry repeats first');
+    expect(db.collections.get('activities')!.size).toBe(4);
+  });
+
+  it('counts rewrites of closed weeks separately', async () => {
+    db.seed('activities', 'open', activity());
+    db.seed('activities', 'closed', activity({ timestamp: ts('2026-01-07T18:00:00Z') }));
+    const counts = await run(asFirestore(db), opts);
+    expect(counts).toMatchObject({ changed: 2, changedClosedWeeks: 1 });
+  });
+
+  it('reports activities it will not count, and guests it cannot find', async () => {
+    db.seed('activities', 'forged', activity({ loggedBy: 'stranger' }));
+    db.seed('activities', 'foreign', activity({ houseId: 'h2' }));
+    db.seed('activities', 'orphan', activity({ guestId: 'ghost' }));
+    db.seed('activities', 'hours', activity({ type: 'work', data: { hoursWorked: 'lots' } }));
+
+    const counts = await run(asFirestore(db), opts);
+
+    expect(counts).toMatchObject({
+      excludedUntrustedLogger: 1,
+      excludedOtherHouse: 1,
+      activitiesGuestMissing: 1,
+      nonNumericHours: 1,
+    });
+  });
+});
+
 describe('main', () => {
   it('passes --apply through', async () => {
     db.seed('activities', 'a1', activity());
-    await main(['--from', '2026-01-01', '--to', '2026-02-01', '--apply'], asFirestore(db));
+    await main(['--from', '2026-01-01', '--to', '2026-02-01', '--apply'], asFirestore(db), {
+      isHouseAdmin,
+    });
     expect(summaryWrites()).toHaveLength(1);
   });
 });

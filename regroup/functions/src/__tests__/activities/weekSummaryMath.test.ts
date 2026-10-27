@@ -230,18 +230,20 @@ describe('aggregateWeek', () => {
     expect(result.activityCount).toBe(0);
   });
 
-  it('counts a WORK activity with missing or non-numeric hours as 0 hours', () => {
+  it('coerces numeric-string hours and counts non-numeric hours as 0, reporting them', () => {
     const result = aggregateWeek(
       [
         act('work', '2026-01-12T15:00:00Z', { data: {} }),
         act('work', '2026-01-12T15:00:00Z', { data: { hoursWorked: '8' } }),
+        act('work', '2026-01-12T15:00:00Z', { data: { hoursWorked: 'eight' } }),
         act('work', '2026-01-12T15:00:00Z', { data: null }),
       ],
       WEEK,
       CHICAGO,
     );
-    expect(result.stats.hoursWorked).toBe(0);
-    expect(result.activityCount).toBe(3);
+    expect(result.stats.hoursWorked).toBe(8);
+    expect(result.activityCount).toBe(4);
+    expect(result.nonNumericHours).toBe(3);
   });
 
   it('counts an unknown type in activityCount only, like the client did', () => {

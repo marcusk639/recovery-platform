@@ -36,6 +36,8 @@ export interface WeekAggregate {
   stats: WeekStats;
   dailyStats: Record<string, DailyStats>;
   activityCount: number;
+  /** Counted WORK activities whose hoursWorked was not a number (added 0). */
+  nonNumericHours: number;
 }
 
 /** The fields of an activity document the summary depends on. */
@@ -163,10 +165,19 @@ export function emptyStats(): WeekStats {
   };
 }
 
-/** Hours a WORK activity contributes; anything but a finite number is 0. */
-function hoursOf(data: unknown): number {
+/**
+ * Hours a WORK activity contributes, or null when hoursWorked is not a finite
+ * number. Numeric strings ("8") are coerced; the client used to concatenate
+ * them as strings instead.
+ */
+export function hoursOf(data: unknown): number | null {
   const h = (data as { hoursWorked?: unknown } | null | undefined)?.hoursWorked;
-  return typeof h === 'number' && Number.isFinite(h) ? h : 0;
+  if (typeof h === 'number') return Number.isFinite(h) ? h : null;
+  if (typeof h === 'string' && h.trim() !== '') {
+    const n = Number(h);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
 }
 
 /**
@@ -185,6 +196,7 @@ export function aggregateWeek(
     dailyStats[date] = { date, ...emptyStats() };
   }
   let activityCount = 0;
+  let nonNumericHours = 0;
 
   for (const activity of activities) {
     if (!countsTowardSummary(activity)) continue;
@@ -194,10 +206,15 @@ export function aggregateWeek(
     activityCount++;
     const key = ACTIVITY_TYPE_TO_STAT[activity.type as keyof typeof ACTIVITY_TYPE_TO_STAT];
     if (!key) continue;
-    const amount = key === 'hoursWorked' ? hoursOf(activity.data) : 1;
+    let amount = 1;
+    if (key === 'hoursWorked') {
+      const hours = hoursOf(activity.data);
+      if (hours === null) nonNumericHours++;
+      amount = hours ?? 0;
+    }
     stats[key] += amount;
     dailyStats[localDateString(at, timeZone)][key] += amount;
   }
 
-  return { stats, dailyStats, activityCount };
+  return { stats, dailyStats, activityCount, nonNumericHours };
 }

@@ -2,8 +2,10 @@
  * Server-side maintenance of `week-summaries/{guestId}_{weekStart}`.
  *
  * Every activity write recomputes the affected guest-week from the activities
- * themselves, inside one Admin SDK transaction that reads the week's activities
- * and the summary and then writes the summary (creating it when missing).
+ * themselves, inside one Admin SDK transaction that reads the week's
+ * activities, the guest and the summary, then writes the summary (creating it
+ * when missing). Only activities activityTrust accepts are counted, and the
+ * summary's houseId always comes from the guest doc, never from an activity.
  *
  * Why recompute rather than apply a +1/-1 delta with a ledger of applied
  * activity ids:
@@ -11,14 +13,17 @@
  *     numbers, and an unchanged summary is not rewritten at all.
  *   - Order-independent: the transaction reads the activities as they are now,
  *     not the event payload, so out-of-order delivery still converges.
- *   - Self-healing during rollout: app versions before this change still apply
- *     their own +1 to the summary. Because the trigger writes absolute values,
- *     a stray client increment is overwritten by the next recompute instead of
- *     being added to.
- *   - No ledger to grow inside the summary doc, and no ledger to seed for the
+ *   - No ledger to grow inside the summary doc, and none to seed for the
  *     summaries that already exist.
- * The cost is one read per activity in that guest-week per event (tens, not
- * thousands: one guest, one week).
+ * The cost is one read per activity in that guest-week per event.
+ *
+ * Old app versions still write summaries (+1 on log, -1 on delete, and a full
+ * client recompute on edit/resolve over a different window that counts
+ * untrusted activities). The trigger's next recompute for that guest-week
+ * overwrites them, but nothing re-triggers on its own: a client write that
+ * lands after the trigger stays until that guest's next activity write in
+ * that week. Re-running the backfill once old versions are retired is
+ * therefore mandatory, not optional.
  *
  * Logs ids and counts only. Activity data (medication details, notes) is PHI.
  */
@@ -28,13 +33,24 @@ import {
   ActivityLike,
   WeekAggregate,
   aggregateWeek,
-  resolveTimeZone,
   summaryDocId,
   toInstant,
   weekEndFor,
   weekStartFor,
   weekWindowUtc,
 } from './weekSummaryMath';
+import {
+  Exclusions,
+  GuestContext,
+  HouseAdminCheck,
+  claimsHouseAdminCheck,
+  loadGuestContext,
+  noExclusions,
+  trustedActivities,
+  trustedGuestFrom,
+} from './activityTrust';
+
+export { houseTimeZone } from './activityTrust';
 
 type Firestore = FirebaseFirestore.Firestore;
 type Data = Record<string, unknown>;
@@ -45,24 +61,35 @@ export const WEEK_SUMMARIES = 'week-summaries';
 
 export interface SummaryTarget {
   guestId: string;
-  houseId: string;
   weekStart: string;
   timeZone: string;
 }
 
-/** The house's IANA zone, or the default when it is unset, invalid or gone. */
-export async function houseTimeZone(db: Firestore, houseId: string): Promise<string> {
-  const snap = houseId ? await db.collection('houses').doc(houseId).get() : undefined;
-  const { timeZone, fallback } = resolveTimeZone(snap?.data()?.timezone);
-  if (fallback) logger.warn('week_summary.timezone_fallback', { houseId, timeZone });
-  return timeZone;
+export interface RecomputeOptions {
+  /** false: report only, in a read-only transaction (backfill dry run). */
+  write?: boolean;
+  isHouseAdmin?: HouseAdminCheck;
 }
 
-function sameAggregate(prev: Data, next: WeekAggregate, target: SummaryTarget): boolean {
+export interface RecomputeResult {
+  /** The guest doc is missing or has no house: nothing was computed. */
+  skipped: boolean;
+  changed: boolean;
+  activityCount: number;
+  excluded: Exclusions;
+  nonNumericHours: number;
+}
+
+function sameAggregate(
+  prev: Data,
+  next: WeekAggregate,
+  houseId: string,
+  weekStart: string,
+): boolean {
   if (
-    prev.houseId !== target.houseId ||
-    prev.startDate !== target.weekStart ||
-    prev.endDate !== weekEndFor(target.weekStart) ||
+    prev.houseId !== houseId ||
+    prev.startDate !== weekStart ||
+    prev.endDate !== weekEndFor(weekStart) ||
     prev.activityCount !== next.activityCount
   ) {
     return false;
@@ -78,16 +105,16 @@ function sameAggregate(prev: Data, next: WeekAggregate, target: SummaryTarget): 
 }
 
 /**
- * Rebuild one guest-week summary from its activities. Fields the summary
- * holds but this code does not own (e.g. phaseRequirementsMet) are kept.
- * `write: false` only reports whether it would change (backfill dry run).
+ * Rebuild one guest-week summary from its trusted activities. Fields the
+ * summary holds but this code does not own (e.g. phaseRequirementsMet) are
+ * kept.
  */
 export async function recomputeWeekSummary(
   db: Firestore,
   target: SummaryTarget,
-  { write = true }: { write?: boolean } = {},
-): Promise<{ changed: boolean; activityCount: number }> {
-  const { guestId, houseId, weekStart, timeZone } = target;
+  { write = true, isHouseAdmin = claimsHouseAdminCheck() }: RecomputeOptions = {},
+): Promise<RecomputeResult> {
+  const { guestId, weekStart, timeZone } = target;
   const id = summaryDocId(guestId, weekStart);
   // Widened by a day each side: aggregateWeek re-filters by weekStartFor, so
   // the result never depends on the exact UTC instant of local midnight
@@ -96,6 +123,7 @@ export async function recomputeWeekSummary(
   const start = new Date(window.start.getTime() - DAY_MS);
   const end = new Date(window.end.getTime() + DAY_MS);
   const summaryRef = db.collection(WEEK_SUMMARIES).doc(id);
+  const guestRef = db.collection('guests').doc(guestId);
   // Matches the existing (guestId ASC, timestamp DESC) composite index.
   const weekActivities = db
     .collection(ACTIVITIES)
@@ -104,25 +132,47 @@ export async function recomputeWeekSummary(
     .where('timestamp', '<', end)
     .orderBy('timestamp', 'desc');
 
-  return db.runTransaction(async (tx) => {
+  const body = async (tx: FirebaseFirestore.Transaction): Promise<RecomputeResult> => {
     const activities = await tx.get(weekActivities);
+    const guestSnap = await tx.get(guestRef);
     const existing = await tx.get(summaryRef);
-    const next = aggregateWeek(
-      activities.docs.map((d) => d.data() as ActivityLike),
-      weekStart,
-      timeZone,
+
+    const guest = trustedGuestFrom(
+      guestId,
+      guestSnap.exists ? (guestSnap.data() as Data) : undefined,
     );
-    const prev = existing.exists ? (existing.data() as Data) : undefined;
-    if (prev && sameAggregate(prev, next, target)) {
-      return { changed: false, activityCount: next.activityCount };
+    if (!guest) {
+      return {
+        skipped: true,
+        changed: false,
+        activityCount: 0,
+        excluded: noExclusions(),
+        nonNumericHours: 0,
+      };
     }
-    if (!write) return { changed: true, activityCount: next.activityCount };
+    const { trusted, excluded } = await trustedActivities(
+      activities.docs.map((d) => d.data() as Data),
+      guest,
+      isHouseAdmin,
+    );
+    const next = aggregateWeek(trusted as ActivityLike[], weekStart, timeZone);
+    const result = {
+      skipped: false,
+      activityCount: next.activityCount,
+      excluded,
+      nonNumericHours: next.nonNumericHours,
+    };
+    const prev = existing.exists ? (existing.data() as Data) : undefined;
+    if (prev && sameAggregate(prev, next, guest.houseId, weekStart)) {
+      return { ...result, changed: false };
+    }
+    if (!write) return { ...result, changed: true };
 
     tx.set(summaryRef, {
       ...(prev ?? {}),
       id,
       guestId,
-      houseId,
+      houseId: guest.houseId,
       startDate: weekStart,
       endDate: weekEndFor(weekStart),
       stats: next.stats,
@@ -130,14 +180,18 @@ export async function recomputeWeekSummary(
       activityCount: next.activityCount,
       lastUpdated: FieldValue.serverTimestamp(),
     });
-    return { changed: true, activityCount: next.activityCount };
-  });
+    return { ...result, changed: true };
+  };
+
+  // A dry run takes no write locks in production.
+  return write ? db.runTransaction(body) : db.runTransaction(body, { readOnly: true });
 }
 
 /**
- * The fields that decide which summary an activity lands in and what it adds.
- * Two versions with the same key contribute identically, so a write that only
- * changes anything else (verified, verifiedBy, loggedAt, notes) is skipped.
+ * The fields that decide which summary an activity lands in and whether it
+ * counts. Two versions with the same key contribute identically, so a write
+ * that only changes anything else (verified, verifiedBy, loggedAt, notes) is
+ * skipped.
  */
 export function contributionKey(data: Data | undefined): string | null {
   if (!data) return null;
@@ -145,6 +199,7 @@ export function contributionKey(data: Data | undefined): string | null {
   return JSON.stringify([
     data.guestId,
     data.houseId,
+    data.loggedBy,
     at ? at.getTime() : null,
     data.status,
     data.type,
@@ -152,19 +207,11 @@ export function contributionKey(data: Data | undefined): string | null {
   ]);
 }
 
-async function targetFor(db: Firestore, data: Data | undefined): Promise<SummaryTarget | null> {
-  if (!data || typeof data.guestId !== 'string' || data.guestId === '') return null;
-  const at = toInstant(data.timestamp);
-  if (!at) return null;
-  const houseId = typeof data.houseId === 'string' ? data.houseId : '';
-  const timeZone = await houseTimeZone(db, houseId);
-  return { guestId: data.guestId, houseId, weekStart: weekStartFor(at, timeZone), timeZone };
-}
-
 /**
  * Handle one activities/{activityId} write: recompute the summary the activity
  * was in before and the one it is in after (the same doc unless the timestamp
- * or guest changed). A failure is rethrown so the event is retried; the
+ * or guest changed). Weeks use the guest's house zone. A missing guest doc is
+ * skipped and logged by id. A failure is rethrown so the event is retried; the
  * recompute is safe to repeat.
  */
 export async function syncWeekSummariesForActivityWrite(
@@ -172,25 +219,44 @@ export async function syncWeekSummariesForActivityWrite(
   activityId: string,
   before: Data | undefined,
   after: Data | undefined,
+  { isHouseAdmin = claimsHouseAdminCheck() }: { isHouseAdmin?: HouseAdminCheck } = {},
 ): Promise<{ recomputed: string[] }> {
   if (before && after && contributionKey(before) === contributionKey(after)) {
     return { recomputed: [] };
   }
 
+  const guests = new Map<string, Promise<GuestContext | null>>();
   const targets = new Map<string, SummaryTarget>();
-  // `after` first, so a summary both versions map to takes the current houseId.
   for (const data of [after, before]) {
-    const t = await targetFor(db, data);
-    const id = t && summaryDocId(t.guestId, t.weekStart);
-    if (t && id && !targets.has(id)) targets.set(id, t);
+    if (!data || typeof data.guestId !== 'string' || data.guestId === '') continue;
+    const at = toInstant(data.timestamp);
+    if (!at) continue;
+    const guestId = data.guestId;
+    if (!guests.has(guestId)) guests.set(guestId, loadGuestContext(db, guestId));
+    const guest = await guests.get(guestId)!;
+    if (!guest) {
+      logger.warn('week_summary.skipped_no_guest', { activityId, guestId });
+      continue;
+    }
+    const weekStart = weekStartFor(at, guest.timeZone);
+    const id = summaryDocId(guestId, weekStart);
+    if (!targets.has(id)) targets.set(id, { guestId, weekStart, timeZone: guest.timeZone });
   }
 
   const recomputed: string[] = [];
   for (const [summaryId, target] of targets) {
     try {
-      const { changed, activityCount } = await recomputeWeekSummary(db, target);
-      logger.info('week_summary.recomputed', { activityId, summaryId, changed, activityCount });
-      recomputed.push(summaryId);
+      const r = await recomputeWeekSummary(db, target, { isHouseAdmin });
+      logger.info('week_summary.recomputed', {
+        activityId,
+        summaryId,
+        skipped: r.skipped,
+        changed: r.changed,
+        activityCount: r.activityCount,
+        excludedOtherHouse: r.excluded.otherHouse,
+        excludedUntrustedLogger: r.excluded.untrustedLogger,
+      });
+      if (!r.skipped) recomputed.push(summaryId);
     } catch (err) {
       logger.error('week_summary.recompute_failed', {
         activityId,
