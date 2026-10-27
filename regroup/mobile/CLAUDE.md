@@ -13,8 +13,7 @@ npx jest path/to/file.test.tsx        # single file
 npm run test:coverage                 # with coverage
 npm run test:integration              # needs emulators — see below
 npm run test:rules                    # needs emulators — see below
-npm run test:e2e:build:ios            # build for E2E
-npm run test:e2e:ios                  # run E2E on iOS simulator
+npm run maestro:smoke:ios             # Maestro e2e smoke (needs E2E_TEST_PASSWORD); see below
 
 # Dev
 npm run ios                           # iPhone 14 Pro simulator
@@ -27,6 +26,8 @@ npm run deploy:indexes                # indexes are NOT in deploy:rules
 ```
 
 ## Android e2e build types
+
+E2E runs on Maestro only (Detox was retired). The launch-gate design is `../../docs/superpowers/specs/2026-10-20-regroup-e2e-launch-gate-design.md` (lands with the `docs/regroup-e2e-launch-gate` branch); flows are in `maestro/flows/` and the CI `maestro-smoke` job runs `../../e2e-maestro/regroup/`.
 
 ```bash
 cd android && ./gradlew assembleE2eEmulator assembleE2eStaging assembleRelease
@@ -80,5 +81,5 @@ fail on reads.
 
 - [Architecture](.claude/rules/architecture.md) — provider tree, state management, navigation, entities, domain concepts
 - [Firebase / Firestore](.claude/rules/firebase.md) — collection refs, timestamps, transactions, React Query, security rules
-- [Testing](.claude/rules/testing.md) — Jest setup, Firebase mocks, integration tests, Detox E2E
+- [Testing](.claude/rules/testing.md) — Jest setup, Firebase mocks, integration tests, Maestro E2E
 - [Conventions](.claude/rules/conventions.md) — commits, component patterns, imports, selectors, known gotchas

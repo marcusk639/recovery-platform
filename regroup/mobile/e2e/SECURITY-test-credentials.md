@@ -45,8 +45,8 @@ export E2E_TEST_PASSWORD="$(cat ~/.config/regroup-e2e/e2e-test-password)"
   resolves it from `-e E2E_TEST_PASSWORD=...` on the command line.
 - `regroup/mobile` `maestro:*` npm scripts and `maestro/scripts/run-flows.sh`
   require `E2E_TEST_PASSWORD` and forward it with `-e`.
-- `e2e/screenshots.e2e.ts` and `homegroups/scripts/seed-e2e.js` read
-  `process.env.E2E_TEST_PASSWORD` and throw if it is unset.
+- `homegroups/scripts/seed-e2e.js` reads `process.env.E2E_TEST_PASSWORD` and
+  throws if it is unset.
 - `e2e/setup/testAccounts.json` no longer carries a password field; consumers
   must take it from `E2E_TEST_PASSWORD`.
 - CI (`maestro-smoke` jobs) injects `${{ secrets.E2E_TEST_PASSWORD }}` via the
