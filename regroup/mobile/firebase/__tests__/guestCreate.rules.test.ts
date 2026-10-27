@@ -26,7 +26,7 @@ import {
   assertFails,
   RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, setDoc, writeBatch } from 'firebase/firestore';
+import { doc, setDoc, Timestamp, writeBatch } from 'firebase/firestore';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -56,6 +56,20 @@ afterAll(async () => {
   await testEnv.cleanup();
 });
 
+// Invited self-create needs the server-written admission ticket that
+// redeemInvitation leaves (see admissionTicket.rules.test.ts for its rules).
+const seedTicket = (role: 'guest' | 'senior-peer') =>
+  testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), `admission-tickets/${RESIDENT_UID}_${HOUSE_ID}`), {
+      invitationId: 'T',
+      role,
+      initialPhase: '',
+      used: false,
+      createdAt: Timestamp.now(),
+      expiresAt: Timestamp.fromMillis(Date.now() + 7 * 24 * 3600 * 1000),
+    });
+  });
+
 beforeEach(async () => {
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     await setDoc(doc(ctx.firestore(), `houses/${HOUSE_ID}`), {
@@ -64,6 +78,7 @@ beforeEach(async () => {
       currentCapacity: 3,
     });
   });
+  await seedTicket('guest');
 });
 
 afterEach(async () => {
@@ -130,6 +145,7 @@ describe('guests create — invite signup still works', () => {
   });
 
   it('ALLOWS a senior peer (guest + admin claims) to create their own guest doc', async () => {
+    await seedTicket('senior-peer');
     const ctx = testEnv.authenticatedContext(RESIDENT_UID, {
       guest: { [HOUSE_ID]: true },
       admin: { [HOUSE_ID]: true },

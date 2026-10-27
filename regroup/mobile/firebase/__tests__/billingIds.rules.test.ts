@@ -25,7 +25,7 @@ import {
   assertFails,
   RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, Timestamp } from 'firebase/firestore';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -52,6 +52,21 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await testEnv.cleanup();
+});
+
+// Invited self-create needs the server-written admission ticket that
+// redeemInvitation leaves (admissionTicket.rules.test.ts covers its rules).
+beforeEach(async () => {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), `admission-tickets/${SELF_UID}_${HOUSE_ID}`), {
+      invitationId: 'T',
+      role: 'guest',
+      initialPhase: '',
+      used: false,
+      createdAt: Timestamp.now(),
+      expiresAt: Timestamp.fromMillis(Date.now() + 7 * 24 * 3600 * 1000),
+    });
+  });
 });
 
 afterEach(async () => {

@@ -136,20 +136,54 @@ service cloud.firestore {
     match /guests/{guestId} {
       allow read: if isGuest([resource.data.houseId]) || isAdmin([resource.data.houseId]); // need to adjust house search to not query guests (data needs to be aggregated on the house documents)
 
-      // Self-create (invite signup) requires the guest claim for the house the
-      // doc joins. onGuestWrite splits the house's EES over its guest docs, so
-      // without this any signed-in user could plant a "ghost" guest in any
-      // house and change what its real residents owe. The claim is set only
-      // server-side (redeemInvitation / addGuestAuthorization), and SignUpForm
-      // refreshes the token after the grant and before this write; the same
-      // batch's house update already needed the claim.
-      // Self-create may not set the Stripe payment fields either, so a
-      // resident cannot plant a co-resident's customer id on their own doc.
-      // Admin create and update stay unrestricted (house admins can still set
-      // them); account deletion checks Stripe ownership server-side.
-      allow create: if (isSameUser(request.resource.data.userId) &&
-                        isGuest([request.resource.data.houseId]) &&
-                        !request.resource.data.keys().hasAny(['stripeCustomerId', 'defaultPaymentMethodId'])) ||
+      // Owner rule: a resident never adds themselves to a house. A resident
+      // record is created by a house admin or peer leader (isAdmin), or by
+      // the resident only when an invitation is behind it: redeemInvitation
+      // writes a server-only admission ticket at
+      // admission-tickets/{uid}_{houseId} (no rule matches that path, so
+      // clients can neither read nor write it). The ticket id is computed
+      // here from the caller and the house, so app builds already in the field
+      // need to send nothing new. onGuestWrite marks the ticket used on the
+      // first guest doc for that account in that house, so a second
+      // self-create is denied. The guest claim is still required.
+      // The self-created doc may carry only what SignUpForm writes, at the
+      // values it writes (Guest entity defaults): no balance, no Stripe or
+      // auto-pay fields, no status other than active, no membership fields.
+      // isAdmin must match the ticket (true only for a senior-peer invite),
+      // and phase must be the invitation's initialPhase when it has one.
+      function admissionTicket(houseId) {
+        return /databases/$(database)/documents/admission-tickets/$(request.auth.uid + '_' + houseId);
+      }
+
+      function isInvitedSelfCreate(d) {
+        let ticketPath = admissionTicket(d.houseId);
+        return isSameUser(d.userId) &&
+          isGuest([d.houseId]) &&
+          exists(ticketPath) &&
+          get(ticketPath).data.used == false &&
+          get(ticketPath).data.expiresAt > request.time &&
+          d.get('isAdmin', false) == (get(ticketPath).data.role == 'senior-peer') &&
+          (get(ticketPath).data.initialPhase == '' || d.get('phase', '') == get(ticketPath).data.initialPhase) &&
+          d.keys().hasOnly([
+            'id', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy',
+            'userId', 'houseId', 'displayName', 'firstName', 'lastName',
+            'email', 'phoneNumber', 'avatar', 'sobrietyDate', 'drugOfChoice',
+            'phase', 'step', 'status', 'isAdmin', 'infoEntered', 'hasJob',
+            'rentOwed', 'choreFees', 'dailyHabit', 'supporters', 'jobs', 'version'
+          ]) &&
+          d.get('status', 'active') == 'active' &&
+          d.get('rentOwed', 0) == 0 &&
+          d.get('choreFees', 0) == 0 &&
+          d.get('dailyHabit', 0) == 0 &&
+          d.get('version', 0) == 0 &&
+          d.get('step', 1) == 1 &&
+          d.get('infoEntered', false) == false &&
+          d.get('hasJob', false) == false &&
+          d.get('supporters', []).size() == 0 &&
+          d.get('jobs', []).size() == 0;
+      }
+
+      allow create: if isInvitedSelfCreate(request.resource.data) ||
                        isAdmin([request.resource.data.houseId]);
 
       // Update has two distinct branches:
@@ -185,7 +219,12 @@ service cloud.firestore {
            'version', 'updatedAt', 'updatedBy'
          ]));
 
-      allow delete: if isSameUser(resource.data.userId) || isAdmin([resource.data.houseId]);
+      // Admin only. A resident must not delete their own doc: it carries their
+      // balance, and deleting it would drop the balance (no archive) while the
+      // claims stay. The app has no working resident self-delete (its batch
+      // also writes guest-archive, which is admin-only), and account deletion
+      // runs server-side with the Admin SDK.
+      allow delete: if isAdmin([resource.data.houseId]);
     }
     
     match /guest-reports/{reportId} {
