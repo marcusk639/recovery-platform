@@ -46,6 +46,47 @@ describe('stampResidentUid', () => {
     expect(db.read('activities', 'a1')!.residentUid).toBe('res1');
   });
 
+  it('D1: a correction that loses the race to a dispute still fills the empty stamp', async () => {
+    // An accountless guest's activity, found unfillable...
+    db.seed(
+      'activities',
+      'a1',
+      act({ guestId: 'intake', residentUid: null, residentUidPending: false }),
+    );
+    const before = db.read('activities', 'a1')!;
+    // ...is re-pointed onto g1 (res1), and a peer disputes it before the event runs.
+    const corrected = { ...before, guestId: 'g1' };
+    db.seed('activities', 'a1', {
+      ...corrected,
+      status: 'disputed',
+      disputedBy: 'p',
+      disputeResolvedBy: 'p',
+    });
+    expect(await stampResidentUid(asFirestore(db), 'a1', before, corrected)).toBe('stamped');
+    expect(db.read('activities', 'a1')).toMatchObject({ residentUid: 'res1', status: 'disputed' });
+    expect(db.read('activities', 'a1')).not.toHaveProperty('residentUidPending');
+  });
+
+  it('D1: entering a dispute fills an empty stamp marked unfillable, once the guest has an account', async () => {
+    db.seed('activities', 'a1', act({ residentUid: null, residentUidPending: false }));
+    const before = db.read('activities', 'a1')!;
+    const disputed = { ...before, status: 'disputed', disputedBy: 'p', disputeResolvedBy: 'p' };
+    expect(await deliver(before, disputed)).toBe('stamped');
+    expect(db.read('activities', 'a1')!.residentUid).toBe('res1');
+    // An ordinary later write of an unfillable stamp still skips the transaction.
+    db.seed(
+      'activities',
+      'a2',
+      act({ guestId: 'intake', residentUid: null, residentUidPending: false }),
+    );
+    const tx = db.transactions;
+    const a2 = db.read('activities', 'a2')!;
+    expect(await stampResidentUid(asFirestore(db), 'a2', a2, { ...a2, verified: true })).toBe(
+      'unchanged',
+    );
+    expect(db.transactions).toBe(tx);
+  });
+
   it('records once that a guest with no app account (an intake) cannot be stamped yet', async () => {
     const warn = jest.spyOn(logger, 'warn');
     expect(await deliver(undefined, act({ guestId: 'intake' }))).toBe('unfillable');

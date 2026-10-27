@@ -77,8 +77,14 @@ export function needsResidentStamp(before: Data | undefined, after: Data | undef
   if (!after) return false;
   if (isGuestCorrection(before, after)) return true;
   if (stamped(after)) return false;
-  return after.residentUidPending !== false;
+  // Entering a dispute retries an empty stamp even if it was found
+  // unfillable before (one transaction per dispute, not per write): the
+  // guest may have an account by now (probe v9 D1).
+  return after.residentUidPending !== false || enteringDispute(before, after);
 }
+
+const enteringDispute = (before: Data | undefined, after: Data | undefined) =>
+  after?.status === 'disputed' && before?.status !== 'disputed';
 
 /** The update that fills an empty stamp (and clears the "unfillable" marker). */
 export const fillStamp = (residentUid: string) => ({
@@ -95,6 +101,7 @@ export async function stampResidentUid(
   if (!needsResidentStamp(before, after)) return 'unchanged';
   const guestId = typeof after?.guestId === 'string' ? after.guestId : '';
   const correction = isGuestCorrection(before, after);
+  const retryEmpty = correction || enteringDispute(before, after);
   const ref = db.collection('activities').doc(activityId);
 
   const result = await db.runTransaction(async (tx): Promise<StampResult> => {
@@ -104,7 +111,13 @@ export async function stampResidentUid(
     // A correction re-stamps only while the activity is still undisputed and
     // still points at that guest (a later write's own event handles the rest).
     const restamp = correction && data.guestId === guestId && !hasDisputeHistory(data);
-    if (!restamp && !needsResidentStamp(undefined, data)) return 'unchanged';
+    // Filling an EMPTY stamp is not moving one: if the correction lost the
+    // race to a dispute (history now, so no re-stamp), still fill a null or
+    // absent stamp from the current guest, whatever residentUidPending says
+    // (probe v9 D1: otherwise it stayed null for good).
+    const empty = !stamped(data);
+    const fill = empty && (retryEmpty || needsResidentStamp(undefined, data));
+    if (!restamp && !fill) return 'unchanged';
     const gid = typeof data.guestId === 'string' ? data.guestId : '';
     const guest = gid ? await tx.get(db.collection('guests').doc(gid)) : undefined;
     const residentUid = residentUidFrom(guest?.exists ? (guest.data() as Data) : undefined);
