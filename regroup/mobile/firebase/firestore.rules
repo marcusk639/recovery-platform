@@ -542,8 +542,11 @@ service cloud.firestore {
         d.diff(resource.data).affectedKeys()
           .hasOnly(['status', 'disputeReason', 'disputedBy', 'disputeResolvedBy', 'disputedAt', 'loggedAt']) &&
         // loggedAt is not the disputer's to rewrite; older builds stamp it
-        // with the server time, which stays allowed.
-        (!d.diff(resource.data).affectedKeys().hasAny(['loggedAt']) || d.loggedAt == request.time) &&
+        // with the server time, which stays allowed, except on an activity
+        // with no timestamp: the court export dates those by loggedAt, so a
+        // dispute must not move them to "now".
+        (!d.diff(resource.data).affectedKeys().hasAny(['loggedAt']) ||
+         (d.loggedAt == request.time && resource.data.get('timestamp', null) != null)) &&
         // This write names the disputer (a leftover from an earlier dispute does not).
         d.diff(resource.data).affectedKeys().hasAny(['disputedBy', 'disputeResolvedBy']) &&
         d.get('disputeResolvedBy', null) == request.auth.uid &&
@@ -582,7 +585,7 @@ service cloud.firestore {
         !d.diff(resource.data).affectedKeys()
           .hasAny(['disputeReason', 'disputedBy', 'disputedAt', 'reopenedBy', 'reopenedAt',
                    'guestId', 'loggedBy', 'houseId', 'residentUid', 'residentUidPending',
-                   'flaggedForReview']) &&
+                   'flaggedForReview', 'type', 'timestamp', 'data']) &&
         consistentOutcome() &&
         callerMayDecide();
     }
@@ -632,6 +635,9 @@ service cloud.firestore {
       let d = request.resource.data;
       let keys = d.diff(r).affectedKeys();
       return isAdmin([r.houseId]) &&
+        // loggedBy is immutable after create, for every client (a write
+        // re-sending the same value passes: diff() ignores it).
+        !keys.hasAny(['loggedBy']) &&
         // loggedAt: unchanged, or the server time (VERIFY and edits, new and
         // old builds, stamp it). Frozen only on an old build's "delete"
         // record (deleted, with disputeResolvedAt), which the export
@@ -645,7 +651,10 @@ service cloud.firestore {
         (r.status != 'disputed' && d.status == 'disputed' ? entersDispute() :
          r.status == 'disputed' && d.status != 'disputed' ? resolvesDispute() :
          (!keys.hasAny(disputeKeys()) && !keys.hasAny(['residentUid', 'residentUidPending', 'flaggedForReview']) &&
-          (!keys.hasAny(['guestId', 'loggedBy', 'houseId', 'status']) ||
+          // What the activity is and when (type, timestamp, data) and who
+          // it is for are frozen once there is dispute history: a retyped or
+          // re-dated meeting would drop out of the summaries and the export.
+          (!keys.hasAny(['guestId', 'houseId', 'status', 'type', 'timestamp', 'data']) ||
            (!hasDisputeHistory(r) &&
             (!keys.hasAny(['status']) ||
              (r.status in ['active', 'deleted'] && d.status in ['active', 'deleted'])))) &&
