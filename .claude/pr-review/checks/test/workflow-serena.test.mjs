@@ -126,7 +126,9 @@ test('the base project.yml is read-only with exactly the four tools and nothing 
   for (const key of ['activation_command', 'excluded_tools', 'included_optional_tools', 'ls_specific_settings']) {
     assert.doesNotMatch(projectYml, new RegExp(`\\n${key}:`), key);
   }
-  for (const p of ['**/public/**', '**/lib/**', '**/node_modules/**', '**/_legacy/**']) assert.ok(projectYml.includes(`"${p}"`), p);
+  for (const p of ['**/public/**', '**/functions/lib/**', 'recovery-api/lib/**', '**/node_modules/**', '**/_legacy/**']) assert.ok(projectYml.includes(`"${p}"`), p);
+  // Real source lives in lib/ dirs too (detox-recovery/lib, recovery-api/src/lib): never ignore every lib.
+  assert.ok(!projectYml.includes('"**/lib/**"'), 'no blanket lib exclusion');
 });
 
 test('the global Serena config has no dashboard or GUI, no trusted projects, and pinned language servers', () => {
