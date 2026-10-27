@@ -71,7 +71,9 @@ const SECRET_NAMES: Record<Kind, string> = {
 };
 
 // Each snippet prints only a value of the expected shape and exits 1 otherwise (missing,
-// junk or unreadable), so with pipefail a bad file never stores an empty secret.
+// junk or unreadable). The printed command runs it once with output discarded and only
+// then pipes it into `secrets:set` (`check && produce | set`): pipefail alone would still
+// run `secrets:set` on empty stdin and store an empty version.
 const JSON_FIELD_SNIPPET =
   'let v;try{v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))[process.argv[2]]}catch{process.exit(1)}' +
   'if(typeof v!=="string"||!/^whsec_[A-Za-z0-9]+$/.test(v))process.exit(1);process.stdout.write(v)';
@@ -91,20 +93,23 @@ export function formatNextSteps(files: {
 }): string {
   const set = (name: string) =>
     `firebase functions:secrets:set ${name} --project regroup-e2e --data-file -`;
+  // Validate (output discarded), then produce and pipe: secrets:set runs only for a good value.
+  const store = (producer: string, name: string) =>
+    `${producer} >/dev/null && ${producer} | ${set(name)}`;
   const fromJson = (field: keyof SecretsFile) =>
-    `set -o pipefail; node -e '${JSON_FIELD_SNIPPET}' ${shQuote(files.secretsFile)} ${field}`;
-  const key = `set -o pipefail; node -e '${KEY_SNIPPET}' ${shQuote(files.keyFile)}`;
+    `node -e '${JSON_FIELD_SNIPPET}' ${shQuote(files.secretsFile)} ${field}`;
+  const key = `node -e '${KEY_SNIPPET}' ${shQuote(files.keyFile)}`;
   const webhookLines = files.createdKinds.length
     ? [
         '1. Store the signing secret of each webhook endpoint created this run:',
-        ...files.createdKinds.map((kind) => `   ${fromJson(kind)} | ${set(SECRET_NAMES[kind])}`),
+        ...files.createdKinds.map((kind) => `   ${store(fromJson(kind), SECRET_NAMES[kind])}`),
       ]
     : ['1. No webhook endpoint was created; webhook secrets are unchanged.'];
   return [
     'Next steps for regroup-e2e (no secret values are printed):',
     ...webhookLines,
     '2. STRIPE_SECRET_KEY must hold this sandbox test key:',
-    `   ${key} | ${set('STRIPE_SECRET_KEY')}`,
+    `   ${store(key, 'STRIPE_SECRET_KEY')}`,
     '3. Regenerate the staging env with the price ids: npm run e2e:gen-env',
     '4. Redeploy the regroup-e2e functions so they pick up new secrets and config.',
   ].join('\n');
