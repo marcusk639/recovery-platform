@@ -87,19 +87,21 @@ export const addGuestAuthorization = onCall(async (request) => {
   }
 
   try {
-    // Record first, then claims (util/houseRoles, "Record before claims").
-    await recordRoleGrant(
-      guest.houseId,
-      guest.userId,
-      guest.isAdmin ? "peerLeader" : "resident",
-      { grantedBy: request.auth.uid, via: "addGuestAuthorization" },
-    );
+    // Record first, then claims, then the record again (util/houseRoles,
+    // "Record before claims").
+    const grantTier = guest.isAdmin ? "peerLeader" : "resident";
+    const meta = {
+      grantedBy: request.auth.uid,
+      via: "addGuestAuthorization" as const,
+    };
+    await recordRoleGrant(guest.houseId, guest.userId, grantTier, meta);
     // One claims write: guest and admin together, or nothing.
     await addHouseRoles(
       guest.userId,
       [guest.houseId],
       guest.isAdmin ? ["guest", "admin"] : ["guest"],
     );
+    await recordRoleGrant(guest.houseId, guest.userId, grantTier, meta);
     logger.info("Claims created for guest", {
       houseId: guest.houseId,
       isAdmin: !!guest.isAdmin,
@@ -170,15 +172,19 @@ export const addAdminAuthorization = onCall(async (request) => {
   }
 
   try {
-    // Record first, then claims (util/houseRoles, "Record before claims").
-    for (const houseId of requestedHouses) {
-      await recordRoleGrant(
-        houseId,
-        adminInput.userId,
-        superAdminHouses.has(houseId) ? "owner" : "manager",
-        { grantedBy: callerUid, via: "addAdminAuthorization" },
-      );
-    }
+    // Record first, then claims, then the record again (util/houseRoles,
+    // "Record before claims").
+    const writeRecords = async () => {
+      for (const houseId of requestedHouses) {
+        await recordRoleGrant(
+          houseId,
+          adminInput.userId,
+          superAdminHouses.has(houseId) ? "owner" : "manager",
+          { grantedBy: callerUid, via: "addAdminAuthorization" },
+        );
+      }
+    };
+    await writeRecords();
     // Each addHouseRoles call reads the current claims and merges into them.
     // (Spreading two createClaims results built from one snapshot let the
     // superAdmin result's stale admin map overwrite the new admin grant.)
@@ -190,6 +196,7 @@ export const addAdminAuthorization = onCall(async (request) => {
         "superAdmin",
       ]);
     }
+    await writeRecords();
     logger.info("addAdminAuthorization: claims set", {
       houseIds: adminInput.houseIds,
       superAdmin: adminInput.superAdmin,
@@ -295,28 +302,38 @@ export const promoteGuestsToAdmin = onCall(async (request) => {
     }
   }
   const users = await getGuestsAsUsers(data);
-  try {
-    await Promise.all(
-      users.map(async (user) => {
-        const guest = data.find((g) => g.userId === user.uid)!;
-        const claims = await createClaims(
-          user.uid,
-          [guest.houseId],
-          "admin",
-          false,
-        );
-        // Record first, then claims (util/houseRoles, "Record before claims").
-        await recordRoleGrant(guest.houseId, user.uid, "peerLeader", {
-          grantedBy: request.auth!.uid,
-          via: "promoteGuestsToAdmin",
-        });
-        await auth().setCustomUserClaims(user.uid, claims);
-      }),
+  const results = await Promise.allSettled(
+    users.map(async (user) => {
+      const guest = data.find((g) => g.userId === user.uid)!;
+      const claims = await createClaims(
+        user.uid,
+        [guest.houseId],
+        "admin",
+        false,
+      );
+      const meta = {
+        grantedBy: request.auth!.uid,
+        via: "promoteGuestsToAdmin" as const,
+      };
+      // Record first, then claims, then the record again (util/houseRoles,
+      // "Record before claims").
+      await recordRoleGrant(guest.houseId, user.uid, "peerLeader", meta);
+      await auth().setCustomUserClaims(user.uid, claims);
+      await recordRoleGrant(guest.houseId, user.uid, "peerLeader", meta);
+    }),
+  );
+  const failed = users.filter((_, i) => results[i].status === "rejected");
+  if (failed.length > 0) {
+    logger.error("promoteGuestsToAdmin: failed to set claims", {
+      failedUids: failed.map((u) => u.uid),
+      codes: results.flatMap((r) =>
+        r.status === "rejected" ? [(r.reason as { code?: unknown })?.code ?? "unknown"] : [],
+      ),
+    });
+    throw new HttpsError(
+      "internal",
+      `${users.length - failed.length} of ${users.length} promoted; retry the rest`,
     );
-  } catch (error) {
-    logger.error("promoteGuestsToAdmin: failed to set claims", { error });
-    if (error instanceof HttpsError) throw error;
-    throw new HttpsError("internal", "Failed to promote guests");
   }
   return "success";
 });

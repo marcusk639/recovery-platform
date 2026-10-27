@@ -24,20 +24,27 @@
  * (firestore.rules guests block) for direct guest-doc departures.
  *
  * Record before claims: addAdminAuthorization, addGuestAuthorization and
- * promoteGuestsToAdmin write the record, then the claims. If the claims
- * write fails, a record with no matching claim is left. It grants nothing:
- * every tier check here needs the live claim, and the rules count a caller's
- * record only when a matching claim backs it (owner: superAdmin; manager or
- * peer leader: admin), so an account with a lower claim keeps that claim's
- * rank. As a TARGET it still ranks by the record (the rules cannot read
+ * promoteGuestsToAdmin write the record, then the claims, then the record
+ * again (recordRoleGrant never lowers, so the second write undoes a revoke
+ * that lowered the record in between). If the claims write fails, a record
+ * with no matching claim is left. It grants no more than the claims do:
+ * every tier check here needs the live claim, and the rules rank a caller
+ * as the server does (tierAndRank): the primary record 4; an owner record
+ * with the superAdmin claim 3; an owner or manager record with the admin
+ * claim 2; a peer-leader record with the admin claim 1; otherwise by the
+ * claim. As a TARGET it still ranks by the record (the rules cannot read
  * another account's claims): no lower staff can make a shadow guest doc for
  * it, and equal staff cannot discharge it (a manager or the owner can) until
  * a retry succeeds or the backfill's stale pass lowers the record (it skips
- * records granted in the last 10 minutes). The other order left an admin-claim holder with no
- * record, ranked 0 in the rules. redeemInvitation still writes the claims
- * first (its retry design needs the record and grantCompletedAt together);
- * a redeem stranded there is completed by the retry, and the backfill
- * records any admin-claim holder still without a record.
+ * callable grants from the last 10 minutes). The other order left an
+ * admin-claim holder with no record, ranked 0 in the rules. redeemInvitation
+ * still writes the claims first (its retry design needs the record and
+ * grantCompletedAt together); a redeem stranded there is completed by the
+ * retry, and the backfill records any admin-claim holder still without a
+ * record. A promoted account's ID token keeps its old claims until it
+ * refreshes (up to an hour; the app force-refreshes only at sign-in and app
+ * start, not after someone else promotes it), so the rules rank it by the
+ * old token meanwhile; the callables read live claims.
  */
 import { HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';

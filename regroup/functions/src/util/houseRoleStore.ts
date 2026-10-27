@@ -171,12 +171,17 @@ export async function recordRoleRevoke(
     const data = snap.exists ? (snap.data() ?? {}) : {};
     const current = parseTier(data.tier);
     if (!current || data.primary === true) return;
-    // Live claims read after the record (and again on a transaction retry):
-    // a grant writes its record before its claims, so a grant that lands
-    // while this runs either retries the transaction or is seen here. A
-    // grant whose record is written but whose claims are not yet can still
-    // lose the record; it then holds a claim with no record (peer leader,
-    // least privilege) until the backfill re-run records it.
+    // Live claims read after the record, inside the transaction (Admin SDK
+    // transactions lock the record, so a grant's record write waits for this
+    // one). A grant writes record, claims, record (callable/auth): if this
+    // revoke runs between its first record write and its claims write, it
+    // re-derives from the old claims and may lower or delete the record; the
+    // grant's second record write restores it. Only a grant that fails after
+    // its claims write leaves the lowered record: an admin grant then holds
+    // the admin claim with a peer-leader record or none (least privilege); a
+    // superAdmin grant ranks as owner by its claim but, as a rules target,
+    // by the lowered record until the grant is retried. The backfill re-run
+    // records what is missing.
     const claims = await liveClaims(uid);
     const cap: RoleTier | null = holds(claims, 'superAdmin', houseId)
       ? 'owner'

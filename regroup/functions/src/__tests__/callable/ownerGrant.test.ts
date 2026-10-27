@@ -183,10 +183,29 @@ describe('record before claims (verifier N-B): a failed claims write leaves a ra
         ],
         auth: OWNER,
       }),
-    ).rejects.toMatchObject({ code: 'internal' });
+    ).rejects.toMatchObject({ code: 'internal', message: '1 of 2 promoted; retry the rest' });
     expect(recordAt('r1')()).toMatchObject({ tier: 'peerLeader' });
     expect(recordAt('r2')()).toMatchObject({ tier: 'peerLeader' });
+    expect(mockSetClaims).toHaveBeenCalledWith('r1', expect.any(Object));
+    expect(mockUsers.r1).toBeDefined(); // r1's claims were written
     expect(mockUsers.r2).toBeUndefined();
     mockSetClaims.mockImplementation(restore);
+  });
+
+  it('a revoke that lowers the record while the claims are written is undone by the second record write (verifier B2)', async () => {
+    as('owner');
+    as('m', { admin: { [H]: true } });
+    mem.seed(`house-roles/${H}_m`, { houseId: H, tier: 'manager' });
+    mockAddHouseRoles.mockImplementation(async (_uid: string, _h: string[], roles: string[]) => {
+      // A concurrent recordRoleRevoke read M's claims (admin only) after the
+      // owner record was written and lowered it back to manager.
+      if (roles.includes('superAdmin'))
+        mem.seed(`house-roles/${H}_m`, { houseId: H, tier: 'manager' });
+    });
+    await (addAdminAuthorization as unknown as Function)({
+      data: { userId: 'm', houseIds: [H], superAdmin: [H] },
+      auth: OWNER,
+    });
+    expect(recordAt('m')()).toMatchObject({ tier: 'owner' });
   });
 });
