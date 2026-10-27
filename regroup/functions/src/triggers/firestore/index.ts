@@ -27,6 +27,7 @@ import { deleteClaim } from "../../util/claims";
 import { SENDGRID_API_KEY } from "../../config";
 import { operatorStatusToHouseStatus } from "../../util/entitlement";
 import { selectLegitimateGuests } from "../../util/guestMembership";
+import { eventAgeMinutes, isStaleEvent, RETRY_CUTOFF_MS } from "../../util/eventAge";
 
 export { onHouseDeleted } from "./houseTombstone";
 
@@ -260,12 +261,27 @@ export const submitFeedback = onDocumentCreated(
 //                 with no account) count; see util/guestMembership.
 //
 // Both operations run independently — a failure in one is logged and does not
-// abort the other. EES failures are re-thrown for Firebase retry; auth cleanup
-// failures are logged-only since a deleted doc won't retrigger this function.
+// abort the other. Registered with retry: true. On create and update, an EES
+// failure is re-thrown so the event is redelivered; the re-split recomputes
+// from current state, so a redelivery is idempotent. On delete, failures are
+// logged only (see the end of the handler). Events older than RETRY_CUTOFF_MS
+// are skipped, so a permanent error stops retrying after hours, not 7 days.
 // ─────────────────────────────────────────────────────────────────────────────
 export const onGuestWrite = onDocumentWritten(
-  "guests/{guestId}",
+  { document: "guests/{guestId}", retry: true },
   async (event) => {
+    if (isStaleEvent(event.time)) {
+      logger.warn(
+        `onGuestWrite: event older than ${RETRY_CUTOFF_MS / 3600000}h retry cutoff; skipped`,
+        {
+          guestId: event.params.guestId,
+          eventId: event.id,
+          ageMinutes: eventAgeMinutes(event.time),
+        },
+      );
+      return;
+    }
+
     const isDelete = !event.data?.after?.exists;
     const guestData = event.data?.after?.data() ?? event.data?.before?.data();
     if (!guestData) return;
@@ -305,8 +321,18 @@ export const onGuestWrite = onDocumentWritten(
         .where("houseId", "==", houseId)
         .get();
 
+      // docId is the guest doc id, which EES records store as guestId.
       const activeGuests = guestsSnap.docs
-        .map((d) => d.data())
+        .map((d) => {
+          const g = d.data();
+          return {
+            docId: d.id,
+            userId: g.userId as unknown,
+            houseId: g.houseId as unknown,
+            moveOutDate: g.moveOutDate as unknown,
+            status: g.status as unknown,
+          };
+        })
         .filter(
           (g) =>
             !g.moveOutDate &&
@@ -347,25 +373,41 @@ export const onGuestWrite = onDocumentWritten(
       // admin-entered residents with no account). A doc a stranger created in
       // this house must not change what real residents owe. Checked after the
       // EES query and the total check so most writes cost no Auth lookups.
-      const activeCount = (await selectLegitimateGuests(activeGuests, houseId))
-        .length;
+      const counted = await selectLegitimateGuests(activeGuests, houseId);
+      const activeCount = counted.length;
       if (activeCount === 0) return;
 
-      const newAmount = totalExpenses > 0 ? totalExpenses / activeCount : 0;
+      // Same rounding as mobile calculateEES (services/oxford/ees.ts), so the
+      // server and the tracker agree on the share.
+      const newAmount =
+        totalExpenses > 0
+          ? Math.round((totalExpenses / activeCount) * 100) / 100
+          : 0;
 
-      const batch = ratsFirestore.batch();
-      eesSnap.docs.forEach((doc) => {
-        batch.update(doc.ref, {
-          amount: newAmount,
-          residentCount: activeCount,
+      // Only counted residents' records get the new share. A record that
+      // belongs to a ghost or duplicate doc (EESTracker bills every guest it
+      // lists) is left exactly as it is.
+      const countedIds = new Set(counted.map((g) => g.docId));
+      const targets = eesSnap.docs.filter((doc) =>
+        countedIds.has(doc.data().guestId),
+      );
+      const leftAlone = eesSnap.docs.length - targets.length;
+
+      if (targets.length > 0) {
+        const batch = ratsFirestore.batch();
+        targets.forEach((doc) => {
+          batch.update(doc.ref, {
+            amount: newAmount,
+            residentCount: activeCount,
+          });
         });
-      });
-      await batch.commit();
+        await batch.commit();
+      }
 
       logger.info(
         `onGuestWrite: EES recalculated for house ${houseId}: ${activeCount} residents, $${newAmount.toFixed(
           2,
-        )} each`,
+        )} each; updated ${targets.length}, left ${leftAlone} record(s) of uncounted guest docs untouched`,
       );
     } catch (err) {
       eesError = err as Error;
@@ -375,9 +417,11 @@ export const onGuestWrite = onDocumentWritten(
       });
     }
 
-    // On non-delete events only EES runs, so re-throw to allow Firebase retry.
-    // On delete events auth cleanup already ran; retrying would duplicate that work
-    // without guaranteeing EES succeeds, so log-only.
+    // Create/update: only EES ran, so re-throw and let retry: true redeliver
+    // the event. Delete: auth cleanup already ran, and a redelivery would run
+    // it again; by then the same account may have been re-granted the house,
+    // so a late redelivery could revoke a fresh claim. Log only. The next
+    // write to any guest in the house re-splits EES from current state.
     if (eesError && !isDelete) throw eesError;
   },
 );

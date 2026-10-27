@@ -139,6 +139,12 @@ import {
   setHouseSubscriptionStatusOnCreate,
 } from "../../triggers/firestore";
 import { logger } from "firebase-functions";
+import { onDocumentWritten } from "firebase-functions/v2/firestore";
+
+// Captured at load time: clearMocks wipes mock.calls before every test.
+const guestWriteRegistration = (onDocumentWritten as jest.Mock).mock.calls.find(
+  (c) => typeof c[0] === "object" && c[0].document === "guests/{guestId}",
+);
 
 // ─── Event helpers ────────────────────────────────────────────────────────────
 
@@ -438,14 +444,21 @@ describe("onGuestWrite (EES recalculation)", () => {
     moveOutDate: "2026-01-01",
   };
 
+  // Guest doc i gets id guest-<i>; EES record i belongs to guest-<i> unless
+  // it names a guestId. The re-split writes only counted guests' records.
   function makeGuestSnap(guests: any[]) {
-    return { docs: guests.map((d) => ({ data: () => d })) };
+    return {
+      docs: guests.map((d, i) => ({ id: `guest-${i}`, data: () => d })),
+    };
   }
 
   function makeEesSnap(records: any[]) {
     return {
       empty: records.length === 0,
-      docs: records.map((r, i) => ({ data: () => r, ref: { id: `ees-${i}` } })),
+      docs: records.map((r, i) => {
+        const data = { guestId: `guest-${i}`, ...r };
+        return { data: () => data, ref: { id: `ees-${i}` } };
+      }),
     };
   }
 
@@ -634,6 +647,102 @@ describe("onGuestWrite (EES recalculation)", () => {
     });
   });
 
+  it("writes only the counted residents' records, leaving a ghost's record alone", async () => {
+    const resident = { ...activeGuest, userId: "resident-1" };
+    const ghost = { ...activeGuest, userId: "stranger" };
+    mockGetUsers.mockImplementationOnce(async () => ({
+      users: [
+        { uid: "resident-1", customClaims: { guest: { "house-1": true } } },
+        { uid: "stranger", customClaims: {} },
+      ],
+      notFound: [],
+    }));
+    mockGuestsGet.mockResolvedValue(makeGuestSnap([resident, ghost]));
+    mockEesGet.mockResolvedValue(
+      makeEesSnap([
+        { houseId: "house-1", totalExpenses: 300, paid: false },
+        { houseId: "house-1", totalExpenses: 300, paid: false, amount: 150 },
+      ]),
+    );
+
+    await onGuestWrite(makeWrittenEvent(resident, resident));
+
+    expect(mockBatchUpdate.mock.calls.map((c) => c[0].id)).toEqual(["ees-0"]);
+    expect(mockBatchUpdate).toHaveBeenCalledWith(
+      { id: "ees-0" },
+      { amount: 300, residentCount: 1 },
+    );
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.stringContaining("left 1 record"),
+    );
+  });
+
+  it("leaves a duplicate doc's record alone and bills the account once", async () => {
+    const resident = { ...activeGuest, userId: "resident-1" };
+    mockGuestsGet.mockResolvedValue(makeGuestSnap([resident, resident]));
+    mockEesGet.mockResolvedValue(
+      makeEesSnap([
+        { houseId: "house-1", totalExpenses: 90, paid: false },
+        { houseId: "house-1", totalExpenses: 90, paid: false },
+      ]),
+    );
+
+    await onGuestWrite(makeWrittenEvent(resident, resident));
+
+    expect(mockBatchUpdate.mock.calls.map((c) => c[0].id)).toEqual(["ees-0"]);
+    expect(mockBatchUpdate).toHaveBeenCalledWith(expect.anything(), {
+      amount: 90,
+      residentCount: 1,
+    });
+  });
+
+  it("rounds the share to cents the way mobile calculateEES does", async () => {
+    mockGuestsGet.mockResolvedValue(
+      makeGuestSnap([activeGuest, activeGuest, activeGuest]),
+    );
+    mockEesGet.mockResolvedValue(
+      makeEesSnap([{ houseId: "house-1", totalExpenses: 100, paid: false }]),
+    );
+
+    await onGuestWrite(makeWrittenEvent(activeGuest, activeGuest));
+
+    expect(mockBatchUpdate).toHaveBeenCalledWith(expect.anything(), {
+      amount: 33.33,
+      residentCount: 3,
+    });
+  });
+
+  it("skips an event older than the retry cutoff without throwing", async () => {
+    const event = {
+      ...makeWrittenEvent(activeGuest, activeGuest, "guest-old"),
+      id: "evt-1",
+      time: new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString(),
+    };
+
+    await expect(onGuestWrite(event)).resolves.toBeUndefined();
+
+    expect(mockGuestsGet).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("older than"),
+      { guestId: "guest-old", eventId: "evt-1", ageMinutes: 420 },
+    );
+  });
+
+  it("processes a recent event normally", async () => {
+    mockGuestsGet.mockResolvedValue(makeGuestSnap([activeGuest]));
+    mockEesGet.mockResolvedValue(
+      makeEesSnap([{ houseId: "house-1", totalExpenses: 40, paid: false }]),
+    );
+    const event = {
+      ...makeWrittenEvent(activeGuest, activeGuest),
+      time: new Date(Date.now() - 60 * 1000).toISOString(),
+    };
+
+    await onGuestWrite(event);
+
+    expect(mockBatchCommit).toHaveBeenCalledTimes(1);
+  });
+
   it("re-throws when the claim lookup fails so Firebase can retry", async () => {
     mockGetUsers.mockRejectedValueOnce(new Error("Auth unavailable"));
     const resident = { ...activeGuest, userId: "resident-1" };
@@ -646,6 +755,16 @@ describe("onGuestWrite (EES recalculation)", () => {
       onGuestWrite(makeWrittenEvent(resident, resident)),
     ).rejects.toThrow("Auth unavailable");
     expect(mockBatchCommit).not.toHaveBeenCalled();
+  });
+});
+
+describe("onGuestWrite registration", () => {
+  it("is registered with retry, so a re-thrown EES failure is redelivered", () => {
+    expect(guestWriteRegistration).toBeDefined();
+    expect(guestWriteRegistration![0]).toEqual({
+      document: "guests/{guestId}",
+      retry: true,
+    });
   });
 });
 
