@@ -8,7 +8,8 @@
   "scripts": {
     "test": "jest",
     "e2e:gen-env": "ts-node scripts/gen-env.ts",
-    "e2e:stripe-setup": "ts-node scripts/stripe-sandbox-setup.ts"
+    "e2e:stripe-setup": "ts-node scripts/stripe-sandbox-setup.ts",
+    "e2e:preflight": "ts-node src/preflight/run.ts"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",
