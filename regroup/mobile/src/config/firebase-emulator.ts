@@ -12,7 +12,8 @@ import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
 import functions from '@react-native-firebase/functions';
-import { LaunchArguments } from 'react-native-launch-arguments';
+import type { LaunchArguments as LaunchArgumentsApi } from 'react-native-launch-arguments';
+import { E2E_PROJECT_IDS, E2EVariant } from './env';
 
 export type EmulatorPorts = {
   auth: number;
@@ -57,6 +58,25 @@ export class E2EEmulatorUnreachable extends Error {
   }
 }
 
+export class E2EProjectMismatch extends Error {
+  constructor(variant: E2EVariant, projectId: string | undefined) {
+    super(
+      `E2E ${variant} build is configured for Firebase project "${projectId}", ` +
+        `expected "${E2E_PROJECT_IDS[variant]}". Refusing to start: a bundled ` +
+        'E2E_VARIANT must never run against another project (check .env).',
+    );
+    this.name = 'E2EProjectMismatch';
+    Object.setPrototypeOf(this, E2EProjectMismatch.prototype);
+  }
+}
+
+/** Throws E2EProjectMismatch unless the native project is the variant's own. */
+export const assertE2EProject = (variant: E2EVariant, projectId: string | undefined): void => {
+  if (projectId !== E2E_PROJECT_IDS[variant]) {
+    throw new E2EProjectMismatch(variant, projectId);
+  }
+};
+
 /**
  * The host machine as seen from the simulator or emulator. RNFirebase would
  * remap 127.0.0.1 on Android itself, but the health probe uses fetch, which
@@ -74,6 +94,12 @@ const parsePort = (name: string, raw: unknown): number => {
 
 /** Emulator ports from launch arguments, each defaulting to the CLI default. */
 export const emulatorPorts = (): EmulatorPorts => {
+  // Loaded here, not at the top: the native module runs startup code when first
+  // loaded (on Android it can wait ~20 s for an Activity), so only the emulator
+  // variant may touch it. A literal require() is still bundled by Metro.
+  const {
+    LaunchArguments,
+  }: { LaunchArguments: typeof LaunchArgumentsApi } = require('react-native-launch-arguments');
   const args = LaunchArguments.value<Record<string, unknown>>();
   const ports = { ...DEFAULT_PORTS };
   (Object.keys(PORT_ARGUMENTS) as (keyof EmulatorPorts)[]).forEach((service) => {

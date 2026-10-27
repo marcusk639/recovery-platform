@@ -7,7 +7,12 @@ import FirebaseStorage from '@react-native-firebase/storage';
 import { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import { FirebaseStorageTypes } from '@react-native-firebase/storage';
-import { connectToEmulators, emulatorHost, emulatorPorts } from './src/config/firebase-emulator';
+import {
+  assertE2EProject,
+  connectToEmulators,
+  emulatorHost,
+  emulatorPorts,
+} from './src/config/firebase-emulator';
 import { e2eVariant } from './src/config/env';
 
 // const app = firebase.app();
@@ -24,8 +29,18 @@ const functions = FirebaseFunctions();
 // Deliberately no catch and no fallback: if an emulator is unreachable this
 // promise rejects, and index.js reports that as fatal. It must never carry on
 // against the project in the native Firebase config.
+//
+// An e2e variant must also be running against its own project. E2E_VARIANT is
+// inlined from the bundling shell or .env, so one left in a developer's .env
+// would otherwise ship in a store build against production. Throwing here,
+// while index.js imports this module, stops the app at startup.
+const variant = e2eVariant();
+if (variant !== null) {
+  assertE2EProject(variant, firebase.app().options.projectId);
+}
+
 const emulatorConnection: Promise<void> =
-  e2eVariant() === 'emulator'
+  variant === 'emulator'
     ? connectToEmulators({ host: emulatorHost(), ports: emulatorPorts() })
     : Promise.resolve();
 

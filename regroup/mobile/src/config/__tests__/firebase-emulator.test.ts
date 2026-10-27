@@ -11,6 +11,13 @@
 // jest.setup.js replaces this module with a stub for every other suite.
 jest.unmock('../firebase-emulator');
 
+// firebase-setup cross-checks an e2e variant against the native project id.
+let mockProjectId = '';
+jest.mock('@react-native-firebase/app', () => ({
+  __esModule: true,
+  default: { app: () => ({ options: { projectId: mockProjectId } }) },
+}));
+
 const PORTS = { auth: 19099, firestore: 18080, storage: 19199, functions: 15001 };
 
 const mockFetch = jest.fn();
@@ -82,6 +89,7 @@ describe('connectToEmulators', () => {
   });
 
   it('wires every SDK before the first probe can settle', () => {
+    jest.useFakeTimers();
     const { connectToEmulators } = loadEmulatorModule();
     mockFetch.mockReturnValue(new Promise(() => {}));
 
@@ -202,6 +210,7 @@ describe('app init (firebase-setup)', () => {
 
   it('never touches the emulators in the staging variant', async () => {
     setVariant('staging');
+    mockProjectId = 'regroup-e2e';
 
     await loadFirebaseSetup().emulatorConnection;
 
@@ -210,6 +219,7 @@ describe('app init (firebase-setup)', () => {
 
   it('connects all four SDKs in the emulator variant, with the platform host and launch-argument ports', async () => {
     setVariant('emulator');
+    mockProjectId = 'demo-regroup-e2e';
     Platform.OS = 'android';
     LaunchArguments.value.mockReturnValue({ e2eFunctionsPort: 15001 });
 
@@ -223,6 +233,7 @@ describe('app init (firebase-setup)', () => {
 
   it('lets an unreachable emulator reject app init, with no fallback', async () => {
     setVariant('emulator');
+    mockProjectId = 'demo-regroup-e2e';
     mockFetch.mockRejectedValue(new TypeError('Network request failed'));
     const { E2EEmulatorUnreachable } = loadEmulatorModule();
 
@@ -233,3 +244,6 @@ describe('app init (firebase-setup)', () => {
     expect(allUseEmulatorCalls()).toHaveLength(4);
   });
 });
+
+// A module, so its top-level names do not collide with other test files.
+export {};

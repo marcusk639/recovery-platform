@@ -76,3 +76,13 @@ export const e2eVariant = (): E2EVariant | null => {
 
 /** True only for a bundle built as an e2e variant. Independent of __DEV__. */
 export const isE2EBuild = (): boolean => e2eVariant() !== null;
+
+/**
+ * The Firebase project each e2e variant's native config must name. 'demo-'
+ * projects are emulator-only: the Firebase SDKs and CLI never reach a real
+ * backend for them.
+ */
+export const E2E_PROJECT_IDS: Readonly<Record<E2EVariant, string>> = {
+  emulator: 'demo-regroup-e2e',
+  staging: 'regroup-e2e',
+};

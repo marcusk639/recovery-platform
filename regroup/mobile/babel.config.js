@@ -34,6 +34,16 @@ if (!isTest) {
   require('dotenv').config({ quiet: true });
 }
 
+// A mistyped E2E_VARIANT would bundle as a non-e2e build that a harness still
+// treats as one. Fail the bundle instead. Checked after .env is loaded.
+const E2E_VARIANTS = ['emulator', 'staging'];
+const e2eVariant = process.env.E2E_VARIANT;
+if (e2eVariant && !E2E_VARIANTS.includes(e2eVariant)) {
+  throw new Error(
+    `E2E_VARIANT must be unset or one of ${E2E_VARIANTS.join(', ')}; got "${e2eVariant}"`,
+  );
+}
+
 // @tanstack/query-core 5.x sets its package "react-native" field to
 // "src/index.ts", so Metro compiles its TypeScript source rather than a built
 // bundle. That source uses class private methods, which the RN preset does not
