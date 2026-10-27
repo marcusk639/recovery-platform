@@ -138,7 +138,7 @@ Entities are TypeScript interfaces/types in `src/entities/`:
 - **Test files**: `__tests__/` directories co-located with source
 - **270+ test files** across the codebase
 - **Naming**: `ComponentName.test.tsx` or `moduleName.test.ts`
-- **E2E**: Detox for iOS/Android (`e2e/tests/`)
+- **E2E**: Maestro flows in `maestro/flows/` (seed fixtures in `e2e/setup/`); Detox is retired
 - **Integration**: Separate jest config (`jest.config.integration.js`)
 - **Coverage target**: 80%+
 - Tests written alongside features (TDD approach in recent commits)
