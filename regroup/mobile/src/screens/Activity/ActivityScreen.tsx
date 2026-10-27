@@ -186,7 +186,10 @@ const ActivityScreen: React.FC = () => {
       {disputesError ? (
         // Disputes on the activities below could not be loaded: say so,
         // rather than show them as undisputed.
-        <TouchableOpacity testID="activity-disputes-load-error" onPress={retryDisputes}>
+        <TouchableOpacity
+          testID="activity-disputes-load-error"
+          accessibilityRole="button"
+          onPress={retryDisputes}>
           <Text style={disputeErrorStyles.text}>Couldn't load disputes. Tap to try again.</Text>
         </TouchableOpacity>
       ) : null}

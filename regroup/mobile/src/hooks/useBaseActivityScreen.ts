@@ -115,7 +115,7 @@ const RESOLVE_REFUSAL_ALERTS: Record<string, { title: string; message: string }>
   'Not allowed to decide this dispute': {
     title: "Can't decide this dispute",
     message:
-      'You cannot approve or reject a dispute on your own activity or one you logged. Another admin needs to decide it.',
+      "You can't decide this dispute. It may be your own or one you logged, or your access changed.",
   },
   'Dispute already resolved': {
     title: 'Dispute already resolved',

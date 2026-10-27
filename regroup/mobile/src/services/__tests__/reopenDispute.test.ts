@@ -86,11 +86,15 @@ describe('reopenDispute', () => {
   });
 
   it('1: a rules refusal (own activity, logger, or decision not logged yet) gets its own message', async () => {
+    (logException as jest.Mock).mockClear();
     seed({ status: 'resolved', disputed: 'rejected' });
     (firestore.runTransaction as jest.Mock).mockRejectedValueOnce(
       Object.assign(new Error('denied'), { code: 'firestore/permission-denied' }),
     );
-    await expect(reopenDispute('act-1', 'mgr-1')).rejects.toThrow('Not allowed to undo this decision');
+    await expect(reopenDispute('act-1', 'mgr-1')).rejects.toThrow(
+      'Not allowed to undo this decision',
+    );
+    expect(logException).toHaveBeenCalled();
   });
 
   it('reports any other failure generically', async () => {

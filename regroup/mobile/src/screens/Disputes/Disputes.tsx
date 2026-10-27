@@ -188,7 +188,7 @@ const Disputes: React.FC = () => {
       />
       {disputesError ? (
         // Not an empty list: "no disputes" would be wrong when we could not read them.
-        <TouchableOpacity testID="disputes-load-error" onPress={retryDisputes}>
+        <TouchableOpacity testID="disputes-load-error" accessibilityRole="button" onPress={retryDisputes}>
           <Text style={styles.loadError}>Couldn't load disputes. Tap to try again.</Text>
         </TouchableOpacity>
       ) : (

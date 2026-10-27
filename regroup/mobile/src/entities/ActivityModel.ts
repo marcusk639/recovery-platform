@@ -90,7 +90,8 @@ export function isLegacyUpheld(activity: unknown): boolean {
  */
 export function hasDisputeHistory(activity: unknown): boolean {
   const a = (activity ?? {}) as Record<string, unknown>;
-  const present = (k: string) => a[k] !== undefined && a[k] !== null;
+  // As the rules: a key present (even null) is history.
+  const present = (k: string) => a[k] !== undefined;
   return (
     a.status === ActivityStatus.DISPUTED ||
     a.status === ActivityStatus.RESOLVED ||
@@ -104,7 +105,7 @@ export function hasDisputeHistory(activity: unknown): boolean {
       'disputedAt',
       'reopenedBy',
     ].some(present) ||
-    (a.disputeResult !== undefined && a.disputeResult !== null && a.disputeResult !== 'none') ||
+    (a.disputeResult !== undefined && a.disputeResult !== 'none') ||
     a.incomplete === true
   );
 }

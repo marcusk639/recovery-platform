@@ -75,6 +75,11 @@ describe('hasDisputeHistory', () => {
     expect(hasDisputeHistory({ status: ActivityStatus.ACTIVE, disputedAt: 'x' })).toBe(true);
   });
 
+  it('S4: matches the rules exactly: a present null dispute field (incl. disputeResult) is history', () => {
+    expect(hasDisputeHistory({ status: ActivityStatus.ACTIVE, disputeResult: null })).toBe(true);
+    expect(hasDisputeHistory({ status: ActivityStatus.ACTIVE, disputedBy: null })).toBe(true);
+  });
+
   it("ignores a never-disputed activity (incl. an older build's disputeResult 'none')", () => {
     expect(
       hasDisputeHistory({

@@ -390,10 +390,13 @@ export async function disputeActivity(
   }
 }
 
-/** resolveDispute refusals the UI shows as-is (the rest are generic). */
-/** The rules refused the caller: the activity is theirs, or they logged it. */
+/**
+ * The rules refused the caller: e.g. the activity is theirs or they logged
+ * it, or their access changed.
+ */
 export const NOT_ALLOWED_TO_DECIDE = 'Not allowed to decide this dispute';
 
+/** resolveDispute refusals the UI shows as-is (the rest are generic). */
 export const RESOLVE_REFUSALS = [
   NOT_ALLOWED_TO_DECIDE,
   'Activity not found',
@@ -460,6 +463,7 @@ export async function resolveDispute(
     });
   } catch (error: any) {
     if (error?.code === 'firestore/permission-denied') {
+      logException(error);
       throw new Error(NOT_ALLOWED_TO_DECIDE);
     }
     if (RESOLVE_REFUSALS.includes(error?.message)) {

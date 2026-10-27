@@ -46,7 +46,10 @@ describe('useLiveHouseDisputes', () => {
   });
 
   it('is empty with no house or a missing doc, and reports a read error (S2)', () => {
-    expect(renderHook(() => useLiveHouseDisputes(undefined)).result.current).toMatchObject({ disputes: {}, error: null });
+    expect(renderHook(() => useLiveHouseDisputes(undefined)).result.current).toMatchObject({
+      disputes: {},
+      error: null,
+    });
     expect(mockDoc).not.toHaveBeenCalled();
     const { result } = renderHook(() => useLiveHouseDisputes('h1'));
     act(() => onNext!({ exists: false, data: () => undefined }));

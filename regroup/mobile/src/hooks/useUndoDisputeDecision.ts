@@ -21,7 +21,7 @@ const REOPEN_REFUSAL_ALERTS: Record<string, { title: string; message: string }> 
   'Not allowed to undo this decision': {
     title: "Can't undo this decision",
     message:
-      'You cannot undo a decision on your own activity or one you logged. If the decision was just made, wait a moment and try again.',
+      "You can't undo this decision. It may be your own or one you logged, or your access changed. If it was just made, wait a moment and try again.",
   },
   'Dispute already reopened': {
     title: 'Already reopened',

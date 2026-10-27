@@ -63,6 +63,7 @@ jest.mock('../../util/logging', () => ({
 
 // Import firestore mock reference (resolves to mocked version after hoisting)
 import { firestore } from '../../../firebase-setup';
+import { logException } from '../../util/logging';
 
 // Import after mocks are set up
 import * as activityService from '../activity';
@@ -1002,12 +1003,15 @@ describe('Activity Service', () => {
     });
 
     it('1: a rules refusal (own activity, or one they logged) gets its own message', async () => {
+      (logException as jest.Mock).mockClear();
       (firestore as any).runTransaction = jest.fn(async () => {
         throw Object.assign(new Error('denied'), { code: 'firestore/permission-denied' });
       });
       await expect(resolveDispute(activityId, 'admin456', 'approve')).rejects.toThrow(
         'Not allowed to decide this dispute',
       );
+      // The refusal is logged before it is mapped (I3).
+      expect(logException).toHaveBeenCalled();
       (firestore as any).runTransaction = workingRunTransaction;
     });
 

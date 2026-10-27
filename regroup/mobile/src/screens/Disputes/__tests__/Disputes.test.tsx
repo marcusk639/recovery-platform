@@ -29,7 +29,11 @@ const mockLiveDisputes = jest.fn((): Record<string, unknown> => ({}));
 const mockLiveError = jest.fn((): Error | null => null);
 const mockLiveRetry = jest.fn();
 jest.mock('../../../hooks/useLiveHouseDisputes', () => ({
-  useLiveHouseDisputes: () => ({ disputes: mockLiveDisputes(), error: mockLiveError(), retry: mockLiveRetry }),
+  useLiveHouseDisputes: () => ({
+    disputes: mockLiveDisputes(),
+    error: mockLiveError(),
+    retry: mockLiveRetry,
+  }),
 }));
 
 // ─── Firebase setup mock ─────────────────────────────────────────────────────
@@ -645,7 +649,12 @@ describe('Disputes', () => {
 
     it("lists an older build's delete resolution (undoable), but not a plain deletion", () => {
       const at = '2024-01-15T12:00:00.000Z';
-      const upheld = { ...makeActivity('activity-upheld'), status: 'deleted', disputeResolvedAt: at, loggedAt: at };
+      const upheld = {
+        ...makeActivity('activity-upheld'),
+        status: 'deleted',
+        disputeResolvedAt: at,
+        loggedAt: at,
+      };
       const withdrawn = { ...makeActivity('activity-withdrawn'), status: 'deleted' };
       (useActivities as jest.Mock).mockImplementation(({ status }: { status: string }) => ({
         activities: status === 'deleted' ? [upheld, withdrawn] : [],

@@ -22,7 +22,11 @@ jest.mock('../../../hooks/useSelectedHouse', () => ({
 const mockLiveDisputes = jest.fn((): Record<string, unknown> => ({}));
 const mockLiveError = jest.fn((): Error | null => null);
 jest.mock('../../../hooks/useLiveHouseDisputes', () => ({
-  useLiveHouseDisputes: () => ({ disputes: mockLiveDisputes(), error: mockLiveError(), retry: jest.fn() }),
+  useLiveHouseDisputes: () => ({
+    disputes: mockLiveDisputes(),
+    error: mockLiveError(),
+    retry: jest.fn(),
+  }),
 }));
 
 // ─── Navigation mock ──────────────────────────────────────────────────────────
