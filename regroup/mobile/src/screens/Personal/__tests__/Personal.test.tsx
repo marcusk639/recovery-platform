@@ -26,6 +26,16 @@ jest.mock("../../../hooks/useSelectedHouse", () => ({
   useSelectedHouse: () => mockUseSelectedHouse(),
 }));
 
+// ─── Offline queue / auth (sign-out confirmation) ─────────────────────────────
+const mockPendingCountFor = jest.fn();
+jest.mock("../../../services/offlineQueue", () => ({
+  offlineQueue: { pendingCountFor: (...a: unknown[]) => mockPendingCountFor(...a) },
+}));
+jest.mock("@react-native-firebase/auth", () => ({
+  __esModule: true,
+  default: () => ({ currentUser: { uid: "u1" } }),
+}));
+
 // ─── Navigation mock ──────────────────────────────────────────────────────────
 jest.mock("@react-navigation/native-stack", () => ({}));
 jest.mock("@react-navigation/native", () => ({
@@ -161,6 +171,7 @@ jest.mock("../../../state/queries/houseQueries", () => ({
 
 // ─── React imports (after mocks) ──────────────────────────────────────────────
 import React from "react";
+import { Alert } from "react-native";
 import { render, fireEvent, act } from "@testing-library/react-native";
 import { Provider } from "react-redux";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -633,11 +644,75 @@ describe("PersonalScreen", () => {
     });
 
     it("navigates to PriorAuth when logout button is pressed", async () => {
+      mockPendingCountFor.mockResolvedValue(0);
       const { getByTestId } = renderScreen();
       await act(async () => {
         fireEvent.press(getByTestId("logout-button"));
       });
       expect(mockNavigation.navigate).toHaveBeenCalledWith("priorAuth");
+    });
+
+    describe("with unsynced offline activities", () => {
+      let alertSpy: jest.SpyInstance;
+      beforeEach(() => {
+        alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+      });
+      afterEach(() => alertSpy.mockRestore());
+
+      const pressLogout = async () => {
+        const utils = renderScreen();
+        await act(async () => {
+          fireEvent.press(utils.getByTestId("logout-button"));
+        });
+      };
+
+      it("asks before signing out and does not navigate yet", async () => {
+        mockPendingCountFor.mockResolvedValue(3);
+        await pressLogout();
+
+        expect(mockPendingCountFor).toHaveBeenCalledWith("u1");
+        expect(alertSpy).toHaveBeenCalledTimes(1);
+        const [, message] = alertSpy.mock.calls[0];
+        expect(message).toBe(
+          "3 activities haven't synced and will be discarded if you sign out. Stay signed in to retry?"
+        );
+        expect(mockNavigation.navigate).not.toHaveBeenCalledWith("priorAuth");
+      });
+
+      it("uses the singular for one activity", async () => {
+        mockPendingCountFor.mockResolvedValue(1);
+        await pressLogout();
+        expect(alertSpy.mock.calls[0][1]).toBe(
+          "1 activity hasn't synced and will be discarded if you sign out. Stay signed in to retry?"
+        );
+      });
+
+      it("signs out when the user confirms", async () => {
+        mockPendingCountFor.mockResolvedValue(2);
+        await pressLogout();
+        const buttons = alertSpy.mock.calls[0][2] as any[];
+        const confirm = buttons.find((b) => b.style === "destructive");
+        await act(async () => {
+          await confirm.onPress();
+        });
+        expect(mockNavigation.navigate).toHaveBeenCalledWith("priorAuth");
+      });
+
+      it("stays signed in when the user chooses to retry", async () => {
+        mockPendingCountFor.mockResolvedValue(2);
+        await pressLogout();
+        const buttons = alertSpy.mock.calls[0][2] as any[];
+        const stay = buttons.find((b) => b.style === "cancel");
+        expect(stay.onPress).toBeUndefined();
+        expect(mockNavigation.navigate).not.toHaveBeenCalledWith("priorAuth");
+      });
+
+      it("still signs out when the pending count cannot be read", async () => {
+        mockPendingCountFor.mockRejectedValue(new Error("storage"));
+        await pressLogout();
+        expect(alertSpy).not.toHaveBeenCalled();
+        expect(mockNavigation.navigate).toHaveBeenCalledWith("priorAuth");
+      });
     });
   });
 

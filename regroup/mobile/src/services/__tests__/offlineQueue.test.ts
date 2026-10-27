@@ -82,11 +82,13 @@ describe('isNetworkError', () => {
   });
 
   it('looks through `cause` for the network code', () => {
-    const wrapped = new Error('Failed to do a thing', {
+    const wrapped = Object.assign(new Error('Failed to do a thing'), {
       cause: { code: 'firestore/unavailable' },
     });
     expect(isNetworkError(wrapped)).toBe(true);
-    expect(isNetworkError(new Error('x', { cause: { code: 'permission-denied' } }))).toBe(false);
+    expect(
+      isNetworkError(Object.assign(new Error('x'), { cause: { code: 'permission-denied' } })),
+    ).toBe(false);
   });
 
   it('returns false for namespaced permission errors', () => {

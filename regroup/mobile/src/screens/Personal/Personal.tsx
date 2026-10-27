@@ -9,7 +9,9 @@ import { Guests } from "../../types";
 import { House } from "../../entities/House";
 import { User } from "../../entities/User";
 import Admin from "../../entities/Admin";
-import { TouchableOpacity, View } from "react-native";
+import { Alert, TouchableOpacity, View } from 'react-native';
+import auth from '@react-native-firebase/auth';
+import { offlineQueue } from '../../services/offlineQueue';
 import {
   ROW,
   normalize,
@@ -289,15 +291,39 @@ const PersonalScreen: React.FC<PersonalProps> = ({ navigation }) => {
     );
   }, [showFormModal, house, dismissFormModal, user]);
 
-  const signOut = useCallback(async () => {
+  const performSignOut = useCallback(async () => {
     try {
       // Unsubscribe from chat listeners would happen here if available
       navigation.navigate(Routes.PriorAuth);
       await logout();
     } catch (error) {
-      logException(error, "Failed to sign out from Personal screen");
+      logException(error, 'Failed to sign out from Personal screen');
     }
   }, [logout, navigation]);
+
+  // Signing out discards whatever offline activities still can't sync, so ask first.
+  const signOut = useCallback(async () => {
+    let unsynced = 0;
+    try {
+      const uid = auth().currentUser?.uid;
+      unsynced = uid ? await offlineQueue.pendingCountFor(uid) : 0;
+    } catch (error) {
+      logException(error, 'Could not count unsynced activities before sign-out');
+    }
+    if (unsynced > 0) {
+      const subject = unsynced === 1 ? "1 activity hasn't" : `${unsynced} activities haven't`;
+      Alert.alert(
+        'Unsynced activities',
+        `${subject} synced and will be discarded if you sign out. Stay signed in to retry?`,
+        [
+          { text: 'Stay signed in', style: 'cancel' },
+          { text: 'Sign out anyway', style: 'destructive', onPress: performSignOut },
+        ],
+      );
+      return;
+    }
+    await performSignOut();
+  }, [performSignOut]);
 
   const OPTIONS = useMemo(
     () => ({
