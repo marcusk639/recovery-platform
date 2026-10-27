@@ -1,6 +1,5 @@
 import FirebaseAuth from '@react-native-firebase/auth';
 import { auth, functions } from '../../firebase-setup';
-import { offlineQueue } from './offlineQueue';
 import { logException } from '../util/logging';
 
 /**
@@ -41,18 +40,8 @@ async function checkAccount(user: CurrentUser): Promise<AccountState> {
   }
 }
 
-/**
- * Clears the offline queue, then signs out, for a deletion that happened (or
- * can't be ruled out). Neither step may mask the outcome. The uid is the one
- * captured when deletion started: native SDKs null `auth.currentUser` on
- * user-not-found / token-expired before this runs.
- */
-async function signOutQuietly(uid: string): Promise<void> {
-  try {
-    await offlineQueue.clearUser(uid);
-  } catch (err) {
-    logException(err, 'Offline queue clear failed after account deletion');
-  }
+/** Sign-out after deletion (or an unconfirmed one) must not mask the outcome. */
+async function signOutQuietly(): Promise<void> {
   try {
     await auth.signOut();
   } catch (err) {
@@ -64,10 +53,10 @@ async function signOutQuietly(uid: string): Promise<void> {
  * After a failure: resolves when the account is confirmed gone, signs out and
  * throws a "couldn't confirm" error when that can't be known, else rethrows.
  */
-async function settleFailure(user: CurrentUser, uid: string, err: unknown): Promise<void> {
+async function settleFailure(user: CurrentUser, err: unknown): Promise<void> {
   const state = await checkAccount(user);
   if (state === 'exists') throw err;
-  await signOutQuietly(uid);
+  await signOutQuietly();
   if (state === 'unconfirmed') {
     throw Object.assign(new Error(DELETION_UNCONFIRMED_MESSAGE), {
       code: DELETION_UNCONFIRMED_CODE,
@@ -90,21 +79,20 @@ export async function deleteMyAccount(password: string): Promise<void> {
   if (!currentUser || !currentUser.email) {
     throw new Error('No signed-in user');
   }
-  const uid = currentUser.uid;
   const credential = FirebaseAuth.EmailAuthProvider.credential(currentUser.email, password);
   try {
     await currentUser.reauthenticateWithCredential(credential);
   } catch (err: any) {
     if (!MAYBE_GONE_REAUTH_CODES.includes(err?.code)) throw err;
-    await settleFailure(currentUser, uid, err);
+    await settleFailure(currentUser, err);
     return;
   }
   try {
     await currentUser.getIdToken(true);
     await functions.httpsCallable('deleteAccount')();
   } catch (err) {
-    await settleFailure(currentUser, uid, err);
+    await settleFailure(currentUser, err);
     return;
   }
-  await signOutQuietly(uid);
+  await signOutQuietly();
 }

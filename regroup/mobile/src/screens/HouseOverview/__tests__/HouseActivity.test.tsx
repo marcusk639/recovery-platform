@@ -78,14 +78,6 @@ jest.mock('../../../services/meeting', () => ({
   addMeeting: jest.fn(() => Promise.resolve({})),
 }));
 
-// ─── offlineQueue mock ────────────────────────────────────────────────────────
-jest.mock('../../../services/offlineQueue', () => ({
-  offlineQueue: {
-    enqueue: jest.fn(),
-    flush: jest.fn(() => Promise.resolve()),
-  },
-}));
-
 // ─── React Query hooks mock ───────────────────────────────────────────────────
 // useHouseActivities is controlled per-test via mockReturnValue; default to empty.
 const mockUseHouseActivities = jest.fn<

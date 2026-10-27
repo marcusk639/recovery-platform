@@ -13,8 +13,6 @@ import Admin from "../entities/Admin";
 import { guestCollection } from "./guest";
 import { adminCollection } from "./admin";
 import { uploadUserAvatar } from "./storage";
-import { flushOfflineActivities } from './activity';
-import { offlineQueue } from './offlineQueue';
 import { logException } from "../util/logging";
 import { finishOperatorSetupIfNeeded, loadRecoveredUser } from "./operator-setup";
 import { SimpleValidationService } from "./SimpleValidationService";
@@ -114,103 +112,7 @@ export async function convertAnonymousUser(
   return signInWithEmail(email, password);
 }
 
-/** Longest a sign-out waits for the offline queue flush. */
-export const SIGN_OUT_FLUSH_TIMEOUT_MS = 5000;
-/** Longest a sign-out waits for the offline queue to be cleared. */
-export const SIGN_OUT_CLEAR_TIMEOUT_MS = 5000;
-
-/** Longest a sign-out waits for the last-resort storage wipe. */
-export const SIGN_OUT_WIPE_TIMEOUT_MS = 3000;
-
-/** Rejection used by withTimeout, so callers can tell a timeout from a failure. */
-class SignOutTimeoutError extends Error {}
-
-/** Settles with `work`, or rejects after `ms` (the timer is always cleared). */
-async function withTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      work,
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new SignOutTimeoutError(message)), ms);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-/**
- * Sign-out step for the offline queue: replay the user's queued activities
- * once (best effort, capped), report what is about to be discarded, then clear
- * them. Queued activities can hold residents' medication data, so they must
- * not outlive the session on a shared device. Only the app's offline queue is
- * cleared: Firestore's own on-device cache of pending writes is not.
- * Nothing here may block or fail the sign-out itself.
- */
-async function flushAndClearOfflineQueue(uid: string): Promise<void> {
-  try {
-    // Offline Firestore writes stay pending until reconnect, so cap the wait.
-    await withTimeout(
-      flushOfflineActivities(uid),
-      SIGN_OUT_FLUSH_TIMEOUT_MS,
-      'offline queue flush timed out',
-    );
-  } catch (error) {
-    logException(error, 'sign-out: offline queue flush failed');
-  }
-  try {
-    const unsynced = await offlineQueue.pendingCountFor(uid);
-    if (unsynced > 0) {
-      // Counts only: no activity content or names.
-      logException(
-        new Error('Sign-out discarded unsynced offline activities'),
-        `sign-out: discarding ${unsynced} unsynced offline activities`,
-      );
-    }
-  } catch (error) {
-    logException(error, 'sign-out: counting unsynced offline activities failed');
-  }
-  try {
-    await withTimeout(
-      offlineQueue.clearUser(uid),
-      SIGN_OUT_CLEAR_TIMEOUT_MS,
-      'offline queue clear timed out',
-    );
-  } catch (error) {
-    logException(
-      error,
-      error instanceof SignOutTimeoutError
-        ? 'sign-out: offline queue clear timed out'
-        : 'sign-out: offline queue clear failed',
-    );
-    // The user's items are still on the device (hung or failed clear, e.g.
-    // other users' items prevented a partial rewrite). Drop the whole stored
-    // queue, every user's, rather than leave medication data behind. Capped:
-    // the same hung storage must not hang sign-out.
-    try {
-      const othersWiped = await withTimeout(
-        offlineQueue.emergencyWipe(uid),
-        SIGN_OUT_WIPE_TIMEOUT_MS,
-        'offline queue wipe timed out',
-      );
-      if (othersWiped > 0) {
-        logException(
-          new Error('Sign-out wiped other users offline activities'),
-          `sign-out: wiped ${othersWiped} other users' offline activities`,
-        );
-      }
-    } catch (wipeError) {
-      logException(wipeError, 'sign-out: offline queue wipe failed');
-    }
-  }
-}
-
 export async function signOut() {
-  const uid = auth().currentUser?.uid;
-  if (uid) {
-    await flushAndClearOfflineQueue(uid);
-  }
   return auth().signOut();
 }
 

@@ -459,8 +459,3 @@ export const useComplianceCheck = (
     error: null,
   };
 };
-
-// Moved to its own file to break the DataContext ↔ activityQueries init cycle.
-// useOfflineSync (called inside DataContext) now imports from there directly,
-// avoiding the circular chain that left useFlushOfflineQueue undefined on first load.
-export { useFlushOfflineQueue } from './useFlushOfflineQueue';

@@ -267,6 +267,21 @@ describe('Activity Service', () => {
   // ==========================================================================
 
   describe('logActivity', () => {
+    it('rethrows the original Firestore error so its code is preserved', async () => {
+      const original = Object.assign(new Error('denied'), { code: 'permission-denied' });
+      mockActivityCollection.add.mockRejectedValueOnce(original);
+
+      await expect(
+        logActivity(
+          'guest123',
+          'house456',
+          ActivityType.CHORE,
+          ActivityDataFactory.chore('daily', 'Kitchen'),
+          'user789',
+        ),
+      ).rejects.toBe(original);
+    });
+
     it('should create chore activity', async () => {
       const activity = await logActivity(
         'guest123',

@@ -20,9 +20,6 @@ import {
   initializeDailyStats,
 } from '../entities/WeekSummary';
 import { logException } from '../util/logging';
-import auth from '@react-native-firebase/auth';
-import { offlineQueue, isNetworkError, type FlushResult } from './offlineQueue';
-import { isPermissionDenied } from './networkError';
 
 /**
  * Helper: Get week start date (Monday) from any date
@@ -67,16 +64,7 @@ function getDateString(date: Date | string): string {
  * @param data - Activity-specific data
  * @param loggedBy - User ID who logged this activity
  * @param timestamp - Optional custom timestamp (defaults to now)
- * @param options.docId - Create the activity under this id instead of a
- *   generated one (offline replay passes the queue item id). If a doc with that
- *   id already exists the activity is not written again, so a retry after a
- *   partial success cannot duplicate it; only the week summary step is redone.
- *   That step is at-least-once: a crash between the summary commit and the
- *   queue removal can count the activity twice (the summary is a delta, not
- *   idempotent per activity).
  * @returns The created activity with Firestore-generated ID
- * @throws The original Firestore error (its `code` is preserved so callers can
- *   tell a network failure from a rejected write)
  */
 export async function logActivity(
   guestId: string,
@@ -85,7 +73,6 @@ export async function logActivity(
   data: ActivityData,
   loggedBy: string,
   timestamp?: Date,
-  options?: { docId?: string },
 ): Promise<Activity> {
   try {
     const activityTimestamp = timestamp || new Date();
@@ -103,65 +90,28 @@ export async function logActivity(
     };
 
     // Add to Firestore
-    let activityId: string;
-    if (options?.docId) {
-      // Create semantics under firestore.rules: set() on a missing doc is a
-      // create (loggedBy must be the caller). The existence check keeps a
-      // replay from becoming an update, which the rules treat differently.
-      const ref = firestore.collection('activities').doc(options.docId);
-      // The `read` rule dereferences resource.data, so get() of a doc that
-      // does not exist yet is permission-denied, not "not found". Treat that as
-      // missing; the create rule (loggedBy == uid) still guards the set().
-      let exists = false;
-      try {
-        exists = (await ref.get()).exists;
-      } catch (getError) {
-        if (!isPermissionDenied(getError)) {
-          throw getError;
-        }
-      }
-      if (!exists) {
-        await ref.set(activity);
-      }
-      activityId = options.docId;
-    } else {
-      const docRef = await firestore.collection('activities').add(activity);
-      activityId = docRef.id;
-    }
+    const docRef = await firestore.collection('activities').add(activity);
 
     // Apply a +1 delta to the week summary. This replaces the prior
     // read-all-week-activities → recompute → write strategy on the hot
     // logActivity path. See .full-review [P1] and the docstring on
     // incrementWeekSummaryForActivity below.
-    try {
-      await incrementWeekSummaryForActivity(
-        guestId,
-        houseId,
-        { type, timestamp: activityTimestamp, data },
-        1,
-      );
-    } catch (summaryError) {
-      // On replay the activity now exists. A network failure is rethrown so the
-      // next flush redoes just this step; anything else (e.g. a resident cannot
-      // write week-summaries under firestore.rules) must not dead-letter an
-      // item whose activity is saved, so report it (id only) and count it synced.
-      if (!options?.docId || isNetworkError(summaryError)) {
-        throw summaryError;
-      }
-      logException(
-        summaryError,
-        `offline replay: week summary update failed; activity ${options.docId} was saved`,
-      );
-    }
+    await incrementWeekSummaryForActivity(
+      guestId,
+      houseId,
+      { type, timestamp: activityTimestamp, data },
+      1,
+    );
 
     // Return activity with ID
     return {
-      id: activityId,
+      id: docRef.id,
       ...activity,
       loggedAt: new Date(), // Convert server timestamp to Date for return
     };
   } catch (error) {
     logException(error);
+    // Original error, so its `code` still tells callers what failed.
     throw error;
   }
 }
@@ -533,8 +483,7 @@ export async function incrementWeekSummaryForActivity(
     });
   } catch (error) {
     logException(error);
-    // Original error, so its `code` still tells a network failure from a rejection.
-    throw error;
+    throw new Error('Failed to update week summary');
   }
 }
 
@@ -818,63 +767,6 @@ export async function verifyActivity(
 }
 
 /**
- * Log an activity with automatic offline fallback.
- *
- * Attempts to write the activity to Firestore immediately. If the write fails
- * because the device is offline (Firestore error code `unavailable` or
- * `deadline-exceeded`, bare or `firestore/`-namespaced), the activity is queued
- * locally for the signed-in user and synced the next time
- * `useFlushOfflineQueue` is called. If nobody is signed in, or the queue cannot
- * persist the item, the original error is rethrown (nothing was saved).
- *
- * Any non-network error (permission denied, invalid argument, etc.) is
- * re-thrown so callers can handle real failures.
- *
- * @returns `{ success: true, queued: false, activityId }` on immediate write,
- *          `{ success: false, queued: true, activityId }` when queued locally.
- */
-export async function logActivityWithOfflineSupport(
-  guestId: string,
-  houseId: string,
-  type: ActivityType,
-  data: ActivityData,
-  loggedBy: string,
-  timestamp?: Date,
-): Promise<{ success: boolean; queued: boolean; activityId?: string }> {
-  try {
-    const activity = await logActivity(
-      guestId,
-      houseId,
-      type,
-      data,
-      loggedBy,
-      timestamp,
-    );
-    return { success: true, queued: false, activityId: activity.id };
-  } catch (error: unknown) {
-    const ownerUid = auth().currentUser?.uid;
-    if (!isNetworkError(error) || !ownerUid) {
-      throw error;
-    }
-    try {
-      const localId = await offlineQueue.enqueue({
-        guestId,
-        houseId,
-        type,
-        data,
-        loggedBy,
-        ownerUid,
-        timestamp: timestamp ?? new Date(),
-      });
-      return { success: false, queued: true, activityId: localId };
-    } catch {
-      // The queue already reported why; the caller must learn the activity was not saved.
-      throw error;
-    }
-  }
-}
-
-/**
  * Subscribe to real-time activity updates for a house
  *
  * @param houseId - ID of the house
@@ -903,22 +795,4 @@ export function subscribeToHouseActivities(
 
       onUpdate(activities);
     });
-}
-
-/**
- * Replay the given user's queued offline activities. Other users' items on a
- * shared device are left untouched.
- */
-export async function flushOfflineActivities(userId: string): Promise<FlushResult> {
-  return offlineQueue.flush(async (item) => {
-    await logActivity(
-      item.guestId,
-      item.houseId,
-      item.type,
-      item.data,
-      item.loggedBy,
-      item.timestamp,
-      { docId: item.id },
-    );
-  }, userId);
 }

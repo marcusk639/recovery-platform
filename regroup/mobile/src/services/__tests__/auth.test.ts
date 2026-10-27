@@ -33,14 +33,10 @@ jest.mock("../../../firebase-setup", () => ({
   },
 }));
 
-// The offline-queue-aware sign-out lives in users.signOut.
-jest.mock("../users", () => ({ signOut: jest.fn() }));
-
 // ── Imports ──────────────────────────────────────────────────────────────────
 
 import { EnhancedAuthService } from "../EnhancedAuthService";
 import { auth } from "../../../firebase-setup";
-import { signOut as signOutAndClearOfflineQueue } from "../users";
 import { SimpleValidationService } from "../SimpleValidationService";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -373,24 +369,16 @@ describe("EnhancedAuthService", () => {
 
   describe("signOut", () => {
     it("returns success on successful sign-out", async () => {
-      (signOutAndClearOfflineQueue as jest.Mock).mockResolvedValueOnce(undefined);
+      (auth.signOut as jest.Mock).mockResolvedValueOnce(undefined);
 
       const result = await EnhancedAuthService.signOut();
 
       expect(result.success).toBe(true);
-      expect(signOutAndClearOfflineQueue).toHaveBeenCalledTimes(1);
+      expect(auth.signOut).toHaveBeenCalledTimes(1);
     });
 
-    it("routes through users.signOut, never auth.signOut directly (queue must be cleared)", async () => {
-      (signOutAndClearOfflineQueue as jest.Mock).mockResolvedValueOnce(undefined);
-
-      await EnhancedAuthService.signOut();
-
-      expect(auth.signOut).not.toHaveBeenCalled();
-    });
-
-    it("returns failure when sign-out throws", async () => {
-      (signOutAndClearOfflineQueue as jest.Mock).mockRejectedValueOnce(new Error("network"));
+    it("returns failure when Firebase sign-out throws", async () => {
+      (auth.signOut as jest.Mock).mockRejectedValueOnce(new Error("network"));
 
       const result = await EnhancedAuthService.signOut();
 

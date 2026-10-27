@@ -79,13 +79,6 @@ jest.mock('../../../services/meeting', () => ({
   addMeeting: jest.fn(() => Promise.resolve({})),
 }));
 
-jest.mock('../../../services/offlineQueue', () => ({
-  offlineQueue: {
-    enqueue: jest.fn(),
-    flush: jest.fn(() => Promise.resolve()),
-  },
-}));
-
 // ─── Context mocks ────────────────────────────────────────────────────────────
 jest.mock('../../../context', () => ({
   useModal: () => ({
