@@ -44,6 +44,15 @@ the list in `false-positives.md` or be a finding.
   trigger as outdated. Do flag a v1 `onCall` given a `region` (class 6).
 - regroup functions are split across two codebases (`regroup/firebase.json` and `regroup/web/firebase.json`).
 
+## Homegroups privacy flags and e2e test ids
+
+- Member privacy toggles (`showSobrietyDate`, `showPhoneNumber`) are opt-in. Show the data only on `=== true`,
+  and deserialize with `?? false` (`homegroups/mobile/src/models/MemberModel.ts`). `!== false`, `?? true` or
+  a truthy default shows the data of members who never opted in (class 7).
+- `testID` props in `homegroups/mobile/src/` are the selectors for the Maestro flows (`homegroups/mobile/maestro/flows/`,
+  and the CI smoke flow `e2e-maestro/homegroups/login-and-join-group.yaml`) and Detox (`homegroups/mobile/e2e/`).
+  Renaming or removing one breaks e2e without failing a unit test, so grep the flows.
+
 ## TypeScript strictness
 
 | Package              | `strict`                                                                  |
