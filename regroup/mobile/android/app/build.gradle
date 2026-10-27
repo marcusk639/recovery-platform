@@ -275,6 +275,24 @@ tasks.matching { it.name in ["preE2eStagingBuild", "processE2eStagingGoogleServi
     dependsOn copyE2eStagingGoogleServices
 }
 
+// Release-build guard (scripts/release-guard.js), for the `release` build type
+// only; the e2e build types and debug are not checked. It reads the Firebase
+// project from the values.xml the google-services plugin generated for release
+// (so whichever google-services.json the plugin resolved), and
+// STRIPE_PUBLISHABLE_KEY as babel.config.js resolves it for the bundle: the
+// build environment, then regroup/mobile/.env. Fails unless the project is
+// phoenix-cleanhouse and the key is pk_live_, before anything is compiled.
+def releaseGuard = tasks.register("regroupReleaseGuard", Exec) {
+    dependsOn "processReleaseGoogleServices"
+    def values = file("${buildDir}/generated/res/google-services/release/values/values.xml")
+    workingDir rootProject.file("..")
+    commandLine "node", "scripts/release-guard.js", "--config", values.absolutePath
+    outputs.upToDateWhen { false }
+}
+tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+    dependsOn releaseGuard
+}
+
 buildscript {
     repositories {
         mavenCentral()

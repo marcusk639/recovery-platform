@@ -335,6 +335,7 @@
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
 				9CC4A6521B0150A823EFBBC9 /* Configure e2e app bundle */,
+				E71BB0F78B40E07BFE625043 /* Release guard */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				7F11A588AD0F48C5AAD88B14 /* Upload Debug Symbols to Sentry */,
 				237A53BBFA35BA0AF9B37521 /* [CP] Copy Pods Resources */,
@@ -598,6 +599,29 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-rats-ratsTests/Pods-rats-ratsTests-resources.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		E71BB0F78B40E07BFE625043 /* Release guard */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/../scripts/ios-release-guard.sh",
+				"$(SRCROOT)/../scripts/release-guard.js",
+				"$(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/GoogleService-Info.plist",
+			);
+			name = "Release guard";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/../scripts/ios-release-guard.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
 		FD10A7F022414F080027D42C /* Start Packager */ = {
