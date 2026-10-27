@@ -22,6 +22,7 @@ import {
 import { logException } from '../util/logging';
 import auth from '@react-native-firebase/auth';
 import { offlineQueue, isNetworkError, type FlushResult } from './offlineQueue';
+import { isPermissionDenied } from './networkError';
 
 /**
  * Helper: Get week start date (Monday) from any date
@@ -108,8 +109,18 @@ export async function logActivity(
       // create (loggedBy must be the caller). The existence check keeps a
       // replay from becoming an update, which the rules treat differently.
       const ref = firestore.collection('activities').doc(options.docId);
-      const existing = await ref.get();
-      if (!existing.exists) {
+      // The `read` rule dereferences resource.data, so get() of a doc that
+      // does not exist yet is permission-denied, not "not found". Treat that as
+      // missing; the create rule (loggedBy == uid) still guards the set().
+      let exists = false;
+      try {
+        exists = (await ref.get()).exists;
+      } catch (getError) {
+        if (!isPermissionDenied(getError)) {
+          throw getError;
+        }
+      }
+      if (!exists) {
         await ref.set(activity);
       }
       activityId = options.docId;
@@ -122,12 +133,26 @@ export async function logActivity(
     // read-all-week-activities → recompute → write strategy on the hot
     // logActivity path. See .full-review [P1] and the docstring on
     // incrementWeekSummaryForActivity below.
-    await incrementWeekSummaryForActivity(
-      guestId,
-      houseId,
-      { type, timestamp: activityTimestamp, data },
-      1,
-    );
+    try {
+      await incrementWeekSummaryForActivity(
+        guestId,
+        houseId,
+        { type, timestamp: activityTimestamp, data },
+        1,
+      );
+    } catch (summaryError) {
+      // On replay the activity now exists. A network failure is rethrown so the
+      // next flush redoes just this step; anything else (e.g. a resident cannot
+      // write week-summaries under firestore.rules) must not dead-letter an
+      // item whose activity is saved, so report it (id only) and count it synced.
+      if (!options?.docId || isNetworkError(summaryError)) {
+        throw summaryError;
+      }
+      logException(
+        summaryError,
+        `offline replay: week summary update failed; activity ${options.docId} was saved`,
+      );
+    }
 
     // Return activity with ID
     return {
@@ -508,7 +533,8 @@ export async function incrementWeekSummaryForActivity(
     });
   } catch (error) {
     logException(error);
-    throw new Error('Failed to update week summary');
+    // Original error, so its `code` still tells a network failure from a rejection.
+    throw error;
   }
 }
 

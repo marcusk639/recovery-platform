@@ -39,5 +39,16 @@ export function isNetworkError(error: unknown): boolean {
   }
 
   const message = typeof err.message === 'string' ? err.message.toLowerCase() : '';
-  return OFFLINE_ERROR_MESSAGES.some((fragment) => message.includes(fragment));
+  if (OFFLINE_ERROR_MESSAGES.some((fragment) => message.includes(fragment))) {
+    return true;
+  }
+
+  // A wrapper that kept the original as `cause` is as offline as its cause.
+  return err.cause !== undefined && err.cause !== error && isNetworkError(err.cause);
+}
+
+/** True for Firestore's permission-denied, bare or `firestore/`-namespaced. */
+export function isPermissionDenied(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null | undefined)?.code;
+  return code === 'permission-denied' || code === 'firestore/permission-denied';
 }

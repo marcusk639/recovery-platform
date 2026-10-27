@@ -81,6 +81,14 @@ describe('isNetworkError', () => {
     expect(isNetworkError({ code: 'firestore/deadline-exceeded', message: 'x' })).toBe(true);
   });
 
+  it('looks through `cause` for the network code', () => {
+    const wrapped = new Error('Failed to do a thing', {
+      cause: { code: 'firestore/unavailable' },
+    });
+    expect(isNetworkError(wrapped)).toBe(true);
+    expect(isNetworkError(new Error('x', { cause: { code: 'permission-denied' } }))).toBe(false);
+  });
+
   it('returns false for namespaced permission errors', () => {
     expect(isNetworkError({ code: 'firestore/permission-denied', message: 'denied' })).toBe(false);
   });

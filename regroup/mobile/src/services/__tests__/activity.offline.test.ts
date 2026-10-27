@@ -105,6 +105,81 @@ describe('logActivity with a docId (idempotent replay)', () => {
   });
 });
 
+describe('replay existence check under the Firestore rules', () => {
+  // firestore.rules: `read` dereferences resource.data, so get() of a doc that
+  // does not exist yet is permission-denied (see activityReplay.rules.test.ts).
+  it.each(['permission-denied', 'firestore/permission-denied'])(
+    'treats %s on the existence get() as "missing" and creates the doc',
+    async (code) => {
+      mockDocGet.mockRejectedValue({ code, message: 'denied' });
+
+      const result = await logActivity('g', 'h', ActivityType.CHORE, data, 'u', when, {
+        docId: 'offline_42',
+      });
+
+      expect(mockSet).toHaveBeenCalledTimes(1);
+      expect(result.id).toBe('offline_42');
+    },
+  );
+
+  it('does not create the doc when the existence get() fails for another reason', async () => {
+    const offline = { code: 'firestore/unavailable', message: 'x' };
+    mockDocGet.mockRejectedValue(offline);
+
+    await expect(
+      logActivity('g', 'h', ActivityType.CHORE, data, 'u', when, { docId: 'offline_42' }),
+    ).rejects.toBe(offline);
+    expect(mockSet).not.toHaveBeenCalled();
+  });
+});
+
+describe('week summary step', () => {
+  const failSummary = (error: object) =>
+    mockRunTransaction.mockImplementation(async () => {
+      throw error;
+    });
+
+  it('rethrows the original error so a network failure stays recognisable', async () => {
+    const offline = { code: 'firestore/unavailable', message: 'x' };
+    failSummary(offline);
+
+    await expect(logActivity('g', 'h', ActivityType.CHORE, data, 'u', when)).rejects.toBe(offline);
+  });
+
+  it('on replay, a network failure in the summary step is rethrown so the item is retried', async () => {
+    const offline = { code: 'firestore/unavailable', message: 'x' };
+    failSummary(offline);
+
+    await expect(
+      logActivity('g', 'h', ActivityType.CHORE, data, 'u', when, { docId: 'offline_42' }),
+    ).rejects.toBe(offline);
+  });
+
+  it('on replay, a rejected summary (e.g. a resident cannot write week-summaries) still counts as synced and is reported by id only', async () => {
+    failSummary({ code: 'firestore/permission-denied', message: 'Jane Doe oxycodone' });
+
+    const result = await logActivity('g', 'h', ActivityType.CHORE, data, 'u', when, {
+      docId: 'offline_42',
+    });
+
+    expect(result.id).toBe('offline_42');
+    expect(mockSet).toHaveBeenCalledTimes(1);
+    const summaryReport = mockLogException.mock.calls.find(([, msg]) =>
+      /week summary/i.test(String(msg)),
+    );
+    expect(summaryReport).toBeDefined();
+    expect(String(summaryReport![1])).not.toMatch(/Dishes|oxycodone|guest/i);
+    expect(String(summaryReport![1])).toContain('offline_42');
+  });
+
+  it('without a docId (direct logging) a rejected summary still fails the call', async () => {
+    const denied = { code: 'firestore/permission-denied', message: 'x' };
+    failSummary(denied);
+
+    await expect(logActivity('g', 'h', ActivityType.CHORE, data, 'u', when)).rejects.toBe(denied);
+  });
+});
+
 describe('logActivityWithOfflineSupport', () => {
   it('queues an add() that rejects with a namespaced firestore/unavailable code', async () => {
     mockAdd.mockRejectedValue({ code: 'firestore/unavailable', message: 'x' });
