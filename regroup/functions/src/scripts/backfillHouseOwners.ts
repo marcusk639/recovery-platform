@@ -182,8 +182,9 @@ export async function primaryOwnerPass(
             tier: 'owner',
             reason: 'owner-chose (--primary): existing record',
           });
-        } catch {
-          contradicted('the primary record changed during the run; re-run');
+        } catch (err) {
+          const code = String((err as { code?: unknown })?.code ?? 'unknown');
+          contradicted(`could not mark the record chosen (${code}); re-run`);
         }
       } else if (choice || existing[0].chosen || found.uid === existing[0].uid) continue;
       else if (found.uid) contradicted(`evidence names ${found.uid}`);

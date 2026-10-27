@@ -110,7 +110,9 @@ it('a primary record that changes during the run is reported, the run goes on', 
   claims.owner = {};
   const report = await run(racing, { [H]: 'owner' });
   expect(report.primaryContradicted).toEqual([
-    expect.objectContaining({ reason: expect.stringMatching(/changed during the run/) }),
+    expect.objectContaining({
+      reason: expect.stringMatching(/could not mark the record chosen \(5\); re-run/),
+    }),
   ]);
   expect(report.owners).toEqual([]);
 });

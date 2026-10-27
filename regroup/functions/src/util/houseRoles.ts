@@ -26,7 +26,9 @@
  * Record before claims: addAdminAuthorization, addGuestAuthorization and
  * promoteGuestsToAdmin write the record, then the claims, then the record
  * again (recordRoleGrant never lowers, so the second write undoes a revoke
- * that lowered the record in between). If the claims write fails, a record
+ * that lowered the record in between; it writes only while the live claims
+ * still back the tier, so a revoke that also removed the claim stays undone
+ * and no record outlives its claim). If the claims write fails, a record
  * with no matching claim is left. It grants no more than the claims do:
  * every tier check here needs the live claim, and the rules rank a caller
  * as the server does (tierAndRank): the primary record 4; an owner record

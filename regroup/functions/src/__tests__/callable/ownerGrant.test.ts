@@ -48,7 +48,7 @@ jest.mock('../../util/user', () => ({
   _verifyUserEmail: jest.fn(),
 }));
 
-import { mem } from '../helpers/memFirestore';
+import { mem, memDb } from '../helpers/memFirestore';
 import {
   addAdminAuthorization,
   addGuestAuthorization,
@@ -196,16 +196,36 @@ describe('record before claims (verifier N-B): a failed claims write leaves a ra
     as('owner');
     as('m', { admin: { [H]: true } });
     mem.seed(`house-roles/${H}_m`, { houseId: H, tier: 'manager' });
-    mockAddHouseRoles.mockImplementation(async (_uid: string, _h: string[], roles: string[]) => {
+    mockAddHouseRoles.mockImplementation(async (uid: string, houses: string[], roles: string[]) => {
       // A concurrent recordRoleRevoke read M's claims (admin only) after the
       // owner record was written and lowered it back to manager.
       if (roles.includes('superAdmin'))
         mem.seed(`house-roles/${H}_m`, { houseId: H, tier: 'manager' });
+      // Then the claims write lands.
+      for (const r of roles) {
+        mockUsers[uid][r] = { ...(mockUsers[uid][r] as object), [houses[0]]: true };
+      }
     });
     await (addAdminAuthorization as unknown as Function)({
       data: { userId: 'm', houseIds: [H], superAdmin: [H] },
       auth: OWNER,
     });
     expect(recordAt('m')()).toMatchObject({ tier: 'owner' });
+  });
+
+  it('the second record write never restores a record that a revoke removed together with the claim', async () => {
+    as('owner');
+    as('m', {});
+    mockAddHouseRoles.mockImplementation(async () => {
+      // The claims write lands, then a higher-ranked revoke removes the claim
+      // and deletes the record before the grant's second record write.
+      mockUsers.m = {};
+      await memDb.collection('house-roles').doc(`${H}_m`).delete();
+    });
+    await (addAdminAuthorization as unknown as Function)({
+      data: { userId: 'm', houseIds: [H], superAdmin: [] },
+      auth: OWNER,
+    });
+    expect(recordAt('m')()).toBeUndefined();
   });
 });

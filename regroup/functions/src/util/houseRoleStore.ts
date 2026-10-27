@@ -126,19 +126,34 @@ export function nextRoleRecord(
   };
 }
 
+/** The live claim a tier needs: owner superAdmin, staff admin, resident guest. */
+const CLAIM_FOR: Record<RoleTier, 'superAdmin' | 'admin' | 'guest'> = {
+  owner: 'superAdmin',
+  manager: 'admin',
+  peerLeader: 'admin',
+  resident: 'guest',
+};
+
 /**
  * Records a grant. Never lowers a stored tier (a manager who is also invited
  * as a resident stays a manager). Transactional; returns the stored tier.
+ * `ifClaimed` (the write after a grant's claims write): write only while the
+ * account's live claims still back the tier, read inside the transaction, so
+ * a revoke that removed the claim meanwhile is not undone.
  */
 export async function recordRoleGrant(
   houseId: string,
   uid: string,
   tier: RoleTier,
   meta: { grantedBy: string; via: RoleVia; invitationId?: string },
+  opts: { ifClaimed?: boolean } = {},
 ): Promise<RoleTier> {
   const ref = roleRef(houseId, uid);
   return admin.firestore().runTransaction(async (tx) => {
     const snap = await tx.get(ref);
+    if (opts.ifClaimed && !holds(await liveClaims(uid), CLAIM_FOR[tier], houseId)) {
+      return parseTier((snap.data() ?? {}).tier) ?? tier;
+    }
     const record = nextRoleRecord(snap.exists ? (snap.data() ?? {}).tier : null, tier, {
       ...meta,
       houseId,
@@ -176,7 +191,9 @@ export async function recordRoleRevoke(
     // one). A grant writes record, claims, record (callable/auth): if this
     // revoke runs between its first record write and its claims write, it
     // re-derives from the old claims and may lower or delete the record; the
-    // grant's second record write restores it. Only a grant that fails after
+    // grant's second record write restores it (only while the live claims
+    // still back the tier, so a revoke after the claims write, which removed
+    // the claim, is never undone). Only a grant that fails after
     // its claims write leaves the lowered record: an admin grant then holds
     // the admin claim with a peer-leader record or none (least privilege); a
     // superAdmin grant ranks as owner by its claim but, as a rules target,

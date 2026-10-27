@@ -101,7 +101,9 @@ export const addGuestAuthorization = onCall(async (request) => {
       [guest.houseId],
       guest.isAdmin ? ["guest", "admin"] : ["guest"],
     );
-    await recordRoleGrant(guest.houseId, guest.userId, grantTier, meta);
+    await recordRoleGrant(guest.houseId, guest.userId, grantTier, meta, {
+      ifClaimed: true,
+    });
     logger.info("Claims created for guest", {
       houseId: guest.houseId,
       isAdmin: !!guest.isAdmin,
@@ -174,17 +176,18 @@ export const addAdminAuthorization = onCall(async (request) => {
   try {
     // Record first, then claims, then the record again (util/houseRoles,
     // "Record before claims").
-    const writeRecords = async () => {
+    const writeRecords = async (ifClaimed: boolean) => {
       for (const houseId of requestedHouses) {
         await recordRoleGrant(
           houseId,
           adminInput.userId,
           superAdminHouses.has(houseId) ? "owner" : "manager",
           { grantedBy: callerUid, via: "addAdminAuthorization" },
+          { ifClaimed },
         );
       }
     };
-    await writeRecords();
+    await writeRecords(false);
     // Each addHouseRoles call reads the current claims and merges into them.
     // (Spreading two createClaims results built from one snapshot let the
     // superAdmin result's stale admin map overwrite the new admin grant.)
@@ -196,7 +199,7 @@ export const addAdminAuthorization = onCall(async (request) => {
         "superAdmin",
       ]);
     }
-    await writeRecords();
+    await writeRecords(true);
     logger.info("addAdminAuthorization: claims set", {
       houseIds: adminInput.houseIds,
       superAdmin: adminInput.superAdmin,
@@ -319,7 +322,9 @@ export const promoteGuestsToAdmin = onCall(async (request) => {
       // "Record before claims").
       await recordRoleGrant(guest.houseId, user.uid, "peerLeader", meta);
       await auth().setCustomUserClaims(user.uid, claims);
-      await recordRoleGrant(guest.houseId, user.uid, "peerLeader", meta);
+      await recordRoleGrant(guest.houseId, user.uid, "peerLeader", meta, {
+        ifClaimed: true,
+      });
     }),
   );
   const failed = users.filter((_, i) => results[i].status === "rejected");
