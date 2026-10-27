@@ -60,9 +60,30 @@ check(ci.jobs["regroup-e2e"], "ci.yml: job regroup-e2e missing");
 
 // claude-code-review.yml
 const review = files["claude-code-review.yml"];
+// The if may add other skip conditions, but only as a pure && chain with the
+// e2e-fix clause as one top-level conjunct: then no other conjunct can bring an
+// e2e-fix/* head back in. No || anywhere, since && binds tighter than ||.
+const topLevelConjuncts = (expr) => {
+  const parts = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < expr.length; i++) {
+    if (expr[i] === "(") depth++;
+    else if (expr[i] === ")") depth--;
+    else if (depth === 0 && expr.startsWith("&&", i)) {
+      parts.push(expr.slice(start, i).trim());
+      start = i + 2;
+    }
+  }
+  parts.push(expr.slice(start).trim());
+  return parts;
+};
 for (const [id, job] of Object.entries(review.jobs)) {
   const cond = norm(job.if).replace(/^\$\{\{\s*|\s*\}\}$/g, "");
-  check(cond === NOT_E2E_FIX, `claude-code-review.yml: ${id}: if must be exactly ${NOT_E2E_FIX}`);
+  check(
+    !cond.includes("||") && topLevelConjuncts(cond).includes(NOT_E2E_FIX),
+    `claude-code-review.yml: ${id}: if must be an && chain (no ||) with ${NOT_E2E_FIX} as a top-level conjunct`,
+  );
 }
 noPersist("claude-code-review.yml", review.jobs);
 
