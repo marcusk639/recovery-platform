@@ -67,6 +67,23 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
 // Same bridges as regroup/mobile/android/build.gradle (see the comments there for
 // the failures each one answers). AGP 8 requires them across every module.
 subprojects { project ->
+    // @react-native-firebase (v21+) declares Java 11 in its own build.gradle but
+    // its Java source uses Java 16+ features (pattern matching in instanceof);
+    // RN 0.76+ forces Java 17 on every module, RN 0.72 does not (issue #87).
+    // Raise those modules to 17 in finalizeDsl: it runs after the module's own
+    // build script and before AGP locks the DSL. Writing compileOptions in
+    // afterEvaluate is too late (discarded), and setting the JavaCompile tasks
+    // is overwritten by AGP. The Kotlin jvmTarget bridge below reads
+    // targetCompatibility, so Kotlin follows to 17.
+    project.plugins.withId('com.android.library') {
+        if (project.name.startsWith('react-native-firebase')) {
+            project.extensions.getByName('androidComponents').finalizeDsl { ext ->
+                ext.compileOptions.sourceCompatibility = JavaVersion.VERSION_17
+                ext.compileOptions.targetCompatibility = JavaVersion.VERSION_17
+            }
+        }
+    }
+
     project.afterEvaluate {
         def android = project.extensions.findByName('android')
         if (android == null) {
