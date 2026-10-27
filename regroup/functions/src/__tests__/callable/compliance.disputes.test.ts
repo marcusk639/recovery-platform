@@ -102,7 +102,7 @@ describe("complianceExport — dispute outcomes", () => {
 
     const result = await call({ houseId: "house-1" });
 
-    expect(rowFor(result.csv, "Approved")?.slice(4)).toEqual(["false", "Approved - not counted"]);
+    expect(rowFor(result.csv, "Approved")?.slice(4)).toEqual(["false", "Successfully disputed - residents report not completed (not counted)"]);
     expect(result.counts.meetings).toBe(1);
   });
 
@@ -146,7 +146,7 @@ describe("complianceExport — legacy upheld disputes", () => {
 
     expect(rowFor(result.csv, "LegacyUpheld")?.slice(4)).toEqual([
       "false",
-      "Removed after dispute (before approve/reject) - not counted",
+      "Successfully disputed (before approve/reject) - residents report not completed (not counted)",
     ]);
     expect(result.csv).not.toContain("PlainDeleted");
     expect(result.counts.meetings).toBe(1);
@@ -160,7 +160,7 @@ describe("complianceExport — a later deletion is never labelled an upheld disp
     ["rejected then deleted", { disputed: "rejected", incomplete: false }],
     ["approved then deleted", { disputed: "successful", incomplete: true }],
     ["kept the old way then deleted", {}],
-  ])("%s: left out (a withdrawal), not \"Removed after dispute\"", async (_label, fields) => {
+  ])("%s: left out (a withdrawal), never labelled a legacy successful dispute", async (_label, fields) => {
     mockGetMeetingActivitiesForGuest.mockResolvedValue([
       meeting("Withdrawn", {
         ...fields,
@@ -174,7 +174,7 @@ describe("complianceExport — a later deletion is never labelled an upheld disp
     const result = await call({ houseId: "house-1" });
 
     expect(result.csv).not.toContain("Withdrawn");
-    expect(result.csv).not.toContain("Removed after dispute");
+    expect(result.csv).not.toContain("before approve/reject");
   });
 });
 

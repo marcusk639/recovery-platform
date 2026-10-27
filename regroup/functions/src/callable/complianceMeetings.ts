@@ -8,10 +8,12 @@
  *   Dispute "None"                          counted
  *   Dispute "Pending - counted until decided" counted
  *   Dispute "Rejected - counted"            counted
- *   Dispute "Approved - not counted"        NOT counted, never shown Verified
+ *   Dispute "Successfully disputed - residents report not completed (not counted)"
+ *                                           an APPROVED dispute: NOT counted,
+ *                                           never shown Verified
  *   Dispute "Resolved - counted"            counted (records resolved before
  *                                           the approve/reject model)
- *   Dispute "Removed after dispute (before approve/reject) - not counted"
+ *   Dispute "Successfully disputed (before approve/reject) - residents report not completed (not counted)"
  *                                           a dispute upheld by the old
  *                                           "delete" resolution
  *
@@ -57,8 +59,8 @@ const legacyUpheld = (m: Data) => {
 };
 
 export function disputeLabel(m: Data): string {
-  if (legacyUpheld(m)) return 'Removed after dispute (before approve/reject) - not counted';
-  if (m.incomplete === true || m.disputed === 'successful') return 'Approved - not counted';
+  if (legacyUpheld(m)) return 'Successfully disputed (before approve/reject) - residents report not completed (not counted)';
+  if (m.incomplete === true || m.disputed === 'successful') return 'Successfully disputed - residents report not completed (not counted)';
   if (m.disputed === 'rejected') return 'Rejected - counted';
   if (m.status === 'disputed') return 'Pending - counted until decided';
   if (m.status === 'resolved') return 'Resolved - counted';
