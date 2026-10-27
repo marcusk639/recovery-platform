@@ -147,15 +147,11 @@ describe('who an activity is for', () => {
     await assertSucceeds(setDoc(doc(mgr(), 'activities/c3'), fresh({ loggedBy: MGR })));
   });
 
-  it('BREAK 2: a null stamp with no guest doc: peers may dispute; only the primary owner decides', async () => {
-    await env.withSecurityRulesDisabled(async (c) => {
-      await setDoc(doc(c.firestore(), `houses/${H}`), { superAdminId: OWN });
-    });
+  it('BREAK 2: a null stamp with no guest doc: peers may dispute; any admin but the logger decides (#145 dependency)', async () => {
     const keep = (uid: string) => ({ status: 'resolved', disputeResolvedBy: uid, disputeResolvedAt: serverTimestamp() });
     await assertSucceeds(upd(peer(), 'nullStampNoGuest', dispute(PEER)));
-    await assertFails(upd(pl(), 'nullStampNoGuest', keep(PL)));
-    await assertFails(upd(ctx('coOwner', { superAdmin: { [H]: true } }), 'nullStampNoGuest', keep('coOwner')));
-    await assertSucceeds(upd(own(), 'nullStampNoGuest', keep(OWN)));
+    await assertFails(upd(mgr(), 'nullStampNoGuest', keep(MGR)));
+    await assertSucceeds(upd(pl(), 'nullStampNoGuest', keep(PL)));
   });
 
   it('a null stamp after the account was linked: the guest doc still identifies the resident', async () => {

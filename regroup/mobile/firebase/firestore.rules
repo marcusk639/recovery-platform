@@ -462,17 +462,21 @@ service cloud.firestore {
     }
 
     // Every dispute field. Clients change them only through the transitions
-    // below (enter, resolve, reopen). residentUid is server-only: the
-    // onActivityWritten Cloud Function stamps it from guests.userId.
+    // below (enter, resolve, reopen). residentUid is not one of them: a client
+    // may set it only at create (to the guest doc's userId), and only the
+    // server changes it afterwards (see residentStampOf).
     function disputeKeys() {
       return ['disputeReason', 'disputedBy', 'disputeResolvedBy', 'disputeResolvedAt', 'disputed',
               'incomplete', 'disputeOutcome', 'disputeResult', 'disputedAt', 'reopenedBy', 'reopenedAt'];
     }
 
-    // The resident stamped on an activity (residentUid), or '' if none: the
-    // stamp is server-only and immutable once set (onActivityWritten fills an
-    // absent or null one from guests.userId; a new app build sets it at
-    // create, checked against the guest doc).
+    // The resident stamped on an activity (residentUid), or '' if none. A new
+    // app build sets it at create (checked against the guest doc); otherwise
+    // onActivityWritten fills an absent or null one from guests.userId. No
+    // client changes it after create. The server re-stamps it only while the
+    // activity has no dispute history and its guestId changes (an admin's
+    // correction); once there is history guestId is frozen, so for a dispute
+    // the stamp never moves.
     function residentStampOf(d) {
       let s = d.get('residentUid', null);
       return s is string && s != '' ? s : '';
@@ -492,15 +496,17 @@ service cloud.firestore {
          get(/databases/$(database)/documents/guests/$(gid)).data.get('userId', null) != request.auth.uid);
     }
 
-    // RESOLVE and REOPEN: as above, and with no usable stamp (null or absent:
-    // nobody knows for sure whose activity it is) only the house's primary
-    // owner may decide: houses/{id}.superAdminId, which no client can write.
-    // Co-owners holding the superAdmin claim are not enough.
+    // RESOLVE and REOPEN (callers are house admins): never the logger, the
+    // stamped resident or the guest doc's account. With no usable stamp:
+    //   - a guest doc with no userId (an accountless resident): there is no
+    //     resident account to protect, so any admin but the logger decides;
+    //   - a guest doc with a userId: that account may not decide;
+    //   - no guest doc: any admin but the logger decides.
+    // The last two trust the guest doc, which is safe only with #145's guest
+    // rules (userId immutable once set, no resident or staff self-delete):
+    // deploy these rules only once #145 has merged too.
     function callerMayDecide() {
-      let d = resource.data;
-      return callerIsNotTheResident() &&
-        (residentStampOf(d) != '' ||
-         get(/databases/$(database)/documents/houses/$(d.houseId)).data.get('superAdminId', null) == request.auth.uid);
+      return callerIsNotTheResident();
     }
 
     // Owner rule: "Disputed activities should never be deleted." Any dispute
@@ -625,8 +631,19 @@ service cloud.firestore {
       let d = request.resource.data;
       let keys = d.diff(r).affectedKeys();
       return isAdmin([r.houseId]) &&
-        // loggedAt: unchanged, or the server time (the app's own edits).
-        (!keys.hasAny(['loggedAt']) || d.loggedAt == request.time) &&
+        // loggedAt: unchanged, or the server time (the app's own edits), and
+        // frozen once there is dispute history (an old build's "delete" is
+        // recognised by disputeResolvedAt == loggedAt) except in the ENTER and
+        // RESOLVE writes themselves, which older builds stamp with the server
+        // time.
+        (!keys.hasAny(['loggedAt']) ||
+         (d.loggedAt == request.time &&
+          (!hasDisputeHistory(r) ||
+           (r.status == 'active' && d.status == 'disputed') ||
+           (r.status == 'disputed' && d.status == 'resolved')))) &&
+        // A new guest (or house) must be a guest of the activity's house,
+        // as at create.
+        (!keys.hasAny(['guestId', 'houseId']) || activityGuest(d.guestId).houseId == d.houseId) &&
         (r.status != 'disputed' && d.status == 'disputed' ? entersDispute() :
          r.status == 'disputed' && d.status != 'disputed' ? resolvesDispute() :
          (!keys.hasAny(disputeKeys()) && !keys.hasAny(['residentUid', 'residentUidPending', 'flaggedForReview']) &&
@@ -675,9 +692,12 @@ service cloud.firestore {
       //   and only with no dispute history.
       // - A resident of the same house (peer): ENTER a dispute only, never on
       //   their own activity (owner rule).
-      // ENTER, RESOLVE and REOPEN are never by the activity's resident or
-      // whoever logged it (callerIsNotTheResident). diff() only flags real
-      // changes, so a write echoing the current values back passes.
+      // ENTER is never by the activity's logger, stamped resident or guest
+      // doc account (callerIsNotTheResident); with no stamp and no guest doc,
+      // a non-admin may ENTER unless they logged it (#145 stops a resident
+      // deleting their own guest doc). RESOLVE and REOPEN: callerMayDecide.
+      // diff() only flags real changes, so a write echoing the current
+      // values back passes.
       allow update: if
         (request.resource.data.status == 'disputed' && resource.data.status in ['resolved', 'deleted'] &&
          isAdmin([resource.data.houseId]) ? reopensDecision(activityId) : adminUpdates()) ||

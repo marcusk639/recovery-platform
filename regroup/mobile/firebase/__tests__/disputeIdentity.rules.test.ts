@@ -3,10 +3,8 @@
  * history, cannot be changed around a dispute (PR #141 review round 4).
  *
  * Each "GAP" case was allowed by the previous rules (probe5):
- *   - the resident is the server-stamped residentUid, which no client writes,
- *     so editing or deleting the guest doc no longer hides them;
- *   - guestId, loggedBy and houseId are frozen once there is dispute history
- *     (for admins too) and always for non-admins;
+ *   - the resident is the stamped residentUid, which no client changes;
+ *   - guestId, loggedBy, houseId are frozen once there is dispute history;
  *   - no dispute field is ever removed; ENTER names the caller; RESOLVE records
  *     the caller and the server time; `resolved` alone is history;
  *   - outcomes are consistent (incl. disputeResult), set only by a resolution,
@@ -178,13 +176,10 @@ describe('the resident is the server-stamped residentUid', () => {
     await assertSucceeds(upd(own(), 'plOwnPending2', reject(OWN)));
   });
 
-  it('no guest doc and no residentUid: peers may dispute it; only the primary owner decides', async () => {
-    await env.withSecurityRulesDisabled(async (c) => {
-      await setDoc(doc(c.firestore(), `houses/${H}`), { superAdminId: OWN });
-    });
+  it('no guest doc and no residentUid: peers may dispute it; any admin but the logger decides', async () => {
     await assertSucceeds(upd(peer(), 'legacyNoGuest', disputeNoNonce(PEER)));
-    await assertFails(upd(pl(), 'legacyNoGuest', reject(PL)));
-    await assertSucceeds(upd(own(), 'legacyNoGuest', reject(OWN)));
+    await assertFails(upd(mgr(), 'legacyNoGuest', reject(MGR)));
+    await assertSucceeds(upd(pl(), 'legacyNoGuest', reject(PL)));
   });
 
   it('freezes guestId, loggedBy and houseId once there is dispute history, for admins too', async () => {

@@ -130,13 +130,14 @@ describe('A: a staff member who is the resident', () => {
     await assertSucceeds(upd(mgr2(), 'xA', reject(M2)));
   });
 
-  it('cannot decide an unstamped activity after recreating the guest doc with no account', async () => {
-    await assertSucceeds(deleteDoc(doc(staff(), 'guests/gS')));
-    await assertSucceeds(setDoc(doc(staff(), 'guests/gS'), { houseId: H, userId: '' }));
-    await assertFails(upd(staff(), 'unstamped', reject(S)));
-    await assertFails(upd(mgr2(), 'unstamped', reject(M2)));
-    await assertFails(upd(coOwner(), 'unstamped', reject(CO)));
-    await assertSucceeds(upd(owner(), 'unstamped', reject(O)));
+  it('an unstamped activity of an accountless guest: any admin but its logger decides', async () => {
+    // A staff resident blanking their OWN guest doc is stopped by #145's
+    // guest rules (userId immutable once set); here the guest never had one.
+    await env.withSecurityRulesDisabled(async (c) => {
+      await setDoc(doc(c.firestore(), 'guests/gS'), { houseId: H, userId: '' });
+    });
+    await assertFails(upd(ctx(M, { admin: { [H]: true } }), 'unstamped', reject(M)));
+    await assertSucceeds(upd(coOwner(), 'unstamped', reject(CO)));
   });
 
   it('an unstamped activity can still be disputed by a peer (not its logger)', async () => {
@@ -170,7 +171,9 @@ describe('C: flaggedForReview and loggedAt on the decision paths', () => {
     await assertFails(upd(mgr2(), 'xA', reject(M2, { loggedAt: old })));
     await assertSucceeds(upd(mgr2(), 'xA', reject(M2, { loggedAt: serverTimestamp() })));
     await assertFails(upd(mgr2(), 'xA', { loggedAt: old }));
-    await assertSucceeds(upd(mgr2(), 'xA', { verified: true, loggedAt: serverTimestamp() }));
+    // L1: once there is dispute history, not even the server time.
+    await assertFails(upd(mgr2(), 'xA', { verified: true, loggedAt: serverTimestamp() }));
+    await assertSucceeds(upd(mgr2(), 'xA', { verified: true }));
   });
 
   it('a reopen can neither clear nor forge flaggedForReview', async () => {
