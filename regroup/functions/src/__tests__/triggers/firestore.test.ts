@@ -50,7 +50,7 @@ jest.mock("firebase-admin", () => ({
 
 // ─── firebase-functions (logger used inside util modules) ─────────────────────
 jest.mock("firebase-functions", () => ({
-  logger: { info: jest.fn(), error: jest.fn() },
+  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }));
 
 // ─── v2 firestore trigger wrappers ───────────────────────────────────────────
@@ -600,6 +600,38 @@ describe("onGuestWrite (EES recalculation)", () => {
     await onGuestWrite(makeWrittenEvent(null, ghost));
 
     expect(mockBatchCommit).not.toHaveBeenCalled();
+  });
+
+  // The app's EES records (mobile createEESRecords) store a per-resident
+  // amount but no totalExpenses. Reading the missing field as 0 zeroed every
+  // unpaid record of the week on any guest write.
+  it("leaves amounts alone when the week's records carry no totalExpenses", async () => {
+    mockGuestsGet.mockResolvedValue(makeGuestSnap([activeGuest, activeGuest]));
+    mockEesGet.mockResolvedValue(
+      makeEesSnap([
+        { houseId: "house-1", amount: 75, paid: false },
+        { houseId: "house-1", amount: 75, paid: false },
+      ]),
+    );
+
+    await onGuestWrite(makeWrittenEvent(activeGuest, { ...activeGuest, step: 2 }));
+
+    expect(mockBatchUpdate).not.toHaveBeenCalled();
+    expect(mockBatchCommit).not.toHaveBeenCalled();
+  });
+
+  it("still applies a recorded totalExpenses of 0", async () => {
+    mockGuestsGet.mockResolvedValue(makeGuestSnap([activeGuest]));
+    mockEesGet.mockResolvedValue(
+      makeEesSnap([{ houseId: "house-1", totalExpenses: 0, paid: false }]),
+    );
+
+    await onGuestWrite(makeWrittenEvent(activeGuest, activeGuest));
+
+    expect(mockBatchUpdate).toHaveBeenCalledWith(expect.anything(), {
+      amount: 0,
+      residentCount: 1,
+    });
   });
 
   it("re-throws when the claim lookup fails so Firebase can retry", async () => {

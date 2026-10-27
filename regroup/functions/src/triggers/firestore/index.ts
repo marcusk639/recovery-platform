@@ -337,8 +337,19 @@ export const onGuestWrite = onDocumentWritten(
         .length;
       if (activeCount === 0) return;
 
+      // Records created by the app (mobile createEESRecords) carry a
+      // per-resident amount but no totalExpenses. Treating the missing total
+      // as 0 zeroed every unpaid record of the week on any guest write, so
+      // without a recorded total there is nothing to re-split.
       const firstRecord = eesSnap.docs[0].data();
-      const totalExpenses = (firstRecord.totalExpenses as number) ?? 0;
+      const totalExpenses = firstRecord.totalExpenses;
+      if (typeof totalExpenses !== "number" || !Number.isFinite(totalExpenses)) {
+        logger.warn("onGuestWrite: EES records have no totalExpenses; skipped", {
+          houseId,
+          recordCount: eesSnap.docs.length,
+        });
+        return;
+      }
       const newAmount = totalExpenses > 0 ? totalExpenses / activeCount : 0;
 
       const batch = ratsFirestore.batch();
