@@ -5,7 +5,20 @@
 
 // ─── firebase-admin ───────────────────────────────────────────────────────────
 const mockSetCustomUserClaims = jest.fn().mockResolvedValue(undefined);
-const mockAuthInstance = { setCustomUserClaims: mockSetCustomUserClaims };
+// Every uid resolves to an account holding a guest claim for house-1 unless a
+// test overrides it. onGuestWrite only counts guest docs whose account holds a
+// claim for the house (see util/guestMembership).
+const mockGetUsers = jest.fn<Promise<any>, [{ uid: string }[]]>(async (ids) => ({
+  users: ids.map((i) => ({
+    uid: i.uid,
+    customClaims: { guest: { "house-1": true } },
+  })),
+  notFound: [],
+}));
+const mockAuthInstance = {
+  setCustomUserClaims: mockSetCustomUserClaims,
+  getUsers: mockGetUsers,
+};
 
 // ─── Firestore query + batch mock ─────────────────────────────────────────────
 const mockBatchUpdate = jest.fn();
@@ -517,6 +530,90 @@ describe("onGuestWrite (EES recalculation)", () => {
 
     const event = makeWrittenEvent(activeGuest, activeGuest);
     await expect(onGuestWrite(event)).rejects.toThrow("Firestore unavailable");
+  });
+
+  // A signed-in user could create a guest doc in any house with their own
+  // userId. Such a "ghost" has no guest claim for the house (claims are set
+  // server-side only), so it must not change real residents' EES share.
+  it("ignores a guest doc whose account holds no claim for the house", async () => {
+    const resident1 = { ...activeGuest, userId: "resident-1" };
+    const resident2 = { ...activeGuest, userId: "resident-2" };
+    const ghost = { ...activeGuest, userId: "stranger" };
+    mockGetUsers.mockImplementationOnce(async (ids: { uid: string }[]) => ({
+      users: ids.map((i) => ({
+        uid: i.uid,
+        customClaims:
+          i.uid === "stranger"
+            ? { guest: { "house-2": true } }
+            : { guest: { "house-1": true } },
+      })),
+      notFound: [],
+    }));
+    mockGuestsGet.mockResolvedValue(
+      makeGuestSnap([resident1, resident2, ghost]),
+    );
+    mockEesGet.mockResolvedValue(
+      makeEesSnap([{ houseId: "house-1", totalExpenses: 300, paid: false }]),
+    );
+
+    await onGuestWrite(makeWrittenEvent(null, ghost));
+
+    expect(mockBatchUpdate).toHaveBeenCalledWith(expect.anything(), {
+      amount: 150,
+      residentCount: 2,
+    });
+  });
+
+  it("ignores a guest doc whose account no longer exists", async () => {
+    const resident = { ...activeGuest, userId: "resident-1" };
+    const orphan = { ...activeGuest, userId: "deleted-user" };
+    mockGetUsers.mockImplementationOnce(async () => ({
+      users: [
+        { uid: "resident-1", customClaims: { guest: { "house-1": true } } },
+      ],
+      notFound: [{ uid: "deleted-user" }],
+    }));
+    mockGuestsGet.mockResolvedValue(makeGuestSnap([resident, orphan]));
+    mockEesGet.mockResolvedValue(
+      makeEesSnap([{ houseId: "house-1", totalExpenses: 120, paid: false }]),
+    );
+
+    await onGuestWrite(makeWrittenEvent(resident, resident));
+
+    expect(mockBatchUpdate).toHaveBeenCalledWith(expect.anything(), {
+      amount: 120,
+      residentCount: 1,
+    });
+  });
+
+  it("does not touch EES records when only ghost docs remain", async () => {
+    const ghost = { ...activeGuest, userId: "stranger" };
+    mockGetUsers.mockImplementationOnce(async () => ({
+      users: [{ uid: "stranger", customClaims: {} }],
+      notFound: [],
+    }));
+    mockGuestsGet.mockResolvedValue(makeGuestSnap([ghost]));
+    mockEesGet.mockResolvedValue(
+      makeEesSnap([{ houseId: "house-1", totalExpenses: 300, paid: false }]),
+    );
+
+    await onGuestWrite(makeWrittenEvent(null, ghost));
+
+    expect(mockBatchCommit).not.toHaveBeenCalled();
+  });
+
+  it("re-throws when the claim lookup fails so Firebase can retry", async () => {
+    mockGetUsers.mockRejectedValueOnce(new Error("Auth unavailable"));
+    const resident = { ...activeGuest, userId: "resident-1" };
+    mockGuestsGet.mockResolvedValue(makeGuestSnap([resident]));
+    mockEesGet.mockResolvedValue(
+      makeEesSnap([{ houseId: "house-1", totalExpenses: 100, paid: false }]),
+    );
+
+    await expect(
+      onGuestWrite(makeWrittenEvent(resident, resident)),
+    ).rejects.toThrow("Auth unavailable");
+    expect(mockBatchCommit).not.toHaveBeenCalled();
   });
 });
 

@@ -26,6 +26,7 @@ import { getCurrentTime } from "../../util/date";
 import { deleteClaim } from "../../util/claims";
 import { SENDGRID_API_KEY } from "../../config";
 import { operatorStatusToHouseStatus } from "../../util/entitlement";
+import { selectLegitimateGuests } from "../../util/guestMembership";
 
 export { onHouseDeleted } from "./houseTombstone";
 
@@ -255,6 +256,8 @@ export const submitFeedback = onDocumentCreated(
 //
 // On DELETE only: removes the departed guest's Firebase Auth custom claims.
 // On ALL writes:  recalculates EES for the house based on active resident count.
+//                 Only guest docs backed by a house claim (or admin-entered,
+//                 with no account) count; see util/guestMembership.
 //
 // Both operations run independently — a failure in one is logged and does not
 // abort the other. EES failures are re-thrown for Firebase retry; auth cleanup
@@ -302,13 +305,15 @@ export const onGuestWrite = onDocumentWritten(
         .where("houseId", "==", houseId)
         .get();
 
-      const activeCount = guestsSnap.docs.filter(
-        (d) =>
-          !d.data().moveOutDate &&
-          d.data().status !== "inactive" &&
-          d.data().status !== "expelled",
-      ).length;
-      if (activeCount === 0) return;
+      const activeGuests = guestsSnap.docs
+        .map((d) => d.data())
+        .filter(
+          (g) =>
+            !g.moveOutDate &&
+            g.status !== "inactive" &&
+            g.status !== "expelled",
+        );
+      if (activeGuests.length === 0) return;
 
       const weekStart = new Date();
       const day = weekStart.getDay();
@@ -323,6 +328,14 @@ export const onGuestWrite = onDocumentWritten(
         .get();
 
       if (eesSnap.empty) return;
+
+      // Count only guest docs whose account holds a claim for this house (or
+      // admin-entered residents with no account). A doc a stranger created in
+      // this house must not change what real residents owe. Checked after the
+      // EES query so houses without open records cost no Auth lookups.
+      const activeCount = (await selectLegitimateGuests(activeGuests, houseId))
+        .length;
+      if (activeCount === 0) return;
 
       const firstRecord = eesSnap.docs[0].data();
       const totalExpenses = (firstRecord.totalExpenses as number) ?? 0;
