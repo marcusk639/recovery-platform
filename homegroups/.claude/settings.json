@@ -41,7 +41,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "FILE=$(jq -r '.tool_input.file_path // empty'); if echo \"$FILE\" | grep -q 'functions/src/'; then cd \"${CLAUDE_PROJECT_DIR}/functions\" && npx tsc --noEmit 2>&1 | head -20; fi",
+            "command": "FILE=$(jq -r '.tool_input.file_path // empty'); if echo \"$FILE\" | grep -q 'functions/src/'; then OUT=$(cd \"${CLAUDE_PROJECT_DIR}/functions\" && npx tsc --noEmit 2>&1 | head -20); if [ -n \"$OUT\" ]; then jq -n --arg c \"$OUT\" '{hookSpecificOutput:{hookEventName:\"PostToolUse\",additionalContext:(\"tsc (homegroups/functions):\\n\" + $c)}}'; fi; fi",
             "timeout": 30000
           }
         ]
