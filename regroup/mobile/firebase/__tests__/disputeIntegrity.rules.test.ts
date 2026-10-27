@@ -15,8 +15,9 @@
  * Rules now: only active -> disputed enters a dispute, and it must name the
  * caller as disputer; -> deleted is allowed from anywhere; nothing leaves
  * deleted or an approved resolution except through an admin. house.disputes
- * is maintained by the onActivityWritten Cloud Function; residents cannot
- * update the house document at all.
+ * is maintained by the onActivityWritten Cloud Function; residents may update
+ * only complaints, issues and currentCapacity on the house document, never
+ * house.disputes.
  *
  * Requires the Firestore emulator on port 8080:
  *   cd firebase && firebase emulators:exec --only firestore --project demo-test \

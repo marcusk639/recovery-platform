@@ -2153,7 +2153,7 @@ describe("houses/{houseId} — update: sensitive fields restricted to superAdmin
       await assertFails(updateDoc(houseRef(ctx), { disputes: { forged: { activityId: "a1" } } }));
     });
 
-    test("ALLOW a guest writing complaints, issues and their own move-out fields", async () => {
+    test("ALLOW a guest writing complaints, issues and currentCapacity (their own flows' fields)", async () => {
       await seedHouse();
       const ctx = testEnv.authenticatedContext(
         GUEST_UID,
@@ -2161,7 +2161,9 @@ describe("houses/{houseId} — update: sensitive fields restricted to superAdmin
       );
       await assertSucceeds(updateDoc(houseRef(ctx), { complaints: { c1: { description: "noise" } } }));
       await assertSucceeds(updateDoc(houseRef(ctx), { issues: { i1: { description: "leak" } } }));
-      await assertSucceeds(updateDoc(houseRef(ctx), { currentCapacity: 3, rooms: {}, phases: {} }));
+      await assertSucceeds(updateDoc(houseRef(ctx), { currentCapacity: 3 }));
+      await assertFails(updateDoc(houseRef(ctx), { rooms: {} }));
+      await assertFails(updateDoc(houseRef(ctx), { phases: {} }));
     });
   });
 });
