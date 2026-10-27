@@ -1,8 +1,12 @@
 #!/bin/bash
-# Deploys the functions listed below in batches of five. It does NOT cover
-# every exported function (see docs/launch-readiness/plan-regroup-functions-
-# 2026-10-19.md, item 7): for a full deploy use `firebase deploy --only
-# functions` from regroup/. Stops at the first failed batch and exits non-zero.
+# Deploys every exported Cloud Function in batches of 5 (for large changesets
+# that hit deploy quotas). The default deploy is `npm --prefix functions run
+# build && firebase deploy --only functions` from regroup/, which always
+# deploys every export; use this script only when that fails on quotas.
+# ALL_FUNCTIONS must list every deployable export of functions/src/index.ts
+# (functions/src/__tests__/deployList.test.ts checks it): a function left off
+# is silently never deployed. A failed batch stops the script with a non-zero
+# exit.
 set -euo pipefail
 
 # Navigate to project root (parent of scripts/) so firebase.json is found
@@ -14,18 +18,26 @@ ALL_FUNCTIONS=(
   addGuestAuthorization addAdminAuthorization deleteAdminAuthorization
   promoteGuestsToAdmin removePrivilegesForGuests verifyUserEmail
   givePotentialSuperAdminPrivilege
+  createHouses finishOperatorSetup
+  createInvitation peekInvitation redeemInvitation
   findMeetings userIsAtMeeting
   createPaymentIntent listPayments listHousePayments
   getPaymentMethod updatePaymentInfo
   connectStripeAccount disconnectStripeAccount getStripeAccountStatus
   createOperatorSubscription reactivateOperatorSubscription cancelUserSubscription
   updateSubscriptionGuests updateSubscriptionHouses
+  createBillingPortalSession applyBundleDiscount getTierCatalog
+  setOxfordEnabled castOxfordVote complianceExport rentRoiMetrics
+  deleteAccount
   sendConfirmationEmail
   stripeConnectReauth stripeConnectReturn universal
-  notify notifyNewHouseCreated sendContactEmail sendSubscriptionUpdateEmail
+  notify notifyNewHouseCreated notifyOperatorOnApplication
+  sendContactEmail sendSubscriptionUpdateEmail
   reportBug submitFeedback
-  onGuestWrite onActivityWritten onGuestLinkedRestamp onHouseDeleted
+  onGuestWrite onHouseDeleted setHouseSubscriptionStatusOnCreate
+  onActivityWritten onGuestLinkedRestamp
   updateDisputes warmWebsite officerTermReminder weeklyTransfers
+  overdueRentNotification scheduledRentCollection
 )
 
 BATCH_SIZE=5
@@ -42,8 +54,7 @@ for ((i=0; i<TOTAL; i+=BATCH_SIZE)); do
   echo ""
   echo "=== Batch $BATCH_NUM / $TOTAL_BATCHES: ${batch[*]} ==="
   if ! firebase deploy --only "$only_arg"; then
-    echo "✖  Batch $BATCH_NUM / $TOTAL_BATCHES failed: ${batch[*]}" >&2
-    echo "   Later batches were NOT deployed. Fix the error and re-run." >&2
+    echo "✗ Batch $BATCH_NUM failed; stopping. Re-run after fixing (deploys are idempotent)." >&2
     exit 1
   fi
   echo "=== Batch $BATCH_NUM complete ==="

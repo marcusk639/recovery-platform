@@ -197,9 +197,13 @@ jest.mock("../../../components/rats-logo", () => ({
   },
 }));
 
-jest.mock("../../../components/DeepLinkTester", () => ({
-  DeepLinkTester: () => null,
-}));
+jest.mock("../../../components/DeepLinkTester", () => {
+  const { View } = require("react-native");
+  return {
+    DeepLinkTester: ({ visible }: { visible: boolean }) =>
+      visible ? <View testID="deep-link-tester" /> : null,
+  };
+});
 
 // ─── Redux action creators mock ───────────────────────────────────────────────
 // Full mock of the userSlice module prevents transitive imports from loading
@@ -406,6 +410,34 @@ describe("Splash (withSplash HOC)", () => {
     it("does not render the wrapped component while loading", () => {
       const { queryByTestId } = renderSplash({ user: null, invitation: null });
       expect(queryByTestId("wrapped-component")).toBeNull();
+    });
+  });
+
+  // ─── E2E-only deep link tester ───────────────────────────────────────────────
+  // Gated on the bundled e2e build variant, not __DEV__.
+
+  describe("DeepLinkTester visibility", () => {
+    const originalVariant = process.env.E2E_VARIANT;
+
+    afterEach(() => {
+      if (originalVariant === undefined) {
+        delete process.env.E2E_VARIANT;
+      } else {
+        process.env.E2E_VARIANT = originalVariant;
+      }
+    });
+
+    it("is hidden in a debug build that is not an e2e build", () => {
+      delete process.env.E2E_VARIANT;
+      expect(__DEV__).toBe(true);
+      const { queryByTestId } = renderSplash({ user: null, invitation: null });
+      expect(queryByTestId("deep-link-tester")).toBeNull();
+    });
+
+    it("is shown in an e2e build", () => {
+      process.env.E2E_VARIANT = "emulator";
+      const { getByTestId } = renderSplash({ user: null, invitation: null });
+      expect(getByTestId("deep-link-tester")).toBeTruthy();
     });
   });
 

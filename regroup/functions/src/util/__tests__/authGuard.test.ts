@@ -14,6 +14,12 @@ jest.mock('../entitlement', () => ({
   enforceHouseEntitlement: (...args: any[]) => mockEnforceHouseEntitlement(...args),
 }));
 
+// The owner is the server-only primary owner record (util/houseRoles):
+// here it names owner-uid, whatever houses.ownerId says.
+jest.mock('../houseRoles', () => ({
+  isPrimaryOwner: async (_houseId: string, uid: string) => uid === 'owner-uid',
+}));
+
 import { assertCanGrantClaimForHouses } from '../authGuard';
 
 const houseData = {
@@ -85,5 +91,19 @@ describe('assertCanGrantClaimForHouses — entitlement opt-in', () => {
     }
     expect(caught?.code).toBe('permission-denied');
     expect(mockEnforceHouseEntitlement).not.toHaveBeenCalled();
+  });
+});
+
+describe('assertCanGrantClaimForHouses — owner from the server-side record', () => {
+  it('a co-owner who rewrote houses.ownerId to themselves is not the owner', async () => {
+    mockHouseGet.mockResolvedValue({ exists: true, data: () => ({ ...houseData, ownerId: 'co' }) });
+    // Self-grant is the owner-only path: refused for the co-owner...
+    await expect(
+      assertCanGrantClaimForHouses({ ...base, callerUid: 'co', targetUid: 'co' }),
+    ).rejects.toMatchObject({ code: 'permission-denied' });
+    // ...and still allowed for the real owner.
+    await expect(
+      assertCanGrantClaimForHouses({ ...base, targetUid: 'owner-uid' }),
+    ).resolves.toBeUndefined();
   });
 });

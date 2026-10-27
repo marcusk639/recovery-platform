@@ -1,6 +1,6 @@
 # How the automated PR review works
 
-**Version 1.1.0** · recovery-platform · 2026-10-27 · Scope: `.claude/pr-review/` and `.github/workflows/claude-code-review.yml`
+**Version 1.2.0** · recovery-platform · 2026-10-27 · Scope: `.claude/pr-review/` and `.github/workflows/claude-code-review.yml`
 
 ---
 
@@ -154,10 +154,18 @@ question, the model writes `<OUT>/reply.md` (after `findings.json`) and runs the
 - the reply must start with `pr-review:`;
 - it refuses HTML comments and control characters, any text `redact()` would change, and any mention of a
   security finding's slug or files;
+- while the snapshot's ledger (`STATE_FILE`) holds any security entry, or the snapshot or prior state can't be
+  read, it refuses any reply naming a file (a path, or a basename with a code/config extension). Earlier
+  security files are stored only as keyed `fileIds` and the key is publish-only, so this is the strictest
+  check the reply step can make;
 - `findings.json` must already exist;
 - an exclusive lock allows one post per run.
 
-The model can't read `.git/**` or `/proc/**`, so it can't put the action's token into the reply. This replaced
+The command gets its token from the action: `claude-code-action@v1` sets `GH_TOKEN`/`GITHUB_TOKEN` to its
+GitHub token (`src/entrypoints/run.ts`) and passes its whole environment to Claude
+(`base-action/src/parse-sdk-options.ts`), so `reply.mjs` and `gh pr view/diff` inherit it, as does `STATE_FILE`
+(exported through `GITHUB_ENV`). The model can't read `.git/**` or `/proc/**`, so it can't put the action's
+token into the reply. This replaced
 `Bash(gh pr comment:*)`, whose prefix also admitted `--body-file` (spec
 `2026-10-26-pr-review-serena-and-suggestions.md` §4.5). A reply is still posted with the action's token, not by
 publish, so it stays outside the ledger, and the inline guard (`github-actions[bot]` review comments only) doesn't
@@ -598,6 +606,7 @@ ledger publish could not read is never replaced with an empty one.
 | `contracts-firestore.mjs` | Firestore/Storage pre-checks: where+orderBy vs composite indexes, collections vs `firestore.rules`, storage paths vs `storage.rules`                                   |
 | `hygiene.mjs`             | Hygiene pre-checks: added secrets, PII near log calls, new files over 300 lines, bare title scope, reviewer self-edits, `verify-diff.sh` test-tamper                   |
 | `advisories.mjs`          | Creates, updates and reopens private draft security advisories. Reports dispositioned ones back as resolved ids                                                        |
+| `reply.mjs`               | The model's one reply command (no arguments). Reads `GH_TOKEN`/`GITHUB_TOKEN` and runs `runReply()` from `lib/reply.mjs`; prints `reply posted/refused: <reason>`. Always exits 0 |
 
 ### 11.2 Library (`checks/lib/`), grouped by concern
 
@@ -644,6 +653,7 @@ _Security: withholding, redaction, delivery_
 | `needles.mjs` | Path normalisation against disguises, and detection of text or findings that name a security file                             |
 | `fileids.mjs` | Keyed hashes of security files (`fileIds`), so later runs keep withholding them without public paths                          |
 | `deliver.mjs` | publish's adapter to `advisories.mjs`: picks the security findings and prior ids, returns the public clause and `resolvedIds` |
+| `reply.mjs` | `runReply()`: the checks on the model's one reply (event target, regular-file body, prefix, secrets, security slugs/files, file names while earlier security entries exist), the one-per-run lock, and the post |
 
 _Inline comments_
 
@@ -684,6 +694,7 @@ Run with `node --test ".claude/pr-review/checks/test/*.test.mjs"` (CI job `pr-re
 | `needle-forms.test.mjs`, `needle-forms2.test.mjs` | Non-canonical and root-level path forms against fileIds                               |
 | `prior-state.test.mjs`                            | `priorUnavailable` handling and verbatim marker re-emission                           |
 | `publish.test.mjs`                                | End-to-end compose: redaction, withholding, prior-state preservation                  |
+| `reply.test.mjs`                                  | Reply command: target, body source, refusals, security slugs/files, file names while earlier security entries exist, one-per-run lock |
 | `publish-fallback.test.mjs`                       | Missing/invalid snapshot and unreadable comments fail closed                          |
 | `publish-skeleton.test.mjs`                       | Basic success/failure summaries                                                       |
 | `publish-status.test.mjs`                         | Completion rules (`complete: true`, `summary.md`) and status lines                    |
@@ -736,6 +747,7 @@ Adding a link type to `routing.json` therefore needs a matching contract-map sec
 | Findings kept                | 200 (lowest severities dropped first). ≤ 10 locations each                         | `findings.mjs`    |
 | Inline comments              | 15 per run. ≤ 100 entries read. Body ≤ 4,000 chars                                 | `inline-post.mjs` |
 | Suggestion                   | ≤ 40 lines, ≤ 4,000 chars, range ≤ 40 lines. Entry read cap 20,000                 | `suggestion.mjs`  |
+| Reply                        | 1 per run. `reply.md` ≤ 4,000 bytes                                                | `lib/reply.mjs`   |
 | Hunks                        | ≤ 500 per file, ≤ 3,000 files                                                      | `hunks.mjs`       |
 | Summary body                 | 60,000 chars. ≤ 50 lines per earlier-review section                                | `render.mjs`      |
 | Ledger marker                | 30,000 chars                                                                       | `render.mjs`      |
@@ -818,5 +830,6 @@ Adding a link type to `routing.json` therefore needs a matching contract-map sec
 
 | Version | Date       | Change                                                                                                                                                      |
 | ------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.2.0   | 2026-10-27 | Module index adds `reply.mjs`, `lib/reply.mjs` and `reply.test.mjs`. The reply command refuses file names while earlier security entries exist. Records where the reply's token comes from |
 | 1.1.0   | 2026-10-27 | Moved from `.claude/pr-review/HOW-IT-WORKS.md` to `docs/ci/pr-review.md`. Documents the `gh pr` read permissions, the base-controlled reply command that replaced `gh pr comment`, Serena `--mode editing`, and the exact resolved-visibility window |
 | 1.0.0   | 2026-10-27 | First version. Documents facts/review/publish, the ledger, the security model, Serena isolation and every `.mjs` module, as of branch `ci/pr-review-serena` |

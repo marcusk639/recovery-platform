@@ -7,7 +7,14 @@ import FirebaseStorage from '@react-native-firebase/storage';
 import { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import { FirebaseStorageTypes } from '@react-native-firebase/storage';
-import { connectToEmulators } from './src/config/firebase-emulator';
+import {
+  assertE2EProject,
+  assertE2EStripeKey,
+  connectToEmulators,
+  emulatorHost,
+  emulatorPorts,
+} from './src/config/firebase-emulator';
+import { e2eVariant, stripePublishableKey } from './src/config/env';
 
 // const app = firebase.app();
 const auth = FirebaseAuth();
@@ -15,12 +22,31 @@ const messaging = FirebaseMessaging();
 const storage = FirebaseStorage();
 const functions = FirebaseFunctions();
 
-// E2E only: route Auth/Firestore/Storage to the local emulator when launched
-// with the IS_E2E_TEST flag. Must run before any Firestore/Auth usage below.
-// Guarded by __DEV__ so production builds never call it (and never log).
-if (__DEV__) {
-  connectToEmulators();
+// E2E emulator builds only: route Auth, Firestore, Storage and Functions to the
+// local emulators. The gate is the bundle-time E2E_VARIANT, not __DEV__ or a
+// launch argument, so no other build reaches connectToEmulators. It wires the
+// SDKs synchronously, before the Firestore settings call below.
+//
+// Deliberately no catch and no fallback: if an emulator is unreachable this
+// promise rejects, and index.js reports that as fatal. It must never carry on
+// against the project in the native Firebase config.
+//
+// An e2e variant must also be running against its own project, with a test
+// Stripe key. E2E_VARIANT is inlined from the bundler's environment: the Gradle
+// e2e build types and Xcode E2E* configurations set it, and babel.config.js
+// refuses it from .env. The remaining way in is a shell that exported it, or a
+// Metro started with it (which serves it to any build, Debug included). Throwing
+// here, while index.js imports this module, stops the app at startup.
+const variant = e2eVariant();
+if (variant !== null) {
+  assertE2EProject(variant, firebase.app().options.projectId);
+  assertE2EStripeKey(variant, stripePublishableKey());
 }
+
+const emulatorConnection: Promise<void> =
+  variant === 'emulator'
+    ? connectToEmulators({ host: emulatorHost(), ports: emulatorPorts() })
+    : Promise.resolve();
 
 export const callHttpsFunction = (name: string, payload: any) => {
   return FirebaseFunctions().httpsCallable(name)(payload);
@@ -36,6 +62,7 @@ firestore.settings({ ignoreUndefinedProperties: true });
 // notifications.android.createChannel(channel);
 
 export {
+  emulatorConnection,
   firestore,
   auth,
   messaging,

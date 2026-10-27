@@ -8,7 +8,7 @@ import { LoginProps, LoginFormValues } from './LoginForm';
 import { loginTextInputStyle, styles } from './LoginStyles';
 
 import { RatsText } from '../../components/rats-text';
-import { IS_E2E_TEST } from '../../util/e2e';
+import { relaxUiForE2E } from '../../util/e2e';
 import {
   fontFamily,
   normalize,
@@ -44,7 +44,7 @@ const LoginFormView: React.FC<
         styleType="secondary"
         disabled={isSubmitting}
         autoCapitalize="none"
-        secureTextEntry={!IS_E2E_TEST}
+        secureTextEntry={!relaxUiForE2E()}
         setRef={(ref: any) => {
           passwordRef.current = ref;
         }}

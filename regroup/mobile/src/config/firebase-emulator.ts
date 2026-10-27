@@ -1,56 +1,185 @@
 /**
- * Firebase Emulator Configuration for E2E Testing
+ * Firebase emulator wiring for the 'emulator' e2e build variant.
  *
- * This configures Firebase to use local emulators instead of production
- * when running E2E tests (Maestro / Detox). In __DEV__ builds the emulator
- * connection is always attempted; if emulators aren't running the try/catch
- * silences the failure and Firebase falls back to production.
+ * Fail-closed by design. Only firebase-setup.ts calls connectToEmulators, and
+ * only when the bundle was built with E2E_VARIANT=emulator (src/config/env.ts),
+ * so no other build ever reaches useEmulator. In an emulator build, a port that
+ * does not answer rejects with E2EEmulatorUnreachable. Nothing catches it and
+ * nothing falls back to a real project: index.js turns it into a fatal error.
  */
-
+import { Platform } from 'react-native';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
+import functions from '@react-native-firebase/functions';
+import type { LaunchArguments as LaunchArgumentsApi } from 'react-native-launch-arguments';
+import { E2E_PROJECT_IDS, E2EVariant, isLiveStripeKey } from './env';
 
-// Use 127.0.0.1 instead of localhost to avoid IPv6 connection issues
-const EMULATOR_HOST = '127.0.0.1';
+export type EmulatorPorts = {
+  auth: number;
+  firestore: number;
+  storage: number;
+  functions: number;
+};
 
-export const connectToEmulators = () => {
-  // In non-dev builds, never connect to emulators.
-  if (!__DEV__) {
-    return false;
+export type EmulatorOptions = { host: string; ports: EmulatorPorts };
+
+/** How long each port has to answer the startup health probe. */
+export const PROBE_TIMEOUT_MS = 5000;
+
+/** The Firebase CLI default emulator ports, used when no launch argument overrides one. */
+const DEFAULT_PORTS: EmulatorPorts = {
+  auth: 9099,
+  firestore: 8080,
+  storage: 9199,
+  functions: 5001,
+};
+
+const PORT_ARGUMENTS: Record<keyof EmulatorPorts, string> = {
+  auth: 'e2eAuthPort',
+  firestore: 'e2eFirestorePort',
+  storage: 'e2eStoragePort',
+  functions: 'e2eFunctionsPort',
+};
+
+export class E2EEmulatorUnreachable extends Error {
+  readonly unreachable: string[];
+
+  constructor(unreachable: string[]) {
+    super(
+      `E2E emulator build cannot reach the Firebase emulators: ${unreachable.join(', ')}. ` +
+        'Start them (firebase emulators:start in regroup/) before launching the app. ' +
+        'This build never falls back to a real Firebase project.',
+    );
+    this.name = 'E2EEmulatorUnreachable';
+    this.unreachable = unreachable;
+    // Keeps instanceof working when the class is transpiled to ES5.
+    Object.setPrototypeOf(this, E2EEmulatorUnreachable.prototype);
   }
+}
 
-  console.log('[Firebase] DEV mode — connecting to local emulators');
+export class E2EProjectMismatch extends Error {
+  constructor(variant: E2EVariant, projectId: string | undefined) {
+    super(
+      `E2E ${variant} build is configured for Firebase project "${projectId}", ` +
+        `expected "${E2E_PROJECT_IDS[variant]}". Refusing to start: a bundled ` +
+        'E2E_VARIANT must never run against another project. E2E_VARIANT comes from ' +
+        'the build (the Gradle build type or the Xcode configuration) or the shell ' +
+        'that started Metro; check those. A Metro started with E2E_VARIANT keeps it ' +
+        'in its transform cache: restart it with `npm start -- --reset-cache`.',
+    );
+    this.name = 'E2EProjectMismatch';
+    Object.setPrototypeOf(this, E2EProjectMismatch.prototype);
+  }
+}
 
-  try {
-    // Connect Auth to emulator
-    auth().useEmulator(`http://${EMULATOR_HOST}:9099`);
-    console.log('[Firebase] ✓ Auth emulator connected');
+export class E2ELiveStripeKey extends Error {
+  constructor(variant: E2EVariant) {
+    super(
+      `E2E ${variant} build carries a live Stripe key (pk_live_). Refusing to start: ` +
+        'e2e runs make test payments and need a pk_test_ key. Export ' +
+        'STRIPE_PUBLISHABLE_KEY=pk_test_... for the e2e build (and remove pk_live_ ' +
+        'from .env), then rebuild; a Metro serving it needs `npm start -- --reset-cache`.',
+    );
+    this.name = 'E2ELiveStripeKey';
+    Object.setPrototypeOf(this, E2ELiveStripeKey.prototype);
+  }
+}
 
-    // Connect Firestore to emulator
-    firestore().useEmulator(EMULATOR_HOST, 8080);
-    console.log('[Firebase] ✓ Firestore emulator connected');
+/**
+ * Throws E2ELiveStripeKey when an e2e build's bundled key is live. babel.config.js
+ * refuses to bundle one; this is the runtime backstop. Never puts the key in
+ * the message.
+ */
+export const assertE2EStripeKey = (variant: E2EVariant, key: string): void => {
+  if (isLiveStripeKey(key)) {
+    throw new E2ELiveStripeKey(variant);
+  }
+};
 
-    // Connect Storage to emulator
-    storage().useEmulator(EMULATOR_HOST, 9199);
-    console.log('[Firebase] ✓ Storage emulator connected');
-
-    console.log('[Firebase] All emulators connected successfully');
-    return true;
-  } catch (error) {
-    console.error('[Firebase] Error connecting to emulators:', error);
-    return false;
+/** Throws E2EProjectMismatch unless the native project is the variant's own. */
+export const assertE2EProject = (variant: E2EVariant, projectId: string | undefined): void => {
+  if (projectId !== E2E_PROJECT_IDS[variant]) {
+    throw new E2EProjectMismatch(variant, projectId);
   }
 };
 
 /**
- * Check if emulators are running
+ * The host machine as seen from the simulator or emulator. RNFirebase would
+ * remap 127.0.0.1 on Android itself, but the health probe uses fetch, which
+ * does not.
  */
-export const checkEmulatorsRunning = async () => {
-  try {
-    const response = await fetch(`http://${EMULATOR_HOST}:4000`);
-    return response.ok;
-  } catch (error) {
-    return false;
+export const emulatorHost = (): string => (Platform.OS === 'android' ? '10.0.2.2' : '127.0.0.1');
+
+const parsePort = (name: string, raw: unknown): number => {
+  const port = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : raw;
+  if (typeof port !== 'number' || !Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(`Launch argument ${name} must be a TCP port, got ${JSON.stringify(raw)}`);
+  }
+  return port;
+};
+
+/** Emulator ports from launch arguments, each defaulting to the CLI default. */
+export const emulatorPorts = (): EmulatorPorts => {
+  // Loaded here, not at the top: the native module runs startup code when first
+  // loaded (on Android it can wait ~20 s for an Activity), so only the emulator
+  // variant may touch it. A literal require() is still bundled by Metro.
+  const {
+    LaunchArguments,
+  }: { LaunchArguments: typeof LaunchArgumentsApi } = require('react-native-launch-arguments');
+  const args = LaunchArguments.value<Record<string, unknown>>();
+  const ports = { ...DEFAULT_PORTS };
+  (Object.keys(PORT_ARGUMENTS) as (keyof EmulatorPorts)[]).forEach((service) => {
+    const name = PORT_ARGUMENTS[service];
+    if (args[name] !== undefined) {
+      ports[service] = parsePort(name, args[name]);
+    }
+  });
+  return ports;
+};
+
+/**
+ * Resolves when the port answers any HTTP response within PROBE_TIMEOUT_MS.
+ * A 404 still proves an emulator is listening; only a refused connection or
+ * silence counts as unreachable.
+ */
+const probe = (url: string): Promise<boolean> =>
+  new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), PROBE_TIMEOUT_MS);
+    fetch(url).then(
+      () => {
+        clearTimeout(timer);
+        resolve(true);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(false);
+      },
+    );
+  });
+
+/**
+ * Points Auth, Firestore, Storage and Functions at the emulators, then checks
+ * every port answers.
+ *
+ * The SDKs are wired synchronously, before the first await, so nothing the app
+ * does while the probes run can reach a real project. If a probe fails the SDKs
+ * stay pointed at the dead emulators and the returned promise rejects.
+ */
+export const connectToEmulators = async ({ host, ports }: EmulatorOptions): Promise<void> => {
+  auth().useEmulator(`http://${host}:${ports.auth}`);
+  firestore().useEmulator(host, ports.firestore);
+  storage().useEmulator(host, ports.storage);
+  functions().useEmulator(host, ports.functions);
+
+  const services = Object.keys(ports) as (keyof EmulatorPorts)[];
+  const results = await Promise.all(
+    services.map((service) => probe(`http://${host}:${ports[service]}/`)),
+  );
+  const unreachable = services
+    .filter((_, i) => !results[i])
+    .map((service) => `${service} (${host}:${ports[service]})`);
+  if (unreachable.length > 0) {
+    throw new E2EEmulatorUnreachable(unreachable);
   }
 };

@@ -9,11 +9,8 @@
       "args": ["-y", "@upstash/context7-mcp@3.0.0"]
     },
     "stripe": {
-      "command": "npx",
-      "args": ["-y", "@stripe/mcp", "--tools=all"],
-      "env": {
-        "STRIPE_SECRET_KEY": "${STRIPE_SECRET_KEY}"
-      }
+      "type": "http",
+      "url": "https://mcp.stripe.com"
     },
     "github": {
       "command": "npx",
@@ -23,11 +20,8 @@
       }
     },
     "sentry": {
-      "command": "npx",
-      "args": ["-y", "@sentry/mcp-server@latest"],
-      "env": {
-        "SENTRY_AUTH_TOKEN": "${SENTRY_AUTH_TOKEN}"
-      }
+      "type": "http",
+      "url": "https://mcp.sentry.dev/mcp"
     },
     "serena": {
       "command": "uvx",

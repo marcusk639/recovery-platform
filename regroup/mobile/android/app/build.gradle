@@ -48,7 +48,12 @@ react {
     //
     //   A list of extra flags to pass to the 'bundle' commands.
     //   See https://github.com/react-native-community/cli/blob/main/docs/commands.md#bundle
-    // extraPackagerArgs = []
+    //
+    //   --reset-cache: babel.config.js inlines env values (BUNDLED_ENV), and
+    //   Metro's transform cache key does not include them. Without this, a
+    //   release bundle built after an e2e one could reuse transforms with
+    //   E2E_VARIANT baked in. Every bundled variant pays a cold transform.
+    extraPackagerArgs = ["--reset-cache"]
 
     /* Hermes Commands */
     //   The hermes compiler command to run. By default it is 'hermesc'
@@ -153,6 +158,37 @@ android {
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
+        // E2E build types: release builds (JS bundled with Hermes, no Metro,
+        // not debuggable) with their own package and Firebase config, signed
+        // with the debug key. E2E_VARIANT is set per variant on the bundle
+        // task below. Each one's google-services.json lives in its source set:
+        //   e2eEmulator: src/e2eEmulator/google-services.json, committed, for
+        //                the emulator-only project demo-regroup-e2e.
+        //   e2eStaging:  copied from ~/.config/regroup-e2e at build time
+        //                (copyE2eStagingGoogleServices), gitignored.
+        e2eEmulator {
+            initWith release
+            applicationIdSuffix ".e2e.emu"
+            // Tells the three installed apps apart on a device.
+            resValue "string", "app_name", "Regroup e2e emu"
+            signingConfig signingConfigs.debug
+            matchingFallbacks = ['release']
+        }
+        e2eStaging {
+            initWith release
+            applicationIdSuffix ".e2e.stg"
+            // Tells the three installed apps apart on a device.
+            resValue "string", "app_name", "Regroup e2e stg"
+            signingConfig signingConfigs.debug
+            matchingFallbacks = ['release']
+        }
+    }
+
+    // A build type only gets src/<buildType>; initWith copies settings, not
+    // sources. Both e2e types need release's no-op ReactNativeFlipper.
+    sourceSets {
+        e2eEmulator.java.srcDirs += 'src/release/java'
+        e2eStaging.java.srcDirs += 'src/release/java'
     }
 
 
@@ -172,6 +208,135 @@ android {
 
         }
     }
+}
+
+// E2E_VARIANT reaches babel.config.js only through the bundler's environment.
+// The React Native Gradle plugin (0.72) has no per-variant env setting, so every
+// bundled variant runs node through `env`: the e2e ones with E2E_VARIANT set to
+// their variant, every other one (release) with it removed, so a value exported
+// in the build shell (`E2E_VARIANT=emulator ./gradlew assembleRelease`) cannot
+// reach a store bundle. A value in .env is refused by babel.config.js itself.
+// It is a task input, so changing it re-runs the bundle. Debug variants have no
+// bundle task (Metro serves them).
+//
+// This must configure the task after the plugin's own register action, which
+// sets nodeExecutableAndArgs and would overwrite an earlier configureEach. The
+// plugin registers the task in its onVariants callback; this callback is added
+// later, so it runs later, and tasks.named(...).configure then runs last.
+def e2eBundleVariants = [e2eEmulator: "emulator", e2eStaging: "staging"]
+def bundledEnvStamp = { String variantName ->
+    file("${buildDir}/bundled-env/${variantName}/bundled-env.sha256")
+}
+androidComponents.onVariants(androidComponents.selector().all()) { variant ->
+    def bundleTask = "createBundle${variant.name.capitalize()}JsAndAssets"
+    if (!tasks.names.contains(bundleTask)) {
+        return
+    }
+    def e2eVariant = e2eBundleVariants[variant.name]
+    def node = e2eVariant != null ?
+        ["env", "E2E_VARIANT=${e2eVariant}".toString(), "node"] :
+        ["env", "-u", "E2E_VARIANT", "node"]
+    def stamp = bundledEnvStamp(variant.name)
+    def stampTask = variant.name == "release" ?
+        "regroupReleaseGuard" :
+        "regroupBundledEnvStamp${variant.name.capitalize()}"
+    if (variant.name != "release") {
+        tasks.register(stampTask, Exec) {
+            outputs.file(stamp)
+            outputs.upToDateWhen { false }
+            workingDir rootProject.file("..")
+            commandLine "node", "scripts/bundled-env.js", "--stamp", stamp.absolutePath
+        }
+    }
+    tasks.named(bundleTask).configure { task ->
+        task.nodeExecutableAndArgs.set(node)
+        // Bundled-env stamp (scripts/bundled-env.js): the plugin's bundle task
+        // tracks only JS sources, so a STRIPE_PUBLISHABLE_KEY, RATS_WEB_URL or
+        // GOOGLE_MAPS_API_KEY changed in the shell or .env would leave it
+        // UP-TO-DATE with the old value inlined. Every bundled variant takes a
+        // digest of those values as an input file. Release's is written by the
+        // release guard (only when it passes); every other variant's by a plain
+        // stamp task.
+        task.dependsOn(stampTask)
+        task.inputs.file(stamp).withPropertyName("bundledEnvStamp")
+    }
+}
+
+// e2e builds never upload source maps to the production Sentry project (their
+// JS also has Sentry disabled; see src/config/sentry.ts). sentry.gradle sets
+// `enabled true` in its own register action, which can run after this, so
+// `enabled = false` does not stick; an onlyIf predicate is ANDed with Sentry's
+// own and holds whatever the order.
+tasks.matching { it.name ==~ /createBundleE2e.*_SentryUpload_.*/ }.configureEach {
+    onlyIf("e2e builds never upload to Sentry") { false }
+}
+
+// e2eStaging's Firebase config is for the real regroup-e2e project, so it stays
+// out of git: it is copied in before every e2eStaging build and the build fails
+// without it. Never falls back to app/google-services.json (phoenix-cleanhouse).
+// -PregroupE2eStagingGoogleServices=<path> overrides the source.
+def e2eStagingGoogleServicesSource = file(
+    project.findProperty("regroupE2eStagingGoogleServices") ?:
+        "${System.getProperty('user.home')}/.config/regroup-e2e/google-services.e2e-staging.json")
+def e2eStagingGoogleServicesTarget = file("src/e2eStaging/google-services.json")
+def copyE2eStagingGoogleServices = tasks.register("copyE2eStagingGoogleServices") {
+    inputs.property("source", e2eStagingGoogleServicesSource.absolutePath)
+    outputs.file(e2eStagingGoogleServicesTarget)
+    outputs.upToDateWhen { false }
+    doLast {
+        if (!e2eStagingGoogleServicesSource.isFile()) {
+            e2eStagingGoogleServicesTarget.delete()
+            throw new GradleException(
+                "e2eStaging needs its Firebase config at ${e2eStagingGoogleServicesSource}: " +
+                "the google-services.json of the Android app com.regroup.app.e2e.stg " +
+                "in Firebase project regroup-e2e. It is not committed.")
+        }
+        e2eStagingGoogleServicesTarget.parentFile.mkdirs()
+        e2eStagingGoogleServicesTarget.bytes = e2eStagingGoogleServicesSource.bytes
+    }
+}
+tasks.matching { it.name in ["preE2eStagingBuild", "processE2eStagingGoogleServices"] }.configureEach {
+    dependsOn copyE2eStagingGoogleServices
+}
+
+// Release-build guard (scripts/release-guard.js), for the `release` build type
+// only; the e2e build types and debug are not checked. It reads the Firebase
+// project from the values.xml the google-services plugin generated for release
+// (so whichever google-services.json the plugin resolved), found among that
+// task's declared outputs rather than at a hard-coded path, and
+// STRIPE_PUBLISHABLE_KEY as babel.config.js resolves it for the bundle: the
+// build environment, then regroup/mobile/.env. Fails unless the project is
+// phoenix-cleanhouse and the key is pk_live_, before anything is compiled.
+//
+// On success it writes the release bundled-env stamp (a digest, never a value),
+// an input of the release bundle task (see onVariants above).
+def releaseGuardEnvStamp = bundledEnvStamp("release")
+def releaseGuard = tasks.register("regroupReleaseGuard", Exec) {
+    // By name: the plugin registers it after this script is evaluated.
+    dependsOn "processReleaseGoogleServices"
+    outputs.file(releaseGuardEnvStamp)
+    outputs.upToDateWhen { false }
+    workingDir rootProject.file("..")
+    executable "node"
+    doFirst {
+        def googleServices = tasks.getByName("processReleaseGoogleServices")
+        def generated = googleServices.outputs.files.files.collectMany { output ->
+            def values = new File(output, "values/values.xml")
+            values.isFile() ? [values] : []
+        }
+        if (generated.size() != 1) {
+            throw new GradleException(
+                "Release guard: expected one values/values.xml among the outputs of " +
+                "processReleaseGoogleServices, found ${generated}")
+        }
+        // The guard writes it only on success; a failed run leaves none behind.
+        releaseGuardEnvStamp.delete()
+        args "scripts/release-guard.js", "--config", generated[0].absolutePath,
+            "--env-stamp", releaseGuardEnvStamp.absolutePath
+    }
+}
+tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+    dependsOn releaseGuard
 }
 
 buildscript {

@@ -2105,7 +2105,7 @@ describe("houses/{houseId} — update: sensitive fields restricted to superAdmin
       );
     });
 
-    test("ALLOW a superAdmin updating monthlyRent/weeklyRent/adminIds/ownerId", async () => {
+    test("ALLOW a superAdmin updating monthlyRent/weeklyRent/adminIds, but not ownerId (server-only, #145)", async () => {
       await seedHouse();
       const ctx = testEnv.authenticatedContext(
         ADMIN_UID,
@@ -2116,9 +2116,9 @@ describe("houses/{houseId} — update: sensitive fields restricted to superAdmin
           monthlyRent: 999,
           weeklyRent: 250,
           adminIds: [ADMIN_UID, OTHER_UID],
-          ownerId: OTHER_UID,
         }),
       );
+      await assertFails(updateDoc(houseRef(ctx), { ownerId: OTHER_UID }));
     });
 
     test("ALLOW a superAdmin updating a non-sensitive field", async () => {

@@ -113,3 +113,76 @@ export const grantHouseRoles = async (
     ...(potentialSuperAdmin !== undefined ? { potentialSuperAdmin } : {}),
   });
 };
+
+type HouseRole = 'admin' | 'guest' | 'superAdmin';
+
+/**
+ * Removes houseIds from each of `roles` in ONE read-modify-write of the
+ * user's claims, and keeps potentialSuperAdmin exactly as it was (absent
+ * stays absent). Use this instead of combining several deleteClaim results:
+ * each of those is built from its own read, so spreading them restores the
+ * roles the earlier one removed, and deleteClaim forces potentialSuperAdmin
+ * to its argument. Skips the write when no role changes. Like
+ * grantHouseRoles, not atomic against a concurrent claims writer.
+ */
+export const revokeHouseRoles = async (
+  userId: string,
+  houseIds: string[],
+  roles: HouseRole[]
+): Promise<void> => {
+  const currentUser = await auth().getUser(userId);
+  const { potentialSuperAdmin, ...current } = parseCurrentClaims(
+    currentUser?.customClaims
+  );
+  const next = { ...current };
+  let changed = false;
+  for (const role of roles) {
+    const remaining: Record<string, true> = { ...current[role] };
+    for (const houseId of houseIds) {
+      if (Object.prototype.hasOwnProperty.call(remaining, houseId)) {
+        delete remaining[houseId];
+        changed = true;
+      }
+    }
+    next[role] = remaining;
+  }
+  if (!changed) return;
+  await auth().setCustomUserClaims(userId, {
+    ...next,
+    ...(potentialSuperAdmin !== undefined ? { potentialSuperAdmin } : {}),
+  });
+};
+
+/**
+ * Adds houseIds to each of `roles` in ONE read-modify-write of the user's
+ * claims (so a guest+admin grant is never half applied), keeping
+ * potentialSuperAdmin as it was. Skips the write when nothing changes. Like
+ * revokeHouseRoles, not atomic against a concurrent claims writer.
+ */
+export const addHouseRoles = async (
+  userId: string,
+  houseIds: string[],
+  roles: HouseRole[]
+): Promise<void> => {
+  const currentUser = await auth().getUser(userId);
+  const { potentialSuperAdmin, ...current } = parseCurrentClaims(
+    currentUser?.customClaims
+  );
+  const next = { ...current };
+  let changed = false;
+  for (const role of roles) {
+    const granted: Record<string, true> = { ...current[role] };
+    for (const houseId of houseIds) {
+      if (!Object.prototype.hasOwnProperty.call(granted, houseId)) {
+        granted[houseId] = true;
+        changed = true;
+      }
+    }
+    next[role] = granted;
+  }
+  if (!changed) return;
+  await auth().setCustomUserClaims(userId, {
+    ...next,
+    ...(potentialSuperAdmin !== undefined ? { potentialSuperAdmin } : {}),
+  });
+};

@@ -11,7 +11,15 @@
 // base URLs, and API keys whose protection is server-side referrer/bundle-id
 // restriction rather than secrecy. Never add a Stripe secret key, a webhook
 // signing secret, or a service-account credential.
-const BUNDLED_ENV = ['STRIPE_PUBLISHABLE_KEY', 'RATS_WEB_URL', 'GOOGLE_MAPS_API_KEY'];
+//
+// E2E_VARIANT ('emulator' | 'staging', unset for every other build) is read via
+// e2eVariant() in src/config/env.ts. Being bundle-time is the point: no launch
+// argument can turn a store build into an e2e build.
+//
+// The list lives in scripts/bundled-env.js, which the Android bundle tasks'
+// env stamp and scripts/check-release-env.js share; babel rejects unknown keys
+// on this module's exports, so it cannot be exported from here.
+const { BUNDLED_ENV } = require('./scripts/bundled-env');
 
 // Under Jest the substitution is skipped so tests can set process.env and
 // re-require a module. src/services/__tests__/google-apikeys.test.ts and
@@ -22,7 +30,46 @@ const isTest = process.env.NODE_ENV === 'test';
 if (!isTest) {
   // Loads .env into process.env so a local `npm run ios` picks the values up.
   // CI and fastlane export them directly, where there is no .env to read.
+  const variantBeforeDotenv = process.env.E2E_VARIANT;
   require('dotenv').config({ quiet: true });
+  // E2E_VARIANT is set per build by the Gradle e2e bundle tasks, never from a
+  // file: a line left in a developer's .env would make every bundle and every
+  // Metro session from that checkout an e2e build. dotenv never overrides an
+  // exported value, so a change here means .env supplied it.
+  if (process.env.E2E_VARIANT !== variantBeforeDotenv) {
+    throw new Error(
+      'E2E_VARIANT must not be set in .env; the e2e build types set it per build. Remove it from .env.',
+    );
+  }
+}
+
+// A mistyped E2E_VARIANT would bundle as a non-e2e build that a harness still
+// treats as one. Fail the bundle instead. Checked after .env is loaded.
+const E2E_VARIANTS = ['emulator', 'staging'];
+const e2eVariant = process.env.E2E_VARIANT;
+if (e2eVariant && !E2E_VARIANTS.includes(e2eVariant)) {
+  throw new Error(
+    `E2E_VARIANT must be unset or one of ${E2E_VARIANTS.join(', ')}; got "${e2eVariant}"`,
+  );
+}
+
+// An e2e bundle never carries a live Stripe key: e2e runs make test payments,
+// and the release guard asks for pk_live_, which may well be sitting in .env.
+// Never prints the key.
+if (e2eVariant && (process.env.STRIPE_PUBLISHABLE_KEY || '').startsWith('pk_live_')) {
+  throw new Error(
+    `E2E_VARIANT=${e2eVariant} bundle with a live Stripe key (pk_live_): e2e builds need a pk_test_ ` +
+      'key. Export STRIPE_PUBLISHABLE_KEY=pk_test_... for the e2e build, or remove pk_live_ from .env.',
+  );
+}
+
+// One whole string literal naming the variant this bundle was built as, so a
+// built artifact can be checked: scripts/verify-android-variants.sh greps the
+// compiled bundle for it. The bare names cannot serve, since 'emulator' and
+// 'staging' appear in every bundle as the E2E_VARIANTS list in src/config/env.ts.
+// Not set under Jest, where nothing is inlined.
+if (!isTest) {
+  process.env.E2E_BUNDLE_MARKER = `regroup-e2e-variant=${e2eVariant || 'none'}`;
 }
 
 // @tanstack/query-core 5.x sets its package "react-native" field to

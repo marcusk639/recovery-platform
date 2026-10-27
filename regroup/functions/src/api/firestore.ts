@@ -33,6 +33,8 @@ export const rentCollectionAttemptCollection = ratsFirestore.collection('rent-co
 // written by onHouseDeleted shortly after the delete; createHouses refuses
 // tombstoned ids (defence in depth, see houseTombstone.ts).
 export const houseTombstoneCollection = ratsFirestore.collection('houseTombstones');
+// Server-only role records house-roles/{houseId}_{uid} (util/houseRoles).
+export const houseRolesCollection = ratsFirestore.collection('house-roles');
 
 /**
  * Shape of a document in the `subscriptions` collection. Read by the Stripe
