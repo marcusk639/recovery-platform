@@ -3,13 +3,19 @@ import { logger } from "firebase-functions";
 import { auth } from "firebase-admin";
 import { z } from "zod";
 import { Guest } from "../entities/Guest";
-import { createClaims, deleteClaim } from "../util/claims";
+import { addHouseRoles, createClaims, deleteClaim } from "../util/claims";
 import Admin from "../entities/Admin";
 import { getGuestsAsUsers } from "../util/user";
 import { Role } from "../entities/Roles";
 import { _verifyUserEmail } from "../util/user";
 import { parseInput } from "../validation";
 import { assertCanGrantClaimForHouses } from "../util/authGuard";
+import {
+  assertMayGrantTier,
+  assertMayRevokeAll,
+  recordRoleGrant,
+  recordRoleRevoke,
+} from "../util/houseRoles";
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
 const guestAuthSchema = z
@@ -70,20 +76,38 @@ export const addGuestAuthorization = onCall(async (request) => {
     callableName: "addGuestAuthorization",
     enforceEntitlement: true,
   });
+  // Tiers (util/houseRoles): making a peer leader needs a manager or above.
+  if (guest.isAdmin) {
+    await assertMayGrantTier({
+      callerUid: request.auth.uid,
+      houseId: guest.houseId,
+      grant: "peerLeader",
+      callableName: "addGuestAuthorization",
+    });
+  }
 
   try {
-    let userClaims = await createClaims(guest.userId, [guest.houseId], "guest");
-    await auth().setCustomUserClaims(guest.userId, userClaims);
-    if (guest.isAdmin) {
-      userClaims = await createClaims(
-        guest.userId,
-        [guest.houseId],
-        "admin",
-        false,
-      );
-      await auth().setCustomUserClaims(guest.userId, userClaims);
-    }
-    logger.info("Claims created for guest", userClaims);
+    // Record first, then claims, then the record again (util/houseRoles,
+    // "Record before claims").
+    const grantTier = guest.isAdmin ? "peerLeader" : "resident";
+    const meta = {
+      grantedBy: request.auth.uid,
+      via: "addGuestAuthorization" as const,
+    };
+    await recordRoleGrant(guest.houseId, guest.userId, grantTier, meta);
+    // One claims write: guest and admin together, or nothing.
+    await addHouseRoles(
+      guest.userId,
+      [guest.houseId],
+      guest.isAdmin ? ["guest", "admin"] : ["guest"],
+    );
+    await recordRoleGrant(guest.houseId, guest.userId, grantTier, meta, {
+      ifClaimed: true,
+    });
+    logger.info("Claims created for guest", {
+      houseId: guest.houseId,
+      isAdmin: !!guest.isAdmin,
+    });
     return true;
   } catch (error) {
     logger.error("addGuestAuthorization: failed to set claims", { error });
@@ -135,21 +159,50 @@ export const addAdminAuthorization = onCall(async (request) => {
     callableName: "addAdminAuthorization",
     enforceEntitlement: true,
   });
+  // Tiers (util/houseRoles): an admin grant makes a manager (owner or
+  // co-owner) and a superAdmin grant an owner (the primary owner only: ranks
+  // are strict). Peer leaders are made through
+  // promoteGuestsToAdmin or a senior-peer invitation.
+  const superAdminHouses = new Set(adminInput.superAdmin || []);
+  for (const houseId of requestedHouses) {
+    await assertMayGrantTier({
+      callerUid,
+      houseId,
+      grant: superAdminHouses.has(houseId) ? "owner" : "manager",
+      callableName: "addAdminAuthorization",
+    });
+  }
 
   try {
-    const [userClaims, superAdminClaims] = await Promise.all([
-      createClaims(adminInput.userId, adminInput.houseIds, "admin", false),
-      createClaims(
-        adminInput.userId,
-        adminInput.superAdmin,
+    // Record first, then claims, then the record again (util/houseRoles,
+    // "Record before claims").
+    const writeRecords = async (ifClaimed: boolean) => {
+      for (const houseId of requestedHouses) {
+        await recordRoleGrant(
+          houseId,
+          adminInput.userId,
+          superAdminHouses.has(houseId) ? "owner" : "manager",
+          { grantedBy: callerUid, via: "addAdminAuthorization" },
+          { ifClaimed },
+        );
+      }
+    };
+    await writeRecords(false);
+    // Each addHouseRoles call reads the current claims and merges into them.
+    // (Spreading two createClaims results built from one snapshot let the
+    // superAdmin result's stale admin map overwrite the new admin grant.)
+    if (adminInput.houseIds?.length) {
+      await addHouseRoles(adminInput.userId, adminInput.houseIds, ["admin"]);
+    }
+    if (adminInput.superAdmin?.length) {
+      await addHouseRoles(adminInput.userId, adminInput.superAdmin, [
         "superAdmin",
-        false,
-      ),
-    ]);
-    logger.info("Creating claims", userClaims, superAdminClaims);
-    await auth().setCustomUserClaims(adminInput.userId, {
-      ...userClaims,
-      ...superAdminClaims,
+      ]);
+    }
+    await writeRecords(true);
+    logger.info("addAdminAuthorization: claims set", {
+      houseIds: adminInput.houseIds,
+      superAdmin: adminInput.superAdmin,
     });
     return true;
   } catch (error) {
@@ -181,6 +234,16 @@ export const deleteAdminAuthorization = onCall(async (request) => {
     houseIds: allHouseIds,
     callableName: "deleteAdminAuthorization",
   });
+  // Tiers (util/houseRoles): only someone strictly above the target may
+  // remove their staff access; the primary owner only themselves.
+  await assertMayRevokeAll({
+    callerUid: request.auth.uid,
+    targets: [...new Set(allHouseIds)].map((houseId) => ({
+      targetUid: admin.userId,
+      houseId,
+    })),
+    callableName: "deleteAdminAuthorization",
+  });
   if (adminHouseIds?.length) {
     const userClaims = await deleteClaim(admin.userId, adminHouseIds, "admin");
     await auth().setCustomUserClaims(admin.userId, { ...userClaims });
@@ -192,6 +255,12 @@ export const deleteAdminAuthorization = onCall(async (request) => {
       "superAdmin",
     );
     await auth().setCustomUserClaims(admin.userId, { ...superAdminClaims });
+  }
+  for (const houseId of superAdminHouseIds ?? []) {
+    await recordRoleRevoke(houseId, admin.userId, "superAdmin");
+  }
+  for (const houseId of adminHouseIds ?? []) {
+    await recordRoleRevoke(houseId, admin.userId, "admin");
   }
 });
 
@@ -224,8 +293,19 @@ export const promoteGuestsToAdmin = onCall(async (request) => {
       }),
     ),
   );
+  // Tiers (util/houseRoles): promoting makes a peer leader (owner or manager).
+  for (const houses of housesByTarget.values()) {
+    for (const houseId of houses) {
+      await assertMayGrantTier({
+        callerUid: request.auth.uid,
+        houseId,
+        grant: "peerLeader",
+        callableName: "promoteGuestsToAdmin",
+      });
+    }
+  }
   const users = await getGuestsAsUsers(data);
-  await Promise.all(
+  const results = await Promise.allSettled(
     users.map(async (user) => {
       const guest = data.find((g) => g.userId === user.uid)!;
       const claims = await createClaims(
@@ -234,9 +314,32 @@ export const promoteGuestsToAdmin = onCall(async (request) => {
         "admin",
         false,
       );
-      return auth().setCustomUserClaims(user.uid, claims);
+      const meta = {
+        grantedBy: request.auth!.uid,
+        via: "promoteGuestsToAdmin" as const,
+      };
+      // Record first, then claims, then the record again (util/houseRoles,
+      // "Record before claims").
+      await recordRoleGrant(guest.houseId, user.uid, "peerLeader", meta);
+      await auth().setCustomUserClaims(user.uid, claims);
+      await recordRoleGrant(guest.houseId, user.uid, "peerLeader", meta, {
+        ifClaimed: true,
+      });
     }),
   );
+  const failed = users.filter((_, i) => results[i].status === "rejected");
+  if (failed.length > 0) {
+    logger.error("promoteGuestsToAdmin: failed to set claims", {
+      failedUids: failed.map((u) => u.uid),
+      codes: results.flatMap((r) =>
+        r.status === "rejected" ? [(r.reason as { code?: unknown })?.code ?? "unknown"] : [],
+      ),
+    });
+    throw new HttpsError(
+      "internal",
+      `${users.length - failed.length} of ${users.length} promoted; retry the rest`,
+    );
+  }
   return "success";
 });
 
@@ -268,6 +371,15 @@ export const removePrivilegesForGuests = onCall(async (request) => {
       }),
     ),
   );
+  // Tiers (util/houseRoles): the caller must rank strictly above each target
+  // (removing a resident's guest claim: any staff above them).
+  await assertMayRevokeAll({
+    callerUid: request.auth.uid,
+    targets: [...housesByTarget].flatMap(([targetUid, houses]) =>
+      [...houses].map((houseId) => ({ targetUid, houseId })),
+    ),
+    callableName: "removePrivilegesForGuests",
+  });
   const users = await getGuestsAsUsers(data.guests);
   await Promise.all(
     users.map(async (user) => {
@@ -278,7 +390,10 @@ export const removePrivilegesForGuests = onCall(async (request) => {
         data.role,
         false,
       );
-      return auth().setCustomUserClaims(user.uid, claims);
+      await auth().setCustomUserClaims(user.uid, claims);
+      if (data.role !== "supporter") {
+        await recordRoleRevoke(guest.houseId, user.uid, data.role);
+      }
     }),
   );
   return "success";

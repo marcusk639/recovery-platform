@@ -165,10 +165,12 @@ describe('advanceGuestWeek', () => {
 
     const mockTxUpdate = jest.fn();
     const mockTxSet = jest.fn();
-    const mockTxGet = jest.fn().mockResolvedValue({
-      exists: true,
-      data: () => ({ ...guest }),
-    });
+    // The guest exists; the next week's summary does not yet.
+    const mockTxGet = jest.fn(async (ref: unknown) =>
+      ref === guestRef
+        ? { exists: true, data: () => ({ ...guest }) }
+        : { exists: false, data: () => undefined },
+    );
 
     mockRunTransaction.mockImplementation(async (fn: Function) => {
       const tx = { get: mockTxGet, update: mockTxUpdate, set: mockTxSet };
@@ -177,8 +179,61 @@ describe('advanceGuestWeek', () => {
 
     await advanceGuestWeek(guestRef, guest);
 
-    // transaction.set should be called once to pre-create the week summary
+    // transaction.set should be called once to pre-create the week summary,
+    // as a plain create (no merge) of a zeroed doc.
     expect(mockTxSet).toHaveBeenCalledTimes(1);
+    expect(mockTxSet.mock.calls[0]).toHaveLength(2);
+    expect(mockTxSet.mock.calls[0][1]).toMatchObject({ activityCount: 0, guestId: 'guest-4' });
+  });
+
+  it('does not overwrite a summary the trigger already filled (activity logged before the advance)', async () => {
+    const guestRef = {} as any;
+    const guest = {
+      id: 'guest-5',
+      houseId: 'house-2',
+      currentWeekStartDate: '2020-01-06',
+    } as any;
+    const filled = {
+      exists: true,
+      data: () => ({ stats: { choresCompleted: 3 }, activityCount: 3 }),
+    };
+
+    const mockTxUpdate = jest.fn();
+    const mockTxSet = jest.fn();
+    const mockTxGet = jest.fn(async (ref: unknown) =>
+      ref === guestRef ? { exists: true, data: () => ({ ...guest }) } : filled,
+    );
+    mockRunTransaction.mockImplementation(async (fn: Function) =>
+      fn({ get: mockTxGet, update: mockTxUpdate, set: mockTxSet }),
+    );
+
+    await advanceGuestWeek(guestRef, guest);
+
+    // The guest still advances, but the summary (and its stats) is untouched.
+    expect(mockTxUpdate).toHaveBeenCalled();
+    expect(mockTxSet).not.toHaveBeenCalled();
+  });
+
+  it('reads the summary before writing anything in the transaction', async () => {
+    const guestRef = {} as any;
+    const guest = { id: 'guest-6', houseId: 'house-2', currentWeekStartDate: '2020-01-06' } as any;
+    const order: string[] = [];
+    mockRunTransaction.mockImplementation(async (fn: Function) =>
+      fn({
+        get: jest.fn(async (ref: unknown) => {
+          order.push('get');
+          return ref === guestRef
+            ? { exists: true, data: () => ({ ...guest }) }
+            : { exists: false, data: () => undefined };
+        }),
+        update: jest.fn(() => order.push('update')),
+        set: jest.fn(() => order.push('set')),
+      }),
+    );
+
+    await advanceGuestWeek(guestRef, guest);
+
+    expect(order).toEqual(['get', 'get', 'update', 'set']);
   });
 
   it('propagates transaction errors to the caller', async () => {

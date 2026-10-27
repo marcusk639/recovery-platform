@@ -1,0 +1,261 @@
+// src/__tests__/activities/disputeNotifications.test.ts
+//
+// Owner decision: when an activity is disputed, notify the house admins AND
+// the resident whose activity it is. Server-side, from onActivityWritten,
+// because the client may only create notifications for itself.
+
+import { logger } from 'firebase-functions';
+import { FakeFirestore, asFirestore } from './fakeFirestore';
+import {
+  disputeMessage,
+  disputerOf,
+  isNewDispute,
+  notifyDispute,
+} from '../../activities/disputeNotifications';
+
+let db: FakeFirestore;
+
+const active = {
+  guestId: 'g1',
+  houseId: 'h1',
+  type: 'chore',
+  status: 'active',
+  loggedBy: 'resident-uid',
+  data: { medicationName: 'SECRET-MED' },
+};
+const disputed = {
+  ...active,
+  status: 'disputed',
+  disputeReason: 'Kitchen not cleaned',
+  disputedBy: 'peer-uid',
+  disputeResolvedBy: 'peer-uid',
+};
+
+const notifications = () => [...(db.collections.get('notifications') ?? new Map()).values()];
+
+beforeEach(() => {
+  db = new FakeFirestore();
+  db.seed('guests', 'g1', { houseId: 'h1', userId: 'resident-uid' });
+  db.seed('houses', 'h1', {
+    adminIds: ['manager-uid', 'peer-leader-uid'],
+    superAdminIds: ['owner-uid'],
+    superAdminId: 'owner-uid',
+  });
+  for (const level of ['info', 'warn', 'error'] as const) {
+    jest.spyOn(logger, level).mockImplementation(() => undefined);
+  }
+});
+
+afterEach(() => jest.restoreAllMocks());
+
+describe('notifyDispute recipients', () => {
+  it('notifies every house admin and the disputed resident, once each', async () => {
+    const r = await notifyDispute(asFirestore(db), 'evt1', 'a1', active, disputed);
+
+    expect(r.recipients.sort()).toEqual([
+      'manager-uid',
+      'owner-uid',
+      'peer-leader-uid',
+      'resident-uid',
+    ]);
+    const byUser = Object.fromEntries(notifications().map((n) => [n.userId, n]));
+    expect(byUser['resident-uid']).toMatchObject({
+      type: 'dispute',
+      level: 'alert',
+      subject: 'Activity Disputed',
+      houseId: 'h1',
+      guestId: 'g1',
+      activityId: 'a1',
+      read: false,
+      adminNotification: false,
+      message: 'Your chore completion has been disputed. Reason: Kitchen not cleaned',
+    });
+    expect(byUser['manager-uid'].message).toBe(
+      'A chore completion has been disputed. Reason: Kitchen not cleaned',
+    );
+    expect(byUser['manager-uid'].adminNotification).toBe(true);
+  });
+
+  it('does not notify the person who raised the dispute (the disputedBy this write set)', async () => {
+    const byManager = { ...disputed, disputedBy: 'manager-uid', disputeResolvedBy: 'manager-uid' };
+    const r = await notifyDispute(asFirestore(db), 'evt1', 'a1', active, byManager);
+    expect(r.recipients).not.toContain('manager-uid');
+    expect(r.recipients).toContain('resident-uid');
+  });
+
+  it('takes disputedBy when present, else disputeResolvedBy (the rules make it the caller)', async () => {
+    const both = {
+      ...active,
+      status: 'disputed',
+      disputedBy: 'manager-uid',
+      disputeResolvedBy: 'manager-uid',
+    };
+    expect(disputerOf(active, both)).toBe('manager-uid');
+    const legacyOnly = { ...active, status: 'disputed', disputeResolvedBy: 'peer-leader-uid' };
+    expect(disputerOf(active, legacyOnly)).toBe('peer-leader-uid');
+    const r = await notifyDispute(asFirestore(db), 'evt1', 'a1', active, both);
+    expect(r.recipients).not.toContain('manager-uid');
+  });
+
+  it("an older build's dispute (disputeResolvedBy only) still notifies everyone but the disputer", async () => {
+    const legacy = {
+      ...active,
+      status: 'disputed',
+      disputeReason: 'x',
+      disputeResolvedBy: 'peer-leader-uid',
+    };
+    const r = await notifyDispute(asFirestore(db), 'evt1', 'a1', active, legacy);
+    expect(r.recipients.sort()).toEqual(['manager-uid', 'owner-uid', 'resident-uid']);
+  });
+
+  it('a write that sets no disputer field (Admin SDK) notifies every recipient', async () => {
+    const { disputedBy: _a, disputeResolvedBy: _b, ...byAdminSdk } = disputed;
+    const r = await notifyDispute(asFirestore(db), 'evt1', 'a1', active, byAdminSdk);
+    expect(r.recipients).toHaveLength(4);
+  });
+
+  it('cannot be steered by a forged disputer: the rules refuse that write (see disputeIntegrity.rules)', () => {
+    // A non-admin entering a dispute must set disputedBy/disputeResolvedBy to
+    // request.auth.uid (firestore.rules disputeNamesCaller); the rules test
+    // "BLOCKS a peer naming someone else in disputedBy or disputeResolvedBy"
+    // pins that. So the field this function trusts is always the caller.
+    expect(disputerOf(active, disputed)).toBe('peer-uid');
+    expect(disputerOf(disputed, { ...disputed, loggedAt: 'x' })).toBe('');
+  });
+
+  it('logs (ids only) a self-dispute that only an Admin SDK path could write (owner rule)', async () => {
+    const warn = jest.spyOn(logger, 'warn');
+    const selfDispute = {
+      ...active,
+      status: 'disputed',
+      disputeReason: 'mine',
+      disputedBy: 'resident-uid',
+    };
+    await notifyDispute(asFirestore(db), 'evt1', 'a1', active, selfDispute);
+    const logged = JSON.stringify(warn.mock.calls);
+    expect(logged).toContain('dispute_notify.self_dispute');
+    expect(logged).toContain('a1');
+    expect(logged).not.toContain('mine');
+  });
+
+  it('recovers on redelivery when a create fails midway: each recipient once', async () => {
+    db.failCreates.set(
+      'notifications/dispute_evt1_resident-uid',
+      Object.assign(new Error('unavailable'), { code: 14 }),
+    );
+    await expect(notifyDispute(asFirestore(db), 'evt1', 'a1', active, disputed)).rejects.toThrow(
+      'unavailable',
+    );
+    const sentFirst = notifications().length;
+    expect(sentFirst).toBeGreaterThan(0);
+    expect(sentFirst).toBeLessThan(4);
+
+    const retry = await notifyDispute(asFirestore(db), 'evt1', 'a1', active, disputed);
+
+    expect(retry.recipients).toContain('resident-uid');
+    expect(
+      notifications()
+        .map((n) => n.userId)
+        .sort(),
+    ).toEqual(['manager-uid', 'owner-uid', 'peer-leader-uid', 'resident-uid']);
+  });
+
+  it('is idempotent across a redelivered event', async () => {
+    await notifyDispute(asFirestore(db), 'evt1', 'a1', active, disputed);
+    const again = await notifyDispute(asFirestore(db), 'evt1', 'a1', active, disputed);
+    expect(again.recipients).toEqual([]);
+    expect(notifications()).toHaveLength(4);
+  });
+
+  it("uses the guest doc's house, not the activity's", async () => {
+    db.seed('houses', 'evil', { adminIds: ['attacker-uid'] });
+    const r = await notifyDispute(asFirestore(db), 'evt1', 'a1', active, {
+      ...disputed,
+      houseId: 'evil',
+    });
+    expect(r.recipients).not.toContain('attacker-uid');
+    expect(r.recipients).toContain('manager-uid');
+  });
+
+  it('skips (logging ids) when the guest doc is missing', async () => {
+    const r = await notifyDispute(asFirestore(db), 'evt1', 'a1', active, {
+      ...disputed,
+      guestId: 'ghost',
+    });
+    expect(r.recipients).toEqual([]);
+    expect(notifications()).toHaveLength(0);
+  });
+
+  it('never logs the reason or activity data', async () => {
+    const info = jest.spyOn(logger, 'info');
+    await notifyDispute(asFirestore(db), 'evt1', 'a1', active, disputed);
+    const logged = JSON.stringify(info.mock.calls);
+    expect(logged).toContain('dispute_notify.sent');
+    expect(logged).not.toContain('Kitchen');
+    expect(logged).not.toContain('SECRET-MED');
+  });
+});
+
+describe('only a transition into disputed notifies', () => {
+  it.each([
+    ['a new active activity', undefined, active],
+    ['an already-disputed activity being edited', disputed, { ...disputed, loggedAt: 'x' }],
+    ['an approval', disputed, { ...disputed, status: 'resolved', incomplete: true }],
+    ['a delete', active, { ...active, status: 'deleted' }],
+    ['a hard delete', disputed, undefined],
+  ])('ignores %s', async (_label, before, after) => {
+    expect(isNewDispute(before, after)).toBe(false);
+    const r = await notifyDispute(asFirestore(db), 'evt1', 'a1', before, after);
+    expect(r.recipients).toEqual([]);
+  });
+
+  it('labels unknown types generically', () => {
+    expect(disputeMessage({ type: 'nap' }, true)).toBe(
+      'An activity has been disputed. Reason: No reason provided',
+    );
+  });
+});
+
+describe('a REOPEN (an admin undoing a decision) notifies', () => {
+  const approved = {
+    ...disputed,
+    status: 'resolved',
+    disputed: 'successful',
+    incomplete: true,
+    disputeResolvedBy: 'manager-uid',
+  };
+  const reopened = {
+    ...disputed,
+    disputeResolvedBy: null,
+    reopenedBy: 'owner-uid',
+    reopenedAt: 'now',
+  };
+
+  it('the house admins and the resident, minus the admin who reopened it, that it is open again', async () => {
+    const r = await notifyDispute(asFirestore(db), 'evt9', 'a1', approved, reopened);
+
+    expect(r.recipients.sort()).toEqual(['manager-uid', 'peer-leader-uid', 'resident-uid']);
+    for (const n of notifications()) {
+      expect(n).toMatchObject({
+        subject: 'Dispute Reopened',
+        message: 'A dispute decision was undone; the dispute is open again.',
+        type: 'dispute',
+      });
+    }
+    expect(db.read('notifications', 'dispute_evt9_resident-uid')).toBeDefined();
+  });
+
+  it('once per event (a redelivery adds nothing), also from an old build\'s "delete", logging ids only', async () => {
+    const info = jest.spyOn(logger, 'info');
+    await notifyDispute(asFirestore(db), 'evt9', 'a1', approved, reopened);
+    expect(
+      (await notifyDispute(asFirestore(db), 'evt9', 'a1', approved, reopened)).recipients,
+    ).toEqual([]);
+    const deleted = { ...disputed, status: 'deleted' };
+    expect(
+      (await notifyDispute(asFirestore(db), 'evt10', 'a1', deleted, reopened)).recipients,
+    ).toHaveLength(3);
+    expect(JSON.stringify(info.mock.calls)).toContain('"kind":"reopened"');
+    expect(JSON.stringify(info.mock.calls)).not.toContain('Kitchen');
+  });
+});

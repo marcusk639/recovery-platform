@@ -1,4 +1,5 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { isPrimaryOwner } from "../util/houseRoles";
 import { logger } from "firebase-functions";
 import * as admin from "firebase-admin";
 import isNil from "lodash/isNil";
@@ -526,13 +527,13 @@ export const updateSubscriptionHouses = onCall(
       if (action === "add") {
         // The subscription houses map is what createHouses accepts as proof of
         // ownership on retry, so only a house this caller owns may enter it.
-        // ownerId is set by createHouses and only a superAdmin of the house can
-        // change it (rules deny client house creates and admin/guest ownerId
-        // writes). ownerUserId is request.auth.uid (checked above).
-        const added = await Promise.all(
-          (houseIds ?? []).map((id) => getHouse(id)),
+        // Ownership is the server-only primary owner record (util/houseRoles),
+        // never houses.ownerId (a superAdmin could rewrite it before the
+        // rules deploy). ownerUserId is request.auth.uid (checked above).
+        const owned = await Promise.all(
+          (houseIds ?? []).map((id) => isPrimaryOwner(id, ownerUserId)),
         );
-        if (added.some((h) => !h || h.ownerId !== ownerUserId)) {
+        if (owned.some((o) => !o)) {
           throw new HttpsError(
             "permission-denied",
             "You can only add houses you own",

@@ -9,8 +9,12 @@ import {
   getGuestsForHouse,
   getDrugTestsForGuest,
   getMeetingActivitiesForGuest,
+  getDisputeDecisions,
 } from "../api/firestore";
 import { tierAllows } from "../util/tierPricing";
+import { resolveTimeZone } from "../activities/weekSummaryMath";
+import { claimsHouseAdminCheck, HouseAdminCheck } from "../activities/activityTrust";
+import { MeetingRow, meetingRowsFor } from "./complianceMeetings";
 import { parseInput } from "../validation";
 
 const complianceExportSchema = z.object({
@@ -44,16 +48,6 @@ interface DrugTest {
   notes?: string;
 }
 
-interface MeetingActivity {
-  timestamp?: string;
-  loggedAt?: string;
-  verified?: boolean;
-  data?: {
-    meetingName?: string;
-    meetingType?: string;
-    duration?: number | string;
-  };
-}
 
 interface ResidentRecord {
   firstName?: string;
@@ -119,7 +113,8 @@ function inWindow(dateIso: string, start?: string, end?: string): boolean {
 interface ResidentExport {
   resident: ResidentRecord;
   tests: DrugTest[];
-  meetings: MeetingActivity[];
+  /** Every logged meeting in range, with its dispute outcome (see complianceMeetings). */
+  meetings: MeetingRow[];
 }
 
 interface ExportData {
@@ -134,7 +129,9 @@ async function gatherExportData(
   residents: ResidentRecord[],
   residentId: string | undefined,
   startDate: string | undefined,
-  endDate: string | undefined
+  endDate: string | undefined,
+  timeZone: string,
+  isHouseAdmin: HouseAdminCheck
 ): Promise<ExportData> {
   // Fetch each resident's drug tests + meetings concurrently. The previous
   // serial N+1 (2 awaits per resident, one resident at a time) made a
@@ -146,7 +143,7 @@ async function gatherExportData(
 
       const [tests, meetings] = await Promise.all([
         getDrugTestsForGuest(rid) as Promise<DrugTest[]>,
-        getMeetingActivitiesForGuest(rid) as Promise<MeetingActivity[]>,
+        getMeetingActivitiesForGuest(rid) as Promise<Record<string, unknown>[]>,
       ]);
 
       return {
@@ -154,8 +151,11 @@ async function gatherExportData(
         tests: tests.filter((t) =>
           inWindow(t.testDate ?? "", startDate, endDate)
         ),
-        meetings: meetings.filter((m) =>
-          inWindow(m.timestamp ?? m.loggedAt ?? "", startDate, endDate)
+        meetings: await meetingRowsFor(
+          resident as Record<string, unknown>,
+          rid,
+          meetings,
+          { timeZone, startDate, endDate, isHouseAdmin, decisionsFor: getDisputeDecisions }
         ),
       };
     })
@@ -166,7 +166,12 @@ async function gatherExportData(
     counts: {
       residents: residents.length,
       drugTests: bundles.reduce((sum, b) => sum + b.tests.length, 0),
-      meetings: bundles.reduce((sum, b) => sum + b.meetings.length, 0),
+      // Totals follow the counting rule: an approved dispute is listed (with
+      // its outcome) but not counted.
+      meetings: bundles.reduce(
+        (sum, b) => sum + b.meetings.filter((m) => m.counted).length,
+        0
+      ),
     },
   };
 }
@@ -216,15 +221,19 @@ function renderCsv(data: ExportData): string {
 
     // Meeting attendance.
     lines.push("Meeting Attendance");
-    lines.push(toCsvRow(["Date", "Meeting", "Type", "Duration", "Verified"]));
+    lines.push(
+      toCsvRow(["Date", "Meeting", "Type", "Duration", "Verified", "Dispute", "Dispute History"])
+    );
     for (const m of meetings) {
       lines.push(
         toCsvRow([
-          datePart(m.timestamp ?? m.loggedAt ?? ""),
-          m.data?.meetingName ?? "",
-          m.data?.meetingType ?? "",
-          m.data?.duration ?? "",
-          m.verified === true,
+          m.date,
+          m.meetingName,
+          m.meetingType,
+          m.duration,
+          m.verified,
+          m.dispute,
+          m.disputeHistory,
         ])
       );
     }
@@ -323,11 +332,13 @@ async function renderPdf(
         for (const m of meetings) {
           doc.text(
             [
-              datePart(m.timestamp ?? m.loggedAt ?? "") || "—",
-              m.data?.meetingName ?? "—",
-              m.data?.meetingType ?? "—",
-              m.data?.duration != null ? String(m.data.duration) : "—",
-              m.verified === true ? "Verified" : "Unverified",
+              m.date || "—",
+              m.meetingName || "—",
+              m.meetingType || "—",
+              m.duration !== "" ? String(m.duration) : "—",
+              m.verified ? "Verified" : "Unverified",
+              `Dispute: ${m.dispute}`,
+              ...(m.disputeHistory ? [m.disputeHistory] : []),
             ].join(" · ")
           );
         }
@@ -447,11 +458,15 @@ export const complianceExport = onCall(async (request) => {
   }
 
   // Gather the shared in-memory structure once; both renderers consume it.
+  // Meeting dates are the house-local date, as in the weekly summaries.
+  const { timeZone } = resolveTimeZone((house as { timezone?: unknown }).timezone);
   const data = await gatherExportData(
     residents,
     residentId,
     startDate,
-    endDate
+    endDate,
+    timeZone,
+    claimsHouseAdminCheck()
   );
 
   logger.info("complianceExport: export generated", {

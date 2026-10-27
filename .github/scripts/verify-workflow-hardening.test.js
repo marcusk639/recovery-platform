@@ -18,7 +18,12 @@ const mutations = [
   ["ci: removed maestro e2e-fix clause", "ci.yml", " && !startsWith(github.head_ref, 'e2e-fix/')", ""],
   ["ci: maestro && -> ||", "ci.yml", "'pull_request' && !startsWith", "'pull_request' || !startsWith"],
   ["ci: job-level contents: write", "ci.yml", "  recovery-api:\n    name: recovery-api — typecheck + test\n", "  recovery-api:\n    permissions:\n      contents: write\n    name: recovery-api — typecheck + test\n"],
-  ["review: removed job if", "claude-code-review.yml", "    if: ${{ !startsWith(github.head_ref, 'e2e-fix/') }}\n", ""],
+  ["review: removed job if", "claude-code-review.yml", /^    if: >-\n(?: {6}.*\n)+/m, ""],
+  ["review: removed e2e-fix clause", "claude-code-review.yml", "      && !startsWith(github.head_ref, 'e2e-fix/')\n", ""],
+  ["review: e2e-fix clause && -> ||", "claude-code-review.yml", "&& !startsWith(github.head_ref, 'e2e-fix/')", "|| !startsWith(github.head_ref, 'e2e-fix/')"],
+  ["review: e2e-fix clause negation dropped", "claude-code-review.yml", "!startsWith(github.head_ref, 'e2e-fix/')", "startsWith(github.head_ref, 'e2e-fix/')"],
+  ["review: e2e-fix clause inside negated group", "claude-code-review.yml", "${{ !github.event.pull_request.draft\n      && !startsWith(github.head_ref, 'e2e-fix/')", "${{ !(!github.event.pull_request.draft\n      && !startsWith(github.head_ref, 'e2e-fix/'))"],
+  ["review: || on another conjunct", "claude-code-review.yml", "&& github.actor != 'dependabot[bot]'", "|| github.actor != 'dependabot[bot]'"],
   ["review: removed persist-credentials", "claude-code-review.yml", "          persist-credentials: false\n", ""],
   ["claude: case pattern changed", "claude.yml", "e2e-fix/*) echo", "e2e-fix-x/*) echo"],
   ["claude: gate inverted", "claude.yml", `if: ${GATE}`, "if: steps.pr-head.outputs.skip == 'true'"],
@@ -43,7 +48,7 @@ for (const [name, file, from, to] of mutations) {
   for (const f of fs.readdirSync(real)) fs.copyFileSync(path.join(real, f), path.join(tmp, f));
   const p = path.join(tmp, file);
   const src = fs.readFileSync(p, "utf8");
-  if (!src.includes(from)) {
+  if (!(from instanceof RegExp ? from.test(src) : src.includes(from))) {
     bad++;
     console.error(`FAIL: mutation "${name}" does not apply (pattern not found in ${file})`);
     continue;

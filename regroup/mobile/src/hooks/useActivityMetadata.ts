@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { Activity, ActivityType } from '../entities/ActivityModel';
+import { Activity, ActivityStatus, ActivityType } from '../entities/ActivityModel';
 import { DISPUTABLE_STATS } from '../entities/Dispute';
 
 export interface UseActivityMetadataReturn {
@@ -33,8 +33,11 @@ export function useActivityMetadata(): UseActivityMetadataReturn {
     return 'check-circle';
   }, []);
 
+  // Only an ACTIVE activity can be disputed: not one already disputed,
+  // resolved or deleted (the rules refuse those too).
   const activityIsDisputable = useCallback((activity: Activity): boolean => {
     return (
+      activity.status === ActivityStatus.ACTIVE &&
       DISPUTABLE_STATS.includes(activity.type) &&
       activity.disputeResult !== 'success' &&
       activity.disputeResult !== 'fail'

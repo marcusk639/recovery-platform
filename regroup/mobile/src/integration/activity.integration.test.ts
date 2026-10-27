@@ -112,13 +112,14 @@ describe('activity service (integration)', () => {
       expect(disputed?.disputeReason).toBe('Not verified');
     });
 
-    it('removes activity from the active activities list after dispute', async () => {
+    it('keeps a pending dispute in the activities list (it still counts)', async () => {
       const activity = await logActivity(
         TEST_GUEST,
         TEST_HOUSE,
         ActivityType.CHORE,
         ActivityDataFactory.chore('weekly', 'Vacuuming'),
         'user-1',
+        new Date('2026-02-17T12:00:00.000Z'), // inside TEST_WEEK
       );
       createdActivityIds.push(activity.id);
 
@@ -129,15 +130,16 @@ describe('activity service (integration)', () => {
 
       await disputeActivity(activity.id, 'Chore not completed properly', 'house-manager-1');
 
-      // Should no longer appear in getActivities (which filters by ACTIVE only)
+      // Owner's dispute model: a pending dispute keeps counting, so it stays
+      // listed until an admin approves it (incomplete) or it is deleted.
       const afterDispute = await getActivities(TEST_GUEST, TEST_WEEK_START, TEST_WEEK_END);
       const foundAfter = afterDispute.find(a => a.id === activity.id);
-      expect(foundAfter).toBeUndefined();
+      expect(foundAfter?.status).toBe(ActivityStatus.DISPUTED);
     });
   });
 
   describe('resolveDispute', () => {
-    it('marks activity as RESOLVED with resolution "keep" after admin approval', async () => {
+    it('reject: marks the activity RESOLVED, disputed rejected, still counted', async () => {
       const activity = await logActivity(
         TEST_GUEST,
         TEST_HOUSE,
@@ -153,16 +155,18 @@ describe('activity service (integration)', () => {
       const disputed = await getActivityById(activity.id);
       expect(disputed?.status).toBe(ActivityStatus.DISPUTED);
 
-      await resolveDispute(activity.id, 'admin-1', 'keep');
+      await resolveDispute(activity.id, 'admin-1', 'reject');
 
       // Check resolved state directly from Firestore
       const resolved = await getActivityById(activity.id);
       expect(resolved).not.toBeNull();
       expect(resolved?.status).toBe(ActivityStatus.RESOLVED);
+      expect(resolved?.disputed).toBe('rejected');
+      expect(resolved?.incomplete).toBe(false);
       expect(resolved?.disputeResolvedBy).toBe('admin-1');
     });
 
-    it('marks activity as DELETED with resolution "delete" after admin rejection', async () => {
+    it('approve: marks the activity incomplete (not done) and keeps it on record', async () => {
       const activity = await logActivity(
         TEST_GUEST,
         TEST_HOUSE,
@@ -173,12 +177,15 @@ describe('activity service (integration)', () => {
       createdActivityIds.push(activity.id);
 
       await disputeActivity(activity.id, 'Did not attend', 'house-manager-1');
-      await resolveDispute(activity.id, 'admin-1', 'delete');
+      await resolveDispute(activity.id, 'admin-1', 'approve');
 
-      const deleted = await getActivityById(activity.id);
-      expect(deleted).not.toBeNull();
-      expect(deleted?.status).toBe(ActivityStatus.DELETED);
-      expect(deleted?.disputeResolvedBy).toBe('admin-1');
+      const approved = await getActivityById(activity.id);
+      expect(approved).not.toBeNull();
+      expect(approved?.status).toBe(ActivityStatus.RESOLVED);
+      expect(approved?.disputed).toBe('successful');
+      expect(approved?.incomplete).toBe(true);
+      expect(approved?.disputeOutcome).toBe('incomplete-per-residents');
+      expect(approved?.disputeResolvedBy).toBe('admin-1');
     });
   });
 });

@@ -1,0 +1,206 @@
+// src/__tests__/activities/syncWeekSummary.edgeCases.test.ts
+//
+// onActivityWritten recompute: time zone, bad input, failure/retry and
+// logging. The core create/transition/idempotency cases are in
+// syncWeekSummary.test.ts; the setup below is the same.
+
+import { Timestamp } from 'firebase-admin/firestore';
+import { logger } from 'firebase-functions';
+import { FakeFirestore, asFirestore } from './fakeFirestore';
+import {
+  GUEST_CHANGED,
+  recomputeWeekSummary,
+  syncWeekSummariesForActivityWrite,
+} from '../../activities/syncWeekSummary';
+
+const WEEK = '2026-01-12'; // Monday, America/Chicago
+const NEXT_WEEK = '2026-01-19';
+const SUMMARY = `g1_${WEEK}`;
+
+let db: FakeFirestore;
+
+/** Stand-in for the Auth custom-claims check: admin-uid administers h1 only. */
+const deps = {
+  isHouseAdmin: async (uid: string, houseId: string) => uid === 'admin-uid' && houseId === 'h1',
+};
+
+const ts = (iso: string) => Timestamp.fromDate(new Date(iso));
+
+const activity = (overrides: Record<string, unknown> = {}) => ({
+  guestId: 'g1',
+  houseId: 'h1',
+  type: 'chore',
+  status: 'active',
+  verified: false,
+  loggedBy: 'resident-uid',
+  timestamp: ts('2026-01-14T18:00:00Z'),
+  data: {},
+  ...overrides,
+});
+
+/** Commit `after` (or delete), then deliver the event for it. */
+async function write(
+  id: string,
+  before: Record<string, unknown> | undefined,
+  after: Record<string, unknown> | undefined,
+) {
+  if (after) db.seed('activities', id, after);
+  else db.collections.get('activities')?.delete(id);
+  return syncWeekSummariesForActivityWrite(asFirestore(db), id, before, after, deps);
+}
+
+const summary = (id = SUMMARY) => db.read('week-summaries', id);
+
+beforeEach(() => {
+  db = new FakeFirestore();
+  db.seed('houses', 'h1', { timezone: 'America/Chicago' });
+  db.seed('guests', 'g1', { houseId: 'h1', userId: 'resident-uid' });
+  db.seed('guests', 'g2', { houseId: 'h1', userId: 'resident2-uid' });
+  jest.spyOn(console, 'log').mockImplementation(() => undefined);
+  jest.spyOn(console, 'info').mockImplementation(() => undefined);
+  jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  jest.spyOn(console, 'error').mockImplementation(() => undefined);
+});
+
+afterEach(() => jest.restoreAllMocks());
+
+
+describe('time zone', () => {
+  const SUNDAY_NIGHT_PST = '2026-01-19T07:30:00Z'; // Sun 23:30 PST, Mon 02:30 EST
+
+  it('puts the activity in the house-local week', async () => {
+    db.seed('houses', 'h1', { timezone: 'America/Los_Angeles' });
+    await write('a1', undefined, activity({ timestamp: ts(SUNDAY_NIGHT_PST) }));
+
+    expect(summary()!.stats.choresCompleted).toBe(1);
+    expect(summary()!.dailyStats['2026-01-18'].choresCompleted).toBe(1);
+    expect(summary(`g1_${NEXT_WEEK}`)).toBeUndefined();
+  });
+
+  it('falls back to America/New_York when the house has no timezone', async () => {
+    db.seed('houses', 'h1', {});
+    await write('a1', undefined, activity({ timestamp: ts(SUNDAY_NIGHT_PST) }));
+
+    expect(summary(`g1_${NEXT_WEEK}`)!.stats.choresCompleted).toBe(1);
+  });
+
+  it('falls back when the house doc does not exist', async () => {
+    db.seed('guests', 'g1', { houseId: 'gone', userId: 'resident-uid' });
+    await write('a1', undefined, activity({ houseId: 'gone', timestamp: ts(SUNDAY_NIGHT_PST) }));
+    expect(summary(`g1_${NEXT_WEEK}`)!.houseId).toBe('gone');
+  });
+});
+
+describe('bad input and failures', () => {
+  it('ignores an activity with no guestId or no usable timestamp, without throwing', async () => {
+    await expect(write('a1', undefined, activity({ guestId: '' }))).resolves.toEqual({
+      recomputed: [],
+    });
+    await expect(write('a2', undefined, activity({ timestamp: 'garbage' }))).resolves.toEqual({
+      recomputed: [],
+    });
+    expect(db.transactions).toBe(0);
+  });
+
+  it('rethrows a failed transaction so the event is retried, having written nothing', async () => {
+    db.failTransactions = 1;
+    await expect(write('a1', undefined, activity())).rejects.toThrow('unavailable');
+    expect(summary()).toBeUndefined();
+
+    // The retry succeeds.
+    await syncWeekSummariesForActivityWrite(asFirestore(db), 'a1', undefined, activity(), deps);
+    expect(summary()!.stats.choresCompleted).toBe(1);
+  });
+
+  it('logs ids and counts only — never activity data', async () => {
+    const calls: unknown[] = [];
+    for (const level of ['info', 'warn', 'error', 'log'] as const) {
+      jest.spyOn(logger, level).mockImplementation((...args: unknown[]) => {
+        calls.push(args);
+      });
+    }
+    await write('a1', undefined, activity({ type: 'medication', data: { medicationName: 'SECRET-MED' } }));
+    const logged = JSON.stringify(calls);
+    expect(logged).toContain('week_summary.recomputed');
+    expect(logged).not.toContain('SECRET-MED');
+  });
+});
+
+describe('recomputeWeekSummary', () => {
+  const target = { guestId: 'g1', houseId: 'h1', weekStart: WEEK, timeZone: 'America/Chicago' };
+
+  it('reports unchanged when the summary already matches', async () => {
+    db.seed('activities', 'a1', activity());
+    expect(await recomputeWeekSummary(asFirestore(db), target, deps)).toMatchObject({
+      skipped: false,
+      changed: true,
+      activityCount: 1,
+    });
+    expect(await recomputeWeekSummary(asFirestore(db), target, deps)).toMatchObject({
+      changed: false,
+      activityCount: 1,
+    });
+  });
+
+  it('a dry run uses a read-only transaction and writes nothing', async () => {
+    db.seed('activities', 'a1', activity());
+    const r = await recomputeWeekSummary(asFirestore(db), target, { ...deps, write: false });
+    expect(r.changed).toBe(true);
+    expect(db.readOnlyTransactions).toBe(1);
+    expect(summary()).toBeUndefined();
+  });
+});
+
+describe('transaction hygiene', () => {
+  const target = { guestId: 'g1', houseId: 'h1', weekStart: WEEK, timeZone: 'America/Chicago' };
+
+  it('resolves admin claims before the transaction opens, once per logger', async () => {
+    db.seed('activities', 'a1', activity({ loggedBy: 'admin-uid' }));
+    db.seed('activities', 'a2', activity({ loggedBy: 'admin-uid', type: 'meeting' }));
+    const txOpenAtCall: number[] = [];
+    const isHouseAdmin = jest.fn(async (uid: string, houseId: string) => {
+      txOpenAtCall.push(db.transactions);
+      return deps.isHouseAdmin(uid, houseId);
+    });
+
+    const r = await recomputeWeekSummary(asFirestore(db), target, { isHouseAdmin });
+
+    expect(r.activityCount).toBe(2);
+    expect(isHouseAdmin).toHaveBeenCalledTimes(1);
+    expect(txOpenAtCall).toEqual([0]);
+  });
+
+  it('falls back to a live lookup for a logger that appears after the pre-read', async () => {
+    db.seed('activities', 'a1', activity());
+    const isHouseAdmin = jest.fn(async (uid: string, houseId: string) => deps.isHouseAdmin(uid, houseId));
+    // Between the pre-read and the transaction, an admin logs another one.
+    const realGet = db.runQuery.bind(db);
+    let calls = 0;
+    jest.spyOn(db, 'runQuery').mockImplementation((collection, spec) => {
+      if (collection === 'activities' && ++calls === 2) {
+        db.seed('activities', 'late', activity({ loggedBy: 'admin-uid', type: 'meeting' }));
+      }
+      return realGet(collection, spec);
+    });
+
+    const r = await recomputeWeekSummary(asFirestore(db), target, { isHouseAdmin });
+
+    expect(r.activityCount).toBe(2);
+    expect(isHouseAdmin).toHaveBeenCalledWith('admin-uid', 'h1');
+  });
+
+  it('refuses to write when the guest moved house after the week was computed', async () => {
+    db.seed('activities', 'a1', activity());
+    db.seed('guests', 'g1', { houseId: 'h2', userId: 'resident-uid' });
+    await expect(recomputeWeekSummary(asFirestore(db), target, deps)).rejects.toThrow(GUEST_CHANGED);
+    expect(summary()).toBeUndefined();
+  });
+
+  it('refuses to write when the house zone differs from the one the week was computed in', async () => {
+    db.seed('activities', 'a1', activity());
+    await expect(
+      recomputeWeekSummary(asFirestore(db), { ...target, timeZone: 'America/Los_Angeles' }, deps),
+    ).rejects.toThrow(GUEST_CHANGED);
+    expect(summary()).toBeUndefined();
+  });
+});
