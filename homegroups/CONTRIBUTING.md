@@ -330,12 +330,14 @@ export const TransactionRow: React.FC<TransactionRowProps> = ({
 
 ### What Happens Next
 
-1. **Claude Code review runs** automatically on PR submission (see `.github/workflows/claude-code-pr-review.yml`). This is the only automated step currently — there is **no CI pipeline that runs `npm test`, `npm run build`, `eslint`, or `tsc`**. Contributors are expected to run those locally before pushing. See the "Quality Standards" section above for the local commands.
+1. **Automated checks run** on every PR, from the monorepo root (`recovery-platform/.github/workflows/`). Workflows under `homegroups/.github/` do not run.
+   - `ci.yml`: homegroups functions typecheck and tests, Firestore and Storage rules tests, mobile and web tests, and a Maestro Android smoke test.
+   - `claude-code-review.yml`: the advisory Claude PR review shared by every product. It posts one summary comment and inline comments. Its homegroups knowledge lives in `.claude/pr-review/` (e.g. `contract-map-homegroups.md`).
+   - `claude.yml`: answers `@claude` mentions on the PR.
+   - `test-tamper.yml`: blocks deleted or weakened tests.
 2. **Code review** (1-2 reviewers)
 3. **Feedback/revisions** (if needed)
 4. **Approval and merge**
-
-> **Note:** A real CI workflow (`.github/workflows/ci.yml`) is in progress as part of the audit-wave-2 hygiene branch. Once it lands, the above will be updated to describe what it actually runs.
 
 ---
 

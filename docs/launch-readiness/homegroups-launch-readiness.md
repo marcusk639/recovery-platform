@@ -61,7 +61,7 @@ Homegroups is a privacy-first mobile and web platform for running 12-step recove
 
 - **67 test files** across functions (unit + integration + rules tests).
 - **CI pipeline**: `ci.yml` with TypeScript check as blocking gate (no `continue-on-error`).
-- **PR review**: `claude-code-pr-review.yml` for automated code review.
+- **PR review**: the monorepo's shared `claude-code-review.yml` (root `.github/workflows/`), with homegroups knowledge in `.claude/pr-review/`.
 - **Crashlytics** installed (`@react-native-firebase/crashlytics` v18.9.0).
 - **Pre-launch checklist**: 30/30 code items marked complete.
 
