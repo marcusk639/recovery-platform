@@ -443,6 +443,14 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/guests/$(guestId)).data;
     }
 
+    // A write that sets disputedBy must name the caller; leaving an existing
+    // value untouched (e.g. the owner deleting an activity a peer disputed)
+    // is fine.
+    function disputerIsCaller() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['disputedBy']) ||
+        request.resource.data.disputedBy == request.auth.uid;
+    }
+
     match /activities/{activityId} {
       allow read: if isGuest([resource.data.houseId]) || isAdmin([resource.data.houseId]);
       // Activities feed week-summaries (phase compliance, computed server-side
@@ -470,13 +478,31 @@ service cloud.firestore {
       // rest, but may not move an activity into a house they do not
       // administer. diff() only flags real changes, so a write echoing the
       // current values back passes.
+      //
+      // Peer disputes: disputes exist so residents can challenge OTHER
+      // residents' activities (the ActivityScreen shows DISPUTE to every house
+      // member). A resident of the activity's house may move an active
+      // activity to disputed, writing only what disputeActivity writes and
+      // naming themselves as the disputer (disputeResolvedBy holds the
+      // disputer until resolveDispute overwrites it; disputedBy keeps it and
+      // is optional so earlier app builds still work). Verified activities
+      // remain disputable: the app's DISPUTE button does not check verified.
+      // Nothing else is open to non-loggers.
       allow update: if
         (isAdmin([resource.data.houseId]) && isAdmin([request.resource.data.houseId])) ||
         (isSameUser(resource.data.loggedBy) &&
           request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['status', 'disputeReason', 'disputeResolvedBy', 'loggedAt']) &&
+            .hasOnly(['status', 'disputeReason', 'disputedBy', 'disputeResolvedBy', 'loggedAt']) &&
+          disputerIsCaller() &&
           (request.resource.data.status == resource.data.status ||
-           request.resource.data.status in ['disputed', 'deleted']));
+           request.resource.data.status in ['disputed', 'deleted'])) ||
+        (isGuest([resource.data.houseId]) &&
+          resource.data.status == 'active' &&
+          request.resource.data.status == 'disputed' &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'disputeReason', 'disputedBy', 'disputeResolvedBy', 'loggedAt']) &&
+          request.resource.data.disputeResolvedBy == request.auth.uid &&
+          disputerIsCaller());
       allow delete: if isAdmin([resource.data.houseId]);
     }
 
