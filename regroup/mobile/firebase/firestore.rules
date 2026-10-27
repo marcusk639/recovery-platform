@@ -221,6 +221,7 @@ service cloud.firestore {
       // staff member's own resident record comes through an invitation),
       // so no one can mint an eviction-proof record for themselves.
       allow create: if createdByCaller(request.resource.data) &&
+                       moveOutDateValid(request.resource.data) &&
                        (isInvitedSelfCreate(request.resource.data) ||
                         (isAdmin([request.resource.data.houseId]) &&
                          request.resource.data.get('userId', '') != request.auth.uid));
@@ -286,16 +287,25 @@ service cloud.firestore {
         let uid = d.get('userId', '');
         return uid is string && uid != '' ? recordRank(d.houseId, uid) : 0;
       }
-      function isActiveRecord(d) {
-        return d.get('status', 'active') == 'active' && d.get('moveOutDate', '') in ['', null];
+      // moveOutDate is a timestamp, a string or null (a 0 or false would read
+      // as "still here" while the server's isActiveGuestDoc agreed, then a
+      // later date would depart someone without the rank check).
+      function moveOutDateValid(d) {
+        return !('moveOutDate' in d) || d.moveOutDate == null ||
+          d.moveOutDate is string || d.moveOutDate is timestamp;
       }
+      // Any change to a record's status, moveOutDate or house (a departure,
+      // a re-activation or a move) needs the caller to rank strictly above
+      // the record's account; a record ranked 0 (a resident, or no record)
+      // any staff may change. Staff never change these on their own record.
       function staffDepartureAllowed() {
         let own = resource.data.get('userId', '') == request.auth.uid;
-        let departs = (isActiveRecord(resource.data) && !isActiveRecord(request.resource.data)) ||
-          request.resource.data.houseId != resource.data.houseId;
-        return !(own && request.resource.data.diff(resource.data).affectedKeys()
-                   .hasAny(['status', 'moveOutDate', 'houseId'])) &&
-          (!departs || callerRank(resource.data.houseId) > targetRank(resource.data));
+        let changed = request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['status', 'moveOutDate', 'houseId']);
+        return !(own && changed) &&
+          (!changed || callerRank(resource.data.houseId) > targetRank(resource.data)) &&
+          (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['moveOutDate']) ||
+           moveOutDateValid(request.resource.data));
       }
 
       allow update: if

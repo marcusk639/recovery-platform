@@ -106,3 +106,57 @@ describe('staff never depart or re-activate their own record', () => {
     await assertSucceeds(updateDoc(doc(db('pl'), 'guests/pl-doc'), { firstName: 'P' }));
   });
 });
+
+describe('a forged moveOutDate cannot hide a departure (verifier X1)', () => {
+  it('DENIES creating or setting a moveOutDate that is not a timestamp, string or null', async () => {
+    await assertFails(
+      setDoc(doc(db('pl'), 'guests/q-doc'), { ...resident('pl2'), moveOutDate: 0 }),
+    );
+    await assertFails(updateDoc(doc(db('mgr'), 'guests/res-doc'), { moveOutDate: false }));
+    await assertSucceeds(
+      updateDoc(doc(db('mgr'), 'guests/res-doc'), { moveOutDate: '2026-10-01' }),
+    );
+  });
+
+  it('a legacy 0 still counts as "here": setting a date on a peer leader stays rank-checked', async () => {
+    await seed('guests/pl2-doc', { ...resident('pl2'), moveOutDate: 0 });
+    await assertFails(updateDoc(doc(db('pl'), 'guests/pl2-doc'), { moveOutDate: '2026-10-01' }));
+  });
+});
+
+describe('re-activation is rank-checked too (verifier X4)', () => {
+  it("DENIES peer leader P re-activating peer leader Q's discharged record", async () => {
+    await seed('guests/pl2-doc', { ...resident('pl2'), status: 'discharged' });
+    await assertFails(updateDoc(doc(db('pl'), 'guests/pl2-doc'), { status: 'active' }));
+    await assertSucceeds(updateDoc(doc(db('mgr'), 'guests/pl2-doc'), { status: 'active' }));
+  });
+});
+
+describe('rank edge cases (S3)', () => {
+  it('a target with no record ranks 0: any staff may depart it', async () => {
+    await seed('guests/new-doc', resident('nobody'));
+    await assertSucceeds(updateDoc(doc(db('pl'), 'guests/new-doc'), { status: 'inactive' }));
+  });
+
+  it('a caller ranked only by a superAdmin claim (co-owner, no record) outranks a manager', async () => {
+    const co = { superAdmin: { [H]: true }, admin: { [H]: true } };
+    await assertSucceeds(updateDoc(doc(db('co', co), 'guests/mgr-doc'), { status: 'discharged' }));
+  });
+
+  it("DENIES a co-owner departing the primary owner's record", async () => {
+    await seed('guests/owner-doc', resident('owner'));
+    const co = { superAdmin: { [H]: true }, admin: { [H]: true } };
+    await assertFails(updateDoc(doc(db('co', co), 'guests/owner-doc'), { status: 'discharged' }));
+    await assertFails(deleteDoc(doc(db('co', co), 'guests/owner-doc')));
+  });
+
+  it("a manager's record departed by moveOutDate or houseId needs an owner", async () => {
+    const both = { admin: { [H]: true, houseB: true }, guest: { [H]: true } };
+    await assertFails(updateDoc(doc(db('pl'), 'guests/mgr-doc'), { moveOutDate: '2026-10-01' }));
+    await assertFails(updateDoc(doc(db('pl', both), 'guests/mgr-doc'), { houseId: 'houseB' }));
+    const owner = { admin: { [H]: true, houseB: true } };
+    await assertSucceeds(
+      updateDoc(doc(db('owner', owner), 'guests/mgr-doc'), { moveOutDate: '2026-10-01' }),
+    );
+  });
+});
