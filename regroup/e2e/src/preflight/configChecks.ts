@@ -9,16 +9,24 @@ import { fail, pass, redact, type Check } from './checks';
 
 /**
  * The files the gate reads from ~/.config/regroup-e2e (design §4.6: dir 700, files 600).
- * Required ones are read by committed code; optional ones are planned inputs not yet
- * read by any code, so only their mode is checked when present.
+ * Required ones are read by committed code, except the two e2e-staging Firebase configs:
+ * those are required ahead of PR #143 (the mobile e2e variants, not yet merged), whose
+ * e2eStaging / E2EStaging builds copy them in and fail without them. Optional ones are
+ * planned inputs no code reads yet, so only their mode is checked when present.
  */
 export const KEY_FILES: readonly { name: string; use: string; optional?: true }[] = [
   { name: 'stripe-e2e-sandbox-key.txt', use: 'stripe-sandbox-setup and preflight hygiene' },
   { name: 'stripe-e2e-account.txt', use: 'pinned e2e sandbox account (stripe-sandbox-setup)' },
   { name: 'stripe-e2e-prices.json', use: 'sandbox price ids for .env.regroup-e2e (gen-env)' },
   { name: 'stripe-e2e-webhook-secrets.json', use: 'regroup-e2e webhook signing secrets' },
-  { name: 'google-services.e2e-staging.json', use: 'Android e2eStaging build' },
-  { name: 'GoogleService-Info.e2e-staging.plist', use: 'iOS E2EStaging build' },
+  {
+    name: 'google-services.e2e-staging.json',
+    use: 'needed for the mobile e2e staging builds: Android e2eStaging (PR #143)',
+  },
+  {
+    name: 'GoogleService-Info.e2e-staging.plist',
+    use: 'needed for the mobile e2e staging builds: iOS E2EStaging (PR #143)',
+  },
   {
     name: 'service-account.json',
     use: 'Admin SDK seeding of regroup-e2e (planned)',
@@ -30,6 +38,9 @@ export const KEY_FILES: readonly { name: string; use: string; optional?: true }[
 
 const modeOf = (stat: fs.Stats): string => (stat.mode & 0o777).toString(8);
 
+// lstat, not stat: a symlinked key file is deliberately rejected (it is not a regular
+// file here, so a required one counts as missing), because its target's location and
+// permissions are outside this directory's 700/600 guarantee.
 function statOrNull(p: string): fs.Stats | null {
   try {
     return fs.lstatSync(p);
@@ -135,8 +146,8 @@ export function launchConfigCheck(functionsDir: string, pricesFile: string): Che
 export type HygieneDeps = {
   /** The sandbox key file's content. Never printed. */
   readKey: () => string;
-  /** stripe-e2e-account.txt's content, or null when absent. Never printed. */
-  readPinnedAccount: () => string | null;
+  /** stripe-e2e-account.txt's content; throws (ENOENT when absent) like fs. Never printed. */
+  readPinnedAccount: () => string;
   apiVersion: () => string;
   createStripe: (key: string, apiVersion: string) => Stripe;
 };
@@ -161,9 +172,17 @@ export function stripeSandboxHygieneCheck(deps: HygieneDeps): Check {
         assertTestKey(key);
         const stripe = deps.createStripe(key, deps.apiVersion());
         const accountId = await assertSandboxAccount(stripe, key);
-        const pinned = deps.readPinnedAccount();
-        if (pinned === null)
-          return fail('the e2e sandbox account is not pinned; run npm run e2e:stripe-setup');
+        let pinned: string;
+        try {
+          pinned = deps.readPinnedAccount();
+        } catch (err) {
+          const code = (err as NodeJS.ErrnoException).code;
+          return fail(
+            code === 'ENOENT'
+              ? 'the e2e sandbox account is not pinned; run npm run e2e:stripe-setup'
+              : `cannot read stripe-e2e-account.txt (${code ?? 'unknown error'})`,
+          );
+        }
         if (pinned.trim() !== accountId) {
           return fail(
             `account ${accountId} differs from the pinned account (stripe-e2e-account.txt)`,

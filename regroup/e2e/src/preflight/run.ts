@@ -42,14 +42,6 @@ const exec: Exec = (cmd, args) =>
     );
   });
 
-const readOrNull = (file: string): string | null => {
-  try {
-    return fs.readFileSync(file, 'utf8');
-  } catch {
-    return null;
-  }
-};
-
 const checks: Check[] = [
   ...TOOLS.map((spec) => toolCheck(exec, spec)),
   playwrightCheck(exec, fs.existsSync, [e2eDir, path.join(regroupDir, 'web')]),
@@ -64,7 +56,8 @@ const checks: Check[] = [
   ),
   stripeSandboxHygieneCheck({
     readKey: () => fs.readFileSync(path.join(configDir, KEY_FILE_NAME), 'utf8'),
-    readPinnedAccount: () => readOrNull(path.join(configDir, 'stripe-e2e-account.txt')),
+    readPinnedAccount: () =>
+      fs.readFileSync(path.join(configDir, 'stripe-e2e-account.txt'), 'utf8'),
     apiVersion: pinnedStripeApiVersion,
     createStripe: (key, apiVersion) =>
       new Stripe(key, {
@@ -80,10 +73,10 @@ const checks: Check[] = [
 runChecks(checks).then(
   (report) => {
     console.log(formatReport(report));
-    process.exit(report.ok ? 0 : 1);
+    process.exitCode = report.ok ? 0 : 1;
   },
   (err: Error) => {
     console.error(`preflight crashed: ${err.message}`);
-    process.exit(1);
+    process.exitCode = 1;
   },
 );

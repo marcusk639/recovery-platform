@@ -16,7 +16,8 @@ export const ANDROID_AVD = {
   device: 'pixel_7',
 } as const;
 
-const PROVISION_HINT = 'run regroup/e2e/scripts/provision-simulators.sh';
+const PROVISION_HINT =
+  'run regroup/e2e/scripts/provision-simulators.sh (add --recreate to replace a mis-pinned AVD)';
 
 function readIfExists(file: string): string | null {
   try {
@@ -139,7 +140,12 @@ export function demoProjectIdCheck(regroupDir: string): Check {
   };
 }
 
-type SimDevice = { name?: string; deviceTypeIdentifier?: string; isAvailable?: boolean };
+type SimDevice = {
+  name?: string;
+  udid?: string;
+  deviceTypeIdentifier?: string;
+  isAvailable?: boolean;
+};
 
 async function iosProblem(exec: Exec): Promise<string | null> {
   const r = await exec('xcrun', ['simctl', 'list', 'devices', '--json']);
@@ -151,17 +157,26 @@ async function iosProblem(exec: Exec): Promise<string | null> {
   } catch {
     return '`xcrun simctl list devices --json` printed invalid JSON';
   }
-  const onRuntime = devices[IOS_SIM.runtime];
-  if (!onRuntime) return `iOS simulator runtime ${IOS_SIM.runtime} is not installed`;
-  const match = onRuntime.find(
-    (d) =>
-      d.name === IOS_SIM.name &&
-      d.deviceTypeIdentifier === IOS_SIM.deviceType &&
-      d.isAvailable !== false,
+  if (!devices[IOS_SIM.runtime]) return `iOS simulator runtime ${IOS_SIM.runtime} is not installed`;
+  // The gate books the device by name, so the name must be unambiguous.
+  const named = Object.entries(devices).flatMap(([runtime, list]) =>
+    list.filter((d) => d.name === IOS_SIM.name).map((d) => ({ ...d, runtime })),
   );
-  return match
-    ? null
-    : `iOS simulator "${IOS_SIM.name}" (${IOS_SIM.deviceType}) on ${IOS_SIM.runtime} not found`;
+  if (named.length > 1) {
+    return `${named.length} iOS simulators are named "${IOS_SIM.name}" (${named
+      .map((d) => d.udid ?? '?')
+      .join(', ')}); delete the extras with xcrun simctl delete <udid>`;
+  }
+  const [device] = named;
+  if (!device) {
+    return `iOS simulator "${IOS_SIM.name}" (${IOS_SIM.deviceType}) on ${IOS_SIM.runtime} not found`;
+  }
+  if (device.deviceTypeIdentifier !== IOS_SIM.deviceType || device.runtime !== IOS_SIM.runtime) {
+    return `iOS simulator "${IOS_SIM.name}" is ${device.deviceTypeIdentifier ?? '?'} on ${device.runtime}, expected ${IOS_SIM.deviceType} on ${IOS_SIM.runtime}; delete it with xcrun simctl delete ${device.udid ?? '<udid>'}`;
+  }
+  return device.isAvailable === false
+    ? `iOS simulator "${IOS_SIM.name}" is unavailable (its runtime is missing or broken)`
+    : null;
 }
 
 function androidProblem(avdHome: string): string | null {

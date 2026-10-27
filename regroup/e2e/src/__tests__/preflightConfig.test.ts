@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { formatReport, runChecks } from '../preflight/checks';
+import { formatReport, redact, runChecks } from '../preflight/checks';
 import {
   KEY_FILES,
   keysPresentCheck,
@@ -15,6 +15,9 @@ import { makeStripe } from './helpers/mockStripe';
 // Recognisable content that must never reach any check's output.
 const CANARY = 'CANARY7f3a9notforoutput';
 const KEY = `sk_test_${CANARY}`;
+const fsError = (code: string) => () => {
+  throw Object.assign(new Error(`${code} ${CANARY}`), { code });
+};
 const tmp = (prefix = 'preflight-') => fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 
 /** A config dir holding every key file (content: the canary), dir 700, files 600. */
@@ -150,8 +153,16 @@ describe('stripeSandboxHygieneCheck', () => {
     ).run();
     expect(differs.ok).toBe(false);
     expect(differs.detail).toMatch(/differs from the pinned account/);
-    const unpinned = await stripeSandboxHygieneCheck(deps({ readPinnedAccount: () => null })).run();
+    const unpinned = await stripeSandboxHygieneCheck(
+      deps({ readPinnedAccount: fsError('ENOENT') }),
+    ).run();
     expect(unpinned.detail).toMatch(/not pinned.*e2e:stripe-setup/);
+    const unreadable = await stripeSandboxHygieneCheck(
+      deps({ readPinnedAccount: fsError('EACCES') }),
+    ).run();
+    expect(unreadable.ok).toBe(false);
+    expect(unreadable.detail).toMatch(/cannot read stripe-e2e-account\.txt \(EACCES\)/);
+    expect(unreadable.detail).not.toContain(CANARY);
     const noKey = await stripeSandboxHygieneCheck(
       deps({
         readKey: () => {
@@ -175,6 +186,21 @@ describe('stripeSandboxHygieneCheck', () => {
     expect(r.detail).toMatch(/Invalid API Key/);
     expect(r.detail).not.toContain(CANARY);
   });
+
+  it('redacts the exact key even when it escapes the key-shape net', async () => {
+    // Passes assertTestKey, but the generic sk_test_[A-Za-z0-9]+ net cannot match it.
+    const odd = `sk_test_-${CANARY}`;
+    expect(redact(`echo ${odd}`)).toContain(CANARY);
+    expect(redact(`echo ${odd}`, [odd])).toBe('echo [redacted]');
+    const { mock, stripe } = makeStripe();
+    mock.accounts.retrieve.mockRejectedValueOnce(new Error(`Invalid API Key provided: ${odd}`));
+    const r = await stripeSandboxHygieneCheck(
+      deps({ readKey: () => `${odd}\n`, createStripe: () => stripe }),
+    ).run();
+    expect(r.ok).toBe(false);
+    expect(r.detail).toMatch(/Invalid API Key provided: \[redacted\]/);
+    expect(r.detail).not.toContain(CANARY);
+  });
 });
 
 describe('no check prints a key file', () => {
@@ -195,6 +221,27 @@ describe('no check prints a key file', () => {
     ]);
     const report = formatReport(result);
     expect(result.ok).toBe(false);
+    expect(report).not.toContain(CANARY);
+  });
+
+  it('with an sk_test_ key file, the Stripe error quoting it is redacted in the report', async () => {
+    const dir = keyDir();
+    fs.writeFileSync(path.join(dir, 'stripe-e2e-sandbox-key.txt'), `${KEY}\n`, { mode: 0o600 });
+    const { mock, stripe } = makeStripe();
+    mock.accounts.retrieve.mockRejectedValue(new Error(`Invalid API Key provided: ${KEY}`));
+    const result = await runChecks([
+      keysPresentCheck(dir),
+      stripeSandboxHygieneCheck({
+        readKey: () => fs.readFileSync(path.join(dir, 'stripe-e2e-sandbox-key.txt'), 'utf8'),
+        readPinnedAccount: () => fs.readFileSync(path.join(dir, 'stripe-e2e-account.txt'), 'utf8'),
+        apiVersion: () => '2026-01-28.clover',
+        createStripe: () => stripe,
+      }),
+    ]);
+    // The Stripe call was reached: the error path, not assertTestKey, produced the failure.
+    expect(mock.accounts.retrieve).toHaveBeenCalled();
+    const report = formatReport(result);
+    expect(report).toMatch(/Invalid API Key provided: \[redacted\]/);
     expect(report).not.toContain(CANARY);
   });
 });

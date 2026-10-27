@@ -120,6 +120,43 @@ describe('simulatorsCheck', () => {
     expect(r.ok).toBe(true);
   });
 
+  it('fails when the name is ambiguous or the named device has the wrong type or runtime', async () => {
+    const other = 'com.apple.CoreSimulator.SimRuntime.iOS-26-0';
+    const dup = await simulatorsCheck(
+      simctl({
+        [IOS_SIM.runtime]: [{ ...iosDevice, udid: 'U1' }],
+        [other]: [{ ...iosDevice, udid: 'U2' }],
+      }),
+      avdHome(SYSDIR),
+    ).run();
+    expect(dup.ok).toBe(false);
+    expect(dup.detail).toMatch(/2 iOS simulators are named "regroup-e2e" \(U1, U2\)/);
+    const wrongType = await simulatorsCheck(
+      simctl({
+        [IOS_SIM.runtime]: [
+          { ...iosDevice, udid: 'U3', deviceTypeIdentifier: 'com.apple.x.iPhone-17e' },
+        ],
+      }),
+      avdHome(SYSDIR),
+    ).run();
+    expect(wrongType.detail).toMatch(/is com\.apple\.x\.iPhone-17e .*expected .*iPhone-17 .*U3/);
+    const wrongRuntime = await simulatorsCheck(
+      simctl({ [IOS_SIM.runtime]: [], [other]: [{ ...iosDevice, udid: 'U4' }] }),
+      avdHome(SYSDIR),
+    ).run();
+    expect(wrongRuntime.detail).toMatch(
+      /on com\.apple\.CoreSimulator\.SimRuntime\.iOS-26-0, expected/,
+    );
+  });
+
+  it('suggests --recreate for a mis-pinned AVD', async () => {
+    const r = await simulatorsCheck(
+      simctl({ [IOS_SIM.runtime]: [iosDevice] }),
+      avdHome('system-images/android-33/google_apis/arm64-v8a/'),
+    ).run();
+    expect(r.detail).toMatch(/provision-simulators\.sh.*--recreate/);
+  });
+
   it('fails, pointing at provision-simulators.sh, when either is missing or mis-pinned', async () => {
     const noSim = await simulatorsCheck(simctl({ [IOS_SIM.runtime]: [] }), avdHome(SYSDIR)).run();
     expect(noSim.ok).toBe(false);
