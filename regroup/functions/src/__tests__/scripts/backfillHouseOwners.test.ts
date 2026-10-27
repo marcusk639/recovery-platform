@@ -204,3 +204,58 @@ describe('--primary parsing and checks exit 1 (S1, N-D)', () => {
     expect(mem.get(`house-roles/${H}_x`)).not.toHaveProperty('houseId');
   });
 });
+
+describe('round 8: settling an existing primary; exit-code precedence; recent grants', () => {
+  it('contradicted, then --primary with the same uid marks it chosen, then a re-run exits 0 (I1)', async () => {
+    claims.co = { admin: { [H]: true } };
+    mem.seed(`houses/${H}`, { id: H, ownerId: 'owner', superAdminId: 'owner' });
+    subscription('owner');
+    mem.seed(`house-roles/${H}_co`, { houseId: H, tier: 'owner', primary: true });
+    expect(exitCodeFor(await run())).toBe(3);
+    const settle = await run({ [H]: 'co' });
+    expect(settle.owners).toEqual([expect.objectContaining({ uid: 'co', houseId: H })]);
+    expect(mem.get(`house-roles/${H}_co`)).toMatchObject({ primary: true, chosen: true });
+    const again = await run();
+    expect(again.primaryContradicted).toEqual([]);
+    expect(exitCodeFor(again)).toBe(0);
+  });
+
+  it('an unverifiable primary is settled the same way and stops being listed (verifier W1k)', async () => {
+    delete claims.owner;
+    mem.seed(`houses/${H}`, { id: H, ownerId: 'owner', superAdminId: 'owner' });
+    mem.seed(`house-roles/${H}_owner`, { houseId: H, tier: 'owner', primary: true });
+    expect((await run()).primaryUnverifiable).toHaveLength(1);
+    claims.owner = { ...SUPER };
+    delete claims.co;
+    await run({ [H]: 'owner' });
+    claims.co = { ...SUPER }; // a co-owner appears: a chosen record is not re-checked
+    const again = await run();
+    expect(again.primaryUnverifiable).toEqual([]);
+    expect(again.primaryContradicted).toEqual([]);
+  });
+
+  it('a claims lookup failure wins over houses waiting for the owner: exit 2 (S3)', () => {
+    const report = {
+      lookupFailed: [{ uid: 'u', houseId: H, tier: 'manager', reason: 'claims lookup failed' }],
+      ownerReview: [{ houseId: H, reason: 'owner must choose' }],
+      primaryContradicted: [],
+    } as unknown as Parameters<typeof exitCodeFor>[0];
+    expect(exitCodeFor(report)).toBe(2);
+  });
+
+  it('the stale pass leaves a record granted in the last minutes alone (its claims may be in flight) (F3)', async () => {
+    mem.seed(`houses/${H}`, { id: H, ownerId: 'owner', superAdminId: 'owner' });
+    const recent = new Date(Date.now() - 60_000).toISOString();
+    mem.seed(`house-roles/${H}_fresh`, { houseId: H, tier: 'manager', grantedAt: recent });
+    mem.seed(`house-roles/${H}_old`, {
+      houseId: H,
+      tier: 'manager',
+      grantedAt: '2000-01-01T00:00:00Z',
+    });
+    claims.fresh = {};
+    claims.old = {};
+    await run();
+    expect(mem.get(`house-roles/${H}_fresh`)).toMatchObject({ tier: 'manager' });
+    expect(mem.get(`house-roles/${H}_old`)).toBeUndefined();
+  });
+});

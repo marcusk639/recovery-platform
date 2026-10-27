@@ -166,6 +166,21 @@ export async function primaryOwnerPass(
       if (existing.length > 1) contradicted('several primary records');
       else if (choice && choice !== existing[0].uid) {
         contradicted(`owner chose ${choice}; remove the existing record first`);
+      } else if (choice && !existing[0].chosen) {
+        // The owner confirms the existing record: mark it chosen (settled).
+        const { chosen, chosenAt } = ctx.record(houseId, true);
+        report.owners.push({
+          uid: choice,
+          houseId,
+          tier: 'owner',
+          reason: 'owner-chose (--primary): existing record',
+        });
+        if (ctx.apply) {
+          await db
+            .collection('house-roles')
+            .doc(`${houseId}_${choice}`)
+            .update({ chosen, chosenAt });
+        }
       } else if (choice || existing[0].chosen || found.uid === existing[0].uid) continue;
       else if (found.uid) contradicted(`evidence names ${found.uid}`);
       else report.primaryUnverifiable.push({ houseId, uid: uids, reason: found.reason });
@@ -174,13 +189,7 @@ export async function primaryOwnerPass(
     let owner = found.uid;
     let reason = found.reason;
     if (choice) {
-      if (!ctx.claimsOf.has(choice)) {
-        report.ownerReview.push({
-          houseId,
-          reason: `chosen ${choice} has no account; ${found.reason}`,
-        });
-        continue;
-      }
+      // housesCheckingChoices already refused a choice with no account.
       owner = choice;
       reason = 'owner-chose (--primary)';
     }

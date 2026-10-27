@@ -12,14 +12,8 @@
  *
  * Passes:
  *  0. Every record gets its houseId field.
- *  1. Owners (scripts/backfillHouseOwners): a house with no primary record
- *     gets { tier: 'owner', primary: true } only when server-written
- *     evidence (the owner's subscription and superAdmin claim) agrees with
- *     both superAdminId and ownerId. Otherwise nothing is written and the
- *     house is listed with the evidence ("owner must choose"); the owner
- *     settles it on a later run with --primary houseId=uid. Existing
- *     primaries are re-checked and mismatches reported, never changed. A
- *     house never gets a second primary, so re-runs are safe.
+ *  1. Owners: see scripts/backfillHouseOwners (evidence, --primary
+ *     houseId=uid, re-checks). A house never gets a second primary.
  *  2. Invitations: every redeemed invitation without grantCompletedAt gets
  *     one (= redeemedAt), so an old token can never regrant (the redeem
  *     treats a redeemed invitation without grantPending as completed anyway).
@@ -34,7 +28,9 @@
  *  4. Stale records: a record whose claims are gone (a departure or removal
  *     done by the old code between runs), checked against the account's
  *     claims re-read just before (lookup errors skip the record; records
- *     granted after the run started are skipped), is lowered or removed:
+ *     granted in the 10 minutes before the run, or after it started, are
+ *     skipped: a grant writes the record before the claims), is lowered or
+ *     removed:
  *     co-owner without superAdmin -> manager (admin) / resident (guest) /
  *     none; manager or peer leader without admin -> resident (guest) / none;
  *     resident without guest -> none. Primary owner records are kept.
@@ -94,6 +90,8 @@ export interface RoleBackfillReport {
 
 const has = (c: Claims | undefined, role: string, houseId: string) =>
   houseKeys(c?.[role]).includes(houseId);
+/** Records granted this recently are left to the grant in flight (pass 4). */
+export const RECENT_GRANT_MS = 10 * 60_000;
 const isAlreadyExists = (err: unknown) => {
   const code = (err as { code?: unknown }).code;
   return code === 6 || code === 'already-exists' || /ALREADY_EXISTS/.test(String(err));
@@ -118,6 +116,7 @@ export async function backfillHouseRoles(
     lookupFailed: [],
   };
   const now = (opts.now ?? new Date()).toISOString();
+  const recentCutoff = new Date(Date.parse(now) - RECENT_GRANT_MS).toISOString();
   const record = (houseId: string, tier: RoleTier, primary = false, chosen = false) => ({
     houseId,
     tier,
@@ -232,8 +231,8 @@ export async function backfillHouseRoles(
     const i = d.id.lastIndexOf('_');
     const houseId = d.id.slice(0, i);
     const uid = d.id.slice(i + 1);
-    // A grant recorded after the run started is newer than anything read here.
-    if (typeof r.grantedAt === 'string' && r.grantedAt > now) continue;
+    // A grant may have written its record but not yet its claims: skip it.
+    if (typeof r.grantedAt === 'string' && r.grantedAt > recentCutoff) continue;
     // Re-read this account's live claims right before acting, so a grant made
     // since the listing is never deleted; an unexpected error skips the record.
     let c: Claims;
