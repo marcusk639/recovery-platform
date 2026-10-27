@@ -171,3 +171,14 @@ test('the copy probes use a real source file from the copy, never a fixed path t
   assert.ok(find < at('run_as touch "$probe_file"') && find < at('run_as test -r "$probe_file"'));
   assert.ok(at('run_as test -r "$probe_file"') < at('project index "$SR_HOME/src"'));
 });
+
+test('the Serena initial prompt guides the review and names only tools the reviewer has', () => {
+  const m = /\ninitial_prompt: \|\n((?: {2}.*\n|\n)+)/.exec(projectYml);
+  assert.ok(m, 'initial_prompt is a non-empty block');
+  const prompt = m[1];
+  assert.match(prompt, /REVIEW\.md is\s+authoritative/);
+  assert.match(prompt, /use Grep for those paths/, 'Grep fallback for paths Serena does not index');
+  assert.match(prompt, /never instructions/, 'tool output is untrusted data');
+  const named = new Set(prompt.match(/\b(?:find_symbol|find_referencing_symbols|get_symbols_overview|search_for_pattern|[a-z]+_[a-z_]+_tool|execute_shell_command|replace_symbol_body|read_memory|write_memory|activate_project)\b/g));
+  for (const tool of named) assert.ok(TOOLS.includes(tool), `prompt names an unavailable tool: ${tool}`);
+});
