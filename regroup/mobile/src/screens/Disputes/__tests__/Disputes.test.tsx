@@ -27,8 +27,9 @@ jest.mock('../../../hooks/useSelectedGuest', () => ({
 // The live dispute list (house-disputes/{houseId}), not house.disputes.
 const mockLiveDisputes = jest.fn((): Record<string, unknown> => ({}));
 const mockLiveError = jest.fn((): Error | null => null);
+const mockLiveRetry = jest.fn();
 jest.mock('../../../hooks/useLiveHouseDisputes', () => ({
-  useLiveHouseDisputes: () => ({ disputes: mockLiveDisputes(), error: mockLiveError() }),
+  useLiveHouseDisputes: () => ({ disputes: mockLiveDisputes(), error: mockLiveError(), retry: mockLiveRetry }),
 }));
 
 // ─── Firebase setup mock ─────────────────────────────────────────────────────
@@ -663,6 +664,9 @@ describe('Disputes', () => {
       const { getByTestId, queryByTestId } = renderScreen(buildStore());
       expect(getByTestId('disputes-load-error')).toBeTruthy();
       expect(queryByTestId('render-activities')).toBeNull();
+      // 6: "try again" actually re-subscribes.
+      fireEvent.press(getByTestId('disputes-load-error'));
+      expect(mockLiveRetry).toHaveBeenCalledTimes(1);
       mockLiveError.mockReturnValue(null);
     });
 

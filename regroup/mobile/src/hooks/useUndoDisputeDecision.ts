@@ -18,6 +18,11 @@ export const UNDO_DECISION_MESSAGE =
 
 /** reopenDispute's refusals (services/reopenDispute REOPEN_REFUSALS), as shown to the admin. */
 const REOPEN_REFUSAL_ALERTS: Record<string, { title: string; message: string }> = {
+  'Not allowed to undo this decision': {
+    title: "Can't undo this decision",
+    message:
+      'You cannot undo a decision on your own activity or one you logged. If the decision was just made, wait a moment and try again.',
+  },
   'Dispute already reopened': {
     title: 'Already reopened',
     message: 'Another admin has already undone this decision. The dispute is open again.',

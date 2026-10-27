@@ -20,8 +20,9 @@ jest.mock('../../../hooks/useSelectedHouse', () => ({
 // The open-dispute count comes from the server-owned live list
 // (house-disputes/{houseId}), not house.disputes.
 const mockLiveDisputes = jest.fn((): Record<string, unknown> => ({}));
+const mockLiveError = jest.fn((): Error | null => null);
 jest.mock('../../../hooks/useLiveHouseDisputes', () => ({
-  useLiveHouseDisputes: () => ({ disputes: mockLiveDisputes(), error: null }),
+  useLiveHouseDisputes: () => ({ disputes: mockLiveDisputes(), error: mockLiveError(), retry: jest.fn() }),
 }));
 
 // ─── Navigation mock ──────────────────────────────────────────────────────────
@@ -438,6 +439,10 @@ describe('HouseSummary', () => {
       const { getByText } = renderScreen();
       expect(getByText('2 open disputes')).toBeTruthy();
       mockLiveDisputes.mockReturnValue({});
+      // 6: an unreadable list is not "0 open disputes".
+      mockLiveError.mockReturnValue(new Error('denied'));
+      expect(renderScreen().getByText("Couldn't load disputes")).toBeTruthy();
+      mockLiveError.mockReturnValue(null);
     });
 
     it('renders the Issues section', () => {

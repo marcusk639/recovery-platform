@@ -1001,6 +1001,16 @@ describe('Activity Service', () => {
       expect((firestore as any).runTransaction).toHaveBeenCalled();
     });
 
+    it('1: a rules refusal (own activity, or one they logged) gets its own message', async () => {
+      (firestore as any).runTransaction = jest.fn(async () => {
+        throw Object.assign(new Error('denied'), { code: 'firestore/permission-denied' });
+      });
+      await expect(resolveDispute(activityId, 'admin456', 'approve')).rejects.toThrow(
+        'Not allowed to decide this dispute',
+      );
+      (firestore as any).runTransaction = workingRunTransaction;
+    });
+
     it('leaves the week summary to the server trigger', async () => {
       await resolveDispute(activityId, 'admin456', 'approve');
 

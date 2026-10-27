@@ -82,10 +82,18 @@ describe('reopenDispute', () => {
     seed(undefined);
     await expect(reopenDispute('act-1', 'mgr-1')).rejects.toThrow('Activity not found');
     expect(mockTx.update).not.toHaveBeenCalled();
-    expect(REOPEN_REFUSALS).toHaveLength(3);
+    expect(REOPEN_REFUSALS).toHaveLength(4);
   });
 
-  it('reports any other failure (e.g. denied before the decision is logged) generically', async () => {
+  it('1: a rules refusal (own activity, logger, or decision not logged yet) gets its own message', async () => {
+    seed({ status: 'resolved', disputed: 'rejected' });
+    (firestore.runTransaction as jest.Mock).mockRejectedValueOnce(
+      Object.assign(new Error('denied'), { code: 'firestore/permission-denied' }),
+    );
+    await expect(reopenDispute('act-1', 'mgr-1')).rejects.toThrow('Not allowed to undo this decision');
+  });
+
+  it('reports any other failure generically', async () => {
     seed({ status: 'resolved', disputed: 'rejected' });
     (firestore.runTransaction as jest.Mock).mockRejectedValueOnce(new Error('permission-denied'));
     await expect(reopenDispute('act-1', 'mgr-1')).rejects.toThrow('Failed to undo decision');

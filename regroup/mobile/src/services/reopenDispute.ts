@@ -4,7 +4,14 @@ import { Activity, ActivityStatus, isLegacyUpheld } from '../entities/ActivityMo
 import { logException } from '../util/logging';
 
 /** reopenDispute refusals the UI shows as-is (the rest are generic). */
+/**
+ * The rules refused it: the activity is the caller's own or they logged it,
+ * or the decision is not in the decision log yet (moments after deciding).
+ */
+export const NOT_ALLOWED_TO_UNDO = 'Not allowed to undo this decision';
+
 export const REOPEN_REFUSALS = [
+  NOT_ALLOWED_TO_UNDO,
   'Activity not found',
   'Dispute already reopened',
   'No decision to undo',
@@ -59,6 +66,9 @@ export async function reopenDispute(activityId: string, reopenedBy: string): Pro
       });
     });
   } catch (error: any) {
+    if (error?.code === 'firestore/permission-denied') {
+      throw new Error(NOT_ALLOWED_TO_UNDO);
+    }
     if (REOPEN_REFUSALS.includes(error?.message)) {
       throw error;
     }

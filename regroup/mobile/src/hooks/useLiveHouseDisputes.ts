@@ -7,7 +7,7 @@
  * older app builds; admins can rewrite it (house setup saves whole-house
  * copies), so the app no longer reads it for disputes.
  */
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import { firestore } from '../../firebase-setup';
 import { Dispute } from '../entities/Dispute';
@@ -19,11 +19,15 @@ export interface LiveHouseDisputes {
   disputes: { [key: string]: Dispute };
   /** Set when the list could not be read; disputes is then empty, not "none". */
   error: Error | null;
+  /** Subscribes again (e.g. a "Try again" button after an error). */
+  retry: () => void;
 }
 
 export function useLiveHouseDisputes(houseId: string | undefined): LiveHouseDisputes {
   const [disputes, setDisputes] = useState<{ [key: string]: Dispute }>({});
   const [error, setError] = useState<Error | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
   useEffect(() => {
     setDisputes({});
@@ -47,7 +51,7 @@ export function useLiveHouseDisputes(houseId: string | undefined): LiveHouseDisp
         },
       );
     return () => unsubscribe();
-  }, [houseId]);
+  }, [houseId, attempt]);
 
-  return { disputes, error };
+  return { disputes, error, retry };
 }

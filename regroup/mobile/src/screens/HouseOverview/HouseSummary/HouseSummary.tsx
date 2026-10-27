@@ -101,7 +101,7 @@ const HouseSummary: React.FC<Props> = ({ navigation }) => {
   // Get data from Redux
   const { house } = useSelectedHouse();
   // Open disputes from the server-owned live list, not house.disputes.
-  const { disputes: liveDisputes } = useLiveHouseDisputes(house?.id);
+  const { disputes: liveDisputes, error: disputesError } = useLiveHouseDisputes(house?.id);
   const user = useAppSelector((state: any) => state.user.user) as User | null;
   const requestingHouses = useAppSelector(
     (state: any) => state.houses.requestingHouses,
@@ -210,13 +210,16 @@ const HouseSummary: React.FC<Props> = ({ navigation }) => {
       <Section
         testID="house-disputes-button"
         name="Disputes"
-        description={`${disputeNumber} open ${
-          disputeNumber === 1 ? 'dispute' : 'disputes'
-        }`}
+        description={
+          // An unreadable list is not "0 open disputes".
+          disputesError
+            ? "Couldn't load disputes"
+            : `${disputeNumber} open ${disputeNumber === 1 ? 'dispute' : 'disputes'}`
+        }
         boxedIconName="exclamation-triangle"
         iconBackgroundColor={color.red}
         onPress={() => navigation.navigate(Routes.HouseDisputes)}
-        notifications={disputeNumber}
+        notifications={disputesError ? 0 : disputeNumber}
       />
       <Section
         name="Issues"

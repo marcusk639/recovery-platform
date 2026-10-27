@@ -25,8 +25,10 @@ jest.mock('../../../hooks/useSelectedGuest', () => ({
 // ─── Navigation mock ──────────────────────────────────────────────────────────
 jest.mock('@react-navigation/native-stack', () => ({}));
 // S3: open disputes come from the server-owned live list, not house.disputes.
+const mockLiveError = jest.fn((): Error | null => null);
+const mockLiveRetry = jest.fn();
 jest.mock('../../../hooks/useLiveHouseDisputes', () => ({
-  useLiveHouseDisputes: () => ({ disputes: {}, error: null }),
+  useLiveHouseDisputes: () => ({ disputes: {}, error: mockLiveError(), retry: mockLiveRetry }),
 }));
 
 // ─── Context mocks ────────────────────────────────────────────────────────────
@@ -591,6 +593,16 @@ describe('ActivityScreen', () => {
   });
 
   // ─── Help popover ─────────────────────────────────────────────────────────
+  describe('live dispute list', () => {
+    it('6: shows that disputes could not be loaded, and retries on tap', () => {
+      mockLiveError.mockReturnValue(new Error('denied'));
+      const { getByTestId } = renderScreen();
+      fireEvent.press(getByTestId('activity-disputes-load-error'));
+      expect(mockLiveRetry).toHaveBeenCalledTimes(1);
+      mockLiveError.mockReturnValue(null);
+    });
+  });
+
   describe('help icon', () => {
     it('calls showPopover when the help icon is pressed', () => {
       const { getByTestId } = renderScreen();

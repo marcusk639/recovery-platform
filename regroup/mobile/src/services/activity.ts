@@ -391,7 +391,11 @@ export async function disputeActivity(
 }
 
 /** resolveDispute refusals the UI shows as-is (the rest are generic). */
+/** The rules refused the caller: the activity is theirs, or they logged it. */
+export const NOT_ALLOWED_TO_DECIDE = 'Not allowed to decide this dispute';
+
 export const RESOLVE_REFUSALS = [
+  NOT_ALLOWED_TO_DECIDE,
   'Activity not found',
   'Dispute already resolved',
   'Activity is not disputed',
@@ -429,7 +433,8 @@ export async function resolveDispute(
       disputeResult: approved ? 'success' : 'fail',
       disputeResolvedBy: resolvedBy,
       disputeResolvedAt: FirebaseFirestore.FieldValue.serverTimestamp() as any,
-      loggedAt: FirebaseFirestore.FieldValue.serverTimestamp() as any,
+      // loggedAt is left alone: it is frozen once there is dispute history
+      // (the rules accept the server time here only for older builds).
     };
 
     const activityRef = firestore.collection('activities').doc(activityId);
@@ -454,6 +459,9 @@ export async function resolveDispute(
       tx.update(activityRef, updates);
     });
   } catch (error: any) {
+    if (error?.code === 'firestore/permission-denied') {
+      throw new Error(NOT_ALLOWED_TO_DECIDE);
+    }
     if (RESOLVE_REFUSALS.includes(error?.message)) {
       throw error;
     }

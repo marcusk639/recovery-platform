@@ -112,6 +112,11 @@ interface UseBaseActivityScreenReturn {
 
 /** resolveDispute's refusals (services/activity RESOLVE_REFUSALS), as shown to the admin. */
 const RESOLVE_REFUSAL_ALERTS: Record<string, { title: string; message: string }> = {
+  'Not allowed to decide this dispute': {
+    title: "Can't decide this dispute",
+    message:
+      'You cannot approve or reject a dispute on your own activity or one you logged. Another admin needs to decide it.',
+  },
   'Dispute already resolved': {
     title: 'Dispute already resolved',
     message: 'Another admin has already resolved this dispute.',

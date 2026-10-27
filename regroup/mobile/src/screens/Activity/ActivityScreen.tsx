@@ -3,7 +3,7 @@
 // Added: useModal, useNotification hooks
 // Phase 1.2: Migrated to Activity system - uses useActivities hook
 import React, { useCallback, useMemo } from 'react';
-import { View, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { color } from '../../styles/theme';
 import ScreenHeader from '../../components/screen-header';
 import { RatsIcon } from '../../components/rats-icon';
@@ -66,7 +66,7 @@ const ActivityScreen: React.FC = () => {
   const activities = activitySystemActivities;
 
   // The server-owned live list (house-disputes/{houseId}), not house.disputes.
-  const { disputes } = useLiveHouseDisputes(house?.id);
+  const { disputes, error: disputesError, retry: retryDisputes } = useLiveHouseDisputes(house?.id);
 
   // Use base activity screen hook
   const activityScreen = useBaseActivityScreen({
@@ -183,6 +183,13 @@ const ActivityScreen: React.FC = () => {
         setSearchTerm={activityScreen.setSearchTerm}
         onFilter={openFilters}
       />
+      {disputesError ? (
+        // Disputes on the activities below could not be loaded: say so,
+        // rather than show them as undisputed.
+        <TouchableOpacity testID="activity-disputes-load-error" onPress={retryDisputes}>
+          <Text style={disputeErrorStyles.text}>Couldn't load disputes. Tap to try again.</Text>
+        </TouchableOpacity>
+      ) : null}
       <View testID="activities-list" style={{ flex: 1 }}>
         <RenderActivities
           activities={filteredActivities}
@@ -200,5 +207,9 @@ const ActivityScreen: React.FC = () => {
     </View>
   );
 };
+
+const disputeErrorStyles = StyleSheet.create({
+  text: { margin: 16, color: color.red },
+});
 
 export default ActivityScreen;
