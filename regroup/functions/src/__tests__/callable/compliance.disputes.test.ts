@@ -132,7 +132,12 @@ describe("complianceExport — dispute outcomes", () => {
 describe("complianceExport — legacy upheld disputes", () => {
   it("lists a dispute upheld the old way (deleted with disputeResolvedAt); plain deletions stay out", async () => {
     mockGetMeetingActivitiesForGuest.mockResolvedValue([
-      meeting("LegacyUpheld", { status: "deleted", disputeResolvedAt: ts("2026-06-03T10:00:00.000Z"), verified: true }),
+      meeting("LegacyUpheld", {
+        status: "deleted",
+        disputeResolvedAt: ts("2026-06-03T10:00:00.000Z"),
+        loggedAt: ts("2026-06-03T10:00:00.000Z"),
+        verified: true,
+      }),
       meeting("PlainDeleted", { status: "deleted" }),
       meeting("Counted"),
     ]);
@@ -145,6 +150,31 @@ describe("complianceExport — legacy upheld disputes", () => {
     ]);
     expect(result.csv).not.toContain("PlainDeleted");
     expect(result.counts.meetings).toBe(1);
+  });
+});
+
+describe("complianceExport — a later deletion is never labelled an upheld dispute", () => {
+  const resolvedAt = ts("2026-06-03T10:00:00.000Z");
+  const deletedLater = ts("2026-06-05T09:00:00.000Z");
+  it.each([
+    ["rejected then deleted", { disputed: "rejected", incomplete: false }],
+    ["approved then deleted", { disputed: "successful", incomplete: true }],
+    ["kept the old way then deleted", {}],
+  ])("%s: left out (a withdrawal), not \"Removed after dispute\"", async (_label, fields) => {
+    mockGetMeetingActivitiesForGuest.mockResolvedValue([
+      meeting("Withdrawn", {
+        ...fields,
+        status: "deleted",
+        disputeResolvedAt: resolvedAt,
+        loggedAt: deletedLater,
+      }),
+      meeting("Counted"),
+    ]);
+
+    const result = await call({ houseId: "house-1" });
+
+    expect(result.csv).not.toContain("Withdrawn");
+    expect(result.csv).not.toContain("Removed after dispute");
   });
 });
 

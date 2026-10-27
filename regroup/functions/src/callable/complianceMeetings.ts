@@ -40,8 +40,21 @@ export interface MeetingRow {
   dispute: string;
 }
 
-/** Deleted by resolveDispute('delete') before the approve/reject model. */
-const legacyUpheld = (m: Data) => m.status === 'deleted' && m.disputeResolvedAt != null;
+/**
+ * A dispute upheld the old way: resolveDispute('delete') (before the
+ * approve/reject model) set status deleted and wrote disputeResolvedAt and
+ * loggedAt in the same write, so they are equal, and set no disputed /
+ * incomplete. Anything else that is deleted — e.g. a resident deleting an
+ * activity after a dispute was rejected, approved, or kept the old way, which
+ * moves loggedAt on — is a withdrawal, not an upheld dispute, and is left out.
+ * This label goes to courts, so it must not be applied by guesswork.
+ */
+const legacyUpheld = (m: Data) => {
+  if (m.status !== 'deleted' || m.disputed !== undefined || m.incomplete !== undefined) return false;
+  const resolvedAt = toInstant(m.disputeResolvedAt);
+  const loggedAt = toInstant(m.loggedAt);
+  return !!resolvedAt && !!loggedAt && resolvedAt.getTime() === loggedAt.getTime();
+};
 
 export function disputeLabel(m: Data): string {
   if (legacyUpheld(m)) return 'Removed after dispute (before approve/reject) - not counted';

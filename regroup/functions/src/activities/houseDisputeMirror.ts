@@ -12,9 +12,11 @@
  * It reconciles from the activity's CURRENT state, read in the same
  * transaction as the house — never from the event payload, because events
  * are redelivered and can arrive out of order:
- *   - currently `disputed`: add `disputes.{activityId}`, unless an entry for
- *     this activity already exists under ANY key (older app builds keyed
- *     theirs by a random uuid);
+ *   - currently `disputed`: keep the entry that belongs to THIS dispute
+ *     (same disputeStamp: disputer + reason; an older build's unstamped,
+ *     possibly uuid-keyed entry matches on its reason), archive any entry
+ *     from an earlier dispute as `superseded`, and add a fresh entry built
+ *     from the current state if none belongs to this dispute;
  *   - anything else (approved, rejected, deleted, or the doc is gone):
  *     remove every entry whose key or activityId is this activity, and
  *     archive each to /disputes/{key} with the outcome.
@@ -25,9 +27,11 @@
  * overwritten. The house comes from the guest doc, never from the activity.
  * Logs ids and counts only.
  */
+import { createHash } from 'crypto';
 import { logger } from 'firebase-functions';
 import { FieldValue } from 'firebase-admin/firestore';
 import { trustedGuestFrom } from './activityTrust';
+import { toInstant } from './weekSummaryMath';
 import { disputerOf, isNewDispute } from './disputeNotifications';
 
 type Firestore = FirebaseFirestore.Firestore;
@@ -46,6 +50,18 @@ export function outcomeOf(after: Data | undefined): 'approved' | 'rejected' | 'd
 }
 
 const stringOrNull = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
+
+/**
+ * Identifies one dispute on an activity: who raised it and why. An activity
+ * can be disputed, restored and disputed again; a late event from the first
+ * dispute must not be credited to the second. (Not loggedAt: an admin verify
+ * rewrites it mid-dispute.) A hash, so the reason text is not repeated.
+ */
+export function disputeStamp(activity: Data): string {
+  const disputer = stringOrNull(activity.disputedBy) || stringOrNull(activity.disputeResolvedBy) || '';
+  const reason = typeof activity.disputeReason === 'string' ? activity.disputeReason : '';
+  return createHash('sha256').update(`${disputer}\n${reason}`).digest('hex').slice(0, 16);
+}
 
 // Map keys become field paths; auto-ids and uuids never contain these.
 const safeKey = (k: string) => /^[A-Za-z0-9_-]+$/.test(k);
@@ -95,42 +111,63 @@ export async function mirrorHouseDispute(
       (k) => safeKey(k) && (k === activityId || disputes[k]?.activityId === activityId),
     );
 
-    if (now_?.status === 'disputed') {
-      if (keys.length > 0) return { added: 0, removed: 0 };
-      tx.update(houseRef, {
-        [`disputes.${activityId}`]: {
-          id: activityId,
-          activityId,
-          guestId,
-          houseId: guest.houseId,
-          type: now_.type ?? null,
-          message: typeof now_.disputeReason === 'string' ? now_.disputeReason : '',
-          disputedBy: disputerOf(before, after) || stringOrNull(now_.disputedBy) ||
-            stringOrNull(now_.disputeResolvedBy),
-          status: 'pending',
-          challenges: [],
-          createdAt: now,
-          updatedAt: now,
-        },
-      });
-      return { added: 1, removed: 0 };
-    }
-
-    if (keys.length === 0) return { added: 0, removed: 0 };
-    const outcome = outcomeOf(now_);
     const updates: FirebaseFirestore.UpdateData<Data> = {};
-    for (const k of keys) {
+    const archive = (k: string, outcome: string) => {
+      const stamp = disputes[k]?.disputeStamp;
       updates[`disputes.${k}`] = FieldValue.delete();
-      tx.set(db.collection('disputes').doc(k), {
+      // One archive doc per dispute, so a later dispute on the same activity
+      // never overwrites an earlier one's record.
+      tx.set(db.collection('disputes').doc(typeof stamp === 'string' ? `${k}_${stamp}` : k), {
         ...disputes[k],
         id: k,
         houseId: guest.houseId,
         status: 'resolved',
         resolutionMessage: outcome,
         resolvedDate: now,
-        resolvedBy: stringOrNull(now_?.disputeResolvedBy),
+        resolvedBy: outcome === 'superseded' ? null : stringOrNull(now_?.disputeResolvedBy),
       });
+    };
+
+    if (now_?.status === 'disputed') {
+      const stamp = disputeStamp(now_);
+      const reason = typeof now_.disputeReason === 'string' ? now_.disputeReason : '';
+      // An entry belongs to the CURRENT dispute if it carries its stamp (or,
+      // for an unstamped entry from an older build, the same reason).
+      const isCurrent = (k: string) =>
+        typeof disputes[k]?.disputeStamp === 'string'
+          ? disputes[k].disputeStamp === stamp
+          : (disputes[k]?.message ?? '') === reason;
+      const stale = keys.filter((k) => !isCurrent(k));
+      stale.forEach((k) => archive(k, 'superseded'));
+      if (keys.some(isCurrent)) {
+        if (stale.length) tx.update(houseRef, updates);
+        return { added: 0, removed: stale.length };
+      }
+      const openedAt = toInstant(now_.loggedAt)?.toISOString() ?? now;
+      updates[`disputes.${activityId}`] = {
+        id: activityId,
+        activityId,
+        guestId,
+        houseId: guest.houseId,
+        type: now_.type ?? null,
+        message: reason,
+        // The rules make the entering write's disputedBy (else
+        // disputeResolvedBy) the caller; built from current state.
+        disputedBy: stringOrNull(now_.disputedBy) || stringOrNull(now_.disputeResolvedBy) ||
+          (disputerOf(before, after) || null),
+        disputeStamp: stamp,
+        status: 'pending',
+        challenges: [],
+        createdAt: openedAt,
+        updatedAt: openedAt,
+      };
+      tx.update(houseRef, updates);
+      return { added: 1, removed: stale.length };
     }
+
+    if (keys.length === 0) return { added: 0, removed: 0 };
+    const outcome = outcomeOf(now_);
+    keys.forEach((k) => archive(k, outcome));
     tx.update(houseRef, updates);
     return { added: 0, removed: keys.length };
   });

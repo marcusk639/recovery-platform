@@ -44,24 +44,21 @@ export function isNewDispute(before: Data | undefined, after: Data | undefined):
 }
 
 /**
- * Who raised the dispute: the disputer field THIS write set — disputedBy, or
- * for app builds before it, disputeResolvedBy (which then held the
- * disputer). The rules require anyone entering a dispute to change one of
- * them to request.auth.uid, so the changed field is the caller; an
- * unchanged, stale value from an earlier dispute is ignored. If the write
- * changed neither, the rules only allowed it because disputedBy already
- * equals the caller (re-disputing an activity an admin restored), so that is
- * used. Empty when there is none (e.g. an Admin SDK write).
+ * Who raised the dispute, for a write that enters `disputed`: disputedBy if
+ * present, else disputeResolvedBy (app builds before disputedBy wrote the
+ * disputer there). The rules require that write to change one of the two to
+ * request.auth.uid, a changed disputeResolvedBy to be the caller, and a
+ * present disputedBy to be the caller — so this is always the caller of the
+ * entering write. Empty for any other write, or when neither is set (e.g. an
+ * Admin SDK write).
  */
 export function disputerOf(before: Data | undefined, after: Data | undefined): string {
   if (!after || !isNewDispute(before, after)) return '';
-  const fields = ['disputedBy', 'disputeResolvedBy'];
-  for (const field of fields) {
+  for (const field of ['disputedBy', 'disputeResolvedBy']) {
     const v = after[field];
-    if (typeof v === 'string' && v !== '' && v !== before?.[field]) return v;
+    if (typeof v === 'string' && v !== '') return v;
   }
-  const changedAny = fields.some((f) => after[f] !== before?.[f]);
-  return !changedAny && typeof after.disputedBy === 'string' ? after.disputedBy : '';
+  return '';
 }
 
 const strings = (v: unknown): string[] =>
@@ -104,6 +101,11 @@ export async function notifyDispute(
   ]);
 
   const disputer = disputerOf(before, after);
+  // Owner rule: nobody disputes their own activity; the rules refuse it for
+  // every client write. Only an Admin SDK path could get here — log it.
+  if (disputer && (disputer === guest.residentUid || disputer === after.loggedBy)) {
+    logger.warn('dispute_notify.self_dispute', { activityId, guestId });
+  }
   const recipients = new Map<string, boolean>(); // uid -> forAdmin
   for (const uid of admins) recipients.set(uid, true);
   if (guest.residentUid && !recipients.has(guest.residentUid))

@@ -76,20 +76,19 @@ describe('notifyDispute recipients', () => {
     expect(r.recipients).toContain('resident-uid');
   });
 
-  it('uses only the disputer field this write set: a stale value from an earlier dispute is ignored', async () => {
-    // An admin reopened an old dispute; its disputedBy (the manager) is still
-    // on the doc. This older-build write sets only disputeResolvedBy.
-    const before = { ...active, disputedBy: 'manager-uid' };
-    const after = { ...before, status: 'disputed', disputeResolvedBy: 'resident-uid' };
-    const r = await notifyDispute(asFirestore(db), 'evt1', 'a1', before, after);
-    expect(r.recipients).toContain('manager-uid');
-    expect(r.recipients).not.toContain('resident-uid');
+  it('takes disputedBy when present, else disputeResolvedBy (the rules make it the caller)', async () => {
+    const both = { ...active, status: 'disputed', disputedBy: 'manager-uid', disputeResolvedBy: 'manager-uid' };
+    expect(disputerOf(active, both)).toBe('manager-uid');
+    const legacyOnly = { ...active, status: 'disputed', disputeResolvedBy: 'peer-leader-uid' };
+    expect(disputerOf(active, legacyOnly)).toBe('peer-leader-uid');
+    const r = await notifyDispute(asFirestore(db), 'evt1', 'a1', active, both);
+    expect(r.recipients).not.toContain('manager-uid');
   });
 
   it("an older build's dispute (disputeResolvedBy only) still notifies everyone but the disputer", async () => {
-    const legacy = { ...active, status: 'disputed', disputeReason: 'x', disputeResolvedBy: 'resident-uid' };
+    const legacy = { ...active, status: 'disputed', disputeReason: 'x', disputeResolvedBy: 'peer-leader-uid' };
     const r = await notifyDispute(asFirestore(db), 'evt1', 'a1', active, legacy);
-    expect(r.recipients.sort()).toEqual(['manager-uid', 'owner-uid', 'peer-leader-uid']);
+    expect(r.recipients.sort()).toEqual(['manager-uid', 'owner-uid', 'resident-uid']);
   });
 
   it('a write that sets no disputer field (Admin SDK) notifies every recipient', async () => {
@@ -107,15 +106,14 @@ describe('notifyDispute recipients', () => {
     expect(disputerOf(disputed, { ...disputed, loggedAt: 'x' })).toBe('');
   });
 
-  it('re-dispute of a restored activity (disputer fields unchanged, already the caller) excludes that disputer', async () => {
-    // The resident disputed, an admin restored it to active, and the resident
-    // disputes again: the rules allow it only because disputedBy is already
-    // the caller.
-    const restored = { ...active, disputedBy: 'resident-uid', disputeResolvedBy: 'resident-uid' };
-    const again = { ...restored, status: 'disputed', disputeReason: 'again' };
-    expect(disputerOf(restored, again)).toBe('resident-uid');
-    const r = await notifyDispute(asFirestore(db), 'evt1', 'a1', restored, again);
-    expect(r.recipients).not.toContain('resident-uid');
+  it("logs (ids only) a self-dispute that only an Admin SDK path could write (owner rule)", async () => {
+    const warn = jest.spyOn(logger, 'warn');
+    const selfDispute = { ...active, status: 'disputed', disputeReason: 'mine', disputedBy: 'resident-uid' };
+    await notifyDispute(asFirestore(db), 'evt1', 'a1', active, selfDispute);
+    const logged = JSON.stringify(warn.mock.calls);
+    expect(logged).toContain('dispute_notify.self_dispute');
+    expect(logged).toContain('a1');
+    expect(logged).not.toContain('mine');
   });
 
   it('recovers on redelivery when a create fails midway: each recipient once', async () => {

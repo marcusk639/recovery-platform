@@ -18,6 +18,10 @@ const disputed = { ...active, status: 'disputed', disputeReason: 'Kitchen not cl
 const approved = { ...disputed, status: 'resolved', disputed: 'successful', incomplete: true, disputeResolvedBy: 'mgr' };
 const rejected = { ...disputed, status: 'resolved', disputed: 'rejected', incomplete: false, disputeResolvedBy: 'mgr' };
 const house = () => db.read('houses', 'h1')!;
+/** Archived disputes for activity a1 (ids are {key} or {key}_{stamp}). */
+const archives = () =>
+  [...(db.collections.get('disputes') ?? new Map()).entries()].filter(([id]) => id.startsWith('a1') || id.includes('uuid'));
+const archiveOf = (prefix: string) => archives().find(([id]) => id.startsWith(prefix))?.[1];
 
 /** Deliver an event whose payload is before/after; `committed` is the doc NOW. */
 const deliver = (before: Data | undefined, after: Data | undefined, now = NOW) =>
@@ -78,7 +82,12 @@ describe('entering a dispute', () => {
   });
 
   it("adds nothing when an older build's uuid-keyed entry for the activity exists", async () => {
-    house().disputes['0b7c-uuid'] = { id: '0b7c-uuid', activityId: 'a1', status: 'pending' };
+    house().disputes['0b7c-uuid'] = {
+      id: '0b7c-uuid',
+      activityId: 'a1',
+      status: 'pending',
+      message: 'Kitchen not cleaned', // older builds stored the reason as message
+    };
     commit(disputed);
     expect(await deliver(active, disputed)).toEqual({ added: 0, removed: 0 });
     expect(house().disputes.a1).toBeUndefined();
@@ -107,7 +116,12 @@ describe('leaving a dispute', () => {
     commit(disputed);
     await deliver(active, disputed);
     // An older app build also mirrored it, under a random uuid key.
-    house().disputes['0b7c1a2e-uuid'] = { id: '0b7c1a2e-uuid', activityId: 'a1', status: 'pending' };
+    house().disputes['0b7c1a2e-uuid'] = {
+      id: '0b7c1a2e-uuid',
+      activityId: 'a1',
+      status: 'pending',
+      message: 'Kitchen not cleaned',
+    };
   });
 
   it.each([
@@ -120,7 +134,7 @@ describe('leaving a dispute', () => {
 
     expect(r).toEqual({ added: 0, removed: 2 });
     expect(Object.keys(house().disputes)).toEqual(['other']);
-    expect(db.read('disputes', 'a1')).toMatchObject({ status: 'resolved', resolutionMessage: outcome, houseId: 'h1' });
+    expect(archiveOf('a1_')).toMatchObject({ status: 'resolved', resolutionMessage: outcome, houseId: 'h1' });
     expect(db.read('disputes', '0b7c1a2e-uuid')).toMatchObject({ resolutionMessage: outcome });
   });
 
@@ -164,13 +178,54 @@ describe('redelivery and reordering converge on the current state', () => {
     await deliver(active, disputed);
     commit(approved);
     await deliver(disputed, approved);
-    const archived = db.read('disputes', 'a1');
+    const archived = archiveOf('a1_');
     for (let i = 0; i < 2; i++) {
       expect(await deliver(active, disputed)).toEqual({ added: 0, removed: 0 });
       expect(await deliver(disputed, approved)).toEqual({ added: 0, removed: 0 });
     }
     expect(house().disputes.a1).toBeUndefined();
-    expect(db.read('disputes', 'a1')).toBe(archived);
+    expect(archiveOf('a1_')).toBe(archived);
+    expect(archives()).toHaveLength(1);
+  });
+});
+
+describe('each entry belongs to one dispute (restore, then re-dispute)', () => {
+  const d1 = { ...active, status: 'disputed', disputeReason: 'A says', disputedBy: 'A', disputeResolvedBy: 'A' };
+  const closed1 = { ...d1, status: 'resolved', disputed: 'rejected', incomplete: false, disputeResolvedBy: 'mgr' };
+  const restored = { ...closed1, status: 'active' };
+  const d2 = { ...restored, status: 'disputed', disputeReason: 'B says', disputedBy: 'B', disputeResolvedBy: 'B' };
+
+  it('a stale OPEN of dispute #1, retried after the restore and dispute #2, is not credited to #2', async () => {
+    commit(d2); // #2 is committed; #1's events are retried late
+    await deliver(active, d1);
+    await deliver(d1, closed1);
+    await deliver(restored, d2);
+
+    const e = house().disputes.a1;
+    expect(e.disputedBy).toBe('B');
+    expect(e.message).toBe('B says');
+    expect(Object.values(house().disputes).filter((x: any) => x.activityId === 'a1')).toHaveLength(1);
+  });
+
+  it('a stale CLOSE of dispute #1 after the open of #2 archives #1 and keeps #2', async () => {
+    commit(d1);
+    await deliver(active, d1);
+    commit(d2);
+    await deliver(restored, d2);
+    await deliver(d1, closed1); // late
+
+    const e = house().disputes.a1;
+    expect(e.message).toBe('B says');
+    expect(e.disputedBy).toBe('B');
+    const superseded = archives().map(([, v]) => v).find((v: any) => v.message === 'A says');
+    expect(superseded).toMatchObject({ resolutionMessage: 'superseded', status: 'resolved' });
+  });
+
+  it('builds the entry from the current state, dated by the dispute write', async () => {
+    const at = { toDate: () => new Date('2026-01-14T19:00:00.000Z') };
+    commit({ ...d1, loggedAt: at });
+    await deliver(active, { ...d1, disputedBy: 'stale-event-value' });
+    expect(house().disputes.a1).toMatchObject({ disputedBy: 'A', createdAt: '2026-01-14T19:00:00.000Z' });
   });
 });
 
