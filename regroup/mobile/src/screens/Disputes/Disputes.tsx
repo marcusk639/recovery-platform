@@ -19,7 +19,8 @@ import {
   RenderActivities,
 } from '../Activity/BaseActivityScreen';
 import { ActivityFilterForm } from '../Activity/ActivityFilterForm';
-import { ActivityStatus } from '../../entities/ActivityModel';
+import { ActivityStatus, isLegacyUpheld } from '../../entities/ActivityModel';
+import { useLiveHouseDisputes } from '../../hooks/useLiveHouseDisputes';
 import { User } from '../../entities/User';
 import { useActivities, useCurrentWeek } from '../../hooks/activity';
 
@@ -66,12 +67,28 @@ const Disputes: React.FC = () => {
     limit: 500,
   });
 
+  // ...and older builds' "delete" resolutions (deleted, resolved at
+  // loggedAt), which an admin can undo too.
+  const { activities: deletedActivities } = useActivities({
+    houseId: house?.id,
+    startDate: previousWeekStart,
+    endDate,
+    status: ActivityStatus.DELETED,
+    limit: 500,
+  });
+
   const activities = useMemo(
-    () => [...disputedActivitySystemActivities, ...decidedActivities],
-    [disputedActivitySystemActivities, decidedActivities],
+    () => [
+      ...disputedActivitySystemActivities,
+      ...decidedActivities,
+      ...deletedActivities.filter(isLegacyUpheld),
+    ],
+    [disputedActivitySystemActivities, decidedActivities, deletedActivities],
   );
 
-  const disputes = house?.disputes || {};
+  // The server-owned live list (house-disputes/{houseId}); house.disputes is
+  // an untrusted legacy mirror.
+  const disputes = useLiveHouseDisputes(house?.id);
 
   // All hooks must be called unconditionally (Rules of Hooks).
   // Pass safe defaults when required state is missing.

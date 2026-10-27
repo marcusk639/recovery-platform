@@ -21,6 +21,7 @@ import { useGuests } from '../../../state/queries';
 import { useHouseApplications } from '../../../state/queries/applicationQueries';
 import { useAppSelector } from '../../../state/store';
 import { useSelectedHouse } from '../../../hooks/useSelectedHouse';
+import { useLiveHouseDisputes } from '../../../hooks/useLiveHouseDisputes';
 import { useNotification } from '../../../context';
 import { useAutoAdvanceRotation } from '../../../hooks/useAutoAdvanceRotation';
 
@@ -99,6 +100,8 @@ const HouseSummary: React.FC<Props> = ({ navigation }) => {
 
   // Get data from Redux
   const { house } = useSelectedHouse();
+  // Open disputes from the server-owned live list, not house.disputes.
+  const liveDisputes = useLiveHouseDisputes(house?.id);
   const user = useAppSelector((state: any) => state.user.user) as User | null;
   const requestingHouses = useAppSelector(
     (state: any) => state.houses.requestingHouses,
@@ -136,7 +139,7 @@ const HouseSummary: React.FC<Props> = ({ navigation }) => {
   }
 
   // Calculate house stats
-  const disputeNumber = countOpenDisputes(house);
+  const disputeNumber = countOpenDisputes({ ...house, disputes: liveDisputes });
   const issuesNumber = countOpenIssues(house);
   const beds = countBeds(house.rooms);
 

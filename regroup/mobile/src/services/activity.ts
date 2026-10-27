@@ -354,8 +354,8 @@ export async function disputeActivity(
       disputeResolvedBy: disputedBy,
       // When this dispute was raised (the rules pin it to the server time):
       // tells it apart from an earlier dispute on the same activity.
+      // loggedAt is left alone: it is not the disputer's to rewrite.
       disputedAt: FirebaseFirestore.FieldValue.serverTimestamp(),
-      loggedAt: FirebaseFirestore.FieldValue.serverTimestamp(),
     });
   } catch (error) {
     logException(error);

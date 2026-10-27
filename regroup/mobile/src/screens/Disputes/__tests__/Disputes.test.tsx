@@ -24,6 +24,12 @@ jest.mock('../../../hooks/useSelectedGuest', () => ({
   useSelectedGuest: () => mockUseSelectedGuest(),
 }));
 
+// The live dispute list (house-disputes/{houseId}), not house.disputes.
+const mockLiveDisputes = jest.fn((): Record<string, unknown> => ({}));
+jest.mock('../../../hooks/useLiveHouseDisputes', () => ({
+  useLiveHouseDisputes: () => mockLiveDisputes(),
+}));
+
 // ─── Firebase setup mock ─────────────────────────────────────────────────────
 jest.mock('../../../../firebase-setup', () => ({
   firestore: {
@@ -633,6 +639,22 @@ describe('Disputes', () => {
       expect((useActivities as jest.Mock).mock.calls.map(([o]) => o.status)).toEqual(
         expect.arrayContaining(['disputed', 'resolved']),
       );
+    });
+
+    it("lists an older build's delete resolution (undoable), but not a plain deletion", () => {
+      const at = '2024-01-15T12:00:00.000Z';
+      const upheld = { ...makeActivity('activity-upheld'), status: 'deleted', disputeResolvedAt: at, loggedAt: at };
+      const withdrawn = { ...makeActivity('activity-withdrawn'), status: 'deleted' };
+      (useActivities as jest.Mock).mockImplementation(({ status }: { status: string }) => ({
+        activities: status === 'deleted' ? [upheld, withdrawn] : [],
+        loading: false,
+        error: null,
+        refetch: jest.fn(),
+      }));
+
+      const { getByTestId, queryByTestId } = renderScreen(buildStore());
+      expect(getByTestId('activity-item-activity-upheld')).toBeTruthy();
+      expect(queryByTestId('activity-item-activity-withdrawn')).toBeNull();
     });
 
     it('passes disputesOnly=true to RenderActivities', () => {

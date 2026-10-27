@@ -17,6 +17,13 @@ jest.mock('../../../hooks/useSelectedHouse', () => ({
   useSelectedHouse: () => mockUseSelectedHouse(),
 }));
 
+// The open-dispute count comes from the server-owned live list
+// (house-disputes/{houseId}), not house.disputes.
+const mockLiveDisputes = jest.fn((): Record<string, unknown> => ({}));
+jest.mock('../../../hooks/useLiveHouseDisputes', () => ({
+  useLiveHouseDisputes: () => mockLiveDisputes(),
+}));
+
 // ─── Navigation mock ──────────────────────────────────────────────────────────
 jest.mock('@react-navigation/native-stack', () => ({}));
 
@@ -136,9 +143,10 @@ jest.mock('../../../components/rats-icon', () => ({
 
 jest.mock('../../../components/rats-interactable-section', () => {
   const { TouchableOpacity, Text, View } = require('react-native');
-  return ({ name, testID, onPress }: any) => (
+  return ({ name, testID, onPress, description }: any) => (
     <TouchableOpacity testID={testID || `section-${name}`} onPress={onPress}>
       <Text>{name}</Text>
+      {description ? <Text>{description}</Text> : null}
     </TouchableOpacity>
   );
 });
@@ -420,6 +428,16 @@ describe('HouseSummary', () => {
     it('renders the Disputes section', () => {
       const { getByText } = renderScreen();
       expect(getByText('Disputes')).toBeTruthy();
+    });
+
+    it('counts open disputes from the live list, not the legacy house.disputes map', () => {
+      mockLiveDisputes.mockReturnValue({
+        a1: { status: 'pending' },
+        a2: { status: 'pending' },
+      });
+      const { getByText } = renderScreen();
+      expect(getByText('2 open disputes')).toBeTruthy();
+      mockLiveDisputes.mockReturnValue({});
     });
 
     it('renders the Issues section', () => {

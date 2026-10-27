@@ -905,9 +905,12 @@ describe('Activity Service', () => {
     });
 
     it('records when the dispute was raised (disputedAt, server time), which tells it apart from a later one', async () => {
+      const activityBeforeDispute = { ...(mockActivities.find(a => a.id === activityId) as any) };
       await disputeActivity(activityId, 'Not done', 'peer-uid');
       const disputed = mockActivities.find(a => a.id === activityId) as any;
       expect(disputed?.disputedAt).toEqual(new Date('2024-01-15T10:00:00Z'));
+      // loggedAt is not the disputer's to rewrite.
+      expect(disputed?.loggedAt).toBe(activityBeforeDispute?.loggedAt);
     });
   });
 

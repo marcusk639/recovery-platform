@@ -11,7 +11,6 @@ import { useCallback } from 'react';
 import { Alert } from 'react-native';
 import { Activity } from '../entities/ActivityModel';
 import { reopenDispute } from '../services/reopenDispute';
-import { logException } from '../util/logging';
 
 export const UNDO_DECISION_TITLE = 'Undo decision?';
 export const UNDO_DECISION_MESSAGE =
@@ -44,7 +43,7 @@ export function useUndoDisputeDecision(userId: string | undefined) {
           Alert.alert(refusal.title, refusal.message);
           return;
         }
-        logException(err);
+        // reopenDispute has already logged it.
         Alert.alert(
           'Decision not undone',
           'We could not undo this decision. If it was just made, wait a moment and try again.',

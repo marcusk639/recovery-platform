@@ -13,6 +13,7 @@ import {
   ActivityStatus,
   ActivityType,
   WorkActivityData,
+  isLegacyUpheld,
 } from "../entities/ActivityModel";
 import {
   getDayOfWeek,
@@ -435,6 +436,7 @@ export const filterActivities = (
       const inDispute =
         activity.status === ActivityStatus.DISPUTED ||
         activity.status === ActivityStatus.RESOLVED ||
+        isLegacyUpheld(activity) ||
         (!!activity.underDispute && activity.underDispute > 0);
       if (!inDispute) {
         return false;

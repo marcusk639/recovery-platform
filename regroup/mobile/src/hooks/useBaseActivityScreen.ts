@@ -8,7 +8,7 @@
 import { useCallback } from 'react';
 import { Alert } from 'react-native';
 import { Guest } from '../entities/Guest';
-import { Activity, ActivityStatus, ActivityType } from '../entities/ActivityModel';
+import { Activity, ActivityStatus, ActivityType, isLegacyUpheld } from '../entities/ActivityModel';
 import { House, PartialHouseWithId } from '../entities/House';
 import {
   normalize,
@@ -384,7 +384,7 @@ export const useBaseActivityScreen = (
       // UNDO DECISION: a decided dispute goes back to pending, and APPROVE /
       // REJECT show again.
       if (
-        activity.status === ActivityStatus.RESOLVED &&
+        (activity.status === ActivityStatus.RESOLVED || isLegacyUpheld(activity)) &&
         isAdminUser &&
         disputesOnly &&
         !isOwnActivity(activity)

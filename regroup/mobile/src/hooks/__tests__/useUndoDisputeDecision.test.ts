@@ -129,7 +129,8 @@ describe('useUndoDisputeDecision', () => {
       await press(alert, 'Undo decision');
     });
     expect(alert).toHaveBeenLastCalledWith('Decision not undone', expect.any(String));
-    expect(logException).toHaveBeenCalled();
+    // reopenDispute logs it; the hook does not log it a second time.
+    expect(logException).not.toHaveBeenCalled();
   });
 });
 
@@ -144,6 +145,27 @@ describe('UNDO DECISION on the Disputes screen', () => {
         expect(result.current.getRightButtonProps(decided, true, token)).toBeUndefined();
       }
     }
+  });
+
+  it("is offered on an older build's delete resolution too, not on a plain deletion", () => {
+    const { result } = renderHook(() => useBaseActivityScreen(screenProps()));
+    const at = '2026-01-15T10:00:00.000Z';
+    const upheld = activity({
+      status: ActivityStatus.DELETED,
+      disputed: undefined,
+      incomplete: undefined,
+      disputeResolvedAt: at,
+      loggedAt: at,
+    });
+    expect(result.current.getLeftButtonProps(upheld, true, ADMIN)?.title).toBe('UNDO DECISION');
+    const withdrawn = activity({
+      status: ActivityStatus.DELETED,
+      disputed: undefined,
+      incomplete: undefined,
+    });
+    expect(result.current.getLeftButtonProps(withdrawn, true, ADMIN)?.title).not.toBe(
+      'UNDO DECISION',
+    );
   });
 
   it('pressing it opens the confirm dialog', () => {
