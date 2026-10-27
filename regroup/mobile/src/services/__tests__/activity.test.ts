@@ -683,8 +683,9 @@ describe('Activity Service', () => {
       );
 
       expect(mockActivityCollection.add).toHaveBeenCalledTimes(1);
-      expect(firestore.collection).toHaveBeenCalledTimes(1);
-      expect(firestore.collection).toHaveBeenCalledWith('activities');
+      // Its only other access is a read of the guest doc, for residentUid.
+      const used = (firestore.collection as jest.Mock).mock.calls.map(([name]) => name);
+      expect(used.filter((n: string) => n !== 'guests')).toEqual(['activities']);
     });
 
     it('logActivity for a past week does not touch week-summaries', async () => {

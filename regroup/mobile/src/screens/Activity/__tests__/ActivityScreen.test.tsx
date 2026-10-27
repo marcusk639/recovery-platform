@@ -24,6 +24,10 @@ jest.mock('../../../hooks/useSelectedGuest', () => ({
 
 // ─── Navigation mock ──────────────────────────────────────────────────────────
 jest.mock('@react-navigation/native-stack', () => ({}));
+// S3: open disputes come from the server-owned live list, not house.disputes.
+jest.mock('../../../hooks/useLiveHouseDisputes', () => ({
+  useLiveHouseDisputes: () => ({ disputes: {}, error: null }),
+}));
 
 // ─── Context mocks ────────────────────────────────────────────────────────────
 const mockShowFormModal = jest.fn();

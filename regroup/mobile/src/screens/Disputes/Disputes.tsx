@@ -3,7 +3,7 @@
 // Added: useModal, useNotification hooks
 // Phase 1.2: Migrated to Activity system - uses useActivities hook
 import React, { useCallback, useMemo } from 'react';
-import { View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import ScreenHeader from '../../components/screen-header';
 import HelpIcon from '../../components/help-icon';
 import { color } from '../../styles/theme';
@@ -88,7 +88,7 @@ const Disputes: React.FC = () => {
 
   // The server-owned live list (house-disputes/{houseId}); house.disputes is
   // an untrusted legacy mirror.
-  const disputes = useLiveHouseDisputes(house?.id);
+  const { disputes, error: disputesError } = useLiveHouseDisputes(house?.id);
 
   // All hooks must be called unconditionally (Rules of Hooks).
   // Pass safe defaults when required state is missing.
@@ -186,20 +186,31 @@ const Disputes: React.FC = () => {
         onFilter={openFilters}
         placeholder="Search disputes..."
       />
-      <RenderActivities
-        activities={filteredActivities}
-        disputesOnly={true}
-        guests={guests}
-        admins={admins}
-        disputes={disputes}
-        houseId={house?.id || ''}
-        userIsAdmin={user?.isAdmin || false}
-        getIconForActivity={activityScreen.getIconForActivity}
-        getLeftButtonProps={activityScreen.getLeftButtonProps}
-        getRightButtonProps={activityScreen.getRightButtonProps}
-      />
+      {disputesError ? (
+        // Not an empty list: "no disputes" would be wrong when we could not read them.
+        <Text testID="disputes-load-error" style={styles.loadError}>
+          Couldn't load disputes. Check your connection and try again.
+        </Text>
+      ) : (
+        <RenderActivities
+          activities={filteredActivities}
+          disputesOnly={true}
+          guests={guests}
+          admins={admins}
+          disputes={disputes}
+          houseId={house?.id || ''}
+          userIsAdmin={user?.isAdmin || false}
+          getIconForActivity={activityScreen.getIconForActivity}
+          getLeftButtonProps={activityScreen.getLeftButtonProps}
+          getRightButtonProps={activityScreen.getRightButtonProps}
+        />
+      )}
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  loadError: { margin: 16, color: color.red },
+});
 
 export default Disputes;

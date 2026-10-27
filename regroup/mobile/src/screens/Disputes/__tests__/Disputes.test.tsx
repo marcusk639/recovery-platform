@@ -26,8 +26,9 @@ jest.mock('../../../hooks/useSelectedGuest', () => ({
 
 // The live dispute list (house-disputes/{houseId}), not house.disputes.
 const mockLiveDisputes = jest.fn((): Record<string, unknown> => ({}));
+const mockLiveError = jest.fn((): Error | null => null);
 jest.mock('../../../hooks/useLiveHouseDisputes', () => ({
-  useLiveHouseDisputes: () => mockLiveDisputes(),
+  useLiveHouseDisputes: () => ({ disputes: mockLiveDisputes(), error: mockLiveError() }),
 }));
 
 // ─── Firebase setup mock ─────────────────────────────────────────────────────
@@ -655,6 +656,14 @@ describe('Disputes', () => {
       const { getByTestId, queryByTestId } = renderScreen(buildStore());
       expect(getByTestId('activity-item-activity-upheld')).toBeTruthy();
       expect(queryByTestId('activity-item-activity-withdrawn')).toBeNull();
+    });
+
+    it("S2: says it couldn't load disputes instead of showing an empty list", () => {
+      mockLiveError.mockReturnValue(new Error('denied'));
+      const { getByTestId, queryByTestId } = renderScreen(buildStore());
+      expect(getByTestId('disputes-load-error')).toBeTruthy();
+      expect(queryByTestId('render-activities')).toBeNull();
+      mockLiveError.mockReturnValue(null);
     });
 
     it('passes disputesOnly=true to RenderActivities', () => {

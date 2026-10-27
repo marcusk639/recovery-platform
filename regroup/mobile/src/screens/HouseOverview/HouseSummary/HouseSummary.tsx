@@ -101,7 +101,7 @@ const HouseSummary: React.FC<Props> = ({ navigation }) => {
   // Get data from Redux
   const { house } = useSelectedHouse();
   // Open disputes from the server-owned live list, not house.disputes.
-  const liveDisputes = useLiveHouseDisputes(house?.id);
+  const { disputes: liveDisputes } = useLiveHouseDisputes(house?.id);
   const user = useAppSelector((state: any) => state.user.user) as User | null;
   const requestingHouses = useAppSelector(
     (state: any) => state.houses.requestingHouses,

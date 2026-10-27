@@ -21,7 +21,7 @@ jest.mock('../../../hooks/useSelectedHouse', () => ({
 // (house-disputes/{houseId}), not house.disputes.
 const mockLiveDisputes = jest.fn((): Record<string, unknown> => ({}));
 jest.mock('../../../hooks/useLiveHouseDisputes', () => ({
-  useLiveHouseDisputes: () => mockLiveDisputes(),
+  useLiveHouseDisputes: () => ({ disputes: mockLiveDisputes(), error: null }),
 }));
 
 // ─── Navigation mock ──────────────────────────────────────────────────────────

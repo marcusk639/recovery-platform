@@ -34,6 +34,7 @@ export async function logActivity(
 ): Promise<Activity> {
   try {
     const activityTimestamp = timestamp || new Date();
+    const residentUid = await residentUidOf(guestId);
 
     const activity: Omit<Activity, 'id'> = {
       guestId,
@@ -45,13 +46,28 @@ export async function logActivity(
       loggedAt: FirebaseFirestore.FieldValue.serverTimestamp() as any,
       verified: false,
       status: ActivityStatus.ACTIVE,
+      // The resident it is for, stamped at create (immutable afterwards; the
+      // rules check it against the guest doc). Omitted when unknown: the
+      // server stamps it then.
+      ...(residentUid ? { residentUid } : {}),
     };
 
     // Add to Firestore. This is the whole write: week-summaries are kept by
     // the onActivityWritten Cloud Function (regroup/functions). The client
     // must not write them — the rules allow only admins, so a resident's
     // log used to save the activity and then throw here.
-    const docRef = await firestore.collection('activities').add(activity);
+    let docRef;
+    try {
+      docRef = await firestore.collection('activities').add(activity);
+    } catch (error: any) {
+      // The guest doc's account changed since we read it: let the server
+      // stamp it instead.
+      if (!residentUid || error?.code !== 'firestore/permission-denied') {
+        throw error;
+      }
+      delete activity.residentUid;
+      docRef = await firestore.collection('activities').add(activity);
+    }
 
     // Return activity with ID
     return {
@@ -63,6 +79,17 @@ export async function logActivity(
     logException(error);
     // Original error, so its `code` still tells callers what failed.
     throw error;
+  }
+}
+
+/** The guest doc's account (guests.userId), or undefined if unknown. */
+async function residentUidOf(guestId: string): Promise<string | undefined> {
+  try {
+    const guest = await firestore.collection('guests').doc(guestId).get();
+    const uid = guest.exists ? guest.data()?.userId : undefined;
+    return typeof uid === 'string' && uid !== '' ? uid : undefined;
+  } catch {
+    return undefined;
   }
 }
 

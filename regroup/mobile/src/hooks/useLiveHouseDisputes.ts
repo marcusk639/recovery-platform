@@ -15,13 +15,19 @@ import { logException } from '../util/logging';
 
 export const LIVE_DISPUTES = 'house-disputes';
 
-export function useLiveHouseDisputes(houseId: string | undefined): {
-  [key: string]: Dispute;
-} {
+export interface LiveHouseDisputes {
+  disputes: { [key: string]: Dispute };
+  /** Set when the list could not be read; disputes is then empty, not "none". */
+  error: Error | null;
+}
+
+export function useLiveHouseDisputes(houseId: string | undefined): LiveHouseDisputes {
   const [disputes, setDisputes] = useState<{ [key: string]: Dispute }>({});
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     setDisputes({});
+    setError(null);
     if (!houseId) {
       return;
     }
@@ -32,14 +38,16 @@ export function useLiveHouseDisputes(houseId: string | undefined): {
         (snapshot: FirebaseFirestoreTypes.DocumentSnapshot) => {
           const data = snapshot.exists ? snapshot.data() : undefined;
           setDisputes((data?.disputes ?? {}) as { [key: string]: Dispute });
+          setError(null);
         },
         (err: Error) => {
           logException(err);
           setDisputes({});
+          setError(err);
         },
       );
     return () => unsubscribe();
   }, [houseId]);
 
-  return disputes;
+  return { disputes, error };
 }

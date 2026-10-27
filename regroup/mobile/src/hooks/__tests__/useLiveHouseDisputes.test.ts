@@ -40,18 +40,22 @@ describe('useLiveHouseDisputes', () => {
     const { result, unmount } = renderHook(() => useLiveHouseDisputes('h1'));
     expect(mockDoc).toHaveBeenCalledWith('house-disputes', 'h1');
     act(() => onNext!({ exists: true, data: () => ({ disputes: { a1: { status: 'pending' } } }) }));
-    expect(result.current).toEqual({ a1: { status: 'pending' } });
+    expect(result.current).toEqual({ disputes: { a1: { status: 'pending' } }, error: null });
     unmount();
     expect(mockUnsubscribe).toHaveBeenCalled();
   });
 
-  it('is empty with no house, a missing doc, or a read error', () => {
-    expect(renderHook(() => useLiveHouseDisputes(undefined)).result.current).toEqual({});
+  it('is empty with no house or a missing doc, and reports a read error (S2)', () => {
+    expect(renderHook(() => useLiveHouseDisputes(undefined)).result.current).toEqual({
+      disputes: {},
+      error: null,
+    });
     expect(mockDoc).not.toHaveBeenCalled();
     const { result } = renderHook(() => useLiveHouseDisputes('h1'));
     act(() => onNext!({ exists: false, data: () => undefined }));
-    expect(result.current).toEqual({});
+    expect(result.current).toEqual({ disputes: {}, error: null });
     act(() => onError!(new Error('denied')));
-    expect(result.current).toEqual({});
+    expect(result.current.disputes).toEqual({});
+    expect(result.current.error?.message).toBe('denied');
   });
 });

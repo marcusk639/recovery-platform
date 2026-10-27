@@ -21,6 +21,7 @@ import {
 import { ActivityFilterForm } from './ActivityFilterForm';
 import { filterActivities } from '../../util/guest';
 import { useActivities, useCurrentWeek } from '../../hooks/activity';
+import { useLiveHouseDisputes } from '../../hooks/useLiveHouseDisputes';
 
 /**
  * Activity Screen
@@ -64,7 +65,8 @@ const ActivityScreen: React.FC = () => {
 
   const activities = activitySystemActivities;
 
-  const disputes = house?.disputes || {};
+  // The server-owned live list (house-disputes/{houseId}), not house.disputes.
+  const { disputes } = useLiveHouseDisputes(house?.id);
 
   // Use base activity screen hook
   const activityScreen = useBaseActivityScreen({
