@@ -87,17 +87,18 @@ export const addGuestAuthorization = onCall(async (request) => {
   }
 
   try {
-    // One claims write: guest and admin together, or nothing.
-    await addHouseRoles(
-      guest.userId,
-      [guest.houseId],
-      guest.isAdmin ? ["guest", "admin"] : ["guest"],
-    );
+    // Record first, then claims (util/houseRoles, "Record before claims").
     await recordRoleGrant(
       guest.houseId,
       guest.userId,
       guest.isAdmin ? "peerLeader" : "resident",
       { grantedBy: request.auth.uid, via: "addGuestAuthorization" },
+    );
+    // One claims write: guest and admin together, or nothing.
+    await addHouseRoles(
+      guest.userId,
+      [guest.houseId],
+      guest.isAdmin ? ["guest", "admin"] : ["guest"],
     );
     logger.info("Claims created for guest", {
       houseId: guest.houseId,
@@ -169,6 +170,15 @@ export const addAdminAuthorization = onCall(async (request) => {
   }
 
   try {
+    // Record first, then claims (util/houseRoles, "Record before claims").
+    for (const houseId of requestedHouses) {
+      await recordRoleGrant(
+        houseId,
+        adminInput.userId,
+        superAdminHouses.has(houseId) ? "owner" : "manager",
+        { grantedBy: callerUid, via: "addAdminAuthorization" },
+      );
+    }
     // Each addHouseRoles call reads the current claims and merges into them.
     // (Spreading two createClaims results built from one snapshot let the
     // superAdmin result's stale admin map overwrite the new admin grant.)
@@ -184,14 +194,6 @@ export const addAdminAuthorization = onCall(async (request) => {
       houseIds: adminInput.houseIds,
       superAdmin: adminInput.superAdmin,
     });
-    for (const houseId of requestedHouses) {
-      await recordRoleGrant(
-        houseId,
-        adminInput.userId,
-        superAdminHouses.has(houseId) ? "owner" : "manager",
-        { grantedBy: callerUid, via: "addAdminAuthorization" },
-      );
-    }
     return true;
   } catch (error) {
     logger.error("addAdminAuthorization: failed to set claims", { error });
@@ -302,11 +304,12 @@ export const promoteGuestsToAdmin = onCall(async (request) => {
         "admin",
         false,
       );
-      await auth().setCustomUserClaims(user.uid, claims);
+      // Record first, then claims (util/houseRoles, "Record before claims").
       await recordRoleGrant(guest.houseId, user.uid, "peerLeader", {
         grantedBy: request.auth!.uid,
         via: "promoteGuestsToAdmin",
       });
+      await auth().setCustomUserClaims(user.uid, claims);
     }),
   );
   return "success";

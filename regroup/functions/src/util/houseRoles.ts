@@ -22,6 +22,17 @@
  * docs, admins docs or houseType. An admin-claim holder with no record is a
  * peer leader, the least privilege. The rules read the same records
  * (firestore.rules guests block) for direct guest-doc departures.
+ *
+ * Record before claims: addAdminAuthorization, addGuestAuthorization and
+ * promoteGuestsToAdmin write the record, then the claims. If the claims
+ * write fails, a record with no claim is left: it grants nothing (every tier
+ * check needs the live claim; the backfill's stale pass lowers it) and it
+ * still ranks the account in the rules, so no lower staff can make a shadow
+ * guest doc for it. The other order left an admin-claim holder with no
+ * record, ranked 0 in the rules. redeemInvitation still writes the claims
+ * first (its retry design needs the record and grantCompletedAt together);
+ * a redeem stranded there is completed by the retry, and the backfill
+ * records any admin-claim holder still without a record.
  */
 import { HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';

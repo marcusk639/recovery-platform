@@ -49,8 +49,12 @@ jest.mock('../../util/user', () => ({
 }));
 
 import { mem } from '../helpers/memFirestore';
-import { addAdminAuthorization } from '../../callable/auth';
-import { assertMayGrantTier } from '../../util/houseRoles';
+import {
+  addAdminAuthorization,
+  addGuestAuthorization,
+  promoteGuestsToAdmin,
+} from '../../callable/auth';
+import { assertMayGrantTier, houseTierOf } from '../../util/houseRoles';
 
 const H = 'h';
 const as = (uid: string, claims: Record<string, unknown> = {}) => {
@@ -98,4 +102,56 @@ it('with no primary owner record nobody may grant owner', async () => {
   await expect(
     assertMayGrantTier({ callerUid: 'co', houseId: H, grant: 'owner', callableName: 't' }),
   ).rejects.toMatchObject(denied);
+});
+
+describe('record before claims (verifier N-B): a failed claims write leaves a ranked record, never an unranked claim', () => {
+  const recordAt = (uid: string) => () => mem.get(`house-roles/${H}_${uid}`);
+  const OWNER = { uid: 'owner', token: {} };
+
+  it('addAdminAuthorization and addGuestAuthorization write the record before the claims', async () => {
+    as('owner');
+    const seen: unknown[] = [];
+    mockAddHouseRoles.mockImplementation(async (uid: string) => {
+      seen.push(recordAt(uid)());
+    });
+    await (addAdminAuthorization as unknown as Function)({
+      data: { userId: 'm', houseIds: [H], superAdmin: [] },
+      auth: OWNER,
+    });
+    await (addGuestAuthorization as unknown as Function)({
+      data: { userId: 'p', houseId: H, isAdmin: true },
+      auth: OWNER,
+    });
+    expect(seen).toEqual([
+      expect.objectContaining({ tier: 'manager' }),
+      expect.objectContaining({ tier: 'peerLeader' }),
+    ]);
+  });
+
+  it('promoteGuestsToAdmin writes the record before the claims', async () => {
+    as('owner');
+    let atClaims: unknown;
+    mockSetClaims.mockImplementationOnce(async () => {
+      atClaims = recordAt('r')();
+    });
+    await (promoteGuestsToAdmin as unknown as Function)({
+      data: [{ userId: 'r', houseId: H }],
+      auth: OWNER,
+    });
+    expect(atClaims).toMatchObject({ tier: 'peerLeader' });
+  });
+
+  it('when the claims write fails, the record stays and grants nothing on its own', async () => {
+    as('owner');
+    mockAddHouseRoles.mockRejectedValueOnce(new Error('claims down'));
+    await expect(
+      (addAdminAuthorization as unknown as Function)({
+        data: { userId: 'm', houseIds: [H], superAdmin: [] },
+        auth: OWNER,
+      }),
+    ).rejects.toMatchObject({ code: 'internal' });
+    expect(recordAt('m')()).toMatchObject({ tier: 'manager' });
+    // No admin claim: the record alone is no tier (util/houseRoles needs the live claim).
+    await expect(houseTierOf('m', H)).resolves.toBe('none');
+  });
 });
