@@ -2,18 +2,22 @@
  * Backfill for the dispute owner rule and REOPEN, on activities written
  * before the onActivityWritten trigger did both:
  *
- *   1. residentUid: stamps each activity that has none with its guest's
- *      account (guests.userId, null for a guest with no app account). The
- *      rules use it to keep residents from disputing, resolving or reopening
- *      their own activity; until it is stamped they fall back to the live
- *      guest doc, which a resident or a peer-leader admin can edit or delete.
- *      An activity whose guest doc is gone is left unstamped (reported): the
- *      rules then refuse it to everyone but admins.
+ *   1. residentUid: stamps each activity that has none, or a null one while
+ *      the guest now has an account, with its guest's account
+ *      (guests.userId, null for a guest with no app account). The rules use
+ *      it to keep residents from disputing, resolving or reopening their own
+ *      activity; until it is stamped they fall back to the live guest doc,
+ *      which a resident or a peer-leader admin can edit or delete. An
+ *      activity whose guest doc is gone is left unstamped (reported): the
+ *      rules then refuse it to everyone but the house owner.
  *   2. The decision log: records decided_{disputeResolvedAt ms} in
  *      activities/{id}/dispute-decisions for each decided dispute (resolved,
  *      or an old build's "delete") that has none. The rules let an admin undo
  *      a decision (REOPEN) only once it is logged. A decision with no
  *      disputeResolvedAt cannot be logged or reopened (reported).
+ *   3. The live dispute list: seeds house-disputes/{houseId} with each open
+ *      dispute (the app reads that list; older entries are only in the
+ *      legacy houses/{id}.disputes mirror).
  *
  * Dry run is the DEFAULT — writing requires --apply.
  *
@@ -28,7 +32,8 @@
  *   npm run backfill:dispute-identity:apply
  *
  * --house <id> limits the run to one house. Idempotent: a re-run stamps and
- * logs nothing more. Each stamp is a transaction that re-reads the activity,
+ * logs nothing more. A stamp is not a week-summary input, so stamping
+ * triggers no summary recompute. Each stamp is a transaction that re-reads the activity,
  * so a live write is never overwritten. Prints ids and counts only.
  */
 import './scriptBootstrap';
@@ -36,6 +41,7 @@ import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import { residentUidFrom } from '../activities/residentStamp';
 import { DECISIONS, disputeStamp, millisOf, outcomeOf } from '../activities/disputeDecisions';
+import { mirrorHouseDispute } from '../activities/houseDisputeMirror';
 
 type Firestore = FirebaseFirestore.Firestore;
 type Data = Record<string, unknown>;
@@ -54,6 +60,7 @@ export interface Counts {
   decisionsLogged: number;
   decisionsPresent: number;
   decisionsUndated: number;
+  openDisputes: number;
 }
 
 const USAGE = 'Usage: backfillDisputeIdentity [--house <houseId>] [--apply]';
@@ -96,7 +103,9 @@ async function stamp(
   counts: Counts,
   changed: string[],
 ) {
-  if (has(data, 'residentUid')) {
+  // A null stamp is no stamp: re-stamp it once the guest has an account.
+  const stamped = () => has(data, 'residentUid') && data.residentUid !== null;
+  if (stamped()) {
     counts.alreadyStamped++;
     return;
   }
@@ -111,12 +120,22 @@ async function stamp(
     return;
   }
   const residentUid = residentUidFrom(guest);
+  if (has(data, 'residentUid') && residentUid === null) {
+    counts.alreadyStamped++;
+    return;
+  }
   if (opts.apply) {
     const ref = db.collection('activities').doc(id);
     const wrote = await db.runTransaction(async (tx) => {
       const current = await tx.get(ref);
       const now = current.exists ? (current.data() as Data) : undefined;
-      if (!now || has(now, 'residentUid') || now.guestId !== guestId) return false;
+      if (
+        !now ||
+        (has(now, 'residentUid') && now.residentUid !== null) ||
+        now.guestId !== guestId
+      ) {
+        return false;
+      }
       tx.update(ref, { residentUid });
       return true;
     });
@@ -146,6 +165,7 @@ async function logDecision(db: Firestore, id: string, data: Data, opts: Options,
         at: Timestamp.fromMillis(at),
         previousOutcome: null,
         disputeStamp: disputeStamp(data),
+        disputedBy: typeof data.disputedBy === 'string' ? data.disputedBy : null,
         activityId: id,
         houseId: typeof data.houseId === 'string' ? data.houseId : null,
         backfilled: true,
@@ -172,6 +192,7 @@ export async function run(db: Firestore, opts: Options): Promise<Counts> {
     decisionsLogged: 0,
     decisionsPresent: 0,
     decisionsUndated: 0,
+    openDisputes: 0,
   };
   const guests = new Map<string, Data | null>();
   const changed: string[] = [];
@@ -186,6 +207,12 @@ export async function run(db: Firestore, opts: Options): Promise<Counts> {
       const data = doc.data() as Data;
       await stamp(db, doc.id, data, guests, opts, counts, changed);
       await logDecision(db, doc.id, data, opts, counts);
+      if (data.status === 'disputed') {
+        // Seeds the live list (house-disputes/{houseId}) with disputes opened
+        // before it existed; the mirror reconciles from current state.
+        counts.openDisputes++;
+        if (opts.apply) await mirrorHouseDispute(db, doc.id, { ...data, status: 'active' }, data);
+      }
     }
     if (page.docs.length < (opts.pageSize ?? 300)) break;
     last = page.docs[page.docs.length - 1];

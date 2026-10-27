@@ -29,6 +29,7 @@ import { operatorStatusToHouseStatus } from "../../util/entitlement";
 
 export { onHouseDeleted } from "./houseTombstone";
 export { onActivityWritten } from "./activityWeekSummary";
+export { onGuestLinkedRestamp } from "./guestRestamp";
 
 /**
  * Sends a push notification when a new document is created in /notifications/{notificationId}.

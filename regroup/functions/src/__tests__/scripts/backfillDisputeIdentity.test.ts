@@ -83,6 +83,7 @@ describe('backfillDisputeIdentity', () => {
       decisionsLogged: 3,
       decisionsPresent: 0,
       decisionsUndated: 1,
+      openDisputes: 0,
     });
     expect(db.writes).toHaveLength(0);
     expect(output.join('\n')).toContain('DRY RUN');
@@ -136,6 +137,33 @@ describe('backfillDisputeIdentity', () => {
     expect(printed).toContain('plain');
     expect(printed).not.toContain('res1');
     expect(printed).not.toContain('SECRET-REASON');
+  });
+});
+
+describe('round 5', () => {
+  it('re-stamps a null stamp once the guest has an account; keeps it null while there is none', async () => {
+    db.seed('activities', 'nullLinked', act({ residentUid: null }));
+    db.seed('activities', 'nullIntake', act({ guestId: 'intake', residentUid: null }));
+    await run(asFirestore(db), { apply: true });
+    expect(db.read('activities', 'nullLinked')!.residentUid).toBe('res1');
+    expect(db.read('activities', 'nullIntake')!.residentUid).toBeNull();
+  });
+
+  it('seeds the live dispute list with disputes opened before it existed (apply only)', async () => {
+    db.seed('houses', 'h1', { disputes: {} });
+    db.seed(
+      'activities',
+      'open',
+      act({ status: 'disputed', disputedBy: 'peer', disputeResolvedBy: 'peer' }),
+    );
+    const dry = await run(asFirestore(db), { apply: false });
+    expect(dry.openDisputes).toBe(1);
+    expect(db.read('house-disputes', 'h1')).toBeUndefined();
+    await run(asFirestore(db), { apply: true });
+    expect(db.read('house-disputes', 'h1')!.disputes.open).toMatchObject({
+      status: 'pending',
+      disputedBy: 'peer',
+    });
   });
 });
 

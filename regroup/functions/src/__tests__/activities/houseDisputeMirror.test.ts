@@ -8,53 +8,10 @@
 import { logger } from 'firebase-functions';
 import { FakeFirestore, asFirestore } from './fakeFirestore';
 import { mirrorHouseDispute, outcomeOf } from '../../activities/houseDisputeMirror';
+import { NOW, active, approved, disputed, mirrorHelpers, rejected } from './mirrorKit';
 
 let db: FakeFirestore;
-const NOW = '2026-01-15T12:00:00.000Z';
-type Data = Record<string, unknown>;
-
-const active = {
-  guestId: 'g1',
-  houseId: 'h1',
-  type: 'chore',
-  status: 'active',
-  loggedBy: 'resident-uid',
-};
-const disputed = {
-  ...active,
-  status: 'disputed',
-  disputeReason: 'Kitchen not cleaned',
-  disputedBy: 'peer-uid',
-};
-const approved = {
-  ...disputed,
-  status: 'resolved',
-  disputed: 'successful',
-  incomplete: true,
-  disputeResolvedBy: 'mgr',
-};
-const rejected = {
-  ...disputed,
-  status: 'resolved',
-  disputed: 'rejected',
-  incomplete: false,
-  disputeResolvedBy: 'mgr',
-};
-const house = () => db.read('houses', 'h1')!;
-/** Archived disputes for activity a1 (ids are {key}[_{stamp}][_{decision id}]). */
-const archives = () =>
-  [...(db.collections.get('disputes') ?? new Map()).entries()].filter(
-    ([id]) => id.startsWith('a1') || id.includes('uuid'),
-  );
-const archiveOf = (prefix: string) => archives().find(([id]) => id.startsWith(prefix))?.[1];
-
-/** Deliver an event whose payload is before/after; `committed` is the doc NOW. */
-const deliver = (before: Data | undefined, after: Data | undefined, now = NOW) =>
-  mirrorHouseDispute(asFirestore(db), 'a1', before, after, { now });
-const commit = (state: Data | undefined) => {
-  if (state) db.seed('activities', 'a1', state);
-  else db.collections.get('activities')?.delete('a1');
-};
+const { house, archives, archiveOf, deliver, commit } = mirrorHelpers(() => db);
 
 beforeEach(() => {
   db = new FakeFirestore();

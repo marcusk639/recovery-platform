@@ -33,6 +33,8 @@ export interface Decision {
     at: Timestamp;
     previousOutcome: DecisionOutcome | null;
     disputeStamp: string;
+    /** Who raised the dispute (disputedBy, else an older build's disputeResolvedBy). */
+    disputedBy: string | null;
   };
 }
 
@@ -68,8 +70,11 @@ export function outcomeOf(activity: Data | undefined): DecisionOutcome {
 /**
  * Identifies one dispute on an activity: who raised it, why, and when
  * (disputedAt, which the rules pin to the server time of the entering write;
- * empty for older builds). A REOPEN changes none of the three, so a reopened
- * dispute keeps its stamp. A hash, so the reason text is not repeated.
+ * empty for older builds). A REOPEN keeps disputedBy, disputeReason and
+ * disputedAt, so a reopened dispute keeps its stamp; an older build's
+ * dispute, whose disputer was only in disputeResolvedBy (cleared by the
+ * reopen), gets disputedBy back from the decision log (houseDisputeMirror).
+ * A hash, so the reason text is not repeated.
  */
 export function disputeStamp(activity: Data): string {
   const disputer =
@@ -95,6 +100,7 @@ export function closingDecision(
       at: Timestamp.fromMillis(at),
       previousOutcome: null,
       disputeStamp: disputeStamp(before),
+      disputedBy: stringOrNull(before.disputedBy) || stringOrNull(before.disputeResolvedBy),
     },
   };
 }
@@ -115,6 +121,7 @@ export function reopenDecision(
       at: Timestamp.fromMillis(at),
       previousOutcome: outcomeOf(before),
       disputeStamp: disputeStamp(after),
+      disputedBy: stringOrNull(after.disputedBy),
     },
   };
 }

@@ -71,6 +71,14 @@ describe('stampResidentUid', () => {
     expect(db.read('activities', 'a1')!.residentUid).toBe('res1');
   });
 
+  it('I2: fills a null stamp on the next write once the guest has an account', async () => {
+    await deliver(undefined, act({ guestId: 'intake' }));
+    db.seed('guests', 'intake', { houseId: 'h1', userId: 'linked' });
+    const stamped = db.read('activities', 'a1')!;
+    expect(await deliver(stamped, { ...stamped, verified: true })).toBe('stamped');
+    expect(db.read('activities', 'a1')!.residentUid).toBe('linked');
+  });
+
   it('is idempotent: a redelivered create writes nothing more', async () => {
     await deliver(undefined, act());
     const writes = db.writes.length;

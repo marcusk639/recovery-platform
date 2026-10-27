@@ -23,12 +23,16 @@ jest.mock('../../activities/houseDisputeMirror', () => ({
 jest.mock('../../activities/residentStamp', () => ({
   stampResidentUid: jest.fn(async () => 'unchanged'),
 }));
+jest.mock('../../activities/selfDecisionCheck', () => ({
+  flagSelfDecision: jest.fn(async () => false),
+}));
 
 import { onActivityWritten } from '../../triggers/firestore/activityWeekSummary';
 import { syncWeekSummariesForActivityWrite } from '../../activities/syncWeekSummary';
 import { notifyDispute } from '../../activities/disputeNotifications';
 import { mirrorHouseDispute } from '../../activities/houseDisputeMirror';
 import { stampResidentUid } from '../../activities/residentStamp';
+import { flagSelfDecision } from '../../activities/selfDecisionCheck';
 
 const trigger = onActivityWritten as unknown as {
   options: { document: string; retry: boolean };
@@ -104,6 +108,9 @@ describe('onActivityWritten', () => {
       data: { before: snap(undefined), after: snap(after) },
     });
     expect(stampResidentUid).toHaveBeenCalledWith({ name: 'rats-db' }, 'a11', undefined, after);
+    expect(flagSelfDecision).toHaveBeenCalledWith({ name: 'rats-db' }, 'a11', undefined, after, {
+      now: undefined,
+    });
   });
 
   it('takes no decision from the event auth context (authId is not documented as the uid)', async () => {

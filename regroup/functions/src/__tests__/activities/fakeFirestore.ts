@@ -25,7 +25,8 @@ const OPS: Record<string, (a: any, b: any) => boolean> = {
 };
 
 const isDelete = (v: unknown) =>
-  !!v && typeof (v as { isEqual?: unknown }).isEqual === 'function' &&
+  !!v &&
+  typeof (v as { isEqual?: unknown }).isEqual === 'function' &&
   (v as { isEqual: (o: unknown) => boolean }).isEqual(FieldValue.delete());
 
 /** Deep-copies plain objects only, so Timestamps keep their prototype. */
@@ -105,12 +106,23 @@ export class FakeFirestore {
         const data = db.col(collection).get(id);
         return { exists: data !== undefined, id, data: () => data };
       },
+      /** Dotted field paths; fails with NOT_FOUND (5) if the doc is missing. */
+      async update(data: Data) {
+        const current = db.col(collection).get(id);
+        if (!current) throw Object.assign(new Error('no document to update'), { code: 5 });
+        const next = clonePlain(current);
+        for (const [p, v] of Object.entries(data)) applyPath(next, p, v);
+        db.col(collection).set(id, next);
+        db.writes.push({ collection, id, data });
+      },
     };
   }
 
   runQuery(collection: string, spec: QuerySpec) {
     let entries = [...this.col(collection).entries()].filter(([, data]) =>
-      spec.filters.every(([field, op, value]) => OPS[op](comparable(data[field]), comparable(value))),
+      spec.filters.every(([field, op, value]) =>
+        OPS[op](comparable(data[field]), comparable(value)),
+      ),
     );
     if (spec.order) {
       const [field, dir] = spec.order;
@@ -134,7 +146,10 @@ export class FakeFirestore {
     return { docs, empty: docs.length === 0, size: docs.length };
   }
 
-  async runTransaction<T>(fn: (tx: any) => Promise<T>, options?: { readOnly?: boolean }): Promise<T> {
+  async runTransaction<T>(
+    fn: (tx: any) => Promise<T>,
+    options?: { readOnly?: boolean },
+  ): Promise<T> {
     this.transactions++;
     if (options?.readOnly) this.readOnlyTransactions++;
     const staged: Array<{ collection: string; id: string; data: Data; update?: boolean }> = [];
