@@ -24,12 +24,6 @@ platform :ios do
       team_id: "D8K3FS4HAX",
     )
   end
-
-  desc "Capture screenshots using Detox"
-  lane :screenshots do
-    sh("cd .. && npm run test:e2e:build:ios 2>&1")
-    sh("cd .. && npx detox test e2e/screenshots.e2e.ts --configuration ios.sim.debug --artifacts-location ./fastlane/screenshots/ios 2>&1")
-  end
 end
 
 platform :android do
@@ -43,10 +37,5 @@ platform :android do
       screenshots_path: "./fastlane/screenshots/android",
       metadata_path: "./fastlane/metadata/android",
     )
-  end
-
-  desc "Capture screenshots using Detox on Android"
-  lane :screenshots do
-    sh("cd .. && npx detox test e2e/screenshots.e2e.ts --configuration android.emu.debug --artifacts-location ./fastlane/screenshots/android 2>&1")
   end
 end
