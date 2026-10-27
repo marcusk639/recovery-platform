@@ -71,7 +71,9 @@ line_ending:
 language_backend:
 
 # whether to use project's .gitignore files to ignore files
-ignore_all_files_in_gitignore: true
+# false in the review copy: the index is built from tracked files only, so gitignore
+# filtering adds nothing, and a PR's .gitignore could otherwise hide tracked callers.
+ignore_all_files_in_gitignore: false
 
 # advanced configuration option allowing to configure language server-specific options.
 # Maps the language key to the options.

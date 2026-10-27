@@ -76,7 +76,7 @@ test("Serena gets a copy of tracked files without .git or the PR's .serena/, the
 test('the MCP server runs as serena-runner with an empty environment', () => {
   assert.match(setup, /SR_USER: serena-runner\n/);
   assert.match(setup, /"command": "sudo", "args": sys\.argv\[2:\]/);
-  assert.match(setup, /\n {12}-n -u "\$SR_USER" -H env -i "HOME=\$SR_HOME" "PATH=\$SR_PATH" "SERENA_HOME=\$SR_HOME\/serena-home" SERENA_USAGE_REPORTING=false \\\n/);
+  assert.match(setup, /\n {12}-n -u "\$SR_USER" -H env -i -C "\$SR_HOME" "HOME=\$SR_HOME" "PATH=\$SR_PATH" "SERENA_HOME=\$SR_HOME\/serena-home" SERENA_USAGE_REPORTING=false \\\n/);
   // env -i drops CI/GITHUB_ACTIONS, which Serena checks to skip its startup usage report.
   assert.match(setup, /run_as\(\) \{ [^}]*SERENA_USAGE_REPORTING=false "\$@"; \}/);
   assert.match(setup, /--mode no-onboarding --mode no-memories/);
@@ -85,8 +85,8 @@ test('the MCP server runs as serena-runner with an empty environment', () => {
 test('language servers install against a throwaway project; PR code is indexed only offline', () => {
   const warmup = at('project index "$SR_HOME/ls-warmup"');
   const chmod = at('chmod 700 "$GITHUB_WORKSPACE/.git" "$RUNNER_TEMP"');
-  const v4 = at('sudo iptables -A OUTPUT -m owner --uid-owner "$SR_USER" -j REJECT');
-  const v6 = at('sudo ip6tables -A OUTPUT -m owner --uid-owner "$SR_USER" -j REJECT');
+  const v4 = at('sudo iptables -I OUTPUT 1 -m owner --uid-owner "$SR_USER" -j REJECT');
+  const v6 = at('sudo ip6tables -I OUTPUT 1 -m owner --uid-owner "$SR_USER" -j REJECT');
   assert.doesNotMatch(setup, /-o lo/, 'no loopback exemption: DNS via 127.0.0.53 would stay open');
   const probes = at('curl -sS --max-time 5');
   const prIndex = at('project index "$SR_HOME/src"');
@@ -204,4 +204,48 @@ test('the Review step gives the MCP server time to start', () => {
 
 test('the global Serena config empties base_modes, which otherwise default to interactive and editing', () => {
   assert.match(serenaConfig, /\nbase_modes: \[\]\n/);
+});
+
+// Regressions from the PR #138 code review.
+test('setup-uv is pinned and cannot be steered by PR files (version, no cache, base working dir)', () => {
+  const uv = stepText('Set up uv for Serena');
+  assert.match(uv, /\n {8}with:\n {10}version: "\d+\.\d+\.\d+"\n {10}enable-cache: false\n {10}working-directory: \.review-base\n/);
+});
+
+test("Serena processes start in serena-runner's home, never in the workspace", () => {
+  assert.match(setup, /run_as\(\) \{ sudo -n -u "\$SR_USER" -H env -i -C "\$SR_HOME" /);
+  assert.match(setup, /-H env -i -C "\$SR_HOME" "HOME=/, 'the MCP command too');
+});
+
+test('relative-path probes from the workspace check the chmod that guards .git and RUNNER_TEMP', () => {
+  const chmod = at('chmod 700 "$GITHUB_WORKSPACE/.git" "$RUNNER_TEMP"');
+  const rel = at('sudo -n -u "$SR_USER" cat .git/config');
+  assert.ok(chmod < rel && rel < at('project index "$SR_HOME/src"'));
+  assert.match(setup, /sudo -n -u "\$SR_USER" ls "\$rel_temp"/);
+  assert.match(setup, /rel_temp="\$\(realpath --relative-to="\$PWD" "\$RUNNER_TEMP"\)"/);
+});
+
+test('the source copy tolerates PR-only files and takes .claude/pr-review from base', () => {
+  assert.match(setup, /--ignore-missing-args --from0 --files-from=-/);
+  const pattern = /grep -zvE '([^']+)'/.exec(setup)[1];
+  const excluded = new RegExp(pattern);
+  for (const p of ['.claude/pr-review/REVIEW.md', '.review-base/x.ts', '.review-publish/y.ts']) assert.ok(excluded.test(p), p);
+  assert.ok(!excluded.test('.claude/rules/react.md'), 'other .claude files still come from the PR head');
+  const base = at('.review-base/.claude/pr-review/ "$SR_HOME/src/.claude/pr-review/"');
+  assert.ok(at('--files-from=-') < base && base < at('sudo chown -R root:root "$SR_HOME/src"'), 'base copy before the chown');
+});
+
+test("a PR's .gitignore cannot hide tracked files from the review index", () => {
+  assert.match(projectYml, /\nignore_all_files_in_gitignore: false\n/);
+});
+
+test('a run with Serena enabled but not started says so under Not reviewed / limits', () => {
+  assert.match(review, /vars\.PR_REVIEW_SERENA == 'on' && steps\.facts\.outputs\.tier != 'none' && steps\.serena\.outputs\.prompt == '' && '[^']*code navigation unavailable[^']*## Not reviewed \/ limits[^']*' \|\| ''/);
+});
+
+test('a missing prompt override warns instead of failing under pipefail; Stop Serena re-kills; firewall rules go first', () => {
+  assert.match(setup, /overrides="\$\(\{ grep -lE [^}]*\|\| true; \} \| wc -l/);
+  const stop = stepText('Stop Serena');
+  assert.match(stop, /for _ in 1 2 3 4 5; do\n(?:.*\n)*? +sudo pkill -KILL -u serena-runner \|\| true\n/);
+  assert.doesNotMatch(setup, /iptables -A OUTPUT/);
 });
