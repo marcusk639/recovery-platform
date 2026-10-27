@@ -184,6 +184,7 @@ describe('activity service (integration)', () => {
       expect(approved?.status).toBe(ActivityStatus.RESOLVED);
       expect(approved?.disputed).toBe('successful');
       expect(approved?.incomplete).toBe(true);
+      expect(approved?.disputeOutcome).toBe('incomplete-per-residents');
       expect(approved?.disputeResolvedBy).toBe('admin-1');
     });
   });

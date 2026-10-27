@@ -76,6 +76,7 @@ import {
   disputeActivity,
   resolveDispute,
   verifyActivity,
+  DISPUTED_NOT_DELETABLE,
 } from '../activity';
 
 const permissionDenied = () =>
@@ -699,7 +700,7 @@ describe('Activity Service', () => {
       expect(touchedWeekSummaries()).toBe(false);
     });
 
-    it('deleteActivity of a DISPUTED activity does not touch week-summaries', async () => {
+    it('deleteActivity refuses a DISPUTED activity (never deleted) and touches no week-summaries', async () => {
       const activity = await logActivity(
         'guest123',
         'house456',
@@ -709,8 +710,9 @@ describe('Activity Service', () => {
       );
       await disputeActivity(activity.id, 'Not done', 'admin123');
 
-      await deleteActivity(activity.id);
+      await expect(deleteActivity(activity.id)).rejects.toThrow(DISPUTED_NOT_DELETABLE);
 
+      expect(mockActivities.find(a => a.id === activity.id)!.status).toBe(ActivityStatus.DISPUTED);
       expect(touchedWeekSummaries()).toBe(false);
     });
 
@@ -822,6 +824,44 @@ describe('Activity Service', () => {
     });
   });
 
+  describe('deleteActivity: never a disputed activity (owner rule)', () => {
+    const histories: Array<[string, Partial<Activity>]> = [
+      ['disputed', { status: ActivityStatus.DISPUTED, disputedBy: 'peer' }],
+      ['approved', { status: ActivityStatus.RESOLVED, disputed: 'successful', incomplete: true }],
+      ['rejected', { status: ActivityStatus.RESOLVED, disputed: 'rejected', incomplete: false }],
+      ['restored after a dispute', { status: ActivityStatus.ACTIVE, disputedBy: 'peer' }],
+      ['kept the old way', { status: ActivityStatus.RESOLVED, disputeResolvedBy: 'admin' }],
+    ];
+
+    it.each(histories)('refuses to delete a %s activity with a clear message', async (_label, fields) => {
+      const a = await logActivity(
+        'guest123',
+        'house456',
+        ActivityType.CHORE,
+        ActivityDataFactory.chore('daily', 'Kitchen'),
+        'user789',
+      );
+      Object.assign(mockActivities.find(x => x.id === a.id)!, fields);
+
+      await expect(deleteActivity(a.id)).rejects.toThrow(
+        'This activity has been disputed, so it cannot be deleted.',
+      );
+      expect(mockActivities.find(x => x.id === a.id)!.status).not.toBe(ActivityStatus.DELETED);
+    });
+
+    it('still deletes an activity that was never disputed', async () => {
+      const a = await logActivity(
+        'guest123',
+        'house456',
+        ActivityType.CHORE,
+        ActivityDataFactory.chore('daily', 'Kitchen'),
+        'user789',
+      );
+      await deleteActivity(a.id);
+      expect(mockActivities.find(x => x.id === a.id)!.status).toBe(ActivityStatus.DELETED);
+    });
+  });
+
   // ==========================================================================
   // disputeActivity Tests
   // ==========================================================================
@@ -908,7 +948,13 @@ describe('Activity Service', () => {
       expect(resolved.disputed).toBe('successful');
       expect(resolved.incomplete).toBe(true);
       expect(resolved.disputeResult).toBe('success');
+      expect(resolved.disputeOutcome).toBe('incomplete-per-residents');
       expect(countsTowardStats(resolved)).toBe(false);
+    });
+
+    it('a rejected dispute records no outcome', async () => {
+      await resolveDispute(activityId, 'admin456', 'reject');
+      expect(mockActivities.find(a => a.id === activityId)!.disputeOutcome).toBeUndefined();
     });
 
     it('should throw error if activity not found', async () => {

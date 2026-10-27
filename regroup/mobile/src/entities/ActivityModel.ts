@@ -35,6 +35,37 @@ export enum ActivityStatus {
  */
 export type DisputeOutcome = 'successful' | 'rejected';
 
+/** disputeOutcome written with an APPROVED dispute. */
+export const DISPUTE_OUTCOME_INCOMPLETE = 'incomplete-per-residents' as const;
+
+/** How an approved dispute is shown in the app. */
+export const SUCCESSFUL_DISPUTE_LABEL =
+  'Successfully disputed — residents of the house report this activity was not completed';
+
+/** An approved dispute: the residents report the activity was not completed. */
+export function isSuccessfullyDisputed(activity: unknown): boolean {
+  const a = (activity ?? {}) as { incomplete?: unknown; disputed?: unknown };
+  return a.incomplete === true || a.disputed === 'successful';
+}
+
+/**
+ * Any dispute history at all — an open dispute, a resolution, or any
+ * disputer / resolver / resolution time recorded. Owner rule: such an
+ * activity is never deleted; it ends only by APPROVE or REJECT. Mirrors
+ * hasDisputeHistory in firebase/firestore.rules.
+ */
+export function hasDisputeHistory(activity: unknown): boolean {
+  const a = (activity ?? {}) as Record<string, unknown>;
+  const set = (k: string) => a[k] !== undefined && a[k] !== null;
+  return (
+    a.status === ActivityStatus.DISPUTED ||
+    (a.status === ActivityStatus.RESOLVED && (set('disputed') || set('disputeResult'))) ||
+    set('disputeResolvedAt') ||
+    set('disputedBy') ||
+    set('disputeResolvedBy')
+  );
+}
+
 /** Statuses an activity list queries; countsTowardStats then drops incomplete. */
 export const LISTED_ACTIVITY_STATUSES: ActivityStatus[] = [
   ActivityStatus.ACTIVE,
@@ -77,6 +108,8 @@ export interface Activity {
   disputed?: DisputeOutcome;
   /** true when an approved dispute marks the activity as not done. */
   incomplete?: boolean;
+  /** Set with an APPROVED dispute: the residents report it was not completed. */
+  disputeOutcome?: typeof DISPUTE_OUTCOME_INCOMPLETE;
   disputeResolvedBy?: string;
   disputeResolvedAt?: Date | string;
 

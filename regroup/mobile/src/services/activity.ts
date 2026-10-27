@@ -7,6 +7,8 @@ import {
   ActivityStatus,
   LISTED_ACTIVITY_STATUSES,
   countsTowardStats,
+  hasDisputeHistory,
+  DISPUTE_OUTCOME_INCOMPLETE,
 } from '../entities/ActivityModel';
 import { WeekSummary } from '../entities/WeekSummary';
 import { logException } from '../util/logging';
@@ -292,6 +294,10 @@ export async function updateActivity(
   }
 }
 
+/** deleteActivity's refusal for an activity with dispute history. */
+export const DISPUTED_NOT_DELETABLE =
+  'This activity has been disputed, so it cannot be deleted. A dispute ends when a house admin approves or rejects it.';
+
 /**
  * Delete an activity (soft delete - sets status to DELETED)
  *
@@ -305,6 +311,11 @@ export async function deleteActivity(activityId: string): Promise<void> {
     if (!activity.exists) {
       throw new Error('Activity not found');
     }
+    // Owner rule: a disputed activity is never deleted; its dispute ends by
+    // APPROVE or REJECT. The rules refuse it too.
+    if (hasDisputeHistory(activity.data())) {
+      throw new Error(DISPUTED_NOT_DELETABLE);
+    }
 
     // Soft delete. The server trigger drops it from the week summary.
     await activityRef.update({
@@ -312,7 +323,9 @@ export async function deleteActivity(activityId: string): Promise<void> {
       loggedAt: FirebaseFirestore.FieldValue.serverTimestamp(),
     });
   } catch (error: any) {
-    if (error?.message === 'Activity not found') throw error;
+    if (error?.message === 'Activity not found' || error?.message === DISPUTED_NOT_DELETABLE) {
+      throw error;
+    }
     logException(error);
     throw new Error('Failed to delete activity');
   }
@@ -381,6 +394,8 @@ export async function resolveDispute(
       status: ActivityStatus.RESOLVED,
       disputed: approved ? 'successful' : 'rejected',
       incomplete: approved,
+      // The owner's wording: residents of the house report it was not done.
+      ...(approved ? { disputeOutcome: DISPUTE_OUTCOME_INCOMPLETE } : {}),
       disputeResult: approved ? 'success' : 'fail',
       disputeResolvedBy: resolvedBy,
       disputeResolvedAt: FirebaseFirestore.FieldValue.serverTimestamp() as any,

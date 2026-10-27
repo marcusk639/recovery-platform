@@ -144,10 +144,11 @@ jest.mock('../../../components/rats-icon', () => ({
 }));
 
 jest.mock('../../../components/card-list/card-list', () => ({
-  CardItem: ({ testID, rightButtonProps }: any) => {
+  CardItem: ({ testID, rightButtonProps, activityItems }: any) => {
     const { View, Text } = require('react-native');
     return (
       <View testID={testID || 'card-item'}>
+        {activityItems}
         {rightButtonProps?.title ? <Text>{`RIGHT:${rightButtonProps.title}`}</Text> : null}
       </View>
     );
@@ -524,6 +525,33 @@ describe('ActivityScreen', () => {
       const { getByTestId } = renderScreen();
       expect(within(getByTestId('activity-item-mine')).queryByText('RIGHT:DISPUTE')).toBeNull();
       expect(within(getByTestId('activity-item-theirs')).queryByText('RIGHT:DISPUTE')).toBeTruthy();
+    });
+  });
+
+  // ─── Owner rule: an approved dispute is shown, not deleted ────────────────
+  describe('successfully disputed activities', () => {
+    it('shows the "Successfully disputed" badge on an approved dispute, and no DISPUTE button', () => {
+      mockUseActivities.mockReturnValue({
+        activities: [
+          makeActivity('approved', {
+            type: 'meeting',
+            loggedBy: 'resident-7',
+            status: 'resolved',
+            disputed: 'successful',
+            incomplete: true,
+            disputeOutcome: 'incomplete-per-residents',
+            disputeResult: 'success',
+          }),
+          makeActivity('plain', { type: 'meeting', loggedBy: 'resident-7' }),
+        ],
+        loading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+      const { getByTestId, queryByTestId } = renderScreen();
+      expect(getByTestId('activity-dispute-outcome-approved')).toBeTruthy();
+      expect(queryByTestId('activity-dispute-outcome-plain')).toBeNull();
+      expect(within(getByTestId('activity-item-approved')).queryByText('RIGHT:DISPUTE')).toBeNull();
     });
   });
 

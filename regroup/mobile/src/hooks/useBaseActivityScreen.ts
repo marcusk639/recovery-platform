@@ -307,7 +307,7 @@ export const useBaseActivityScreen = (
     async (activity: Activity): Promise<void> => {
       return Alert.alert(
         'Approve dispute?',
-        'The activity is marked as not done and stops counting. It stays on record.',
+        'The activity will be marked "Successfully disputed": the residents of the house report it was not completed. It stops counting and stays on record (it is never deleted).',
         [
           { text: 'Cancel', onPress: () => null },
           {
