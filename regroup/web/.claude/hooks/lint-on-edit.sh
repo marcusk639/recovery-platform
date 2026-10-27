@@ -1,9 +1,9 @@
 #!/bin/bash
 # PostToolUse hook: runs TSLint on any TypeScript file Claude edits
+# Claude Code passes the tool call as JSON on stdin; no env var carries it.
 FILE=$(python3 -c "
-import sys, json, os
-d = json.loads(os.environ.get('CLAUDE_TOOL_INPUT', '{}'))
-print(d.get('file_path', ''))
+import sys, json
+print(json.load(sys.stdin).get('tool_input', {}).get('file_path', ''))
 " 2>/dev/null)
 
 if [[ "$FILE" == *.ts ]] && [[ -f "$FILE" ]]; then
