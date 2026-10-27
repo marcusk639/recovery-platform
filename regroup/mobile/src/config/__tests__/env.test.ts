@@ -98,3 +98,91 @@ describe('webBaseUrl', () => {
     expect(loadWithWebUrl(undefined).webBaseUrl()).toBe('https://regroup-app.com');
   });
 });
+
+describe('e2eVariant / isE2EBuild', () => {
+  const originalVariant = process.env.E2E_VARIANT;
+
+  const loadWithVariant = (variant?: string) => {
+    jest.resetModules();
+    if (variant === undefined) {
+      delete process.env.E2E_VARIANT;
+    } else {
+      process.env.E2E_VARIANT = variant;
+    }
+    return require(MODULE_PATH);
+  };
+
+  afterEach(() => {
+    jest.resetModules();
+    if (originalVariant === undefined) {
+      delete process.env.E2E_VARIANT;
+    } else {
+      process.env.E2E_VARIANT = originalVariant;
+    }
+  });
+
+  it('is null, and not an e2e build, when no variant was bundled', () => {
+    const env = loadWithVariant(undefined);
+    expect(env.e2eVariant()).toBeNull();
+    expect(env.isE2EBuild()).toBe(false);
+  });
+
+  it('is null for an empty variant', () => {
+    expect(loadWithVariant('').e2eVariant()).toBeNull();
+  });
+
+  it.each(['emulator', 'staging'])('recognises the %s variant as an e2e build', (variant) => {
+    const env = loadWithVariant(variant);
+    expect(env.e2eVariant()).toBe(variant);
+    expect(env.isE2EBuild()).toBe(true);
+  });
+
+  it('does not treat an unknown variant as an e2e build', () => {
+    const env = loadWithVariant('production');
+    expect(env.e2eVariant()).toBeNull();
+    expect(env.isE2EBuild()).toBe(false);
+  });
+
+  it('ignores __DEV__: a debug build without a variant is not an e2e build', () => {
+    expect(__DEV__).toBe(true);
+    expect(loadWithVariant(undefined).isE2EBuild()).toBe(false);
+  });
+});
+
+describe('babel.config.js E2E_VARIANT check', () => {
+  const originalVariant = process.env.E2E_VARIANT;
+
+  // babel.config.js reads process.env when it is loaded, so each case loads a
+  // fresh copy. Under Jest (NODE_ENV=test) it does not read .env.
+  const loadBabelConfig = (variant?: string) => {
+    if (variant === undefined) {
+      delete process.env.E2E_VARIANT;
+    } else {
+      process.env.E2E_VARIANT = variant;
+    }
+    let config: unknown;
+    jest.isolateModules(() => {
+      config = require('../../../babel.config.js');
+    });
+    return config;
+  };
+
+  afterEach(() => {
+    if (originalVariant === undefined) {
+      delete process.env.E2E_VARIANT;
+    } else {
+      process.env.E2E_VARIANT = originalVariant;
+    }
+  });
+
+  it.each([undefined, '', 'emulator', 'staging'])('bundles with E2E_VARIANT=%s', (variant) => {
+    expect(loadBabelConfig(variant)).toHaveProperty('presets');
+  });
+
+  it.each(['emulater', 'production', 'EMULATOR'])(
+    'refuses to bundle with an unrecognised E2E_VARIANT=%s',
+    (variant) => {
+      expect(() => loadBabelConfig(variant)).toThrow(/E2E_VARIANT/);
+    },
+  );
+});

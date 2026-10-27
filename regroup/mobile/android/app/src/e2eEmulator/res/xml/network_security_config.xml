@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  e2eEmulator only. The Firebase emulators listen on the host, which the Android
+  emulator reaches as 10.0.2.2, over plain HTTP. Cleartext is allowed to that
+  address and nowhere else; every other build type has no config and so no
+  cleartext (targetSdk >= 28).
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>

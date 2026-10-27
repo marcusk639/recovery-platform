@@ -545,7 +545,16 @@ jest.mock('react-native-webview', () => {
 jest.mock(
   './src/config/firebase-emulator',
   () => ({
-    connectToEmulators: jest.fn(),
+    connectToEmulators: jest.fn(() => Promise.resolve()),
+    emulatorHost: jest.fn(() => '127.0.0.1'),
+    emulatorPorts: jest.fn(() => ({ auth: 9099, firestore: 8080, storage: 9199, functions: 5001 })),
+    E2EEmulatorUnreachable: class E2EEmulatorUnreachable extends Error {},
   }),
   { virtual: true },
 );
+
+// Native module: its JS proxy throws on any access when the module is not linked.
+jest.mock('react-native-launch-arguments', () => ({
+  LaunchArguments: { value: jest.fn(() => ({})) },
+}));
+

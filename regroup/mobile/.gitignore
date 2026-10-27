@@ -88,3 +88,11 @@ maestro/output/
 
 # Build docs live under docs/build/ and are tracked.
 !docs/build/
+
+# e2eStaging Firebase config: copied at build time from ~/.config/regroup-e2e
+# (android/app/build.gradle, copyE2eStagingGoogleServices). Never commit it.
+/android/app/src/e2eStaging/google-services.json
+
+# E2EStaging iOS Firebase config: copied at build time from ~/.config/regroup-e2e
+# (scripts/ios-configure-e2e-bundle.sh). Never commit it.
+/ios/config/E2EStaging/GoogleService-Info.plist
