@@ -22,5 +22,10 @@
         ]
       }
     ]
+  },
+  "permissions": {
+    "deny": [
+      "Edit(/src/environments/environment.prod.ts)"
+    ]
   }
 }
