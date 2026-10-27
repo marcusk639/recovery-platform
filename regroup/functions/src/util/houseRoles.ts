@@ -25,10 +25,15 @@
  *
  * Record before claims: addAdminAuthorization, addGuestAuthorization and
  * promoteGuestsToAdmin write the record, then the claims. If the claims
- * write fails, a record with no claim is left: it grants nothing (every tier
- * check needs the live claim; the backfill's stale pass lowers it) and it
- * still ranks the account in the rules, so no lower staff can make a shadow
- * guest doc for it. The other order left an admin-claim holder with no
+ * write fails, a record with no matching claim is left. It grants nothing:
+ * every tier check here needs the live claim, and the rules count a caller's
+ * record only when a matching claim backs it (owner: superAdmin; manager or
+ * peer leader: admin), so an account with a lower claim keeps that claim's
+ * rank. As a TARGET it still ranks by the record (the rules cannot read
+ * another account's claims): no lower staff can make a shadow guest doc for
+ * it, and equal staff cannot discharge it (a manager or the owner can) until
+ * a retry succeeds or the backfill's stale pass lowers the record (it skips
+ * records granted in the last 10 minutes). The other order left an admin-claim holder with no
  * record, ranked 0 in the rules. redeemInvitation still writes the claims
  * first (its retry design needs the record and grantCompletedAt together);
  * a redeem stranded there is completed by the retry, and the backfill

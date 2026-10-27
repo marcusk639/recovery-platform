@@ -295,23 +295,29 @@ export const promoteGuestsToAdmin = onCall(async (request) => {
     }
   }
   const users = await getGuestsAsUsers(data);
-  await Promise.all(
-    users.map(async (user) => {
-      const guest = data.find((g) => g.userId === user.uid)!;
-      const claims = await createClaims(
-        user.uid,
-        [guest.houseId],
-        "admin",
-        false,
-      );
-      // Record first, then claims (util/houseRoles, "Record before claims").
-      await recordRoleGrant(guest.houseId, user.uid, "peerLeader", {
-        grantedBy: request.auth!.uid,
-        via: "promoteGuestsToAdmin",
-      });
-      await auth().setCustomUserClaims(user.uid, claims);
-    }),
-  );
+  try {
+    await Promise.all(
+      users.map(async (user) => {
+        const guest = data.find((g) => g.userId === user.uid)!;
+        const claims = await createClaims(
+          user.uid,
+          [guest.houseId],
+          "admin",
+          false,
+        );
+        // Record first, then claims (util/houseRoles, "Record before claims").
+        await recordRoleGrant(guest.houseId, user.uid, "peerLeader", {
+          grantedBy: request.auth!.uid,
+          via: "promoteGuestsToAdmin",
+        });
+        await auth().setCustomUserClaims(user.uid, claims);
+      }),
+    );
+  } catch (error) {
+    logger.error("promoteGuestsToAdmin: failed to set claims", { error });
+    if (error instanceof HttpsError) throw error;
+    throw new HttpsError("internal", "Failed to promote guests");
+  }
   return "success";
 });
 

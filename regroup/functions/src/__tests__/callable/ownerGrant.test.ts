@@ -154,4 +154,39 @@ describe('record before claims (verifier N-B): a failed claims write leaves a ra
     // No admin claim: the record alone is no tier (util/houseRoles needs the live claim).
     await expect(houseTierOf('m', H)).resolves.toBe('none');
   });
+
+  it('addGuestAuthorization: a failed claims write is reported as internal; the record stays and grants nothing', async () => {
+    as('owner');
+    mockAddHouseRoles.mockRejectedValueOnce(new Error('claims down'));
+    await expect(
+      (addGuestAuthorization as unknown as Function)({
+        data: { userId: 'p', houseId: H, isAdmin: true },
+        auth: OWNER,
+      }),
+    ).rejects.toMatchObject({ code: 'internal' });
+    expect(recordAt('p')()).toMatchObject({ tier: 'peerLeader' });
+    await expect(houseTierOf('p', H)).resolves.toBe('none');
+  });
+
+  it('promoteGuestsToAdmin with several guests: one failed claims write is reported as internal', async () => {
+    as('owner');
+    const restore = mockSetClaims.getMockImplementation()!;
+    mockSetClaims.mockImplementation(async (uid: string, c: Record<string, unknown>) => {
+      if (uid === 'r2') throw new Error('claims down');
+      mockUsers[uid] = JSON.parse(JSON.stringify(c));
+    });
+    await expect(
+      (promoteGuestsToAdmin as unknown as Function)({
+        data: [
+          { userId: 'r1', houseId: H },
+          { userId: 'r2', houseId: H },
+        ],
+        auth: OWNER,
+      }),
+    ).rejects.toMatchObject({ code: 'internal' });
+    expect(recordAt('r1')()).toMatchObject({ tier: 'peerLeader' });
+    expect(recordAt('r2')()).toMatchObject({ tier: 'peerLeader' });
+    expect(mockUsers.r2).toBeUndefined();
+    mockSetClaims.mockImplementation(restore);
+  });
 });

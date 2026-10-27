@@ -165,20 +165,26 @@ export async function recordRoleRevoke(
   uid: string,
   removed: 'admin' | 'superAdmin' | 'guest',
 ): Promise<void> {
-  const claims = await liveClaims(uid);
-  const cap: RoleTier | null = holds(claims, 'superAdmin', houseId)
-    ? 'owner'
-    : holds(claims, 'admin', houseId)
-      ? 'manager'
-      : holds(claims, 'guest', houseId)
-        ? 'resident'
-        : null;
   const ref = roleRef(houseId, uid);
   await admin.firestore().runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     const data = snap.exists ? (snap.data() ?? {}) : {};
     const current = parseTier(data.tier);
     if (!current || data.primary === true) return;
+    // Live claims read after the record (and again on a transaction retry):
+    // a grant writes its record before its claims, so a grant that lands
+    // while this runs either retries the transaction or is seen here. A
+    // grant whose record is written but whose claims are not yet can still
+    // lose the record; it then holds a claim with no record (peer leader,
+    // least privilege) until the backfill re-run records it.
+    const claims = await liveClaims(uid);
+    const cap: RoleTier | null = holds(claims, 'superAdmin', houseId)
+      ? 'owner'
+      : holds(claims, 'admin', houseId)
+        ? 'manager'
+        : holds(claims, 'guest', houseId)
+          ? 'resident'
+          : null;
     if (!cap) {
       tx.delete(ref);
     } else if (RANK[cap] < RANK[current]) {
