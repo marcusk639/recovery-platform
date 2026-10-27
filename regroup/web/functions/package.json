@@ -8,7 +8,7 @@
   "scripts": {
     "build": "tsc && cd .. && npm run build:copy-to-functions",
     "serve": "npm run build && firebase emulators:start --only functions",
-    "deploy": "npm run build && firebase deploy --only functions:ssr"
+    "deploy": "npm run build && firebase deploy --only functions:web:ssr"
   },
   "dependencies": {
     "firebase": "8.10.1",
