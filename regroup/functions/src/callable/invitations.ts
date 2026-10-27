@@ -6,15 +6,19 @@ import { parseInput } from '../validation';
 import { generateInvitationToken } from '../util/tokens';
 import { sendOneInviteEmail } from '../util/inviteEmails';
 import { addHouseRoles } from '../util/claims';
-import {
-  assertResidentCapacityAvailable,
-  recordResidentAccepted,
-  roleConsumesResidentSlot,
-} from '../util/residentCapacity';
-import { getHouse } from '../api/firestore';
 import { completeGrant, consumeInvitation, releaseInvitation } from '../util/admission';
-import { assertTierMayGrant, houseTierOf, INVITATION_TIER, isPrimaryOwner } from '../util/houseRoles';
-import { assertInviteeMayBeInvited, assertInviterStillMayIssue } from '../util/invitationChecks';
+import {
+  assertTierMayGrant,
+  houseTierOf,
+  INVITATION_TIER,
+  isPrimaryOwner,
+} from '../util/houseRoles';
+import {
+  assertInviteeMayBeInvited,
+  assertInviterStillMayIssue,
+  assertRedeemerMayAccept,
+} from '../util/invitationChecks';
+import { assertSlotForRole, recordSlotTaken } from '../util/inviteCapacity';
 import { enforceHouseEntitlement } from '../util/entitlement';
 import { Invitation, InvitationRole } from '../entities/Invitation';
 
@@ -129,6 +133,7 @@ export const createInvitation = onCall(async (request) => {
     callerEmail: request.auth.token?.email,
     invitedEmail: input.email,
     houseId: input.houseId,
+    role: input.role,
   });
 
   // Onboarding new people is product usage. Redeeming an already-sent
@@ -136,14 +141,9 @@ export const createInvitation = onCall(async (request) => {
   // operator lapsing after the invite went out.
   await enforceHouseEntitlement(house, input.houseId);
 
-  // ── Resident capacity: guest/senior-peer invitations consume a slot on
-  // the operator's subscription. Counts existing residents + outstanding
-  // pending invitations so an operator can't bypass the cap by sending many
-  // invitations at once and having them all accepted. Admin invitations
-  // grant house-staff access, not a resident/guest claim, so they're exempt.
-  if (roleConsumesResidentSlot(input.role)) {
-    await assertResidentCapacityAvailable(house.ownerId, input.houseId);
-  }
+  // Resident capacity (util/inviteCapacity): counts existing residents and
+  // pending invitations, so many invitations cannot all be accepted past the cap.
+  await assertSlotForRole(input.houseId, input.role);
 
   // ── Build + write the invitation doc ─────────────────────────────────
   const token = generateInvitationToken();
@@ -248,17 +248,14 @@ export const redeemInvitation = onCall(async (request) => {
     throw new HttpsError('permission-denied', 'Invitation was issued to a different email address');
   }
 
-  // ── Resident capacity re-check: the invitation may have been created
-  // before a downgrade, or may be racing another acceptance for the same
-  // house. Re-derive the owner from the house doc — inv.inviterUid may be
-  // an admin, not necessarily the billing owner who holds the subscription.
+  // Before granting: the inviter must still be able to issue the role; the
+  // caller is not the inviter nor already living here; capacity re-checked
+  // (the invitation may predate a downgrade or race another acceptance).
   let residentOwnerId: string | undefined;
-  // The inviter must still be able to issue this role (live tier).
-  if (willGrant) await assertInviterStillMayIssue(inv);
-  if (willGrant && roleConsumesResidentSlot(inv.role)) {
-    const house = await getHouse(inv.houseId);
-    residentOwnerId = house?.ownerId;
-    await assertResidentCapacityAvailable(residentOwnerId, inv.houseId);
+  if (willGrant) {
+    await assertInviterStillMayIssue(inv);
+    await assertRedeemerMayAccept(inv, callerUid);
+    residentOwnerId = await assertSlotForRole(inv.houseId, inv.role);
   }
 
   // Consume the invitation first, in a transaction, so of two concurrent
@@ -289,20 +286,7 @@ export const redeemInvitation = onCall(async (request) => {
   }
   await completeGrant(token, inv, callerUid, INVITATION_TIER[inv.role]);
 
-  if (roleConsumesResidentSlot(inv.role)) {
-    // Best-effort: the claim grant + invitation redemption above already
-    // succeeded, so a failure here must not fail the whole call — it would
-    // incorrectly report the redemption as failed after access was already
-    // granted. Occupancy tracking is a cap-enforcement input, not the
-    // privilege boundary.
-    try {
-      await recordResidentAccepted(residentOwnerId, inv.houseId);
-    } catch {
-      logger.warn('redeemInvitation: failed to record resident occupancy', {
-        houseId: inv.houseId,
-      });
-    }
-  }
+  await recordSlotTaken(residentOwnerId, inv.houseId, inv.role);
 
   logger.info('redeemInvitation: success', {
     callerUid,

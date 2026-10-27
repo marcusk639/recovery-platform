@@ -5,7 +5,7 @@
 import * as admin from 'firebase-admin';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
-import { Invitation } from '../entities/Invitation';
+import { Invitation, InvitationRole } from '../entities/Invitation';
 import { entitlingDocs } from './admission';
 import { isActiveGuestDoc } from './guestMembership';
 import { houseTierOf, INVITATION_TIER, MAY_GRANT_TIERS } from './houseRoles';
@@ -15,15 +15,16 @@ export const normalizeEmail = (e: unknown): string =>
 
 /**
  * Refuses an invitation to the inviter's own email (a staff member inviting
- * themselves as a resident to mint a second, eviction-proof record), and to
- * an account that already has an active entitling resident record in the
- * house. Ids only in logs.
+ * themselves as a resident to mint a second, eviction-proof record), and a
+ * guest invitation to an account that already has an active entitling
+ * resident record in the house. Ids only in logs.
  */
 export async function assertInviteeMayBeInvited(params: {
   callerUid: string;
   callerEmail: unknown;
   invitedEmail: string;
   houseId: string;
+  role: InvitationRole;
 }): Promise<void> {
   const invited = normalizeEmail(params.invitedEmail);
   if (invited && invited === normalizeEmail(params.callerEmail)) {
@@ -40,11 +41,11 @@ export async function assertInviteeMayBeInvited(params: {
   if (uid === params.callerUid) {
     throw new HttpsError('failed-precondition', 'You cannot invite yourself');
   }
-  const snap = await admin.firestore().collection('guests').where('userId', '==', uid).get();
-  const active = snap.docs.filter(
-    (d) => (d.data() ?? {}).houseId === params.houseId && isActiveGuestDoc(d.data() ?? {}),
-  );
-  if ((await entitlingDocs(uid, params.houseId, active)).length > 0) {
+  // A staff invitation (admin, senior-peer) may go to someone who already
+  // lives here: it is how the owner promotes a resident manager (the tier
+  // check above still applies).
+  if (params.role !== 'guest') return;
+  if (await livesIn(uid, params.houseId)) {
     logger.warn('createInvitation: invitee already lives in the house', {
       houseId: params.houseId,
     });
@@ -69,4 +70,31 @@ export async function assertInviterStillMayIssue(inv: Invitation): Promise<void>
     'failed-precondition',
     'This invitation is no longer valid: the person who sent it can no longer grant this role. Ask for a new invitation.',
   );
+}
+
+/** An account's active entitling resident records in the house (util/admission). */
+async function livesIn(uid: string, houseId: string): Promise<boolean> {
+  const snap = await admin.firestore().collection('guests').where('userId', '==', uid).get();
+  const active = snap.docs.filter(
+    (d) => (d.data() ?? {}).houseId === houseId && isActiveGuestDoc(d.data() ?? {}),
+  );
+  return (await entitlingDocs(uid, houseId, active)).length > 0;
+}
+
+/**
+ * At redeem: the inviter never redeems their own invitation, and a guest or
+ * senior-peer invitation is refused to an account that already lives in
+ * the house (no second resident record).
+ */
+export async function assertRedeemerMayAccept(inv: Invitation, callerUid: string): Promise<void> {
+  if (callerUid === inv.inviterUid) {
+    logger.warn('redeemInvitation: inviter redeeming own invitation refused', {
+      houseId: inv.houseId,
+    });
+    throw new HttpsError('failed-precondition', 'You cannot accept an invitation you sent');
+  }
+  if (inv.role !== 'admin' && (await livesIn(callerUid, inv.houseId))) {
+    logger.warn('redeemInvitation: already lives in the house', { houseId: inv.houseId });
+    throw new HttpsError('failed-precondition', 'You already have a resident record in this house');
+  }
 }

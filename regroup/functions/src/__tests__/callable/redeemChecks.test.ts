@@ -71,7 +71,7 @@ beforeEach(() => {
   mockCapacity.mockReset();
   mockRecordAccepted.mockReset();
   mem.seed(`houses/${H}`, { id: H, ownerId: 'owner' });
-  mem.seed(`house-roles/${H}_owner`, { tier: 'owner', primary: true });
+  mem.seed(`house-roles/${H}_owner`, { houseId: H, tier: 'owner', primary: true });
 });
 
 describe('invitations redeemed before #145 never regrant (B1 / I1)', () => {
@@ -173,4 +173,53 @@ it('a stranded redeem re-checks capacity and records occupancy (I4)', async () =
   await redeem('T'); // completed: no capacity check, no second occupancy record
   expect(mockCapacity).not.toHaveBeenCalled();
   expect(mockRecordAccepted).not.toHaveBeenCalled();
+});
+
+describe('round 5: staff invitations to residents, and who may redeem', () => {
+  it('the owner promotes a resident manager in the app: an admin invitation to someone who lives here (I3)', async () => {
+    emails['m@x.com'] = 'alice';
+    mem.seed('guests/m-doc', { houseId: H, userId: 'alice', status: 'active' });
+    mem.seed(`house-roles/${H}_alice`, { houseId: H, tier: 'peerLeader', via: 'backfill' });
+    users.alice = { admin: { [H]: true }, guest: { [H]: true } };
+    const { token } = await call(
+      createInvitation,
+      { email: 'm@x.com', houseId: H, role: 'admin' },
+      'owner',
+      'owner@x.com',
+    );
+    mem.seed(`invitations/${token}`, {
+      ...(mem.get(`invitations/${token}`) as object),
+      invitedEmail: 'm@x.com',
+    });
+    await redeem(token, 'alice', 'm@x.com');
+    expect(mem.get(`house-roles/${H}_alice`)).toMatchObject({ tier: 'manager' });
+  });
+
+  it('a guest invitation to someone who already lives here is still refused', async () => {
+    emails['r@x.com'] = 'res';
+    mem.seed('guests/r-doc', { houseId: H, userId: 'res', status: 'active' });
+    await expect(
+      call(
+        createInvitation,
+        { email: 'r@x.com', houseId: H, role: 'guest' },
+        'owner',
+        'owner@x.com',
+      ),
+    ).rejects.toMatchObject(failed);
+  });
+
+  it('the inviter can never redeem their own invitation (X6)', async () => {
+    mem.seed('invitations/T', invitation('guest', { invitedEmail: 'owner@x.com' }));
+    await expect(redeem('T', 'owner', 'owner@x.com')).rejects.toMatchObject(failed);
+    expect(mockSetClaims).not.toHaveBeenCalled();
+  });
+
+  it('a guest or senior-peer invitation is refused to someone who already lives here (X6)', async () => {
+    mem.seed('guests/a-doc', { houseId: H, userId: 'alice', status: 'active' });
+    for (const role of ['guest', 'senior-peer']) {
+      mem.seed('invitations/T', invitation(role));
+      await expect(redeem('T')).rejects.toMatchObject(failed);
+    }
+    expect(mockSetClaims).not.toHaveBeenCalled();
+  });
 });

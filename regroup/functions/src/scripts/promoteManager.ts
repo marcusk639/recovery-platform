@@ -55,6 +55,7 @@ export async function promoteManager(
   const snap = await ref.get();
   const from = snap.exists ? (((snap.data() ?? {}).tier as string) ?? null) : null;
   const record = nextRoleRecord(from, 'manager', {
+    houseId,
     grantedBy: 'owner-script',
     via: 'promoteScript',
   });

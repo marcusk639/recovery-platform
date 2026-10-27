@@ -174,7 +174,7 @@ export const createHousesTx = async (
   // with the house, so it can never be missing for a house createHouses made.
   // A retry re-writes the same record.
   ids.forEach((id) => {
-    tx.set(houseRolesCollection.doc(`${id}_${uid}`), primaryOwnerRecord(uid, 'createHouses'));
+    tx.set(houseRolesCollection.doc(`${id}_${uid}`), primaryOwnerRecord(uid, 'createHouses', id));
   });
   tx.update(userRef, {
     adminId,

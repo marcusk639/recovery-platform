@@ -1,11 +1,10 @@
-// House tiers (util/houseRoles), end to end on an in-memory store. A tier
-// comes ONLY from the server-only house-roles/{houseId}_{uid} record plus
-// ownerId / the superAdmin claim. Guest docs, admins docs and houseType are
-// never read, so no client write can raise or keep a tier.
-//   owner -> owner, manager, peer leader, resident
-//   manager -> peer leader, resident
-//   peer leader -> resident only (also: an admin-claim holder with no record)
-const mockSetClaims = jest.fn();
+// House tiers (util/houseRoles) end to end on an in-memory store: tiers come
+// only from house-roles records (the owner: the primary record) and live
+// claims, never guest docs, admins docs, ownerId or houseType. Claim writes
+// land in mockUsers, so revokes re-derive records from the claims left.
+const mockSetClaims = jest.fn(async (uid: string, c: Record<string, unknown>) => {
+  mockUsers[uid] = JSON.parse(JSON.stringify(c));
+});
 const mockAddHouseRoles = jest.fn();
 // LIVE claims per account: tier checks read these (getUser), never the token.
 const mockUsers: Record<string, Record<string, unknown>> = {};
@@ -16,7 +15,7 @@ jest.mock('firebase-admin', () => ({
     getUserByEmail: async () => {
       throw Object.assign(new Error('no user'), { code: 'auth/user-not-found' });
     },
-    setCustomUserClaims: (...a: unknown[]) => mockSetClaims(...a),
+    setCustomUserClaims: (uid: string, c: Record<string, unknown>) => mockSetClaims(uid, c),
   }),
 }));
 jest.mock('firebase-functions', () => ({
@@ -36,7 +35,11 @@ jest.mock('../../util/inviteEmails', () => ({ sendOneInviteEmail: jest.fn() }));
 jest.mock('../../util/authGuard', () => ({ assertCanGrantClaimForHouses: jest.fn() }));
 jest.mock('../../util/claims', () => ({
   createClaims: jest.fn(async () => ({})),
-  deleteClaim: jest.fn(async () => ({})),
+  deleteClaim: jest.fn(async (uid: string, houses: string[], role: string) => {
+    const c = JSON.parse(JSON.stringify(mockUsers[uid] ?? {}));
+    for (const h of houses) delete (c[role] ?? {})[h];
+    return c;
+  }),
   addHouseRoles: (...a: unknown[]) => mockAddHouseRoles(...a),
 }));
 jest.mock('../../util/user', () => ({
@@ -78,9 +81,14 @@ const denied = { code: 'permission-denied' };
 const roleOf = (uid: string) => mem.get(`house-roles/${H}_${uid}`) as any;
 const tier = (c: Caller) => houseTierOf(c.uid, H);
 
+let baseline: string | undefined;
 beforeEach(() => {
+  // Every test starts from the claims registered by as() at load time.
+  baseline = baseline ?? JSON.stringify(mockUsers);
+  for (const k of Object.keys(mockUsers)) delete mockUsers[k];
+  Object.assign(mockUsers, JSON.parse(baseline));
   mem.reset();
-  mockSetClaims.mockReset();
+  mockSetClaims.mockClear();
   mockAddHouseRoles.mockReset();
   mem.seed(`houses/${H}`, { id: H, ownerId: 'owner', houseType: 'traditional' });
   // The owner is the server-only primary owner record (createHouses / backfill).
@@ -233,6 +241,7 @@ describe('revocations update the record', () => {
 
   it('removing owner access leaves a manager', async () => {
     mem.seed(`house-roles/${H}_o2`, { tier: 'owner', via: 'addAdminAuthorization' });
+    mockUsers.o2 = { admin: { [H]: true }, superAdmin: { [H]: true } };
     await run(
       deleteAdminAuthorization,
       { admin: { userId: 'o2' }, adminHouseIds: [], superAdminHouseIds: [H] },

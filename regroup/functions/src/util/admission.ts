@@ -165,6 +165,7 @@ export async function completeGrant(
       return;
     }
     const record = nextRoleRecord(roleSnap.exists ? (roleSnap.data() ?? {}).tier : null, tier, {
+      houseId: inv.houseId,
       grantedBy: inv.inviterUid,
       via: 'invitation',
       invitationId: token,

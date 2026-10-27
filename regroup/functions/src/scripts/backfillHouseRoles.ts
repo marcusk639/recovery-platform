@@ -11,10 +11,13 @@
  *   npm run migrate:house-roles:apply
  *
  * Passes:
- *  1. Owners: every house's ownerId gets the PRIMARY owner record
- *     { tier: 'owner', primary: true }, read now, before any client can
- *     rewrite ownerId under the new code. From then on ownership is the
- *     record, never ownerId.
+ *  0. Every record gets its houseId field.
+ *  1. Owners: a house with no primary record gets one for its superAdminId
+ *     { tier: 'owner', primary: true } (superAdminId is set only by
+ *     createHouses and server-only in every rules version; ownerId is not).
+ *     Where ownerId disagrees, superAdminId wins and the house is listed;
+ *     with no superAdminId nothing is written and the house is listed.
+ *     A house never gets a second primary, so re-runs are safe.
  *  2. Invitations: every redeemed invitation without grantCompletedAt gets
  *     one (= redeemedAt), so an old token can never regrant (the redeem
  *     treats a redeemed invitation without grantPending as completed anyway).
@@ -27,21 +30,26 @@
  *       everyone else -> peerLeader (least privilege), listed for the owner
  *         with the reason (every staff-not-resident row included).
  *  4. Stale records: a record whose claims are gone (a departure or removal
- *     done by the old code between runs) is lowered or removed:
+ *     done by the old code between runs), checked against the account's
+ *     claims re-read just before (lookup errors skip the record; records
+ *     granted after the run started are skipped), is lowered or removed:
  *     co-owner without superAdmin -> manager (admin) / resident (guest) /
  *     none; manager or peer leader without admin -> resident (guest) / none;
  *     resident without guest -> none. Primary owner records are kept.
  * Existing records are never raised by the backfill, and a record created
- * meanwhile wins (create races are skipped). Output is ids, tiers, reasons.
+ * meanwhile wins (create races are skipped). The review list starts with
+ * has-guest-doc and active-resident-isAdmin rows. Output is ids, tiers, reasons.
  */
 import './scriptBootstrap';
 import * as admin from 'firebase-admin';
 import { isActiveGuestDoc } from '../util/guestMembership';
 import { emulatorEnvError } from './findGhostGuests';
+import { listedOrOwnerGranted, printRoleReport } from './backfillHouseRolesReport';
 import type { RoleTier } from '../util/houseRoles';
 
 type Claims = Record<string, unknown>;
 interface AuthLike {
+  getUser(uid: string): Promise<{ customClaims?: Claims }>;
   listUsers(
     max: number,
     pageToken?: string,
@@ -63,6 +71,8 @@ export interface RoleBackfillReport {
   invitationsStamped: number;
   /** Records lowered (tier) or removed ('none') because the claims are gone. */
   stale: RoleBackfillRow[];
+  /** Houses whose owner needs a look: superAdminId missing, or disagreeing with ownerId. */
+  ownerReview: Array<{ houseId: string; reason: string }>;
 }
 
 const houseKeys = (v: unknown): string[] => {
@@ -89,9 +99,11 @@ export async function backfillHouseRoles(
     review: [],
     invitationsStamped: 0,
     stale: [],
+    ownerReview: [],
   };
   const now = (opts.now ?? new Date()).toISOString();
-  const record = (tier: RoleTier, primary = false) => ({
+  const record = (houseId: string, tier: RoleTier, primary = false) => ({
+    houseId,
     tier,
     grantedBy: 'backfill',
     grantedAt: now,
@@ -109,17 +121,35 @@ export async function backfillHouseRoles(
     for (const u of page.users) claimsOf.set(u.uid, u.customClaims ?? {});
   } while (pageToken);
 
-  // 1. Primary owners, from ownerId as it is now.
+  // 0. Every record carries its houseId (records from before it existed).
+  const houseOf = (id: string) => id.slice(0, id.lastIndexOf('_'));
+  const primaryHouses = new Set<string>();
+  for (const d of (await roles.get()).docs) {
+    const r = d.data() ?? {};
+    if (r.primary === true) primaryHouses.add(houseOf(d.id));
+    if (opts.apply && r.houseId !== houseOf(d.id)) await d.ref.update({ houseId: houseOf(d.id) });
+  }
+
+  // 1. Primary owners, from superAdminId: set only by createHouses and
+  // server-only in every rules version, unlike ownerId (a superAdmin can
+  // rewrite ownerId until #145's rules deploy). Written only for a house
+  // with no primary record yet, so a re-run never adds a second owner.
   const houses = new Map<string, Record<string, unknown>>();
   for (const h of (await db.collection('houses').get()).docs) {
     const house = (h.data() ?? {}) as Record<string, unknown>;
     houses.set(h.id, house);
-    if (typeof house.ownerId !== 'string' || !house.ownerId) continue;
-    const ref = roles.doc(`${h.id}_${house.ownerId}`);
-    const cur = await ref.get();
-    if (cur.exists && (cur.data() ?? {}).primary === true) continue;
-    report.owners.push({ uid: house.ownerId, houseId: h.id, tier: 'owner', reason: 'ownerId' });
-    if (opts.apply) await ref.set(record('owner', true));
+    const owner = typeof house.superAdminId === 'string' ? house.superAdminId : '';
+    if (!owner) {
+      report.ownerReview.push({ houseId: h.id, reason: 'no-superAdminId: no primary written' });
+      continue;
+    }
+    if (house.ownerId !== owner) {
+      report.ownerReview.push({ houseId: h.id, reason: 'ownerId-disagrees: superAdminId used' });
+    }
+    if (primaryHouses.has(h.id)) continue;
+    primaryHouses.add(h.id);
+    report.owners.push({ uid: owner, houseId: h.id, tier: 'owner', reason: 'superAdminId' });
+    if (opts.apply) await roles.doc(`${h.id}_${owner}`).set(record(h.id, 'owner', true));
   }
 
   // 2. Redeemed invitations: mark the grant completed.
@@ -138,8 +168,8 @@ export async function backfillHouseRoles(
     const guestDocs = (await db.collection('guests').where('userId', '==', uid).get()).docs;
     for (const houseId of staffHouses) {
       const ref = roles.doc(`${houseId}_${uid}`);
-      // The house's ownerId account: pass 1 gave it the primary owner record.
-      if (houses.get(houseId)?.ownerId === uid) continue;
+      // The house's owner: pass 1 gave it the primary owner record.
+      if (houses.get(houseId)?.superAdminId === uid) continue;
       if ((await ref.get()).exists) {
         report.existing += 1;
         continue;
@@ -168,7 +198,7 @@ export async function backfillHouseRoles(
       }
       if (opts.apply) {
         try {
-          await ref.create(record(row.tier as RoleTier));
+          await ref.create(record(houseId, row.tier as RoleTier));
         } catch (err) {
           // A grant recorded meanwhile wins; never overwrite it.
           if (!isAlreadyExists(err)) throw err;
@@ -188,7 +218,20 @@ export async function backfillHouseRoles(
     const i = d.id.lastIndexOf('_');
     const houseId = d.id.slice(0, i);
     const uid = d.id.slice(i + 1);
-    const c = claimsOf.get(uid);
+    // A grant recorded after the run started is newer than anything read here.
+    if (typeof r.grantedAt === 'string' && r.grantedAt > now) continue;
+    // Re-read this account's live claims right before acting, so a grant made
+    // since the listing is never deleted; an unexpected error skips the record.
+    let c: Claims;
+    try {
+      c = (await authClient.getUser(uid)).customClaims ?? {};
+    } catch (err) {
+      if ((err as { code?: string }).code !== 'auth/user-not-found') {
+        report.stale.push({ uid, houseId, tier: r.tier, reason: 'skipped: claims lookup failed' });
+        continue;
+      }
+      c = {};
+    }
     const fallback: RoleTier | 'none' = has(c, 'admin', houseId)
       ? 'manager'
       : has(c, 'guest', houseId)
@@ -207,47 +250,11 @@ export async function backfillHouseRoles(
       else await d.ref.update({ tier: next });
     }
   }
+  // Review rows that matter first: staff who are (or were) residents here.
+  const order = ['has-guest-doc', 'active-resident-isAdmin'];
+  const rank = (r: RoleBackfillRow) => (order.includes(r.reason) ? order.indexOf(r.reason) : 9);
+  report.review.sort((a, b) => rank(a) - rank(b));
   return report;
-}
-
-/** Listed in the house's adminIds through an admins doc of the account, or invited as admin by the owner. */
-async function listedOrOwnerGranted(
-  db: FirebaseFirestore.Firestore,
-  uid: string,
-  houseId: string,
-  house: Record<string, unknown>,
-): Promise<boolean> {
-  const adminIds = Array.isArray(house.adminIds) ? (house.adminIds as unknown[]) : [];
-  const adminDocs = (await db.collection('admins').where('userId', '==', uid).get()).docs;
-  if (adminDocs.some((d) => adminIds.includes(d.id))) return true;
-  const invites = (await db.collection('invitations').where('redeemedByUid', '==', uid).get()).docs;
-  return invites.some((d) => {
-    const inv = d.data() ?? {};
-    return inv.houseId === houseId && inv.role === 'admin' && inv.inviterUid === house.ownerId;
-  });
-}
-
-export function printRoleReport(report: RoleBackfillReport, apply: boolean): void {
-  const rows = (title: string, list: RoleBackfillRow[]) => {
-    if (list.length === 0) return;
-    console.log(`\n${title}\nuid\thouseId\ttier\treason`);
-    for (const r of list) console.log(`${r.uid}\t${r.houseId}\t${r.tier}\t${r.reason}`);
-  };
-  console.log(`Mode: ${apply ? 'APPLY (writes)' : 'DRY RUN (no writes)'}: house-roles records`);
-  console.log(`Existing records left alone: ${report.existing}`);
-  console.log(`Redeemed invitations marked completed: ${report.invitationsStamped}`);
-  rows('Primary owners (from ownerId):', report.owners);
-  rows(`Staff records ${apply ? 'written' : 'to write'}:`, report.toWrite);
-  rows(
-    'Recorded as peerLeader (least privilege); owner to review. Promote real managers by\n' +
-      'sending them an admin invitation, or: npm run roles:promote-manager -- --house H --uid U',
-    report.review,
-  );
-  rows(
-    `Stale records ${apply ? 'lowered/removed' : 'to lower/remove'} (claims gone):`,
-    report.stale,
-  );
-  if (!apply) console.log('\nNothing was written. Re-run with --apply to commit.');
 }
 
 if (require.main === module) {
