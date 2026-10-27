@@ -81,6 +81,17 @@ describe('run', () => {
     expect(output).not.toContain('r1');
   });
 
+  it('warns that a duplicate-account hit may be the real record (deleting it can revoke access)', async () => {
+    await run(makeDb([docs[0], docs[4]]), makeAuth(users));
+    const output = logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+    expect(output).toContain('the doc listed may be the real record');
+  });
+
+  it('prints no duplicate warning when there is no duplicate', async () => {
+    await run(makeDb(docs.filter((d) => d.id !== 'dupe')), makeAuth(users));
+    expect(logSpy.mock.calls.flat().join(' ')).not.toContain('may be the real record');
+  });
+
   it('reports a clean scan', async () => {
     const result = await run(makeDb([docs[0], docs[1]]), makeAuth(users));
     expect(result.suspects).toEqual([]);

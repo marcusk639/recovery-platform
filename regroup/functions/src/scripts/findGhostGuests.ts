@@ -28,6 +28,14 @@
  *                      not key users/{uid}); never looked up, and not counted
  *                      by onGuestWrite either
  *   duplicate-account  a second guest doc for the same account in the house
+ *                      (whichever the scan reached second, which can be the
+ *                      resident's real record). Never delete one on this
+ *                      report alone: deleting a guest doc revokes the
+ *                      account's house claims unless another doc of theirs
+ *                      still counts (onGuestWrite, util/admission
+ *                      entitlingDocs: the doc bound to their invitation
+ *                      ticket, not flagged in guest-flags). Merge the two
+ *                      docs, or confirm which one counts first.
  *   no-house           the doc has no houseId
  * Docs with no userId (admin intake, CSV import) are not flagged: only an
  * admin could create those. Claims are read live, so a guest whose claim was
@@ -43,11 +51,7 @@ import {
 } from '../util/guestMembership';
 
 export type SuspectReason =
-  | 'no-claim'
-  | 'account-missing'
-  | 'invalid-userid'
-  | 'duplicate-account'
-  | 'no-house';
+  'no-claim' | 'account-missing' | 'invalid-userid' | 'duplicate-account' | 'no-house';
 
 export interface Suspect {
   guestId: string;
@@ -105,6 +109,13 @@ export async function run(
   // details, uids or amounts.
   for (const s of result.suspects) {
     console.log(`${s.guestId}\t${s.houseId || '(none)'}\t${s.reason}`);
+  }
+  if (result.suspects.some((s) => s.reason === 'duplicate-account')) {
+    console.log(
+      '\nduplicate-account: the doc listed may be the real record. Deleting a guest doc ' +
+        "revokes the account's house claims unless another of its docs still counts; " +
+        'merge the docs or confirm which one counts before deleting either.',
+    );
   }
   console.log('\nNothing was written.');
   return result;
