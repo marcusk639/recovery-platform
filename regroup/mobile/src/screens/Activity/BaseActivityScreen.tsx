@@ -8,7 +8,12 @@ import {
   color,
 } from '../../styles/theme';
 import { STAT_MAP, getDateAndTime } from '../../util/display';
-import { Activity, ActivityType } from '../../entities/ActivityModel';
+import {
+  Activity,
+  ActivityType,
+  isSuccessfullyDisputed,
+  SUCCESSFUL_DISPUTE_LABEL,
+} from '../../entities/ActivityModel';
 import { Guest } from '../../entities/Guest';
 import { Guests, Admins } from '../../types';
 import { CardItem, ActivityItem } from '../../components/card-list/card-list';
@@ -276,6 +281,17 @@ export const RenderActivity: React.FC<RenderActivityProps> = ({
                   description={getActivityDescription(activity)}
                   descriptionHeader={STAT_MAP[activity.type]?.activityLabel}
                 />
+                {/* Approved dispute: kept on record, marked as not completed (owner rule) */}
+                {isSuccessfullyDisputed(activity) && (
+                  <View testID={`activity-dispute-outcome-${activity.id}`}>
+                    <ActivityItem
+                      container={{ marginBottom: normalize(10) }}
+                      type="bad"
+                      description={SUCCESSFUL_DISPUTE_LABEL}
+                      descriptionHeader="Successfully disputed"
+                    />
+                  </View>
+                )}
                 {/* Verification badge - visible when admin has verified the activity */}
                 {activity.verified && (
                   <View testID={`activity-verification-badge-${activity.id}`}>

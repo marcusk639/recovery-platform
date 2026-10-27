@@ -2105,7 +2105,7 @@ describe("houses/{houseId} — update: sensitive fields restricted to superAdmin
       );
     });
 
-    test("ALLOW a superAdmin updating monthlyRent/weeklyRent/adminIds/ownerId", async () => {
+    test("ALLOW a superAdmin updating monthlyRent/weeklyRent/adminIds, but not ownerId (server-only, #145)", async () => {
       await seedHouse();
       const ctx = testEnv.authenticatedContext(
         ADMIN_UID,
@@ -2116,9 +2116,9 @@ describe("houses/{houseId} — update: sensitive fields restricted to superAdmin
           monthlyRent: 999,
           weeklyRent: 250,
           adminIds: [ADMIN_UID, OTHER_UID],
-          ownerId: OTHER_UID,
         }),
       );
+      await assertFails(updateDoc(houseRef(ctx), { ownerId: OTHER_UID }));
     });
 
     test("ALLOW a superAdmin updating a non-sensitive field", async () => {
@@ -2143,13 +2143,27 @@ describe("houses/{houseId} — update: sensitive fields restricted to superAdmin
       );
     });
 
-    test("ALLOW a guest updating a non-sensitive field", async () => {
+    test("DENY a guest updating an ordinary house field (residents may write only their own flows' fields)", async () => {
       await seedHouse();
       const ctx = testEnv.authenticatedContext(
         GUEST_UID,
         authHouseGuest(GUEST_UID, HOUSE_ID),
       );
-      await assertSucceeds(updateDoc(houseRef(ctx), { name: "Renamed House" }));
+      await assertFails(updateDoc(houseRef(ctx), { name: "Renamed House" }));
+      await assertFails(updateDoc(houseRef(ctx), { disputes: { forged: { activityId: "a1" } } }));
+    });
+
+    test("ALLOW a guest writing complaints, issues and currentCapacity (their own flows' fields)", async () => {
+      await seedHouse();
+      const ctx = testEnv.authenticatedContext(
+        GUEST_UID,
+        authHouseGuest(GUEST_UID, HOUSE_ID),
+      );
+      await assertSucceeds(updateDoc(houseRef(ctx), { complaints: { c1: { description: "noise" } } }));
+      await assertSucceeds(updateDoc(houseRef(ctx), { issues: { i1: { description: "leak" } } }));
+      await assertSucceeds(updateDoc(houseRef(ctx), { currentCapacity: 3 }));
+      await assertFails(updateDoc(houseRef(ctx), { rooms: {} }));
+      await assertFails(updateDoc(houseRef(ctx), { phases: {} }));
     });
   });
 });
@@ -2717,13 +2731,14 @@ describe("houses/{houseId} — subscriptionStatus is server-owned", () => {
     );
   });
 
-  it("still allows a guest to edit an ordinary field on a v2 house", async () => {
+  it("still allows a guest to file a complaint on a v2 house", async () => {
     // Positive control for the guest denial above: the guest branch is open
-    // for ordinary fields, so the denial is the stripeAccountApi guard.
+    // for the fields residents' own flows write (complaints, issues, ...), so
+    // the denial is not a blanket guest denial.
     await seedV2House();
     await assertSucceeds(
       updateDoc(houseDocAs(GUEST_UID, authHouseGuest(GUEST_UID, HOUSE_ID)), {
-        name: "Renamed House",
+        complaints: { c1: { description: "noise" } },
       }),
     );
   });

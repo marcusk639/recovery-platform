@@ -125,6 +125,7 @@ describe("complianceExport — entitled CSV export", () => {
         legalStatus: "probation",
         phase: 2,
         houseId: "house-1",
+        userId: "resident-uid",
       },
     ]);
     mockGetDrugTestsForGuest.mockResolvedValue([
@@ -141,6 +142,8 @@ describe("complianceExport — entitled CSV export", () => {
     mockGetMeetingActivitiesForGuest.mockResolvedValue([
       {
         timestamp: "2026-06-02T10:00:00.000Z",
+        houseId: "house-1",
+        loggedBy: "resident-uid",
         verified: true,
         data: { meetingName: "Morning AA", meetingType: "AA", duration: 60 },
       },
@@ -204,7 +207,7 @@ describe("complianceExport — entitled CSV export", () => {
   it("filters out records outside the [startDate, endDate] window", async () => {
     entitledTraditional();
     mockGetGuestsForHouse.mockResolvedValue([
-      { id: "g1", displayName: "Jane", houseId: "house-1", phase: 1 },
+      { id: "g1", displayName: "Jane", houseId: "house-1", phase: 1, userId: "resident-uid" },
     ]);
     mockGetDrugTestsForGuest.mockResolvedValue([
       { testDate: "2026-05-01", result: "positive", testType: "urine" }, // before window
@@ -213,10 +216,14 @@ describe("complianceExport — entitled CSV export", () => {
     mockGetMeetingActivitiesForGuest.mockResolvedValue([
       {
         timestamp: "2026-07-01T10:00:00.000Z", // after window
+        houseId: "house-1",
+        loggedBy: "resident-uid",
         data: { meetingName: "Late Meeting" },
       },
       {
         timestamp: "2026-06-10T10:00:00.000Z", // in window
+        houseId: "house-1",
+        loggedBy: "resident-uid",
         data: { meetingName: "In Window Meeting" },
       },
     ]);
@@ -377,6 +384,7 @@ describe("complianceExport — entitled PDF export", () => {
         legalStatus: "probation",
         phase: 2,
         houseId: "house-1",
+        userId: "resident-uid",
       },
     ]);
     mockGetDrugTestsForGuest.mockResolvedValue([
@@ -393,6 +401,8 @@ describe("complianceExport — entitled PDF export", () => {
     mockGetMeetingActivitiesForGuest.mockResolvedValue([
       {
         timestamp: "2026-06-02T10:00:00.000Z",
+        houseId: "house-1",
+        loggedBy: "resident-uid",
         verified: true,
         data: { meetingName: "Morning AA", meetingType: "AA", duration: 60 },
       },

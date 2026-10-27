@@ -67,7 +67,6 @@ import { firestore } from '../../../firebase-setup';
 import * as crud from '../crud';
 import { updateDispute, createDispute } from '../dispute';
 import { Dispute } from '../../entities/Dispute';
-import { Notification } from '../../entities/Notification';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -91,11 +90,6 @@ const makeDispute = (overrides: Partial<Dispute> = {}): Dispute => ({
   ...overrides,
 });
 
-const makeNotification = (id: string): Notification => {
-  const n = new Notification();
-  (n as any).id = id;
-  return n;
-};
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
@@ -110,34 +104,35 @@ describe('dispute service', () => {
 
   describe('updateDispute', () => {
     it('calls firestore.batch()', async () => {
-      await updateDispute({ id: 'h1' } as any, { id: 'g1' } as any, []);
+      await updateDispute({ id: 'h1' } as any);
       expect(firestore.batch).toHaveBeenCalledTimes(1);
     });
 
     it('commits the batch', async () => {
-      await updateDispute({ id: 'h1' } as any, { id: 'g1' } as any, []);
+      await updateDispute({ id: 'h1' } as any);
       expect(getBatch().commit).toHaveBeenCalledTimes(1);
     });
 
-    it('calls batch.update twice — once for house, once for guest', async () => {
-      await updateDispute({ id: 'h1' } as any, { id: 'g1' } as any, []);
-      expect(getBatch().update).toHaveBeenCalledTimes(2);
+    it('calls batch.update once — the house only, never the disputed guest\'s doc', async () => {
+      await updateDispute({ id: 'h1' } as any);
+      expect(getBatch().update).toHaveBeenCalledTimes(1);
+      expect(getBatch().update).toHaveBeenCalledWith(expect.anything(), { id: 'h1' });
     });
 
-    it('does not call batch.set when no dispute or notifications are provided', async () => {
-      await updateDispute({ id: 'h1' } as any, { id: 'g1' } as any, []);
+    it('does not call batch.set when no resolvedDispute is provided', async () => {
+      await updateDispute({ id: 'h1' } as any);
       expect(getBatch().set).not.toHaveBeenCalled();
     });
 
     it('calls batch.set once when a resolvedDispute is provided', async () => {
       const dispute = makeDispute({ id: 'd1' });
-      await updateDispute({ id: 'h1' } as any, { id: 'g1' } as any, [], dispute);
+      await updateDispute({ id: 'h1' } as any, dispute);
       expect(getBatch().set).toHaveBeenCalledTimes(1);
     });
 
     it('writes the resolvedDispute to the disputes collection', async () => {
       const dispute = makeDispute({ id: 'd1' });
-      await updateDispute({ id: 'h1' } as any, { id: 'g1' } as any, [], dispute);
+      await updateDispute({ id: 'h1' } as any, dispute);
       // batch.set is called with (docRef, disputeData)
       expect(getBatch().set).toHaveBeenCalledWith(
         expect.anything(),
@@ -145,23 +140,22 @@ describe('dispute service', () => {
       );
     });
 
-    it('calls batch.set once per notification', async () => {
-      const notes: Notification[] = [makeNotification('n1'), makeNotification('n2')];
-      await updateDispute({ id: 'h1' } as any, { id: 'g1' } as any, notes);
-      expect(getBatch().set).toHaveBeenCalledTimes(2);
+    it('never creates notifications (the onActivityWritten function sends them)', async () => {
+      await updateDispute({ id: 'h1' } as any);
+      expect(getBatch().set).not.toHaveBeenCalled();
+      expect(getBatch().update).toHaveBeenCalledTimes(1);
     });
 
-    it('calls batch.set for both a resolvedDispute and notifications', async () => {
+    it('with a resolvedDispute, writes only the /disputes archive', async () => {
       const dispute = makeDispute({ id: 'd1' });
-      const notes: Notification[] = [makeNotification('n1'), makeNotification('n2')];
-      await updateDispute({ id: 'h1' } as any, { id: 'g1' } as any, notes, dispute);
-      // 1 dispute + 2 notifications = 3 batch.set calls
-      expect(getBatch().set).toHaveBeenCalledTimes(3);
+      await updateDispute({ id: 'h1' } as any, dispute);
+      expect(getBatch().set).toHaveBeenCalledTimes(1);
+      expect(getBatch().update).toHaveBeenCalledTimes(1);
     });
 
     it('still commits the batch even when a resolvedDispute is provided', async () => {
       const dispute = makeDispute({ id: 'd1' });
-      await updateDispute({ id: 'h1' } as any, { id: 'g1' } as any, [], dispute);
+      await updateDispute({ id: 'h1' } as any, dispute);
       expect(getBatch().commit).toHaveBeenCalledTimes(1);
     });
   });

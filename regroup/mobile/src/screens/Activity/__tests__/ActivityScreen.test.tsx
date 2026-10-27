@@ -24,6 +24,12 @@ jest.mock('../../../hooks/useSelectedGuest', () => ({
 
 // ─── Navigation mock ──────────────────────────────────────────────────────────
 jest.mock('@react-navigation/native-stack', () => ({}));
+// S3: open disputes come from the server-owned live list, not house.disputes.
+const mockLiveError = jest.fn((): Error | null => null);
+const mockLiveRetry = jest.fn();
+jest.mock('../../../hooks/useLiveHouseDisputes', () => ({
+  useLiveHouseDisputes: () => ({ disputes: {}, error: mockLiveError(), retry: mockLiveRetry }),
+}));
 
 // ─── Context mocks ────────────────────────────────────────────────────────────
 const mockShowFormModal = jest.fn();
@@ -144,9 +150,14 @@ jest.mock('../../../components/rats-icon', () => ({
 }));
 
 jest.mock('../../../components/card-list/card-list', () => ({
-  CardItem: ({ testID }: any) => {
-    const { View } = require('react-native');
-    return <View testID={testID || 'card-item'} />;
+  CardItem: ({ testID, rightButtonProps, activityItems }: any) => {
+    const { View, Text } = require('react-native');
+    return (
+      <View testID={testID || 'card-item'}>
+        {activityItems}
+        {rightButtonProps?.title ? <Text>{`RIGHT:${rightButtonProps.title}`}</Text> : null}
+      </View>
+    );
   },
   ActivityItem: ({ testID }: any) => {
     const { View } = require('react-native');
@@ -191,7 +202,7 @@ jest.mock('../ActivityFilterForm', () => ({
 
 // ─── React imports (after mocks) ──────────────────────────────────────────────
 import React from 'react';
-import { render, fireEvent, act } from '@testing-library/react-native';
+import { render, fireEvent, act, within } from '@testing-library/react-native';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -505,7 +516,94 @@ describe('ActivityScreen', () => {
     });
   });
 
+  // ─── Owner rule: DISPUTE only on other people's activities ────────────────
+  describe('DISPUTE button (owner rule)', () => {
+    it("is not offered on an activity the viewer logged, but is on someone else's", () => {
+      mockUseActivities.mockReturnValue({
+        activities: [
+          makeActivity('mine', { type: 'meeting', loggedBy: 'admin-1' }),
+          makeActivity('theirs', { type: 'meeting', loggedBy: 'resident-7' }),
+        ],
+        loading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+      const { getByTestId } = renderScreen();
+      expect(within(getByTestId('activity-item-mine')).queryByText('RIGHT:DISPUTE')).toBeNull();
+      expect(within(getByTestId('activity-item-theirs')).queryByText('RIGHT:DISPUTE')).toBeTruthy();
+    });
+  });
+
+  // ─── Owner rule: an approved dispute is shown, not deleted ────────────────
+  describe('successfully disputed activities', () => {
+    it('shows the "Successfully disputed" badge on an approved dispute, and no DISPUTE button', () => {
+      mockUseActivities.mockReturnValue({
+        activities: [
+          makeActivity('approved', {
+            type: 'meeting',
+            loggedBy: 'resident-7',
+            status: 'resolved',
+            disputed: 'successful',
+            incomplete: true,
+            disputeOutcome: 'incomplete-per-residents',
+            disputeResult: 'success',
+          }),
+          makeActivity('plain', { type: 'meeting', loggedBy: 'resident-7' }),
+        ],
+        loading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+      const { getByTestId, queryByTestId } = renderScreen();
+      expect(getByTestId('activity-dispute-outcome-approved')).toBeTruthy();
+      expect(queryByTestId('activity-dispute-outcome-plain')).toBeNull();
+      expect(within(getByTestId('activity-item-approved')).queryByText('RIGHT:DISPUTE')).toBeNull();
+    });
+
+    it('hides the badge while the dispute is pending again (decision undone), and whenever it still counts', () => {
+      mockUseActivities.mockReturnValue({
+        activities: [
+          makeActivity('reopened', {
+            type: 'meeting',
+            loggedBy: 'resident-7',
+            status: 'disputed',
+            disputed: null,
+            incomplete: null,
+            disputeOutcome: null,
+            reopenedBy: 'mgr',
+          }),
+          // Inconsistent legacy data: 'successful' but counted.
+          makeActivity('counted', {
+            type: 'meeting',
+            loggedBy: 'resident-7',
+            status: 'resolved',
+            disputed: 'successful',
+            incomplete: false,
+          }),
+        ],
+        loading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+      const { getByTestId, queryByTestId } = renderScreen();
+      expect(getByTestId('activity-item-reopened')).toBeTruthy();
+      expect(queryByTestId('activity-dispute-outcome-reopened')).toBeNull();
+      expect(queryByTestId('activity-dispute-outcome-counted')).toBeNull();
+    });
+  });
+
   // ─── Help popover ─────────────────────────────────────────────────────────
+  describe('live dispute list', () => {
+    it('6: shows that disputes could not be loaded, and retries on tap', () => {
+      mockLiveError.mockReturnValue(new Error('denied'));
+      const { getByTestId } = renderScreen();
+      expect(getByTestId('activity-disputes-load-error').props.accessibilityRole).toBe('button');
+      fireEvent.press(getByTestId('activity-disputes-load-error'));
+      expect(mockLiveRetry).toHaveBeenCalledTimes(1);
+      mockLiveError.mockReturnValue(null);
+    });
+  });
+
   describe('help icon', () => {
     it('calls showPopover when the help icon is pressed', () => {
       const { getByTestId } = renderScreen();
