@@ -329,14 +329,6 @@ export const onGuestWrite = onDocumentWritten(
 
       if (eesSnap.empty) return;
 
-      // Count only guest docs whose account holds a claim for this house (or
-      // admin-entered residents with no account). A doc a stranger created in
-      // this house must not change what real residents owe. Checked after the
-      // EES query so houses without open records cost no Auth lookups.
-      const activeCount = (await selectLegitimateGuests(activeGuests, houseId))
-        .length;
-      if (activeCount === 0) return;
-
       // Records created by the app (mobile createEESRecords) carry a
       // per-resident amount but no totalExpenses. Treating the missing total
       // as 0 zeroed every unpaid record of the week on any guest write, so
@@ -350,6 +342,15 @@ export const onGuestWrite = onDocumentWritten(
         });
         return;
       }
+
+      // Count only guest docs whose account holds a claim for this house (or
+      // admin-entered residents with no account). A doc a stranger created in
+      // this house must not change what real residents owe. Checked after the
+      // EES query and the total check so most writes cost no Auth lookups.
+      const activeCount = (await selectLegitimateGuests(activeGuests, houseId))
+        .length;
+      if (activeCount === 0) return;
+
       const newAmount = totalExpenses > 0 ? totalExpenses / activeCount : 0;
 
       const batch = ratsFirestore.batch();
