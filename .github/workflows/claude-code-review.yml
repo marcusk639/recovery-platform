@@ -120,21 +120,27 @@ jobs:
         run: |
           set -euo pipefail
           cfg=.review-base/.claude/pr-review/serena
-          if [ ! -f "$cfg/project.yml" ] || [ ! -f "$cfg/serena_config.yml" ] || [ ! -f "$cfg/prompt_templates/review_prompts.yml" ]; then
+          # Exactly one base template must override connection_prompt: the only Serena text the
+          # reviewer receives up front. Two overrides make Serena refuse to start.
+          overrides="$(grep -lE '^  connection_prompt:' "$cfg"/prompt_templates/*.yml 2>/dev/null | wc -l | tr -d ' ')"
+          if [ ! -f "$cfg/project.yml" ] || [ ! -f "$cfg/serena_config.yml" ] || [ "$overrides" != "1" ]; then
             echo "::warning::Serena config not on base; reviewing without code navigation"
             exit 0
           fi
           sudo useradd --create-home --shell /usr/sbin/nologin "$SR_USER"
           sudo chmod 700 "$SR_HOME"
           SR_PATH="$SR_HOME/.local/bin:$(dirname "$(command -v uv)"):$(dirname "$(command -v node)"):/usr/local/bin:/usr/bin:/bin"
-          run_as() { sudo -n -u "$SR_USER" -H env -i "HOME=$SR_HOME" "PATH=$SR_PATH" "SERENA_HOME=$SR_HOME/serena-home" "$@"; }
+          # SERENA_USAGE_REPORTING: env -i drops CI/GITHUB_ACTIONS, which Serena checks to skip its
+          # startup usage report, so opt out explicitly.
+          run_as() { sudo -n -u "$SR_USER" -H env -i "HOME=$SR_HOME" "PATH=$SR_PATH" "SERENA_HOME=$SR_HOME/serena-home" SERENA_USAGE_REPORTING=false "$@"; }
           run_as uv tool install --python 3.13 "serena-agent==$SERENA_VERSION"
           SERENA_BIN="$SR_HOME/.local/bin/serena"
           sudo install -d -o "$SR_USER" -m 700 "$SR_HOME/serena-home"
           sudo install -o "$SR_USER" -m 600 "$cfg/serena_config.yml" "$SR_HOME/serena-home/serena_config.yml"
-          # Review guidance replaces Serena's connection prompt (see prompt_templates/review_prompts.yml).
+          # Review guidance replaces Serena's connection prompt (see prompt_templates/).
+          # Serena reads every .yml there, so install them all; the file name does not matter.
           sudo install -d -o "$SR_USER" -m 700 "$SR_HOME/serena-home/prompt_templates"
-          sudo install -o "$SR_USER" -m 600 "$cfg/prompt_templates/review_prompts.yml" "$SR_HOME/serena-home/prompt_templates/review_prompts.yml"
+          sudo install -o "$SR_USER" -m 600 "$cfg"/prompt_templates/*.yml "$SR_HOME/serena-home/prompt_templates/"
           # Network on, PR code absent: install the pinned TypeScript language server by
           # indexing a throwaway one-file project. The PR's code is indexed only offline.
           sudo install -d -o "$SR_USER" -m 700 "$SR_HOME/ls-warmup" "$SR_HOME/ls-warmup/.serena"
@@ -185,7 +191,7 @@ jobs:
           if run_as touch "$probe_file" 2>/dev/null; then
             echo "::error::serena-runner can write the source copy"; exit 1
           fi
-          extra="$(run_as env | grep -cvE '^(HOME|PATH|SERENA_HOME)=' || true)"
+          extra="$(run_as env | grep -cvE '^(HOME|PATH|SERENA_HOME|SERENA_USAGE_REPORTING)=' || true)"
           if [ "$extra" != "0" ]; then
             echo "::error::serena-runner environment is not empty"; exit 1
           fi
@@ -197,7 +203,7 @@ jobs:
           run_as "$SERENA_BIN" project index "$SR_HOME/src" --log-level WARNING --timeout 30
           python3 -c 'import json, sys; json.dump({"mcpServers": {"serena": {"command": "sudo", "args": sys.argv[2:]}}}, open(sys.argv[1], "w"))' \
             "$RUNNER_TEMP/serena-mcp.json" \
-            -n -u "$SR_USER" -H env -i "HOME=$SR_HOME" "PATH=$SR_PATH" "SERENA_HOME=$SR_HOME/serena-home" \
+            -n -u "$SR_USER" -H env -i "HOME=$SR_HOME" "PATH=$SR_PATH" "SERENA_HOME=$SR_HOME/serena-home" SERENA_USAGE_REPORTING=false \
             "$SERENA_BIN" start-mcp-server --context claude-code --project "$SR_HOME/src" \
             --mode no-onboarding --mode no-memories --log-level WARNING
           {

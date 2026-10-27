@@ -2,7 +2,7 @@
 // arguments unchanged when off, pinning, isolation, and the base-controlled config.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -76,7 +76,9 @@ test("Serena gets a copy of tracked files without .git or the PR's .serena/, the
 test('the MCP server runs as serena-runner with an empty environment', () => {
   assert.match(setup, /SR_USER: serena-runner\n/);
   assert.match(setup, /"command": "sudo", "args": sys\.argv\[2:\]/);
-  assert.match(setup, /\n {12}-n -u "\$SR_USER" -H env -i "HOME=\$SR_HOME" "PATH=\$SR_PATH" "SERENA_HOME=\$SR_HOME\/serena-home" \\\n/);
+  assert.match(setup, /\n {12}-n -u "\$SR_USER" -H env -i "HOME=\$SR_HOME" "PATH=\$SR_PATH" "SERENA_HOME=\$SR_HOME\/serena-home" SERENA_USAGE_REPORTING=false \\\n/);
+  // env -i drops CI/GITHUB_ACTIONS, which Serena checks to skip its startup usage report.
+  assert.match(setup, /run_as\(\) \{ [^}]*SERENA_USAGE_REPORTING=false "\$@"; \}/);
   assert.match(setup, /--mode no-onboarding --mode no-memories/);
 });
 
@@ -173,7 +175,11 @@ test('the copy probes use a real source file from the copy, never a fixed path t
 });
 
 test("the review guidance replaces Serena's connection prompt and names only the reviewer's tools", () => {
-  const tpl = readFileSync(join(ROOT, '.claude/pr-review/serena/prompt_templates/review_prompts.yml'), 'utf8');
+  // Serena reads every .yml in prompt_templates/; exactly one may override connection_prompt.
+  const dir = join(ROOT, '.claude/pr-review/serena/prompt_templates');
+  const overriding = readdirSync(dir).filter((f) => /\.ya?ml$/.test(f)).filter((f) => /\n {2}connection_prompt:/.test(readFileSync(join(dir, f), 'utf8')));
+  assert.equal(overriding.length, 1, `exactly one connection_prompt override, got ${overriding.join(', ')}`);
+  const tpl = readFileSync(join(dir, overriding[0]), 'utf8');
   const m = /\nprompts:\n {2}connection_prompt: \|\n((?: {4}.*\n|\n)+)/.exec(tpl);
   assert.ok(m, 'connection_prompt override is a non-empty block');
   const prompt = m[1];
@@ -186,11 +192,16 @@ test("the review guidance replaces Serena's connection prompt and names only the
   // initial_prompt only travels through initial_instructions, which is not allowed: keep it empty.
   assert.match(projectYml, /\ninitial_prompt: ""\n/);
   // The setup step installs the override into SERENA_HOME before Serena starts, and requires it.
-  const install = at('"$cfg/prompt_templates/review_prompts.yml" "$SR_HOME/serena-home/prompt_templates/review_prompts.yml"');
+  const install = at('"$cfg"/prompt_templates/*.yml "$SR_HOME/serena-home/prompt_templates/"');
   assert.ok(install < at('project index "$SR_HOME/ls-warmup"'));
-  assert.match(setup, /\[ ! -f "\$cfg\/prompt_templates\/review_prompts\.yml" \]/);
+  assert.match(setup, /grep -lE '\^  connection_prompt:' "\$cfg"\/prompt_templates\/\*\.yml/);
+  assert.match(setup, /\[ "\$overrides" != "1" \]/, 'Serena stays off unless exactly one override exists');
 });
 
 test('the Review step gives the MCP server time to start', () => {
   assert.match(review, /\n {8}env:\n {10}MCP_TIMEOUT: "\d+"\n/);
+});
+
+test('the global Serena config empties base_modes, which otherwise default to interactive and editing', () => {
+  assert.match(serenaConfig, /\nbase_modes: \[\]\n/);
 });
