@@ -145,3 +145,17 @@ describe('staff create never self-links (no eviction-proof record of their own)'
     );
   });
 });
+
+describe('moving a guest doc to another house', () => {
+  it('needs an admin of both houses (confirmed, unchanged)', async () => {
+    await assertFails(updateDoc(doc(db('mgr', MANAGER), 'guests/res'), { houseId: 'houseB' }));
+    const both = { admin: { [H]: true, houseB: true } };
+    await assertSucceeds(updateDoc(doc(db('op', both), 'guests/res'), { houseId: 'houseB' }));
+  });
+
+  it('a resident cannot move their own doc', async () => {
+    await assertFails(
+      updateDoc(doc(db('resident', RESIDENT), 'guests/res'), { houseId: 'houseB' }),
+    );
+  });
+});

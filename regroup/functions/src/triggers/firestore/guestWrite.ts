@@ -16,8 +16,11 @@ import { eventAgeMinutes, isStaleEvent, RETRY_CUTOFF_MS } from '../../util/event
 //
 // Fires on every create, update or delete of guests/{guestId}.
 //
-// DELETE, or an UPDATE that takes a doc from active to departed
-// (isActiveGuestDoc true -> false: discharged, expelled, inactive, moved out):
+// DELETE, an UPDATE that takes a doc from active to departed
+// (isActiveGuestDoc true -> false: discharged, expelled, inactive, moved out),
+// or an UPDATE that moves the doc to another house (a departure from the old
+// house; the old house's EES week is re-split too, and the new house's
+// claims are never granted here):
 //   revokes the account's guest claim for the house, and its admin
 //   claim, unless something still entitles the account to them:
 //   - an ACTIVE guest doc of the account in the house (isActiveGuestDoc: not
@@ -74,8 +77,16 @@ export const onGuestWrite = onDocumentWritten(
       !!before &&
       isActiveGuestDoc(before) &&
       !isActiveGuestDoc(guestData);
+    // A move to another house is a departure from the old one.
+    const moved =
+      !isDelete &&
+      !isCreate &&
+      !!before &&
+      typeof before.houseId === 'string' &&
+      before.houseId !== '' &&
+      before.houseId !== houseId;
     // The account and house the departing doc belonged to.
-    const leaving = isDelete ? guestData : departed ? before : undefined;
+    const leaving = isDelete ? guestData : departed || moved ? before : undefined;
 
     // Settle the ticket (see header). Runs even for a late event (a missed
     // settle would leave the ticket open until it expires); a late failure is
@@ -125,6 +136,14 @@ export const onGuestWrite = onDocumentWritten(
       });
     }
 
+    // A move: the old house loses a counted resident, so its week re-splits
+    // too (same function and rules as a delete). The new house is processed
+    // below as a normal write; its claims are never granted here.
+    if (!stale && moved && leftHouse) {
+      await resplitEES(leftHouse, event.time).catch((e) =>
+        remember('EES recalculation (old house)', e),
+      );
+    }
     if (!stale && houseId) {
       await resplitEES(houseId, event.time).catch((e) => remember('EES recalculation', e));
     }

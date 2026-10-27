@@ -159,3 +159,80 @@ describe('docs with no createdBy (older builds): flagged only under a ticket', (
     expect(mem.get('guest-flags/a')).toBeUndefined();
   });
 });
+
+describe('a move to another house is a departure from the old house', () => {
+  const H2 = 'h2';
+  const time = '2026-10-28T12:00:00Z';
+  const week = '2026-10-26';
+  const moveEvent = (
+    guestId: string,
+    from: Record<string, unknown>,
+    to: Record<string, unknown>,
+  ) => ({
+    id: `evt-move-${guestId}`,
+    time,
+    params: { guestId },
+    data: { before: { exists: true, data: () => from }, after: { exists: true, data: () => to } },
+  });
+  const move = async (userId: string) => {
+    const from = { houseId: H, userId, status: 'active' };
+    const to = { houseId: H2, userId, status: 'active' };
+    mem.seed(`guests/${userId}-doc`, to);
+    await run(moveEvent(`${userId}-doc`, from, to));
+  };
+
+  it("revokes the old house's guest claim and never grants the new house's", async () => {
+    users.r = { guest: { [H]: true } };
+    await move('r');
+    expect(users.r.guest).toEqual({});
+  });
+
+  it("revokes a peer leader's admin claim for the old house, and removes the record", async () => {
+    users.p = { admin: { [H]: true }, guest: { [H]: true } };
+    mem.seed(`house-roles/${H}_p`, { tier: 'peerLeader', via: 'invitation' });
+    await move('p');
+    expect(users.p).toEqual({ admin: {}, guest: {}, superAdmin: {} });
+    expect(mem.get(`house-roles/${H}_p`)).toBeUndefined();
+  });
+
+  it("keeps a manager's admin claim for the old house", async () => {
+    users.m = { admin: { [H]: true }, guest: { [H]: true } };
+    mem.seed(`house-roles/${H}_m`, { tier: 'manager', via: 'invitation' });
+    await move('m');
+    expect(users.m.admin).toEqual({ [H]: true });
+  });
+
+  it('another entitling doc in the old house keeps the claims', async () => {
+    users.r = { guest: { [H]: true } };
+    mem.seed('guests/r-other', { houseId: H, userId: 'r', status: 'active' });
+    await move('r');
+    expect(users.r.guest).toEqual({ [H]: true });
+  });
+
+  it("re-splits the old house's EES week over the residents left there", async () => {
+    users.a = { guest: { [H]: true } };
+    users.b = { guest: { [H]: true } };
+    users.r = { guest: { [H]: true } };
+    mem.seed('guests/a', { houseId: H, userId: 'a', status: 'active' });
+    mem.seed('guests/b', { houseId: H, userId: 'b', status: 'active' });
+    const rec = { houseId: H, weekStart: week, paid: false, totalExpenses: 300, amount: 100 };
+    mem.seed('ees-records/ea', { ...rec, guestId: 'a' });
+    mem.seed('ees-records/eb', { ...rec, guestId: 'b' });
+    mem.seed('ees-records/er', { ...rec, guestId: 'r-doc' });
+
+    await move('r');
+
+    expect(mem.get('ees-records/ea')?.amount).toBe(150);
+    expect(mem.get('ees-records/eb')?.amount).toBe(150);
+    expect(mem.get('ees-records/er')?.amount).toBe(100); // the mover's record is left alone
+  });
+
+  it('a redelivered move is a no-op', async () => {
+    users.r = { guest: { [H]: true } };
+    await move('r');
+    mockSetClaims.mockClear();
+    await move('r');
+    expect(mockSetClaims).not.toHaveBeenCalled();
+    expect(users.r.guest).toEqual({});
+  });
+});
