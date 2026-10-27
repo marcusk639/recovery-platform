@@ -120,9 +120,10 @@ describe('run', () => {
     expect(s.activityCount).toBe(2);
   });
 
-  it('restores activities kept after a dispute (resolved), which the old client dropped', async () => {
+  it('counts pending disputes and legacy kept (resolved) activities the old client dropped, not approved ones', async () => {
     db.seed('activities', 'kept', activity({ status: 'resolved' }));
     db.seed('activities', 'pending', activity({ type: 'meeting', status: 'disputed' }));
+    db.seed('activities', 'approved', activity({ type: 'medication', status: 'resolved', incomplete: true }));
     db.seed('week-summaries', `g1_${WEEK}`, {
       guestId: 'g1',
       houseId: 'h1',
@@ -137,7 +138,8 @@ describe('run', () => {
 
     const s = db.read('week-summaries', `g1_${WEEK}`)!;
     expect(s.stats.choresCompleted).toBe(1);
-    expect(s.stats.meetingsAttended).toBe(0);
+    expect(s.stats.meetingsAttended).toBe(1);
+    expect(s.stats.medicationTaken).toBe(0);
   });
 
   it('creates summaries that do not exist yet', async () => {

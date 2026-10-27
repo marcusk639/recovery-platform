@@ -11,6 +11,7 @@ import {
   getMeetingActivitiesForGuest,
 } from "../api/firestore";
 import { tierAllows } from "../util/tierPricing";
+import { countsTowardSummary, toInstant } from "../activities/weekSummaryMath";
 import { parseInput } from "../validation";
 
 const complianceExportSchema = z.object({
@@ -48,6 +49,8 @@ interface MeetingActivity {
   timestamp?: string;
   loggedAt?: string;
   verified?: boolean;
+  status?: string;
+  incomplete?: boolean;
   data?: {
     meetingName?: string;
     meetingType?: string;
@@ -114,6 +117,14 @@ function inWindow(dateIso: string, start?: string, end?: string): boolean {
   return true;
 }
 
+// Activity docs store timestamp/loggedAt as Firestore Timestamps; the export
+// compares and prints ISO strings. Without this, datePart() called .slice on
+// a Timestamp and the export threw for any resident with a logged meeting.
+function withIsoDates(m: MeetingActivity): MeetingActivity {
+  const iso = (v: unknown) => toInstant(v)?.toISOString();
+  return { ...m, timestamp: iso(m.timestamp), loggedAt: iso(m.loggedAt) };
+}
+
 // In-memory per-resident export bundle. Both the CSV and PDF renderers consume
 // this shared structure so the two formats can never drift apart.
 interface ResidentExport {
@@ -154,9 +165,15 @@ async function gatherExportData(
         tests: tests.filter((t) =>
           inWindow(t.testDate ?? "", startDate, endDate)
         ),
-        meetings: meetings.filter((m) =>
-          inWindow(m.timestamp ?? m.loggedAt ?? "", startDate, endDate)
-        ),
+        // Attendance rows are the meetings that COUNT, by the same rule as the
+        // weekly numbers: not deleted, and not an approved dispute
+        // (incomplete). Pending and rejected disputes are included.
+        meetings: meetings
+          .filter(countsTowardSummary)
+          .map(withIsoDates)
+          .filter((m) =>
+            inWindow(m.timestamp ?? m.loggedAt ?? "", startDate, endDate)
+          ),
       };
     })
   );

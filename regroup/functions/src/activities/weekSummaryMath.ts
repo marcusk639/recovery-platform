@@ -8,12 +8,14 @@
  * agree. The server has no device, so it uses the house's `timezone`, falling
  * back to the same default as mobile util/dateWithTimezone.
  *
- * An activity counts iff its status is `active` or `resolved`. `resolved` is
- * what resolveDispute('keep') writes: an admin upheld it, so it counts again.
- * (The old client recompute counted only `active`, so every dispute removed
- * the activity for good even when kept.) A pending dispute (`disputed`) does
- * not count until resolved; `deleted` never counts. Mobile's activity lists
- * use the same set (COUNTED_ACTIVITY_STATUSES in entities/ActivityModel).
+ * Counting rule (owner's dispute model): every activity counts unless it is
+ * deleted (`status: 'deleted'`) or an admin approved a dispute against it
+ * (`incomplete: true`, written with `disputed: 'successful'`). So a pending
+ * dispute (`disputed`) keeps counting, and a rejected one (`resolved`,
+ * `disputed: 'rejected'`) counts. Data written before this model: an old
+ * `resolved` (the former "keep") counts, an old `deleted` (the former
+ * "delete") does not. Mobile applies the same rule (countsTowardStats in
+ * entities/ActivityModel), as does the court compliance export.
  *
  * dailyStats is keyed by the house-local date. The client keyed it by the UTC
  * date, which put Sunday-evening activities on a Monday outside the week;
@@ -48,6 +50,8 @@ export interface ActivityLike {
   status?: unknown;
   timestamp?: unknown;
   data?: unknown;
+  /** true once an admin approves a dispute: the activity was not done. */
+  incomplete?: unknown;
 }
 
 const DAY_MS = 86_400_000;
@@ -149,11 +153,9 @@ export function toInstant(value: unknown): Date | null {
   return d && !Number.isNaN(d.getTime()) ? d : null;
 }
 
-/** Statuses that count: active, and a dispute resolved as "keep". */
-export const COUNTED_STATUSES: readonly string[] = ['active', 'resolved'];
-
+/** Counts unless deleted or marked incomplete by an approved dispute. */
 export function countsTowardSummary(activity: ActivityLike): boolean {
-  return typeof activity.status === 'string' && COUNTED_STATUSES.includes(activity.status);
+  return activity.status !== 'deleted' && activity.incomplete !== true;
 }
 
 export function summaryDocId(guestId: string, weekStart: string): string {

@@ -127,12 +127,15 @@ describe('toInstant', () => {
 });
 
 describe('countsTowardSummary', () => {
-  it('counts active and kept (resolved) activities; not pending disputes or deleted', () => {
+  it('counts every activity except deleted ones and approved disputes (incomplete)', () => {
     expect(countsTowardSummary({ status: 'active' })).toBe(true);
-    expect(countsTowardSummary({ status: 'disputed' })).toBe(false);
-    expect(countsTowardSummary({ status: 'resolved' })).toBe(true);
-    expect(countsTowardSummary({ status: 'deleted' })).toBe(false);
-    expect(countsTowardSummary({})).toBe(false);
+    expect(countsTowardSummary({ status: 'disputed' })).toBe(true); // pending keeps counting
+    expect(countsTowardSummary({ status: 'resolved', disputed: 'rejected' } as never)).toBe(true);
+    expect(countsTowardSummary({ status: 'resolved', incomplete: true })).toBe(false); // approved
+    expect(countsTowardSummary({ status: 'resolved' })).toBe(true); // legacy "keep"
+    expect(countsTowardSummary({ status: 'deleted' })).toBe(false); // incl. legacy "delete"
+    expect(countsTowardSummary({ status: 'active', incomplete: false })).toBe(true);
+    expect(countsTowardSummary({})).toBe(true); // no status field: counts
   });
 });
 
@@ -201,20 +204,21 @@ describe('aggregateWeek', () => {
     expect(result.dailyStats['2026-01-19']).toBeUndefined();
   });
 
-  it('ignores disputed and deleted activities but counts kept (resolved) ones', () => {
+  it('counts pending and rejected disputes, not approved disputes or deleted activities', () => {
     const result = aggregateWeek(
       [
         act('chore', '2026-01-12T15:00:00Z', { status: 'disputed' }),
-        act('chore', '2026-01-12T15:00:00Z', { status: 'resolved' }),
+        act('chore', '2026-01-12T15:00:00Z', { status: 'resolved', disputed: 'rejected', incomplete: false }),
+        act('chore', '2026-01-12T15:00:00Z', { status: 'resolved', disputed: 'successful', incomplete: true }),
         act('chore', '2026-01-12T15:00:00Z', { status: 'deleted' }),
         act('meeting', '2026-01-12T15:00:00Z'),
       ],
       WEEK,
       CHICAGO,
     );
-    expect(result.stats.choresCompleted).toBe(1);
+    expect(result.stats.choresCompleted).toBe(2);
     expect(result.stats.meetingsAttended).toBe(1);
-    expect(result.activityCount).toBe(2);
+    expect(result.activityCount).toBe(3);
   });
 
   it('ignores activities outside the week and ones without a usable timestamp', () => {

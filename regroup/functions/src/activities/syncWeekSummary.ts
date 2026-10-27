@@ -219,6 +219,7 @@ export function contributionKey(data: Data | undefined): string | null {
     data.loggedBy,
     at ? at.getTime() : null,
     data.status,
+    data.incomplete === true,
     data.type,
     (data.data as Data | null | undefined)?.hoursWorked ?? null,
   ]);

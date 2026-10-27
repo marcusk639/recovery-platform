@@ -201,26 +201,31 @@ describe('status transitions', () => {
     expect(summary()!.activityCount).toBe(0);
   });
 
-  it('dispute (active → disputed) removes it, as the client recompute would', async () => {
+  it('a pending dispute (active → disputed) keeps counting', async () => {
     const a = activity();
     await write('a1', undefined, a);
     await write('a1', a, { ...a, status: 'disputed' });
-    expect(summary()!.stats.choresCompleted).toBe(0);
+    expect(summary()!.stats.choresCompleted).toBe(1);
   });
 
-  it('a peer dispute lowers the count, and resolve "keep" restores it', async () => {
+  it('an approved dispute stops counting; a rejected one counts', async () => {
     const a = activity();
     await write('a1', undefined, a);
-    expect(summary()!.stats.choresCompleted).toBe(1);
-
-    const disputed = { ...a, status: 'disputed', disputeReason: 'not done', disputeResolvedBy: 'peer-uid' };
+    await write('a2', undefined, activity({ type: 'meeting' }));
+    const disputed = { ...a, status: 'disputed', disputeReason: 'not done', disputedBy: 'peer-uid' };
     await write('a1', a, disputed);
-    expect(summary()!.stats.choresCompleted).toBe(0);
-
-    const kept = { ...disputed, status: 'resolved', disputeResolvedBy: 'admin-uid' };
-    await write('a1', disputed, kept);
     expect(summary()!.stats.choresCompleted).toBe(1);
+
+    const approved = { ...disputed, status: 'resolved', disputed: 'successful', incomplete: true };
+    await write('a1', disputed, approved);
+    expect(summary()!.stats.choresCompleted).toBe(0);
     expect(summary()!.activityCount).toBe(1);
+
+    const b = activity({ type: 'meeting' });
+    const bDisputed = { ...b, status: 'disputed' };
+    await write('a2', b, bDisputed);
+    await write('a2', bDisputed, { ...bDisputed, status: 'resolved', disputed: 'rejected', incomplete: false });
+    expect(summary()!.stats.meetingsAttended).toBe(1);
   });
 
   it('a dispute resolved "delete" removes the activity for good', async () => {
