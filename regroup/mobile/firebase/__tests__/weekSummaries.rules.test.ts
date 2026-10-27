@@ -141,6 +141,16 @@ describe('week-summaries read', () => {
   });
 });
 
+describe('week-summaries list', () => {
+  it("BLOCKS listing another house's summaries", async () => {
+    const q = query(
+      collection(resident().firestore(), 'week-summaries'),
+      where('houseId', '==', OTHER_HOUSE_ID),
+    );
+    await assertFails(getDocs(q));
+  });
+});
+
 describe('week-summaries write', () => {
   it('BLOCKS a resident from creating a summary (the server owns them)', async () => {
     await assertFails(

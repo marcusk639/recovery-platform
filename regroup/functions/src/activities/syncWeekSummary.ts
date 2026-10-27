@@ -39,6 +39,7 @@ import {
 type Firestore = FirebaseFirestore.Firestore;
 type Data = Record<string, unknown>;
 
+const DAY_MS = 86_400_000;
 export const ACTIVITIES = 'activities';
 export const WEEK_SUMMARIES = 'week-summaries';
 
@@ -88,7 +89,12 @@ export async function recomputeWeekSummary(
 ): Promise<{ changed: boolean; activityCount: number }> {
   const { guestId, houseId, weekStart, timeZone } = target;
   const id = summaryDocId(guestId, weekStart);
-  const { start, end } = weekWindowUtc(weekStart, timeZone);
+  // Widened by a day each side: aggregateWeek re-filters by weekStartFor, so
+  // the result never depends on the exact UTC instant of local midnight
+  // (skipped/ambiguous midnights in some historical zone transitions).
+  const window = weekWindowUtc(weekStart, timeZone);
+  const start = new Date(window.start.getTime() - DAY_MS);
+  const end = new Date(window.end.getTime() + DAY_MS);
   const summaryRef = db.collection(WEEK_SUMMARIES).doc(id);
   // Matches the existing (guestId ASC, timestamp DESC) composite index.
   const weekActivities = db
