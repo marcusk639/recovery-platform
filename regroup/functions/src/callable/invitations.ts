@@ -12,8 +12,8 @@ import {
   roleConsumesResidentSlot,
 } from '../util/residentCapacity';
 import { getHouse } from '../api/firestore';
-import { consumeInvitation, releaseInvitation } from '../util/admission';
-import { assertTierMayGrant, houseTierOf, INVITATION_TIER, recordRoleGrant } from '../util/houseRoles';
+import { completeGrant, consumeInvitation, releaseInvitation } from '../util/admission';
+import { assertTierMayGrant, houseTierOf, INVITATION_TIER } from '../util/houseRoles';
 import { enforceHouseEntitlement } from '../util/entitlement';
 import { Invitation, InvitationRole } from '../entities/Invitation';
 
@@ -116,7 +116,8 @@ export const createInvitation = onCall(async (request) => {
   // invite a manager, peer leader or resident; a manager a peer leader or
   // resident; a peer leader a resident only. Oxford houses too, until the
   // Oxford admission PR.
-  const tier = await houseTierOf(callerUid, callerClaims, input.houseId, house);
+  // Live claims (houseTierOf), so a just-revoked staff token cannot act.
+  const tier = await houseTierOf(callerUid, input.houseId, house);
   assertTierMayGrant(tier, INVITATION_TIER[input.role], {
     callableName: 'createInvitation',
     houseId: input.houseId,
@@ -213,8 +214,10 @@ const redeemInvitationSchema = z.object({ token: z.string().min(1) });
  *  - role=guest        → guest claim; resident
  *  - role=admin        → admin claim; manager
  *  - role=senior-peer  → guest AND admin claims; peer leader
- * A repeat call by the account that already redeemed it succeeds without
- * granting again (util/admission consumeInvitation).
+ * A repeat call by the account that redeemed it succeeds and grants nothing
+ * once the grant completed (grantCompletedAt); a stranded redeem (grant and
+ * release both failed) is completed while the invitation is unexpired
+ * (+24h). util/admission consumeInvitation / completeGrant.
  */
 export const redeemInvitation = onCall(async (request) => {
   if (!request.auth) {
@@ -249,29 +252,31 @@ export const redeemInvitation = onCall(async (request) => {
   // redeems of one token only one can go on to grant claims. For a resident
   // role the same commit writes the caller's admission ticket, which the
   // guests self-create rule requires (util/admission).
-  const { alreadyRedeemed } = await consumeInvitation(token, callerUid);
+  const { state } = await consumeInvitation(token, callerUid);
+
+  // A completed grant is never repeated: a role revoked since then stays
+  // revoked, however old the token (util/admission ConsumeState).
+  if (state === 'completed') {
+    logger.info('redeemInvitation: already completed for this account; nothing granted', {
+      houseId: inv.houseId,
+    });
+    return { houseId: inv.houseId, role: inv.role };
+  }
 
   // One claims write: a senior-peer gets guest and admin together or not at
   // all. If it fails, the redemption and ticket are released so the invitee
   // can retry.
-  if (!alreadyRedeemed) {
-    const roles: Array<'guest' | 'admin'> =
-      inv.role === 'senior-peer' ? ['guest', 'admin'] : inv.role === 'admin' ? ['admin'] : ['guest'];
-    try {
-      await addHouseRoles(callerUid, [inv.houseId], roles);
-    } catch (err) {
-      await releaseInvitation(token, callerUid, inv.houseId);
-      throw err;
-    }
+  const roles: Array<'guest' | 'admin'> =
+    inv.role === 'senior-peer' ? ['guest', 'admin'] : inv.role === 'admin' ? ['admin'] : ['guest'];
+  try {
+    await addHouseRoles(callerUid, [inv.houseId], roles);
+  } catch (err) {
+    if (state === 'fresh') await releaseInvitation(token, callerUid, inv.houseId);
+    throw err;
   }
-  // After the grant; a failure here throws, and the retry records it.
-  await recordRoleGrant(inv.houseId, callerUid, INVITATION_TIER[inv.role], {
-    grantedBy: inv.inviterUid,
-    via: 'invitation',
-    invitationId: token,
-  });
+  await completeGrant(token, inv, callerUid, INVITATION_TIER[inv.role]);
 
-  if (!alreadyRedeemed && roleConsumesResidentSlot(inv.role)) {
+  if (state === 'fresh' && roleConsumesResidentSlot(inv.role)) {
     // Best-effort: the claim grant + invitation redemption above already
     // succeeded, so a failure here must not fail the whole call — it would
     // incorrectly report the redemption as failed after access was already

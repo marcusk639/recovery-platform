@@ -136,16 +136,63 @@ it('a repeat redeem by the same account succeeds without granting again', async 
   expect(mockSetClaims).not.toHaveBeenCalled();
 });
 
-it('a repeat redeem re-writes a missing ticket, and never touches an existing one', async () => {
+it('a completed redeem records grantCompletedAt; a repeat never re-writes a missing ticket', async () => {
   mem.seed('invitations/T', invitation('guest'));
   await redeem('T');
+  expect(mem.get('invitations/T')?.grantCompletedAt).toEqual(expect.any(String));
+  // E.g. the resident was removed; an old token must not let them self-create again.
   await memDb.doc('admission-tickets/alice_h').delete();
   await redeem('T');
-  expect(ticket()).toMatchObject({ used: false, invitationId: 'T' });
+  expect(ticket()).toBeUndefined();
+});
 
-  await memDb.doc('admission-tickets/alice_h').update({ used: true, usedByGuestId: 'g1' });
-  await redeem('T');
-  expect(ticket()).toMatchObject({ used: true, usedByGuestId: 'g1' });
+describe('a same-account retry never brings back a revoked tier (verifier V1)', () => {
+  it('an ex-manager re-redeeming their old admin token (even long expired) gets nothing back', async () => {
+    mem.seed('invitations/T', invitation('admin'));
+    await redeem('T');
+    expect(mem.get('house-roles/h_alice')).toMatchObject({ tier: 'manager' });
+    // The owner removes the manager.
+    users.alice = { admin: {}, guest: {}, superAdmin: {} };
+    await memDb.doc('house-roles/h_alice').delete();
+    await memDb
+      .doc('invitations/T')
+      .update({ expiresAt: new Date(Date.now() - 90 * 86400_000).toISOString() });
+    mockSetClaims.mockClear();
+
+    await expect(redeem('T')).resolves.toEqual({ houseId: 'h', role: 'admin' });
+    expect(mockSetClaims).not.toHaveBeenCalled();
+    expect(users.alice.admin).toEqual({});
+    expect(mem.get('house-roles/h_alice')).toBeUndefined();
+  });
+
+  const stranded = (expiresAt: string) =>
+    mem.seed(
+      'invitations/T',
+      invitation('guest', {
+        expiresAt,
+        redeemedAt: new Date().toISOString(),
+        redeemedByUid: 'alice',
+      }),
+    );
+
+  it('a stranded redeem (grant and release both failed) recovers while the invitation is valid', async () => {
+    stranded(new Date(Date.now() + 86400_000).toISOString());
+
+    await redeem('T');
+
+    expect(users.alice.guest).toEqual({ h: true });
+    expect(ticket()).toMatchObject({ used: false });
+    expect(mem.get('house-roles/h_alice')).toMatchObject({ tier: 'resident' });
+    expect(mem.get('invitations/T')?.grantCompletedAt).toEqual(expect.any(String));
+  });
+
+  it('an expired stranded retry (past the 24h grace) is refused and grants nothing', async () => {
+    stranded(new Date(Date.now() - 2 * 86400_000).toISOString());
+
+    await expect(redeem('T')).rejects.toThrow('Invitation has expired');
+    expect(mockSetClaims).not.toHaveBeenCalled();
+    expect(mem.get('house-roles/h_alice')).toBeUndefined();
+  });
 });
 
 it('a senior-peer redeem grants guest and admin in ONE claims write; if it fails, nothing is granted', async () => {

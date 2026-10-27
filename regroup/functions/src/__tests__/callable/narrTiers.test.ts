@@ -7,9 +7,14 @@
 //   peer leader -> resident only (also: an admin-claim holder with no record)
 const mockSetClaims = jest.fn();
 const mockAddHouseRoles = jest.fn();
+// LIVE claims per account: tier checks read these (getUser), never the token.
+const mockUsers: Record<string, Record<string, unknown>> = {};
 jest.mock('firebase-admin', () => ({
   firestore: () => require('../helpers/memFirestore').memDb,
-  auth: () => ({ setCustomUserClaims: (...a: unknown[]) => mockSetClaims(...a) }),
+  auth: () => ({
+    getUser: async (uid: string) => ({ uid, customClaims: mockUsers[uid] ?? {} }),
+    setCustomUserClaims: (...a: unknown[]) => mockSetClaims(...a),
+  }),
 }));
 jest.mock('firebase-functions', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
@@ -52,7 +57,10 @@ import { houseTierOf, recordOwnerRoles } from '../../util/houseRoles';
 
 const H = 'h';
 type Caller = { uid: string; token: Record<string, unknown> };
-const as = (uid: string, claims: Record<string, unknown> = {}): Caller => ({ uid, token: claims });
+const as = (uid: string, claims: Record<string, unknown> = {}): Caller => {
+  mockUsers[uid] = claims;
+  return { uid, token: claims };
+};
 const OWNER = as('owner');
 const MANAGER = as('manager', { admin: { [H]: true } });
 const PEER = as('peer', { admin: { [H]: true }, guest: { [H]: true } });
@@ -65,7 +73,7 @@ const run = (fn: unknown, data: unknown, caller: Caller) =>
   (fn as Function)({ data, auth: caller });
 const denied = { code: 'permission-denied' };
 const roleOf = (uid: string) => mem.get(`house-roles/${H}_${uid}`) as any;
-const tier = (c: Caller) => houseTierOf(c.uid, c.token, H, { ownerId: 'owner' });
+const tier = (c: Caller) => houseTierOf(c.uid, H, { ownerId: 'owner' });
 
 beforeEach(() => {
   mem.reset();
@@ -215,5 +223,50 @@ describe('revocations update the record', () => {
       OWNER,
     );
     expect(roleOf('o2').tier).toBe('manager');
+  });
+});
+
+describe('removals need a tier strictly above the target (verifier V2)', () => {
+  const removeAdmin = (c: Caller, userId: string, superAdmin: string[] = []) =>
+    run(
+      deleteAdminAuthorization,
+      { admin: { userId }, adminHouseIds: [H], superAdminHouseIds: superAdmin },
+      c,
+    );
+  const removeRole = (c: Caller, userId: string, role: string) =>
+    run(removePrivilegesForGuests, { guests: [{ userId, houseId: H }], role }, c);
+  const CO = as('co', { admin: { [H]: true }, superAdmin: { [H]: true } });
+  as('owner', { admin: { [H]: true }, superAdmin: { [H]: true } });
+  as('resident', { guest: { [H]: true } });
+
+  it('a peer leader removes no manager and does not touch the owner', async () => {
+    await expect(removeRole(PEER, 'manager', 'admin')).rejects.toMatchObject(denied);
+    await expect(removeAdmin(PEER, 'owner', [H])).rejects.toMatchObject(denied);
+    expect(roleOf('manager').tier).toBe('manager');
+  });
+
+  it('only an owner removes a manager; a manager may remove a peer leader', async () => {
+    await expect(
+      removeAdmin(as('manager2', { admin: { [H]: true } }), 'manager'),
+    ).rejects.toMatchObject(denied);
+    await expect(removeAdmin(MANAGER, 'peer')).resolves.toBeUndefined();
+    await expect(removeAdmin(OWNER, 'manager')).resolves.toBeUndefined();
+  });
+
+  it('the primary owner can be demoted only by themselves, not by a superAdmin co-owner', async () => {
+    await expect(removeAdmin(CO, 'owner', [H])).rejects.toMatchObject(denied);
+    await expect(removeAdmin(OWNER, 'owner', [H])).resolves.toBeUndefined();
+  });
+
+  it("removing a resident's guest claim needs any staff above them; a resident cannot", async () => {
+    await expect(removeRole(PEER, 'resident', 'guest')).resolves.toBe('success');
+    await expect(
+      removeRole(as('r2', { guest: { [H]: true } }), 'resident', 'guest'),
+    ).rejects.toMatchObject(denied);
+  });
+
+  it("a just-revoked staff member's token cannot act: the live claims decide", async () => {
+    const stale = { uid: 'peer', token: { admin: { [H]: true }, superAdmin: { [H]: true } } };
+    await expect(removeRole(stale, 'manager', 'admin')).rejects.toMatchObject(denied);
   });
 });

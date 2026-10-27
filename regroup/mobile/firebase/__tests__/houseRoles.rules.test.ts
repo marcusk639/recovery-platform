@@ -73,6 +73,17 @@ describe('houseType is server-only', () => {
   });
 });
 
+describe('ownerId is server-only', () => {
+  it.each([
+    ['a superAdmin co-owner', 'co', OWNER],
+    ['a manager', 'manager', MANAGER],
+    ['a peer leader', 'pl', PEER],
+    ['a resident', 'res', RESIDENT],
+  ])('DENIES %s changing ownerId', async (_label, uid, claims) => {
+    await assertFails(updateDoc(doc(db(uid, claims), `houses/${H}`), { ownerId: uid }));
+  });
+});
+
 describe('house-roles records are server-only', () => {
   it('DENIES client reads and writes, even by the owner', async () => {
     await seed(`house-roles/${H}_pl`, { tier: 'peerLeader' });

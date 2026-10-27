@@ -151,8 +151,11 @@ jest.mock("../../util/admission", () => ({
 // Role record of the account whose guest doc is deleted (null: none).
 const mockReadRoleTier = jest.fn().mockResolvedValue(null);
 const mockRecordRoleRevoke = jest.fn().mockResolvedValue(undefined);
+// Live claims of the account (a superAdmin co-owner keeps the admin claim).
+const mockLiveClaims = jest.fn().mockResolvedValue({});
 jest.mock("../../util/houseRoles", () => ({
   ...jest.requireActual("../../util/houseRoles"),
+  liveClaims: (...args: any[]) => mockLiveClaims(...args),
   readRoleTier: (...args: any[]) => mockReadRoleTier(...args),
   recordRoleRevoke: (...args: any[]) => mockRecordRoleRevoke(...args),
 }));
@@ -238,6 +241,8 @@ const makeWrittenEvent = (
 beforeEach(() => {
   jest.clearAllMocks();
   mockReadRoleTier.mockResolvedValue(null);
+  mockLiveClaims.mockResolvedValue({});
+  mockAdminsGet.mockResolvedValue({ docs: [] });
   mockHouseDocGet.mockResolvedValue({ exists: true, data: () => ({ ownerId: "owner-uid" }) });
   mockBatchCommit.mockResolvedValue(undefined);
 });
@@ -921,7 +926,13 @@ describe("onGuestWrite (merged handler)", () => {
 
     expect(mockRevokeHouseRoles).toHaveBeenCalledWith("user-1", ["house-1"], ["guest", "admin"]);
     expect(mockRecordRoleRevoke).toHaveBeenCalledWith("house-1", "user-1", "admin");
-    mockAdminsGet.mockResolvedValue({ docs: [] });
+  });
+
+  it("keeps the admin claim of a superAdmin co-owner (live claim)", async () => {
+    const { onGuestWrite } = require("../../triggers/firestore");
+    mockLiveClaims.mockResolvedValueOnce({ superAdmin: { "house-1": true } });
+    await (onGuestWrite as Function)(makeWrittenEvent(guest, null));
+    expect(mockRevokeHouseRoles).toHaveBeenLastCalledWith("user-1", ["house-1"], ["guest"]);
   });
 
   it("keeps the admin claim for a manager role record, or for the house owner", async () => {
@@ -952,7 +963,7 @@ describe("onGuestWrite (merged handler)", () => {
     ]);
     expect(mockGuestsGet).not.toHaveBeenCalled();
     expect(logger.warn).toHaveBeenCalledWith(
-      "onGuestWrite: late delete event; claims cleanup still runs",
+      "onGuestWrite: late departure event; claims cleanup still runs",
       expect.objectContaining({ guestId: "late-guest", eventId: "evt-late" }),
     );
   });

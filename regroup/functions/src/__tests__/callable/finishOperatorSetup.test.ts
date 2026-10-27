@@ -6,8 +6,7 @@
 // ids from housesOwned and the (server-written) subscription map whose house
 // doc has ownerId === uid — and writes the flags only after the grant succeeds.
 
-// Owner role records (util/houseRoles) are covered in narrTiers.test.ts.
-jest.mock('../../util/houseRoles', () => ({ recordOwnerRoles: jest.fn(async () => undefined) }));
+jest.mock('../../util/houseRoles', () => ({ recordOwnerRoles: jest.fn(async () => undefined) })); // covered in narrTiers
 jest.mock('firebase-functions/v2/https', () => {
   const actual = jest.requireActual('firebase-functions/v2/https');
   return {

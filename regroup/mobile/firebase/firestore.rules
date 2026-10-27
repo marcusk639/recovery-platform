@@ -217,9 +217,13 @@ service cloud.firestore {
           d.get('updatedBy', request.auth.uid) == request.auth.uid;
       }
 
+      // Staff create never links the doc to the creator (no self-link: a
+      // staff member's own resident record comes through an invitation),
+      // so no one can mint an eviction-proof record for themselves.
       allow create: if createdByCaller(request.resource.data) &&
                        (isInvitedSelfCreate(request.resource.data) ||
-                        isAdmin([request.resource.data.houseId]));
+                        (isAdmin([request.resource.data.houseId]) &&
+                         request.resource.data.get('userId', '') != request.auth.uid));
 
       // Update has two distinct branches:
       //
@@ -337,12 +341,15 @@ service cloud.firestore {
       // may write it. superAdminIds is an authorization field like
       // adminIds/ownerId: only a superAdmin of the house may change it.
       // adminId is a legacy field, blocked defensively the same way.
+      // ownerId makes someone the house owner (top tier, functions
+      // util/houseRoles): only createHouses (Admin SDK) sets it, so no
+      // client, a superAdmin co-owner included, may change it.
       // houseType (traditional / oxford) picks the admission and voting
       // rules; only createHouses and setOxfordEnabled (Admin SDK) set it,
       // so no client, the owner included, may change it.
       allow update: if isDemoScopedHouses([houseId]) &&
         !request.resource.data.diff(resource.data).affectedKeys()
-          .hasAny(['subscriptionStatus', 'guestGraceEndsAt', 'stripeAccountApi', 'superAdminId', 'houseType']) &&
+          .hasAny(['subscriptionStatus', 'guestGraceEndsAt', 'stripeAccountApi', 'superAdminId', 'houseType', 'ownerId']) &&
         (hasSuperAdminRoleInHouse([houseId]) ||
           ((hasAdminRoleInHouse([houseId]) || hasGuestRoleInHouse([houseId])) && !request.resource.data.diff(resource.data).affectedKeys()
             .hasAny(['stripeAccountId', 'stripeStatus', 'monthlyRent', 'weeklyRent', 'adminIds', 'ownerId', 'superAdminIds', 'adminId'])));

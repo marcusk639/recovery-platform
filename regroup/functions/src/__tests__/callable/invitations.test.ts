@@ -25,7 +25,9 @@ const mockSetCustomUserClaims = jest.fn();
 const mockCreateClaims = jest.fn();
 // redeemInvitation grants every claim of the role in ONE addHouseRoles call.
 const mockAddHouseRoles = jest.fn().mockResolvedValue(undefined);
-const mockRecordRoleGrant = jest.fn().mockResolvedValue('resident');
+// The tier is recorded with grantCompletedAt in util/admission.completeGrant
+// (covered on a real store in redeemAdmission.test.ts).
+const mockCompleteGrant = jest.fn().mockResolvedValue(undefined);
 
 // Guest docs read by the NARR tier check (is the inviter a resident?), and
 // the admission-ticket writes made inside redeemInvitation's transaction.
@@ -81,7 +83,10 @@ const mockHouseTierOf = jest.fn().mockResolvedValue('owner');
 jest.mock('../../util/houseRoles', () => ({
   ...jest.requireActual('../../util/houseRoles'),
   houseTierOf: (...args: unknown[]) => mockHouseTierOf(...args),
-  recordRoleGrant: (...args: unknown[]) => mockRecordRoleGrant(...args),
+}));
+jest.mock('../../util/admission', () => ({
+  ...jest.requireActual('../../util/admission'),
+  completeGrant: (...args: unknown[]) => mockCompleteGrant(...args),
 }));
 
 jest.mock('../../util/claims', () => ({
@@ -382,11 +387,12 @@ describe('redeemInvitation', () => {
     );
 
     expect(mockAddHouseRoles).toHaveBeenCalledWith('alice-uid', ['house-1'], ['admin']);
-    expect(mockRecordRoleGrant).toHaveBeenCalledWith('house-1', 'alice-uid', 'manager', {
-      grantedBy: expect.any(String),
-      via: 'invitation',
-      invitationId: 'TEST_TOKEN_FIXED',
-    });
+    expect(mockCompleteGrant).toHaveBeenCalledWith(
+      'TEST_TOKEN_FIXED',
+      expect.objectContaining({ houseId: 'house-1' }),
+      'alice-uid',
+      'manager',
+    );
     expect(mockInvitationsDocUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
         redeemedAt: expect.any(String),
@@ -477,12 +483,7 @@ describe('redeemInvitation', () => {
       { uid: 'alice-uid', token: { email: 'alice@x.com' } },
     );
     expect(mockAddHouseRoles).toHaveBeenCalledWith('alice-uid', ['house-1'], ['guest']);
-    expect(mockRecordRoleGrant).toHaveBeenCalledWith(
-      'house-1',
-      'alice-uid',
-      'resident',
-      expect.objectContaining({ via: 'invitation' }),
-    );
+    expect(mockCompleteGrant).toHaveBeenCalledWith('T', expect.anything(), 'alice-uid', 'resident');
   });
 
   it('role=senior-peer maps to BOTH guest and admin claims', async () => {
@@ -499,12 +500,7 @@ describe('redeemInvitation', () => {
     // One claims write: both roles or neither.
     expect(mockAddHouseRoles).toHaveBeenCalledTimes(1);
     expect(mockAddHouseRoles).toHaveBeenCalledWith('alice-uid', ['house-1'], ['guest', 'admin']);
-    expect(mockRecordRoleGrant).toHaveBeenCalledWith(
-      'house-1',
-      'alice-uid',
-      'peerLeader',
-      expect.objectContaining({ via: 'invitation' }),
-    );
+    expect(mockCompleteGrant).toHaveBeenCalledWith('T', expect.anything(), 'alice-uid', 'peerLeader');
   });
 });
 

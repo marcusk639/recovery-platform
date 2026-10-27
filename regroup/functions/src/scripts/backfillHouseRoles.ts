@@ -12,14 +12,17 @@
  *   npm run migrate:house-roles:apply
  *
  * Per (account, house) with a staff claim:
- *   ownerId or a superAdmin claim                      -> owner
- *   an ACTIVE guest doc in the house with isAdmin true -> peerLeader
- *   otherwise                                          -> manager
- * "Ambiguous" (printed for the owner to review) is a manager that has some
- * other guest doc in the house, or a house doc that is missing. Until a
- * record exists the server treats an admin-claim holder as a peer leader, so
- * running this late only under-grants. Existing records are never
- * overwritten, so a second run writes nothing. Output is ids and tiers only.
+ *   ownerId or a superAdmin claim -> owner
+ *   manager ONLY when unambiguous: the admin claim, never any guest doc in
+ *     the house (any status), and listed in the house's adminIds (through
+ *     an admins doc of the account) or granted by the owner (an admin
+ *     invitation from the owner, redeemed by this account)
+ *   everyone else -> peerLeader (least privilege), and listed for the
+ *     owner's review with ids and the reason
+ * The owner then promotes the real managers with addAdminAuthorization
+ * (owner-only), which records `manager`. Existing records are never
+ * overwritten (a record created meanwhile is skipped), so a second run
+ * writes nothing. Output is ids, tiers and reasons only.
  */
 import './scriptBootstrap';
 import * as admin from 'firebase-admin';
@@ -46,7 +49,8 @@ export interface RoleBackfillRow {
 export interface RoleBackfillReport {
   toWrite: RoleBackfillRow[];
   existing: number;
-  ambiguous: RoleBackfillRow[];
+  /** Written as peerLeader: the owner reviews and promotes real managers. */
+  review: RoleBackfillRow[];
 }
 
 const houseKeys = (v: unknown): string[] => {
@@ -60,7 +64,7 @@ export async function backfillHouseRoles(
   authClient: AuthLike,
   opts: { apply: boolean; now?: Date },
 ): Promise<RoleBackfillReport> {
-  const report: RoleBackfillReport = { toWrite: [], existing: 0, ambiguous: [] };
+  const report: RoleBackfillReport = { toWrite: [], existing: 0, review: [] };
   const houses = new Map<string, Record<string, unknown> | null>();
   const houseData = async (id: string) => {
     if (!houses.has(id)) {
@@ -92,30 +96,67 @@ export async function backfillHouseRoles(
         let row: RoleBackfillRow;
         if (house?.ownerId === user.uid || superHouses.has(houseId)) {
           row = { uid: user.uid, houseId, tier: 'owner', reason: 'owner-or-superAdmin' };
-        } else if (inHouse.some((g) => isActiveGuestDoc(g) && g.isAdmin === true)) {
-          row = { uid: user.uid, houseId, tier: 'peerLeader', reason: 'active-resident-isAdmin' };
         } else {
           const reason = !house
             ? 'house-missing'
             : inHouse.length > 0
-              ? 'has-guest-doc-not-active-peer'
-              : 'staff-not-resident';
-          row = { uid: user.uid, houseId, tier: 'manager', reason };
-          if (reason !== 'staff-not-resident') report.ambiguous.push(row);
+              ? inHouse.some((g) => isActiveGuestDoc(g) && g.isAdmin === true)
+                ? 'active-resident-isAdmin'
+                : 'has-guest-doc'
+              : (await listedOrOwnerGranted(db, user.uid, houseId, house))
+                ? 'manager-unambiguous'
+                : 'staff-not-resident';
+          row = {
+            uid: user.uid,
+            houseId,
+            tier: reason === 'manager-unambiguous' ? 'manager' : 'peerLeader',
+            reason,
+          };
+          if (row.tier === 'peerLeader') report.review.push(row);
         }
         report.toWrite.push(row);
         if (opts.apply) {
-          await ref.create({
-            tier: row.tier,
-            grantedBy: 'backfill',
-            grantedAt: (opts.now ?? new Date()).toISOString(),
-            via: 'backfill',
-          });
+          try {
+            await ref.create({
+              tier: row.tier,
+              grantedBy: 'backfill',
+              grantedAt: (opts.now ?? new Date()).toISOString(),
+              via: 'backfill',
+            });
+          } catch (err) {
+            // A grant recorded meanwhile wins; never overwrite it.
+            if (!isAlreadyExists(err)) throw err;
+            report.toWrite.pop();
+            report.existing += 1;
+            if (report.review[report.review.length - 1] === row) report.review.pop();
+          }
         }
       }
     }
   } while (pageToken);
   return report;
+}
+
+const isAlreadyExists = (err: unknown) => {
+  const code = (err as { code?: unknown }).code;
+  return code === 6 || code === 'already-exists' || /ALREADY_EXISTS/.test(String(err));
+};
+
+/** Listed in the house's adminIds through an admins doc of the account, or granted by the owner. */
+async function listedOrOwnerGranted(
+  db: FirebaseFirestore.Firestore,
+  uid: string,
+  houseId: string,
+  house: Record<string, unknown>,
+): Promise<boolean> {
+  const adminIds = Array.isArray(house.adminIds) ? (house.adminIds as unknown[]) : [];
+  const adminDocs = (await db.collection('admins').where('userId', '==', uid).get()).docs;
+  if (adminDocs.some((d) => adminIds.includes(d.id))) return true;
+  const invites = (await db.collection('invitations').where('redeemedByUid', '==', uid).get()).docs;
+  return invites.some((d) => {
+    const inv = d.data() ?? {};
+    return inv.houseId === houseId && inv.role === 'admin' && inv.inviterUid === house.ownerId;
+  });
 }
 
 export function printRoleReport(report: RoleBackfillReport, apply: boolean): void {
@@ -124,9 +165,10 @@ export function printRoleReport(report: RoleBackfillReport, apply: boolean): voi
   console.log(`${apply ? 'Written' : 'To write'}: ${report.toWrite.length}`);
   console.log('uid\thouseId\ttier\treason');
   for (const r of report.toWrite) console.log(`${r.uid}\t${r.houseId}\t${r.tier}\t${r.reason}`);
-  if (report.ambiguous.length > 0) {
-    console.log('\nAmbiguous (classified manager; owner to review):');
-    for (const r of report.ambiguous) console.log(`${r.uid}\t${r.houseId}\t${r.reason}`);
+  if (report.review.length > 0) {
+    console.log('\nRecorded as peerLeader (least privilege); owner to review. Promote real');
+    console.log('managers with addAdminAuthorization (owner-only), which records manager:');
+    for (const r of report.review) console.log(`${r.uid}\t${r.houseId}\t${r.reason}`);
   }
   if (!apply) console.log('\nNothing was written. Re-run with --apply to commit.');
 }

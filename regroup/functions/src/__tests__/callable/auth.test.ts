@@ -77,7 +77,9 @@ jest.mock("../../util/authGuard", () => ({
 const mockAssertMayGrantTier = jest.fn().mockResolvedValue(undefined);
 const mockRecordRoleGrant = jest.fn().mockResolvedValue(undefined);
 const mockRecordRoleRevoke = jest.fn().mockResolvedValue(undefined);
+const mockAssertMayRevoke = jest.fn().mockResolvedValue(undefined);
 jest.mock("../../util/houseRoles", () => ({
+  assertMayRevoke: (...args: unknown[]) => mockAssertMayRevoke(...args),
   assertMayGrantTier: (...args: unknown[]) => mockAssertMayGrantTier(...args),
   recordRoleGrant: (...args: unknown[]) => mockRecordRoleGrant(...args),
   recordRoleRevoke: (...args: unknown[]) => mockRecordRoleRevoke(...args),
@@ -103,6 +105,7 @@ beforeEach(() => {
   mockAssertMayGrantTier.mockResolvedValue(undefined);
   mockRecordRoleGrant.mockResolvedValue(undefined);
   mockRecordRoleRevoke.mockResolvedValue(undefined);
+  mockAssertMayRevoke.mockResolvedValue(undefined);
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -250,14 +253,8 @@ describe("addGuestAuthorization — authorization guard", () => {
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe("addAdminAuthorization", () => {
-  it("creates admin and superAdmin claims and merges them", async () => {
+  it("creates admin and superAdmin claims, each merged into the current claims", async () => {
     mockAssertCanGrantClaimForHouses.mockResolvedValue(undefined);
-    const adminClaims = { admin: ["h1"] };
-    const superAdminClaims = { superAdmin: ["h2"] };
-    mockCreateClaims
-      .mockResolvedValueOnce(adminClaims)
-      .mockResolvedValueOnce(superAdminClaims);
-    mockSetCustomUserClaims.mockResolvedValue(undefined);
 
     const result = await call(
       addAdminAuthorization,
@@ -269,31 +266,16 @@ describe("addAdminAuthorization", () => {
       { uid: "u1", token: {} },
     );
 
-    expect(mockCreateClaims).toHaveBeenCalledTimes(2);
-    expect(mockCreateClaims).toHaveBeenNthCalledWith(
-      1,
-      "u1",
-      ["h1"],
-      "admin",
-      false,
-    );
-    expect(mockCreateClaims).toHaveBeenNthCalledWith(
-      2,
-      "u1",
-      ["h2"],
-      "superAdmin",
-      false,
-    );
-    expect(mockSetCustomUserClaims).toHaveBeenCalledWith("u1", {
-      ...adminClaims,
-      ...superAdminClaims,
-    });
+    // Each call re-reads the claims (the old spread of two snapshots lost
+    // the admin grant); the real merge is covered in narrTiers.test.ts.
+    expect(mockAddHouseRoles).toHaveBeenNthCalledWith(1, "u1", ["h1"], ["admin"]);
+    expect(mockAddHouseRoles).toHaveBeenNthCalledWith(2, "u1", ["h2"], ["superAdmin"]);
     expect(result).toBe(true);
   });
 
   it("throws internal error when claims creation fails", async () => {
     mockAssertCanGrantClaimForHouses.mockResolvedValue(undefined);
-    mockCreateClaims.mockRejectedValue(new Error("Firebase error"));
+    mockAddHouseRoles.mockRejectedValue(new Error("Firebase error"));
     await expect(
       call(
         addAdminAuthorization,

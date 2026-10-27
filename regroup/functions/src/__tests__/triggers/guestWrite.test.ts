@@ -104,13 +104,13 @@ describe('delete: claim cleanup', () => {
     expect(mem.get(`house-roles/${H}_a`)).toMatchObject({ tier: 'manager' });
   });
 
-  it('an admins doc alone no longer keeps the admin claim; a peer leader record becomes resident-less', async () => {
+  it("an admins doc alone no longer keeps the admin claim; a departed peer leader's record is removed", async () => {
     users.p = { admin: { [H]: true }, guest: { [H]: true } };
     mem.seed('admins/p1', { userId: 'p', houseIds: [H], superAdmin: [] });
     mem.seed(`house-roles/${H}_p`, { tier: 'peerLeader', via: 'invitation' });
     await run(deleteEvent('g1', { houseId: H, userId: 'p' }));
     expect(users.p).toEqual({ admin: {}, guest: {}, superAdmin: {} });
-    expect(mem.get(`house-roles/${H}_p`)).toMatchObject({ tier: 'resident' });
+    expect(mem.get(`house-roles/${H}_p`)).toBeUndefined();
   });
 
   it('the house owner keeps the admin claim', async () => {
@@ -167,7 +167,7 @@ describe('delete: claim cleanup', () => {
       run(deleteEvent('g1', { houseId: H, userId: 'r' }, late)),
     ).resolves.toBeUndefined();
     expect(logger.error).toHaveBeenCalledWith(
-      'onGuestWrite: late delete event; claims cleanup failed, not retried',
+      'onGuestWrite: late departure event; claims cleanup failed, not retried',
       expect.objectContaining({ guestId: 'g1', houseId: H, error: 'auth down' }),
     );
   });

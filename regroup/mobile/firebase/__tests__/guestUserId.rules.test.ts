@@ -98,3 +98,50 @@ describe('guests.userId', () => {
     );
   });
 });
+
+describe('staff create never self-links (no eviction-proof record of their own)', () => {
+  it('DENIES a peer leader creating a doc for themselves through the staff branch', async () => {
+    await assertFails(
+      setDoc(doc(db('peer', PEER), 'guests/plself'), {
+        houseId: H,
+        userId: 'peer',
+        status: 'active',
+      }),
+    );
+    await assertFails(
+      setDoc(doc(db('peer', PEER), 'guests/plself2'), {
+        houseId: H,
+        userId: 'peer',
+        createdBy: 'peer',
+        status: 'active',
+      }),
+    );
+  });
+
+  it('DENIES a manager creating a doc linked to themselves', async () => {
+    await assertFails(
+      setDoc(doc(db('mgr', MANAGER), 'guests/mself'), {
+        houseId: H,
+        userId: 'mgr',
+        status: 'active',
+      }),
+    );
+  });
+
+  it('ALLOWS staff creating a doc for someone else, or an intake doc with no account', async () => {
+    await assertSucceeds(
+      setDoc(doc(db('mgr', MANAGER), 'guests/other'), {
+        houseId: H,
+        userId: 'newbie',
+        status: 'active',
+      }),
+    );
+    await assertSucceeds(
+      setDoc(doc(db('peer', PEER), 'guests/intake2'), {
+        houseId: H,
+        firstName: 'K',
+        status: 'active',
+      }),
+    );
+  });
+});

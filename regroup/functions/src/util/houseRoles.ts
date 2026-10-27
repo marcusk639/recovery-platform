@@ -67,10 +67,27 @@ export const INVITATION_TIER: Record<InvitationRole, RoleTier> = {
 interface HouseFields {
   ownerId?: string;
 }
-/** Caller's token claims (only the admin/superAdmin house maps are read). */
+/** Custom claims (only the admin/superAdmin/guest house maps are read). */
 type Claims = Record<string, unknown> | undefined;
-const holds = (claims: Claims, role: 'admin' | 'superAdmin', houseId: string) =>
-  ((claims?.[role] ?? {}) as Record<string, unknown>)[houseId] === true;
+const holds = (claims: Claims, role: 'admin' | 'superAdmin' | 'guest', houseId: string) => {
+  const v = claims?.[role];
+  if (Array.isArray(v)) return v.includes(houseId);
+  return !!v && typeof v === 'object' && (v as Record<string, unknown>)[houseId] === true;
+};
+
+/**
+ * The account's LIVE custom claims (Auth record), never the caller's ID
+ * token: a token keeps a revoked claim for up to an hour. Missing account:
+ * no claims.
+ */
+export async function liveClaims(uid: string): Promise<Claims> {
+  try {
+    return ((await admin.auth().getUser(uid)).customClaims ?? {}) as Claims;
+  } catch (err) {
+    if ((err as { code?: string }).code === 'auth/user-not-found') return {};
+    throw err;
+  }
+}
 
 export const roleRef = (houseId: string, uid: string) =>
   admin.firestore().collection('house-roles').doc(`${houseId}_${uid}`);
@@ -85,20 +102,60 @@ export async function readRoleTier(houseId: string, uid: string): Promise<RoleTi
 }
 
 /**
- * The caller's tier in the house. Owner: ownerId or a superAdmin claim. Staff
- * otherwise needs the admin claim AND reads its tier from the role record
- * (a stale owner record counts as manager); no record means peer leader.
+ * An account's tier in the house, from its LIVE claims (liveClaims). Owner:
+ * ownerId or a superAdmin claim. Staff otherwise needs the admin claim AND
+ * reads its tier from the role record (a stale owner record counts as
+ * manager); no record means peer leader. A guest claim alone is resident.
  */
 export async function houseTierOf(
   uid: string,
-  claims: Claims,
   houseId: string,
   house: HouseFields,
 ): Promise<HouseTier> {
+  const claims = await liveClaims(uid);
   if (house.ownerId === uid || holds(claims, 'superAdmin', houseId)) return 'owner';
-  if (!holds(claims, 'admin', houseId)) return 'none';
+  if (!holds(claims, 'admin', houseId)) return holds(claims, 'guest', houseId) ? 'resident' : 'none';
   const stored = await readRoleTier(houseId, uid);
   return stored === 'owner' || stored === 'manager' ? 'manager' : 'peerLeader';
+}
+
+const houseFields = async (houseId: string): Promise<HouseFields> =>
+  ((await admin.firestore().collection('houses').doc(houseId).get()).data() ?? {}) as HouseFields;
+
+/** Rank for removals: the house's primary owner (ownerId) above a co-owner. */
+const removalRank = (tier: HouseTier, isPrimaryOwner: boolean) =>
+  isPrimaryOwner ? 4 : tier === 'none' ? -1 : RANK[tier];
+
+/**
+ * Removing someone's house claim (admin, superAdmin or guest) needs a tier
+ * strictly above theirs: owner > manager > peer leader > resident, so only
+ * an owner removes a manager. The primary owner (ownerId) can be demoted only
+ * by themselves; a co-owner holding superAdmin cannot remove them. Anyone may
+ * remove their own claims. Both tiers come from live claims and records.
+ */
+export async function assertMayRevoke(params: {
+  callerUid: string;
+  targetUid: string;
+  houseId: string;
+  callableName: string;
+}): Promise<void> {
+  const { callerUid, targetUid, houseId, callableName } = params;
+  if (callerUid === targetUid) return;
+  const house = await houseFields(houseId);
+  const [callerTier, targetTier] = await Promise.all([
+    houseTierOf(callerUid, houseId, house),
+    houseTierOf(targetUid, houseId, house),
+  ]);
+  const caller = removalRank(callerTier, house.ownerId === callerUid);
+  const target = removalRank(targetTier, house.ownerId === targetUid);
+  if (caller >= 1 && caller > target) return;
+  logger.warn(`${callableName}: tier may not remove`, { houseId, callerTier, targetTier });
+  throw new HttpsError(
+    'permission-denied',
+    house.ownerId === targetUid
+      ? 'Only the house owner can change their own access'
+      : 'Your role in this house cannot remove this person',
+  );
 }
 
 /** Throws permission-denied unless the tier may hand out this tier. */
@@ -117,18 +174,33 @@ export function assertTierMayGrant(
   );
 }
 
-/** Reads the house and the caller's tier, then assertTierMayGrant. */
+/** Reads the house and the caller's tier (live claims), then assertTierMayGrant. */
 export async function assertMayGrantTier(params: {
   callerUid: string;
-  claims: Claims;
   houseId: string;
   grant: RoleTier;
   callableName: string;
 }): Promise<void> {
-  const snap = await admin.firestore().collection('houses').doc(params.houseId).get();
-  const house = (snap.data() ?? {}) as HouseFields;
-  const tier = await houseTierOf(params.callerUid, params.claims, params.houseId, house);
+  const house = await houseFields(params.houseId);
+  const tier = await houseTierOf(params.callerUid, params.houseId, house);
   assertTierMayGrant(tier, params.grant, params);
+}
+
+/** The record to store for a grant, or null when the stored tier is already as high. */
+export function nextRoleRecord(
+  current: unknown,
+  tier: RoleTier,
+  meta: { grantedBy: string; via: RoleVia; invitationId?: string },
+): HouseRoleRecord | null {
+  const stored = parseTier(current);
+  if (stored && RANK[stored] >= RANK[tier]) return null;
+  return {
+    tier,
+    grantedBy: meta.grantedBy,
+    grantedAt: new Date().toISOString(),
+    via: meta.via,
+    ...(meta.invitationId ? { invitationId: meta.invitationId } : {}),
+  };
 }
 
 /**
@@ -144,15 +216,8 @@ export async function recordRoleGrant(
   const ref = roleRef(houseId, uid);
   return admin.firestore().runTransaction(async (tx) => {
     const snap = await tx.get(ref);
-    const current = snap.exists ? parseTier((snap.data() ?? {}).tier) : null;
-    if (current && RANK[current] >= RANK[tier]) return current;
-    const record: HouseRoleRecord = {
-      tier,
-      grantedBy: meta.grantedBy,
-      grantedAt: new Date().toISOString(),
-      via: meta.via,
-      ...(meta.invitationId ? { invitationId: meta.invitationId } : {}),
-    };
+    const record = nextRoleRecord(snap.exists ? (snap.data() ?? {}).tier : null, tier, meta);
+    if (!record) return parseTier((snap.data() ?? {}).tier) ?? tier;
     tx.set(ref, record);
     return tier;
   });
