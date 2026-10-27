@@ -32,6 +32,7 @@ const mockEesGet = jest.fn();
 // other query to the collection's main mock.
 const mockGuestsByUserGet = jest.fn().mockResolvedValue({ docs: [] });
 const mockAdminsGet = jest.fn().mockResolvedValue({ docs: [] });
+const mockHouseDocGet = jest.fn();
 const mockQueryFilters: Array<Array<[string, string, unknown]>> = [];
 
 function makeQueryChain(
@@ -117,9 +118,11 @@ jest.mock("../../api/firestore", () => ({
   // onGuestWrite EES recalculation reads guestCollection + ratsFirestore directly.
   guestCollection: makeQueryChain(mockGuestsGet, mockGuestsByUserGet),
   adminCollection: makeQueryChain(mockAdminsGet),
-  houseCollection: makeQueryChain(
-    jest.fn().mockResolvedValue({ docs: [], empty: true }),
-  ),
+  houseCollection: {
+    ...makeQueryChain(jest.fn().mockResolvedValue({ docs: [], empty: true })),
+    // The delete cleanup reads ownerId (the owner keeps the admin claim).
+    doc: jest.fn(() => ({ get: (...a: unknown[]) => mockHouseDocGet(...a) })),
+  },
   notificationCollection: {
     doc: jest.fn(() => ({ set: jest.fn(), update: jest.fn() })),
   },
@@ -136,10 +139,22 @@ jest.mock("../../api/firestore", () => ({
 }));
 
 // ─── util/admission ──────────────────────────────────────────────────────────
-// Ticket marking is covered with a real store in guestWrite.test.ts.
-const mockMarkTicketUsed = jest.fn().mockResolvedValue(false);
+// Ticket settling and entitlement are covered with a real store in
+// guestWrite.test.ts; here every active doc entitles.
+const mockSettleTicket = jest.fn().mockResolvedValue([]);
 jest.mock("../../util/admission", () => ({
-  markTicketUsed: (...args: any[]) => mockMarkTicketUsed(...args),
+  settleTicket: (...args: any[]) => mockSettleTicket(...args),
+  entitlingDocs: async (_uid: string, _house: string, docs: unknown[]) => docs,
+}));
+
+// ─── util/houseRoles ─────────────────────────────────────────────────────────
+// Role record of the account whose guest doc is deleted (null: none).
+const mockReadRoleTier = jest.fn().mockResolvedValue(null);
+const mockRecordRoleRevoke = jest.fn().mockResolvedValue(undefined);
+jest.mock("../../util/houseRoles", () => ({
+  ...jest.requireActual("../../util/houseRoles"),
+  readRoleTier: (...args: any[]) => mockReadRoleTier(...args),
+  recordRoleRevoke: (...args: any[]) => mockRecordRoleRevoke(...args),
 }));
 
 // ─── util/claims ─────────────────────────────────────────────────────────────
@@ -222,6 +237,8 @@ const makeWrittenEvent = (
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockReadRoleTier.mockResolvedValue(null);
+  mockHouseDocGet.mockResolvedValue({ exists: true, data: () => ({ ownerId: "owner-uid" }) });
   mockBatchCommit.mockResolvedValue(undefined);
 });
 
@@ -894,15 +911,29 @@ describe("onGuestWrite (merged handler)", () => {
     expect(mockRevokeHouseRoles).not.toHaveBeenCalled();
   });
 
-  it("keeps the admin claim when an admins doc still lists the house", async () => {
+  it("an admins doc listing the house no longer keeps the admin claim (clients write admins docs)", async () => {
     const { onGuestWrite } = require("../../triggers/firestore");
-    mockAdminsGet.mockResolvedValueOnce({
+    mockAdminsGet.mockResolvedValue({
       docs: [{ id: "a1", data: () => ({ userId: "user-1", houseIds: ["house-1"] }) }],
     });
 
     await (onGuestWrite as Function)(makeWrittenEvent(guest, null));
 
-    expect(mockRevokeHouseRoles).toHaveBeenCalledWith("user-1", ["house-1"], ["guest"]);
+    expect(mockRevokeHouseRoles).toHaveBeenCalledWith("user-1", ["house-1"], ["guest", "admin"]);
+    expect(mockRecordRoleRevoke).toHaveBeenCalledWith("house-1", "user-1", "admin");
+    mockAdminsGet.mockResolvedValue({ docs: [] });
+  });
+
+  it("keeps the admin claim for a manager role record, or for the house owner", async () => {
+    const { onGuestWrite } = require("../../triggers/firestore");
+    mockReadRoleTier.mockResolvedValueOnce("manager");
+    await (onGuestWrite as Function)(makeWrittenEvent(guest, null));
+    expect(mockRevokeHouseRoles).toHaveBeenLastCalledWith("user-1", ["house-1"], ["guest"]);
+
+    mockHouseDocGet.mockResolvedValueOnce({ exists: true, data: () => ({ ownerId: "user-1" }) });
+    await (onGuestWrite as Function)(makeWrittenEvent(guest, null));
+    expect(mockRevokeHouseRoles).toHaveBeenLastCalledWith("user-1", ["house-1"], ["guest"]);
+    expect(mockRecordRoleRevoke).not.toHaveBeenCalledWith("house-1", "user-1", "admin");
   });
 
   it("still revokes on a delete event delivered past the retry cutoff, but skips EES", async () => {

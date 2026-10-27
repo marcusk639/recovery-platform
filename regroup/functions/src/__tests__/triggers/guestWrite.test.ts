@@ -32,7 +32,7 @@ jest.mock('firebase-functions/v2/firestore', () => ({
 jest.mock('../../api/firestore', () => require('../helpers/memFirestore').apiFirestore);
 
 import { logger } from 'firebase-functions';
-import { mem } from '../helpers/memFirestore';
+import { mem, memDb } from '../helpers/memFirestore';
 import { isoWeekStartUtc, onGuestWrite } from '../../triggers/firestore/guestWrite';
 
 const run = onGuestWrite as unknown as (e: unknown) => Promise<void>;
@@ -96,11 +96,28 @@ describe('delete: claim cleanup', () => {
     expect(users.r.guest).toEqual({ [H]: true });
   });
 
-  it('keeps the admin claim of a house admin whose guest doc is deleted', async () => {
+  it('keeps the admin claim of a manager (house-roles record) whose guest doc is deleted', async () => {
     users.a = { admin: { [H]: true }, guest: { [H]: true } };
-    mem.seed('admins/a1', { userId: 'a', houseIds: [H], superAdmin: [] });
+    mem.seed(`house-roles/${H}_a`, { tier: 'manager', via: 'invitation' });
     await run(deleteEvent('g1', { houseId: H, userId: 'a' }));
     expect(users.a).toEqual({ admin: { [H]: true }, guest: {}, superAdmin: {} });
+    expect(mem.get(`house-roles/${H}_a`)).toMatchObject({ tier: 'manager' });
+  });
+
+  it('an admins doc alone no longer keeps the admin claim; a peer leader record becomes resident-less', async () => {
+    users.p = { admin: { [H]: true }, guest: { [H]: true } };
+    mem.seed('admins/p1', { userId: 'p', houseIds: [H], superAdmin: [] });
+    mem.seed(`house-roles/${H}_p`, { tier: 'peerLeader', via: 'invitation' });
+    await run(deleteEvent('g1', { houseId: H, userId: 'p' }));
+    expect(users.p).toEqual({ admin: {}, guest: {}, superAdmin: {} });
+    expect(mem.get(`house-roles/${H}_p`)).toMatchObject({ tier: 'resident' });
+  });
+
+  it('the house owner keeps the admin claim', async () => {
+    users.o = { admin: { [H]: true }, guest: { [H]: true } };
+    mem.seed(`houses/${H}`, { id: H, ownerId: 'o' });
+    await run(deleteEvent('g1', { houseId: H, userId: 'o' }));
+    expect(users.o).toEqual({ admin: { [H]: true }, guest: {}, superAdmin: {} });
   });
 
   it('re-throws a cleanup failure so the event is retried', async () => {
@@ -136,7 +153,9 @@ describe('delete: claim cleanup', () => {
   });
 
   it('a deleted account counts as cleaned up (account deletion removes the user too)', async () => {
-    await expect(run(deleteEvent('g1', { houseId: H, userId: 'deleted-user' }))).resolves.toBeUndefined();
+    await expect(
+      run(deleteEvent('g1', { houseId: H, userId: 'deleted-user' })),
+    ).resolves.toBeUndefined();
     expect(mockSetClaims).not.toHaveBeenCalled();
   });
 
@@ -144,7 +163,9 @@ describe('delete: claim cleanup', () => {
     users.r = { guest: { [H]: true } };
     mockSetClaims.mockRejectedValueOnce(new Error('auth down'));
     const late = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
-    await expect(run(deleteEvent('g1', { houseId: H, userId: 'r' }, late))).resolves.toBeUndefined();
+    await expect(
+      run(deleteEvent('g1', { houseId: H, userId: 'r' }, late)),
+    ).resolves.toBeUndefined();
     expect(logger.error).toHaveBeenCalledWith(
       'onGuestWrite: late delete event; claims cleanup failed, not retried',
       expect.objectContaining({ guestId: 'g1', houseId: H, error: 'auth down' }),
@@ -252,13 +273,21 @@ describe('admission ticket', () => {
     id: `evt-${guestId}`,
     time,
     params: { guestId },
-    data: { before: { exists: false, data: () => undefined }, after: { exists: true, data: () => data } },
+    data: {
+      before: { exists: false, data: () => undefined },
+      after: { exists: true, data: () => data },
+    },
   });
   const ticketOf = () => mem.get(`admission-tickets/r_${H}`) as any;
 
   beforeEach(() => {
     users.r = { guest: { [H]: true } };
-    mem.seed(`admission-tickets/r_${H}`, { invitationId: 'T', role: 'guest', initialPhase: '', used: false });
+    mem.seed(`admission-tickets/r_${H}`, {
+      invitationId: 'T',
+      role: 'guest',
+      initialPhase: '',
+      used: false,
+    });
   });
 
   it('the first guest doc created for the account in the house uses the ticket', async () => {
@@ -268,8 +297,10 @@ describe('admission ticket', () => {
   });
 
   it('is idempotent: a redelivery or a second create leaves the first use in place', async () => {
+    mem.seed('guests/g1', { houseId: H, userId: 'r' });
     await run(created('g1', { houseId: H, userId: 'r' }));
     await run(created('g1', { houseId: H, userId: 'r' }));
+    mem.seed('guests/g2', { houseId: H, userId: 'r' });
     await run(created('g2', { houseId: H, userId: 'r' }));
     expect(ticketOf()).toMatchObject({ used: true, usedByGuestId: 'g1' });
   });
@@ -282,7 +313,76 @@ describe('admission ticket', () => {
 
   it('a late create still marks the ticket used', async () => {
     const late = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    mem.seed('guests/g1', { houseId: H, userId: 'r' });
     await run(created('g1', { houseId: H, userId: 'r' }, late));
     expect(ticketOf().used).toBe(true);
+  });
+});
+
+describe('one ticket, several docs: the trigger binds and flags; only entitled docs keep claims', () => {
+  const created = (guestId: string, data: Record<string, unknown>) => ({
+    id: `evt-${guestId}`,
+    params: { guestId },
+    data: {
+      before: { exists: false, data: () => undefined },
+      after: { exists: true, data: () => data },
+    },
+  });
+  const doc = (id: string, createdBy?: string) => {
+    const data = { houseId: H, userId: 'r', status: 'active', ...(createdBy ? { createdBy } : {}) };
+    mem.seed(`guests/${id}`, data);
+    return data;
+  };
+
+  beforeEach(() => {
+    users.r = { guest: { [H]: true } };
+    mem.seed(`admission-tickets/r_${H}`, {
+      invitationId: 'T',
+      role: 'guest',
+      initialPhase: '',
+      used: false,
+    });
+  });
+
+  it('an extra self-create is flagged and does not keep the claims when the bound doc goes', async () => {
+    const a = doc('bound', 'r');
+    const b = doc('extra', 'r');
+    await run(created('extra', b)); // triggers may run out of order
+    await run(created('bound', a));
+    expect(mem.get(`admission-tickets/r_${H}`)).toMatchObject({ usedByGuestId: 'bound' });
+    expect(mem.get('guest-flags/extra')).toMatchObject({ reason: 'extra-self-create' });
+
+    await memDb.doc('guests/bound').delete();
+    await run(deleteEvent('bound', a));
+    expect(users.r.guest).toEqual({});
+  });
+
+  it('the bound doc keeps the claims when an extra self-create is deleted', async () => {
+    const a = doc('bound', 'r');
+    const b = doc('extra', 'r');
+    await run(created('bound', a));
+    await run(created('extra', b));
+    await memDb.doc('guests/extra').delete();
+    await run(deleteEvent('extra', b));
+    expect(users.r.guest).toEqual({ [H]: true });
+  });
+
+  it('staff-created and legacy (no createdBy) docs keep the claims', async () => {
+    const a = doc('bound', 'r');
+    await run(created('bound', a));
+    const staff = doc('intake', 'manager');
+    await run(created('intake', staff));
+    await memDb.doc('guests/bound').delete();
+    await run(deleteEvent('bound', a));
+    expect(users.r.guest).toEqual({ [H]: true });
+
+    mem.reset();
+    users.r = { guest: { [H]: true } };
+    const legacy = doc('legacy');
+    doc('gone', 'r');
+    await memDb.doc('guests/gone').delete();
+    await run(deleteEvent('gone', { houseId: H, userId: 'r', createdBy: 'r' }));
+    expect(legacy.createdBy).toBeUndefined();
+    expect(users.r.guest).toEqual({ [H]: true });
   });
 });

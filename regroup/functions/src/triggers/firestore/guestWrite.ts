@@ -1,8 +1,9 @@
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { logger } from 'firebase-functions';
-import { adminCollection, guestCollection, ratsFirestore } from '../../api/firestore';
+import { guestCollection, houseCollection, ratsFirestore } from '../../api/firestore';
 import { revokeHouseRoles } from '../../util/claims';
-import { markTicketUsed } from '../../util/admission';
+import { entitlingDocs, settleTicket } from '../../util/admission';
+import { isStaffTier, readRoleTier, recordRoleRevoke } from '../../util/houseRoles';
 import {
   isActiveGuestDoc,
   isPlausibleUid,
@@ -19,10 +20,15 @@ import { eventAgeMinutes, isStaleEvent, RETRY_CUTOFF_MS } from '../../util/event
 //   claim, unless something still entitles the account to them:
 //   - an ACTIVE guest doc of the account in the house (isActiveGuestDoc: not
 //     moved out, inactive, expelled or discharged) keeps both claims, and is
-//     logged as a warning. That doc may be a self-created duplicate; until
-//     duplicates are marked (phase 2), it still keeps the claims;
-//   - an admins/{id} doc of the account listing the house keeps the admin
-//     claim.
+//     logged as a warning, unless it is an extra self-create under one
+//     ticket (util/admission entitlingDocs: flagged in guest-flags, or
+//     self-created and not the ticket's usedByGuestId). Staff-created docs
+//     and legacy docs with no createdBy keep them as before;
+//   - the house owner (ownerId), or a manager or owner role record
+//     (util/houseRoles), keeps the admin claim. admins/{id} docs are not
+//     read: clients write them. A peer leader's admin claim goes with their
+//     last resident record.
+//   The role record is updated to match (recordRoleRevoke).
 //   The check reads current state, so a redelivery after the resident was
 //   re-added finds their new active doc and revokes nothing. An account that
 //   no longer exists (auth/user-not-found; account deletion removes the guest
@@ -31,14 +37,19 @@ import { eventAgeMinutes, isStaleEvent, RETRY_CUTOFF_MS } from '../../util/event
 //   late delete would leave a departed resident's claims in place. A late
 //   delete's cleanup is attempted once: on failure it logs an error (ids
 //   only) and is not retried, so retrying stays bounded by the cutoff.
-// CREATE: marks the account's admission ticket for the house used (the
-//   self-create rule needs an unused one), once, in a transaction.
+// CREATE: settles the account's admission ticket for the house
+//   (util/admission settleTicket, one transaction): marks it used, bound to
+//   one doc (usedByGuestId), and flags any other self-created doc under it
+//   in guest-flags. Runs for every create of an account's doc, whoever
+//   created it.
 // ALL WRITES: re-splits the event's EES week over counted residents (see
 //   resplitEES). Stale events (older than RETRY_CUTOFF_MS) skip this step.
 //
-// Registered with retry: true. Any failure of a fresh event is re-thrown after
-// the other step has run, so the event is redelivered; both steps recompute
-// from current state. Claims are last-writer-wins: a grant that lands between
+// Registered with retry: true. A failed ticket settle on a fresh create event
+// is re-thrown at once, before the EES step; the redelivery runs every step
+// again. On other events the claims cleanup and the EES step both run, and
+// the first failure is re-thrown after them, so the event is redelivered.
+// Every step recomputes from current state. Claims are last-writer-wins: a grant that lands between
 // the cleanup's reads and its write can still be revoked.
 // ─────────────────────────────────────────────────────────────────────────────
 export const onGuestWrite = onDocumentWritten(
@@ -53,13 +64,12 @@ export const onGuestWrite = onDocumentWritten(
     const ageInfo = { guestId, eventId: event.id, ageMinutes: eventAgeMinutes(event.time) };
     const isCreate = !isDelete && !event.data?.before?.exists;
 
-    // The first guest doc created for an account in a house uses up its
-    // admission ticket (util/admission), so the self-create rule refuses a
-    // second one. Runs even for a late event (a missed mark would leave the
-    // ticket open until it expires); a late failure is logged, not retried.
+    // Settle the ticket (see header). Runs even for a late event (a missed
+    // settle would leave the ticket open until it expires); a late failure is
+    // logged, not retried.
     if (isCreate && houseId && isPlausibleUid(guestData.userId)) {
       try {
-        await markTicketUsed(guestData.userId, houseId, guestId);
+        await settleTicket(guestData.userId, houseId);
       } catch (err) {
         if (!stale) throw err;
         logger.error('onGuestWrite: late create event; admission ticket not marked used', {
@@ -113,14 +123,16 @@ async function revokeIfNoLongerEntitled(
   houseId: string,
   deletedGuestId: string,
 ): Promise<void> {
-  const [guestSnap, adminSnap] = await Promise.all([
+  const [guestSnap, tier, house] = await Promise.all([
     guestCollection.where('userId', '==', uid).get(),
-    adminCollection.where('userId', '==', uid).get(),
+    readRoleTier(houseId, uid),
+    houseCollection.doc(houseId).get(),
   ]);
   // Current state: a doc re-created with the deleted id counts like any other.
-  const activeDoc = guestSnap.docs.find(
+  const active = guestSnap.docs.filter(
     (d) => d.data().houseId === houseId && isActiveGuestDoc(d.data()),
   );
+  const [activeDoc] = await entitlingDocs(uid, houseId, active);
   if (activeDoc) {
     logger.warn('onGuestWrite: account still has an active guest doc in the house; claims kept', {
       guestId: deletedGuestId,
@@ -129,12 +141,11 @@ async function revokeIfNoLongerEntitled(
     });
     return;
   }
-  const listsHouse = (v: unknown) => Array.isArray(v) && v.includes(houseId);
-  const stillAdmin = adminSnap.docs.some(
-    (d) => listsHouse(d.data().houseIds) || listsHouse(d.data().superAdmin),
-  );
+  const stillAdmin = isStaffTier(tier) || (house.data() ?? {}).ownerId === uid;
   try {
     await revokeHouseRoles(uid, [houseId], stillAdmin ? ['guest'] : ['guest', 'admin']);
+    await recordRoleRevoke(houseId, uid, 'guest');
+    if (!stillAdmin) await recordRoleRevoke(houseId, uid, 'admin');
   } catch (err) {
     // No account, no claims: nothing left to revoke.
     if ((err as { code?: string }).code === 'auth/user-not-found') {
