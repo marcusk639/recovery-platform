@@ -90,9 +90,9 @@ function activityDoc(ctx: ReturnType<RulesTestEnvironment["authenticatedContext"
 describe("activities verification fields", () => {
   beforeEach(seedActivity);
 
-  it("lets the logging resident edit non-verification fields", async () => {
+  it("BLOCKS the logging resident editing activity details (data)", async () => {
     const ctx = testEnv.authenticatedContext(GUEST_UID, authHouseGuest(GUEST_UID, HOUSE_ID));
-    await assertSucceeds(
+    await assertFails(
       updateDoc(activityDoc(ctx), { data: { meetingName: "Tuesday AA", duration: 90 } }),
     );
   });
@@ -112,15 +112,16 @@ describe("activities verification fields", () => {
     await assertFails(
       updateDoc(activityDoc(ctx), {
         verified: true,
-        data: { meetingName: "Tuesday AA", duration: 90 },
+        status: "disputed",
+        disputeReason: "x",
       }),
     );
   });
 
-  it("allows a resident write that echoes the same verified value back", async () => {
+  it("allows a resident dispute that echoes the same verified value back", async () => {
     const ctx = testEnv.authenticatedContext(GUEST_UID, authHouseGuest(GUEST_UID, HOUSE_ID));
     await assertSucceeds(
-      updateDoc(activityDoc(ctx), { verified: false, data: { duration: 45 } }),
+      updateDoc(activityDoc(ctx), { verified: false, status: "disputed", disputeReason: "x" }),
     );
   });
 

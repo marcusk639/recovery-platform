@@ -139,10 +139,33 @@ describe('activities create', () => {
 });
 
 describe('activities update by the logging resident', () => {
-  it('still allows editing the activity details', async () => {
-    await assertSucceeds(
+  it('no longer allows editing the activity details (no resident UI edits them)', async () => {
+    await assertFails(
       update(resident(), 'mine', { data: { type: 'chore', choreName: 'Bathroom' } }),
     );
+  });
+
+  it('BLOCKS changing data or type on a verified activity (it would stay verified)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(
+        doc(ctx.firestore(), 'activities/verified'),
+        activity({ type: 'work', data: { hoursWorked: 2 }, verified: true, verifiedBy: ADMIN_UID }),
+      );
+    });
+    await assertFails(update(resident(), 'verified', { data: { hoursWorked: 40 } }));
+    await assertFails(update(resident(), 'verified', { type: 'meeting' }));
+  });
+
+  it('allows exactly the fields disputeActivity and deleteActivity write', async () => {
+    await assertSucceeds(
+      update(resident(), 'mine', {
+        status: 'disputed',
+        disputeReason: 'Not done',
+        disputeResolvedBy: RESIDENT_UID,
+        loggedAt: Timestamp.now(),
+      }),
+    );
+    await assertSucceeds(update(resident(), 'mine', { status: 'deleted', loggedAt: Timestamp.now() }));
   });
 
   it('allows disputing or deleting their own activity (only lowers counts)', async () => {

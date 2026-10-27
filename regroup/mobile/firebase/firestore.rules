@@ -460,18 +460,21 @@ service cloud.firestore {
            request.resource.data.status == 'active' &&
            request.resource.data.get('verified', false) == false));
       // `verified`/`verifiedBy` feed the Verified column of the court-ready
-      // compliance export, so the resident who logged the activity must not be
-      // able to self-certify their own attendance. Nor may they re-point it
-      // (guestId, houseId, loggedBy), move it to another week (timestamp), or
-      // reactivate it: their only status changes are to disputed or deleted,
-      // which can only lower their counts. Admins may do the rest, but may not
-      // move an activity into a house they do not administer. diff() only
-      // flags real changes, so a whole-object write echoing values back passes.
+      // compliance export. Once an admin verifies an activity its details must
+      // not change under that verification, so the resident who logged it may
+      // not edit it at all beyond disputing or soft-deleting it: exactly the
+      // fields disputeActivity / deleteActivity write (services/activity.ts).
+      // Their status may only move to disputed or deleted; on an UPDATE that
+      // can only lower their counts. (Creates are separate: a resident may log
+      // a backdated or future-dated activity by design.) Admins may do the
+      // rest, but may not move an activity into a house they do not
+      // administer. diff() only flags real changes, so a write echoing the
+      // current values back passes.
       allow update: if
         (isAdmin([resource.data.houseId]) && isAdmin([request.resource.data.houseId])) ||
         (isSameUser(resource.data.loggedBy) &&
-          !request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['verified', 'verifiedBy', 'guestId', 'houseId', 'loggedBy', 'timestamp']) &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'disputeReason', 'disputeResolvedBy', 'loggedAt']) &&
           (request.resource.data.status == resource.data.status ||
            request.resource.data.status in ['disputed', 'deleted']));
       allow delete: if isAdmin([resource.data.houseId]);
