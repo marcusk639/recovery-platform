@@ -33,7 +33,7 @@ describe('CloudFunctionService', () => {
 
     expect(httpsCallable).toHaveBeenCalledWith('createOperatorSubscription');
     expect(callableFn).toHaveBeenCalledWith({
-      user: { id: 'uid-1', email: 'a@b.com', subscriptionMetadata: undefined },
+      user: { id: 'uid-1', email: 'a@b.com', subscriptionMetadata: user.subscriptionMetadata },
       paymentMethod: 'pm_1',
       houseType: 'traditional',
       tier: 'starter',

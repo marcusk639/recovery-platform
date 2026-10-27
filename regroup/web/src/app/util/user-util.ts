@@ -1,6 +1,6 @@
-import { auth } from 'firebase/app';
+import firebase from 'firebase/app';
 
-export const getFirebaseUserFromUserCredential = (firebaseUser: auth.UserCredential) => {
+export const getFirebaseUserFromUserCredential = (firebaseUser: firebase.auth.UserCredential) => {
   return (firebaseUser.user as any)._user;
 };
 

@@ -12,7 +12,6 @@ import { User } from 'src/app/entities/User';
 import { AuthService } from 'src/app/services/auth/auth-service.service';
 import { PaymentMethod } from 'ngx-stripe/lib/interfaces/payment-intent';
 import { ModalService } from 'src/app/services/modal.service';
-import { analytics } from 'firebase';
 import { AngularFireAnalytics } from '@angular/fire/analytics';
 import { BillingInterval, HouseType } from 'src/app/entities/TierCatalog';
 

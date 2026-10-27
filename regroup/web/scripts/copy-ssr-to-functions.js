@@ -12,11 +12,15 @@
  * runtime behaviour; it is not demonstrable from this repo. The function has
  * always depended on it.
  *
- * THE BUNDLE IS NOT SELF-CONTAINED. angular.json marks @firebase/firestore as
- * an external, so requiring main.js resolves it from functions/node_modules,
- * supplied transitively by `firebase` in functions/package.json. Dropping or
- * bumping that dependency breaks SSR on the first request, and no build step
- * catches it — copying dist is necessary but not sufficient.
+ * THE BUNDLE IS NOT SELF-CONTAINED. angular.json marks @firebase/app and
+ * @firebase/firestore as externals, so requiring main.js resolves them from
+ * functions/node_modules, supplied transitively by `firebase` in
+ * functions/package.json. That pin must match the web app's firebase major
+ * (both 8.10.1 now): with firebase 8 in the bundle but 7 in functions,
+ * Firestore registered on a second @firebase/app and every route returned 500.
+ * Dropping or changing that dependency breaks SSR on the first request and no
+ * build step catches it, so copying dist is necessary but not sufficient: run
+ * `npm run test:ssr` (scripts/ssr-smoke.js) after this script.
  *
  * This replaces `cp -r ../dist .`, which copied an incomplete build as happily
  * as a complete one. web/dist holds only sapp, so narrowing the copy to
