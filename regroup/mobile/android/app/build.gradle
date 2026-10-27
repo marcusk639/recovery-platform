@@ -48,7 +48,12 @@ react {
     //
     //   A list of extra flags to pass to the 'bundle' commands.
     //   See https://github.com/react-native-community/cli/blob/main/docs/commands.md#bundle
-    // extraPackagerArgs = []
+    //
+    //   --reset-cache: babel.config.js inlines env values (BUNDLED_ENV), and
+    //   Metro's transform cache key does not include them. Without this, a
+    //   release bundle built after an e2e one could reuse transforms with
+    //   E2E_VARIANT baked in. Every bundled variant pays a cold transform.
+    extraPackagerArgs = ["--reset-cache"]
 
     /* Hermes Commands */
     //   The hermes compiler command to run. By default it is 'hermesc'
@@ -153,6 +158,33 @@ android {
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
+        // E2E build types: release builds (JS bundled with Hermes, no Metro,
+        // not debuggable) with their own package and Firebase config, signed
+        // with the debug key. E2E_VARIANT is set per variant on the bundle
+        // task below. Each one's google-services.json lives in its source set:
+        //   e2eEmulator: src/e2eEmulator/google-services.json, committed, for
+        //                the emulator-only project demo-regroup-e2e.
+        //   e2eStaging:  copied from ~/.config/regroup-e2e at build time
+        //                (copyE2eStagingGoogleServices), gitignored.
+        e2eEmulator {
+            initWith release
+            applicationIdSuffix ".e2e.emu"
+            signingConfig signingConfigs.debug
+            matchingFallbacks = ['release']
+        }
+        e2eStaging {
+            initWith release
+            applicationIdSuffix ".e2e.stg"
+            signingConfig signingConfigs.debug
+            matchingFallbacks = ['release']
+        }
+    }
+
+    // A build type only gets src/<buildType>; initWith copies settings, not
+    // sources. Both e2e types need release's no-op ReactNativeFlipper.
+    sourceSets {
+        e2eEmulator.java.srcDirs += 'src/release/java'
+        e2eStaging.java.srcDirs += 'src/release/java'
     }
 
 
@@ -172,6 +204,53 @@ android {
 
         }
     }
+}
+
+// E2E_VARIANT reaches babel.config.js only through the bundler's environment.
+// The React Native Gradle plugin (0.72) has no per-variant env setting, so each
+// e2e bundle task runs node through `env` with the variant set. It is a task
+// input, so changing it re-runs the bundle. Every other variant leaves it unset.
+//
+// This must configure the task after the plugin's own register action, which
+// sets nodeExecutableAndArgs and would overwrite an earlier configureEach. The
+// plugin registers the task in its onVariants callback; this callback is added
+// later, so it runs later, and tasks.named(...).configure then runs last.
+def e2eBundleVariants = [e2eEmulator: "emulator", e2eStaging: "staging"]
+androidComponents.onVariants(androidComponents.selector().all()) { variant ->
+    def e2eVariant = e2eBundleVariants[variant.name]
+    if (e2eVariant != null) {
+        tasks.named("createBundle${variant.name.capitalize()}JsAndAssets").configure { task ->
+            task.nodeExecutableAndArgs.set(["env", "E2E_VARIANT=${e2eVariant}".toString(), "node"])
+        }
+    }
+}
+
+// e2eStaging's Firebase config is for the real regroup-e2e project, so it stays
+// out of git: it is copied in before every e2eStaging build and the build fails
+// without it. Never falls back to app/google-services.json (phoenix-cleanhouse).
+// -PregroupE2eStagingGoogleServices=<path> overrides the source.
+def e2eStagingGoogleServicesSource = file(
+    project.findProperty("regroupE2eStagingGoogleServices") ?:
+        "${System.getProperty('user.home')}/.config/regroup-e2e/google-services.e2e-staging.json")
+def e2eStagingGoogleServicesTarget = file("src/e2eStaging/google-services.json")
+def copyE2eStagingGoogleServices = tasks.register("copyE2eStagingGoogleServices") {
+    inputs.property("source", e2eStagingGoogleServicesSource.absolutePath)
+    outputs.file(e2eStagingGoogleServicesTarget)
+    outputs.upToDateWhen { false }
+    doLast {
+        if (!e2eStagingGoogleServicesSource.isFile()) {
+            e2eStagingGoogleServicesTarget.delete()
+            throw new GradleException(
+                "e2eStaging needs its Firebase config at ${e2eStagingGoogleServicesSource}: " +
+                "the google-services.json of the Android app com.regroup.app.e2e.stg " +
+                "in Firebase project regroup-e2e. It is not committed.")
+        }
+        e2eStagingGoogleServicesTarget.parentFile.mkdirs()
+        e2eStagingGoogleServicesTarget.bytes = e2eStagingGoogleServicesSource.bytes
+    }
+}
+tasks.matching { it.name in ["preE2eStagingBuild", "processE2eStagingGoogleServices"] }.configureEach {
+    dependsOn copyE2eStagingGoogleServices
 }
 
 buildscript {

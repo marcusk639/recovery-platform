@@ -20,6 +20,7 @@ const BUNDLED_ENV = [
   'RATS_WEB_URL',
   'GOOGLE_MAPS_API_KEY',
   'E2E_VARIANT',
+  'E2E_BUNDLE_MARKER',
 ];
 
 // Under Jest the substitution is skipped so tests can set process.env and
@@ -42,6 +43,15 @@ if (e2eVariant && !E2E_VARIANTS.includes(e2eVariant)) {
   throw new Error(
     `E2E_VARIANT must be unset or one of ${E2E_VARIANTS.join(', ')}; got "${e2eVariant}"`,
   );
+}
+
+// One whole string literal naming the variant this bundle was built as, so a
+// built artifact can be checked: scripts/verify-android-variants.sh greps the
+// compiled bundle for it. The bare names cannot serve, since 'emulator' and
+// 'staging' appear in every bundle as the E2E_VARIANTS list in src/config/env.ts.
+// Not set under Jest, where nothing is inlined.
+if (!isTest) {
+  process.env.E2E_BUNDLE_MARKER = `regroup-e2e-variant=${e2eVariant || 'none'}`;
 }
 
 // @tanstack/query-core 5.x sets its package "react-native" field to

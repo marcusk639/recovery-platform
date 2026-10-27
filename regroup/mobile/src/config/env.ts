@@ -59,6 +59,13 @@ export type E2EVariant = 'emulator' | 'staging';
 const E2E_VARIANTS: readonly E2EVariant[] = ['emulator', 'staging'];
 
 /**
+ * "regroup-e2e-variant=<emulator|staging|none>", inlined by babel.config.js.
+ * Nothing reads it at runtime. It is exported so the literal stays in the
+ * compiled bundle, where scripts/verify-android-variants.sh checks it.
+ */
+export const E2E_BUNDLE_MARKER = process.env.E2E_BUNDLE_MARKER as string | undefined;
+
+/**
  * The e2e build variant baked into this bundle, or null for every other build.
  *
  * 'emulator' builds route Firebase to local emulators (see
