@@ -5,6 +5,7 @@ import {
   ActivityType,
   ActivityData,
   ActivityStatus,
+  COUNTED_ACTIVITY_STATUSES,
 } from '../entities/ActivityModel';
 import { WeekSummary } from '../entities/WeekSummary';
 import { logException } from '../util/logging';
@@ -83,7 +84,7 @@ export async function getActivities(
       .where('guestId', '==', guestId)
       .where('timestamp', '>=', startDate)
       .where('timestamp', '<', endDate)
-      .where('status', '==', ActivityStatus.ACTIVE);
+      .where('status', 'in', COUNTED_ACTIVITY_STATUSES);
 
     // Add type filter if specified
     if (type) {
@@ -157,7 +158,7 @@ export async function getActivitiesPage(
       .where('guestId', '==', guestId)
       .where('timestamp', '>=', startDate)
       .where('timestamp', '<', endDate)
-      .where('status', '==', ActivityStatus.ACTIVE);
+      .where('status', 'in', COUNTED_ACTIVITY_STATUSES);
 
     if (type) {
       query = query.where('type', '==', type);
@@ -210,7 +211,7 @@ export async function getHouseActivities(
     const snapshot = await firestore
       .collection('activities')
       .where('houseId', '==', houseId)
-      .where('status', '==', ActivityStatus.ACTIVE)
+      .where('status', 'in', COUNTED_ACTIVITY_STATUSES)
       .orderBy('timestamp', 'desc')
       .limit(limit)
       .get();
@@ -332,6 +333,10 @@ export async function disputeActivity(
     await firestore.collection('activities').doc(activityId).update({
       status: ActivityStatus.DISPUTED,
       disputeReason: reason,
+      // disputeResolvedBy has always held the disputer (and is overwritten
+      // with the resolver by resolveDispute); disputedBy keeps who disputed.
+      // The rules require both to be the caller for a peer dispute.
+      disputedBy,
       disputeResolvedBy: disputedBy,
       loggedAt: FirebaseFirestore.FieldValue.serverTimestamp(),
     });
@@ -418,7 +423,7 @@ export function subscribeToHouseActivities(
   return firestore
     .collection('activities')
     .where('houseId', '==', houseId)
-    .where('status', '==', ActivityStatus.ACTIVE)
+    .where('status', 'in', COUNTED_ACTIVITY_STATUSES)
     .orderBy('timestamp', 'desc')
     .limit(limit)
     .onSnapshot(snapshot => {

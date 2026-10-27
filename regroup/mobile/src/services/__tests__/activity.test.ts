@@ -109,6 +109,7 @@ describe('Activity Service', () => {
         capturedFilters.every(f => {
           const val = (a as any)[f.field];
           if (f.op === '==') return val === f.value;
+          if (f.op === 'in') return (f.value as unknown[]).includes(val);
           const av = val instanceof Date ? val : new Date(val);
           const fv = f.value instanceof Date ? f.value : new Date(f.value);
           if (f.op === '>=') return av >= fv;
@@ -459,6 +460,41 @@ describe('Activity Service', () => {
       );
     });
 
+    it('lists active and kept (resolved) activities, not pending disputes or deleted ones', async () => {
+      const ids: Record<string, string> = {};
+      for (const status of [
+        ActivityStatus.ACTIVE,
+        ActivityStatus.RESOLVED,
+        ActivityStatus.DISPUTED,
+        ActivityStatus.DELETED,
+      ]) {
+        const a = await logActivity(
+          'guest-status',
+          'house456',
+          ActivityType.CHORE,
+          ActivityDataFactory.chore('daily', 'Kitchen'),
+          'user789',
+          new Date('2024-01-16T10:00:00Z'),
+        );
+        mockActivities.find(x => x.id === a.id)!.status = status;
+        ids[status] = a.id;
+      }
+
+      const listed = await getActivities(
+        'guest-status',
+        new Date('2024-01-15'),
+        new Date('2024-01-22'),
+      );
+
+      expect(listed.map(a => a.id).sort()).toEqual(
+        [ids[ActivityStatus.ACTIVE], ids[ActivityStatus.RESOLVED]].sort(),
+      );
+      expect(mockActivityCollection.where).toHaveBeenCalledWith('status', 'in', [
+        ActivityStatus.ACTIVE,
+        ActivityStatus.RESOLVED,
+      ]);
+    });
+
     it('should get all activities for guest in date range', async () => {
       const activities = await getActivities(
         'guest123',
@@ -807,6 +843,15 @@ describe('Activity Service', () => {
       expect(disputed?.status).toBe(ActivityStatus.DISPUTED);
       expect(disputed?.disputeReason).toBe('Chore was not completed properly');
       expect(disputed?.disputeResolvedBy).toBe('admin123');
+    });
+
+    it('records who disputed in disputedBy (it survives resolution)', async () => {
+      await disputeActivity(activityId, 'Not done', 'peer-uid');
+      await resolveDispute(activityId, 'admin456', 'keep');
+
+      const resolved = mockActivities.find(a => a.id === activityId);
+      expect(resolved?.disputedBy).toBe('peer-uid');
+      expect(resolved?.disputeResolvedBy).toBe('admin456');
     });
   });
 

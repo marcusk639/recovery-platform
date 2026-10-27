@@ -23,6 +23,17 @@ export enum ActivityStatus {
 }
 
 /**
+ * Statuses that count toward stats and appear in activity lists: active, and
+ * a dispute an admin resolved as "keep" (resolveDispute writes RESOLVED). A
+ * pending dispute and a deleted activity do not. Must match COUNTED_STATUSES
+ * in regroup/functions/src/activities/weekSummaryMath.ts (week summaries).
+ */
+export const COUNTED_ACTIVITY_STATUSES: ActivityStatus[] = [
+  ActivityStatus.ACTIVE,
+  ActivityStatus.RESOLVED,
+];
+
+/**
  * Base Activity Interface
  * Represents a single activity logged by a guest
  */
@@ -40,6 +51,8 @@ export interface Activity {
 
   // Optional dispute fields
   disputeReason?: string;
+  /** Who raised the dispute (kept after resolveDispute overwrites disputeResolvedBy). */
+  disputedBy?: string;
   disputeResolvedBy?: string;
   disputeResolvedAt?: Date | string;
 
@@ -134,6 +147,8 @@ export class ActivityEntity extends BaseEntity implements Activity {
   status: ActivityStatus = ActivityStatus.ACTIVE;
 
   disputeReason?: string;
+  /** Who raised the dispute (kept after resolveDispute overwrites disputeResolvedBy). */
+  disputedBy?: string;
   disputeResolvedBy?: string;
   disputeResolvedAt?: Date;
   notes?: string;
