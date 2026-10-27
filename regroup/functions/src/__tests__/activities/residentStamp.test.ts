@@ -7,6 +7,7 @@
 import { logger } from 'firebase-functions';
 import { FakeFirestore, asFirestore } from './fakeFirestore';
 import {
+  hasDisputeHistory,
   needsResidentStamp,
   residentUidFrom,
   stampResidentUid,
@@ -152,6 +153,13 @@ describe('helpers', () => {
       needsResidentStamp(undefined, act({ residentUid: null, residentUidPending: false })),
     ).toBe(false);
     expect(needsResidentStamp(act(), undefined)).toBe(false);
+  });
+
+  it('hasDisputeHistory mirrors the rules: a null disputeResult (or any present key) is history', () => {
+    expect(hasDisputeHistory({ status: 'active', disputeResult: null })).toBe(true);
+    expect(hasDisputeHistory({ status: 'active', disputedBy: null })).toBe(true);
+    expect(hasDisputeHistory({ status: 'active', disputeResult: 'none' })).toBe(false);
+    expect(hasDisputeHistory({ status: 'active' })).toBe(false);
   });
 
   it('residentUidFrom: the userId, else null', () => {

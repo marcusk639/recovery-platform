@@ -5,20 +5,20 @@
  * not enough: a resident or staff member could edit, delete or recreate their
  * own guest doc around a dispute.
  *
- * The stamp is IMMUTABLE for any dispute. No client changes it after create,
- * and restampGuestActivities (onGuestLinkedRestamp) and the backfill only
- * fill empty stamps. The one server re-stamp: an admin's correction of
- * guestId while the activity has no dispute history re-stamps it from the new
- * guest (its userId, or null and unfillable). Once there is history the
- * rules freeze guestId, so a disputed activity's stamp never moves. A new app build sets it at create
- * (the rules check it against the guest doc); for older builds this fills it
- * from the onActivityWritten trigger. It only ever fills an ABSENT or NULL
- * stamp:
- *   - the guest has an account: stamp it;
- *   - no account yet, or no guest doc: record `residentUidPending: false` and
- *     `residentUid: null` once (logged once), so later writes skip the
- *     transaction; onGuestLinkedRestamp fills it when an account is linked.
- * Until stamped, the rules let only the house's primary owner decide.
+ * Who may change it:
+ *   - clients: only at create, and only to the guest doc's userId (the new
+ *     app build does; the rules check it);
+ *   - this, from onActivityWritten: fills an ABSENT or NULL stamp (the guest
+ *     has an account: stamp it; none yet, or no guest doc: record
+ *     `residentUid: null, residentUidPending: false` once, logged once, so
+ *     later writes skip the transaction), and RE-STAMPS on an admin's
+ *     correction of guestId while the activity has no dispute history (from
+ *     the new guest: its userId, or null and unfillable);
+ *   - restampGuestActivities (onGuestLinkedRestamp) and the backfill: fill
+ *     empty stamps only.
+ * Once there is dispute history the rules freeze guestId, so a disputed
+ * activity's stamp never moves. With no usable stamp the rules fall back to
+ * the guest doc (safe only with #145's guest rules live).
  *
  * Idempotent, in a transaction that re-reads the activity and guest. Logs ids
  * only.
@@ -57,7 +57,8 @@ export function hasDisputeHistory(d: Data | undefined): boolean {
     d.status === 'disputed' ||
     d.status === 'resolved' ||
     HISTORY_KEYS.some((k) => k in d) ||
-    (d.disputeResult !== undefined && d.disputeResult !== null && d.disputeResult !== 'none') ||
+    // As the rules (get('disputeResult', 'none') != 'none'): a null counts.
+    ('disputeResult' in d && d.disputeResult !== 'none') ||
     d.incomplete === true
   );
 }
