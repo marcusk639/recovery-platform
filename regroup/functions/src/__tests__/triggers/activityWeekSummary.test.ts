@@ -14,9 +14,13 @@ jest.mock('../../api/firestore', () => ({ ratsFirestore: { name: 'rats-db' } }))
 jest.mock('../../activities/syncWeekSummary', () => ({
   syncWeekSummariesForActivityWrite: jest.fn(async () => ({ recomputed: [] })),
 }));
+jest.mock('../../activities/disputeNotifications', () => ({
+  notifyDispute: jest.fn(async () => ({ recipients: [] })),
+}));
 
 import { onActivityWritten } from '../../triggers/firestore/activityWeekSummary';
 import { syncWeekSummariesForActivityWrite } from '../../activities/syncWeekSummary';
+import { notifyDispute } from '../../activities/disputeNotifications';
 
 const trigger = onActivityWritten as unknown as {
   options: { document: string; retry: boolean };
@@ -67,6 +71,25 @@ describe('onActivityWritten', () => {
         data: { before: snap(undefined), after: snap({}) },
       }),
     ).rejects.toThrow('aborted');
+  });
+
+  it('also runs the dispute notifier with the event id (for idempotent notification ids)', async () => {
+    const before = { status: 'active' };
+    const after = { status: 'disputed' };
+    await trigger.handler({
+      id: 'evt-9',
+      params: { activityId: 'a9' },
+      data: { before: snap(before), after: snap(after) },
+    });
+    expect(notifyDispute).toHaveBeenCalledWith({ name: 'rats-db' }, 'evt-9', 'a9', before, after);
+  });
+
+  it('still recomputes when notifying fails, then fails the event so it retries', async () => {
+    (notifyDispute as jest.Mock).mockRejectedValueOnce(new Error('notify down'));
+    await expect(
+      trigger.handler({ id: 'e', params: { activityId: 'a10' }, data: { before: snap(undefined), after: snap({}) } }),
+    ).rejects.toThrow('notify down');
+    expect(syncWeekSummariesForActivityWrite).toHaveBeenCalledWith({ name: 'rats-db' }, 'a10', undefined, {});
   });
 
   it('is exported from the triggers index so it deploys', () => {

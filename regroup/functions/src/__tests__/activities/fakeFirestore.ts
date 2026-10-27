@@ -59,6 +59,14 @@ export class FakeFirestore {
     return {
       id,
       collection,
+      /** Like the Admin SDK: fails with ALREADY_EXISTS (6) if the doc exists. */
+      async create(data: Data) {
+        if (db.col(collection).has(id)) {
+          throw Object.assign(new Error('already exists'), { code: 6 });
+        }
+        db.col(collection).set(id, data);
+        db.writes.push({ collection, id, data });
+      },
       async get() {
         const data = db.col(collection).get(id);
         return { exists: data !== undefined, id, data: () => data };
