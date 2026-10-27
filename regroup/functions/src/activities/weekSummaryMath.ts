@@ -218,3 +218,28 @@ export function aggregateWeek(
 
   return { stats, dailyStats, activityCount, nonNumericHours };
 }
+
+/** Whether a stored summary already holds exactly this aggregate. */
+export function sameAggregate(
+  prev: Record<string, unknown>,
+  next: WeekAggregate,
+  houseId: string,
+  weekStart: string,
+): boolean {
+  if (
+    prev.houseId !== houseId ||
+    prev.startDate !== weekStart ||
+    prev.endDate !== weekEndFor(weekStart) ||
+    prev.activityCount !== next.activityCount
+  ) {
+    return false;
+  }
+  const stats = (prev.stats ?? {}) as Record<string, unknown>;
+  if (Object.entries(next.stats).some(([k, v]) => stats[k] !== v)) return false;
+
+  const daily = (prev.dailyStats ?? {}) as Record<string, Record<string, unknown>>;
+  if (Object.keys(daily).length !== Object.keys(next.dailyStats).length) return false;
+  return Object.entries(next.dailyStats).every(([date, day]) =>
+    Object.entries(day).every(([k, v]) => daily[date]?.[k] === v),
+  );
+}

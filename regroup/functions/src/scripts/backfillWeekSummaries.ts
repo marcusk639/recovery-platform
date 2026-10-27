@@ -150,7 +150,12 @@ async function scan(db: Firestore, opts: BackfillOptions, counts: Counts) {
       const weekStart = weekStartFor(at, guest.timeZone);
       const id = summaryDocId(data.guestId, weekStart);
       if (!targets.has(id))
-        targets.set(id, { guestId: data.guestId, weekStart, timeZone: guest.timeZone });
+        targets.set(id, {
+          guestId: data.guestId,
+          houseId: guest.houseId,
+          weekStart,
+          timeZone: guest.timeZone,
+        });
     }
     if (page.docs.length < pageSize) break;
     cursor = page.docs[page.docs.length - 1];

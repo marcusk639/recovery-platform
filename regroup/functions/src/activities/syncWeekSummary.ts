@@ -31,8 +31,9 @@ import { logger } from 'firebase-functions';
 import { FieldValue } from 'firebase-admin/firestore';
 import {
   ActivityLike,
-  WeekAggregate,
   aggregateWeek,
+  resolveTimeZone,
+  sameAggregate,
   summaryDocId,
   toInstant,
   weekEndFor,
@@ -59,11 +60,21 @@ const DAY_MS = 86_400_000;
 export const ACTIVITIES = 'activities';
 export const WEEK_SUMMARIES = 'week-summaries';
 
+/**
+ * One guest-week to recompute. houseId and timeZone come from the guest
+ * snapshot the week was derived from; the transaction re-reads the guest and
+ * its house and refuses to write if either changed in between.
+ */
 export interface SummaryTarget {
   guestId: string;
+  houseId: string;
   weekStart: string;
   timeZone: string;
 }
+
+/** The guest moved house (or the house changed zone) mid-recompute: retry. */
+export const GUEST_CHANGED = 'week_summary.guest_changed';
+const guestChanged = () => Object.assign(new Error(GUEST_CHANGED), { code: 'aborted' });
 
 export interface RecomputeOptions {
   /** false: report only, in a read-only transaction (backfill dry run). */
@@ -80,29 +91,6 @@ export interface RecomputeResult {
   nonNumericHours: number;
 }
 
-function sameAggregate(
-  prev: Data,
-  next: WeekAggregate,
-  houseId: string,
-  weekStart: string,
-): boolean {
-  if (
-    prev.houseId !== houseId ||
-    prev.startDate !== weekStart ||
-    prev.endDate !== weekEndFor(weekStart) ||
-    prev.activityCount !== next.activityCount
-  ) {
-    return false;
-  }
-  const stats = (prev.stats ?? {}) as Data;
-  if (Object.entries(next.stats).some(([k, v]) => stats[k] !== v)) return false;
-
-  const daily = (prev.dailyStats ?? {}) as Record<string, Data>;
-  if (Object.keys(daily).length !== Object.keys(next.dailyStats).length) return false;
-  return Object.entries(next.dailyStats).every(([date, day]) =>
-    Object.entries(day).every(([k, v]) => daily[date]?.[k] === v),
-  );
-}
 
 /**
  * Rebuild one guest-week summary from its trusted activities. Fields the
@@ -132,6 +120,26 @@ export async function recomputeWeekSummary(
     .where('timestamp', '<', end)
     .orderBy('timestamp', 'desc');
 
+  // Resolve admin claims for this week's loggers BEFORE the transaction, so
+  // Auth network calls never run while it holds locks. Inside, a uid seen
+  // here is answered from the map; one that appeared since falls back to a
+  // live lookup. Costs one extra (lock-free) read of the week's activities.
+  const adminByUid = new Map<string, boolean>();
+  const preread = await weekActivities.get();
+  const loggers = new Set(
+    preread.docs
+      .map((d) => d.data())
+      .filter((a) => a.status === 'active' && typeof a.loggedBy === 'string' && a.loggedBy !== '')
+      .map((a) => a.loggedBy as string),
+  );
+  await Promise.all(
+    [...loggers].map(async (uid) => adminByUid.set(uid, await isHouseAdmin(uid, target.houseId))),
+  );
+  const prefetchedAdmin: HouseAdminCheck = async (uid, houseId) =>
+    houseId === target.houseId && adminByUid.has(uid)
+      ? adminByUid.get(uid)!
+      : isHouseAdmin(uid, houseId);
+
   const body = async (tx: FirebaseFirestore.Transaction): Promise<RecomputeResult> => {
     const activities = await tx.get(weekActivities);
     const guestSnap = await tx.get(guestRef);
@@ -150,10 +158,18 @@ export async function recomputeWeekSummary(
         nonNumericHours: 0,
       };
     }
+    // The week and its window were derived from target.houseId's zone. Check
+    // both against this same guest snapshot, reading the house in the same
+    // transaction; on any difference refuse and let the event retry with a
+    // fresh guest rather than write a week computed in the wrong zone.
+    if (guest.houseId !== target.houseId) throw guestChanged();
+    const house = await tx.get(db.collection('houses').doc(guest.houseId));
+    if (resolveTimeZone(house.data()?.timezone).timeZone !== timeZone) throw guestChanged();
+
     const { trusted, excluded } = await trustedActivities(
       activities.docs.map((d) => d.data() as Data),
       guest,
-      isHouseAdmin,
+      prefetchedAdmin,
     );
     const next = aggregateWeek(trusted as ActivityLike[], weekStart, timeZone);
     const result = {
@@ -240,7 +256,9 @@ export async function syncWeekSummariesForActivityWrite(
     }
     const weekStart = weekStartFor(at, guest.timeZone);
     const id = summaryDocId(guestId, weekStart);
-    if (!targets.has(id)) targets.set(id, { guestId, weekStart, timeZone: guest.timeZone });
+    if (!targets.has(id)) {
+      targets.set(id, { guestId, houseId: guest.houseId, weekStart, timeZone: guest.timeZone });
+    }
   }
 
   const recomputed: string[] = [];

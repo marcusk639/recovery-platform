@@ -8,6 +8,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { FakeFirestore, asFirestore } from './fakeFirestore';
 import {
+  GUEST_CHANGED,
   recomputeWeekSummary,
   syncWeekSummariesForActivityWrite,
 } from '../../activities/syncWeekSummary';
@@ -126,7 +127,7 @@ describe('bad input and failures', () => {
 });
 
 describe('recomputeWeekSummary', () => {
-  const target = { guestId: 'g1', weekStart: WEEK, timeZone: 'America/Chicago' };
+  const target = { guestId: 'g1', houseId: 'h1', weekStart: WEEK, timeZone: 'America/Chicago' };
 
   it('reports unchanged when the summary already matches', async () => {
     db.seed('activities', 'a1', activity());
@@ -146,6 +147,60 @@ describe('recomputeWeekSummary', () => {
     const r = await recomputeWeekSummary(asFirestore(db), target, { ...deps, write: false });
     expect(r.changed).toBe(true);
     expect(db.readOnlyTransactions).toBe(1);
+    expect(summary()).toBeUndefined();
+  });
+});
+
+describe('transaction hygiene', () => {
+  const target = { guestId: 'g1', houseId: 'h1', weekStart: WEEK, timeZone: 'America/Chicago' };
+
+  it('resolves admin claims before the transaction opens, once per logger', async () => {
+    db.seed('activities', 'a1', activity({ loggedBy: 'admin-uid' }));
+    db.seed('activities', 'a2', activity({ loggedBy: 'admin-uid', type: 'meeting' }));
+    const txOpenAtCall: number[] = [];
+    const isHouseAdmin = jest.fn(async (uid: string, houseId: string) => {
+      txOpenAtCall.push(db.transactions);
+      return deps.isHouseAdmin(uid, houseId);
+    });
+
+    const r = await recomputeWeekSummary(asFirestore(db), target, { isHouseAdmin });
+
+    expect(r.activityCount).toBe(2);
+    expect(isHouseAdmin).toHaveBeenCalledTimes(1);
+    expect(txOpenAtCall).toEqual([0]);
+  });
+
+  it('falls back to a live lookup for a logger that appears after the pre-read', async () => {
+    db.seed('activities', 'a1', activity());
+    const isHouseAdmin = jest.fn(async (uid: string, houseId: string) => deps.isHouseAdmin(uid, houseId));
+    // Between the pre-read and the transaction, an admin logs another one.
+    const realGet = db.runQuery.bind(db);
+    let calls = 0;
+    jest.spyOn(db, 'runQuery').mockImplementation((collection, spec) => {
+      if (collection === 'activities' && ++calls === 2) {
+        db.seed('activities', 'late', activity({ loggedBy: 'admin-uid', type: 'meeting' }));
+      }
+      return realGet(collection, spec);
+    });
+
+    const r = await recomputeWeekSummary(asFirestore(db), target, { isHouseAdmin });
+
+    expect(r.activityCount).toBe(2);
+    expect(isHouseAdmin).toHaveBeenCalledWith('admin-uid', 'h1');
+  });
+
+  it('refuses to write when the guest moved house after the week was computed', async () => {
+    db.seed('activities', 'a1', activity());
+    db.seed('guests', 'g1', { houseId: 'h2', userId: 'resident-uid' });
+    await expect(recomputeWeekSummary(asFirestore(db), target, deps)).rejects.toThrow(GUEST_CHANGED);
+    expect(summary()).toBeUndefined();
+  });
+
+  it('refuses to write when the house zone differs from the one the week was computed in', async () => {
+    db.seed('activities', 'a1', activity());
+    await expect(
+      recomputeWeekSummary(asFirestore(db), { ...target, timeZone: 'America/Los_Angeles' }, deps),
+    ).rejects.toThrow(GUEST_CHANGED);
     expect(summary()).toBeUndefined();
   });
 });
