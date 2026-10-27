@@ -148,7 +148,9 @@ test('the workflow captures the run start before the review and denies model rea
   const start = wf.indexOf('RUN_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)');
   assert.ok(start > 0, 'run start step');
   assert.ok(start < wf.indexOf('- name: Review'), 'captured before the review step');
-  assert.match(wf, /RUN_STARTED_AT=\$\(date -u \+%Y-%m-%dT%H:%M:%SZ\)" >> "\$GITHUB_ENV"/);
+  // On its own line or inside the step's grouped `{ ... } >> "$GITHUB_ENV"` (actionlint SC2129).
+  const step = wf.slice(wf.lastIndexOf('- name:', start), wf.indexOf('- name:', start));
+  assert.match(step, /RUN_STARTED_AT=\$\(date -u \+%Y-%m-%dT%H:%M:%SZ\)"( >> "\$GITHUB_ENV"|[\s\S]*\} >> "\$GITHUB_ENV")/);
   const deny = /--disallowedTools "([^"]+)"/.exec(wf)?.[1].split(',') ?? [];
   assert.ok(deny.includes('Read(/${{ github.workspace }}/.git/**)'), 'Read of workspace .git denied');
   assert.ok(deny.includes('Read(//proc/**)'));
