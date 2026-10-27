@@ -46,18 +46,22 @@ export function isNewDispute(before: Data | undefined, after: Data | undefined):
 /**
  * Who raised the dispute: the disputer field THIS write set — disputedBy, or
  * for app builds before it, disputeResolvedBy (which then held the
- * disputer). The rules require a non-admin entering a dispute to change one
- * of them to request.auth.uid, so the changed field is the caller; an
- * unchanged, stale value from an earlier dispute is ignored. Empty when
- * neither changed (e.g. an Admin SDK write).
+ * disputer). The rules require anyone entering a dispute to change one of
+ * them to request.auth.uid, so the changed field is the caller; an
+ * unchanged, stale value from an earlier dispute is ignored. If the write
+ * changed neither, the rules only allowed it because disputedBy already
+ * equals the caller (re-disputing an activity an admin restored), so that is
+ * used. Empty when there is none (e.g. an Admin SDK write).
  */
 export function disputerOf(before: Data | undefined, after: Data | undefined): string {
   if (!after || !isNewDispute(before, after)) return '';
-  for (const field of ['disputedBy', 'disputeResolvedBy']) {
+  const fields = ['disputedBy', 'disputeResolvedBy'];
+  for (const field of fields) {
     const v = after[field];
     if (typeof v === 'string' && v !== '' && v !== before?.[field]) return v;
   }
-  return '';
+  const changedAny = fields.some((f) => after[f] !== before?.[f]);
+  return !changedAny && typeof after.disputedBy === 'string' ? after.disputedBy : '';
 }
 
 const strings = (v: unknown): string[] =>

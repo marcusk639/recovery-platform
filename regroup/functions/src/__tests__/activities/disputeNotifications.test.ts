@@ -107,6 +107,17 @@ describe('notifyDispute recipients', () => {
     expect(disputerOf(disputed, { ...disputed, loggedAt: 'x' })).toBe('');
   });
 
+  it('re-dispute of a restored activity (disputer fields unchanged, already the caller) excludes that disputer', async () => {
+    // The resident disputed, an admin restored it to active, and the resident
+    // disputes again: the rules allow it only because disputedBy is already
+    // the caller.
+    const restored = { ...active, disputedBy: 'resident-uid', disputeResolvedBy: 'resident-uid' };
+    const again = { ...restored, status: 'disputed', disputeReason: 'again' };
+    expect(disputerOf(restored, again)).toBe('resident-uid');
+    const r = await notifyDispute(asFirestore(db), 'evt1', 'a1', restored, again);
+    expect(r.recipients).not.toContain('resident-uid');
+  });
+
   it('recovers on redelivery when a create fails midway: each recipient once', async () => {
     db.failCreates.set('notifications/dispute_evt1_resident-uid', Object.assign(new Error('unavailable'), { code: 14 }));
     await expect(notifyDispute(asFirestore(db), 'evt1', 'a1', active, disputed)).rejects.toThrow(

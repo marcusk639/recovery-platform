@@ -129,6 +129,25 @@ describe("complianceExport — dispute outcomes", () => {
   });
 });
 
+describe("complianceExport — legacy upheld disputes", () => {
+  it("lists a dispute upheld the old way (deleted with disputeResolvedAt); plain deletions stay out", async () => {
+    mockGetMeetingActivitiesForGuest.mockResolvedValue([
+      meeting("LegacyUpheld", { status: "deleted", disputeResolvedAt: ts("2026-06-03T10:00:00.000Z"), verified: true }),
+      meeting("PlainDeleted", { status: "deleted" }),
+      meeting("Counted"),
+    ]);
+
+    const result = await call({ houseId: "house-1" });
+
+    expect(rowFor(result.csv, "LegacyUpheld")?.slice(4)).toEqual([
+      "false",
+      "Removed after dispute (before approve/reject) - not counted",
+    ]);
+    expect(result.csv).not.toContain("PlainDeleted");
+    expect(result.counts.meetings).toBe(1);
+  });
+});
+
 describe("complianceExport — house time zone", () => {
   it("dates a meeting by the house-local date, not the UTC date", async () => {
     // 21:30 Monday in Chicago is already Tuesday in UTC.

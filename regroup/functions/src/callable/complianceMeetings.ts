@@ -11,6 +11,9 @@
  *   Dispute "Approved - not counted"        NOT counted, never shown Verified
  *   Dispute "Resolved - counted"            counted (records resolved before
  *                                           the approve/reject model)
+ *   Dispute "Removed after dispute (before approve/reject) - not counted"
+ *                                           a dispute upheld by the old
+ *                                           "delete" resolution
  *
  * Only the resident's own records are listed, by the same trust rule as the
  * weekly summaries: the activity's house is the resident's house and it was
@@ -37,7 +40,11 @@ export interface MeetingRow {
   dispute: string;
 }
 
+/** Deleted by resolveDispute('delete') before the approve/reject model. */
+const legacyUpheld = (m: Data) => m.status === 'deleted' && m.disputeResolvedAt != null;
+
 export function disputeLabel(m: Data): string {
+  if (legacyUpheld(m)) return 'Removed after dispute (before approve/reject) - not counted';
   if (m.incomplete === true || m.disputed === 'successful') return 'Approved - not counted';
   if (m.disputed === 'rejected') return 'Rejected - counted';
   if (m.status === 'disputed') return 'Pending - counted until decided';
@@ -62,7 +69,10 @@ export async function meetingRowsFor(
     meetings,
     guest,
     opts.isHouseAdmin,
-    (a) => a.status !== 'deleted',
+    // Deleted activities were withdrawn and are not listed, except disputes
+    // upheld the old way (status deleted by resolveDispute, which also set
+    // disputeResolvedAt): the court should see that record and its outcome.
+    (a) => a.status !== 'deleted' || legacyUpheld(a),
   );
 
   const rows: Array<MeetingRow & { at: number }> = [];
