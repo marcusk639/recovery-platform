@@ -1,15 +1,16 @@
 /**
  * useOfflineSync
  *
- * Listens for app foreground transitions (background → active) using React
- * Native's built-in AppState API. When the app becomes active, it checks the
- * offline activity queue and flushes any pending items so they are synced to
- * Firestore without the user needing to take any action.
+ * Flushes the signed-in user's offline activity queue at the moments it can
+ * succeed, so queued activities reach Firestore without user action:
+ *   - once a user is signed in (including a cold start with items queued
+ *     earlier), via the auth state listener's initial event;
+ *   - when the app returns to the foreground (background/inactive -> active),
+ *     via React Native's AppState;
+ *   - when connectivity returns, via @react-native-community/netinfo.
  *
- * It also listens (via @react-native-community/netinfo) for the isConnected
- * transition from false → true and triggers a flush on reconnect.
- *
- * Returns { pendingCount } so callers can optionally render a sync badge.
+ * Returns { pendingCount } (0 when signed out) so callers can optionally
+ * render a sync badge.
  *
  * Usage (call once near the top of the component tree, inside QueryClientProvider):
  *   const { pendingCount } = useOfflineSync();
@@ -18,32 +19,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import auth from '@react-native-firebase/auth';
-import NetInfo from '@react-native-community/netinfo';
+import NetInfo, { type NetInfoState } from '@react-native-community/netinfo';
 import { offlineQueue } from '../services/offlineQueue';
 import { useFlushOfflineQueue } from '../state/queries/useFlushOfflineQueue';
+import { logException } from '../util/logging';
 
-// ---------------------------------------------------------------------------
-// NetInfo — imported statically. Never hide a require from Metro: in a release
-// bundle an unknown module is reported as fatal, bypassing try/catch.
-// ---------------------------------------------------------------------------
-
-type NetInfoSubscription = () => void;
-type NetInfoChangeHandler = (state: {
-  isConnected: boolean | null;
-  isInternetReachable?: boolean | null;
-}) => void;
-
-interface NetInfoLike {
-  addEventListener(handler: NetInfoChangeHandler): NetInfoSubscription;
-}
-
-function tryGetNetInfo(): NetInfoLike | null {
-  const impl = NetInfo as unknown as NetInfoLike | undefined;
-  if (impl && typeof impl.addEventListener === 'function') {
-    return impl;
-  }
-  return null;
-}
+/**
+ * How long a link may report "connected" with undecided reachability before
+ * we stop waiting and treat it as reachable (NetInfo can leave it null).
+ */
+export const REACHABILITY_FALLBACK_MS = 10000;
 
 // ---------------------------------------------------------------------------
 // Hook
@@ -63,10 +48,11 @@ export function useOfflineSync(): UseOfflineSyncResult {
   const flushRef = useRef(flushMutation.mutate);
   flushRef.current = flushMutation.mutate;
 
-  // Track the previous AppState to detect background → active transitions.
+  // AppState at the previous change event; a flush needs a background/inactive -> active transition.
   const prevAppStateRef = useRef<AppStateStatus>(AppState.currentState);
 
-  // Track the previous isConnected to detect false → true transitions.
+  // Last decided connectivity (link up and internet reachable); null until the
+  // first decided event, which only records the state and never flushes.
   const prevIsConnectedRef = useRef<boolean | null>(null);
 
   // Whether a flush is already in flight — prevents double-firing when both
@@ -75,7 +61,7 @@ export function useOfflineSync(): UseOfflineSyncResult {
 
   /**
    * Load the current pending count from the queue and update state.
-   * Called on mount and after each successful flush.
+   * Called when a user is present or changes, and after each flush.
    */
   const refreshPendingCount = async () => {
     try {
@@ -87,7 +73,8 @@ export function useOfflineSync(): UseOfflineSyncResult {
       const pending = await offlineQueue.getPending(uid);
       setPendingCount(pending.length);
       return pending.length;
-    } catch {
+    } catch (error) {
+      logException(error, 'useOfflineSync: reading the pending count failed');
       return 0;
     }
   };
@@ -120,17 +107,25 @@ export function useOfflineSync(): UseOfflineSyncResult {
       });
       // Refresh count again after flush completes so the badge is up to date.
       await refreshPendingCount();
-    } catch {
-      // Flush errors are non-fatal — the queue retains the items and the next
-      // trigger will retry (up to MAX_RETRY_COUNT times in the queue itself).
+    } catch (error) {
+      // Non-fatal: the queue retains the items and the next trigger retries
+      // (non-network failures count against the queue's retry limit).
+      logException(error, 'useOfflineSync: offline queue flush failed');
     } finally {
       isFlushing.current = false;
     }
   };
 
   useEffect(() => {
-    // Populate pending count immediately on mount (no flush yet).
-    refreshPendingCount();
+    // The auth listener delivers the current state on subscribe, so this covers
+    // a cold start with items queued earlier, and a user who signs in later.
+    const authUnsubscribe = auth().onAuthStateChanged((user) => {
+      if (user) {
+        maybeFlush();
+      } else {
+        setPendingCount(0);
+      }
+    });
 
     // --- AppState listener ---
     const handleAppStateChange = (nextState: AppStateStatus) => {
@@ -146,44 +141,53 @@ export function useOfflineSync(): UseOfflineSyncResult {
     const appStateSubscription = AppState.addEventListener('change', handleAppStateChange);
 
     // --- NetInfo listener ---
-    const netInfo = tryGetNetInfo();
-    let netInfoUnsubscribe: NetInfoSubscription | null = null;
+    let reachabilityTimer: ReturnType<typeof setTimeout> | undefined;
 
-    if (netInfo) {
-      netInfoUnsubscribe = netInfo.addEventListener((state) => {
-        // NetInfo emits (connected, reachable=null) the moment a link comes up and
-        // only later settles on true/false (captive portal, weak signal). Flushing
-        // at the undecided stage burns every item's retry budget, so ignore those
-        // events entirely: no flush and no update to the previous-state ref.
-        // A lost link (isConnected false) is always decisive, whatever the reachability.
-        const linkUp = state.isConnected ?? false;
-        if (
-          linkUp &&
-          (state.isInternetReachable === null || state.isInternetReachable === undefined)
-        ) {
-          return;
-        }
-        const isConnected = linkUp && state.isInternetReachable === true;
-        const wasConnected = prevIsConnectedRef.current;
-        prevIsConnectedRef.current = isConnected;
+    const applyConnectivity = (isConnected: boolean) => {
+      const wasConnected = prevIsConnectedRef.current;
+      prevIsConnectedRef.current = isConnected;
 
-        // Skip the very first event emitted by NetInfo (initialisation call)
-        // where wasConnected is still null — we don't want to flush on mount
-        // just because NetInfo fired its initial state.
-        if (wasConnected === null) return;
+      // The first decided state only initialises the ref: don't flush on mount
+      // just because NetInfo reported its initial state.
+      if (wasConnected === null) {
+        return;
+      }
 
-        // Only flush on reconnect transition (false → true).
-        if (!wasConnected && isConnected) {
-          maybeFlush();
-        }
-      });
-    }
+      // Only flush on reconnect transition (false → true).
+      if (!wasConnected && isConnected) {
+        maybeFlush();
+      }
+    };
+
+    const netInfoUnsubscribe = NetInfo.addEventListener((state: NetInfoState) => {
+      clearTimeout(reachabilityTimer);
+      reachabilityTimer = undefined;
+
+      // NetInfo emits (connected, reachable=null) the moment a link comes up and
+      // only later settles on true/false (captive portal, weak signal). A flush
+      // at the undecided stage either hangs on Firestore's pending writes or
+      // fails fast; wait for the decision instead. A lost link (isConnected
+      // false) is always decisive, whatever the reachability.
+      const linkUp = state.isConnected ?? false;
+      if (
+        linkUp &&
+        (state.isInternetReachable === null || state.isInternetReachable === undefined)
+      ) {
+        // Reachability can stay undecided; stop waiting and trust the link.
+        reachabilityTimer = setTimeout(() => {
+          reachabilityTimer = undefined;
+          applyConnectivity(true);
+        }, REACHABILITY_FALLBACK_MS);
+        return;
+      }
+      applyConnectivity(linkUp && state.isInternetReachable === true);
+    });
 
     return () => {
+      authUnsubscribe();
       appStateSubscription.remove();
-      if (netInfoUnsubscribe) {
-        netInfoUnsubscribe();
-      }
+      netInfoUnsubscribe();
+      clearTimeout(reachabilityTimer);
     };
     // maybeFlush is defined inside the effect closure and intentionally
     // captured once. flushRef.current always points to the latest mutate fn.

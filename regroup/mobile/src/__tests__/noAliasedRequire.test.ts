@@ -1,11 +1,10 @@
 /**
  * Guards against "optional" requires hidden from Metro by aliasing `require`.
  *
- * In a release bundle Metro's require() reports an unknown module through
- * ErrorUtils.reportFatalError instead of throwing to the caller, so a
- * surrounding try/catch never runs and the app crashes on launch. Debug builds
- * throw a catchable error instead, which is why this only showed up in release.
- * Install the package and import it statically instead.
+ * In a release bundle Metro's require() reports an unknown module (outside
+ * module initialisation) through ErrorUtils.reportFatalError instead of
+ * throwing to the caller, so a surrounding try/catch never runs. Install the
+ * package and import it statically instead.
  */
 import * as fs from 'fs';
 import * as path from 'path';

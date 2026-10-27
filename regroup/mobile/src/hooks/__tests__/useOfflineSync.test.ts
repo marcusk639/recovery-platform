@@ -2,30 +2,50 @@
  * useOfflineSync — unit tests
  *
  * Mocks:
- *   - AppState.addEventListener  (configured on the preset's mock via beforeEach)
- *   - offlineQueue               (via jest.mock)
- *   - useFlushOfflineQueue       (via jest.mock)
- *   - @react-native-community/netinfo  (mock, see NetInfo section)
+ *   - AppState.addEventListener        (configured on the preset's mock via beforeEach)
+ *   - firebase auth                    (mutable current user + onAuthStateChanged)
+ *   - offlineQueue                     (via jest.mock)
+ *   - useFlushOfflineQueue             (via jest.mock)
+ *   - @react-native-community/netinfo  (addEventListener captures the hook's handler)
  *
- * Strategy for NetInfo:
- *   The hook reads NetInfo.addEventListener inside the useEffect, so we can
- *   control it via a jest.mock whose factory
- *   closes over a mutable "mock" prefixed state object. Jest allows variables
- *   whose names start with "mock" (case-insensitive) in mock factories.
+ * Jest allows "mock"-prefixed variables in mock factories, so the factories
+ * close over mutable mock state that each test can drive.
  */
 
 import { renderHook, waitFor, act } from '@testing-library/react-native';
 import { AppState, AppStateStatus } from 'react-native';
 
 // ---------------------------------------------------------------------------
-// Mock: offlineQueue
+// Mock: firebase auth
+//
+// onAuthStateChanged delivers the current user immediately, like the real
+// listener, and keeps the callback so tests can sign in/out later.
 // ---------------------------------------------------------------------------
-const mockCurrentUser: { uid: string } | null = { uid: 'test-uid' };
+let mockCurrentUser: { uid: string } | null = { uid: 'test-uid' };
+let mockAuthListener: ((user: { uid: string } | null) => void) | null = null;
+const mockAuthUnsub = jest.fn();
 jest.mock('@react-native-firebase/auth', () => ({
   __esModule: true,
-  default: () => ({ currentUser: mockCurrentUser }),
+  default: () => ({
+    get currentUser() {
+      return mockCurrentUser;
+    },
+    onAuthStateChanged: (listener: (user: { uid: string } | null) => void) => {
+      mockAuthListener = listener;
+      listener(mockCurrentUser);
+      return mockAuthUnsub;
+    },
+  }),
 }));
 
+const mockLogException = jest.fn();
+jest.mock('../../util/logging', () => ({
+  logException: (...args: unknown[]) => mockLogException(...args),
+}));
+
+// ---------------------------------------------------------------------------
+// Mock: offlineQueue
+// ---------------------------------------------------------------------------
 const mockGetPending = jest.fn();
 jest.mock('../../services/offlineQueue', () => ({
   offlineQueue: {
@@ -37,8 +57,8 @@ jest.mock('../../services/offlineQueue', () => ({
 // Mock: useFlushOfflineQueue
 // ---------------------------------------------------------------------------
 const mockMutate = jest.fn();
-// useOfflineSync imports the hook from the extracted leaf module (see 6e0d615),
-// so the mock must target that path — not activityQueries, which only re-exports it.
+// useOfflineSync imports the hook from the extracted leaf module, so the mock
+// must target that path, not activityQueries, which only re-exports it.
 jest.mock('../../state/queries/useFlushOfflineQueue', () => ({
   useFlushOfflineQueue: () => ({
     mutate: mockMutate,
@@ -48,35 +68,27 @@ jest.mock('../../state/queries/useFlushOfflineQueue', () => ({
 // ---------------------------------------------------------------------------
 // NetInfo mock
 //
-// The factory references only "mock"-prefixed names (allowed by Jest).
-// mockNetInfo.handler  — set by the hook when it calls addEventListener
-// mockNetInfo.unsub    — returned as the unsubscribe token
-// mockNetInfo.enabled  — controls whether addEventListener is exposed
+// mockNetInfo.handler — set by the hook when it calls addEventListener
+// mockNetInfo.unsub   — returned as the unsubscribe token
 // ---------------------------------------------------------------------------
+type NetInfoHandler = (state: {
+  isConnected: boolean | null;
+  isInternetReachable?: boolean | null;
+}) => void;
+
 const mockNetInfo = {
-  handler: null as
-    | ((state: { isConnected: boolean | null; isInternetReachable?: boolean | null }) => void)
-    | null,
+  handler: null as NetInfoHandler | null,
   unsub: jest.fn(),
-  enabled: false,
 };
+const mockNetInfoAddEventListener = jest.fn((handler: NetInfoHandler) => {
+  mockNetInfo.handler = handler;
+  return mockNetInfo.unsub;
+});
 
 jest.mock('@react-native-community/netinfo', () => ({
-  // When enabled, addEventListener captures the handler the hook passes in.
-  // When not enabled, addEventListener is undefined so tryGetNetInfo() returns null.
-  get addEventListener() {
-    if (!mockNetInfo.enabled) {
-      return undefined;
-    }
-    return (
-      handler: (state: {
-        isConnected: boolean | null;
-        isInternetReachable?: boolean | null;
-      }) => void,
-    ) => {
-      mockNetInfo.handler = handler;
-      return mockNetInfo.unsub;
-    };
+  __esModule: true,
+  default: {
+    addEventListener: (handler: NetInfoHandler) => mockNetInfoAddEventListener(handler),
   },
 }));
 
@@ -118,7 +130,7 @@ function resolveMutate() {
 // ---------------------------------------------------------------------------
 // Import hook under test (after all top-level mocks are in place)
 // ---------------------------------------------------------------------------
-import { useOfflineSync } from '../useOfflineSync';
+import { useOfflineSync, REACHABILITY_FALLBACK_MS } from '../useOfflineSync';
 
 // ---------------------------------------------------------------------------
 // Common beforeEach
@@ -127,8 +139,9 @@ beforeEach(() => {
   jest.clearAllMocks();
   capturedAppStateHandler = null;
   mockNetInfo.handler = null;
-  mockNetInfo.enabled = false;
   mockNetInfo.unsub.mockReset();
+  mockCurrentUser = { uid: 'test-uid' };
+  mockAuthListener = null;
 
   (AppState.addEventListener as jest.Mock).mockImplementation(
     (_event: string, handler: AppStateHandler) => {
@@ -138,6 +151,10 @@ beforeEach(() => {
   );
 
   mockGetPending.mockResolvedValue([]);
+});
+
+afterEach(() => {
+  jest.useRealTimers();
 });
 
 // ---------------------------------------------------------------------------
@@ -171,7 +188,75 @@ describe('useOfflineSync', () => {
       await waitFor(() => expect(result.current.pendingCount).toBe(3));
     });
 
-    it('does NOT call mutate on mount (only checks count, no flush)', async () => {
+    it('subscribes to NetInfo and to auth state changes', async () => {
+      renderHook(() => useOfflineSync());
+
+      expect(mockNetInfoAddEventListener).toHaveBeenCalledTimes(1);
+      expect(mockAuthListener).not.toBeNull();
+      await waitFor(() => expect(mockGetPending).toHaveBeenCalledTimes(1));
+    });
+
+    it('flushes once on mount when the signed-in user already has queued items', async () => {
+      mockGetPending.mockResolvedValue([{ id: 'cold-start' }]);
+
+      renderHook(() => useOfflineSync());
+
+      await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1));
+    });
+
+    it('reports 0 and neither reads nor flushes the queue when signed out', async () => {
+      mockCurrentUser = null;
+      mockGetPending.mockResolvedValue([{ id: 'x' }]);
+
+      const { result } = renderHook(() => useOfflineSync());
+
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      expect(result.current.pendingCount).toBe(0);
+      expect(mockGetPending).not.toHaveBeenCalled();
+      expect(mockMutate).not.toHaveBeenCalled();
+    });
+
+    it('flushes when a user signs in after mount, and resets the count on sign-out', async () => {
+      mockCurrentUser = null;
+      const { result } = renderHook(() => useOfflineSync());
+      mockCurrentUser = { uid: 'late-uid' };
+      mockGetPending.mockResolvedValue([{ id: 'q1' }, { id: 'q2' }]);
+
+      act(() => mockAuthListener!({ uid: 'late-uid' }));
+      await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1));
+      expect(mockGetPending).toHaveBeenCalledWith('late-uid');
+      await waitFor(() => expect(result.current.pendingCount).toBe(2));
+
+      act(() => mockAuthListener!(null));
+      expect(result.current.pendingCount).toBe(0);
+    });
+
+    it('reports (without throwing) when the pending count cannot be read', async () => {
+      mockGetPending.mockRejectedValue(new Error('storage'));
+
+      const { result } = renderHook(() => useOfflineSync());
+
+      await waitFor(() => expect(mockLogException).toHaveBeenCalled());
+      expect(result.current.pendingCount).toBe(0);
+      expect(mockMutate).not.toHaveBeenCalled();
+    });
+
+    it('reports a failed flush and allows a later flush', async () => {
+      mockGetPending.mockResolvedValue([{ id: 'f1' }]);
+      renderHook(() => useOfflineSync());
+      await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1));
+
+      act(() => mockMutate.mock.calls[0][1].onError(new Error('flush failed')));
+      await waitFor(() => expect(mockLogException).toHaveBeenCalled());
+
+      simulateAppState('background');
+      simulateAppState('active');
+      await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(2));
+    });
+
+    it('does NOT call mutate on mount when the queue is empty (only checks count)', async () => {
       mockGetPending.mockResolvedValueOnce([]);
 
       renderHook(() => useOfflineSync());
@@ -279,11 +364,11 @@ describe('useOfflineSync', () => {
   // -------------------------------------------------------------------------
   describe('concurrent flush guard', () => {
     it('does not trigger a second flush while one is in flight', async () => {
-      // Queue always has items.
-      mockGetPending.mockResolvedValue([{ id: 'z' }]);
+      // Empty at mount (so mount does not flush), items afterwards.
+      mockGetPending.mockResolvedValueOnce([]).mockResolvedValue([{ id: 'z' }]);
       renderHook(() => useOfflineSync());
 
-      // Wait for the mount refreshPendingCount to complete.
+      // Wait for the mount count check to complete.
       await waitFor(() => expect(mockGetPending).toHaveBeenCalledTimes(1));
 
       // Both background→active transitions fire synchronously so the second
@@ -322,17 +407,15 @@ describe('useOfflineSync', () => {
   // -------------------------------------------------------------------------
   // NetInfo integration (simulated)
   //
-  // Set mockNetInfo.enabled = true so the mock exposes addEventListener.
-  // The hook's tryGetNetInfo() runs at effect-mount time, so the flag must be
-  // set before renderHook() is called.
+  // The queue is empty at mount (so mount itself does not flush) and holds
+  // items afterwards; events are then driven through mockNetInfo.handler.
   // -------------------------------------------------------------------------
   describe('NetInfo integration (simulated)', () => {
-    beforeEach(() => {
-      mockNetInfo.enabled = true;
-    });
+    const queueFilledAfterMount = (id: string) =>
+      mockGetPending.mockResolvedValueOnce([]).mockResolvedValue([{ id }]);
 
     it('flushes when isConnected transitions false → true with pending items', async () => {
-      mockGetPending.mockResolvedValue([{ id: 'net1' }]);
+      queueFilledAfterMount('net1');
 
       renderHook(() => useOfflineSync());
 
@@ -351,7 +434,7 @@ describe('useOfflineSync', () => {
     });
 
     it('does NOT flush when isConnected stays true → true', async () => {
-      mockGetPending.mockResolvedValue([{ id: 'net2' }]);
+      queueFilledAfterMount('net2');
 
       renderHook(() => useOfflineSync());
 
@@ -382,7 +465,7 @@ describe('useOfflineSync', () => {
     });
 
     it('does NOT flush on reconnect while the internet is unreachable', async () => {
-      mockGetPending.mockResolvedValue([{ id: 'net3' }]);
+      queueFilledAfterMount('net3');
 
       renderHook(() => useOfflineSync());
 
@@ -402,7 +485,7 @@ describe('useOfflineSync', () => {
     });
 
     it('flushes once reachability is confirmed after a reconnect', async () => {
-      mockGetPending.mockResolvedValue([{ id: 'net4' }]);
+      queueFilledAfterMount('net4');
 
       renderHook(() => useOfflineSync());
 
@@ -413,6 +496,68 @@ describe('useOfflineSync', () => {
       simulateNetInfo(true, true);
 
       await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1));
+    });
+    describe('reachability that never settles', () => {
+      const startReconnectWithUndecidedReachability = async () => {
+        jest.useFakeTimers();
+        queueFilledAfterMount('net5');
+        renderHook(() => useOfflineSync());
+        await waitFor(() => expect(mockGetPending).toHaveBeenCalledTimes(1));
+        simulateNetInfo(false, false);
+        simulateNetInfo(true, null);
+      };
+
+      it('falls back to isConnected after the bounded wait', async () => {
+        await startReconnectWithUndecidedReachability();
+
+        await act(async () => {
+          jest.advanceTimersByTime(REACHABILITY_FALLBACK_MS - 1);
+        });
+        expect(mockMutate).not.toHaveBeenCalled();
+
+        await act(async () => {
+          jest.advanceTimersByTime(1);
+        });
+        await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1));
+      });
+
+      it('does not fall back when reachability is decided as unreachable in time', async () => {
+        await startReconnectWithUndecidedReachability();
+
+        simulateNetInfo(true, false);
+        await act(async () => {
+          jest.advanceTimersByTime(REACHABILITY_FALLBACK_MS * 2);
+        });
+
+        expect(mockMutate).not.toHaveBeenCalled();
+      });
+
+      it('does not fall back after the link is lost again', async () => {
+        await startReconnectWithUndecidedReachability();
+
+        simulateNetInfo(false, false);
+        await act(async () => {
+          jest.advanceTimersByTime(REACHABILITY_FALLBACK_MS * 2);
+        });
+
+        expect(mockMutate).not.toHaveBeenCalled();
+      });
+
+      it('cancels the pending fallback on unmount', async () => {
+        jest.useFakeTimers();
+        queueFilledAfterMount('net6');
+        const { unmount } = renderHook(() => useOfflineSync());
+        await waitFor(() => expect(mockGetPending).toHaveBeenCalledTimes(1));
+        simulateNetInfo(false, false);
+        simulateNetInfo(true, null);
+
+        unmount();
+        await act(async () => {
+          jest.advanceTimersByTime(REACHABILITY_FALLBACK_MS * 2);
+        });
+
+        expect(mockMutate).not.toHaveBeenCalled();
+      });
     });
   });
 });
