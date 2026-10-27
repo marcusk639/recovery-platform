@@ -543,14 +543,13 @@ describe('useBaseActivityScreen', () => {
   // ── getLeftButtonProps ─────────────────────────────────────────────────────
 
   describe('getLeftButtonProps', () => {
-    it('returns confirmButtonProps for a disputable activity without admin token', () => {
-      const activity = makeActivity({ type: ActivityType.CHORE, disputeResult: 'none', underDispute: 1 });
+    it('hides CHALLENGE DISPUTE until the follow-up PR (it could only fail now)', () => {
       const { result } = renderHook(() => useBaseActivityScreen(makeProps()));
 
-      const props = result.current.getLeftButtonProps(activity);
-
-      expect(props).toBeDefined();
-      expect(props.title).toBe('CHALLENGE DISPUTE');
+      for (const status of [ActivityStatus.ACTIVE, ActivityStatus.DISPUTED]) {
+        const activity = makeActivity({ type: ActivityType.CHORE, disputeResult: 'none', underDispute: 1, status });
+        expect(result.current.getLeftButtonProps(activity as any)).toBeUndefined();
+      }
     });
 
     it('returns verify button for admin on unverified activity (non-disputes view)', () => {
@@ -708,6 +707,24 @@ describe('useBaseActivityScreen', () => {
         'Approval not saved',
         'We could not resolve this dispute. Please try again.',
       );
+      alertSpy.mockRestore();
+    });
+  });
+
+  describe('resolve refusals are shown to the admin', () => {
+    it.each([
+      ['Dispute already resolved', 'Dispute already resolved', 'Another admin has already resolved this dispute.'],
+      ['Activity is not disputed', 'Not disputed', 'This activity is not disputed anymore, so there is nothing to resolve.'],
+    ])('"%s" shows its specific message', async (error, title, message) => {
+      (activityService.resolveDispute as jest.Mock).mockRejectedValueOnce(new Error(error));
+      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined as any);
+      const { result } = renderHook(() => useBaseActivityScreen(makeProps()));
+
+      act(() => { result.current.rejectDispute(makeActivity({ status: 'disputed' }) as any); });
+      const buttons = alertSpy.mock.calls[0][2] as Array<{ text: string; onPress: () => unknown }>;
+      await act(async () => { await buttons.find(b => b.text === 'Reject')!.onPress(); });
+
+      expect(alertSpy).toHaveBeenLastCalledWith(title, message);
       alertSpy.mockRestore();
     });
   });

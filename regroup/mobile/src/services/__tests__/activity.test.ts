@@ -83,11 +83,14 @@ const permissionDenied = () =>
     code: 'firestore/permission-denied',
   });
 
-/** Did the service open week-summaries or a transaction at all? */
+/** Did the service open the week-summaries collection at all? */
 const touchedWeekSummaries = () =>
   (firestore.collection as jest.Mock).mock.calls.some(
     ([name]) => name === 'week-summaries',
-  ) || ((firestore as any).runTransaction as jest.Mock).mock.calls.length > 0;
+  );
+
+/** The working runTransaction installed in beforeEach (resolveDispute uses one). */
+let workingRunTransaction: jest.Mock;
 
 describe('Activity Service', () => {
   let mockActivityCollection: any;
@@ -271,9 +274,11 @@ describe('Activity Service', () => {
           // Delegate to the ref's own set (sync in the mock).
           return ref.set(data, options);
         },
+        update: (ref: any, data: any) => ref.update(data),
       };
       return fn(tx);
     });
+    workingRunTransaction = (firestore as any).runTransaction;
   });
 
   // ==========================================================================
@@ -920,13 +925,24 @@ describe('Activity Service', () => {
         ActivityDataFactory.chore('daily', 'Kitchen'),
         'user789',
       );
-      for (const status of [ActivityStatus.ACTIVE, ActivityStatus.DELETED, ActivityStatus.RESOLVED]) {
+      for (const status of [ActivityStatus.ACTIVE, ActivityStatus.DELETED]) {
         mockActivities.find(a => a.id === other.id)!.status = status;
         await expect(resolveDispute(other.id, 'admin456', 'approve')).rejects.toThrow(
           'Activity is not disputed',
         );
       }
       expect(mockActivities.find(a => a.id === other.id)!.incomplete).toBeUndefined();
+    });
+
+    it('refuses a second resolve with "Dispute already resolved", inside a transaction', async () => {
+      await resolveDispute(activityId, 'admin456', 'approve');
+      await expect(resolveDispute(activityId, 'admin789', 'reject')).rejects.toThrow(
+        'Dispute already resolved',
+      );
+      const resolved = mockActivities.find(a => a.id === activityId)!;
+      expect(resolved.disputed).toBe('successful');
+      expect(resolved.disputeResolvedBy).toBe('admin456');
+      expect((firestore as any).runTransaction).toHaveBeenCalled();
     });
 
     it('leaves the week summary to the server trigger', async () => {
@@ -1016,6 +1032,8 @@ describe('Activity Service', () => {
     });
 
     it('resolveDispute resolves when week-summaries writes are denied', async () => {
+      // resolveDispute's own transaction reads/writes only the activity.
+      (firestore as any).runTransaction = workingRunTransaction;
       await disputeActivity(activityId, 'Not done', 'admin123');
       await expect(
         resolveDispute(activityId, 'admin456', 'approve'),

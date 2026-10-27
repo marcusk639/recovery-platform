@@ -347,6 +347,13 @@ export async function disputeActivity(
   }
 }
 
+/** resolveDispute refusals the UI shows as-is (the rest are generic). */
+export const RESOLVE_REFUSALS = [
+  'Activity not found',
+  'Dispute already resolved',
+  'Activity is not disputed',
+];
+
 /**
  * Resolve a dispute. Only house admins (owners, managers, peer leaders) may;
  * the rules enforce it.
@@ -381,24 +388,28 @@ export async function resolveDispute(
     };
 
     const activityRef = firestore.collection('activities').doc(activityId);
-    const activity = await activityRef.get();
 
-    if (!activity.exists) {
-      throw new Error('Activity not found');
-    }
-    // Only an open dispute can be resolved: resolving a deleted, active or
-    // already-resolved activity would rewrite its outcome.
-    if ((activity.data() as Activity | undefined)?.status !== ActivityStatus.DISPUTED) {
-      throw new Error('Activity is not disputed');
-    }
-
-    // The week summary and house.disputes are updated server-side.
-    await activityRef.update(updates);
+    // In a transaction, so two admins resolving at once cannot both win (the
+    // rules also refuse a resolution unless the dispute is still open).
+    await firestore.runTransaction(async (tx: any) => {
+      const activity = await tx.get(activityRef);
+      if (!activity.exists) {
+        throw new Error('Activity not found');
+      }
+      const status = (activity.data() as Activity | undefined)?.status;
+      if (status === ActivityStatus.RESOLVED) {
+        throw new Error('Dispute already resolved');
+      }
+      // Only an open dispute can be resolved: resolving a deleted or active
+      // activity would invent an outcome.
+      if (status !== ActivityStatus.DISPUTED) {
+        throw new Error('Activity is not disputed');
+      }
+      // The week summary and house.disputes are updated server-side.
+      tx.update(activityRef, updates);
+    });
   } catch (error: any) {
-    if (
-      error?.message === 'Activity not found' ||
-      error?.message === 'Activity is not disputed'
-    ) {
+    if (RESOLVE_REFUSALS.includes(error?.message)) {
       throw error;
     }
     logException(error);

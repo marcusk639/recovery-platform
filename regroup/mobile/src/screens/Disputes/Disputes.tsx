@@ -82,7 +82,7 @@ const Disputes: React.FC = () => {
   const renderHelp = useCallback(() => {
     showPopover(
       'DISPUTES',
-      'Here you can view all current disputes. Owners, managers and peer leaders can approve a dispute (the activity is marked as not done) or reject it (the activity stands). Residents can challenge a dispute or reinforce a dispute.',
+      'Here you can view all current disputes. Owners, managers and peer leaders can approve a dispute (the activity is marked as not done) or reject it (the activity stands).',
     );
   }, [showPopover]);
 

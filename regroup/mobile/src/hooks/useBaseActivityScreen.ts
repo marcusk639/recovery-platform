@@ -107,6 +107,22 @@ interface UseBaseActivityScreenReturn {
   ) => Activity[];
 }
 
+/** resolveDispute's refusals (services/activity RESOLVE_REFUSALS), as shown to the admin. */
+const RESOLVE_REFUSAL_ALERTS: Record<string, { title: string; message: string }> = {
+  'Dispute already resolved': {
+    title: 'Dispute already resolved',
+    message: 'Another admin has already resolved this dispute.',
+  },
+  'Activity is not disputed': {
+    title: 'Not disputed',
+    message: 'This activity is not disputed anymore, so there is nothing to resolve.',
+  },
+  'Activity not found': {
+    title: 'Activity not found',
+    message: 'This activity no longer exists.',
+  },
+};
+
 export const useBaseActivityScreen = (
   props: UseBaseActivityScreenProps,
 ): UseBaseActivityScreenReturn => {
@@ -128,7 +144,6 @@ export const useBaseActivityScreen = (
 
   const challengeDispute = useCallback(
     async (activity: Activity, message: string): Promise<void> => {
-      const activityGuest = guests[activity.guestId];
       const _user = guests[user.guestId] || userAsAdmin;
       const dispute = disputes[activity.disputeId!];
 
@@ -256,6 +271,11 @@ export const useBaseActivityScreen = (
       try {
         await resolveDisputeInFirestore(activity.id, user.id || '', outcome);
       } catch (err) {
+        const refusal = RESOLVE_REFUSAL_ALERTS[(err as Error)?.message];
+        if (refusal) {
+          Alert.alert(refusal.title, refusal.message);
+          return;
+        }
         logException(err);
         Alert.alert(
           outcome === 'approve' ? 'Approval not saved' : 'Rejection not saved',
@@ -308,7 +328,6 @@ export const useBaseActivityScreen = (
       disputesOnly: boolean = false,
       token?: RoleToken,
     ): any => {
-      const isDisputable = metadata.activityIsDisputable(activity);
       const isAdminUser =
         token &&
         (token.role[house.id] === 'admin' ||
@@ -327,22 +346,6 @@ export const useBaseActivityScreen = (
           borderColor: color.baby_blue,
         },
       };
-      const confirmButtonProps = {
-        testID: `challenge-dispute-button-${activity.id}`,
-        style: {
-          ...STAT_BUTTON_TEXT,
-          color: color.green,
-          fontSize: fontSize.regular,
-        },
-        containerStyle: {
-          ...STAT_BUTTON,
-          flex: 0.48,
-          borderColor: color.green,
-        },
-        onPress: () => modal.showModal('confirm', activity),
-        title: 'CHALLENGE DISPUTE',
-        disabled: !activity.underDispute,
-      };
       if (isAdminUser && !disputesOnly && !activity.verified) {
         return {
           testID: `verify-activity-button-${activity.id}`,
@@ -360,11 +363,11 @@ export const useBaseActivityScreen = (
       if (isPendingDispute && isAdminUser && disputesOnly) {
         return approveButtonProps;
       }
-      if (isDisputable || isPendingDispute) {
-        return confirmButtonProps;
-      }
+      // CHALLENGE DISPUTE is hidden until the follow-up PR: it writes
+      // house.disputes, which residents may no longer write, so it could only
+      // fail.
     },
-    [metadata, house, approveDispute, modal, verifyActivity],
+    [house, approveDispute, verifyActivity],
   );
 
   const getRightButtonProps = useCallback(

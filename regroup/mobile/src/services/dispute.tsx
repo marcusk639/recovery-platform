@@ -7,15 +7,14 @@ const houseCollection = firestore.collection('houses');
 const disputesCollection = firestore.collection('disputes');
 
 /**
- * Mirror a dispute into house.disputes (where its message and challenges
- * live) and, on resolution, archive it to /disputes.
+ * Write house.disputes and optionally archive a dispute to /disputes.
  *
- * It used to also rewrite the disputed resident's guest doc (an unchanged
- * copy) and create the dispute notifications. Both were denied for a peer:
- * only the resident or an admin may update a guest doc, and notifications may
- * only be created for oneself, so the whole batch failed. Notifications are
- * now sent by the onActivityWritten Cloud Function, and the guest write was a
- * no-op. Residents may update house.disputes (not a sensitive house field).
+ * The app no longer calls this to open or resolve a dispute: the
+ * onActivityWritten Cloud Function adds the house.disputes entry when an
+ * activity is disputed, removes and archives it on resolution, and sends the
+ * notifications. The rules deny residents house.disputes. The only remaining
+ * caller is the (hidden, see the follow-up PR) challenge flow, which only a
+ * house admin could now complete.
  */
 export function updateDispute(
   house: PartialHouseWithId,
