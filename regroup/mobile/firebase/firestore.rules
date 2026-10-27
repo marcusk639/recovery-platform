@@ -277,10 +277,12 @@ service cloud.firestore {
       // may get() it; clients cannot read it): primary owner 4, owner 3,
       // manager 2, peer leader 1, resident or no record 0; the caller also
       // ranks 3 with a superAdmin claim and 1 with an admin claim. A caller's
-      // record counts only when a claim backs it (owner: the superAdmin
-      // claim; manager or peer leader: the admin claim; the primary record
-      // always counts): a record left by a failed claims write never raises
-      // the caller above their claim. A target's claims cannot be read here,
+      // record counts only as far as a claim backs it, as on the server
+      // (tierAndRank): the primary record 4; an owner record with the
+      // superAdmin claim 3; an owner or manager record with the admin claim 2;
+      // a peer-leader record with the admin claim 1; otherwise the claim's
+      // rank. A record left by a failed claims write never raises the caller
+      // above what the server would grant. A target's claims cannot be read here,
       // so a target ranks by its record alone. Staff never
       // change the status, moveOutDate or house of their OWN record, or
       // delete it: only someone above them can (no self re-activation after a
@@ -308,9 +310,11 @@ service cloud.firestore {
         let tier = d.get('tier', '');
         let sa = hasSuperAdminRoleInHouse([houseId]);
         let ad = hasAdminRoleInHouse([houseId]);
-        let backed = d.get('primary', false) == true || (tier == 'owner' && sa) ||
-          ((tier == 'manager' || tier == 'peerLeader') && ad);
-        let r = backed ? rankOf(d) : 0;
+        // Same as the server's tierAndRank (functions util/houseRoles).
+        let r = d.get('primary', false) == true ? 4 :
+          tier == 'owner' && sa ? 3 :
+          (tier == 'owner' || tier == 'manager') && ad ? 2 :
+          tier == 'peerLeader' && ad ? 1 : 0;
         let c = sa ? 3 : ad ? 1 : 0;
         return r > c ? r : c;
       }

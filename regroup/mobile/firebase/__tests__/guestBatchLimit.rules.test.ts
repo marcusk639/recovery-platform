@@ -87,3 +87,7 @@ it('ALLOWS 8 moves between two houses in one batch, DENIES 10', async () => {
   await assertSucceeds(batchOf(8, 'move'));
   await assertFails(batchOf(10, 'move', 8));
 });
+
+it('ALLOWS 9 moves between two houses in one batch (the documented ceiling)', async () => {
+  await assertSucceeds(batchOf(9, 'move'));
+});

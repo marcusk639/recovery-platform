@@ -181,6 +181,11 @@ describe('a caller record counts only when a claim backs it (round 8, F1)', () =
     );
   });
 
+  it('ALLOWS a caller with an owner record and only the admin claim (a manager, as on the server) discharging a peer leader', async () => {
+    await seed(`house-roles/${H}_mgr`, { tier: 'owner' });
+    await assertSucceeds(updateDoc(doc(db('mgr'), 'guests/pl-doc'), { status: 'discharged' }));
+  });
+
   it('a manager record backed by the admin claim still ranks 2', async () => {
     await assertSucceeds(updateDoc(doc(db('mgr'), 'guests/pl-doc'), { status: 'discharged' }));
   });
