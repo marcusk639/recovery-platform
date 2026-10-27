@@ -62,6 +62,13 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      # Node 22 matches ci.yml, for .github/scripts/claude-verify.sh.
+      - name: Set up Node
+        if: steps.pr-head.outputs.skip != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Run Claude Code
         if: steps.pr-head.outputs.skip != 'true'
         id: claude
@@ -73,11 +80,11 @@ jobs:
           additional_permissions: |
             actions: read
 
-          # Optional: Give a custom prompt to Claude. If this is not specified, Claude will perform the instructions specified in the comment that tagged it.
-          # prompt: 'Update the pull request description to include a summary of changes.'
-
-          # Optional: Add claude_args to customize behavior and configuration
+          # Tag mode already allows git add/commit/rm and the action's push script.
+          # These add read-only PR context and per-package verification, so a
+          # commit is checked the way CI checks it before it is pushed.
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://code.claude.com/docs/en/cli-reference for available options
-          # claude_args: '--allowed-tools Bash(gh pr *)'
+          claude_args: |
+            --allowedTools "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(bash .github/scripts/claude-verify.sh:*)"
+            --append-system-prompt "Before every commit to a pull request: (1) run gh pr view and gh pr diff on the PR to see its current state and changes; (2) for every package your change touches, run bash .github/scripts/claude-verify.sh followed by the package path (run it without arguments to list the packages). If verification fails, do not commit; fix the cause and run it again, or reply explaining the failure. Never weaken, skip or delete a test to make it pass. Say in your reply which packages you verified."
 
