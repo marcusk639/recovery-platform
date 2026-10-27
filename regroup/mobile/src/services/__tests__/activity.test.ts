@@ -912,6 +912,23 @@ describe('Activity Service', () => {
       ).rejects.toThrow('Activity not found');
     });
 
+    it('refuses to resolve an activity that is not disputed', async () => {
+      const other = await logActivity(
+        'guest123',
+        'house456',
+        ActivityType.CHORE,
+        ActivityDataFactory.chore('daily', 'Kitchen'),
+        'user789',
+      );
+      for (const status of [ActivityStatus.ACTIVE, ActivityStatus.DELETED, ActivityStatus.RESOLVED]) {
+        mockActivities.find(a => a.id === other.id)!.status = status;
+        await expect(resolveDispute(other.id, 'admin456', 'approve')).rejects.toThrow(
+          'Activity is not disputed',
+        );
+      }
+      expect(mockActivities.find(a => a.id === other.id)!.incomplete).toBeUndefined();
+    });
+
     it('leaves the week summary to the server trigger', async () => {
       await resolveDispute(activityId, 'admin456', 'approve');
 

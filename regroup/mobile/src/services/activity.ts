@@ -386,11 +386,21 @@ export async function resolveDispute(
     if (!activity.exists) {
       throw new Error('Activity not found');
     }
+    // Only an open dispute can be resolved: resolving a deleted, active or
+    // already-resolved activity would rewrite its outcome.
+    if ((activity.data() as Activity | undefined)?.status !== ActivityStatus.DISPUTED) {
+      throw new Error('Activity is not disputed');
+    }
 
-    // The week summary is recomputed server-side.
+    // The week summary and house.disputes are updated server-side.
     await activityRef.update(updates);
   } catch (error: any) {
-    if (error?.message === 'Activity not found') throw error;
+    if (
+      error?.message === 'Activity not found' ||
+      error?.message === 'Activity is not disputed'
+    ) {
+      throw error;
+    }
     logException(error);
     throw new Error('Failed to resolve dispute');
   }
