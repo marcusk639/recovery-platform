@@ -67,22 +67,26 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
 // Same bridges as regroup/mobile/android/build.gradle (see the comments there for
 // the failures each one answers). AGP 8 requires them across every module.
 subprojects { project ->
-    // @react-native-firebase (v21+) declares Java 11 in its own build.gradle but
-    // its Java source uses Java 16+ features (pattern matching in instanceof);
-    // RN 0.76+ forces Java 17 on every module, RN 0.72 does not (issue #87).
-    // Raise those modules to 17 in finalizeDsl: it runs after the module's own
-    // build script and before AGP locks the DSL. Writing compileOptions in
-    // afterEvaluate is too late (discarded), and setting the JavaCompile tasks
-    // is overwritten by AGP. The Kotlin jvmTarget bridge below reads
-    // targetCompatibility, so Kotlin follows to 17.
-    project.plugins.withId('com.android.library') {
-        if (project.name.startsWith('react-native-firebase')) {
-            project.extensions.getByName('androidComponents').finalizeDsl { ext ->
-                ext.compileOptions.sourceCompatibility = JavaVersion.VERSION_17
-                ext.compileOptions.targetCompatibility = JavaVersion.VERSION_17
-            }
+    // Java level of every Android module, in AGP's finalizeDsl (after the
+    // module's own build script, before AGP locks the DSL). React Native 0.72
+    // forced 11 everywhere; gradle.properties turns that off
+    // (react.internal.disableJavaVersionAlignment) because it overrode 17 for
+    // @react-native-firebase v21+, whose Java source needs 16+ (pattern
+    // matching in instanceof) though its build file asks for 11 (issue #87).
+    // Same 11 as before for every other module; 17 for react-native-firebase.
+    // Writing compileOptions in afterEvaluate is too late (discarded), and
+    // setting the JavaCompile tasks is overwritten by AGP. The Kotlin jvmTarget
+    // bridge below reads targetCompatibility, so Kotlin follows.
+    def javaLevel = { ->
+        def level = project.name.startsWith('react-native-firebase')
+            ? JavaVersion.VERSION_17 : JavaVersion.VERSION_11
+        project.extensions.getByName('androidComponents').finalizeDsl { ext ->
+            ext.compileOptions.sourceCompatibility = level
+            ext.compileOptions.targetCompatibility = level
         }
     }
+    project.plugins.withId('com.android.application') { javaLevel() }
+    project.plugins.withId('com.android.library') { javaLevel() }
 
     project.afterEvaluate {
         def android = project.extensions.findByName('android')
