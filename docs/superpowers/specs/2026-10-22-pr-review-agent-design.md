@@ -160,8 +160,8 @@ Pre-check failures must not fail the job. A broken script yields a "pre-check un
 
 - `Read`, `Grep`, `Glob` over the repository and `OUT`. Reads of the workspace `.git/**` (the action writes its app token into `.git/config`) and of `//proc/**` are denied.
 - `Write` and `Edit` only under `OUT` (`Write(//<OUT>/**)`, `Edit(//<OUT>/**)`); both are denied anywhere in the workspace.
-- **No `Bash`.** The facts step precomputes the git material the model needs: `<OUT>/pr.diff`, `<OUT>/increment.diff` and `<OUT>/commits.txt`, plus `facts.md` and `state.json`.
-- No inline-comment tool and no comment-writing commands: the model proposes inline comments in `<OUT>/inline.json`.
+- **`Bash` only for `gh pr view`, `gh pr diff` and `gh pr comment`** (owner decision, 2026-10-27; see the addendum §4.5 for the limits and residual risk). The facts step still precomputes the git material the model needs: `<OUT>/pr.diff`, `<OUT>/increment.diff` and `<OUT>/commits.txt`, plus `facts.md` and `state.json`.
+- No inline-comment tool: the model proposes inline comments in `<OUT>/inline.json`. `gh pr comment` is only for a direct reply to a maintainer's question, never for findings.
 
 No `WebFetch`/`WebSearch`, no package managers. The builder confirms in a real run that nothing posts as `permission_denied`. That was the old bot's silent failure.
 

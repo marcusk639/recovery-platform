@@ -11,7 +11,7 @@ Two improvements to the advisory PR reviewer, keeping every invariant of the mai
 
 ## 2. Decisions
 
-- **The model still never posts.** Suggestions travel through `<OUT>/inline.json` and are posted by the model-free publish step, like today's inline comments (§7.7). A PR diff is untrusted text: a model with a posting tool can be steered by it to post anything.
+- **Findings are posted only by the model-free publish step.** Suggestions travel through `<OUT>/inline.json`, like today's inline comments (§7.7). By owner decision (2026-10-27), the model may also run `gh pr comment`, `gh pr diff` and `gh pr view` for one narrow job, replying to a maintainer's direct question (§4.5). A PR diff is untrusted text, so a model holding a posting command can be steered by it; §4.5 records the limits and the residual risk.
 - **No GitHub MCP server.** Everything it would provide (PR body, comments, diff, prior reviews) is precomputed by `facts.mjs` and filtered to owner/member/collaborator text. A GitHub MCP server would give the model a token in the model step, return unfiltered third-party text, and offer write tools. Missing PR data gets added to `facts.mjs` instead.
 - **Serena is opt-in per repository** through the Actions variable `PR_REVIEW_SERENA` (`on` / unset). It stays off until the measurement in §5 shows it pays.
 - **Serena runs isolated from every credential** (§3.2), because it starts language servers that parse files the PR controls.
@@ -119,6 +119,16 @@ If only the suggestion fails, publish drops the suggestion, posts the comment wi
 - Offer a suggestion only when the fix is local to the commented lines and complete. No partial fixes, no "something like" code, and no suggestion that would need a matching change elsewhere (put that in the body).
 - Keep the replacement minimal and preserve the file's indentation.
 - One suggestion per finding.
+
+### 4.5 Direct PR comments (owner decision, 2026-10-27)
+
+The Review step allows `Bash(gh pr comment:*)`, `Bash(gh pr diff:*)` and `Bash(gh pr view:*)`. `Bash`, `NotebookEdit`, `WebFetch`, `WebSearch` and the inline-comment tool are no longer explicitly denied; tools missing from `--allowedTools` stay unavailable. Serena starts with `--mode editing`; `fixed_tools` and `read_only` still limit it to the four lookups.
+
+- **What `gh` is for:** `REVIEW.md` sends findings, inline comments and suggestions only through the OUT files, because only Publish keeps the ledger, keeps security findings private, redacts secrets and can retract comments. `gh pr view`/`gh pr diff` read this PR. `gh pr comment` may post at most one reply per run, to a question a maintainer (owner, member, collaborator) asked the reviewer directly. The reply contains no findings, security detail, secrets or PII, and is always `gh pr comment <PR> --body "<text>"`.
+- **Residual risk:** these limits are instructions, not enforcement.
+  - **Credential leak:** permission rules match command prefixes only, so `gh pr comment --body-file <file>` is also allowed. A prompt-injected run could post `.git/config`, where the action writes its app token, or other runner-readable files. `Read`'s denies don't cover `gh`.
+  - **Bypassing Publish:** an injected run can post anything else with the job's token, outside the ledger, the redaction and the post-hoc guard.
+  - **Enforcement:** removing the risk needs enforcement in code. Either drop `gh pr comment`, or replace it with a base-controlled wrapper that takes the body from `<OUT>` and applies Publish's redaction and security guard.
 
 ## 5. Measurement and rollout
 
