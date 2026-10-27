@@ -44,6 +44,10 @@ const OWN = 'ownerSuper';
 const T0 = Timestamp.fromDate(new Date('2026-01-14T18:00:00Z'));
 
 let env: RulesTestEnvironment;
+const asAdmin = (fn: (db: Db) => Promise<unknown>) =>
+  env.withSecurityRulesDisabled(async (c) => {
+    await fn(c.firestore());
+  });
 
 beforeAll(async () => {
   env = await initializeTestEnvironment({
@@ -151,7 +155,9 @@ describe('the resident is the server-stamped residentUid', () => {
     const fresh = act({ residentUid: RES });
     await assertSucceeds(setDoc(doc(res(), 'activities/new1'), fresh));
     await assertFails(setDoc(doc(res(), 'activities/new1b'), act({ residentUid: PEER })));
-    await assertFails(setDoc(doc(mgr(), 'activities/new2'), act({ residentUid: PEER, loggedBy: MGR })));
+    await assertFails(
+      setDoc(doc(mgr(), 'activities/new2'), act({ residentUid: PEER, loggedBy: MGR })),
+    );
     await assertFails(upd(mgr(), 'active', { residentUid: PEER }));
     await assertFails(upd(mgr(), 'active', { residentUid: deleteField() }));
     const { residentUid: _r, ...unstamped } = fresh;
@@ -159,9 +165,10 @@ describe('the resident is the server-stamped residentUid', () => {
   });
 
   it('GAP: a resident who deletes and recreates their guest doc still cannot dispute their own activity', async () => {
-    await assertSucceeds(deleteDoc(doc(res(), 'guests/g1')));
+    // Tampering done with rules off: #145's guest rules refuse it themselves.
+    await asAdmin(async (db) => deleteDoc(doc(db, 'guests/g1')));
     await assertFails(upd(res(), 'adminLogged', disputeNoNonce(RES)));
-    await assertSucceeds(setDoc(doc(res(), 'guests/g1'), { houseId: H, userId: RES }));
+    await asAdmin(async (db) => setDoc(doc(db, 'guests/g1'), { houseId: H, userId: RES }));
     await assertFails(upd(res(), 'adminLogged', disputeNoNonce(RES)));
   });
 
@@ -171,7 +178,8 @@ describe('the resident is the server-stamped residentUid', () => {
   });
 
   it('GAP: a peer leader who clears userId on their own guest doc still cannot resolve their dispute', async () => {
-    await assertSucceeds(updateDoc(doc(pl(), 'guests/gpl'), { userId: deleteField() }));
+    // Tampering done with rules off: #145's guest rules refuse it themselves.
+    await asAdmin(async (db) => updateDoc(doc(db, 'guests/gpl'), { userId: deleteField() }));
     await assertFails(upd(pl(), 'plOwnPending2', reject(PL)));
     await assertSucceeds(upd(own(), 'plOwnPending2', reject(OWN)));
   });

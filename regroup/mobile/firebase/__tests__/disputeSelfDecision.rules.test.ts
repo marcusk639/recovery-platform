@@ -119,14 +119,22 @@ const reject = (uid: string, extra: DocumentData = {}): DocumentData => ({
 describe('A: a staff member who is the resident', () => {
   it('cannot reject their own dispute after pointing their guest doc at a decoy (#141 rules alone)', async () => {
     await assertFails(upd(staff(), 'xA', reject(S)));
-    await assertSucceeds(updateDoc(doc(staff(), 'guests/gS'), { userId: 'decoy' }));
+    // The tampering itself is refused by #145's guest rules; it is done with
+    // rules disabled so this holds with or without them (and a pre-#145 doc).
+    await env.withSecurityRulesDisabled(async (c) => {
+      await updateDoc(doc(c.firestore(), 'guests/gS'), { userId: 'decoy' });
+    });
     await assertFails(upd(staff(), 'xA', reject(S)));
     await assertFails(upd(staff(), 'xA', { residentUid: 'decoy' }));
   });
 
   it('cannot reject it after deleting and recreating their guest doc with a decoy', async () => {
-    await assertSucceeds(deleteDoc(doc(staff(), 'guests/gS')));
-    await assertSucceeds(setDoc(doc(staff(), 'guests/gS'), { houseId: H, userId: 'decoy' }));
+    // The tampering itself is refused by #145's guest rules; it is done with
+    // rules disabled so this holds with or without them (and a pre-#145 doc).
+    await env.withSecurityRulesDisabled(async (c) => {
+      await deleteDoc(doc(c.firestore(), 'guests/gS'));
+      await setDoc(doc(c.firestore(), 'guests/gS'), { houseId: H, userId: 'decoy' });
+    });
     await assertFails(upd(staff(), 'xA', reject(S)));
     await assertSucceeds(upd(mgr2(), 'xA', reject(M2)));
   });
