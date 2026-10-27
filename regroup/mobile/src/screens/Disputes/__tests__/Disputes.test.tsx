@@ -674,6 +674,7 @@ describe('Disputes', () => {
       expect(getByTestId('disputes-load-error')).toBeTruthy();
       expect(queryByTestId('render-activities')).toBeNull();
       // 6: "try again" actually re-subscribes.
+      expect(getByTestId('disputes-load-error').props.accessibilityRole).toBe('button');
       fireEvent.press(getByTestId('disputes-load-error'));
       expect(mockLiveRetry).toHaveBeenCalledTimes(1);
       mockLiveError.mockReturnValue(null);

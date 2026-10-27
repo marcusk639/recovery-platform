@@ -12,7 +12,7 @@
  *      they logged the activity.
  *
  * The guest-doc cases rely on #145's guest rules (userId immutable once set,
- * no self-delete): these rules deploy only after #145 has merged.
+ * no self-delete): these rules deploy together with or after #145's rules.
  *
  * Requires the Firestore emulator on port 8080:
  *   cd firebase && firebase emulators:exec --only firestore --project demo-test \
@@ -75,7 +75,10 @@ const act = (o: DocumentData = {}) => ({
 
 /** An active activity with no dispute fields at all. */
 const clean = (o: DocumentData = {}) => {
-  const { disputeReason: _r, disputedBy: _b, disputeResolvedBy: _x, ...rest } = act({ status: 'active', ...o });
+  const rest: DocumentData = act({ status: 'active', ...o });
+  delete rest.disputeReason;
+  delete rest.disputedBy;
+  delete rest.disputeResolvedBy;
   return rest;
 };
 
@@ -94,14 +97,8 @@ beforeEach(async () => {
     await setDoc(doc(db, 'activities/vA'), act({ guestId: 'gV', houseId: H2, loggedBy: 'm3' }));
     // No guest doc, no stamp.
     await setDoc(doc(db, 'activities/gone'), act({ guestId: 'missing' }));
-    await setDoc(
-      doc(db, 'activities/fresh'),
-      clean({ guestId: 'missing' }),
-    );
-    await setDoc(
-      doc(db, 'activities/plain'),
-      clean({ guestId: 'gP', residentUid: P }),
-    );
+    await setDoc(doc(db, 'activities/fresh'), clean({ guestId: 'missing' }));
+    await setDoc(doc(db, 'activities/plain'), clean({ guestId: 'gP', residentUid: P }));
     // An older build's "delete": deleted, resolved at loggedAt.
     await setDoc(
       doc(db, 'activities/upheld'),
@@ -199,11 +196,20 @@ describe("3: loggedAt is frozen on an older build's delete record", () => {
     await env.withSecurityRulesDisabled(async (c) => {
       await setDoc(
         doc(c.firestore(), 'activities/rejected'),
-        act({ status: 'resolved', disputed: 'rejected', incomplete: false, disputeResult: 'fail', disputeResolvedBy: M2, disputeResolvedAt: T0 }),
+        act({
+          status: 'resolved',
+          disputed: 'rejected',
+          incomplete: false,
+          disputeResult: 'fail',
+          disputeResolvedBy: M2,
+          disputeResolvedAt: T0,
+        }),
       );
     });
-    // What verifyActivity writes.
-    await assertSucceeds(upd(mgr2(), 'rejected', { verified: true, verifiedBy: M2, loggedAt: serverTimestamp() }));
+    // What an older build's verifyActivity writes (the current app omits loggedAt).
+    await assertSucceeds(
+      upd(mgr2(), 'rejected', { verified: true, verifiedBy: M2, loggedAt: serverTimestamp() }),
+    );
     // What updateActivity writes on a pending dispute.
     await assertSucceeds(upd(mgr2(), 'uA', { timestamp: T0, loggedAt: serverTimestamp() }));
     await assertFails(upd(mgr2(), 'uA', { loggedAt: Timestamp.fromDate(new Date('2020-01-01')) }));

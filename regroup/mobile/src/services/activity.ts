@@ -436,8 +436,9 @@ export async function resolveDispute(
       disputeResult: approved ? 'success' : 'fail',
       disputeResolvedBy: resolvedBy,
       disputeResolvedAt: FirebaseFirestore.FieldValue.serverTimestamp() as any,
-      // loggedAt is left alone: it is frozen once there is dispute history
-      // (the rules accept the server time here only for older builds).
+      // loggedAt is left alone: a decision does not change when the
+      // activity was logged (the court export dates a timestamp-less
+      // activity by it; older builds still stamp the server time here).
     };
 
     const activityRef = firestore.collection('activities').doc(activityId);
@@ -485,10 +486,12 @@ export async function verifyActivity(
   verifiedBy: string,
 ): Promise<void> {
   try {
+    // loggedAt is left alone: verifying does not change when the activity
+    // was logged, and the rules refuse it on a disputed activity with no
+    // timestamp (the court export dates those by loggedAt).
     await firestore.collection('activities').doc(activityId).update({
       verified: true,
       verifiedBy,
-      loggedAt: FirebaseFirestore.FieldValue.serverTimestamp(),
     });
   } catch (error) {
     logException(error);

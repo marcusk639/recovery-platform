@@ -11,6 +11,9 @@
  *   E1:    a peer's ENTER may stamp loggedAt with the server time (older
  *          builds do) only on an activity that has a timestamp: the export
  *          dates a timestamp-less activity by loggedAt.
+ *   I-3/B1: the same holds for every admin write once there is dispute
+ *          history (plain bump, VERIFY, old-build KEEP, REJECT, APPROVE):
+ *          old builds' KEEP and VERIFY on such an activity are refused.
  *
  * Requires the Firestore emulator on port 8080:
  *   cd firebase && firebase emulators:exec --only firestore --project demo-test \
@@ -101,8 +104,14 @@ beforeEach(async () => {
         reopenedAt: T0,
       }),
     );
-    const { timestamp: _t, ...noTimestamp } = meeting();
+    const noTimestamp: DocumentData = meeting();
+    delete noTimestamp.timestamp;
     await setDoc(doc(db, 'activities/noTimestamp'), noTimestamp);
+    await setDoc(doc(db, 'activities/noTimestampPending'), {
+      ...noTimestamp,
+      status: 'disputed',
+      ...disputedBy,
+    });
   });
 });
 
@@ -182,5 +191,63 @@ describe('E1: ENTER and loggedAt on a timestamp-less activity', () => {
 
   it('with a timestamp, an older build may still stamp loggedAt', async () => {
     await assertSucceeds(upd(peer(), 'active', { ...enter(P), loggedAt: serverTimestamp() }));
+  });
+
+  it('I-3/B1 (E4a-e): no admin path may stamp loggedAt on a disputed timestamp-less activity', async () => {
+    const stamp = { loggedAt: serverTimestamp() };
+    await assertFails(
+      upd(mgr2(), 'noTimestampPending', { verified: true, verifiedBy: M2, ...stamp }),
+    );
+    await assertFails(
+      upd(mgr2(), 'noTimestampPending', {
+        status: 'resolved',
+        disputeResolvedBy: M2,
+        disputeResolvedAt: serverTimestamp(),
+        ...stamp,
+      }),
+    );
+    // E4: and every other admin path: a plain bump (by another admin and by
+    // the logger), and the new app's REJECT and APPROVE bundling loggedAt.
+    await assertFails(upd(mgr2(), 'noTimestampPending', stamp));
+    await assertFails(upd(mgr(), 'noTimestampPending', stamp));
+    const decide = {
+      status: 'resolved',
+      disputeResolvedBy: M2,
+      disputeResolvedAt: serverTimestamp(),
+    };
+    const reject = { ...decide, disputed: 'rejected', incomplete: false, disputeResult: 'fail' };
+    const approve = {
+      ...decide,
+      disputed: 'successful',
+      incomplete: true,
+      disputeOutcome: 'incomplete-per-residents',
+      disputeResult: 'success',
+    };
+    await assertFails(upd(mgr2(), 'noTimestampPending', { ...reject, ...stamp }));
+    await assertFails(upd(mgr2(), 'noTimestampPending', { ...approve, ...stamp }));
+    // A decided timestamp-less activity: no bump either.
+    await env.withSecurityRulesDisabled(async (c) => {
+      const decided: DocumentData = meeting({ ...disputedBy, ...reject, disputeResolvedAt: T0 });
+      delete decided.timestamp;
+      await setDoc(doc(c.firestore(), 'activities/noTimestampDecided'), decided);
+      const pending: DocumentData = meeting({ status: 'disputed', ...disputedBy });
+      delete pending.timestamp;
+      await setDoc(doc(c.firestore(), 'activities/noTimestampPending2'), pending);
+    });
+    await assertFails(upd(mgr2(), 'noTimestampDecided', stamp));
+    await assertFails(
+      upd(mgr2(), 'noTimestampDecided', { verified: true, verifiedBy: M2, ...stamp }),
+    );
+    // What the new app writes: VERIFY and decisions leave loggedAt alone.
+    await assertSucceeds(upd(mgr2(), 'noTimestampPending2', approve));
+    await assertSucceeds(upd(mgr2(), 'noTimestampDecided', { verified: true, verifiedBy: M2 }));
+    await assertSucceeds(upd(mgr2(), 'noTimestampPending', { verified: true, verifiedBy: M2 }));
+    await assertSucceeds(
+      upd(mgr2(), 'noTimestampPending', {
+        status: 'resolved',
+        disputeResolvedBy: M2,
+        disputeResolvedAt: serverTimestamp(),
+      }),
+    );
   });
 });

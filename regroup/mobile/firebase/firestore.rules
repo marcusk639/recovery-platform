@@ -576,7 +576,9 @@ service cloud.firestore {
     // RESOLVE (admin): an OPEN dispute only (so a second admin cannot
     // overwrite the first decision), to `resolved` with a consistent outcome,
     // recording the caller and the server time as resolver. The disputer
-    // fields stay as they are.
+    // fields stay as they are. loggedAt is checked by adminUpdates (the only
+    // caller) for RESOLVE too: no change on a timestamp-less activity with
+    // dispute history, so an old build's KEEP stamping it is refused there.
     function resolvesDispute() {
       let d = request.resource.data;
       return resource.data.status == 'disputed' && d.status == 'resolved' &&
@@ -642,9 +644,12 @@ service cloud.firestore {
         // old builds, stamp it). Frozen only on an old build's "delete"
         // record (deleted, with disputeResolvedAt), which the export
         // recognises by disputeResolvedAt == loggedAt.
+        // And with dispute history only on an activity that has a timestamp:
+        // the court export dates a timestamp-less activity by loggedAt.
         (!keys.hasAny(['loggedAt']) ||
          (d.loggedAt == request.time &&
-          !(r.status == 'deleted' && r.get('disputeResolvedAt', null) != null))) &&
+          !(r.status == 'deleted' && r.get('disputeResolvedAt', null) != null) &&
+          (!hasDisputeHistory(r) || r.get('timestamp', null) != null))) &&
         // A new guest (or house) must be a guest of the activity's house,
         // as at create.
         (!keys.hasAny(['guestId', 'houseId']) || activityGuest(d.guestId).houseId == d.houseId) &&

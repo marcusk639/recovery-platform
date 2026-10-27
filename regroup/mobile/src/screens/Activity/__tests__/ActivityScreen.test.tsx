@@ -597,6 +597,7 @@ describe('ActivityScreen', () => {
     it('6: shows that disputes could not be loaded, and retries on tap', () => {
       mockLiveError.mockReturnValue(new Error('denied'));
       const { getByTestId } = renderScreen();
+      expect(getByTestId('activity-disputes-load-error').props.accessibilityRole).toBe('button');
       fireEvent.press(getByTestId('activity-disputes-load-error'));
       expect(mockLiveRetry).toHaveBeenCalledTimes(1);
       mockLiveError.mockReturnValue(null);

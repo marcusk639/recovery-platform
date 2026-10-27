@@ -733,6 +733,21 @@ describe('Activity Service', () => {
       expect(touchedWeekSummaries()).toBe(false);
     });
 
+    it('I-3: verifyActivity leaves loggedAt alone', async () => {
+      const activity = await logActivity(
+        'guest123',
+        'house456',
+        ActivityType.CHORE,
+        ActivityDataFactory.chore('daily', 'Kitchen'),
+        'user789',
+      );
+      const before = (mockActivities.find((a) => a.id === activity.id) as any).loggedAt;
+      await verifyActivity(activity.id, 'admin123');
+      const after = mockActivities.find((a) => a.id === activity.id) as any;
+      expect(after.verified).toBe(true);
+      expect(after.loggedAt).toBe(before);
+    });
+
     it('the service no longer exports a client-side summary writer', () => {
       const exported = activityService as Record<string, unknown>;
       expect(exported.incrementWeekSummaryForActivity).toBeUndefined();
