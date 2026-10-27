@@ -86,10 +86,11 @@ describe('AuthGuard', () => {
   });
 
   // Pins the SSR branch. Returning false here cancelled the navigation, so the
-  // server rendered an incomplete shell; returning true lets the component mount
-  // and issue its own redirect. Note the redirect does NOT come from this guard
-  // re-running on the client — see the header. It comes from
-  // MyAccountComponent.checkUser, which does inspect the resolved user.
+  // server rendered an incomplete shell; returning true lets the page render.
+  // A signed-out user still reaches /login in the browser: the client runs its
+  // initial navigation on bootstrap (initialNavigation: 'enabled' in
+  // app-routing.module.ts), so this guard's browser branch denies and redirects,
+  // and MyAccountComponent.checkUser redirects too if the component mounts.
   it('defers to the client during server-side rendering', () => {
     const { guard } = setup('server', {
       user: null,
