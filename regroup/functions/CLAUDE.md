@@ -26,7 +26,7 @@ npm run migrate:house-sub:run
 npm run migrate:payment-cents:dry-run   # / :apply
 npm run migrate:balance-cents:dry-run   # / :apply
 npm run backfill:week-summaries:dry-run -- --from YYYY-MM-DD --to YYYY-MM-DD [--house <id>]   # / :apply
-npm run backfill:dispute-identity:dry-run [-- --house <id>]   # then :apply — stamp/re-stamp residentUid, log older decisions (reopen needs them), seed house-disputes. Deploy order: rules (`mobile`: `npm run deploy:rules`, from main, only together with or after #145's rules) → functions (from a clean worktree at the merged commit, from regroup/: `npm --prefix functions ci && npm --prefix functions run build`, then `firebase deploy --only functions`; review any deletion prompt, no blind --force) → this, immediately → app. See regroup/CLAUDE.md
+npm run backfill:dispute-identity:dry-run [-- --house <id>]   # then :apply — stamp/re-stamp residentUid, log older decisions (reopen needs them), seed house-disputes. Combined #141/#145 deploy order (regroup/CLAUDE.md): #145 step 0 and backfills → functions (build first) → the MERGED ruleset immediately after → this, with `-- --rules-live-at <ISO time the rules went live>` (re-derives pre-rules stamps; flags differing ones on disputed activities) → #145's remaining steps → app
 ```
 
 Jest config is the `jest` key in `package.json` (no `jest.config.js`). Firestore rules tests live in `../mobile/firebase/__tests__/`, not here.

@@ -68,8 +68,12 @@ export class FakeFirestore {
     return c;
   }
 
-  seed(collection: string, id: string, data: Data): void {
+  /** "collection/id" -> the document's createTime in ms (query docs expose it). */
+  readonly createTimes = new Map<string, number>();
+
+  seed(collection: string, id: string, data: Data, createTimeMs?: number): void {
     this.col(collection).set(id, data);
+    if (createTimeMs !== undefined) this.createTimes.set(`${collection}/${id}`, createTimeMs);
   }
 
   read(collection: string, id: string): Data | undefined {
@@ -140,6 +144,9 @@ export class FakeFirestore {
     this.queries.push({ collection, spec });
     const docs = entries.map(([id, data]) => ({
       id,
+      createTime: this.createTimes.has(`${collection}/${id}`)
+        ? { toMillis: () => this.createTimes.get(`${collection}/${id}`)! }
+        : undefined,
       data: () => data,
       ref: this.docRef(collection, id),
     }));

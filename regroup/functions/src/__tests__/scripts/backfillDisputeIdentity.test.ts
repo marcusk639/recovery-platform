@@ -84,6 +84,9 @@ describe('backfillDisputeIdentity', () => {
       decisionsPresent: 0,
       decisionsUndated: 1,
       openDisputes: 0,
+      stampsChecked: 0,
+      restamped: 0,
+      stampMismatchFlagged: 0,
     });
     expect(db.writes).toHaveLength(0);
     expect(output.join('\n')).toContain('DRY RUN');
@@ -164,6 +167,72 @@ describe('round 5', () => {
       status: 'pending',
       disputedBy: 'peer',
     });
+  });
+});
+
+describe('--rules-live-at: stamps written before the rules went live', () => {
+  const LIVE = Date.parse('2026-11-01T00:00:00Z');
+  const before = LIVE - 60_000;
+  const after = LIVE + 60_000;
+  // No dispute history unless given (act() carries a disputeReason).
+  const plain = (o: Record<string, unknown> = {}) => {
+    const { disputeReason: _r, ...rest } = act(o);
+    return rest;
+  };
+  const disputed = { status: 'disputed', disputedBy: 'p', disputeResolvedBy: 'p' };
+
+  beforeEach(() => {
+    db = new FakeFirestore();
+    db.seed('guests', 'g1', { houseId: 'h1', userId: 'res1' });
+    db.seed('guests', 'intake', { houseId: 'h1' });
+    db.seed('activities', 'forged', plain({ residentUid: 'someoneElse' }), before);
+    db.seed('activities', 'forgedIntake', plain({ guestId: 'intake', residentUid: 'x' }), before);
+    db.seed(
+      'activities',
+      'forgedDisputed',
+      plain({ ...disputed, residentUid: 'someoneElse' }),
+      before,
+    );
+    db.seed('activities', 'ok', plain({ residentUid: 'res1' }), before);
+    db.seed('activities', 'afterLive', plain({ residentUid: 'someoneElse' }), after);
+  });
+
+  const opts = { apply: true, rulesLiveAt: new Date(LIVE) };
+
+  it('no dispute history: a differing stamp is re-derived from the guest doc (null for an accountless guest)', async () => {
+    const counts = await run(asFirestore(db), opts);
+    expect(db.read('activities', 'forged')!.residentUid).toBe('res1');
+    expect(db.read('activities', 'forgedIntake')).toMatchObject({
+      residentUid: null,
+      residentUidPending: false,
+    });
+    expect(counts).toMatchObject({ stampsChecked: 4, restamped: 2 });
+    expect(output.join('\n')).toContain('Re-stamped (pre-rules): forged, forgedIntake');
+  });
+
+  it('dispute history: a differing stamp is never changed; the activity is flagged and listed', async () => {
+    const counts = await run(asFirestore(db), opts);
+    expect(db.read('activities', 'forgedDisputed')).toMatchObject({
+      residentUid: 'someoneElse',
+      flaggedForReview: { reason: 'stamp_mismatch' },
+    });
+    expect(counts.stampMismatchFlagged).toBe(1);
+    expect(output.join('\n')).toContain("flagged for the owner's review: forgedDisputed");
+  });
+
+  it('a matching stamp is left alone; activities created after the cutoff are untouched; dry run writes nothing', async () => {
+    const dry = await run(asFirestore(db), { ...opts, apply: false });
+    expect(dry).toMatchObject({ restamped: 2, stampMismatchFlagged: 1 });
+    expect(db.writes).toHaveLength(0);
+    await run(asFirestore(db), opts);
+    expect(db.read('activities', 'ok')).toEqual(plain({ residentUid: 'res1' }));
+    expect(db.read('activities', 'afterLive')!.residentUid).toBe('someoneElse');
+    expect(output.join('\n')).not.toContain('res1');
+    expect(parseArgs(['--rules-live-at', '2026-11-01T00:00:00Z'])).toEqual({
+      apply: false,
+      rulesLiveAt: new Date(LIVE),
+    });
+    expect(() => parseArgs(['--rules-live-at', 'soon'])).toThrow('ISO time');
   });
 });
 

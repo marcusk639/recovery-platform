@@ -21,20 +21,18 @@
  *
  * Dry run is the DEFAULT — writing requires --apply.
  *
- *   # rehearse against seeded emulator data (demo-* project only)
  *   FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=demo-regroup \
- *     npm run backfill:dispute-identity:dry-run
+ *     npm run backfill:dispute-identity:dry-run      # rehearse (demo-* only)
+ *   npm run backfill:dispute-identity:dry-run -- --rules-live-at <ISO>
+ *   npm run backfill:dispute-identity:apply -- --rules-live-at <ISO>
  *
- *   # report against production without writing
- *   npm run backfill:dispute-identity:dry-run
- *
- *   # write (only after the dry-run report has been reviewed)
- *   npm run backfill:dispute-identity:apply
- *
- * --house <id> limits the run to one house. Idempotent: a re-run stamps and
- * logs nothing more. A stamp is not a week-summary input, so stamping
- * triggers no summary recompute. Each stamp is a transaction that re-reads the activity,
- * so a live write is never overwritten. Prints ids and counts only.
+ * --rules-live-at <ISO> (combined #141/#145 deploy, step 4): for activities
+ * created before #141's rules went live, re-derives the stamp from the guest
+ * doc (activities/stampVerification): overwritten with no dispute history; a
+ * differing one with history is flagged for review, never changed.
+ * --house <id> limits the run to one house. Idempotent. Stamps are not
+ * week-summary inputs (no recompute). Each write is a transaction that
+ * re-reads the activity. Prints ids and counts only.
  */
 import './scriptBootstrap';
 import * as admin from 'firebase-admin';
@@ -42,6 +40,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { fillStamp, residentUidFrom } from '../activities/residentStamp';
 import { DECISIONS, disputeStamp, millisOf, outcomeOf } from '../activities/disputeDecisions';
 import { mirrorHouseDispute } from '../activities/houseDisputeMirror';
+import { verifyStamp } from '../activities/stampVerification';
 
 type Firestore = FirebaseFirestore.Firestore;
 type Data = Record<string, unknown>;
@@ -50,6 +49,8 @@ export interface Options {
   apply: boolean;
   houseId?: string;
   pageSize?: number;
+  /** When #141's rules went live: stamps on activities created before it are re-derived. */
+  rulesLiveAt?: Date;
 }
 
 export interface Counts {
@@ -61,23 +62,39 @@ export interface Counts {
   decisionsPresent: number;
   decisionsUndated: number;
   openDisputes: number;
+  /** --rules-live-at: stamps checked, overwritten (no dispute history), and flagged. */
+  stampsChecked: number;
+  restamped: number;
+  stampMismatchFlagged: number;
 }
 
-const USAGE = 'Usage: backfillDisputeIdentity [--house <houseId>] [--apply]';
+const USAGE =
+  'Usage: backfillDisputeIdentity [--house <houseId>] [--rules-live-at <ISO time>] [--apply]';
 const ALREADY_EXISTS = 6;
 
 export function parseArgs(argv: string[]): Options {
-  const known = new Set(['--house', '--apply']);
+  const valued = ['--house', '--rules-live-at'];
+  const known = new Set([...valued, '--apply']);
   argv.forEach((a, i) => {
     if (a.startsWith('--') && !known.has(a)) throw new Error(`Unknown flag ${a}. ${USAGE}`);
-    if (!a.startsWith('--') && argv[i - 1] !== '--house')
+    if (!a.startsWith('--') && !valued.includes(argv[i - 1]))
       throw new Error(`Unexpected ${a}. ${USAGE}`);
   });
-  const i = argv.indexOf('--house');
-  const houseId = i === -1 ? undefined : argv[i + 1];
-  if (i !== -1 && (!houseId || houseId.startsWith('--')))
-    throw new Error(`--house needs a value. ${USAGE}`);
-  return { apply: argv.includes('--apply'), ...(houseId ? { houseId } : {}) };
+  const value = (flag: string) => {
+    const i = argv.indexOf(flag);
+    const v = i === -1 ? undefined : argv[i + 1];
+    if (i !== -1 && (!v || v.startsWith('--'))) throw new Error(`${flag} needs a value. ${USAGE}`);
+    return v;
+  };
+  const houseId = value('--house');
+  const live = value('--rules-live-at');
+  if (live !== undefined && Number.isNaN(Date.parse(live)))
+    throw new Error(`--rules-live-at must be an ISO time. ${USAGE}`);
+  return {
+    apply: argv.includes('--apply'),
+    ...(houseId ? { houseId } : {}),
+    ...(live ? { rulesLiveAt: new Date(live) } : {}),
+  };
 }
 
 const has = (d: Data, k: string) => Object.prototype.hasOwnProperty.call(d, k);
@@ -193,7 +210,12 @@ export async function run(db: Firestore, opts: Options): Promise<Counts> {
     decisionsPresent: 0,
     decisionsUndated: 0,
     openDisputes: 0,
+    stampsChecked: 0,
+    restamped: 0,
+    stampMismatchFlagged: 0,
   };
+  const restampedIds: string[] = [];
+  const flaggedIds: string[] = [];
   const guests = new Map<string, Data | null>();
   const changed: string[] = [];
   let base: FirebaseFirestore.Query = db.collection('activities');
@@ -205,7 +227,34 @@ export async function run(db: Firestore, opts: Options): Promise<Counts> {
     for (const doc of page.docs) {
       counts.scanned++;
       const data = doc.data() as Data;
-      await stamp(db, doc.id, data, guests, opts, counts, changed);
+      // Created before the rules went live (createTime; else loggedAt; unknown counts as before).
+      const created = doc.createTime?.toMillis() ?? millisOf(data.loggedAt);
+      if (opts.rulesLiveAt && (created === null || created < opts.rulesLiveAt.getTime())) {
+        const guestId = typeof data.guestId === 'string' ? data.guestId : '';
+        const snap = guestId ? await db.collection('guests').doc(guestId).get() : undefined;
+        if (!snap?.exists) {
+          counts.guestMissing++;
+        } else {
+          counts.stampsChecked++;
+          const check = await verifyStamp(
+            db,
+            doc.id,
+            residentUidFrom(snap.data() as Data),
+            opts.apply,
+            data,
+          );
+          if (check === 'restamped' || check === 'filled') {
+            counts.restamped++;
+            restampedIds.push(doc.id);
+          }
+          if (check === 'flagged') {
+            counts.stampMismatchFlagged++;
+            flaggedIds.push(doc.id);
+          }
+        }
+      } else {
+        await stamp(db, doc.id, data, guests, opts, counts, changed);
+      }
       await logDecision(db, doc.id, data, opts, counts);
       if (data.status === 'disputed') {
         // Seeds the live list (house-disputes/{houseId}) with disputes opened
@@ -220,6 +269,14 @@ export async function run(db: Firestore, opts: Options): Promise<Counts> {
   console.log(
     `${opts.apply ? 'Stamped' : 'Would stamp'} residentUid on: ${changed.join(', ') || '(none)'}`,
   );
+  if (opts.rulesLiveAt) {
+    console.log(
+      `${opts.apply ? 'Re-stamped' : 'Would re-stamp'} (pre-rules): ${restampedIds.join(', ') || '(none)'}`,
+    );
+    console.log(
+      `Stamp differs on a disputed activity, ${opts.apply ? 'flagged' : 'would flag'} for the owner's review: ${flaggedIds.join(', ') || '(none)'}`,
+    );
+  }
   console.log(JSON.stringify(counts));
   return counts;
 }
