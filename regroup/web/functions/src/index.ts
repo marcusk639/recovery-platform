@@ -7,10 +7,13 @@
  * ../scripts/copy-ssr-to-functions.js), so the built bundle ships inside the
  * deployed function at dist/sapp/server/main.js.
  *
- * The bundle is not self-contained — angular.json externalises
- * @firebase/firestore, which resolves from this package's node_modules via its
- * `firebase` dependency. Removing that dependency breaks SSR at the first
- * request, with nothing in the build to catch it.
+ * The bundle is not self-contained — angular.json externalises @firebase/app
+ * and @firebase/firestore, which resolve from this package's node_modules via
+ * its `firebase` dependency. That pin must match the firebase version in
+ * ../package.json: a mismatch makes Firestore register on a second
+ * @firebase/app, so every render throws and the Universal engine answers 500
+ * itself (sendShell below never runs). Removing or bumping the dependency
+ * alone breaks SSR at the first request; `npm run test:ssr` in ../ catches it.
  *
  * Deployed under the `web` codebase (see ../firebase.json), deliberately
  * separate from the `default` codebase that ../../functions owns. Firebase

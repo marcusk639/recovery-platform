@@ -32,6 +32,8 @@ npm run build                     # Full build: Angular prod + copy hosting + SS
 npm run deploy                    # firebase deploy --only hosting,functions:web:ssr
 npm run serve:ssr                 # run dist/sapp/server/main.js
 npm run test:scripts              # node --test scripts/copy-ssr-to-functions.test.js
+npm run test:ssr                  # render smoke test of functions/dist (after build:ssr,
+                                  # functions npm ci, build:copy-to-functions); not in CI
 npm run build:deploy              # Build + deploy in one command
 ```
 

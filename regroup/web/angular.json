@@ -131,7 +131,8 @@
             "main": "server.ts",
             "tsConfig": "tsconfig.server.json",
             "externalDependencies": [
-              "@firebase/firestore"
+              "@firebase/firestore",
+              "@firebase/app"
             ]
           },
           "configurations": {
