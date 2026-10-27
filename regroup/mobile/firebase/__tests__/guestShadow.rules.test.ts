@@ -70,6 +70,20 @@ describe('a peer leader cannot give another peer leader a shadow record', () => 
   });
 });
 
+describe('a move is rank-checked in the house it ends up in (review I3)', () => {
+  it('DENIES a peer leader of both houses moving a resident of A into B, where they are a peer leader too', async () => {
+    // Before the move pl2 ranks 0 in A (no record there), below pl; after it
+    // pl2 ranks 1 in B, equal to pl. Only the after-state check refuses it.
+    const both = { admin: { [H]: true, houseB: true }, guest: { [H]: true } };
+    await seed('house-roles/houseB_pl', { tier: 'peerLeader' });
+    await seed('house-roles/houseB_pl2', { tier: 'peerLeader' });
+    await seed(`house-roles/${H}_pl2`, { tier: 'resident' });
+    await seed('guests/q', { houseId: H, userId: 'pl2', status: 'active' });
+    const asPl = testEnv.authenticatedContext('pl', both).firestore();
+    await assertFails(updateDoc(doc(asPl, 'guests/q'), { houseId: 'houseB' }));
+  });
+});
+
 describe('ordinary staff creates and links still work', () => {
   it('ALLOWS a manager creating a doc for a peer leader or a resident', async () => {
     await assertSucceeds(

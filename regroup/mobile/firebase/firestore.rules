@@ -279,10 +279,16 @@ service cloud.firestore {
       // ranks 3 with a superAdmin claim and 1 with an admin claim. Staff never
       // change the status, moveOutDate or house of their OWN record, or
       // delete it: only someone above them can (no self re-activation after a
-      // discharge). Two record reads at most per request.
+      // discharge). Record reads: one get() per record (a missing record reads
+      // as null, so no separate exists()); at most four per write (a move
+      // between houses: the caller's and the account's records in both),
+      // usually two. In a batch the caller's record is read once, so one
+      // batch carries at most 19 account-linked guest docs (the 20-read
+      // limit); the app writes them 8 at a time (src/services/guestBatch).
       function recordRank(houseId, uid) {
         let path = /databases/$(database)/documents/house-roles/$(houseId + '_' + uid);
-        let d = exists(path) ? get(path).data : {};
+        let snap = get(path);
+        let d = snap == null ? {} : snap.data;
         let tier = d.get('tier', '');
         return d.get('primary', false) == true ? 4 :
           tier == 'owner' ? 3 : tier == 'manager' ? 2 : tier == 'peerLeader' ? 1 : 0;
