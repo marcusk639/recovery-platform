@@ -12,6 +12,7 @@ jest.mock('firebase-admin', () => ({
 }));
 
 import {
+  isActiveGuestDoc,
   isPlausibleUid,
   holdsHouseRole,
   classifyGuestMembership,
@@ -193,5 +194,24 @@ describe('selectLegitimateGuests', () => {
     await expect(
       selectLegitimateGuests([{ houseId: HOUSE, userId: 'r1' }], HOUSE, failing),
     ).rejects.toThrow('auth down');
+  });
+});
+
+// A current resident: status absent or "active", and no moveOutDate. Every
+// other status (inactive, expelled, discharged, archived, or one added later)
+// is not current, even when moveOutDate was never set.
+describe("isActiveGuestDoc", () => {
+  it.each([
+    ["no status", {}, true],
+    ["active", { status: "active" }, true],
+    ["inactive, no moveOutDate", { status: "inactive" }, false],
+    ["expelled, no moveOutDate", { status: "expelled" }, false],
+    ["discharged, no moveOutDate", { status: "discharged" }, false],
+    ["archived, no moveOutDate", { status: "archived" }, false],
+    ["an unknown future status", { status: "paused" }, false],
+    ["active but moved out", { status: "active", moveOutDate: "2026-01-01" }, false],
+    ["no status but moved out", { moveOutDate: "2026-01-01" }, false],
+  ])("%s -> %s", (_label, data, expected) => {
+    expect(isActiveGuestDoc(data)).toBe(expected);
   });
 });

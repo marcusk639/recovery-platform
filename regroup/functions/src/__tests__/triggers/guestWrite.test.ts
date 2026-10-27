@@ -110,7 +110,8 @@ describe('delete: claim cleanup', () => {
 
   it('a discharged doc of the same account does not keep the claims', async () => {
     users.r = { guest: { [H]: true } };
-    mem.seed('guests/old', { houseId: H, userId: 'r', status: 'discharged', moveOutDate: '2026-01-01' });
+    // No moveOutDate: the status alone must decide.
+    mem.seed('guests/old', { houseId: H, userId: 'r', status: 'discharged' });
     await run(deleteEvent('g2', { houseId: H, userId: 'r' }));
     expect(users.r.guest).toEqual({});
   });
@@ -185,6 +186,19 @@ describe('EES re-split: what it may touch', () => {
     record('e3', 'gone');
 
     await run(writeEvent('gone', { houseId: H, moveOutDate: '2026-10-27' }, time));
+
+    expect(mem.get('ees-records/e1')?.amount).toBe(150);
+    expect(mem.get('ees-records/e2')?.amount).toBe(150);
+    expect(mem.get('ees-records/e3')?.amount).toBe(100);
+  });
+
+  it('a discharged resident (no moveOutDate) is not in the divisor; their record is left alone', async () => {
+    mem.seed('guests/out', { houseId: H, status: 'discharged' });
+    record('e1', 'g1');
+    record('e2', 'g2');
+    record('e3', 'out');
+
+    await run(writeEvent('g1', { houseId: H, userId: 'r1' }, time));
 
     expect(mem.get('ees-records/e1')?.amount).toBe(150);
     expect(mem.get('ees-records/e2')?.amount).toBe(150);
