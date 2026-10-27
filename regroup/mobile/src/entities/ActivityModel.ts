@@ -23,6 +23,112 @@ export enum ActivityStatus {
 }
 
 /**
+ * Dispute model (owner decision): a disputed activity keeps counting while
+ * the dispute is pending. A house admin (owner, manager or peer leader)
+ * approves or rejects it via resolveDispute:
+ *   approve -> status RESOLVED, disputed 'successful', incomplete true:
+ *              the activity was not done and does NOT count;
+ *   reject  -> status RESOLVED, disputed 'rejected', incomplete false:
+ *              the activity stands and counts.
+ * A house admin may undo a decision (reopenDispute): back to DISPUTED,
+ * pending and counted, to be approved or rejected again. Every decision is
+ * kept server-side (activities/{id}/dispute-decisions).
+ * Legacy data: an old RESOLVED without `incomplete` (the former "keep")
+ * counts like a reject; an old DELETED (the former "delete") does not.
+ */
+export type DisputeOutcome = 'successful' | 'rejected';
+
+/** disputeOutcome written with an APPROVED dispute. */
+export const DISPUTE_OUTCOME_INCOMPLETE = 'incomplete-per-residents' as const;
+
+/** How an approved dispute is shown in the app. */
+export const SUCCESSFUL_DISPUTE_LABEL =
+  'Successfully disputed — residents of the house report this activity was not completed';
+
+/**
+ * An approved dispute: decided, and not counted (the residents report the
+ * activity was not completed). From the counting rule, never from `disputed`
+ * alone, so a reopened (pending) dispute shows no badge.
+ */
+export function isSuccessfullyDisputed(activity: unknown): boolean {
+  const a = (activity ?? {}) as { status?: unknown };
+  return a.status === ActivityStatus.RESOLVED && !countsTowardStats(activity);
+}
+
+const millis = (v: unknown): number | null => {
+  if (v && typeof (v as { toMillis?: unknown }).toMillis === 'function') {
+    return (v as { toMillis: () => number }).toMillis();
+  }
+  if (v instanceof Date) {
+    return v.getTime();
+  }
+  if (typeof v === 'string') {
+    const t = Date.parse(v);
+    return Number.isNaN(t) ? null : t;
+  }
+  return null;
+};
+
+/** An older build's "delete" resolution: deleted, resolved at loggedAt. */
+export function isLegacyUpheld(activity: unknown): boolean {
+  const a = (activity ?? {}) as Record<string, unknown>;
+  const at = millis(a.disputeResolvedAt);
+  return (
+    a.status === ActivityStatus.DELETED &&
+    at !== null &&
+    at === millis(a.loggedAt) &&
+    (a.disputed === undefined || a.disputed === null) &&
+    a.incomplete !== true
+  );
+}
+
+/**
+ * Any dispute history at all — an open or decided dispute, or any dispute
+ * field recorded. Owner rule: such an activity is never deleted; a dispute
+ * ends only by APPROVE or REJECT (which an admin may undo). Mirrors
+ * hasDisputeHistory in firebase/firestore.rules.
+ */
+export function hasDisputeHistory(activity: unknown): boolean {
+  const a = (activity ?? {}) as Record<string, unknown>;
+  // As the rules: a key present (even null) is history.
+  const present = (k: string) => a[k] !== undefined;
+  return (
+    a.status === ActivityStatus.DISPUTED ||
+    a.status === ActivityStatus.RESOLVED ||
+    [
+      'disputeReason',
+      'disputedBy',
+      'disputeResolvedBy',
+      'disputeResolvedAt',
+      'disputed',
+      'disputeOutcome',
+      'disputedAt',
+      'reopenedBy',
+    ].some(present) ||
+    (a.disputeResult !== undefined && a.disputeResult !== 'none') ||
+    a.incomplete === true
+  );
+}
+
+/** Statuses an activity list queries; countsTowardStats then drops incomplete. */
+export const LISTED_ACTIVITY_STATUSES: ActivityStatus[] = [
+  ActivityStatus.ACTIVE,
+  ActivityStatus.DISPUTED,
+  ActivityStatus.RESOLVED,
+];
+
+/**
+ * Counts toward stats (and appears in lists) unless deleted or marked
+ * incomplete by an approved dispute. Same rule as countsTowardSummary in
+ * regroup/functions/src/activities/weekSummaryMath.ts.
+ */
+export function countsTowardStats(activity: unknown): boolean {
+  // Accepts raw Firestore doc data as well as typed Activities.
+  const a = (activity ?? {}) as { status?: unknown; incomplete?: unknown };
+  return a.status !== ActivityStatus.DELETED && a.incomplete !== true;
+}
+
+/**
  * Base Activity Interface
  * Represents a single activity logged by a guest
  */
@@ -40,8 +146,23 @@ export interface Activity {
 
   // Optional dispute fields
   disputeReason?: string;
-  disputeResolvedBy?: string;
-  disputeResolvedAt?: Date | string;
+  /** Who raised the dispute (kept after resolveDispute overwrites disputeResolvedBy). */
+  disputedBy?: string;
+  /** Set by an admin's resolution: approved ('successful') or 'rejected'. */
+  disputed?: DisputeOutcome;
+  /** true when an approved dispute marks the activity as not done. */
+  incomplete?: boolean;
+  /** Set with an APPROVED dispute: the residents report it was not completed. */
+  disputeOutcome?: typeof DISPUTE_OUTCOME_INCOMPLETE;
+  disputeResolvedBy?: string | null;
+  disputeResolvedAt?: Date | string | null;
+  /** When the dispute was raised (server time). */
+  disputedAt?: Date | string;
+  /** The admin who last undid a decision (reopenDispute), and when. */
+  reopenedBy?: string;
+  reopenedAt?: Date | string;
+  /** The resident's account, stamped server-side (onActivityWritten). */
+  residentUid?: string | null;
 
   // Metadata
   notes?: string;
@@ -134,6 +255,8 @@ export class ActivityEntity extends BaseEntity implements Activity {
   status: ActivityStatus = ActivityStatus.ACTIVE;
 
   disputeReason?: string;
+  /** Who raised the dispute (kept after resolveDispute overwrites disputeResolvedBy). */
+  disputedBy?: string;
   disputeResolvedBy?: string;
   disputeResolvedAt?: Date;
   notes?: string;

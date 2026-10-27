@@ -26,8 +26,13 @@ import { getCurrentTime } from "../../util/date";
 import { deleteClaim } from "../../util/claims";
 import { SENDGRID_API_KEY } from "../../config";
 import { operatorStatusToHouseStatus } from "../../util/entitlement";
+import { selectLegitimateGuests } from "../../util/guestMembership";
+import { eventAgeMinutes, isStaleEvent, RETRY_CUTOFF_MS } from "../../util/eventAge";
 
 export { onHouseDeleted } from "./houseTombstone";
+export { onActivityWritten } from "./activityWeekSummary";
+export { onGuestLinkedRestamp } from "./guestRestamp";
+export { onGuestWrite } from "./guestWrite";
 
 /**
  * Sends a push notification when a new document is created in /notifications/{notificationId}.
@@ -244,116 +249,6 @@ export const submitFeedback = onDocumentCreated(
     } catch (error) {
       logger.error("submitFeedback: email delivery failed", { error });
     }
-  },
-);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// onGuestWrite
-//
-// Merged handler replacing addDeleteGuestAuthorization + eesRecalculationOnGuestWrite.
-// Fires on every create, update, or delete of a document in guests/{guestId}.
-//
-// On DELETE only: removes the departed guest's Firebase Auth custom claims.
-// On ALL writes:  recalculates EES for the house based on active resident count.
-//
-// Both operations run independently — a failure in one is logged and does not
-// abort the other. EES failures are re-thrown for Firebase retry; auth cleanup
-// failures are logged-only since a deleted doc won't retrigger this function.
-// ─────────────────────────────────────────────────────────────────────────────
-export const onGuestWrite = onDocumentWritten(
-  "guests/{guestId}",
-  async (event) => {
-    const isDelete = !event.data?.after?.exists;
-    const guestData = event.data?.after?.data() ?? event.data?.before?.data();
-    if (!guestData) return;
-
-    let eesError: Error | null = null;
-
-    if (isDelete) {
-      try {
-        const guest = event.data!.before.data() as Guest;
-        const userClaims = await deleteClaim(
-          guest.userId,
-          [guest.houseId],
-          "guest",
-        );
-        const adminClaims = await deleteClaim(
-          guest.userId,
-          [guest.houseId],
-          "admin",
-        );
-        await auth().setCustomUserClaims(guest.userId, {
-          ...userClaims,
-          ...adminClaims,
-        });
-      } catch (err) {
-        logger.error("onGuestWrite: auth claims cleanup failed", {
-          guestId: event.params.guestId,
-          error: (err as Error).message,
-        });
-      }
-    }
-
-    try {
-      const houseId = guestData.houseId as string | undefined;
-      if (!houseId) return;
-
-      const guestsSnap = await guestCollection
-        .where("houseId", "==", houseId)
-        .get();
-
-      const activeCount = guestsSnap.docs.filter(
-        (d) =>
-          !d.data().moveOutDate &&
-          d.data().status !== "inactive" &&
-          d.data().status !== "expelled",
-      ).length;
-      if (activeCount === 0) return;
-
-      const weekStart = new Date();
-      const day = weekStart.getDay();
-      weekStart.setDate(weekStart.getDate() - (day === 0 ? 6 : day - 1));
-      const weekStartStr = weekStart.toISOString().slice(0, 10);
-
-      const eesSnap = await ratsFirestore
-        .collection("ees-records")
-        .where("houseId", "==", houseId)
-        .where("weekStart", "==", weekStartStr)
-        .where("paid", "==", false)
-        .get();
-
-      if (eesSnap.empty) return;
-
-      const firstRecord = eesSnap.docs[0].data();
-      const totalExpenses = (firstRecord.totalExpenses as number) ?? 0;
-      const newAmount = totalExpenses > 0 ? totalExpenses / activeCount : 0;
-
-      const batch = ratsFirestore.batch();
-      eesSnap.docs.forEach((doc) => {
-        batch.update(doc.ref, {
-          amount: newAmount,
-          residentCount: activeCount,
-        });
-      });
-      await batch.commit();
-
-      logger.info(
-        `onGuestWrite: EES recalculated for house ${houseId}: ${activeCount} residents, $${newAmount.toFixed(
-          2,
-        )} each`,
-      );
-    } catch (err) {
-      eesError = err as Error;
-      logger.error("onGuestWrite: EES recalculation failed", {
-        guestId: event.params.guestId,
-        error: eesError.message,
-      });
-    }
-
-    // On non-delete events only EES runs, so re-throw to allow Firebase retry.
-    // On delete events auth cleanup already ran; retrying would duplicate that work
-    // without guaranteeing EES succeeds, so log-only.
-    if (eesError && !isDelete) throw eesError;
   },
 );
 

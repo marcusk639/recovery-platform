@@ -3,7 +3,7 @@
 // Added: useModal, useNotification hooks
 // Phase 1.2: Migrated to Activity system - uses useActivities hook
 import React, { useCallback, useMemo } from 'react';
-import { View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import ScreenHeader from '../../components/screen-header';
 import HelpIcon from '../../components/help-icon';
 import { color } from '../../styles/theme';
@@ -19,7 +19,8 @@ import {
   RenderActivities,
 } from '../Activity/BaseActivityScreen';
 import { ActivityFilterForm } from '../Activity/ActivityFilterForm';
-import { ActivityStatus } from '../../entities/ActivityModel';
+import { ActivityStatus, isLegacyUpheld } from '../../entities/ActivityModel';
+import { useLiveHouseDisputes } from '../../hooks/useLiveHouseDisputes';
 import { User } from '../../entities/User';
 import { useActivities, useCurrentWeek } from '../../hooks/activity';
 
@@ -56,10 +57,38 @@ const Disputes: React.FC = () => {
     status: ActivityStatus.DISPUTED, // Only disputed activities
     limit: 500,
   });
+  // ...and the decided ones in the same window, so an admin can undo a
+  // decision (UNDO DECISION reopens it; APPROVE / REJECT then show again).
+  const { activities: decidedActivities } = useActivities({
+    houseId: house?.id,
+    startDate: previousWeekStart,
+    endDate,
+    status: ActivityStatus.RESOLVED,
+    limit: 500,
+  });
 
-  const activities = disputedActivitySystemActivities;
+  // ...and older builds' "delete" resolutions (deleted, resolved at
+  // loggedAt), which an admin can undo too.
+  const { activities: deletedActivities } = useActivities({
+    houseId: house?.id,
+    startDate: previousWeekStart,
+    endDate,
+    status: ActivityStatus.DELETED,
+    limit: 500,
+  });
 
-  const disputes = house?.disputes || {};
+  const activities = useMemo(
+    () => [
+      ...disputedActivitySystemActivities,
+      ...decidedActivities,
+      ...deletedActivities.filter(isLegacyUpheld),
+    ],
+    [disputedActivitySystemActivities, decidedActivities, deletedActivities],
+  );
+
+  // The server-owned live list (house-disputes/{houseId}); house.disputes is
+  // an untrusted legacy mirror.
+  const { disputes, error: disputesError, retry: retryDisputes } = useLiveHouseDisputes(house?.id);
 
   // All hooks must be called unconditionally (Rules of Hooks).
   // Pass safe defaults when required state is missing.
@@ -82,7 +111,7 @@ const Disputes: React.FC = () => {
   const renderHelp = useCallback(() => {
     showPopover(
       'DISPUTES',
-      'Here you can view all current disputes. Mangers can allow or override a dispute. Residents can challenge a dispute or reinforce a dispute.',
+      'Here you can view current disputes and recent decisions. Owners, managers and peer leaders can approve a dispute (the activity is marked as not done) or reject it (the activity stands), and undo a decision to reopen the dispute.',
     );
   }, [showPopover]);
 
@@ -157,20 +186,31 @@ const Disputes: React.FC = () => {
         onFilter={openFilters}
         placeholder="Search disputes..."
       />
-      <RenderActivities
-        activities={filteredActivities}
-        disputesOnly={true}
-        guests={guests}
-        admins={admins}
-        disputes={disputes}
-        houseId={house?.id || ''}
-        userIsAdmin={user?.isAdmin || false}
-        getIconForActivity={activityScreen.getIconForActivity}
-        getLeftButtonProps={activityScreen.getLeftButtonProps}
-        getRightButtonProps={activityScreen.getRightButtonProps}
-      />
+      {disputesError ? (
+        // Not an empty list: "no disputes" would be wrong when we could not read them.
+        <TouchableOpacity testID="disputes-load-error" accessibilityRole="button" onPress={retryDisputes}>
+          <Text style={styles.loadError}>Couldn't load disputes. Tap to try again.</Text>
+        </TouchableOpacity>
+      ) : (
+        <RenderActivities
+          activities={filteredActivities}
+          disputesOnly={true}
+          guests={guests}
+          admins={admins}
+          disputes={disputes}
+          houseId={house?.id || ''}
+          userIsAdmin={user?.isAdmin || false}
+          getIconForActivity={activityScreen.getIconForActivity}
+          getLeftButtonProps={activityScreen.getLeftButtonProps}
+          getRightButtonProps={activityScreen.getRightButtonProps}
+        />
+      )}
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  loadError: { margin: 16, color: color.red },
+});
 
 export default Disputes;

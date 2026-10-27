@@ -79,17 +79,13 @@ describe('disputeQueries', () => {
       const { result } = renderHook(() => useUpdateDispute(), { wrapper });
 
       result.current.mutate({
-        guest: makeGuest(),
         house: makeHouse(),
-        notifications: [makeNotification()],
       });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(disputeService.updateDispute).toHaveBeenCalledWith(
         makeHouse(),
-        makeGuest(),
-        [makeNotification()],
         undefined,
       );
     });
@@ -101,9 +97,7 @@ describe('disputeQueries', () => {
       const { result } = renderHook(() => useUpdateDispute(), { wrapper });
 
       result.current.mutate({
-        guest: makeGuest(),
         house: makeHouse(),
-        notifications: [],
         resolvedDispute,
       });
 
@@ -111,51 +105,41 @@ describe('disputeQueries', () => {
 
       expect(disputeService.updateDispute).toHaveBeenCalledWith(
         makeHouse(),
-        makeGuest(),
-        [],
         resolvedDispute,
       );
     });
 
-    it('handles an empty notifications array', async () => {
+    it('sends no notifications from the client (the server sends them)', async () => {
       (disputeService.updateDispute as jest.Mock).mockResolvedValue(undefined);
 
       const { result } = renderHook(() => useUpdateDispute(), { wrapper });
 
       result.current.mutate({
-        guest: makeGuest(),
         house: makeHouse(),
-        notifications: [],
       });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      const [, , notifications] = (disputeService.updateDispute as jest.Mock)
-        .mock.calls[0];
-      expect(notifications).toEqual([]);
+      const args = (disputeService.updateDispute as jest.Mock).mock.calls[0];
+      expect(args).toHaveLength(2);
+      expect(args.some((a: unknown) => Array.isArray(a))).toBe(false);
     });
 
-    it('passes multiple notifications correctly', async () => {
+    it('never passes the disputed guest (no guest-doc write a peer could not make)', async () => {
       (disputeService.updateDispute as jest.Mock).mockResolvedValue(undefined);
-
-      const notifications = [
-        { ...makeNotification(), id: 'n1' },
-        { ...makeNotification(), id: 'n2' },
-      ] as any[];
 
       const { result } = renderHook(() => useUpdateDispute(), { wrapper });
 
       result.current.mutate({
-        guest: makeGuest(),
         house: makeHouse(),
-        notifications,
+        resolvedDispute: makeDispute(),
       });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      const [, , passedNotifications] = (disputeService.updateDispute as jest.Mock)
-        .mock.calls[0];
-      expect(passedNotifications).toHaveLength(2);
+      const [house, archived] = (disputeService.updateDispute as jest.Mock).mock.calls[0];
+      expect(house).toEqual(makeHouse());
+      expect(archived).toEqual(makeDispute());
     });
 
     it('invalidates guests, houses, and disputes queries on success', async () => {
@@ -166,9 +150,7 @@ describe('disputeQueries', () => {
       const { result } = renderHook(() => useUpdateDispute(), { wrapper });
 
       result.current.mutate({
-        guest: makeGuest(),
         house: makeHouse(),
-        notifications: [],
       });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -185,9 +167,7 @@ describe('disputeQueries', () => {
       const { result } = renderHook(() => useUpdateDispute(), { wrapper });
 
       result.current.mutate({
-        guest: makeGuest(),
         house: makeHouse(),
-        notifications: [],
       });
 
       await waitFor(() => expect(result.current.isError).toBe(true));
@@ -205,9 +185,7 @@ describe('disputeQueries', () => {
       const { result } = renderHook(() => useUpdateDispute(), { wrapper });
 
       result.current.mutate({
-        guest: makeGuest(),
         house: makeHouse(),
-        notifications: [],
       });
 
       await waitFor(() => expect(result.current.isError).toBe(true));

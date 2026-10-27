@@ -356,7 +356,7 @@ export const useResolveDispute = () => {
     }: {
       activityId: string;
       resolvedBy: string;
-      resolution: 'keep' | 'delete';
+      resolution: 'approve' | 'reject';
     }) => activityService.resolveDispute(activityId, resolvedBy, resolution),
 
     onSuccess: () => {

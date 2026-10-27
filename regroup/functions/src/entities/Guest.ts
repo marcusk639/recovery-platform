@@ -7,6 +7,13 @@ import { RatsMeeting } from "./Meeting";
 const { v4: uuid } = require("uuid") as { v4: () => string };
 import { createGuestId } from "../api/firestore";
 
+export type GuestStatus =
+  | "active"
+  | "inactive"
+  | "expelled"
+  | "discharged"
+  | "archived";
+
 export type Stat =
   | "meeting"
   | "medication"
@@ -111,7 +118,8 @@ export class Guest extends BaseEntity {
 
   // Fields added to align with mobile app entity
   displayName: string = "";
-  status: "active" | "inactive" | "expelled" = "active";
+  // Same values as mobile GuestStatus (mobile/src/entities/Guest.tsx).
+  status: GuestStatus = "active";
   step: number = 0;
   version: number = 0;
   lastUpdated: string = "";

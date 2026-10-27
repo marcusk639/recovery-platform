@@ -1,4 +1,5 @@
 import { logger } from "firebase-functions";
+import { isPrimaryOwner } from "./houseRoles";
 import * as admin from "firebase-admin";
 import { HttpsError } from "firebase-functions/v2/https";
 import { enforceHouseEntitlement } from "./entitlement";
@@ -8,7 +9,8 @@ import { enforceHouseEntitlement } from "./entitlement";
  * (addAdminAuthorization, addGuestAuthorization).
  *
  * Each requested house must satisfy ONE of:
- *   (a) caller is the house owner (ownerId match) — covers the setup-wizard
+ *   (a) caller is the house owner (server-only primary owner record,
+ *       util/houseRoles; never houses.ownerId) — covers the setup-wizard
  *       self-service path where an operator creates a house and claims admin/guest
  *       for themselves on it.
  *   (b) caller is an existing admin/superAdmin of the house AND the grant
@@ -64,7 +66,8 @@ export async function assertCanGrantClaimForHouses(params: {
       subscriptionStatus?: string | null;
       guestGraceEndsAt?: string | null;
     };
-    const isOwner = house.ownerId === callerUid;
+    // The primary owner record (util/houseRoles), never houses.ownerId.
+    const isOwner = await isPrimaryOwner(houseId, callerUid);
     const callerIsExistingAdmin =
       callerToken?.admin?.[houseId] === true ||
       callerToken?.superAdmin?.[houseId] === true;

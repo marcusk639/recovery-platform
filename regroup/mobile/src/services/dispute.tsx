@@ -1,31 +1,30 @@
 import { firestore } from '../../firebase-setup';
 import { PartialHouseWithId } from '../entities/House';
-import { PartialGuestWithId } from '../entities/Guest';
-import { Notification } from '../entities/Notification';
 import { Dispute } from '../entities/Dispute';
 import * as crud from './crud';
 
 const houseCollection = firestore.collection('houses');
-const guestCollection = firestore.collection('guests');
-const notificationCollection = firestore.collection('notifications');
 const disputesCollection = firestore.collection('disputes');
 
+/**
+ * Write house.disputes and optionally archive a dispute to /disputes.
+ *
+ * The app no longer calls this to open or resolve a dispute: the
+ * onActivityWritten Cloud Function adds the house.disputes entry when an
+ * activity is disputed, removes and archives it on resolution, and sends the
+ * notifications. The rules deny residents house.disputes. The only remaining
+ * caller is the (hidden, see the follow-up PR) challenge flow, which only a
+ * house admin could now complete.
+ */
 export function updateDispute(
   house: PartialHouseWithId,
-  guest: PartialGuestWithId,
-  notifications: Notification[],
   resolvedDispute?: Dispute,
 ) {
   const batch = firestore.batch();
   batch.update(houseCollection.doc(house.id), house);
-  batch.update(guestCollection.doc(guest.id), guest);
   if (resolvedDispute) {
     batch.set(disputesCollection.doc(resolvedDispute.id), resolvedDispute);
   }
-  notifications.forEach(notification => {
-    const newNoteRef = notificationCollection.doc();
-    batch.set(newNoteRef, notification);
-  });
   return batch.commit();
 }
 

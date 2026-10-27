@@ -1,5 +1,13 @@
 #!/bin/bash
-set -e
+# Deploys every exported Cloud Function in batches of 5 (for large changesets
+# that hit deploy quotas). The default deploy is `npm --prefix functions run
+# build && firebase deploy --only functions` from regroup/, which always
+# deploys every export; use this script only when that fails on quotas.
+# ALL_FUNCTIONS must list every deployable export of functions/src/index.ts
+# (functions/src/__tests__/deployList.test.ts checks it): a function left off
+# is silently never deployed. A failed batch stops the script with a non-zero
+# exit.
+set -euo pipefail
 
 # Navigate to project root (parent of scripts/) so firebase.json is found
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -10,18 +18,26 @@ ALL_FUNCTIONS=(
   addGuestAuthorization addAdminAuthorization deleteAdminAuthorization
   promoteGuestsToAdmin removePrivilegesForGuests verifyUserEmail
   givePotentialSuperAdminPrivilege
+  createHouses finishOperatorSetup
+  createInvitation peekInvitation redeemInvitation
   findMeetings userIsAtMeeting
   createPaymentIntent listPayments listHousePayments
   getPaymentMethod updatePaymentInfo
   connectStripeAccount disconnectStripeAccount getStripeAccountStatus
   createOperatorSubscription reactivateOperatorSubscription cancelUserSubscription
   updateSubscriptionGuests updateSubscriptionHouses
-  sendInviteEmails sendConfirmationEmail
+  createBillingPortalSession applyBundleDiscount getTierCatalog
+  setOxfordEnabled castOxfordVote complianceExport rentRoiMetrics
+  deleteAccount
+  sendConfirmationEmail
   stripeConnectReauth stripeConnectReturn universal
-  notify notifyNewHouseCreated sendContactEmail sendSubscriptionUpdateEmail
+  notify notifyNewHouseCreated notifyOperatorOnApplication
+  sendContactEmail sendSubscriptionUpdateEmail
   reportBug submitFeedback
-  onGuestWrite
+  onGuestWrite onHouseDeleted setHouseSubscriptionStatusOnCreate
+  onActivityWritten onGuestLinkedRestamp
   updateDisputes warmWebsite officerTermReminder weeklyTransfers
+  overdueRentNotification scheduledRentCollection
 )
 
 BATCH_SIZE=5
@@ -37,9 +53,13 @@ for ((i=0; i<TOTAL; i+=BATCH_SIZE)); do
 
   echo ""
   echo "=== Batch $BATCH_NUM / $TOTAL_BATCHES: ${batch[*]} ==="
-  firebase deploy --only "$only_arg" && echo "=== Batch $BATCH_NUM complete ===" || echo "⚠  Batch $BATCH_NUM had errors — continuing"
+  if ! firebase deploy --only "$only_arg"; then
+    echo "✗ Batch $BATCH_NUM failed; stopping. Re-run after fixing (deploys are idempotent)." >&2
+    exit 1
+  fi
+  echo "=== Batch $BATCH_NUM complete ==="
   sleep 2
 done
 
 echo ""
-echo "All batches attempted."
+echo "All $TOTAL_BATCHES batches deployed."
