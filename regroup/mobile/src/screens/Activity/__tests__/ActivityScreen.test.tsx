@@ -144,9 +144,13 @@ jest.mock('../../../components/rats-icon', () => ({
 }));
 
 jest.mock('../../../components/card-list/card-list', () => ({
-  CardItem: ({ testID }: any) => {
-    const { View } = require('react-native');
-    return <View testID={testID || 'card-item'} />;
+  CardItem: ({ testID, rightButtonProps }: any) => {
+    const { View, Text } = require('react-native');
+    return (
+      <View testID={testID || 'card-item'}>
+        {rightButtonProps?.title ? <Text>{`RIGHT:${rightButtonProps.title}`}</Text> : null}
+      </View>
+    );
   },
   ActivityItem: ({ testID }: any) => {
     const { View } = require('react-native');
@@ -191,7 +195,7 @@ jest.mock('../ActivityFilterForm', () => ({
 
 // ─── React imports (after mocks) ──────────────────────────────────────────────
 import React from 'react';
-import { render, fireEvent, act } from '@testing-library/react-native';
+import { render, fireEvent, act, within } from '@testing-library/react-native';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -502,6 +506,24 @@ describe('ActivityScreen', () => {
       });
       const { getByTestId } = renderScreen();
       expect(getByTestId('activity-item-single-act')).toBeTruthy();
+    });
+  });
+
+  // ─── Owner rule: DISPUTE only on other people's activities ────────────────
+  describe('DISPUTE button (owner rule)', () => {
+    it("is not offered on an activity the viewer logged, but is on someone else's", () => {
+      mockUseActivities.mockReturnValue({
+        activities: [
+          makeActivity('mine', { type: 'meeting', loggedBy: 'admin-1' }),
+          makeActivity('theirs', { type: 'meeting', loggedBy: 'resident-7' }),
+        ],
+        loading: false,
+        error: null,
+        refetch: jest.fn(),
+      });
+      const { getByTestId } = renderScreen();
+      expect(within(getByTestId('activity-item-mine')).queryByText('RIGHT:DISPUTE')).toBeNull();
+      expect(within(getByTestId('activity-item-theirs')).queryByText('RIGHT:DISPUTE')).toBeTruthy();
     });
   });
 

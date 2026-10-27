@@ -60,7 +60,7 @@ function makeActivity(overrides: Record<string, any> = {}) {
     type: ActivityType.CHORE,
     timestamp: new Date().toISOString(),
     loggedAt: new Date().toISOString(),
-    loggedBy: 'user-1',
+    loggedBy: 'resident-1',
     verified: false,
     status: ActivityStatus.ACTIVE,
     data: { type: 'chore', choreType: 'daily', choreName: 'Kitchen' },
@@ -88,9 +88,11 @@ function makeDispute(overrides: Record<string, any> = {}) {
   };
 }
 
+// The activities' resident is 'resident-1'; the viewer (mockUser, 'user-1')
+// is a housemate, so DISPUTE is offered unless a test says otherwise.
 const mockGuest = {
   id: 'guest-1',
-  userId: 'user-1',
+  userId: 'resident-1',
   firstName: 'Alice',
   lastName: 'Smith',
 };
@@ -726,6 +728,33 @@ describe('useBaseActivityScreen', () => {
 
       expect(alertSpy).toHaveBeenLastCalledWith(title, message);
       alertSpy.mockRestore();
+    });
+  });
+
+  describe('owner rule: no DISPUTE on your own activity', () => {
+    it("hides DISPUTE on an activity of the viewer's own guest (an admin logged it for them)", () => {
+      const props = makeProps({ guests: { 'guest-1': { ...mockGuest, userId: mockUser.id } } });
+      const { result } = renderHook(() => useBaseActivityScreen(props));
+      const activity = makeActivity({ loggedBy: 'admin-9' }) as any;
+
+      expect(result.current.activityIsDisputable(activity)).toBe(false);
+      expect(result.current.getRightButtonProps(activity)).toBeUndefined();
+    });
+
+    it('hides DISPUTE on an activity the viewer logged (e.g. an admin logging for a resident)', () => {
+      const { result } = renderHook(() => useBaseActivityScreen(makeProps()));
+      const activity = makeActivity({ loggedBy: mockUser.id }) as any;
+
+      expect(result.current.activityIsDisputable(activity)).toBe(false);
+      expect(result.current.getRightButtonProps(activity)).toBeUndefined();
+    });
+
+    it("offers DISPUTE on a housemate's activity", () => {
+      const { result } = renderHook(() => useBaseActivityScreen(makeProps()));
+      const activity = makeActivity() as any;
+
+      expect(result.current.activityIsDisputable(activity)).toBe(true);
+      expect(result.current.getRightButtonProps(activity)?.title).toBe('DISPUTE');
     });
   });
 

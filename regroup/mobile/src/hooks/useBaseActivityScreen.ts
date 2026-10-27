@@ -370,13 +370,30 @@ export const useBaseActivityScreen = (
     [house, approveDispute, verifyActivity],
   );
 
+  // Owner rule: nobody disputes their own activity — not the resident whose
+  // activity it is (the guest doc's account) nor whoever logged it. The
+  // rules refuse it too; this keeps the button from offering it.
+  const isOwnActivity = useCallback(
+    (activity: Activity): boolean =>
+      !!user?.id &&
+      (activity.loggedBy === user.id ||
+        guests[activity.guestId]?.userId === user.id),
+    [user, guests],
+  );
+
+  const activityIsDisputable = useCallback(
+    (activity: Activity): boolean =>
+      metadata.activityIsDisputable(activity) && !isOwnActivity(activity),
+    [metadata, isOwnActivity],
+  );
+
   const getRightButtonProps = useCallback(
     (
       activity: Activity,
       disputesOnly: boolean = false,
       token?: RoleToken,
     ): any => {
-      const isDisputable = metadata.activityIsDisputable(activity);
+      const isDisputable = activityIsDisputable(activity);
       const rejectButtonProps = {
         testID: `reject-dispute-button-${activity.disputeId ?? activity.id}`,
         style: { ...STAT_BUTTON_TEXT, color: color.white },
@@ -421,7 +438,7 @@ export const useBaseActivityScreen = (
         return disputeButtonProps;
       }
     },
-    [metadata, house, rejectDispute, modal],
+    [activityIsDisputable, house, rejectDispute, modal],
   );
 
   // ─── Return composed interface ────────────────────────────────────────────
@@ -446,7 +463,7 @@ export const useBaseActivityScreen = (
 
     // From useActivityMetadata
     getIconForActivity: metadata.getIconForActivity,
-    activityIsDisputable: metadata.activityIsDisputable,
+    activityIsDisputable,
 
     // Dispute business logic (this hook)
     handleDisputeSubmission,
