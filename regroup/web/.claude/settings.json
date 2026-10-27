@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/block-prod-env.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/block-prod-env.sh\""
           }
         ]
       }
@@ -17,10 +17,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/lint-on-edit.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/lint-on-edit.sh\""
           }
         ]
       }
+    ]
+  },
+  "permissions": {
+    "deny": [
+      "Edit(/src/environments/environment.prod.ts)"
     ]
   }
 }
