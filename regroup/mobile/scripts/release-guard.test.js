@@ -1,4 +1,3 @@
-const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -111,18 +110,26 @@ function run({
 } = {}) {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'release-guard-'));
   const config = path.join(cwd, file);
-  fs.writeFileSync(config, FIXTURES[file] ? FIXTURES[file](projectId) : `PROJECT_ID=${projectId}\n`);
+  fs.writeFileSync(
+    config,
+    FIXTURES[file] ? FIXTURES[file](projectId) : `PROJECT_ID=${projectId}\n`,
+  );
   if (dotenv !== undefined) {
     fs.writeFileSync(path.join(cwd, '.env'), dotenv);
   }
   const base = { ...process.env };
-  delete base.E2E_VARIANT;
-  delete base.STRIPE_PUBLISHABLE_KEY;
-  const result = spawnSync(process.execPath, [SCRIPT, ...(args || ['--config', config, ...extraArgs])], {
-    cwd,
-    env: { ...base, ...env },
-    encoding: 'utf8',
-  });
+  for (const name of require('./bundled-env').BUNDLED_ENV) {
+    delete base[name];
+  }
+  const result = spawnSync(
+    process.execPath,
+    [SCRIPT, ...(args || ['--config', config, ...extraArgs])],
+    {
+      cwd,
+      env: { ...base, ...env },
+      encoding: 'utf8',
+    },
+  );
   return { status: result.status, output: `${result.stdout}${result.stderr}`, cwd };
 }
 
@@ -219,17 +226,24 @@ describe('release-guard CLI', () => {
     expect(output).toContain('unrecognised config file type');
   });
 
-  describe('--key-stamp', () => {
-    const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex');
+  describe('--env-stamp', () => {
+    const { bundledEnvDigest } = require('./bundled-env');
+    const UNSET = { STRIPE_PUBLISHABLE_KEY: null, RATS_WEB_URL: null, GOOGLE_MAPS_API_KEY: null };
 
-    it('writes the SHA-256 of the resolved key, never the key', () => {
+    it('writes the digest of the resolved bundled env, never a value', () => {
       const { status, cwd } = run({
-        dotenv: 'STRIPE_PUBLISHABLE_KEY=pk_live_fromfile\n',
-        extraArgs: ['--key-stamp', 'out/dir/key.sha256'],
+        dotenv: 'STRIPE_PUBLISHABLE_KEY=pk_live_fromfile\nRATS_WEB_URL=https://web.invalid\n',
+        extraArgs: ['--env-stamp', 'out/dir/bundled-env.sha256'],
       });
       expect(status).toBe(0);
-      const stamp = fs.readFileSync(path.join(cwd, 'out/dir/key.sha256'), 'utf8');
-      expect(stamp).toBe(`${sha256('pk_live_fromfile')}\n`);
+      const stamp = fs.readFileSync(path.join(cwd, 'out/dir/bundled-env.sha256'), 'utf8');
+      expect(stamp).toBe(
+        `${bundledEnvDigest({
+          ...UNSET,
+          STRIPE_PUBLISHABLE_KEY: 'pk_live_fromfile',
+          RATS_WEB_URL: 'https://web.invalid',
+        })}\n`,
+      );
       expect(stamp).not.toContain('pk_live');
     });
 
@@ -237,9 +251,9 @@ describe('release-guard CLI', () => {
       const stampFor = (key) => {
         const { cwd } = run({
           env: { STRIPE_PUBLISHABLE_KEY: key },
-          extraArgs: ['--key-stamp', 'key.sha256'],
+          extraArgs: ['--env-stamp', 'bundled-env.sha256'],
         });
-        return fs.readFileSync(path.join(cwd, 'key.sha256'), 'utf8');
+        return fs.readFileSync(path.join(cwd, 'bundled-env.sha256'), 'utf8');
       };
       expect(stampFor('pk_live_a')).not.toBe(stampFor('pk_live_b'));
     });
@@ -247,10 +261,10 @@ describe('release-guard CLI', () => {
     it('is not written when the guard fails', () => {
       const { status, cwd } = run({
         env: { STRIPE_PUBLISHABLE_KEY: 'pk_test_x' },
-        extraArgs: ['--key-stamp', 'key.sha256'],
+        extraArgs: ['--env-stamp', 'bundled-env.sha256'],
       });
       expect(status).toBe(1);
-      expect(fs.existsSync(path.join(cwd, 'key.sha256'))).toBe(false);
+      expect(fs.existsSync(path.join(cwd, 'bundled-env.sha256'))).toBe(false);
     });
   });
 });

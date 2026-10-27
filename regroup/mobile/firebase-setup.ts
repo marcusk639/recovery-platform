@@ -9,11 +9,12 @@ import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import { FirebaseStorageTypes } from '@react-native-firebase/storage';
 import {
   assertE2EProject,
+  assertE2EStripeKey,
   connectToEmulators,
   emulatorHost,
   emulatorPorts,
 } from './src/config/firebase-emulator';
-import { e2eVariant } from './src/config/env';
+import { e2eVariant, stripePublishableKey } from './src/config/env';
 
 // const app = firebase.app();
 const auth = FirebaseAuth();
@@ -30,13 +31,16 @@ const functions = FirebaseFunctions();
 // promise rejects, and index.js reports that as fatal. It must never carry on
 // against the project in the native Firebase config.
 //
-// An e2e variant must also be running against its own project. E2E_VARIANT is
-// inlined from the bundling shell or .env, so one left in a developer's .env
-// would otherwise ship in a store build against production. Throwing here,
-// while index.js imports this module, stops the app at startup.
+// An e2e variant must also be running against its own project, with a test
+// Stripe key. E2E_VARIANT is inlined from the bundler's environment: the Gradle
+// e2e build types and Xcode E2E* configurations set it, and babel.config.js
+// refuses it from .env. The remaining way in is a shell that exported it, or a
+// Metro started with it (which serves it to any build, Debug included). Throwing
+// here, while index.js imports this module, stops the app at startup.
 const variant = e2eVariant();
 if (variant !== null) {
   assertE2EProject(variant, firebase.app().options.projectId);
+  assertE2EStripeKey(variant, stripePublishableKey());
 }
 
 const emulatorConnection: Promise<void> =

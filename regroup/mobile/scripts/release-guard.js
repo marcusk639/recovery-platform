@@ -14,20 +14,24 @@
  *   - STRIPE_PUBLISHABLE_KEY: resolved the way babel.config.js resolves it for
  *     the bundle, an exported value first, then .env in the working directory
  *     via dotenv. The builds run this from regroup/mobile, as they run Metro.
- *   - E2E_VARIANT: must be unset, as scripts/check-release-env.js requires.
+ *   - E2E_VARIANT: must be unset.
+ * scripts/check-release-env.js --release applies the same key and E2E_VARIANT
+ * rules (stripeKeyReleaseProblem, e2eVariantProblem).
  *
- * Hooked into the Android `release` build type (preReleaseBuild) and the iOS
- * Release configuration only. The e2e build types and Debug are not checked.
+ * Hooked into the Android `release` build type (preReleaseBuild) and every iOS
+ * configuration except Debug and E2E*. The e2e build types are not checked.
  *
  *   node scripts/release-guard.js --config <values.xml | GoogleService-Info.plist | google-services.json>
- *     [--key-stamp <file>]   on success, write the key's SHA-256 there
+ *     [--env-stamp <file>]   on success, write the bundled-env digest there
+ *                            (scripts/bundled-env.js), an input of the
+ *                            Android release bundle task
  *
  * Never prints the key; only its mode prefix.
  */
 
-const crypto = require('crypto');
+const { Buffer } = require('buffer');
 const fs = require('fs');
-const path = require('path');
+const { writeBundledEnvStamp } = require('./bundled-env');
 
 const PRODUCTION_FIREBASE_PROJECT = 'phoenix-cleanhouse';
 const LIVE_KEY_PREFIX = 'pk_live_';
@@ -40,24 +44,37 @@ function checkRelease({ firebaseProjectId, stripePublishableKey, e2eVariant }) {
   const reasons = [];
   if (firebaseProjectId !== PRODUCTION_FIREBASE_PROJECT) {
     reasons.push(
-      `Firebase project is '${firebaseProjectId || ''}'; a release build must use '${PRODUCTION_FIREBASE_PROJECT}'`,
+      `Firebase project is '${
+        firebaseProjectId || ''
+      }'; a release build must use '${PRODUCTION_FIREBASE_PROJECT}'`,
     );
   }
-  if (
-    !stripePublishableKey ||
-    !stripePublishableKey.startsWith(LIVE_KEY_PREFIX) ||
-    stripePublishableKey.length === LIVE_KEY_PREFIX.length
-  ) {
-    reasons.push(
-      `STRIPE_PUBLISHABLE_KEY is ${describeKey(stripePublishableKey)}; a release build requires a ${LIVE_KEY_PREFIX} key`,
-    );
-  }
-  if (e2eVariant !== undefined) {
-    reasons.push(
-      'E2E_VARIANT is set; it must be unset outside the e2e build types (check your shell and .env)',
-    );
+  for (const problem of [
+    stripeKeyReleaseProblem(stripePublishableKey),
+    e2eVariantProblem(e2eVariant),
+  ]) {
+    if (problem) {
+      reasons.push(problem);
+    }
   }
   return { ok: reasons.length === 0, reasons };
+}
+
+/** Why a release build cannot ship this key, or null. Never includes the key. */
+function stripeKeyReleaseProblem(key) {
+  if (key && key.startsWith(LIVE_KEY_PREFIX) && key.length > LIVE_KEY_PREFIX.length) {
+    return null;
+  }
+  return `STRIPE_PUBLISHABLE_KEY is ${describeKey(
+    key,
+  )}; a release build requires a ${LIVE_KEY_PREFIX} key`;
+}
+
+/** Why E2E_VARIANT must not be set here, or null. Empty counts as set. */
+function e2eVariantProblem(variant) {
+  return variant === undefined
+    ? null
+    : 'E2E_VARIANT is set; it must be unset outside the e2e build types (check your shell and .env)';
 }
 
 /** The key's mode only: safe for CI logs. */
@@ -74,46 +91,70 @@ function describeKey(key) {
  * object table, offset table, 32-byte trailer). Non-string values are skipped.
  */
 function readBinaryPlistTopLevelStrings(buf) {
+  if (buf.length < 8 + 32) {
+    throw new Error('binary plist is truncated');
+  }
+  const byte = (at) => {
+    if (!Number.isInteger(at) || at < 8 || at >= buf.length - 32) {
+      throw new Error(`binary plist reference out of range (${at})`);
+    }
+    return buf[at];
+  };
   const trailer = buf.subarray(buf.length - 32);
   const offsetSize = trailer[6];
   const refSize = trailer[7];
+  if (offsetSize < 1 || offsetSize > 8 || refSize < 1 || refSize > 8) {
+    throw new Error('binary plist trailer is malformed');
+  }
   const top = Number(trailer.readBigUInt64BE(16));
   const table = Number(trailer.readBigUInt64BE(24));
   const uint = (at, size) => {
     let value = 0;
-    for (let i = 0; i < size; i++) value = value * 256 + buf[at + i];
+    for (let i = 0; i < size; i++) {
+      value = value * 256 + byte(at + i);
+    }
     return value;
   };
   const offsetOf = (ref) => uint(table + ref * offsetSize, offsetSize);
   // An object's length: the marker's low nibble, or a following int object.
   const lengthAt = (at) => {
-    const nibble = buf[at] & 0x0f;
-    if (nibble !== 0x0f) return [nibble, at + 1];
-    const size = 1 << (buf[at + 1] & 0x0f);
+    const nibble = byte(at) & 0x0f;
+    if (nibble !== 0x0f) {
+      return [nibble, at + 1];
+    }
+    const size = 1 << (byte(at + 1) & 0x0f);
     return [uint(at + 2, size), at + 2 + size];
   };
   const string = (ref) => {
     const at = offsetOf(ref);
     const [length, start] = lengthAt(at);
-    switch (buf[at] >> 4) {
-      case 0x5:
-        return buf.subarray(start, start + length).toString('latin1');
-      case 0x6:
-        return Buffer.from(buf.subarray(start, start + length * 2)).swap16().toString('utf16le');
-      default:
-        return undefined;
+    const type = byte(at) >> 4;
+    if (type !== 0x5 && type !== 0x6) {
+      return undefined;
     }
+    const end = start + (type === 0x6 ? length * 2 : length);
+    if (length > 0) {
+      byte(end - 1);
+    }
+    return type === 0x5
+      ? buf.subarray(start, end).toString('latin1')
+      : Buffer.from(buf.subarray(start, end)).swap16().toString('utf16le');
   };
   const at = offsetOf(top);
-  if (buf[at] >> 4 !== 0xd) {
+  if (byte(at) >> 4 !== 0xd) {
     throw new Error('binary plist top-level object is not a dictionary');
   }
   const [count, start] = lengthAt(at);
+  if (count > (buf.length - start) / (2 * refSize)) {
+    throw new Error(`binary plist dictionary count ${count} exceeds the file`);
+  }
   const result = {};
   for (let i = 0; i < count; i++) {
     const key = string(uint(start + i * refSize, refSize));
     const value = string(uint(start + (count + i) * refSize, refSize));
-    if (key !== undefined && value !== undefined) result[key] = value;
+    if (key !== undefined && value !== undefined) {
+      result[key] = value;
+    }
   }
   return result;
 }
@@ -144,7 +185,7 @@ function main(argv) {
     return index === -1 ? undefined : argv[index + 1];
   };
   const config = option('--config');
-  const keyStamp = option('--key-stamp');
+  const envStamp = option('--env-stamp');
   if (!config) {
     console.error(
       'usage: release-guard.js --config <values.xml | GoogleService-Info.plist | google-services.json>',
@@ -185,23 +226,28 @@ function main(argv) {
     );
     return 1;
   }
-  if (keyStamp) {
-    // A digest of the key the bundle will inline, never the key: the Android
-    // release bundle task takes this file as an input, so a changed key
-    // re-runs the bundle instead of shipping a stale one.
-    fs.mkdirSync(path.dirname(keyStamp), { recursive: true });
-    fs.writeFileSync(
-      keyStamp,
-      `${crypto.createHash('sha256').update(stripePublishableKey).digest('hex')}\n`,
-    );
+  if (envStamp) {
+    // A digest of every value the bundle will inline (scripts/bundled-env.js),
+    // never a value: the Android release bundle task takes this file as an
+    // input, so a changed key or URL re-runs the bundle instead of shipping a
+    // stale one. Written only when the guard passes.
+    writeBundledEnvStamp(envStamp);
   }
   console.log(
-    `Release guard OK: Firebase project ${firebaseProjectId}, STRIPE_PUBLISHABLE_KEY is ${describeKey(stripePublishableKey)}`,
+    `Release guard OK: Firebase project ${firebaseProjectId}, STRIPE_PUBLISHABLE_KEY is ${describeKey(
+      stripePublishableKey,
+    )}`,
   );
   return 0;
 }
 
-module.exports = { checkRelease, readFirebaseProjectId, readBinaryPlistTopLevelStrings };
+module.exports = {
+  checkRelease,
+  stripeKeyReleaseProblem,
+  e2eVariantProblem,
+  readFirebaseProjectId,
+  readBinaryPlistTopLevelStrings,
+};
 
 if (require.main === module) {
   process.exit(main(process.argv.slice(2)));

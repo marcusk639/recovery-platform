@@ -53,4 +53,35 @@ describe('check-release-env', () => {
     expect(status).toBe(1);
     expect(output).toContain('E2E_VARIANT is set');
   });
+
+  // The release rules are shared with scripts/release-guard.js, so the two
+  // cannot drift.
+  it.each(['pk_live_', 'pk_test_example'])(
+    'fails a release build with STRIPE_PUBLISHABLE_KEY=%s',
+    (key) => {
+      const { status, output } = run({ ...VALID, STRIPE_PUBLISHABLE_KEY: key });
+      expect(status).toBe(1);
+      expect(output).toContain('STRIPE_PUBLISHABLE_KEY');
+    },
+  );
+
+  it('fails a release build without GOOGLE_MAPS_API_KEY', () => {
+    const { status, output } = run({ STRIPE_PUBLISHABLE_KEY: 'pk_live_example' });
+    expect(status).toBe(1);
+    expect(output).toContain('GOOGLE_MAPS_API_KEY is not set');
+  });
+
+  it('fails a release build with an empty E2E_VARIANT', () => {
+    const { status, output } = run({ ...VALID, E2E_VARIANT: '' });
+    expect(status).toBe(1);
+    expect(output).toContain('E2E_VARIANT is set');
+  });
+
+  it('checks only names babel.config.js bundles', () => {
+    const { BUNDLED_ENV } = require('./bundled-env');
+    const source = require('fs').readFileSync(SCRIPT, 'utf8');
+    const names = [...source.matchAll(/name: '([A-Z_]+)'/g)].map((m) => m[1]);
+    expect(names.length).toBeGreaterThan(0);
+    names.forEach((name) => expect(BUNDLED_ENV).toContain(name));
+  });
 });

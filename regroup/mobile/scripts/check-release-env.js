@@ -14,11 +14,20 @@
  * key still gets told when a variable is missing entirely.
  */
 
+const { BUNDLED_ENV } = require('./bundled-env');
+const { stripeKeyReleaseProblem, e2eVariantProblem } = require('./release-guard');
+
 const RELEASE = process.argv.includes('--release');
 
-// Mirrors BUNDLED_ENV in babel.config.js. A name here that is missing there is
-// never substituted into the bundle, so the check would pass while the app
-// still reads undefined.
+// Every name must be in BUNDLED_ENV (scripts/bundled-env.js, which
+// babel.config.js inlines). A name missing there is never substituted into the
+// bundle, so the check would pass while the app still reads undefined.
+//
+// Release-mode Stripe and E2E_VARIANT rules are scripts/release-guard.js's own,
+// so the two checks cannot drift. GOOGLE_MAPS_API_KEY stays here only: the
+// release guard checks that a store build points at production (Firebase
+// project, live payments), and a missing Maps key breaks a feature rather than
+// pointing the app at the wrong environment.
 const REQUIRED = [
   {
     name: 'STRIPE_PUBLISHABLE_KEY',
@@ -33,8 +42,10 @@ const REQUIRED = [
       if (value.startsWith('sk_')) {
         return 'is a SECRET key; publishable keys start with pk_';
       }
-      if (RELEASE && !value.startsWith('pk_live_')) {
-        return 'is a test-mode key; a release build requires pk_live_';
+      if (RELEASE) {
+        const problem = stripeKeyReleaseProblem(value);
+        // The shared message starts with the variable's name.
+        return problem && problem.replace(/^STRIPE_PUBLISHABLE_KEY /, '');
       }
       return null;
     },
@@ -54,14 +65,19 @@ try {
 
 const problems = [];
 
+for (const { name } of REQUIRED) {
+  if (!BUNDLED_ENV.includes(name)) {
+    problems.push(`${name} is checked here but not in BUNDLED_ENV (scripts/bundled-env.js)`);
+  }
+}
+
 // babel.config.js inlines E2E_VARIANT into the bundle. Set in a release or
 // developer environment (an exported shell variable, or a line in .env), it
 // would turn that bundle into an e2e build. Only the Gradle e2e build types
 // set it, on their own bundle tasks.
-if (process.env.E2E_VARIANT !== undefined) {
-  problems.push(
-    'E2E_VARIANT is set; it must be unset outside the e2e build types (check your shell and .env)',
-  );
+const variantProblem = e2eVariantProblem(process.env.E2E_VARIANT);
+if (variantProblem) {
+  problems.push(variantProblem);
 }
 
 for (const { name, releaseOnly, validate } of REQUIRED) {

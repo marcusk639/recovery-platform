@@ -224,6 +224,9 @@ android {
 // plugin registers the task in its onVariants callback; this callback is added
 // later, so it runs later, and tasks.named(...).configure then runs last.
 def e2eBundleVariants = [e2eEmulator: "emulator", e2eStaging: "staging"]
+def bundledEnvStamp = { String variantName ->
+    file("${buildDir}/bundled-env/${variantName}/bundled-env.sha256")
+}
 androidComponents.onVariants(androidComponents.selector().all()) { variant ->
     def bundleTask = "createBundle${variant.name.capitalize()}JsAndAssets"
     if (!tasks.names.contains(bundleTask)) {
@@ -233,16 +236,29 @@ androidComponents.onVariants(androidComponents.selector().all()) { variant ->
     def node = e2eVariant != null ?
         ["env", "E2E_VARIANT=${e2eVariant}".toString(), "node"] :
         ["env", "-u", "E2E_VARIANT", "node"]
+    def stamp = bundledEnvStamp(variant.name)
+    def stampTask = variant.name == "release" ?
+        "regroupReleaseGuard" :
+        "regroupBundledEnvStamp${variant.name.capitalize()}"
+    if (variant.name != "release") {
+        tasks.register(stampTask, Exec) {
+            outputs.file(stamp)
+            outputs.upToDateWhen { false }
+            workingDir rootProject.file("..")
+            commandLine "node", "scripts/bundled-env.js", "--stamp", stamp.absolutePath
+        }
+    }
     tasks.named(bundleTask).configure { task ->
         task.nodeExecutableAndArgs.set(node)
-        // The release bundle inlines STRIPE_PUBLISHABLE_KEY. The guard's stamp of
-        // it makes a changed key re-run this task instead of leaving it
-        // UP-TO-DATE with the old key (see regroupReleaseGuard below).
-        if (variant.name == "release") {
-            task.dependsOn("regroupReleaseGuard")
-            task.inputs.file(file("${buildDir}/release-guard/key.sha256"))
-                .withPropertyName("releaseGuardKeyStamp")
-        }
+        // Bundled-env stamp (scripts/bundled-env.js): the plugin's bundle task
+        // tracks only JS sources, so a STRIPE_PUBLISHABLE_KEY, RATS_WEB_URL or
+        // GOOGLE_MAPS_API_KEY changed in the shell or .env would leave it
+        // UP-TO-DATE with the old value inlined. Every bundled variant takes a
+        // digest of those values as an input file. Release's is written by the
+        // release guard (only when it passes); every other variant's by a plain
+        // stamp task.
+        task.dependsOn(stampTask)
+        task.inputs.file(stamp).withPropertyName("bundledEnvStamp")
     }
 }
 
@@ -292,15 +308,13 @@ tasks.matching { it.name in ["preE2eStagingBuild", "processE2eStagingGoogleServi
 // build environment, then regroup/mobile/.env. Fails unless the project is
 // phoenix-cleanhouse and the key is pk_live_, before anything is compiled.
 //
-// On success it writes the key's SHA-256 (never the key) to
-// releaseGuardKeyStamp, an input of the release bundle task (see onVariants
-// above): the bundle inlines the key, and nothing else tells Gradle that a
-// changed key makes the bundle stale.
-def releaseGuardKeyStamp = file("${buildDir}/release-guard/key.sha256")
+// On success it writes the release bundled-env stamp (a digest, never a value),
+// an input of the release bundle task (see onVariants above).
+def releaseGuardEnvStamp = bundledEnvStamp("release")
 def releaseGuard = tasks.register("regroupReleaseGuard", Exec) {
     // By name: the plugin registers it after this script is evaluated.
     dependsOn "processReleaseGoogleServices"
-    outputs.file(releaseGuardKeyStamp)
+    outputs.file(releaseGuardEnvStamp)
     outputs.upToDateWhen { false }
     workingDir rootProject.file("..")
     executable "node"
@@ -316,9 +330,9 @@ def releaseGuard = tasks.register("regroupReleaseGuard", Exec) {
                 "processReleaseGoogleServices, found ${generated}")
         }
         // The guard writes it only on success; a failed run leaves none behind.
-        releaseGuardKeyStamp.delete()
+        releaseGuardEnvStamp.delete()
         args "scripts/release-guard.js", "--config", generated[0].absolutePath,
-            "--key-stamp", releaseGuardKeyStamp.absolutePath
+            "--env-stamp", releaseGuardEnvStamp.absolutePath
     }
 }
 tasks.matching { it.name == "preReleaseBuild" }.configureEach {

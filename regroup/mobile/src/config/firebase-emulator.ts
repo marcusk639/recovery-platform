@@ -13,7 +13,7 @@ import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
 import functions from '@react-native-firebase/functions';
 import type { LaunchArguments as LaunchArgumentsApi } from 'react-native-launch-arguments';
-import { E2E_PROJECT_IDS, E2EVariant } from './env';
+import { E2E_PROJECT_IDS, E2EVariant, isLiveStripeKey } from './env';
 
 export type EmulatorPorts = {
   auth: number;
@@ -65,12 +65,37 @@ export class E2EProjectMismatch extends Error {
         `expected "${E2E_PROJECT_IDS[variant]}". Refusing to start: a bundled ` +
         'E2E_VARIANT must never run against another project. E2E_VARIANT comes from ' +
         'the build (the Gradle build type or the Xcode configuration) or the shell ' +
-        'that started Metro; check those.',
+        'that started Metro; check those. A Metro started with E2E_VARIANT keeps it ' +
+        'in its transform cache: restart it with `npm start -- --reset-cache`.',
     );
     this.name = 'E2EProjectMismatch';
     Object.setPrototypeOf(this, E2EProjectMismatch.prototype);
   }
 }
+
+export class E2ELiveStripeKey extends Error {
+  constructor(variant: E2EVariant) {
+    super(
+      `E2E ${variant} build carries a live Stripe key (pk_live_). Refusing to start: ` +
+        'e2e runs make test payments and need a pk_test_ key. Export ' +
+        'STRIPE_PUBLISHABLE_KEY=pk_test_... for the e2e build (and remove pk_live_ ' +
+        'from .env), then rebuild; a Metro serving it needs `npm start -- --reset-cache`.',
+    );
+    this.name = 'E2ELiveStripeKey';
+    Object.setPrototypeOf(this, E2ELiveStripeKey.prototype);
+  }
+}
+
+/**
+ * Throws E2ELiveStripeKey when an e2e build's bundled key is live. babel.config.js
+ * refuses to bundle one; this is the runtime backstop. Never puts the key in
+ * the message.
+ */
+export const assertE2EStripeKey = (variant: E2EVariant, key: string): void => {
+  if (isLiveStripeKey(key)) {
+    throw new E2ELiveStripeKey(variant);
+  }
+};
 
 /** Throws E2EProjectMismatch unless the native project is the variant's own. */
 export const assertE2EProject = (variant: E2EVariant, projectId: string | undefined): void => {

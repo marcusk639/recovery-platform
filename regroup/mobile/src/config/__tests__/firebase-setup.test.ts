@@ -17,6 +17,7 @@ jest.mock('@react-native-firebase/app', () => ({
 }));
 
 const originalVariant = process.env.E2E_VARIANT;
+const originalStripeKey = process.env.STRIPE_PUBLISHABLE_KEY;
 const originalFetch = global.fetch;
 
 const setVariant = (variant?: string) => {
@@ -41,6 +42,11 @@ beforeEach(() => {
 afterEach(() => {
   global.fetch = originalFetch;
   setVariant(originalVariant);
+  if (originalStripeKey === undefined) {
+    delete process.env.STRIPE_PUBLISHABLE_KEY;
+  } else {
+    process.env.STRIPE_PUBLISHABLE_KEY = originalStripeKey;
+  }
 });
 
 describe('e2e variant / Firebase project cross-check', () => {
@@ -82,6 +88,52 @@ describe('e2e variant / Firebase project cross-check', () => {
     mockProjectId = 'phoenix-cleanhouse';
 
     await expect(loadFirebaseSetup().emulatorConnection).resolves.toBeUndefined();
+  });
+});
+
+describe('e2e variant / live Stripe key', () => {
+  // babel.config.js already refuses to bundle one; this is the runtime backstop
+  // for a bundle built some other way (a Metro started with E2E_VARIANT).
+  it.each([
+    ['emulator', 'demo-regroup-e2e'],
+    ['staging', 'regroup-e2e'],
+  ])('refuses to start the %s variant with a live key', (variant, projectId) => {
+    setVariant(variant);
+    mockProjectId = projectId;
+    process.env.STRIPE_PUBLISHABLE_KEY = 'pk_live_abc123';
+
+    let thrown: unknown;
+    try {
+      loadFirebaseSetup();
+    } catch (error) {
+      thrown = error;
+    }
+
+    const { E2ELiveStripeKey } = require('../firebase-emulator');
+    expect(thrown).toBeInstanceOf(E2ELiveStripeKey);
+    expect(String(thrown)).toContain(variant);
+    expect(String(thrown)).not.toContain('abc123');
+  });
+
+  it('starts an e2e variant with a test key', async () => {
+    setVariant('staging');
+    mockProjectId = 'regroup-e2e';
+    process.env.STRIPE_PUBLISHABLE_KEY = 'pk_test_abc';
+
+    await expect(loadFirebaseSetup().emulatorConnection).resolves.toBeUndefined();
+  });
+
+  it('allows a live key in a build without an e2e variant', async () => {
+    setVariant(undefined);
+    mockProjectId = 'phoenix-cleanhouse';
+    process.env.STRIPE_PUBLISHABLE_KEY = 'pk_live_abc';
+
+    await expect(loadFirebaseSetup().emulatorConnection).resolves.toBeUndefined();
+  });
+
+  it('assertE2EStripeKey accepts an unconfigured key', () => {
+    const { assertE2EStripeKey } = require('../firebase-emulator');
+    expect(() => assertE2EStripeKey('emulator', '')).not.toThrow();
   });
 });
 

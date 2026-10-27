@@ -1,7 +1,8 @@
 #!/bin/bash
 # Xcode build phase "Release guard" (target rats, after "Configure e2e app
-# bundle", before the JS bundle is built). Runs for the Release configuration
-# only; Debug and the E2E* configurations are not checked.
+# bundle", before the JS bundle is built). Runs for every configuration except
+# Debug and the E2E* ones, so a configuration added later (another archive or
+# store configuration) is checked by default instead of slipping through.
 #
 # Runs scripts/release-guard.js on the GoogleService-Info.plist inside the
 # built app, which is the one that ships, and on STRIPE_PUBLISHABLE_KEY as the
@@ -11,10 +12,11 @@
 # the project is phoenix-cleanhouse and the key is pk_live_.
 set -e
 
-if [ "$CONFIGURATION" != Release ]; then
-  echo "Release guard: not checked for configuration $CONFIGURATION"
-  exit 0
-fi
+case "$CONFIGURATION" in
+  Debug | E2E*)
+    echo "Release guard: not checked for configuration $CONFIGURATION"
+    exit 0 ;;
+esac
 
 # Finds node the way react-native's with-environment.sh does for the bundle
 # phase: PATH, then .xcode.env(.local), then find-node-for-xcode.sh (nvm,
@@ -22,10 +24,12 @@ fi
 NODE_BINARY=$(command -v node || true)
 for ENV_FILE in "$SRCROOT/.xcode.env" "$SRCROOT/.xcode.env.local"; do
   if [ -f "$ENV_FILE" ]; then
+    # shellcheck source=/dev/null
     . "$ENV_FILE"
   fi
 done
 if [ -z "$NODE_BINARY" ]; then
+  # shellcheck source=/dev/null
   . "$SRCROOT/../node_modules/react-native/scripts/find-node-for-xcode.sh"
   NODE_BINARY=$(command -v node || true)
 fi

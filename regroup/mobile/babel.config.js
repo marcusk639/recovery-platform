@@ -15,13 +15,11 @@
 // E2E_VARIANT ('emulator' | 'staging', unset for every other build) is read via
 // e2eVariant() in src/config/env.ts. Being bundle-time is the point: no launch
 // argument can turn a store build into an e2e build.
-const BUNDLED_ENV = [
-  'STRIPE_PUBLISHABLE_KEY',
-  'RATS_WEB_URL',
-  'GOOGLE_MAPS_API_KEY',
-  'E2E_VARIANT',
-  'E2E_BUNDLE_MARKER',
-];
+//
+// The list lives in scripts/bundled-env.js, which the Android bundle tasks'
+// env stamp and scripts/check-release-env.js share; babel rejects unknown keys
+// on this module's exports, so it cannot be exported from here.
+const { BUNDLED_ENV } = require('./scripts/bundled-env');
 
 // Under Jest the substitution is skipped so tests can set process.env and
 // re-require a module. src/services/__tests__/google-apikeys.test.ts and
@@ -52,6 +50,16 @@ const e2eVariant = process.env.E2E_VARIANT;
 if (e2eVariant && !E2E_VARIANTS.includes(e2eVariant)) {
   throw new Error(
     `E2E_VARIANT must be unset or one of ${E2E_VARIANTS.join(', ')}; got "${e2eVariant}"`,
+  );
+}
+
+// An e2e bundle never carries a live Stripe key: e2e runs make test payments,
+// and the release guard asks for pk_live_, which may well be sitting in .env.
+// Never prints the key.
+if (e2eVariant && (process.env.STRIPE_PUBLISHABLE_KEY || '').startsWith('pk_live_')) {
+  throw new Error(
+    `E2E_VARIANT=${e2eVariant} bundle with a live Stripe key (pk_live_): e2e builds need a pk_test_ ` +
+      'key. Export STRIPE_PUBLISHABLE_KEY=pk_test_... for the e2e build, or remove pk_live_ from .env.',
   );
 }
 
