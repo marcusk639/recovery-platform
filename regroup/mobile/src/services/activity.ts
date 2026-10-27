@@ -5,7 +5,8 @@ import {
   ActivityType,
   ActivityData,
   ActivityStatus,
-  COUNTED_ACTIVITY_STATUSES,
+  LISTED_ACTIVITY_STATUSES,
+  countsTowardStats,
 } from '../entities/ActivityModel';
 import { WeekSummary } from '../entities/WeekSummary';
 import { logException } from '../util/logging';
@@ -84,7 +85,7 @@ export async function getActivities(
       .where('guestId', '==', guestId)
       .where('timestamp', '>=', startDate)
       .where('timestamp', '<', endDate)
-      .where('status', 'in', COUNTED_ACTIVITY_STATUSES);
+      .where('status', 'in', LISTED_ACTIVITY_STATUSES);
 
     // Add type filter if specified
     if (type) {
@@ -98,7 +99,7 @@ export async function getActivities(
       ...doc.data(),
       timestamp: doc.data().timestamp?.toDate?.() || doc.data().timestamp,
       loggedAt: doc.data().loggedAt?.toDate?.() || doc.data().loggedAt,
-    })) as Activity[];
+    })).filter(countsTowardStats) as Activity[];
   } catch (error) {
     logException(error);
     throw new Error('Failed to get activities');
@@ -158,7 +159,7 @@ export async function getActivitiesPage(
       .where('guestId', '==', guestId)
       .where('timestamp', '>=', startDate)
       .where('timestamp', '<', endDate)
-      .where('status', 'in', COUNTED_ACTIVITY_STATUSES);
+      .where('status', 'in', LISTED_ACTIVITY_STATUSES);
 
     if (type) {
       query = query.where('type', '==', type);
@@ -185,7 +186,7 @@ export async function getActivitiesPage(
       ...doc.data(),
       timestamp: doc.data().timestamp?.toDate?.() || doc.data().timestamp,
       loggedAt: doc.data().loggedAt?.toDate?.() || doc.data().loggedAt,
-    })) as Activity[];
+    })).filter(countsTowardStats) as Activity[];
 
     const nextCursor = hasMore ? pageDocs[pageDocs.length - 1] : null;
 
@@ -211,7 +212,7 @@ export async function getHouseActivities(
     const snapshot = await firestore
       .collection('activities')
       .where('houseId', '==', houseId)
-      .where('status', 'in', COUNTED_ACTIVITY_STATUSES)
+      .where('status', 'in', LISTED_ACTIVITY_STATUSES)
       .orderBy('timestamp', 'desc')
       .limit(limit)
       .get();
@@ -221,7 +222,7 @@ export async function getHouseActivities(
       ...doc.data(),
       timestamp: doc.data().timestamp?.toDate?.() || doc.data().timestamp,
       loggedAt: doc.data().loggedAt?.toDate?.() || doc.data().loggedAt,
-    })) as Activity[];
+    })).filter(countsTowardStats) as Activity[];
   } catch (error) {
     logException(error);
     throw new Error('Failed to get house activities');
@@ -347,23 +348,33 @@ export async function disputeActivity(
 }
 
 /**
- * Resolve a disputed activity
+ * Resolve a dispute. Only house admins (owners, managers, peer leaders) may;
+ * the rules enforce it.
+ *
+ * approve: the dispute stands, the activity was not done. It is marked
+ *          incomplete and stops counting (it stays on record, e.g. for the
+ *          court export's history).
+ * reject:  the dispute fails, the activity stands and counts.
+ *
+ * Both set status RESOLVED and the legacy `disputeResult` the UI's
+ * activityIsDisputable reads, so a resolved activity cannot be re-disputed.
  *
  * @param activityId - ID of the activity
- * @param resolvedBy - User ID who resolved the dispute
- * @param resolution - 'keep' or 'delete'
+ * @param resolvedBy - User ID of the admin resolving the dispute
+ * @param outcome - 'approve' or 'reject'
  */
 export async function resolveDispute(
   activityId: string,
   resolvedBy: string,
-  resolution: 'keep' | 'delete',
+  outcome: 'approve' | 'reject',
 ): Promise<void> {
   try {
+    const approved = outcome === 'approve';
     const updates: Partial<Activity> = {
-      status:
-        resolution === 'keep'
-          ? ActivityStatus.RESOLVED
-          : ActivityStatus.DELETED,
+      status: ActivityStatus.RESOLVED,
+      disputed: approved ? 'successful' : 'rejected',
+      incomplete: approved,
+      disputeResult: approved ? 'success' : 'fail',
       disputeResolvedBy: resolvedBy,
       disputeResolvedAt: FirebaseFirestore.FieldValue.serverTimestamp() as any,
       loggedAt: FirebaseFirestore.FieldValue.serverTimestamp() as any,
@@ -423,7 +434,7 @@ export function subscribeToHouseActivities(
   return firestore
     .collection('activities')
     .where('houseId', '==', houseId)
-    .where('status', 'in', COUNTED_ACTIVITY_STATUSES)
+    .where('status', 'in', LISTED_ACTIVITY_STATUSES)
     .orderBy('timestamp', 'desc')
     .limit(limit)
     .onSnapshot(snapshot => {
@@ -432,7 +443,7 @@ export function subscribeToHouseActivities(
         ...doc.data(),
         timestamp: doc.data().timestamp?.toDate?.() || doc.data().timestamp,
         loggedAt: doc.data().loggedAt?.toDate?.() || doc.data().loggedAt,
-      })) as Activity[];
+      })).filter(countsTowardStats) as Activity[];
 
       onUpdate(activities);
     });

@@ -1,31 +1,31 @@
 import { firestore } from '../../firebase-setup';
 import { PartialHouseWithId } from '../entities/House';
-import { PartialGuestWithId } from '../entities/Guest';
-import { Notification } from '../entities/Notification';
 import { Dispute } from '../entities/Dispute';
 import * as crud from './crud';
 
 const houseCollection = firestore.collection('houses');
-const guestCollection = firestore.collection('guests');
-const notificationCollection = firestore.collection('notifications');
 const disputesCollection = firestore.collection('disputes');
 
+/**
+ * Mirror a dispute into house.disputes (where its message and challenges
+ * live) and, on resolution, archive it to /disputes.
+ *
+ * It used to also rewrite the disputed resident's guest doc (an unchanged
+ * copy) and create the dispute notifications. Both were denied for a peer:
+ * only the resident or an admin may update a guest doc, and notifications may
+ * only be created for oneself, so the whole batch failed. Notifications are
+ * now sent by the onActivityWritten Cloud Function, and the guest write was a
+ * no-op. Residents may update house.disputes (not a sensitive house field).
+ */
 export function updateDispute(
   house: PartialHouseWithId,
-  guest: PartialGuestWithId,
-  notifications: Notification[],
   resolvedDispute?: Dispute,
 ) {
   const batch = firestore.batch();
   batch.update(houseCollection.doc(house.id), house);
-  batch.update(guestCollection.doc(guest.id), guest);
   if (resolvedDispute) {
     batch.set(disputesCollection.doc(resolvedDispute.id), resolvedDispute);
   }
-  notifications.forEach(notification => {
-    const newNoteRef = notificationCollection.doc();
-    batch.set(newNoteRef, notification);
-  });
   return batch.commit();
 }
 

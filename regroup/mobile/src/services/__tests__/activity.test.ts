@@ -10,6 +10,7 @@ import {
   ActivityType,
   ActivityStatus,
   ActivityDataFactory,
+  countsTowardStats,
 } from '../../entities/ActivityModel';
 import { WeekSummary } from '../../entities/WeekSummary';
 
@@ -460,14 +461,17 @@ describe('Activity Service', () => {
       );
     });
 
-    it('lists active and kept (resolved) activities, not pending disputes or deleted ones', async () => {
+    it('lists every counted activity: not deleted ones or approved disputes (incomplete)', async () => {
+      const cases: Array<[string, Partial<Activity>]> = [
+        ['active', { status: ActivityStatus.ACTIVE }],
+        ['pending', { status: ActivityStatus.DISPUTED }],
+        ['rejected', { status: ActivityStatus.RESOLVED, disputed: 'rejected', incomplete: false }],
+        ['legacyKept', { status: ActivityStatus.RESOLVED }],
+        ['approved', { status: ActivityStatus.RESOLVED, disputed: 'successful', incomplete: true }],
+        ['deleted', { status: ActivityStatus.DELETED }],
+      ];
       const ids: Record<string, string> = {};
-      for (const status of [
-        ActivityStatus.ACTIVE,
-        ActivityStatus.RESOLVED,
-        ActivityStatus.DISPUTED,
-        ActivityStatus.DELETED,
-      ]) {
+      for (const [label, fields] of cases) {
         const a = await logActivity(
           'guest-status',
           'house456',
@@ -476,8 +480,8 @@ describe('Activity Service', () => {
           'user789',
           new Date('2024-01-16T10:00:00Z'),
         );
-        mockActivities.find(x => x.id === a.id)!.status = status;
-        ids[status] = a.id;
+        Object.assign(mockActivities.find(x => x.id === a.id)!, fields);
+        ids[label] = a.id;
       }
 
       const listed = await getActivities(
@@ -487,10 +491,11 @@ describe('Activity Service', () => {
       );
 
       expect(listed.map(a => a.id).sort()).toEqual(
-        [ids[ActivityStatus.ACTIVE], ids[ActivityStatus.RESOLVED]].sort(),
+        ['active', 'pending', 'rejected', 'legacyKept'].map(l => ids[l]).sort(),
       );
       expect(mockActivityCollection.where).toHaveBeenCalledWith('status', 'in', [
         ActivityStatus.ACTIVE,
+        ActivityStatus.DISPUTED,
         ActivityStatus.RESOLVED,
       ]);
     });
@@ -847,7 +852,7 @@ describe('Activity Service', () => {
 
     it('records who disputed in disputedBy (it survives resolution)', async () => {
       await disputeActivity(activityId, 'Not done', 'peer-uid');
-      await resolveDispute(activityId, 'admin456', 'keep');
+      await resolveDispute(activityId, 'admin456', 'reject');
 
       const resolved = mockActivities.find(a => a.id === activityId);
       expect(resolved?.disputedBy).toBe('peer-uid');
@@ -876,31 +881,39 @@ describe('Activity Service', () => {
       await disputeActivity(activityId, 'Test dispute', 'admin123');
     });
 
-    it('should resolve dispute by keeping activity', async () => {
-      await resolveDispute(activityId, 'admin456', 'keep');
+    it('reject: the activity stands and counts (disputed rejected, not incomplete)', async () => {
+      await resolveDispute(activityId, 'admin456', 'reject');
 
-      const resolved = mockActivities.find(a => a.id === activityId);
+      const resolved = mockActivities.find(a => a.id === activityId)!;
 
-      expect(resolved?.status).toBe(ActivityStatus.RESOLVED);
-      expect(resolved?.disputeResolvedBy).toBe('admin456');
+      expect(resolved.status).toBe(ActivityStatus.RESOLVED);
+      expect(resolved.disputed).toBe('rejected');
+      expect(resolved.incomplete).toBe(false);
+      expect(resolved.disputeResult).toBe('fail');
+      expect(resolved.disputeResolvedBy).toBe('admin456');
+      expect(countsTowardStats(resolved)).toBe(true);
     });
 
-    it('should resolve dispute by deleting activity', async () => {
-      await resolveDispute(activityId, 'admin456', 'delete');
+    it('approve: the activity is marked not done and stops counting (kept on record)', async () => {
+      await resolveDispute(activityId, 'admin456', 'approve');
 
-      const resolved = mockActivities.find(a => a.id === activityId);
+      const resolved = mockActivities.find(a => a.id === activityId)!;
 
-      expect(resolved?.status).toBe(ActivityStatus.DELETED);
+      expect(resolved.status).toBe(ActivityStatus.RESOLVED);
+      expect(resolved.disputed).toBe('successful');
+      expect(resolved.incomplete).toBe(true);
+      expect(resolved.disputeResult).toBe('success');
+      expect(countsTowardStats(resolved)).toBe(false);
     });
 
     it('should throw error if activity not found', async () => {
       await expect(
-        resolveDispute('nonexistent', 'admin456', 'keep'),
+        resolveDispute('nonexistent', 'admin456', 'reject'),
       ).rejects.toThrow('Activity not found');
     });
 
     it('leaves the week summary to the server trigger', async () => {
-      await resolveDispute(activityId, 'admin456', 'keep');
+      await resolveDispute(activityId, 'admin456', 'approve');
 
       expect(touchedWeekSummaries()).toBe(false);
     });
@@ -988,9 +1001,9 @@ describe('Activity Service', () => {
     it('resolveDispute resolves when week-summaries writes are denied', async () => {
       await disputeActivity(activityId, 'Not done', 'admin123');
       await expect(
-        resolveDispute(activityId, 'admin456', 'delete'),
+        resolveDispute(activityId, 'admin456', 'approve'),
       ).resolves.toBeUndefined();
-      expect(mockActivities[0].status).toBe(ActivityStatus.DELETED);
+      expect(mockActivities[0].incomplete).toBe(true);
     });
 
     it('deleting an ACTIVE activity runs no transaction (the -1 delta is gone)', async () => {

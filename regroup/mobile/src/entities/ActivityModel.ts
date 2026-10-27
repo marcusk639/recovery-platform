@@ -23,15 +23,35 @@ export enum ActivityStatus {
 }
 
 /**
- * Statuses that count toward stats and appear in activity lists: active, and
- * a dispute an admin resolved as "keep" (resolveDispute writes RESOLVED). A
- * pending dispute and a deleted activity do not. Must match COUNTED_STATUSES
- * in regroup/functions/src/activities/weekSummaryMath.ts (week summaries).
+ * Dispute model (owner decision): a disputed activity keeps counting while
+ * the dispute is pending. A house admin (owner, manager or peer leader)
+ * approves or rejects it via resolveDispute:
+ *   approve -> status RESOLVED, disputed 'successful', incomplete true:
+ *              the activity was not done and does NOT count;
+ *   reject  -> status RESOLVED, disputed 'rejected', incomplete false:
+ *              the activity stands and counts.
+ * Legacy data: an old RESOLVED without `incomplete` (the former "keep")
+ * counts; an old DELETED (the former "delete") does not.
  */
-export const COUNTED_ACTIVITY_STATUSES: ActivityStatus[] = [
+export type DisputeOutcome = 'successful' | 'rejected';
+
+/** Statuses an activity list queries; countsTowardStats then drops incomplete. */
+export const LISTED_ACTIVITY_STATUSES: ActivityStatus[] = [
   ActivityStatus.ACTIVE,
+  ActivityStatus.DISPUTED,
   ActivityStatus.RESOLVED,
 ];
+
+/**
+ * Counts toward stats (and appears in lists) unless deleted or marked
+ * incomplete by an approved dispute. Same rule as countsTowardSummary in
+ * regroup/functions/src/activities/weekSummaryMath.ts.
+ */
+export function countsTowardStats(activity: unknown): boolean {
+  // Accepts raw Firestore doc data as well as typed Activities.
+  const a = (activity ?? {}) as { status?: unknown; incomplete?: unknown };
+  return a.status !== ActivityStatus.DELETED && a.incomplete !== true;
+}
 
 /**
  * Base Activity Interface
@@ -53,6 +73,10 @@ export interface Activity {
   disputeReason?: string;
   /** Who raised the dispute (kept after resolveDispute overwrites disputeResolvedBy). */
   disputedBy?: string;
+  /** Set by an admin's resolution: approved ('successful') or 'rejected'. */
+  disputed?: DisputeOutcome;
+  /** true when an approved dispute marks the activity as not done. */
+  incomplete?: boolean;
   disputeResolvedBy?: string;
   disputeResolvedAt?: Date | string;
 
