@@ -178,6 +178,14 @@ class ActivityOfflineQueue {
   }
 
   /**
+   * How many items userId has queued (e.g. to warn before sign-out discards
+   * them). Read-only, with the same fallback as getPending().
+   */
+  async pendingCountFor(userId: string): Promise<number> {
+    return (await this.getPending(userId)).length;
+  }
+
+  /**
    * Remove every item owned by userId (sign-out / account deletion). Queued
    * items can hold residents' medication data, so they must not outlive the
    * session on a shared device. This clears this queue only; Firestore's own

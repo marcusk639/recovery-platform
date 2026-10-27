@@ -116,34 +116,79 @@ export async function convertAnonymousUser(
 
 /** Longest a sign-out waits for the offline queue flush. */
 export const SIGN_OUT_FLUSH_TIMEOUT_MS = 5000;
+/** Longest a sign-out waits for the offline queue to be cleared. */
+export const SIGN_OUT_CLEAR_TIMEOUT_MS = 5000;
+
+/** Settles with `work`, or rejects after `ms` (the timer is always cleared). */
+async function withTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), ms);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Sign-out step for the offline queue: replay the user's queued activities
+ * once (best effort, capped), report what is about to be discarded, then clear
+ * them. Queued activities can hold residents' medication data, so they must
+ * not outlive the session on a shared device. Only the app's offline queue is
+ * cleared: Firestore's own on-device cache of pending writes is not.
+ * Nothing here may block or fail the sign-out itself.
+ */
+async function flushAndClearOfflineQueue(uid: string): Promise<void> {
+  try {
+    // Offline Firestore writes stay pending until reconnect, so cap the wait.
+    await withTimeout(
+      flushOfflineActivities(uid),
+      SIGN_OUT_FLUSH_TIMEOUT_MS,
+      'offline queue flush timed out',
+    );
+  } catch (error) {
+    logException(error, 'sign-out: offline queue flush failed');
+  }
+  try {
+    const unsynced = await offlineQueue.pendingCountFor(uid);
+    if (unsynced > 0) {
+      // Counts only: no activity content or names.
+      logException(
+        new Error('Sign-out discarded unsynced offline activities'),
+        `sign-out: discarding ${unsynced} unsynced offline activities`,
+      );
+    }
+  } catch (error) {
+    logException(error, 'sign-out: counting unsynced offline activities failed');
+  }
+  try {
+    await withTimeout(
+      offlineQueue.clearUser(uid),
+      SIGN_OUT_CLEAR_TIMEOUT_MS,
+      'offline queue clear timed out',
+    );
+  } catch (error) {
+    logException(error, 'sign-out: offline queue clear failed');
+    if (error instanceof Error && error.message === 'offline queue clear timed out') {
+      // Storage is hanging. Drop the whole stored queue (every user's) rather
+      // than leave this user's data behind.
+      try {
+        await offlineQueue.emergencyWipe();
+      } catch (wipeError) {
+        logException(wipeError, 'sign-out: offline queue wipe failed');
+      }
+    }
+  }
+}
 
 export async function signOut() {
   const uid = auth().currentUser?.uid;
   if (uid) {
-    // Queued activities can hold residents' medication data: replay them once
-    // (best effort), then remove them so they never outlive this session.
-    // Offline Firestore writes stay pending until reconnect, so cap the wait.
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      await Promise.race([
-        flushOfflineActivities(uid),
-        new Promise((_, reject) => {
-          timer = setTimeout(
-            () => reject(new Error('offline queue flush timed out')),
-            SIGN_OUT_FLUSH_TIMEOUT_MS,
-          );
-        }),
-      ]);
-    } catch (error) {
-      logException(error, 'sign-out: offline queue flush failed');
-    } finally {
-      clearTimeout(timer);
-    }
-    try {
-      await offlineQueue.clearUser(uid);
-    } catch (error) {
-      logException(error, 'sign-out: offline queue clear failed');
-    }
+    await flushAndClearOfflineQueue(uid);
   }
   return auth().signOut();
 }

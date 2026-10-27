@@ -341,6 +341,13 @@ describe('ActivityOfflineQueue — with AsyncStorage', () => {
     expect(forU1.map((i) => i.id)).toEqual(['offline_u1_a', 'offline_u1_b']);
   });
 
+  it("pendingCountFor('u1') counts only that user's items", async () => {
+    mockGetItem.mockResolvedValue(encodeQueue(twoUserQueue()));
+
+    expect(await offlineQueueModule.offlineQueue.pendingCountFor('u1')).toBe(2);
+    expect(await offlineQueueModule.offlineQueue.pendingCountFor('nobody')).toBe(0);
+  });
+
   it('ownership follows ownerUid, not loggedBy', async () => {
     const items = [
       {

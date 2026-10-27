@@ -4,6 +4,7 @@ import { logException } from "../util/logging";
 import { FirebaseAuthTypes } from "@react-native-firebase/auth";
 import { SimpleValidationService } from "./SimpleValidationService";
 import { getCurrentTime } from "../util/display";
+import { signOut as signOutAndClearOfflineQueue } from "./users";
 
 export interface AuthResult {
   success: boolean;
@@ -322,11 +323,13 @@ export class EnhancedAuthService {
   }
 
   /**
-   * Enhanced sign out
+   * Enhanced sign out. Goes through users.signOut so the offline activity
+   * queue is flushed and cleared; signing out of Firebase alone would leave a
+   * previous user's queued data on the device.
    */
   static async signOut(): Promise<AuthResult> {
     try {
-      await auth.signOut();
+      await signOutAndClearOfflineQueue();
       return {
         success: true,
       };

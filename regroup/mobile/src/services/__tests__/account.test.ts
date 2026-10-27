@@ -182,4 +182,62 @@ describe("deleteMyAccount", () => {
     await expect(deleteMyAccount("pw")).resolves.toBeUndefined();
     expect(mockLogException).toHaveBeenCalledWith(err, "Sign-out failed after account deletion");
   });
+  describe('offline queue clearing uses the uid captured at the start', () => {
+    // Native SDKs null auth.currentUser on user-not-found / token-expired
+    // before our sign-out code runs.
+    const nullCurrentUserDuring = (fn: jest.Mock, error: object) =>
+      fn.mockImplementation(async () => {
+        const { auth } = require('../../../firebase-setup');
+        auth.currentUser = null;
+        throw error;
+      });
+
+    let savedUser: unknown;
+    beforeEach(() => {
+      savedUser = require('../../../firebase-setup').auth.currentUser;
+    });
+    afterEach(() => {
+      require('../../../firebase-setup').auth.currentUser = savedUser;
+    });
+
+    it('still clears the queue when reload reports user-not-found and currentUser is already null', async () => {
+      mockReauth.mockRejectedValue({ code: 'auth/user-not-found' });
+      nullCurrentUserDuring(mockReload, { code: 'auth/user-not-found' });
+
+      await expect(deleteMyAccount('pw')).resolves.toBeUndefined();
+
+      expect(mockClearUser).toHaveBeenCalledWith('uid-1');
+    });
+
+    it('does not clear the queue when the account still exists (wrong password)', async () => {
+      mockReauth.mockRejectedValue({ code: 'auth/invalid-credential' });
+
+      await expect(deleteMyAccount('bad')).rejects.toEqual({ code: 'auth/invalid-credential' });
+
+      expect(mockClearUser).not.toHaveBeenCalled();
+    });
+
+    it('clears the queue before signing out when deletion is unconfirmed', async () => {
+      mockCallable.mockRejectedValue({ code: 'functions/internal' });
+      mockReload.mockRejectedValue({ code: 'auth/user-token-expired' });
+      mockClearUser.mockImplementation(async () => void calls.push('clearQueue'));
+
+      await expect(deleteMyAccount('pw')).rejects.toMatchObject({
+        code: DELETION_UNCONFIRMED_CODE,
+      });
+
+      expect(mockClearUser).toHaveBeenCalledWith('uid-1');
+      expect(calls.slice(-2)).toEqual(['clearQueue', 'signOut']);
+    });
+
+    it('clears the queue before signing out when the account is confirmed gone', async () => {
+      mockCallable.mockRejectedValue({ code: 'functions/deadline-exceeded' });
+      mockReload.mockRejectedValue({ code: 'auth/user-not-found' });
+      mockClearUser.mockImplementation(async () => void calls.push('clearQueue'));
+
+      await expect(deleteMyAccount('pw')).resolves.toBeUndefined();
+
+      expect(calls.slice(-2)).toEqual(['clearQueue', 'signOut']);
+    });
+  });
 });
