@@ -118,14 +118,15 @@ describe("activities verification fields", () => {
     );
   });
 
-  it("allows a resident dispute that echoes the same verified value back", async () => {
-    const ctx = testEnv.authenticatedContext(GUEST_UID, authHouseGuest(GUEST_UID, HOUSE_ID));
+  it("allows a housemate's dispute that echoes the same verified value back", async () => {
+    // Disputes are by OTHER residents (the logger may not dispute their own).
+    const ctx = testEnv.authenticatedContext("housemateUser", authHouseGuest("housemateUser", HOUSE_ID));
     await assertSucceeds(
       updateDoc(activityDoc(ctx), {
         verified: false,
         status: "disputed",
         disputeReason: "x",
-        disputedBy: GUEST_UID,
+        disputedBy: "housemateUser",
       }),
     );
   });

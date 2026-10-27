@@ -146,9 +146,10 @@ describe('C: an admin entering a dispute names themselves', () => {
   });
 });
 
-describe('F: the owner can re-dispute an activity an admin restored', () => {
-  it('allows active -> disputed when the disputer fields already name the caller', async () => {
-    await assertSucceeds(upd(res(), 'restored', disp(OWNER)));
+describe('F: closed by the owner rule (never your own activity)', () => {
+  it('DENIES the owner re-disputing their own restored activity, even with the fields already naming them', async () => {
+    await assertFails(upd(res(), 'restored', disp(OWNER)));
+    await assertFails(upd(res(), 'restored', { status: 'disputed', disputeReason: 'r', loggedAt: Timestamp.now() }));
   });
 
   it('opens no other path: not from a resolution, and not for someone the fields do not name', async () => {

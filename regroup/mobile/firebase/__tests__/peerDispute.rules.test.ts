@@ -152,9 +152,9 @@ describe('peer disputes', () => {
     await assertFails(update(owner, 'a1', { disputedBy: 'someoneElse' }));
   });
 
-  it('still lets the owner dispute or delete their own activity', async () => {
+  it('lets the owner delete, but never dispute, their own activity (owner rule)', async () => {
     const owner = testEnv.authenticatedContext(OWNER_UID, { guest: { [HOUSE]: true } });
-    await assertSucceeds(update(owner, 'a1', dispute(OWNER_UID)));
+    await assertFails(update(owner, 'a1', dispute(OWNER_UID)));
     await assertSucceeds(update(owner, 'a1', { status: 'deleted', loggedAt: Timestamp.now() }));
   });
 });

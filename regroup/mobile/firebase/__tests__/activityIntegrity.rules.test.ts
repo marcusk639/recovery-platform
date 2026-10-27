@@ -156,11 +156,12 @@ describe('activities update by the logging resident', () => {
     await assertFails(update(resident(), 'verified', { type: 'meeting' }));
   });
 
-  it('allows exactly the fields disputeActivity and deleteActivity write', async () => {
-    await assertSucceeds(
+  it('allows exactly the fields deleteActivity writes; never their own dispute payload', async () => {
+    await assertFails(
       update(resident(), 'mine', {
         status: 'disputed',
         disputeReason: 'Not done',
+        disputedBy: RESIDENT_UID,
         disputeResolvedBy: RESIDENT_UID,
         loggedAt: Timestamp.now(),
       }),
@@ -168,8 +169,8 @@ describe('activities update by the logging resident', () => {
     await assertSucceeds(update(resident(), 'mine', { status: 'deleted', loggedAt: Timestamp.now() }));
   });
 
-  it('allows disputing or deleting their own activity (only lowers counts)', async () => {
-    await assertSucceeds(
+  it('BLOCKS disputing their own activity (owner rule); still allows deleting it', async () => {
+    await assertFails(
       update(resident(), 'mine', { status: 'disputed', disputeReason: 'x', disputedBy: RESIDENT_UID }),
     );
     await assertSucceeds(update(resident(), 'mine', { status: 'deleted' }));

@@ -453,31 +453,49 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/guests/$(guestId)).data;
     }
 
-    // Anyone entering a dispute (resident, peer or admin) must name THEMSELVES
-    // as the disputer: disputedBy (current app) or, for builds before it,
-    // disputeResolvedBy (which then held the disputer). Whichever of the two
-    // the write changes must be the caller. If it changes neither, disputedBy
-    // must already be the caller (re-disputing an activity an admin restored
-    // after the same person disputed it). The onActivityWritten Cloud
-    // Function takes the disputer from these fields (disputerOf), so they
-    // must be trustworthy.
+    // Anyone entering a dispute (peer or admin) must name THEMSELVES as the
+    // disputer, in this write: it must change disputedBy (current app) or,
+    // for builds before it, disputeResolvedBy (which then held the disputer);
+    // a changed disputeResolvedBy must be the caller, and a disputedBy that
+    // is present must be the caller. So the recorded disputer is always the
+    // caller: disputedBy if present, else disputeResolvedBy. The
+    // onActivityWritten Cloud Function takes the disputer from exactly that
+    // (disputerOf), so these fields must be trustworthy.
     function disputeNamesCaller() {
-      let keys = request.resource.data.diff(resource.data).affectedKeys();
-      return (!keys.hasAny(['disputedBy']) || request.resource.data.disputedBy == request.auth.uid) &&
-        (!keys.hasAny(['disputeResolvedBy']) || request.resource.data.disputeResolvedBy == request.auth.uid) &&
-        (keys.hasAny(['disputedBy', 'disputeResolvedBy']) ||
-         request.resource.data.get('disputedBy', '') == request.auth.uid);
+      let d = request.resource.data;
+      let keys = d.diff(resource.data).affectedKeys();
+      return keys.hasAny(['disputedBy', 'disputeResolvedBy']) &&
+        (!keys.hasAny(['disputeResolvedBy']) || d.disputeResolvedBy == request.auth.uid) &&
+        d.get('disputedBy', request.auth.uid) == request.auth.uid;
     }
 
-    // An admin's write that records a resolution (status resolved and any
-    // resolution field) must find the dispute still open, so a second admin
-    // cannot overwrite the first admin's outcome.
+    // Owner rule: an activity is never disputed (or its dispute resolved) by
+    // the person who did it. "Who did it" is the account on the activity's
+    // guest doc (guests.userId) and whoever logged it (loggedBy). A guest doc
+    // that is missing or has no userId (an admin intake) leaves only the
+    // loggedBy check. One get() of the guest doc, within the rules' limits.
+    function callerIsNotTheResident() {
+      let gid = resource.data.get('guestId', '');
+      return request.auth.uid != resource.data.get('loggedBy', null) &&
+        (gid == '' ||
+         !exists(/databases/$(database)/documents/guests/$(gid)) ||
+         get(/databases/$(database)/documents/guests/$(gid)).data.get('userId', null) != request.auth.uid);
+    }
+
+    function enteringDispute() {
+      return resource.data.status != 'disputed' && request.resource.data.status == 'disputed';
+    }
+
+    // A write that records a resolution must find the dispute still open, so
+    // a second admin (or an old build's "delete" resolution) cannot overwrite
+    // the first outcome: status resolved with any resolution field, or ANY
+    // change to disputeResolvedAt.
     function resolvesOpenDisputeOnly() {
-      return !(request.resource.data.status == 'resolved' &&
-               request.resource.data.diff(resource.data).affectedKeys().hasAny([
-                 'status', 'disputed', 'incomplete', 'disputeResult',
-                 'disputeResolvedBy', 'disputeResolvedAt'
-               ])) ||
+      let keys = request.resource.data.diff(resource.data).affectedKeys();
+      return (!(request.resource.data.status == 'resolved' &&
+                keys.hasAny(['status', 'disputed', 'incomplete', 'disputeResult',
+                             'disputeResolvedBy', 'disputeResolvedAt'])) &&
+              !keys.hasAny(['disputeResolvedAt'])) ||
         resource.data.status == 'disputed';
     }
 
@@ -490,7 +508,8 @@ service cloud.firestore {
         request.resource.data.status == 'disputed' &&
         request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['status', 'disputeReason', 'disputedBy', 'disputeResolvedBy', 'loggedAt']) &&
-        disputeNamesCaller();
+        disputeNamesCaller() &&
+        callerIsNotTheResident();
     }
 
     match /activities/{activityId} {
@@ -520,34 +539,35 @@ service cloud.firestore {
       // compliance export. Once an admin verifies an activity its details must
       // not change under that verification, so non-admins never edit details.
       //
-      // The resident who logged it may only:
-      //   - soft-delete it, from any status (status + loggedAt only; deleted
-      //     never counts, so this can only lower their numbers), or
-      //   - dispute it, active -> disputed only (entersDispute).
-      // A resident of the same house (peer) may only dispute it, the same way.
-      // Disputes exist so residents can challenge OTHER residents' activities;
-      // verified activities stay disputable (the DISPUTE button does not check
+      // The resident who logged it may only soft-delete it, from any status
+      // (status + loggedAt only; deleted never counts). They may NOT dispute
+      // it: disputes are for OTHER people to say the activity did not happen
+      // (owner rule). A resident of the same house (peer) may only dispute it,
+      // active -> disputed (entersDispute), never their own. Verified
+      // activities stay disputable (the DISPUTE button does not check
       // verified).
       //
       // Nothing leaves deleted or a resolution except through an admin.
-      // Admins (owners, managers, peer leaders) may do the rest, but may not
-      // move an activity into a house they do not administer, and a resolver
-      // they record must be themselves. diff() only flags real changes, so a
-      // write echoing the current values back passes.
+      // Admins (owners, managers, peer leaders) may do the rest, except:
+      // entering a dispute names themselves and is not their own activity;
+      // resolving needs an open dispute that is not their own activity; a
+      // resolver they record is themselves; on a pending dispute they cannot
+      // rewrite the disputer or resolver; and they cannot move an activity
+      // into a house they do not administer. diff() only flags real changes,
+      // so a write echoing the current values back passes.
       allow update: if
         (isAdmin([resource.data.houseId]) && isAdmin([request.resource.data.houseId]) &&
           resolvesOpenDisputeOnly() &&
-          // An admin entering a dispute names themselves too.
-          (resource.data.status == 'disputed' || request.resource.data.status != 'disputed' ||
-           disputeNamesCaller()) &&
-          // A resolver an admin records must be themselves.
+          (!enteringDispute() || (disputeNamesCaller() && callerIsNotTheResident())) &&
+          (!(resource.data.status == 'disputed' && request.resource.data.status != 'disputed') ||
+           callerIsNotTheResident()) &&
+          !(resource.data.status == 'disputed' && request.resource.data.status == 'disputed' &&
+            request.resource.data.diff(resource.data).affectedKeys().hasAny(['disputedBy', 'disputeResolvedBy'])) &&
           (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['disputeResolvedBy']) ||
-           request.resource.data.status == 'disputed' ||
            request.resource.data.disputeResolvedBy == request.auth.uid)) ||
         (isSameUser(resource.data.loggedBy) &&
           request.resource.data.status == 'deleted' &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'loggedAt'])) ||
-        (isSameUser(resource.data.loggedBy) && entersDispute()) ||
         (isGuest([resource.data.houseId]) && entersDispute());
       allow delete: if isAdmin([resource.data.houseId]);
     }

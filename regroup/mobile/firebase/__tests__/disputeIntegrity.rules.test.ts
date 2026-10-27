@@ -134,11 +134,11 @@ describe('only active -> disputed starts a dispute', () => {
   });
 
   it('breaks the disputed <-> deleted cycle that flooded admins with notifications', async () => {
-    await assertSucceeds(upd(resident(), 'active', dispute(OWNER)));
+    await assertSucceeds(upd(peer(), 'active', dispute(PEER)));
     await assertSucceeds(
       upd(resident(), 'active', { status: 'deleted', loggedAt: Timestamp.now() }),
     );
-    await assertFails(upd(resident(), 'active', dispute(OWNER)));
+    await assertFails(upd(peer(), 'active', dispute(PEER)));
   });
 
   it('still lets the owner soft-delete from any status', async () => {
