@@ -44,10 +44,11 @@ Maestro is the only e2e runner; Detox has been retired. The plan of record is th
 # Install CLI (Java 17+ required)
 curl -Ls "https://get.maestro.mobile.dev" | bash
 
-# Seed the emulators (e2e/setup/ fixtures), then run flows
-npm run maestro:seed
+# Run flows. There is no working seed step: `npm run maestro:seed` is BROKEN
+# (it calls e2e/setup/seedTestData.js, which has never existed). Seeding is
+# unresolved until the launch-gate walking skeleton lands.
 npm run maestro:smoke:ios        # needs E2E_TEST_PASSWORD (e2e/SECURITY-test-credentials.md)
 npm run maestro:ios              # all flows in maestro/flows/
 ```
 
-Flows live in `maestro/flows/` (shared steps in `maestro/subflows/`); seed fixtures in `e2e/setup/`. The CI `maestro-smoke` job runs the repo-root `e2e-maestro/regroup/` flows on Maestro Cloud. Reports go to `docs/e2e/reports/`.
+Flows live in `maestro/flows/` (shared steps in `maestro/subflows/`). `e2e/setup/` holds unused JSON fixtures; nothing reads them yet. The CI `maestro-smoke` job runs the repo-root `e2e-maestro/regroup/` flows on Maestro Cloud. Reports go to `docs/e2e/reports/`.
