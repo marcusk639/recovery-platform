@@ -90,6 +90,9 @@ class ActivityOfflineQueue {
   /** Per-user counter bumped by clearUser; lets an in-flight flush notice a clear. */
   private clearGeneration = new Map<string, number>();
 
+  /** Users whose clearUser has started and not finished; enqueue refuses for them. */
+  private clearing = new Set<string>();
+
   /** Running flush per user, so concurrent callers share it instead of replaying twice. */
   private inFlight = new Map<string, { generation: number; promise: Promise<FlushResult> }>();
 
@@ -146,6 +149,11 @@ class ActivityOfflineQueue {
       queuedAt: Date.now(),
       retryCount: 0,
     };
+    if (this.clearing.has(activity.ownerUid)) {
+      // A sign-out is clearing this user's queue; an item added now would
+      // outlive the session.
+      throw new Error('Offline queue is being cleared for sign-out');
+    }
     await this.withLock(async () => {
       const queue = await this.load();
       queue.push(item);
@@ -198,7 +206,16 @@ class ActivityOfflineQueue {
     // Bump synchronously so an in-flight flush stops before its next item, even
     // while this call is still waiting for the lock.
     this.clearGeneration.set(userId, this.generationOf(userId) + 1);
-    await this.withLock(async () => {
+    this.clearing.add(userId);
+    try {
+      await this.clearLocked(userId);
+    } finally {
+      this.clearing.delete(userId);
+    }
+  }
+
+  private clearLocked(userId: string): Promise<void> {
+    return this.withLock(async () => {
       const remaining = (await this.load()).filter((item) => item.ownerUid !== userId);
       try {
         await this.save(remaining);
@@ -217,12 +234,16 @@ class ActivityOfflineQueue {
 
   /**
    * Last resort for a sign-out whose clearUser hung or failed: drop the whole
-   * persisted queue (every user's) without waiting for the lock. Rejects if
-   * storage refuses.
+   * persisted queue, every user's, without waiting for the lock or reading
+   * storage. Rejects if storage refuses.
+   * @returns How many other users' items the last known queue held, so the
+   *   caller can report what was lost (a count only; approximate).
    */
-  async emergencyWipe(): Promise<void> {
+  async emergencyWipe(userId: string): Promise<number> {
+    const otherUsersItems = this.memoryQueue.filter((i) => i.ownerUid !== userId).length;
     await AsyncStorage.removeItem(STORAGE_KEY);
     this.memoryQueue = [];
+    return otherUsersItems;
   }
 
   /**
@@ -328,6 +349,7 @@ class ActivityOfflineQueue {
     this.lockTail = Promise.resolve();
     this.clearGeneration.clear();
     this.inFlight.clear();
+    this.clearing.clear();
   }
 }
 

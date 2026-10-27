@@ -569,14 +569,16 @@ describe('ActivityOfflineQueue — when AsyncStorage fails', () => {
     expect(mockLogException).toHaveBeenCalled();
   });
 
-  it('emergencyWipe() removes the storage key without taking the lock', async () => {
+  it('emergencyWipe() removes the storage key without taking the lock and counts other users items', async () => {
     const { offlineQueue } = offlineQueueModule;
-    store = encodeQueue([q('a1', 'A', 1)]);
+    store = encodeQueue([q('a1', 'A', 1), q('b1', 'B', 2), q('b2', 'B', 3)]);
+    await offlineQueue.getPending('A'); // last known queue
 
-    await offlineQueue.emergencyWipe();
+    const otherUsersItems = await offlineQueue.emergencyWipe('A');
 
     expect(mockRemoveItem).toHaveBeenCalledTimes(1);
     expect(store).toBeNull();
+    expect(otherUsersItems).toBe(2);
   });
 });
 
@@ -825,5 +827,38 @@ describe('ActivityOfflineQueue — flush concurrency', () => {
     // The write landed before the reset completed, not after it.
     await expect(enqueuing).resolves.toMatch(/^offline_/);
     expect(stored()).toHaveLength(1);
+  });
+  it('enqueue() refuses for a user whose sign-out clear is in progress, and works again afterwards', async () => {
+    const { offlineQueue } = offlineQueueModule;
+    seed([q('a1', 'A', 1)]);
+    let releaseRead!: () => void;
+    mockGetItem.mockImplementationOnce(
+      () =>
+        new Promise<string | null>((resolve) => {
+          releaseRead = () => resolve(store);
+        }),
+    );
+
+    const clearing = offlineQueue.clearUser('A');
+    await expect(offlineQueue.enqueue(makeItem({ loggedBy: 'A', ownerUid: 'A' }))).rejects.toThrow(
+      /cleared|sign-out/i,
+    );
+    releaseRead();
+    await clearing;
+    expect(stored()).toEqual([]);
+
+    await expect(offlineQueue.enqueue(makeItem({ loggedBy: 'A', ownerUid: 'A' }))).resolves.toMatch(
+      /^offline_/,
+    );
+  });
+
+  it('enqueue() for another user is not affected by a clear in progress', async () => {
+    const { offlineQueue } = offlineQueueModule;
+    seed([q('a1', 'A', 1)]);
+    const clearing = offlineQueue.clearUser('A');
+    await expect(offlineQueue.enqueue(makeItem({ loggedBy: 'B', ownerUid: 'B' }))).resolves.toMatch(
+      /^offline_/,
+    );
+    await clearing;
   });
 });

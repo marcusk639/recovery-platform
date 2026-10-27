@@ -82,6 +82,7 @@ import {
   signOut,
   SIGN_OUT_FLUSH_TIMEOUT_MS,
   SIGN_OUT_CLEAR_TIMEOUT_MS,
+  SIGN_OUT_WIPE_TIMEOUT_MS,
   sendForgotPasswordEmail,
   anonymouslyLogin,
   userCollection,
@@ -666,7 +667,7 @@ describe("users service", () => {
           order.push('clear');
         });
         (offlineQueue.pendingCountFor as jest.Mock).mockReset().mockResolvedValue(0);
-        (offlineQueue.emergencyWipe as jest.Mock).mockReset().mockResolvedValue(undefined);
+        (offlineQueue.emergencyWipe as jest.Mock).mockReset().mockResolvedValue(0);
         (logException as jest.Mock).mockReset();
         const mockAuth = getMockAuth();
         mockAuth.signOut.mockReset();
@@ -763,6 +764,47 @@ describe("users service", () => {
           (offlineQueue.emergencyWipe as jest.Mock).mockRejectedValue(new Error('storage'));
           const done = signOut();
           await jest.advanceTimersByTimeAsync(SIGN_OUT_CLEAR_TIMEOUT_MS);
+          await done;
+          expect(order).toEqual(['flush', 'signOut']);
+        } finally {
+          jest.useRealTimers();
+        }
+      });
+
+      it('wipes the stored queue when clearUser fails (not only when it times out) and signs out', async () => {
+        (offlineQueue.clearUser as jest.Mock).mockRejectedValue(new Error('storage'));
+        (offlineQueue.emergencyWipe as jest.Mock).mockImplementation(async () => {
+          order.push('wipe');
+          return 0;
+        });
+        await signOut();
+        expect(offlineQueue.emergencyWipe).toHaveBeenCalledWith('u1');
+        expect(order).toEqual(['flush', 'wipe', 'signOut']);
+      });
+
+      it('does not wipe when clearUser succeeds', async () => {
+        await signOut();
+        expect(offlineQueue.emergencyWipe).not.toHaveBeenCalled();
+      });
+
+      it("reports how many other users' items the wipe took, as a count only", async () => {
+        (offlineQueue.clearUser as jest.Mock).mockRejectedValue(new Error('storage'));
+        (offlineQueue.emergencyWipe as jest.Mock).mockResolvedValue(4);
+        await signOut();
+        const call = (logException as jest.Mock).mock.calls.find(([, msg]) =>
+          /wiped 4/.test(String(msg)),
+        );
+        expect(call).toBeDefined();
+      });
+
+      it('signs out even when the last-resort wipe never settles', async () => {
+        jest.useFakeTimers();
+        try {
+          (offlineQueue.clearUser as jest.Mock).mockImplementation(() => new Promise(() => {}));
+          (offlineQueue.emergencyWipe as jest.Mock).mockImplementation(() => new Promise(() => {}));
+          const done = signOut();
+          await jest.advanceTimersByTimeAsync(SIGN_OUT_CLEAR_TIMEOUT_MS);
+          await jest.advanceTimersByTimeAsync(SIGN_OUT_WIPE_TIMEOUT_MS);
           await done;
           expect(order).toEqual(['flush', 'signOut']);
         } finally {

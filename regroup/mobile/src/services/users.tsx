@@ -119,6 +119,12 @@ export const SIGN_OUT_FLUSH_TIMEOUT_MS = 5000;
 /** Longest a sign-out waits for the offline queue to be cleared. */
 export const SIGN_OUT_CLEAR_TIMEOUT_MS = 5000;
 
+/** Longest a sign-out waits for the last-resort storage wipe. */
+export const SIGN_OUT_WIPE_TIMEOUT_MS = 3000;
+
+/** Rejection used by withTimeout, so callers can tell a timeout from a failure. */
+class SignOutTimeoutError extends Error {}
+
 /** Settles with `work`, or rejects after `ms` (the timer is always cleared). */
 async function withTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -126,7 +132,7 @@ async function withTimeout<T>(work: Promise<T>, ms: number, message: string): Pr
     return await Promise.race([
       work,
       new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(message)), ms);
+        timer = setTimeout(() => reject(new SignOutTimeoutError(message)), ms);
       }),
     ]);
   } finally {
@@ -172,15 +178,30 @@ async function flushAndClearOfflineQueue(uid: string): Promise<void> {
       'offline queue clear timed out',
     );
   } catch (error) {
-    logException(error, 'sign-out: offline queue clear failed');
-    if (error instanceof Error && error.message === 'offline queue clear timed out') {
-      // Storage is hanging. Drop the whole stored queue (every user's) rather
-      // than leave this user's data behind.
-      try {
-        await offlineQueue.emergencyWipe();
-      } catch (wipeError) {
-        logException(wipeError, 'sign-out: offline queue wipe failed');
+    logException(
+      error,
+      error instanceof SignOutTimeoutError
+        ? 'sign-out: offline queue clear timed out'
+        : 'sign-out: offline queue clear failed',
+    );
+    // The user's items are still on the device (hung or failed clear, e.g.
+    // other users' items prevented a partial rewrite). Drop the whole stored
+    // queue, every user's, rather than leave medication data behind. Capped:
+    // the same hung storage must not hang sign-out.
+    try {
+      const othersWiped = await withTimeout(
+        offlineQueue.emergencyWipe(uid),
+        SIGN_OUT_WIPE_TIMEOUT_MS,
+        'offline queue wipe timed out',
+      );
+      if (othersWiped > 0) {
+        logException(
+          new Error('Sign-out wiped other users offline activities'),
+          `sign-out: wiped ${othersWiped} other users' offline activities`,
+        );
       }
+    } catch (wipeError) {
+      logException(wipeError, 'sign-out: offline queue wipe failed');
     }
   }
 }
