@@ -32,6 +32,15 @@ The `test-tamper` workflow re-runs verify-diff on every PR, using the script fro
 - **pre-push:** runs `npm test` in each changed package among recovery-api, detox-recovery, homegroups/functions and regroup/functions. Changes come from the pushed refs, not the checked-out branch. Deletions test nothing, and a ref other than the checked-out commit is left to CI, since tests run on the working tree. The result is cached per HEAD SHA.
 - **`.claude/rules/*.md`** are path-scoped with `paths:` frontmatter, the only key Claude Code reads. Any other key (e.g. `globs:`) is ignored and the rule loads every session; session-check warns on it. Rules are guidance, not enforcement: anything that must hold belongs in a hook or CI.
 
+## Code navigation (Serena)
+
+Serena is a project MCP server in `.mcp.json` (`serena-agent==1.7.0` via `uvx`, `--project-from-cwd`), configured by the committed `.serena/project.yml`. Its cache, memories and `project.local.yml` stay untracked. The PR review job ignores both and uses its own locked-down copy, `.claude/pr-review/serena/project.yml`.
+
+- **It indexes the directory the session started in.** A session started in the main checkout that edits a worktree through `git -C` gets symbol answers about the main checkout. That is often a stale branch. Start the session in the worktree, or Read and Grep the worktree's paths. Every worktree gets the committed `.serena/project.yml`, so its index skips the same build output.
+- **It ignores every `lib/` directory**, by owner decision. Symbol lookups and `search_for_pattern` see nothing in `detox-recovery/lib`, `recovery-api/src/lib` or `.claude/pr-review/checks/lib`, so Grep there. An empty result means "not indexed", not "unused".
+- **Use `find_referencing_symbols` for callers across packages.** It catches aliased imports that a name grep misses. Products share no code: a helper duplicated between `homegroups/functions/src/utils/` and `regroup/functions/src/util/` needs both copies checked.
+- **String contracts aren't symbols.** For Firestore collection and field names, callable and HTTP export names, env var names, Stripe event types and deep-link routes, use `search_for_pattern` or Grep on the literal.
+
 ## Gotchas
 
 - **Work in a worktree off `origin/main`.** The main checkout is often on a stale branch or detached HEAD. Confirm committed state with `git show origin/main:<path>`, not the working tree. Don't merge the local `feat/regroup-tier-billing` branch.
@@ -39,6 +48,6 @@ The `test-tamper` workflow re-runs verify-diff on every PR, using the script fro
 - **PRs land as squash merges**, so `merge-base --is-ancestor` and three-dot diffs report merged branches as unmerged. Check with a two-dot diff of the branch's own paths against `origin/<branch>`:
   `B=origin/<branch>; git diff origin/main..$B -- $(git diff --name-only $(git merge-base $B origin/main)..$B) | wc -l`
   `0` means merged. Non-zero is inconclusive, because later PRs may have edited the same paths. GitHub's PR state is the authority.
-- **Skip build output and vendor bundles** (`**/public/`, `*.min.js`, `lib/`, `dist/`, `build/`, `.next/`) when searching or counting. `regroup/web/public/` alone is about 1.15M lines.
+- **Skip build output and vendor bundles** (`**/public/`, `*.min.js`, `dist/`, `build/`, `.next/`, and the compiled `recovery-api/lib/` and `*/functions/lib/`) when searching or counting. `regroup/web/public/` alone is about 1.15M lines. Other `lib/` directories are hand-written source (`detox-recovery/lib`, `recovery-api/src/lib`, `.claude/pr-review/checks/lib`): search them.
 - **`homegroups/mobile` and `regroup/mobile` postinstall runs `pod install`.** For JS-only work (Jest, ESLint) use `npm ci --ignore-scripts`.
 - **zsh:** `$var:r`, `:h` and `:t` are path modifiers. Write `"${c}:path"` in `git show` loops.
