@@ -3,8 +3,10 @@
  * @lint-ignore-every XPLATJSCOPYRIGHT1
  */
 
-// Imported first so that, in an e2e emulator build, firebase-setup points every
-// Firebase SDK at the local emulators before any other module can use one.
+// Imported first so that firebase-setup (the e2e project check and, in an e2e
+// emulator build, the emulator wiring) runs before any other module. The bare
+// import matters: Metro's inlineRequires defers a named import to its first use.
+import './firebase-setup';
 import { emulatorConnection } from './firebase-setup';
 
 import { AppRegistry } from 'react-native';
