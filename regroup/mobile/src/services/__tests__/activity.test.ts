@@ -15,10 +15,11 @@ import { WeekSummary } from '../../entities/WeekSummary';
 
 // Mock Firebase before importing the service.
 //
-// runTransaction is added to support the P1 increment-based week-summary
-// updater (incrementWeekSummaryForActivity). The mock runs the callback
-// immediately with a `tx` that delegates to the same in-memory summary store
-// used by the rest of the file.
+// week-summaries are owned by the onActivityWritten Cloud Function, so the
+// service must never touch them. runTransaction and the week-summaries
+// collection stay mocked so the tests below can prove that: they record
+// calls, and denySummaryWrites() makes them reject like the production rules
+// do for a resident.
 jest.mock('../../../firebase-setup', () => {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { firestore: _unused } = { firestore: {} };
@@ -63,18 +64,29 @@ jest.mock('../../util/logging', () => ({
 import { firestore } from '../../../firebase-setup';
 
 // Import after mocks are set up
+import * as activityService from '../activity';
 import {
   logActivity,
   getActivities,
   getHouseActivities,
   getWeekSummary,
-  updateWeekSummary,
   updateActivity,
   deleteActivity,
   disputeActivity,
   resolveDispute,
-  incrementWeekSummaryForActivity,
+  verifyActivity,
 } from '../activity';
+
+const permissionDenied = () =>
+  Object.assign(new Error('Missing or insufficient permissions.'), {
+    code: 'firestore/permission-denied',
+  });
+
+/** Did the service open week-summaries or a transaction at all? */
+const touchedWeekSummaries = () =>
+  (firestore.collection as jest.Mock).mock.calls.some(
+    ([name]) => name === 'week-summaries',
+  ) || ((firestore as any).runTransaction as jest.Mock).mock.calls.length > 0;
 
 describe('Activity Service', () => {
   let mockActivityCollection: any;
@@ -388,7 +400,7 @@ describe('Activity Service', () => {
       );
     });
 
-    it('should call updateWeekSummary after creating activity', async () => {
+    it('does not read or write week-summaries (the server trigger owns them)', async () => {
       await logActivity(
         'guest123',
         'house456',
@@ -398,9 +410,8 @@ describe('Activity Service', () => {
         new Date('2024-01-15T10:00:00Z'),
       );
 
-      // Verify summary doc was created/updated
-      const summaryId = 'guest123_2024-01-15';
-      expect(mockWeekSummaryCollection.doc).toHaveBeenCalledWith(summaryId);
+      expect(mockWeekSummaryCollection.doc).not.toHaveBeenCalled();
+      expect(touchedWeekSummaries()).toBe(false);
     });
   });
 
@@ -563,126 +574,120 @@ describe('Activity Service', () => {
   });
 
   // ==========================================================================
-  // updateWeekSummary Tests
+  // week-summaries are server-owned (onActivityWritten)
+  //
+  // The rules let only admins write week-summaries, so when the client kept
+  // them a resident's logActivity saved the activity and then threw on the
+  // summary write: an error for a saved activity, and a duplicate on retry.
+  // The aggregation itself is tested in regroup/functions
+  // (__tests__/activities/).
   // ==========================================================================
 
-  describe('updateWeekSummary', () => {
-    beforeEach(async () => {
-      // Create activities for a week
+  describe('week-summaries are server-owned', () => {
+    const denySummaryWrites = () => {
+      mockWeekSummaryCollection.doc.mockImplementation(() => ({
+        get: jest.fn(async () => {
+          throw permissionDenied();
+        }),
+        set: jest.fn(async () => {
+          throw permissionDenied();
+        }),
+      }));
+      (firestore as any).runTransaction = jest.fn(async () => {
+        throw permissionDenied();
+      });
+    };
+
+    it('logActivity resolves with the saved activity when summary writes are denied (resident)', async () => {
+      denySummaryWrites();
+
+      const activity = await logActivity(
+        'guest123',
+        'house456',
+        ActivityType.MEDICATION,
+        ActivityDataFactory.medication('Antabuse'),
+        'guest-uid',
+        new Date('2024-01-15T10:00:00Z'),
+      );
+
+      expect(activity.id).toBe('activity_1');
+      expect(mockActivities).toHaveLength(1);
+    });
+
+    it('logActivity opens no transaction', async () => {
       await logActivity(
         'guest123',
         'house456',
         ActivityType.CHORE,
         ActivityDataFactory.chore('daily', 'Kitchen'),
         'user789',
-        new Date('2024-01-15T10:00:00Z'),
       );
 
-      await logActivity(
-        'guest123',
-        'house456',
-        ActivityType.MEETING,
-        ActivityDataFactory.meeting('AA', 'AA', 60),
-        'user789',
-        new Date('2024-01-15T19:00:00Z'),
-      );
+      expect((firestore as any).runTransaction).not.toHaveBeenCalled();
+    });
 
+    it('logActivity writes exactly one document: the activity', async () => {
       await logActivity(
         'guest123',
         'house456',
         ActivityType.WORK,
         ActivityDataFactory.work('Server', 8),
         'user789',
-        new Date('2024-01-16T09:00:00Z'),
-      );
-    });
-
-    it('should create summary from activities', async () => {
-      await updateWeekSummary('guest123', 'house456', '2024-01-15');
-
-      const summary = mockSummaries.get('guest123_2024-01-15');
-
-      expect(summary).toBeDefined();
-      expect(summary?.guestId).toBe('guest123');
-      expect(summary?.houseId).toBe('house456');
-      expect(summary?.startDate).toBe('2024-01-15');
-    });
-
-    it('should aggregate stats correctly', async () => {
-      await updateWeekSummary('guest123', 'house456', '2024-01-15');
-
-      const summary = mockSummaries.get('guest123_2024-01-15');
-
-      expect(summary?.stats.choresCompleted).toBe(1);
-      expect(summary?.stats.meetingsAttended).toBe(1);
-      expect(summary?.stats.hoursWorked).toBe(8);
-    });
-
-    it('should create daily stats breakdown', async () => {
-      await updateWeekSummary('guest123', 'house456', '2024-01-15');
-
-      const summary = mockSummaries.get('guest123_2024-01-15');
-
-      expect(summary?.dailyStats['2024-01-15']).toBeDefined();
-      expect(summary?.dailyStats['2024-01-15'].choresCompleted).toBe(1);
-      expect(summary?.dailyStats['2024-01-15'].meetingsAttended).toBe(1);
-
-      expect(summary?.dailyStats['2024-01-16']).toBeDefined();
-      expect(summary?.dailyStats['2024-01-16'].hoursWorked).toBe(8);
-    });
-
-    it('should set activity count', async () => {
-      await updateWeekSummary('guest123', 'house456', '2024-01-15');
-
-      const summary = mockSummaries.get('guest123_2024-01-15');
-
-      expect(summary?.activityCount).toBe(3);
-    });
-
-    it('should handle multiple jobs on same day', async () => {
-      await logActivity(
-        'guest123',
-        'house456',
-        ActivityType.WORK,
-        ActivityDataFactory.work('Delivery', 4),
-        'user789',
-        new Date('2024-01-16T14:00:00Z'),
       );
 
-      await updateWeekSummary('guest123', 'house456', '2024-01-15');
-
-      const summary = mockSummaries.get('guest123_2024-01-15');
-
-      expect(summary?.stats.hoursWorked).toBe(12); // 8 + 4
-      expect(summary?.dailyStats['2024-01-16'].hoursWorked).toBe(12);
+      expect(mockActivityCollection.add).toHaveBeenCalledTimes(1);
+      expect(firestore.collection).toHaveBeenCalledTimes(1);
+      expect(firestore.collection).toHaveBeenCalledWith('activities');
     });
 
-    it('should handle multiple meetings on same day', async () => {
+    it('logActivity for a past week does not touch week-summaries', async () => {
       await logActivity(
         'guest123',
         'house456',
         ActivityType.MEETING,
-        ActivityDataFactory.meeting('NA', 'NA', 90),
+        ActivityDataFactory.meeting('AA', 'AA', 60),
         'user789',
-        new Date('2024-01-15T20:30:00Z'),
+        new Date('2023-12-04T19:00:00Z'),
       );
 
-      await updateWeekSummary('guest123', 'house456', '2024-01-15');
-
-      const summary = mockSummaries.get('guest123_2024-01-15');
-
-      expect(summary?.stats.meetingsAttended).toBe(2);
-      expect(summary?.dailyStats['2024-01-15'].meetingsAttended).toBe(2);
+      expect(touchedWeekSummaries()).toBe(false);
     });
 
-    it('should handle week with no activities', async () => {
-      await updateWeekSummary('guest999', 'house456', '2024-01-15');
+    it('deleteActivity of a DISPUTED activity does not touch week-summaries', async () => {
+      const activity = await logActivity(
+        'guest123',
+        'house456',
+        ActivityType.CHORE,
+        ActivityDataFactory.chore('daily', 'Kitchen'),
+        'user789',
+      );
+      await disputeActivity(activity.id, 'Not done', 'admin123');
 
-      const summary = mockSummaries.get('guest999_2024-01-15');
+      await deleteActivity(activity.id);
 
-      expect(summary?.stats.choresCompleted).toBe(0);
-      expect(summary?.stats.meetingsAttended).toBe(0);
-      expect(summary?.activityCount).toBe(0);
+      expect(touchedWeekSummaries()).toBe(false);
+    });
+
+    it('disputeActivity and verifyActivity do not touch week-summaries', async () => {
+      const activity = await logActivity(
+        'guest123',
+        'house456',
+        ActivityType.CHORE,
+        ActivityDataFactory.chore('daily', 'Kitchen'),
+        'user789',
+      );
+
+      await verifyActivity(activity.id, 'admin123');
+      await disputeActivity(activity.id, 'Not done', 'admin123');
+
+      expect(touchedWeekSummaries()).toBe(false);
+    });
+
+    it('the service no longer exports a client-side summary writer', () => {
+      const exported = activityService as Record<string, unknown>;
+      expect(exported.incrementWeekSummaryForActivity).toBeUndefined();
+      expect(exported.updateWeekSummary).toBeUndefined();
+      expect(typeof exported.getWeekSummary).toBe('function');
     });
   });
 
@@ -723,11 +728,11 @@ describe('Activity Service', () => {
       ).rejects.toThrow('Activity not found');
     });
 
-    it('should recalculate week summary after update', async () => {
-      await updateActivity(activityId, { verified: true });
+    it('does not recalculate the week summary client-side', async () => {
+      (firestore.collection as jest.Mock).mockClear();
+      await updateActivity(activityId, { notes: 'Edited by the resident' });
 
-      // Verify updateWeekSummary was called
-      expect(mockWeekSummaryCollection.doc).toHaveBeenCalled();
+      expect(touchedWeekSummaries()).toBe(false);
     });
   });
 
@@ -764,11 +769,10 @@ describe('Activity Service', () => {
       );
     });
 
-    it('should recalculate week summary after deletion', async () => {
+    it('leaves the week summary to the server trigger', async () => {
       await deleteActivity(activityId);
 
-      // Verify updateWeekSummary was called
-      expect(mockWeekSummaryCollection.doc).toHaveBeenCalled();
+      expect(touchedWeekSummaries()).toBe(false);
     });
   });
 
@@ -850,10 +854,10 @@ describe('Activity Service', () => {
       ).rejects.toThrow('Activity not found');
     });
 
-    it('should recalculate summary after resolution', async () => {
+    it('leaves the week summary to the server trigger', async () => {
       await resolveDispute(activityId, 'admin456', 'keep');
 
-      expect(mockWeekSummaryCollection.doc).toHaveBeenCalled();
+      expect(touchedWeekSummaries()).toBe(false);
     });
   });
 
@@ -863,17 +867,24 @@ describe('Activity Service', () => {
 
   describe('getWeekSummary', () => {
     it('should return summary if exists', async () => {
-      // Create a summary
-      await logActivity(
-        'guest123',
-        'house456',
-        ActivityType.CHORE,
-        ActivityDataFactory.chore('daily', 'Kitchen'),
-        'user789',
-        new Date('2024-01-15T10:00:00Z'),
-      );
-
-      await updateWeekSummary('guest123', 'house456', '2024-01-15');
+      // As written by the onActivityWritten trigger.
+      mockSummaries.set('guest123_2024-01-15', {
+        id: 'guest123_2024-01-15',
+        guestId: 'guest123',
+        houseId: 'house456',
+        startDate: '2024-01-15',
+        endDate: '2024-01-21',
+        stats: {
+          choresCompleted: 1,
+          meetingsAttended: 0,
+          hoursWorked: 0,
+          medicationTaken: 0,
+          primarySupporterMet: 0,
+        },
+        dailyStats: {},
+        lastUpdated: null,
+        activityCount: 1,
+      });
 
       const summary = await getWeekSummary('guest123', '2024-01-15');
 
@@ -889,187 +900,67 @@ describe('Activity Service', () => {
   });
 
   // ==========================================================================
-  // incrementWeekSummaryForActivity Tests  — .full-review [P1]
+  // An admin-only summary write can no longer fail an activity write
   //
-  // The increment-based hot path replaces the O(N²) reads-per-week strategy
-  // that updateWeekSummary still uses for the rare update/resolveDispute
-  // callers. These tests verify:
-  //   - First write of the week materializes the full WeekSummary schema
-  //     (every stat key present as 0 + the activity's delta applied).
-  //   - Subsequent writes use FieldValue.increment semantics and accumulate
-  //     correctly across activity types.
-  //   - WORK activities scale by hoursWorked.
-  //   - Negative deltas (delete path) subtract.
+  // Every mutation used to follow its activity write with a summary write
+  // (+1/-1 transaction or a full recompute). For a resident that write was
+  // always denied, so the call threw after the activity had changed.
   // ==========================================================================
 
-  describe('incrementWeekSummaryForActivity', () => {
-    const GUEST = 'guest-p1';
-    const HOUSE = 'house-p1';
-    const TS = new Date('2024-01-15T10:00:00Z'); // Monday — week start
-    const SUMMARY_ID = `${GUEST}_2024-01-15`;
+  describe('activity writes do not depend on week-summaries permissions', () => {
+    let activityId: string;
 
-    it('first write of the week materializes the full schema', async () => {
-      await incrementWeekSummaryForActivity(
-        GUEST,
-        HOUSE,
-        {
-          type: ActivityType.CHORE,
-          timestamp: TS,
-          data: ActivityDataFactory.chore('daily', 'Kitchen'),
-        },
-        1,
+    beforeEach(async () => {
+      const activity = await logActivity(
+        'guest123',
+        'house456',
+        ActivityType.CHORE,
+        ActivityDataFactory.chore('daily', 'Kitchen'),
+        'guest-uid',
+        new Date('2024-01-15T10:00:00Z'),
       );
-
-      const summary = mockSummaries.get(SUMMARY_ID) as any;
-      expect(summary).toBeDefined();
-      expect(summary.guestId).toBe(GUEST);
-      expect(summary.houseId).toBe(HOUSE);
-      expect(summary.startDate).toBe('2024-01-15');
-
-      // Every top-level stat is a number (no undefined for unused types).
-      expect(summary.stats.choresCompleted).toBe(1);
-      expect(summary.stats.meetingsAttended).toBe(0);
-      expect(summary.stats.hoursWorked).toBe(0);
-      expect(summary.stats.medicationTaken).toBe(0);
-      expect(summary.stats.primarySupporterMet).toBe(0);
-
-      // The dailyStats entry for the activity date is populated; sibling
-      // days still exist with zeros (initializeDailyStats schedules them).
-      expect(summary.dailyStats['2024-01-15'].choresCompleted).toBe(1);
-      expect(summary.dailyStats['2024-01-15'].meetingsAttended).toBe(0);
-      expect(summary.activityCount).toBe(1);
+      activityId = activity.id;
+      mockWeekSummaryCollection.doc.mockImplementation(() => {
+        throw permissionDenied();
+      });
+      (firestore as any).runTransaction = jest.fn(async () => {
+        throw permissionDenied();
+      });
     });
 
-    it('subsequent writes accumulate across types via field-path increments', async () => {
-      // First two writes — chore + meeting on same day.
-      await incrementWeekSummaryForActivity(
-        GUEST,
-        HOUSE,
-        {
-          type: ActivityType.CHORE,
-          timestamp: TS,
-          data: ActivityDataFactory.chore('daily', 'Kitchen'),
-        },
-        1,
-      );
-      await incrementWeekSummaryForActivity(
-        GUEST,
-        HOUSE,
-        {
-          type: ActivityType.MEETING,
-          timestamp: TS,
-          data: ActivityDataFactory.meeting('AA', 'AA', 60),
-        },
-        1,
-      );
-
-      const summary = mockSummaries.get(SUMMARY_ID) as any;
-      expect(summary.stats.choresCompleted).toBe(1);
-      expect(summary.stats.meetingsAttended).toBe(1);
-      expect(summary.dailyStats['2024-01-15'].choresCompleted).toBe(1);
-      expect(summary.dailyStats['2024-01-15'].meetingsAttended).toBe(1);
-      expect(summary.activityCount).toBe(2);
+    it('deleteActivity resolves when week-summaries writes are denied', async () => {
+      await expect(deleteActivity(activityId)).resolves.toBeUndefined();
+      expect(mockActivities[0].status).toBe(ActivityStatus.DELETED);
     });
 
-    it('WORK delta scales by hoursWorked, not by 1', async () => {
-      await incrementWeekSummaryForActivity(
-        GUEST,
-        HOUSE,
-        {
-          type: ActivityType.WORK,
-          timestamp: TS,
-          data: ActivityDataFactory.work('Server', 8),
-        },
-        1,
-      );
-      await incrementWeekSummaryForActivity(
-        GUEST,
-        HOUSE,
-        {
-          type: ActivityType.WORK,
-          timestamp: new Date('2024-01-16T10:00:00Z'),
-          data: ActivityDataFactory.work('Server', 4),
-        },
-        1,
-      );
-
-      const summary = mockSummaries.get(SUMMARY_ID) as any;
-      expect(summary.stats.hoursWorked).toBe(12);
-      expect(summary.dailyStats['2024-01-15'].hoursWorked).toBe(8);
-      expect(summary.dailyStats['2024-01-16'].hoursWorked).toBe(4);
-      // activityCount is per-activity, not per-hour.
-      expect(summary.activityCount).toBe(2);
+    it('updateActivity resolves when week-summaries writes are denied', async () => {
+      await expect(
+        updateActivity(activityId, { notes: 'Edited' }),
+      ).resolves.toBeUndefined();
+      expect(mockActivities[0].notes).toBe('Edited');
     });
 
-    it('negative delta (delete path) subtracts the counter', async () => {
-      // Seed two chores, then delete one.
-      await incrementWeekSummaryForActivity(
-        GUEST,
-        HOUSE,
-        {
-          type: ActivityType.CHORE,
-          timestamp: TS,
-          data: ActivityDataFactory.chore('daily', 'Kitchen'),
-        },
-        1,
-      );
-      await incrementWeekSummaryForActivity(
-        GUEST,
-        HOUSE,
-        {
-          type: ActivityType.CHORE,
-          timestamp: TS,
-          data: ActivityDataFactory.chore('daily', 'Bathroom'),
-        },
-        1,
-      );
-      await incrementWeekSummaryForActivity(
-        GUEST,
-        HOUSE,
-        {
-          type: ActivityType.CHORE,
-          timestamp: TS,
-          data: ActivityDataFactory.chore('daily', 'Bathroom'),
-        },
-        -1,
-      );
-
-      const summary = mockSummaries.get(SUMMARY_ID) as any;
-      expect(summary.stats.choresCompleted).toBe(1);
-      expect(summary.dailyStats['2024-01-15'].choresCompleted).toBe(1);
-      expect(summary.activityCount).toBe(1);
+    it('resolveDispute resolves when week-summaries writes are denied', async () => {
+      await disputeActivity(activityId, 'Not done', 'admin123');
+      await expect(
+        resolveDispute(activityId, 'admin456', 'delete'),
+      ).resolves.toBeUndefined();
+      expect(mockActivities[0].status).toBe(ActivityStatus.DELETED);
     });
 
-    it('only reads the summary doc ONCE per call (the prior read-all-week-activities cost is gone)', async () => {
-      // Spy on the activities collection to make sure no .where().get() chain
-      // is triggered from the increment path. logActivity DOES call .add()
-      // separately for the activity write — that's unrelated; the cost we're
-      // verifying is the absence of the read-all-week-activities query.
+    it('deleting an ACTIVE activity runs no transaction (the -1 delta is gone)', async () => {
+      await deleteActivity(activityId);
+      expect((firestore as any).runTransaction).not.toHaveBeenCalled();
+    });
+
+    it('makes no activities-collection queries (no client-side week recompute)', async () => {
       const before = mockActivityCollection.get.mock.calls.length;
 
-      await incrementWeekSummaryForActivity(
-        GUEST,
-        HOUSE,
-        {
-          type: ActivityType.CHORE,
-          timestamp: TS,
-          data: ActivityDataFactory.chore('daily', 'Kitchen'),
-        },
-        1,
-      );
-      await incrementWeekSummaryForActivity(
-        GUEST,
-        HOUSE,
-        {
-          type: ActivityType.MEETING,
-          timestamp: TS,
-          data: ActivityDataFactory.meeting('AA', 'AA', 60),
-        },
-        1,
-      );
+      await updateActivity(activityId, { notes: 'Edited' });
+      await deleteActivity(activityId);
 
-      const after = mockActivityCollection.get.mock.calls.length;
-      expect(after - before).toBe(0); // no activities-collection queries
+      // Only the per-document .doc(id).get() reads; no .where().get() query.
+      expect(mockActivityCollection.get.mock.calls.length - before).toBe(0);
     });
   });
 });

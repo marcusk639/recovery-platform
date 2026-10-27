@@ -5,55 +5,9 @@ import {
   ActivityType,
   ActivityData,
   ActivityStatus,
-  ActivityEntity,
-  isChoreActivity,
-  isMeetingActivity,
-  isWorkActivity,
-  isMedicationActivity,
-  isPrimarySupporterActivity,
 } from '../entities/ActivityModel';
-import {
-  WeekSummary,
-  WeekSummaryEntity,
-  DailyStats,
-  createEmptyWeekStats,
-  initializeDailyStats,
-} from '../entities/WeekSummary';
+import { WeekSummary } from '../entities/WeekSummary';
 import { logException } from '../util/logging';
-
-/**
- * Helper: Get week start date (Monday) from any date
- */
-function getWeekStart(date: Date | { toDate(): Date }): string {
-  const d =
-    typeof (date as any)?.toDate === 'function'
-      ? (date as any).toDate()
-      : new Date(date as Date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust for Sunday
-  d.setDate(diff);
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString().split('T')[0];
-}
-
-/**
- * Helper: Get week end date (Sunday) from start date
- */
-function getWeekEnd(startDate: string): string {
-  const d = new Date(startDate);
-  d.setDate(d.getDate() + 6);
-  return d.toISOString().split('T')[0];
-}
-
-/**
- * Helper: Get date string from Date object
- */
-function getDateString(date: Date | string): string {
-  if (typeof date === 'string') {
-    return date.split('T')[0];
-  }
-  return date.toISOString().split('T')[0];
-}
 
 /**
  * Log a new activity
@@ -89,19 +43,11 @@ export async function logActivity(
       status: ActivityStatus.ACTIVE,
     };
 
-    // Add to Firestore
+    // Add to Firestore. This is the whole write: week-summaries are kept by
+    // the onActivityWritten Cloud Function (regroup/functions). The client
+    // must not write them — the rules allow only admins, so a resident's
+    // log used to save the activity and then throw here.
     const docRef = await firestore.collection('activities').add(activity);
-
-    // Apply a +1 delta to the week summary. This replaces the prior
-    // read-all-week-activities → recompute → write strategy on the hot
-    // logActivity path. See .full-review [P1] and the docstring on
-    // incrementWeekSummaryForActivity below.
-    await incrementWeekSummaryForActivity(
-      guestId,
-      houseId,
-      { type, timestamp: activityTimestamp, data },
-      1,
-    );
 
     // Return activity with ID
     return {
@@ -315,281 +261,6 @@ export async function getWeekSummary(
 }
 
 /**
- * Mutate `stats` and the `dailyStats[date]` entry in-place by `delta` for the
- * counters that `activity` contributes to. `delta` is +1 for log / -1 for
- * delete. WORK activities scale by `data.hoursWorked` (so deleting an 8-hour
- * shift subtracts 8 hours, not 1).
- *
- * Used by the increment-based hot path on the first write of the week, where
- * we need to construct the full WeekSummary schema from scratch. The same
- * accounting is encoded in the FieldValue.increment payload for subsequent
- * writes (see `addIncrementsForType`).
- */
-function applyActivityDeltaInPlace(
-  stats: ReturnType<typeof createEmptyWeekStats>,
-  daily: DailyStats,
-  activity: Pick<Activity, 'type' | 'data'>,
-  delta: number,
-): void {
-  switch (activity.type) {
-    case ActivityType.CHORE:
-      stats.choresCompleted += delta;
-      daily.choresCompleted += delta;
-      break;
-    case ActivityType.MEETING:
-      stats.meetingsAttended += delta;
-      daily.meetingsAttended += delta;
-      break;
-    case ActivityType.WORK: {
-      const hours = isWorkActivity(activity as Activity)
-        ? activity.data.hoursWorked || 0
-        : 0;
-      stats.hoursWorked += hours * delta;
-      daily.hoursWorked += hours * delta;
-      break;
-    }
-    case ActivityType.MEDICATION:
-      stats.medicationTaken += delta;
-      daily.medicationTaken += delta;
-      break;
-    case ActivityType.PRIMARY_SUPPORTER:
-      stats.primarySupporterMet += delta;
-      daily.primarySupporterMet += delta;
-      break;
-  }
-}
-
-/**
- * Build the `set({merge: true})` payload that applies a delta to an existing
- * WeekSummary document via FieldValue.increment. No read needed — Firestore
- * applies the deltas server-side atomically.
- */
-function addIncrementsForType(
-  updates: Record<string, any>,
-  activity: Pick<Activity, 'type' | 'data'>,
-  activityDate: string,
-  delta: number,
-): void {
-  let topLevelKey: string | null = null;
-  let incrementBy = delta;
-
-  switch (activity.type) {
-    case ActivityType.CHORE:
-      topLevelKey = 'choresCompleted';
-      break;
-    case ActivityType.MEETING:
-      topLevelKey = 'meetingsAttended';
-      break;
-    case ActivityType.WORK: {
-      topLevelKey = 'hoursWorked';
-      const hours = isWorkActivity(activity as Activity)
-        ? activity.data.hoursWorked || 0
-        : 0;
-      incrementBy = hours * delta;
-      break;
-    }
-    case ActivityType.MEDICATION:
-      topLevelKey = 'medicationTaken';
-      break;
-    case ActivityType.PRIMARY_SUPPORTER:
-      topLevelKey = 'primarySupporterMet';
-      break;
-  }
-
-  if (topLevelKey && incrementBy !== 0) {
-    updates[`stats.${topLevelKey}`] =
-      FirebaseFirestore.FieldValue.increment(incrementBy);
-    updates[`dailyStats.${activityDate}.${topLevelKey}`] =
-      FirebaseFirestore.FieldValue.increment(incrementBy);
-  }
-}
-
-/**
- * Apply a single-activity delta to the week summary doc.
- *
- * Replaces the prior read-all-week-activities → recompute → write strategy
- * on the hot logActivity / deleteActivity paths. Cost transitions:
- *   - First write of the week: 1 read (existence check) + 1 write.
- *   - Subsequent writes:        0 reads + 1 write (FieldValue.increment).
- * Old strategy was 1 query returning up to N docs + 1 write per call — i.e.
- * O(N²) reads per week per guest. New strategy is O(1) reads per week.
- *
- * The full-schema initialization on the first write keeps consumers reading
- * fields like `summary.stats.choresCompleted` consistent (they expect
- * every stat key to be present as a number).
- *
- * See .full-review/02-security-performance.md [P1].
- */
-export async function incrementWeekSummaryForActivity(
-  guestId: string,
-  houseId: string,
-  activity: Pick<Activity, 'type' | 'timestamp' | 'data'>,
-  delta: 1 | -1,
-): Promise<void> {
-  try {
-    const weekStart = getWeekStart(
-      typeof activity.timestamp === 'string'
-        ? new Date(activity.timestamp)
-        : (activity.timestamp as Date),
-    );
-    const weekEnd = getWeekEnd(weekStart);
-    const activityDate = getDateString(activity.timestamp);
-    const docId = `${guestId}_${weekStart}`;
-    const summaryRef = firestore.collection('week-summaries').doc(docId);
-
-    await firestore.runTransaction(async tx => {
-      const snap = await tx.get(summaryRef);
-
-      if (!snap.exists) {
-        // First write of the week. Materialize the full schema (every stat
-        // key present as a number) and apply the delta into the new object,
-        // so consumers reading `summary.stats.x` never see `undefined`.
-        const stats = createEmptyWeekStats();
-        const dailyStats = initializeDailyStats(weekStart, weekEnd);
-        const dailyForDate = dailyStats[activityDate] ?? {
-          date: activityDate,
-          choresCompleted: 0,
-          meetingsAttended: 0,
-          hoursWorked: 0,
-          medicationTaken: 0,
-          primarySupporterMet: 0,
-        };
-        applyActivityDeltaInPlace(stats, dailyForDate, activity, delta);
-        dailyStats[activityDate] = dailyForDate;
-
-        tx.set(summaryRef, {
-          guestId,
-          houseId,
-          startDate: weekStart,
-          endDate: weekEnd,
-          stats,
-          dailyStats,
-          // eslint-disable-next-line no-restricted-syntax -- WeekSummary Firestore schema field
-          lastUpdated: FirebaseFirestore.FieldValue.serverTimestamp() as any,
-          activityCount: Math.max(0, delta),
-        });
-        return;
-      }
-
-      // Doc exists — server-side atomic increments. No data round-trip.
-      const updates: Record<string, any> = {
-        // eslint-disable-next-line no-restricted-syntax -- WeekSummary Firestore schema field
-        lastUpdated: FirebaseFirestore.FieldValue.serverTimestamp(),
-        activityCount: FirebaseFirestore.FieldValue.increment(delta),
-        [`dailyStats.${activityDate}.date`]: activityDate,
-      };
-      addIncrementsForType(updates, activity, activityDate, delta);
-      tx.set(summaryRef, updates, { merge: true });
-    });
-  } catch (error) {
-    logException(error);
-    throw new Error('Failed to update week summary');
-  }
-}
-
-/**
- * Update week summary by recalculating from activities
- * Called automatically when activities are logged
- *
- * Retained for use by updateActivity and resolveDispute where the before↔
- * after type/hours diff is more complex than a single delta. Also suitable
- * for a periodic Cloud Function rebuild as a safety net against drift.
- *
- * @param guestId - ID of the guest
- * @param houseId - ID of the house
- * @param weekStart - Week start date (YYYY-MM-DD)
- */
-export async function updateWeekSummary(
-  guestId: string,
-  houseId: string,
-  weekStart: string,
-): Promise<void> {
-  try {
-    const weekEnd = getWeekEnd(weekStart);
-    const docId = `${guestId}_${weekStart}`;
-
-    // Get all activities for this week
-    const activities = await getActivities(
-      guestId,
-      new Date(weekStart),
-      new Date(weekEnd + 'T23:59:59'),
-    );
-
-    // Calculate week stats
-    const stats = createEmptyWeekStats();
-    const dailyStats = initializeDailyStats(weekStart, weekEnd);
-
-    for (const activity of activities) {
-      const activityDate = getDateString(activity.timestamp);
-
-      // Ensure daily stats exist for this date
-      if (!dailyStats[activityDate]) {
-        dailyStats[activityDate] = {
-          date: activityDate,
-          choresCompleted: 0,
-          meetingsAttended: 0,
-          hoursWorked: 0,
-          medicationTaken: 0,
-          primarySupporterMet: 0,
-        };
-      }
-
-      // Aggregate based on activity type
-      switch (activity.type) {
-        case ActivityType.CHORE:
-          stats.choresCompleted++;
-          dailyStats[activityDate].choresCompleted++;
-          break;
-
-        case ActivityType.MEETING:
-          stats.meetingsAttended++;
-          dailyStats[activityDate].meetingsAttended++;
-          break;
-
-        case ActivityType.WORK:
-          if (isWorkActivity(activity)) {
-            const hours = activity.data.hoursWorked || 0;
-            stats.hoursWorked += hours;
-            dailyStats[activityDate].hoursWorked += hours;
-          }
-          break;
-
-        case ActivityType.MEDICATION:
-          stats.medicationTaken++;
-          dailyStats[activityDate].medicationTaken++;
-          break;
-
-        case ActivityType.PRIMARY_SUPPORTER:
-          stats.primarySupporterMet++;
-          dailyStats[activityDate].primarySupporterMet++;
-          break;
-      }
-    }
-
-    // Update or create week summary
-    const summary: Omit<WeekSummary, 'id'> = {
-      guestId,
-      houseId,
-      startDate: weekStart,
-      endDate: weekEnd,
-      stats,
-      dailyStats,
-      // eslint-disable-next-line no-restricted-syntax -- WeekSummary Firestore schema field
-      lastUpdated: FirebaseFirestore.FieldValue.serverTimestamp() as any,
-      activityCount: activities.length,
-    };
-
-    await firestore
-      .collection('week-summaries')
-      .doc(docId)
-      .set(summary, { merge: true });
-  } catch (error) {
-    logException(error);
-    throw new Error('Failed to update week summary');
-  }
-}
-
-/**
  * Update an existing activity
  *
  * @param activityId - ID of the activity to update
@@ -607,21 +278,11 @@ export async function updateActivity(
       throw new Error('Activity not found');
     }
 
-    const data = activity.data() as Activity;
-
-    // Update activity
+    // Update activity. The week summary is recomputed server-side.
     await activityRef.update({
       ...updates,
       loggedAt: FirebaseFirestore.FieldValue.serverTimestamp(),
     });
-
-    // Recalculate week summary
-    const weekStart = getWeekStart(
-      typeof data.timestamp === 'string'
-        ? new Date(data.timestamp)
-        : data.timestamp,
-    );
-    await updateWeekSummary(data.guestId, data.houseId, weekStart);
   } catch (error: any) {
     if (error?.message === 'Activity not found') throw error;
     logException(error);
@@ -643,27 +304,11 @@ export async function deleteActivity(activityId: string): Promise<void> {
       throw new Error('Activity not found');
     }
 
-    const data = activity.data() as Activity;
-    const wasActive = data.status === ActivityStatus.ACTIVE;
-
-    // Soft delete
+    // Soft delete. The server trigger drops it from the week summary.
     await activityRef.update({
       status: ActivityStatus.DELETED,
       loggedAt: FirebaseFirestore.FieldValue.serverTimestamp(),
     });
-
-    // Apply a -1 delta to the week summary, but ONLY if the activity was
-    // ACTIVE (and therefore counted in the summary). DISPUTED and already-
-    // DELETED activities are not in the summary, so deleting them is a no-op
-    // from the summary's perspective. See .full-review [P1].
-    if (wasActive) {
-      await incrementWeekSummaryForActivity(
-        data.guestId,
-        data.houseId,
-        { type: data.type, timestamp: data.timestamp, data: data.data },
-        -1,
-      );
-    }
   } catch (error: any) {
     if (error?.message === 'Activity not found') throw error;
     logException(error);
@@ -726,17 +371,8 @@ export async function resolveDispute(
       throw new Error('Activity not found');
     }
 
-    const data = activity.data() as Activity;
-
+    // The week summary is recomputed server-side.
     await activityRef.update(updates);
-
-    // Recalculate week summary
-    const weekStart = getWeekStart(
-      typeof data.timestamp === 'string'
-        ? new Date(data.timestamp)
-        : data.timestamp,
-    );
-    await updateWeekSummary(data.guestId, data.houseId, weekStart);
   } catch (error: any) {
     if (error?.message === 'Activity not found') throw error;
     logException(error);
