@@ -1,7 +1,7 @@
 import { BaseEntity } from '../entities/BaseEntity';
 import { AngularFirestoreCollection, AngularFirestore } from '@angular/fire/firestore/public_api';
 import { User } from '../entities/User';
-import { firestore } from 'firebase/app';
+import firebase from 'firebase/app';
 
 export default class BaseFirestoreService<T extends BaseEntity> {
   collection: AngularFirestoreCollection<T>;
@@ -28,7 +28,7 @@ export default class BaseFirestoreService<T extends BaseEntity> {
     return doc.data() as T;
   }
 
-  async getByAttribute(attribute: string, operator: firestore.WhereFilterOp, value: any) {
+  async getByAttribute(attribute: string, operator: firebase.firestore.WhereFilterOp, value: any) {
     const result = await this.collection.ref.where(attribute, operator, value).get();
     return result.docs.length ? result.docs.map((doc) => doc.data() as T) : [];
   }

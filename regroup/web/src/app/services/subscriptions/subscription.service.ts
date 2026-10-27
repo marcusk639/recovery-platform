@@ -2,7 +2,7 @@ import { Injectable } from "@angular/core";
 import BaseFirestoreService from "../base-service";
 import { AngularFirestore } from "@angular/fire/firestore";
 import { FormBuilder, FormControl, Validators } from "@angular/forms";
-import { firestore } from "firebase/app";
+import firebase from "firebase/app";
 
 @Injectable({
   providedIn: "root",
@@ -27,6 +27,6 @@ export class SubscriptionService extends BaseFirestoreService<any> {
   pushEmail(email: string) {
     return this.collection
       .doc("emails")
-      .update({ emails: firestore.FieldValue.arrayUnion(email) });
+      .update({ emails: firebase.firestore.FieldValue.arrayUnion(email) });
   }
 }

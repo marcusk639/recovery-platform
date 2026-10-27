@@ -1,5 +1,4 @@
 import { Injectable } from '@angular/core';
-import { auth as firebaseAuth } from 'firebase/app';
 import { AngularFirestore } from '@angular/fire/firestore';
 import { AngularFireAuth } from '@angular/fire/auth';
 import { User, createSuperAdmin } from 'src/app/entities/User';
@@ -15,7 +14,7 @@ import { FormBuilder, FormControl, Validators, ValidatorFn } from '@angular/form
 import { CloudFunctionService } from '../functions/cloud-function.service';
 import { PaymentMethod } from 'ngx-stripe/lib/interfaces/payment-intent';
 import { LocalStorageService } from '../local-storage.service';
-import firebase from 'firebase';
+import firebase from 'firebase/app';
 import { BillingInterval, HouseType } from 'src/app/entities/TierCatalog';
 
 @Injectable({
@@ -71,10 +70,10 @@ export class AuthService extends BaseFirestoreService<User> {
   }
 
   retrieveCredential() {
-    // return this.localStorage.get<firebaseAuth.AuthCredential>('credential');
+    // return this.localStorage.get<firebase.auth.AuthCredential>('credential');
   }
 
-  loginWithCredential(credential: firebaseAuth.AuthCredential) {
+  loginWithCredential(credential: firebase.auth.AuthCredential) {
     return this.auth.signInWithCredential(credential);
   }
 
@@ -96,13 +95,15 @@ export class AuthService extends BaseFirestoreService<User> {
    * @param {*} email
    * @param {*} password
    */
-  signInWithEmail(email: string, password: string): Promise<firebaseAuth.UserCredential> {
+  signInWithEmail(email: string, password: string): Promise<firebase.auth.UserCredential> {
     return this.auth.signInWithEmailAndPassword(email, password);
   }
 
   async convertAnonymousUser(email: string, password: string) {
-    const credential = firebaseAuth.EmailAuthProvider.credential(email, password);
+    // Await currentUser first: AngularFire 6.1 lazy-loads firebase/auth, so firebase.auth
+    // is only defined once the AngularFireAuth instance has resolved.
     const currentUser = await this.auth.currentUser;
+    const credential = firebase.auth.EmailAuthProvider.credential(email, password);
     await currentUser.linkWithCredential(credential);
     return this.signInWithEmail(email, password).then((user) => user.user);
   }
@@ -270,7 +271,9 @@ export class AuthService extends BaseFirestoreService<User> {
 
   async setPersistence() {
     try {
-      await this.auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+      // The string value of firebase.auth.Auth.Persistence.LOCAL. The namespace constant can be
+      // undefined here because AngularFire 6.1 lazy-loads firebase/auth.
+      await this.auth.setPersistence('local');
     } catch (error) {
       console.error('Failed to persist auth');
     }
