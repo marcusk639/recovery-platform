@@ -14,6 +14,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import * as activityService from '../../services/activity';
 import auth from '@react-native-firebase/auth';
+import type { FlushResult } from '../../services/offlineQueue';
 
 // Mirror activityKeys.newActivities() and activityKeys.weekSummaries().
 // Defined inline to avoid importing activityQueries (which is in the cycle).
@@ -26,17 +27,18 @@ const ACTIVITY_SUMMARIES_QUERY_KEY = ['activities', 'summaries'] as const;
  * Call when the app regains connectivity. Syncs all queued activities to
  * Firestore and invalidates caches so the UI reflects newly synced data.
  * Only the signed-in user's items are replayed; with no signed-in user
- * nothing is flushed. Items that exceed the retry limit are silently dropped (dead-letter
- * behaviour is handled inside ActivityOfflineQueue.flush()).
+ * nothing is flushed. Items that exceed the retry limit are dropped and
+ * reported to Sentry by ActivityOfflineQueue.flush(); the result's `dropped`
+ * counts them.
  */
 export const useFlushOfflineQueue = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async () => {
+    mutationFn: async (): Promise<FlushResult> => {
       const uid = auth().currentUser?.uid;
       if (!uid) {
-        return { synced: 0, failed: 0 };
+        return { synced: 0, retrying: 0, dropped: 0 };
       }
       return activityService.flushOfflineActivities(uid);
     },

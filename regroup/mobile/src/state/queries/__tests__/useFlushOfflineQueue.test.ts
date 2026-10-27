@@ -29,7 +29,7 @@ describe('useFlushOfflineQueue', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockCurrentUser = { uid: 'u1' };
-    mockFlushOfflineActivities.mockResolvedValue({ synced: 2, failed: 0 });
+    mockFlushOfflineActivities.mockResolvedValue({ synced: 2, retrying: 0, dropped: 0 });
   });
 
   it("flushes with the signed-in user's uid", async () => {
@@ -37,15 +37,15 @@ describe('useFlushOfflineQueue', () => {
     result.current.mutate();
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockFlushOfflineActivities).toHaveBeenCalledWith('u1');
-    expect(result.current.data).toEqual({ synced: 2, failed: 0 });
+    expect(result.current.data).toEqual({ synced: 2, retrying: 0, dropped: 0 });
   });
 
-  it('resolves { synced: 0, failed: 0 } without flushing when signed out', async () => {
+  it('resolves { synced: 0, retrying: 0, dropped: 0 } without flushing when signed out', async () => {
     mockCurrentUser = null;
     const { result } = renderHook(() => useFlushOfflineQueue(), { wrapper });
     result.current.mutate();
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockFlushOfflineActivities).not.toHaveBeenCalled();
-    expect(result.current.data).toEqual({ synced: 0, failed: 0 });
+    expect(result.current.data).toEqual({ synced: 0, retrying: 0, dropped: 0 });
   });
 });
