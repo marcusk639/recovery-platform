@@ -219,12 +219,18 @@ service cloud.firestore {
 
       // Staff create never links the doc to the creator (no self-link: a
       // staff member's own resident record comes through an invitation),
-      // so no one can mint an eviction-proof record for themselves.
+      // so no one can mint an eviction-proof record for themselves. A staff
+      // create linked to an account needs the caller to rank strictly above
+      // that account (rank helpers below): otherwise a peer leader could
+      // give another peer leader a "shadow" active record that keeps their
+      // claims after their real record is discharged. A record with no
+      // account, or for a plain resident, ranks 0.
       allow create: if createdByCaller(request.resource.data) &&
                        moveOutDateValid(request.resource.data) &&
                        (isInvitedSelfCreate(request.resource.data) ||
                         (isAdmin([request.resource.data.houseId]) &&
-                         request.resource.data.get('userId', '') != request.auth.uid));
+                         request.resource.data.get('userId', '') != request.auth.uid &&
+                         callerRank(request.resource.data.houseId) > targetRank(request.resource.data)));
 
       // Update has two distinct branches:
       //
@@ -248,7 +254,9 @@ service cloud.firestore {
       // userId says whose record this is: activities, disputes and claims
       // trust it. It is immutable once set, for every client. An admin may
       // set it only on a doc that has none (linking an intake record to an
-      // account), and never to their own uid. Audit (PR #145): the app's
+      // account), never to their own uid, and only to an account ranked
+      // strictly below them in the house the doc ends up in (the shadow
+      // record above). Audit (PR #145): the app's
       // only client writer is mapUserToGuest (SignUp self-create, and
       // NewAccountForm's self-update re-writing the same uid); full-doc
       // admin writes re-send the existing value.
@@ -257,7 +265,8 @@ service cloud.firestore {
         let after = request.resource.data.get('userId', '');
         return after == before ||
           (before == '' && after is string && after != request.auth.uid &&
-           isAdmin([resource.data.houseId]));
+           isAdmin([resource.data.houseId]) &&
+           callerRank(request.resource.data.houseId) > targetRank(request.resource.data));
       }
 
       // Staff departures follow rank (functions util/houseRoles). Removing a
@@ -296,14 +305,17 @@ service cloud.firestore {
       }
       // Any change to a record's status, moveOutDate or house (a departure,
       // a re-activation or a move) needs the caller to rank strictly above
-      // the record's account; a record ranked 0 (a resident, or no record)
-      // any staff may change. Staff never change these on their own record.
+      // the record's account, both before and after the write (the account
+      // and house may change in the same write); a record ranked 0 (a
+      // resident, or no record) any staff may change. Staff never change
+      // these on their own record.
       function staffDepartureAllowed() {
         let own = resource.data.get('userId', '') == request.auth.uid;
         let changed = request.resource.data.diff(resource.data).affectedKeys()
           .hasAny(['status', 'moveOutDate', 'houseId']);
         return !(own && changed) &&
-          (!changed || callerRank(resource.data.houseId) > targetRank(resource.data)) &&
+          (!changed || (callerRank(resource.data.houseId) > targetRank(resource.data) &&
+            callerRank(request.resource.data.houseId) > targetRank(request.resource.data))) &&
           (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['moveOutDate']) ||
            moveOutDateValid(request.resource.data));
       }
