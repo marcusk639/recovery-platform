@@ -160,3 +160,28 @@ describe('rank edge cases (S3)', () => {
     );
   });
 });
+
+describe('a caller record counts only when a claim backs it (round 8, F1)', () => {
+  it('DENIES a manager whose owner grant failed (owner record, no superAdmin claim) discharging another manager', async () => {
+    // W3a: the primary granted superAdmin to mgr; the record was written
+    // (owner) but the claims write failed, so mgr holds only the admin claim.
+    await seed(`house-roles/${H}_mgr`, { tier: 'owner' });
+    await seed(`house-roles/${H}_mgr2`, { tier: 'manager' });
+    await seed('guests/mgr2-doc', resident('mgr2'));
+    await assertFails(updateDoc(doc(db('mgr'), 'guests/mgr2-doc'), { status: 'discharged' }));
+  });
+
+  it('ALLOWS the same discharge once the superAdmin claim backs the owner record', async () => {
+    await seed(`house-roles/${H}_mgr`, { tier: 'owner' });
+    await seed(`house-roles/${H}_mgr2`, { tier: 'manager' });
+    await seed('guests/mgr2-doc', resident('mgr2'));
+    const co = { admin: { [H]: true }, superAdmin: { [H]: true } };
+    await assertSucceeds(
+      updateDoc(doc(db('mgr', co), 'guests/mgr2-doc'), { status: 'discharged' }),
+    );
+  });
+
+  it('a manager record backed by the admin claim still ranks 2', async () => {
+    await assertSucceeds(updateDoc(doc(db('mgr'), 'guests/pl-doc'), { status: 'discharged' }));
+  });
+});

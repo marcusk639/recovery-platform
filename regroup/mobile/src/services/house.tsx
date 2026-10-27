@@ -319,6 +319,7 @@ export const removeAdminPrivileges = async (
   return response.data;
 };
 
+// Unused: no caller since 8e36c372 (#145 round 8 review I2).
 export async function updateHouseBatch(
   house: Partial<House>,
   houseBefore: House,

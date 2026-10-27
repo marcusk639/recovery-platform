@@ -4,10 +4,9 @@
  * A status, moveOutDate or house change, a delete or an account-linked create
  * of a guest doc makes the rules read the house-roles record of the doc's
  * account (firestore.rules, guests block), plus the caller's own record once
- * per batch. A batch may make at most 20 such reads, so about 19
- * account-linked guest docs is the most one batch can carry; older builds
- * that send more in one save are denied. Writers chunk to GUEST_BATCH_SIZE
- * guest docs per batch, well under that.
+ * per batch; a batch may make at most 20 such reads. Its only user,
+ * services/house updateHouseBatch, has no caller; the app removes and
+ * discharges one guest doc at a time, so the limit does not affect it.
  */
 import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 

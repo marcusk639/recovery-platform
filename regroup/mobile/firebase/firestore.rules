@@ -139,8 +139,8 @@ service cloud.firestore {
       //  - delete: unchanged (request.resource is null on delete, so this
       //    has always denied; the app's AdminManagement delete fails today).
       function staffRecord(houseId) {
-        let path = /databases/$(database)/documents/house-roles/$(houseId + '_' + request.auth.uid);
-        return exists(path) && get(path).data.tier in ['owner', 'manager'];
+        let snap = get(/databases/$(database)/documents/house-roles/$(houseId + '_' + request.auth.uid));
+        return snap != null && snap.data.get('tier', '') in ['owner', 'manager'];
       }
       allow create: if isSameUser(request.resource.data.userId) &&
         request.resource.data.houseIds.size() == 1 &&
@@ -276,26 +276,42 @@ service cloud.firestore {
       // account. Ranks come from the server-only house-roles record (rules
       // may get() it; clients cannot read it): primary owner 4, owner 3,
       // manager 2, peer leader 1, resident or no record 0; the caller also
-      // ranks 3 with a superAdmin claim and 1 with an admin claim. Staff never
+      // ranks 3 with a superAdmin claim and 1 with an admin claim. A caller's
+      // record counts only when a claim backs it (owner: the superAdmin
+      // claim; manager or peer leader: the admin claim; the primary record
+      // always counts): a record left by a failed claims write never raises
+      // the caller above their claim. A target's claims cannot be read here,
+      // so a target ranks by its record alone. Staff never
       // change the status, moveOutDate or house of their OWN record, or
       // delete it: only someone above them can (no self re-activation after a
-      // discharge). Record reads: one get() per record (a missing record reads
-      // as null, so no separate exists()); at most four per write (a move
-      // between houses: the caller's and the account's records in both),
-      // usually two. In a batch the caller's record is read once, so one
-      // batch carries at most 19 account-linked guest docs (the 20-read
-      // limit); the app writes them 8 at a time (src/services/guestBatch).
-      function recordRank(houseId, uid) {
-        let path = /databases/$(database)/documents/house-roles/$(houseId + '_' + uid);
-        let snap = get(path);
-        let d = snap == null ? {} : snap.data;
+      // discharge). Record reads: one get() per record (get() returns null
+      // for a missing document, so no separate exists()); two per write, four
+      // for a move between houses (the caller's and the account's records in
+      // both). In a batch the caller's record is read once, so one batch
+      // carries at most 19 account-linked removals or discharges, or 9 moves
+      // between two houses (the 20-read limit). The app removes and
+      // discharges one guest doc at a time, so the limit does not affect it.
+      function roleData(houseId, uid) {
+        let snap = get(/databases/$(database)/documents/house-roles/$(houseId + '_' + uid));
+        return snap == null ? {} : snap.data;
+      }
+      function rankOf(d) {
         let tier = d.get('tier', '');
         return d.get('primary', false) == true ? 4 :
           tier == 'owner' ? 3 : tier == 'manager' ? 2 : tier == 'peerLeader' ? 1 : 0;
       }
+      function recordRank(houseId, uid) {
+        return rankOf(roleData(houseId, uid));
+      }
       function callerRank(houseId) {
-        let r = recordRank(houseId, request.auth.uid);
-        let c = hasSuperAdminRoleInHouse([houseId]) ? 3 : hasAdminRoleInHouse([houseId]) ? 1 : 0;
+        let d = roleData(houseId, request.auth.uid);
+        let tier = d.get('tier', '');
+        let sa = hasSuperAdminRoleInHouse([houseId]);
+        let ad = hasAdminRoleInHouse([houseId]);
+        let backed = d.get('primary', false) == true || (tier == 'owner' && sa) ||
+          ((tier == 'manager' || tier == 'peerLeader') && ad);
+        let r = backed ? rankOf(d) : 0;
+        let c = sa ? 3 : ad ? 1 : 0;
         return r > c ? r : c;
       }
       function targetRank(d) {
