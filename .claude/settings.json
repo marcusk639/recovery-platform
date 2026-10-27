@@ -56,7 +56,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r '.tool_input.file_path // empty'); if echo \"$FILE\" | grep -q '/recovery-api/src/'; then echo \"[tsc] Type-checking recovery-api...\"; cd \"${CLAUDE_PROJECT_DIR}/recovery-api\" && npm run typecheck 2>&1 | tail -30; fi",
+            "command": "FILE=$(jq -r '.tool_input.file_path // empty'); if echo \"$FILE\" | grep -q '/recovery-api/src/'; then OUT=$(cd \"${CLAUDE_PROJECT_DIR}/recovery-api\" && npm run typecheck 2>&1) || jq -n --arg c \"$(printf '%s' \"$OUT\" | tail -30)\" '{hookSpecificOutput:{hookEventName:\"PostToolUse\",additionalContext:(\"[tsc] recovery-api typecheck failed:\\n\" + $c)}}'; fi",
             "timeout": 45000
           }
         ]
@@ -66,7 +66,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r '.tool_input.file_path // empty'); if echo \"$FILE\" | grep -qE '\\.(ts|js|json|md)$' && echo \"$FILE\" | grep -q '/recovery-api/'; then cd /Users/marcusklein/dev/recovery-platform/recovery-api && npx prettier --write \"$FILE\" 2>/dev/null && echo \"[prettier] Formatted $FILE\"; fi",
+            "command": "FILE=$(jq -r '.tool_input.file_path // empty'); if echo \"$FILE\" | grep -qE '\\.(ts|js|json|md)$' && echo \"$FILE\" | grep -q '/recovery-api/'; then cd \"${CLAUDE_PROJECT_DIR}/recovery-api\" && npx prettier --write \"$FILE\" 2>/dev/null && echo \"[prettier] Formatted $FILE\"; fi",
             "timeout": 15000
           }
         ]
