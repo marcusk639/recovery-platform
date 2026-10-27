@@ -98,7 +98,7 @@ const resolution = (outcome: 'approve' | 'reject', by: string): DocumentData => 
   disputeResult: outcome === 'approve' ? 'success' : 'fail',
   disputeResolvedBy: by,
   disputeResolvedAt: serverTimestamp(),
-  loggedAt: Timestamp.now(),
+  loggedAt: serverTimestamp(),
 });
 
 describe('who can resolve a dispute', () => {
@@ -175,7 +175,7 @@ describe("the app's peer dispute flow, end to end under the rules", () => {
         disputeReason: 'Kitchen was not cleaned',
         disputedBy: PEER_UID,
         disputeResolvedBy: PEER_UID,
-        loggedAt: Timestamp.now(),
+        loggedAt: serverTimestamp(),
       }),
     );
     // The onActivityWritten Cloud Function maintains house.disputes; a

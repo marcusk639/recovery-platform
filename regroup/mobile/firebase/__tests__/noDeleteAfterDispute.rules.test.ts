@@ -108,7 +108,7 @@ const actors: Record<string, () => ReturnType<typeof ctx>> = {
   admin: () => ctx(MGR, { admin: { [HOUSE]: true } }),
   superAdmin: () => ctx(OPERATOR, { superAdmin: { [HOUSE]: true } }),
 };
-const softDelete: DocumentData = { status: 'deleted', loggedAt: Timestamp.now() };
+const softDelete: DocumentData = { status: 'deleted', loggedAt: serverTimestamp() };
 
 describe('no deletion once an activity has dispute history', () => {
   for (const actor of Object.keys(actors)) {
@@ -133,7 +133,7 @@ describe('no deletion once an activity has dispute history', () => {
         status: 'deleted',
         disputeResolvedBy: MGR,
         disputeResolvedAt: serverTimestamp(),
-        loggedAt: Timestamp.now(),
+        loggedAt: serverTimestamp(),
       }),
     );
   });
@@ -156,7 +156,7 @@ describe('APPROVE and REJECT record a consistent outcome', () => {
     disputeResult: 'success',
     disputeResolvedBy: MGR,
     disputeResolvedAt: serverTimestamp(),
-    loggedAt: Timestamp.now(),
+    loggedAt: serverTimestamp(),
   };
 
   it('accepts APPROVE with disputeOutcome incomplete-per-residents', async () => {

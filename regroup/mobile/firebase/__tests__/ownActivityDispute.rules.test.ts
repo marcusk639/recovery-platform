@@ -102,13 +102,13 @@ const disp = (uid: string): DocumentData => ({
   disputeReason: 'r',
   disputedBy: uid,
   disputeResolvedBy: uid,
-  loggedAt: Timestamp.now(),
+  loggedAt: serverTimestamp(),
 });
 const legacyDisp = (uid: string): DocumentData => ({
   status: 'disputed',
   disputeReason: 'r',
   disputeResolvedBy: uid,
-  loggedAt: Timestamp.now(),
+  loggedAt: serverTimestamp(),
 });
 const resolve = (outcome: 'approve' | 'reject', by: string): DocumentData => ({
   status: 'resolved',
@@ -118,7 +118,7 @@ const resolve = (outcome: 'approve' | 'reject', by: string): DocumentData => ({
   disputeResult: outcome === 'approve' ? 'success' : 'fail',
   disputeResolvedBy: by,
   disputeResolvedAt: serverTimestamp(),
-  loggedAt: Timestamp.now(),
+  loggedAt: serverTimestamp(),
 });
 
 describe('owner rule: never your own activity', () => {
@@ -145,11 +145,11 @@ describe('owner rule: never your own activity', () => {
   });
 
   it('DENIES probe F: the owner re-disputing their restored activity, fields already naming them', async () => {
-    await assertFails(upd(owner(), 'restored', { status: 'disputed', disputeReason: 'r', loggedAt: Timestamp.now() }));
+    await assertFails(upd(owner(), 'restored', { status: 'disputed', disputeReason: 'r', loggedAt: serverTimestamp() }));
   });
 
   it('DENIES peerOld: a dispute that changes no disputer field (disputeResolvedBy already the peer)', async () => {
-    await assertFails(upd(peer(), 'peerOld', { status: 'disputed', disputeReason: 'r', loggedAt: Timestamp.now() }));
+    await assertFails(upd(peer(), 'peerOld', { status: 'disputed', disputeReason: 'r', loggedAt: serverTimestamp() }));
   });
 
   it('DENIES an admin who is the resident resolving a dispute on their own activity', async () => {
@@ -171,7 +171,7 @@ describe('owner rule: never your own activity', () => {
   });
 
   it('still lets the owner soft-delete their own activity', async () => {
-    await assertSucceeds(upd(owner(), 'own', { status: 'deleted', loggedAt: Timestamp.now() }));
+    await assertSucceeds(upd(owner(), 'own', { status: 'deleted', loggedAt: serverTimestamp() }));
   });
 });
 
@@ -194,7 +194,7 @@ describe('round-3 probes', () => {
         status: 'deleted',
         disputeResolvedBy: MGR2,
         disputeResolvedAt: serverTimestamp(),
-        loggedAt: Timestamp.now(),
+        loggedAt: serverTimestamp(),
       }),
     );
   });
@@ -205,14 +205,14 @@ describe('round-3 probes', () => {
         status: 'deleted',
         disputeResolvedBy: MGR,
         disputeResolvedAt: serverTimestamp(),
-        loggedAt: Timestamp.now(),
+        loggedAt: serverTimestamp(),
       }),
     );
   });
 
   it('DENIES the owner soft-deleting a resolved activity (dispute history); an undisputed one still works', async () => {
     await assertSucceeds(upd(mgr(), 'pending', resolve('reject', MGR)));
-    await assertFails(upd(owner(), 'pending', { status: 'deleted', loggedAt: Timestamp.now() }));
-    await assertSucceeds(upd(owner(), 'own', { status: 'deleted', loggedAt: Timestamp.now() }));
+    await assertFails(upd(owner(), 'pending', { status: 'deleted', loggedAt: serverTimestamp() }));
+    await assertSucceeds(upd(owner(), 'own', { status: 'deleted', loggedAt: serverTimestamp() }));
   });
 });

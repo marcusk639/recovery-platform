@@ -114,7 +114,7 @@ const dispute = (uid: string): DocumentData => ({
   disputeReason: 'x',
   disputedBy: uid,
   disputeResolvedBy: uid,
-  loggedAt: Timestamp.now(),
+  loggedAt: serverTimestamp(),
 });
 
 describe('only active -> disputed starts a dispute', () => {
@@ -138,15 +138,15 @@ describe('only active -> disputed starts a dispute', () => {
     // A disputed activity is never deleted (owner rule), and cannot be
     // re-disputed while its dispute is open.
     await assertFails(
-      upd(resident(), 'active', { status: 'deleted', loggedAt: Timestamp.now() }),
+      upd(resident(), 'active', { status: 'deleted', loggedAt: serverTimestamp() }),
     );
     await assertFails(upd(peer(), 'active', dispute(PEER)));
   });
 
   it('lets the owner soft-delete only an activity with no dispute history', async () => {
-    await assertSucceeds(upd(resident(), 'active', { status: 'deleted', loggedAt: Timestamp.now() }));
+    await assertSucceeds(upd(resident(), 'active', { status: 'deleted', loggedAt: serverTimestamp() }));
     for (const id of ['pending', 'approved', 'rejected']) {
-      await assertFails(upd(resident(), id, { status: 'deleted', loggedAt: Timestamp.now() }));
+      await assertFails(upd(resident(), id, { status: 'deleted', loggedAt: serverTimestamp() }));
     }
   });
 

@@ -99,7 +99,7 @@ const disp = (uid: string): DocumentData => ({
   disputeReason: 'r',
   disputedBy: uid,
   disputeResolvedBy: uid,
-  loggedAt: Timestamp.now(),
+  loggedAt: serverTimestamp(),
 });
 const resolve = (outcome: 'approve' | 'reject', by: string): DocumentData => ({
   status: 'resolved',
@@ -109,7 +109,7 @@ const resolve = (outcome: 'approve' | 'reject', by: string): DocumentData => ({
   disputeResult: outcome === 'approve' ? 'success' : 'fail',
   disputeResolvedBy: by,
   disputeResolvedAt: serverTimestamp(),
-  loggedAt: Timestamp.now(),
+  loggedAt: serverTimestamp(),
 });
 
 describe('A: residents cannot change the house configuration', () => {
@@ -136,7 +136,7 @@ describe('A: residents cannot change the house configuration', () => {
 describe('C: an admin entering a dispute names themselves', () => {
   it('BLOCKS a peer leader disputing while naming the resident as disputer', async () => {
     await assertFails(
-      upd(pl(), 'active', { status: 'disputed', disputeReason: 'r', disputedBy: OWNER, loggedAt: Timestamp.now() }),
+      upd(pl(), 'active', { status: 'disputed', disputeReason: 'r', disputedBy: OWNER, loggedAt: serverTimestamp() }),
     );
     await assertFails(upd(mgr(), 'active', { ...disp(MGR), disputeResolvedBy: OWNER }));
   });
@@ -150,7 +150,7 @@ describe('C: an admin entering a dispute names themselves', () => {
 describe('F: closed by the owner rule (never your own activity)', () => {
   it('DENIES the owner re-disputing their own restored activity, even with the fields already naming them', async () => {
     await assertFails(upd(res(), 'restored', disp(OWNER)));
-    await assertFails(upd(res(), 'restored', { status: 'disputed', disputeReason: 'r', loggedAt: Timestamp.now() }));
+    await assertFails(upd(res(), 'restored', { status: 'disputed', disputeReason: 'r', loggedAt: serverTimestamp() }));
   });
 
   it('opens no other path: not from a resolution, and not for someone the fields do not name', async () => {

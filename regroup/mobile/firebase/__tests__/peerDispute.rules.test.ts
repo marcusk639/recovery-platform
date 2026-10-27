@@ -23,7 +23,7 @@ import {
   assertFails,
   RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, setDoc, updateDoc, Timestamp, DocumentData } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, Timestamp, DocumentData, serverTimestamp } from 'firebase/firestore';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -90,7 +90,7 @@ const dispute = (by = PEER_UID): DocumentData => ({
   disputeReason: 'Kitchen was not cleaned',
   disputedBy: by,
   disputeResolvedBy: by,
-  loggedAt: Timestamp.now(),
+  loggedAt: serverTimestamp(),
 });
 
 describe('peer disputes', () => {
@@ -124,7 +124,7 @@ describe('peer disputes', () => {
   it("BLOCKS a peer reactivating, deleting or resolving someone else's activity", async () => {
     await assertFails(update(peer(), 'disputed', { status: 'active' }));
     await assertFails(update(peer(), 'disputed', { status: 'resolved' }));
-    await assertFails(update(peer(), 'a1', { status: 'deleted', loggedAt: Timestamp.now() }));
+    await assertFails(update(peer(), 'a1', { status: 'deleted', loggedAt: serverTimestamp() }));
     await assertFails(update(peer(), 'deleted', dispute()));
   });
 
@@ -150,13 +150,13 @@ describe('peer disputes', () => {
   it('BLOCKS the owner deleting their activity after a peer disputed it (owner rule)', async () => {
     await assertSucceeds(update(peer(), 'a1', dispute()));
     const owner = testEnv.authenticatedContext(OWNER_UID, { guest: { [HOUSE]: true } });
-    await assertFails(update(owner, 'a1', { status: 'deleted', loggedAt: Timestamp.now() }));
+    await assertFails(update(owner, 'a1', { status: 'deleted', loggedAt: serverTimestamp() }));
     await assertFails(update(owner, 'a1', { disputedBy: 'someoneElse' }));
   });
 
   it('lets the owner delete, but never dispute, their own activity (owner rule)', async () => {
     const owner = testEnv.authenticatedContext(OWNER_UID, { guest: { [HOUSE]: true } });
     await assertFails(update(owner, 'a1', dispute(OWNER_UID)));
-    await assertSucceeds(update(owner, 'a1', { status: 'deleted', loggedAt: Timestamp.now() }));
+    await assertSucceeds(update(owner, 'a1', { status: 'deleted', loggedAt: serverTimestamp() }));
   });
 });

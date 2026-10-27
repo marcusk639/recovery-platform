@@ -163,10 +163,10 @@ describe('activities update by the logging resident', () => {
         disputeReason: 'Not done',
         disputedBy: RESIDENT_UID,
         disputeResolvedBy: RESIDENT_UID,
-        loggedAt: Timestamp.now(),
+        loggedAt: serverTimestamp(),
       }),
     );
-    await assertSucceeds(update(resident(), 'mine', { status: 'deleted', loggedAt: Timestamp.now() }));
+    await assertSucceeds(update(resident(), 'mine', { status: 'deleted', loggedAt: serverTimestamp() }));
   });
 
   it('BLOCKS disputing their own activity (owner rule); still allows deleting it', async () => {

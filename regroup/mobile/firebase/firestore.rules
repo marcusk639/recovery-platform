@@ -463,18 +463,22 @@ service cloud.firestore {
 
     // Owner rule: an activity is never disputed, resolved or reopened by the
     // person who did it: whoever logged it (loggedBy), the resident the server
-    // stamped on it (residentUid, from guests.userId when it was created), and
-    // the account on its guest doc now. The guest doc alone can be edited or
-    // deleted around a dispute, so residentUid is what holds; an activity with
-    // neither a guest doc nor a residentUid is refused to everyone but admins.
+    // stamped on it (residentUid, from guests.userId; re-stamped whenever the
+    // guest's account changes), and the account on its guest doc now. The
+    // guest doc alone can be edited or deleted around a dispute, so the stamp
+    // is what holds. A null stamp (a guest with no account when stamped) is no
+    // stamp: with neither a usable stamp nor a guest doc, only the house owner
+    // (superAdmin) may act.
     function callerIsNotTheResident() {
       let d = resource.data;
       let gid = d.get('guestId', '');
+      let stamp = d.get('residentUid', null);
+      let stamped = stamp is string && stamp != '';
       return request.auth.uid != d.get('loggedBy', null) &&
-        request.auth.uid != d.get('residentUid', null) &&
+        (!stamped || stamp != request.auth.uid) &&
         ((gid is string && gid != '' && exists(/databases/$(database)/documents/guests/$(gid)))
           ? get(/databases/$(database)/documents/guests/$(gid)).data.get('userId', null) != request.auth.uid
-          : (d.keys().hasAny(['residentUid']) || isAdmin([d.houseId])));
+          : (stamped || (hasSuperAdminRoleInHouse([d.houseId]) && isDemoScopedHouses([d.houseId]))));
     }
 
     // Owner rule: "Disputed activities should never be deleted." Any dispute
@@ -508,6 +512,9 @@ service cloud.firestore {
       return resource.data.status == 'active' && d.status == 'disputed' &&
         d.diff(resource.data).affectedKeys()
           .hasOnly(['status', 'disputeReason', 'disputedBy', 'disputeResolvedBy', 'disputedAt', 'loggedAt']) &&
+        // loggedAt is not the disputer's to rewrite; older builds stamp it
+        // with the server time, which stays allowed.
+        (!d.diff(resource.data).affectedKeys().hasAny(['loggedAt']) || d.loggedAt == request.time) &&
         // This write names the disputer (a leftover from an earlier dispute does not).
         d.diff(resource.data).affectedKeys().hasAny(['disputedBy', 'disputeResolvedBy']) &&
         d.get('disputeResolvedBy', null) == request.auth.uid &&
@@ -530,7 +537,7 @@ service cloud.firestore {
               d.get('disputeResult', null) == 'success') ||
         (d.get('disputed', null) == 'rejected' && d.get('incomplete', null) == false &&
          d.get('disputeOutcome', null) == null && d.get('disputeResult', null) == 'fail') ||
-        (d.get('disputed', null) == null && d.get('incomplete', false) == false &&
+        (d.get('disputed', null) == null && d.get('incomplete', null) in [null, false] &&
          d.get('disputeOutcome', null) == null && d.get('disputeResult', null) == null);
     }
 
@@ -594,7 +601,7 @@ service cloud.firestore {
       return isAdmin([r.houseId]) &&
         (r.status != 'disputed' && d.status == 'disputed' ? entersDispute() :
          r.status == 'disputed' && d.status != 'disputed' ? resolvesDispute() :
-         (!keys.hasAny(disputeKeys()) && !keys.hasAny(['residentUid']) &&
+         (!keys.hasAny(disputeKeys()) && !keys.hasAny(['residentUid', 'flaggedForReview']) &&
           (!keys.hasAny(['guestId', 'loggedBy', 'houseId', 'status']) ||
            (!hasDisputeHistory(r) &&
             (!keys.hasAny(['status']) ||
@@ -611,12 +618,15 @@ service cloud.firestore {
       // admin may log for any of its residents; a resident only for
       // themselves, as an active, unverified activity. Nobody creates an
       // activity with dispute fields, residentUid, or already in a dispute.
+      // Whoever creates it is its logger (loggedBy), admins too. Ids are
+      // limited to the characters the server's dispute mirror can key on.
       allow create: if
+        activityId.matches('^[A-Za-z0-9_-]+$') &&
         activityGuest(request.resource.data.guestId).houseId == request.resource.data.houseId &&
-        !request.resource.data.keys().hasAny(['residentUid']) &&
+        !request.resource.data.keys().hasAny(['residentUid', 'flaggedForReview']) &&
         !request.resource.data.keys().hasAny(disputeKeys()) &&
         !(request.resource.data.get('status', null) in ['disputed', 'resolved']) &&
-        (isAdmin([request.resource.data.houseId]) ||
+        ((isAdmin([request.resource.data.houseId]) && isSameUser(request.resource.data.loggedBy)) ||
           (isGuest([request.resource.data.houseId]) &&
            isSameUser(request.resource.data.loggedBy) &&
            activityGuest(request.resource.data.guestId).userId == request.auth.uid &&
@@ -639,7 +649,8 @@ service cloud.firestore {
         (isSameUser(resource.data.loggedBy) &&
           request.resource.data.status == 'deleted' &&
           !hasDisputeHistory(resource.data) &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'loggedAt'])) ||
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'loggedAt']) &&
+          request.resource.data.get('loggedAt', null) in [resource.data.get('loggedAt', null), request.time]) ||
         (isGuest([resource.data.houseId]) && entersDispute());
       // Hard delete: admins only, and never an activity with dispute history.
       allow delete: if isAdmin([resource.data.houseId]) && !hasDisputeHistory(resource.data);
@@ -650,6 +661,15 @@ service cloud.firestore {
       match /dispute-decisions/{decisionId} {
         allow read, write: if false;
       }
+    }
+
+    // The authoritative list of a house's open disputes, written only by the
+    // onActivityWritten Cloud Function. houses/{id}.disputes is kept as a
+    // legacy, display-only mirror for older app builds; admins can still
+    // rewrite it (house setup saves whole-house copies), so nothing trusts it.
+    match /house-disputes/{houseId} {
+      allow read: if isGuestOrAdmin([houseId]);
+      allow write: if false;
     }
 
     function summaryGuest(summaryId) {
