@@ -126,11 +126,32 @@ service cloud.firestore {
     
     match /admins/{adminId} {
       allow read: if isAdmin(resource.data.houseIds) || isSameUser(adminId);
-      // allow create: if isAdmin(request.resource.data.houseIds);
-      allow create: if isAdmin(request.resource.data.houseIds);
-      allow update: if isAdmin(request.resource.data.houseIds);
+      // admins docs are profile data for the app; the server reads the tier
+      // from house-roles/{houseId}_{uid} (server-only), never from these.
+      // Still, keep clients to what the app does:
+      //  - create: an admin creates their OWN doc for ONE house, after
+      //    redeemInvitation recorded them as a manager or owner there
+      //    (SignUpForm admin path). No owner access in it. A peer leader has
+      //    no admins doc and cannot make one.
+      //  - update: the doc's own user or an admin of its houses; the user
+      //    stays the same and houses can only be removed (profile edits,
+      //    house settings removing an admin), never added.
+      //  - delete: unchanged (request.resource is null on delete, so this
+      //    has always denied; the app's AdminManagement delete fails today).
+      function staffRecord(houseId) {
+        let path = /databases/$(database)/documents/house-roles/$(houseId + '_' + request.auth.uid);
+        return exists(path) && get(path).data.tier in ['owner', 'manager'];
+      }
+      allow create: if isSameUser(request.resource.data.userId) &&
+        request.resource.data.houseIds.size() == 1 &&
+        isAdmin(request.resource.data.houseIds) &&
+        staffRecord(request.resource.data.houseIds[0]) &&
+        request.resource.data.get('superAdmin', []).size() == 0;
+      allow update: if (isAdmin(resource.data.houseIds) || isSameUser(resource.data.userId)) &&
+        request.resource.data.userId == resource.data.userId &&
+        resource.data.get('houseIds', []).hasAll(request.resource.data.get('houseIds', [])) &&
+        resource.data.get('superAdmin', []).hasAll(request.resource.data.get('superAdmin', []));
       allow delete: if isAdmin(request.resource.data.houseIds);
-      // allow create: if signedIn();
     }
     
     match /guests/{guestId} {
@@ -143,14 +164,18 @@ service cloud.firestore {
       // admission-tickets/{uid}_{houseId} (no rule matches that path, so
       // clients can neither read nor write it). The ticket id is computed
       // here from the caller and the house, so app builds already in the field
-      // need to send nothing new. onGuestWrite marks the ticket used on the
-      // first guest doc for that account in that house, so a second
+      // need to send nothing new. onGuestWrite marks the ticket used once a
+      // guest doc for that account in that house exists, so a later
       // self-create is denied. The guest claim is still required.
       // The self-created doc may carry only what SignUpForm writes, at the
       // values it writes (Guest entity defaults): no balance, no Stripe or
       // auto-pay fields, no status other than active, no membership fields.
       // isAdmin must match the ticket (true only for a senior-peer invite),
-      // and phase must be the invitation's initialPhase when it has one.
+      // and phase must equal the invitation's initialPhase exactly ("" when
+      // it has none, which is what the app sends). The rule alone cannot
+      // stop several docs created before onGuestWrite marks the ticket used
+      // (one batch, or quick sequential writes); the server binds the ticket
+      // to one doc and flags the others (util/admission).
       function admissionTicket(houseId) {
         return /databases/$(database)/documents/admission-tickets/$(request.auth.uid + '_' + houseId);
       }
@@ -163,7 +188,7 @@ service cloud.firestore {
           get(ticketPath).data.used == false &&
           get(ticketPath).data.expiresAt > request.time &&
           d.get('isAdmin', false) == (get(ticketPath).data.role == 'senior-peer') &&
-          (get(ticketPath).data.initialPhase == '' || d.get('phase', '') == get(ticketPath).data.initialPhase) &&
+          d.get('phase', '') == get(ticketPath).data.initialPhase &&
           d.keys().hasOnly([
             'id', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy',
             'userId', 'houseId', 'displayName', 'firstName', 'lastName',
@@ -183,8 +208,18 @@ service cloud.firestore {
           d.get('jobs', []).size() == 0;
       }
 
-      allow create: if isInvitedSelfCreate(request.resource.data) ||
-                       isAdmin([request.resource.data.houseId]);
+      // createdBy, when sent, is the caller (builds before this one send
+      // none; the server then treats the doc as legacy). It is how the server
+      // tells a self-created doc (createdBy == userId) from a staff-created
+      // one when it binds a ticket to one doc (util/admission).
+      function createdByCaller(d) {
+        return d.get('createdBy', request.auth.uid) == request.auth.uid &&
+          d.get('updatedBy', request.auth.uid) == request.auth.uid;
+      }
+
+      allow create: if createdByCaller(request.resource.data) &&
+                       (isInvitedSelfCreate(request.resource.data) ||
+                        isAdmin([request.resource.data.houseId]));
 
       // Update has two distinct branches:
       //
@@ -206,6 +241,9 @@ service cloud.firestore {
       //
       // See .full-review/02-security-performance.md [S1] for the threat model.
       allow update: if
+        request.resource.data.get('createdBy', null) == resource.data.get('createdBy', null) &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['updatedBy']) ||
+         request.resource.data.updatedBy == request.auth.uid) && (
         (isAdmin([resource.data.houseId]) && isAdmin([request.resource.data.houseId])) ||
         (isSameUser(request.resource.data.userId) &&
          request.resource.data.userId == resource.data.userId &&
@@ -217,7 +255,7 @@ service cloud.firestore {
            'emergencyContactName', 'emergencyContactPhone', 'emergencyContactRelation',
            'autoPayEnabled',
            'version', 'updatedAt', 'updatedBy'
-         ]));
+         ])));
 
       // Admin only. A resident must not delete their own doc: it carries their
       // balance, and deleting it would drop the balance (no archive) while the
@@ -283,9 +321,12 @@ service cloud.firestore {
       // may write it. superAdminIds is an authorization field like
       // adminIds/ownerId: only a superAdmin of the house may change it.
       // adminId is a legacy field, blocked defensively the same way.
+      // houseType (traditional / oxford) picks the admission and voting
+      // rules; only createHouses and setOxfordEnabled (Admin SDK) set it,
+      // so no client, the owner included, may change it.
       allow update: if isDemoScopedHouses([houseId]) &&
         !request.resource.data.diff(resource.data).affectedKeys()
-          .hasAny(['subscriptionStatus', 'guestGraceEndsAt', 'stripeAccountApi', 'superAdminId']) &&
+          .hasAny(['subscriptionStatus', 'guestGraceEndsAt', 'stripeAccountApi', 'superAdminId', 'houseType']) &&
         (hasSuperAdminRoleInHouse([houseId]) ||
           ((hasAdminRoleInHouse([houseId]) || hasGuestRoleInHouse([houseId])) && !request.resource.data.diff(resource.data).affectedKeys()
             .hasAny(['stripeAccountId', 'stripeStatus', 'monthlyRent', 'weeklyRent', 'adminIds', 'ownerId', 'superAdminIds', 'adminId'])));
