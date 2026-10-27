@@ -38,7 +38,7 @@ Two improvements to the advisory PR reviewer, keeping every invariant of the mai
 Serena starts the TypeScript language server, which reads `tsconfig.json`, `package.json` and source files from the PR head. Treat it as running untrusted input. The Review step's environment holds the Claude OAuth token, and the action writes its app token into `.git/config`; neither may reach Serena or its children.
 
 - **Separate Unix user.** The setup step creates `serena-runner` (`sudo useradd`). Claude starts the MCP server through `sudo -n -u serena-runner env -i PATH=… HOME=… SERENA_HOME=… serena start-mcp-server …`, so the process gets an empty environment: no tokens, no `GITHUB_*`, no `ACTIONS_*`.
-- **No access to credentials on disk.** Before Review, `chmod 700` the workspace `.git/` and `RUNNER_TEMP`, which are owned by the runner user. `serena-runner` can read the checked-out source (world-readable) but not `.git/config`, `OUT`, the state snapshot or the runner's command files. `/proc/<pid>/environ` of the runner's processes is owner-only.
+- **No access to credentials on disk.** Before Review, `chmod 700` the workspace `.git/` and `RUNNER_TEMP` (defence in depth, since `serena-runner` reads only its copy), which are owned by the runner user. `serena-runner` can read the checked-out source (world-readable) but not `.git/config`, `OUT`, the state snapshot or the runner's command files. `/proc/<pid>/environ` of the runner's processes is owner-only.
 - **No network.** `sudo iptables -A OUTPUT -m owner --uid-owner serena-runner -j REJECT` (and the `ip6tables` equivalent) blocks all egress for that user.
 - **Order matters.**
   1. Install Serena and warm up the language servers, with the network on, against a throwaway one-file project, never the PR.
@@ -47,7 +47,7 @@ Serena starts the TypeScript language server, which reads `tsconfig.json`, `pack
   4. Only then index the PR checkout.
 
   Any step that touches PR files runs with credentials hidden and egress blocked.
-- **Reachability.** `serena-runner` must be able to traverse to the workspace. The setup step checks it can read a tracked file. If it can't, it switches Serena off with a warning rather than widening permissions beyond `o+x` on the path components. The only workspace directory `serena-runner` may write is `.serena/`.
+- **Indexed copy, not the workspace.** As built, Serena indexes a root-owned copy of the tracked files at `/home/serena-runner/src`. The copy leaves out `.git/`, any `.serena/` from the PR, and build and vendor folders. `serena-runner` can write only the copy's `.serena/`, so it never needs a path into `/home/runner`, which stays unchanged. If the copy can't be read, the setup step switches Serena off with a warning.
 - **No survivors.** A step after Review (`if: always()`, before the publish checkout) runs `sudo pkill -KILL -u serena-runner` and checks that no `serena-runner` process remains. A process that outlived Review could otherwise tamper with `/tmp` or the publish checkout before the secret-bearing Publish step.
 - **Why not bubblewrap:** Ubuntu 24.04 runners restrict unprivileged user namespaces through AppArmor, so `bwrap` needs a sysctl change. A separate user plus an `iptables` owner rule needs no kernel changes.
 - **Failure is not fatal.** If Serena fails to start, Claude Code runs without the MCP server and the review proceeds with `Read`/`Grep`/`Glob`. The summary's limits line says "code navigation unavailable".
