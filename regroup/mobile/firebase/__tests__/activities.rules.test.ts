@@ -121,7 +121,12 @@ describe("activities verification fields", () => {
   it("allows a resident dispute that echoes the same verified value back", async () => {
     const ctx = testEnv.authenticatedContext(GUEST_UID, authHouseGuest(GUEST_UID, HOUSE_ID));
     await assertSucceeds(
-      updateDoc(activityDoc(ctx), { verified: false, status: "disputed", disputeReason: "x" }),
+      updateDoc(activityDoc(ctx), {
+        verified: false,
+        status: "disputed",
+        disputeReason: "x",
+        disputedBy: GUEST_UID,
+      }),
     );
   });
 

@@ -169,7 +169,9 @@ describe('activities update by the logging resident', () => {
   });
 
   it('allows disputing or deleting their own activity (only lowers counts)', async () => {
-    await assertSucceeds(update(resident(), 'mine', { status: 'disputed', disputeReason: 'x' }));
+    await assertSucceeds(
+      update(resident(), 'mine', { status: 'disputed', disputeReason: 'x', disputedBy: RESIDENT_UID }),
+    );
     await assertSucceeds(update(resident(), 'mine', { status: 'deleted' }));
   });
 

@@ -240,8 +240,16 @@ service cloud.firestore {
         !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny(['subscriptionStatus', 'guestGraceEndsAt', 'stripeAccountApi', 'superAdminId']) &&
         (hasSuperAdminRoleInHouse([houseId]) ||
-          ((hasAdminRoleInHouse([houseId]) || hasGuestRoleInHouse([houseId])) && !request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['stripeAccountId', 'stripeStatus', 'monthlyRent', 'weeklyRent', 'adminIds', 'ownerId', 'superAdminIds', 'adminId'])));
+          (hasAdminRoleInHouse([houseId]) && !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['stripeAccountId', 'stripeStatus', 'monthlyRent', 'weeklyRent', 'adminIds', 'ownerId', 'superAdminIds', 'adminId'])) ||
+          // Residents (guest role, not admin) may write ONLY the fields their
+          // own app flows write (audited for PR #141): complaints and issues
+          // (Personal screen), currentCapacity (sign-up createGuest), and
+          // currentCapacity/rooms/phases (deleting their own guest profile).
+          // Not house.disputes: the onActivityWritten Cloud Function
+          // maintains it, and residents used to rewrite the whole map.
+          (hasGuestRoleInHouse([houseId]) && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['complaints', 'issues', 'currentCapacity', 'rooms', 'phases'])));
       
       match /chat/{chatId} {
         allow read, write: if isGuest([houseId]) || isAdmin([houseId]);
@@ -446,9 +454,29 @@ service cloud.firestore {
     // A write that sets disputedBy must name the caller; leaving an existing
     // value untouched (e.g. the owner deleting an activity a peer disputed)
     // is fine.
-    function disputerIsCaller() {
-      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['disputedBy']) ||
-        request.resource.data.disputedBy == request.auth.uid;
+    // A non-admin entering a dispute must name THEMSELVES as the disputer,
+    // in this write: disputedBy (current app) or, for builds before it,
+    // disputeResolvedBy (which then held the disputer). Whichever of the two
+    // the write changes must be the caller. The Cloud Function takes the
+    // disputer from the request's auth, not from these fields; this keeps the
+    // record honest.
+    function disputeNamesCaller() {
+      let keys = request.resource.data.diff(resource.data).affectedKeys();
+      return keys.hasAny(['disputedBy', 'disputeResolvedBy']) &&
+        (!keys.hasAny(['disputedBy']) || request.resource.data.disputedBy == request.auth.uid) &&
+        (!keys.hasAny(['disputeResolvedBy']) || request.resource.data.disputeResolvedBy == request.auth.uid);
+    }
+
+    // Only an ACTIVE activity can enter a dispute. Anything else (deleted,
+    // an approved or rejected resolution, an open dispute) would make a
+    // deleted or approved activity count again, reopen a closed dispute, and
+    // re-notify the admins on every cycle.
+    function entersDispute() {
+      return resource.data.status == 'active' &&
+        request.resource.data.status == 'disputed' &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'disputeReason', 'disputedBy', 'disputeResolvedBy', 'loggedAt']) &&
+        disputeNamesCaller();
     }
 
     match /activities/{activityId} {
@@ -467,46 +495,40 @@ service cloud.firestore {
            activityGuest(request.resource.data.guestId).userId == request.auth.uid &&
            request.resource.data.status == 'active' &&
            request.resource.data.get('verified', false) == false &&
-           // Dispute resolution fields are admin-only (owners, managers, peer
-           // leaders): see resolveDispute. Updates are already limited by the
-           // hasOnly allowlists below.
-           !request.resource.data.keys().hasAny(['incomplete', 'disputed', 'disputeResult'])));
+           // Dispute fields are not the creator's to set: the resolution
+           // (incomplete, disputed, disputeResult) is admin-only, and the
+           // disputer/reason are written when a dispute is actually raised.
+           !request.resource.data.keys().hasAny([
+             'incomplete', 'disputed', 'disputeResult',
+             'disputedBy', 'disputeResolvedBy', 'disputeReason', 'disputeResolvedAt'
+           ])));
       // `verified`/`verifiedBy` feed the Verified column of the court-ready
       // compliance export. Once an admin verifies an activity its details must
-      // not change under that verification, so the resident who logged it may
-      // not edit it at all beyond disputing or soft-deleting it: exactly the
-      // fields disputeActivity / deleteActivity write (services/activity.ts).
-      // Their status may only move to disputed or deleted; on an UPDATE that
-      // can only lower their counts. (Creates are separate: a resident may log
-      // a backdated or future-dated activity by design.) Admins may do the
-      // rest, but may not move an activity into a house they do not
-      // administer. diff() only flags real changes, so a write echoing the
-      // current values back passes.
+      // not change under that verification, so non-admins never edit details.
       //
-      // Peer disputes: disputes exist so residents can challenge OTHER
-      // residents' activities (the ActivityScreen shows DISPUTE to every house
-      // member). A resident of the activity's house may move an active
-      // activity to disputed, writing only what disputeActivity writes and
-      // naming themselves as the disputer (disputeResolvedBy holds the
-      // disputer until resolveDispute overwrites it; disputedBy keeps it and
-      // is optional so earlier app builds still work). Verified activities
-      // remain disputable: the app's DISPUTE button does not check verified.
-      // Nothing else is open to non-loggers.
+      // The resident who logged it may only:
+      //   - soft-delete it, from any status (status + loggedAt only; deleted
+      //     never counts, so this can only lower their numbers), or
+      //   - dispute it, active -> disputed only (entersDispute).
+      // A resident of the same house (peer) may only dispute it, the same way.
+      // Disputes exist so residents can challenge OTHER residents' activities;
+      // verified activities stay disputable (the DISPUTE button does not check
+      // verified).
+      //
+      // Nothing leaves deleted or a resolution except through an admin.
+      // Admins (owners, managers, peer leaders) may do the rest, but may not
+      // move an activity into a house they do not administer, and a resolver
+      // they record must be themselves. diff() only flags real changes, so a
+      // write echoing the current values back passes.
       allow update: if
-        (isAdmin([resource.data.houseId]) && isAdmin([request.resource.data.houseId])) ||
+        (isAdmin([resource.data.houseId]) && isAdmin([request.resource.data.houseId]) &&
+          (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['disputeResolvedBy']) ||
+           request.resource.data.disputeResolvedBy == request.auth.uid)) ||
         (isSameUser(resource.data.loggedBy) &&
-          request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['status', 'disputeReason', 'disputedBy', 'disputeResolvedBy', 'loggedAt']) &&
-          disputerIsCaller() &&
-          (request.resource.data.status == resource.data.status ||
-           request.resource.data.status in ['disputed', 'deleted'])) ||
-        (isGuest([resource.data.houseId]) &&
-          resource.data.status == 'active' &&
-          request.resource.data.status == 'disputed' &&
-          request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['status', 'disputeReason', 'disputedBy', 'disputeResolvedBy', 'loggedAt']) &&
-          request.resource.data.disputeResolvedBy == request.auth.uid &&
-          disputerIsCaller());
+          request.resource.data.status == 'deleted' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'loggedAt'])) ||
+        (isSameUser(resource.data.loggedBy) && entersDispute()) ||
+        (isGuest([resource.data.houseId]) && entersDispute());
       allow delete: if isAdmin([resource.data.houseId]);
     }
 

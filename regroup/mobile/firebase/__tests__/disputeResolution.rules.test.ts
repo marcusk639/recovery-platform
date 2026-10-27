@@ -9,9 +9,9 @@
  * Residents and peers may never set incomplete, disputed or disputeResult,
  * on create or update.
  *
- * Also runs the app's whole peer dispute flow under the rules: the activity
- * update, then the house.disputes mirror (services/dispute.tsx), which no
- * longer writes the guest doc or notifications.
+ * Also runs the app's peer dispute flow under the rules: the activity update
+ * is the whole client side; house.disputes and the notifications are written
+ * by the onActivityWritten Cloud Function, and a resident may write neither.
  *
  * Requires the Firestore emulator on port 8080:
  *   cd firebase && firebase emulators:exec --only firestore --project demo-test \
@@ -165,9 +165,9 @@ describe('residents and peers can never set the resolution fields', () => {
 });
 
 describe("the app's peer dispute flow, end to end under the rules", () => {
-  it('peer disputes the activity, then mirrors it into house.disputes', async () => {
+  it('peer disputes the activity; the house.disputes mirror is the server\'s job, not the peer\'s', async () => {
     const db = peer().firestore();
-    // 1. services/activity.ts disputeActivity
+    // services/activity.ts disputeActivity: the whole client side of a dispute.
     await assertSucceeds(
       updateDoc(doc(db, 'activities/active'), {
         status: 'disputed',
@@ -177,21 +177,13 @@ describe("the app's peer dispute flow, end to end under the rules", () => {
         loggedAt: Timestamp.now(),
       }),
     );
-    // 2. services/dispute.tsx updateDispute(house): one house update, nothing else
+    // The onActivityWritten Cloud Function maintains house.disputes; a
+    // resident may no longer write it (they could forge or wipe entries).
     const batch = writeBatch(db);
     batch.update(doc(db, `houses/${HOUSE}`), {
-      id: HOUSE,
-      disputes: {
-        d1: {
-          id: 'd1',
-          activityId: 'active',
-          guestId: 'residentGuest',
-          houseId: HOUSE,
-          status: 'pending',
-        },
-      },
+      disputes: { d1: { id: 'd1', activityId: 'active', status: 'pending' } },
     });
-    await assertSucceeds(batch.commit());
+    await assertFails(batch.commit());
   });
 
   it('the batch the app used to send (guest doc + notification) was denied for a peer', async () => {
