@@ -13,11 +13,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 // Mock the activity service module before importing the hooks
 jest.mock('../../../services/activity');
-// Mock offlineQueue used inside the file (useFlushOfflineQueue)
-jest.mock('../../../services/offlineQueue', () => ({
-  offlineQueue: { flush: jest.fn(() => Promise.resolve()) },
-  isNetworkError: jest.fn(() => false),
-}));
 // Mock meeting service (referenced by old-model hooks that share the file)
 jest.mock('../../../services/meeting', () => ({
   searchForMeetings: jest.fn(),

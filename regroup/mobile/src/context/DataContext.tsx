@@ -20,7 +20,6 @@ import { adminKeys } from '../state/queries/adminQueries';
 import * as houseService from '../services/house';
 import * as guestService from '../services/guest';
 import * as adminService from '../services/admin';
-import { useOfflineSync } from '../hooks/useOfflineSync';
 import { useSelectedHouse } from '../hooks/useSelectedHouse';
 import { useSelectedGuest } from '../hooks/useSelectedGuest';
 import { useSelectedAdmin } from '../hooks/useSelectedAdmin';
@@ -87,12 +86,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
 
   // Aggregate Loading State
   const loading = userLoading || housesLoading || guestsLoading;
-
-  // Wire up offline-queue auto-flush. The hook listens for AppState foreground
-  // transitions and (if @react-native-community/netinfo is installed) network
-  // reconnect events, then flushes any queued activities to Firestore.
-  // pendingCount is unused here but available if the UI ever wants a badge.
-  useOfflineSync();
 
   // Fetch initial data when user logs in
   useEffect(() => {

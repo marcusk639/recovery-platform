@@ -20,7 +20,6 @@ import {
   initializeDailyStats,
 } from '../entities/WeekSummary';
 import { logException } from '../util/logging';
-import { offlineQueue, isNetworkError } from './offlineQueue';
 
 /**
  * Helper: Get week start date (Monday) from any date
@@ -112,7 +111,8 @@ export async function logActivity(
     };
   } catch (error) {
     logException(error);
-    throw new Error(`Failed to log activity: ${type}`);
+    // Original error, so its `code` still tells callers what failed.
+    throw error;
   }
 }
 
@@ -763,54 +763,6 @@ export async function verifyActivity(
   } catch (error) {
     logException(error);
     throw new Error('Failed to verify activity');
-  }
-}
-
-/**
- * Log an activity with automatic offline fallback.
- *
- * Attempts to write the activity to Firestore immediately. If the write fails
- * because the device is offline (Firestore error code `unavailable` or
- * `deadline-exceeded`), the activity is queued locally and will be synced the
- * next time `useFlushOfflineQueue` is called.
- *
- * Any non-network error (permission denied, invalid argument, etc.) is
- * re-thrown so callers can handle real failures.
- *
- * @returns `{ success: true, queued: false, activityId }` on immediate write,
- *          `{ success: false, queued: true, activityId }` when queued locally.
- */
-export async function logActivityWithOfflineSupport(
-  guestId: string,
-  houseId: string,
-  type: ActivityType,
-  data: ActivityData,
-  loggedBy: string,
-  timestamp?: Date,
-): Promise<{ success: boolean; queued: boolean; activityId?: string }> {
-  try {
-    const activity = await logActivity(
-      guestId,
-      houseId,
-      type,
-      data,
-      loggedBy,
-      timestamp,
-    );
-    return { success: true, queued: false, activityId: activity.id };
-  } catch (error: unknown) {
-    if (isNetworkError(error)) {
-      const localId = await offlineQueue.enqueue({
-        guestId,
-        houseId,
-        type,
-        data,
-        loggedBy,
-        timestamp: timestamp ?? new Date(),
-      });
-      return { success: false, queued: true, activityId: localId };
-    }
-    throw error;
   }
 }
 

@@ -39,7 +39,6 @@ export {
   useDeleteActivity,
   useDisputeActivity,
   useResolveDispute,
-  useFlushOfflineQueue,
 } from "./activityQueries";
 
 // Payment queries
