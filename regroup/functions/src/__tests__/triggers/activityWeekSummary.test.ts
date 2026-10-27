@@ -5,8 +5,7 @@
 // recompute (covered in __tests__/activities/syncWeekSummary.test.ts).
 
 jest.mock('firebase-functions/v2/firestore', () => ({
-  onDocumentWrittenWithAuthContext: jest.fn((options: unknown, handler: unknown) => ({ options, handler })),
-  onDocumentWritten: jest.fn(() => ({})),
+  onDocumentWritten: jest.fn((options: unknown, handler: unknown) => ({ options, handler })),
   onDocumentCreated: jest.fn(() => ({})),
   onDocumentUpdated: jest.fn(() => ({})),
   onDocumentDeleted: jest.fn(() => ({})),
@@ -78,32 +77,31 @@ describe('onActivityWritten', () => {
     ).rejects.toThrow('aborted');
   });
 
-  it('runs the notifier and the house mirror with the event id and the authenticated caller', async () => {
+  it('runs the notifier and the house mirror with the event id and time', async () => {
     const before = { status: 'active' };
-    const after = { status: 'disputed', disputedBy: 'forged-uid' };
+    const after = { status: 'disputed', disputedBy: 'peer-uid' };
     await trigger.handler({
       id: 'evt-9',
       time: '2026-01-15T12:00:00.000Z',
-      authType: 'api_key',
-      authId: 'peer-uid',
       params: { activityId: 'a9' },
       data: { before: snap(before), after: snap(after) },
     });
-    expect(notifyDispute).toHaveBeenCalledWith({ name: 'rats-db' }, 'evt-9', 'a9', before, after, 'peer-uid');
+    expect(notifyDispute).toHaveBeenCalledWith({ name: 'rats-db' }, 'evt-9', 'a9', before, after);
     expect(mirrorHouseDispute).toHaveBeenCalledWith({ name: 'rats-db' }, 'a9', before, after, {
-      disputerUid: 'peer-uid',
       now: '2026-01-15T12:00:00.000Z',
     });
   });
 
-  it('passes no disputer for a write without auth context', async () => {
+  it('takes no decision from the event auth context (authId is not documented as the uid)', async () => {
     await trigger.handler({
       id: 'evt-10',
       authType: 'unknown',
+      authId: 'someone-else',
       params: { activityId: 'a10' },
       data: { before: snap({ status: 'active' }), after: snap({ status: 'disputed' }) },
     });
-    expect((notifyDispute as jest.Mock).mock.calls[0][5]).toBeUndefined();
+    expect((notifyDispute as jest.Mock).mock.calls[0]).toHaveLength(5);
+    expect(JSON.stringify((mirrorHouseDispute as jest.Mock).mock.calls[0])).not.toContain('someone-else');
   });
 
   it('still recomputes when notifying fails, then fails the event so it retries', async () => {

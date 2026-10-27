@@ -54,9 +54,6 @@ jest.mock("firebase-functions/v2/firestore", () => ({
   onDocumentWritten: jest.fn((_pathOrOpts: any, handler?: any) =>
     typeof _pathOrOpts === "function" ? _pathOrOpts : (handler ?? _pathOrOpts),
   ),
-  onDocumentWrittenWithAuthContext: jest.fn((_pathOrOpts: any, handler?: any) =>
-    typeof _pathOrOpts === "function" ? _pathOrOpts : (handler ?? _pathOrOpts),
-  ),
 }));
 
 // ─── util/notifications ───────────────────────────────────────────────────────

@@ -6,7 +6,12 @@
 
 import { logger } from 'firebase-functions';
 import { FakeFirestore, asFirestore } from './fakeFirestore';
-import { disputeMessage, isNewDispute, notifyDispute } from '../../activities/disputeNotifications';
+import {
+  disputeMessage,
+  disputerOf,
+  isNewDispute,
+  notifyDispute,
+} from '../../activities/disputeNotifications';
 
 let db: FakeFirestore;
 
@@ -45,7 +50,7 @@ afterEach(() => jest.restoreAllMocks());
 
 describe('notifyDispute recipients', () => {
   it('notifies every house admin and the disputed resident, once each', async () => {
-    const r = await notifyDispute(asFirestore(db), 'evt1', 'a1', active, disputed, 'peer-uid');
+    const r = await notifyDispute(asFirestore(db), 'evt1', 'a1', active, disputed);
 
     expect(r.recipients.sort()).toEqual(['manager-uid', 'owner-uid', 'peer-leader-uid', 'resident-uid']);
     const byUser = Object.fromEntries(notifications().map((n) => [n.userId, n]));
@@ -64,41 +69,54 @@ describe('notifyDispute recipients', () => {
     expect(byUser['manager-uid'].adminNotification).toBe(true);
   });
 
-  it('does not notify the person who raised the dispute (from the write\'s auth)', async () => {
-    const r = await notifyDispute(asFirestore(db), 'evt1', 'a1', active, disputed, 'manager-uid');
+  it('does not notify the person who raised the dispute (the disputedBy this write set)', async () => {
+    const byManager = { ...disputed, disputedBy: 'manager-uid', disputeResolvedBy: 'manager-uid' };
+    const r = await notifyDispute(asFirestore(db), 'evt1', 'a1', active, byManager);
     expect(r.recipients).not.toContain('manager-uid');
     expect(r.recipients).toContain('resident-uid');
   });
 
-  it('ignores a forged disputedBy: it cannot suppress another recipient', async () => {
-    // A peer disputes but names the manager as the disputer.
-    const forged = { ...disputed, disputedBy: 'manager-uid', disputeResolvedBy: 'manager-uid' };
-    const r = await notifyDispute(asFirestore(db), 'evt1', 'a1', active, forged, 'peer-uid');
+  it('uses only the disputer field this write set: a stale value from an earlier dispute is ignored', async () => {
+    // An admin reopened an old dispute; its disputedBy (the manager) is still
+    // on the doc. This older-build write sets only disputeResolvedBy.
+    const before = { ...active, disputedBy: 'manager-uid' };
+    const after = { ...before, status: 'disputed', disputeResolvedBy: 'resident-uid' };
+    const r = await notifyDispute(asFirestore(db), 'evt1', 'a1', before, after);
     expect(r.recipients).toContain('manager-uid');
-    expect(r.recipients).not.toContain('peer-uid');
+    expect(r.recipients).not.toContain('resident-uid');
   });
 
-  it("an older build's dispute (disputeResolvedBy only) still notifies everyone but the caller", async () => {
-    const { disputedBy: _omit, ...legacy } = disputed;
-    const r = await notifyDispute(asFirestore(db), 'evt1', 'a1', active, legacy, 'peer-uid');
-    expect(r.recipients.sort()).toEqual(['manager-uid', 'owner-uid', 'peer-leader-uid', 'resident-uid']);
+  it("an older build's dispute (disputeResolvedBy only) still notifies everyone but the disputer", async () => {
+    const legacy = { ...active, status: 'disputed', disputeReason: 'x', disputeResolvedBy: 'resident-uid' };
+    const r = await notifyDispute(asFirestore(db), 'evt1', 'a1', active, legacy);
+    expect(r.recipients.sort()).toEqual(['manager-uid', 'owner-uid', 'peer-leader-uid']);
   });
 
-  it('a write with no auth context (Admin SDK) notifies every recipient', async () => {
-    const r = await notifyDispute(asFirestore(db), 'evt1', 'a1', active, disputed, undefined);
+  it('a write that sets no disputer field (Admin SDK) notifies every recipient', async () => {
+    const { disputedBy: _a, disputeResolvedBy: _b, ...byAdminSdk } = disputed;
+    const r = await notifyDispute(asFirestore(db), 'evt1', 'a1', active, byAdminSdk);
     expect(r.recipients).toHaveLength(4);
+  });
+
+  it('cannot be steered by a forged disputer: the rules refuse that write (see disputeIntegrity.rules)', () => {
+    // A non-admin entering a dispute must set disputedBy/disputeResolvedBy to
+    // request.auth.uid (firestore.rules disputeNamesCaller); the rules test
+    // "BLOCKS a peer naming someone else in disputedBy or disputeResolvedBy"
+    // pins that. So the field this function trusts is always the caller.
+    expect(disputerOf(active, disputed)).toBe('peer-uid');
+    expect(disputerOf(disputed, { ...disputed, loggedAt: 'x' })).toBe('');
   });
 
   it('recovers on redelivery when a create fails midway: each recipient once', async () => {
     db.failCreates.set('notifications/dispute_evt1_resident-uid', Object.assign(new Error('unavailable'), { code: 14 }));
-    await expect(notifyDispute(asFirestore(db), 'evt1', 'a1', active, disputed, 'peer-uid')).rejects.toThrow(
+    await expect(notifyDispute(asFirestore(db), 'evt1', 'a1', active, disputed)).rejects.toThrow(
       'unavailable',
     );
     const sentFirst = notifications().length;
     expect(sentFirst).toBeGreaterThan(0);
     expect(sentFirst).toBeLessThan(4);
 
-    const retry = await notifyDispute(asFirestore(db), 'evt1', 'a1', active, disputed, 'peer-uid');
+    const retry = await notifyDispute(asFirestore(db), 'evt1', 'a1', active, disputed);
 
     expect(retry.recipients).toContain('resident-uid');
     expect(notifications().map((n) => n.userId).sort()).toEqual([

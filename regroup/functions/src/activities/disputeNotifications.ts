@@ -10,8 +10,9 @@
  * Recipients: every admin of the guest's house (house.adminIds,
  * house.superAdminIds, house.superAdminId; the house roster that
  * notifyOperatorOnApplication already uses) plus the resident
- * (guests.userId), minus whoever raised the dispute (taken from the write's
- * auth context, not from client-written fields). The house comes from the
+ * (guests.userId), minus whoever raised the dispute (disputerOf: the
+ * disputer field this write set, which the rules tie to the caller). The
+ * house comes from the
  * guest doc, never from the activity.
  *
  * Writes /notifications/{id} in the existing shape (userId, houseId, guestId,
@@ -42,6 +43,23 @@ export function isNewDispute(before: Data | undefined, after: Data | undefined):
   return after?.status === 'disputed' && before?.status !== 'disputed';
 }
 
+/**
+ * Who raised the dispute: the disputer field THIS write set — disputedBy, or
+ * for app builds before it, disputeResolvedBy (which then held the
+ * disputer). The rules require a non-admin entering a dispute to change one
+ * of them to request.auth.uid, so the changed field is the caller; an
+ * unchanged, stale value from an earlier dispute is ignored. Empty when
+ * neither changed (e.g. an Admin SDK write).
+ */
+export function disputerOf(before: Data | undefined, after: Data | undefined): string {
+  if (!after || !isNewDispute(before, after)) return '';
+  for (const field of ['disputedBy', 'disputeResolvedBy']) {
+    const v = after[field];
+    if (typeof v === 'string' && v !== '' && v !== before?.[field]) return v;
+  }
+  return '';
+}
+
 const strings = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x !== '') : [];
 
@@ -61,8 +79,6 @@ export async function notifyDispute(
   activityId: string,
   before: Data | undefined,
   after: Data | undefined,
-  /** The authenticated uid that made the write (event.authId), if any. */
-  disputerUid?: string,
 ): Promise<{ recipients: string[] }> {
   if (!after || !isNewDispute(before, after)) return { recipients: [] };
 
@@ -83,10 +99,7 @@ export async function notifyDispute(
     ...strings([house.superAdminId]),
   ]);
 
-  // The disputer is whoever made this write, from the event's auth context —
-  // never the activity's disputedBy/disputeResolvedBy, which a client could
-  // set to another person to suppress that person's notification.
-  const disputer = disputerUid ?? '';
+  const disputer = disputerOf(before, after);
   const recipients = new Map<string, boolean>(); // uid -> forAdmin
   for (const uid of admins) recipients.set(uid, true);
   if (guest.residentUid && !recipients.has(guest.residentUid))

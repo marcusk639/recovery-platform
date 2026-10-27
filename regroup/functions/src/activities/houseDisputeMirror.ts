@@ -23,7 +23,7 @@
 import { logger } from 'firebase-functions';
 import { FieldValue } from 'firebase-admin/firestore';
 import { trustedGuestFrom } from './activityTrust';
-import { isNewDispute } from './disputeNotifications';
+import { disputerOf, isNewDispute } from './disputeNotifications';
 
 type Firestore = FirebaseFirestore.Firestore;
 type Data = Record<string, unknown>;
@@ -48,7 +48,7 @@ export async function mirrorHouseDispute(
   activityId: string,
   before: Data | undefined,
   after: Data | undefined,
-  { disputerUid, now = new Date().toISOString() }: { disputerUid?: string; now?: string } = {},
+  { now = new Date().toISOString() }: { now?: string } = {},
 ): Promise<{ added: number; removed: number }> {
   const opening = isNewDispute(before, after);
   const closing = leavesDispute(before, after);
@@ -86,7 +86,7 @@ export async function mirrorHouseDispute(
           houseId: guest.houseId,
           type: activity.type ?? null,
           message: typeof activity.disputeReason === 'string' ? activity.disputeReason : '',
-          disputedBy: disputerUid ?? null,
+          disputedBy: disputerOf(before, after) || null,
           status: 'pending',
           challenges: [],
           createdAt: now,

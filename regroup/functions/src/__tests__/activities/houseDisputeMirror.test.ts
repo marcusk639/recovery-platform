@@ -30,8 +30,14 @@ beforeEach(() => {
 afterEach(() => jest.restoreAllMocks());
 
 describe('entering a dispute', () => {
-  it('adds one entry keyed by the activity id, with the server-side disputer', async () => {
-    const r = await mirrorHouseDispute(asFirestore(db), 'a1', active, disputed, { disputerUid: 'peer-uid', now: NOW });
+  it('adds one entry keyed by the activity id, with the disputer this write set', async () => {
+    const r = await mirrorHouseDispute(
+      asFirestore(db),
+      'a1',
+      active,
+      { ...disputed, disputedBy: 'peer-uid' },
+      { now: NOW },
+    );
 
     expect(r).toEqual({ added: 1, removed: 0 });
     expect(house().disputes.a1).toMatchObject({
