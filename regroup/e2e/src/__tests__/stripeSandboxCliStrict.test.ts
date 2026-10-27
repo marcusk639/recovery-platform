@@ -17,11 +17,22 @@ const keyFile = () => path.join(dir, 'stripe-e2e-sandbox-key.txt');
 const steps = (createdKinds: ('platform' | 'connect')[]) =>
   formatNextSteps({ secretsFile: secretsFile(), keyFile: keyFile(), createdKinds });
 const commandLines = (text: string) => text.split('\n').filter((l) => l.includes('node -e'));
-/** The value-producing half of a printed command: everything before `| firebase`. */
-const producer = (line: string) => line.trim().split(' | firebase')[0];
+/**
+ * Runs a whole printed command with `firebase` replaced by a shell function that
+ * records whether it ran and what it received on stdin.
+ */
 const run = (line: string) => {
-  const r = spawnSync('bash', ['-c', producer(line)], { encoding: 'utf8' });
-  return { status: r.status, stdout: r.stdout, stderr: r.stderr };
+  const received = path.join(dir, 'received');
+  fs.rmSync(received, { force: true });
+  const stub = `firebase() { cat > ${JSON.stringify(received)}; }`;
+  const r = spawnSync('bash', ['-c', `${stub}; ${line.trim()}`], { encoding: 'utf8' });
+  const ran = fs.existsSync(received);
+  return {
+    status: r.status,
+    stdout: r.stdout,
+    stderr: r.stderr,
+    stored: ran ? fs.readFileSync(received, 'utf8') : null,
+  };
 };
 const lineFor = (text: string, secretName: string) =>
   commandLines(text).find((l) => l.includes(`secrets:set ${secretName} `))!;
@@ -47,25 +58,26 @@ describe('formatNextSteps', () => {
     expect(none).toMatch(/secrets:set STRIPE_SECRET_KEY /);
   });
 
-  it('quotes the file paths and starts every command with pipefail', () => {
+  it('quotes the file paths and validates before piping into secrets:set', () => {
     const text = steps(['platform', 'connect']);
     const quoted = (p: string) => `'${p.replace(/'/g, `'\\''`)}'`;
     expect(text).toContain(quoted(secretsFile()));
     expect(text).toContain(quoted(keyFile()));
     const lines = commandLines(text);
     expect(lines).toHaveLength(3);
-    for (const line of lines) expect(line.trim().startsWith('set -o pipefail; ')).toBe(true);
+    for (const line of lines) expect(line).toMatch(/ >\/dev\/null && node -e .* \| firebase /);
   });
 
-  it('prints exactly the stored webhook secret, with no newline', () => {
+  it('stores exactly the webhook secret, with no newline, and prints nothing', () => {
     fs.writeFileSync(secretsFile(), JSON.stringify({ platform: 'whsec_p1', connect: 'whsec_c1' }));
     const text = steps(['platform', 'connect']);
     expect(run(lineFor(text, 'STRIPE_TEST_WEBHOOK_SECRET'))).toEqual({
       status: 0,
-      stdout: 'whsec_p1',
+      stdout: '',
       stderr: '',
+      stored: 'whsec_p1',
     });
-    expect(run(lineFor(text, 'STRIPE_CONNECT_TEST_WEBHOOK_SECRET')).stdout).toBe('whsec_c1');
+    expect(run(lineFor(text, 'STRIPE_CONNECT_TEST_WEBHOOK_SECRET')).stored).toBe('whsec_c1');
   });
 
   it.each([
@@ -73,23 +85,24 @@ describe('formatNextSteps', () => {
     ['a junk value', JSON.stringify({ platform: 'x' })],
     ['an empty value', JSON.stringify({ platform: '' })],
     ['corrupt JSON', '{"platform": whsec_leakme}'],
-  ])('exits 1 and prints nothing for %s', (_label, content) => {
+  ])('never runs secrets:set for %s, and prints nothing', (_label, content) => {
     fs.writeFileSync(secretsFile(), content);
     const result = run(lineFor(steps(['platform']), 'STRIPE_TEST_WEBHOOK_SECRET'));
     expect(result.status).toBe(1);
+    expect(result.stored).toBeNull();
     expect(result.stdout).toBe('');
     expect(result.stderr).not.toMatch(/whsec_|leakme/);
   });
 
-  it('prints the sandbox key trimmed, and refuses anything that is not an sk_test_ key', () => {
+  it('stores the sandbox key trimmed, and never runs secrets:set for anything else', () => {
     fs.writeFileSync(keyFile(), 'sk_test_abc123\n');
     const line = lineFor(steps([]), 'STRIPE_SECRET_KEY');
-    expect(run(line)).toEqual({ status: 0, stdout: 'sk_test_abc123', stderr: '' });
+    expect(run(line)).toEqual({ status: 0, stdout: '', stderr: '', stored: 'sk_test_abc123' });
     for (const bad of ['pk_test_abc', 'sk_live_abc', '']) {
       fs.writeFileSync(keyFile(), bad);
-      expect(run(line)).toMatchObject({ status: 1, stdout: '' });
+      expect(run(line)).toMatchObject({ status: 1, stdout: '', stored: null });
     }
     fs.rmSync(keyFile());
-    expect(run(line)).toMatchObject({ status: 1, stdout: '' });
+    expect(run(line)).toMatchObject({ status: 1, stdout: '', stored: null });
   });
 });
