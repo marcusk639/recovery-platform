@@ -64,13 +64,18 @@ const ticketFor = (token: string, inv: Invitation, redeemedAtMs: number) => ({
 });
 
 /**
- * fresh:     this call consumed the invitation; grant, then completeGrant.
- * completed: this account already redeemed it AND its grant completed
- *            (grantCompletedAt): succeed, grant and record nothing. A role
- *            revoked since then is never brought back by an old token.
- * stranded:  this account redeemed it but the grant never completed (the
- *            grant failed and so did the release): grant and record again,
- *            only while the invitation is unexpired (+24h grace).
+ * What consumeInvitation found, for this caller:
+ *   fresh:     not redeemed before; consumed now (grantPending set). Grant,
+ *              then completeGrant (grantCompletedAt).
+ *   completed: this account redeemed it before and the grant completed:
+ *              grantCompletedAt is set, OR grantPending was never set (an
+ *              invitation redeemed by code before #145, which always granted
+ *              in the same call). Grant and record nothing: a role revoked
+ *              since then is never brought back by an old token.
+ *   stranded:  this account redeemed it with grantPending set and no
+ *              grantCompletedAt (the grant failed and so did the release):
+ *              grant and record again, only while the invitation is
+ *              unexpired (+24h grace).
  */
 export type ConsumeState = 'fresh' | 'completed' | 'stranded';
 
@@ -91,9 +96,15 @@ export async function consumeInvitation(
   return db().runTransaction(async (tx) => {
     const snap = await tx.get(invRef);
     if (!snap.exists) throw new HttpsError('not-found', 'Invitation not found');
-    const inv = snap.data() as Invitation & { redeemedByUid?: string; grantCompletedAt?: string };
+    const inv = snap.data() as Invitation & {
+      redeemedByUid?: string;
+      grantCompletedAt?: string;
+      grantPending?: boolean;
+    };
     if (inv.redeemedAt && inv.redeemedByUid === uid) {
-      if (inv.grantCompletedAt) return { inv, state: 'completed' as const };
+      if (inv.grantCompletedAt || inv.grantPending !== true) {
+        return { inv, state: 'completed' as const };
+      }
       if (new Date(inv.expiresAt).getTime() + TICKET_GRACE_AFTER_INVITATION_MS < nowMs) {
         throw new HttpsError('failed-precondition', 'Invitation has expired');
       }
@@ -109,10 +120,22 @@ export async function consumeInvitation(
     if (new Date(inv.expiresAt).getTime() < nowMs) {
       throw new HttpsError('failed-precondition', 'Invitation has expired');
     }
-    tx.update(invRef, { redeemedAt: new Date(nowMs).toISOString(), redeemedByUid: uid });
-    if (SELF_CREATE_ROLES.has(inv.role)) {
-      tx.set(ticketRef(uid, inv.houseId), ticketFor(token, inv, nowMs));
+    // A used ticket for this account and house is never overwritten: the
+    // account already has its resident record here.
+    const tRef = ticketRef(uid, inv.houseId);
+    const existing = SELF_CREATE_ROLES.has(inv.role) ? await tx.get(tRef) : null;
+    if (existing?.exists && (existing.data() ?? {}).used === true) {
+      throw new HttpsError(
+        'failed-precondition',
+        'You already have a resident record in this house. Ask the house staff for help.',
+      );
     }
+    tx.update(invRef, {
+      redeemedAt: new Date(nowMs).toISOString(),
+      redeemedByUid: uid,
+      grantPending: true,
+    });
+    if (SELF_CREATE_ROLES.has(inv.role)) tx.set(tRef, ticketFor(token, inv, nowMs));
     return { inv, state: 'fresh' as const };
   });
 }
@@ -132,7 +155,15 @@ export async function completeGrant(
   const rRef = roleRef(inv.houseId, uid);
   await db().runTransaction(async (tx) => {
     const [invSnap, roleSnap] = [await tx.get(invRef), await tx.get(rRef)];
-    if (!invSnap.exists) return;
+    if (!invSnap.exists) {
+      logger.error(
+        'redeemInvitation: invitation gone before the grant completed; tier not recorded',
+        {
+          houseId: inv.houseId,
+        },
+      );
+      return;
+    }
     const record = nextRoleRecord(roleSnap.exists ? (roleSnap.data() ?? {}).tier : null, tier, {
       grantedBy: inv.inviterUid,
       via: 'invitation',
@@ -159,7 +190,11 @@ export async function releaseInvitation(
       const tRef = ticketRef(uid, houseId);
       const [inv, ticket] = [await tx.get(invRef), await tx.get(tRef)];
       if (inv.exists && (inv.data() ?? {}).redeemedByUid === uid) {
-        tx.update(invRef, { redeemedAt: FieldValue.delete(), redeemedByUid: FieldValue.delete() });
+        tx.update(invRef, {
+          redeemedAt: FieldValue.delete(),
+          redeemedByUid: FieldValue.delete(),
+          grantPending: FieldValue.delete(),
+        });
       }
       if (ticket.exists && (ticket.data() ?? {}).used === false) tx.delete(tRef);
     });

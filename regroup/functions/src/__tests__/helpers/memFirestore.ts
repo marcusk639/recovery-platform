@@ -278,4 +278,5 @@ export const apiFirestore = {
   userCollection: collectionRef('users'),
   invitationCollection: collectionRef('invitations'),
   adminCollection: collectionRef('admins'),
+  houseRolesCollection: collectionRef('house-roles'),
 };

@@ -113,11 +113,16 @@ describe('delete: claim cleanup', () => {
     expect(mem.get(`house-roles/${H}_p`)).toBeUndefined();
   });
 
-  it('the house owner keeps the admin claim', async () => {
+  it('the house owner (primary owner record) keeps the admin claim; ownerId alone does not', async () => {
     users.o = { admin: { [H]: true }, guest: { [H]: true } };
-    mem.seed(`houses/${H}`, { id: H, ownerId: 'o' });
+    mem.seed(`house-roles/${H}_o`, { tier: 'owner', primary: true });
     await run(deleteEvent('g1', { houseId: H, userId: 'o' }));
     expect(users.o).toEqual({ admin: { [H]: true }, guest: {}, superAdmin: {} });
+
+    users.x = { admin: { [H]: true }, guest: { [H]: true } };
+    mem.seed(`houses/${H}`, { id: H, ownerId: 'x' });
+    await run(deleteEvent('g2', { houseId: H, userId: 'x' }));
+    expect(users.x.admin).toEqual({});
   });
 
   it('re-throws a cleanup failure so the event is retried', async () => {

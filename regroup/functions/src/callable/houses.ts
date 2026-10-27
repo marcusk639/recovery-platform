@@ -8,7 +8,6 @@ import { createHousesTx } from '../houses/createHousesTx';
 import { createHouseInputSchema } from '../houses/houseInput';
 import { writeOperatorSetupFlags } from '../houses/operatorSetup';
 import { grantHouseRoles } from '../util/claims';
-import { recordOwnerRoles } from '../util/houseRoles';
 import { parseInput } from '../validation';
 
 const createHousesSchema = z.object({
@@ -55,7 +54,6 @@ export const createHouses = onCall(async (request): Promise<CreateHousesResponse
 
   try {
     await grantHouseRoles(uid, result.houseIds);
-    await recordOwnerRoles(uid, result.houseIds, 'createHouses');
   } catch (err) {
     logger.error('createHouses: claim grant failed', {
       uid,

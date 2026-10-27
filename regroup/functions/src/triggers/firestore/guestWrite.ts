@@ -1,6 +1,6 @@
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { logger } from 'firebase-functions';
-import { guestCollection, houseCollection, ratsFirestore } from '../../api/firestore';
+import { guestCollection, ratsFirestore } from '../../api/firestore';
 import { revokeHouseRoles } from '../../util/claims';
 import { entitlingDocs, settleTicket } from '../../util/admission';
 import { isStaffTier, liveClaims, readRoleTier, recordRoleRevoke } from '../../util/houseRoles';
@@ -29,12 +29,10 @@ import { eventAgeMinutes, isStaleEvent, RETRY_CUTOFF_MS } from '../../util/event
 //     ticket (util/admission entitlingDocs: flagged in guest-flags, or
 //     self-created and not the ticket's usedByGuestId). Staff-created docs
 //     and legacy docs with no createdBy keep them as before;
-//   - the house owner (ownerId), a live superAdmin claim (co-owner), or a
-//     manager or owner role record (util/houseRoles) keeps the admin claim.
-//     admins/{id} docs are not read: clients write them. A peer leader's
-//     admin claim and tier go with their last entitling resident record.
-//   The role record is updated to match (recordRoleRevoke), admin first, so
-//   a departed peer leader's record is removed, not left as a resident.
+//   - an owner/manager role record (util/houseRoles; never ownerId or an
+//     admins doc) or a live superAdmin claim keeps the admin claim. A peer
+//     leader's admin claim and tier go with their last entitling record;
+//     the role record is updated, admin first (so it is removed).
 //   The check reads current state, so a redelivery after the resident was
 //   re-added finds their new active doc and revokes nothing. An account that
 //   no longer exists (auth/user-not-found; account deletion removes the guest
@@ -113,10 +111,14 @@ export const onGuestWrite = onDocumentWritten(
     }
 
     let failure: Error | null = null;
-    const remember = (step: string, err: unknown) => {
+    const remember = (step: string, err: unknown, forHouse = houseId) => {
       const e = err as Error;
       failure = failure ?? e;
-      logger.error(`onGuestWrite: ${step} failed`, { guestId, houseId, error: e.message });
+      logger.error(`onGuestWrite: ${step} failed`, {
+        guestId,
+        houseId: forHouse,
+        error: e.message,
+      });
     };
 
     const leftHouse = typeof leaving?.houseId === 'string' ? leaving.houseId : '';
@@ -125,7 +127,7 @@ export const onGuestWrite = onDocumentWritten(
         logger.warn('onGuestWrite: late departure event; claims cleanup still runs', ageInfo);
       await revokeIfNoLongerEntitled(leaving.userId, leftHouse, guestId).catch((e) => {
         if (!stale) {
-          remember('auth claims cleanup', e);
+          remember('auth claims cleanup', e, leftHouse);
           return;
         }
         logger.error('onGuestWrite: late departure event; claims cleanup failed, not retried', {
@@ -141,7 +143,7 @@ export const onGuestWrite = onDocumentWritten(
     // below as a normal write; its claims are never granted here.
     if (!stale && moved && leftHouse) {
       await resplitEES(leftHouse, event.time).catch((e) =>
-        remember('EES recalculation (old house)', e),
+        remember('EES recalculation (old house)', e, leftHouse),
       );
     }
     if (!stale && houseId) {
@@ -157,10 +159,9 @@ async function revokeIfNoLongerEntitled(
   houseId: string,
   deletedGuestId: string,
 ): Promise<void> {
-  const [guestSnap, tier, house, claims] = await Promise.all([
+  const [guestSnap, tier, claims] = await Promise.all([
     guestCollection.where('userId', '==', uid).get(),
     readRoleTier(houseId, uid),
-    houseCollection.doc(houseId).get(),
     liveClaims(uid),
   ]);
   // Current state: a doc re-created with the deleted id counts like any other.
@@ -179,7 +180,6 @@ async function revokeIfNoLongerEntitled(
   const superAdmin = (claims?.superAdmin ?? {}) as Record<string, unknown>;
   const stillAdmin =
     isStaffTier(tier) ||
-    (house.data() ?? {}).ownerId === uid ||
     (Array.isArray(superAdmin) ? superAdmin.includes(houseId) : superAdmin[houseId] === true);
   try {
     await revokeHouseRoles(uid, [houseId], stillAdmin ? ['guest'] : ['guest', 'admin']);

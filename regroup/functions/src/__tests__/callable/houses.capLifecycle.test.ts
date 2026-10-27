@@ -6,8 +6,6 @@
 // trigger is the only path that frees one: at the cap, deleting a house must
 // let the operator create another, and a tombstoned id must stay refused.
 
-// Owner role records (util/houseRoles) are covered in narrTiers.test.ts.
-jest.mock('../../util/houseRoles', () => ({ recordOwnerRoles: jest.fn(async () => undefined) }));
 jest.mock('firebase-functions/v2/https', () => {
   const actual = jest.requireActual('firebase-functions/v2/https');
   return {

@@ -12,7 +12,7 @@ import { parseInput } from "../validation";
 import { assertCanGrantClaimForHouses } from "../util/authGuard";
 import {
   assertMayGrantTier,
-  assertMayRevoke,
+  assertMayRevokeAll,
   recordRoleGrant,
   recordRoleRevoke,
 } from "../util/houseRoles";
@@ -223,14 +223,14 @@ export const deleteAdminAuthorization = onCall(async (request) => {
   });
   // Tiers (util/houseRoles): only someone strictly above the target may
   // remove their staff access; the primary owner only themselves.
-  for (const houseId of new Set(allHouseIds)) {
-    await assertMayRevoke({
-      callerUid: request.auth.uid,
+  await assertMayRevokeAll({
+    callerUid: request.auth.uid,
+    targets: [...new Set(allHouseIds)].map((houseId) => ({
       targetUid: admin.userId,
       houseId,
-      callableName: "deleteAdminAuthorization",
-    });
-  }
+    })),
+    callableName: "deleteAdminAuthorization",
+  });
   if (adminHouseIds?.length) {
     const userClaims = await deleteClaim(admin.userId, adminHouseIds, "admin");
     await auth().setCustomUserClaims(admin.userId, { ...userClaims });
@@ -341,16 +341,13 @@ export const removePrivilegesForGuests = onCall(async (request) => {
   );
   // Tiers (util/houseRoles): the caller must rank strictly above each target
   // (removing a resident's guest claim: any staff above them).
-  for (const [targetUid, houses] of housesByTarget) {
-    for (const houseId of houses) {
-      await assertMayRevoke({
-        callerUid: request.auth.uid,
-        targetUid,
-        houseId,
-        callableName: "removePrivilegesForGuests",
-      });
-    }
-  }
+  await assertMayRevokeAll({
+    callerUid: request.auth.uid,
+    targets: [...housesByTarget].flatMap(([targetUid, houses]) =>
+      [...houses].map((houseId) => ({ targetUid, houseId })),
+    ),
+    callableName: "removePrivilegesForGuests",
+  });
   const users = await getGuestsAsUsers(data.guests);
   await Promise.all(
     users.map(async (user) => {

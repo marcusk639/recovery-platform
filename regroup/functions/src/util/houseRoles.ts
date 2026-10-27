@@ -3,18 +3,20 @@
  * Oxford admission PR). Owner rule: a resident never adds themselves; each
  * tier hands out only the tiers below it.
  *
- *   owner (house.ownerId, or a superAdmin claim) -> owner, manager, peer leader, resident
- *   manager                                      -> peer leader, resident
- *   peer leader                                  -> resident
+ *   owner (primary owner record, or a superAdmin claim) -> owner, manager, peer leader, resident
+ *   manager                                             -> peer leader, resident
+ *   peer leader                                         -> resident
  *
- * The tier comes ONLY from a server-only role record,
- *   house-roles/{houseId}_{uid}  { tier, grantedBy, grantedAt, via }
- * (no client rule matches the path), plus ownerId / the superAdmin claim for
- * the owner. Never from guest docs, admins docs, houseType or claims other
- * admins can edit, so a client write cannot change anyone's tier. Every
- * grant path writes the record; revocations update it. An admin-claim holder
- * with no record yet (before scripts/backfillHouseRoles) is a peer leader,
- * the least privilege; the owner can always act.
+ * The tier comes ONLY from the server-only role record
+ *   house-roles/{houseId}_{uid}  { tier, grantedBy, grantedAt, via, primary? }
+ * (no client rule matches the path) and the account's LIVE claims. The house
+ * owner is the record with `primary: true`, written by createHouses (in its
+ * transaction) and by scripts/backfillHouseRoles from ownerId read before the
+ * functions deploy; `houses.ownerId` is never trusted for authority (a
+ * superAdmin could rewrite it until the rules deploy). Never from guest
+ * docs, admins docs or houseType. An admin-claim holder with no record is a
+ * peer leader, the least privilege. The rules read the same records
+ * (firestore.rules guests block) for direct guest-doc departures.
  */
 import * as admin from 'firebase-admin';
 import { HttpsError } from 'firebase-functions/v2/https';
@@ -30,6 +32,7 @@ export type RoleVia =
   | 'addAdminAuthorization'
   | 'promoteGuestsToAdmin'
   | 'addGuestAuthorization'
+  | 'promoteScript'
   | 'backfill';
 
 export interface HouseRoleRecord {
@@ -38,6 +41,8 @@ export interface HouseRoleRecord {
   grantedAt: string;
   via: RoleVia;
   invitationId?: string;
+  /** The house's primary owner (set only by createHouses and the backfill). */
+  primary?: boolean;
 }
 
 const RANK: Record<RoleTier, number> = { resident: 0, peerLeader: 1, manager: 2, owner: 3 };
@@ -50,6 +55,9 @@ const MAY_GRANT: Record<HouseTier, readonly RoleTier[]> = {
   resident: [],
   none: [],
 };
+
+/** The tiers this tier may hand out. */
+export const MAY_GRANT_TIERS = (tier: HouseTier): readonly RoleTier[] => MAY_GRANT[tier];
 
 const TIER_LABEL: Record<RoleTier, string> = {
   owner: 'an owner',
@@ -64,9 +72,6 @@ export const INVITATION_TIER: Record<InvitationRole, RoleTier> = {
   guest: 'resident',
 };
 
-interface HouseFields {
-  ownerId?: string;
-}
 /** Custom claims (only the admin/superAdmin/guest house maps are read). */
 type Claims = Record<string, unknown> | undefined;
 const holds = (claims: Claims, role: 'admin' | 'superAdmin' | 'guest', houseId: string) => {
@@ -95,68 +100,101 @@ export const roleRef = (houseId: string, uid: string) =>
 const parseTier = (v: unknown): RoleTier | null =>
   TIERS.includes(v as RoleTier) ? (v as RoleTier) : null;
 
-/** The stored tier, or null when there is no (valid) record. */
-export async function readRoleTier(houseId: string, uid: string): Promise<RoleTier | null> {
-  const snap = await roleRef(houseId, uid).get();
-  return snap.exists ? parseTier((snap.data() ?? {}).tier) : null;
-}
-
-/**
- * An account's tier in the house, from its LIVE claims (liveClaims). Owner:
- * ownerId or a superAdmin claim. Staff otherwise needs the admin claim AND
- * reads its tier from the role record (a stale owner record counts as
- * manager); no record means peer leader. A guest claim alone is resident.
- */
-export async function houseTierOf(
-  uid: string,
+/** The stored record (tier and primary flag), or null when there is no valid one. */
+export async function readRoleRecord(
   houseId: string,
-  house: HouseFields,
-): Promise<HouseTier> {
-  const claims = await liveClaims(uid);
-  if (house.ownerId === uid || holds(claims, 'superAdmin', houseId)) return 'owner';
-  if (!holds(claims, 'admin', houseId)) return holds(claims, 'guest', houseId) ? 'resident' : 'none';
-  const stored = await readRoleTier(houseId, uid);
-  return stored === 'owner' || stored === 'manager' ? 'manager' : 'peerLeader';
+  uid: string,
+): Promise<{ tier: RoleTier; primary: boolean } | null> {
+  const snap = await roleRef(houseId, uid).get();
+  const data = snap.exists ? (snap.data() ?? {}) : {};
+  const tier = parseTier(data.tier);
+  return tier ? { tier, primary: tier === 'owner' && data.primary === true } : null;
 }
 
-const houseFields = async (houseId: string): Promise<HouseFields> =>
-  ((await admin.firestore().collection('houses').doc(houseId).get()).data() ?? {}) as HouseFields;
+export async function readRoleTier(houseId: string, uid: string): Promise<RoleTier | null> {
+  return (await readRoleRecord(houseId, uid))?.tier ?? null;
+}
 
-/** Rank for removals: the house's primary owner (ownerId) above a co-owner. */
-const removalRank = (tier: HouseTier, isPrimaryOwner: boolean) =>
-  isPrimaryOwner ? 4 : tier === 'none' ? -1 : RANK[tier];
+/** The house's primary owner, from the server-only record (never houses.ownerId). */
+export async function isPrimaryOwner(houseId: string, uid: string): Promise<boolean> {
+  return (await readRoleRecord(houseId, uid))?.primary === true;
+}
+
+/** The primary owner record createHouses writes (in its transaction) and the backfill writes. */
+export const primaryOwnerRecord = (uid: string, via: RoleVia): HouseRoleRecord => ({
+  tier: 'owner',
+  primary: true,
+  grantedBy: uid,
+  grantedAt: new Date().toISOString(),
+  via,
+});
+
+/** Tier plus removal rank (the primary owner ranks above a co-owner). */
+async function tierAndRank(uid: string, houseId: string) {
+  const [claims, record] = await Promise.all([liveClaims(uid), readRoleRecord(houseId, uid)]);
+  let tier: HouseTier;
+  if (record?.primary || holds(claims, 'superAdmin', houseId)) tier = 'owner';
+  else if (!holds(claims, 'admin', houseId))
+    tier = holds(claims, 'guest', houseId) ? 'resident' : 'none';
+  else tier = record?.tier === 'owner' || record?.tier === 'manager' ? 'manager' : 'peerLeader';
+  const rank = record?.primary ? 4 : tier === 'none' ? -1 : RANK[tier];
+  return { tier, rank, primary: !!record?.primary };
+}
 
 /**
- * Removing someone's house claim (admin, superAdmin or guest) needs a tier
- * strictly above theirs: owner > manager > peer leader > resident, so only
- * an owner removes a manager. The primary owner (ownerId) can be demoted only
- * by themselves; a co-owner holding superAdmin cannot remove them. Anyone may
- * remove their own claims. Both tiers come from live claims and records.
+ * An account's tier in the house: owner (primary owner record, or a live
+ * superAdmin claim); staff need the live admin claim and take their tier
+ * from the record (a stale owner record counts as manager; none means peer
+ * leader); a guest claim alone is resident.
  */
-export async function assertMayRevoke(params: {
+export async function houseTierOf(uid: string, houseId: string): Promise<HouseTier> {
+  return (await tierAndRank(uid, houseId)).tier;
+}
+
+/**
+ * Removing someone's house claim needs a rank strictly above theirs: primary
+ * owner > co-owner > manager > peer leader > resident, so only an owner
+ * removes a manager, and the primary owner is demoted only by themselves.
+ * Anyone may remove their own claims. The caller's rank is computed once per
+ * house; the targets are checked in parallel.
+ */
+export async function assertMayRevokeAll(params: {
+  callerUid: string;
+  targets: Array<{ targetUid: string; houseId: string }>;
+  callableName: string;
+}): Promise<void> {
+  const { callerUid, callableName } = params;
+  const targets = params.targets.filter((t) => t.targetUid !== callerUid);
+  const houses = [...new Set(targets.map((t) => t.houseId))];
+  const callerByHouse = new Map(
+    await Promise.all(houses.map(async (h) => [h, await tierAndRank(callerUid, h)] as const)),
+  );
+  await Promise.all(
+    targets.map(async ({ targetUid, houseId }) => {
+      const caller = callerByHouse.get(houseId)!;
+      const target = await tierAndRank(targetUid, houseId);
+      if (caller.rank >= 1 && caller.rank > target.rank) return;
+      logger.warn(`${callableName}: tier may not remove`, {
+        houseId,
+        callerTier: caller.tier,
+        targetTier: target.tier,
+      });
+      throw new HttpsError(
+        'permission-denied',
+        target.primary
+          ? 'Only the house owner can change their own access'
+          : 'Your role in this house cannot remove this person',
+      );
+    }),
+  );
+}
+
+export const assertMayRevoke = (p: {
   callerUid: string;
   targetUid: string;
   houseId: string;
   callableName: string;
-}): Promise<void> {
-  const { callerUid, targetUid, houseId, callableName } = params;
-  if (callerUid === targetUid) return;
-  const house = await houseFields(houseId);
-  const [callerTier, targetTier] = await Promise.all([
-    houseTierOf(callerUid, houseId, house),
-    houseTierOf(targetUid, houseId, house),
-  ]);
-  const caller = removalRank(callerTier, house.ownerId === callerUid);
-  const target = removalRank(targetTier, house.ownerId === targetUid);
-  if (caller >= 1 && caller > target) return;
-  logger.warn(`${callableName}: tier may not remove`, { houseId, callerTier, targetTier });
-  throw new HttpsError(
-    'permission-denied',
-    house.ownerId === targetUid
-      ? 'Only the house owner can change their own access'
-      : 'Your role in this house cannot remove this person',
-  );
-}
+}) => assertMayRevokeAll({ callerUid: p.callerUid, targets: [p], callableName: p.callableName });
 
 /** Throws permission-denied unless the tier may hand out this tier. */
 export function assertTierMayGrant(
@@ -174,16 +212,14 @@ export function assertTierMayGrant(
   );
 }
 
-/** Reads the house and the caller's tier (live claims), then assertTierMayGrant. */
+/** The caller's tier (live claims and record), then assertTierMayGrant. */
 export async function assertMayGrantTier(params: {
   callerUid: string;
   houseId: string;
   grant: RoleTier;
   callableName: string;
 }): Promise<void> {
-  const house = await houseFields(params.houseId);
-  const tier = await houseTierOf(params.callerUid, params.houseId, house);
-  assertTierMayGrant(tier, params.grant, params);
+  assertTierMayGrant(await houseTierOf(params.callerUid, params.houseId), params.grant, params);
 }
 
 /** The record to store for a grant, or null when the stored tier is already as high. */
@@ -227,8 +263,8 @@ export async function recordRoleGrant(
  * Updates the record after a claim is revoked:
  *   superAdmin removed: owner -> manager;
  *   admin removed:      peer leader -> resident, owner/manager -> no record;
- *   guest removed:      resident -> no record (a staff tier is unchanged:
- *                       removing a guest claim never changes a tier).
+ *   guest removed:      resident -> no record (a staff tier is unchanged).
+ * The primary owner's record is never lowered: ownership is not a claim.
  */
 export async function recordRoleRevoke(
   houseId: string,
@@ -238,8 +274,9 @@ export async function recordRoleRevoke(
   const ref = roleRef(houseId, uid);
   await admin.firestore().runTransaction(async (tx) => {
     const snap = await tx.get(ref);
-    const current = snap.exists ? parseTier((snap.data() ?? {}).tier) : null;
-    if (!current) return;
+    const data = snap.exists ? (snap.data() ?? {}) : {};
+    const current = parseTier(data.tier);
+    if (!current || data.primary === true) return;
     if (removed === 'superAdmin' && current === 'owner') tx.update(ref, { tier: 'manager' });
     if (removed === 'admin' && current === 'peerLeader') tx.update(ref, { tier: 'resident' });
     if (removed === 'admin' && (current === 'owner' || current === 'manager')) tx.delete(ref);
@@ -250,13 +287,3 @@ export async function recordRoleRevoke(
 /** Staff tiers keep the admin claim when their resident record goes. */
 export const isStaffTier = (tier: RoleTier | null): boolean =>
   tier === 'owner' || tier === 'manager';
-
-/** Owner records for houses the uid now owns (createHouses, finishOperatorSetup). */
-export async function recordOwnerRoles(
-  uid: string,
-  houseIds: string[],
-  via: RoleVia,
-): Promise<void> {
-  for (const houseId of houseIds)
-    await recordRoleGrant(houseId, uid, 'owner', { grantedBy: uid, via });
-}

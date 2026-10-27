@@ -32,6 +32,8 @@ beforeEach(() => {
   for (const k of Object.keys(users)) delete users[k];
   mem.seed('houses/h1', { id: 'h1', ownerId: 'owner' });
   mem.seed('houses/h2', { id: 'h2', ownerId: 'owner' });
+  mem.seed('house-roles/h1_owner', { tier: 'owner', primary: true });
+  mem.seed('house-roles/h2_owner', { tier: 'owner', primary: true });
 });
 
 it('grants admin and superAdmin together, keeping existing claims', async () => {

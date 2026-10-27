@@ -80,9 +80,16 @@ jest.mock('firebase-admin', () => ({
 // NARR tier limits are exercised end to end in narrTiers.test.ts; here the
 // inviter is the owner unless a test says otherwise.
 const mockHouseTierOf = jest.fn().mockResolvedValue('owner');
+// The primary owner record (util/houseRoles) names owner-uid in these tests.
 jest.mock('../../util/houseRoles', () => ({
   ...jest.requireActual('../../util/houseRoles'),
   houseTierOf: (...args: unknown[]) => mockHouseTierOf(...args),
+  isPrimaryOwner: async (_houseId: string, uid: string) => uid === 'owner-uid',
+}));
+// Invitee and inviter checks are covered on a real store in redeemAdmission.test.ts.
+jest.mock('../../util/invitationChecks', () => ({
+  assertInviteeMayBeInvited: jest.fn(async () => undefined),
+  assertInviterStillMayIssue: jest.fn(async () => undefined),
 }));
 jest.mock('../../util/admission', () => ({
   ...jest.requireActual('../../util/admission'),

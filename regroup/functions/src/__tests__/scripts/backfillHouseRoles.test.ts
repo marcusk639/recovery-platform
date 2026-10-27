@@ -42,8 +42,9 @@ beforeEach(() => {
 it('writes manager only when unambiguous; every other staff holder is peerLeader, listed for review', async () => {
   const report = await backfillHouseRoles(memDb, authClient, { apply: false });
   const tiers = Object.fromEntries(report.toWrite.map((r) => [r.uid, `${r.tier}:${r.reason}`]));
+  // The house's ownerId account gets the primary owner record (pass 1).
+  expect(report.owners).toEqual([{ uid: 'owner', houseId: H, tier: 'owner', reason: 'ownerId' }]);
   expect(tiers).toEqual({
-    owner: 'owner:owner-or-superAdmin',
     listed: 'manager:manager-unambiguous', // in adminIds through its admins doc
     invited: 'manager:manager-unambiguous', // admin invitation from the owner
     peer: 'peerLeader:active-resident-isAdmin',
@@ -100,4 +101,42 @@ it('a record created meanwhile (a grant racing the backfill) is skipped, not an 
   expect(mem.get(`house-roles/${H}_unknown`)).toMatchObject({ tier: 'manager' });
   expect(report.toWrite.map((r) => r.uid)).not.toContain('unknown');
   expect(report.review.map((r) => r.uid)).not.toContain('unknown');
+});
+
+describe('owner, invitation and stale-record passes', () => {
+  it('records ownerId as the PRIMARY owner, even if the owner holds no claims; a superAdmin is a co-owner', async () => {
+    users.push({ uid: 'co', customClaims: { superAdmin: { [H]: true }, admin: { [H]: true } } });
+    await backfillHouseRoles(memDb, authClient, { apply: true });
+    users.pop();
+    expect(mem.get(`house-roles/${H}_owner`)).toMatchObject({ tier: 'owner', primary: true });
+    expect(mem.get(`house-roles/${H}_co`)).toMatchObject({ tier: 'owner' });
+    expect(mem.get(`house-roles/${H}_co`)).not.toHaveProperty('primary');
+  });
+
+  it('marks every redeemed invitation completed, so an old token never regrants', async () => {
+    mem.seed('invitations/OLD', { houseId: H, role: 'admin', redeemedAt: '2026-01-01T00:00:00Z' });
+    mem.seed('invitations/OPEN', { houseId: H, role: 'guest' });
+    const report = await backfillHouseRoles(memDb, authClient, { apply: true });
+    expect(report.invitationsStamped).toBe(1);
+    expect(mem.get('invitations/OLD')).toMatchObject({ grantCompletedAt: '2026-01-01T00:00:00Z' });
+    expect(mem.get('invitations/OPEN')?.grantCompletedAt).toBeUndefined();
+  });
+
+  it('a re-run lowers or removes records whose claims are gone; the primary owner stays', async () => {
+    mem.seed(`house-roles/${H}_gone`, { tier: 'manager' }); // account deleted
+    mem.seed(`house-roles/${H}_resident`, { tier: 'manager' }); // admin claim removed; guest kept
+    mem.seed(`house-roles/${H}_exco`, { tier: 'owner' }); // superAdmin removed, admin kept
+    users.push({ uid: 'exco', customClaims: { admin: { [H]: true } } });
+    const report = await backfillHouseRoles(memDb, authClient, { apply: true });
+    users.pop();
+    expect(mem.get(`house-roles/${H}_gone`)).toBeUndefined();
+    expect(mem.get(`house-roles/${H}_resident`)).toMatchObject({ tier: 'resident' });
+    expect(mem.get(`house-roles/${H}_exco`)).toMatchObject({ tier: 'manager' });
+    expect(mem.get(`house-roles/${H}_owner`)).toMatchObject({ tier: 'owner', primary: true });
+    expect(report.stale.map((r) => `${r.uid}:${r.tier}`).sort()).toEqual([
+      'exco:manager',
+      'gone:none',
+      'resident:resident',
+    ]);
+  });
 });

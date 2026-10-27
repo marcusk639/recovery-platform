@@ -13,6 +13,9 @@ jest.mock('firebase-admin', () => ({
   firestore: () => require('../helpers/memFirestore').memDb,
   auth: () => ({
     getUser: async (uid: string) => ({ uid, customClaims: mockUsers[uid] ?? {} }),
+    getUserByEmail: async () => {
+      throw Object.assign(new Error('no user'), { code: 'auth/user-not-found' });
+    },
     setCustomUserClaims: (...a: unknown[]) => mockSetClaims(...a),
   }),
 }));
@@ -53,7 +56,7 @@ import {
   promoteGuestsToAdmin,
   removePrivilegesForGuests,
 } from '../../callable/auth';
-import { houseTierOf, recordOwnerRoles } from '../../util/houseRoles';
+import { houseTierOf } from '../../util/houseRoles';
 
 const H = 'h';
 type Caller = { uid: string; token: Record<string, unknown> };
@@ -73,13 +76,15 @@ const run = (fn: unknown, data: unknown, caller: Caller) =>
   (fn as Function)({ data, auth: caller });
 const denied = { code: 'permission-denied' };
 const roleOf = (uid: string) => mem.get(`house-roles/${H}_${uid}`) as any;
-const tier = (c: Caller) => houseTierOf(c.uid, H, { ownerId: 'owner' });
+const tier = (c: Caller) => houseTierOf(c.uid, H);
 
 beforeEach(() => {
   mem.reset();
   mockSetClaims.mockReset();
   mockAddHouseRoles.mockReset();
   mem.seed(`houses/${H}`, { id: H, ownerId: 'owner', houseType: 'traditional' });
+  // The owner is the server-only primary owner record (createHouses / backfill).
+  mem.seed(`house-roles/${H}_owner`, { tier: 'owner', primary: true, via: 'createHouses' });
   mem.seed(`house-roles/${H}_manager`, { tier: 'manager', via: 'invitation' });
   mem.seed(`house-roles/${H}_peer`, { tier: 'peerLeader', via: 'invitation' });
   mem.seed('guests/peer-doc', { houseId: H, userId: 'peer', status: 'active' });
@@ -148,9 +153,20 @@ describe('a peer leader cannot change their own tier through client data (probes
 });
 
 describe('every grant path records the tier', () => {
-  it('createHouses / finishOperatorSetup record the owner', async () => {
-    await recordOwnerRoles('op', [H], 'createHouses');
-    expect(roleOf('op')).toMatchObject({ tier: 'owner', grantedBy: 'op', via: 'createHouses' });
+  it('the owner is the primary owner record, not houses.ownerId (review I3)', async () => {
+    // A superAdmin co-owner rewrites ownerId to themselves (allowed by the
+    // rules until #145's rules deploy).
+    const CO2 = as('co2', { admin: { [H]: true }, superAdmin: { [H]: true } });
+    mem.seed(`houses/${H}`, { id: H, ownerId: 'co2', houseType: 'traditional' });
+    await expect(houseTierOf('owner', H)).resolves.toBe('owner');
+    // The co-owner still cannot remove the real owner.
+    await expect(
+      run(
+        deleteAdminAuthorization,
+        { admin: { userId: 'owner' }, adminHouseIds: [H], superAdminHouseIds: [H] },
+        CO2,
+      ),
+    ).rejects.toMatchObject(denied);
   });
 
   it('addAdminAuthorization by the owner makes a manager (or owner for superAdmin); nobody else may', async () => {
@@ -216,7 +232,7 @@ describe('revocations update the record', () => {
   });
 
   it('removing owner access leaves a manager', async () => {
-    await recordOwnerRoles('o2', [H], 'createHouses');
+    mem.seed(`house-roles/${H}_o2`, { tier: 'owner', via: 'addAdminAuthorization' });
     await run(
       deleteAdminAuthorization,
       { admin: { userId: 'o2' }, adminHouseIds: [], superAdminHouseIds: [H] },

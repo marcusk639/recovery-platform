@@ -1,10 +1,9 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
-import { houseCollection, ratsFirestore, userCollection } from '../api/firestore';
+import { houseRolesCollection, ratsFirestore, userCollection } from '../api/firestore';
 import type { User } from '../entities/User';
 import { writeOperatorSetupFlags } from '../houses/operatorSetup';
 import { grantHouseRoles } from '../util/claims';
-import { recordOwnerRoles } from '../util/houseRoles';
 
 export type FinishOperatorSetupResponse =
   { completed: false } | { completed: true; houseIds: string[] };
@@ -38,24 +37,30 @@ const candidateHouseIds = (user: Partial<User> | undefined): string[] =>
 
 /**
  * House ids the caller provably owns: the first MAX_CANDIDATE_HOUSES
- * candidates (read in one getAll) whose house doc exists with
- * `ownerId === uid`. Every other candidate is ignored.
+ * candidates (read in one getAll) with a server-only primary owner record
+ * for the caller (house-roles/{houseId}_{uid}, util/houseRoles; written by
+ * createHouses with the house, or by the backfill). houses.ownerId is not
+ * trusted: a superAdmin could rewrite it until the rules deploy. Every other
+ * candidate is ignored.
  */
 const ownedHouseIds = async (uid: string, candidates: string[]): Promise<string[]> => {
   if (candidates.length === 0) {
     return [];
   }
-  const snaps = await ratsFirestore.getAll(...candidates.map((id) => houseCollection.doc(id)));
+  const snaps = await ratsFirestore.getAll(
+    ...candidates.map((id) => houseRolesCollection.doc(`${id}_${uid}`)),
+  );
   return candidates.filter((_id, i) => {
-    const snap = snaps[i];
-    return snap.exists && (snap.data() as { ownerId?: string } | undefined)?.ownerId === uid;
+    const data = (snaps[i].exists ? snaps[i].data() : undefined) as
+      | { tier?: string; primary?: boolean }
+      | undefined;
+    return data?.tier === 'owner' && data.primary === true;
   });
 };
 
 const grantOrThrow = async (uid: string, houseIds: string[]): Promise<void> => {
   try {
     await grantHouseRoles(uid, houseIds);
-    await recordOwnerRoles(uid, houseIds, 'finishOperatorSetup');
   } catch (err) {
     logger.error('finishOperatorSetup: claim grant failed', {
       uid,

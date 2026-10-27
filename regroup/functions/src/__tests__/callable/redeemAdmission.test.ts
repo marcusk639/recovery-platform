@@ -54,6 +54,8 @@ beforeEach(() => {
   mem.reset();
   for (const k of Object.keys(users)) delete users[k];
   mockSetClaims.mockClear();
+  // The inviter ('owner') must still be able to issue the role at redeem time.
+  mem.seed('house-roles/h_owner', { tier: 'owner', primary: true });
 });
 
 it('a resident invitation writes an unused admission ticket with the redemption', async () => {
@@ -101,6 +103,7 @@ it('a senior-peer invitation writes a senior-peer ticket; an admin invitation wr
   expect(ticket().role).toBe('senior-peer');
 
   mem.reset();
+  mem.seed('house-roles/h_owner', { tier: 'owner', primary: true });
   mem.seed('invitations/T', invitation('admin'));
   await redeem('T');
   expect(ticket()).toBeUndefined();
@@ -172,6 +175,7 @@ describe('a same-account retry never brings back a revoked tier (verifier V1)', 
         expiresAt,
         redeemedAt: new Date().toISOString(),
         redeemedByUid: 'alice',
+        grantPending: true, // this build's fresh redeem sets it
       }),
     );
 

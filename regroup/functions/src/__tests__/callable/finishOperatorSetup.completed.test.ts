@@ -5,8 +5,6 @@
 // grant fails. The callable grants only owned houses missing from the caller's
 // ID-token claims; a fully granted operator costs no house reads.
 
-// Owner role records (util/houseRoles) are covered in narrTiers.test.ts.
-jest.mock('../../util/houseRoles', () => ({ recordOwnerRoles: jest.fn(async () => undefined) }));
 jest.mock('firebase-functions/v2/https', () => {
   const actual = jest.requireActual('firebase-functions/v2/https');
   return {
@@ -28,7 +26,14 @@ jest.mock('../../util/claims', () => ({
 
 import { logger } from 'firebase-functions';
 import { finishOperatorSetup, MAX_CANDIDATE_HOUSES } from '../../callable/finishOperatorSetup';
-import { events, expectCode, getAll, resetFakeFirestore, store } from './helpers/fakeTxFirestore';
+import {
+  events,
+  expectCode,
+  getAll,
+  resetFakeFirestore,
+  seedHouse as seedOwned,
+  store,
+} from './helpers/fakeTxFirestore';
 
 const handler = finishOperatorSetup as unknown as (req: unknown) => Promise<any>;
 
@@ -51,8 +56,9 @@ const seedCompletedOperator = (houseIds: string[]) =>
       houses: Object.fromEntries(houseIds.map((id) => [id, { numberOfGuests: 0 }])),
     },
   });
-const seedHouse = (id: string, ownerId: string = UID) =>
-  store.set(`houses/${id}`, { id, name: 'House', ownerId });
+// Ownership is the server-only primary owner record (util/houseRoles),
+// which createHouses writes with the house; ownerId alone proves nothing.
+const seedHouse = (id: string, ownerId: string = UID) => seedOwned(id, ownerId);
 
 const writes = () => events.filter((e) => e.op === 'directUpdate');
 

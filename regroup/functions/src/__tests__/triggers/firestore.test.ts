@@ -941,7 +941,8 @@ describe("onGuestWrite (merged handler)", () => {
     await (onGuestWrite as Function)(makeWrittenEvent(guest, null));
     expect(mockRevokeHouseRoles).toHaveBeenLastCalledWith("user-1", ["house-1"], ["guest"]);
 
-    mockHouseDocGet.mockResolvedValueOnce({ exists: true, data: () => ({ ownerId: "user-1" }) });
+    // The house owner: the primary owner record (tier owner), never ownerId.
+    mockReadRoleTier.mockResolvedValueOnce("owner");
     await (onGuestWrite as Function)(makeWrittenEvent(guest, null));
     expect(mockRevokeHouseRoles).toHaveBeenLastCalledWith("user-1", ["house-1"], ["guest"]);
     expect(mockRecordRoleRevoke).not.toHaveBeenCalledWith("house-1", "user-1", "admin");

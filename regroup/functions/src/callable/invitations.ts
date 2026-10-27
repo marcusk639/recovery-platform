@@ -13,7 +13,8 @@ import {
 } from '../util/residentCapacity';
 import { getHouse } from '../api/firestore';
 import { completeGrant, consumeInvitation, releaseInvitation } from '../util/admission';
-import { assertTierMayGrant, houseTierOf, INVITATION_TIER } from '../util/houseRoles';
+import { assertTierMayGrant, houseTierOf, INVITATION_TIER, isPrimaryOwner } from '../util/houseRoles';
+import { assertInviteeMayBeInvited, assertInviterStillMayIssue } from '../util/invitationChecks';
 import { enforceHouseEntitlement } from '../util/entitlement';
 import { Invitation, InvitationRole } from '../entities/Invitation';
 
@@ -98,7 +99,7 @@ export const createInvitation = onCall(async (request) => {
     admin?: Record<string, boolean>;
     superAdmin?: Record<string, boolean>;
   };
-  const isOwner = house.ownerId === callerUid;
+  const isOwner = await isPrimaryOwner(input.houseId, callerUid);
   const isAdmin = callerClaims.admin?.[input.houseId] === true;
   const isSuperAdmin = callerClaims.superAdmin?.[input.houseId] === true;
   if (!isOwner && !isAdmin && !isSuperAdmin) {
@@ -117,9 +118,16 @@ export const createInvitation = onCall(async (request) => {
   // resident; a peer leader a resident only. Oxford houses too, until the
   // Oxford admission PR.
   // Live claims (houseTierOf), so a just-revoked staff token cannot act.
-  const tier = await houseTierOf(callerUid, input.houseId, house);
+  const tier = await houseTierOf(callerUid, input.houseId);
   assertTierMayGrant(tier, INVITATION_TIER[input.role], {
     callableName: 'createInvitation',
+    houseId: input.houseId,
+  });
+  // No self-invites; nobody who already lives here (util/invitationChecks).
+  await assertInviteeMayBeInvited({
+    callerUid,
+    callerEmail: request.auth.token?.email,
+    invitedEmail: input.email,
     houseId: input.houseId,
   });
 
@@ -228,8 +236,11 @@ export const redeemInvitation = onCall(async (request) => {
   const callerEmail = ((request.auth.token?.email as string | undefined) ?? '').toLowerCase();
 
   const inv = await fetchInvitationByToken(token);
-  const retry = !!inv.redeemedAt && (inv as { redeemedByUid?: string }).redeemedByUid === callerUid;
+  const meta = inv as { redeemedByUid?: string; grantPending?: boolean; grantCompletedAt?: string };
+  const retry = !!inv.redeemedAt && meta.redeemedByUid === callerUid;
   if (!retry) assertInvitationUsable(inv);
+  // A completed retry grants nothing (util/admission ConsumeState).
+  const willGrant = !retry || (!meta.grantCompletedAt && meta.grantPending === true);
 
   // Not checked: email_verified (see "Future consideration" in regroup/functions/CLAUDE.md).
   if (inv.invitedEmail.toLowerCase() !== callerEmail) {
@@ -242,7 +253,9 @@ export const redeemInvitation = onCall(async (request) => {
   // house. Re-derive the owner from the house doc — inv.inviterUid may be
   // an admin, not necessarily the billing owner who holds the subscription.
   let residentOwnerId: string | undefined;
-  if (!retry && roleConsumesResidentSlot(inv.role)) {
+  // The inviter must still be able to issue this role (live tier).
+  if (willGrant) await assertInviterStillMayIssue(inv);
+  if (willGrant && roleConsumesResidentSlot(inv.role)) {
     const house = await getHouse(inv.houseId);
     residentOwnerId = house?.ownerId;
     await assertResidentCapacityAvailable(residentOwnerId, inv.houseId);
@@ -276,7 +289,7 @@ export const redeemInvitation = onCall(async (request) => {
   }
   await completeGrant(token, inv, callerUid, INVITATION_TIER[inv.role]);
 
-  if (state === 'fresh' && roleConsumesResidentSlot(inv.role)) {
+  if (roleConsumesResidentSlot(inv.role)) {
     // Best-effort: the claim grant + invitation redemption above already
     // succeeded, so a failure here must not fail the whole call — it would
     // incorrectly report the redemption as failed after access was already

@@ -1,12 +1,10 @@
 // src/__tests__/callable/finishOperatorSetup.test.ts
 //
-// finishOperatorSetup recovers an operator whose houses exist but whose claim
-// grant / onboarding-flags write never completed (app restarted before a
-// retry). It grants roles only on houses the caller provably owns — candidate
-// ids from housesOwned and the (server-written) subscription map whose house
-// doc has ownerId === uid — and writes the flags only after the grant succeeds.
+// finishOperatorSetup recovers an operator whose claim grant / flags write
+// never completed. It grants only houses the caller provably owns (candidates
+// from housesOwned and the subscription map with a primary owner record for
+// the caller) and writes the flags only after the grant succeeds.
 
-jest.mock('../../util/houseRoles', () => ({ recordOwnerRoles: jest.fn(async () => undefined) })); // covered in narrTiers
 jest.mock('firebase-functions/v2/https', () => {
   const actual = jest.requireActual('firebase-functions/v2/https');
   return {
@@ -35,6 +33,7 @@ import {
   failNextUpdate,
   getAll,
   resetFakeFirestore,
+  seedHouse as seedOwned,
   store,
 } from './helpers/fakeTxFirestore';
 
@@ -57,8 +56,7 @@ const seedUser = (houses: Record<string, unknown>, extra: Record<string, unknown
     subscriptionMetadata: { status: 'active', tier: 'starter', maxProperties: 1, houses },
     ...extra,
   });
-const seedHouse = (id: string, ownerId: string = UID) =>
-  store.set(`houses/${id}`, { id, name: 'House', ownerId });
+const seedHouse = (id: string, ownerId: string = UID) => seedOwned(id, ownerId);
 
 const writes = () => events.filter((e) => e.op === 'directUpdate');
 
@@ -165,7 +163,7 @@ describe('finishOperatorSetup', () => {
       completed: true,
       houseIds: ['owned-a', 'owned-b'],
     });
-    const candidates = getAll.mock.calls[0].map((ref: { id: string }) => ref.id);
+    const candidates = getAll.mock.calls[0].map((r: { id: string }) => r.id.split('_')[0]);
     expect(candidates).toHaveLength(MAX_CANDIDATE_HOUSES);
     expect(candidates.slice(0, 3)).toEqual(['owned-a', 'm05', 'owned-b']);
     expect(new Set(candidates).size).toBe(candidates.length);
@@ -277,7 +275,9 @@ describe('finishOperatorSetup', () => {
 
     expect(getAll).toHaveBeenCalledTimes(1);
     expect(getAll.mock.calls[0]).toHaveLength(MAX_CANDIDATE_HOUSES);
-    const houseReads = events.filter((e) => e.op === 'directGet' && e.path.startsWith('houses/'));
+    const houseReads = events.filter(
+      (e) => e.op === 'directGet' && e.path.startsWith('house-roles/'),
+    );
     expect(houseReads).toHaveLength(MAX_CANDIDATE_HOUSES);
     expect(mockGrantHouseRoles).toHaveBeenCalledWith(UID, ['h00', 'h10', 'h20']);
     // h30 is owned but beyond the cap: not recovered, and the truncation is logged.
