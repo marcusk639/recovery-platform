@@ -32,6 +32,8 @@ Two improvements to the advisory PR reviewer, keeping every invariant of the mai
   - `ignored_paths` for build output and vendor code: `**/public/**`, `**/lib/**`, `**/dist/**`, `**/build/**`, `**/.next/**`, `**/_legacy/**`, `**/node_modules/**`.
 - **Defence in depth on the Claude side:** the Review step adds only `mcp__serena__find_symbol`, `mcp__serena__find_referencing_symbols`, `mcp__serena__get_symbols_overview` and `mcp__serena__search_for_pattern` to `--allowedTools`. `--strict-mcp-config` stays, and `--mcp-config` points to a file the workflow writes under `RUNNER_TEMP`, never to the PR's `.mcp.json`.
 - **Start command:** `serena start-mcp-server --context claude-code --project <workspace> --mode no-onboarding --mode no-memories --log-level WARNING`.
+- **Review guidance reaches Claude through the connection prompt.** Serena's MCP server sends only its `connection_prompt` up front. Its system prompt, including the context prompt and the project's `initial_prompt`, arrives only through the `initial_instructions` tool, which the review does not allow, and the built-in `claude-code` context's prompt is written for editing sessions. So the base file `.claude/pr-review/serena/prompt_templates/review_prompts.yml` overrides `connection_prompt` with the review guidance, and the setup step installs it into `$SERENA_HOME/prompt_templates`, which Serena reads before its own templates. `initial_prompt` stays empty. Measured with 1.7.0: the instructions become the 2.7k-character review guidance instead of a pointer to `initial_instructions`.
+- **Startup headroom:** the Review step sets `MCP_TIMEOUT=60000`. Locally, Serena answers `initialize` in about 3 s with the full index.
 
 ### 3.2 Isolation
 

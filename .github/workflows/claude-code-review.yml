@@ -120,7 +120,7 @@ jobs:
         run: |
           set -euo pipefail
           cfg=.review-base/.claude/pr-review/serena
-          if [ ! -f "$cfg/project.yml" ] || [ ! -f "$cfg/serena_config.yml" ]; then
+          if [ ! -f "$cfg/project.yml" ] || [ ! -f "$cfg/serena_config.yml" ] || [ ! -f "$cfg/prompt_templates/review_prompts.yml" ]; then
             echo "::warning::Serena config not on base; reviewing without code navigation"
             exit 0
           fi
@@ -132,6 +132,9 @@ jobs:
           SERENA_BIN="$SR_HOME/.local/bin/serena"
           sudo install -d -o "$SR_USER" -m 700 "$SR_HOME/serena-home"
           sudo install -o "$SR_USER" -m 600 "$cfg/serena_config.yml" "$SR_HOME/serena-home/serena_config.yml"
+          # Review guidance replaces Serena's connection prompt (see prompt_templates/review_prompts.yml).
+          sudo install -d -o "$SR_USER" -m 700 "$SR_HOME/serena-home/prompt_templates"
+          sudo install -o "$SR_USER" -m 600 "$cfg/prompt_templates/review_prompts.yml" "$SR_HOME/serena-home/prompt_templates/review_prompts.yml"
           # Network on, PR code absent: install the pinned TypeScript language server by
           # indexing a throwaway one-file project. The PR's code is indexed only offline.
           sudo install -d -o "$SR_USER" -m 700 "$SR_HOME/ls-warmup" "$SR_HOME/ls-warmup/.serena"
@@ -207,6 +210,11 @@ jobs:
         id: review
         if: steps.facts.outputs.tier != 'none'
         continue-on-error: true
+        # Room for the Serena MCP server to start its language servers on a slow runner
+        # (about 3s locally). Without Serena this only bounds MCP startup; there are no
+        # other MCP servers.
+        env:
+          MCP_TIMEOUT: "60000"
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

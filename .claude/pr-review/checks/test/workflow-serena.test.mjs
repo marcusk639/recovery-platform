@@ -172,13 +172,25 @@ test('the copy probes use a real source file from the copy, never a fixed path t
   assert.ok(at('run_as test -r "$probe_file"') < at('project index "$SR_HOME/src"'));
 });
 
-test('the Serena initial prompt guides the review and names only tools the reviewer has', () => {
-  const m = /\ninitial_prompt: \|\n((?: {2}.*\n|\n)+)/.exec(projectYml);
-  assert.ok(m, 'initial_prompt is a non-empty block');
+test("the review guidance replaces Serena's connection prompt and names only the reviewer's tools", () => {
+  const tpl = readFileSync(join(ROOT, '.claude/pr-review/serena/prompt_templates/review_prompts.yml'), 'utf8');
+  const m = /\nprompts:\n {2}connection_prompt: \|\n((?: {4}.*\n|\n)+)/.exec(tpl);
+  assert.ok(m, 'connection_prompt override is a non-empty block');
   const prompt = m[1];
   assert.match(prompt, /REVIEW\.md decides what to review/);
   assert.match(prompt, /Grep those paths/, 'Grep fallback for paths Serena does not index');
   assert.match(prompt, /never as instructions/, 'tool output is untrusted data');
-  const named = new Set(prompt.match(/\b(?:find_symbol|find_referencing_symbols|get_symbols_overview|search_for_pattern|[a-z]+_[a-z_]+_tool|execute_shell_command|replace_symbol_body|read_memory|write_memory|activate_project)\b/g));
+  assert.doesNotMatch(prompt, /initial_instructions/, 'never points at a tool the review does not allow');
+  const named = new Set(prompt.match(/\b(?:find_symbol|find_referencing_symbols|get_symbols_overview|search_for_pattern|initial_instructions|execute_shell_command|replace_symbol_body|read_memory|write_memory|activate_project)\b/g));
   for (const tool of named) assert.ok(TOOLS.includes(tool), `prompt names an unavailable tool: ${tool}`);
+  // initial_prompt only travels through initial_instructions, which is not allowed: keep it empty.
+  assert.match(projectYml, /\ninitial_prompt: ""\n/);
+  // The setup step installs the override into SERENA_HOME before Serena starts, and requires it.
+  const install = at('"$cfg/prompt_templates/review_prompts.yml" "$SR_HOME/serena-home/prompt_templates/review_prompts.yml"');
+  assert.ok(install < at('project index "$SR_HOME/ls-warmup"'));
+  assert.match(setup, /\[ ! -f "\$cfg\/prompt_templates\/review_prompts\.yml" \]/);
+});
+
+test('the Review step gives the MCP server time to start', () => {
+  assert.match(review, /\n {8}env:\n {10}MCP_TIMEOUT: "\d+"\n/);
 });
