@@ -160,10 +160,10 @@ payment routing, or if it touches any existing security weakness. For these:
 
 Propose an inline comment only when **all** of these hold:
 
-- the finding is Critical or High;
+- the finding is Critical, High or Medium (never Low);
 - it is **not** security-relevant;
 - its slug is not in `state.inlineSlugs` or `acknowledgedSlugs`, and no ledger entry has that slug;
-- you have proposed fewer than 10 in this run.
+- you have proposed fewer than 15 in this run. Publish posts Critical and High before Medium.
 
 Write them to `<OUT>/inline.json` as one JSON array (write `[]` when there are none):
 
@@ -175,19 +175,45 @@ Write them to `<OUT>/inline.json` as one JSON array (write `[]` when there are n
     "line": 42,
     "side": "RIGHT",
     "body": "What breaks, the other side as file:line, and the suggested fix."
+  },
+  {
+    "slug": "c9:regroup/mobile/src/screens/Feed.tsx:loadFeed",
+    "path": "regroup/mobile/src/screens/Feed.tsx",
+    "start_line": 40,
+    "line": 41,
+    "side": "RIGHT",
+    "body": "The error is swallowed, so the screen shows an empty feed instead of the retry banner.",
+    "suggestion": "  } catch (err) {\n    setError(err);"
   }
 ]
 ```
 
 - `slug` is the finding's slug in `findings.json`. `path` is a file the PR changes; `line` is a line of
   the diff on that file: `side` `RIGHT` for the PR-head side, `LEFT` for a removed line.
+- `start_line` (optional) makes a multi-line comment over `start_line`..`line`, on the `RIGHT` side,
+  inside one hunk of the diff. Outside one hunk, publish posts it on `line` alone.
+- `suggestion` (optional) is the exact replacement for lines `start_line`..`line` (or `line` alone), which
+  GitHub offers as a one-click change. Write only the replacement text. Publish adds the
+  ` ```suggestion ` fence itself, and drops any entry whose `body` contains one.
+- Offer a suggestion only when the fix is local to those lines and complete: no partial fixes, no
+  "something like" code, and nothing that needs a matching change elsewhere (say that in `body`). Keep it
+  minimal, keep the file's indentation, and give at most one per finding.
+- Publish drops just the suggestion (the comment still posts) when it is not on the `RIGHT` side, its
+  lines are not all inside one hunk of the PR diff, it is over 40 lines or 4,000 characters, the range
+  spans more than 40 lines, it contains a ` ``` ` fence, a control character other than tab and newline,
+  or an HTML comment, it quotes a secret, or the comment would exceed the body limit with it.
+- No suggestion on security-relevant files: a path `routing.json` maps to classes 1–7 (callables, webhooks,
+  rules, indexes, auth and claims, payments, region config), a prior security file, `*.rules`,
+  `firestore.indexes.json`, `.github/**`, `.claude/**`, `package.json` or a lockfile. Publish drops it
+  there (the comment still posts), so describe the fix in `body` instead.
 - `body` is plain text: no HTML comments and no fingerprint. The publish step appends the `fp` marker and
-  posts the survivors as one review. It drops an entry whose slug is not a non-security Critical or High
-  finding in `findings.json`, whose `path` is not a changed file, whose slug already has an inline comment,
-  that touches a security-relevant file or quotes a secret, or that comes after the first 10. It does
-  **not** check the ledger or `acknowledgedSlugs`: leaving those slugs out is your job. It records which
-  were posted; you never set that yourself. The summary counts Critical or High comments dropped as malformed,
-  outside the changed files or over the limit; drops for security reasons are not announced.
+  posts the survivors as one review. It drops an entry whose slug is not a non-security Critical, High or
+  Medium finding in `findings.json`, whose `path` is not a changed file, whose slug already has an inline
+  comment, that touches a security-relevant file or quotes a secret, or that comes after the first 15. It
+  does **not** check the ledger or `acknowledgedSlugs`: leaving those slugs out is your job. It records
+  which were posted; you never set that yourself. The summary counts Critical or High comments dropped as
+  malformed, outside the changed files or over the limit; drops for security reasons, and Medium drops,
+  are not announced.
 
 ## Slugs
 

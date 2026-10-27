@@ -24,7 +24,10 @@ const finding = (slug, over = {}) => ({
   title: `Breaks ${slug}`, feature: 'Feed', locations: [{ file: A, line: 3, side: 'changed' }], why: 'w', fix: 'x', inlinePosted: false, ...over,
 });
 const HIGH = finding(`c9:${A}:load`);
-const MED = finding(`c9:${B}:save`, { severity: 'Medium', locations: [{ file: B, line: 2, side: 'changed' }] });
+const MED = finding(`c9:${B}:medium`, { severity: 'Medium', locations: [{ file: B, line: 2, side: 'changed' }] });
+// Low findings never get inline comments; Medium ones do (spec addendum §4.3).
+const LOW = finding(`c9:${B}:save`, { severity: 'Low', locations: [{ file: B, line: 2, side: 'changed' }] });
+const LOW2 = finding(`c9:${B}:tiny`, { severity: 'Low', locations: [{ file: B, line: 2, side: 'changed' }] });
 const SEC = finding(`c1:${SEC_FILE}:charge`, { class: 1, security: true, locations: [{ file: SEC_FILE, line: 9, side: 'changed' }] });
 const entry = (slug, over = {}) => ({ slug, path: A, line: 3, side: 'RIGHT', body: 'This breaks the feed. See b.ts:2.', ...over });
 
@@ -46,18 +49,19 @@ test('parseInline keeps every well-formed entry; selectInline caps at MAX_INLINE
 });
 
 const select = (entries, over = {}) =>
-  selectInline({ entries, findings: [HIGH, MED, SEC], changedFiles: [A, B, SEC_FILE], postedSlugs: [], isSecurityPath: (t) => t.includes('payments.ts'), ...over });
+  selectInline({ entries, findings: [HIGH, MED, LOW2, SEC], changedFiles: [A, B, SEC_FILE], postedSlugs: [], isSecurityPath: (t) => t.includes('payments.ts'), ...over });
 
-test('selectInline posts only Critical/High non-security findings on changed files, once', () => {
+test('selectInline posts only Critical/High/Medium non-security findings on changed files, once', () => {
   const out = select([
     entry(HIGH.slug),
     entry(HIGH.slug), // duplicate
-    entry(MED.slug, { path: B }), // Medium
+    entry(MED.slug, { path: B }), // Medium: posted after High
+    entry(LOW2.slug, { path: B }), // Low: never inline
     entry(SEC.slug, { path: SEC_FILE }), // security
     entry(`c9:${A}:unknown`), // no such finding
     entry(HIGH.slug, { path: 'not/in/pr.ts' }),
   ]);
-  assert.deepEqual(out.map((c) => c.slug), [HIGH.slug]);
+  assert.deepEqual(out.map((c) => c.slug), [HIGH.slug, MED.slug]);
   assert.match(out[0].body, /<!-- pr-review:fp=c9:regroup\/mobile\/src\/a\.ts:load -->$/);
   assert.equal(select([entry(HIGH.slug, { path: 'not/in/pr.ts' })]).length, 0);
   assert.equal(select([entry(HIGH.slug)], { postedSlugs: [HIGH.slug] }).length, 0, 'already posted');
@@ -129,8 +133,8 @@ async function run(over = {}, comments = []) {
     request: r.request,
     report: () => {},
   };
-  const findingsText = JSON.stringify({ reviewedSha: HEAD, findings: [HIGH, { ...MED, inlinePosted: true }, SEC], resolvedSlugs: [], complete: true });
-  const inlineText = JSON.stringify([entry(HIGH.slug), entry(MED.slug, { path: B })]);
+  const findingsText = JSON.stringify({ reviewedSha: HEAD, findings: [HIGH, { ...LOW, inlinePosted: true }, SEC], resolvedSlugs: [], complete: true });
+  const inlineText = JSON.stringify([entry(HIGH.slug), entry(LOW.slug, { path: B })]);
   const orig = console.log;
   console.log = () => {};
   try {

@@ -39,13 +39,22 @@ Serena starts the TypeScript language server, which reads `tsconfig.json`, `pack
 
 - **Separate Unix user.** The setup step creates `serena-runner` (`sudo useradd`). Claude starts the MCP server through `sudo -n -u serena-runner env -i PATH=… HOME=… SERENA_HOME=… serena start-mcp-server …`, so the process gets an empty environment: no tokens, no `GITHUB_*`, no `ACTIONS_*`.
 - **No access to credentials on disk.** Before Review, `chmod 700` the workspace `.git/` and `RUNNER_TEMP`, which are owned by the runner user. `serena-runner` can read the checked-out source (world-readable) but not `.git/config`, `OUT`, the state snapshot or the runner's command files. `/proc/<pid>/environ` of the runner's processes is owner-only.
-- **No network.** After the setup step has installed the language servers and built the index, `sudo iptables -A OUTPUT -m owner --uid-owner serena-runner -j REJECT` (and the `ip6tables` equivalent) blocks all egress for that user.
+- **No network.** `sudo iptables -A OUTPUT -m owner --uid-owner serena-runner -j REJECT` (and the `ip6tables` equivalent) blocks all egress for that user.
+- **Order matters.**
+  1. Install Serena and warm up the language servers, with the network on, against a throwaway one-file project, never the PR.
+  2. `chmod 700` `.git/` and `RUNNER_TEMP`.
+  3. Add the network block.
+  4. Only then index the PR checkout.
+
+  Any step that touches PR files runs with credentials hidden and egress blocked.
+- **Reachability.** `serena-runner` must be able to traverse to the workspace. The setup step checks it can read a tracked file. If it can't, it switches Serena off with a warning rather than widening permissions beyond `o+x` on the path components. The only workspace directory `serena-runner` may write is `.serena/`.
+- **No survivors.** A step after Review (`if: always()`, before the publish checkout) runs `sudo pkill -KILL -u serena-runner` and checks that no `serena-runner` process remains. A process that outlived Review could otherwise tamper with `/tmp` or the publish checkout before the secret-bearing Publish step.
 - **Why not bubblewrap:** Ubuntu 24.04 runners restrict unprivileged user namespaces through AppArmor, so `bwrap` needs a sysctl change. A separate user plus an `iptables` owner rule needs no kernel changes.
 - **Failure is not fatal.** If Serena fails to start, Claude Code runs without the MCP server and the review proceeds with `Read`/`Grep`/`Glob`. The summary's limits line says "code navigation unavailable".
 
 ### 3.3 Index and speed
 
-- The setup step runs `serena project index` as `serena-runner` before the network block. Its cache lives under the project's `.serena/` directory, which the workflow controls (§3.1).
+- The setup step runs `serena project index` as `serena-runner` after the network block (§3.2). Its cache lives under the project's `.serena/` directory, which the workflow controls (§3.1).
 - **Prototype:** no index caching. Measure the setup time first (§5). If it exceeds about 60 seconds, add `actions/cache` keyed on the base SHA, restoring the index as `serena-runner`.
 
 ### 3.4 Reviewer instructions
@@ -85,6 +94,8 @@ An entry with a suggestion is posted only if all of these hold:
 - `side` is `RIGHT`. GitHub applies suggestions only to the new side.
 - **Range:** every line in `start_line..line` is an added or context line of the PR diff, inside one hunk. `facts.mjs` records the RIGHT-side line ranges of each hunk per changed file (`hunkRanges` in the trusted snapshot), and publish checks against that, never against the model.
 - **Size:** the suggestion is at most 40 lines and 4,000 characters, and the range spans at most 40 lines.
+- **Not on security-relevant files.** A one-click suggestion can carry attacker-influenced code, because a prompt injection in the PR can steer the model, and maintainers tend to trust suggestions. No suggestion is posted on a file that `routing.json` maps to classes 1–7, on a path the inline guard treats as security-relevant or a prior security file, or on `*.rules`, `firestore.indexes.json`, `.github/**`, `.claude/**`, `package.json` or a lockfile. The comment still posts.
+- **Diff source:** `hunkRanges` always come from the full base...head diff, whatever the tier.
 - **Safety:** it passes the same guard predicate as the body (secret patterns, security slugs, prior security files), applied to the body plus suggestion exactly as posted.
 - **Text:** it contains no ` ``` ` fence and no NUL or other control characters except tab and newline.
 
@@ -119,7 +130,10 @@ If only the suggestion fails, publish drops the suggestion, posts the comment wi
 5. Medium findings get inline comments up to the cap of 15, with Critical/High first.
 6. The pr-review checks test suite covers every rule in §3.1, §3.2 and §4.2.
 
-## 7. Open questions
+## 7. Dependencies and open questions
+
+- **The replay set (main spec §8.2) doesn't exist yet.** Step 2 of §5 depends on it, so building it is the first task of the Serena evaluation. Until then Serena stays off.
+- **Medium inline comments add noise.** Measure them in the two-week 👍/👎 trial (main spec §8.9). If Medium comments score below the 70% target, revert eligibility to Critical/High; that is a one-line change.
 
 - Whether the TypeScript language server ever loads PR-controlled code (tsconfig `plugins` from a committed `node_modules`). Isolation (§3.2) makes the answer non-critical, but it decides whether isolation can ever be relaxed. Answer it during the prototype.
 - Whether Serena's TypeScript support handles this monorepo's several `tsconfig` roots without per-package projects. If not, index only the packages `routing.json` maps the PR to.

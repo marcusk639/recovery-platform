@@ -1,7 +1,7 @@
 import { appendFileSync, chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { prDiff } from './lib/diff.mjs';
+import { readPrDiff } from './lib/hunks.mjs';
 import { route } from './lib/routing.mjs';
 import { redact } from './lib/redact.mjs';
 import { ghRequest, listIssueComments, listReviewComments } from './lib/gh.mjs';
@@ -197,6 +197,8 @@ async function main() {
     inlineSlugs: [],
     // The PR's changed paths: publish posts inline comments only on these.
     changedFiles: [],
+    // RIGHT-side hunk ranges per changed file: publish posts a suggestion only inside one.
+    hunkRanges: {},
     tier: 'full',
     maxTurns: MAX_TURNS.full,
     headSha: HEAD_SHA,
@@ -211,7 +213,8 @@ async function main() {
   try {
     Object.assign(state, await loadState(REPO, PR, { listIssueComments, listReviewComments }));
     const repoRoot = process.cwd();
-    const prFiles = prDiff(BASE_SHA, HEAD_SHA, repoRoot);
+    const { files: prFiles, hunkRanges } = readPrDiff(BASE_SHA, HEAD_SHA, repoRoot);
+    state.hunkRanges = hunkRanges;
     const paths = [...new Set(prFiles.flatMap((f) => [f.oldFile, f.file]).filter(Boolean))];
     state.changedFiles = paths.slice(0, MAX_CHANGED);
     const inc = computeIncrement({ ...state, baseSha: BASE_SHA, headSha: HEAD_SHA, prPaths: paths, cwd: repoRoot });
