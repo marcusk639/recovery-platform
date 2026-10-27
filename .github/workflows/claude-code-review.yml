@@ -229,14 +229,13 @@ jobs:
           fi
           # PR code is indexed only now, offline.
           run_as "$SERENA_BIN" project index "$SR_HOME/src" --log-level WARNING --timeout 30
-          # Modes only remove tools here (their prompts arrive via initial_instructions, which the
-          # review does not allow). planning drops every edit tool and execute_shell_command,
-          # no-memories the memory and onboarding tools: locks independent of fixed_tools/read_only.
+          # Modes (owner decision: editing). Their prompts arrive via initial_instructions, which the
+          # review does not allow; fixed_tools and read_only keep Serena to four read-only lookups.
           python3 -c 'import json, sys; json.dump({"mcpServers": {"serena": {"command": "sudo", "args": sys.argv[2:]}}}, open(sys.argv[1], "w"))' \
             "$RUNNER_TEMP/serena-mcp.json" \
             -n -u "$SR_USER" -H env -i -C "$SR_HOME" "HOME=$SR_HOME" "PATH=$SR_PATH" "SERENA_HOME=$SR_HOME/serena-home" SERENA_USAGE_REPORTING=false \
             "$SERENA_BIN" start-mcp-server --context claude-code --project "$SR_HOME/src" \
-            --mode planning --mode no-onboarding --mode no-memories --log-level WARNING
+            --mode editing --log-level WARNING
           {
             echo "mcp_args=--mcp-config $RUNNER_TEMP/serena-mcp.json"
             echo "tools=mcp__serena__find_symbol,mcp__serena__find_referencing_symbols,mcp__serena__get_symbols_overview,mcp__serena__search_for_pattern,"
@@ -259,7 +258,8 @@ jobs:
           prompt: |
             Follow .claude/pr-review/REVIEW.md. OUT=${{ runner.temp }}/pr-review. Base ${{ github.event.pull_request.base.sha }}, head ${{ github.event.pull_request.head.sha }}. Ignore the .review-base/ and .review-publish/ directories.
             ${{ steps.serena.outputs.prompt }}${{ vars.PR_REVIEW_SERENA == 'on' && steps.facts.outputs.tier != 'none' && steps.serena.outputs.prompt == '' && 'Code navigation (Serena) was enabled for this run but did not start: say "code navigation unavailable" under ## Not reviewed / limits.' || '' }}
-          # No shell for the model: facts writes the diff and commit list into OUT.
+          # The only shell is gh pr comment/diff/view (owner decision); facts still writes the diff
+          # and commit list into OUT.
           # Write/Edit are allowed only under OUT (absolute-path rules, "//"
           # prefix) and denied anywhere in the workspace, so .git/, .claude/ and
           # the publish checkout path stay out of reach. Reads of the workspace
@@ -278,8 +278,8 @@ jobs:
             --strict-mcp-config
             --add-dir ${{ runner.temp }}/pr-review
             ${{ steps.serena.outputs.mcp_args }}
-            --allowedTools "${{ steps.serena.outputs.tools }}Read,Grep,Glob,Write(/${{ runner.temp }}/pr-review/**),Edit(/${{ runner.temp }}/pr-review/**)"
-            --disallowedTools "Bash,MultiEdit,NotebookEdit,WebFetch,WebSearch,mcp__github_inline_comment__create_inline_comment,Write(/${{ github.workspace }}/**),Edit(/${{ github.workspace }}/**),Read(//proc/**),Read(/${{ github.workspace }}/.git/**),Write(/${{ runner.temp }}/_runner_file_commands/**),Edit(/${{ runner.temp }}/_runner_file_commands/**),Write(/${{ runner.temp }}/prstate-snapshot/**),Edit(/${{ runner.temp }}/prstate-snapshot/**)"
+            --allowedTools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),${{ steps.serena.outputs.tools }}Read,Grep,Glob,Write(/${{ runner.temp }}/pr-review/**),Edit(/${{ runner.temp }}/pr-review/**)"
+            --disallowedTools "MultiEdit,Write(/${{ github.workspace }}/**),Edit(/${{ github.workspace }}/**),Read(//proc/**),Read(/${{ github.workspace }}/.git/**),Write(/${{ runner.temp }}/_runner_file_commands/**),Edit(/${{ runner.temp }}/_runner_file_commands/**),Write(/${{ runner.temp }}/prstate-snapshot/**),Edit(/${{ runner.temp }}/prstate-snapshot/**)"
 
       # No serena-runner process may outlive the review: one could tamper with the
       # publish checkout or /tmp before the secret-bearing Publish step. Publish is

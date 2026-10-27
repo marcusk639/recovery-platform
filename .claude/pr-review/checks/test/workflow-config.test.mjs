@@ -48,7 +48,8 @@ test('model writes and edits are allowed only under OUT; workspace writes and ed
   assert.ok(!deny.includes('Edit'), 'no bare Edit deny (it would override the OUT allow rule)');
   assert.ok(deny.includes('Write(/${{ github.workspace }}/**)'));
   assert.ok(deny.includes('Edit(/${{ github.workspace }}/**)'));
-  assert.ok(deny.includes('Bash'));
+  assert.ok(!allow.includes('Bash'), 'Bash only as the gh pr comment/diff/view prefixes');
+  assert.deepEqual(allow.filter((t) => t.startsWith('Bash')), ['Bash(gh pr comment:*)', 'Bash(gh pr diff:*)', 'Bash(gh pr view:*)']);
 });
 
 test('the model cannot write runner command files or the state snapshot', () => {
@@ -87,9 +88,12 @@ test('the model runs with --strict-mcp-config and all hooks disabled', () => {
   assert.match(wf, /settings: '\{"disableAllHooks": true\}'/);
 });
 
-test('the model is denied MultiEdit, NotebookEdit, WebFetch and WebSearch', () => {
+test('the model is denied MultiEdit; NotebookEdit, WebFetch and WebSearch are not allowed', () => {
+  const allow = /--allowedTools "([^"]+)"/.exec(wf)?.[1].split(',') ?? [];
   const deny = /--disallowedTools "([^"]+)"/.exec(wf)?.[1].split(',') ?? [];
-  for (const t of ['Bash', 'MultiEdit', 'NotebookEdit', 'WebFetch', 'WebSearch']) assert.ok(deny.includes(t), t);
+  assert.ok(deny.includes('MultiEdit'));
+  // Not denied explicitly any more; tools missing from --allowedTools stay unavailable in the action.
+  for (const t of ['NotebookEdit', 'WebFetch', 'WebSearch', 'Bash']) assert.ok(!allow.includes(t), t);
 });
 
 test('the base checkout path is cleared before the trusted-scripts checkout', () => {

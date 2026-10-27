@@ -41,9 +41,9 @@ test('with Serena off, the model arguments and prompt are exactly the pre-Serena
   const allow = /--allowedTools "([^"]+)"/.exec(review)[1];
   assert.equal(
     allow.replace('${{ steps.serena.outputs.tools }}', ''),
-    'Read,Grep,Glob,Write(/${{ runner.temp }}/pr-review/**),Edit(/${{ runner.temp }}/pr-review/**)',
+    'Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Grep,Glob,Write(/${{ runner.temp }}/pr-review/**),Edit(/${{ runner.temp }}/pr-review/**)',
   );
-  assert.ok(allow.startsWith('${{ steps.serena.outputs.tools }}Read,'), 'Serena tools are only a prefix');
+  assert.ok(allow.includes(',${{ steps.serena.outputs.tools }}Read,'), 'Serena tools are inserted only before Read');
   const serenaRefs = [...review.matchAll(/\$\{\{\s*steps\.serena\.outputs\.(\w+)\s*\}\}/g)].map((m) => m[1]).sort();
   assert.deepEqual(serenaRefs, ['mcp_args', 'prompt', 'tools']);
   assert.match(review, /\n {12}\$\{\{ steps\.serena\.outputs\.mcp_args \}\}\n/, 'mcp_args on its own line');
@@ -79,9 +79,10 @@ test('the MCP server runs as serena-runner with an empty environment', () => {
   assert.match(setup, /\n {12}-n -u "\$SR_USER" -H env -i -C "\$SR_HOME" "HOME=\$SR_HOME" "PATH=\$SR_PATH" "SERENA_HOME=\$SR_HOME\/serena-home" SERENA_USAGE_REPORTING=false \\\n/);
   // env -i drops CI/GITHUB_ACTIONS, which Serena checks to skip its startup usage report.
   assert.match(setup, /run_as\(\) \{ [^}]*SERENA_USAGE_REPORTING=false "\$@"; \}/);
-  assert.match(setup, /--mode planning --mode no-onboarding --mode no-memories --log-level WARNING/);
-  // --mode replaces the default modes; editing/interactive would drop these locks and add nothing.
-  assert.doesNotMatch(setup, /--mode (editing|interactive)\b/);
+  // Owner decision: Serena runs in editing mode. fixed_tools and read_only still limit it to the
+  // four read-only lookups.
+  assert.match(setup, /--mode editing --log-level WARNING/);
+  assert.doesNotMatch(setup, /--mode interactive\b/);
 });
 
 test('language servers install against a throwaway project; PR code is indexed only offline', () => {
