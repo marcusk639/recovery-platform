@@ -25,6 +25,7 @@ npm run migrate:house-sub:dry-run
 npm run migrate:house-sub:run
 npm run migrate:payment-cents:dry-run   # / :apply
 npm run migrate:balance-cents:dry-run   # / :apply
+npm run backfill:week-summaries:dry-run -- --from YYYY-MM-DD --to YYYY-MM-DD [--house <id>]   # / :apply
 ```
 
 Jest config is the `jest` key in `package.json` (no `jest.config.js`). Firestore rules tests live in `../mobile/firebase/__tests__/`, not here.
@@ -53,6 +54,8 @@ src/
     finishOperatorSetup.ts, getTierCatalog.ts
   triggers/
     firestore/      Firestore document write triggers
+                    (activityWeekSummary.ts: onActivityWritten owns week-summaries)
+  activities/       Week-summary recompute (syncWeekSummary) + pure week/time-zone math
   accountDeletion/  Resumable deleteAccount orchestrator (targets, *Records, personalData)
   houses/           createHouses transaction, houseId, operatorSetup
   http/
@@ -145,6 +148,8 @@ The legacy `STRIPE_HOUSE_PRICE_ID` / `STRIPE_GUEST_PRICE_ID` / `STRIPE_OXFORD_PR
 **Two Stripe clients, two version sources.** `util/stripe.ts` hardcodes `apiVersion: "2026-01-28.clover"`; `api/stripe.ts` reads `process.env.STRIPE_API_VERSION!`. `STRIPE_API_VERSION` is therefore still genuinely required — unset, it affects only the `api/stripe.ts` client; set to anything else, the two clients disagree. Worth collapsing to one source.
 
 ### Firestore gotchas
+
+**week-summaries are server-owned.** `onActivityWritten` recomputes the touched guest-week(s) from `activities` in a transaction on every activity write (house-local Monday week via `houses.timezone`, default `America/New_York`; only `status == "active"` counts). It writes absolute values, so redelivery is a no-op and stray client increments from old app versions are overwritten. Don't add client-side summary writes back. Repair drift with `backfill:week-summaries` (dry run first).
 
 **Indexes are NOT deployed by `deploy:rules`.** `regroup/mobile/firebase/firestore.indexes.json` is the source of truth (wired via `mobile/firebase/firebase.json`); `mobile`'s `deploy:rules` is only `--only firestore:rules,storage`. Deploy indexes with `cd ../mobile && npm run deploy:indexes`. A `balance`→`rentOwed` rename in `6e67faf` (2026-06-01) left the committed index stale, and `scheduledRentCollection` threw `FAILED_PRECONDITION` on every single run for months while Cloud Scheduler went unwatched. After changing any composite query, run `deploy:indexes` and confirm the index reports READY.
 

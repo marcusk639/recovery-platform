@@ -20,7 +20,7 @@ ALL_FUNCTIONS=(
   stripeConnectReauth stripeConnectReturn universal
   notify notifyNewHouseCreated sendContactEmail sendSubscriptionUpdateEmail
   reportBug submitFeedback
-  onGuestWrite
+  onGuestWrite onActivityWritten
   updateDisputes warmWebsite officerTermReminder weeklyTransfers
 )
 

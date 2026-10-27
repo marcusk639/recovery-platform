@@ -28,6 +28,7 @@ import { SENDGRID_API_KEY } from "../../config";
 import { operatorStatusToHouseStatus } from "../../util/entitlement";
 
 export { onHouseDeleted } from "./houseTombstone";
+export { onActivityWritten } from "./activityWeekSummary";
 
 /**
  * Sends a push notification when a new document is created in /notifications/{notificationId}.
