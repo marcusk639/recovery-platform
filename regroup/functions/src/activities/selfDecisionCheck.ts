@@ -6,7 +6,8 @@
  * onActivityWritten trigger, a decision whose decider is the activity's
  * resident (the guest doc's current userId, or the stamp) or its logger is
  * logged as `dispute.self_decision` (ids only) and the activity is flagged
- * for review in `flaggedForReview`, a field only the server writes.
+ * for review in `flaggedForReview`, a field only the server writes (reasons
+ * are merged with any existing flag, see reviewFlag).
  *
  * Idempotent: the flag is keyed by the decision, so a redelivery rewrites the
  * same value.
@@ -14,6 +15,7 @@
 import { logger } from 'firebase-functions';
 import { closingDecision, reopenDecision } from './disputeDecisions';
 import { residentUidFrom } from './residentStamp';
+import { mergeReviewFlag } from './reviewFlag';
 
 type Firestore = FirebaseFirestore.Firestore;
 type Data = Record<string, unknown>;
@@ -44,11 +46,13 @@ export async function flagSelfDecision(
     decisionId: decision.id,
   });
   const flag = { reason: 'self_decision', event: decision.data.event, decisionId: decision.id };
-  try {
-    await db.collection('activities').doc(activityId).update({ flaggedForReview: flag });
-  } catch (err) {
-    // NOT_FOUND: the activity is gone (Admin SDK delete); the log line stays.
-    if ((err as { code?: unknown })?.code !== 5) throw err;
-  }
+  // Merged with any existing flag (e.g. the backfill's stamp_mismatch), never overwritten.
+  const ref = db.collection('activities').doc(activityId);
+  await db.runTransaction(async (tx) => {
+    const current = await tx.get(ref);
+    if (!current.exists) return; // gone (Admin SDK delete); the log line stays
+    const merged = mergeReviewFlag((current.data() as Data).flaggedForReview, flag);
+    if (merged) tx.update(ref, { flaggedForReview: merged });
+  });
   return true;
 }

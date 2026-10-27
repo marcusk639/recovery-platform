@@ -13,7 +13,7 @@ npm run serve                   # Build + legacy `firebase serve --only function
 npm run preflight:billing       # Billing preflight (also the firebase.json predeploy hook)
 npm run stripe:listen           # Forward Stripe events to local stripeEvents + handleStripeConnectWebhook
 npm run deploy                  # Deploy all functions
-npm run deploy:batched          # Batch deploy of a hand-kept SUBSET; stops at the first failed batch. For a full deploy: firebase deploy --only functions (from regroup/)
+npm run deploy:batched          # Batched fallback for deploy quotas only (default: `firebase deploy --only functions` from regroup/)
 ```
 
 **Migration scripts** (each runs `npm run build` first; dry-run is the default, `--apply` writes for the cents migrations):
@@ -26,7 +26,7 @@ npm run migrate:house-sub:run
 npm run migrate:payment-cents:dry-run   # / :apply
 npm run migrate:balance-cents:dry-run   # / :apply
 npm run backfill:week-summaries:dry-run -- --from YYYY-MM-DD --to YYYY-MM-DD [--house <id>]   # / :apply
-npm run backfill:dispute-identity:dry-run [-- --house <id>]   # then :apply — stamp/re-stamp residentUid, log older decisions (reopen needs them), seed house-disputes. Combined #141/#145 deploy order (regroup/CLAUDE.md): #145 step 0 and backfills → functions (build first) → the MERGED ruleset immediately after → this, with `-- --rules-live-at <ISO time the rules went live>` (re-derives pre-rules stamps; flags differing ones on disputed activities) → #145's remaining steps → app
+npm run backfill:dispute-identity:dry-run [-- --house <id>]   # then :apply — stamp/re-stamp residentUid, log older decisions (reopen needs them), seed house-disputes. Combined #141/#145 deploy order (regroup/CLAUDE.md): #145 step 0 and backfills → functions (build first) → the MERGED ruleset immediately after → this, at least 10 minutes later, with `-- --verify-stamps` (cutoff = run start; re-derives pre-rules stamps; flags differing ones on disputed activities, exit 3) → #145's remaining steps → app
 ```
 
 Jest config is the `jest` key in `package.json` (no `jest.config.js`). Firestore rules tests live in `../mobile/firebase/__tests__/`, not here.

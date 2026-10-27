@@ -1,27 +1,30 @@
 /**
- * Re-derives the residentUid stamp of an activity created before #141's
- * rules went live (backfillDisputeIdentity --rules-live-at).
+ * Re-derives the residentUid stamp of an activity created before the backfill
+ * cutoff (backfillDisputeIdentity --verify-stamps / --rules-live-at).
  *
  * Under the old rules a client could write any residentUid at create, and
- * the server keeps a set stamp. Combined deploy order (#141 + #145): the
- * functions go live before the merged ruleset, so stamps written in that
- * window (and before it) are checked against the guest doc:
+ * the server keeps a set stamp. In the combined #141/#145 deploy the
+ * functions go live before the merged ruleset, so stamps written until the
+ * rules are live (they take up to ~10 minutes to propagate) are checked
+ * against the guest doc:
  *   - it matches the guest's account (or is null for an accountless
  *     guest): left alone;
  *   - no dispute history and it differs: overwritten from the guest doc
  *     (its userId, or null and unfillable);
  *   - dispute history: an empty stamp is filled (filling is not moving);
  *     a set stamp that differs is NEVER changed; the activity is flagged
- *     for the owner's review (flaggedForReview, reason 'stamp_mismatch').
- *
- * Each write is a transaction that re-reads the activity. Ids only.
+ *     for the owner's review (flaggedForReview reason 'stamp_mismatch',
+ *     merged with any existing flag).
+ * The guest doc is read inside the same transaction as the activity, so a
+ * concurrent account link can't make it null out a correct stamp. Ids only.
  */
-import { fillStamp, hasDisputeHistory } from './residentStamp';
+import { fillStamp, hasDisputeHistory, residentUidFrom } from './residentStamp';
+import { mergeReviewFlag } from './reviewFlag';
 
 type Firestore = FirebaseFirestore.Firestore;
 type Data = Record<string, unknown>;
 
-export type StampCheck = 'match' | 'restamped' | 'filled' | 'flagged' | 'skipped';
+export type StampCheck = 'match' | 'restamped' | 'filled' | 'flagged' | 'skipped' | 'guestMissing';
 
 const storedStamp = (d: Data): string | null =>
   typeof d.residentUid === 'string' && d.residentUid !== '' ? d.residentUid : null;
@@ -38,21 +41,36 @@ export function stampCheck(activity: Data, derived: string | null): StampCheck {
 
 export const MISMATCH_FLAG = { reason: 'stamp_mismatch' } as const;
 
-/** Applies stampCheck in a transaction (dry run: only reports it). */
+/** Checks (dry run) or applies (transaction) one activity's stamp. */
 export async function verifyStamp(
   db: Firestore,
   activityId: string,
-  derived: string | null,
-  apply: boolean,
   data: Data,
+  apply: boolean,
 ): Promise<StampCheck> {
-  if (!apply) return stampCheck(data, derived);
+  const guestId = typeof data.guestId === 'string' ? data.guestId : '';
+  const guestRef = guestId ? db.collection('guests').doc(guestId) : undefined;
+  if (!apply) {
+    const guest = guestRef ? await guestRef.get() : undefined;
+    if (!guest?.exists) return 'guestMissing';
+    return stampCheck(data, residentUidFrom(guest.data() as Data));
+  }
   const ref = db.collection('activities').doc(activityId);
   return db.runTransaction(async (tx): Promise<StampCheck> => {
     const current = await tx.get(ref);
     if (!current.exists) return 'skipped';
     const now = current.data() as Data;
-    if (now.guestId !== data.guestId) return 'skipped';
+    if ((typeof now.guestId === 'string' ? now.guestId : '') !== guestId) return 'skipped';
+    const guest = guestRef ? await tx.get(guestRef) : undefined;
+    if (!guest?.exists) {
+      // Can't be verified; a disputed one goes to the owner (merged flag).
+      const flag = hasDisputeHistory(now)
+        ? mergeReviewFlag(now.flaggedForReview, { reason: 'stamp_unverifiable' })
+        : null;
+      if (flag) tx.update(ref, { flaggedForReview: flag });
+      return 'guestMissing';
+    }
+    const derived = residentUidFrom(guest.data() as Data);
     const check = stampCheck(now, derived);
     if (check === 'restamped' || check === 'filled') {
       tx.update(
@@ -60,9 +78,10 @@ export async function verifyStamp(
         derived ? fillStamp(derived) : { residentUid: null, residentUidPending: false },
       );
     }
-    // An existing flag (e.g. a self decision) is kept; the report lists both.
-    if (check === 'flagged' && !now.flaggedForReview)
-      tx.update(ref, { flaggedForReview: MISMATCH_FLAG });
+    if (check === 'flagged') {
+      const merged = mergeReviewFlag(now.flaggedForReview, MISMATCH_FLAG);
+      if (merged) tx.update(ref, { flaggedForReview: merged });
+    }
     return check;
   });
 }

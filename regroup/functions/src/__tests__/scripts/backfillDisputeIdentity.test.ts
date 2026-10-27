@@ -87,6 +87,9 @@ describe('backfillDisputeIdentity', () => {
       stampsChecked: 0,
       restamped: 0,
       stampMismatchFlagged: 0,
+      stampSkipped: 0,
+      stampGuestMissing: 0,
+      preRulesDecisions: 0,
     });
     expect(db.writes).toHaveLength(0);
     expect(output.join('\n')).toContain('DRY RUN');
@@ -228,11 +231,12 @@ describe('--rules-live-at: stamps written before the rules went live', () => {
     expect(db.read('activities', 'ok')).toEqual(plain({ residentUid: 'res1' }));
     expect(db.read('activities', 'afterLive')!.residentUid).toBe('someoneElse');
     expect(output.join('\n')).not.toContain('res1');
-    expect(parseArgs(['--rules-live-at', '2026-11-01T00:00:00Z'])).toEqual({
+    const now = new Date(LIVE + 3_600_000);
+    expect(parseArgs(['--rules-live-at', '2026-11-01T00:00:00Z'], now)).toEqual({
       apply: false,
       rulesLiveAt: new Date(LIVE),
     });
-    expect(() => parseArgs(['--rules-live-at', 'soon'])).toThrow('ISO time');
+    expect(() => parseArgs(['--rules-live-at', 'soon'], now)).toThrow('ISO 8601');
   });
 });
 

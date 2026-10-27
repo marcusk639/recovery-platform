@@ -14,8 +14,11 @@
  *     later writes skip the transaction), and RE-STAMPS on an admin's
  *     correction of guestId while the activity has no dispute history (from
  *     the new guest: its userId, or null and unfillable);
- *   - restampGuestActivities (onGuestLinkedRestamp) and the backfill: fill
- *     empty stamps only.
+ *   - restampGuestActivities (onGuestLinkedRestamp): fills empty stamps only;
+ *   - the deploy backfill (backfillDisputeIdentity --verify-stamps): fills
+ *     empty stamps, and OVERWRITES a stamp written before the rules went
+ *     live that differs from the guest doc, when there is no dispute history
+ *     (with history it only flags it; activities/stampVerification).
  * Once there is dispute history the rules freeze guestId, so a disputed
  * activity's stamp never moves. With no usable stamp the rules fall back to
  * the guest doc (safe only with #145's guest rules live).
@@ -25,11 +28,12 @@
  */
 import { logger } from 'firebase-functions';
 import { FieldValue } from 'firebase-admin/firestore';
+import { mergeReviewFlag } from './reviewFlag';
 
 type Firestore = FirebaseFirestore.Firestore;
 type Data = Record<string, unknown>;
 
-export type StampResult = 'stamped' | 'unchanged' | 'skipped' | 'unfillable';
+export type StampResult = 'stamped' | 'unchanged' | 'skipped' | 'unfillable' | 'guestMissing';
 
 /** The value to stamp from a guest doc: its userId, or null with no account. */
 export function residentUidFrom(guest: Data | undefined): string | null {
@@ -126,11 +130,23 @@ export async function stampResidentUid(
       tx.update(ref, fillStamp(residentUid));
       return 'stamped';
     }
-    if (data.residentUid === null && data.residentUidPending === false) return 'unchanged';
-    tx.update(ref, { residentUid: null, residentUidPending: false });
-    return 'unfillable';
+    const updates: FirebaseFirestore.UpdateData<Data> = {};
+    if (!(data.residentUid === null && data.residentUidPending === false)) {
+      Object.assign(updates, { residentUid: null, residentUidPending: false });
+    }
+    // A disputed activity whose guest doc is gone can't be stamped: the
+    // owner should see it (v10 B4: the doc deleted around the dispute).
+    if (!guest?.exists && hasDisputeHistory(data)) {
+      const flag = mergeReviewFlag(data.flaggedForReview, { reason: 'guest_missing' });
+      if (flag) updates.flaggedForReview = flag;
+    }
+    if (Object.keys(updates).length === 0) return 'unchanged';
+    tx.update(ref, updates);
+    return updates.flaggedForReview ? 'guestMissing' : 'unfillable';
   });
   if (result === 'stamped') logger.info('resident_stamp.stamped', { activityId, guestId });
   if (result === 'unfillable') logger.warn('resident_stamp.unfillable', { activityId, guestId });
+  if (result === 'guestMissing')
+    logger.warn('resident_stamp.guest_missing', { activityId, guestId });
   return result;
 }

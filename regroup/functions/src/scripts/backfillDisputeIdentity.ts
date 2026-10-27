@@ -23,13 +23,14 @@
  *
  *   FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=demo-regroup \
  *     npm run backfill:dispute-identity:dry-run      # rehearse (demo-* only)
- *   npm run backfill:dispute-identity:dry-run -- --rules-live-at <ISO>
- *   npm run backfill:dispute-identity:apply -- --rules-live-at <ISO>
+ *   npm run backfill:dispute-identity:dry-run -- --verify-stamps
+ *   npm run backfill:dispute-identity:apply -- --verify-stamps
  *
- * --rules-live-at <ISO> (combined #141/#145 deploy, step 4): for activities
- * created before #141's rules went live, re-derives the stamp from the guest
- * doc (activities/stampVerification): overwritten with no dispute history; a
- * differing one with history is flagged for review, never changed.
+ * --verify-stamps (combined #141/#145 deploy, step 4; run at least 10 minutes
+ * after the merged ruleset deploy finished): for activities created before
+ * the cutoff (the time the run starts; or an explicit --rules-live-at <ISO>),
+ * re-derives the stamp from the guest doc (scripts/preRulesStamps). Exit 3
+ * when a disputed activity's stamp differs and is flagged for the owner.
  * --house <id> limits the run to one house. Idempotent. Stamps are not
  * week-summary inputs (no recompute). Each write is a transaction that
  * re-reads the activity. Prints ids and counts only.
@@ -40,7 +41,14 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { fillStamp, residentUidFrom } from '../activities/residentStamp';
 import { DECISIONS, disputeStamp, millisOf, outcomeOf } from '../activities/disputeDecisions';
 import { mirrorHouseDispute } from '../activities/houseDisputeMirror';
-import { verifyStamp } from '../activities/stampVerification';
+import {
+  PreRulesReport,
+  checkPreRules,
+  createdBefore,
+  emptyPreRulesReport,
+  parseCutoff,
+  printPreRulesReport,
+} from './preRulesStamps';
 
 type Firestore = FirebaseFirestore.Firestore;
 type Data = Record<string, unknown>;
@@ -49,7 +57,7 @@ export interface Options {
   apply: boolean;
   houseId?: string;
   pageSize?: number;
-  /** When #141's rules went live: stamps on activities created before it are re-derived. */
+  /** The cutoff: stamps on activities created before it are re-derived (scripts/preRulesStamps). */
   rulesLiveAt?: Date;
 }
 
@@ -62,21 +70,25 @@ export interface Counts {
   decisionsPresent: number;
   decisionsUndated: number;
   openDisputes: number;
-  /** --rules-live-at: stamps checked, overwritten (no dispute history), and flagged. */
+  /** Pre-rules check: stamps checked, overwritten or filled, flagged, skipped, guest doc gone. */
   stampsChecked: number;
   restamped: number;
   stampMismatchFlagged: number;
+  stampSkipped: number;
+  stampGuestMissing: number;
+  preRulesDecisions: number;
 }
 
 const USAGE =
-  'Usage: backfillDisputeIdentity [--house <houseId>] [--rules-live-at <ISO time>] [--apply]';
+  'Usage: backfillDisputeIdentity [--house <houseId>] [--verify-stamps | --rules-live-at <ISO>] [--apply]';
 const ALREADY_EXISTS = 6;
 
-export function parseArgs(argv: string[]): Options {
+export function parseArgs(argv: string[], now: Date = new Date()): Options {
   const valued = ['--house', '--rules-live-at'];
-  const known = new Set([...valued, '--apply']);
+  const known = new Set([...valued, '--apply', '--verify-stamps']);
   argv.forEach((a, i) => {
     if (a.startsWith('--') && !known.has(a)) throw new Error(`Unknown flag ${a}. ${USAGE}`);
+    if (a.startsWith('--') && argv.indexOf(a) !== i) throw new Error(`${a} given twice. ${USAGE}`);
     if (!a.startsWith('--') && !valued.includes(argv[i - 1]))
       throw new Error(`Unexpected ${a}. ${USAGE}`);
   });
@@ -88,12 +100,17 @@ export function parseArgs(argv: string[]): Options {
   };
   const houseId = value('--house');
   const live = value('--rules-live-at');
-  if (live !== undefined && Number.isNaN(Date.parse(live)))
-    throw new Error(`--rules-live-at must be an ISO time. ${USAGE}`);
+  // --verify-stamps alone: the cutoff is the time the run starts.
+  const rulesLiveAt =
+    live !== undefined
+      ? parseCutoff(live, now)
+      : argv.includes('--verify-stamps')
+        ? now
+        : undefined;
   return {
     apply: argv.includes('--apply'),
     ...(houseId ? { houseId } : {}),
-    ...(live ? { rulesLiveAt: new Date(live) } : {}),
+    ...(rulesLiveAt ? { rulesLiveAt } : {}),
   };
 }
 
@@ -199,7 +216,8 @@ async function logDecision(db: Firestore, id: string, data: Data, opts: Options,
 export async function run(db: Firestore, opts: Options): Promise<Counts> {
   console.log(
     `Mode: ${opts.apply ? 'LIVE (writes)' : 'DRY RUN (no writes)'} — residentUid and dispute decisions` +
-      `${opts.houseId ? ` (house ${opts.houseId})` : ''}`,
+      `${opts.houseId ? ` (house ${opts.houseId})` : ''}` +
+      `${opts.rulesLiveAt ? `; re-checking stamps of activities created before ${opts.rulesLiveAt.toISOString()}` : ''}`,
   );
   const counts: Counts = {
     scanned: 0,
@@ -213,9 +231,11 @@ export async function run(db: Firestore, opts: Options): Promise<Counts> {
     stampsChecked: 0,
     restamped: 0,
     stampMismatchFlagged: 0,
+    stampSkipped: 0,
+    stampGuestMissing: 0,
+    preRulesDecisions: 0,
   };
-  const restampedIds: string[] = [];
-  const flaggedIds: string[] = [];
+  const pre: PreRulesReport = emptyPreRulesReport();
   const guests = new Map<string, Data | null>();
   const changed: string[] = [];
   let base: FirebaseFirestore.Query = db.collection('activities');
@@ -227,31 +247,8 @@ export async function run(db: Firestore, opts: Options): Promise<Counts> {
     for (const doc of page.docs) {
       counts.scanned++;
       const data = doc.data() as Data;
-      // Created before the rules went live (createTime; else loggedAt; unknown counts as before).
-      const created = doc.createTime?.toMillis() ?? millisOf(data.loggedAt);
-      if (opts.rulesLiveAt && (created === null || created < opts.rulesLiveAt.getTime())) {
-        const guestId = typeof data.guestId === 'string' ? data.guestId : '';
-        const snap = guestId ? await db.collection('guests').doc(guestId).get() : undefined;
-        if (!snap?.exists) {
-          counts.guestMissing++;
-        } else {
-          counts.stampsChecked++;
-          const check = await verifyStamp(
-            db,
-            doc.id,
-            residentUidFrom(snap.data() as Data),
-            opts.apply,
-            data,
-          );
-          if (check === 'restamped' || check === 'filled') {
-            counts.restamped++;
-            restampedIds.push(doc.id);
-          }
-          if (check === 'flagged') {
-            counts.stampMismatchFlagged++;
-            flaggedIds.push(doc.id);
-          }
-        }
+      if (opts.rulesLiveAt && createdBefore(doc.createTime?.toMillis(), data, opts.rulesLiveAt)) {
+        await checkPreRules(db, doc.id, data, opts.rulesLiveAt, opts.apply, pre);
       } else {
         await stamp(db, doc.id, data, guests, opts, counts, changed);
       }
@@ -270,12 +267,15 @@ export async function run(db: Firestore, opts: Options): Promise<Counts> {
     `${opts.apply ? 'Stamped' : 'Would stamp'} residentUid on: ${changed.join(', ') || '(none)'}`,
   );
   if (opts.rulesLiveAt) {
-    console.log(
-      `${opts.apply ? 'Re-stamped' : 'Would re-stamp'} (pre-rules): ${restampedIds.join(', ') || '(none)'}`,
-    );
-    console.log(
-      `Stamp differs on a disputed activity, ${opts.apply ? 'flagged' : 'would flag'} for the owner's review: ${flaggedIds.join(', ') || '(none)'}`,
-    );
+    Object.assign(counts, {
+      stampsChecked: pre.checked,
+      restamped: pre.restamped.length,
+      stampMismatchFlagged: pre.flagged.length,
+      stampSkipped: pre.skipped.length,
+      stampGuestMissing: pre.guestMissing.length,
+      preRulesDecisions: pre.preRulesDecisions.length,
+    });
+    printPreRulesReport(pre, opts.apply);
   }
   console.log(JSON.stringify(counts));
   return counts;
@@ -285,7 +285,9 @@ export async function main(
   argv: string[] = process.argv.slice(2),
   database: Firestore = admin.firestore(),
 ): Promise<void> {
-  await run(database, parseArgs(argv));
+  const counts = await run(database, parseArgs(argv));
+  // 3: a disputed activity's stamp differs and needs the owner (as #145's backfills).
+  if (counts.stampMismatchFlagged > 0) process.exitCode = 3;
 }
 
 // Guard against the module being imported by a test runner.

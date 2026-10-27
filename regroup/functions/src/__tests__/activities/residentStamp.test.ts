@@ -87,6 +87,21 @@ describe('stampResidentUid', () => {
     expect(db.transactions).toBe(tx);
   });
 
+  it('B4: a disputed activity whose guest doc is gone is flagged guest_missing (merged), not silently left null', async () => {
+    db.seed(
+      'activities',
+      'a1',
+      act({ guestId: 'ghost', flaggedForReview: { reason: 'self_decision' } }),
+    );
+    const before = db.read('activities', 'a1')!;
+    const disputed = { ...before, status: 'disputed', disputedBy: 'p', disputeResolvedBy: 'p' };
+    expect(await deliver(before, disputed)).toBe('guestMissing');
+    expect(db.read('activities', 'a1')).toMatchObject({
+      residentUid: null,
+      flaggedForReview: { reason: 'self_decision', reasons: ['self_decision', 'guest_missing'] },
+    });
+  });
+
   it('records once that a guest with no app account (an intake) cannot be stamped yet', async () => {
     const warn = jest.spyOn(logger, 'warn');
     expect(await deliver(undefined, act({ guestId: 'intake' }))).toBe('unfillable');

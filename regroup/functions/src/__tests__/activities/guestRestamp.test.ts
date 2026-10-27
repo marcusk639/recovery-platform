@@ -131,6 +131,15 @@ describe('flagSelfDecision', () => {
     expect(JSON.stringify(warn.mock.calls)).toContain('dispute.self_decision');
   });
 
+  it('S-4: merges with an existing flag instead of overwriting it', async () => {
+    db.seed('activities', 'c1', { ...rejectBy('pl'), flaggedForReview: { reason: 'stamp_mismatch' } });
+    expect(await run(pending, rejectBy('pl'))).toBe(true);
+    expect(db.read('activities', 'c1')!.flaggedForReview).toEqual({
+      reason: 'stamp_mismatch',
+      reasons: ['stamp_mismatch', 'self_decision'],
+    });
+  });
+
   it('flags a self reopen too; ignores other admins and non-decisions; tolerates a deleted activity', async () => {
     const reopened = {
       ...rejectBy('mgr2'),
