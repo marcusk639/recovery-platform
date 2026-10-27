@@ -28,6 +28,10 @@
       "env": {
         "SENTRY_AUTH_TOKEN": "${SENTRY_AUTH_TOKEN}"
       }
+    },
+    "serena": {
+      "command": "uvx",
+      "args": ["--from", "serena-agent==1.7.0", "serena", "start-mcp-server", "--context", "claude-code", "--project-from-cwd", "--open-web-dashboard", "False"]
     }
   }
 }
