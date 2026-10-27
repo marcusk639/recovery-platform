@@ -126,23 +126,111 @@ service cloud.firestore {
     
     match /admins/{adminId} {
       allow read: if isAdmin(resource.data.houseIds) || isSameUser(adminId);
-      // allow create: if isAdmin(request.resource.data.houseIds);
-      allow create: if isAdmin(request.resource.data.houseIds);
-      allow update: if isAdmin(request.resource.data.houseIds);
+      // admins docs are profile data for the app; the server reads the tier
+      // from house-roles/{houseId}_{uid} (server-only), never from these.
+      // Still, keep clients to what the app does:
+      //  - create: an admin creates their OWN doc for ONE house, after
+      //    redeemInvitation recorded them as a manager or owner there
+      //    (SignUpForm admin path). No owner access in it. A peer leader has
+      //    no admins doc and cannot make one.
+      //  - update: the doc's own user or an admin of its houses; the user
+      //    stays the same and houses can only be removed (profile edits,
+      //    house settings removing an admin), never added.
+      //  - delete: unchanged (request.resource is null on delete, so this
+      //    has always denied; the app's AdminManagement delete fails today).
+      function staffRecord(houseId) {
+        let snap = get(/databases/$(database)/documents/house-roles/$(houseId + '_' + request.auth.uid));
+        return snap != null && snap.data.get('tier', '') in ['owner', 'manager'];
+      }
+      allow create: if isSameUser(request.resource.data.userId) &&
+        request.resource.data.houseIds.size() == 1 &&
+        isAdmin(request.resource.data.houseIds) &&
+        staffRecord(request.resource.data.houseIds[0]) &&
+        request.resource.data.get('superAdmin', []).size() == 0;
+      allow update: if (isAdmin(resource.data.houseIds) || isSameUser(resource.data.userId)) &&
+        request.resource.data.userId == resource.data.userId &&
+        resource.data.get('houseIds', []).hasAll(request.resource.data.get('houseIds', [])) &&
+        resource.data.get('superAdmin', []).hasAll(request.resource.data.get('superAdmin', []));
       allow delete: if isAdmin(request.resource.data.houseIds);
-      // allow create: if signedIn();
     }
     
     match /guests/{guestId} {
       allow read: if isGuest([resource.data.houseId]) || isAdmin([resource.data.houseId]); // need to adjust house search to not query guests (data needs to be aggregated on the house documents)
 
-      // Self-create (invite signup) may not set the Stripe payment fields, so a
-      // resident cannot plant a co-resident's customer id on their own doc.
-      // Admin create and update stay unrestricted (house admins can still set
-      // them); account deletion checks Stripe ownership server-side.
-      allow create: if (isSameUser(request.resource.data.userId) &&
-                        !request.resource.data.keys().hasAny(['stripeCustomerId', 'defaultPaymentMethodId'])) ||
-                       isAdmin([request.resource.data.houseId]);
+      // Owner rule: a resident never adds themselves to a house. A resident
+      // record is created by a house admin or peer leader (isAdmin), or by
+      // the resident only when an invitation is behind it: redeemInvitation
+      // writes a server-only admission ticket at
+      // admission-tickets/{uid}_{houseId} (no rule matches that path, so
+      // clients can neither read nor write it). The ticket id is computed
+      // here from the caller and the house, so app builds already in the field
+      // need to send nothing new. onGuestWrite marks the ticket used once a
+      // guest doc for that account in that house exists, so a later
+      // self-create is denied. The guest claim is still required.
+      // The self-created doc may carry only what SignUpForm writes, at the
+      // values it writes (Guest entity defaults): no balance, no Stripe or
+      // auto-pay fields, no status other than active, no membership fields.
+      // isAdmin must match the ticket (true only for a senior-peer invite),
+      // and phase must equal the invitation's initialPhase exactly ("" when
+      // it has none, which is what the app sends). The rule alone cannot
+      // stop several docs created before onGuestWrite marks the ticket used
+      // (one batch, or quick sequential writes); the server binds the ticket
+      // to one doc and flags the others (util/admission).
+      function admissionTicket(houseId) {
+        return /databases/$(database)/documents/admission-tickets/$(request.auth.uid + '_' + houseId);
+      }
+
+      function isInvitedSelfCreate(d) {
+        let ticketPath = admissionTicket(d.houseId);
+        return isSameUser(d.userId) &&
+          isGuest([d.houseId]) &&
+          exists(ticketPath) &&
+          get(ticketPath).data.used == false &&
+          get(ticketPath).data.expiresAt > request.time &&
+          d.get('isAdmin', false) == (get(ticketPath).data.role == 'senior-peer') &&
+          d.get('phase', '') == get(ticketPath).data.initialPhase &&
+          d.keys().hasOnly([
+            'id', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy',
+            'userId', 'houseId', 'displayName', 'firstName', 'lastName',
+            'email', 'phoneNumber', 'avatar', 'sobrietyDate', 'drugOfChoice',
+            'phase', 'step', 'status', 'isAdmin', 'infoEntered', 'hasJob',
+            'rentOwed', 'choreFees', 'dailyHabit', 'supporters', 'jobs', 'version'
+          ]) &&
+          d.get('status', 'active') == 'active' &&
+          d.get('rentOwed', 0) == 0 &&
+          d.get('choreFees', 0) == 0 &&
+          d.get('dailyHabit', 0) == 0 &&
+          d.get('version', 0) == 0 &&
+          d.get('step', 1) == 1 &&
+          d.get('infoEntered', false) == false &&
+          d.get('hasJob', false) == false &&
+          d.get('supporters', []).size() == 0 &&
+          d.get('jobs', []).size() == 0;
+      }
+
+      // createdBy, when sent, is the caller (builds before this one send
+      // none; the server then treats the doc as legacy). It is how the server
+      // tells a self-created doc (createdBy == userId) from a staff-created
+      // one when it binds a ticket to one doc (util/admission).
+      function createdByCaller(d) {
+        return d.get('createdBy', request.auth.uid) == request.auth.uid &&
+          d.get('updatedBy', request.auth.uid) == request.auth.uid;
+      }
+
+      // Staff create never links the doc to the creator (no self-link: a
+      // staff member's own resident record comes through an invitation),
+      // so no one can mint an eviction-proof record for themselves. A staff
+      // create linked to an account needs the caller to rank strictly above
+      // that account (rank helpers below): otherwise a peer leader could
+      // give another peer leader a "shadow" active record that keeps their
+      // claims after their real record is discharged. A record with no
+      // account, or for a plain resident, ranks 0.
+      allow create: if createdByCaller(request.resource.data) &&
+                       moveOutDateValid(request.resource.data) &&
+                       (isInvitedSelfCreate(request.resource.data) ||
+                        (isAdmin([request.resource.data.houseId]) &&
+                         request.resource.data.get('userId', '') != request.auth.uid &&
+                         callerRank(request.resource.data.houseId) > targetRank(request.resource.data)));
 
       // Update has two distinct branches:
       //
@@ -163,8 +251,108 @@ service cloud.firestore {
       //    self-writes.
       //
       // See .full-review/02-security-performance.md [S1] for the threat model.
+      // userId says whose record this is: activities, disputes and claims
+      // trust it. It is immutable once set, for every client. An admin may
+      // set it only on a doc that has none (linking an intake record to an
+      // account), never to their own uid, and only to an account ranked
+      // strictly below them in the house the doc ends up in (the shadow
+      // record above). Audit (PR #145): the app's
+      // only client writer is mapUserToGuest (SignUp self-create, and
+      // NewAccountForm's self-update re-writing the same uid); full-doc
+      // admin writes re-send the existing value.
+      function userIdUnchangedOrLinked() {
+        let before = resource.data.get('userId', '');
+        let after = request.resource.data.get('userId', '');
+        return after == before ||
+          (before == '' && after is string && after != request.auth.uid &&
+           isAdmin([resource.data.houseId]) &&
+           callerRank(request.resource.data.houseId) > targetRank(request.resource.data));
+      }
+
+      // Staff departures follow rank (functions util/houseRoles). Removing a
+      // resident record (status leaving active, a moveOutDate, a move to
+      // another house, or a delete) makes onGuestWrite strip that account's
+      // claims, so it needs the caller to rank strictly above the doc's
+      // account. Ranks come from the server-only house-roles record (rules
+      // may get() it; clients cannot read it): primary owner 4, owner 3,
+      // manager 2, peer leader 1, resident or no record 0; the caller also
+      // ranks 3 with a superAdmin claim and 1 with an admin claim. A caller's
+      // record counts only as far as a claim backs it, as on the server
+      // (tierAndRank): the primary record 4; an owner record with the
+      // superAdmin claim 3; an owner or manager record with the admin claim 2;
+      // a peer-leader record with the admin claim 1; otherwise the claim's
+      // rank. A record left by a failed claims write never raises the caller
+      // above what the server would grant. A target's claims cannot be read here,
+      // so a target ranks by its record alone. Staff never
+      // change the status, moveOutDate or house of their OWN record, or
+      // delete it: only someone above them can (no self re-activation after a
+      // discharge). Record reads: one get() per record (get() returns null
+      // for a missing document, so no separate exists()); two per write, four
+      // for a move between houses (the caller's and the account's records in
+      // both). In a batch the caller's record is read once, so one batch
+      // carries at most 19 account-linked removals or discharges, or 9 moves
+      // between two houses (the 20-read limit). The app removes and
+      // discharges one guest doc at a time, so the limit does not affect it.
+      function roleData(houseId, uid) {
+        let snap = get(/databases/$(database)/documents/house-roles/$(houseId + '_' + uid));
+        return snap == null ? {} : snap.data;
+      }
+      function rankOf(d) {
+        let tier = d.get('tier', '');
+        return d.get('primary', false) == true ? 4 :
+          tier == 'owner' ? 3 : tier == 'manager' ? 2 : tier == 'peerLeader' ? 1 : 0;
+      }
+      function recordRank(houseId, uid) {
+        return rankOf(roleData(houseId, uid));
+      }
+      function callerRank(houseId) {
+        let d = roleData(houseId, request.auth.uid);
+        let tier = d.get('tier', '');
+        let sa = hasSuperAdminRoleInHouse([houseId]);
+        let ad = hasAdminRoleInHouse([houseId]);
+        // Same as the server's tierAndRank (functions util/houseRoles).
+        let r = d.get('primary', false) == true ? 4 :
+          tier == 'owner' && sa ? 3 :
+          (tier == 'owner' || tier == 'manager') && ad ? 2 :
+          tier == 'peerLeader' && ad ? 1 : 0;
+        let c = sa ? 3 : ad ? 1 : 0;
+        return r > c ? r : c;
+      }
+      function targetRank(d) {
+        let uid = d.get('userId', '');
+        return uid is string && uid != '' ? recordRank(d.houseId, uid) : 0;
+      }
+      // moveOutDate is a timestamp, a string or null (a 0 or false would read
+      // as "still here" while the server's isActiveGuestDoc agreed, then a
+      // later date would depart someone without the rank check).
+      function moveOutDateValid(d) {
+        return !('moveOutDate' in d) || d.moveOutDate == null ||
+          d.moveOutDate is string || d.moveOutDate is timestamp;
+      }
+      // Any change to a record's status, moveOutDate or house (a departure,
+      // a re-activation or a move) needs the caller to rank strictly above
+      // the record's account, both before and after the write (the account
+      // and house may change in the same write); a record ranked 0 (a
+      // resident, or no record) any staff may change. Staff never change
+      // these on their own record.
+      function staffDepartureAllowed() {
+        let own = resource.data.get('userId', '') == request.auth.uid;
+        let changed = request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['status', 'moveOutDate', 'houseId']);
+        return !(own && changed) &&
+          (!changed || (callerRank(resource.data.houseId) > targetRank(resource.data) &&
+            callerRank(request.resource.data.houseId) > targetRank(request.resource.data))) &&
+          (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['moveOutDate']) ||
+           moveOutDateValid(request.resource.data));
+      }
+
       allow update: if
-        (isAdmin([resource.data.houseId]) && isAdmin([request.resource.data.houseId])) ||
+        userIdUnchangedOrLinked() &&
+        request.resource.data.get('createdBy', null) == resource.data.get('createdBy', null) &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['updatedBy']) ||
+         request.resource.data.updatedBy == request.auth.uid) && (
+        (isAdmin([resource.data.houseId]) && isAdmin([request.resource.data.houseId]) &&
+         staffDepartureAllowed()) ||
         (isSameUser(request.resource.data.userId) &&
          request.resource.data.userId == resource.data.userId &&
          request.resource.data.houseId == resource.data.houseId &&
@@ -175,9 +363,18 @@ service cloud.firestore {
            'emergencyContactName', 'emergencyContactPhone', 'emergencyContactRelation',
            'autoPayEnabled',
            'version', 'updatedAt', 'updatedBy'
-         ]));
+         ])));
 
-      allow delete: if isSameUser(resource.data.userId) || isAdmin([resource.data.houseId]);
+      // Admin only. A resident must not delete their own doc: it carries their
+      // balance, and deleting it would drop the balance (no archive) while the
+      // claims stay. The app has no working resident self-delete (its batch
+      // also writes guest-archive, which is admin-only), and account deletion
+      // runs server-side with the Admin SDK.
+      // Staff delete follows rank (staffDepartureAllowed above), never of
+      // their own record.
+      allow delete: if isAdmin([resource.data.houseId]) &&
+        resource.data.get('userId', '') != request.auth.uid &&
+        callerRank(resource.data.houseId) > targetRank(resource.data);
     }
     
     match /guest-reports/{reportId} {
@@ -236,9 +433,15 @@ service cloud.firestore {
       // may write it. superAdminIds is an authorization field like
       // adminIds/ownerId: only a superAdmin of the house may change it.
       // adminId is a legacy field, blocked defensively the same way.
+      // ownerId makes someone the house owner (top tier, functions
+      // util/houseRoles): only createHouses (Admin SDK) sets it, so no
+      // client, a superAdmin co-owner included, may change it.
+      // houseType (traditional / oxford) picks the admission and voting
+      // rules; only createHouses and setOxfordEnabled (Admin SDK) set it,
+      // so no client, the owner included, may change it.
       allow update: if isDemoScopedHouses([houseId]) &&
         !request.resource.data.diff(resource.data).affectedKeys()
-          .hasAny(['subscriptionStatus', 'guestGraceEndsAt', 'stripeAccountApi', 'superAdminId']) &&
+          .hasAny(['subscriptionStatus', 'guestGraceEndsAt', 'stripeAccountApi', 'superAdminId', 'houseType', 'ownerId']) &&
         (hasSuperAdminRoleInHouse([houseId]) ||
           ((hasAdminRoleInHouse([houseId]) || hasGuestRoleInHouse([houseId])) && !request.resource.data.diff(resource.data).affectedKeys()
             .hasAny(['stripeAccountId', 'stripeStatus', 'monthlyRent', 'weeklyRent', 'adminIds', 'ownerId', 'superAdminIds', 'adminId'])));

@@ -15,6 +15,7 @@ import "@react-native-firebase/firestore";
 import { FirebaseFirestoreTypes } from "@react-native-firebase/firestore";
 import FirebaseFirestore from "@react-native-firebase/firestore";
 import { guestCollection, archiveCollection } from "./guest";
+import { commitGuestOps, GuestBatchOp } from './guestBatch';
 import { Guest } from "../entities/Guest";
 import { uploadHousePhoto } from "./storage";
 import { createAdminInvite, createGuestInvite } from "./setup-wizard";
@@ -318,6 +319,7 @@ export const removeAdminPrivileges = async (
   return response.data;
 };
 
+// Unused: no caller since 8e36c372 (#145 round 8 review I2).
 export async function updateHouseBatch(
   house: Partial<House>,
   houseBefore: House,
@@ -391,20 +393,31 @@ export async function updateHouseBatch(
     }
   });
   batch.update(houseCollection.doc(house.id), house);
-  updatedGuests.forEach((guest) => {
-    batch.update(guestCollection.doc(guest.id), guest);
-  });
   updatedAdmins.forEach((admin) => {
     batch.update(adminCollection.doc(admin.id), admin);
-  });
-  deletedGuests.forEach((guest) => {
-    batch.delete(guestCollection.doc(guest.id));
-    batch.set(archiveCollection.doc(guest.id), guest);
   });
   deletedAdmins.forEach((admin) => {
     batch.delete(adminCollection.doc(admin.id));
   });
   promises.push(batch.commit());
+  // Guest docs go in their own chunked batches (services/guestBatch: the
+  // rules read one house-roles record per guest doc, at most 20 per batch).
+  const guestOps: GuestBatchOp[] = [
+    ...updatedGuests.map(
+      (guest): GuestBatchOp =>
+        (b) => {
+          b.update(guestCollection.doc(guest.id), guest);
+        },
+    ),
+    ...deletedGuests.map(
+      (guest): GuestBatchOp =>
+        (b) => {
+          b.delete(guestCollection.doc(guest.id));
+          b.set(archiveCollection.doc(guest.id), guest);
+        },
+    ),
+  ];
+  promises.push(commitGuestOps(() => firestore.batch(), guestOps));
   try {
     const result = await Promise.all(promises);
     return result;

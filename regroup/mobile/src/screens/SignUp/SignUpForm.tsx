@@ -19,7 +19,7 @@ import {
 import { navigateAuthStackRoute } from "../../navigation/authNavigation";
 import { Invitation } from "../../entities/Invite";
 import { Guest } from "../../entities/Guest";
-import { mapUserToGuest } from "../../util/guest";
+import { buildSelfCreateGuest } from "./selfCreateGuest";
 import { Role } from "../../entities/Roles";
 import { mapValuesToUser } from "../../util/user";
 import { mapUserToAdmin } from "../../util/admin";
@@ -112,9 +112,7 @@ const SignUpForm = withFormik<SignUpFormProps, SignUpFormValues>({
       invitation &&
       (invitation.type === "guest" || invitation.type === "senior-peer")
     ) {
-      const newGuest = mapUserToGuest(createdUser, new Guest());
-      newGuest.isAdmin = invitation.type === "senior-peer";
-      newGuest.phase = invitation.initialPhase;
+      const newGuest = buildSelfCreateGuest(createdUser, invitation);
       try {
         if (invitation.token) {
           // New token-based flow — redeemInvitation grants the claim

@@ -34,6 +34,16 @@ export const store = new Map<string, Doc>();
 export const events: TxEvent[] = [];
 let autoId = 0;
 
+/**
+ * Seeds a house and its server-only primary owner record (util/houseRoles),
+ * which createHouses writes with the house: ownership is the record, never
+ * houses.ownerId.
+ */
+export const seedHouse = (id: string, ownerId: string): void => {
+  store.set(`houses/${id}`, { id, name: 'House', ownerId });
+  store.set(`house-roles/${id}_${ownerId}`, { tier: 'owner', primary: true });
+};
+
 export const resetFakeFirestore = (): void => {
   store.clear();
   events.length = 0;
@@ -126,6 +136,7 @@ export const apiFirestoreMock = () => ({
   userCollection: makeCollection('users'),
   houseCollection: makeCollection('houses'),
   houseTombstoneCollection: makeCollection('houseTombstones'),
+  houseRolesCollection: makeCollection('house-roles'),
   adminCollection: makeCollection('admins'),
   createAdminId: () => `admin-new-${++autoId}`,
 });

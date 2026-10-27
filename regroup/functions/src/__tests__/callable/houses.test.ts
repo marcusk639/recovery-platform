@@ -138,8 +138,16 @@ describe('createHouses', () => {
       });
     }
 
-    const adminSets = events.filter((e) => e.op === 'set');
+    const adminSets = events.filter((e) => e.op === 'set' && e.path.startsWith('admins/'));
     expect(adminSets).toHaveLength(1);
+    // The primary owner record of every house, written in the same transaction.
+    const ownerRecords = events.filter((e) => e.op === 'set' && e.path.startsWith('house-roles/'));
+    expect(ownerRecords.map((e) => e.data)).toEqual(
+      ownerRecords.map(() =>
+        expect.objectContaining({ tier: 'owner', primary: true, via: 'createHouses' }),
+      ),
+    );
+    expect(ownerRecords).toHaveLength(2);
     expect(adminSets[0].path).toBe(`admins/${adminId}`);
     expect(adminSets[0].data).toMatchObject({
       id: adminId,
@@ -200,7 +208,7 @@ describe('createHouses', () => {
     });
     const res = await call([house(K1)]);
 
-    const sets = events.filter((e) => e.op === 'set');
+    const sets = events.filter((e) => e.op === 'set' && e.path.startsWith('admins/'));
     expect(sets).toHaveLength(1);
     expect(sets[0].path).toBe('admins/admin-1');
     expect(store.get('admins/admin-1')).toMatchObject({

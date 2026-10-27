@@ -5,9 +5,11 @@ import {
   adminCollection,
   createAdminId,
   houseCollection,
+  houseRolesCollection,
   houseTombstoneCollection,
   userCollection,
 } from '../api/firestore';
+import { primaryOwnerRecord } from '../util/houseRoles';
 import type Admin from '../entities/Admin';
 import type OperatorSubscription from '../entities/OperatorSubscription';
 import type { User } from '../entities/User';
@@ -167,6 +169,13 @@ export const createHousesTx = async (
     );
   });
   tx.set(adminCollection.doc(adminId), admin, { merge: true });
+  // The server-only primary owner record (util/houseRoles): who owns the
+  // house for every authority check, independent of houses.ownerId. Written
+  // with the house, so it can never be missing for a house createHouses made.
+  // A retry re-writes the same record.
+  ids.forEach((id) => {
+    tx.set(houseRolesCollection.doc(`${id}_${uid}`), primaryOwnerRecord(uid, 'createHouses', id));
+  });
   tx.update(userRef, {
     adminId,
     housesOwned: union(user?.housesOwned, ids),
