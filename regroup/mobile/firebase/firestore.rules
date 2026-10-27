@@ -437,19 +437,48 @@ service cloud.firestore {
       allow delete: if isAdmin([resource.data.houseId]);
     }
 
+    // The guest doc an activity claims to be for (guest doc ids are not auth
+    // uids; guests.userId is the resident's uid).
+    function activityGuest(guestId) {
+      return get(/databases/$(database)/documents/guests/$(guestId)).data;
+    }
+
     match /activities/{activityId} {
       allow read: if isGuest([resource.data.houseId]) || isAdmin([resource.data.houseId]);
-      allow create: if isSameUser(request.resource.data.loggedBy) || isAdmin([request.resource.data.houseId]);
+      // Activities feed week-summaries (phase compliance, computed server-side
+      // by onActivityWritten) and the court compliance export, so who an
+      // activity is for, which house, and its status are not the client's to
+      // choose. The guest must exist and live in the activity's house. A house
+      // admin may log for any of its residents; a resident only for
+      // themselves, as an active, unverified activity.
+      allow create: if
+        activityGuest(request.resource.data.guestId).houseId == request.resource.data.houseId &&
+        (isAdmin([request.resource.data.houseId]) ||
+          (isGuest([request.resource.data.houseId]) &&
+           isSameUser(request.resource.data.loggedBy) &&
+           activityGuest(request.resource.data.guestId).userId == request.auth.uid &&
+           request.resource.data.status == 'active' &&
+           request.resource.data.get('verified', false) == false));
       // `verified`/`verifiedBy` feed the Verified column of the court-ready
       // compliance export, so the resident who logged the activity must not be
-      // able to self-certify their own attendance. Admins may verify; the
-      // logging user may edit everything else. diff() only flags real changes,
-      // so a whole-object write echoing the same flags back still passes.
-      allow update: if isAdmin([resource.data.houseId]) ||
+      // able to self-certify their own attendance. Nor may they re-point it
+      // (guestId, houseId, loggedBy), move it to another week (timestamp), or
+      // reactivate it: their only status changes are to disputed or deleted,
+      // which can only lower their counts. Admins may do the rest, but may not
+      // move an activity into a house they do not administer. diff() only
+      // flags real changes, so a whole-object write echoing values back passes.
+      allow update: if
+        (isAdmin([resource.data.houseId]) && isAdmin([request.resource.data.houseId])) ||
         (isSameUser(resource.data.loggedBy) &&
           !request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['verified', 'verifiedBy']));
+            .hasAny(['verified', 'verifiedBy', 'guestId', 'houseId', 'loggedBy', 'timestamp']) &&
+          (request.resource.data.status == resource.data.status ||
+           request.resource.data.status in ['disputed', 'deleted']));
       allow delete: if isAdmin([resource.data.houseId]);
+    }
+
+    function summaryGuest(summaryId) {
+      return activityGuest(summaryId.split('_')[0]);
     }
 
     match /week-summaries/{summaryId} {
@@ -457,12 +486,23 @@ service cloud.firestore {
       // after the activity. The app subscribes to {guestId}_{weekStart} before
       // that, so a missing doc must read as not-found: dereferencing
       // resource.data on a null resource denied it and killed the listener.
-      allow read: if (signedIn() && resource == null) ||
+      //
+      // The missing-doc branch is scoped through the guest the id names
+      // ({guestId}_{weekStart}; guest ids are auto-ids with no '_'): the same
+      // house members who could read the summary once it exists. So a stranger
+      // cannot probe whether a summary exists. Costs one get() per read of a
+      // missing summary.
+      allow read: if (resource == null && signedIn() &&
+          (summaryGuest(summaryId).userId == request.auth.uid ||
+           isGuest([summaryGuest(summaryId).houseId]) ||
+           isAdmin([summaryGuest(summaryId).houseId]))) ||
         isGuest([resource.data.houseId]) || isAdmin([resource.data.houseId]);
       // The app no longer writes summaries. Admin write remains ONLY for app
-      // versions released before the trigger, which still apply a client-side
-      // +1 that the trigger's recompute overwrites. Change to `if false` once
-      // those versions are no longer supported.
+      // versions released before the trigger, which still write them (+1 on
+      // log, -1 on delete, a full client recompute on edit/resolve). The
+      // trigger's next recompute overwrites those, but a write landing after
+      // it persists until then, so the post-rollout backfill re-run is
+      // mandatory. Change to `if false` once those versions are unsupported.
       allow write: if isAdmin([request.resource.data.houseId]);
     }
     

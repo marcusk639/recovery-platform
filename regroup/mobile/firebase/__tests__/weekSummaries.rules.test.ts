@@ -90,6 +90,10 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), `guests/${GUEST_ID}`), {
+      houseId: HOUSE_ID,
+      userId: 'residentUid',
+    });
     await setDoc(doc(ctx.firestore(), `week-summaries/${SUMMARY_ID}`), summary());
   });
 });
@@ -138,6 +142,21 @@ describe('week-summaries read', () => {
     );
     const snap = await assertSucceeds(getDocs(q));
     expect(snap.size).toBe(1);
+  });
+});
+
+describe('week-summaries missing-doc probing', () => {
+  it('BLOCKS a member of another house from probing a missing summary', async () => {
+    await assertFails(getDoc(summaryDoc(outsider(), MISSING_ID)));
+  });
+
+  it('BLOCKS reading a missing summary for a guest that does not exist', async () => {
+    await assertFails(getDoc(summaryDoc(resident(), 'ghost_2026-01-19')));
+  });
+
+  it('lets the resident read their own missing summary even without a house claim', async () => {
+    const self = testEnv.authenticatedContext('residentUid', {});
+    await assertSucceeds(getDoc(summaryDoc(self, MISSING_ID)));
   });
 });
 
