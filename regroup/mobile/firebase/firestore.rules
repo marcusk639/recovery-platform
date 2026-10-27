@@ -453,7 +453,16 @@ service cloud.firestore {
     }
 
     match /week-summaries/{summaryId} {
-      allow read: if isGuest([resource.data.houseId]) || isAdmin([resource.data.houseId]);
+      // Written by the onActivityWritten Cloud Function (Admin SDK), some time
+      // after the activity. The app subscribes to {guestId}_{weekStart} before
+      // that, so a missing doc must read as not-found: dereferencing
+      // resource.data on a null resource denied it and killed the listener.
+      allow read: if (signedIn() && resource == null) ||
+        isGuest([resource.data.houseId]) || isAdmin([resource.data.houseId]);
+      // The app no longer writes summaries. Admin write remains ONLY for app
+      // versions released before the trigger, which still apply a client-side
+      // +1 that the trigger's recompute overwrites. Change to `if false` once
+      // those versions are no longer supported.
       allow write: if isAdmin([request.resource.data.houseId]);
     }
     
