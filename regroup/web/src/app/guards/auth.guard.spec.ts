@@ -1,18 +1,12 @@
 /**
- * NOTE: these specs do not execute. angular.json points the Karma target at a
- * karma.conf.js that has never existed in this repo, so `ng test` cannot run
- * and CI enforces only `tsc --noEmit -p tsconfig.spec.json`. Everything here is
- * typechecked, never evaluated. Treat it as documentation until a runner exists.
+ * These specs run locally (`npm test -- --watch=false --browsers=ChromeHeadless
+ * --include src/app/guards/auth.guard.spec.ts`); CI only typechecks them, because
+ * the full suite still aborts on an unhandled rejection elsewhere.
  *
- * The guard's deny path is unreachable. AuthService.doAutoLogin
- * cannot reject -- it try/catches autoLogin and setPersistence both -- so it always
- * resolves, with undefined when there is no session. The guard does
- * .then(() => true), discarding that value, so the .catch redirect at
- * auth.guard.ts:31-34 is unreachable and the guard admits unauthenticated users.
- * So the deny-path test below asserts that defect as it stands, rather than faking
- * a rejected doAutoLogin — a contract the real service does not honour. Tracked as
- * a separate fix; real protection today is MyAccountComponent.checkUser, which does
- * inspect the resolved user, plus the Firestore rules.
+ * AuthService.doAutoLogin cannot reject -- it try/catches autoLogin and
+ * setPersistence both -- so it always resolves, with undefined when there is no
+ * session. The deny path is therefore driven by the resolved value, and the main
+ * deny test models exactly that rather than faking a rejection.
  */
 import { TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -69,21 +63,27 @@ describe('AuthGuard', () => {
     expect(result).toBe(true);
   });
 
-  // doAutoLogin cannot reject (see the header), so this pins what the guard really
-  // does when there is no session: it admits. Asserted as-is rather than mocking a
-  // rejection the real service never produces. When the guard is fixed to inspect
-  // the resolved value, invert this to expect(false) and a /login navigation.
-  it('admits an unauthenticated user when auto-login finds no session (known defect)', async () => {
+  it('denies and redirects to /login when auto-login finds no session', async () => {
     const { guard, router } = setup('browser', {
       user: null,
       doAutoLogin: () => Promise.resolve(undefined),
     } as any);
     const navigate = spyOn(router, 'navigate');
     const result = await Promise.resolve(guard.canActivate(route, state));
-    expect(result).toBe(true);
-    expect(navigate).not.toHaveBeenCalled();
+    expect(result).toBe(false);
+    expect(navigate).toHaveBeenCalledWith(['login']);
   });
 
+  it('fails closed if auto-login ever rejects', async () => {
+    const { guard, router } = setup('browser', {
+      user: null,
+      doAutoLogin: () => Promise.reject(new Error('boom')),
+    } as any);
+    const navigate = spyOn(router, 'navigate');
+    const result = await Promise.resolve(guard.canActivate(route, state));
+    expect(result).toBe(false);
+    expect(navigate).toHaveBeenCalledWith(['login']);
+  });
 
   // Pins the SSR branch. Returning false here cancelled the navigation, so the
   // server rendered an incomplete shell; returning true lets the component mount
