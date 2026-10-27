@@ -63,7 +63,9 @@ export class E2EProjectMismatch extends Error {
     super(
       `E2E ${variant} build is configured for Firebase project "${projectId}", ` +
         `expected "${E2E_PROJECT_IDS[variant]}". Refusing to start: a bundled ` +
-        'E2E_VARIANT must never run against another project (check .env).',
+        'E2E_VARIANT must never run against another project. E2E_VARIANT comes from ' +
+        'the build (the Gradle build type or the Xcode configuration) or the shell ' +
+        'that started Metro; check those.',
     );
     this.name = 'E2EProjectMismatch';
     Object.setPrototypeOf(this, E2EProjectMismatch.prototype);
