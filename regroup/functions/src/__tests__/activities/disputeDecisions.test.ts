@@ -2,8 +2,8 @@
 //
 // Owner decision: dispute decisions can be undone (REOPEN), and no decision
 // is ever lost. Every decision is logged in activities/{id}/dispute-decisions
-// and archived to /disputes/{key}_{stamp}_{decision id}; a reopened dispute
-// keeps its stamp and gets its house.disputes entry back.
+// and archived to dispute-archive/{activityId}_{decision id}; a reopened
+// dispute keeps its stamp and gets its live house-disputes entry back.
 
 import { logger } from 'firebase-functions';
 import { Timestamp } from 'firebase-admin/firestore';

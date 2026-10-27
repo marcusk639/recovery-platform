@@ -58,11 +58,30 @@ describe('stampResidentUid', () => {
     expect(warn.mock.calls.filter(([m]) => m === 'resident_stamp.unfillable')).toHaveLength(1);
   });
 
-  it('A: never moves a stamp, even when an admin moves the activity to another guest', async () => {
+  it('2 (G1): an admin moving an undisputed activity to another guest re-stamps it; a disputed one never moves', async () => {
     await deliver(undefined, act());
     const stamped = db.read('activities', 'a1')!;
-    expect(await deliver(stamped, { ...stamped, guestId: 'g2' })).toBe('unchanged');
-    expect(db.read('activities', 'a1')!.residentUid).toBe('res1');
+    expect(await deliver(stamped, { ...stamped, guestId: 'g2' })).toBe('stamped');
+    expect(db.read('activities', 'a1')!.residentUid).toBe('res2');
+    // With dispute history (here written by the Admin SDK; the rules freeze guestId): no re-stamp.
+    const disputed = { ...db.read('activities', 'a1')!, status: 'disputed', disputedBy: 'p' };
+    expect(await deliver(disputed, { ...disputed, guestId: 'g1' })).toBe('unchanged');
+    expect(db.read('activities', 'a1')!.residentUid).toBe('res2');
+  });
+
+  it('2 (5d): correcting an unfillable activity onto a linked guest re-stamps it; onto an accountless one makes it null', async () => {
+    await deliver(undefined, act({ guestId: 'intake' }));
+    const unfillable = db.read('activities', 'a1')!;
+    expect(unfillable.residentUidPending).toBe(false);
+    expect(await deliver(unfillable, { ...unfillable, guestId: 'g2' })).toBe('stamped');
+    const doc = db.read('activities', 'a1')!;
+    expect(doc.residentUid).toBe('res2');
+    expect(doc).not.toHaveProperty('residentUidPending');
+    expect(await deliver(doc, { ...doc, guestId: 'intake' })).toBe('unfillable');
+    expect(db.read('activities', 'a1')).toMatchObject({
+      residentUid: null,
+      residentUidPending: false,
+    });
   });
 
   it('keeps the stamp when the guest doc changes later (a deleted or cleared userId)', async () => {
@@ -119,8 +138,15 @@ describe('helpers', () => {
     expect(needsResidentStamp(act({ residentUid: 'res1' }), act({ residentUid: 'res1' }))).toBe(
       false,
     );
+    // A pre-dispute guest correction re-stamps; with dispute history it does not.
     expect(
       needsResidentStamp(act({ residentUid: 'res1' }), act({ guestId: 'g2', residentUid: 'res1' })),
+    ).toBe(true);
+    expect(
+      needsResidentStamp(
+        act({ residentUid: 'res1' }),
+        act({ guestId: 'g2', residentUid: 'res1', status: 'disputed' }),
+      ),
     ).toBe(false);
     expect(
       needsResidentStamp(undefined, act({ residentUid: null, residentUidPending: false })),

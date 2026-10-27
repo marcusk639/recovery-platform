@@ -19,7 +19,9 @@ export const onGuestLinkedRestamp = onDocumentWritten(
   { document: 'guests/{guestId}', retry: true },
   async (event) => {
     if (isStaleEvent(event.time)) {
-      logger.warn('resident_restamp.stale_event', {
+      // Given up: any activity this event failed to fill was left pending,
+      // so its next write or the backfill fills it.
+      logger.error('resident_restamp.stale_event', {
         guestId: event.params.guestId,
         ageMinutes: eventAgeMinutes(event.time),
       });

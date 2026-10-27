@@ -37,6 +37,7 @@ export async function restampGuestActivities(
   const base = db.collection('activities').where('guestId', '==', guestId).orderBy('__name__');
   let scanned = 0;
   let stamped = 0;
+  let failed: unknown;
   let last: FirebaseFirestore.QueryDocumentSnapshot | undefined;
   for (;;) {
     const page = await (last ? base.startAfter(last) : base).limit(pageSize).get();
@@ -44,7 +45,7 @@ export async function restampGuestActivities(
       scanned++;
       const existing = doc.data() as Data;
       if (typeof existing.residentUid === 'string' && existing.residentUid !== '') continue;
-      const wrote = await db.runTransaction(async (tx) => {
+      const fill = db.runTransaction(async (tx) => {
         const activity = await tx.get(doc.ref);
         const guest = await tx.get(guestRef);
         const uid = residentUidFrom(guest.exists ? (guest.data() as Data) : undefined);
@@ -54,11 +55,19 @@ export async function restampGuestActivities(
         tx.update(doc.ref, fillStamp(uid));
         return true;
       });
-      if (wrote) stamped++;
+      try {
+        if (await fill) stamped++;
+      } catch (err) {
+        // Leave it pending (not "unfillable"), so the next write of the
+        // activity, the backfill or this event's retry can still fill it.
+        failed = failed ?? err;
+        await doc.ref.update({ residentUidPending: true }).catch(() => undefined);
+      }
     }
     if (page.docs.length < pageSize) break;
     last = page.docs[page.docs.length - 1];
   }
-  logger.info('resident_restamp.done', { guestId, scanned, stamped });
+  logger.info('resident_restamp.done', { guestId, scanned, stamped, failed: !!failed });
+  if (failed) throw failed; // retried until RETRY_CUTOFF_MS
   return { scanned, stamped };
 }

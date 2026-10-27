@@ -78,6 +78,17 @@ describe('restampGuestActivities', () => {
     expect(JSON.stringify(info.mock.calls)).not.toContain('"pl"');
   });
 
+  it('6: a fill that fails leaves the activity pending (not unfillable), then rethrows to retry', async () => {
+    db.seed('activities', 'c2', act({ residentUid: null, residentUidPending: false }));
+    db.failTransactions = 1;
+    await expect(restamp({ userId: 'x' }, { userId: 'pl' })).rejects.toThrow('unavailable');
+    expect(db.read('activities', 'c2')!.residentUidPending).toBe(true);
+    // The retry (or the next activity write) fills it.
+    await restamp({ userId: 'x' }, { userId: 'pl' });
+    expect(db.read('activities', 'c2')!.residentUid).toBe('pl');
+    expect(db.read('activities', 'c2')).not.toHaveProperty('residentUidPending');
+  });
+
   it('accountChanged: set or changed to a non-empty account only', () => {
     expect(accountChanged(undefined, { userId: 'a' })).toBe(true);
     expect(accountChanged({ userId: 'a' }, { userId: 'b' })).toBe(true);

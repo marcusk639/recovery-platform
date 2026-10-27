@@ -5,9 +5,12 @@
  * not enough: a resident or staff member could edit, delete or recreate their
  * own guest doc around a dispute.
  *
- * The stamp is IMMUTABLE once set. No path ever changes a non-null stamp: not
- * this, not restampGuestActivities (onGuestLinkedRestamp), not the backfill,
- * and the rules refuse any client change. A new app build sets it at create
+ * The stamp is IMMUTABLE for any dispute. No client changes it after create,
+ * and restampGuestActivities (onGuestLinkedRestamp) and the backfill only
+ * fill empty stamps. The one server re-stamp: an admin's correction of
+ * guestId while the activity has no dispute history re-stamps it from the new
+ * guest (its userId, or null and unfillable). Once there is history the
+ * rules freeze guestId, so a disputed activity's stamp never moves. A new app build sets it at create
  * (the rules check it against the guest doc); for older builds this fills it
  * from the onActivityWritten trigger. It only ever fills an ABSENT or NULL
  * stamp:
@@ -36,9 +39,43 @@ export function residentUidFrom(guest: Data | undefined): string | null {
 
 const stamped = (d: Data | undefined) => typeof d?.residentUid === 'string' && d.residentUid !== '';
 
-/** Whether this write could fill a stamp: none yet, and not already found unfillable. */
-export function needsResidentStamp(_before: Data | undefined, after: Data | undefined): boolean {
-  if (!after || stamped(after)) return false;
+const HISTORY_KEYS = [
+  'disputeReason',
+  'disputedBy',
+  'disputeResolvedBy',
+  'disputeResolvedAt',
+  'disputed',
+  'disputeOutcome',
+  'disputedAt',
+  'reopenedBy',
+];
+
+/** Any dispute history (same test as hasDisputeHistory in firestore.rules). */
+export function hasDisputeHistory(d: Data | undefined): boolean {
+  if (!d) return false;
+  return (
+    d.status === 'disputed' ||
+    d.status === 'resolved' ||
+    HISTORY_KEYS.some((k) => k in d) ||
+    (d.disputeResult !== undefined && d.disputeResult !== null && d.disputeResult !== 'none') ||
+    d.incomplete === true
+  );
+}
+
+/**
+ * An admin's correction of who the activity is for, before any dispute: the
+ * stamp follows the new guest. (Once there is history the rules freeze
+ * guestId, so a disputed activity's stamp never moves.)
+ */
+export function isGuestCorrection(before: Data | undefined, after: Data | undefined): boolean {
+  return !!before && !!after && before.guestId !== after.guestId && !hasDisputeHistory(after);
+}
+
+/** Whether this write could change the stamp: a correction, or an empty stamp not yet found unfillable. */
+export function needsResidentStamp(before: Data | undefined, after: Data | undefined): boolean {
+  if (!after) return false;
+  if (isGuestCorrection(before, after)) return true;
+  if (stamped(after)) return false;
   return after.residentUidPending !== false;
 }
 
@@ -56,20 +93,26 @@ export async function stampResidentUid(
 ): Promise<StampResult> {
   if (!needsResidentStamp(before, after)) return 'unchanged';
   const guestId = typeof after?.guestId === 'string' ? after.guestId : '';
+  const correction = isGuestCorrection(before, after);
   const ref = db.collection('activities').doc(activityId);
 
   const result = await db.runTransaction(async (tx): Promise<StampResult> => {
     const current = await tx.get(ref);
     if (!current.exists) return 'skipped';
     const data = current.data() as Data;
-    if (!needsResidentStamp(undefined, data)) return 'unchanged';
+    // A correction re-stamps only while the activity is still undisputed and
+    // still points at that guest (a later write's own event handles the rest).
+    const restamp = correction && data.guestId === guestId && !hasDisputeHistory(data);
+    if (!restamp && !needsResidentStamp(undefined, data)) return 'unchanged';
     const gid = typeof data.guestId === 'string' ? data.guestId : '';
     const guest = gid ? await tx.get(db.collection('guests').doc(gid)) : undefined;
     const residentUid = residentUidFrom(guest?.exists ? (guest.data() as Data) : undefined);
     if (residentUid) {
+      if (data.residentUid === residentUid && !('residentUidPending' in data)) return 'unchanged';
       tx.update(ref, fillStamp(residentUid));
       return 'stamped';
     }
+    if (data.residentUid === null && data.residentUidPending === false) return 'unchanged';
     tx.update(ref, { residentUid: null, residentUidPending: false });
     return 'unfillable';
   });
