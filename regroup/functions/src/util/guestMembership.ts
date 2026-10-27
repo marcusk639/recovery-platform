@@ -90,6 +90,21 @@ export function isPlausibleUid(value: unknown): value is string {
   );
 }
 
+/**
+ * True for a guest doc of a current resident: no moveOutDate, and status not
+ * inactive, expelled or discharged (dischargeGuest keeps the doc and sets
+ * status "discharged" plus moveOutDate). The one definition used by both the
+ * EES re-split and the delete-time claim cleanup, so they cannot drift.
+ */
+export function isActiveGuestDoc(data: { moveOutDate?: unknown; status?: unknown }): boolean {
+  return (
+    !data.moveOutDate &&
+    data.status !== 'inactive' &&
+    data.status !== 'expelled' &&
+    data.status !== 'discharged'
+  );
+}
+
 /** No userId at all: undefined, null or "" (admin-entered residents). */
 function hasNoUserId(guest: GuestLike): boolean {
   return guest.userId === undefined || guest.userId === null || guest.userId === '';

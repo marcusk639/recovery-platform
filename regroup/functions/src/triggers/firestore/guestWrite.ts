@@ -2,7 +2,11 @@ import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { logger } from 'firebase-functions';
 import { adminCollection, guestCollection, ratsFirestore } from '../../api/firestore';
 import { revokeHouseRoles } from '../../util/claims';
-import { isPlausibleUid, selectLegitimateGuests } from '../../util/guestMembership';
+import {
+  isActiveGuestDoc,
+  isPlausibleUid,
+  selectLegitimateGuests,
+} from '../../util/guestMembership';
 import { eventAgeMinutes, isStaleEvent, RETRY_CUTOFF_MS } from '../../util/eventAge';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -11,20 +15,28 @@ import { eventAgeMinutes, isStaleEvent, RETRY_CUTOFF_MS } from '../../util/event
 // Fires on every create, update or delete of guests/{guestId}.
 //
 // DELETE: revokes the account's guest claim for the house, and its admin
-//   claim, but only if nothing still entitles the account to them: no other
-//   guest doc of the account in the house (guest and admin claims kept), and
-//   no admins/{id} doc of the account listing the house (admin claim kept).
-//   This check reads current state, so the cleanup is idempotent: a
-//   redelivery after the resident was re-added finds their new doc and
-//   revokes nothing. Delete events ignore the age cutoff for this step,
-//   because skipping a late delete would leave a departed resident's claims
-//   in place; a late delete is logged as a warning.
+//   claim, unless something still entitles the account to them:
+//   - an ACTIVE guest doc of the account in the house (isActiveGuestDoc: not
+//     moved out, inactive, expelled or discharged) keeps both claims, and is
+//     logged as a warning. That doc may be a self-created duplicate; until
+//     duplicates are marked (phase 2), it still keeps the claims;
+//   - an admins/{id} doc of the account listing the house keeps the admin
+//     claim.
+//   The check reads current state, so a redelivery after the resident was
+//   re-added finds their new active doc and revokes nothing. An account that
+//   no longer exists (auth/user-not-found; account deletion removes the guest
+//   doc, then the user) has no claims, so that counts as done.
+//   Delete events ignore the age cutoff for this step, because skipping a
+//   late delete would leave a departed resident's claims in place. A late
+//   delete's cleanup is attempted once: on failure it logs an error (ids
+//   only) and is not retried, so retrying stays bounded by the cutoff.
 // ALL WRITES: re-splits the event's EES week over counted residents (see
 //   resplitEES). Stale events (older than RETRY_CUTOFF_MS) skip this step.
 //
-// Registered with retry: true. Any failure is re-thrown after the other step
-// has run, so the event is redelivered; both steps recompute from current
-// state, so a redelivery is safe.
+// Registered with retry: true. Any failure of a fresh event is re-thrown after
+// the other step has run, so the event is redelivered; both steps recompute
+// from current state. Claims are last-writer-wins: a grant that lands between
+// the cleanup's reads and its write can still be revoked.
 // ─────────────────────────────────────────────────────────────────────────────
 export const onGuestWrite = onDocumentWritten(
   { document: 'guests/{guestId}', retry: true },
@@ -54,9 +66,17 @@ export const onGuestWrite = onDocumentWritten(
 
     if (isDelete && houseId && isPlausibleUid(guestData.userId)) {
       if (stale) logger.warn('onGuestWrite: late delete event; claims cleanup still runs', ageInfo);
-      await revokeIfNoLongerEntitled(guestData.userId, houseId, guestId).catch((e) =>
-        remember('auth claims cleanup', e),
-      );
+      await revokeIfNoLongerEntitled(guestData.userId, houseId, guestId).catch((e) => {
+        if (!stale) {
+          remember('auth claims cleanup', e);
+          return;
+        }
+        logger.error('onGuestWrite: late delete event; claims cleanup failed, not retried', {
+          ...ageInfo,
+          houseId,
+          error: (e as Error).message,
+        });
+      });
     }
 
     if (!stale && houseId) {
@@ -76,13 +96,15 @@ async function revokeIfNoLongerEntitled(
     guestCollection.where('userId', '==', uid).get(),
     adminCollection.where('userId', '==', uid).get(),
   ]);
-  const stillGuest = guestSnap.docs.some(
-    (d) => d.id !== deletedGuestId && d.data().houseId === houseId,
+  // Current state: a doc re-created with the deleted id counts like any other.
+  const activeDoc = guestSnap.docs.find(
+    (d) => d.data().houseId === houseId && isActiveGuestDoc(d.data()),
   );
-  if (stillGuest) {
-    logger.info('onGuestWrite: account still has a guest doc in the house; claims kept', {
+  if (activeDoc) {
+    logger.warn('onGuestWrite: account still has an active guest doc in the house; claims kept', {
       guestId: deletedGuestId,
       houseId,
+      keptByGuestId: activeDoc.id,
     });
     return;
   }
@@ -90,7 +112,19 @@ async function revokeIfNoLongerEntitled(
   const stillAdmin = adminSnap.docs.some(
     (d) => listsHouse(d.data().houseIds) || listsHouse(d.data().superAdmin),
   );
-  await revokeHouseRoles(uid, [houseId], stillAdmin ? ['guest'] : ['guest', 'admin']);
+  try {
+    await revokeHouseRoles(uid, [houseId], stillAdmin ? ['guest'] : ['guest', 'admin']);
+  } catch (err) {
+    // No account, no claims: nothing left to revoke.
+    if ((err as { code?: string }).code === 'auth/user-not-found') {
+      logger.info('onGuestWrite: account no longer exists; no claims to revoke', {
+        guestId: deletedGuestId,
+        houseId,
+      });
+      return;
+    }
+    throw err;
+  }
 }
 
 /** ISO Monday (UTC) of the week containing `time`, as YYYY-MM-DD. */
@@ -111,7 +145,8 @@ export function isoWeekStartUtc(time: string | undefined, nowMs = Date.now()): s
  * Writes only the unpaid records of counted residents. Left untouched:
  * - paid records (not read: the query filters paid == false);
  * - records of guest docs that are not counted: ghost (no claim), duplicate
- *   (second doc of the same account), moved-out, inactive or expelled;
+ *   (second doc of the same account), moved-out, inactive, expelled or
+ *   discharged;
  * - records whose guest doc no longer exists.
  * Weeks whose records carry no totalExpenses (every app-created record today)
  * are left alone entirely.
@@ -134,7 +169,7 @@ async function resplitEES(houseId: string, eventTime: string | undefined): Promi
         status: g.status as unknown,
       };
     })
-    .filter((g) => !g.moveOutDate && g.status !== 'inactive' && g.status !== 'expelled');
+    .filter((g) => isActiveGuestDoc(g));
   if (activeGuests.length === 0) return;
 
   const weekStart = isoWeekStartUtc(eventTime);
@@ -187,6 +222,6 @@ async function resplitEES(houseId: string, eventTime: string | undefined): Promi
   logger.info(
     `onGuestWrite: EES recalculated for house ${houseId} week ${weekStart}: ${activeCount} residents, $${newAmount.toFixed(
       2,
-    )} each; updated ${targets.length}, left ${leftAlone} unpaid record(s) untouched (ghost, duplicate, moved-out/inactive/expelled or deleted guest docs)`,
+    )} each; updated ${targets.length}, left ${leftAlone} unpaid record(s) untouched (ghost, duplicate, moved-out/inactive/expelled/discharged or deleted guest docs)`,
   );
 }

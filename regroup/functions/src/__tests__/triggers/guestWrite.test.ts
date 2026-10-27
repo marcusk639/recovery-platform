@@ -8,7 +8,12 @@ const mockSetClaims = jest.fn(async (uid: string, claims: Record<string, unknown
 });
 jest.mock('firebase-admin', () => ({
   auth: () => ({
-    getUser: async (uid: string) => ({ uid, customClaims: users[uid] }),
+    getUser: async (uid: string) => {
+      if (!(uid in users)) {
+        throw Object.assign(new Error('There is no user record'), { code: 'auth/user-not-found' });
+      }
+      return { uid, customClaims: users[uid] };
+    },
     getUsers: async (ids: { uid: string }[]) => ({
       users: ids
         .filter((i) => i.uid in users)
@@ -25,6 +30,7 @@ jest.mock('firebase-functions/v2/firestore', () => ({
 }));
 jest.mock('../../api/firestore', () => require('../helpers/memFirestore').apiFirestore);
 
+import { logger } from 'firebase-functions';
 import { mem } from '../helpers/memFirestore';
 import { isoWeekStartUtc, onGuestWrite } from '../../triggers/firestore/guestWrite';
 
@@ -100,6 +106,47 @@ describe('delete: claim cleanup', () => {
     users.r = { guest: { [H]: true } };
     mockSetClaims.mockRejectedValueOnce(new Error('auth down'));
     await expect(run(deleteEvent('g1', { houseId: H, userId: 'r' }))).rejects.toThrow('auth down');
+  });
+
+  it('a discharged doc of the same account does not keep the claims', async () => {
+    users.r = { guest: { [H]: true } };
+    mem.seed('guests/old', { houseId: H, userId: 'r', status: 'discharged', moveOutDate: '2026-01-01' });
+    await run(deleteEvent('g2', { houseId: H, userId: 'r' }));
+    expect(users.r.guest).toEqual({});
+  });
+
+  it('a moved-out doc of the same account does not keep the claims', async () => {
+    users.r = { guest: { [H]: true } };
+    mem.seed('guests/old', { houseId: H, userId: 'r', moveOutDate: '2026-01-01' });
+    await run(deleteEvent('g2', { houseId: H, userId: 'r' }));
+    expect(users.r.guest).toEqual({});
+  });
+
+  it('an active doc of the same account keeps the claims, with a warning', async () => {
+    users.r = { guest: { [H]: true } };
+    mem.seed('guests/other', { houseId: H, userId: 'r', status: 'active' });
+    await run(deleteEvent('g2', { houseId: H, userId: 'r' }));
+    expect(users.r.guest).toEqual({ [H]: true });
+    expect(logger.warn).toHaveBeenCalledWith(
+      'onGuestWrite: account still has an active guest doc in the house; claims kept',
+      { guestId: 'g2', houseId: H, keptByGuestId: 'other' },
+    );
+  });
+
+  it('a deleted account counts as cleaned up (account deletion removes the user too)', async () => {
+    await expect(run(deleteEvent('g1', { houseId: H, userId: 'deleted-user' }))).resolves.toBeUndefined();
+    expect(mockSetClaims).not.toHaveBeenCalled();
+  });
+
+  it('a late delete whose cleanup fails logs an error and does not retry', async () => {
+    users.r = { guest: { [H]: true } };
+    mockSetClaims.mockRejectedValueOnce(new Error('auth down'));
+    const late = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    await expect(run(deleteEvent('g1', { houseId: H, userId: 'r' }, late))).resolves.toBeUndefined();
+    expect(logger.error).toHaveBeenCalledWith(
+      'onGuestWrite: late delete event; claims cleanup failed, not retried',
+      expect.objectContaining({ guestId: 'g1', houseId: H, error: 'auth down' }),
+    );
   });
 
   it('still revokes when the delete event arrives a day late', async () => {

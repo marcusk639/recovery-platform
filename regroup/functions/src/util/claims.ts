@@ -139,7 +139,7 @@ export const revokeHouseRoles = async (
   for (const role of roles) {
     const remaining: Record<string, true> = { ...current[role] };
     for (const houseId of houseIds) {
-      if (houseId in remaining) {
+      if (Object.prototype.hasOwnProperty.call(remaining, houseId)) {
         delete remaining[houseId];
         changed = true;
       }
