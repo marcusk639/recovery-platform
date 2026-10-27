@@ -25,14 +25,28 @@ test('no runner.* expression in a job-level env block (GitHub rejects it there)'
   assert.ok(!jobLevelEnv().some((l) => /\$\{\{\s*runner\./.test(l)), 'runner context is step-level only');
 });
 
+// An echo reaches GITHUB_ENV on its own line (`echo "X" >> "$GITHUB_ENV"`) or
+// inside one grouped redirect (`{ echo "X"; ... } >> "$GITHUB_ENV"`, actionlint SC2129).
+function writesEnv(step, echo) {
+  const group = /\{\n([\s\S]*?)\n\s*\} >> "\$GITHUB_ENV"/.exec(step)?.[1] ?? '';
+  return step.includes(`${echo} >> "$GITHUB_ENV"`) || group.split('\n').some((l) => l.trim() === echo);
+}
+
 test('Run start sets OUT and STATE_FILE through GITHUB_ENV before any other step', () => {
   const start = wf.indexOf('- name: Run start');
   const next = wf.indexOf('- name:', start + 1);
   const step = wf.slice(start, next);
   assert.ok(start > 0 && start < wf.indexOf('- name: Facts'));
-  assert.match(step, /echo "OUT=\$RUNNER_TEMP\/pr-review" >> "\$GITHUB_ENV"/);
-  assert.match(step, /echo "STATE_FILE=\$RUNNER_TEMP\/prstate-snapshot\/state\.json" >> "\$GITHUB_ENV"/);
-  assert.match(step, /RUN_STARTED_AT=/);
+  assert.ok(writesEnv(step, 'echo "OUT=$RUNNER_TEMP/pr-review"'), 'OUT reaches GITHUB_ENV');
+  assert.ok(
+    writesEnv(step, 'echo "STATE_FILE=$RUNNER_TEMP/prstate-snapshot/state.json"'),
+    'STATE_FILE reaches GITHUB_ENV',
+  );
+  assert.ok(
+    writesEnv(step, 'echo "RUN_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"'),
+    'RUN_STARTED_AT reaches GITHUB_ENV',
+  );
+  assert.ok(!writesEnv(step, 'echo "NOT_SET=1"'), 'the helper rejects an absent line');
 });
 
 test('the job is skipped for Dependabot (its runs get no secrets)', () => {
