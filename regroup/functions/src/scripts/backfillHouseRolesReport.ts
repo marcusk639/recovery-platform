@@ -30,7 +30,11 @@ export function printRoleReport(report: RoleBackfillReport, apply: boolean): voi
   console.log(`Mode: ${apply ? 'APPLY (writes)' : 'DRY RUN (no writes)'}: house-roles records`);
   console.log(`Existing records left alone: ${report.existing}`);
   console.log(`Redeemed invitations marked completed: ${report.invitationsStamped}`);
-  rows('Primary owners (from ownerId):', report.owners);
+  console.log(`Records ${apply ? 'stamped' : 'to stamp'} with houseId: ${report.houseIdsToStamp}`);
+  rows(
+    `Primary owners ${apply ? 'written' : 'to write'} (evidence agrees, or --primary):`,
+    report.owners,
+  );
   rows(`Staff records ${apply ? 'written' : 'to write'}:`, report.toWrite);
   rows(
     'Recorded as peerLeader (least privilege); owner to review. Promote real managers by\n' +
@@ -41,9 +45,22 @@ export function printRoleReport(report: RoleBackfillReport, apply: boolean): voi
     `Stale records ${apply ? 'lowered/removed' : 'to lower/remove'} (claims gone):`,
     report.stale,
   );
+  rows(
+    'Claims lookup FAILED; records left as they are, re-run (exit code 2):',
+    report.lookupFailed,
+  );
   if (report.ownerReview.length > 0) {
-    console.log('\nHouses for the owner to check (ids only):');
+    console.log(
+      '\nNo primary owner written; owner must choose, then re-run with --primary houseId=uid:',
+    );
     for (const h of report.ownerReview) console.log(`${h.houseId}\t${h.reason}`);
+  }
+  if (report.primaryMismatch.length > 0) {
+    console.log(
+      '\nExisting primary records the evidence does not support (left as they are; remove a\n' +
+        'wrong one by hand, then re-run with --primary houseId=uid):\nhouseId\tprimary\treason',
+    );
+    for (const m of report.primaryMismatch) console.log(`${m.houseId}\t${m.uid}\t${m.reason}`);
   }
   if (!apply) console.log('\nNothing was written. Re-run with --apply to commit.');
 }

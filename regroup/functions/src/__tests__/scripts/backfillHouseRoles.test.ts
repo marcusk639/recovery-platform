@@ -40,6 +40,8 @@ beforeEach(() => {
     adminIds: ['adm-listed'],
   });
   mem.seed('admins/adm-listed', { userId: 'listed', houseIds: [H] });
+  // Server-written evidence for the owner (scripts/backfillHouseOwners).
+  mem.seed('users/owner', { subscriptionMetadata: { status: 'active', houses: { [H]: {} } } });
   mem.seed('invitations/T', {
     houseId: H,
     role: 'admin',
@@ -53,9 +55,14 @@ beforeEach(() => {
 it('writes manager only when unambiguous; every other staff holder is peerLeader, listed for review', async () => {
   const report = await backfillHouseRoles(memDb, authClient, { apply: false });
   const tiers = Object.fromEntries(report.toWrite.map((r) => [r.uid, `${r.tier}:${r.reason}`]));
-  // The house's ownerId account gets the primary owner record (pass 1).
+  // superAdminId and ownerId agree: the primary owner record (pass 1).
   expect(report.owners).toEqual([
-    { uid: 'owner', houseId: H, tier: 'owner', reason: 'superAdminId' },
+    {
+      uid: 'owner',
+      houseId: H,
+      tier: 'owner',
+      reason: expect.stringMatching(/^fields, subscription and claim agree/),
+    },
   ]);
   expect(tiers).toEqual({
     listed: 'manager:manager-unambiguous', // in adminIds through its admins doc
@@ -117,7 +124,7 @@ it('a record created meanwhile (a grant racing the backfill) is skipped, not an 
 });
 
 describe('owner, invitation and stale-record passes', () => {
-  it('records ownerId as the PRIMARY owner, even if the owner holds no claims; a superAdmin is a co-owner', async () => {
+  it('records the evidence-backed owner as the PRIMARY owner; another superAdmin is a co-owner', async () => {
     users.push({ uid: 'co', customClaims: { superAdmin: { [H]: true }, admin: { [H]: true } } });
     await backfillHouseRoles(memDb, authClient, { apply: true });
     users.pop();
@@ -154,7 +161,7 @@ describe('owner, invitation and stale-record passes', () => {
   });
 });
 
-describe('round 5: one primary owner from superAdminId; races; review order', () => {
+describe('round 5: one primary owner; races; review order', () => {
   it('a co-owner rewriting ownerId between run 1 and run 2 never makes a second primary (X2 / I1)', async () => {
     await backfillHouseRoles(memDb, authClient, { apply: true });
     mem.seed(`houses/${H}`, { id: H, ownerId: 'co', superAdminId: 'owner', adminIds: [] });
@@ -162,25 +169,46 @@ describe('round 5: one primary owner from superAdminId; races; review order', ()
     const primaries = mem.paths('house-roles/').filter((p) => (mem.get(p) as any).primary === true);
     expect(primaries).toEqual([`house-roles/${H}_owner`]);
     expect(second.owners).toEqual([]);
-    expect(second.ownerReview).toEqual([
-      { houseId: H, reason: 'ownerId-disagrees: superAdminId used' },
-    ]);
+    expect(second.ownerReview).toEqual([]); // the house already has its primary
   });
 
-  it('superAdminId wins over a disagreeing ownerId; no superAdminId means no primary and a review row', async () => {
+  it('fields, subscription and claim agreeing give a primary; a field mismatch or a missing field gives none and is listed (C1)', async () => {
     mem.seed(`houses/${H}`, { id: H, ownerId: 'co', superAdminId: 'owner' });
     mem.seed('houses/h2', { id: 'h2', ownerId: 'someone' });
+    mem.seed('houses/h3', { id: 'h3', ownerId: 'o3', superAdminId: 'o3' });
+    mem.seed('users/o3', { subscriptionMetadata: { status: 'active', houses: { h3: {} } } });
+    users.push({ uid: 'o3', customClaims: { superAdmin: { h3: true } } });
     const report = await backfillHouseRoles(memDb, authClient, { apply: true });
-    expect(mem.get(`house-roles/${H}_owner`)).toMatchObject({
-      houseId: H,
+    users.pop();
+    expect(mem.paths(`house-roles/${H}_`).filter((p) => (mem.get(p) as any).primary)).toEqual([]);
+    expect(mem.paths('house-roles/h2_')).toEqual([]);
+    expect(mem.get('house-roles/h3_o3')).toMatchObject({
+      houseId: 'h3',
       tier: 'owner',
       primary: true,
     });
-    expect(mem.get(`house-roles/${H}_co`)).toBeUndefined();
-    expect(mem.paths('house-roles/h2_')).toEqual([]);
-    expect(report.ownerReview).toEqual(
-      expect.arrayContaining([{ houseId: 'h2', reason: 'no-superAdminId: no primary written' }]),
-    );
+    expect(report.ownerReview).toEqual([
+      {
+        houseId: H,
+        reason: expect.stringMatching(/^superAdminId and ownerId differ; owner must choose/),
+      },
+      {
+        houseId: 'h2',
+        reason: expect.stringMatching(/^superAdminId or ownerId missing; owner must choose/),
+      },
+    ]);
+  });
+
+  it("the owner's --primary choice on a later run settles a listed house; a uid with no account is refused (C1)", async () => {
+    mem.seed(`houses/${H}`, { id: H, ownerId: 'co', superAdminId: 'co' });
+    await backfillHouseRoles(memDb, authClient, { apply: true });
+    const bad = await backfillHouseRoles(memDb, authClient, {
+      apply: true,
+      primaryChoices: { [H]: 'x' },
+    });
+    expect(bad.owners).toEqual([]);
+    await backfillHouseRoles(memDb, authClient, { apply: true, primaryChoices: { [H]: 'owner' } });
+    expect(mem.get(`house-roles/${H}_owner`)).toMatchObject({ tier: 'owner', primary: true });
   });
 
   it('every record carries its houseId', async () => {
@@ -191,7 +219,7 @@ describe('round 5: one primary owner from superAdminId; races; review order', ()
     for (const p of mem.paths('house-roles/')) expect(mem.get(p)).toMatchObject({ houseId: H });
   });
 
-  it('the stale pass never deletes a grant made during the run (I2)', async () => {
+  it('the stale pass leaves a record alone when the claims lookup fails, or it was granted after the run started (I2)', async () => {
     // Listed without claims, granted admin before the stale pass reads it.
     users.push({ uid: 'late', customClaims: {} });
     mem.seed(`house-roles/${H}_late`, {
@@ -209,11 +237,10 @@ describe('round 5: one primary owner from superAdminId; races; review order', ()
     authClient.getUser.mockImplementation(realGetUser);
     users.pop();
     expect(mem.get(`house-roles/${H}_late`)).toMatchObject({ tier: 'manager' });
-    expect(report.stale).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ uid: 'late', reason: 'skipped: claims lookup failed' }),
-      ]),
-    );
+    // Reported in its own section (the script exits non-zero on these).
+    expect(report.lookupFailed).toEqual([
+      expect.objectContaining({ uid: 'late', reason: 'claims lookup failed' }),
+    ]);
     // A record granted after the run started is not touched either.
     mem.seed(`house-roles/${H}_new`, {
       houseId: H,
@@ -222,6 +249,31 @@ describe('round 5: one primary owner from superAdminId; races; review order', ()
     });
     await backfillHouseRoles(memDb, authClient, { apply: true });
     expect(mem.get(`house-roles/${H}_new`)).toMatchObject({ tier: 'manager' });
+  });
+
+  it('the real race: listed with no claim, granted before the stale pass reads it, the record survives', async () => {
+    users.push({ uid: 'raced', customClaims: {} }); // what listUsers shows
+    mem.seed(`house-roles/${H}_raced`, {
+      houseId: H,
+      tier: 'manager',
+      grantedAt: '2000-01-01T00:00:00Z',
+    });
+    const realGetUser = authClient.getUser.getMockImplementation()!;
+    authClient.getUser.mockImplementation(async (uid: string) =>
+      uid === 'raced' ? { uid, customClaims: { admin: { [H]: true } } } : realGetUser(uid),
+    );
+    await backfillHouseRoles(memDb, authClient, { apply: true });
+    authClient.getUser.mockImplementation(realGetUser);
+    users.pop();
+    expect(mem.get(`house-roles/${H}_raced`)).toMatchObject({ tier: 'manager' });
+  });
+
+  it('the dry run counts the records pass 0 would stamp with houseId (S3)', async () => {
+    mem.seed(`house-roles/${H}_a`, { tier: 'resident' });
+    mem.seed(`house-roles/${H}_b`, { houseId: H, tier: 'resident' });
+    const report = await backfillHouseRoles(memDb, authClient, { apply: false });
+    expect(report.houseIdsToStamp).toBe(1);
+    expect(mem.get(`house-roles/${H}_a`)).not.toHaveProperty('houseId');
   });
 
   it('the review list starts with staff who are or were residents (S4)', async () => {
