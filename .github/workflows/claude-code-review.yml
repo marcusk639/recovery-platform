@@ -35,9 +35,11 @@ jobs:
       # comments created from here on (and first posted on this head) as this run's.
       - name: Run start
         run: |
-          echo "RUN_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
-          echo "OUT=$RUNNER_TEMP/pr-review" >> "$GITHUB_ENV"
-          echo "STATE_FILE=$RUNNER_TEMP/prstate-snapshot/state.json" >> "$GITHUB_ENV"
+          {
+            echo "RUN_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "OUT=$RUNNER_TEMP/pr-review"
+            echo "STATE_FILE=$RUNNER_TEMP/prstate-snapshot/state.json"
+          } >> "$GITHUB_ENV"
 
       - name: Checkout PR head
         uses: actions/checkout@v4

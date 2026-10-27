@@ -10,8 +10,10 @@ import { Guest, Stat, stats } from "../entities/Guest";
 import { WeekStats } from "../entities/WeekSummary";
 import {
   Activity,
+  ActivityStatus,
   ActivityType,
   WorkActivityData,
+  isLegacyUpheld,
 } from "../entities/ActivityModel";
 import {
   getDayOfWeek,
@@ -427,11 +429,16 @@ export const filterActivities = (
     let valid = true;
 
     // Filter by dispute status
-    // disputesOnly === true: Only show activities that are under dispute (Disputes screen)
+    // disputesOnly === true: the Disputes screen: pending (DISPUTED) and
+    // decided (RESOLVED) disputes, plus older builds' underDispute counter.
     // disputesOnly === false or undefined: Show all activities (Activity screen shows all, including disputed)
     if (disputesOnly === true) {
-      // Only show disputed activities
-      if (!activity.underDispute || activity.underDispute <= 0) {
+      const inDispute =
+        activity.status === ActivityStatus.DISPUTED ||
+        activity.status === ActivityStatus.RESOLVED ||
+        isLegacyUpheld(activity) ||
+        (!!activity.underDispute && activity.underDispute > 0);
+      if (!inDispute) {
         return false;
       }
     }

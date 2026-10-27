@@ -23,11 +23,46 @@ const mockInvitationsDocUpdate = jest.fn();
 // jest.mock factory below.
 const mockSetCustomUserClaims = jest.fn();
 const mockCreateClaims = jest.fn();
+// redeemInvitation grants every claim of the role in ONE addHouseRoles call.
+const mockAddHouseRoles = jest.fn().mockResolvedValue(undefined);
+// The tier is recorded with grantCompletedAt in util/admission.completeGrant
+// (covered on a real store in redeemAdmission.test.ts).
+const mockCompleteGrant = jest.fn().mockResolvedValue(undefined);
+
+// Guest docs read by the NARR tier check (is the inviter a resident?), and
+// the admission-ticket writes made inside redeemInvitation's transaction.
+const mockGuestDocs: Array<Record<string, unknown>> = [];
+const mockTicketSet = jest.fn();
+const mockTicketGet = jest.fn().mockResolvedValue({ exists: false });
+const mockTicketDelete = jest.fn();
 
 jest.mock('firebase-admin', () => ({
   auth: jest.fn(() => ({ setCustomUserClaims: mockSetCustomUserClaims })),
   firestore: () => ({
+    // A transaction runs its reads and writes against the same doc mocks.
+    runTransaction: async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({
+        get: (ref: { get: () => unknown }) => ref.get(),
+        update: (ref: { update: (d: unknown) => unknown }, d: unknown) => ref.update(d),
+        set: (ref: { set: (d: unknown) => unknown }, d: unknown) => ref.set(d),
+        delete: (ref: { delete: () => unknown }) => ref.delete(),
+      }),
     collection: (name: string) => {
+      if (name === 'guests')
+        return {
+          where: () => ({
+            get: async () => ({ docs: mockGuestDocs.map((d) => ({ data: () => d })) }),
+          }),
+        };
+      if (name === 'admission-tickets')
+        return {
+          doc: (id: string) => ({
+            id,
+            get: mockTicketGet,
+            set: (d: unknown) => mockTicketSet(id, d),
+            delete: mockTicketDelete,
+          }),
+        };
       if (name === 'houses') return { doc: (_id: string) => ({ get: mockHouseGet }) };
       if (name === 'invitations')
         return {
@@ -42,8 +77,34 @@ jest.mock('firebase-admin', () => ({
   }),
 }));
 
+// NARR tier limits are exercised end to end in narrTiers.test.ts; here the
+// inviter is the owner unless a test says otherwise.
+const mockHouseTierOf = jest.fn().mockResolvedValue('owner');
+// The primary owner record (util/houseRoles) names owner-uid in these tests.
+jest.mock('../../util/houseRoles', () => ({
+  ...jest.requireActual('../../util/houseRoles'),
+  houseTierOf: (...args: unknown[]) => mockHouseTierOf(...args),
+  isPrimaryOwner: async (_houseId: string, uid: string) => uid === 'owner-uid',
+  // The subscription holder (primary owner record) mirrors the mocked house's owner.
+  primaryOwnerUid: async (houseId: string) =>
+    (await mockGetHouse(houseId))?.ownerId ??
+    (await mockHouseGet())?.data?.()?.ownerId ??
+    null,
+}));
+// Invitee and inviter checks are covered on a real store in redeemAdmission.test.ts.
+jest.mock('../../util/invitationChecks', () => ({
+  assertInviteeMayBeInvited: jest.fn(async () => undefined),
+  assertInviterStillMayIssue: jest.fn(async () => undefined),
+  assertRedeemerMayAccept: jest.fn(async () => undefined),
+}));
+jest.mock('../../util/admission', () => ({
+  ...jest.requireActual('../../util/admission'),
+  completeGrant: (...args: unknown[]) => mockCompleteGrant(...args),
+}));
+
 jest.mock('../../util/claims', () => ({
   createClaims: (...args: unknown[]) => mockCreateClaims(...args),
+  addHouseRoles: (...args: unknown[]) => mockAddHouseRoles(...args),
 }));
 
 // Resident-capacity dependencies (util/residentCapacity.ts -> api/firestore.ts).
@@ -338,10 +399,12 @@ describe('redeemInvitation', () => {
       { uid: 'alice-uid', token: { email: 'alice@x.com' } },
     );
 
-    expect(mockCreateClaims).toHaveBeenCalledWith('alice-uid', ['house-1'], 'admin', false);
-    expect(mockSetCustomUserClaims).toHaveBeenCalledWith(
+    expect(mockAddHouseRoles).toHaveBeenCalledWith('alice-uid', ['house-1'], ['admin']);
+    expect(mockCompleteGrant).toHaveBeenCalledWith(
+      'TEST_TOKEN_FIXED',
+      expect.objectContaining({ houseId: 'house-1' }),
       'alice-uid',
-      expect.objectContaining({ admin: ['house-1'] }),
+      'manager',
     );
     expect(mockInvitationsDocUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -366,6 +429,7 @@ describe('redeemInvitation', () => {
     ).rejects.toMatchObject({ code: 'permission-denied' });
     expect(mockInvitationsDocUpdate).not.toHaveBeenCalled();
     expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+    expect(mockAddHouseRoles).not.toHaveBeenCalled();
   });
 
   it('DENY: already redeemed', async () => {
@@ -431,7 +495,8 @@ describe('redeemInvitation', () => {
       { token: 'T' },
       { uid: 'alice-uid', token: { email: 'alice@x.com' } },
     );
-    expect(mockCreateClaims).toHaveBeenCalledWith('alice-uid', ['house-1'], 'guest', false);
+    expect(mockAddHouseRoles).toHaveBeenCalledWith('alice-uid', ['house-1'], ['guest']);
+    expect(mockCompleteGrant).toHaveBeenCalledWith('T', expect.anything(), 'alice-uid', 'resident');
   });
 
   it('role=senior-peer maps to BOTH guest and admin claims', async () => {
@@ -445,10 +510,10 @@ describe('redeemInvitation', () => {
       { token: 'T' },
       { uid: 'alice-uid', token: { email: 'alice@x.com' } },
     );
-    expect(mockCreateClaims).toHaveBeenCalledTimes(2);
-    expect(mockCreateClaims).toHaveBeenNthCalledWith(1, 'alice-uid', ['house-1'], 'guest', false);
-    expect(mockCreateClaims).toHaveBeenNthCalledWith(2, 'alice-uid', ['house-1'], 'admin', false);
-    expect(mockSetCustomUserClaims).toHaveBeenCalledTimes(2);
+    // One claims write: both roles or neither.
+    expect(mockAddHouseRoles).toHaveBeenCalledTimes(1);
+    expect(mockAddHouseRoles).toHaveBeenCalledWith('alice-uid', ['house-1'], ['guest', 'admin']);
+    expect(mockCompleteGrant).toHaveBeenCalledWith('T', expect.anything(), 'alice-uid', 'peerLeader');
   });
 });
 
@@ -623,6 +688,8 @@ describe('resident capacity enforcement', () => {
         ),
       ).rejects.toMatchObject({ code: 'failed-precondition' });
       expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+      expect(mockAddHouseRoles).not.toHaveBeenCalled();
+    expect(mockAddHouseRoles).not.toHaveBeenCalled();
       expect(mockInvitationsDocUpdate).not.toHaveBeenCalled();
       expect(mockUpdateUser).not.toHaveBeenCalled();
     });

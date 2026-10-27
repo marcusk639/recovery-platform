@@ -8,7 +8,7 @@
 import { useCallback } from 'react';
 import { Alert } from 'react-native';
 import { Guest } from '../entities/Guest';
-import { Activity, ActivityType } from '../entities/ActivityModel';
+import { Activity, ActivityStatus, ActivityType, isLegacyUpheld } from '../entities/ActivityModel';
 import { House, PartialHouseWithId } from '../entities/House';
 import {
   normalize,
@@ -18,15 +18,12 @@ import {
   fontSize,
 } from '../styles/theme';
 import { getTodaysDate } from '../util/display';
-import * as uuid from 'uuid';
 import { User } from '../entities/User';
 import {
-  DISPUTABLE_STATS,
   Dispute,
   DisputeChallenge,
 } from '../entities/Dispute';
 import { cloneDeep } from 'lodash';
-import { DisputeNotification } from '../entities/Notification';
 import { Guests, Admins } from '../types';
 import { ActivityFilterFormValues } from '../screens/Activity/ActivityFilterForm';
 import { RoleToken } from '../components/auth/auth';
@@ -40,6 +37,7 @@ import {
 import { logException } from '../util/logging';
 
 import { useActivityModal } from './useActivityModal';
+import { useUndoDisputeDecision } from './useUndoDisputeDecision';
 import { useActivityFilters } from './useActivityFilters';
 import { useActivityMetadata } from './useActivityMetadata';
 
@@ -79,8 +77,12 @@ interface UseBaseActivityScreenReturn {
   activityIsDisputable: (activity: Activity) => boolean;
 
   // Dispute methods
-  overturnDispute: (dispute: Dispute) => void;
-  allowDispute: (dispute: Dispute) => void;
+  /** REJECT (house admins): the activity stands and counts. */
+  rejectDispute: (activity: Activity) => void;
+  /** APPROVE (house admins): the activity is marked not done (incomplete). */
+  approveDispute: (activity: Activity) => void;
+  /** UNDO DECISION (house admins): reopen a decided dispute, after a confirm. */
+  undoDecision: (activity: Activity) => void;
   updateHouseDisputes: (
     dispute: Dispute,
     resolution: string,
@@ -108,6 +110,27 @@ interface UseBaseActivityScreenReturn {
   ) => Activity[];
 }
 
+/** resolveDispute's refusals (services/activity RESOLVE_REFUSALS), as shown to the admin. */
+const RESOLVE_REFUSAL_ALERTS: Record<string, { title: string; message: string }> = {
+  'Not allowed to decide this dispute': {
+    title: "Can't decide this dispute",
+    message:
+      "You can't decide this dispute. It may be your own or one you logged, or your access changed.",
+  },
+  'Dispute already resolved': {
+    title: 'Dispute already resolved',
+    message: 'Another admin has already resolved this dispute.',
+  },
+  'Activity is not disputed': {
+    title: 'Not disputed',
+    message: 'This activity is not disputed anymore, so there is nothing to resolve.',
+  },
+  'Activity not found': {
+    title: 'Activity not found',
+    message: 'This activity no longer exists.',
+  },
+};
+
 export const useBaseActivityScreen = (
   props: UseBaseActivityScreenProps,
 ): UseBaseActivityScreenReturn => {
@@ -118,26 +141,18 @@ export const useBaseActivityScreen = (
   const modal = useActivityModal();
   const filtersHook = useActivityFilters(activities, guest);
   const metadata = useActivityMetadata();
+  const { undoDecision } = useUndoDisputeDecision(user?.id);
 
   const updateDisputeMutation = useUpdateDispute();
 
   // ─── Dispute business logic ───────────────────────────────────────────────
 
-  const buildNotifications = useCallback(
-    (dispute: Dispute): DisputeNotification[] => {
-      const guestNotification = new DisputeNotification(
-        dispute,
-        false,
-        guest?.userId || '',
-      );
-      return [guestNotification];
-    },
-    [guest],
-  );
+  // Dispute notifications (house admins + the disputed resident) are sent by
+  // the onActivityWritten Cloud Function. The client cannot create them: the
+  // rules allow a notification only for the caller.
 
   const challengeDispute = useCallback(
     async (activity: Activity, message: string): Promise<void> => {
-      const activityGuest = guests[activity.guestId];
       const _user = guests[user.guestId] || userAsAdmin;
       const dispute = disputes[activity.disputeId!];
 
@@ -157,57 +172,17 @@ export const useBaseActivityScreen = (
         disputes: { ...disputes, [dispute.id]: updatedDispute },
       };
 
-      await updateDisputeMutation.mutateAsync({
-        guest: activityGuest,
-        house: updatedHouse,
-        notifications: [],
-      });
+      await updateDisputeMutation.mutateAsync({ house: updatedHouse });
     },
     [guests, user, userAsAdmin, disputes, house, updateDisputeMutation],
   );
 
   const disputeActivity = useCallback(
     async (activity: Activity, message: string): Promise<void> => {
-      const activityGuest = guests[activity.guestId];
-      let dispute: Dispute;
-
-      if (activity.underDispute && activity.disputeId) {
-        dispute = cloneDeep(disputes[activity.disputeId]);
-      } else {
-        const disputeType: ActivityType | string = DISPUTABLE_STATS.includes(
-          activity.type as any,
-        )
-          ? activity.type
-          : 'dispute';
-
-        dispute = {
-          id: uuid.v4(),
-          guestId: activityGuest.id,
-          houseId: house.id,
-          activityId: activity.id,
-          type: disputeType as any,
-          message: message,
-          status: 'pending',
-          // M1: legacy `createdDate` write removed — Notification.tsx now reads `createdAt` with fallback.
-          createdAt: getTodaysDate(),
-          updatedAt: getTodaysDate(),
-          challenges: [],
-        };
-      }
-
-      const housePayload: PartialHouseWithId = {
-        id: house.id,
-        disputes: { ...disputes, [dispute.id]: dispute },
-      };
-
-      const updatedGuest = cloneDeep(activityGuest);
-
-      // Write the authoritative record (the activity's DISPUTED status, which
-      // compliance/export reads) FIRST. Only mirror it into the denormalized
-      // house.disputes cache on success — otherwise a failed activity write
-      // leaves the house showing a dispute the activity never recorded, and the
-      // "Dispute not saved" alert would be a lie. If the activity write fails,
-      // nothing is half-applied.
+      // The activity write is the whole client side of a dispute. The
+      // onActivityWritten Cloud Function then adds the house.disputes entry
+      // and notifies the house admins and the resident; residents may write
+      // neither (they could forge or wipe other people's disputes).
       try {
         await disputeActivityInFirestore(activity.id, message, user.id || '');
       } catch (err) {
@@ -218,14 +193,8 @@ export const useBaseActivityScreen = (
         );
         throw err;
       }
-
-      await updateDisputeMutation.mutateAsync({
-        guest: updatedGuest,
-        house: housePayload,
-        notifications: buildNotifications(dispute),
-      });
     },
-    [guests, house, disputes, user, updateDisputeMutation, buildNotifications],
+    [user],
   );
 
   const verifyActivity = useCallback(
@@ -297,111 +266,84 @@ export const useBaseActivityScreen = (
     [house, disputes],
   );
 
-  const overturnDispute = useCallback(
-    async (dispute: Dispute): Promise<void> => {
-      return Alert.alert(
-        'Confirm Override',
-        'Are you sure you want to override this dispute?',
-        [
-          { text: 'Cancel', onPress: () => null },
-          {
-            text: 'Continue',
-            onPress: async () => {
-              const activityGuest = guests[dispute.guestId];
-              const { partialHouse, resolvedDispute } = updateHouseDisputes(
-                dispute,
-                'overturned',
-              );
-
-              const updatedGuest = cloneDeep(activityGuest);
-
-              modal.setLoadingMessage('Processing dispute...');
-              // Resolve the authoritative activity record first; only update the
-              // denormalized house cache to "resolved" if it succeeds. Otherwise
-              // the UI would show the dispute resolved while the activity stays
-              // DISPUTED, and the alert would be a lie.
-              try {
-                await resolveDisputeInFirestore(
-                  dispute.activityId,
-                  user.id || '',
-                  'delete',
-                );
-              } catch (err) {
-                logException(err);
-                Alert.alert(
-                  'Override not saved',
-                  'We could not resolve this dispute. Please try again.',
-                );
-                return;
-              }
-
-              await updateDisputeMutation.mutateAsync({
-                guest: updatedGuest,
-                house: partialHouse,
-                notifications: [],
-                resolvedDispute,
-              });
-            },
-          },
-        ],
-      );
+  /**
+   * Approve or reject the dispute on `activity` (house admins only; enforced
+   * by the rules). Works from the activity itself: new-model activities carry
+   * no disputeId/underDispute, so the house.disputes entry (if any) is found
+   * by activityId and archived once the activity is resolved.
+   */
+  const resolveActivityDispute = useCallback(
+    async (activity: Activity, outcome: 'approve' | 'reject'): Promise<void> => {
+      modal.setLoadingMessage('Processing dispute...');
+      // Only the activity is written. The onActivityWritten Cloud Function
+      // removes every house.disputes entry for it and archives them.
+      try {
+        await resolveDisputeInFirestore(activity.id, user.id || '', outcome);
+      } catch (err) {
+        const refusal = RESOLVE_REFUSAL_ALERTS[(err as Error)?.message];
+        if (refusal) {
+          Alert.alert(refusal.title, refusal.message);
+          return;
+        }
+        logException(err);
+        Alert.alert(
+          outcome === 'approve' ? 'Approval not saved' : 'Rejection not saved',
+          'We could not resolve this dispute. Please try again.',
+        );
+      }
     },
-    [guests, user, updateHouseDisputes, updateDisputeMutation, modal],
+    [user, modal],
   );
 
-  const allowDispute = useCallback(
-    async (dispute: Dispute): Promise<void> => {
+  const rejectDispute = useCallback(
+    async (activity: Activity): Promise<void> => {
       return Alert.alert(
-        'Confirm Allowance',
-        'Are you sure you want to allow this dispute?',
+        'Reject dispute?',
+        'The activity stands and keeps counting toward the weekly numbers.',
         [
           { text: 'Cancel', onPress: () => null },
           {
-            text: 'Continue',
-            onPress: async () => {
-              const activityGuest = guests[dispute.guestId];
-              const { partialHouse, resolvedDispute } = updateHouseDisputes(
-                dispute,
-                'allowed',
-              );
-
-              const updatedGuest = cloneDeep(activityGuest);
-
-              modal.setLoadingMessage('Processing dispute...');
-              // Resolve the authoritative activity record first; only update the
-              // denormalized house cache to "resolved" if it succeeds. Otherwise
-              // the UI would show the dispute resolved while the activity stays
-              // DISPUTED, and the alert would be a lie.
-              try {
-                await resolveDisputeInFirestore(
-                  dispute.activityId,
-                  user.id || '',
-                  'keep',
-                );
-              } catch (err) {
-                logException(err);
-                Alert.alert(
-                  'Allowance not saved',
-                  'We could not resolve this dispute. Please try again.',
-                );
-                return;
-              }
-
-              await updateDisputeMutation.mutateAsync({
-                guest: updatedGuest,
-                house: partialHouse,
-                notifications: [],
-                resolvedDispute,
-              });
-            },
+            text: 'Reject',
+            onPress: () => resolveActivityDispute(activity, 'reject'),
           },
         ],
       );
     },
-    [guests, user, updateHouseDisputes, updateDisputeMutation, modal],
+    [resolveActivityDispute],
+  );
+
+  const approveDispute = useCallback(
+    async (activity: Activity): Promise<void> => {
+      return Alert.alert(
+        'Approve dispute?',
+        'The activity will be marked "Successfully disputed": the residents of the house report it was not completed. It stops counting and stays on record (it is never deleted).',
+        [
+          { text: 'Cancel', onPress: () => null },
+          {
+            text: 'Approve',
+            onPress: () => resolveActivityDispute(activity, 'approve'),
+          },
+        ],
+      );
+    },
+    [resolveActivityDispute],
   );
 
   // ─── Button prop factories ────────────────────────────────────────────────
+
+  // Owner rule: nobody disputes, decides or reopens their own activity — not
+  // the resident whose activity it is (residentUid, stamped server-side, or
+  // the guest doc's account) nor whoever logged it. The rules refuse it too;
+  // this keeps the buttons from offering it.
+  const isOwnActivity = useCallback(
+    (activity: Activity): boolean =>
+      !!user?.id &&
+      (activity.loggedBy === user.id ||
+        activity.residentUid === user.id ||
+        guests[activity.guestId]?.userId === user.id),
+    [user, guests],
+  );
+
 
   const getLeftButtonProps = useCallback(
     (
@@ -409,38 +351,23 @@ export const useBaseActivityScreen = (
       disputesOnly: boolean = false,
       token?: RoleToken,
     ): any => {
-      const isDisputable = metadata.activityIsDisputable(activity);
       const isAdminUser =
         token &&
         (token.role[house.id] === 'admin' ||
           token.role[house.id] === 'superAdmin');
-      const allowButtonProps = {
-        testID: `resolve-dispute-button-${activity.disputeId}`,
-        onPress: () => allowDispute(disputes[activity.disputeId!]),
-        title: 'ALLOW',
-        disabled: (activity.underDispute ?? 0) < 1,
+      const isPendingDispute = activity.status === ActivityStatus.DISPUTED;
+      // APPROVE / REJECT: house admins (owners, managers, peer leaders) only.
+      const approveButtonProps = {
+        testID: `resolve-dispute-button-${activity.disputeId ?? activity.id}`,
+        onPress: () => approveDispute(activity),
+        title: 'APPROVE',
+        disabled: activity.status !== ActivityStatus.DISPUTED,
         style: { ...STAT_BUTTON_TEXT, color: color.baby_blue },
         containerStyle: {
           ...STAT_BUTTON,
           flex: 0.48,
           borderColor: color.baby_blue,
         },
-      };
-      const confirmButtonProps = {
-        testID: `challenge-dispute-button-${activity.id}`,
-        style: {
-          ...STAT_BUTTON_TEXT,
-          color: color.green,
-          fontSize: fontSize.regular,
-        },
-        containerStyle: {
-          ...STAT_BUTTON,
-          flex: 0.48,
-          borderColor: color.green,
-        },
-        onPress: () => modal.showModal('confirm', activity),
-        title: 'CHALLENGE DISPUTE',
-        disabled: !activity.underDispute,
       };
       if (isAdminUser && !disputesOnly && !activity.verified) {
         return {
@@ -456,14 +383,41 @@ export const useBaseActivityScreen = (
           onPress: () => verifyActivity(activity.id),
         };
       }
-      if (isDisputable) {
-        if (isAdminUser) {
-          return disputesOnly ? allowButtonProps : confirmButtonProps;
-        }
-        return confirmButtonProps;
+      if (isPendingDispute && isAdminUser && disputesOnly && !isOwnActivity(activity)) {
+        return approveButtonProps;
       }
+      // UNDO DECISION: a decided dispute goes back to pending, and APPROVE /
+      // REJECT show again.
+      if (
+        (activity.status === ActivityStatus.RESOLVED || isLegacyUpheld(activity)) &&
+        isAdminUser &&
+        disputesOnly &&
+        !isOwnActivity(activity)
+      ) {
+        return {
+          testID: `undo-dispute-decision-button-${activity.id}`,
+          onPress: () => undoDecision(activity),
+          title: 'UNDO DECISION',
+          style: { ...STAT_BUTTON_TEXT, color: color.baby_blue },
+          containerStyle: {
+            ...STAT_BUTTON,
+            flex: 0.48,
+            borderColor: color.baby_blue,
+          },
+        };
+      }
+      // CHALLENGE DISPUTE is hidden until the follow-up PR: it writes
+      // house.disputes, which residents may no longer write, so it could only
+      // fail.
     },
-    [metadata, disputes, house, allowDispute, modal, verifyActivity],
+    [house, approveDispute, verifyActivity, isOwnActivity, undoDecision],
+  );
+
+
+  const activityIsDisputable = useCallback(
+    (activity: Activity): boolean =>
+      metadata.activityIsDisputable(activity) && !isOwnActivity(activity),
+    [metadata, isOwnActivity],
   );
 
   const getRightButtonProps = useCallback(
@@ -472,19 +426,19 @@ export const useBaseActivityScreen = (
       disputesOnly: boolean = false,
       token?: RoleToken,
     ): any => {
-      const isDisputable = metadata.activityIsDisputable(activity);
-      const overrideButtonProps = {
-        testID: `reject-dispute-button-${activity.disputeId}`,
+      const isDisputable = activityIsDisputable(activity);
+      const rejectButtonProps = {
+        testID: `reject-dispute-button-${activity.disputeId ?? activity.id}`,
         style: { ...STAT_BUTTON_TEXT, color: color.white },
-        disabled: !isDisputable,
+        disabled: activity.status !== ActivityStatus.DISPUTED,
         containerStyle: {
           ...STAT_BUTTON,
           flex: 0.48,
           backgroundColor: color.baby_blue,
           borderColor: color.baby_blue,
         },
-        onPress: () => overturnDispute(disputes[activity.disputeId!]),
-        title: 'OVERRIDE',
+        onPress: () => rejectDispute(activity),
+        title: 'REJECT',
       };
       const disputeButtonProps = {
         testID: `dispute-activity-button-${activity.id}`,
@@ -500,18 +454,25 @@ export const useBaseActivityScreen = (
         onPress: () => modal.showModal('dispute', activity),
         title: 'DISPUTE',
       };
+      const isAdminUser =
+        token &&
+        (token.role[house.id] === 'admin' ||
+          token.role[house.id] === 'superAdmin');
+      if (
+        activity.status === ActivityStatus.DISPUTED &&
+        isAdminUser &&
+        disputesOnly &&
+        !isOwnActivity(activity)
+      ) {
+        return rejectButtonProps;
+      }
+      // DISPUTE only on an ACTIVE activity (activityIsDisputable): never on an
+      // already-disputed, resolved or deleted one.
       if (isDisputable) {
-        if (
-          token &&
-          (token.role[house.id] === 'admin' ||
-            token.role[house.id] === 'superAdmin')
-        ) {
-          return disputesOnly ? overrideButtonProps : disputeButtonProps;
-        }
         return disputeButtonProps;
       }
     },
-    [metadata, disputes, house, overturnDispute, modal],
+    [activityIsDisputable, house, rejectDispute, modal, isOwnActivity],
   );
 
   // ─── Return composed interface ────────────────────────────────────────────
@@ -536,14 +497,15 @@ export const useBaseActivityScreen = (
 
     // From useActivityMetadata
     getIconForActivity: metadata.getIconForActivity,
-    activityIsDisputable: metadata.activityIsDisputable,
+    activityIsDisputable,
 
     // Dispute business logic (this hook)
     handleDisputeSubmission,
     challengeDispute,
     disputeActivity,
-    overturnDispute,
-    allowDispute,
+    rejectDispute,
+    approveDispute,
+    undoDecision,
     updateHouseDisputes,
 
     // Button props (this hook)
