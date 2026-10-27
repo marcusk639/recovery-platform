@@ -96,7 +96,7 @@ test('selectInline counts drops by reason; only path and over-cap drops are "los
   assert.equal(drops.ineligible, 1);
   assert.equal(drops.path, 1);
   assert.equal(drops.overCap, 2);
-  assert.deepEqual(drops.lost, [HIGH_B.slug, highs[10].slug, highs[11].slug]);
+  assert.deepEqual(drops.lost, [HIGH_B.slug, highs[MAX_INLINE].slug, highs[MAX_INLINE + 1].slug]);
 });
 
 test('a High comment outside the changed files is announced in the summary', async () => {
