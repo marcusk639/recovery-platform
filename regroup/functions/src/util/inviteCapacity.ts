@@ -6,6 +6,7 @@
  * Admin invitations grant staff access, not a resident slot.
  */
 import { logger } from 'firebase-functions';
+import { HttpsError } from 'firebase-functions/v2/https';
 import { InvitationRole } from '../entities/Invitation';
 import { primaryOwnerUid } from './houseRoles';
 import {
@@ -20,7 +21,13 @@ export async function assertSlotForRole(
   role: InvitationRole,
 ): Promise<string | undefined> {
   if (!roleConsumesResidentSlot(role)) return undefined;
-  const owner = (await primaryOwnerUid(houseId)) ?? undefined;
+  const owner = await primaryOwnerUid(houseId);
+  if (!owner) {
+    // Fail closed: with no primary owner record there is no subscription to
+    // charge the slot to (the backfill lists such houses for the owner).
+    logger.warn('invitations: house has no owner record', { houseId });
+    throw new HttpsError('failed-precondition', 'house has no owner record');
+  }
   await assertResidentCapacityAvailable(owner, houseId);
   return owner;
 }

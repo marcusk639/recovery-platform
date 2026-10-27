@@ -41,10 +41,11 @@ export async function assertInviteeMayBeInvited(params: {
   if (uid === params.callerUid) {
     throw new HttpsError('failed-precondition', 'You cannot invite yourself');
   }
-  // A staff invitation (admin, senior-peer) may go to someone who already
-  // lives here: it is how the owner promotes a resident manager (the tier
-  // check above still applies).
-  if (params.role !== 'guest') return;
+  // Only an admin invitation may go to someone who already lives here: it is
+  // how the owner promotes a resident manager (the tier check still applies).
+  // A senior-peer invitation consumes a resident slot and is refused at
+  // redeem for an existing resident, so it is refused here too.
+  if (params.role === 'admin') return;
   if (await livesIn(uid, params.houseId)) {
     logger.warn('createInvitation: invitee already lives in the house', {
       houseId: params.houseId,

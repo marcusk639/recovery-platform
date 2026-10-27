@@ -92,7 +92,7 @@ beforeEach(() => {
   mockAddHouseRoles.mockReset();
   mem.seed(`houses/${H}`, { id: H, ownerId: 'owner', houseType: 'traditional' });
   // The owner is the server-only primary owner record (createHouses / backfill).
-  mem.seed(`house-roles/${H}_owner`, { tier: 'owner', primary: true, via: 'createHouses' });
+  mem.seed(`house-roles/${H}_owner`, { houseId: H, tier: 'owner', primary: true });
   mem.seed(`house-roles/${H}_manager`, { tier: 'manager', via: 'invitation' });
   mem.seed(`house-roles/${H}_peer`, { tier: 'peerLeader', via: 'invitation' });
   mem.seed('guests/peer-doc', { houseId: H, userId: 'peer', status: 'active' });

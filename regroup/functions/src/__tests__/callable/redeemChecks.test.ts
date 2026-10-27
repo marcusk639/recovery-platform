@@ -223,3 +223,49 @@ describe('round 5: staff invitations to residents, and who may redeem', () => {
     expect(mockSetClaims).not.toHaveBeenCalled();
   });
 });
+
+describe('round 6: staff invitations, and the owner record behind capacity', () => {
+  const invite = (role: string, to = 'r@x.com', uid = 'owner') =>
+    call(createInvitation, { email: to, houseId: H, role }, uid, `${uid}@x.com`);
+
+  it('a senior-peer invitation to someone who already lives here is refused at create (I1)', async () => {
+    emails['r@x.com'] = 'res';
+    mem.seed('guests/r-doc', { houseId: H, userId: 'res', status: 'active' });
+    await expect(invite('senior-peer')).rejects.toMatchObject(failed);
+    expect(mem.paths('invitations/')).toEqual([]);
+  });
+
+  it('a house with no primary owner record refuses slot-consuming invitations (I2)', async () => {
+    mem.reset();
+    mem.seed(`houses/${H}`, { id: H, ownerId: 'owner' });
+    users.co = { admin: { [H]: true }, superAdmin: { [H]: true } };
+    mem.seed(`house-roles/${H}_co`, { houseId: H, tier: 'owner' }); // co-owner, not primary
+    for (const role of ['guest', 'senior-peer']) {
+      await expect(invite(role, 'n@x.com', 'co')).rejects.toMatchObject({
+        code: 'failed-precondition',
+        message: 'house has no owner record',
+      });
+    }
+    expect(mockCapacity).not.toHaveBeenCalled();
+    // An admin invitation takes no slot, so it does not need the owner record.
+    await expect(invite('admin', 'n@x.com', 'co')).resolves.toHaveProperty('token');
+  });
+
+  it('a redeem in a house with no primary owner record is refused for a guest (I2)', async () => {
+    mem.reset();
+    mem.seed(`houses/${H}`, { id: H, ownerId: 'owner' });
+    users.co = { admin: { [H]: true }, superAdmin: { [H]: true } }; // a co-owner invited
+    mem.seed('invitations/T', invitation('guest', { inviterUid: 'co' }));
+    await expect(redeem('T')).rejects.toMatchObject({ message: 'house has no owner record' });
+    expect(mockSetClaims).not.toHaveBeenCalled();
+  });
+
+  it('capacity is charged to the primary owner record, not houses.ownerId (I6)', async () => {
+    mem.seed(`houses/${H}`, { id: H, ownerId: 'someone-else' });
+    await invite('guest', 'n@x.com');
+    expect(mockCapacity).toHaveBeenCalledWith('owner', H);
+    mem.seed('invitations/T', invitation('guest'));
+    await redeem('T');
+    expect(mockRecordAccepted).toHaveBeenCalledWith('owner', H);
+  });
+});

@@ -154,8 +154,9 @@ export const addAdminAuthorization = onCall(async (request) => {
     callableName: "addAdminAuthorization",
     enforceEntitlement: true,
   });
-  // Tiers (util/houseRoles): an admin grant makes a manager and a superAdmin
-  // grant an owner, both owner-only. Peer leaders are made through
+  // Tiers (util/houseRoles): an admin grant makes a manager (owner or
+  // co-owner) and a superAdmin grant an owner (the primary owner only: ranks
+  // are strict). Peer leaders are made through
   // promoteGuestsToAdmin or a senior-peer invitation.
   const superAdminHouses = new Set(adminInput.superAdmin || []);
   for (const houseId of requestedHouses) {

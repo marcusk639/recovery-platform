@@ -3,17 +3,22 @@
  * Oxford admission PR). Owner rule: a resident never adds themselves; each
  * tier hands out only the tiers below it.
  *
- *   owner (primary owner record, or a superAdmin claim) -> owner, manager, peer leader, resident
+ *   primary owner (primary owner record)               -> owner, manager, peer leader, resident
+ *   co-owner (superAdmin claim, not primary)            -> manager, peer leader, resident
  *   manager                                             -> peer leader, resident
  *   peer leader                                         -> resident
+ *
+ * Ranks are strict for every grant and revoke: only the primary owner
+ * (rank 4) may make someone an owner; a co-owner (rank 3) may not.
  *
  * The tier comes ONLY from the server-only role record
  *   house-roles/{houseId}_{uid}  { tier, grantedBy, grantedAt, via, primary? }
  * (no client rule matches the path) and the account's LIVE claims. The house
  * owner is the record with `primary: true`, written by createHouses (in its
- * transaction) and by scripts/backfillHouseRoles from ownerId read before the
- * functions deploy; `houses.ownerId` is never trusted for authority (a
- * superAdmin could rewrite it until the rules deploy). Never from guest
+ * transaction) and by scripts/backfillHouseRoles only where server-written
+ * evidence agrees with superAdminId and ownerId (scripts/backfillHouseOwners);
+ * `houses.ownerId` is never trusted for authority (a superAdmin could rewrite
+ * it until the rules deploy). Never from guest
  * docs, admins docs or houseType. An admin-claim holder with no record is a
  * peer leader, the least privilege. The rules read the same records
  * (firestore.rules guests block) for direct guest-doc departures.
@@ -33,8 +38,9 @@ import {
 
 export * from './houseRoleStore';
 
+// 'owner' is granted only by the primary owner (assertMayGrantTier), never by tier alone.
 const MAY_GRANT: Record<HouseTier, readonly RoleTier[]> = {
-  owner: ['owner', 'manager', 'peerLeader', 'resident'],
+  owner: ['manager', 'peerLeader', 'resident'],
   manager: ['peerLeader', 'resident'],
   peerLeader: ['resident'],
   resident: [],
@@ -83,7 +89,10 @@ export async function houseTierOf(uid: string, houseId: string): Promise<HouseTi
  * Removing someone's house claim needs a rank strictly above theirs: primary
  * owner > co-owner > manager > peer leader > resident, so only an owner
  * removes a manager, and the primary owner is demoted only by themselves.
- * Anyone may remove their own claims. The caller's rank is computed once per
+ * Targets equal to the caller are skipped here, but that does not let
+ * anyone remove their own claims: the callables also run
+ * assertCanGrantClaimForHouses (util/authGuard), which refuses a self-target
+ * unless the caller is the primary owner. The caller's rank is computed once per
  * house; the targets are checked in parallel.
  */
 export async function assertMayRevokeAll(params: {
@@ -140,12 +149,25 @@ export function assertTierMayGrant(
   );
 }
 
-/** The caller's tier (live claims and record), then assertTierMayGrant. */
+/**
+ * The caller's tier (live claims and record), then assertTierMayGrant. Making
+ * someone an owner needs the primary owner record (rank 4): a co-owner holds
+ * the owner tier but ranks 3, and ranks are strict.
+ */
 export async function assertMayGrantTier(params: {
   callerUid: string;
   houseId: string;
   grant: RoleTier;
   callableName: string;
 }): Promise<void> {
-  assertTierMayGrant(await houseTierOf(params.callerUid, params.houseId), params.grant, params);
+  const caller = await tierAndRank(params.callerUid, params.houseId);
+  if (params.grant === 'owner') {
+    if (caller.primary) return;
+    logger.warn(`${params.callableName}: only the primary owner may grant owner`, {
+      houseId: params.houseId,
+      tier: caller.tier,
+    });
+    throw new HttpsError('permission-denied', 'Only the house owner can add another owner');
+  }
+  assertTierMayGrant(caller.tier, params.grant, params);
 }

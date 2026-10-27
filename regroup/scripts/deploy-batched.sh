@@ -1,10 +1,12 @@
 #!/bin/bash
 # Deploys every exported Cloud Function in batches of 5 (for large changesets
-# that hit deploy quotas). The default deploy is `firebase deploy --only
-# functions` from regroup/, which always deploys every export; use this script
-# only when that fails on quotas. ALL_FUNCTIONS must list every deployable
-# export of functions/src/index.ts: a function left off is silently never
-# deployed. A failed batch stops the script with a non-zero exit.
+# that hit deploy quotas). The default deploy is `npm --prefix functions run
+# build && firebase deploy --only functions` from regroup/, which always
+# deploys every export; use this script only when that fails on quotas.
+# ALL_FUNCTIONS must list every deployable export of functions/src/index.ts
+# (functions/src/__tests__/deployList.test.ts checks it): a function left off
+# is silently never deployed. A failed batch stops the script with a non-zero
+# exit.
 set -euo pipefail
 
 # Navigate to project root (parent of scripts/) so firebase.json is found
