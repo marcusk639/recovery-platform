@@ -1856,7 +1856,7 @@ PODS:
     - React-Core
   - react-native-html-to-pdf (0.12.0):
     - React-Core
-  - react-native-image-picker (8.2.1):
+  - react-native-image-picker (7.1.3):
     - RCT-Folly (= 2021.07.22.00)
     - React-Core
   - react-native-maps (1.10.4):
@@ -2027,7 +2027,7 @@ PODS:
     - Firebase/Storage (= 11.11.0)
     - React-Core
     - RNFBApp
-  - RNGestureHandler (2.31.2):
+  - RNGestureHandler (2.17.1):
     - RCT-Folly (= 2021.07.22.00)
     - React-Core
   - RNGoogleSignin (13.3.1):
@@ -2039,7 +2039,7 @@ PODS:
     - RCT-Folly (= 2021.07.22.00)
     - React-Core
     - React-RCTImage
-  - RNSVG (15.15.5):
+  - RNSVG (14.1.0):
     - React-Core
   - SDWebImage (5.11.1):
     - SDWebImage/Core (= 5.11.1)
@@ -2452,7 +2452,7 @@ SPEC CHECKSUMS:
   react-native-get-random-values: d16467cf726c618e9c7a8c3c39c31faa2244bbba
   react-native-google-maps: d32eeecac6541217bf06ddc5709dc8632bccbc08
   react-native-html-to-pdf: 7a49e6c58ac5221bcc093027b195f4b214f27a9d
-  react-native-image-picker: 496b28329c0c3af23b381649feac5067c21afe6c
+  react-native-image-picker: 942bec2fd03b641309f2327e6c9f04247c1fba0d
   react-native-maps: e398e4c23b1e0421b169a821cd2d93ad1422123f
   react-native-netinfo: 387c95161b1971d0b2acd61f5ecf394c8fd3fb95
   react-native-safe-area-context: bf9d9d58f0f6726d4a6257088044c2595017579d
@@ -2491,11 +2491,11 @@ SPEC CHECKSUMS:
   RNFBFunctions: 192aa93950b54bcbf2237e09dab53032c05cd60c
   RNFBMessaging: 0f0498a95c605e3afcf13ac5f349d0b201ea65f6
   RNFBStorage: f058204f5e684a95797ac78e2d3918fc3dd07b17
-  RNGestureHandler: b72c93f525e6746b87f9de5cf9aed8bfc7b40e90
+  RNGestureHandler: 77d4378791d09189b8c426305b08f04089c482fd
   RNGoogleSignin: 576a84dd0407b912e7a0adf07492de9feb79e5d9
   RNPermissions: a924440672dd3b2b7ca7fdf17d19b91b9d5ac015
   RNScreens: 508ace7f1c439ce1745c14a49939bb72726b4ecd
-  RNSVG: d7c1f0b18e6f597d692d5532b076a02c905e1853
+  RNSVG: 6d5ed33b6635ed6d6ecb50744dcf127580c39ed5
   SDWebImage: a7f831e1a65eb5e285e3fb046a23fcfbf08e696d
   SDWebImageWebPCoder: 908b83b6adda48effe7667cd2b7f78c897e5111d
   SexyTooltip: 5c9b4dec52bfb317938cb0488efd9da3717bb6fd
