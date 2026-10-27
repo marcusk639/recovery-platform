@@ -5,7 +5,8 @@
 // recompute (covered in __tests__/activities/syncWeekSummary.test.ts).
 
 jest.mock('firebase-functions/v2/firestore', () => ({
-  onDocumentWritten: jest.fn((options: unknown, handler: unknown) => ({ options, handler })),
+  onDocumentWrittenWithAuthContext: jest.fn((options: unknown, handler: unknown) => ({ options, handler })),
+  onDocumentWritten: jest.fn(() => ({})),
   onDocumentCreated: jest.fn(() => ({})),
   onDocumentUpdated: jest.fn(() => ({})),
   onDocumentDeleted: jest.fn(() => ({})),
@@ -17,10 +18,14 @@ jest.mock('../../activities/syncWeekSummary', () => ({
 jest.mock('../../activities/disputeNotifications', () => ({
   notifyDispute: jest.fn(async () => ({ recipients: [] })),
 }));
+jest.mock('../../activities/houseDisputeMirror', () => ({
+  mirrorHouseDispute: jest.fn(async () => ({ added: 0, removed: 0 })),
+}));
 
 import { onActivityWritten } from '../../triggers/firestore/activityWeekSummary';
 import { syncWeekSummariesForActivityWrite } from '../../activities/syncWeekSummary';
 import { notifyDispute } from '../../activities/disputeNotifications';
+import { mirrorHouseDispute } from '../../activities/houseDisputeMirror';
 
 const trigger = onActivityWritten as unknown as {
   options: { document: string; retry: boolean };
@@ -73,15 +78,32 @@ describe('onActivityWritten', () => {
     ).rejects.toThrow('aborted');
   });
 
-  it('also runs the dispute notifier with the event id (for idempotent notification ids)', async () => {
+  it('runs the notifier and the house mirror with the event id and the authenticated caller', async () => {
     const before = { status: 'active' };
-    const after = { status: 'disputed' };
+    const after = { status: 'disputed', disputedBy: 'forged-uid' };
     await trigger.handler({
       id: 'evt-9',
+      time: '2026-01-15T12:00:00.000Z',
+      authType: 'api_key',
+      authId: 'peer-uid',
       params: { activityId: 'a9' },
       data: { before: snap(before), after: snap(after) },
     });
-    expect(notifyDispute).toHaveBeenCalledWith({ name: 'rats-db' }, 'evt-9', 'a9', before, after);
+    expect(notifyDispute).toHaveBeenCalledWith({ name: 'rats-db' }, 'evt-9', 'a9', before, after, 'peer-uid');
+    expect(mirrorHouseDispute).toHaveBeenCalledWith({ name: 'rats-db' }, 'a9', before, after, {
+      disputerUid: 'peer-uid',
+      now: '2026-01-15T12:00:00.000Z',
+    });
+  });
+
+  it('passes no disputer for a write without auth context', async () => {
+    await trigger.handler({
+      id: 'evt-10',
+      authType: 'unknown',
+      params: { activityId: 'a10' },
+      data: { before: snap({ status: 'active' }), after: snap({ status: 'disputed' }) },
+    });
+    expect((notifyDispute as jest.Mock).mock.calls[0][5]).toBeUndefined();
   });
 
   it('still recomputes when notifying fails, then fails the event so it retries', async () => {

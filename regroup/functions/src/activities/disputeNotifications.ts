@@ -10,7 +10,8 @@
  * Recipients: every admin of the guest's house (house.adminIds,
  * house.superAdminIds, house.superAdminId; the house roster that
  * notifyOperatorOnApplication already uses) plus the resident
- * (guests.userId), minus whoever raised the dispute. The house comes from the
+ * (guests.userId), minus whoever raised the dispute (taken from the write's
+ * auth context, not from client-written fields). The house comes from the
  * guest doc, never from the activity.
  *
  * Writes /notifications/{id} in the existing shape (userId, houseId, guestId,
@@ -60,6 +61,8 @@ export async function notifyDispute(
   activityId: string,
   before: Data | undefined,
   after: Data | undefined,
+  /** The authenticated uid that made the write (event.authId), if any. */
+  disputerUid?: string,
 ): Promise<{ recipients: string[] }> {
   if (!after || !isNewDispute(before, after)) return { recipients: [] };
 
@@ -80,10 +83,10 @@ export async function notifyDispute(
     ...strings([house.superAdminId]),
   ]);
 
-  const disputer =
-    (typeof after.disputedBy === 'string' && after.disputedBy) ||
-    (typeof after.disputeResolvedBy === 'string' && after.disputeResolvedBy) ||
-    '';
+  // The disputer is whoever made this write, from the event's auth context —
+  // never the activity's disputedBy/disputeResolvedBy, which a client could
+  // set to another person to suppress that person's notification.
+  const disputer = disputerUid ?? '';
   const recipients = new Map<string, boolean>(); // uid -> forAdmin
   for (const uid of admins) recipients.set(uid, true);
   if (guest.residentUid && !recipients.has(guest.residentUid))

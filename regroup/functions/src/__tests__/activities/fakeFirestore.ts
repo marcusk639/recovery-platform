@@ -1,3 +1,4 @@
+import { FieldValue } from 'firebase-admin/firestore';
 // In-memory stand-in for the slice of the Admin SDK that the week-summary
 // code uses: doc get, where/orderBy/get queries, and runTransaction with
 // tx.get / tx.set. Nothing here can reach a real project.
@@ -23,10 +24,34 @@ const OPS: Record<string, (a: any, b: any) => boolean> = {
   '<=': (a, b) => a <= b,
 };
 
+const isDelete = (v: unknown) =>
+  !!v && typeof (v as { isEqual?: unknown }).isEqual === 'function' &&
+  (v as { isEqual: (o: unknown) => boolean }).isEqual(FieldValue.delete());
+
+/** Deep-copies plain objects only, so Timestamps keep their prototype. */
+function clonePlain(v: any): any {
+  if (!v || typeof v !== 'object' || Object.getPrototypeOf(v) !== Object.prototype) return v;
+  return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, clonePlain(x)]));
+}
+
+function applyPath(doc: Data, path: string, value: unknown) {
+  const parts = path.split('.');
+  let cur: Data = doc;
+  for (const p of parts.slice(0, -1)) {
+    if (!cur[p] || typeof cur[p] !== 'object') cur[p] = {};
+    cur = cur[p];
+  }
+  const last = parts[parts.length - 1];
+  if (isDelete(value)) delete cur[last];
+  else cur[last] = value;
+}
+
 export class FakeFirestore {
   readonly collections = new Map<string, Map<string, Data>>();
   readonly writes: Array<{ collection: string; id: string; data: Data }> = [];
   transactions = 0;
+  /** "collection/id" -> error thrown by the next create() of that doc. */
+  readonly failCreates = new Map<string, Error>();
   readOnlyTransactions = 0;
   readonly queries: Array<{ collection: string; spec: unknown }> = [];
   /** Number of upcoming transactions that should throw instead of committing. */
@@ -61,6 +86,11 @@ export class FakeFirestore {
       collection,
       /** Like the Admin SDK: fails with ALREADY_EXISTS (6) if the doc exists. */
       async create(data: Data) {
+        const injected = db.failCreates.get(`${collection}/${id}`);
+        if (injected) {
+          db.failCreates.delete(`${collection}/${id}`);
+          throw injected;
+        }
         if (db.col(collection).has(id)) {
           throw Object.assign(new Error('already exists'), { code: 6 });
         }
@@ -103,13 +133,21 @@ export class FakeFirestore {
   async runTransaction<T>(fn: (tx: any) => Promise<T>, options?: { readOnly?: boolean }): Promise<T> {
     this.transactions++;
     if (options?.readOnly) this.readOnlyTransactions++;
-    const staged: Array<{ collection: string; id: string; data: Data }> = [];
+    const staged: Array<{ collection: string; id: string; data: Data; update?: boolean }> = [];
     const tx = {
       get: (target: { get: () => Promise<unknown> }) => target.get(),
       set: (ref: { collection: string; id: string }, data: Data) => {
         // The real SDK rejects writes in a read-only transaction.
         if (options?.readOnly) throw new Error('write in a read-only transaction');
         staged.push({ collection: ref.collection, id: ref.id, data });
+      },
+      /** Dotted field paths; FieldValue.delete() removes the field. */
+      update: (ref: { collection: string; id: string }, data: Data) => {
+        if (options?.readOnly) throw new Error('write in a read-only transaction');
+        if (!this.col(ref.collection).has(ref.id)) {
+          throw Object.assign(new Error('no document to update'), { code: 5 });
+        }
+        staged.push({ collection: ref.collection, id: ref.id, data, update: true });
       },
     };
     const result = await fn(tx);
@@ -118,7 +156,13 @@ export class FakeFirestore {
       throw this.failWith;
     }
     for (const w of staged) {
-      this.col(w.collection).set(w.id, w.data);
+      if (w.update) {
+        const doc = clonePlain(this.col(w.collection).get(w.id) ?? {});
+        for (const [path, value] of Object.entries(w.data)) applyPath(doc, path, value);
+        this.col(w.collection).set(w.id, doc);
+      } else {
+        this.col(w.collection).set(w.id, w.data);
+      }
       this.writes.push(w);
     }
     return result;
