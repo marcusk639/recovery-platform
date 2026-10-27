@@ -39,9 +39,9 @@ export interface GuestContext extends TrustedGuest {
 }
 
 export interface Exclusions {
-  /** Counted (active/kept) activities whose houseId is not the guest's house. */
+  /** Considered activities whose houseId is not the guest's house. */
   otherHouse: number;
-  /** Counted activities logged by neither the resident nor a house admin. */
+  /** Considered activities logged by neither the resident nor a house admin. */
   untrustedLogger: number;
 }
 
@@ -109,17 +109,24 @@ export function claimsHouseAdminCheck(
   };
 }
 
-/** Keep only the activities that may count for `guest`; tally the rest. */
+/**
+ * Keep only the activities that are genuinely `guest`'s (their house; logged
+ * by them or a house admin); tally the rest. `consider` picks which
+ * activities to check at all: by default the counted ones (summaries); the
+ * compliance export also considers approved disputes, which it lists.
+ */
 export async function trustedActivities(
   activities: Data[],
   guest: TrustedGuest,
   isHouseAdmin: HouseAdminCheck,
+  consider: (a: Data) => boolean = countsTowardSummary,
 ): Promise<{ trusted: Data[]; excluded: Exclusions }> {
   const excluded = noExclusions();
   const trusted: Data[] = [];
   for (const a of activities) {
-    // Only counted activities (active / kept) need, and pay for, a check.
-    if (!countsTowardSummary(a)) continue;
+    // Counted = not deleted and not an approved dispute (incomplete). Only
+    // the considered activities need, and pay for, a check.
+    if (!consider(a)) continue;
     if (a.houseId !== guest.houseId) {
       excluded.otherHouse++;
       continue;
