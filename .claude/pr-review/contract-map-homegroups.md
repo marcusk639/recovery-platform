@@ -43,6 +43,13 @@ Clients: `homegroups/mobile/src/` (models, redux slices, screens), `homegroups/m
 | Auth wrapper (`requireAuth`) removed or a callable made public   | `false-positives.md` for the known public callables                                                                                        | Anything else that drops `requireAuth` needs a reason.                                               |
 | Client call site added or payload changed (reverse direction)    | The callable's schema and its `index.ts` export                                                                                            | A client may call a name that is not exported, or send keys the schema doesn't read.                 |
 
+Group subscriptions are flat rate (`quantity: 1`). The group document's `stripePriceIdGroup` and `stripeProductIdGroup`
+are set by several callables: `homegroups/functions/src/callable/createGroupSubscription.ts`,
+`homegroups/functions/src/callable/createGroupWithSubscription.ts`,
+`homegroups/functions/src/callable/reactivateGroupSubscription.ts` and
+`homegroups/functions/src/callable/createStripeCheckoutSession.ts`. A change to one must be made in all of them,
+or a group ends up on the wrong product or with a per-member quantity.
+
 ### regroup
 
 Server: `regroup/functions/src/callable/` (v2 `onCall`), exported from `regroup/functions/src/index.ts`.
@@ -124,6 +131,12 @@ auth trigger `homegroups/functions/src/triggers/auth/onUserCreated.ts`.
 | `onAnnouncementCreate.ts`                                                                       | `status` (`published` / `scheduled`), `scheduledFor`                             | Announcement slices; `scheduledAnnouncementPublisher.ts`                 |
 | `onGroupCreate.ts`                                                                              | location and name fields                                                         | Group creation callables and mobile                                      |
 | `onMemberCreate.ts`, `onAdminRequestCreate.ts`, `onDirectMessageCreate.ts`, `onReportCreate.ts` | notification settings and ids on the new doc                                     | Corresponding mobile writers                                             |
+
+`onTransactionWrite.ts` owns `treasury_overviews/{groupId}` (a separate collection, not part of the group document).
+Rules block client creates. The client only updates the prudent reserve, range $0–10,000 with a default of $600, and
+that range is checked in both `homegroups/mobile/src/models/TreasuryModel.ts` and
+`homegroups/mobile/src/screens/homegroup/GroupEditDetailsScreen.tsx`. A change that recomputes treasury totals
+on the client, or moves them into the group document, diverges from the trigger.
 
 If a writer renames or stops setting a field, the trigger reads `undefined` and usually returns early without an error.
 If a trigger starts reading a new field, check that every writer sets it. Entities in
