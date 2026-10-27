@@ -144,18 +144,24 @@ jobs:
           # /home/runner is never opened up: serena-runner needs no path into the workspace.
           sudo install -d -m 755 "$SR_HOME/src"
           git ls-files -z \
-            | grep -zvE '(^|/)(\.serena|node_modules|public|lib|dist|build|\.next|_legacy)/' \
+            | grep -zvE '(^|/)(\.serena|node_modules|public|dist|build|\.next|_legacy)/|(^|/)functions/lib/|^recovery-api/lib/' \
             | sudo rsync -a --no-owner --no-group --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r --from0 --files-from=- ./ "$SR_HOME/src/"
           sudo chown -R root:root "$SR_HOME/src"
           sudo install -d -o "$SR_USER" -m 700 "$SR_HOME/src/.serena"
           sudo install -o "$SR_USER" -m 600 "$cfg/project.yml" "$SR_HOME/src/.serena/project.yml"
           # From here on serena-runner has no network and no view of the credentials.
           chmod 700 "$GITHUB_WORKSPACE/.git" "$RUNNER_TEMP"
-          sudo iptables -A OUTPUT -m owner --uid-owner "$SR_USER" ! -o lo -j REJECT
-          sudo ip6tables -A OUTPUT -m owner --uid-owner "$SR_USER" ! -o lo -j REJECT
+          # Loopback too: DNS goes to systemd-resolved on 127.0.0.53, which forwards queries
+          # out, so a loopback exemption would leave DNS as an exfiltration channel. Serena
+          # talks to Claude over stdio and needs no sockets.
+          sudo iptables -A OUTPUT -m owner --uid-owner "$SR_USER" -j REJECT
+          sudo ip6tables -A OUTPUT -m owner --uid-owner "$SR_USER" -j REJECT
           # Isolation probes: any failure leaves the outputs unset, so Review runs without Serena.
           if run_as curl -sS --max-time 5 -o /dev/null https://api.github.com; then
             echo "::error::serena-runner reached the network"; exit 1
+          fi
+          if run_as getent hosts example.com >/dev/null 2>&1; then
+            echo "::error::serena-runner can resolve DNS names"; exit 1
           fi
           if run_as cat "$GITHUB_WORKSPACE/.git/config" >/dev/null 2>&1; then
             echo "::error::serena-runner can read the workspace .git/config"; exit 1
@@ -230,7 +236,11 @@ jobs:
           if ! id serena-runner >/dev/null 2>&1; then exit 0; fi
           sudo pkill -KILL -u serena-runner || true
           for _ in 1 2 3 4 5; do
-            if ! pgrep -u serena-runner >/dev/null; then exit 0; fi
+            if ! pgrep -u serena-runner >/dev/null; then
+              # Nothing serena-runner left in shared temp space survives into Publish.
+              sudo find /tmp /var/tmp /dev/shm -xdev -user serena-runner -delete 2>/dev/null || true
+              exit 0
+            fi
             sleep 1
           done
           echo "::error::serena-runner processes survived; Publish is skipped"

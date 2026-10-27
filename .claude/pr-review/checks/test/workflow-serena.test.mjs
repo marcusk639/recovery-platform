@@ -83,14 +83,15 @@ test('the MCP server runs as serena-runner with an empty environment', () => {
 test('language servers install against a throwaway project; PR code is indexed only offline', () => {
   const warmup = at('project index "$SR_HOME/ls-warmup"');
   const chmod = at('chmod 700 "$GITHUB_WORKSPACE/.git" "$RUNNER_TEMP"');
-  const v4 = at('sudo iptables -A OUTPUT -m owner --uid-owner "$SR_USER" ! -o lo -j REJECT');
-  const v6 = at('sudo ip6tables -A OUTPUT -m owner --uid-owner "$SR_USER" ! -o lo -j REJECT');
+  const v4 = at('sudo iptables -A OUTPUT -m owner --uid-owner "$SR_USER" -j REJECT');
+  const v6 = at('sudo ip6tables -A OUTPUT -m owner --uid-owner "$SR_USER" -j REJECT');
+  assert.doesNotMatch(setup, /-o lo/, 'no loopback exemption: DNS via 127.0.0.53 would stay open');
   const probes = at('curl -sS --max-time 5');
   const prIndex = at('project index "$SR_HOME/src"');
   const outputs = at('>> "$GITHUB_OUTPUT"');
   assert.ok(warmup < chmod && chmod < v4 && v4 < v6 && v6 < probes && probes < prIndex && prIndex < outputs);
   assert.equal(setup.split('project index').length, 3, 'exactly two index runs: warmup, then the PR copy');
-  for (const probe of ['serena-runner reached the network', 'can read the workspace .git/config', 'can list RUNNER_TEMP', 'can write the source copy', 'environment is not empty']) {
+  for (const probe of ['serena-runner reached the network', 'can resolve DNS names', 'can read the workspace .git/config', 'can list RUNNER_TEMP', 'can write the source copy', 'environment is not empty']) {
     assert.ok(at(probe) < prIndex, probe);
   }
   assert.equal(setup.split('>> "$GITHUB_OUTPUT"').length, 2, 'outputs are written once, at the end');
@@ -110,6 +111,7 @@ test('Stop Serena kills every serena-runner process before the publish checkout,
   assert.match(stop, /\n {8}if: always\(\)\n/);
   assert.match(stop, /sudo pkill -KILL -u serena-runner/);
   assert.match(stop, /pgrep -u serena-runner/);
+  assert.match(stop, /sudo find \/tmp \/var\/tmp \/dev\/shm -xdev -user serena-runner -delete/, 'leftover temp files removed');
   assert.match(stop, /\n {10}exit 1\n/, 'fails if a process survives');
   assert.ok(wf.indexOf('- name: Review\n') < wf.indexOf('- name: Stop Serena'));
   assert.ok(wf.indexOf('- name: Stop Serena') < wf.indexOf('- name: Clear publish checkout path'));
@@ -133,4 +135,24 @@ test('the global Serena config has no dashboard or GUI, no trusted projects, and
   }
   assert.match(serenaConfig, /typescript_version: "\d+\.\d+\.\d+"/);
   assert.match(serenaConfig, /typescript_language_server_version: "\d+\.\d+\.\d+"/);
+});
+
+test('the copy filter drops build output and vendor code but keeps real source named lib', () => {
+  const pattern = /grep -zvE '([^']+)'/.exec(setup)[1];
+  const excluded = new RegExp(pattern);
+  for (const kept of ['detox-recovery/lib/abuse-protection.ts', 'recovery-api/src/lib/meetings/index.ts', '.claude/pr-review/checks/lib/ledger.mjs', 'homegroups/functions/src/index.ts']) {
+    assert.ok(!excluded.test(kept), `kept: ${kept}`);
+  }
+  for (const dropped of ['recovery-api/lib/callable/findMeetings.js', 'regroup/functions/lib/index.js', 'regroup/web/public/x.js', 'a/node_modules/b.js', 'homegroups/_legacy/x.ts', '.serena/project.yml', 'x/.serena/y']) {
+    assert.ok(excluded.test(dropped), `dropped: ${dropped}`);
+  }
+});
+
+test('Serena tools reach the model only through the step output: no literal or wildcard Serena tools', () => {
+  const allow = /--allowedTools "([^"]+)"/.exec(review)[1];
+  assert.doesNotMatch(allow, /mcp__serena/, 'no literal Serena tool in the Review step');
+  // Path globs inside Write(...)/Edit(...) are expected; a wildcard tool name is not.
+  assert.doesNotMatch(allow, /mcp__[^,]*\*|(^|,)\*/, 'no tool-name wildcards');
+  const tools = /echo "tools=([^"]+)"/.exec(setup)[1];
+  assert.doesNotMatch(tools, /\*/, 'no wildcard in the Serena tool list');
 });
