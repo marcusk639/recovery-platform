@@ -22,7 +22,7 @@ export function checkOrigin(req: Request): { ok: boolean } {
   return { ok: getAllowedOrigins().has(origin) };
 }
 
-export const HONEYPOT_FIELD = "website";
+export const HONEYPOT_FIELD = "homepage";
 
 export function checkHoneypot(body: Record<string, unknown>): { ok: boolean } {
   const v = body[HONEYPOT_FIELD];
