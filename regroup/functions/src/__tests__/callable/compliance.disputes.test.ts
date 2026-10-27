@@ -25,6 +25,7 @@ const mockGetGuest = jest.fn();
 const mockGetGuestsForHouse = jest.fn();
 const mockGetDrugTestsForGuest = jest.fn();
 const mockGetMeetingActivitiesForGuest = jest.fn();
+const mockGetDisputeDecisions = jest.fn(async (_id: string): Promise<Record<string, unknown>[]> => []);
 
 jest.mock("../../api/firestore", () => ({
   getHouse: mockGetHouse,
@@ -33,6 +34,7 @@ jest.mock("../../api/firestore", () => ({
   getGuestsForHouse: mockGetGuestsForHouse,
   getDrugTestsForGuest: mockGetDrugTestsForGuest,
   getMeetingActivitiesForGuest: mockGetMeetingActivitiesForGuest,
+  getDisputeDecisions: mockGetDisputeDecisions,
 }));
 
 import { complianceExport } from "../../callable/compliance";
@@ -52,6 +54,7 @@ beforeEach(() => jest.clearAllMocks());
 
 const ts = (iso: string) => ({ toDate: () => new Date(iso) });
 const meeting = (name: string, extra: Record<string, unknown> = {}) => ({
+  id: name,
   timestamp: "2026-06-02T16:00:00.000Z",
   verified: true,
   status: "active",
@@ -209,8 +212,14 @@ describe("complianceExport — house time zone", () => {
 });
 
 describe("complianceExport — undone decisions (REOPEN)", () => {
-  it("a reopened dispute is pending and counted; Dispute History notes the undone decision", async () => {
+  it("a reopened dispute is pending and counted; Dispute History comes from the decision log", async () => {
     const reopenedAt = ts("2026-06-03T15:00:00.000Z");
+    // The server's decision log (trusted), not the activity's own fields.
+    mockGetDisputeDecisions.mockImplementation(async (id: string) =>
+      id === "NeverReopened"
+        ? [{ event: "rejected" }]
+        : [{ event: "approved" }, { event: "reopened", previousOutcome: "approved", at: reopenedAt }],
+    );
     mockGetMeetingActivitiesForGuest.mockResolvedValue([
       meeting("Reopened", { status: "disputed", reopenedBy: "mgr", reopenedAt, disputed: null, incomplete: null }),
       meeting("ReDecided", { status: "resolved", disputed: "successful", incomplete: true, reopenedBy: "mgr", reopenedAt }),
@@ -220,7 +229,7 @@ describe("complianceExport — undone decisions (REOPEN)", () => {
     const result = await call({ houseId: "house-1" });
 
     expect(result.csv).toContain("Date,Meeting,Type,Duration,Verified,Dispute,Dispute History");
-    const note = "An earlier decision was undone on 2026-06-03 and the dispute reopened";
+    const note = "Earlier decision undone (approved); last on 2026-06-03; the dispute was reopened";
     expect(rowFor(result.csv, "Reopened")?.slice(5)).toEqual(["Pending - counted until decided", note]);
     expect(rowFor(result.csv, "ReDecided")?.slice(4)).toEqual([
       "false",

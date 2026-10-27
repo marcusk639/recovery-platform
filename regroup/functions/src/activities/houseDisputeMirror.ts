@@ -1,5 +1,5 @@
 /**
- * Server-side maintenance of the live dispute list, the /disputes archive and
+ * Server-side maintenance of the live dispute list, the dispute-archive and
  * the dispute decision log (disputeDecisions), from the onActivityWritten
  * trigger, on any event that enters `disputed` (incl. a REOPEN) or leaves it.
  *
@@ -16,7 +16,7 @@
  *      existing entry is never rewritten (a different one is logged as a
  *      conflict). Written for every activity, whatever its id or house;
  *   2. the archive: the entry of the dispute this event decided is archived
- *      to /disputes/{key}_{stamp}_{decision id} with that decision's outcome
+ *      to dispute-archive/{key}_{stamp}_{decision id} with that decision's outcome
  *      and resolver, even if the activity has been reopened since;
  *   3. the live list, from the activity's CURRENT state (events are
  *      redelivered and arrive out of order): while `disputed`, keep the entry
@@ -58,6 +58,12 @@ type Data = Record<string, unknown>;
 type Result = { added: number; removed: number; logged: number };
 
 export const LIVE_DISPUTES = 'house-disputes';
+/**
+ * The server-only archive of decided disputes (no client rule matches it).
+ * /disputes is the legacy client collection older builds still write; it is
+ * untrusted. dispute-decisions + dispute-archive are the trusted record.
+ */
+export const ARCHIVE = 'dispute-archive';
 
 const stringOrNull = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
 const disputerIn = (a: Data) => stringOrNull(a.disputedBy) || stringOrNull(a.disputeResolvedBy);
@@ -148,7 +154,7 @@ export async function mirrorHouseDispute(
     // The archive of the decided dispute, if its entry is already gone.
     const decidedArchiveRef =
       decided && before
-        ? db.collection('disputes').doc(`${activityId}_${disputeStamp(before)}_${decided.id}`)
+        ? db.collection(ARCHIVE).doc(`${activityId}_${disputeStamp(before)}_${decided.id}`)
         : undefined;
     const decidedArchive = decidedArchiveRef ? await tx.get(decidedArchiveRef) : undefined;
 
@@ -201,7 +207,7 @@ export async function mirrorHouseDispute(
       const id = [k, typeof stamp === 'string' ? stamp : null, decisionId]
         .filter(Boolean)
         .join('_');
-      tx.set(db.collection('disputes').doc(id), {
+      tx.set(db.collection(ARCHIVE).doc(id), {
         ...entries[k],
         id: k,
         houseId: guest.houseId,

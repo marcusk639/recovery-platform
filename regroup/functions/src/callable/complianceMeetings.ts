@@ -76,12 +76,27 @@ export function disputeLabel(m: Data): string {
   return 'Resolved - counted';
 }
 
-/** The decision-history note for the export: set once a decision was undone. */
-export function disputeHistoryNote(m: Data): string {
-  if (m.reopenedBy == null && m.reopenedAt == null) return '';
-  const at = toInstant(m.reopenedAt);
-  return `An earlier decision was undone${at ? ` on ${at.toISOString().slice(0, 10)}` : ''} and the dispute reopened`;
+/**
+ * The decision-history note for the export, from the server-written decision
+ * log (activities/{id}/dispute-decisions, the trusted record; /disputes is a
+ * client-writable legacy collection): the decisions an admin undid, if any.
+ */
+export function disputeHistoryNote(decisions: Data[]): string {
+  const reopens = decisions
+    .filter((d) => d.event === 'reopened')
+    .map((d) => ({ at: toInstant(d.at), undid: typeof d.previousOutcome === 'string' ? d.previousOutcome : 'decision' }))
+    .sort((a, b) => (a.at?.getTime() ?? 0) - (b.at?.getTime() ?? 0));
+  if (reopens.length === 0) return '';
+  const last = reopens[reopens.length - 1].at;
+  // No commas: the cell stays unquoted in the CSV.
+  const undone = reopens.map((r) => r.undid).join(' then ');
+  return `Earlier decision${reopens.length > 1 ? 's' : ''} undone (${undone})${
+    last ? `; last on ${last.toISOString().slice(0, 10)}` : ''
+  }; the dispute was reopened`;
 }
+
+const hasDecisions = (m: Data) =>
+  m.status === 'disputed' || m.status === 'resolved' || legacyUpheld(m) || m.reopenedBy != null;
 
 export async function meetingRowsFor(
   resident: Data,
@@ -92,6 +107,8 @@ export async function meetingRowsFor(
     startDate?: string;
     endDate?: string;
     isHouseAdmin: HouseAdminCheck;
+    /** Reads an activity's decision log (for the Dispute History column). */
+    decisionsFor?: (activityId: string) => Promise<Data[]>;
   },
 ): Promise<MeetingRow[]> {
   const guest = trustedGuestFrom(residentId, resident);
@@ -115,6 +132,8 @@ export async function meetingRowsFor(
     if (opts.endDate && date > opts.endDate) continue;
     const data = (m.data ?? {}) as Data;
     const counted = countsTowardSummary(m);
+    const decisions =
+      opts.decisionsFor && typeof m.id === 'string' && hasDecisions(m) ? await opts.decisionsFor(m.id) : [];
     rows.push({
       at: at.getTime(),
       date,
@@ -124,7 +143,7 @@ export async function meetingRowsFor(
       verified: counted && m.verified === true,
       counted,
       dispute: disputeLabel(m),
-      disputeHistory: disputeHistoryNote(m),
+      disputeHistory: disputeHistoryNote(decisions),
     });
   }
   return rows.sort((a, b) => a.at - b.at).map(({ at: _at, ...row }) => row);

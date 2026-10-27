@@ -9,6 +9,7 @@ import {
   getGuestsForHouse,
   getDrugTestsForGuest,
   getMeetingActivitiesForGuest,
+  getDisputeDecisions,
 } from "../api/firestore";
 import { tierAllows } from "../util/tierPricing";
 import { resolveTimeZone } from "../activities/weekSummaryMath";
@@ -154,7 +155,7 @@ async function gatherExportData(
           resident as Record<string, unknown>,
           rid,
           meetings,
-          { timeZone, startDate, endDate, isHouseAdmin }
+          { timeZone, startDate, endDate, isHouseAdmin, decisionsFor: getDisputeDecisions }
         ),
       };
     })

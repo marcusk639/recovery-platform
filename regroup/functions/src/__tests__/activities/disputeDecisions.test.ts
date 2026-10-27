@@ -62,7 +62,7 @@ const house = () => db.read('houses', 'h1')!;
 const log = () => [
   ...(db.collections.get('activities/a1/dispute-decisions') ?? new Map()).entries(),
 ];
-const archives = () => [...(db.collections.get('disputes') ?? new Map()).entries()];
+const archives = () => [...(db.collections.get('dispute-archive') ?? new Map()).entries()];
 const step = async (before: Data | undefined, after: Data) => {
   db.seed('activities', 'a1', after);
   return mirrorHouseDispute(asFirestore(db), 'a1', before, after, { now: NOW });

@@ -38,7 +38,7 @@ export const rejected = {
 /** Helpers bound to the test's current FakeFirestore (re-created per test). */
 export const mirrorHelpers = (db: () => FakeFirestore) => {
   const archives = () =>
-    [...(db().collections.get('disputes') ?? new Map()).entries()].filter(
+    [...(db().collections.get('dispute-archive') ?? new Map()).entries()].filter(
       ([id]) => id.startsWith('a1') || id.includes('uuid'),
     );
   return {

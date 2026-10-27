@@ -87,7 +87,7 @@ describe('an activity id that cannot be a map key', () => {
     );
     expect(r.logged).toBe(1);
     expect(decisions('ev.il').map(([id]) => id)).toEqual([`decided_${T1.toMillis()}`]);
-    const archived = [...(db.collections.get('disputes') ?? new Map()).entries()];
+    const archived = [...(db.collections.get('dispute-archive') ?? new Map()).entries()];
     expect(archived).toHaveLength(1);
     expect(archived[0][0].startsWith('ev.il_')).toBe(true);
     expect(house().disputes).toEqual({});
@@ -144,5 +144,17 @@ describe("reopening an older build's dispute (no disputedBy)", () => {
       disputedBy: 'peer-uid',
       disputeStamp: stamp,
     });
+  });
+});
+
+describe('the trusted archive', () => {
+  it('ITEM 4: a server resolve archives to the server-only dispute-archive, never the client /disputes', async () => {
+    commit(disputed);
+    await deliver(active, disputed);
+    commit({ ...approved, disputeResolvedAt: T1 });
+    await deliver(disputed, { ...approved, disputeResolvedAt: T1 });
+    const trusted = [...(db.collections.get('dispute-archive') ?? new Map()).keys()];
+    expect(trusted).toEqual([`a1_${disputeStamp(disputed)}_decided_${T1.toMillis()}`]);
+    expect(db.collections.get('disputes')?.size ?? 0).toBe(0);
   });
 });

@@ -11,7 +11,7 @@
  *     undid (previousOutcome).
  * The rules let an admin REOPEN only once decided_{disputeResolvedAt ms}
  * exists, so the decision being undone is always logged first. The log is
- * written in the same transaction as the /disputes archive
+ * written in the same transaction as the dispute-archive entry
  * (houseDisputeMirror). Clients can neither read nor write it.
  */
 import { createHash } from 'crypto';
