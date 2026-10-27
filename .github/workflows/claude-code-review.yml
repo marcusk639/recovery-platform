@@ -229,11 +229,14 @@ jobs:
           fi
           # PR code is indexed only now, offline.
           run_as "$SERENA_BIN" project index "$SR_HOME/src" --log-level WARNING --timeout 30
+          # Modes only remove tools here (their prompts arrive via initial_instructions, which the
+          # review does not allow). planning drops every edit tool and execute_shell_command,
+          # no-memories the memory and onboarding tools: locks independent of fixed_tools/read_only.
           python3 -c 'import json, sys; json.dump({"mcpServers": {"serena": {"command": "sudo", "args": sys.argv[2:]}}}, open(sys.argv[1], "w"))' \
             "$RUNNER_TEMP/serena-mcp.json" \
             -n -u "$SR_USER" -H env -i -C "$SR_HOME" "HOME=$SR_HOME" "PATH=$SR_PATH" "SERENA_HOME=$SR_HOME/serena-home" SERENA_USAGE_REPORTING=false \
             "$SERENA_BIN" start-mcp-server --context claude-code --project "$SR_HOME/src" \
-            --mode no-onboarding --mode no-memories --log-level WARNING
+            --mode planning --mode no-onboarding --mode no-memories --log-level WARNING
           {
             echo "mcp_args=--mcp-config $RUNNER_TEMP/serena-mcp.json"
             echo "tools=mcp__serena__find_symbol,mcp__serena__find_referencing_symbols,mcp__serena__get_symbols_overview,mcp__serena__search_for_pattern,"

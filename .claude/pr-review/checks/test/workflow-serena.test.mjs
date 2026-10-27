@@ -79,7 +79,9 @@ test('the MCP server runs as serena-runner with an empty environment', () => {
   assert.match(setup, /\n {12}-n -u "\$SR_USER" -H env -i -C "\$SR_HOME" "HOME=\$SR_HOME" "PATH=\$SR_PATH" "SERENA_HOME=\$SR_HOME\/serena-home" SERENA_USAGE_REPORTING=false \\\n/);
   // env -i drops CI/GITHUB_ACTIONS, which Serena checks to skip its startup usage report.
   assert.match(setup, /run_as\(\) \{ [^}]*SERENA_USAGE_REPORTING=false "\$@"; \}/);
-  assert.match(setup, /--mode no-onboarding --mode no-memories/);
+  assert.match(setup, /--mode planning --mode no-onboarding --mode no-memories --log-level WARNING/);
+  // --mode replaces the default modes; editing/interactive would drop these locks and add nothing.
+  assert.doesNotMatch(setup, /--mode (editing|interactive)\b/);
 });
 
 test('language servers install against a throwaway project; PR code is indexed only offline', () => {
