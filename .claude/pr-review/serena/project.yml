@@ -6,7 +6,10 @@ encoding: "utf-8"
 ignore_all_files_in_gitignore: true
 ignored_paths:
   - "**/public/**"
-  - "**/lib/**"
+  # Build output only: real source also lives in lib/ dirs (detox-recovery/lib,
+  # recovery-api/src/lib, .claude/pr-review/checks/lib).
+  - "**/functions/lib/**"
+  - "recovery-api/lib/**"
   - "**/dist/**"
   - "**/build/**"
   - "**/.next/**"

@@ -102,7 +102,7 @@ test('the source copy is root-owned; serena-runner may write only its .serena in
   const chown = at('sudo chown -R root:root "$SR_HOME/src"');
   const serenaDir = at('sudo install -d -o "$SR_USER" -m 700 "$SR_HOME/src/.serena"');
   assert.ok(copy < chown && chown < serenaDir);
-  assert.match(setup, /if ! run_as test -r "\$SR_HOME\/src\/package\.json"; then\n.*\n\s+exit 0\n/, 'unreadable copy means no Serena, not a failed job');
+  assert.match(setup, /if ! run_as test -r "\$probe_file"; then\n.*\n\s+exit 0\n/, 'unreadable copy means no Serena, not a failed job');
   assert.doesNotMatch(setup, /chmod [^\n]*\/home\/runner|setfacl/, '/home/runner is never opened up');
 });
 
@@ -126,7 +126,9 @@ test('the base project.yml is read-only with exactly the four tools and nothing 
   for (const key of ['activation_command', 'excluded_tools', 'included_optional_tools', 'ls_specific_settings']) {
     assert.doesNotMatch(projectYml, new RegExp(`\\n${key}:`), key);
   }
-  for (const p of ['**/public/**', '**/lib/**', '**/node_modules/**', '**/_legacy/**']) assert.ok(projectYml.includes(`"${p}"`), p);
+  for (const p of ['**/public/**', '**/functions/lib/**', 'recovery-api/lib/**', '**/node_modules/**', '**/_legacy/**']) assert.ok(projectYml.includes(`"${p}"`), p);
+  // Real source lives in lib/ dirs too (detox-recovery/lib, recovery-api/src/lib): never ignore every lib.
+  assert.ok(!projectYml.includes('"**/lib/**"'), 'no blanket lib exclusion');
 });
 
 test('the global Serena config has no dashboard or GUI, no trusted projects, and pinned language servers', () => {
@@ -155,4 +157,11 @@ test('Serena tools reach the model only through the step output: no literal or w
   assert.doesNotMatch(allow, /mcp__[^,]*\*|(^|,)\*/, 'no tool-name wildcards');
   const tools = /echo "tools=([^"]+)"/.exec(setup)[1];
   assert.doesNotMatch(tools, /\*/, 'no wildcard in the Serena tool list');
+});
+
+test('the copy probes use a real source file from the copy, never a fixed path that may not exist', () => {
+  assert.doesNotMatch(setup, /package\.json/, 'the repo has no root package.json');
+  const find = at(`probe_file="$(sudo find "$SR_HOME/src" -type f -name '*.ts'`);
+  assert.ok(find < at('run_as touch "$probe_file"') && find < at('run_as test -r "$probe_file"'));
+  assert.ok(at('run_as test -r "$probe_file"') < at('project index "$SR_HOME/src"'));
 });

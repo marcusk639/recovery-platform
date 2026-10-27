@@ -169,14 +169,20 @@ jobs:
           if run_as ls "$RUNNER_TEMP" >/dev/null 2>&1; then
             echo "::error::serena-runner can list RUNNER_TEMP"; exit 1
           fi
-          if run_as touch "$SR_HOME/src/package.json" 2>/dev/null; then
+          # Probe with a real source file from the copy: the repo has no root manifest to rely on.
+          probe_file="$(sudo find "$SR_HOME/src" -type f -name '*.ts' -not -path '*/.serena/*' -print -quit)"
+          if [ -z "$probe_file" ]; then
+            echo "::warning::no TypeScript files in the source copy; reviewing without code navigation"
+            exit 0
+          fi
+          if run_as touch "$probe_file" 2>/dev/null; then
             echo "::error::serena-runner can write the source copy"; exit 1
           fi
           extra="$(run_as env | grep -cvE '^(HOME|PATH|SERENA_HOME)=' || true)"
           if [ "$extra" != "0" ]; then
             echo "::error::serena-runner environment is not empty"; exit 1
           fi
-          if ! run_as test -r "$SR_HOME/src/package.json"; then
+          if ! run_as test -r "$probe_file"; then
             echo "::warning::serena-runner cannot read the source copy; reviewing without code navigation"
             exit 0
           fi
