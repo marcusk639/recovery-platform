@@ -1,1 +1,2 @@
 Throwaway file for testing @claude commits. Delete with the PR.
+probe ok
