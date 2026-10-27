@@ -11,7 +11,7 @@ Two improvements to the advisory PR reviewer, keeping every invariant of the mai
 
 ## 2. Decisions
 
-- **The model still never posts.** Suggestions travel through `<OUT>/inline.json` and are posted by the model-free publish step, like today's inline comments (§7.7). A PR diff is untrusted text: a model with a posting tool can be steered by it to post anything.
+- **Findings are posted only by the model-free publish step.** Suggestions travel through `<OUT>/inline.json`, like today's inline comments (§7.7). By owner decision (2026-10-27), the model may also read the PR with `gh pr diff`/`gh pr view` and post one sanitized reply to a maintainer's direct question through a base-controlled wrapper (§4.5). A PR diff is untrusted text, so a model holding a posting command can be steered by it; §4.5 records the limits and the residual risk.
 - **No GitHub MCP server.** Everything it would provide (PR body, comments, diff, prior reviews) is precomputed by `facts.mjs` and filtered to owner/member/collaborator text. A GitHub MCP server would give the model a token in the model step, return unfiltered third-party text, and offer write tools. Missing PR data gets added to `facts.mjs` instead.
 - **Serena is opt-in per repository** through the Actions variable `PR_REVIEW_SERENA` (`on` / unset). It stays off until the measurement in §5 shows it pays.
 - **Serena runs isolated from every credential** (§3.2), because it starts language servers that parse files the PR controls.
@@ -31,14 +31,16 @@ Two improvements to the advisory PR reviewer, keeping every invariant of the mai
   - `language_servers: ["typescript"]`.
   - `ignored_paths` for build output and vendor code: `**/public/**`, `**/lib/**`, `**/dist/**`, `**/build/**`, `**/.next/**`, `**/_legacy/**`, `**/node_modules/**`.
 - **Defence in depth on the Claude side:** the Review step adds only `mcp__serena__find_symbol`, `mcp__serena__find_referencing_symbols`, `mcp__serena__get_symbols_overview` and `mcp__serena__search_for_pattern` to `--allowedTools`. `--strict-mcp-config` stays, and `--mcp-config` points to a file the workflow writes under `RUNNER_TEMP`, never to the PR's `.mcp.json`.
-- **Start command:** `serena start-mcp-server --context claude-code --project <workspace> --mode no-onboarding --mode no-memories --log-level WARNING`.
+- **Start command:** `serena start-mcp-server --context claude-code --project <source copy> --mode editing --log-level WARNING`, run as `serena-runner` (owner decision 2026-10-27; see §4.5).
+- **Review guidance reaches Claude through the connection prompt.** Serena's MCP server sends only its `connection_prompt` up front. Its system prompt, including the context prompt and the project's `initial_prompt`, arrives only through the `initial_instructions` tool, which the review does not allow, and the built-in `claude-code` context's prompt is written for editing sessions. So the base file `.claude/pr-review/serena/prompt_templates/prompt.yml` overrides `connection_prompt` with the review guidance, and the setup step installs it into `$SERENA_HOME/prompt_templates`, which Serena reads before its own templates. `initial_prompt` stays empty. Measured with 1.7.0: the instructions become the 2.7k-character review guidance instead of a pointer to `initial_instructions`.
+- **Startup headroom:** the Review step sets `MCP_TIMEOUT=60000`. Locally, Serena answers `initialize` in about 3 s with the full index.
 
 ### 3.2 Isolation
 
 Serena starts the TypeScript language server, which reads `tsconfig.json`, `package.json` and source files from the PR head. Treat it as running untrusted input. The Review step's environment holds the Claude OAuth token, and the action writes its app token into `.git/config`; neither may reach Serena or its children.
 
 - **Separate Unix user.** The setup step creates `serena-runner` (`sudo useradd`). Claude starts the MCP server through `sudo -n -u serena-runner env -i PATH=… HOME=… SERENA_HOME=… serena start-mcp-server …`, so the process gets an empty environment: no tokens, no `GITHUB_*`, no `ACTIONS_*`.
-- **No access to credentials on disk.** Before Review, `chmod 700` the workspace `.git/` and `RUNNER_TEMP`, which are owned by the runner user. `serena-runner` can read the checked-out source (world-readable) but not `.git/config`, `OUT`, the state snapshot or the runner's command files. `/proc/<pid>/environ` of the runner's processes is owner-only.
+- **No access to credentials on disk.** Before Review, `chmod 700` the workspace `.git/` and `RUNNER_TEMP`. This is load-bearing, not defence in depth: `sudo` keeps the caller's working directory, the workspace, and relative paths from there need no access to `/home/runner`. So every `serena-runner` process also starts in its own home (`env -i -C`), and probes check `.git/config` and `RUNNER_TEMP` by relative path from the workspace as well as by absolute path, which are owned by the runner user. `serena-runner` can read the checked-out source (world-readable) but not `.git/config`, `OUT`, the state snapshot or the runner's command files. `/proc/<pid>/environ` of the runner's processes is owner-only.
 - **No network.** `sudo iptables -A OUTPUT -m owner --uid-owner serena-runner -j REJECT` (and the `ip6tables` equivalent) blocks all egress for that user.
 - **Order matters.**
   1. Install Serena and warm up the language servers, with the network on, against a throwaway one-file project, never the PR.
@@ -47,10 +49,13 @@ Serena starts the TypeScript language server, which reads `tsconfig.json`, `pack
   4. Only then index the PR checkout.
 
   Any step that touches PR files runs with credentials hidden and egress blocked.
-- **Reachability.** `serena-runner` must be able to traverse to the workspace. The setup step checks it can read a tracked file. If it can't, it switches Serena off with a warning rather than widening permissions beyond `o+x` on the path components. The only workspace directory `serena-runner` may write is `.serena/`.
+- **Indexed copy, not the workspace.** As built, Serena indexes a root-owned copy of the tracked files at `/home/serena-runner/src`. The copy leaves out `.git/`, any `.serena/` from the PR, and build and vendor folders. `serena-runner` can write only the copy's `.serena/`, so it never needs a path into `/home/runner`, which stays unchanged. If the copy can't be read, the setup step switches Serena off with a warning.
 - **No survivors.** A step after Review (`if: always()`, before the publish checkout) runs `sudo pkill -KILL -u serena-runner` and checks that no `serena-runner` process remains. A process that outlived Review could otherwise tamper with `/tmp` or the publish checkout before the secret-bearing Publish step.
 - **Why not bubblewrap:** Ubuntu 24.04 runners restrict unprivileged user namespaces through AppArmor, so `bwrap` needs a sysctl change. A separate user plus an `iptables` owner rule needs no kernel changes.
-- **Failure is not fatal.** If Serena fails to start, Claude Code runs without the MCP server and the review proceeds with `Read`/`Grep`/`Glob`. The summary's limits line says "code navigation unavailable".
+- **The installer can't be steered by the PR.** `setup-uv` runs with a pinned `version`, `enable-cache: false` and `working-directory: .review-base`. Otherwise it reads the uv version and cache directory from the PR's `uv.toml`/`pyproject.toml`, and its post step uploads that path.
+- **The copy can't drift from base.** `.claude/pr-review/` is copied from the base checkout, not from the PR's file list (the working tree already holds the base copy, so PR-only files would be missing). Missing tracked paths are skipped (`--ignore-missing-args`). The review `project.yml` sets `ignore_all_files_in_gitignore: false`, so a PR's `.gitignore` can't hide tracked callers.
+- **Firewall placement:** the `iptables`/`ip6tables` rules are inserted first (`-I OUTPUT 1`). AF_UNIX sockets, such as systemd-resolved's D-Bus and varlink resolver API, are outside `iptables`; `serena-runner` holds no secrets and runs no PR code.
+- **Failure is not fatal.** If Serena fails to start, Claude Code runs without the MCP server and the review proceeds with `Read`/`Grep`/`Glob`. When `PR_REVIEW_SERENA` is on but setup produced no outputs, the Review prompt tells the reviewer to say "code navigation unavailable" under `## Not reviewed / limits`.
 
 ### 3.3 Index and speed
 
@@ -114,6 +119,18 @@ If only the suggestion fails, publish drops the suggestion, posts the comment wi
 - Offer a suggestion only when the fix is local to the commented lines and complete. No partial fixes, no "something like" code, and no suggestion that would need a matching change elsewhere (put that in the body).
 - Keep the replacement minimal and preserve the file's indentation.
 - One suggestion per finding.
+
+### 4.5 Direct PR comments (owner decision, 2026-10-27)
+
+The Review step allows `Bash(gh pr diff:*)`, `Bash(gh pr view:*)` and the exact command `Bash(node .review-base/.claude/pr-review/checks/reply.mjs)`, with no `:*`, so it takes no arguments. `Bash`, `NotebookEdit`, `WebFetch`, `WebSearch` and the inline-comment tool are no longer explicitly denied; tools missing from `--allowedTools` stay unavailable. Serena starts with `--mode editing`; `fixed_tools` and `read_only` still limit it to the four lookups.
+
+- **What the model may do:** `REVIEW.md` sends findings, inline comments and suggestions only through the OUT files, because only Publish keeps the ledger, keeps security findings private, redacts secrets and can retract comments. `gh pr view`/`gh pr diff` read this PR. A reply to a maintainer's direct question goes in `<OUT>/reply.md`, posted by `reply.mjs`.
+- **What `reply.mjs` enforces** (base-controlled code, the model can't change it):
+  - **Target:** repo and PR come from `$GITHUB_EVENT_PATH`; any argument is refused.
+  - **Source:** the body comes only from `<OUT>/reply.md`, which must be a regular file (not a symlink) of at most 4,000 bytes. So the model can't post a file it names. `gh pr comment --body-file .git/config` would have posted the app token; with the wrapper, the model's own file access, `Read` and its denies, bounds what can end up in a reply.
+  - **Content:** the text must start with `pr-review:` and contain no HTML comment or control characters. It is refused, not redacted, if `redact()` would change it, or if it names a security finding's slug or file (current `findings.json`, including class-forced security findings). The reply is refused until `findings.json` exists and is valid.
+  - **Limits:** one reply per run, through an exclusive lock in `$RUNNER_TEMP` claimed before posting. The posted comment ends with `<!-- pr-review:reply -->`, so Publish never mistakes it for the summary.
+- **Residual risk:** a prompt-injected run can still post one reply of its choosing to this PR, but only text that passes these checks. Prior security files from earlier runs (keyed `fileIds`) aren't checked, because the ID key is Publish-only.
 
 ## 5. Measurement and rollout
 

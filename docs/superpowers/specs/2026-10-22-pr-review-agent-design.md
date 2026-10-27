@@ -147,7 +147,7 @@ Pre-check failures must not fail the job. A broken script yields a "pre-check un
 ### 7.5 Review procedure (in `REVIEW.md`)
 
 1. Read the PR title, body and maintainers' comments (from `facts.md`), including Marcus's "Review round N" posts, and the ledger, inline fingerprints and acknowledged slugs in `state.json` (this bot's earlier summary is not repeated). Note what is already dispositioned.
-2. Read the facts file, then the diff for the tier: `<OUT>/pr.diff` or `<OUT>/increment.diff` (precomputed; the model has no shell).
+2. Read the facts file, then the diff for the tier: `<OUT>/pr.diff` or `<OUT>/increment.diff` (precomputed; the model has no `git`, and its only shell is `gh pr view/diff/comment`).
 3. **Cross-package pass:** for each link type touched, use the contract map to find the counterparts. Open them, compare shapes and strings, and record a break only with both sides cited.
 4. **Feature-impact pass:** name the user-facing features each changed area serves.
 5. **Repo-specific pass:** apply the routed checklist classes and the conventions, honouring `false-positives.md`.
@@ -160,10 +160,12 @@ Pre-check failures must not fail the job. A broken script yields a "pre-check un
 
 - `Read`, `Grep`, `Glob` over the repository and `OUT`. Reads of the workspace `.git/**` (the action writes its app token into `.git/config`) and of `//proc/**` are denied.
 - `Write` and `Edit` only under `OUT` (`Write(//<OUT>/**)`, `Edit(//<OUT>/**)`); both are denied anywhere in the workspace.
-- **No `Bash`.** The facts step precomputes the git material the model needs: `<OUT>/pr.diff`, `<OUT>/increment.diff` and `<OUT>/commits.txt`, plus `facts.md` and `state.json`.
-- No inline-comment tool and no comment-writing commands: the model proposes inline comments in `<OUT>/inline.json`.
+- **`Bash` only for `gh pr view`, `gh pr diff` and the exact reply command `node .review-base/.claude/pr-review/checks/reply.mjs`** (owner decision, 2026-10-27; see the addendum §4.5 for what the wrapper enforces). The facts step still precomputes the git material the model needs: `<OUT>/pr.diff`, `<OUT>/increment.diff` and `<OUT>/commits.txt`, plus `facts.md` and `state.json`.
+- No inline-comment tool: the model proposes inline comments in `<OUT>/inline.json`. `<OUT>/reply.md`, posted once per run by `reply.mjs`, is only for a direct reply to a maintainer's question, never for findings.
 
 No `WebFetch`/`WebSearch`, no package managers. The builder confirms in a real run that nothing posts as `permission_denied`. That was the old bot's silent failure.
+
+**Opt-in code navigation.** With the repository variable `PR_REVIEW_SERENA=on`, the reviewer also gets four read-only Serena tools (`find_symbol`, `find_referencing_symbols`, `get_symbols_overview`, `search_for_pattern`). Serena runs as a separate user with an empty environment, no network, and a root-owned copy of the tracked source, and every serena-runner process is killed before Publish. The design is in `2026-10-26-pr-review-serena-and-suggestions.md` §3.
 
 ### 7.7 Output
 
