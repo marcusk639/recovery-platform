@@ -48,8 +48,8 @@ test('model writes and edits are allowed only under OUT; workspace writes and ed
   assert.ok(!deny.includes('Edit'), 'no bare Edit deny (it would override the OUT allow rule)');
   assert.ok(deny.includes('Write(/${{ github.workspace }}/**)'));
   assert.ok(deny.includes('Edit(/${{ github.workspace }}/**)'));
-  assert.ok(!allow.includes('Bash'), 'Bash only as the gh pr comment/diff/view prefixes');
-  assert.deepEqual(allow.filter((t) => t.startsWith('Bash')), ['Bash(gh pr comment:*)', 'Bash(gh pr diff:*)', 'Bash(gh pr view:*)']);
+  assert.ok(!allow.includes('Bash'), 'Bash only as gh pr diff/view and the exact reply command');
+  assert.deepEqual(allow.filter((t) => t.startsWith('Bash')), ['Bash(gh pr diff:*)', 'Bash(gh pr view:*)', 'Bash(node .review-base/.claude/pr-review/checks/reply.mjs)']);
 });
 
 test('the model cannot write runner command files or the state snapshot', () => {

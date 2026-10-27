@@ -11,7 +11,7 @@ Two improvements to the advisory PR reviewer, keeping every invariant of the mai
 
 ## 2. Decisions
 
-- **Findings are posted only by the model-free publish step.** Suggestions travel through `<OUT>/inline.json`, like today's inline comments (§7.7). By owner decision (2026-10-27), the model may also run `gh pr comment`, `gh pr diff` and `gh pr view` for one narrow job, replying to a maintainer's direct question (§4.5). A PR diff is untrusted text, so a model holding a posting command can be steered by it; §4.5 records the limits and the residual risk.
+- **Findings are posted only by the model-free publish step.** Suggestions travel through `<OUT>/inline.json`, like today's inline comments (§7.7). By owner decision (2026-10-27), the model may also read the PR with `gh pr diff`/`gh pr view` and post one sanitized reply to a maintainer's direct question through a base-controlled wrapper (§4.5). A PR diff is untrusted text, so a model holding a posting command can be steered by it; §4.5 records the limits and the residual risk.
 - **No GitHub MCP server.** Everything it would provide (PR body, comments, diff, prior reviews) is precomputed by `facts.mjs` and filtered to owner/member/collaborator text. A GitHub MCP server would give the model a token in the model step, return unfiltered third-party text, and offer write tools. Missing PR data gets added to `facts.mjs` instead.
 - **Serena is opt-in per repository** through the Actions variable `PR_REVIEW_SERENA` (`on` / unset). It stays off until the measurement in §5 shows it pays.
 - **Serena runs isolated from every credential** (§3.2), because it starts language servers that parse files the PR controls.
@@ -31,7 +31,7 @@ Two improvements to the advisory PR reviewer, keeping every invariant of the mai
   - `language_servers: ["typescript"]`.
   - `ignored_paths` for build output and vendor code: `**/public/**`, `**/lib/**`, `**/dist/**`, `**/build/**`, `**/.next/**`, `**/_legacy/**`, `**/node_modules/**`.
 - **Defence in depth on the Claude side:** the Review step adds only `mcp__serena__find_symbol`, `mcp__serena__find_referencing_symbols`, `mcp__serena__get_symbols_overview` and `mcp__serena__search_for_pattern` to `--allowedTools`. `--strict-mcp-config` stays, and `--mcp-config` points to a file the workflow writes under `RUNNER_TEMP`, never to the PR's `.mcp.json`.
-- **Start command:** `serena start-mcp-server --context claude-code --project <workspace> --mode no-onboarding --mode no-memories --log-level WARNING`.
+- **Start command:** `serena start-mcp-server --context claude-code --project <source copy> --mode editing --log-level WARNING`, run as `serena-runner` (owner decision 2026-10-27; see §4.5).
 - **Review guidance reaches Claude through the connection prompt.** Serena's MCP server sends only its `connection_prompt` up front. Its system prompt, including the context prompt and the project's `initial_prompt`, arrives only through the `initial_instructions` tool, which the review does not allow, and the built-in `claude-code` context's prompt is written for editing sessions. So the base file `.claude/pr-review/serena/prompt_templates/prompt.yml` overrides `connection_prompt` with the review guidance, and the setup step installs it into `$SERENA_HOME/prompt_templates`, which Serena reads before its own templates. `initial_prompt` stays empty. Measured with 1.7.0: the instructions become the 2.7k-character review guidance instead of a pointer to `initial_instructions`.
 - **Startup headroom:** the Review step sets `MCP_TIMEOUT=60000`. Locally, Serena answers `initialize` in about 3 s with the full index.
 
@@ -122,13 +122,15 @@ If only the suggestion fails, publish drops the suggestion, posts the comment wi
 
 ### 4.5 Direct PR comments (owner decision, 2026-10-27)
 
-The Review step allows `Bash(gh pr comment:*)`, `Bash(gh pr diff:*)` and `Bash(gh pr view:*)`. `Bash`, `NotebookEdit`, `WebFetch`, `WebSearch` and the inline-comment tool are no longer explicitly denied; tools missing from `--allowedTools` stay unavailable. Serena starts with `--mode editing`; `fixed_tools` and `read_only` still limit it to the four lookups.
+The Review step allows `Bash(gh pr diff:*)`, `Bash(gh pr view:*)` and the exact command `Bash(node .review-base/.claude/pr-review/checks/reply.mjs)`, with no `:*`, so it takes no arguments. `Bash`, `NotebookEdit`, `WebFetch`, `WebSearch` and the inline-comment tool are no longer explicitly denied; tools missing from `--allowedTools` stay unavailable. Serena starts with `--mode editing`; `fixed_tools` and `read_only` still limit it to the four lookups.
 
-- **What `gh` is for:** `REVIEW.md` sends findings, inline comments and suggestions only through the OUT files, because only Publish keeps the ledger, keeps security findings private, redacts secrets and can retract comments. `gh pr view`/`gh pr diff` read this PR. `gh pr comment` may post at most one reply per run, to a question a maintainer (owner, member, collaborator) asked the reviewer directly. The reply contains no findings, security detail, secrets or PII, and is always `gh pr comment <PR> --body "<text>"`.
-- **Residual risk:** these limits are instructions, not enforcement.
-  - **Credential leak:** permission rules match command prefixes only, so `gh pr comment --body-file <file>` is also allowed. A prompt-injected run could post `.git/config`, where the action writes its app token, or other runner-readable files. `Read`'s denies don't cover `gh`.
-  - **Bypassing Publish:** an injected run can post anything else with the job's token, outside the ledger, the redaction and the post-hoc guard.
-  - **Enforcement:** removing the risk needs enforcement in code. Either drop `gh pr comment`, or replace it with a base-controlled wrapper that takes the body from `<OUT>` and applies Publish's redaction and security guard.
+- **What the model may do:** `REVIEW.md` sends findings, inline comments and suggestions only through the OUT files, because only Publish keeps the ledger, keeps security findings private, redacts secrets and can retract comments. `gh pr view`/`gh pr diff` read this PR. A reply to a maintainer's direct question goes in `<OUT>/reply.md`, posted by `reply.mjs`.
+- **What `reply.mjs` enforces** (base-controlled code, the model can't change it):
+  - **Target:** repo and PR come from `$GITHUB_EVENT_PATH`; any argument is refused.
+  - **Source:** the body comes only from `<OUT>/reply.md`, which must be a regular file (not a symlink) of at most 4,000 bytes. So the model can't post a file it names. `gh pr comment --body-file .git/config` would have posted the app token; with the wrapper, the model's own file access, `Read` and its denies, bounds what can end up in a reply.
+  - **Content:** the text must start with `pr-review:` and contain no HTML comment or control characters. It is refused, not redacted, if `redact()` would change it, or if it names a security finding's slug or file (current `findings.json`, including class-forced security findings). The reply is refused until `findings.json` exists and is valid.
+  - **Limits:** one reply per run, through an exclusive lock in `$RUNNER_TEMP` claimed before posting. The posted comment ends with `<!-- pr-review:reply -->`, so Publish never mistakes it for the summary.
+- **Residual risk:** a prompt-injected run can still post one reply of its choosing to this PR, but only text that passes these checks. Prior security files from earlier runs (keyed `fileIds`) aren't checked, because the ID key is Publish-only.
 
 ## 5. Measurement and rollout
 

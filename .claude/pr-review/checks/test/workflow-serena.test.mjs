@@ -41,7 +41,7 @@ test('with Serena off, the model arguments and prompt are exactly the pre-Serena
   const allow = /--allowedTools "([^"]+)"/.exec(review)[1];
   assert.equal(
     allow.replace('${{ steps.serena.outputs.tools }}', ''),
-    'Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Grep,Glob,Write(/${{ runner.temp }}/pr-review/**),Edit(/${{ runner.temp }}/pr-review/**)',
+    'Bash(gh pr diff:*),Bash(gh pr view:*),Bash(node .review-base/.claude/pr-review/checks/reply.mjs),Read,Grep,Glob,Write(/${{ runner.temp }}/pr-review/**),Edit(/${{ runner.temp }}/pr-review/**)',
   );
   assert.ok(allow.includes(',${{ steps.serena.outputs.tools }}Read,'), 'Serena tools are inserted only before Read');
   const serenaRefs = [...review.matchAll(/\$\{\{\s*steps\.serena\.outputs\.(\w+)\s*\}\}/g)].map((m) => m[1]).sort();

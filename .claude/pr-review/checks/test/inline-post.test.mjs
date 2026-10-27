@@ -171,14 +171,15 @@ test('on a failed run inline.json is not posted and this-run unmarked github-act
   assert.match(summary, /review did not complete/);
 });
 
-test('the model has no inline-comment tool, and its only shell is gh pr comment/diff/view', () => {
+test('the model has no inline-comment tool, and its only shell is gh pr diff/view and the reply wrapper', () => {
   const wf = readFileSync(WORKFLOW, 'utf8');
   const allow = /--allowedTools "([^"]+)"/.exec(wf)?.[1].split(',') ?? [];
   const deny = /--disallowedTools "([^"]+)"/.exec(wf)?.[1].split(',') ?? [];
   assert.ok(!allow.some((t) => t.includes('inline_comment')), 'inline-comment tool is not allowed');
   assert.ok(!allow.includes('Bash'), 'no bare Bash');
-  assert.deepEqual(allow.filter((t) => t.startsWith('Bash')), ['Bash(gh pr comment:*)', 'Bash(gh pr diff:*)', 'Bash(gh pr view:*)']);
-  assert.ok(!deny.includes('Bash'), 'Bash is not blanket-denied: the gh prefixes above are allowed');
+  assert.deepEqual(allow.filter((t) => t.startsWith('Bash')), ['Bash(gh pr diff:*)', 'Bash(gh pr view:*)', 'Bash(node .review-base/.claude/pr-review/checks/reply.mjs)']);
+  assert.ok(!deny.includes('Bash'), 'Bash is not blanket-denied: the rules above are allowed');
+  assert.ok(!allow.some((t) => t.includes('gh pr comment')), 'no gh pr comment: --body-file could post any file');
   const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../publish.mjs'), 'utf8');
   assert.match(src, /inlineText: fromOut\('inline\.json'\)/, 'publish reads the model\'s inline.json from OUT');
 });

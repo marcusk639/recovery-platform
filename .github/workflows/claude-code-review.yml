@@ -258,8 +258,11 @@ jobs:
           prompt: |
             Follow .claude/pr-review/REVIEW.md. OUT=${{ runner.temp }}/pr-review. Base ${{ github.event.pull_request.base.sha }}, head ${{ github.event.pull_request.head.sha }}. Ignore the .review-base/ and .review-publish/ directories.
             ${{ steps.serena.outputs.prompt }}${{ vars.PR_REVIEW_SERENA == 'on' && steps.facts.outputs.tier != 'none' && steps.serena.outputs.prompt == '' && 'Code navigation (Serena) was enabled for this run but did not start: say "code navigation unavailable" under ## Not reviewed / limits.' || '' }}
-          # The only shell is gh pr comment/diff/view (owner decision); facts still writes the diff
-          # and commit list into OUT.
+          # The only shell is gh pr diff/view (reading) and the exact reply command (owner decision):
+          # reply.mjs, from the base checkout and with no arguments, posts at most one sanitized
+          # comment from OUT/reply.md. A gh pr comment prefix rule would also have allowed
+          # --body-file, i.e. posting any runner-readable file (.git/config holds the app token).
+          # Facts still writes the diff and commit list into OUT.
           # Write/Edit are allowed only under OUT (absolute-path rules, "//"
           # prefix) and denied anywhere in the workspace, so .git/, .claude/ and
           # the publish checkout path stay out of reach. Reads of the workspace
@@ -278,7 +281,7 @@ jobs:
             --strict-mcp-config
             --add-dir ${{ runner.temp }}/pr-review
             ${{ steps.serena.outputs.mcp_args }}
-            --allowedTools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),${{ steps.serena.outputs.tools }}Read,Grep,Glob,Write(/${{ runner.temp }}/pr-review/**),Edit(/${{ runner.temp }}/pr-review/**)"
+            --allowedTools "Bash(gh pr diff:*),Bash(gh pr view:*),Bash(node .review-base/.claude/pr-review/checks/reply.mjs),${{ steps.serena.outputs.tools }}Read,Grep,Glob,Write(/${{ runner.temp }}/pr-review/**),Edit(/${{ runner.temp }}/pr-review/**)"
             --disallowedTools "MultiEdit,Write(/${{ github.workspace }}/**),Edit(/${{ github.workspace }}/**),Read(//proc/**),Read(/${{ github.workspace }}/.git/**),Write(/${{ runner.temp }}/_runner_file_commands/**),Edit(/${{ runner.temp }}/_runner_file_commands/**),Write(/${{ runner.temp }}/prstate-snapshot/**),Edit(/${{ runner.temp }}/prstate-snapshot/**)"
 
       # No serena-runner process may outlive the review: one could tamper with the
