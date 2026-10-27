@@ -1,0 +1,248 @@
+import { FieldValue } from 'firebase-admin/firestore';
+// In-memory stand-in for the slice of the Admin SDK that the week-summary
+// code uses: doc get, where/orderBy/get queries, and runTransaction with
+// tx.get / tx.set. Nothing here can reach a real project.
+//
+// Transactions buffer writes and apply them on commit, so a test can make a
+// transaction fail (failTransactions) and see that nothing was written.
+
+type Data = Record<string, any>;
+
+const comparable = (v: unknown): unknown => {
+  if (v instanceof Date) return v.getTime();
+  if (v && typeof (v as { toMillis?: unknown }).toMillis === 'function') {
+    return (v as { toMillis: () => number }).toMillis();
+  }
+  return v;
+};
+
+const OPS: Record<string, (a: any, b: any) => boolean> = {
+  '==': (a, b) => a === b,
+  '>=': (a, b) => a >= b,
+  '>': (a, b) => a > b,
+  '<': (a, b) => a < b,
+  '<=': (a, b) => a <= b,
+};
+
+const isDelete = (v: unknown) =>
+  !!v &&
+  typeof (v as { isEqual?: unknown }).isEqual === 'function' &&
+  (v as { isEqual: (o: unknown) => boolean }).isEqual(FieldValue.delete());
+
+/** Deep-copies plain objects only, so Timestamps keep their prototype. */
+function clonePlain(v: any): any {
+  if (!v || typeof v !== 'object' || Object.getPrototypeOf(v) !== Object.prototype) return v;
+  return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, clonePlain(x)]));
+}
+
+function applyPath(doc: Data, path: string, value: unknown) {
+  const parts = path.split('.');
+  let cur: Data = doc;
+  for (const p of parts.slice(0, -1)) {
+    if (!cur[p] || typeof cur[p] !== 'object') cur[p] = {};
+    cur = cur[p];
+  }
+  const last = parts[parts.length - 1];
+  if (isDelete(value)) delete cur[last];
+  else cur[last] = value;
+}
+
+export class FakeFirestore {
+  readonly collections = new Map<string, Map<string, Data>>();
+  readonly writes: Array<{ collection: string; id: string; data: Data }> = [];
+  transactions = 0;
+  /** "collection/id" -> error thrown by the next create() of that doc. */
+  readonly failCreates = new Map<string, Error>();
+  readOnlyTransactions = 0;
+  readonly queries: Array<{ collection: string; spec: unknown }> = [];
+  /** Number of upcoming transactions that should throw instead of committing. */
+  failTransactions = 0;
+  failWith: Error = Object.assign(new Error('unavailable'), { code: 14 });
+
+  private col(name: string): Map<string, Data> {
+    let c = this.collections.get(name);
+    if (!c) {
+      c = new Map();
+      this.collections.set(name, c);
+    }
+    return c;
+  }
+
+  /** "collection/id" -> the document's createTime in ms (query docs expose it). */
+  readonly createTimes = new Map<string, number>();
+
+  seed(collection: string, id: string, data: Data, createTimeMs?: number): void {
+    this.col(collection).set(id, data);
+    if (createTimeMs !== undefined) this.createTimes.set(`${collection}/${id}`, createTimeMs);
+  }
+
+  read(collection: string, id: string): Data | undefined {
+    return this.col(collection).get(id);
+  }
+
+  collection(name: string) {
+    return new FakeQuery(this, name);
+  }
+
+  docRef(collection: string, id: string) {
+    const db = this;
+    return {
+      id,
+      colName: collection,
+      /** A subcollection, stored as the collection "parent/id/sub". */
+      collection(sub: string) {
+        return new FakeQuery(db, `${collection}/${id}/${sub}`);
+      },
+      /** Like the Admin SDK: fails with ALREADY_EXISTS (6) if the doc exists. */
+      async create(data: Data) {
+        const injected = db.failCreates.get(`${collection}/${id}`);
+        if (injected) {
+          db.failCreates.delete(`${collection}/${id}`);
+          throw injected;
+        }
+        if (db.col(collection).has(id)) {
+          throw Object.assign(new Error('already exists'), { code: 6 });
+        }
+        db.col(collection).set(id, data);
+        db.writes.push({ collection, id, data });
+      },
+      async get() {
+        const data = db.col(collection).get(id);
+        return { exists: data !== undefined, id, data: () => data };
+      },
+      /** Dotted field paths; fails with NOT_FOUND (5) if the doc is missing. */
+      async update(data: Data) {
+        const current = db.col(collection).get(id);
+        if (!current) throw Object.assign(new Error('no document to update'), { code: 5 });
+        const next = clonePlain(current);
+        for (const [p, v] of Object.entries(data)) applyPath(next, p, v);
+        db.col(collection).set(id, next);
+        db.writes.push({ collection, id, data });
+      },
+    };
+  }
+
+  runQuery(collection: string, spec: QuerySpec) {
+    let entries = [...this.col(collection).entries()].filter(([, data]) =>
+      spec.filters.every(([field, op, value]) =>
+        OPS[op](comparable(data[field]), comparable(value)),
+      ),
+    );
+    if (spec.order) {
+      const [field, dir] = spec.order;
+      const sign = dir === 'desc' ? -1 : 1;
+      entries.sort(([ia, a], [ib, b]) => {
+        const x = comparable(a[field]) as any;
+        const y = comparable(b[field]) as any;
+        return x === y ? ia.localeCompare(ib) : x < y ? -sign : sign;
+      });
+    }
+    if (spec.afterId !== undefined) {
+      entries = entries.slice(entries.findIndex(([id]) => id === spec.afterId) + 1);
+    }
+    if (spec.limit !== undefined) entries = entries.slice(0, spec.limit);
+    this.queries.push({ collection, spec });
+    const docs = entries.map(([id, data]) => ({
+      id,
+      createTime: this.createTimes.has(`${collection}/${id}`)
+        ? { toMillis: () => this.createTimes.get(`${collection}/${id}`)! }
+        : undefined,
+      data: () => data,
+      ref: this.docRef(collection, id),
+    }));
+    return { docs, empty: docs.length === 0, size: docs.length };
+  }
+
+  async runTransaction<T>(
+    fn: (tx: any) => Promise<T>,
+    options?: { readOnly?: boolean },
+  ): Promise<T> {
+    this.transactions++;
+    if (options?.readOnly) this.readOnlyTransactions++;
+    const staged: Array<{ collection: string; id: string; data: Data; update?: boolean }> = [];
+    const tx = {
+      get: (target: { get: () => Promise<unknown> }) => target.get(),
+      set: (ref: { colName: string; id: string }, data: Data) => {
+        // The real SDK rejects writes in a read-only transaction.
+        if (options?.readOnly) throw new Error('write in a read-only transaction');
+        staged.push({ collection: ref.colName, id: ref.id, data });
+      },
+      /** Like the Admin SDK: the transaction fails with ALREADY_EXISTS (6) if the doc exists. */
+      create: (ref: { colName: string; id: string }, data: Data) => {
+        if (options?.readOnly) throw new Error('write in a read-only transaction');
+        if (this.col(ref.colName).has(ref.id)) {
+          throw Object.assign(new Error('already exists'), { code: 6 });
+        }
+        staged.push({ collection: ref.colName, id: ref.id, data });
+      },
+      /** Dotted field paths; FieldValue.delete() removes the field. */
+      update: (ref: { colName: string; id: string }, data: Data) => {
+        if (options?.readOnly) throw new Error('write in a read-only transaction');
+        if (!this.col(ref.colName).has(ref.id)) {
+          throw Object.assign(new Error('no document to update'), { code: 5 });
+        }
+        staged.push({ collection: ref.colName, id: ref.id, data, update: true });
+      },
+    };
+    const result = await fn(tx);
+    if (this.failTransactions > 0) {
+      this.failTransactions--;
+      throw this.failWith;
+    }
+    for (const w of staged) {
+      if (w.update) {
+        const doc = clonePlain(this.col(w.collection).get(w.id) ?? {});
+        for (const [path, value] of Object.entries(w.data)) applyPath(doc, path, value);
+        this.col(w.collection).set(w.id, doc);
+      } else {
+        this.col(w.collection).set(w.id, w.data);
+      }
+      this.writes.push(w);
+    }
+    return result;
+  }
+}
+
+interface QuerySpec {
+  filters: Array<[string, string, unknown]>;
+  order?: [string, string];
+  limit?: number;
+  afterId?: string;
+}
+
+class FakeQuery {
+  constructor(
+    private readonly db: FakeFirestore,
+    private readonly name: string,
+    private readonly spec: QuerySpec = { filters: [] },
+  ) {}
+
+  doc(id: string) {
+    return this.db.docRef(this.name, id);
+  }
+
+  where(field: string, op: string, value: unknown) {
+    return new FakeQuery(this.db, this.name, {
+      ...this.spec,
+      filters: [...this.spec.filters, [field, op, value]],
+    });
+  }
+
+  orderBy(field: string, dir = 'asc') {
+    return new FakeQuery(this.db, this.name, { ...this.spec, order: [field, dir] });
+  }
+
+  limit(n: number) {
+    return new FakeQuery(this.db, this.name, { ...this.spec, limit: n });
+  }
+
+  startAfter(doc: { id: string }) {
+    return new FakeQuery(this.db, this.name, { ...this.spec, afterId: doc.id });
+  }
+
+  async get() {
+    return this.db.runQuery(this.name, this.spec);
+  }
+}
+
+export const asFirestore = (db: FakeFirestore) => db as unknown as FirebaseFirestore.Firestore;

@@ -9,6 +9,7 @@
 import { renderHook, act } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import { useBaseActivityScreen } from '../useBaseActivityScreen';
+import * as activityService from '../../services/activity';
 import { ActivityType, ActivityStatus } from '../../entities/ActivityModel';
 import { ActivityFilterFormValues } from '../../screens/Activity/ActivityFilterForm';
 
@@ -59,7 +60,7 @@ function makeActivity(overrides: Record<string, any> = {}) {
     type: ActivityType.CHORE,
     timestamp: new Date().toISOString(),
     loggedAt: new Date().toISOString(),
-    loggedBy: 'user-1',
+    loggedBy: 'resident-1',
     verified: false,
     status: ActivityStatus.ACTIVE,
     data: { type: 'chore', choreType: 'daily', choreName: 'Kitchen' },
@@ -87,9 +88,11 @@ function makeDispute(overrides: Record<string, any> = {}) {
   };
 }
 
+// The activities' resident is 'resident-1'; the viewer (mockUser, 'user-1')
+// is a housemate, so DISPUTE is offered unless a test says otherwise.
 const mockGuest = {
   id: 'guest-1',
-  userId: 'user-1',
+  userId: 'resident-1',
   firstName: 'Alice',
   lastName: 'Smith',
 };
@@ -371,6 +374,14 @@ describe('useBaseActivityScreen', () => {
       expect(result.current.activityIsDisputable(activity)).toBe(true);
     });
 
+    it.each([ActivityStatus.DISPUTED, ActivityStatus.RESOLVED, ActivityStatus.DELETED])(
+      'returns false for a %s activity (only ACTIVE can be disputed)',
+      status => {
+        const { result } = renderHook(() => useBaseActivityScreen(makeProps()));
+        expect(result.current.activityIsDisputable(makeActivity({ status }) as any)).toBe(false);
+      },
+    );
+
     it('returns true for WORK type (disputable)', () => {
       const { result } = renderHook(() => useBaseActivityScreen(makeProps()));
       const activity = makeActivity({ type: ActivityType.WORK, disputeResult: 'none' });
@@ -443,7 +454,9 @@ describe('useBaseActivityScreen', () => {
       });
 
       expect(returnValue).toBe(true);
-      expect(mockMutateAsync).toHaveBeenCalled();
+      // The activity write is the whole client side of a dispute.
+      expect(activityService.disputeActivity).toHaveBeenCalledWith(activity.id, 'I dispute this', mockUser.id);
+      expect(mockMutateAsync).not.toHaveBeenCalled();
     });
 
     it('dismisses modal after successful submission', async () => {
@@ -463,7 +476,8 @@ describe('useBaseActivityScreen', () => {
     });
 
     it('returns false and sets error when an exception occurs', async () => {
-      mockMutateAsync.mockRejectedValueOnce(new Error('Network error'));
+      (activityService.disputeActivity as jest.Mock).mockRejectedValueOnce(new Error('Network error'));
+      jest.spyOn(Alert, 'alert').mockImplementation(() => undefined as any);
 
       const activity = makeActivity({ underDispute: 0, disputeResult: 'none' });
       const { result } = renderHook(() =>
@@ -531,14 +545,13 @@ describe('useBaseActivityScreen', () => {
   // ── getLeftButtonProps ─────────────────────────────────────────────────────
 
   describe('getLeftButtonProps', () => {
-    it('returns confirmButtonProps for a disputable activity without admin token', () => {
-      const activity = makeActivity({ type: ActivityType.CHORE, disputeResult: 'none', underDispute: 1 });
+    it('hides CHALLENGE DISPUTE until the follow-up PR (it could only fail now)', () => {
       const { result } = renderHook(() => useBaseActivityScreen(makeProps()));
 
-      const props = result.current.getLeftButtonProps(activity);
-
-      expect(props).toBeDefined();
-      expect(props.title).toBe('CHALLENGE DISPUTE');
+      for (const status of [ActivityStatus.ACTIVE, ActivityStatus.DISPUTED]) {
+        const activity = makeActivity({ type: ActivityType.CHORE, disputeResult: 'none', underDispute: 1, status });
+        expect(result.current.getLeftButtonProps(activity as any)).toBeUndefined();
+      }
     });
 
     it('returns verify button for admin on unverified activity (non-disputes view)', () => {
@@ -552,10 +565,11 @@ describe('useBaseActivityScreen', () => {
       expect(props.title).toBe('VERIFY');
     });
 
-    it('returns allow button for admin in disputes-only view', () => {
+    it('returns the APPROVE button for an admin in the disputes-only view', () => {
       const dispute = makeDispute();
       const activity = makeActivity({
         type: ActivityType.CHORE,
+        status: ActivityStatus.DISPUTED,
         disputeResult: 'none',
         underDispute: 1,
         disputeId: 'dispute-1',
@@ -567,7 +581,7 @@ describe('useBaseActivityScreen', () => {
 
       const props = result.current.getLeftButtonProps(activity, true, adminToken);
 
-      expect(props?.title).toBe('ALLOW');
+      expect(props?.title).toBe('APPROVE');
     });
 
     it('returns undefined for non-disputable activity without admin token', () => {
@@ -593,10 +607,11 @@ describe('useBaseActivityScreen', () => {
       expect(props.title).toBe('DISPUTE');
     });
 
-    it('returns override button for admin in disputes-only view', () => {
+    it('returns the REJECT button for an admin in the disputes-only view', () => {
       const dispute = makeDispute();
       const activity = makeActivity({
         type: ActivityType.CHORE,
+        status: ActivityStatus.DISPUTED,
         disputeResult: 'none',
         underDispute: 1,
         disputeId: 'dispute-1',
@@ -608,7 +623,7 @@ describe('useBaseActivityScreen', () => {
 
       const props = result.current.getRightButtonProps(activity, true, adminToken);
 
-      expect(props?.title).toBe('OVERRIDE');
+      expect(props?.title).toBe('REJECT');
     });
 
     it('returns undefined for a non-disputable activity', () => {
@@ -621,37 +636,184 @@ describe('useBaseActivityScreen', () => {
     });
   });
 
-  // ── overturnDispute / allowDispute (Alert.alert) ───────────────────────────
+  // ── approveDispute / rejectDispute (owner decision) ────────────────────────
 
-  describe('overturnDispute and allowDispute', () => {
-    it('shows an Alert.alert when overturnDispute is called', () => {
+  describe('dispute model wiring (owner decision)', () => {
+    const press = (alertSpy: jest.SpyInstance, text: string) => {
+      const buttons = alertSpy.mock.calls[0][2] as Array<{ text: string; onPress: () => unknown }>;
+      return buttons.find(b => b.text === text)!.onPress();
+    };
+    const adminToken = { role: { [mockHouse.id]: 'admin' } } as any;
+
+    it('APPROVE approves the dispute and writes only the activity (the server archives house.disputes)', async () => {
       const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined as any);
-      const dispute = makeDispute();
-      const props = makeProps({ disputes: { 'dispute-1': dispute } });
-      const { result } = renderHook(() => useBaseActivityScreen(props));
+      const dispute = makeDispute({ activityId: 'act-1' });
+      const { result } = renderHook(() =>
+        useBaseActivityScreen(makeProps({ disputes: { 'dispute-1': dispute } })),
+      );
 
-      act(() => { result.current.overturnDispute(dispute); });
+      act(() => { result.current.approveDispute(makeActivity({ id: 'act-1', status: 'disputed' }) as any); });
+      await act(async () => { await press(alertSpy, 'Approve'); });
+
+      expect(activityService.resolveDispute).toHaveBeenCalledWith('act-1', mockUser.id, 'approve');
+      expect(mockMutateAsync).not.toHaveBeenCalled();
+      alertSpy.mockRestore();
+    });
+
+    it('REJECT rejects the dispute (the activity stands and counts)', async () => {
+      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined as any);
+      const { result } = renderHook(() => useBaseActivityScreen(makeProps()));
+
+      act(() => { result.current.rejectDispute(makeActivity({ id: 'act-2', status: 'disputed' }) as any); });
+      await act(async () => { await press(alertSpy, 'Reject'); });
+
+      expect(activityService.resolveDispute).toHaveBeenCalledWith('act-2', mockUser.id, 'reject');
+      expect(mockMutateAsync).not.toHaveBeenCalled();
+      alertSpy.mockRestore();
+    });
+
+    it('a dispute writes only the activity (the server mirrors and notifies)', async () => {
+      const { result } = renderHook(() => useBaseActivityScreen(makeProps()));
+
+      await act(async () => {
+        await result.current.disputeActivity(
+          makeActivity({ id: 'act-3', guestId: 'guest-1' }) as any,
+          'Not done',
+        );
+      });
+
+      expect(activityService.disputeActivity).toHaveBeenCalledWith('act-3', 'Not done', mockUser.id);
+      expect(mockMutateAsync).not.toHaveBeenCalled();
+    });
+
+    it('APPROVE is enabled for any pending dispute, without legacy underDispute/disputeId', () => {
+      const { result } = renderHook(() => useBaseActivityScreen(makeProps()));
+      const approve = result.current.getLeftButtonProps(
+        makeActivity({ status: 'disputed', underDispute: undefined, disputeId: undefined }) as any,
+        true,
+        adminToken,
+      );
+      expect(approve.title).toBe('APPROVE');
+      expect(approve.disabled).toBe(false);
+    });
+
+    it('shows a message when resolving fails', async () => {
+      (activityService.resolveDispute as jest.Mock).mockRejectedValueOnce(new Error('denied'));
+      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined as any);
+      const { result } = renderHook(() => useBaseActivityScreen(makeProps()));
+
+      act(() => { result.current.approveDispute(makeActivity({ status: 'disputed' }) as any); });
+      await act(async () => { await press(alertSpy, 'Approve'); });
+
+      expect(alertSpy).toHaveBeenLastCalledWith(
+        'Approval not saved',
+        'We could not resolve this dispute. Please try again.',
+      );
+      alertSpy.mockRestore();
+    });
+  });
+
+  describe('resolve refusals are shown to the admin', () => {
+    it.each([
+      ['Dispute already resolved', 'Dispute already resolved', 'Another admin has already resolved this dispute.'],
+      ['Activity is not disputed', 'Not disputed', 'This activity is not disputed anymore, so there is nothing to resolve.'],
+    ])('"%s" shows its specific message', async (error, title, message) => {
+      (activityService.resolveDispute as jest.Mock).mockRejectedValueOnce(new Error(error));
+      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined as any);
+      const { result } = renderHook(() => useBaseActivityScreen(makeProps()));
+
+      act(() => { result.current.rejectDispute(makeActivity({ status: 'disputed' }) as any); });
+      const buttons = alertSpy.mock.calls[0][2] as Array<{ text: string; onPress: () => unknown }>;
+      await act(async () => { await buttons.find(b => b.text === 'Reject')!.onPress(); });
+
+      expect(alertSpy).toHaveBeenLastCalledWith(title, message);
+      alertSpy.mockRestore();
+    });
+  });
+
+  describe('owner rule: no DISPUTE on your own activity', () => {
+    it("hides DISPUTE on an activity of the viewer's own guest (an admin logged it for them)", () => {
+      const props = makeProps({ guests: { 'guest-1': { ...mockGuest, userId: mockUser.id } } });
+      const { result } = renderHook(() => useBaseActivityScreen(props));
+      const activity = makeActivity({ loggedBy: 'admin-9' }) as any;
+
+      expect(result.current.activityIsDisputable(activity)).toBe(false);
+      expect(result.current.getRightButtonProps(activity)).toBeUndefined();
+    });
+
+    it('hides DISPUTE on an activity the viewer logged (e.g. an admin logging for a resident)', () => {
+      const { result } = renderHook(() => useBaseActivityScreen(makeProps()));
+      const activity = makeActivity({ loggedBy: mockUser.id }) as any;
+
+      expect(result.current.activityIsDisputable(activity)).toBe(false);
+      expect(result.current.getRightButtonProps(activity)).toBeUndefined();
+    });
+
+    it("offers DISPUTE on a housemate's activity", () => {
+      const { result } = renderHook(() => useBaseActivityScreen(makeProps()));
+      const activity = makeActivity() as any;
+
+      expect(result.current.activityIsDisputable(activity)).toBe(true);
+      expect(result.current.getRightButtonProps(activity)?.title).toBe('DISPUTE');
+    });
+  });
+
+  describe('who sees which dispute button', () => {
+    const adminToken = { role: { [mockHouse.id]: 'admin' } } as any;
+    const ownerToken = { role: { [mockHouse.id]: 'superAdmin' } } as any;
+    const residentToken = { role: { [mockHouse.id]: 'guest' } } as any;
+
+    it.each([ActivityStatus.DISPUTED, ActivityStatus.RESOLVED, ActivityStatus.DELETED])(
+      'does not offer DISPUTE on a %s activity',
+      status => {
+        const { result } = renderHook(() => useBaseActivityScreen(makeProps()));
+        const props = result.current.getRightButtonProps(makeActivity({ status }) as any, false, residentToken);
+        expect(props?.title).not.toBe('DISPUTE');
+      },
+    );
+
+    it('never shows APPROVE or REJECT to a resident, even on the Disputes screen', () => {
+      const { result } = renderHook(() => useBaseActivityScreen(makeProps()));
+      const pending = makeActivity({ status: 'disputed' }) as any;
+      expect(result.current.getLeftButtonProps(pending, true, residentToken)?.title).not.toBe('APPROVE');
+      expect(result.current.getRightButtonProps(pending, true, residentToken)?.title).not.toBe('REJECT');
+    });
+
+    it('shows APPROVE and REJECT to managers/peer leaders (admin) and owners (superAdmin)', () => {
+      const { result } = renderHook(() => useBaseActivityScreen(makeProps()));
+      const pending = makeActivity({ status: 'disputed' }) as any;
+      for (const token of [adminToken, ownerToken]) {
+        expect(result.current.getLeftButtonProps(pending, true, token)?.title).toBe('APPROVE');
+        expect(result.current.getRightButtonProps(pending, true, token)?.title).toBe('REJECT');
+      }
+    });
+  });
+
+  describe('rejectDispute and approveDispute', () => {
+    it('shows a confirm dialog when rejectDispute is called', () => {
+      const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined as any);
+      const { result } = renderHook(() => useBaseActivityScreen(makeProps()));
+
+      act(() => { result.current.rejectDispute(makeActivity({ status: 'disputed' }) as any); });
 
       expect(alertSpy).toHaveBeenCalledWith(
-        'Confirm Override',
-        'Are you sure you want to override this dispute?',
+        'Reject dispute?',
+        'The activity stands and keeps counting toward the weekly numbers.',
         expect.any(Array),
       );
 
       alertSpy.mockRestore();
     });
 
-    it('shows an Alert.alert when allowDispute is called', () => {
+    it('shows a confirm dialog when approveDispute is called', () => {
       const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined as any);
-      const dispute = makeDispute();
-      const props = makeProps({ disputes: { 'dispute-1': dispute } });
-      const { result } = renderHook(() => useBaseActivityScreen(props));
+      const { result } = renderHook(() => useBaseActivityScreen(makeProps()));
 
-      act(() => { result.current.allowDispute(dispute); });
+      act(() => { result.current.approveDispute(makeActivity({ status: 'disputed' }) as any); });
 
       expect(alertSpy).toHaveBeenCalledWith(
-        'Confirm Allowance',
-        'Are you sure you want to allow this dispute?',
+        'Approve dispute?',
+        'The activity will be marked "Successfully disputed": the residents of the house report it was not completed. It stops counting and stays on record (it is never deleted).',
         expect.any(Array),
       );
 

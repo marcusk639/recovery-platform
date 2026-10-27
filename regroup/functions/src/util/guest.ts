@@ -59,11 +59,16 @@ export async function advanceGuestWeek(
   const nextWeekEnd = nextWeekEndDate.toISOString().split("T")[0];
   const currentMonday = getCurrentWeekStart();
 
+  const summaryRef = weekSummariesCollection.doc(nextWeekId);
+
   return ratsFirestore.runTransaction(async (transaction) => {
     const currentDoc = await transaction.get(guestRef);
     if (!currentDoc.exists) {
       throw new Error(`Guest ${guest.id} no longer exists`);
     }
+    // Read before any write (transaction rule). The onActivityWritten trigger
+    // may already have created and filled this week's summary.
+    const summarySnap = await transaction.get(summaryRef);
 
     const currentGuest = currentDoc.data() as Guest;
 
@@ -80,9 +85,11 @@ export async function advanceGuestWeek(
       lastUpdated: new Date().toISOString(),
     });
 
-    // Pre-create empty week-summary document for the new week
-    const summaryRef = weekSummariesCollection.doc(nextWeekId);
-    transaction.set(
+    // Pre-create an empty week-summary document for the new week, ONLY if it
+    // does not exist. This used to be set(..., { merge: true }) with zeroed
+    // stats, which wiped the numbers the onActivityWritten trigger had already
+    // recorded for an in-progress week. The trigger owns the counts.
+    if (!summarySnap.exists) transaction.set(
       summaryRef,
       {
         id: nextWeekId,
@@ -100,8 +107,7 @@ export async function advanceGuestWeek(
         dailyStats: {},
         lastUpdated: new Date().toISOString(),
         activityCount: 0,
-      },
-      { merge: true }
+      }
     );
 
     logger.info("Advanced guest week", {

@@ -11,7 +11,7 @@ jest.mock('firebase-admin', () => ({
   })),
 }));
 
-import { createClaims, deleteClaim, grantHouseRoles } from '../../util/claims';
+import { createClaims, deleteClaim, grantHouseRoles, revokeHouseRoles } from '../../util/claims';
 
 const mockUser = (claims: Record<string, any> = {}) => ({
   customClaims: claims,
@@ -148,5 +148,61 @@ describe('grantHouseRoles', () => {
     expect(mockSetCustomUserClaims.mock.calls[0][1]).not.toHaveProperty(
       'potentialSuperAdmin'
     );
+  });
+});
+
+// Removing several roles must start from ONE claims snapshot. Spreading two
+// deleteClaim results ({...guestRemoved, ...adminRemoved}) put the untouched
+// guest map from the second read back on top, so a departed resident kept
+// their guest claim, and potentialSuperAdmin was forced to false.
+describe('revokeHouseRoles', () => {
+  it('removes the house from every named role in a single write', async () => {
+    mockGetUser.mockResolvedValue(
+      mockUser({ admin: { h: true }, guest: { h: true, o: true }, potentialSuperAdmin: true }),
+    );
+
+    await revokeHouseRoles('user-1', ['h'], ['guest', 'admin']);
+
+    expect(mockGetUser).toHaveBeenCalledTimes(1);
+    expect(mockSetCustomUserClaims).toHaveBeenCalledTimes(1);
+    expect(mockSetCustomUserClaims).toHaveBeenCalledWith('user-1', {
+      admin: {},
+      guest: { o: true },
+      superAdmin: {},
+      potentialSuperAdmin: true,
+    });
+  });
+
+  it('leaves roles it was not asked to touch', async () => {
+    mockGetUser.mockResolvedValue(mockUser({ admin: { h: true }, guest: { h: true } }));
+    await revokeHouseRoles('user-1', ['h'], ['guest']);
+    expect(mockSetCustomUserClaims).toHaveBeenCalledWith('user-1', {
+      admin: { h: true },
+      guest: {},
+      superAdmin: {},
+    });
+  });
+
+  it('keeps potentialSuperAdmin false when it was false, and omits it when absent', async () => {
+    mockGetUser.mockResolvedValue(mockUser({ guest: { h: true }, potentialSuperAdmin: false }));
+    await revokeHouseRoles('user-1', ['h'], ['guest']);
+    expect(mockSetCustomUserClaims.mock.calls[0][1].potentialSuperAdmin).toBe(false);
+
+    mockSetCustomUserClaims.mockClear();
+    mockGetUser.mockResolvedValue(mockUser({ guest: { h: true } }));
+    await revokeHouseRoles('user-1', ['h'], ['guest']);
+    expect('potentialSuperAdmin' in mockSetCustomUserClaims.mock.calls[0][1]).toBe(false);
+  });
+
+  it('migrates the legacy array shape while removing', async () => {
+    mockGetUser.mockResolvedValue(mockUser({ guest: ['h', 'o'] }));
+    await revokeHouseRoles('user-1', ['h'], ['guest']);
+    expect(mockSetCustomUserClaims.mock.calls[0][1].guest).toEqual({ o: true });
+  });
+
+  it('skips the write when nothing changes', async () => {
+    mockGetUser.mockResolvedValue(mockUser({ guest: { o: true } }));
+    await revokeHouseRoles('user-1', ['h'], ['guest', 'admin']);
+    expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
   });
 });

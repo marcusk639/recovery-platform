@@ -33,6 +33,8 @@ export const rentCollectionAttemptCollection = ratsFirestore.collection('rent-co
 // written by onHouseDeleted shortly after the delete; createHouses refuses
 // tombstoned ids (defence in depth, see houseTombstone.ts).
 export const houseTombstoneCollection = ratsFirestore.collection('houseTombstones');
+// Server-only role records house-roles/{houseId}_{uid} (util/houseRoles).
+export const houseRolesCollection = ratsFirestore.collection('house-roles');
 
 /**
  * Shape of a document in the `subscriptions` collection. Read by the Stripe
@@ -324,6 +326,17 @@ export async function getMeetingActivitiesForGuest(
     .where('guestId', '==', guestId)
     .where('type', '==', 'meeting')
     .get();
+  return result.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+/**
+ * An activity's dispute decision log (server-written, append-only; the
+ * trusted record of decisions and reopens, with the dispute-archive).
+ */
+export async function getDisputeDecisions(
+  activityId: string,
+): Promise<FirebaseFirestore.DocumentData[]> {
+  const result = await activityCollection.doc(activityId).collection('dispute-decisions').get();
   return result.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 

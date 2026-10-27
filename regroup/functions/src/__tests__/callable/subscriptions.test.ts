@@ -97,6 +97,15 @@ const mockWriteOperatorSubscription = jest.fn(async (uid: string, meta: object) 
   await mockUpdateUser(uid, { subscriptionMetadata: meta });
   return { ...meta, houses: KEPT_HOUSES };
 });
+// The primary owner record (util/houseRoles) is written by createHouses with
+// the house; here it mirrors the mocked house's owner.
+jest.mock("../../util/houseRoles", () => ({
+  isPrimaryOwner: async (id: string, uid: string) => {
+    const h = await mockGetHouse(id);
+    return !!h && h.ownerId === uid;
+  },
+}));
+
 jest.mock("../../util/operatorSubscriptionWrite", () => ({
   writeOperatorSubscription: (uid: string, meta: object) =>
     mockWriteOperatorSubscription(uid, meta),

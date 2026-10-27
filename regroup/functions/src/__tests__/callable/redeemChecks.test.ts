@@ -1,0 +1,271 @@
+// Invitation checks from the third #145 review round, on an in-memory store:
+//   B1 / I1  invitations redeemed before #145 (no grantPending) never regrant;
+//   B3       no self-invites, no invitation to someone already living here,
+//            and a used admission ticket is never overwritten;
+//   item 4   the inviter must still rank high enough when the invitee redeems;
+//   I4       a stranded redeem re-checks capacity and records occupancy.
+const users: Record<string, Record<string, unknown>> = {};
+const emails: Record<string, string> = {};
+const mockSetClaims = jest.fn(async (uid: string, c: Record<string, unknown>) => {
+  users[uid] = JSON.parse(JSON.stringify(c));
+});
+jest.mock('firebase-admin', () => ({
+  firestore: () => require('../helpers/memFirestore').memDb,
+  auth: () => ({
+    getUser: async (uid: string) => ({ uid, customClaims: users[uid] ?? {} }),
+    getUserByEmail: async (email: string) => {
+      if (!(email in emails))
+        throw Object.assign(new Error('no user'), { code: 'auth/user-not-found' });
+      return { uid: emails[email] };
+    },
+    setCustomUserClaims: (uid: string, c: Record<string, unknown>) => mockSetClaims(uid, c),
+  }),
+}));
+jest.mock('firebase-admin/firestore', () => ({
+  ...jest.requireActual('firebase-admin/firestore'),
+  FieldValue: require('../helpers/memFirestore').fieldValue,
+}));
+jest.mock('firebase-functions', () => ({
+  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+}));
+jest.mock('firebase-functions/v2/https', () => ({
+  ...jest.requireActual('firebase-functions/v2/https'),
+  onCall: (_o: unknown, h?: unknown) => (typeof _o === 'function' ? _o : h),
+}));
+const mockCapacity = jest.fn();
+const mockRecordAccepted = jest.fn();
+jest.mock('../../util/residentCapacity', () => ({
+  roleConsumesResidentSlot: (r: string) => r !== 'admin',
+  assertResidentCapacityAvailable: (...a: unknown[]) => mockCapacity(...a),
+  recordResidentAccepted: (...a: unknown[]) => mockRecordAccepted(...a),
+}));
+jest.mock('../../util/entitlement', () => ({ enforceHouseEntitlement: jest.fn() }));
+jest.mock('../../api/firestore', () => ({ getHouse: jest.fn(async () => ({ ownerId: 'owner' })) }));
+jest.mock('../../util/inviteEmails', () => ({ sendOneInviteEmail: jest.fn() }));
+
+import { mem, memDb } from '../helpers/memFirestore';
+import { createInvitation, redeemInvitation } from '../../callable/invitations';
+
+const H = 'h';
+const call = (fn: unknown, data: unknown, uid: string, email: string) =>
+  (fn as Function)({ data, auth: { uid, token: { email, ...(users[uid] ?? {}) } } });
+const redeem = (token: string, uid = 'alice', email = 'alice@x.com') =>
+  call(redeemInvitation, { token }, uid, email);
+const invitation = (role: string, extra: Record<string, unknown> = {}) => ({
+  token: 'T',
+  inviterUid: 'owner',
+  houseId: H,
+  role,
+  invitedEmail: 'alice@x.com',
+  expiresAt: new Date(Date.now() + 86400_000).toISOString(),
+  createdAt: new Date().toISOString(),
+  ...extra,
+});
+const failed = { code: 'failed-precondition' };
+
+beforeEach(() => {
+  mem.reset();
+  for (const k of Object.keys(users)) delete users[k];
+  for (const k of Object.keys(emails)) delete emails[k];
+  mockSetClaims.mockClear();
+  mockCapacity.mockReset();
+  mockRecordAccepted.mockReset();
+  mem.seed(`houses/${H}`, { id: H, ownerId: 'owner' });
+  mem.seed(`house-roles/${H}_owner`, { houseId: H, tier: 'owner', primary: true });
+});
+
+describe('invitations redeemed before #145 never regrant (B1 / I1)', () => {
+  // Redeemed by the pre-#145 code: redeemedAt + redeemedByUid, no grantPending.
+  const mainEra = (role: string) =>
+    mem.seed(
+      'invitations/T',
+      invitation(role, {
+        redeemedAt: new Date(Date.now() - 86400_000).toISOString(),
+        redeemedByUid: 'alice',
+      }),
+    );
+
+  it('a manager demoted since cannot get the role back by re-redeeming', async () => {
+    mainEra('admin');
+    users.alice = {}; // the owner removed the admin claim
+    await expect(redeem('T')).resolves.toEqual({ houseId: H, role: 'admin' });
+    expect(mockSetClaims).not.toHaveBeenCalled();
+    expect(mem.get(`house-roles/${H}_alice`)).toBeUndefined();
+  });
+
+  it('a discharged resident cannot get the guest claim or a fresh ticket back', async () => {
+    mainEra('guest');
+    users.alice = { guest: {} };
+    await redeem('T');
+    expect(mockSetClaims).not.toHaveBeenCalled();
+    expect(mem.get(`admission-tickets/alice_${H}`)).toBeUndefined();
+  });
+});
+
+describe('no self-invites; nobody who already lives here (B3)', () => {
+  const invite = (uid: string, email: string, to: string, role = 'guest') =>
+    call(createInvitation, { email: to, houseId: H, role }, uid, email);
+
+  it('a peer leader cannot invite their own email (any case or spacing)', async () => {
+    users.pl = { admin: { [H]: true }, guest: { [H]: true } };
+    mem.seed(`house-roles/${H}_pl`, { tier: 'peerLeader' });
+    await expect(invite('pl', 'pl@x.com', 'PL@X.com')).rejects.toMatchObject(failed);
+  });
+
+  it('nobody can invite an account that already has an active record in the house', async () => {
+    emails['res@x.com'] = 'res';
+    mem.seed('guests/res-doc', { houseId: H, userId: 'res', status: 'active' });
+    await expect(invite('owner', 'owner@x.com', 'res@x.com')).rejects.toMatchObject(failed);
+    // A discharged record does not block a new invitation.
+    mem.seed('guests/res-doc', { houseId: H, userId: 'res', status: 'discharged' });
+    await expect(invite('owner', 'owner@x.com', 'res@x.com')).resolves.toHaveProperty('token');
+  });
+
+  it('a redeem never overwrites a used ticket: refused with a clear error', async () => {
+    mem.seed(`admission-tickets/alice_${H}`, { used: true, usedByGuestId: 'g0', role: 'guest' });
+    mem.seed('invitations/T', invitation('guest'));
+    await expect(redeem('T')).rejects.toMatchObject(failed);
+    expect(mem.get(`admission-tickets/alice_${H}`)).toMatchObject({
+      used: true,
+      usedByGuestId: 'g0',
+    });
+    expect(mem.get('invitations/T')?.redeemedAt).toBeUndefined();
+    expect(mockSetClaims).not.toHaveBeenCalled();
+  });
+});
+
+describe('the inviter must still rank high enough at redeem time (item 4)', () => {
+  it('a senior-peer invitation from a manager demoted since is refused', async () => {
+    users.mgr = { admin: { [H]: true } }; // record gone: now a peer leader at most
+    mem.seed('invitations/T', invitation('senior-peer', { inviterUid: 'mgr' }));
+    await expect(redeem('T')).rejects.toMatchObject(failed);
+    expect(mockSetClaims).not.toHaveBeenCalled();
+  });
+
+  it("the owner's admin invitation promotes an existing peer leader record to manager", async () => {
+    users.alice = { admin: { [H]: true } };
+    mem.seed(`house-roles/${H}_alice`, { tier: 'peerLeader', via: 'backfill' });
+    mem.seed('invitations/T', invitation('admin'));
+    await redeem('T');
+    expect(mem.get(`house-roles/${H}_alice`)).toMatchObject({ tier: 'manager', via: 'invitation' });
+  });
+});
+
+it('a stranded redeem re-checks capacity and records occupancy (I4)', async () => {
+  mem.seed(
+    'invitations/T',
+    invitation('guest', {
+      redeemedAt: new Date().toISOString(),
+      redeemedByUid: 'alice',
+      grantPending: true,
+    }),
+  );
+  await redeem('T');
+  expect(mockCapacity).toHaveBeenCalledWith('owner', H);
+  expect(mockRecordAccepted).toHaveBeenCalledWith('owner', H);
+
+  mockCapacity.mockReset();
+  mockRecordAccepted.mockReset();
+  mem.seed('invitations/T', {
+    ...(mem.get('invitations/T') as object),
+    grantCompletedAt: new Date().toISOString(),
+  });
+  await redeem('T'); // completed: no capacity check, no second occupancy record
+  expect(mockCapacity).not.toHaveBeenCalled();
+  expect(mockRecordAccepted).not.toHaveBeenCalled();
+});
+
+describe('round 5: staff invitations to residents, and who may redeem', () => {
+  it('the owner promotes a resident manager in the app: an admin invitation to someone who lives here (I3)', async () => {
+    emails['m@x.com'] = 'alice';
+    mem.seed('guests/m-doc', { houseId: H, userId: 'alice', status: 'active' });
+    mem.seed(`house-roles/${H}_alice`, { houseId: H, tier: 'peerLeader', via: 'backfill' });
+    users.alice = { admin: { [H]: true }, guest: { [H]: true } };
+    const { token } = await call(
+      createInvitation,
+      { email: 'm@x.com', houseId: H, role: 'admin' },
+      'owner',
+      'owner@x.com',
+    );
+    mem.seed(`invitations/${token}`, {
+      ...(mem.get(`invitations/${token}`) as object),
+      invitedEmail: 'm@x.com',
+    });
+    await redeem(token, 'alice', 'm@x.com');
+    expect(mem.get(`house-roles/${H}_alice`)).toMatchObject({ tier: 'manager' });
+  });
+
+  it('a guest invitation to someone who already lives here is still refused', async () => {
+    emails['r@x.com'] = 'res';
+    mem.seed('guests/r-doc', { houseId: H, userId: 'res', status: 'active' });
+    await expect(
+      call(
+        createInvitation,
+        { email: 'r@x.com', houseId: H, role: 'guest' },
+        'owner',
+        'owner@x.com',
+      ),
+    ).rejects.toMatchObject(failed);
+  });
+
+  it('the inviter can never redeem their own invitation (X6)', async () => {
+    mem.seed('invitations/T', invitation('guest', { invitedEmail: 'owner@x.com' }));
+    await expect(redeem('T', 'owner', 'owner@x.com')).rejects.toMatchObject(failed);
+    expect(mockSetClaims).not.toHaveBeenCalled();
+  });
+
+  it('a guest or senior-peer invitation is refused to someone who already lives here (X6)', async () => {
+    mem.seed('guests/a-doc', { houseId: H, userId: 'alice', status: 'active' });
+    for (const role of ['guest', 'senior-peer']) {
+      mem.seed('invitations/T', invitation(role));
+      await expect(redeem('T')).rejects.toMatchObject(failed);
+    }
+    expect(mockSetClaims).not.toHaveBeenCalled();
+  });
+});
+
+describe('round 6: staff invitations, and the owner record behind capacity', () => {
+  const invite = (role: string, to = 'r@x.com', uid = 'owner') =>
+    call(createInvitation, { email: to, houseId: H, role }, uid, `${uid}@x.com`);
+
+  it('a senior-peer invitation to someone who already lives here is refused at create (I1)', async () => {
+    emails['r@x.com'] = 'res';
+    mem.seed('guests/r-doc', { houseId: H, userId: 'res', status: 'active' });
+    await expect(invite('senior-peer')).rejects.toMatchObject(failed);
+    expect(mem.paths('invitations/')).toEqual([]);
+  });
+
+  it('a house with no primary owner record refuses slot-consuming invitations (I2)', async () => {
+    mem.reset();
+    mem.seed(`houses/${H}`, { id: H, ownerId: 'owner' });
+    users.co = { admin: { [H]: true }, superAdmin: { [H]: true } };
+    mem.seed(`house-roles/${H}_co`, { houseId: H, tier: 'owner' }); // co-owner, not primary
+    for (const role of ['guest', 'senior-peer']) {
+      await expect(invite(role, 'n@x.com', 'co')).rejects.toMatchObject({
+        code: 'failed-precondition',
+        message: 'house has no owner record',
+      });
+    }
+    expect(mockCapacity).not.toHaveBeenCalled();
+    // An admin invitation takes no slot, so it does not need the owner record.
+    await expect(invite('admin', 'n@x.com', 'co')).resolves.toHaveProperty('token');
+  });
+
+  it('a redeem in a house with no primary owner record is refused for a guest (I2)', async () => {
+    mem.reset();
+    mem.seed(`houses/${H}`, { id: H, ownerId: 'owner' });
+    users.co = { admin: { [H]: true }, superAdmin: { [H]: true } }; // a co-owner invited
+    mem.seed('invitations/T', invitation('guest', { inviterUid: 'co' }));
+    await expect(redeem('T')).rejects.toMatchObject({ message: 'house has no owner record' });
+    expect(mockSetClaims).not.toHaveBeenCalled();
+  });
+
+  it('capacity is charged to the primary owner record, not houses.ownerId (I6)', async () => {
+    mem.seed(`houses/${H}`, { id: H, ownerId: 'someone-else' });
+    await invite('guest', 'n@x.com');
+    expect(mockCapacity).toHaveBeenCalledWith('owner', H);
+    mem.seed('invitations/T', invitation('guest'));
+    await redeem('T');
+    expect(mockRecordAccepted).toHaveBeenCalledWith('owner', H);
+  });
+});
