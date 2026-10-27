@@ -5,9 +5,9 @@
  *      guest doc's) unstamped activity is decided and reopened by any house
  *      admin but its logger, also in a house with no superAdminId.
  *   2. A changed guestId must belong to the activity's house (as at create).
- *   3. loggedAt is frozen once there is dispute history, even to the server
- *      time (an older build's "delete" is recognised by
- *      disputeResolvedAt == loggedAt).
+ *   3. loggedAt is frozen, even to the server time, on an older build's
+ *      "delete" record (recognised by disputeResolvedAt == loggedAt); VERIFY
+ *      and edits elsewhere still stamp the server time (round 8, I1).
  *   7. With no stamp and no guest doc, a non-admin may raise a dispute unless
  *      they logged the activity.
  *
@@ -188,11 +188,25 @@ describe('2: a new guestId must belong to the house', () => {
   });
 });
 
-describe('3: loggedAt is frozen once there is dispute history', () => {
-  it("even to the server time, e.g. on an older build's delete record", async () => {
+describe("3: loggedAt is frozen on an older build's delete record", () => {
+  it('even to the server time; elsewhere the server time is fine', async () => {
     await assertFails(upd(mgr2(), 'upheld', { loggedAt: serverTimestamp() }));
-    await assertFails(upd(mgr2(), 'uA', { loggedAt: serverTimestamp() }));
+    await assertFails(upd(mgr2(), 'upheld', { verified: true, loggedAt: serverTimestamp() }));
     await assertSucceeds(upd(mgr2(), 'plain', { loggedAt: serverTimestamp() }));
+  });
+
+  it('I1: VERIFY on a rejected dispute, and an edit on a pending one, still stamp the server time', async () => {
+    await env.withSecurityRulesDisabled(async (c) => {
+      await setDoc(
+        doc(c.firestore(), 'activities/rejected'),
+        act({ status: 'resolved', disputed: 'rejected', incomplete: false, disputeResult: 'fail', disputeResolvedBy: M2, disputeResolvedAt: T0 }),
+      );
+    });
+    // What verifyActivity writes.
+    await assertSucceeds(upd(mgr2(), 'rejected', { verified: true, verifiedBy: M2, loggedAt: serverTimestamp() }));
+    // What updateActivity writes on a pending dispute.
+    await assertSucceeds(upd(mgr2(), 'uA', { timestamp: T0, loggedAt: serverTimestamp() }));
+    await assertFails(upd(mgr2(), 'uA', { loggedAt: Timestamp.fromDate(new Date('2020-01-01')) }));
   });
 });
 

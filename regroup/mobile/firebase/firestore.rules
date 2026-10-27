@@ -502,9 +502,10 @@ service cloud.firestore {
     //     resident account to protect, so any admin but the logger decides;
     //   - a guest doc with a userId: that account may not decide;
     //   - no guest doc: any admin but the logger decides.
-    // The last two trust the guest doc, which is safe only with #145's guest
-    // rules (userId immutable once set, no resident or staff self-delete):
-    // deploy these rules only once #145 has merged too.
+    // The last two trust the guest doc. HARD DEPLOY PRECONDITION: safe only
+    // with #145's guest rules live (userId immutable once set, no delete of
+    // your own guest doc). Deploy these rules only together with or after
+    // #145's rules, never alone.
     function callerMayDecide() {
       return callerIsNotTheResident();
     }
@@ -631,16 +632,13 @@ service cloud.firestore {
       let d = request.resource.data;
       let keys = d.diff(r).affectedKeys();
       return isAdmin([r.houseId]) &&
-        // loggedAt: unchanged, or the server time (the app's own edits), and
-        // frozen once there is dispute history (an old build's "delete" is
-        // recognised by disputeResolvedAt == loggedAt) except in the ENTER and
-        // RESOLVE writes themselves, which older builds stamp with the server
-        // time.
+        // loggedAt: unchanged, or the server time (VERIFY and edits, new and
+        // old builds, stamp it). Frozen only on an old build's "delete"
+        // record (deleted, with disputeResolvedAt), which the export
+        // recognises by disputeResolvedAt == loggedAt.
         (!keys.hasAny(['loggedAt']) ||
          (d.loggedAt == request.time &&
-          (!hasDisputeHistory(r) ||
-           (r.status == 'active' && d.status == 'disputed') ||
-           (r.status == 'disputed' && d.status == 'resolved')))) &&
+          !(r.status == 'deleted' && r.get('disputeResolvedAt', null) != null))) &&
         // A new guest (or house) must be a guest of the activity's house,
         // as at create.
         (!keys.hasAny(['guestId', 'houseId']) || activityGuest(d.guestId).houseId == d.houseId) &&
@@ -694,8 +692,10 @@ service cloud.firestore {
       //   their own activity (owner rule).
       // ENTER is never by the activity's logger, stamped resident or guest
       // doc account (callerIsNotTheResident); with no stamp and no guest doc,
-      // a non-admin may ENTER unless they logged it (#145 stops a resident
-      // deleting their own guest doc). RESOLVE and REOPEN: callerMayDecide.
+      // a non-admin may ENTER unless they logged it; that relies on #145's
+      // guest rules (userId immutable once set, no delete of your own guest
+      // doc), which must be live: deploy only together with or after #145.
+      // RESOLVE and REOPEN: callerMayDecide.
       // diff() only flags real changes, so a write echoing the current
       // values back passes.
       allow update: if

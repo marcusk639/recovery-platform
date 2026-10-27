@@ -2,10 +2,11 @@
  * Firestore Security Rules Tests — PR #141 review round 6 (probe7).
  *
  *   A. A resident who is also staff (admin claim) cannot decide a dispute on
- *      their own activity by changing their guest doc: the stamp is
- *      immutable (no client writes it, the server only fills an empty one).
- *      With no usable stamp only the house's primary owner
- *      (houses/{id}.superAdminId) decides; peers may still raise a dispute.
+ *      their own activity by changing their guest doc: no client changes the
+ *      stamp (the server fills an empty one, and re-stamps only a pre-dispute
+ *      guestId correction). With no usable stamp the guest doc decides who
+ *      may (any admin but the logger when it has no account), which relies on
+ *      #145's guest rules being live.
  *   C. A decision cannot clear or forge flaggedForReview, and no client path
  *      backdates loggedAt.
  *
@@ -171,8 +172,8 @@ describe('C: flaggedForReview and loggedAt on the decision paths', () => {
     await assertFails(upd(mgr2(), 'xA', reject(M2, { loggedAt: old })));
     await assertSucceeds(upd(mgr2(), 'xA', reject(M2, { loggedAt: serverTimestamp() })));
     await assertFails(upd(mgr2(), 'xA', { loggedAt: old }));
-    // L1: once there is dispute history, not even the server time.
-    await assertFails(upd(mgr2(), 'xA', { verified: true, loggedAt: serverTimestamp() }));
+    // I1: an edit of a disputed activity still stamps the server time.
+    await assertSucceeds(upd(mgr2(), 'xA', { verified: true, loggedAt: serverTimestamp() }));
     await assertSucceeds(upd(mgr2(), 'xA', { verified: true }));
   });
 
