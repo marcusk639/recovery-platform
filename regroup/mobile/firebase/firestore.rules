@@ -466,7 +466,11 @@ service cloud.firestore {
            isSameUser(request.resource.data.loggedBy) &&
            activityGuest(request.resource.data.guestId).userId == request.auth.uid &&
            request.resource.data.status == 'active' &&
-           request.resource.data.get('verified', false) == false));
+           request.resource.data.get('verified', false) == false &&
+           // Dispute resolution fields are admin-only (owners, managers, peer
+           // leaders): see resolveDispute. Updates are already limited by the
+           // hasOnly allowlists below.
+           !request.resource.data.keys().hasAny(['incomplete', 'disputed', 'disputeResult'])));
       // `verified`/`verifiedBy` feed the Verified column of the court-ready
       // compliance export. Once an admin verifies an activity its details must
       // not change under that verification, so the resident who logged it may
