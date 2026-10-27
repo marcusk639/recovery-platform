@@ -329,6 +329,17 @@ export async function getMeetingActivitiesForGuest(
   return result.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
+/**
+ * An activity's dispute decision log (server-written, append-only; the
+ * trusted record of decisions and reopens, with the dispute-archive).
+ */
+export async function getDisputeDecisions(
+  activityId: string,
+): Promise<FirebaseFirestore.DocumentData[]> {
+  const result = await activityCollection.doc(activityId).collection('dispute-decisions').get();
+  return result.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
 // ─── Rent-collection ROI metrics (RG-TRACK) read helper ─────────────────────
 // Returns all successful payment docs for a house. The date window is filtered
 // in memory by the analytics callable (avoids a composite index on

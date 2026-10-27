@@ -2,11 +2,12 @@
 // Requires Firebase emulator: firebase emulators:start --only firestore,auth
 // Run with: npm run test:integration
 //
-// Tests that activities logged in different weeks produce separate, isolated
-// week summaries — i.e., old summaries are preserved and stats don't bleed
-// across week boundaries.
+// Activities logged in different weeks stay isolated: each week's activity
+// query returns only that week, and the app never rewrites another week's
+// summary. Summaries themselves are written by the onActivityWritten Cloud
+// Function (regroup/functions), whose tests cover week boundaries.
 
-import { logActivity, getWeekSummary } from '../services/activity';
+import { logActivity, getActivities, getWeekSummary } from '../services/activity';
 import { ActivityType, ActivityDataFactory } from '../entities/ActivityModel';
 import { firestore } from '../../firebase-setup';
 
@@ -16,93 +17,85 @@ const TEST_HOUSE = 'transfer-house-1';
 // Week 1: 2026-02-09 (Monday)
 const WEEK_1_START = '2026-02-09';
 const WEEK_1_DATE = new Date('2026-02-09T12:00:00.000Z');
+const WEEK_1_RANGE: [Date, Date] = [
+  new Date('2026-02-09T00:00:00.000Z'),
+  new Date('2026-02-16T00:00:00.000Z'),
+];
 
 // Week 2: 2026-02-16 (Monday) — the following week
 const WEEK_2_START = '2026-02-16';
 const WEEK_2_DATE = new Date('2026-02-16T12:00:00.000Z');
+const WEEK_2_RANGE: [Date, Date] = [
+  new Date('2026-02-16T00:00:00.000Z'),
+  new Date('2026-02-23T00:00:00.000Z'),
+];
 
 describe('guest week transfer (integration)', () => {
   const createdActivityIds: string[] = [];
 
+  const log = async (type: ActivityType, data: any, at: Date) => {
+    const activity = await logActivity(TEST_GUEST, TEST_HOUSE, type, data, 'user-1', at);
+    createdActivityIds.push(activity.id);
+    return activity;
+  };
+
   afterEach(async () => {
-    await firestore
-      .collection('week-summaries')
-      .doc(`${TEST_GUEST}_${WEEK_1_START}`)
-      .delete();
-    await firestore
-      .collection('week-summaries')
-      .doc(`${TEST_GUEST}_${WEEK_2_START}`)
-      .delete();
+    await firestore.collection('week-summaries').doc(`${TEST_GUEST}_${WEEK_1_START}`).delete();
+    await firestore.collection('week-summaries').doc(`${TEST_GUEST}_${WEEK_2_START}`).delete();
 
     await Promise.all(
-      createdActivityIds.map(id =>
-        firestore.collection('activities').doc(id).delete(),
-      ),
+      createdActivityIds.map((id) => firestore.collection('activities').doc(id).delete()),
     );
     createdActivityIds.length = 0;
   });
 
-  it('activities in different weeks produce separate week summaries', async () => {
-    const choreW1 = await logActivity(
-      TEST_GUEST,
-      TEST_HOUSE,
+  it('activities in different weeks are queried back per week', async () => {
+    const w1 = await log(
       ActivityType.CHORE,
       ActivityDataFactory.chore('daily', 'Kitchen'),
-      'user-1',
       WEEK_1_DATE,
     );
-    createdActivityIds.push(choreW1.id);
-
-    const choreW2 = await logActivity(
-      TEST_GUEST,
-      TEST_HOUSE,
+    const w2 = await log(
       ActivityType.CHORE,
       ActivityDataFactory.chore('daily', 'Bathroom'),
-      'user-1',
       WEEK_2_DATE,
     );
-    createdActivityIds.push(choreW2.id);
 
-    const summary1 = await getWeekSummary(TEST_GUEST, WEEK_1_START);
-    const summary2 = await getWeekSummary(TEST_GUEST, WEEK_2_START);
+    const week1 = await getActivities(TEST_GUEST, ...WEEK_1_RANGE);
+    const week2 = await getActivities(TEST_GUEST, ...WEEK_2_RANGE);
 
-    expect(summary1).not.toBeNull();
-    expect(summary1?.startDate).toBe(WEEK_1_START);
-    expect(summary1?.stats.choresCompleted).toBe(1);
-
-    expect(summary2).not.toBeNull();
-    expect(summary2?.startDate).toBe(WEEK_2_START);
-    expect(summary2?.stats.choresCompleted).toBe(1);
+    expect(week1.map((a) => a.id)).toEqual([w1.id]);
+    expect(week2.map((a) => a.id)).toEqual([w2.id]);
   });
 
   it('logging in week 2 does not modify the week 1 summary', async () => {
-    const chore1 = await logActivity(
-      TEST_GUEST,
-      TEST_HOUSE,
-      ActivityType.CHORE,
-      ActivityDataFactory.chore('daily', 'Kitchen'),
-      'user-1',
-      WEEK_1_DATE,
-    );
-    createdActivityIds.push(chore1.id);
+    // Week 1 summary as the server left it.
+    await firestore
+      .collection('week-summaries')
+      .doc(`${TEST_GUEST}_${WEEK_1_START}`)
+      .set({
+        id: `${TEST_GUEST}_${WEEK_1_START}`,
+        guestId: TEST_GUEST,
+        houseId: TEST_HOUSE,
+        startDate: WEEK_1_START,
+        endDate: '2026-02-15',
+        stats: {
+          choresCompleted: 1,
+          meetingsAttended: 0,
+          hoursWorked: 0,
+          medicationTaken: 0,
+          primarySupporterMet: 0,
+        },
+        dailyStats: {},
+        activityCount: 1,
+      });
 
-    // Capture week 1 stats before logging in week 2
-    const summaryBefore = await getWeekSummary(TEST_GUEST, WEEK_1_START);
-    expect(summaryBefore?.stats.choresCompleted).toBe(1);
-    expect(summaryBefore?.activityCount).toBe(1);
-
-    // Log a meeting in week 2
-    const meeting2 = await logActivity(
-      TEST_GUEST,
-      TEST_HOUSE,
+    await log(
       ActivityType.MEETING,
       ActivityDataFactory.meeting('NA Monday', 'NA', 60),
-      'user-1',
       WEEK_2_DATE,
     );
-    createdActivityIds.push(meeting2.id);
 
-    // Week 1 summary must be unchanged
     const summaryAfter = await getWeekSummary(TEST_GUEST, WEEK_1_START);
     expect(summaryAfter).not.toBeNull();
     expect(summaryAfter?.stats.choresCompleted).toBe(1);
@@ -110,78 +103,41 @@ describe('guest week transfer (integration)', () => {
     expect(summaryAfter?.activityCount).toBe(1);
   });
 
-  it('week 2 summary only counts week 2 activities', async () => {
-    // Log two activities in week 1
-    const choreW1 = await logActivity(
-      TEST_GUEST,
-      TEST_HOUSE,
-      ActivityType.CHORE,
-      ActivityDataFactory.chore('daily', 'Living Room'),
-      'user-1',
-      WEEK_1_DATE,
-    );
-    createdActivityIds.push(choreW1.id);
-
-    const meetingW1 = await logActivity(
-      TEST_GUEST,
-      TEST_HOUSE,
+  it('the week 2 activity query only returns week 2 activities', async () => {
+    await log(ActivityType.CHORE, ActivityDataFactory.chore('daily', 'Living Room'), WEEK_1_DATE);
+    await log(
       ActivityType.MEETING,
       ActivityDataFactory.meeting('AA Monday', 'AA', 60),
-      'user-1',
       WEEK_1_DATE,
     );
-    createdActivityIds.push(meetingW1.id);
-
-    // Log one chore in week 2
-    const choreW2 = await logActivity(
-      TEST_GUEST,
-      TEST_HOUSE,
+    const w2 = await log(
       ActivityType.CHORE,
       ActivityDataFactory.chore('weekly', 'Vacuuming'),
-      'user-1',
       WEEK_2_DATE,
     );
-    createdActivityIds.push(choreW2.id);
 
-    const summary2 = await getWeekSummary(TEST_GUEST, WEEK_2_START);
-    expect(summary2).not.toBeNull();
-    // Only the week 2 chore should appear
-    expect(summary2?.stats.choresCompleted).toBe(1);
-    expect(summary2?.stats.meetingsAttended).toBe(0);
-    expect(summary2?.activityCount).toBe(1);
+    const week2 = await getActivities(TEST_GUEST, ...WEEK_2_RANGE);
+    expect(week2.map((a) => a.id)).toEqual([w2.id]);
+    expect(week2[0].type).toBe(ActivityType.CHORE);
   });
 
-  it('returns null for a week with no logged activities', async () => {
-    // Log only in week 1
-    const chore = await logActivity(
-      TEST_GUEST,
-      TEST_HOUSE,
-      ActivityType.CHORE,
-      ActivityDataFactory.chore('daily', 'Dishes'),
-      'user-1',
-      WEEK_1_DATE,
-    );
-    createdActivityIds.push(chore.id);
+  it("the app writes no summary for either week; that is the server's job", async () => {
+    await log(ActivityType.CHORE, ActivityDataFactory.chore('daily', 'Dishes'), WEEK_1_DATE);
 
-    // Week 2 has no activities — should return null
-    const summary2 = await getWeekSummary(TEST_GUEST, WEEK_2_START);
-    expect(summary2).toBeNull();
+    expect(await getWeekSummary(TEST_GUEST, WEEK_1_START)).toBeNull();
+    expect(await getWeekSummary(TEST_GUEST, WEEK_2_START)).toBeNull();
   });
 
-  it('week summaries have the correct guestId and houseId', async () => {
-    const chore = await logActivity(
-      TEST_GUEST,
-      TEST_HOUSE,
+  it('logged activities carry the guestId and houseId the server keys summaries on', async () => {
+    const chore = await log(
       ActivityType.CHORE,
       ActivityDataFactory.chore('daily', 'Kitchen'),
-      'user-1',
       WEEK_1_DATE,
     );
-    createdActivityIds.push(chore.id);
 
-    const summary = await getWeekSummary(TEST_GUEST, WEEK_1_START);
-    expect(summary?.guestId).toBe(TEST_GUEST);
-    expect(summary?.houseId).toBe(TEST_HOUSE);
-    expect(summary?.id).toBe(`${TEST_GUEST}_${WEEK_1_START}`);
+    const saved = (await firestore.collection('activities').doc(chore.id).get()).data();
+    expect(saved?.guestId).toBe(TEST_GUEST);
+    expect(saved?.houseId).toBe(TEST_HOUSE);
+    expect(saved?.status).toBe('active');
   });
 });

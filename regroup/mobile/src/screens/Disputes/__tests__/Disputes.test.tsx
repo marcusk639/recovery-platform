@@ -24,6 +24,18 @@ jest.mock('../../../hooks/useSelectedGuest', () => ({
   useSelectedGuest: () => mockUseSelectedGuest(),
 }));
 
+// The live dispute list (house-disputes/{houseId}), not house.disputes.
+const mockLiveDisputes = jest.fn((): Record<string, unknown> => ({}));
+const mockLiveError = jest.fn((): Error | null => null);
+const mockLiveRetry = jest.fn();
+jest.mock('../../../hooks/useLiveHouseDisputes', () => ({
+  useLiveHouseDisputes: () => ({
+    disputes: mockLiveDisputes(),
+    error: mockLiveError(),
+    retry: mockLiveRetry,
+  }),
+}));
+
 // ─── Firebase setup mock ─────────────────────────────────────────────────────
 jest.mock('../../../../firebase-setup', () => ({
   firestore: {
@@ -612,21 +624,60 @@ describe('Disputes', () => {
 
   // ─── Data rendering ───────────────────────────────────────────────────────
   describe('with disputed activities', () => {
-    it('renders activity items when disputed activities exist', () => {
-      const activity1 = makeActivity('activity-1');
-      const activity2 = makeActivity('activity-2');
+    it('renders pending and decided disputes (decided ones can be undone)', () => {
+      const pending1 = makeActivity('activity-1');
+      const pending2 = makeActivity('activity-2');
+      const decided = { ...makeActivity('activity-3'), status: 'resolved' };
 
-      (useActivities as jest.Mock).mockReturnValue({
-        activities: [activity1, activity2],
+      // One query for DISPUTED, one for RESOLVED (same window).
+      (useActivities as jest.Mock).mockImplementation(({ status }: { status: string }) => ({
+        activities: status === 'disputed' ? [pending1, pending2] : [decided],
         loading: false,
         error: null,
         refetch: jest.fn(),
-      });
+      }));
 
       const store = buildStore();
       const { getByTestId } = renderScreen(store);
       expect(getByTestId('activity-item-activity-1')).toBeTruthy();
       expect(getByTestId('activity-item-activity-2')).toBeTruthy();
+      expect(getByTestId('activity-item-activity-3')).toBeTruthy();
+      expect((useActivities as jest.Mock).mock.calls.map(([o]) => o.status)).toEqual(
+        expect.arrayContaining(['disputed', 'resolved']),
+      );
+    });
+
+    it("lists an older build's delete resolution (undoable), but not a plain deletion", () => {
+      const at = '2024-01-15T12:00:00.000Z';
+      const upheld = {
+        ...makeActivity('activity-upheld'),
+        status: 'deleted',
+        disputeResolvedAt: at,
+        loggedAt: at,
+      };
+      const withdrawn = { ...makeActivity('activity-withdrawn'), status: 'deleted' };
+      (useActivities as jest.Mock).mockImplementation(({ status }: { status: string }) => ({
+        activities: status === 'deleted' ? [upheld, withdrawn] : [],
+        loading: false,
+        error: null,
+        refetch: jest.fn(),
+      }));
+
+      const { getByTestId, queryByTestId } = renderScreen(buildStore());
+      expect(getByTestId('activity-item-activity-upheld')).toBeTruthy();
+      expect(queryByTestId('activity-item-activity-withdrawn')).toBeNull();
+    });
+
+    it("S2: says it couldn't load disputes instead of showing an empty list", () => {
+      mockLiveError.mockReturnValue(new Error('denied'));
+      const { getByTestId, queryByTestId } = renderScreen(buildStore());
+      expect(getByTestId('disputes-load-error')).toBeTruthy();
+      expect(queryByTestId('render-activities')).toBeNull();
+      // 6: "try again" actually re-subscribes.
+      expect(getByTestId('disputes-load-error').props.accessibilityRole).toBe('button');
+      fireEvent.press(getByTestId('disputes-load-error'));
+      expect(mockLiveRetry).toHaveBeenCalledTimes(1);
+      mockLiveError.mockReturnValue(null);
     });
 
     it('passes disputesOnly=true to RenderActivities', () => {

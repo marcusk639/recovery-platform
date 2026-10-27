@@ -26,7 +26,8 @@ import {
 } from '../../../util/display';
 import { getCheckinInput, getMeetingTime } from '../../../util/meeting';
 import { useActivities } from '../../../hooks/activity';
-import { ActivityType, ActivityStatus } from '../../../entities/ActivityModel';
+import { ActivityType } from '../../../entities/ActivityModel';
+import { alreadyCheckedIn } from '../../../util/meetingDedupe';
 import {
   useSearchMeetings,
   useCheckIntoMeeting,
@@ -63,13 +64,14 @@ export const useMeetingSearch = (props: UseMeetingSearchProps) => {
   const todaysDate = useMemo(() => getTodaysDate(), []);
 
   // Fetch today's meeting activities from Activity system for dedup checks
+  // Today's meeting activities; alreadyCheckedIn applies the counting rule
+  // (a pending dispute still counts, so it still blocks a duplicate).
   const { activities: todaysMeetingActivities } = useActivities({
     guestId: guest?.id,
     houseId: house?.id,
     startDate: todaysDate,
     endDate: todaysDate,
     type: ActivityType.MEETING,
-    status: ActivityStatus.ACTIVE,
   });
 
   // Local state
@@ -170,10 +172,7 @@ export const useMeetingSearch = (props: UseMeetingSearchProps) => {
   // Check if guest already attended meeting today
   const guestAttendedMeeting = useCallback(
     (meeting: RatsMeeting) => {
-      return todaysMeetingActivities.some(activity => {
-        const data = activity.data as any;
-        return data?.meetingId === meeting.id;
-      });
+      return alreadyCheckedIn(todaysMeetingActivities, meeting.id);
     },
     [todaysMeetingActivities],
   );

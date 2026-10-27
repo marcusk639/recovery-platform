@@ -30,6 +30,8 @@ import { selectLegitimateGuests } from "../../util/guestMembership";
 import { eventAgeMinutes, isStaleEvent, RETRY_CUTOFF_MS } from "../../util/eventAge";
 
 export { onHouseDeleted } from "./houseTombstone";
+export { onActivityWritten } from "./activityWeekSummary";
+export { onGuestLinkedRestamp } from "./guestRestamp";
 export { onGuestWrite } from "./guestWrite";
 
 /**

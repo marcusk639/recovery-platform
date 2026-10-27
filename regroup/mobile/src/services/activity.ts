@@ -5,55 +5,13 @@ import {
   ActivityType,
   ActivityData,
   ActivityStatus,
-  ActivityEntity,
-  isChoreActivity,
-  isMeetingActivity,
-  isWorkActivity,
-  isMedicationActivity,
-  isPrimarySupporterActivity,
+  LISTED_ACTIVITY_STATUSES,
+  countsTowardStats,
+  hasDisputeHistory,
+  DISPUTE_OUTCOME_INCOMPLETE,
 } from '../entities/ActivityModel';
-import {
-  WeekSummary,
-  WeekSummaryEntity,
-  DailyStats,
-  createEmptyWeekStats,
-  initializeDailyStats,
-} from '../entities/WeekSummary';
+import { WeekSummary } from '../entities/WeekSummary';
 import { logException } from '../util/logging';
-
-/**
- * Helper: Get week start date (Monday) from any date
- */
-function getWeekStart(date: Date | { toDate(): Date }): string {
-  const d =
-    typeof (date as any)?.toDate === 'function'
-      ? (date as any).toDate()
-      : new Date(date as Date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust for Sunday
-  d.setDate(diff);
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString().split('T')[0];
-}
-
-/**
- * Helper: Get week end date (Sunday) from start date
- */
-function getWeekEnd(startDate: string): string {
-  const d = new Date(startDate);
-  d.setDate(d.getDate() + 6);
-  return d.toISOString().split('T')[0];
-}
-
-/**
- * Helper: Get date string from Date object
- */
-function getDateString(date: Date | string): string {
-  if (typeof date === 'string') {
-    return date.split('T')[0];
-  }
-  return date.toISOString().split('T')[0];
-}
 
 /**
  * Log a new activity
@@ -76,6 +34,7 @@ export async function logActivity(
 ): Promise<Activity> {
   try {
     const activityTimestamp = timestamp || new Date();
+    const residentUid = await residentUidOf(guestId);
 
     const activity: Omit<Activity, 'id'> = {
       guestId,
@@ -87,21 +46,28 @@ export async function logActivity(
       loggedAt: FirebaseFirestore.FieldValue.serverTimestamp() as any,
       verified: false,
       status: ActivityStatus.ACTIVE,
+      // The resident it is for, stamped at create (immutable afterwards; the
+      // rules check it against the guest doc). Omitted when unknown: the
+      // server stamps it then.
+      ...(residentUid ? { residentUid } : {}),
     };
 
-    // Add to Firestore
-    const docRef = await firestore.collection('activities').add(activity);
-
-    // Apply a +1 delta to the week summary. This replaces the prior
-    // read-all-week-activities → recompute → write strategy on the hot
-    // logActivity path. See .full-review [P1] and the docstring on
-    // incrementWeekSummaryForActivity below.
-    await incrementWeekSummaryForActivity(
-      guestId,
-      houseId,
-      { type, timestamp: activityTimestamp, data },
-      1,
-    );
+    // Add to Firestore. This is the whole write: week-summaries are kept by
+    // the onActivityWritten Cloud Function (regroup/functions). The client
+    // must not write them — the rules allow only admins, so a resident's
+    // log used to save the activity and then throw here.
+    let docRef;
+    try {
+      docRef = await firestore.collection('activities').add(activity);
+    } catch (error: any) {
+      // The guest doc's account changed since we read it: let the server
+      // stamp it instead.
+      if (!residentUid || error?.code !== 'firestore/permission-denied') {
+        throw error;
+      }
+      delete activity.residentUid;
+      docRef = await firestore.collection('activities').add(activity);
+    }
 
     // Return activity with ID
     return {
@@ -113,6 +79,17 @@ export async function logActivity(
     logException(error);
     // Original error, so its `code` still tells callers what failed.
     throw error;
+  }
+}
+
+/** The guest doc's account (guests.userId), or undefined if unknown. */
+async function residentUidOf(guestId: string): Promise<string | undefined> {
+  try {
+    const guest = await firestore.collection('guests').doc(guestId).get();
+    const uid = guest.exists ? guest.data()?.userId : undefined;
+    return typeof uid === 'string' && uid !== '' ? uid : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -137,7 +114,7 @@ export async function getActivities(
       .where('guestId', '==', guestId)
       .where('timestamp', '>=', startDate)
       .where('timestamp', '<', endDate)
-      .where('status', '==', ActivityStatus.ACTIVE);
+      .where('status', 'in', LISTED_ACTIVITY_STATUSES);
 
     // Add type filter if specified
     if (type) {
@@ -151,7 +128,7 @@ export async function getActivities(
       ...doc.data(),
       timestamp: doc.data().timestamp?.toDate?.() || doc.data().timestamp,
       loggedAt: doc.data().loggedAt?.toDate?.() || doc.data().loggedAt,
-    })) as Activity[];
+    })).filter(countsTowardStats) as Activity[];
   } catch (error) {
     logException(error);
     throw new Error('Failed to get activities');
@@ -211,7 +188,7 @@ export async function getActivitiesPage(
       .where('guestId', '==', guestId)
       .where('timestamp', '>=', startDate)
       .where('timestamp', '<', endDate)
-      .where('status', '==', ActivityStatus.ACTIVE);
+      .where('status', 'in', LISTED_ACTIVITY_STATUSES);
 
     if (type) {
       query = query.where('type', '==', type);
@@ -238,7 +215,7 @@ export async function getActivitiesPage(
       ...doc.data(),
       timestamp: doc.data().timestamp?.toDate?.() || doc.data().timestamp,
       loggedAt: doc.data().loggedAt?.toDate?.() || doc.data().loggedAt,
-    })) as Activity[];
+    })).filter(countsTowardStats) as Activity[];
 
     const nextCursor = hasMore ? pageDocs[pageDocs.length - 1] : null;
 
@@ -264,7 +241,7 @@ export async function getHouseActivities(
     const snapshot = await firestore
       .collection('activities')
       .where('houseId', '==', houseId)
-      .where('status', '==', ActivityStatus.ACTIVE)
+      .where('status', 'in', LISTED_ACTIVITY_STATUSES)
       .orderBy('timestamp', 'desc')
       .limit(limit)
       .get();
@@ -274,7 +251,7 @@ export async function getHouseActivities(
       ...doc.data(),
       timestamp: doc.data().timestamp?.toDate?.() || doc.data().timestamp,
       loggedAt: doc.data().loggedAt?.toDate?.() || doc.data().loggedAt,
-    })) as Activity[];
+    })).filter(countsTowardStats) as Activity[];
   } catch (error) {
     logException(error);
     throw new Error('Failed to get house activities');
@@ -315,281 +292,6 @@ export async function getWeekSummary(
 }
 
 /**
- * Mutate `stats` and the `dailyStats[date]` entry in-place by `delta` for the
- * counters that `activity` contributes to. `delta` is +1 for log / -1 for
- * delete. WORK activities scale by `data.hoursWorked` (so deleting an 8-hour
- * shift subtracts 8 hours, not 1).
- *
- * Used by the increment-based hot path on the first write of the week, where
- * we need to construct the full WeekSummary schema from scratch. The same
- * accounting is encoded in the FieldValue.increment payload for subsequent
- * writes (see `addIncrementsForType`).
- */
-function applyActivityDeltaInPlace(
-  stats: ReturnType<typeof createEmptyWeekStats>,
-  daily: DailyStats,
-  activity: Pick<Activity, 'type' | 'data'>,
-  delta: number,
-): void {
-  switch (activity.type) {
-    case ActivityType.CHORE:
-      stats.choresCompleted += delta;
-      daily.choresCompleted += delta;
-      break;
-    case ActivityType.MEETING:
-      stats.meetingsAttended += delta;
-      daily.meetingsAttended += delta;
-      break;
-    case ActivityType.WORK: {
-      const hours = isWorkActivity(activity as Activity)
-        ? activity.data.hoursWorked || 0
-        : 0;
-      stats.hoursWorked += hours * delta;
-      daily.hoursWorked += hours * delta;
-      break;
-    }
-    case ActivityType.MEDICATION:
-      stats.medicationTaken += delta;
-      daily.medicationTaken += delta;
-      break;
-    case ActivityType.PRIMARY_SUPPORTER:
-      stats.primarySupporterMet += delta;
-      daily.primarySupporterMet += delta;
-      break;
-  }
-}
-
-/**
- * Build the `set({merge: true})` payload that applies a delta to an existing
- * WeekSummary document via FieldValue.increment. No read needed — Firestore
- * applies the deltas server-side atomically.
- */
-function addIncrementsForType(
-  updates: Record<string, any>,
-  activity: Pick<Activity, 'type' | 'data'>,
-  activityDate: string,
-  delta: number,
-): void {
-  let topLevelKey: string | null = null;
-  let incrementBy = delta;
-
-  switch (activity.type) {
-    case ActivityType.CHORE:
-      topLevelKey = 'choresCompleted';
-      break;
-    case ActivityType.MEETING:
-      topLevelKey = 'meetingsAttended';
-      break;
-    case ActivityType.WORK: {
-      topLevelKey = 'hoursWorked';
-      const hours = isWorkActivity(activity as Activity)
-        ? activity.data.hoursWorked || 0
-        : 0;
-      incrementBy = hours * delta;
-      break;
-    }
-    case ActivityType.MEDICATION:
-      topLevelKey = 'medicationTaken';
-      break;
-    case ActivityType.PRIMARY_SUPPORTER:
-      topLevelKey = 'primarySupporterMet';
-      break;
-  }
-
-  if (topLevelKey && incrementBy !== 0) {
-    updates[`stats.${topLevelKey}`] =
-      FirebaseFirestore.FieldValue.increment(incrementBy);
-    updates[`dailyStats.${activityDate}.${topLevelKey}`] =
-      FirebaseFirestore.FieldValue.increment(incrementBy);
-  }
-}
-
-/**
- * Apply a single-activity delta to the week summary doc.
- *
- * Replaces the prior read-all-week-activities → recompute → write strategy
- * on the hot logActivity / deleteActivity paths. Cost transitions:
- *   - First write of the week: 1 read (existence check) + 1 write.
- *   - Subsequent writes:        0 reads + 1 write (FieldValue.increment).
- * Old strategy was 1 query returning up to N docs + 1 write per call — i.e.
- * O(N²) reads per week per guest. New strategy is O(1) reads per week.
- *
- * The full-schema initialization on the first write keeps consumers reading
- * fields like `summary.stats.choresCompleted` consistent (they expect
- * every stat key to be present as a number).
- *
- * See .full-review/02-security-performance.md [P1].
- */
-export async function incrementWeekSummaryForActivity(
-  guestId: string,
-  houseId: string,
-  activity: Pick<Activity, 'type' | 'timestamp' | 'data'>,
-  delta: 1 | -1,
-): Promise<void> {
-  try {
-    const weekStart = getWeekStart(
-      typeof activity.timestamp === 'string'
-        ? new Date(activity.timestamp)
-        : (activity.timestamp as Date),
-    );
-    const weekEnd = getWeekEnd(weekStart);
-    const activityDate = getDateString(activity.timestamp);
-    const docId = `${guestId}_${weekStart}`;
-    const summaryRef = firestore.collection('week-summaries').doc(docId);
-
-    await firestore.runTransaction(async tx => {
-      const snap = await tx.get(summaryRef);
-
-      if (!snap.exists) {
-        // First write of the week. Materialize the full schema (every stat
-        // key present as a number) and apply the delta into the new object,
-        // so consumers reading `summary.stats.x` never see `undefined`.
-        const stats = createEmptyWeekStats();
-        const dailyStats = initializeDailyStats(weekStart, weekEnd);
-        const dailyForDate = dailyStats[activityDate] ?? {
-          date: activityDate,
-          choresCompleted: 0,
-          meetingsAttended: 0,
-          hoursWorked: 0,
-          medicationTaken: 0,
-          primarySupporterMet: 0,
-        };
-        applyActivityDeltaInPlace(stats, dailyForDate, activity, delta);
-        dailyStats[activityDate] = dailyForDate;
-
-        tx.set(summaryRef, {
-          guestId,
-          houseId,
-          startDate: weekStart,
-          endDate: weekEnd,
-          stats,
-          dailyStats,
-          // eslint-disable-next-line no-restricted-syntax -- WeekSummary Firestore schema field
-          lastUpdated: FirebaseFirestore.FieldValue.serverTimestamp() as any,
-          activityCount: Math.max(0, delta),
-        });
-        return;
-      }
-
-      // Doc exists — server-side atomic increments. No data round-trip.
-      const updates: Record<string, any> = {
-        // eslint-disable-next-line no-restricted-syntax -- WeekSummary Firestore schema field
-        lastUpdated: FirebaseFirestore.FieldValue.serverTimestamp(),
-        activityCount: FirebaseFirestore.FieldValue.increment(delta),
-        [`dailyStats.${activityDate}.date`]: activityDate,
-      };
-      addIncrementsForType(updates, activity, activityDate, delta);
-      tx.set(summaryRef, updates, { merge: true });
-    });
-  } catch (error) {
-    logException(error);
-    throw new Error('Failed to update week summary');
-  }
-}
-
-/**
- * Update week summary by recalculating from activities
- * Called automatically when activities are logged
- *
- * Retained for use by updateActivity and resolveDispute where the before↔
- * after type/hours diff is more complex than a single delta. Also suitable
- * for a periodic Cloud Function rebuild as a safety net against drift.
- *
- * @param guestId - ID of the guest
- * @param houseId - ID of the house
- * @param weekStart - Week start date (YYYY-MM-DD)
- */
-export async function updateWeekSummary(
-  guestId: string,
-  houseId: string,
-  weekStart: string,
-): Promise<void> {
-  try {
-    const weekEnd = getWeekEnd(weekStart);
-    const docId = `${guestId}_${weekStart}`;
-
-    // Get all activities for this week
-    const activities = await getActivities(
-      guestId,
-      new Date(weekStart),
-      new Date(weekEnd + 'T23:59:59'),
-    );
-
-    // Calculate week stats
-    const stats = createEmptyWeekStats();
-    const dailyStats = initializeDailyStats(weekStart, weekEnd);
-
-    for (const activity of activities) {
-      const activityDate = getDateString(activity.timestamp);
-
-      // Ensure daily stats exist for this date
-      if (!dailyStats[activityDate]) {
-        dailyStats[activityDate] = {
-          date: activityDate,
-          choresCompleted: 0,
-          meetingsAttended: 0,
-          hoursWorked: 0,
-          medicationTaken: 0,
-          primarySupporterMet: 0,
-        };
-      }
-
-      // Aggregate based on activity type
-      switch (activity.type) {
-        case ActivityType.CHORE:
-          stats.choresCompleted++;
-          dailyStats[activityDate].choresCompleted++;
-          break;
-
-        case ActivityType.MEETING:
-          stats.meetingsAttended++;
-          dailyStats[activityDate].meetingsAttended++;
-          break;
-
-        case ActivityType.WORK:
-          if (isWorkActivity(activity)) {
-            const hours = activity.data.hoursWorked || 0;
-            stats.hoursWorked += hours;
-            dailyStats[activityDate].hoursWorked += hours;
-          }
-          break;
-
-        case ActivityType.MEDICATION:
-          stats.medicationTaken++;
-          dailyStats[activityDate].medicationTaken++;
-          break;
-
-        case ActivityType.PRIMARY_SUPPORTER:
-          stats.primarySupporterMet++;
-          dailyStats[activityDate].primarySupporterMet++;
-          break;
-      }
-    }
-
-    // Update or create week summary
-    const summary: Omit<WeekSummary, 'id'> = {
-      guestId,
-      houseId,
-      startDate: weekStart,
-      endDate: weekEnd,
-      stats,
-      dailyStats,
-      // eslint-disable-next-line no-restricted-syntax -- WeekSummary Firestore schema field
-      lastUpdated: FirebaseFirestore.FieldValue.serverTimestamp() as any,
-      activityCount: activities.length,
-    };
-
-    await firestore
-      .collection('week-summaries')
-      .doc(docId)
-      .set(summary, { merge: true });
-  } catch (error) {
-    logException(error);
-    throw new Error('Failed to update week summary');
-  }
-}
-
-/**
  * Update an existing activity
  *
  * @param activityId - ID of the activity to update
@@ -607,27 +309,21 @@ export async function updateActivity(
       throw new Error('Activity not found');
     }
 
-    const data = activity.data() as Activity;
-
-    // Update activity
+    // Update activity. The week summary is recomputed server-side.
     await activityRef.update({
       ...updates,
       loggedAt: FirebaseFirestore.FieldValue.serverTimestamp(),
     });
-
-    // Recalculate week summary
-    const weekStart = getWeekStart(
-      typeof data.timestamp === 'string'
-        ? new Date(data.timestamp)
-        : data.timestamp,
-    );
-    await updateWeekSummary(data.guestId, data.houseId, weekStart);
   } catch (error: any) {
     if (error?.message === 'Activity not found') throw error;
     logException(error);
     throw new Error('Failed to update activity');
   }
 }
+
+/** deleteActivity's refusal for an activity with dispute history. */
+export const DISPUTED_NOT_DELETABLE =
+  'This activity has been disputed, so it cannot be deleted. A dispute ends when a house admin approves or rejects it.';
 
 /**
  * Delete an activity (soft delete - sets status to DELETED)
@@ -642,30 +338,21 @@ export async function deleteActivity(activityId: string): Promise<void> {
     if (!activity.exists) {
       throw new Error('Activity not found');
     }
+    // Owner rule: a disputed activity is never deleted; its dispute ends by
+    // APPROVE or REJECT. The rules refuse it too.
+    if (hasDisputeHistory(activity.data())) {
+      throw new Error(DISPUTED_NOT_DELETABLE);
+    }
 
-    const data = activity.data() as Activity;
-    const wasActive = data.status === ActivityStatus.ACTIVE;
-
-    // Soft delete
+    // Soft delete. The server trigger drops it from the week summary.
     await activityRef.update({
       status: ActivityStatus.DELETED,
       loggedAt: FirebaseFirestore.FieldValue.serverTimestamp(),
     });
-
-    // Apply a -1 delta to the week summary, but ONLY if the activity was
-    // ACTIVE (and therefore counted in the summary). DISPUTED and already-
-    // DELETED activities are not in the summary, so deleting them is a no-op
-    // from the summary's perspective. See .full-review [P1].
-    if (wasActive) {
-      await incrementWeekSummaryForActivity(
-        data.guestId,
-        data.houseId,
-        { type: data.type, timestamp: data.timestamp, data: data.data },
-        -1,
-      );
-    }
   } catch (error: any) {
-    if (error?.message === 'Activity not found') throw error;
+    if (error?.message === 'Activity not found' || error?.message === DISPUTED_NOT_DELETABLE) {
+      throw error;
+    }
     logException(error);
     throw new Error('Failed to delete activity');
   }
@@ -687,8 +374,15 @@ export async function disputeActivity(
     await firestore.collection('activities').doc(activityId).update({
       status: ActivityStatus.DISPUTED,
       disputeReason: reason,
+      // disputeResolvedBy has always held the disputer (and is overwritten
+      // with the resolver by resolveDispute); disputedBy keeps who disputed.
+      // The rules require both to be the caller for a peer dispute.
+      disputedBy,
       disputeResolvedBy: disputedBy,
-      loggedAt: FirebaseFirestore.FieldValue.serverTimestamp(),
+      // When this dispute was raised (the rules pin it to the server time):
+      // tells it apart from an earlier dispute on the same activity.
+      // loggedAt is left alone: it is not the disputer's to rewrite.
+      disputedAt: FirebaseFirestore.FieldValue.serverTimestamp(),
     });
   } catch (error) {
     logException(error);
@@ -697,48 +391,85 @@ export async function disputeActivity(
 }
 
 /**
- * Resolve a disputed activity
+ * The rules refused the caller: e.g. the activity is theirs or they logged
+ * it, or their access changed.
+ */
+export const NOT_ALLOWED_TO_DECIDE = 'Not allowed to decide this dispute';
+
+/** resolveDispute refusals the UI shows as-is (the rest are generic). */
+export const RESOLVE_REFUSALS = [
+  NOT_ALLOWED_TO_DECIDE,
+  'Activity not found',
+  'Dispute already resolved',
+  'Activity is not disputed',
+];
+
+/**
+ * Resolve a dispute. Only house admins (owners, managers, peer leaders) may;
+ * the rules enforce it.
+ *
+ * approve: the dispute stands, the activity was not done. It is marked
+ *          incomplete and stops counting (it stays on record, e.g. for the
+ *          court export's history).
+ * reject:  the dispute fails, the activity stands and counts.
+ *
+ * Both set status RESOLVED and the legacy `disputeResult` the UI's
+ * activityIsDisputable reads, so a resolved activity cannot be re-disputed.
  *
  * @param activityId - ID of the activity
- * @param resolvedBy - User ID who resolved the dispute
- * @param resolution - 'keep' or 'delete'
+ * @param resolvedBy - User ID of the admin resolving the dispute
+ * @param outcome - 'approve' or 'reject'
  */
 export async function resolveDispute(
   activityId: string,
   resolvedBy: string,
-  resolution: 'keep' | 'delete',
+  outcome: 'approve' | 'reject',
 ): Promise<void> {
   try {
+    const approved = outcome === 'approve';
     const updates: Partial<Activity> = {
-      status:
-        resolution === 'keep'
-          ? ActivityStatus.RESOLVED
-          : ActivityStatus.DELETED,
+      status: ActivityStatus.RESOLVED,
+      disputed: approved ? 'successful' : 'rejected',
+      incomplete: approved,
+      // The owner's wording: residents of the house report it was not done.
+      ...(approved ? { disputeOutcome: DISPUTE_OUTCOME_INCOMPLETE } : {}),
+      disputeResult: approved ? 'success' : 'fail',
       disputeResolvedBy: resolvedBy,
       disputeResolvedAt: FirebaseFirestore.FieldValue.serverTimestamp() as any,
-      loggedAt: FirebaseFirestore.FieldValue.serverTimestamp() as any,
+      // loggedAt is left alone: a decision does not change when the
+      // activity was logged (the court export dates a timestamp-less
+      // activity by it; older builds still stamp the server time here).
     };
 
     const activityRef = firestore.collection('activities').doc(activityId);
-    const activity = await activityRef.get();
 
-    if (!activity.exists) {
-      throw new Error('Activity not found');
-    }
-
-    const data = activity.data() as Activity;
-
-    await activityRef.update(updates);
-
-    // Recalculate week summary
-    const weekStart = getWeekStart(
-      typeof data.timestamp === 'string'
-        ? new Date(data.timestamp)
-        : data.timestamp,
-    );
-    await updateWeekSummary(data.guestId, data.houseId, weekStart);
+    // In a transaction, so two admins resolving at once cannot both win (the
+    // rules also refuse a resolution unless the dispute is still open).
+    await firestore.runTransaction(async (tx: any) => {
+      const activity = await tx.get(activityRef);
+      if (!activity.exists) {
+        throw new Error('Activity not found');
+      }
+      const status = (activity.data() as Activity | undefined)?.status;
+      if (status === ActivityStatus.RESOLVED) {
+        throw new Error('Dispute already resolved');
+      }
+      // Only an open dispute can be resolved: resolving a deleted or active
+      // activity would invent an outcome.
+      if (status !== ActivityStatus.DISPUTED) {
+        throw new Error('Activity is not disputed');
+      }
+      // The week summary and house.disputes are updated server-side.
+      tx.update(activityRef, updates);
+    });
   } catch (error: any) {
-    if (error?.message === 'Activity not found') throw error;
+    if (error?.code === 'firestore/permission-denied') {
+      logException(error);
+      throw new Error(NOT_ALLOWED_TO_DECIDE);
+    }
+    if (RESOLVE_REFUSALS.includes(error?.message)) {
+      throw error;
+    }
     logException(error);
     throw new Error('Failed to resolve dispute');
   }
@@ -755,10 +486,12 @@ export async function verifyActivity(
   verifiedBy: string,
 ): Promise<void> {
   try {
+    // loggedAt is left alone: verifying does not change when the activity
+    // was logged, and the rules refuse it on a disputed activity with no
+    // timestamp (the court export dates those by loggedAt).
     await firestore.collection('activities').doc(activityId).update({
       verified: true,
       verifiedBy,
-      loggedAt: FirebaseFirestore.FieldValue.serverTimestamp(),
     });
   } catch (error) {
     logException(error);
@@ -782,7 +515,7 @@ export function subscribeToHouseActivities(
   return firestore
     .collection('activities')
     .where('houseId', '==', houseId)
-    .where('status', '==', ActivityStatus.ACTIVE)
+    .where('status', 'in', LISTED_ACTIVITY_STATUSES)
     .orderBy('timestamp', 'desc')
     .limit(limit)
     .onSnapshot(snapshot => {
@@ -791,7 +524,7 @@ export function subscribeToHouseActivities(
         ...doc.data(),
         timestamp: doc.data().timestamp?.toDate?.() || doc.data().timestamp,
         loggedAt: doc.data().loggedAt?.toDate?.() || doc.data().loggedAt,
-      })) as Activity[];
+      })).filter(countsTowardStats) as Activity[];
 
       onUpdate(activities);
     });

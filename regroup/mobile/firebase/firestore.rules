@@ -443,8 +443,18 @@ service cloud.firestore {
         !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny(['subscriptionStatus', 'guestGraceEndsAt', 'stripeAccountApi', 'superAdminId', 'houseType', 'ownerId']) &&
         (hasSuperAdminRoleInHouse([houseId]) ||
-          ((hasAdminRoleInHouse([houseId]) || hasGuestRoleInHouse([houseId])) && !request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['stripeAccountId', 'stripeStatus', 'monthlyRent', 'weeklyRent', 'adminIds', 'ownerId', 'superAdminIds', 'adminId'])));
+          (hasAdminRoleInHouse([houseId]) && !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['stripeAccountId', 'stripeStatus', 'monthlyRent', 'weeklyRent', 'adminIds', 'ownerId', 'superAdminIds', 'adminId'])) ||
+          // Residents (guest role, not admin) may write ONLY the fields their
+          // own app flows write (audited for PR #141): complaints and issues
+          // (Personal screen) and currentCapacity (sign-up createGuest).
+          // Not rooms/phases: a resident could lower their own phase
+          // thresholds, and the only resident path that wrote them (deleting
+          // their own guest profile) is denied anyway (guest-archive create is
+          // admin-only). Not house.disputes: the onActivityWritten Cloud
+          // Function maintains it, and residents used to rewrite the whole map.
+          (hasGuestRoleInHouse([houseId]) && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['complaints', 'issues', 'currentCapacity'])));
       
       match /chat/{chatId} {
         allow read, write: if isGuest([houseId]) || isAdmin([houseId]);
@@ -548,11 +558,19 @@ service cloud.firestore {
       allow delete: if isAdmin([resource.data.houseId]);
     }
     
+    // LEGACY, UNTRUSTED: older app builds write /disputes in their resolve
+    // batch (house + guest + /disputes). Builds from the initial import
+    // (8e36c372) commit that batch BEFORE the activity write, so a refused
+    // batch would stop their resolve; main since e044fc5c writes the activity
+    // first. Either way the batch must keep succeeding. It is display-only.
+    // The trusted record is server-only: activities/{id}/dispute-decisions
+    // and dispute-archive (no rule here matches dispute-archive, so clients
+    // can neither read nor write it).
     match /disputes/{disputeId} {
       // Only house admins and the disputing resident may read a dispute — not
-      // every resident of the house. Clients render disputes from the embedded
-      // house map / activities collection, not by querying this collection, so
-      // admin-scoped reads don't break the app.
+      // every resident of the house. No current app screen queries this
+      // collection: open disputes come from house-disputes/{houseId} and the
+      // activities themselves (older builds read the house.disputes mirror).
       allow read: if isAdmin([resource.data.houseId])
         || isSameUser(resource.data.guestId);
       // Guests may only file disputes for themselves (guestId == Auth UID);
@@ -640,23 +658,318 @@ service cloud.firestore {
       allow delete: if isAdmin([resource.data.houseId]);
     }
 
+    // The guest doc an activity claims to be for (guest doc ids are not auth
+    // uids; guests.userId is the resident's uid).
+    function activityGuest(guestId) {
+      return get(/databases/$(database)/documents/guests/$(guestId)).data;
+    }
+
+    // Every dispute field. Clients change them only through the transitions
+    // below (enter, resolve, reopen). residentUid is not one of them: a client
+    // may set it only at create (to the guest doc's userId), and only the
+    // server changes it afterwards (see residentStampOf).
+    function disputeKeys() {
+      return ['disputeReason', 'disputedBy', 'disputeResolvedBy', 'disputeResolvedAt', 'disputed',
+              'incomplete', 'disputeOutcome', 'disputeResult', 'disputedAt', 'reopenedBy', 'reopenedAt'];
+    }
+
+    // The resident stamped on an activity (residentUid), or '' if none. A new
+    // app build sets it at create (checked against the guest doc); otherwise
+    // onActivityWritten fills an absent or null one from guests.userId. No
+    // client changes it after create. The server re-stamps it only while the
+    // activity has no dispute history and its guestId changes (an admin's
+    // correction); once there is history guestId is frozen, so for a dispute
+    // the stamp never moves.
+    function residentStampOf(d) {
+      let s = d.get('residentUid', null);
+      return s is string && s != '' ? s : '';
+    }
+
+    // Owner rule: an activity is never disputed, resolved or reopened by the
+    // person who did it: whoever logged it (loggedBy), the stamped resident
+    // (residentUid), and the account on its guest doc now. The guest doc
+    // alone can be edited, deleted or recreated around a dispute; the stamp
+    // cannot. Used as is for ENTER: anyone else may raise a dispute.
+    function callerIsNotTheResident() {
+      let d = resource.data;
+      let gid = d.get('guestId', '');
+      return request.auth.uid != d.get('loggedBy', null) &&
+        request.auth.uid != residentStampOf(d) &&
+        (!(gid is string && gid != '' && exists(/databases/$(database)/documents/guests/$(gid))) ||
+         get(/databases/$(database)/documents/guests/$(gid)).data.get('userId', null) != request.auth.uid);
+    }
+
+    // RESOLVE and REOPEN (callers are house admins): never the logger, the
+    // stamped resident or the guest doc's account. With no usable stamp:
+    //   - a guest doc with no userId (an accountless resident): there is no
+    //     resident account to protect, so any admin but the logger decides;
+    //   - a guest doc with a userId: that account may not decide;
+    //   - no guest doc: any admin but the logger decides.
+    // The last two trust the guest doc. HARD DEPLOY PRECONDITION: safe only
+    // with #145's guest rules live (userId immutable once set, no delete of
+    // your own guest doc). Deploy these rules only together with or after
+    // #145's rules, never alone.
+    function callerMayDecide() {
+      return callerIsNotTheResident();
+    }
+
+    // Owner rule: "Disputed activities should never be deleted." Any dispute
+    // history at all: an open or decided dispute, or any dispute field ever
+    // recorded (an old build's dispute set disputeResolvedBy only). Such an
+    // activity is never deleted (soft or hard), by anyone.
+    function hasDisputeHistory(d) {
+      return d.status == 'disputed' || d.status == 'resolved' ||
+        d.keys().hasAny(['disputeReason', 'disputedBy', 'disputeResolvedBy', 'disputeResolvedAt',
+                         'disputed', 'disputeOutcome', 'disputedAt', 'reopenedBy']) ||
+        d.get('disputeResult', 'none') != 'none' ||
+        d.get('incomplete', false) == true;
+    }
+
+    // Dispute history is never erased: a dispute field, once set, is never
+    // removed or nulled. ENTER, RESOLVE and the other admin writes each
+    // limit which fields they touch, so this is checked where it can happen.
+    // (Only a REOPEN clears the decision; see reopensDecision.)
+    function keeps(k) {
+      return resource.data.get(k, null) == null || request.resource.data.get(k, null) != null;
+    }
+
+    // ENTER (peer or admin): only an ACTIVE activity, and the write names the
+    // caller as the disputer in BOTH fields: disputeResolvedBy (old builds
+    // set only this) and disputedBy if present. disputedAt, if written, is
+    // the server time: it tells this dispute apart from an earlier one on the
+    // same activity. The onActivityWritten Cloud Function takes the disputer
+    // from these fields (disputerOf), so they must be trustworthy.
+    function entersDispute() {
+      let d = request.resource.data;
+      return resource.data.status == 'active' && d.status == 'disputed' &&
+        d.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'disputeReason', 'disputedBy', 'disputeResolvedBy', 'disputedAt', 'loggedAt']) &&
+        // loggedAt is not the disputer's to rewrite; older builds stamp it
+        // with the server time, which stays allowed, except on an activity
+        // with no timestamp: the court export dates those by loggedAt, so a
+        // dispute must not move them to "now".
+        (!d.diff(resource.data).affectedKeys().hasAny(['loggedAt']) ||
+         (d.loggedAt == request.time && resource.data.get('timestamp', null) != null)) &&
+        // This write names the disputer (a leftover from an earlier dispute does not).
+        d.diff(resource.data).affectedKeys().hasAny(['disputedBy', 'disputeResolvedBy']) &&
+        d.get('disputeResolvedBy', null) == request.auth.uid &&
+        d.get('disputedBy', request.auth.uid) == request.auth.uid &&
+        d.get('disputedAt', request.time) == request.time &&
+        keeps('disputeReason') && keeps('disputedBy') && keeps('disputedAt') &&
+        callerIsNotTheResident();
+    }
+
+    // A decision is one of three, consistently:
+    //   APPROVE: disputed 'successful', incomplete true, disputeOutcome
+    //            'incomplete-per-residents', disputeResult 'success' (not counted);
+    //   REJECT:  disputed 'rejected', incomplete false, no disputeOutcome,
+    //            disputeResult 'fail' (counted);
+    //   KEEP:    an old build's "keep", no outcome fields (counted, like REJECT).
+    function consistentOutcome() {
+      let d = request.resource.data;
+      return (d.get('disputed', null) == 'successful' && d.get('incomplete', null) == true &&
+              d.get('disputeOutcome', null) == 'incomplete-per-residents' &&
+              d.get('disputeResult', null) == 'success') ||
+        (d.get('disputed', null) == 'rejected' && d.get('incomplete', null) == false &&
+         d.get('disputeOutcome', null) == null && d.get('disputeResult', null) == 'fail') ||
+        (d.get('disputed', null) == null && d.get('incomplete', null) in [null, false] &&
+         d.get('disputeOutcome', null) == null && d.get('disputeResult', null) == null);
+    }
+
+    // RESOLVE (admin): an OPEN dispute only (so a second admin cannot
+    // overwrite the first decision), to `resolved` with a consistent outcome,
+    // recording the caller and the server time as resolver. The disputer
+    // fields stay as they are. loggedAt is checked by adminUpdates (the only
+    // caller) for RESOLVE too: no change on a timestamp-less activity with
+    // dispute history, so an old build's KEEP stamping it is refused there.
+    function resolvesDispute() {
+      let d = request.resource.data;
+      return resource.data.status == 'disputed' && d.status == 'resolved' &&
+        d.get('disputeResolvedBy', null) == request.auth.uid &&
+        d.get('disputeResolvedAt', null) == request.time &&
+        !d.diff(resource.data).affectedKeys()
+          .hasAny(['disputeReason', 'disputedBy', 'disputedAt', 'reopenedBy', 'reopenedAt',
+                   'guestId', 'loggedBy', 'houseId', 'residentUid', 'residentUidPending',
+                   'flaggedForReview', 'type', 'timestamp', 'data']) &&
+        consistentOutcome() &&
+        callerMayDecide();
+    }
+
+    // An old build's "delete" resolution: deleted, resolved at loggedAt.
+    function legacyUpheld(r) {
+      return r.status == 'deleted' && r.get('disputeResolvedAt', null) != null &&
+        r.get('disputeResolvedAt', null) == r.get('loggedAt', null) &&
+        r.get('disputed', null) == null && r.get('incomplete', null) != true;
+    }
+
+    // REOPEN (admin, owner decision "add a way to undo dispute decisions"): a
+    // decided dispute (or an old build's "delete") goes back to `disputed`,
+    // pending and counted, to be decided again. The write records the caller
+    // and server time (reopenedBy/At), clears the decision (the only write
+    // that may), and changes nothing else. The decision it undoes must
+    // already be in the server's decision log
+    // (activities/{id}/dispute-decisions/decided_{disputeResolvedAt ms},
+    // written with the /disputes archive), so no decision is ever lost.
+    function reopensDecision(activityId) {
+      let r = resource.data;
+      let d = request.resource.data;
+      let at = r.get('disputeResolvedAt', null);
+      return (r.status == 'resolved' || legacyUpheld(r)) && d.status == 'disputed' &&
+        d.diff(r).affectedKeys().hasOnly(['status', 'reopenedBy', 'reopenedAt', 'disputed', 'incomplete',
+          'disputeResult', 'disputeOutcome', 'disputeResolvedBy', 'disputeResolvedAt']) &&
+        d.get('reopenedBy', null) == request.auth.uid && d.get('reopenedAt', null) == request.time &&
+        // Cleared to null explicitly, never deleted: the keys stay on record.
+        d.keys().hasAll(['disputed', 'incomplete', 'disputeResult', 'disputeOutcome',
+                         'disputeResolvedBy', 'disputeResolvedAt']) &&
+        d.get('disputed', null) == null && d.get('incomplete', null) == null &&
+        d.get('disputeResult', null) == null && d.get('disputeOutcome', null) == null &&
+        d.get('disputeResolvedBy', null) == null && d.get('disputeResolvedAt', null) == null &&
+        at is timestamp &&
+        exists(/databases/$(database)/documents/activities/$(activityId)/dispute-decisions/$('decided_' + string(at.toMillis()))) &&
+        callerMayDecide();
+    }
+
+    // Every admin write but REOPEN, by transition: ENTER, RESOLVE, or a write
+    // that touches no dispute field (and never residentUid). In the last,
+    // who/where the activity is (guestId, loggedBy, houseId) is frozen once
+    // there is dispute history, and status moves only active <-> deleted with
+    // no dispute history: a pending dispute leaves only by RESOLVE, a
+    // decision (or an old build's "delete") only by REOPEN.
+    function adminUpdates() {
+      let r = resource.data;
+      let d = request.resource.data;
+      let keys = d.diff(r).affectedKeys();
+      return isAdmin([r.houseId]) &&
+        // loggedBy is immutable after create, for every client (a write
+        // re-sending the same value passes: diff() ignores it).
+        !keys.hasAny(['loggedBy']) &&
+        // loggedAt: unchanged, or the server time (VERIFY and edits, new and
+        // old builds, stamp it). Frozen only on an old build's "delete"
+        // record (deleted, with disputeResolvedAt), which the export
+        // recognises by disputeResolvedAt == loggedAt.
+        // And with dispute history only on an activity that has a timestamp:
+        // the court export dates a timestamp-less activity by loggedAt.
+        (!keys.hasAny(['loggedAt']) ||
+         (d.loggedAt == request.time &&
+          !(r.status == 'deleted' && r.get('disputeResolvedAt', null) != null) &&
+          (!hasDisputeHistory(r) || r.get('timestamp', null) != null))) &&
+        // A new guest (or house) must be a guest of the activity's house,
+        // as at create.
+        (!keys.hasAny(['guestId', 'houseId']) || activityGuest(d.guestId).houseId == d.houseId) &&
+        (r.status != 'disputed' && d.status == 'disputed' ? entersDispute() :
+         r.status == 'disputed' && d.status != 'disputed' ? resolvesDispute() :
+         (!keys.hasAny(disputeKeys()) && !keys.hasAny(['residentUid', 'residentUidPending', 'flaggedForReview']) &&
+          // What the activity is and when (type, timestamp, data) and who
+          // it is for are frozen once there is dispute history: a retyped or
+          // re-dated meeting would drop out of the summaries and the export.
+          (!keys.hasAny(['guestId', 'houseId', 'status', 'type', 'timestamp', 'data']) ||
+           (!hasDisputeHistory(r) &&
+            (!keys.hasAny(['status']) ||
+             (r.status in ['active', 'deleted'] && d.status in ['active', 'deleted'])))) &&
+          (!keys.hasAny(['houseId']) || isAdmin([d.houseId]))));
+    }
+
     match /activities/{activityId} {
       allow read: if isGuest([resource.data.houseId]) || isAdmin([resource.data.houseId]);
-      allow create: if isSameUser(request.resource.data.loggedBy) || isAdmin([request.resource.data.houseId]);
+      // Activities feed week-summaries (phase compliance, computed server-side
+      // by onActivityWritten) and the court compliance export, so who an
+      // activity is for, which house, and its status are not the client's to
+      // choose. The guest must exist and live in the activity's house. A house
+      // admin may log for any of its residents; a resident only for
+      // themselves, as an active, unverified activity. Nobody creates an
+      // activity with dispute fields or already in a dispute; a residentUid
+      // given at create must be the guest doc's account.
+      // Whoever creates it is its logger (loggedBy), admins too. Ids are
+      // limited to the characters the server's dispute mirror can key on.
+      allow create: if
+        activityId.matches('^[A-Za-z0-9_-]+$') &&
+        activityGuest(request.resource.data.guestId).houseId == request.resource.data.houseId &&
+        !request.resource.data.keys().hasAny(['residentUidPending', 'flaggedForReview']) &&
+        // A new app build stamps the resident at create: it must be the guest
+        // doc's account. Older builds omit it; the server stamps those.
+        (!request.resource.data.keys().hasAny(['residentUid']) ||
+         (activityGuest(request.resource.data.guestId).get('userId', '') is string &&
+          activityGuest(request.resource.data.guestId).get('userId', '') != '' &&
+          request.resource.data.residentUid == activityGuest(request.resource.data.guestId).userId)) &&
+        !request.resource.data.keys().hasAny(disputeKeys()) &&
+        !(request.resource.data.get('status', null) in ['disputed', 'resolved']) &&
+        ((isAdmin([request.resource.data.houseId]) && isSameUser(request.resource.data.loggedBy)) ||
+          (isGuest([request.resource.data.houseId]) &&
+           isSameUser(request.resource.data.loggedBy) &&
+           activityGuest(request.resource.data.guestId).userId == request.auth.uid &&
+           request.resource.data.status == 'active' &&
+           request.resource.data.get('verified', false) == false));
       // `verified`/`verifiedBy` feed the Verified column of the court-ready
-      // compliance export, so the resident who logged the activity must not be
-      // able to self-certify their own attendance. Admins may verify; the
-      // logging user may edit everything else. diff() only flags real changes,
-      // so a whole-object write echoing the same flags back still passes.
-      allow update: if isAdmin([resource.data.houseId]) ||
+      // compliance export, so non-admins never edit details.
+      //
+      // - Admins (owners, managers, peer leaders): adminUpdates, plus REOPEN.
+      // - The resident who logged it: soft-delete only (status + loggedAt),
+      //   and only with no dispute history.
+      // - A resident of the same house (peer): ENTER a dispute only, never on
+      //   their own activity (owner rule).
+      // ENTER is never by the activity's logger, stamped resident or guest
+      // doc account (callerIsNotTheResident); with no stamp and no guest doc,
+      // a non-admin may ENTER unless they logged it; that relies on #145's
+      // guest rules (userId immutable once set, no delete of your own guest
+      // doc), which must be live: deploy only together with or after #145.
+      // RESOLVE and REOPEN: callerMayDecide.
+      // diff() only flags real changes, so a write echoing the current
+      // values back passes.
+      allow update: if
+        (request.resource.data.status == 'disputed' && resource.data.status in ['resolved', 'deleted'] &&
+         isAdmin([resource.data.houseId]) ? reopensDecision(activityId) : adminUpdates()) ||
         (isSameUser(resource.data.loggedBy) &&
-          !request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['verified', 'verifiedBy']));
-      allow delete: if isAdmin([resource.data.houseId]);
+          request.resource.data.status == 'deleted' &&
+          !hasDisputeHistory(resource.data) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'loggedAt']) &&
+          request.resource.data.get('loggedAt', null) in [resource.data.get('loggedAt', null), request.time]) ||
+        (isGuest([resource.data.houseId]) && entersDispute());
+      // Hard delete: admins only, and never an activity with dispute history.
+      allow delete: if isAdmin([resource.data.houseId]) && !hasDisputeHistory(resource.data);
+
+      // The append-only dispute decision log (approved | rejected | kept |
+      // deleted | reopened), written only by the onActivityWritten Cloud
+      // Function. REOPEN checks it with exists().
+      match /dispute-decisions/{decisionId} {
+        allow read, write: if false;
+      }
+    }
+
+    // The authoritative list of a house's open disputes, written only by the
+    // onActivityWritten Cloud Function. houses/{id}.disputes is kept as a
+    // legacy, display-only mirror for older app builds; admins can still
+    // rewrite it (house setup saves whole-house copies), so nothing trusts it.
+    match /house-disputes/{houseId} {
+      allow read: if isGuestOrAdmin([houseId]);
+      allow write: if false;
+    }
+
+    function summaryGuest(summaryId) {
+      return activityGuest(summaryId.split('_')[0]);
     }
 
     match /week-summaries/{summaryId} {
-      allow read: if isGuest([resource.data.houseId]) || isAdmin([resource.data.houseId]);
+      // Written by the onActivityWritten Cloud Function (Admin SDK), some time
+      // after the activity. The app subscribes to {guestId}_{weekStart} before
+      // that, so a missing doc must read as not-found: dereferencing
+      // resource.data on a null resource denied it and killed the listener.
+      //
+      // The missing-doc branch is scoped through the guest the id names
+      // ({guestId}_{weekStart}; guest ids are auto-ids with no '_'): the same
+      // house members who could read the summary once it exists. So a stranger
+      // cannot probe whether a summary exists. Costs one get() per read of a
+      // missing summary.
+      allow read: if (resource == null && signedIn() &&
+          (summaryGuest(summaryId).userId == request.auth.uid ||
+           isGuest([summaryGuest(summaryId).houseId]) ||
+           isAdmin([summaryGuest(summaryId).houseId]))) ||
+        isGuest([resource.data.houseId]) || isAdmin([resource.data.houseId]);
+      // The app no longer writes summaries. Admin write remains ONLY for app
+      // versions released before the trigger, which still write them (+1 on
+      // log, -1 on delete, a full client recompute on edit/resolve). The
+      // trigger's next recompute overwrites those, but a write landing after
+      // it persists until then, so the post-rollout backfill re-run is
+      // mandatory. Change to `if false` once those versions are unsupported.
       allow write: if isAdmin([request.resource.data.houseId]);
     }
     
