@@ -136,11 +136,19 @@ service cloud.firestore {
     match /guests/{guestId} {
       allow read: if isGuest([resource.data.houseId]) || isAdmin([resource.data.houseId]); // need to adjust house search to not query guests (data needs to be aggregated on the house documents)
 
-      // Self-create (invite signup) may not set the Stripe payment fields, so a
+      // Self-create (invite signup) requires the guest claim for the house the
+      // doc joins. onGuestWrite splits the house's EES over its guest docs, so
+      // without this any signed-in user could plant a "ghost" guest in any
+      // house and change what its real residents owe. The claim is set only
+      // server-side (redeemInvitation / addGuestAuthorization), and SignUpForm
+      // refreshes the token after the grant and before this write; the same
+      // batch's house update already needed the claim.
+      // Self-create may not set the Stripe payment fields either, so a
       // resident cannot plant a co-resident's customer id on their own doc.
       // Admin create and update stay unrestricted (house admins can still set
       // them); account deletion checks Stripe ownership server-side.
       allow create: if (isSameUser(request.resource.data.userId) &&
+                        isGuest([request.resource.data.houseId]) &&
                         !request.resource.data.keys().hasAny(['stripeCustomerId', 'defaultPaymentMethodId'])) ||
                        isAdmin([request.resource.data.houseId]);
 

@@ -8,6 +8,10 @@
  * ownership (metadata.userId) before cancelling or deleting anything; house
  * admins can still set guest payment fields.
  *
+ * Self-create needs the guest claim for the house (see guestCreate.rules.test.ts),
+ * which invite signup holds before it writes, so the self-create cases here run
+ * with that claim and still isolate the payment-field guard.
+ *
  * Requires the Firebase Firestore emulator running on port 8080.
  *
  * Setup:
@@ -31,6 +35,7 @@ const RULES_PATH = path.resolve(__dirname, '../firestore.rules');
 const SELF_UID = 'newResident';
 const ADMIN_UID = 'houseAdmin';
 const HOUSE_ID = 'house123';
+const SIGNUP_CLAIMS = { guest: { [HOUSE_ID]: true } };
 
 let testEnv: RulesTestEnvironment;
 
@@ -63,7 +68,7 @@ const signupGuest = {
 
 describe('guests self-create payment fields', () => {
   it('lets a user create their own guest doc without payment fields', async () => {
-    const ctx = testEnv.authenticatedContext(SELF_UID);
+    const ctx = testEnv.authenticatedContext(SELF_UID, SIGNUP_CLAIMS);
     await assertSucceeds(setDoc(doc(ctx.firestore(), 'guests/g1'), signupGuest));
   });
 
@@ -71,7 +76,7 @@ describe('guests self-create payment fields', () => {
     ['stripeCustomerId', { stripeCustomerId: 'cus_victim' }],
     ['defaultPaymentMethodId', { defaultPaymentMethodId: 'pm_victim' }],
   ])('BLOCKS a self-created guest doc carrying %s', async (_label, extra) => {
-    const ctx = testEnv.authenticatedContext(SELF_UID);
+    const ctx = testEnv.authenticatedContext(SELF_UID, SIGNUP_CLAIMS);
     await assertFails(setDoc(doc(ctx.firestore(), 'guests/g1'), { ...signupGuest, ...extra }));
   });
 
