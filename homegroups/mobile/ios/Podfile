@@ -66,8 +66,8 @@ target 'RecoveryConnect' do
 
   pod 'RNFBStorage', :path => '../node_modules/@react-native-firebase/storage'
 
-  pod 'Stripe', '~> 24.12.0'
-  pod 'StripePaymentSheet', '~> 24.12.0'
+  pod 'Stripe', '~> 24.11.0'
+  pod 'StripePaymentSheet', '~> 24.11.0'
 
   # Firebase iOS SDK version is supplied by @react-native-firebase v21 (Firebase 11.x).
   # Do not override $FirebaseSDKVersion here — let RNFB own the version to avoid nanopb drift.
