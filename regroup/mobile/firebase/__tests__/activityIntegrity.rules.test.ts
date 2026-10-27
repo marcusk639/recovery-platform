@@ -75,6 +75,8 @@ function activity(overrides: Record<string, unknown> = {}) {
     status: 'active',
     verified: false,
     loggedBy: RESIDENT_UID,
+    // Stamped by the server (onActivityWritten) from guests.userId.
+    residentUid: RESIDENT_UID,
     timestamp: WHEN,
     data: { type: 'chore', choreType: 'daily', choreName: 'Kitchen' },
     ...overrides,

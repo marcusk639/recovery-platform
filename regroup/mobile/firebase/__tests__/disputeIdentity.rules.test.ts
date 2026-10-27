@@ -149,10 +149,11 @@ const approve = (uid: string): DocumentData => ({
 });
 
 describe('the resident is the server-stamped residentUid', () => {
-  it('DENIES any client writing residentUid, on create or update', async () => {
+  it("a client sets residentUid only at create, only to the guest doc's account; never on update", async () => {
     const fresh = act({ residentUid: RES });
-    await assertFails(setDoc(doc(res(), 'activities/new1'), fresh));
-    await assertFails(setDoc(doc(mgr(), 'activities/new2'), act({ residentUid: PEER })));
+    await assertSucceeds(setDoc(doc(res(), 'activities/new1'), fresh));
+    await assertFails(setDoc(doc(res(), 'activities/new1b'), act({ residentUid: PEER })));
+    await assertFails(setDoc(doc(mgr(), 'activities/new2'), act({ residentUid: PEER, loggedBy: MGR })));
     await assertFails(upd(mgr(), 'active', { residentUid: PEER }));
     await assertFails(upd(mgr(), 'active', { residentUid: deleteField() }));
     const { residentUid: _r, ...unstamped } = fresh;
@@ -177,9 +178,13 @@ describe('the resident is the server-stamped residentUid', () => {
     await assertSucceeds(upd(own(), 'plOwnPending2', reject(OWN)));
   });
 
-  it('no guest doc and no residentUid: residents may not dispute it, admins still may', async () => {
-    await assertFails(upd(peer(), 'legacyNoGuest', disputeNoNonce(PEER)));
-    await assertSucceeds(upd(own(), 'legacyNoGuest', disputeNoNonce(OWN)));
+  it('no guest doc and no residentUid: peers may dispute it; only the primary owner decides', async () => {
+    await env.withSecurityRulesDisabled(async (c) => {
+      await setDoc(doc(c.firestore(), `houses/${H}`), { superAdminId: OWN });
+    });
+    await assertSucceeds(upd(peer(), 'legacyNoGuest', disputeNoNonce(PEER)));
+    await assertFails(upd(pl(), 'legacyNoGuest', reject(PL)));
+    await assertSucceeds(upd(own(), 'legacyNoGuest', reject(OWN)));
   });
 
   it('freezes guestId, loggedBy and houseId once there is dispute history, for admins too', async () => {

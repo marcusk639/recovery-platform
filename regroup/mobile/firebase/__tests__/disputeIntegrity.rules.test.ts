@@ -62,6 +62,8 @@ const act = (o: Record<string, unknown> = {}) => ({
   status: 'active',
   verified: false,
   loggedBy: OWNER,
+  // Stamped by the server (onActivityWritten) from guests.userId.
+  residentUid: OWNER,
   timestamp: Timestamp.fromDate(new Date('2026-01-14T18:00:00Z')),
   ...o,
 });
