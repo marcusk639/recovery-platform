@@ -9,14 +9,14 @@ import {
 } from '../../activities/duplicateActivities';
 
 const at = (iso: string) => ({ toDate: () => new Date(iso) });
-const a = (id: string, loggedAt: string, extra: Record<string, unknown> = {}) => ({
+const a = (id: string, timestamp: string, extra: Record<string, unknown> = {}) => ({
   id,
   data: {
     guestId: 'g1',
     type: 'medication',
     status: 'active',
     data: { medicationName: 'x', dose: 1 },
-    loggedAt: at(loggedAt),
+    timestamp: at(timestamp),
     ...extra,
   },
 });
@@ -50,14 +50,36 @@ describe('findSuspectedDuplicates', () => {
     ).toEqual([{ id: '5', duplicateOf: '1' }]);
   });
 
-  it('ignores inactive activities and falls back to timestamp when loggedAt is missing', () => {
+  it('ignores inactive activities and ones without a timestamp', () => {
     expect(
       findSuspectedDuplicates([
         a('deleted', '2026-01-14T18:00:00Z', { status: 'deleted' }),
-        a('x', '2026-01-14T18:00:30Z', { loggedAt: undefined, timestamp: at('2026-01-14T18:00:30Z') }),
-        a('y', '2026-01-14T18:01:00Z', { loggedAt: undefined, timestamp: at('2026-01-14T18:01:00Z') }),
+        a('x', '2026-01-14T18:00:30Z'),
+        a('y', '2026-01-14T18:01:00Z'),
+        a('none', '2026-01-14T18:01:10Z', { timestamp: undefined }),
       ]),
     ).toEqual([{ id: 'y', duplicateOf: 'x' }]);
+  });
+
+  it('does not flag a week of identical daily activities whose loggedAt an admin verify rewrote', () => {
+    // verifyActivity sets loggedAt = serverTimestamp(), so all seven now share
+    // one loggedAt seconds apart; their timestamps are a day apart.
+    const days = Array.from({ length: 7 }, (_, i) =>
+      a(`day${i}`, `2026-01-${String(12 + i).padStart(2, '0')}T09:00:00Z`, {
+        verified: true,
+        loggedAt: at(`2026-01-19T10:00:0${i}Z`),
+      }),
+    );
+    expect(findSuspectedDuplicates(days)).toEqual([]);
+  });
+
+  it('flags a backdated retry that reused the identical form timestamp', () => {
+    expect(
+      findSuspectedDuplicates([
+        a('first', '2026-01-10T09:00:00Z', { loggedAt: at('2026-01-14T18:00:00Z') }),
+        a('retry', '2026-01-10T09:00:00Z', { loggedAt: at('2026-01-14T18:00:40Z') }),
+      ]),
+    ).toEqual([{ id: 'retry', duplicateOf: 'first' }]);
   });
 
   it('chains a burst of retries to the previous one', () => {

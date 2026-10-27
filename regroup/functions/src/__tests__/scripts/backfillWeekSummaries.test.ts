@@ -195,11 +195,10 @@ describe('dry-run report', () => {
   });
 
   it('reports suspected duplicates (same guest, type and data within 10 min) by id, without removing them', async () => {
-    const loggedAt = (iso: string) => ts(iso);
-    db.seed('activities', 'first', activity({ loggedAt: loggedAt('2026-01-14T18:00:05Z') }));
-    db.seed('activities', 'retry', activity({ loggedAt: loggedAt('2026-01-14T18:01:30Z') }));
-    db.seed('activities', 'later', activity({ loggedAt: loggedAt('2026-01-14T19:30:00Z') }));
-    db.seed('activities', 'other', activity({ type: 'meeting', loggedAt: loggedAt('2026-01-14T18:01:00Z') }));
+    db.seed('activities', 'first', activity({ timestamp: ts('2026-01-14T18:00:05Z') }));
+    db.seed('activities', 'retry', activity({ timestamp: ts('2026-01-14T18:01:30Z') }));
+    db.seed('activities', 'later', activity({ timestamp: ts('2026-01-14T19:30:00Z') }));
+    db.seed('activities', 'other', activity({ type: 'meeting', timestamp: ts('2026-01-14T18:01:00Z') }));
 
     const counts = await run(asFirestore(db), opts);
 

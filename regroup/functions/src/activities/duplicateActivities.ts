@@ -7,10 +7,13 @@
  * duplicate documents; the trigger and backfill count them.
  *
  * A suspected duplicate is an active activity with the same guestId, type and
- * equal `data` as an earlier active one, logged within DUPLICATE_WINDOW_MINUTES
- * of it. Time is `loggedAt` (server time of the write) when present, else
- * `timestamp`: a retry of a backdated log keeps the backdated timestamp, but
- * its loggedAt is seconds to minutes after the first.
+ * equal `data` as an earlier active one, whose `timestamp` is within
+ * DUPLICATE_WINDOW_MINUTES of it. `timestamp` is the activity's own time: a
+ * plain retry gets a new Date() seconds later, and a retry of a backdated log
+ * reuses the identical form timestamp, so one window catches both.
+ * `loggedAt` is deliberately NOT used: update, delete, dispute, resolve and
+ * verify all overwrite it with serverTimestamp, so an admin verifying a week
+ * of identical daily activities would make them look like a burst.
  *
  * Why 10 minutes: an error-then-retry happens within seconds to a couple of
  * minutes, while two genuine identical logs (same chore name, same meeting,
@@ -49,7 +52,7 @@ export function findSuspectedDuplicates(
   const groups = new Map<string, Array<{ id: string; at: number }>>();
   for (const { id, data } of activities) {
     if (data.status !== 'active') continue;
-    const at = toInstant(data.loggedAt) ?? toInstant(data.timestamp);
+    const at = toInstant(data.timestamp);
     if (!at) continue;
     const key = stable([data.guestId, data.type, data.data]);
     const list = groups.get(key) ?? [];
