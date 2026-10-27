@@ -135,15 +135,18 @@ describe('only active -> disputed starts a dispute', () => {
 
   it('breaks the disputed <-> deleted cycle that flooded admins with notifications', async () => {
     await assertSucceeds(upd(peer(), 'active', dispute(PEER)));
-    await assertSucceeds(
+    // A disputed activity is never deleted (owner rule), and cannot be
+    // re-disputed while its dispute is open.
+    await assertFails(
       upd(resident(), 'active', { status: 'deleted', loggedAt: Timestamp.now() }),
     );
     await assertFails(upd(peer(), 'active', dispute(PEER)));
   });
 
-  it('still lets the owner soft-delete from any status', async () => {
-    for (const id of ['active', 'pending', 'approved', 'rejected']) {
-      await assertSucceeds(upd(resident(), id, { status: 'deleted', loggedAt: Timestamp.now() }));
+  it('lets the owner soft-delete only an activity with no dispute history', async () => {
+    await assertSucceeds(upd(resident(), 'active', { status: 'deleted', loggedAt: Timestamp.now() }));
+    for (const id of ['pending', 'approved', 'rejected']) {
+      await assertFails(upd(resident(), id, { status: 'deleted', loggedAt: Timestamp.now() }));
     }
   });
 

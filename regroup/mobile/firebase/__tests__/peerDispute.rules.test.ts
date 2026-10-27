@@ -145,10 +145,10 @@ describe('peer disputes', () => {
     await assertFails(updateDoc(doc(anon.firestore(), 'activities/a1'), dispute('x')));
   });
 
-  it('lets the owner delete their activity after a peer disputed it', async () => {
+  it('BLOCKS the owner deleting their activity after a peer disputed it (owner rule)', async () => {
     await assertSucceeds(update(peer(), 'a1', dispute()));
     const owner = testEnv.authenticatedContext(OWNER_UID, { guest: { [HOUSE]: true } });
-    await assertSucceeds(update(owner, 'a1', { status: 'deleted', loggedAt: Timestamp.now() }));
+    await assertFails(update(owner, 'a1', { status: 'deleted', loggedAt: Timestamp.now() }));
     await assertFails(update(owner, 'a1', { disputedBy: 'someoneElse' }));
   });
 

@@ -93,6 +93,7 @@ const update = (c: Ctx, id: string, data: DocumentData) =>
 const resolution = (outcome: 'approve' | 'reject', by: string): DocumentData => ({
   status: 'resolved',
   disputed: outcome === 'approve' ? 'successful' : 'rejected',
+  ...(outcome === 'approve' ? { disputeOutcome: 'incomplete-per-residents' } : {}),
   incomplete: outcome === 'approve',
   disputeResult: outcome === 'approve' ? 'success' : 'fail',
   disputeResolvedBy: by,

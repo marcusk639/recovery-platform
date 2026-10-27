@@ -113,6 +113,7 @@ const legacyDisp = (uid: string): DocumentData => ({
 const resolve = (outcome: 'approve' | 'reject', by: string): DocumentData => ({
   status: 'resolved',
   disputed: outcome === 'approve' ? 'successful' : 'rejected',
+  ...(outcome === 'approve' ? { disputeOutcome: 'incomplete-per-residents' } : {}),
   incomplete: outcome === 'approve',
   disputeResult: outcome === 'approve' ? 'success' : 'fail',
   disputeResolvedBy: by,
@@ -198,8 +199,8 @@ describe('round-3 probes', () => {
     );
   });
 
-  it("an old build's 'delete' resolution of an OPEN dispute still works", async () => {
-    await assertSucceeds(
+  it("DENIES an old build's 'delete' resolution, even of an open dispute (never delete a disputed activity)", async () => {
+    await assertFails(
       upd(mgr(), 'pending', {
         status: 'deleted',
         disputeResolvedBy: MGR,
@@ -209,8 +210,9 @@ describe('round-3 probes', () => {
     );
   });
 
-  it("the owner's plain soft-delete of a resolved activity still works (no disputeResolvedAt change)", async () => {
+  it('DENIES the owner soft-deleting a resolved activity (dispute history); an undisputed one still works', async () => {
     await assertSucceeds(upd(mgr(), 'pending', resolve('reject', MGR)));
-    await assertSucceeds(upd(owner(), 'pending', { status: 'deleted', loggedAt: Timestamp.now() }));
+    await assertFails(upd(owner(), 'pending', { status: 'deleted', loggedAt: Timestamp.now() }));
+    await assertSucceeds(upd(owner(), 'own', { status: 'deleted', loggedAt: Timestamp.now() }));
   });
 });
