@@ -13,14 +13,18 @@
 @interface AppDelegate ()
 
 @property (nonatomic, copy) NSDictionary *appLaunchOptions;
+/// YES once React Native has been started (bridge and root view exist). Set
+/// explicitly instead of inferring it from self.bridge, which RCTAppDelegate
+/// may populate or clear on its own schedule.
+@property (nonatomic, assign) BOOL reactNativeStarted;
 
 @end
 
 @implementation AppDelegate
 
-- (UIViewController *)rootViewControllerForConnectionOptions:(UISceneConnectionOptions *)connectionOptions
+- (UIViewController *)startReactNativeIfNeededWithConnectionOptions:(UISceneConnectionOptions *)connectionOptions
 {
-  if (self.bridge == nil) {
+  if (!self.reactNativeStarted) {
     // Rebuild the launch options React Native reads for Linking.getInitialURL().
     NSMutableDictionary *options = [self.appLaunchOptions mutableCopy];
     NSURL *url = connectionOptions.URLContexts.anyObject.URL;
@@ -34,8 +38,14 @@
         @"UIApplicationLaunchOptionsUserActivityKey" : activity,
       };
     }
+    // A notification tap that cold-started the app arrives here, not in launchOptions.
+    NSDictionary *notificationUserInfo = connectionOptions.notificationResponse.notification.request.content.userInfo;
+    if (notificationUserInfo) {
+      options[UIApplicationLaunchOptionsRemoteNotificationKey] = notificationUserInfo;
+    }
     // RCTAppDelegate creates the bridge, the root view and a scene-less window.
     [super application:UIApplication.sharedApplication didFinishLaunchingWithOptions:options];
+    self.reactNativeStarted = YES;
   } else {
     // The scene was discarded and reconnected while the process (and bridge) lived.
     // UIKit does not call scene:openURLContexts: / continueUserActivity: for
@@ -51,6 +61,10 @@
     }
   }
   UIViewController *rootViewController = self.window.rootViewController;
+  NSAssert(rootViewController != nil, @"React Native did not create a root view controller");
+  if (rootViewController == nil) {
+    NSLog(@"[AppDelegate] React Native produced no root view controller; the scene will show a blank window");
+  }
   self.window.rootViewController = nil;
   return rootViewController;
 }
@@ -144,7 +158,7 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
     return;
   }
   AppDelegate *appDelegate = (AppDelegate *)UIApplication.sharedApplication.delegate;
-  UIViewController *rootViewController = [appDelegate rootViewControllerForConnectionOptions:connectionOptions];
+  UIViewController *rootViewController = [appDelegate startReactNativeIfNeededWithConnectionOptions:connectionOptions];
   self.window = [[UIWindow alloc] initWithWindowScene:(UIWindowScene *)scene];
   self.window.rootViewController = rootViewController;
   // React Native and its libraries reach the window through the app delegate.

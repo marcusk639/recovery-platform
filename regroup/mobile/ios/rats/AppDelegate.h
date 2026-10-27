@@ -5,8 +5,9 @@
 @interface AppDelegate : RCTAppDelegate <UNUserNotificationCenterDelegate>
 
 /// Starts React Native (once) for the app's window scene and returns its root
-/// view controller. Called by SceneDelegate when the scene connects.
-- (UIViewController *)rootViewControllerForConnectionOptions:(UISceneConnectionOptions *)connectionOptions;
+/// view controller (nil only if React Native failed to create one). Called by
+/// SceneDelegate when the scene connects.
+- (UIViewController *)startReactNativeIfNeededWithConnectionOptions:(UISceneConnectionOptions *)connectionOptions;
 
 @end
 
