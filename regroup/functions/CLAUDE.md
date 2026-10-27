@@ -25,6 +25,7 @@ npm run migrate:house-sub:dry-run
 npm run migrate:house-sub:run
 npm run migrate:payment-cents:dry-run   # / :apply
 npm run migrate:balance-cents:dry-run   # / :apply
+npm run report:ghost-guests     # Read-only: guest docs with no house claim (ids only); needs both emulator hosts to rehearse
 ```
 
 Jest config is the `jest` key in `package.json` (no `jest.config.js`). Firestore rules tests live in `../mobile/firebase/__tests__/`, not here.
