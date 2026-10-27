@@ -22,9 +22,11 @@
  *   no-claim           the account named by userId has no guest/admin/
  *                      superAdmin claim for the house: the ghost pattern
  *   account-missing    userId names an account that no longer exists
- *   invalid-userid     userId is not a plausible Firebase uid (not a string,
- *                      over 128 characters, or contains a slash); never
- *                      looked up, and not counted by onGuestWrite either
+ *   invalid-userid     userId is not a uid this app could have issued (not a
+ *                      string, over 128 characters, or contains a slash: the
+ *                      app's sign-up never creates such uids, and one could
+ *                      not key users/{uid}); never looked up, and not counted
+ *                      by onGuestWrite either
  *   duplicate-account  a second guest doc for the same account in the house
  *   no-house           the doc has no houseId
  * Docs with no userId (admin intake, CSV import) are not flagged: only an

@@ -19,9 +19,9 @@ import { auth } from 'firebase-admin';
  *   both the old and the new rules, so these count.
  * - userId with a guest, admin or superAdmin claim for the house: a member.
  * - userId with no claim for the house, or no account at all: not counted.
- * - userId that cannot be a Firebase uid (not a string, over 128 characters,
- *   or containing a slash): not counted, and never sent to getUsers(), which
- *   would reject the whole house's lookup over one bad identifier.
+ * - userId that is not a uid this app could have issued (not a string, over
+ *   128 characters, or containing a slash): not counted, and never sent to
+ *   getUsers(), which rejects the whole call when one identifier is invalid.
  */
 
 /** The subset of the Admin Auth client used here, so tests can pass a fake. */
@@ -68,12 +68,18 @@ export function holdsHouseRole(
   });
 }
 
-/** Firebase Auth uids are 1-128 characters; a slash is never valid. */
+/** Firebase Auth rejects uids longer than 128 characters. */
 const MAX_UID_LENGTH = 128;
 
 /**
- * True for a value that could be a Firebase uid. getUsers() rejects the whole
- * call on one malformed identifier, so anything else is filtered out first.
+ * True for a userId worth looking up. getUsers() rejects the whole call when
+ * one identifier is invalid, so anything else is filtered out first.
+ *
+ * Slashes are excluded although Firebase Auth itself accepts them
+ * (firebase-admin's isUid allows any 1-128 character string): this app only
+ * creates accounts through Firebase Auth sign-up, whose generated uids never
+ * contain one, and a uid with a slash could not key a Firestore doc such as
+ * users/{uid}. Excluding them fails safe: such a doc is simply not counted.
  */
 export function isPlausibleUid(value: unknown): value is string {
   return (

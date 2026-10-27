@@ -27,10 +27,29 @@ const mockBatch = { update: mockBatchUpdate, commit: mockBatchCommit };
 
 const mockGuestsGet = jest.fn();
 const mockEesGet = jest.fn();
+// onGuestWrite's delete cleanup looks up the account's other guest docs and
+// admins docs (queries filtered on userId); those go to these mocks, and every
+// other query to the collection's main mock.
+const mockGuestsByUserGet = jest.fn().mockResolvedValue({ docs: [] });
+const mockAdminsGet = jest.fn().mockResolvedValue({ docs: [] });
+const mockQueryFilters: Array<Array<[string, string, unknown]>> = [];
 
-function makeQueryChain(getFn: jest.Mock) {
-  const chain = { where: jest.fn().mockReturnThis(), get: getFn };
-  return chain;
+function makeQueryChain(
+  getFn: jest.Mock,
+  byUserGetFn?: jest.Mock,
+  filters: Array<[string, string, unknown]> = [],
+): any {
+  return {
+    where: jest.fn((field: string, op: string, value: unknown) =>
+      makeQueryChain(getFn, byUserGetFn, [...filters, [field, op, value]]),
+    ),
+    get: (...args: unknown[]) => {
+      mockQueryFilters.push(filters);
+      return byUserGetFn && filters.some(([f]) => f === "userId")
+        ? byUserGetFn(...args)
+        : getFn(...args);
+    },
+  };
 }
 
 jest.mock("firebase-admin", () => ({
@@ -96,7 +115,8 @@ jest.mock("../../api/firestore", () => ({
   addNotification: jest.fn(),
   getUser: (...args: any[]) => mockGetUser(...args),
   // onGuestWrite EES recalculation reads guestCollection + ratsFirestore directly.
-  guestCollection: makeQueryChain(mockGuestsGet),
+  guestCollection: makeQueryChain(mockGuestsGet, mockGuestsByUserGet),
+  adminCollection: makeQueryChain(mockAdminsGet),
   houseCollection: makeQueryChain(
     jest.fn().mockResolvedValue({ docs: [], empty: true }),
   ),
@@ -117,8 +137,10 @@ jest.mock("../../api/firestore", () => ({
 
 // ─── util/claims ─────────────────────────────────────────────────────────────
 const mockDeleteClaim = jest.fn();
+const mockRevokeHouseRoles = jest.fn().mockResolvedValue(undefined);
 jest.mock("../../util/claims", () => ({
   deleteClaim: (...args: any[]) => mockDeleteClaim(...args),
+  revokeHouseRoles: (...args: any[]) => mockRevokeHouseRoles(...args),
 }));
 
 // ─── util/date ────────────────────────────────────────────────────────────────
@@ -444,6 +466,9 @@ describe("onGuestWrite (EES recalculation)", () => {
     moveOutDate: "2026-01-01",
   };
 
+  // Every EES update is conditioned on the record being unchanged since read.
+  const PRECONDITION = { lastUpdateTime: expect.anything() };
+
   // Guest doc i gets id guest-<i>; EES record i belongs to guest-<i> unless
   // it names a guestId. The re-split writes only counted guests' records.
   function makeGuestSnap(guests: any[]) {
@@ -457,7 +482,11 @@ describe("onGuestWrite (EES recalculation)", () => {
       empty: records.length === 0,
       docs: records.map((r, i) => {
         const data = { guestId: `guest-${i}`, ...r };
-        return { data: () => data, ref: { id: `ees-${i}` } };
+        return {
+          data: () => data,
+          ref: { id: `ees-${i}` },
+          updateTime: { ut: `ees-${i}` },
+        };
       }),
     };
   }
@@ -474,7 +503,7 @@ describe("onGuestWrite (EES recalculation)", () => {
     expect(mockBatchUpdate).toHaveBeenCalledWith(expect.anything(), {
       amount: 100,
       residentCount: 2,
-    });
+    }, PRECONDITION);
     expect(mockBatchCommit).toHaveBeenCalledTimes(1);
   });
 
@@ -492,7 +521,7 @@ describe("onGuestWrite (EES recalculation)", () => {
     expect(mockBatchUpdate).toHaveBeenCalledWith(expect.anything(), {
       amount: 100,
       residentCount: 1,
-    });
+    }, PRECONDITION);
   });
 
   it("uses the before snapshot houseId on a delete event", async () => {
@@ -507,7 +536,7 @@ describe("onGuestWrite (EES recalculation)", () => {
     expect(mockBatchUpdate).toHaveBeenCalledWith(expect.anything(), {
       amount: 50,
       residentCount: 1,
-    });
+    }, PRECONDITION);
   });
 
   it("returns early when no EES records exist for the current week", async () => {
@@ -574,7 +603,7 @@ describe("onGuestWrite (EES recalculation)", () => {
     expect(mockBatchUpdate).toHaveBeenCalledWith(expect.anything(), {
       amount: 150,
       residentCount: 2,
-    });
+    }, PRECONDITION);
   });
 
   it("ignores a guest doc whose account no longer exists", async () => {
@@ -596,7 +625,7 @@ describe("onGuestWrite (EES recalculation)", () => {
     expect(mockBatchUpdate).toHaveBeenCalledWith(expect.anything(), {
       amount: 120,
       residentCount: 1,
-    });
+    }, PRECONDITION);
   });
 
   it("does not touch EES records when only ghost docs remain", async () => {
@@ -644,7 +673,7 @@ describe("onGuestWrite (EES recalculation)", () => {
     expect(mockBatchUpdate).toHaveBeenCalledWith(expect.anything(), {
       amount: 0,
       residentCount: 1,
-    });
+    }, PRECONDITION);
   });
 
   it("writes only the counted residents' records, leaving a ghost's record alone", async () => {
@@ -671,9 +700,10 @@ describe("onGuestWrite (EES recalculation)", () => {
     expect(mockBatchUpdate).toHaveBeenCalledWith(
       { id: "ees-0" },
       { amount: 300, residentCount: 1 },
+      { lastUpdateTime: { ut: "ees-0" } },
     );
     expect(logger.info).toHaveBeenCalledWith(
-      expect.stringContaining("left 1 record"),
+      expect.stringContaining("left 1 unpaid record(s) untouched"),
     );
   });
 
@@ -693,7 +723,7 @@ describe("onGuestWrite (EES recalculation)", () => {
     expect(mockBatchUpdate).toHaveBeenCalledWith(expect.anything(), {
       amount: 90,
       residentCount: 1,
-    });
+    }, PRECONDITION);
   });
 
   it("rounds the share to cents the way mobile calculateEES does", async () => {
@@ -709,7 +739,7 @@ describe("onGuestWrite (EES recalculation)", () => {
     expect(mockBatchUpdate).toHaveBeenCalledWith(expect.anything(), {
       amount: 33.33,
       residentCount: 3,
-    });
+    }, PRECONDITION);
   });
 
   it("skips an event older than the retry cutoff without throwing", async () => {
@@ -813,30 +843,80 @@ describe("onGuestWrite (merged handler)", () => {
     await (onGuestWrite as Function)(event);
 
     expect(mockGuestsGet).toHaveBeenCalledTimes(1);
-    expect(mockDeleteClaim).toHaveBeenCalledTimes(2);
-    expect(mockSetCustomUserClaims).toHaveBeenCalledTimes(1);
+    // One read-modify-write of the claims (util/claims revokeHouseRoles),
+    // removing both roles for the house.
+    expect(mockRevokeHouseRoles).toHaveBeenCalledTimes(1);
+    expect(mockRevokeHouseRoles).toHaveBeenCalledWith("user-1", ["house-1"], [
+      "guest",
+      "admin",
+    ]);
   });
 
-  it("still runs EES if auth cleanup fails on delete", async () => {
+  // Cleanup and EES still run independently, but with retry: true a failure
+  // in either now re-throws so the event is redelivered. Both steps re-read
+  // current state, so the redelivery is safe.
+  it("still runs EES if auth cleanup fails on delete, then re-throws for retry", async () => {
     const { onGuestWrite } = require("../../triggers/firestore");
-    mockDeleteClaim.mockReset();
-    mockDeleteClaim.mockRejectedValue(new Error("Auth service down"));
+    mockRevokeHouseRoles.mockRejectedValueOnce(new Error("Auth service down"));
     mockGuestsGet.mockResolvedValue({ docs: [{ data: () => guest }] });
     mockEesGet.mockResolvedValue({ empty: true, docs: [] });
 
     const event = makeWrittenEvent(guest, null);
-    await expect((onGuestWrite as Function)(event)).resolves.toBeUndefined();
+    await expect((onGuestWrite as Function)(event)).rejects.toThrow("Auth service down");
     expect(mockGuestsGet).toHaveBeenCalledTimes(1);
   });
 
-  it("still runs auth cleanup if EES fails on delete", async () => {
+  it("still runs auth cleanup if EES fails on delete, then re-throws for retry", async () => {
     const { onGuestWrite } = require("../../triggers/firestore");
     mockGuestsGet.mockReset();
     mockGuestsGet.mockRejectedValue(new Error("Firestore down"));
 
     const event = makeWrittenEvent(guest, null);
-    await expect((onGuestWrite as Function)(event)).resolves.toBeUndefined();
-    expect(mockDeleteClaim).toHaveBeenCalledTimes(2);
+    await expect((onGuestWrite as Function)(event)).rejects.toThrow("Firestore down");
+    expect(mockRevokeHouseRoles).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the claims when the account still has another guest doc in the house", async () => {
+    const { onGuestWrite } = require("../../triggers/firestore");
+    mockGuestsByUserGet.mockResolvedValueOnce({
+      docs: [{ id: "readded", data: () => ({ userId: "user-1", houseId: "house-1" }) }],
+    });
+
+    await (onGuestWrite as Function)(makeWrittenEvent(guest, null));
+
+    expect(mockRevokeHouseRoles).not.toHaveBeenCalled();
+  });
+
+  it("keeps the admin claim when an admins doc still lists the house", async () => {
+    const { onGuestWrite } = require("../../triggers/firestore");
+    mockAdminsGet.mockResolvedValueOnce({
+      docs: [{ id: "a1", data: () => ({ userId: "user-1", houseIds: ["house-1"] }) }],
+    });
+
+    await (onGuestWrite as Function)(makeWrittenEvent(guest, null));
+
+    expect(mockRevokeHouseRoles).toHaveBeenCalledWith("user-1", ["house-1"], ["guest"]);
+  });
+
+  it("still revokes on a delete event delivered past the retry cutoff, but skips EES", async () => {
+    const { onGuestWrite } = require("../../triggers/firestore");
+    const event = {
+      ...makeWrittenEvent(guest, null, "late-guest"),
+      id: "evt-late",
+      time: new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString(),
+    };
+
+    await (onGuestWrite as Function)(event);
+
+    expect(mockRevokeHouseRoles).toHaveBeenCalledWith("user-1", ["house-1"], [
+      "guest",
+      "admin",
+    ]);
+    expect(mockGuestsGet).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      "onGuestWrite: late delete event; claims cleanup still runs",
+      expect.objectContaining({ guestId: "late-guest", eventId: "evt-late" }),
+    );
   });
 });
 
