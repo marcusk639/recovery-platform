@@ -5,7 +5,8 @@
 prompts:
   connection_prompt: |
     Serena is the code-navigation aid for an automated, advisory PR review running in GitHub
-    Actions: no shell, a fixed turn budget, and outputs written only to <OUT>.
+    Actions: no shell beyond gh pr view/diff and the reply command, a fixed turn budget, and
+    outputs written only to <OUT>.
     .claude/pr-review/REVIEW.md decides what to review and what to write; this note covers
     only how to get the most out of Serena within that.
 
