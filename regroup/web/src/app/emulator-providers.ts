@@ -1,6 +1,8 @@
-import { APP_INITIALIZER, Provider } from '@angular/core';
-import { SETTINGS as FIRESTORE_SETTINGS } from '@angular/fire/firestore';
-import { ORIGIN as FUNCTIONS_ORIGIN } from '@angular/fire/functions';
+import { APP_INITIALIZER, InjectionToken, Provider } from '@angular/core';
+import { USE_EMULATOR as AUTH_EMULATOR } from '@angular/fire/auth';
+import { USE_EMULATOR as FIRESTORE_EMULATOR } from '@angular/fire/firestore';
+import { USE_EMULATOR as FUNCTIONS_EMULATOR } from '@angular/fire/functions';
+import { AngularFireStorage } from '@angular/fire/storage';
 
 export type EmulatorService = 'auth' | 'firestore' | 'storage' | 'functions';
 
@@ -20,12 +22,22 @@ export interface EmulatorAwareEnvironment {
 export type EmulatorProbe = (url: string) => Promise<void>;
 
 /**
- * Emulators the installed SDKs cannot be pointed at. AngularFire 6.0.0 has no
- * USE_EMULATOR tokens (they arrived in 6.1.0), and firebase 7.14.2 has no
- * auth().useEmulator() or storage().useEmulator() (both arrived in 8.x).
- * Firestore (SETTINGS host) and Functions (ORIGIN) can be redirected.
+ * Every SDK the app uses. An emulator build must point all of them at the
+ * emulator suite; one left out would talk to real Google endpoints.
  */
-export const UNWIRED_EMULATORS: EmulatorService[] = ['auth', 'storage'];
+export const REQUIRED_EMULATORS: EmulatorService[] = ['auth', 'firestore', 'storage', 'functions'];
+
+/**
+ * AngularFire 6.1 has USE_EMULATOR tokens for auth, firestore and functions
+ * but not storage, so storage gets this app-level token and is wired by the
+ * APP_INITIALIZER through firebase 8's storage().useEmulator(host, port).
+ */
+export const STORAGE_EMULATOR = new InjectionToken<[string, number]>('regroup.storage-emulator');
+
+/** The part of firebase.storage.Storage this module calls. */
+export interface EmulatableStorage {
+  useEmulator?: (host: string, port: number) => void;
+}
 
 const DEFAULT_PROBE_TIMEOUT_MS = 5000;
 
@@ -57,10 +69,20 @@ function withTimeout(p: Promise<void>, ms: number, what: string): Promise<void> 
   });
 }
 
+/** Points the storage SDK at the emulator, or throws if it cannot be. */
+export function wireStorageEmulator(storage: EmulatableStorage, host: string, port: number): void {
+  if (!storage || typeof storage.useEmulator !== 'function') {
+    throw new Error(
+      'The storage SDK has no useEmulator(); cannot point storage at the emulator. Refusing to start.',
+    );
+  }
+  storage.useEmulator(host, port);
+}
+
 /**
  * Fail-closed startup check for emulator builds. Rejects (so Angular aborts
- * bootstrap) unless the project is a `demo-` project, every requested
- * emulator can actually be wired, and every requested emulator answers.
+ * bootstrap) unless the project is a `demo-` project, every SDK the app uses
+ * has an emulator configured, and every configured emulator answers.
  */
 export async function verifyEmulators(
   projectId: string,
@@ -73,14 +95,14 @@ export async function verifyEmulators(
       `Emulator builds must use a demo- project id; got "${projectId}". Refusing to start.`,
     );
   }
-  const requested = Object.keys(emulators.ports) as EmulatorService[];
-  const unwired = requested.filter((s) => UNWIRED_EMULATORS.indexOf(s) !== -1);
-  if (unwired.length > 0) {
+  const missing = REQUIRED_EMULATORS.filter((s) => !emulators.ports[s]);
+  if (missing.length > 0) {
     throw new Error(
-      `Cannot point ${unwired.join(', ')} at the emulator with the installed ` +
-        'AngularFire 6.0.0 / firebase 7.14.2. Refusing to start rather than talk to real Firebase.',
+      `No emulator port configured for ${missing.join(', ')}. Refusing to start rather than ` +
+        'let those SDKs talk to real Firebase.',
     );
   }
+  const requested = Object.keys(emulators.ports) as EmulatorService[];
   await Promise.all(
     requested.map((service) => {
       const url = `http://${emulators.host}:${emulators.ports[service]}/`;
@@ -97,8 +119,9 @@ export async function verifyEmulators(
 
 /**
  * AngularFire providers that redirect the SDKs to the local emulators, plus an
- * APP_INITIALIZER that aborts startup if they are not healthy. Returns no
- * providers at all unless the environment sets `useEmulators: true`.
+ * APP_INITIALIZER that wires storage and aborts startup if the emulators are
+ * not healthy. Returns no providers at all unless the environment sets
+ * `useEmulators: true`.
  */
 export function emulatorProviders(
   env: EmulatorAwareEnvironment,
@@ -111,23 +134,32 @@ export function emulatorProviders(
   if (!emulators) {
     throw new Error('useEmulators is true but the environment has no emulators config');
   }
+  const { host, ports } = emulators;
   const providers: Provider[] = [];
-  if (emulators.ports.firestore) {
-    providers.push({
-      provide: FIRESTORE_SETTINGS,
-      useValue: { host: `${emulators.host}:${emulators.ports.firestore}`, ssl: false },
-    });
+  if (ports.auth) {
+    providers.push({ provide: AUTH_EMULATOR, useValue: [host, ports.auth] });
   }
-  if (emulators.ports.functions) {
-    providers.push({
-      provide: FUNCTIONS_ORIGIN,
-      useValue: `http://${emulators.host}:${emulators.ports.functions}`,
-    });
+  if (ports.firestore) {
+    providers.push({ provide: FIRESTORE_EMULATOR, useValue: [host, ports.firestore] });
+  }
+  if (ports.functions) {
+    providers.push({ provide: FUNCTIONS_EMULATOR, useValue: [host, ports.functions] });
+  }
+  if (ports.storage) {
+    providers.push({ provide: STORAGE_EMULATOR, useValue: [host, ports.storage] });
   }
   providers.push({
     provide: APP_INITIALIZER,
     multi: true,
-    useFactory: () => () => verifyEmulators(env.firebaseConfig.projectId, emulators, probe),
+    deps: [AngularFireStorage],
+    // Storage is wired first so that no storage call can run before it is
+    // redirected; a wiring failure rejects like a failed probe.
+    useFactory: (afStorage: AngularFireStorage) => async () => {
+      if (ports.storage) {
+        wireStorageEmulator(afStorage && afStorage.storage, host, ports.storage);
+      }
+      await verifyEmulators(env.firebaseConfig.projectId, emulators, probe);
+    },
   });
   return providers;
 }

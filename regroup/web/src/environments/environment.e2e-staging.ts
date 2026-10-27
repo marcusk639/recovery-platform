@@ -6,22 +6,12 @@
 // the build fails with "Cannot find module './e2e-staging.generated'": generate
 // it first. The shape is in ./e2e-staging.generated.example.ts.
 import { e2eStaging } from './e2e-staging.generated';
+import { assertE2eStagingConfig } from './e2e-staging-guard';
 
-const EXPECTED_PROJECT_ID = 'regroup-e2e';
-
-// Fail closed if the generated file points anywhere but the e2e project
-// (in particular, never the production project) or carries a live Stripe key.
-if (e2eStaging.firebaseConfig.projectId !== EXPECTED_PROJECT_ID) {
-  throw new Error(
-    `e2e-staging.generated.ts must target "${EXPECTED_PROJECT_ID}", ` +
-      `got "${e2eStaging.firebaseConfig.projectId}". Refusing to start.`,
-  );
-}
-if (!/^pk_test_/.test(e2eStaging.stripePublishableKey)) {
-  throw new Error(
-    'e2e-staging.generated.ts must use a Stripe test-mode (pk_test_) key. Refusing to start.',
-  );
-}
+// Fail closed unless the generated file targets the regroup-e2e project, holds
+// nothing from production (project id, project number, API key, bucket,
+// authDomain, databaseURL, measurementId) and uses a pk_test_ Stripe key.
+assertE2eStagingConfig(e2eStaging);
 
 export const environment = {
   production: false,

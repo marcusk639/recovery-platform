@@ -6,11 +6,13 @@
 // production. Ports match regroup/mobile/firebase/firebase.json (auth 9099,
 // firestore 8080, storage 9199) plus the default functions port 5001.
 //
-// Startup is fail-closed: the APP_INITIALIZER from src/app/emulator-providers.ts
-// aborts bootstrap unless every emulator below can be wired and answers.
-// NOTE: with AngularFire 6.0.0 / firebase 7.14.2, auth and storage cannot be
-// pointed at an emulator, so this configuration currently refuses to start.
-// It becomes usable once the SDKs are upgraded and those two are wired.
+// Auth, Firestore and Functions are redirected with AngularFire 6.1's
+// USE_EMULATOR tokens; Storage with storage().useEmulator() in the
+// APP_INITIALIZER (AngularFire 6.1 has no storage token). See
+// src/app/emulator-providers.ts.
+//
+// Startup is fail-closed: that APP_INITIALIZER aborts bootstrap unless the
+// project id is a demo- id, all four emulators are configured, and each answers.
 
 export const environment = {
   production: false,

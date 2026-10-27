@@ -217,11 +217,12 @@ jobs:
           cache-dependency-path: regroup/web/package-lock.json
       - name: Install dependencies
         run: cd regroup/web && npm ci
-      # Deliberately not `npm test`: angular.json points the Karma target at
-      # karma.conf.js, which has never existed in this repo, so `ng test`
-      # cannot run. The specs do typecheck, so that is what is enforced until
-      # someone adds a runner — this job is named "typecheck", not "test", so
-      # it does not imply coverage it has not got.
+      # Deliberately not `npm test`: karma.conf.js exists and specs run locally
+      # (`npm test -- --watch=false --browsers=ChromeHeadless`), but CI only
+      # typechecks them. The full suite is not green yet (one known failing
+      # CloudFunctionService spec, and the run aborts on an unhandled
+      # rejection), so this job is named "typecheck", not "test", and does not
+      # imply coverage it has not got.
       - name: Typecheck
         run: cd regroup/web && npx tsc --noEmit -p tsconfig.spec.json
 
