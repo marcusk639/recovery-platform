@@ -259,12 +259,52 @@ service cloud.firestore {
            isAdmin([resource.data.houseId]));
       }
 
+      // Staff departures follow rank (functions util/houseRoles). Removing a
+      // resident record (status leaving active, a moveOutDate, a move to
+      // another house, or a delete) makes onGuestWrite strip that account's
+      // claims, so it needs the caller to rank strictly above the doc's
+      // account. Ranks come from the server-only house-roles record (rules
+      // may get() it; clients cannot read it): primary owner 4, owner 3,
+      // manager 2, peer leader 1, resident or no record 0; the caller also
+      // ranks 3 with a superAdmin claim and 1 with an admin claim. Staff never
+      // change the status, moveOutDate or house of their OWN record, or
+      // delete it: only someone above them can (no self re-activation after a
+      // discharge). Two record reads at most per request.
+      function recordRank(houseId, uid) {
+        let path = /databases/$(database)/documents/house-roles/$(houseId + '_' + uid);
+        let d = exists(path) ? get(path).data : {};
+        let tier = d.get('tier', '');
+        return d.get('primary', false) == true ? 4 :
+          tier == 'owner' ? 3 : tier == 'manager' ? 2 : tier == 'peerLeader' ? 1 : 0;
+      }
+      function callerRank(houseId) {
+        let r = recordRank(houseId, request.auth.uid);
+        let c = hasSuperAdminRoleInHouse([houseId]) ? 3 : hasAdminRoleInHouse([houseId]) ? 1 : 0;
+        return r > c ? r : c;
+      }
+      function targetRank(d) {
+        let uid = d.get('userId', '');
+        return uid is string && uid != '' ? recordRank(d.houseId, uid) : 0;
+      }
+      function isActiveRecord(d) {
+        return d.get('status', 'active') == 'active' && d.get('moveOutDate', '') in ['', null];
+      }
+      function staffDepartureAllowed() {
+        let own = resource.data.get('userId', '') == request.auth.uid;
+        let departs = (isActiveRecord(resource.data) && !isActiveRecord(request.resource.data)) ||
+          request.resource.data.houseId != resource.data.houseId;
+        return !(own && request.resource.data.diff(resource.data).affectedKeys()
+                   .hasAny(['status', 'moveOutDate', 'houseId'])) &&
+          (!departs || callerRank(resource.data.houseId) > targetRank(resource.data));
+      }
+
       allow update: if
         userIdUnchangedOrLinked() &&
         request.resource.data.get('createdBy', null) == resource.data.get('createdBy', null) &&
         (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['updatedBy']) ||
          request.resource.data.updatedBy == request.auth.uid) && (
-        (isAdmin([resource.data.houseId]) && isAdmin([request.resource.data.houseId])) ||
+        (isAdmin([resource.data.houseId]) && isAdmin([request.resource.data.houseId]) &&
+         staffDepartureAllowed()) ||
         (isSameUser(request.resource.data.userId) &&
          request.resource.data.userId == resource.data.userId &&
          request.resource.data.houseId == resource.data.houseId &&
@@ -282,7 +322,11 @@ service cloud.firestore {
       // claims stay. The app has no working resident self-delete (its batch
       // also writes guest-archive, which is admin-only), and account deletion
       // runs server-side with the Admin SDK.
-      allow delete: if isAdmin([resource.data.houseId]);
+      // Staff delete follows rank (staffDepartureAllowed above), never of
+      // their own record.
+      allow delete: if isAdmin([resource.data.houseId]) &&
+        resource.data.get('userId', '') != request.auth.uid &&
+        callerRank(resource.data.houseId) > targetRank(resource.data);
     }
     
     match /guest-reports/{reportId} {
