@@ -122,13 +122,18 @@ test('the base project.yml is read-only with exactly the four tools and nothing 
   assert.match(projectYml, /\nread_only: true\n/);
   const fixed = /\nfixed_tools:\n((?: {2}- .+\n)+)/.exec(projectYml)[1].trim().split('\n').map((l) => l.trim().replace(/^- /, ''));
   assert.deepEqual(fixed, TOOLS);
-  assert.match(projectYml, /\nlanguage_servers: \["typescript"\]\n/);
+  const servers = JSON.parse(/\nlanguage_servers: (\[[^\]]*\])\n/.exec(projectYml)[1]);
+  assert.ok(servers.includes('typescript'), 'typescript is configured');
+  // Every configured server must be downloaded during the network-on warmup.
+  const EXT = { typescript: 'ts', markdown: 'md', yaml: 'yaml' };
+  for (const ls of servers) {
+    assert.ok(EXT[ls], `known language server: ${ls}`);
+    assert.ok(at(`ls-warmup/warmup.${EXT[ls]}"`) < at('project index "$SR_HOME/ls-warmup"'), `warmup file for ${ls}`);
+  }
   for (const key of ['activation_command', 'excluded_tools', 'included_optional_tools', 'ls_specific_settings']) {
     assert.doesNotMatch(projectYml, new RegExp(`\\n${key}:`), key);
   }
-  for (const p of ['**/public/**', '**/functions/lib/**', 'recovery-api/lib/**', '**/node_modules/**', '**/_legacy/**']) assert.ok(projectYml.includes(`"${p}"`), p);
-  // Real source lives in lib/ dirs too (detox-recovery/lib, recovery-api/src/lib): never ignore every lib.
-  assert.ok(!projectYml.includes('"**/lib/**"'), 'no blanket lib exclusion');
+  for (const p of ['**/public/**', '**/lib/**', '**/node_modules/**', '**/_legacy/**']) assert.ok(projectYml.includes(`"${p}"`), p);
 });
 
 test('the global Serena config has no dashboard or GUI, no trusted projects, and pinned language servers', () => {
@@ -139,13 +144,14 @@ test('the global Serena config has no dashboard or GUI, no trusted projects, and
   assert.match(serenaConfig, /typescript_language_server_version: "\d+\.\d+\.\d+"/);
 });
 
-test('the copy filter drops build output and vendor code but keeps real source named lib', () => {
+test('the copy filter drops build output, vendor code and every lib/ dir (owner decision), keeps other source', () => {
   const pattern = /grep -zvE '([^']+)'/.exec(setup)[1];
   const excluded = new RegExp(pattern);
-  for (const kept of ['detox-recovery/lib/abuse-protection.ts', 'recovery-api/src/lib/meetings/index.ts', '.claude/pr-review/checks/lib/ledger.mjs', 'homegroups/functions/src/index.ts']) {
+  for (const kept of ['homegroups/functions/src/index.ts', 'regroup/mobile/src/App.tsx', 'detox-recovery/app/api/contact/route.ts']) {
     assert.ok(!excluded.test(kept), `kept: ${kept}`);
   }
-  for (const dropped of ['recovery-api/lib/callable/findMeetings.js', 'regroup/functions/lib/index.js', 'regroup/web/public/x.js', 'a/node_modules/b.js', 'homegroups/_legacy/x.ts', '.serena/project.yml', 'x/.serena/y']) {
+  // Every lib/ dir is treated as build output, matching the project.yml ignore.
+  for (const dropped of ['recovery-api/lib/callable/findMeetings.js', 'regroup/functions/lib/index.js', 'detox-recovery/lib/abuse-protection.ts', 'regroup/web/public/x.js', 'a/node_modules/b.js', 'homegroups/_legacy/x.ts', '.serena/project.yml', 'x/.serena/y']) {
     assert.ok(excluded.test(dropped), `dropped: ${dropped}`);
   }
 });
