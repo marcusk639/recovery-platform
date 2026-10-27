@@ -2,6 +2,7 @@ import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { logger } from 'firebase-functions';
 import { adminCollection, guestCollection, ratsFirestore } from '../../api/firestore';
 import { revokeHouseRoles } from '../../util/claims';
+import { markTicketUsed } from '../../util/admission';
 import {
   isActiveGuestDoc,
   isPlausibleUid,
@@ -30,6 +31,8 @@ import { eventAgeMinutes, isStaleEvent, RETRY_CUTOFF_MS } from '../../util/event
 //   late delete would leave a departed resident's claims in place. A late
 //   delete's cleanup is attempted once: on failure it logs an error (ids
 //   only) and is not retried, so retrying stays bounded by the cutoff.
+// CREATE: marks the account's admission ticket for the house used (the
+//   self-create rule needs an unused one), once, in a transaction.
 // ALL WRITES: re-splits the event's EES week over counted residents (see
 //   resplitEES). Stale events (older than RETRY_CUTOFF_MS) skip this step.
 //
@@ -48,6 +51,24 @@ export const onGuestWrite = onDocumentWritten(
     const houseId = typeof guestData.houseId === 'string' ? guestData.houseId : '';
     const stale = isStaleEvent(event.time);
     const ageInfo = { guestId, eventId: event.id, ageMinutes: eventAgeMinutes(event.time) };
+    const isCreate = !isDelete && !event.data?.before?.exists;
+
+    // The first guest doc created for an account in a house uses up its
+    // admission ticket (util/admission), so the self-create rule refuses a
+    // second one. Runs even for a late event (a missed mark would leave the
+    // ticket open until it expires); a late failure is logged, not retried.
+    if (isCreate && houseId && isPlausibleUid(guestData.userId)) {
+      try {
+        await markTicketUsed(guestData.userId, houseId, guestId);
+      } catch (err) {
+        if (!stale) throw err;
+        logger.error('onGuestWrite: late create event; admission ticket not marked used', {
+          ...ageInfo,
+          houseId,
+          error: (err as Error).message,
+        });
+      }
+    }
 
     if (stale && !isDelete) {
       logger.warn(

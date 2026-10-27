@@ -35,6 +35,8 @@ const mockAuthGetUser = jest.fn();
 const mockHouseGet = jest.fn();
 // Mock for assertCanGrantClaimForHouses — individual tests override per scenario.
 const mockAssertCanGrantClaimForHouses = jest.fn();
+// Guest docs visible to the NARR tier check: { userId, houseId, status? }.
+const mockGuestDocs: Array<Record<string, unknown>> = [];
 
 jest.mock("../../util/claims", () => ({
   createClaims: mockCreateClaims,
@@ -52,12 +54,27 @@ jest.mock("firebase-admin", () => ({
     getUser: mockAuthGetUser,
   })),
   firestore: jest.fn(() => ({
-    collection: () => ({ doc: () => ({ get: mockHouseGet }) }),
+    collection: (name: string) =>
+      name === "guests"
+        ? {
+            // Guest docs read by the NARR tier check (who is a resident).
+            where: () => ({
+              get: async () => ({ docs: mockGuestDocs.map((d) => ({ data: () => d })) }),
+            }),
+          }
+        : { doc: () => ({ get: mockHouseGet }) },
   })),
 }));
 
 jest.mock("../../util/authGuard", () => ({
   assertCanGrantClaimForHouses: mockAssertCanGrantClaimForHouses,
+}));
+
+// NARR tier limits are exercised end to end in narrTiers.test.ts; here they
+// pass unless a test says otherwise.
+const mockAssertMayGrantStaffClaim = jest.fn().mockResolvedValue(undefined);
+jest.mock("../../util/houseRoles", () => ({
+  assertMayGrantStaffClaim: (...args: unknown[]) => mockAssertMayGrantStaffClaim(...args),
 }));
 
 import {

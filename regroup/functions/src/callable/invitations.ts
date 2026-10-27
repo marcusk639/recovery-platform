@@ -13,6 +13,8 @@ import {
   roleConsumesResidentSlot,
 } from '../util/residentCapacity';
 import { getHouse } from '../api/firestore';
+import { consumeInvitation, releaseInvitation } from '../util/admission';
+import { assertTierMayGrant, houseTierOf, isOxfordHouse } from '../util/houseRoles';
 import { enforceHouseEntitlement } from '../util/entitlement';
 import { Invitation, InvitationRole } from '../entities/Invitation';
 
@@ -88,6 +90,7 @@ export const createInvitation = onCall(async (request) => {
   }
   const house = houseSnap.data() as {
     ownerId?: string;
+    houseType?: string;
     subscriptionStatus?: string | null;
     guestGraceEndsAt?: string | null;
   };
@@ -108,6 +111,15 @@ export const createInvitation = onCall(async (request) => {
       'permission-denied',
       'Only the house owner or an existing admin can send invitations',
     );
+  }
+
+  // NARR tiers (util/houseRoles): the owner may invite a manager, peer
+  // leader or resident; a manager a peer leader or resident; a peer leader
+  // (an admin who is also a resident here) a resident only. Oxford houses
+  // keep their current invitation behaviour for now.
+  if (!isOxfordHouse(house)) {
+    const tier = await houseTierOf(callerUid, callerClaims, input.houseId, house);
+    assertTierMayGrant(tier, input.role, { callableName: 'createInvitation', houseId: input.houseId });
   }
 
   // Onboarding new people is product usage. Redeeming an already-sent
@@ -229,23 +241,30 @@ export const redeemInvitation = onCall(async (request) => {
     await assertResidentCapacityAvailable(residentOwnerId, inv.houseId);
   }
 
+  // Consume the invitation first, in a transaction, so of two concurrent
+  // redeems of one token only one can go on to grant claims. For a resident
+  // role the same commit writes the caller's admission ticket, which the
+  // guests self-create rule requires (util/admission).
+  await consumeInvitation(token, callerUid);
+
   // Map role → claims. createClaims is the canonical merger; we call it
   // once for guest+senior-peer and a second time to layer admin on top
   // of senior-peer. Mirrors addGuestAuthorization at callable/auth.ts:50-72.
-  if (inv.role === 'guest' || inv.role === 'senior-peer') {
-    const claims = await createClaims(callerUid, [inv.houseId], 'guest', false);
-    await auth().setCustomUserClaims(callerUid, claims);
+  // If the grant fails, the redemption and ticket are released so the
+  // invitee can retry.
+  try {
+    if (inv.role === 'guest' || inv.role === 'senior-peer') {
+      const claims = await createClaims(callerUid, [inv.houseId], 'guest', false);
+      await auth().setCustomUserClaims(callerUid, claims);
+    }
+    if (inv.role === 'admin' || inv.role === 'senior-peer') {
+      const claims = await createClaims(callerUid, [inv.houseId], 'admin', false);
+      await auth().setCustomUserClaims(callerUid, claims);
+    }
+  } catch (err) {
+    await releaseInvitation(token, callerUid, inv.houseId);
+    throw err;
   }
-  if (inv.role === 'admin' || inv.role === 'senior-peer') {
-    const claims = await createClaims(callerUid, [inv.houseId], 'admin', false);
-    await auth().setCustomUserClaims(callerUid, claims);
-  }
-
-  const invitationRef = admin.firestore().collection('invitations').doc(token);
-  await invitationRef.update({
-    redeemedAt: new Date().toISOString(),
-    redeemedByUid: callerUid,
-  });
 
   if (roleConsumesResidentSlot(inv.role)) {
     // Best-effort: the claim grant + invitation redemption above already

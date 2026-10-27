@@ -7,6 +7,7 @@ const mockSetClaims = jest.fn(async (uid: string, claims: Record<string, unknown
   users[uid] = JSON.parse(JSON.stringify(claims));
 });
 jest.mock('firebase-admin', () => ({
+  firestore: () => require('../helpers/memFirestore').memDb,
   auth: () => ({
     getUser: async (uid: string) => {
       if (!(uid in users)) {
@@ -243,5 +244,45 @@ describe('isoWeekStartUtc', () => {
     const now = Date.parse('2026-11-04T10:00:00Z');
     expect(isoWeekStartUtc(undefined, now)).toBe('2026-11-02');
     expect(isoWeekStartUtc('nope', now)).toBe('2026-11-02');
+  });
+});
+
+describe('admission ticket', () => {
+  const created = (guestId: string, data: Record<string, unknown>, time?: string) => ({
+    id: `evt-${guestId}`,
+    time,
+    params: { guestId },
+    data: { before: { exists: false, data: () => undefined }, after: { exists: true, data: () => data } },
+  });
+  const ticketOf = () => mem.get(`admission-tickets/r_${H}`) as any;
+
+  beforeEach(() => {
+    users.r = { guest: { [H]: true } };
+    mem.seed(`admission-tickets/r_${H}`, { invitationId: 'T', role: 'guest', initialPhase: '', used: false });
+  });
+
+  it('the first guest doc created for the account in the house uses the ticket', async () => {
+    mem.seed('guests/g1', { houseId: H, userId: 'r' });
+    await run(created('g1', { houseId: H, userId: 'r' }));
+    expect(ticketOf()).toMatchObject({ used: true, usedByGuestId: 'g1' });
+  });
+
+  it('is idempotent: a redelivery or a second create leaves the first use in place', async () => {
+    await run(created('g1', { houseId: H, userId: 'r' }));
+    await run(created('g1', { houseId: H, userId: 'r' }));
+    await run(created('g2', { houseId: H, userId: 'r' }));
+    expect(ticketOf()).toMatchObject({ used: true, usedByGuestId: 'g1' });
+  });
+
+  it('an update or a doc with no account does not touch the ticket', async () => {
+    await run(writeEvent('g1', { houseId: H, userId: 'r' }));
+    await run(created('intake', { houseId: H }));
+    expect(ticketOf().used).toBe(false);
+  });
+
+  it('a late create still marks the ticket used', async () => {
+    const late = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    await run(created('g1', { houseId: H, userId: 'r' }, late));
+    expect(ticketOf().used).toBe(true);
   });
 });

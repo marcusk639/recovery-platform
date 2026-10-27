@@ -10,6 +10,7 @@ import { Role } from "../entities/Roles";
 import { _verifyUserEmail } from "../util/user";
 import { parseInput } from "../validation";
 import { assertCanGrantClaimForHouses } from "../util/authGuard";
+import { assertMayGrantStaffClaim } from "../util/houseRoles";
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
 const guestAuthSchema = z
@@ -135,6 +136,19 @@ export const addAdminAuthorization = onCall(async (request) => {
     callableName: "addAdminAuthorization",
     enforceEntitlement: true,
   });
+  // NARR tiers (util/houseRoles): only the owner makes managers or owners; a
+  // manager may make a resident a peer leader; a peer leader neither.
+  const superAdminHouses = new Set(adminInput.superAdmin || []);
+  for (const houseId of requestedHouses) {
+    await assertMayGrantStaffClaim({
+      callerUid,
+      claims: request.auth.token,
+      targetUid: adminInput.userId,
+      houseId,
+      superAdmin: superAdminHouses.has(houseId),
+      callableName: "addAdminAuthorization",
+    });
+  }
 
   try {
     const [userClaims, superAdminClaims] = await Promise.all([
@@ -224,6 +238,20 @@ export const promoteGuestsToAdmin = onCall(async (request) => {
       }),
     ),
   );
+  // NARR tiers: promoting a resident makes a peer leader (owner or manager
+  // only); promoting a non-resident makes a manager (owner only).
+  for (const [targetUid, houses] of housesByTarget) {
+    for (const houseId of houses) {
+      await assertMayGrantStaffClaim({
+        callerUid: request.auth.uid,
+        claims: request.auth.token,
+        targetUid,
+        houseId,
+        superAdmin: false,
+        callableName: "promoteGuestsToAdmin",
+      });
+    }
+  }
   const users = await getGuestsAsUsers(data);
   await Promise.all(
     users.map(async (user) => {

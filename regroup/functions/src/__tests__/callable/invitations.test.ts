@@ -24,10 +24,40 @@ const mockInvitationsDocUpdate = jest.fn();
 const mockSetCustomUserClaims = jest.fn();
 const mockCreateClaims = jest.fn();
 
+// Guest docs read by the NARR tier check (is the inviter a resident?), and
+// the admission-ticket writes made inside redeemInvitation's transaction.
+const mockGuestDocs: Array<Record<string, unknown>> = [];
+const mockTicketSet = jest.fn();
+const mockTicketGet = jest.fn().mockResolvedValue({ exists: false });
+const mockTicketDelete = jest.fn();
+
 jest.mock('firebase-admin', () => ({
   auth: jest.fn(() => ({ setCustomUserClaims: mockSetCustomUserClaims })),
   firestore: () => ({
+    // A transaction runs its reads and writes against the same doc mocks.
+    runTransaction: async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({
+        get: (ref: { get: () => unknown }) => ref.get(),
+        update: (ref: { update: (d: unknown) => unknown }, d: unknown) => ref.update(d),
+        set: (ref: { set: (d: unknown) => unknown }, d: unknown) => ref.set(d),
+        delete: (ref: { delete: () => unknown }) => ref.delete(),
+      }),
     collection: (name: string) => {
+      if (name === 'guests')
+        return {
+          where: () => ({
+            get: async () => ({ docs: mockGuestDocs.map((d) => ({ data: () => d })) }),
+          }),
+        };
+      if (name === 'admission-tickets')
+        return {
+          doc: (id: string) => ({
+            id,
+            get: mockTicketGet,
+            set: (d: unknown) => mockTicketSet(id, d),
+            delete: mockTicketDelete,
+          }),
+        };
       if (name === 'houses') return { doc: (_id: string) => ({ get: mockHouseGet }) };
       if (name === 'invitations')
         return {
@@ -40,6 +70,14 @@ jest.mock('firebase-admin', () => ({
       return {};
     },
   }),
+}));
+
+// NARR tier limits are exercised end to end in narrTiers.test.ts; here the
+// inviter is the owner unless a test says otherwise.
+const mockHouseTierOf = jest.fn().mockResolvedValue('owner');
+jest.mock('../../util/houseRoles', () => ({
+  ...jest.requireActual('../../util/houseRoles'),
+  houseTierOf: (...args: unknown[]) => mockHouseTierOf(...args),
 }));
 
 jest.mock('../../util/claims', () => ({

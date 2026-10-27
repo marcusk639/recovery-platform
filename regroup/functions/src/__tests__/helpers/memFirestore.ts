@@ -211,30 +211,46 @@ function batch() {
   };
 }
 
+/**
+ * Optimistic like Firestore: docs read through tx.get are versioned; if any
+ * changed before the commit, the whole function runs again (up to 5 times),
+ * so two racing transactions cannot both act on the same read.
+ */
 async function runTransaction<T>(fn: (tx: any) => Promise<T>): Promise<T> {
-  const b = batch();
-  const tx = {
-    get: async (refOrQuery: { get: () => Promise<unknown> }) => refOrQuery.get(),
-    set: (r: { path: string }, d: Data, o?: { merge?: boolean }) => {
-      b.set(r, d, o);
-      return tx;
-    },
-    update: (r: { path: string }, d: Data) => {
-      b.update(r, d);
-      return tx;
-    },
-    create: (r: { path: string }, d: Data) => {
-      b.create(r, d);
-      return tx;
-    },
-    delete: (r: { path: string }) => {
-      b.delete(r);
-      return tx;
-    },
-  };
-  const result = await fn(tx);
-  await b.commit();
-  return result;
+  for (let attempt = 1; ; attempt++) {
+    const b = batch();
+    const reads = new Map<string, number>();
+    const tx = {
+      get: async (refOrQuery: { path?: string; get: () => Promise<unknown> }) => {
+        if (refOrQuery.path) reads.set(refOrQuery.path, store.get(refOrQuery.path)?.updateTimeMs ?? -1);
+        return refOrQuery.get();
+      },
+      set: (r: { path: string }, d: Data, o?: { merge?: boolean }) => {
+        b.set(r, d, o);
+        return tx;
+      },
+      update: (r: { path: string }, d: Data) => {
+        b.update(r, d);
+        return tx;
+      },
+      create: (r: { path: string }, d: Data) => {
+        b.create(r, d);
+        return tx;
+      },
+      delete: (r: { path: string }) => {
+        b.delete(r);
+        return tx;
+      },
+    };
+    const result = await fn(tx);
+    const conflicted = [...reads].some(([path, t]) => (store.get(path)?.updateTimeMs ?? -1) !== t);
+    if (conflicted) {
+      if (attempt >= 5) throw new Error('ABORTED: transaction contention');
+      continue;
+    }
+    await b.commit();
+    return result;
+  }
 }
 
 export const memDb: any = {

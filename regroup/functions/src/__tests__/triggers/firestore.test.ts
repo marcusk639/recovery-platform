@@ -135,6 +135,13 @@ jest.mock("../../api/firestore", () => ({
   },
 }));
 
+// ─── util/admission ──────────────────────────────────────────────────────────
+// Ticket marking is covered with a real store in guestWrite.test.ts.
+const mockMarkTicketUsed = jest.fn().mockResolvedValue(false);
+jest.mock("../../util/admission", () => ({
+  markTicketUsed: (...args: any[]) => mockMarkTicketUsed(...args),
+}));
+
 // ─── util/claims ─────────────────────────────────────────────────────────────
 const mockDeleteClaim = jest.fn();
 const mockRevokeHouseRoles = jest.fn().mockResolvedValue(undefined);
