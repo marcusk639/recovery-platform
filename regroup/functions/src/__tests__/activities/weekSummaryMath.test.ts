@@ -127,10 +127,10 @@ describe('toInstant', () => {
 });
 
 describe('countsTowardSummary', () => {
-  it('counts only ACTIVE activities (what the client recompute and lists count)', () => {
+  it('counts active and kept (resolved) activities; not pending disputes or deleted', () => {
     expect(countsTowardSummary({ status: 'active' })).toBe(true);
     expect(countsTowardSummary({ status: 'disputed' })).toBe(false);
-    expect(countsTowardSummary({ status: 'resolved' })).toBe(false);
+    expect(countsTowardSummary({ status: 'resolved' })).toBe(true);
     expect(countsTowardSummary({ status: 'deleted' })).toBe(false);
     expect(countsTowardSummary({})).toBe(false);
   });
@@ -201,7 +201,7 @@ describe('aggregateWeek', () => {
     expect(result.dailyStats['2026-01-19']).toBeUndefined();
   });
 
-  it('ignores disputed, resolved and deleted activities', () => {
+  it('ignores disputed and deleted activities but counts kept (resolved) ones', () => {
     const result = aggregateWeek(
       [
         act('chore', '2026-01-12T15:00:00Z', { status: 'disputed' }),
@@ -212,9 +212,9 @@ describe('aggregateWeek', () => {
       WEEK,
       CHICAGO,
     );
-    expect(result.stats.choresCompleted).toBe(0);
+    expect(result.stats.choresCompleted).toBe(1);
     expect(result.stats.meetingsAttended).toBe(1);
-    expect(result.activityCount).toBe(1);
+    expect(result.activityCount).toBe(2);
   });
 
   it('ignores activities outside the week and ones without a usable timestamp', () => {

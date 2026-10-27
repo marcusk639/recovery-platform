@@ -32,6 +32,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import {
   ActivityLike,
   aggregateWeek,
+  countsTowardSummary,
   resolveTimeZone,
   sameAggregate,
   summaryDocId,
@@ -129,7 +130,7 @@ export async function recomputeWeekSummary(
   const loggers = new Set(
     preread.docs
       .map((d) => d.data())
-      .filter((a) => a.status === 'active' && typeof a.loggedBy === 'string' && a.loggedBy !== '')
+      .filter((a) => countsTowardSummary(a) && typeof a.loggedBy === 'string' && a.loggedBy !== '')
       .map((a) => a.loggedBy as string),
   );
   await Promise.all(

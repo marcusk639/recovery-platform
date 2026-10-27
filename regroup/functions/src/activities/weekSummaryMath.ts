@@ -8,10 +8,12 @@
  * agree. The server has no device, so it uses the house's `timezone`, falling
  * back to the same default as mobile util/dateWithTimezone.
  *
- * An activity counts iff its status is `active`. That is the client's own
- * recompute rule (updateWeekSummary only read ACTIVE activities) and what every
- * activity list shows. Note it means a dispute resolved as "keep" (status
- * `resolved`) no longer counts, exactly as before.
+ * An activity counts iff its status is `active` or `resolved`. `resolved` is
+ * what resolveDispute('keep') writes: an admin upheld it, so it counts again.
+ * (The old client recompute counted only `active`, so every dispute removed
+ * the activity for good even when kept.) A pending dispute (`disputed`) does
+ * not count until resolved; `deleted` never counts. Mobile's activity lists
+ * use the same set (COUNTED_ACTIVITY_STATUSES in entities/ActivityModel).
  *
  * dailyStats is keyed by the house-local date. The client keyed it by the UTC
  * date, which put Sunday-evening activities on a Monday outside the week;
@@ -147,8 +149,11 @@ export function toInstant(value: unknown): Date | null {
   return d && !Number.isNaN(d.getTime()) ? d : null;
 }
 
+/** Statuses that count: active, and a dispute resolved as "keep". */
+export const COUNTED_STATUSES: readonly string[] = ['active', 'resolved'];
+
 export function countsTowardSummary(activity: ActivityLike): boolean {
-  return activity.status === 'active';
+  return typeof activity.status === 'string' && COUNTED_STATUSES.includes(activity.status);
 }
 
 export function summaryDocId(guestId: string, weekStart: string): string {

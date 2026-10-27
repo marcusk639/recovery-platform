@@ -20,7 +20,7 @@
  */
 import { logger } from 'firebase-functions';
 import { getAuth } from 'firebase-admin/auth';
-import { resolveTimeZone } from './weekSummaryMath';
+import { countsTowardSummary, resolveTimeZone } from './weekSummaryMath';
 
 type Firestore = FirebaseFirestore.Firestore;
 type Data = Record<string, unknown>;
@@ -39,9 +39,9 @@ export interface GuestContext extends TrustedGuest {
 }
 
 export interface Exclusions {
-  /** Active activities whose houseId is not the guest's house. */
+  /** Counted (active/kept) activities whose houseId is not the guest's house. */
   otherHouse: number;
-  /** Active activities logged by neither the resident nor a house admin. */
+  /** Counted activities logged by neither the resident nor a house admin. */
   untrustedLogger: number;
 }
 
@@ -118,8 +118,8 @@ export async function trustedActivities(
   const excluded = noExclusions();
   const trusted: Data[] = [];
   for (const a of activities) {
-    // Only active activities count, so only they need (and pay for) a check.
-    if (a.status !== 'active') continue;
+    // Only counted activities (active / kept) need, and pay for, a check.
+    if (!countsTowardSummary(a)) continue;
     if (a.houseId !== guest.houseId) {
       excluded.otherHouse++;
       continue;

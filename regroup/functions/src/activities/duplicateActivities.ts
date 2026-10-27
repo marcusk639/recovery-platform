@@ -6,8 +6,8 @@
  * a saved activity and the resident tapped again. Those retries are real
  * duplicate documents; the trigger and backfill count them.
  *
- * A suspected duplicate is an active activity with the same guestId, type and
- * equal `data` as an earlier active one, whose `timestamp` is within
+ * A suspected duplicate is a counted (active or kept) activity with the same
+ * guestId, type and equal `data` as an earlier counted one, whose `timestamp` is within
  * DUPLICATE_WINDOW_MINUTES of it. `timestamp` is the activity's own time: a
  * plain retry gets a new Date() seconds later, and a retry of a backdated log
  * reuses the identical form timestamp, so one window catches both.
@@ -22,7 +22,7 @@
  *
  * Report-only: nothing here deletes or changes an activity.
  */
-import { toInstant } from './weekSummaryMath';
+import { countsTowardSummary, toInstant } from './weekSummaryMath';
 
 export const DUPLICATE_WINDOW_MINUTES = 10;
 
@@ -51,7 +51,7 @@ export function findSuspectedDuplicates(
   const windowMs = windowMinutes * 60_000;
   const groups = new Map<string, Array<{ id: string; at: number }>>();
   for (const { id, data } of activities) {
-    if (data.status !== 'active') continue;
+    if (!countsTowardSummary(data)) continue;
     const at = toInstant(data.timestamp);
     if (!at) continue;
     const key = stable([data.guestId, data.type, data.data]);

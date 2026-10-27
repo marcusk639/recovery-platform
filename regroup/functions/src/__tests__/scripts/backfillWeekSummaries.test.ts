@@ -120,6 +120,26 @@ describe('run', () => {
     expect(s.activityCount).toBe(2);
   });
 
+  it('restores activities kept after a dispute (resolved), which the old client dropped', async () => {
+    db.seed('activities', 'kept', activity({ status: 'resolved' }));
+    db.seed('activities', 'pending', activity({ type: 'meeting', status: 'disputed' }));
+    db.seed('week-summaries', `g1_${WEEK}`, {
+      guestId: 'g1',
+      houseId: 'h1',
+      startDate: WEEK,
+      endDate: '2026-01-18',
+      stats: { choresCompleted: 0, meetingsAttended: 0, hoursWorked: 0, medicationTaken: 0, primarySupporterMet: 0 },
+      dailyStats: {},
+      activityCount: 0,
+    });
+
+    await run(asFirestore(db), { ...opts, apply: true });
+
+    const s = db.read('week-summaries', `g1_${WEEK}`)!;
+    expect(s.stats.choresCompleted).toBe(1);
+    expect(s.stats.meetingsAttended).toBe(0);
+  });
+
   it('creates summaries that do not exist yet', async () => {
     db.seed('activities', 'a1', activity({ guestId: 'g9' }));
     await run(asFirestore(db), { ...opts, apply: true });

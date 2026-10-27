@@ -208,11 +208,29 @@ describe('status transitions', () => {
     expect(summary()!.stats.choresCompleted).toBe(0);
   });
 
-  it('a dispute resolved "keep" (resolved) stays uncounted, matching the client recompute', async () => {
-    const a = activity({ status: 'disputed' });
+  it('a peer dispute lowers the count, and resolve "keep" restores it', async () => {
+    const a = activity();
     await write('a1', undefined, a);
-    await write('a1', a, { ...a, status: 'resolved' });
+    expect(summary()!.stats.choresCompleted).toBe(1);
+
+    const disputed = { ...a, status: 'disputed', disputeReason: 'not done', disputeResolvedBy: 'peer-uid' };
+    await write('a1', a, disputed);
     expect(summary()!.stats.choresCompleted).toBe(0);
+
+    const kept = { ...disputed, status: 'resolved', disputeResolvedBy: 'admin-uid' };
+    await write('a1', disputed, kept);
+    expect(summary()!.stats.choresCompleted).toBe(1);
+    expect(summary()!.activityCount).toBe(1);
+  });
+
+  it('a dispute resolved "delete" removes the activity for good', async () => {
+    const a = activity();
+    await write('a1', undefined, a);
+    const disputed = { ...a, status: 'disputed' };
+    await write('a1', a, disputed);
+    await write('a1', disputed, { ...disputed, status: 'deleted' });
+    expect(summary()!.stats.choresCompleted).toBe(0);
+    expect(summary()!.activityCount).toBe(0);
   });
 
   it('a verify-only update does not touch the summary at all', async () => {
