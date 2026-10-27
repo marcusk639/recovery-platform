@@ -40,6 +40,8 @@ export interface MeetingRow {
   verified: boolean;
   counted: boolean;
   dispute: string;
+  /** A note when an earlier dispute decision was undone (REOPEN); '' otherwise. */
+  disputeHistory: string;
 }
 
 /**
@@ -58,13 +60,27 @@ const legacyUpheld = (m: Data) => {
   return !!resolvedAt && !!loggedAt && resolvedAt.getTime() === loggedAt.getTime();
 };
 
+/**
+ * Whether it is counted comes from the counting rule (countsTowardSummary),
+ * never from `disputed` alone. A pending dispute, including one reopened by
+ * an admin undoing a decision, counts until decided. An older build's "keep"
+ * (resolved with no outcome) counts like a REJECT.
+ */
 export function disputeLabel(m: Data): string {
   if (legacyUpheld(m)) return 'Successfully disputed (before approve/reject) - residents report not completed (not counted)';
-  if (m.incomplete === true || m.disputed === 'successful') return 'Successfully disputed - residents report not completed (not counted)';
-  if (m.disputed === 'rejected') return 'Rejected - counted';
   if (m.status === 'disputed') return 'Pending - counted until decided';
-  if (m.status === 'resolved') return 'Resolved - counted';
-  return 'None';
+  if (m.status !== 'resolved') return 'None';
+  if (!countsTowardSummary(m)) return 'Successfully disputed - residents report not completed (not counted)';
+  if (m.disputed === 'rejected') return 'Rejected - counted';
+  if (m.disputed == null && m.disputeResult == null) return 'Rejected (kept) - counted';
+  return 'Resolved - counted';
+}
+
+/** The decision-history note for the export: set once a decision was undone. */
+export function disputeHistoryNote(m: Data): string {
+  if (m.reopenedBy == null && m.reopenedAt == null) return '';
+  const at = toInstant(m.reopenedAt);
+  return `An earlier decision was undone${at ? ` on ${at.toISOString().slice(0, 10)}` : ''} and the dispute reopened`;
 }
 
 export async function meetingRowsFor(
@@ -108,6 +124,7 @@ export async function meetingRowsFor(
       verified: counted && m.verified === true,
       counted,
       dispute: disputeLabel(m),
+      disputeHistory: disputeHistoryNote(m),
     });
   }
   return rows.sort((a, b) => a.at - b.at).map(({ at: _at, ...row }) => row);

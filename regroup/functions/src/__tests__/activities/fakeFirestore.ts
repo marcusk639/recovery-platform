@@ -83,7 +83,11 @@ export class FakeFirestore {
     const db = this;
     return {
       id,
-      collection,
+      colName: collection,
+      /** A subcollection, stored as the collection "parent/id/sub". */
+      collection(sub: string) {
+        return new FakeQuery(db, `${collection}/${id}/${sub}`);
+      },
       /** Like the Admin SDK: fails with ALREADY_EXISTS (6) if the doc exists. */
       async create(data: Data) {
         const injected = db.failCreates.get(`${collection}/${id}`);
@@ -136,18 +140,18 @@ export class FakeFirestore {
     const staged: Array<{ collection: string; id: string; data: Data; update?: boolean }> = [];
     const tx = {
       get: (target: { get: () => Promise<unknown> }) => target.get(),
-      set: (ref: { collection: string; id: string }, data: Data) => {
+      set: (ref: { colName: string; id: string }, data: Data) => {
         // The real SDK rejects writes in a read-only transaction.
         if (options?.readOnly) throw new Error('write in a read-only transaction');
-        staged.push({ collection: ref.collection, id: ref.id, data });
+        staged.push({ collection: ref.colName, id: ref.id, data });
       },
       /** Dotted field paths; FieldValue.delete() removes the field. */
-      update: (ref: { collection: string; id: string }, data: Data) => {
+      update: (ref: { colName: string; id: string }, data: Data) => {
         if (options?.readOnly) throw new Error('write in a read-only transaction');
-        if (!this.col(ref.collection).has(ref.id)) {
+        if (!this.col(ref.colName).has(ref.id)) {
           throw Object.assign(new Error('no document to update'), { code: 5 });
         }
-        staged.push({ collection: ref.collection, id: ref.id, data, update: true });
+        staged.push({ collection: ref.colName, id: ref.id, data, update: true });
       },
     };
     const result = await fn(tx);

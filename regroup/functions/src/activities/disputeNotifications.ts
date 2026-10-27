@@ -21,10 +21,15 @@
  * the event id and recipient and written with create(), so a redelivered event
  * cannot notify twice.
  *
+ * A REOPEN (an admin undoing a decision: resolved, or an old build's
+ * "delete", back to `disputed`) notifies the same people, minus the admin who
+ * reopened it, that the decision was undone and the dispute is open again.
+ *
  * Logs ids and counts only; the reason text goes only into the notifications.
  */
 import { logger } from 'firebase-functions';
 import { trustedGuestFrom } from './activityTrust';
+import { isReopen } from './disputeDecisions';
 
 type Firestore = FirebaseFirestore.Firestore;
 type Data = Record<string, unknown>;
@@ -64,6 +69,8 @@ export function disputerOf(before: Data | undefined, after: Data | undefined): s
 const strings = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x !== '') : [];
 
+export const REOPENED_MESSAGE = 'A dispute decision was undone; the dispute is open again.';
+
 export function disputeMessage(activity: Data, forAdmin: boolean): string {
   const label = TYPE_LABELS[String(activity.type)] ?? 'activity';
   const reason =
@@ -100,17 +107,23 @@ export async function notifyDispute(
     ...strings([house.superAdminId]),
   ]);
 
-  const disputer = disputerOf(before, after);
+  const reopened = isReopen(before, after);
+  // Whoever acted: the reopening admin, or the disputer.
+  const actor = reopened
+    ? typeof after.reopenedBy === 'string'
+      ? after.reopenedBy
+      : ''
+    : disputerOf(before, after);
   // Owner rule: nobody disputes their own activity; the rules refuse it for
   // every client write. Only an Admin SDK path could get here — log it.
-  if (disputer && (disputer === guest.residentUid || disputer === after.loggedBy)) {
+  if (!reopened && actor && (actor === guest.residentUid || actor === after.loggedBy)) {
     logger.warn('dispute_notify.self_dispute', { activityId, guestId });
   }
   const recipients = new Map<string, boolean>(); // uid -> forAdmin
   for (const uid of admins) recipients.set(uid, true);
   if (guest.residentUid && !recipients.has(guest.residentUid))
     recipients.set(guest.residentUid, false);
-  recipients.delete(disputer);
+  recipients.delete(actor);
 
   const date = new Date().toISOString();
   const sent: string[] = [];
@@ -122,8 +135,8 @@ export async function notifyDispute(
         houseId: guest.houseId,
         guestId,
         activityId,
-        subject: 'Activity Disputed',
-        message: disputeMessage(after, forAdmin),
+        subject: reopened ? 'Dispute Reopened' : 'Activity Disputed',
+        message: reopened ? REOPENED_MESSAGE : disputeMessage(after, forAdmin),
         type: 'dispute',
         level: 'alert',
         adminNotification: forAdmin,
@@ -137,6 +150,7 @@ export async function notifyDispute(
   }
   logger.info('dispute_notify.sent', {
     activityId,
+    kind: reopened ? 'reopened' : 'disputed',
     houseId: guest.houseId,
     recipients: sent.length,
     redelivered: recipients.size - sent.length,

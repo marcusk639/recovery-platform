@@ -19,6 +19,8 @@
     "migrate:balance-cents:apply": "npm run build && node lib/scripts/migrateBalanceToCents.js --apply",
     "backfill:week-summaries:dry-run": "npm run build && node lib/scripts/backfillWeekSummaries.js",
     "backfill:week-summaries:apply": "npm run build && node lib/scripts/backfillWeekSummaries.js --apply",
+    "backfill:dispute-identity:dry-run": "npm run build && node lib/scripts/backfillDisputeIdentity.js",
+    "backfill:dispute-identity:apply": "npm run build && node lib/scripts/backfillDisputeIdentity.js --apply",
     "test": "jest --runInBand",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",

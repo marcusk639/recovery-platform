@@ -20,11 +20,15 @@ jest.mock('../../activities/disputeNotifications', () => ({
 jest.mock('../../activities/houseDisputeMirror', () => ({
   mirrorHouseDispute: jest.fn(async () => ({ added: 0, removed: 0 })),
 }));
+jest.mock('../../activities/residentStamp', () => ({
+  stampResidentUid: jest.fn(async () => 'unchanged'),
+}));
 
 import { onActivityWritten } from '../../triggers/firestore/activityWeekSummary';
 import { syncWeekSummariesForActivityWrite } from '../../activities/syncWeekSummary';
 import { notifyDispute } from '../../activities/disputeNotifications';
 import { mirrorHouseDispute } from '../../activities/houseDisputeMirror';
+import { stampResidentUid } from '../../activities/residentStamp';
 
 const trigger = onActivityWritten as unknown as {
   options: { document: string; retry: boolean };
@@ -92,6 +96,16 @@ describe('onActivityWritten', () => {
     });
   });
 
+  it('stamps residentUid on every write (the stamp itself skips writes that need none)', async () => {
+    const after = { status: 'active', guestId: 'g1' };
+    await trigger.handler({
+      id: 'e',
+      params: { activityId: 'a11' },
+      data: { before: snap(undefined), after: snap(after) },
+    });
+    expect(stampResidentUid).toHaveBeenCalledWith({ name: 'rats-db' }, 'a11', undefined, after);
+  });
+
   it('takes no decision from the event auth context (authId is not documented as the uid)', async () => {
     await trigger.handler({
       id: 'evt-10',
@@ -101,15 +115,26 @@ describe('onActivityWritten', () => {
       data: { before: snap({ status: 'active' }), after: snap({ status: 'disputed' }) },
     });
     expect((notifyDispute as jest.Mock).mock.calls[0]).toHaveLength(5);
-    expect(JSON.stringify((mirrorHouseDispute as jest.Mock).mock.calls[0])).not.toContain('someone-else');
+    expect(JSON.stringify((mirrorHouseDispute as jest.Mock).mock.calls[0])).not.toContain(
+      'someone-else',
+    );
   });
 
   it('still recomputes when notifying fails, then fails the event so it retries', async () => {
     (notifyDispute as jest.Mock).mockRejectedValueOnce(new Error('notify down'));
     await expect(
-      trigger.handler({ id: 'e', params: { activityId: 'a10' }, data: { before: snap(undefined), after: snap({}) } }),
+      trigger.handler({
+        id: 'e',
+        params: { activityId: 'a10' },
+        data: { before: snap(undefined), after: snap({}) },
+      }),
     ).rejects.toThrow('notify down');
-    expect(syncWeekSummariesForActivityWrite).toHaveBeenCalledWith({ name: 'rats-db' }, 'a10', undefined, {});
+    expect(syncWeekSummariesForActivityWrite).toHaveBeenCalledWith(
+      { name: 'rats-db' },
+      'a10',
+      undefined,
+      {},
+    );
   });
 
   it('is exported from the triggers index so it deploys', () => {

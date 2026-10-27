@@ -221,7 +221,7 @@ function renderCsv(data: ExportData): string {
     // Meeting attendance.
     lines.push("Meeting Attendance");
     lines.push(
-      toCsvRow(["Date", "Meeting", "Type", "Duration", "Verified", "Dispute"])
+      toCsvRow(["Date", "Meeting", "Type", "Duration", "Verified", "Dispute", "Dispute History"])
     );
     for (const m of meetings) {
       lines.push(
@@ -232,6 +232,7 @@ function renderCsv(data: ExportData): string {
           m.duration,
           m.verified,
           m.dispute,
+          m.disputeHistory,
         ])
       );
     }
@@ -336,6 +337,7 @@ async function renderPdf(
               m.duration !== "" ? String(m.duration) : "—",
               m.verified ? "Verified" : "Unverified",
               `Dispute: ${m.dispute}`,
+              ...(m.disputeHistory ? [m.disputeHistory] : []),
             ].join(" · ")
           );
         }

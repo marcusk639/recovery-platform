@@ -87,10 +87,10 @@ describe("complianceExport — dispute outcomes", () => {
     const result = await call({ houseId: "house-1" });
 
     expect(result.csv).toContain("Date,Meeting,Type,Duration,Verified,Dispute");
-    expect(rowFor(result.csv, "Counted")?.slice(4)).toEqual(["true", "None"]);
-    expect(rowFor(result.csv, "Pending")?.slice(4)).toEqual(["true", "Pending - counted until decided"]);
-    expect(rowFor(result.csv, "Rejected")?.slice(4)).toEqual(["true", "Rejected - counted"]);
-    expect(rowFor(result.csv, "LegacyKept")?.slice(4)).toEqual(["true", "Resolved - counted"]);
+    expect(rowFor(result.csv, "Counted")?.slice(4, 6)).toEqual(["true", "None"]);
+    expect(rowFor(result.csv, "Pending")?.slice(4, 6)).toEqual(["true", "Pending - counted until decided"]);
+    expect(rowFor(result.csv, "Rejected")?.slice(4, 6)).toEqual(["true", "Rejected - counted"]);
+    expect(rowFor(result.csv, "LegacyKept")?.slice(4, 6)).toEqual(["true", "Rejected (kept) - counted"]);
     expect(result.csv).not.toContain("Deleted");
   });
 
@@ -102,7 +102,7 @@ describe("complianceExport — dispute outcomes", () => {
 
     const result = await call({ houseId: "house-1" });
 
-    expect(rowFor(result.csv, "Approved")?.slice(4)).toEqual(["false", "Successfully disputed - residents report not completed (not counted)"]);
+    expect(rowFor(result.csv, "Approved")?.slice(4, 6)).toEqual(["false", "Successfully disputed - residents report not completed (not counted)"]);
     expect(result.counts.meetings).toBe(1);
   });
 
@@ -144,7 +144,7 @@ describe("complianceExport — legacy upheld disputes", () => {
 
     const result = await call({ houseId: "house-1" });
 
-    expect(rowFor(result.csv, "LegacyUpheld")?.slice(4)).toEqual([
+    expect(rowFor(result.csv, "LegacyUpheld")?.slice(4, 6)).toEqual([
       "false",
       "Successfully disputed (before approve/reject) - residents report not completed (not counted)",
     ]);
@@ -205,6 +205,38 @@ describe("complianceExport — house time zone", () => {
     ]);
     const result = await call({ houseId: "house-1" });
     expect(rowFor(result.csv, "NoZone")?.[0]).toBe("2026-06-01");
+  });
+});
+
+describe("complianceExport — undone decisions (REOPEN)", () => {
+  it("a reopened dispute is pending and counted; Dispute History notes the undone decision", async () => {
+    const reopenedAt = ts("2026-06-03T15:00:00.000Z");
+    mockGetMeetingActivitiesForGuest.mockResolvedValue([
+      meeting("Reopened", { status: "disputed", reopenedBy: "mgr", reopenedAt, disputed: null, incomplete: null }),
+      meeting("ReDecided", { status: "resolved", disputed: "successful", incomplete: true, reopenedBy: "mgr", reopenedAt }),
+      meeting("NeverReopened", { status: "resolved", disputed: "rejected", incomplete: false }),
+    ]);
+
+    const result = await call({ houseId: "house-1" });
+
+    expect(result.csv).toContain("Date,Meeting,Type,Duration,Verified,Dispute,Dispute History");
+    const note = "An earlier decision was undone on 2026-06-03 and the dispute reopened";
+    expect(rowFor(result.csv, "Reopened")?.slice(5)).toEqual(["Pending - counted until decided", note]);
+    expect(rowFor(result.csv, "ReDecided")?.slice(4)).toEqual([
+      "false",
+      "Successfully disputed - residents report not completed (not counted)",
+      note,
+    ]);
+    expect(rowFor(result.csv, "NeverReopened")?.slice(5)).toEqual(["Rejected - counted", ""]);
+    expect(result.counts.meetings).toBe(2); // the reopened one and the rejected one
+  });
+
+  it("derives counted from the counting rule, never from `disputed` alone", async () => {
+    mockGetMeetingActivitiesForGuest.mockResolvedValue([
+      meeting("SuccessfulButCounted", { status: "resolved", disputed: "successful", incomplete: false }),
+    ]);
+    const result = await call({ houseId: "house-1" });
+    expect(rowFor(result.csv, "SuccessfulButCounted")?.slice(4, 6)).toEqual(["true", "Resolved - counted"]);
   });
 });
 
