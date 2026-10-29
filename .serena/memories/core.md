@@ -11,7 +11,7 @@ Flat monorepo of independent products, each its own Firebase project; never cros
 - `docs/superpowers/{specs,plans}/` — Superpowers design docs and plans (repo-level); product-level ones under `<product>/mobile/docs/superpowers/`.
 
 ## Invariants
-- Vocabulary differs: homegroups `meeting` = 12-step meeting; regroup `meeting` = house meeting, `guest` = resident.
+- Vocabulary: `meeting` = 12-step meeting in every product (as in homegroups). Sober-living house meetings are a separate concept, "house meeting" (`regroup:house-meeting`). Regroup code (`functions/src/callable/meetings.ts`) still says "meeting" for house meetings: legacy naming. Regroup `guest` = resident.
 - Never log PII; log full errors server-side, sanitized messages to clients.
 - Coverage floors are ratchets (raise only). Test files/counts guarded by verify-diff (pre-commit + CI `test-tamper`).
 - Commit scope must name the product (`fix(regroup-mobile): …`).
