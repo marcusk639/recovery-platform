@@ -112,7 +112,7 @@ scripts/logs/
 # ── Per-repo tooling artifacts (excluded from monorepo commits) ──
 # Serena: share the project config and memories, keep the cache and local overrides out.
 # Memories are committed because cloud sessions run in ephemeral containers; untracked
-# ones are lost with the container. The PR review job never reads a PR's .serena/.
+# ones are lost with the container. Serena in the PR review job never indexes a PR's .serena/.
 .serena/*
 !.serena/project.yml
 !.serena/.gitignore
