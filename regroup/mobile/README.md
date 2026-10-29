@@ -61,7 +61,8 @@ src/
   context/       # React contexts (Auth, Data, Modal, Notification)
   navigation/    # React Navigation setup + deep linking
   util/          # Utilities (compliance, formatting, permissions)
-e2e/             # Detox E2E tests
+e2e/             # E2E seed fixtures (e2e/setup/) and test-credential notes
+maestro/         # Maestro flows, subflows and seed/run scripts
 firebase/        # Firestore security rules
 ```
 
@@ -81,8 +82,8 @@ npm run test:coverage
 firebase emulators:start --only firestore,auth
 npm run test:integration
 
-# E2E tests (requires staging Firebase project)
-E2E_FIREBASE_PROJECT=rats-dev npm run test:e2e:ios
+# E2E tests (Maestro; needs E2E_TEST_PASSWORD, see e2e/SECURITY-test-credentials.md)
+npm run maestro:smoke:ios
 ```
 
 ## Related Repos

@@ -1,5 +1,7 @@
 # Maestro E2E Testing Guide — Regroup
 
+> **SUPERSEDED.** Current e2e guidance is in `regroup/mobile/.claude/rules/testing.md` and the e2e sections of `regroup/mobile/CLAUDE.md`. This guide's Maestro-MCP setup and `.maestro/flows/` path are out of date (flows live in `maestro/flows/`).
+
 **Status:** Under evaluation as a replacement / complement to Detox  
 **Last updated:** 2026-06-01
 

@@ -56,7 +56,7 @@ const routes: Routes = [
   { path: 'contact', component: ContactPageComponent },
   { path: 'privacy-policy', component: PrivacyPolicyComponent },
   { path: 'terms', component: TermsComponent },
-  { path: 'my-account', component: MyAccountComponent },
+  { path: 'my-account', component: MyAccountComponent, canActivate: [AuthGuard] },
   // The mobile app's "Manage Subscription" button deep-links to /billing — a
   // literal path, origin-only from env (SubscriptionRequiredScreen.tsx:25). The
   // route was specified in regroup/mobile/docs/superpowers/specs/
@@ -82,4 +82,4 @@ const routes: Routes = [
   ],
   exports: [RouterModule],
 })
-export class AppRoutingModule { }
+export class AppRoutingModule {}

@@ -19,12 +19,17 @@ esac
 
 PATTERN='sk_live_[0-9A-Za-z]{10,}|rk_live_[0-9A-Za-z]{10,}|ghp_[0-9A-Za-z]{36}|github_pat_[0-9A-Za-z_]{50,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|xox[baprs]-[0-9A-Za-z-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY-----'
 
-HITS="$(grep -nIEo "$PATTERN" "$FILE" 2>/dev/null | head -5 || true)"
+# Mask each match to its first 8 characters so the warning itself doesn't
+# copy the credential into Claude's context and the transcript.
+HITS="$(grep -nIEo "$PATTERN" "$FILE" 2>/dev/null | head -5 | sed -E 's/^([0-9]+:.{8}).*/\1…(masked)/' || true)"
 
+# Plain stdout from a PostToolUse hook is not shown to Claude; only
+# hookSpecificOutput.additionalContext is.
 if [ -n "$HITS" ]; then
-  echo "⚠️  [secret-scan] Possible hardcoded secret in $FILE:"
-  echo "$HITS"
-  echo "Move it to Firebase Secret Manager or an environment variable before committing."
+  MSG="⚠️  [secret-scan] Possible hardcoded secret in $FILE (line:prefix):
+$HITS
+Move it to Firebase Secret Manager or an environment variable before committing."
+  jq -n --arg c "$MSG" '{hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $c}}'
 fi
 
 exit 0

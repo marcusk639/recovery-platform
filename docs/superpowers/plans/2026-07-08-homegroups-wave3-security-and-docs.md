@@ -431,6 +431,8 @@ and
 
 `${CLAUDE_PROJECT_DIR}` here refers to `homegroups/` since that's where this `.claude/settings.json` lives (Claude Code sets the project dir to the directory containing the active `.claude/` folder).
 
+> **Correction (2026-10-27):** the commands above read `$TOOL_INPUT`, which Claude Code never sets, so these hooks never ran. Hook input arrives as JSON on stdin. The current hooks read it with `jq -r '.tool_input.file_path // empty'`, and the tsc hook returns its output as `hookSpecificOutput.additionalContext`, because plain PostToolUse stdout is not shown to Claude. See `homegroups/.claude/settings.json`.
+
 - [ ] **Step 3: Verify JSON is valid**
 
 Run: `cd homegroups && python3 -c "import json; json.load(open('.mcp.json')); json.load(open('.claude/settings.json')); print('VALID')"`

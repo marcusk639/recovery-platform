@@ -1,5 +1,5 @@
 ---
-description: Jest setup, Firebase mocks, integration tests, Detox E2E
+description: Jest setup, Firebase mocks, integration tests, Maestro E2E
 paths: "**/__tests__/**,**/*.test.*,e2e/**,jest.*"
 ---
 
@@ -36,36 +36,19 @@ npm run test:integration
 
 Emulator must use `127.0.0.1` (not `localhost`) — see `src/config/firebase-emulator.ts`.
 
-## E2E Tests — Maestro (evaluating) + Detox (existing)
+## E2E Tests — Maestro
 
-See [docs/e2e/MAESTRO_GUIDE.md](../docs/e2e/MAESTRO_GUIDE.md) for the full Maestro setup, Claude Code MCP integration, and the autonomous pipeline (`/mobile-e2e pipeline`).
-
-### Maestro (preferred for new flows)
+Maestro is the only e2e runner; Detox has been retired. The plan of record is the launch-gate design, `docs/superpowers/specs/2026-10-20-regroup-e2e-launch-gate-design.md` at the repo root (it lands with the `docs/regroup-e2e-launch-gate` branch). Build the e2e app variants as described in the "Android e2e build types" section of `regroup/mobile/CLAUDE.md` — never run e2e against production Firebase.
 
 ```bash
 # Install CLI (Java 17+ required)
 curl -Ls "https://get.maestro.mobile.dev" | bash
 
-# Register MCP server with Claude Code
-claude mcp add maestro -- maestro mcp
-
-# Run a flow
-maestro test .maestro/flows/auth/01-login.yaml
-
-# Full autonomous pipeline (analyze codebase → generate YAML → run → report)
-/mobile-e2e pipeline
+# Run flows. There is no working seed step: `npm run maestro:seed` is BROKEN
+# (it calls e2e/setup/seedTestData.js, which has never existed). Seeding is
+# unresolved until the launch-gate walking skeleton lands.
+npm run maestro:smoke:ios        # needs E2E_TEST_PASSWORD (e2e/SECURITY-test-credentials.md)
+npm run maestro:ios              # all flows in maestro/flows/
 ```
 
-Flows live in `.maestro/flows/`. Reports written to `docs/e2e/reports/`.
-
-## E2E Tests — Detox (existing)
-
-Device: iOS simulator `iPhone 15-Detox`. The global setup aborts if emulators aren't reachable — never run E2E against production Firebase.
-
-```bash
-npm run test:e2e:build:ios    # build app for simulator
-npm run test:e2e:ios          # run tests
-npm run test:e2e:run          # via helper script
-```
-
-E2E test files: `e2e/tests/`. Setup: `e2e/setup/globalSetup.js` (includes emulator connectivity guard).
+Flows live in `maestro/flows/` (shared steps in `maestro/subflows/`). `e2e/setup/` holds unused JSON fixtures; nothing reads them yet. The CI `maestro-smoke` job runs the repo-root `e2e-maestro/regroup/` flows on Maestro Cloud. Reports go to `docs/e2e/reports/`.

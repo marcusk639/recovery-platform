@@ -139,10 +139,10 @@ Generates a new Angular service that extends `BaseFirestoreService<T>`, along wi
 Every data service in this project follows an identical pattern:
 
 ```typescript
-@Injectable({ providedIn: "root" })
+@Injectable({ providedIn: 'root' })
 export class FooService extends BaseFirestoreService<Foo> {
   constructor(protected firestore: AngularFirestore) {
-    super(firestore, "foos");
+    super(firestore, 'foos');
   }
 }
 ```
@@ -196,7 +196,9 @@ add(object: T): Promise<DocumentReference>
 
 ### What it does
 
-Intercepts any Claude attempt to edit `src/environments/environment.prod.ts` and exits with code 2 (blocked). Claude cannot bypass this — the hook runs before the tool executes.
+Intercepts any Claude attempt to edit `src/environments/environment.prod.ts` with the `Edit` or `Write` tool, and exits with code 2 (blocked). A second layer, the `permissions.deny` rule `Edit(/src/environments/environment.prod.ts)` in `.claude/settings.json`, blocks the same edits even if the script cannot run (no `python3`, say). The leading `/` anchors the path to this project, so the rule still holds after the session `cd`s into a subdirectory; a bare `src/...` path does not.
+
+Neither layer covers shell commands. A `Bash` call that writes the file (`sed -i`, `>`) is not an `Edit`/`Write` tool call, so treat this as a guard against accidents, not a security boundary.
 
 ### Why this project needs it
 
@@ -223,17 +225,19 @@ Open `src/environments/environment.prod.ts` directly in your code editor. The ho
 
 ```bash
 # .claude/hooks/block-prod-env.sh
+# Claude Code passes the tool call as JSON on stdin; no env var carries it.
 FILE=$(python3 -c "
-import sys, json, os
-d = json.loads(os.environ.get('CLAUDE_TOOL_INPUT', '{}'))
-print(d.get('file_path', ''))
+import sys, json
+print(json.load(sys.stdin).get('tool_input', {}).get('file_path', ''))
 " 2>/dev/null)
 
 if [[ "$FILE" == *"environment.prod.ts"* ]]; then
-  echo "BLOCKED: environment.prod.ts contains production Firebase credentials."
+  echo "BLOCKED: environment.prod.ts contains production Firebase credentials." >&2
   exit 2
 fi
 ```
+
+The message goes to stderr because, on exit 2, stderr is what Claude Code shows Claude. `settings.json` runs the script as `bash "$CLAUDE_PROJECT_DIR/.claude/hooks/block-prod-env.sh"`. A relative `bash .claude/hooks/...` path stops resolving once the session `cd`s elsewhere, and the hook then errors without blocking.
 
 ---
 
@@ -244,7 +248,7 @@ fi
 
 ### What it does
 
-Automatically runs TSLint on any TypeScript file that Claude edits, and prints the results to the conversation. This is informational — it never blocks a write.
+Automatically runs TSLint on any TypeScript file that Claude edits, and returns the results to Claude as `additionalContext`. This is informational — it never blocks a write.
 
 ### Why this project needs it
 
@@ -266,19 +270,25 @@ If there are no issues, the hook produces no output.
 ```bash
 # .claude/hooks/lint-on-edit.sh
 FILE=$(python3 -c "
-import sys, json, os
-d = json.loads(os.environ.get('CLAUDE_TOOL_INPUT', '{}'))
-print(d.get('file_path', ''))
+import sys, json
+print(json.load(sys.stdin).get('tool_input', {}).get('file_path', ''))
 " 2>/dev/null)
 
 if [[ "$FILE" == *.ts ]] && [[ -f "$FILE" ]]; then
   cd "${CLAUDE_PROJECT_DIR:-.}"
-  echo "--- TSLint: $FILE ---"
-  npx tslint --project tsconfig.json "$FILE" 2>&1 | head -40
+  OUT=$(npx tslint --project tsconfig.json "$FILE" 2>&1 | head -40)
+  if [[ -n "$OUT" ]]; then
+    printf '%s' "--- TSLint: $FILE ---"$'\n'"$OUT" | python3 -c "
+import sys, json
+print(json.dumps({'hookSpecificOutput': {'hookEventName': 'PostToolUse', 'additionalContext': sys.stdin.read()}}))
+"
+  fi
 fi
 
 exit 0  # informational only
 ```
+
+Plain stdout from a PostToolUse hook is not shown to Claude, so the results are wrapped in `hookSpecificOutput.additionalContext`.
 
 ---
 
@@ -377,9 +387,10 @@ regroup-web/
 
 ### Adding a new hook
 
-1. Create a script in `.claude/hooks/<name>.sh`
-2. Add it to `.claude/settings.json` under the appropriate event (`PreToolUse` or `PostToolUse`)
-3. Use `exit 2` to block, `exit 0` to allow (with optional stdout output Claude will see)
+1. Create a script in `.claude/hooks/<name>.sh`. Read the tool call from stdin, which is JSON with `tool_name` and `tool_input` (e.g. `tool_input.file_path`). Claude Code sets no `TOOL_INPUT` or `CLAUDE_TOOL_INPUT` env var.
+2. Add it to `.claude/settings.json` under the appropriate event (`PreToolUse` or `PostToolUse`). Invoke it as `bash "$CLAUDE_PROJECT_DIR/.claude/hooks/<name>.sh"`, not by a relative path.
+3. Use `exit 2` with a message on stderr to block, and `exit 0` to allow. To show Claude output from a PostToolUse hook, print `{"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": "..."}}`. Plain stdout is not shown to Claude.
+4. To stop Claude editing a specific file, prefer a `permissions.deny` rule such as `Edit(/path/from/project/root)`, which also covers `Write`. Use a hook only when the check needs logic.
 
 ### Adding a new skill
 

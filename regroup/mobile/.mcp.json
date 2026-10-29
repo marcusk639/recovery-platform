@@ -1,12 +1,5 @@
 {
   "mcpServers": {
-    "detox": {
-      "command": "npx",
-      "args": ["detox-mcp"],
-      "env": {
-        "DETOX_PROJECT_PATH": "/Users/marcusklein/dev/recovery-platform/regroup/mobile"
-      }
-    },
     "context7": {
       "command": "npx",
       "args": ["-y", "@upstash/context7-mcp@3.0.0"]
