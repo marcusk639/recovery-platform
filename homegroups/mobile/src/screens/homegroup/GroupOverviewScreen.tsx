@@ -17,7 +17,7 @@ import {RouteProp, useRoute, useNavigation} from '@react-navigation/native';
 import {StackNavigationProp} from '@react-navigation/stack';
 import auth from '@react-native-firebase/auth';
 import functions from '@react-native-firebase/functions';
-import Clipboard from '@react-native-community/clipboard';
+import Clipboard from '@react-native-clipboard/clipboard';
 import SubscriptionWebView from '../../components/payments/SubscriptionWebView';
 import AdminValuePropModal from '../../components/payments/AdminValuePropModal';
 import TrialStatusBanner from '../../components/subscription/TrialStatusBanner';

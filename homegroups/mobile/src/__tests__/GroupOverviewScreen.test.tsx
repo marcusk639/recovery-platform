@@ -1,5 +1,7 @@
 import React from 'react';
+import {Alert} from 'react-native';
 import renderer, {act} from 'react-test-renderer';
+import Clipboard from '@react-native-clipboard/clipboard';
 
 // --- Navigation ---
 const mockNavigate = jest.fn();
@@ -53,7 +55,7 @@ const mockGroup = {
   isClaimed: true,
   members: ['user1'],
   pendingAdminRequests: [],
-  stripeConnectAccountId: null,
+  stripeConnectAccountId: null as string | null,
   paymentLinks: {},
   subscriptionStatus: 'canceled',
 };
@@ -300,6 +302,46 @@ describe('GroupOverviewScreen — unread count listener', () => {
 
     expect(mockDispatch).not.toHaveBeenCalledWith(
       expect.objectContaining({type: 'chat/fetchUnread'}),
+    );
+  });
+});
+
+describe('GroupOverviewScreen — copy group URL', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockDispatch.mockReturnValue({unwrap: () => Promise.resolve([])});
+    mockGroup.stripeConnectAccountId = 'acct_test';
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    mockGroup.stripeConnectAccountId = null;
+  });
+
+  it('copies the group page URL from the Stripe settings modal', async () => {
+    let component: renderer.ReactTestRenderer;
+    await act(async () => {
+      component = renderer.create(<GroupOverviewScreen />);
+      await Promise.resolve();
+    });
+
+    act(() => {
+      component!.root
+        .findByProps({testID: 'group-admin-stripe-setup-button'})
+        .props.onPress();
+    });
+    await act(async () => {
+      await component!.root
+        .findByProps({testID: 'copy-group-url-button'})
+        .props.onPress();
+    });
+
+    expect(Clipboard.setString).toHaveBeenCalledWith(
+      'https://homegroups-app.com/groups/g1',
+    );
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Copied!',
+      'URL copied to clipboard',
     );
   });
 });
