@@ -188,6 +188,13 @@ describe('delete: claim cleanup', () => {
 describe('EES re-split: what it may touch', () => {
   const week = '2026-10-26';
   const time = '2026-10-28T12:00:00Z';
+  // Pin the clock just after the fixed event time: guestWrite skips the
+  // re-split for events older than RETRY_CUTOFF_MS (6h) against Date.now().
+  let nowSpy: jest.SpyInstance;
+  beforeEach(() => {
+    nowSpy = jest.spyOn(Date, 'now').mockReturnValue(Date.parse(time) + 60_000);
+  });
+  afterEach(() => nowSpy.mockRestore());
   const record = (id: string, guestId: string, extra: Record<string, unknown> = {}) =>
     mem.seed(`ees-records/${id}`, {
       houseId: H,
