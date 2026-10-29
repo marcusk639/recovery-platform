@@ -333,14 +333,11 @@ jest.mock('react-native-webview', () => {
   return {WebView, default: WebView};
 });
 
-// Mock clipboard packages
+// Mock the clipboard. __esModule makes `import Clipboard from ...` resolve to
+// `default`; without it Babel's interop hands back the wrapper object and
+// Clipboard.setString is undefined.
 jest.mock('@react-native-clipboard/clipboard', () => ({
-  default: {
-    getString: jest.fn(() => Promise.resolve('')),
-    setString: jest.fn(),
-  },
-}));
-jest.mock('@react-native-community/clipboard', () => ({
+  __esModule: true,
   default: {
     getString: jest.fn(() => Promise.resolve('')),
     setString: jest.fn(),

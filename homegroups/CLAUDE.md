@@ -101,7 +101,7 @@ Each subproject documents its own architecture in its CLAUDE.md (see [Subproject
 
 See `mobile/CLAUDE.md` and `functions/CLAUDE.md` for test commands.
 
-- Android CI: the `homegroups-maestro-smoke` job (`.github/workflows/ci.yml`, Java 17) currently fails compiling `@react-native-firebase/auth` (Java source level). Flows live in `mobile/maestro/flows/`.
+- Android CI: the `homegroups-maestro-smoke` job (`.github/workflows/ci.yml`, Java 17) builds the debug APK, then runs only `invite-code-join.yaml`, with `continue-on-error: true`. A green job proves the build, not the flow. The Android build depends on RN 0.72 holding actions (Java 17 for `@react-native-firebase`, exact native pins); see `mobile/CLAUDE.md`. Flows live in `mobile/maestro/flows/`.
 
 ---
 

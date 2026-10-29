@@ -8,9 +8,17 @@ module.exports = {
     android: {},
   },
   dependencies: {
+    // Android links only v10 (the one the JS imports and fonts.gradle uses), iOS
+    // only v11's common. Both packages' Android sides define a VectorIconsPackage,
+    // and autolinking both makes the generated PackageList.java ambiguous.
     'react-native-vector-icons': {
       platforms: {
         ios: null,
+      },
+    },
+    '@react-native-vector-icons/common': {
+      platforms: {
+        android: null,
       },
     },
     '@flyskywhy/react-native-gcanvas': {

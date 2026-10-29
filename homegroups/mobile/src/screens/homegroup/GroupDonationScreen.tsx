@@ -20,6 +20,7 @@ import {RouteProp, useRoute, useNavigation} from '@react-navigation/native';
 import {StackNavigationProp} from '@react-navigation/stack';
 import {GroupStackParamList} from '../../types/navigation';
 import {useStripe} from '@stripe/stripe-react-native';
+import Clipboard from '@react-native-clipboard/clipboard';
 import functions from '@react-native-firebase/functions';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useSelector} from 'react-redux';
@@ -234,7 +235,6 @@ const GroupDonationScreen: React.FC = () => {
 
   const copyToClipboard = async (text: string) => {
     try {
-      const Clipboard = require('@react-native-community/clipboard').default;
       Clipboard.setString(text);
       Alert.alert('Copied!', 'Payment info copied to clipboard');
     } catch (err) {

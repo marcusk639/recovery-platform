@@ -1,7 +1,17 @@
 buildscript {
     ext {
-        // Align with @react-native/gradle-plugin's build file
-        kotlinVersion = "1.9.22"
+        // 2.1.20, as in regroup/mobile (its build.gradle has the full history):
+        // @stripe/stripe-react-native 0.44.0's native SDK depends on
+        // kotlin-stdlib 2.1.10, whose metadata a 1.9 compiler can't read
+        // (":stripe_stripe-react-native:compileDebugKotlin ... binary version of
+        // its metadata is 2.1.0, expected version is 1.9"). Raising the compiler
+        // is the fix regroup's CI confirmed; forcing the stdlib down was disproved.
+        kotlinVersion = "2.1.20"
+        // Pinned native Stripe SDK for wrapper 0.44.0, the version regroup/mobile
+        // confirmed by bisecting real AARs: 21.18.0+ breaks the wrapper's compile
+        // (Typography opt-in), 21.24.0+ again (DisplayPayNowDetails). The wrapper
+        // reads rootProject.ext.stripeVersion ahead of its own 21.10.+ range.
+        stripeVersion = "21.14.0"
         buildToolsVersion = "34.0.0"
         minSdkVersion = 23
         compileSdkVersion = 34 // Keep compileSdk at 34
@@ -67,6 +77,27 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
 // Same bridges as regroup/mobile/android/build.gradle (see the comments there for
 // the failures each one answers). AGP 8 requires them across every module.
 subprojects { project ->
+    // Java level of every Android module, in AGP's finalizeDsl (after the
+    // module's own build script, before AGP locks the DSL). React Native 0.72
+    // forced 11 everywhere; gradle.properties turns that off
+    // (react.internal.disableJavaVersionAlignment) because it overrode 17 for
+    // @react-native-firebase v21+, whose Java source needs 16+ (pattern
+    // matching in instanceof) though its build file asks for 11 (issue #87).
+    // Same 11 as before for every other module; 17 for react-native-firebase.
+    // Writing compileOptions in afterEvaluate is too late (discarded), and
+    // setting the JavaCompile tasks is overwritten by AGP. The Kotlin jvmTarget
+    // bridge below reads targetCompatibility, so Kotlin follows.
+    def javaLevel = { ->
+        def level = project.name.startsWith('react-native-firebase')
+            ? JavaVersion.VERSION_17 : JavaVersion.VERSION_11
+        project.extensions.getByName('androidComponents').finalizeDsl { ext ->
+            ext.compileOptions.sourceCompatibility = level
+            ext.compileOptions.targetCompatibility = level
+        }
+    }
+    project.plugins.withId('com.android.application') { javaLevel() }
+    project.plugins.withId('com.android.library') { javaLevel() }
+
     project.afterEvaluate {
         def android = project.extensions.findByName('android')
         if (android == null) {
@@ -84,13 +115,11 @@ subprojects { project ->
             .withType(org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile)
             .configureEach {
                 compilerOptions.jvmTarget.set(project.provider {
-                    // `.@Companion` is required. fromTarget is an instance method on
-                    // the Kotlin companion (KGP 1.9.22, not @JvmStatic). Groovy resolves
-                    // plain `JvmTarget.Companion` to the nested CLASS JvmTarget$Companion
-                    // in preference to the static FIELD of that name, then fails looking
-                    // for a static fromTarget. `.@` forces the field read. Do not
-                    // "simplify" it back.
-                    org.jetbrains.kotlin.gradle.dsl.JvmTarget.@Companion.fromTarget(
+                    // Static fromTarget, as in regroup/mobile on the same KGP 2.1.20.
+                    // Under KGP 1.9.22 it was only an instance method on the companion
+                    // and needed `JvmTarget.@Companion.fromTarget`; go back to that
+                    // form if kotlinVersion ever drops below 2.x.
+                    org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(
                         android.compileOptions.targetCompatibility.toString())
                 })
             }
