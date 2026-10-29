@@ -163,6 +163,13 @@ describe('docs with no createdBy (older builds): flagged only under a ticket', (
 describe('a move to another house is a departure from the old house', () => {
   const H2 = 'h2';
   const time = '2026-10-28T12:00:00Z';
+  // Pin the clock just after the fixed event time: guestWrite skips the
+  // re-split for events older than RETRY_CUTOFF_MS (6h) against Date.now().
+  let nowSpy: jest.SpyInstance;
+  beforeEach(() => {
+    nowSpy = jest.spyOn(Date, 'now').mockReturnValue(Date.parse(time) + 60_000);
+  });
+  afterEach(() => nowSpy.mockRestore());
   const week = '2026-10-26';
   const moveEvent = (
     guestId: string,
