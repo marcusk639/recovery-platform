@@ -18,7 +18,7 @@ E2E tests use Detox:
 - iOS: `npm run test:e2e:build` then `npm run test:e2e:test`
 - Android: `npm run test:e2e:build:android` then `npm run test:e2e:test:android`
 
-Firebase modules are mocked in `jest.setup.js`. Maestro flows: `maestro/flows/`. The Android CI job `homegroups-maestro-smoke` currently fails compiling `@react-native-firebase/auth`; see `maestro/CI-CLOUD-SETUP.md`.
+Firebase modules are mocked in `jest.setup.js`. Maestro flows: `maestro/flows/`. The Android CI job `homegroups-maestro-smoke` builds the debug APK and runs `invite-code-join.yaml` with `continue-on-error: true`, so it goes red only on a build failure; see `maestro/CI-CLOUD-SETUP.md`. On RN 0.72 the build relies on `android/build.gradle` setting each module's Java level (17 for `react-native-firebase*`, 11 otherwise) and on exact pins for gesture-handler, image-picker, screens, permissions and stripe-react-native. Lift both after the RN 0.76+ upgrade. Import the clipboard only from `@react-native-clipboard/clipboard`.
 
 ## Architecture
 
