@@ -34,7 +34,7 @@ The `test-tamper` workflow re-runs verify-diff on every PR, using the script fro
 
 ## Code navigation (Serena)
 
-Serena is a project MCP server in `.mcp.json` (`serena-agent==1.7.0` via `uvx`, `--project-from-cwd`), configured by the committed `.serena/project.yml`. Its cache, memories and `project.local.yml` stay untracked. The PR review job ignores both and uses its own locked-down copy, `.claude/pr-review/serena/project.yml`.
+Serena is a project MCP server in `.mcp.json` (`serena-agent==1.7.0` via `uvx`, `--project-from-cwd`), configured by the committed `.serena/project.yml`. Its memories (`.serena/memories/`, entry point `core.md`) are committed so they survive ephemeral cloud containers: edit them with Serena's memory tools, keep them to the style in `memory_maintenance.md`, review them like code, and run `serena memories check` after renames or deletions. Its cache and `project.local.yml` stay untracked. The PR review job ignores the PR's `.serena/` (memories included) and uses its own locked-down copy, `.claude/pr-review/serena/project.yml`.
 
 - **It indexes the directory the session started in.** A session started in the main checkout that edits a worktree through `git -C` gets symbol answers about the main checkout. That is often a stale branch. Start the session in the worktree, or Read and Grep the worktree's paths. Every worktree gets the committed `.serena/project.yml`, so its index skips the same build output.
 - **It ignores every `lib/` directory**, by owner decision. Symbol lookups and `search_for_pattern` see nothing in `detox-recovery/lib`, `recovery-api/src/lib` or `.claude/pr-review/checks/lib`, so Grep there. An empty result means "not indexed", not "unused".
