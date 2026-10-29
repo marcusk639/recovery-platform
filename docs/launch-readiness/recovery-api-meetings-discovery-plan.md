@@ -31,7 +31,7 @@ meeting stores that today make a meeting created in one app invisible to the oth
 - **Attendance tracking.** Each product tracks its own users' attendance natively
   (regroup: Unified Activities per guest/week; homegroups: QR check-ins). Not shared.
 - **Private / internal meetings.** A homegroup's private business meeting or a
-  regroup house's internal resident meeting (`regroup:meeting` = a house meeting,
+  regroup house's internal resident meeting (`regroup:house-meeting`, a house meeting,
   a _different concept_ from a public 12-step meeting) must NOT enter the shared
   directory. The create flow must distinguish public-directory vs product-private.
 - **Product-specific meeting metadata.** Group treasury/donation links (`venmo`,
