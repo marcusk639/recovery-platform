@@ -1017,6 +1017,30 @@ Pinned exactly so the migration cannot change them; none is fixed here.
   changed files 22 → 20 errors (the two removed are Splash's unused `onMessage` and `res`; none
   new, the new files are clean); `verify-diff.sh` (working tree vs HEAD) passes.
 
+### Task 12: Sentry 8 and Hermes in the iOS bundle phases
+
+- **Bundle phase:** bundles through Sentry 8.33.0's `scripts/sentry-xcode.sh` over RN 0.88's
+  `react-native-xcode.sh` (it uploads the bundle and source map, collects modules, and skips the
+  upload for Debug configurations). The source map now goes through `SOURCEMAP_FILE`
+  (`$DERIVED_FILE_DIR/main.jsbundle.map`), which RN 0.88 composes with the Hermes bytecode map;
+  `--sourcemap-output` left `EXTRA_PACKAGER_ARGS`, `--reset-cache` stayed. Unchanged: the
+  `sentry.properties` guard, the E2E skip, `SENTRY_DISABLE_AUTO_UPLOAD`, `BUNDLER_ENV` and the
+  stale-bundle removal (RN 0.88's script now has `set -e`; kept as a guard, comment updated).
+- **dSYM phase:** uploads through Sentry 8's `scripts/sentry-xcode-debug-files.sh` (which honours
+  `SENTRY_INCLUDE_NATIVE_SOURCES` and skips Debug), after the same E2E, disable and
+  `sentry.properties` guards.
+- **Checks:** the pbxproj parses with the npm `xcode` package, and both phase scripts pass `bash -n`.
+- **Not done here, for the owner:**
+  - **Debug IDs:** `metro.config.js` does not use `@sentry/react-native/metro`'s serializer, so
+    bundles carry no debug ID and Sentry matches source maps by release and dist. The spec keeps
+    `metro.config.js` "unchanged in shape"; wrapping it with `withSentryConfig` is the one-line
+    change if debug-ID matching is wanted.
+  - **Hermes is still off on iOS** (`:hermes_enabled => false` in the Podfile): the composed map
+    applies once Task 13 enables it; until then the phase uploads the plain JSC map.
+  - **Leftover CocoaPods phases:** `[CP-User] [RNFB] Crashlytics Configuration` and the
+    FirebaseCrashlytics run phase come from the stale `Podfile.lock` (Crashlytics was removed);
+    they go at Task 13's `pod install`.
+
 ## 7. Verification
 
 _Final results and the Mac checkpoint (Task 16)._
