@@ -5,6 +5,8 @@
 #   verify-diff.sh --staged          # pre-commit: inspect the staged index
 #   verify-diff.sh                   # working tree vs HEAD
 #   verify-diff.sh origin/main       # PR check against a base ref
+#   verify-diff.sh <base> <head>     # two commits, no working tree (the PR reviewer's facts
+#                                    # step: its tree is neutralized, so only objects count)
 #
 # Exit 0 = clean, exit 1 = violations found (printed).
 #
@@ -19,9 +21,13 @@
 set -uo pipefail
 
 MODE="${1:-HEAD}"
+HEAD_REF="${2:-}"
 if [ "$MODE" = "--staged" ]; then
   DIFF=(git -c core.quotePath=false diff --cached)
   LABEL="staged index"
+elif [ -n "$HEAD_REF" ]; then
+  DIFF=(git -c core.quotePath=false diff "$MODE" "$HEAD_REF")
+  LABEL="$MODE..$HEAD_REF"
 else
   DIFF=(git -c core.quotePath=false diff "$MODE")
   LABEL="working tree vs $MODE"
@@ -92,7 +98,8 @@ SNAP=$("${DIFF[@]}" --name-only 2>/dev/null | grep -c '\.snap$')
 # ---------- 5. NEW untracked test files (git diff cannot see these) ----------
 # Closes the hole found in Stage 1: an agent-written test file that is never
 # staged is invisible to every git diff, so it must be scanned directly.
-if [ "$MODE" != "--staged" ]; then
+# Two commits compare objects only: the working tree is not the change under review.
+if [ "$MODE" != "--staged" ] && [ -z "$HEAD_REF" ]; then
   while IFS= read -r f; do
     [ -z "$f" ] && continue
     printf '%s' "$f" | grep -qE "$TEST_PATH_RE" || continue
