@@ -55,8 +55,12 @@ const ActivityScreen: React.FC = () => {
   }, [startDate]);
 
   // Fetch activities from new Activity system (current + previous week)
-  const { activities: activitySystemActivities, loading: activitiesLoading } =
-    useActivities({
+  const {
+    activities: activitySystemActivities,
+    loading: activitiesLoading,
+    error: activitiesError,
+    refetch: refetchActivities,
+  } = useActivities({
       houseId: house?.id,
       startDate: previousWeekStart, // Start from previous week
       endDate, // End at current week
@@ -191,6 +195,17 @@ const ActivityScreen: React.FC = () => {
           accessibilityRole="button"
           onPress={retryDisputes}>
           <Text style={disputeErrorStyles.text}>Couldn't load disputes. Tap to try again.</Text>
+        </TouchableOpacity>
+      ) : null}
+      {activitiesError ? (
+        // Not an empty feed: "no activity" would be wrong when we could not read it.
+        <TouchableOpacity
+          testID="activities-load-error"
+          accessibilityRole="button"
+          onPress={refetchActivities}>
+          <Text style={disputeErrorStyles.text}>
+            Couldn't load activities. Tap to try again.
+          </Text>
         </TouchableOpacity>
       ) : null}
       <View testID="activities-list" style={{ flex: 1 }}>

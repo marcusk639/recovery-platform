@@ -24,6 +24,14 @@ import { logException } from '../util/logging';
  * @param timestamp - Optional custom timestamp (defaults to now)
  * @returns The created activity with Firestore-generated ID
  */
+
+/**
+ * A generic message for the UI that keeps the original error as `cause`, so
+ * callers can still tell a rules denial from a missing index or being offline.
+ */
+const failure = (message: string, cause: unknown): Error =>
+  Object.assign(new Error(message), { cause });
+
 export async function logActivity(
   guestId: string,
   houseId: string,
@@ -76,7 +84,7 @@ export async function logActivity(
       loggedAt: new Date(), // Convert server timestamp to Date for return
     };
   } catch (error) {
-    logException(error);
+    logException(error, 'logActivity');
     // Original error, so its `code` still tells callers what failed.
     throw error;
   }
@@ -94,7 +102,8 @@ async function residentUidOf(guestId: string): Promise<string | undefined> {
 }
 
 /**
- * Get activities for a guest within a date range
+ * Get a guest's activities in one house within a date range (activities
+ * logged under another house are not returned)
  *
  * @param guestId - ID of the guest
  * @param houseId - The guest's house. Required: the rules let a client list
@@ -135,8 +144,8 @@ export async function getActivities(
       loggedAt: doc.data().loggedAt?.toDate?.() || doc.data().loggedAt,
     })).filter(countsTowardStats) as Activity[];
   } catch (error) {
-    logException(error);
-    throw new Error('Failed to get activities');
+    logException(error, 'getActivities');
+    throw failure('Failed to get activities', error);
   }
 }
 
@@ -229,8 +238,8 @@ export async function getActivitiesPage(
 
     return { activities, nextCursor, hasMore };
   } catch (error) {
-    logException(error);
-    throw new Error('Failed to get activities page');
+    logException(error, 'getActivitiesPage');
+    throw failure('Failed to get activities page', error);
   }
 }
 
@@ -261,8 +270,8 @@ export async function getHouseActivities(
       loggedAt: doc.data().loggedAt?.toDate?.() || doc.data().loggedAt,
     })).filter(countsTowardStats) as Activity[];
   } catch (error) {
-    logException(error);
-    throw new Error('Failed to get house activities');
+    logException(error, 'getHouseActivities');
+    throw failure('Failed to get house activities', error);
   }
 }
 
@@ -294,8 +303,8 @@ export async function getWeekSummary(
       lastUpdated: data?.lastUpdated?.toDate?.() || data?.lastUpdated,
     } as WeekSummary;
   } catch (error) {
-    logException(error);
-    throw new Error('Failed to get week summary');
+    logException(error, 'getWeekSummary');
+    throw failure('Failed to get week summary', error);
   }
 }
 
@@ -324,8 +333,8 @@ export async function updateActivity(
     });
   } catch (error: any) {
     if (error?.message === 'Activity not found') throw error;
-    logException(error);
-    throw new Error('Failed to update activity');
+    logException(error, 'updateActivity');
+    throw failure('Failed to update activity', error);
   }
 }
 
@@ -361,8 +370,8 @@ export async function deleteActivity(activityId: string): Promise<void> {
     if (error?.message === 'Activity not found' || error?.message === DISPUTED_NOT_DELETABLE) {
       throw error;
     }
-    logException(error);
-    throw new Error('Failed to delete activity');
+    logException(error, 'deleteActivity');
+    throw failure('Failed to delete activity', error);
   }
 }
 
@@ -393,8 +402,8 @@ export async function disputeActivity(
       disputedAt: FirebaseFirestore.FieldValue.serverTimestamp(),
     });
   } catch (error) {
-    logException(error);
-    throw new Error('Failed to dispute activity');
+    logException(error, 'disputeActivity');
+    throw failure('Failed to dispute activity', error);
   }
 }
 
@@ -472,14 +481,14 @@ export async function resolveDispute(
     });
   } catch (error: any) {
     if (error?.code === 'firestore/permission-denied') {
-      logException(error);
+      logException(error, 'resolveDispute');
       throw new Error(NOT_ALLOWED_TO_DECIDE);
     }
     if (RESOLVE_REFUSALS.includes(error?.message)) {
       throw error;
     }
-    logException(error);
-    throw new Error('Failed to resolve dispute');
+    logException(error, 'resolveDispute');
+    throw failure('Failed to resolve dispute', error);
   }
 }
 
@@ -502,8 +511,8 @@ export async function verifyActivity(
       verifiedBy,
     });
   } catch (error) {
-    logException(error);
-    throw new Error('Failed to verify activity');
+    logException(error, 'verifyActivity');
+    throw failure('Failed to verify activity', error);
   }
 }
 

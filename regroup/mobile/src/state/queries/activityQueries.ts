@@ -31,8 +31,11 @@ export const activityKeys = {
   all: ['activities'] as const,
 
   newActivities: () => [...activityKeys.all, 'new-model'] as const,
+  // houseId is part of the result (the query is scoped to it), so it is part
+  // of the key: a guest who moves house must not get the old house's list.
   activityList: (
     guestId: string,
+    houseId: string,
     startDate: string,
     endDate: string,
     type?: ActivityType,
@@ -40,10 +43,11 @@ export const activityKeys = {
     [
       ...activityKeys.newActivities(),
       'list',
-      { guestId, startDate, endDate, type },
+      { guestId, houseId, startDate, endDate, type },
     ] as const,
   activityInfiniteList: (
     guestId: string,
+    houseId: string,
     startDate: string,
     endDate: string,
     type?: ActivityType,
@@ -51,7 +55,7 @@ export const activityKeys = {
     [
       ...activityKeys.newActivities(),
       'infinite',
-      { guestId, startDate, endDate, type },
+      { guestId, houseId, startDate, endDate, type },
     ] as const,
   houseActivities: (houseId: string) =>
     [...activityKeys.newActivities(), 'house', houseId] as const,
@@ -65,7 +69,8 @@ export const activityKeys = {
 // ============================================================================
 
 /**
- * Get activities for a guest within a date range
+ * Get a guest's activities in one house within a date range (activities
+ * logged under another house are not returned)
  *
  * @param guestId - ID of the guest
  * @param houseId - The guest's house; no fetch without it (the rules deny an
@@ -86,6 +91,7 @@ export const useActivities = (
   return useQuery({
     queryKey: activityKeys.activityList(
       guestId,
+      houseId,
       startDate.toISOString(),
       endDate.toISOString(),
       type,
@@ -98,7 +104,7 @@ export const useActivities = (
 };
 
 /**
- * Get activities for a guest using cursor-based infinite pagination.
+ * Get a guest's activities in one house using cursor-based infinite pagination.
  *
  * Backed by `getActivitiesPage()` which fetches `pageSize + 1` docs per page
  * to detect whether a next page exists, returns only `pageSize` docs, and
@@ -133,6 +139,7 @@ export const useInfiniteActivities = (
   return useInfiniteQuery({
     queryKey: activityKeys.activityInfiniteList(
       guestId,
+      houseId,
       startDate.toISOString(),
       endDate.toISOString(),
       type,

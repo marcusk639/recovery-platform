@@ -7,7 +7,12 @@
 
 import { renderHook, waitFor, act } from '@testing-library/react-native';
 import { ActivityType, ActivityStatus } from '../../../entities/ActivityModel';
-import { getActivitiesOnce, useActivities, useActivityCount } from '../useActivities';
+import {
+  getActivitiesOnce,
+  useActivities,
+  useActivityCount,
+  useDisputedActivities,
+} from '../useActivities';
 
 // ── Firestore mock setup ──────────────────────────────────────────────────────
 
@@ -19,6 +24,7 @@ const mockQuery = {
   where: jest.fn().mockReturnThis(),
   orderBy: jest.fn().mockReturnThis(),
   limit: jest.fn().mockReturnThis(),
+  get: jest.fn(async () => ({ docs: [] })),
   onSnapshot: jest.fn((success: any, error?: any) => {
     onSnapshotCallback = success;
     onSnapshotErrorCallback = error ?? null;
@@ -229,17 +235,21 @@ describe('useActivities', () => {
     // so a query without a houseId filter is always denied: don't send one.
     it('does not query with no filters (an unscoped list is denied)', async () => {
       const { firestore } = require('../../../../firebase-setup');
-      const { result } = renderHook(() => useActivities());
+      const { result } = renderHook(() => useActivities({ houseId: undefined }));
 
       await waitFor(() => expect(result.current.loading).toBe(false));
       expect(firestore.collection).not.toHaveBeenCalled();
       expect(result.current.activities).toEqual([]);
       expect(result.current.error).toBeNull();
+      // Idle, not "no activities": callers can tell nothing was queried.
+      expect(result.current.idle).toBe(true);
     });
 
     it('does not query by guestId without a houseId', async () => {
       const { firestore } = require('../../../../firebase-setup');
-      const { result } = renderHook(() => useActivities({ guestId: 'guest123' }));
+      const { result } = renderHook(() =>
+        useActivities({ guestId: 'guest123', houseId: undefined }),
+      );
 
       await waitFor(() => expect(result.current.loading).toBe(false));
       expect(firestore.collection).not.toHaveBeenCalled();
@@ -289,11 +299,35 @@ describe('useActivities', () => {
   });
 
   describe('getActivitiesOnce', () => {
-    it('returns no activities and sends no query without a houseId', async () => {
+    // A one-shot read has no "house still loading" state: a missing houseId is
+    // a caller bug, so it fails loudly instead of returning an empty list.
+    it('rejects and sends no query without a houseId', async () => {
       const { firestore } = require('../../../../firebase-setup');
 
-      await expect(getActivitiesOnce({ guestId: 'guest123' })).resolves.toEqual([]);
+      await expect(getActivitiesOnce({ guestId: 'guest123', houseId: undefined })).rejects.toThrow(
+        'houseId is required',
+      );
       expect(firestore.collection).not.toHaveBeenCalled();
+    });
+
+    it('scopes the read to the house and the guest', async () => {
+      await getActivitiesOnce({ guestId: 'guest123', houseId: 'house456' });
+
+      expect(mockQuery.where).toHaveBeenCalledWith('houseId', '==', 'house456');
+      expect(mockQuery.where).toHaveBeenCalledWith('guestId', '==', 'guest123');
+      expect(mockQuery.get).toHaveBeenCalled();
+    });
+  });
+
+  describe('useDisputedActivities', () => {
+    it("lists the house's disputed activities", async () => {
+      renderHook(() => useDisputedActivities({ guestId: 'guest123', houseId: 'house456' }));
+
+      emitSnapshot([]);
+      await waitFor(() =>
+        expect(mockQuery.where).toHaveBeenCalledWith('houseId', '==', 'house456'),
+      );
+      expect(mockQuery.where).toHaveBeenCalledWith('status', '==', ActivityStatus.DISPUTED);
     });
   });
 
@@ -310,12 +344,15 @@ describe('useActivities', () => {
 
     it('does not query by guestId without a houseId, and counts 0', async () => {
       const { firestore } = require('../../../../firebase-setup');
-      const { result } = renderHook(() => useActivityCount({ guestId: 'guest123' }));
+      const { result } = renderHook(() =>
+        useActivityCount({ guestId: 'guest123', houseId: undefined }),
+      );
 
       await waitFor(() => expect(result.current.loading).toBe(false));
       expect(firestore.collection).not.toHaveBeenCalled();
       expect(result.current.count).toBe(0);
       expect(result.current.error).toBeNull();
+      expect(result.current.idle).toBe(true);
     });
   });
 

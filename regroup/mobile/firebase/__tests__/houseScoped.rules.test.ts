@@ -7,7 +7,8 @@
  * admins of resource.data.houseId, so a list filtered by guestId alone is
  * denied for everyone, and the client must also filter by houseId. Likewise
  * meetings/{id} accepts a create only from a guest or admin of the meeting's
- * houseId, so a meeting without one can never be created.
+ * houseId, so a meeting without one can never be created. On update, a meeting
+ * is checked against its stored houseId, which may not change.
  *
  * Requires the Firebase Firestore emulator running on port 8080.
  */
@@ -199,6 +200,17 @@ describe('meetings update', () => {
 
   it("denies another house's admin editing it without moving it", async () => {
     await assertFails(updateDoc(doc(asOtherHouseAdmin(), 'meetings/m1'), { name: 'Edited' }));
+  });
+
+  // Meetings without a houseId (none are client-created: creates require one)
+  // stay Admin-only; writing a houseId in no longer adopts them into a house.
+  it('denies updating a meeting that has no houseId, even by writing one', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'meetings/legacy'), { name: 'Legacy' });
+    });
+    await assertFails(
+      updateDoc(doc(asAdmin(), 'meetings/legacy'), { name: 'Adopted', houseId: HOUSE_ID }),
+    );
   });
 
   it('denies moving a meeting to another house, even for an admin of both', async () => {

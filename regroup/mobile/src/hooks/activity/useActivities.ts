@@ -1,8 +1,9 @@
 /**
  * useActivities Hook
  *
- * Subscribes to activities with real-time updates
- * Supports filtering by guest, house, date range, type, and status
+ * Subscribes to one house's activities in real time, optionally narrowed by
+ * guest, date range, type and status. No houseId, no query: the rules deny an
+ * activities list not filtered by house.
  */
 
 import { useState, useEffect, useMemo } from 'react';
@@ -13,7 +14,12 @@ import { logException } from '../../util/logging';
 
 export interface UseActivitiesOptions {
   guestId?: string;
-  houseId?: string;
+  /**
+   * Required key (pass `house?.id`): the rules deny an activities list not
+   * filtered by house, so while it is undefined nothing is queried and the
+   * result is idle: empty, loading false, `idle` true.
+   */
+  houseId: string | undefined;
   startDate?: Date | string;
   endDate?: Date | string;
   type?: ActivityType;
@@ -24,6 +30,8 @@ export interface UseActivitiesOptions {
 export interface UseActivitiesResult {
   activities: Activity[];
   loading: boolean;
+  /** No houseId yet: nothing was queried (not the same as "no activities"). */
+  idle: boolean;
   error: Error | null;
   refetch: () => void;
 }
@@ -34,7 +42,7 @@ export interface UseActivitiesResult {
  * @param options - Filter options
  * @returns Activities data with loading and error states
  */
-export function useActivities(options: UseActivitiesOptions = {}): UseActivitiesResult {
+export function useActivities(options: UseActivitiesOptions): UseActivitiesResult {
   const { guestId, houseId, startDate, endDate, type, status, limit = 100 } = options;
 
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -62,12 +70,11 @@ export function useActivities(options: UseActivitiesOptions = {}): UseActivities
     // Build Firestore query
     let query: FirebaseFirestoreTypes.Query = firestore.collection('activities');
 
-    // Filter by guestId (most common, indexed)
+    // Optional: narrows the house's list to one guest.
     if (guestId) {
       query = query.where('guestId', '==', guestId);
     }
 
-    // Filter by houseId (indexed; always present, see above)
     query = query.where('houseId', '==', houseId);
 
     // Filter by type
@@ -81,8 +88,6 @@ export function useActivities(options: UseActivitiesOptions = {}): UseActivities
     }
 
     // Filter by date range (if provided)
-    // Note: Firestore doesn't support range queries on multiple fields
-    // So we query with one bound and filter the rest in memory
     if (startDate) {
       const startTimestamp = new Date(startDate);
       query = query.where('timestamp', '>=', startTimestamp);
@@ -123,7 +128,7 @@ export function useActivities(options: UseActivitiesOptions = {}): UseActivities
         setError(null);
       },
       (err: Error) => {
-        logException(err);
+        logException(err, 'useActivities onSnapshot');
         setError(err);
         setLoading(false);
       },
@@ -132,7 +137,7 @@ export function useActivities(options: UseActivitiesOptions = {}): UseActivities
     return () => unsubscribe();
   }, [guestId, houseId, startDate, endDate, type, status, limit, refetchTrigger]);
 
-  return { activities, loading: !!houseId && loading, error, refetch };
+  return { activities, loading: !!houseId && loading, idle: !houseId, error, refetch };
 }
 
 /**
@@ -141,12 +146,13 @@ export function useActivities(options: UseActivitiesOptions = {}): UseActivities
  * @param options - Filter options
  * @returns Promise of activities array
  */
-export async function getActivitiesOnce(options: UseActivitiesOptions = {}): Promise<Activity[]> {
+export async function getActivitiesOnce(options: UseActivitiesOptions): Promise<Activity[]> {
   const { guestId, houseId, startDate, endDate, type, status, limit = 100 } = options;
 
-  // No houseId, no query: the rules deny it (see useActivities).
+  // A one-shot call has no "house still loading" state: a missing houseId is a
+  // caller bug, and the query would be denied (see UseActivitiesOptions.houseId).
   if (!houseId) {
-    return [];
+    throw new Error('getActivitiesOnce: houseId is required');
   }
 
   let query: FirebaseFirestoreTypes.Query = firestore.collection('activities');
@@ -194,20 +200,23 @@ export async function getActivitiesOnce(options: UseActivitiesOptions = {}): Pro
       return activity;
     });
   } catch (error) {
-    logException(error as Error);
+    logException(error as Error, 'getActivitiesOnce');
     throw error;
   }
 }
 
 /**
- * Hook to get activity count (without fetching all data)
+ * Live count of matching activities (subscribes to the full result set; not an
+ * aggregate query). Like useActivities, counts 0 without a houseId.
  *
  * @param options - Filter options
  * @returns Activity count
  */
-export function useActivityCount(options: UseActivitiesOptions = {}): {
+export function useActivityCount(options: UseActivitiesOptions): {
   count: number;
   loading: boolean;
+  /** No houseId yet: nothing was counted (not the same as a count of 0). */
+  idle: boolean;
   error: Error | null;
 } {
   const { guestId, houseId, startDate, endDate, type, status } = options;
@@ -217,8 +226,7 @@ export function useActivityCount(options: UseActivitiesOptions = {}): {
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    // No houseId, no query: the rules deny an activities list not scoped to a
-    // house (see useActivities).
+    // See UseActivitiesOptions.houseId.
     if (!houseId) {
       setCount(0);
       setError(null);
@@ -245,7 +253,7 @@ export function useActivityCount(options: UseActivitiesOptions = {}): {
         setError(null);
       },
       (err: Error) => {
-        logException(err);
+        logException(err, 'useActivityCount onSnapshot');
         setError(err);
         setLoading(false);
       },
@@ -255,31 +263,20 @@ export function useActivityCount(options: UseActivitiesOptions = {}): {
   }, [guestId, houseId, startDate, endDate, type, status]);
 
   // Masked as in useActivities: no house means nothing to load.
-  return { count, loading: !!houseId && loading, error };
+  return { count, loading: !!houseId && loading, idle: !houseId, error };
 }
 
 /**
- * Hook to get disputed activities only
+ * Hook to get disputed activities only: a house's disputes, or one guest's
+ * when guestId is given (no query without houseId).
  *
- * @param guestId - Guest ID
- * @param houseId - The guest's house (no query without it)
- * @param startDate - Optional start date
- * @param endDate - Optional end date
+ * @param options - Filter options (status is fixed to DISPUTED)
  * @returns Disputed activities
  */
 export function useDisputedActivities(
-  guestId: string | undefined,
-  houseId: string | undefined,
-  startDate?: Date | string,
-  endDate?: Date | string,
+  options: Omit<UseActivitiesOptions, 'status'>,
 ): UseActivitiesResult {
-  return useActivities({
-    guestId,
-    houseId,
-    startDate,
-    endDate,
-    status: ActivityStatus.DISPUTED,
-  });
+  return useActivities({ ...options, status: ActivityStatus.DISPUTED });
 }
 
 /**
@@ -288,7 +285,7 @@ export function useDisputedActivities(
  * @param options - Filter options
  * @returns Activities grouped by date string (YYYY-MM-DD)
  */
-export function useActivitiesByDate(options: UseActivitiesOptions = {}): {
+export function useActivitiesByDate(options: UseActivitiesOptions): {
   activitiesByDate: Record<string, Activity[]>;
   loading: boolean;
   error: Error | null;

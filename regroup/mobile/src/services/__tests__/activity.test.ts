@@ -530,6 +530,25 @@ describe('Activity Service', () => {
       expect(activities.every(a => a.houseId === 'house456')).toBe(true);
     });
 
+    it('keeps the original error as the cause, so a denial is not just "failed"', async () => {
+      const denied = Object.assign(new Error('Missing or insufficient permissions.'), {
+        code: 'firestore/permission-denied',
+      });
+      mockActivityCollection.get.mockRejectedValueOnce(denied);
+
+      const failed = await getActivities(
+        'guest123',
+        'house456',
+        new Date('2024-01-15'),
+        new Date('2024-01-18'),
+      ).catch((error: Error) => error);
+
+      expect(failed).toBeInstanceOf(Error);
+      expect((failed as Error).message).toBe('Failed to get activities');
+      expect((failed as Error & { cause?: unknown }).cause).toBe(denied);
+      expect(logException).toHaveBeenCalledWith(denied, 'getActivities');
+    });
+
     it('should get all activities for guest in date range', async () => {
       const activities = await getActivities(
         'guest123',

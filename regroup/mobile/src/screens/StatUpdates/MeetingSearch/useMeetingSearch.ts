@@ -63,12 +63,14 @@ export const useMeetingSearch = (props: UseMeetingSearchProps) => {
   // Today's date for dedup checks
   const todaysDate = useMemo(() => getTodaysDate(), []);
 
-  // Fetch today's meeting activities from Activity system for dedup checks
-  // Today's meeting activities; alreadyCheckedIn applies the counting rule
-  // (a pending dispute still counts, so it still blocks a duplicate).
-  const { activities: todaysMeetingActivities } = useActivities({
-    guestId: guest?.id,
-    houseId: house?.id,
+  // Today's meeting activities of the guest who would check in (the same
+  // guest performCheckIn uses); alreadyCheckedIn applies the counting rule (a
+  // pending dispute still counts, so it still blocks a duplicate). With no
+  // guest nothing is listed: a house-wide list would match other residents.
+  const checkInGuestId = (userAsGuest || guest)?.id;
+  const { activities: todaysMeetingActivities, error: todaysMeetingsError } = useActivities({
+    guestId: checkInGuestId,
+    houseId: checkInGuestId ? house?.id : undefined,
     startDate: todaysDate,
     endDate: todaysDate,
     type: ActivityType.MEETING,
@@ -219,6 +221,16 @@ export const useMeetingSearch = (props: UseMeetingSearchProps) => {
   // Check into meeting
   const checkInto = useCallback(
     (meeting: RatsMeeting) => {
+      // Without today's check-ins the duplicate check can't run; check-ins
+      // feed phase compliance, so fail closed rather than risk a duplicate.
+      if (todaysMeetingsError) {
+        notify(
+          'Check-in Unavailable',
+          "Couldn't confirm you haven't already checked in today. Please try again.",
+          [],
+        );
+        return;
+      }
       const attended = guestAttendedMeeting(meeting);
       if (attended) {
         notify(
@@ -252,7 +264,14 @@ export const useMeetingSearch = (props: UseMeetingSearchProps) => {
 
       performCheckIn(meeting);
     },
-    [guestAttendedMeeting, isMeetingDay, isMeetingTime, performCheckIn, notify],
+    [
+      todaysMeetingsError,
+      guestAttendedMeeting,
+      isMeetingDay,
+      isMeetingTime,
+      performCheckIn,
+      notify,
+    ],
   );
 
   // Force check-in (when not right day/time) - kept for backwards compatibility
