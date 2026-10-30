@@ -121,6 +121,18 @@ describe('activities list queries', () => {
     await assertSucceeds(getDocs(guestWeek(asResident(), where('houseId', '==', HOUSE_ID))));
   });
 
+  // Owner decision: residents read every activity in their house, not only
+  // their own (peers review each other's activities and raise disputes).
+  it("allows another resident of the house to list this resident's activities", async () => {
+    const asPeer = testEnv
+      .authenticatedContext('peerResident', { guest: { [HOUSE_ID]: true } })
+      .firestore();
+    const snapshot = await assertSucceeds(
+      getDocs(guestWeek(asPeer, where('houseId', '==', HOUSE_ID))),
+    );
+    expect(snapshot.size).toBe(1);
+  });
+
   it('denies a list filtered by a house the caller does not belong to', async () => {
     await assertFails(getDocs(guestWeek(asAdmin(), where('houseId', '==', 'other-house'))));
   });
