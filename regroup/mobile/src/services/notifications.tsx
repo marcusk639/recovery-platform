@@ -3,18 +3,15 @@ import {
   collection,
   doc,
   setDoc,
-  type CollectionReference,
-  type FirebaseFirestoreTypes,
 } from '@react-native-firebase/firestore';
 import { firestore } from '../../firebase-setup';
 import * as crud from './crud';
 import { Notification } from '../entities/Notification';
 
-// Typed for both APIs while crud still takes the namespaced type (Task 10f).
 export const notificationCollection = collection(
   firestore,
   'notifications',
-) as CollectionReference & FirebaseFirestoreTypes.CollectionReference;
+);
 
 /**
  * Gets a house by id

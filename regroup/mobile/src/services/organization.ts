@@ -1,15 +1,11 @@
 import {
   collection,
-  type CollectionReference,
-  type FirebaseFirestoreTypes,
 } from '@react-native-firebase/firestore';
 import { firestore } from '../../firebase-setup';
 import * as crud from './crud';
 import Organization from '../entities/Organization';
 
-// Typed for both APIs while crud still takes the namespaced type (Task 10f).
-const orgCollection = collection(firestore, 'organizations') as CollectionReference &
-  FirebaseFirestoreTypes.CollectionReference;
+const orgCollection = collection(firestore, 'organizations');
 
 /**
  * Create a new organization

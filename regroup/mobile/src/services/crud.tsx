@@ -8,20 +8,12 @@ import {
   setDoc,
   updateDoc,
   where,
-  type CollectionReference as ModularCollectionReference,
-  type FirebaseFirestoreTypes,
+  type CollectionReference,
+  type DocumentData,
+  type DocumentReference,
+  type WhereFilterOp,
 } from '@react-native-firebase/firestore';
 import { BaseEntity } from '../entities/BaseEntity';
-
-type DocumentReference<T extends DocumentData = DocumentData> =
-  FirebaseFirestoreTypes.DocumentReference<T>;
-type DocumentData = FirebaseFirestoreTypes.DocumentData;
-// Callers still pass namespaced-typed refs until Task 10 moves them; RNFirebase
-// 25 serves both APIs on the same object, so the cast below only bridges types.
-type CollectionReference<T extends DocumentData = DocumentData> =
-  FirebaseFirestoreTypes.CollectionReference<T>;
-const modular = (collection: CollectionReference) =>
-  collection as unknown as ModularCollectionReference;
 
 // Base interface for entities that can be stored in Firestore
 // More flexible than BaseEntity class for entities with custom timestamp handling
@@ -37,7 +29,7 @@ function checkId<T extends FirestoreEntity>(object: T) {
 }
 
 function createId(collection: CollectionReference) {
-  return doc(modular(collection)).id;
+  return doc(collection).id;
 }
 
 /**
@@ -49,7 +41,7 @@ async function get<T extends FirestoreEntity>(
   collection: CollectionReference,
   id: string,
 ): Promise<T> {
-  const snapshot = await getDoc(doc(modular(collection), id));
+  const snapshot = await getDoc(doc(collection, id));
   return snapshot.data() as T;
 }
 
@@ -65,10 +57,10 @@ async function get<T extends FirestoreEntity>(
 async function getByAttribute<T extends FirestoreEntity>(
   collection: CollectionReference,
   attribute: string,
-  operator: FirebaseFirestore.WhereFilterOp,
+  operator: WhereFilterOp,
   value: string | number | boolean | null,
 ): Promise<T[]> {
-  const result = await getDocs(query(modular(collection), where(attribute, operator, value)));
+  const result = await getDocs(query(collection, where(attribute, operator, value)));
   return result.docs.length ? result.docs.map((snapshot) => snapshot.data() as T) : [];
 }
 
@@ -84,7 +76,7 @@ async function update<T extends FirestoreEntity>(
   // firebase users have uids instead of ids
   checkId(object as FirestoreEntity);
   return updateDoc(
-    doc(modular(collection), (object.uid ? object.uid : object.id)!),
+    doc(collection, (object.uid ? object.uid : object.id)!),
     object as DocumentData,
   );
 }
@@ -92,7 +84,7 @@ async function update<T extends FirestoreEntity>(
 async function deleteObject<T extends FirestoreEntity>(collection: CollectionReference, object: T) {
   checkId(object);
   // firebase users have uids instead of ids
-  return deleteDoc(doc(modular(collection), object.uid ? object.uid : object.id!));
+  return deleteDoc(doc(collection, object.uid ? object.uid : object.id!));
 }
 
 /**
@@ -108,9 +100,9 @@ async function create<T extends FirestoreEntity>(
   id?: string,
 ): Promise<T> {
   if (!object.id) {
-    object.id = id || doc(modular(collection)).id;
+    object.id = id || doc(collection).id;
   }
-  await setDoc(doc(modular(collection), object.id), object as unknown as DocumentData);
+  await setDoc(doc(collection, object.id), object as unknown as DocumentData);
   return object;
 }
 
@@ -118,7 +110,7 @@ async function add<T extends FirestoreEntity>(
   collection: CollectionReference,
   object: T,
 ): Promise<DocumentReference<DocumentData>> {
-  return addDoc(modular(collection), object as unknown as DocumentData) as unknown as Promise<
+  return addDoc(collection, object as unknown as DocumentData) as unknown as Promise<
     DocumentReference<DocumentData>
   >;
 }

@@ -22,7 +22,9 @@ jest.mock('@react-native-firebase/firestore', () => ({
 }));
 jest.mock('../../util/logging', () => ({ logException: jest.fn() }));
 
-import { firestore } from '../../../firebase-setup';
+import { firestore as setupFirestore } from '../../../firebase-setup';
+// The firebase-setup mock is namespaced-shaped; the real module's types are modular.
+const firestore = setupFirestore as any;
 import { reopenDispute, REOPEN_REFUSALS } from '../reopenDispute';
 import { logException } from '../../util/logging';
 import { ActivityStatus } from '../../entities/ActivityModel';

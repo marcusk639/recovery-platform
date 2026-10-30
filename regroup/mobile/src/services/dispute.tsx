@@ -2,8 +2,6 @@ import {
   collection,
   doc,
   writeBatch,
-  type CollectionReference,
-  type FirebaseFirestoreTypes,
 } from '@react-native-firebase/firestore';
 import { firestore } from '../../firebase-setup';
 import { PartialHouseWithId } from '../entities/House';
@@ -11,9 +9,7 @@ import { Dispute } from '../entities/Dispute';
 import * as crud from './crud';
 
 const houseCollection = collection(firestore, 'houses');
-// Typed for both APIs while crud.create still takes the namespaced type (Task 10f).
-const disputesCollection = collection(firestore, 'disputes') as CollectionReference &
-  FirebaseFirestoreTypes.CollectionReference;
+const disputesCollection = collection(firestore, 'disputes');
 
 /**
  * Write house.disputes and optionally archive a dispute to /disputes.

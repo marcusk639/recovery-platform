@@ -1,8 +1,5 @@
-// Shared across Task 10 migration groups: typed for both APIs until RNFirebase 26 (Task 10f).
 import {
   collection,
-  type CollectionReference,
-  type FirebaseFirestoreTypes as SharedRefTypes,
   type WhereFilterOp,
 } from '@react-native-firebase/firestore';
 import { firestore } from '../../firebase-setup';
@@ -13,10 +10,8 @@ import { Admins } from '../types';
 import map from 'lodash/map';
 import { createInvitation } from './invitations';
 
-export const adminCollection = collection(firestore, 'admins') as CollectionReference &
-  SharedRefTypes.CollectionReference;
-export const adminArchive = collection(firestore, 'admin-archive') as CollectionReference &
-  SharedRefTypes.CollectionReference;
+export const adminCollection = collection(firestore, 'admins');
+export const adminArchive = collection(firestore, 'admin-archive');
 
 export function createAdminId(): string {
   return crud.createId(adminCollection);

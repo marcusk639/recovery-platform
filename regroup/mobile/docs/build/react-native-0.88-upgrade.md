@@ -858,6 +858,31 @@ the adapter maps onto exactly the chain a suite mocks.
   integration 35 / 55 (target 35). Repo-wide, the only namespaced reference left is
   `FirebaseFirestore.WhereFilterOp` in `crud.tsx`, for 10f.
 
+#### 10f: RNFirebase 26.4.1
+
+- **Versions:** all seven packages at exactly 26.4.1; `firebase` dedupes to the single 12.17.1 that
+  RNFirebase 26 pins (no nested copy any more).
+- **`firebase-setup.ts`:** instances are plain modular types. `initializeFirestore` is synchronous
+  since 26.0, so the instance comes from it directly; a failure (e.g. already initialized) is still
+  logged rather than thrown at import, falling back to `getFirestore()`. The `Firebase*Types`
+  re-exports are gone (nothing imported them).
+- **Intersections removed** from every shared ref and the crud collections; `crud.tsx` takes the
+  modular `CollectionReference`, `DocumentReference`, `DocumentData` and `WhereFilterOp`, so its
+  bridging cast is gone. `rnfb-to-web.ts` uses `getMessaging()` (26 has no default exports).
+- **Grep:** the plan's repo-wide namespaced-API grep has zero hits outside comments.
+- **Tests:** both `initializeFirestore` mocks return the instance synchronously, and the
+  initialization-failure case throws instead of rejecting (its assertion, logged and not thrown, is
+  unchanged). Twelve suites that reach into the namespaced-shaped `firebase-setup` mock now alias
+  that import as `any` (type-only; 26 has no namespaced types to give it); `users.test` gets its
+  instance from `getAuth()`. Cases unchanged.
+- **Deviation: the namespaced mock surface stays.** The plan removes it here. In practice it is the
+  namespaced adapter plus the hand-built namespaced mocks (`__mocks__/firebase-setup.ts` and the
+  chains dozens of suites configure); removing it means rewriting that unit-test mock layer, with no
+  effect on the app and a large test-change surface. Deferred to a follow-up; the app code itself
+  has no namespaced call left, and the ratchet holds.
+- **Results:** unit 387 suites, 5859 passed; ratchet 125 / 125; rules 28 suites, 610 / 610;
+  integration **35 / 55, the final target**: every baseline pass the rules allow, no new failure.
+
 #### Behaviours pinned as-is (10d, 10e op-logs), for follow-up
 
 Pinned exactly so the migration cannot change them; none is fixed here.

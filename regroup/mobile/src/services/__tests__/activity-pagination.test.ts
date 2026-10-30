@@ -39,7 +39,9 @@ jest.mock('../../util/logging', () => ({
   logException: jest.fn(),
 }));
 
-import { firestore } from '../../../firebase-setup';
+import { firestore as setupFirestore } from '../../../firebase-setup';
+// The firebase-setup mock is namespaced-shaped; the real module's types are modular.
+const firestore = setupFirestore as any;
 import { getActivitiesPage } from '../activity';
 
 // ---------------------------------------------------------------------------

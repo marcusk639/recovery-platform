@@ -1,27 +1,13 @@
 import { getApp } from '@react-native-firebase/app';
-import { getAuth, type Auth, type FirebaseAuthTypes } from '@react-native-firebase/auth';
-import {
-  getMessaging,
-  type FirebaseMessagingTypes,
-  type Messaging,
-} from '@react-native-firebase/messaging';
-import {
-  getFunctions,
-  httpsCallable,
-  type FirebaseFunctionsTypes,
-  type Functions,
-} from '@react-native-firebase/functions';
+import { getAuth } from '@react-native-firebase/auth';
+import { getMessaging } from '@react-native-firebase/messaging';
+import { getFunctions, httpsCallable } from '@react-native-firebase/functions';
 import {
   getFirestore,
   initializeFirestore,
-  type FirebaseFirestoreTypes,
   type Firestore,
 } from '@react-native-firebase/firestore';
-import {
-  getStorage,
-  type FirebaseStorage,
-  type FirebaseStorageTypes,
-} from '@react-native-firebase/storage';
+import { getStorage } from '@react-native-firebase/storage';
 import {
   assertE2EProject,
   assertE2EStripeKey,
@@ -32,21 +18,21 @@ import {
 import { e2eVariant, stripePublishableKey } from './src/config/env';
 import { logException } from './src/util/logging';
 
-// Transitional intersection types (RNFirebase 25.1.0 serves both APIs on the
-// same objects): code still on the namespaced API and code already moved to the
-// modular API share these instances until the namespaced types go with 26.x.
-const auth = getAuth() as Auth & FirebaseAuthTypes.Module;
-const messaging = getMessaging() as Messaging & FirebaseMessagingTypes.Module;
-const storage = getStorage() as FirebaseStorage & FirebaseStorageTypes.Module;
-const functions = getFunctions() as Functions & FirebaseFunctionsTypes.Module;
+const auth = getAuth();
+const messaging = getMessaging();
+const storage = getStorage();
+const functions = getFunctions();
 
-// 25.1.0's initializeFirestore is async, but it records ignoreUndefinedProperties
-// before its first await, and writes read the flag when they serialize. Both
-// calls return the same instance, so it is settled before connectToEmulators.
-initializeFirestore(getApp(), { ignoreUndefinedProperties: true }).catch((error) =>
-  logException(error, 'firebase-setup: initializeFirestore'),
-);
-const firestore = getFirestore() as Firestore & FirebaseFirestoreTypes.Module;
+// Settings first (initializeFirestore is synchronous since RNFirebase 26), then
+// connectToEmulators below. A failure (e.g. Firestore already initialized) is
+// logged, not thrown at import, and the default instance is used.
+let firestore: Firestore;
+try {
+  firestore = initializeFirestore(getApp(), { ignoreUndefinedProperties: true });
+} catch (error) {
+  logException(error, 'firebase-setup: initializeFirestore');
+  firestore = getFirestore();
+}
 
 // E2E emulator builds only: route Auth, Firestore, Storage and Functions to the
 // local emulators. The gate is the bundle-time E2E_VARIANT, not __DEV__ or a
@@ -89,4 +75,3 @@ export {
   storage,
   functions,
 };
-export type { FirebaseAuthTypes, FirebaseFirestoreTypes, FirebaseStorageTypes };

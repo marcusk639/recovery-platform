@@ -36,7 +36,9 @@ jest.mock("../../../firebase-setup", () => ({
 // ── Imports ──────────────────────────────────────────────────────────────────
 
 import { EnhancedAuthService } from "../EnhancedAuthService";
-import { auth } from "../../../firebase-setup";
+import { auth as setupAuth } from "../../../firebase-setup";
+// The firebase-setup mock is namespaced-shaped; the real module's types are modular.
+const auth = setupAuth as any;
 import { SimpleValidationService } from "../SimpleValidationService";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

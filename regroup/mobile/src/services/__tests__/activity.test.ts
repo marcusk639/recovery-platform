@@ -68,7 +68,9 @@ jest.mock('../../util/logging', () => ({
 }));
 
 // Import firestore mock reference (resolves to mocked version after hoisting)
-import { firestore } from '../../../firebase-setup';
+import { firestore as setupFirestore } from '../../../firebase-setup';
+// The firebase-setup mock is namespaced-shaped; the real module's types are modular.
+const firestore = setupFirestore as any;
 import { logException } from '../../util/logging';
 
 // Import after mocks are set up

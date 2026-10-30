@@ -220,9 +220,9 @@ describe('SDK instances', () => {
     setVariant(undefined);
     mockProjectId = 'phoenix-cleanhouse';
     const failure = new Error('settings rejected');
-    require('@react-native-firebase/firestore').initializeFirestore.mockReturnValueOnce(
-      Promise.reject(failure),
-    );
+    require('@react-native-firebase/firestore').initializeFirestore.mockImplementationOnce(() => {
+      throw failure;
+    });
 
     expect(() => loadFirebaseSetup()).not.toThrow();
     await new Promise(process.nextTick);

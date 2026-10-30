@@ -1,4 +1,3 @@
-// Shared across Task 10 migration groups: typed for both APIs until RNFirebase 26 (Task 10f).
 import {
   collection,
   doc,
@@ -7,9 +6,7 @@ import {
   setDoc,
   where,
   writeBatch,
-  type CollectionReference,
   type DocumentData,
-  type FirebaseFirestoreTypes as SharedRefTypes,
 } from '@react-native-firebase/firestore';
 import {
   createUserWithEmailAndPassword,
@@ -46,8 +43,7 @@ import {
 import { SimpleValidationService } from './SimpleValidationService';
 // import { EmailConfirmationPayload } from '../entities/Email'; // Email verification removed
 
-export const userCollection = collection(firestore, 'users') as CollectionReference &
-  SharedRefTypes.CollectionReference;
+export const userCollection = collection(firestore, 'users');
 
 /**
  * Throws a client-side rate-limit error shaped like a Firebase auth error

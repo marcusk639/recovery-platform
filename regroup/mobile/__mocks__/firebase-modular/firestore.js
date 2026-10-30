@@ -232,7 +232,7 @@ module.exports = {
   default: firestore,
   instance,
   getFirestore: () => instance,
-  initializeFirestore: jest.fn(() => Promise.resolve(instance)),
+  initializeFirestore: jest.fn(() => instance),
   connectFirestoreEmulator: jest.fn(),
   collection,
   collectionGroup,

@@ -1,4 +1,3 @@
-// Shared across Task 10 migration groups: typed for both APIs until RNFirebase 26 (Task 10f).
 import {
   collection,
   doc,
@@ -7,9 +6,7 @@ import {
   serverTimestamp,
   updateDoc,
   writeBatch,
-  type CollectionReference,
   type DocumentData,
-  type FirebaseFirestoreTypes as SharedRefTypes,
 } from '@react-native-firebase/firestore';
 import { firestore } from '../../firebase-setup';
 import { Guest, GuestStatus } from '../entities/Guest';
@@ -22,10 +19,8 @@ import { houseCollection, getHouse, removeGuestPrivileges } from './house';
 import { findGuestBed } from '../util/house';
 import cloneDeep from 'lodash/cloneDeep';
 
-export const guestCollection = collection(firestore, 'guests') as CollectionReference &
-  SharedRefTypes.CollectionReference;
-export const archiveCollection = collection(firestore, 'guest-archive') as CollectionReference &
-  SharedRefTypes.CollectionReference;
+export const guestCollection = collection(firestore, 'guests');
+export const archiveCollection = collection(firestore, 'guest-archive');
 
 /**
  * Custom error for optimistic locking conflicts

@@ -1,4 +1,3 @@
-// Shared across Task 10 migration groups: typed for both APIs until RNFirebase 26 (Task 10f).
 import {
   arrayRemove,
   arrayUnion,
@@ -9,9 +8,7 @@ import {
   updateDoc,
   where,
   writeBatch,
-  type CollectionReference,
   type DocumentData,
-  type FirebaseFirestoreTypes as SharedRefTypes,
   type QueryDocumentSnapshot,
   type WhereFilterOp,
 } from '@react-native-firebase/firestore';
@@ -40,8 +37,7 @@ import { houseIdsRemoved } from '../util/admin';
 import { geohash, getGeohashRange } from '../util/geolocation';
 import { getTimezone } from '../../google/timezone';
 import { getCurrentTime } from '../util/display';
-export const houseCollection = collection(firestore, 'houses') as CollectionReference &
-  SharedRefTypes.CollectionReference;
+export const houseCollection = collection(firestore, 'houses');
 
 export function shapeHouses(docs: QueryDocumentSnapshot[]): {
   [id: string]: House;

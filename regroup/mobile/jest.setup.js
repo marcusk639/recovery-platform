@@ -269,7 +269,7 @@ jest.mock('@react-native-firebase/firestore', () => {
     arrayRemove: (...args) => FieldValue.arrayRemove(...args),
     deleteField: () => FieldValue.delete(),
     getFirestore: () => mockFirestore,
-    initializeFirestore: jest.fn(() => Promise.resolve(mockFirestore)),
+    initializeFirestore: jest.fn(() => mockFirestore),
     connectFirestoreEmulator: jest.fn(),
     Timestamp,
     FieldValue,

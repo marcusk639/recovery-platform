@@ -1,19 +1,14 @@
 import {
   collection,
   doc,
-  type CollectionReference,
-  type FirebaseFirestoreTypes,
 } from '@react-native-firebase/firestore';
 import { firestore } from '../../firebase-setup';
 import * as crud from './crud';
 import { Feedback } from '../entities/Feedback';
 import { BugReport } from '../entities/BugReport';
 
-// Typed for both APIs while crud still takes the namespaced type (Task 10f).
-const bugReportCollection = collection(firestore, 'bugs') as CollectionReference &
-  FirebaseFirestoreTypes.CollectionReference;
-const feedbackCollection = collection(firestore, 'feedback') as CollectionReference &
-  FirebaseFirestoreTypes.CollectionReference;
+const bugReportCollection = collection(firestore, 'bugs');
+const feedbackCollection = collection(firestore, 'feedback');
 
 /**
  * Gets feedback from db and maps them to object of key-value pairs

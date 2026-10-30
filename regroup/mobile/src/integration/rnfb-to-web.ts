@@ -29,7 +29,7 @@ import {
   type StorageReference,
   type UploadMetadata,
 } from 'firebase/storage';
-import messagingModule from '@react-native-firebase/messaging';
+import { getMessaging } from '@react-native-firebase/messaging';
 import { EMULATOR_HOST, emulatorPort, integrationProjectId } from './emulator-env';
 
 export * from 'firebase/app';
@@ -152,7 +152,7 @@ export const putFile = (reference: StorageReference, filePath: string, metadata?
 
 // ─── firebase-setup's exports ────────────────────────────────────────────────
 
-const messaging = messagingModule();
+const messaging = getMessaging();
 const emulatorConnection = Promise.resolve();
 
 export const callHttpsFunction = <ResponseData = unknown>(name: string, payload: unknown) =>

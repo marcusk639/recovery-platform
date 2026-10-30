@@ -1,7 +1,5 @@
 import {
   collection,
-  type CollectionReference,
-  type FirebaseFirestoreTypes,
 } from '@react-native-firebase/firestore';
 import { httpsCallable } from '@react-native-firebase/functions';
 import { functions, firestore, callHttpsFunction } from '../../firebase-setup';
@@ -13,9 +11,7 @@ import { RatsMeeting } from '../entities/Meeting';
 import * as crud from './crud';
 import { cloneDeep } from 'lodash';
 
-// Typed for both APIs while crud still takes the namespaced type (Task 10f).
-export const meetingCollection = collection(firestore, 'meetings') as CollectionReference &
-  FirebaseFirestoreTypes.CollectionReference;
+export const meetingCollection = collection(firestore, 'meetings');
 
 export async function searchForMeetings(
   searchInput: MeetingSearchInput,

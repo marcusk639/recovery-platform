@@ -33,8 +33,6 @@ import {
   query,
   startAfter,
   updateDoc,
-  type CollectionReference,
-  type FirebaseFirestoreTypes,
   type QueryConstraint,
   type QuerySnapshot,
   type Timestamp,
@@ -44,8 +42,6 @@ import { logException } from '../util/logging';
 const houseCollection = collection(firestore, 'houses');
 const directMessageCollection = collection(firestore, 'direct-messages');
 
-// Typed for both APIs while crud.create still takes the namespaced type (Task 10f).
-type CrudCollection = CollectionReference & FirebaseFirestoreTypes.CollectionReference;
 
 export function getMessageDate(
   createdAt:
@@ -87,7 +83,7 @@ export async function sendMessageToHouseChat(
 ): Promise<PromiseSettledResult<Message>[]> {
   const promises = messages.map(message =>
     crud.create<Message>(
-      collection(doc(houseCollection, houseId), 'chat') as CrudCollection,
+      collection(doc(houseCollection, houseId), 'chat'),
       message,
     ),
   );
@@ -320,7 +316,7 @@ export async function updateConversation(
   try {
     const promises = messages.map(message =>
       crud.create<DirectMessage>(
-        collection(doc(directMessageCollection, id), 'chat') as CrudCollection,
+        collection(doc(directMessageCollection, id), 'chat'),
         message,
       ),
     );
