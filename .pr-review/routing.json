@@ -281,8 +281,8 @@
   },
   {
     "linkType": "review-config",
-    "paths": [".github/workflows/claude-code-review.yml", ".pr-review/**"],
-    "counterparts": [".github/workflows/claude-code-review.yml", ".pr-review/**"],
+    "paths": [".github/workflows/claude-code-review.yml", ".pr-review/**", ".claude/agent-gates/verify-diff.sh"],
+    "counterparts": [".github/workflows/claude-code-review.yml", ".pr-review/**", ".claude/agent-gates/verify-diff.sh"],
     "classes": []
   }
 ]
