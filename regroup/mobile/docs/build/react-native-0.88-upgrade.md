@@ -701,6 +701,22 @@ was never committed and was redone from the plan.
   - The app's meeting create (`NewMeeting.tsx` → `addMeeting`) sends no `houseId`, which the
     meetings rules require.
 
+### Merge of main after #164 (before Task 10)
+
+#164 (`fix(regroup-mobile)`, merged to main) fixed two production bugs that Task 9's rules-enforced
+harness exposed: `getActivities` / `getActivitiesPage` now take a required `houseId` and filter on
+it, and new meetings carry `houseId`. Merging main brought:
+
+- **A forced change to a Task 2 op-log file.** `activity.oplog.test.ts` was to stay byte-identical
+  through Task 10, but #164 changed the service contract it pins. Its three `getActivities` /
+  `getActivitiesPage` cases now pass `'h1'`, expect the new `['where', 'houseId', '==', 'h1']`
+  constraint after the `guestId` one, and slice the constraint list one later. The seeded
+  activities, the expected ids and every other constraint are unchanged. From this commit on it is
+  byte-identical through Task 10 again, and Task 10b's rewrite must keep the `houseId` filter.
+- **Integration targets up by 3** (Appendix A): the `getActivities` cases are no longer denied.
+- Results after the merge: unit 349 suites, ratchet 125 / 125, rules 28 suites 610 / 610 (591 plus
+  #164's 19), integration 7 / 41 (the harness, as expected before Task 10).
+
 ## 7. Verification
 
 _Final results and the Mac checkpoint (Task 16)._
@@ -718,15 +734,17 @@ target under the rules, checked against `firestore.rules` and, for the list quer
 | Suite | Passing at baseline (Admin) | Load graph reaches | Restored by | Target under the rules |
 | ----- | --------------------------- | ------------------ | ----------- | ---------------------- |
 | `harness.integration.test.ts` (new) | — | none | Task 9 | 7 of 7 |
-| `activity.integration.test.ts` | 4 of 6 | 10b | 10b | 3: "keeps a pending dispute" calls `getActivities` |
-| `guestWeekTransfer.integration.test.ts` | 5 of 5 | 10b | 10b | 3: the two week-query cases call `getActivities` |
+| `activity.integration.test.ts` | 4 of 6 | 10b | 10b | 4 (since #164: `getActivities` filters by `houseId`) |
+| `guestWeekTransfer.integration.test.ts` | 5 of 5 | 10b | 10b | 5 (since #164) |
 | `weekSummary.integration.test.ts` | 5 of 5 | 10b | 10b | 5 |
 | `activity.emulator.test.ts` | 1 of 18 | 10b | 10b | 0: the case sends no `loggedBy` (stale API) |
 | `guestCRUD.integration.test.ts` | 6 of 6 | 10a, 10b, 10c, 10d (`guest.tsx` → `house.tsx` → `storage.tsx`, …) | 10d | 6 |
 | `meetings.integration.test.ts` | 8 of 8 | 10a–10d | 10d | 8 |
 
-Expected passing after each group, run with `--runInBand`: Task 9 7, 10a 7, 10b 18, 10c 18, 10d 32,
-10e 32 (the 29 baseline passes less the 4 the rules deny, plus the 7 harness cases). A group that
+Expected passing after each group, run with `--runInBand`: Task 9 7, 10a 7, 10b 21, 10c 21, 10d 35,
+10e 35 (the 29 baseline passes less the one the rules deny, `activity.emulator`'s stale-API case,
+plus the 7 harness cases). Before #164 merged, the three `getActivities` cases were denied too (its
+`guestId`-only query), and the targets were 18 and 32. A group that
 recovers fewer than its target is investigated before its commit; one that recovers more means a
 rule or a prediction here was wrong, and is recorded.
 

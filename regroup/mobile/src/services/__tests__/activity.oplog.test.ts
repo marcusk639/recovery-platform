@@ -163,7 +163,7 @@ describe('getActivities / getHouseActivities', () => {
     const start = new Date('2026-10-01T00:00:00Z');
     const end = new Date('2026-10-08T00:00:00Z');
 
-    const result = await getActivities('g1', start, end);
+    const result = await getActivities('g1', 'h1', start, end);
 
     expect(result.map((a) => a.id)).toEqual(['a4', 'a1']);
     expect(result[0].timestamp).toEqual(new Date('2026-10-05T00:00:00Z'));
@@ -173,6 +173,7 @@ describe('getActivities / getHouseActivities', () => {
         path: 'activities',
         constraints: [
           ['where', 'guestId', '==', 'g1'],
+          ['where', 'houseId', '==', 'h1'],
           ['where', 'timestamp', '>=', start],
           ['where', 'timestamp', '<', end],
           ['where', 'status', 'in', LISTED],
@@ -186,10 +187,10 @@ describe('getActivities / getHouseActivities', () => {
     const start = new Date('2026-10-01T00:00:00Z');
     const end = new Date('2026-10-08T00:00:00Z');
 
-    const result = await getActivities('g1', start, end, ActivityType.MEETING);
+    const result = await getActivities('g1', 'h1', start, end, ActivityType.MEETING);
 
     expect(result.map((a) => a.id)).toEqual(['a4']);
-    expect(getOpLog()[0].constraints?.slice(4)).toEqual([
+    expect(getOpLog()[0].constraints?.slice(5)).toEqual([
       ['where', 'type', '==', ActivityType.MEETING],
       ['orderBy', 'timestamp', 'desc'],
     ]);
@@ -215,20 +216,20 @@ describe('getActivities / getHouseActivities', () => {
     const start = new Date('2026-10-01T00:00:00Z');
     const end = new Date('2026-10-08T00:00:00Z');
 
-    const first = await getActivitiesPage('g1', start, end, 2);
+    const first = await getActivitiesPage('g1', 'h1', start, end, 2);
     expect(first.hasMore).toBe(true);
     expect(first.activities.map((a) => a.id)).toEqual(['a4']);
 
-    const second = await getActivitiesPage('g1', start, end, 2, first.nextCursor);
+    const second = await getActivitiesPage('g1', 'h1', start, end, 2, first.nextCursor);
     expect(second.hasMore).toBe(false);
     expect(second.activities.map((a) => a.id)).toEqual(['a1']);
 
     const [one, two] = getOpLog();
-    expect(one.constraints?.slice(4)).toEqual([
+    expect(one.constraints?.slice(5)).toEqual([
       ['orderBy', 'timestamp', 'desc'],
       ['limit', 3],
     ]);
-    expect(two.constraints?.slice(4)).toEqual([
+    expect(two.constraints?.slice(5)).toEqual([
       ['orderBy', 'timestamp', 'desc'],
       ['startAfter', { __snap: 'activities/a2' }],
       ['limit', 3],
