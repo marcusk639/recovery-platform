@@ -333,7 +333,7 @@ it, because screens show residents' names, recovery and payment details.
 **ESLint.** `no-restricted-imports` makes `react-native-modal` importable only from `rats-modal` and
 `rats-loading-modal`.
 
-**Verification.**
+**Verification (Task 3).**
 
 | Check | Result |
 | ----- | ------ |
@@ -343,6 +343,93 @@ it, because screens show residents' names, recovery and payment details.
 | Rules | 591 / 591 |
 | Integration | see Appendix A (order-dependent; measured in-band) |
 | Android release bundle | `react-native bundle --platform android --dev false` builds; it carries the `regroup-e2e-variant=none` marker |
+
+### Task 4: the Android project
+
+Applied from the 0.88.1 template (`@react-native-community/template@0.88.1`), keeping every Regroup
+block: the e2e build types, bundled-env stamps, release guard, Sentry, google-services, signing and
+version. CI (`maestro-smoke`) is the compile gate: this environment cannot reach `dl.google.com`, so
+Gradle cannot resolve AGP locally.
+
+**Versions.** Gradle 9.4.1 (template wrapper files); AGP from the React Native plugin (9.2.1);
+compileSdk 37, targetSdk 36, buildTools 37.0.0, NDK 27.1.12297006. minSdk goes from 23 to 24, which
+is RN 0.88's floor. Kotlin is 2.2.21, the newest 2.2.x and Stripe RN 0.84's declared version (the
+template ships 2.2.0). google-services is 4.5.0 (RNFirebase 26's version).
+
+**Host in Kotlin.**
+
+- `MainApplication.kt` uses `getDefaultReactHost(…)` and `loadReactNative(this)`.
+- `MainActivity.kt` keeps the component name `rats`, uses `DefaultReactActivityDelegate(…,
+  fabricEnabled)`, and sets react-native-screens 4.x's `RNScreensFragmentFactory` before
+  `super.onCreate(savedInstanceState)`. The 0.72 code passed `null`, which dropped all saved state to
+  avoid restoring screen fragments without their views; the factory does that restoration correctly.
+- Flipper (both `ReactNativeFlipper.java` and its dependencies) is gone, so the e2e `sourceSets`
+  that only existed for the release Flipper stub are gone too.
+
+**Removed 0.72 workarounds**, each now handled upstream or obsolete:
+
+- the root `subprojects { afterEvaluate }` block: the RN 0.88 plugin sets library namespaces and
+  aligns Java/Kotlin targets;
+- the Crashlytics classpath (the package is gone);
+- the `stripeVersion` pin (wrapper 0.84.0 declares native 23.25.1);
+- the `androidx.activity` force and its explicit 1.7.0 dependencies, which would pin newer
+  libraries down;
+- the `native_modules.gradle` applies (CLI 20 no longer ships the file;
+  `autolinkLibrariesWithApp()` and `com.facebook.react.settings` replace them);
+- the `buildConfig` opt-in (no code reads `BuildConfig` now);
+- the ABI-split block (splits were disabled, so it never ran; it also used AGP's removed
+  `OutputFile`);
+- JitPack (no remaining dependency is hosted there);
+- Jetifier.
+
+**Gradle 9 / AGP 9 adjustments.**
+
+- The bundled-env stamp path uses `layout.buildDirectory` instead of `buildDir`.
+- The release ProGuard file becomes `proguard-android-optimize.txt`, because AGP 9 rejects
+  `proguard-android.txt`. Minify stays off, so nothing changes at runtime.
+- `gradle.properties` takes the template's `newArchEnabled=true`, `edgeToEdgeEnabled=true`,
+  `android.builtInKotlin=false` and `android.newDsl=false`. The app's memory and worker settings
+  stay.
+
+**Temporary patch.** `patches/react-native-push-notification+8.1.1.patch` makes the library
+configure on Gradle 9 / AGP 9:
+
+- removes `jcenter()`;
+- switches to the optimize ProGuard file;
+- defaults its appcompat to AndroidX, its own `supportLibVersion < 20` switch. The old default,
+  `com.android.support:appcompat-v7`, was what needed Jetifier.
+
+It is deleted with the package in Task 11. `react-native-date-picker` 5.0.13 (kept, and the latest
+release) also names `proguard-android.txt` with minify off; it is patched only if CI shows AGP 9
+rejects it there.
+
+**Manifest.** `POST_NOTIFICATIONS` is declared (targetSdk 36: Android 13+ shows no notification
+without it) and `supportsRtl` is set (template). Cleartext stays as it was: none in release,
+debug's own manifest allows Metro, and e2eEmulator's network security config allows only
+`10.0.2.2`. The template's `${usesCleartextTraffic}` placeholder is not adopted, so
+`scripts/verify-android-variants.sh` checks the same thing as before.
+
+**Guards fail closed.** The release guard, the bundled-env stamps, `E2E_VARIANT` and the e2e Sentry
+skip attach to tasks by name, and the `onVariants` block returned silently when a bundle task was
+missing. A `gradle.projectsEvaluated` check in `app/build.gradle` now stops every build if:
+
+- `preReleaseBuild` does not depend on `regroupReleaseGuard`;
+- any of `createBundle{Release,E2eEmulator,E2eStaging}JsAndAssets` is missing or does not depend on
+  its stamp;
+- the e2e Sentry-upload skip matches no task for an e2e variant.
+
+The check uses the task names, because Sentry 8 registers its upload tasks in its own `onVariants`
+callback, which has run by then.
+
+**Permanent CI step** (`maestro-smoke`, after `assembleDebug`) checks three things:
+
+- `assembleRelease --dry-run` runs `regroupReleaseGuard` before `createBundleReleaseJsAndAssets`;
+- `assembleE2eEmulator --dry-run` runs `regroupBundledEnvStampE2eEmulator` and not the release
+  guard;
+- the guard, run with `STRIPE_PUBLISHABLE_KEY=pk_test_x`, exits non-zero with its own
+  "a release build requires a pk_live_ key" refusal.
+
+`verify-workflow-hardening.test.sh` passes with the change.
 
 ## 7. Verification
 

@@ -1,0 +1,46 @@
+# TEMPORARY (regroup-mobile RN 0.88 upgrade, Task 4): deleted with the package in Task 11,
+# when react-native-notify-kit replaces it. patch-package fails on a patch whose package is gone.
+#
+# Makes react-native-push-notification 8.1.1 configure on AGP 9.2.1 / Gradle 9.4.1:
+# - jcenter() is removed: Gradle 9 removed the repository.
+# - proguard-android.txt -> proguard-android-optimize.txt: AGP 9 rejects the old default file.
+# - the default appcompat becomes androidx.appcompat:appcompat:1.7.0 (supportLibVersion < 20
+#   is the library's own AndroidX switch). The old default, com.android.support:appcompat-v7,
+#   needed Jetifier, which the RN 0.88 template drops.
+diff --git a/node_modules/react-native-push-notification/android/build.gradle b/node_modules/react-native-push-notification/android/build.gradle
+index d6019f6..0bfc0bf 100644
+--- a/node_modules/react-native-push-notification/android/build.gradle
++++ b/node_modules/react-native-push-notification/android/build.gradle
+@@ -2,7 +2,6 @@ buildscript {
+     repositories {
+         mavenCentral()
+         google()
+-        jcenter()
+     }
+     dependencies {
+         classpath 'com.android.tools.build:gradle:3.2.0'
+@@ -13,7 +12,6 @@ allprojects {
+     repositories {
+         mavenCentral()
+         google()
+-        jcenter()
+     }
+ }
+ 
+@@ -44,14 +42,14 @@ android {
+     buildTypes {
+         release {
+             minifyEnabled false
+-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
++            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+         }
+     }
+ }
+ 
+ dependencies {
+     // Use either AndroidX library names or old/support library names based on major version of support lib
+-    def supportLibVersion = safeExtGet('supportLibVersion', '27.1.1')
++    def supportLibVersion = safeExtGet('supportLibVersion', '1.7.0')
+     def supportLibMajorVersion = supportLibVersion.split('\\.')[0] as int
+     def appCompatLibName =  (supportLibMajorVersion < 20) ? "androidx.appcompat:appcompat" : "com.android.support:appcompat-v7"
+ 

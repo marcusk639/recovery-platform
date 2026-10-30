@@ -5,15 +5,17 @@ apply plugin: "com.android.application"
 // specific and the app crashed at launch (release is where it was observed).
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
-apply plugin: 'com.google.gms.google-services' // <- Add this line
-
-import com.android.build.OutputFile
+apply plugin: 'com.google.gms.google-services'
 
 /**
  * This is the configuration block to customize your React Native Android app.
  * By default you don't need to apply any configuration, just uncomment the lines you need.
  */
 react {
+    // RN 0.88: autolinking is configured here (and in settings.gradle), replacing the CLI's
+    // native_modules.gradle, which CLI 20 no longer ships.
+    autolinkLibrariesWithApp()
+
     /* Folders */
     //   The root of your project, i.e. where "package.json" lives. Default is '..'
     // root = file("../")
@@ -64,14 +66,6 @@ react {
 }
 
 /**
- * Set this to true to create four separate APKs instead of one,
- * one for each native architecture. This is useful if you don't
- * use App Bundles (https://developer.android.com/guide/app-bundle/)
- * and want to have separate APKs to upload to the Play Store.
- */
-def enableSeparateBuildPerCPUArchitecture = false
-
-/**
  * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
  */
 def enableProguardInReleaseBuilds = false
@@ -87,32 +81,15 @@ def enableProguardInReleaseBuilds = false
  * give correct results when using with locales other than en-US. Note that
  * this variant is about 6MiB larger per architecture than default.
  */
-def jscFlavor = 'org.webkit:android-jsc:+'
-
-/**
- * Private function to get the list of Native Architectures you want to build.
- * This reads the value from reactNativeArchitectures in your gradle.properties
- * file and works together with the --active-arch-only flag of react-native run-android.
- */
-def reactNativeArchitectures() {
-    def value = project.getProperties().get("reactNativeArchitectures")
-    return value ? value.split(",") : ["armeabi-v7a", "x86", "x86_64", "arm64-v8a"]
-}
+def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
 apply from: "../../node_modules/@sentry/react-native/sentry.gradle"
 android {
     ndkVersion rootProject.ext.ndkVersion
-
-    compileSdkVersion rootProject.ext.compileSdkVersion
+    buildToolsVersion rootProject.ext.buildToolsVersion
+    compileSdk rootProject.ext.compileSdkVersion
 
     namespace "com.rats.dev"
-
-    // AGP 8 stops generating BuildConfig unless asked. MainApplication.java
-    // reads BuildConfig.DEBUG, IS_NEW_ARCHITECTURE_ENABLED and IS_HERMES_ENABLED,
-    // so without this the app module no longer compiles.
-    buildFeatures {
-        buildConfig true
-    }
 
     defaultConfig {
         applicationId 'com.regroup.app'
@@ -122,14 +99,6 @@ android {
         versionName "0.55"
     }
 
-    splits {
-        abi {
-            reset()
-            enable enableSeparateBuildPerCPUArchitecture
-            universalApk false  // If true, also generate a universal APK
-            include (*reactNativeArchitectures())
-        }
-    }
     signingConfigs {
         debug {
             storeFile file('debug.keystore')
@@ -156,7 +125,7 @@ android {
             // see https://reactnative.dev/docs/signed-apk-android.
             signingConfig signingConfigs.release
             minifyEnabled enableProguardInReleaseBuilds
-            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
         // E2E build types: release builds (JS bundled with Hermes, no Metro,
         // not debuggable) with their own package and Firebase config, signed
@@ -183,35 +152,10 @@ android {
             matchingFallbacks = ['release']
         }
     }
-
-    // A build type only gets src/<buildType>; initWith copies settings, not
-    // sources. Both e2e types need release's no-op ReactNativeFlipper.
-    sourceSets {
-        e2eEmulator.java.srcDirs += 'src/release/java'
-        e2eStaging.java.srcDirs += 'src/release/java'
-    }
-
-
-
-    // applicationVariants are e.g. debug, release
-    applicationVariants.all { variant ->
-        variant.outputs.each { output ->
-            // For each separate APK per architecture, set a unique version code as described here:
-            // https://developer.android.com/studio/build/configure-apk-splits.html
-            // Example: versionCode 1 will generate 1001 for armeabi-v7a, 1002 for x86, etc.
-            def versionCodes = ["armeabi-v7a": 1, "x86": 2, "arm64-v8a": 3, "x86_64": 4]
-            def abi = output.getFilter(OutputFile.ABI)
-            if (abi != null) {  // null for the universal-debug, universal-release variants
-                output.versionCodeOverride =
-                        defaultConfig.versionCode * 1000 + versionCodes.get(abi)
-            }
-
-        }
-    }
 }
 
 // E2E_VARIANT reaches babel.config.js only through the bundler's environment.
-// The React Native Gradle plugin (0.72) has no per-variant env setting, so every
+// The React Native Gradle plugin has no per-variant env setting, so every
 // bundled variant runs node through `env`: the e2e ones with E2E_VARIANT set to
 // their variant, every other one (release) with it removed, so a value exported
 // in the build shell (`E2E_VARIANT=emulator ./gradlew assembleRelease`) cannot
@@ -225,7 +169,7 @@ android {
 // later, so it runs later, and tasks.named(...).configure then runs last.
 def e2eBundleVariants = [e2eEmulator: "emulator", e2eStaging: "staging"]
 def bundledEnvStamp = { String variantName ->
-    file("${buildDir}/bundled-env/${variantName}/bundled-env.sha256")
+    layout.buildDirectory.file("bundled-env/${variantName}/bundled-env.sha256").get().asFile
 }
 androidComponents.onVariants(androidComponents.selector().all()) { variant ->
     def bundleTask = "createBundle${variant.name.capitalize()}JsAndAssets"
@@ -339,17 +283,53 @@ tasks.matching { it.name == "preReleaseBuild" }.configureEach {
     dependsOn releaseGuard
 }
 
-buildscript {
-    repositories {
-        mavenCentral()
-        maven { url "https://maven.google.com" }
+// Fail closed. The wiring above attaches the release guard, the bundled-env stamps and the e2e
+// Sentry skip by task NAME, so a rename in AGP, the React Native plugin or Sentry would silently
+// drop a guard (the onVariants block returns early when a bundle task is missing). Once every
+// project is configured, check that each guard is attached and stop the build if one is not.
+// Debug has no bundle task (Metro serves it), so it is exempt.
+def regroupGuardedVariants = [
+    Release    : "regroupReleaseGuard",
+    E2eEmulator: "regroupBundledEnvStampE2eEmulator",
+    E2eStaging : "regroupBundledEnvStampE2eStaging",
+]
+def regroupDependsOn = { Task task, String name ->
+    task.dependsOn.any { dep ->
+        (dep instanceof CharSequence ? dep.toString() :
+            (dep instanceof Task || dep instanceof TaskProvider) ? dep.name : null) == name
     }
 }
-
-allprojects {
-    repositories {
-        maven { url 'https://jitpack.io' }
-        maven { url "https://maven.google.com" }
+gradle.projectsEvaluated {
+    def appTasks = project.tasks
+    def problems = []
+    def preRelease = appTasks.findByName("preReleaseBuild")
+    if (preRelease == null) {
+        problems << "task preReleaseBuild does not exist, so regroupReleaseGuard is never run"
+    } else if (!regroupDependsOn(preRelease, "regroupReleaseGuard")) {
+        problems << "preReleaseBuild does not depend on regroupReleaseGuard"
+    }
+    regroupGuardedVariants.each { variant, stampTask ->
+        def bundleName = "createBundle${variant}JsAndAssets"
+        def bundle = appTasks.findByName(bundleName)
+        if (bundle == null) {
+            problems << "task ${bundleName} does not exist, so neither ${stampTask} nor E2E_VARIANT is attached to the ${variant} bundle"
+        } else if (!regroupDependsOn(bundle, stampTask)) {
+            problems << "${bundleName} does not depend on ${stampTask}"
+        }
+        if (appTasks.findByName(stampTask) == null) {
+            problems << "task ${stampTask} does not exist"
+        }
+        // Sentry registers its upload tasks in its own onVariants callback, so the names exist
+        // by now; the skip above (onlyIf false) must have a target for both e2e variants.
+        if (variant.startsWith("E2e") &&
+                !appTasks.names.any { it ==~ /createBundle${variant}JsAndAssets_SentryUpload_.*/ }) {
+            problems << "no createBundle${variant}JsAndAssets_SentryUpload_* task: the e2e Sentry-upload skip has nothing to match, so Sentry's task naming has changed"
+        }
+    }
+    if (!problems.isEmpty()) {
+        throw new GradleException(
+            "Regroup build guards are not wired; refusing to build (android/app/build.gradle):\n  - " +
+                problems.join("\n  - "))
     }
 }
 
@@ -361,17 +341,7 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.3.1'
 
     implementation 'com.google.android.gms:play-services-location:21.0.1'
-    
-    // Fix for react-native-image-picker - requires androidx.activity 1.6.0+
-    implementation "androidx.activity:activity:1.7.0"
-    implementation "androidx.activity:activity-ktx:1.7.0"
 
-    debugImplementation("com.facebook.flipper:flipper:${FLIPPER_VERSION}")
-    debugImplementation("com.facebook.flipper:flipper-network-plugin:${FLIPPER_VERSION}") {
-        exclude group:'com.squareup.okhttp3', module:'okhttp'
-    }
-
-    debugImplementation("com.facebook.flipper:flipper-fresco-plugin:${FLIPPER_VERSION}")
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")
     } else {
@@ -381,5 +351,4 @@ dependencies {
 }
 
 apply from: "../../node_modules/react-native-vector-icons/fonts.gradle"
-apply from: file("../../node_modules/@react-native-community/cli-platform-android/native_modules.gradle"); applyNativeModulesAppBuildGradle(project)
 apply from: "../fix-vector-icons.gradle"
