@@ -1,4 +1,4 @@
-# Regroup mobile React Native 0.88.1 upgrade: implementation plan (v2)
+# Regroup mobile React Native 0.88.1 upgrade: implementation plan (v3)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -23,14 +23,14 @@
 
 **Spec:** `regroup/mobile/docs/superpowers/specs/2026-10-29-react-native-0.88-upgrade-design.md` (revised 2026-10-30 with the plan-review findings).
 
-**Review record:** `2026-10-30-react-native-0.88-upgrade.review.json`, beside this file. v1 got CHANGES_REQUESTED; every item is addressed here.
+**Review record:** `2026-10-30-react-native-0.88-upgrade.review.json`, beside this file. v1 got CHANGES_REQUESTED. The v2 re-review found 4 new blocking items and 7 partial ones; v3 resolves them. Main change: the Firebase migration runs on **RNFirebase 25.1.0**, which ships both APIs with types, and bumps to 26.4.1 only after the last group (Task 10f). A probe on 2026-10-30 measured the 25.1.0 bump at exactly 15 new type errors, all fixed in its own commit.
 
 ## Global Constraints
 
 - **Paths.** Relative to `regroup/mobile/`, except `.claude/agent-gates/`, `.github/` and `.serena/`, which are at the repo root. Mobile docs and rules are `regroup/mobile/docs/…` and `regroup/mobile/.claude/rules/…`.
 - **Exact versions.** As spec §5.4 and this list:
   - **Core:** `react-native` 0.88.1, `react` 19.3.0, `react-test-renderer` 19.3.0, `@types/react` ^19.2.0, `@types/react-test-renderer` ^19.1.0, `@react-native/*` 0.88.1, `@react-native-community/cli`, `cli-platform-android` and `cli-platform-ios` 20.2.0.
-  - **Firebase:** `@react-native-firebase/{app,auth,firestore,functions,messaging,storage,analytics}` 26.4.1; `firebase` 12.17.1 (devDependency, for the integration suite); `firebase-admin` latest 13.x; `@firebase/rules-unit-testing` 5.0.2.
+  - **Firebase:** `@react-native-firebase/{app,auth,firestore,functions,messaging,storage,analytics}` 25.1.0 during the migration (Tasks 9–10e), then 26.4.1 (Task 10f); `firebase` 12.17.1 (devDependency, for the integration suite); `firebase-admin` latest 13.x; `@firebase/rules-unit-testing` 5.0.2.
   - **Other native:** `@stripe/stripe-react-native` 0.84.0, `@sentry/react-native` 8.33.0, `react-native-notify-kit` 10.10.0, `react-native-keyboard-controller` 1.22.9, `react-native-reanimated` 4.7.1, `react-native-worklets` 0.13.1, `react-native-modal` 13.0.2 (patched).
   - **Engines:** `"node": ">=22.13"`.
 - **Android:** minSdk 24, compileSdk 37, targetSdk 36, buildTools 37.0.0, NDK 27.1.12297006, Kotlin 2.2.21, Gradle 9.4.1. `gradle.properties` sets `newArchEnabled=true`, `hermesEnabled=true`, `edgeToEdgeEnabled=true`, `android.builtInKotlin=false`, `android.newDsl=false`.
@@ -63,7 +63,7 @@
   - `react-native-modal`: `rats-modal`, `rats-loading-modal`.
   - `react-native-notify-kit`: `src/services/notifications/**`.
   - `react-native-keyboard-controller`: `rats-scroll-view`, `rats-keyboard`, `index.js`.
-  - `@react-native-firebase/*` default imports: banned once Task 10 lands.
+  - `@react-native-firebase/*` default imports and `Firebase*Types`: none after Task 10f. RNFirebase 26 drops them, so `tsc` (the ratchet) enforces it. The Task 10f grep is the second check; untyped (`any`) refs are its blind spot.
 
 ## Review Focus
 
@@ -130,6 +130,7 @@
 - Op-log entry: `{ op: 'get'|'getDocs'|'set'|'update'|'add'|'delete'|'listen'|'tx.get'|'tx.set'|'tx.update'|'tx.delete'|'batch.set'|'batch.update'|'batch.delete'|'batch.commit'|'call', path: string, data?: object, options?: object, constraints?: Array<[kind, ...args]> }`.
   - Sentinels serialize as `{ __fv: 'serverTimestamp' | 'increment', n? | 'arrayUnion', items? | 'arrayRemove', items? | 'deleteField' }`.
   - Helpers: `getOpLog()`, `resetOpLog()`, `seedDoc(path, data)`, `seedQuery(pathAndConstraints, docs)`.
+- **Snapshot rule:** mock snapshots follow the installed RNFirebase. On 17.x, namespaced `get()` returns `exists: boolean`. From 25.1.0 (Task 9) `exists()` is a method on both shapes, as on device. Tests seed with `seedDoc` and assert outcomes and op-log entries, never the snapshot shape, so they stay byte-identical across the switch.
 - Mock refs are **dual-shape**: a ref from either API shape has `path`, and also the namespaced methods (`.doc`, `.collection`, `.where`, `.orderBy`, `.limit`, `.get`, `.set`, `.update`, `.add`, `.delete`, `.onSnapshot`). Both shapes log identical entries. This keeps cross-group shared refs (`guestCollection`, `houseCollection`, `userCollection`, `paywallConfigRef`, `crud.tsx`) working during Task 10.
 
 - [ ] **Step 1: Baselines.** Measure and write these into the record, with the integration failure names saved in an appendix (`--verbose`):
@@ -138,12 +139,13 @@
   - rules: 27 suites, 591 tests;
   - integration: 48 tests, 27 pass, 21 fail.
 
-  Map the 27 passing integration tests to the services they exercise. Correct the stale numbers in `regroup/mobile/CLAUDE.md` in Task 16.
+  Map each passing integration test to the **latest Task 10 group among the modules its import graph evaluates at load** (for example, `guestCRUD` loads `guest.tsx` → `house.tsx`, which runs `firestore.collection('houses')` at module load, so it maps to 10c, not 10b). Correct the stale numbers in `regroup/mobile/CLAUDE.md` in Task 16.
 - [ ] **Step 2: Keyboard audit, before.** For every screen or component with a `TextInput`, `RatsTextInput` or a form field, record:
   - the wrapper: APSL, `rats-scroll-view`, `KeyboardAvoidingView`, or none;
   - its props: `extraScrollHeight`, `extraHeight`, `enableOnAndroid`, `keyboardShouldPersistTaps`, `keyboardDismissMode`, `resetScrollToCoords`;
   - whether IQKeyboardManager lifts it (yes on iOS, except DirectChat while focused);
   - whether it relies on IQKeyboardManager's **toolbar** (every field; critically the 19 numeric, decimal and phone-pad fields: list them);
+  - whether it renders **inside a Modal** (RatsModal, or RN `Modal` such as `PaymentDashboard`'s `ManualPaymentModal` and `DischargeGuestModal`);
   - whether it contains a `FlatList` or `SectionList`;
   - whether it has a pinned footer;
   - its Android behaviour (`adjustResize`; HouseSetup `setHeight(normalize(115))`).
@@ -211,7 +213,7 @@
   - **Pickers and inputs:** datetimepicker 9.2.2, date-picker 5.0.13, picker-select 9.3.1, popover 6.1.0, image-picker 8.3.0, places-autocomplete 2.6.5.
   - **Payments and monitoring:** Stripe 0.84.0, Sentry 8.33.0.
   - **Modal:** `react-native-modal` pinned to 13.0.2.
-  - **Removals:** every package in spec §5.4 "Removed as unused", plus `@testing-library/jest-native` and `@types/react-native-vector-icons` (kept until Task 5), and the stale `overrides.react-native-router-flux` entry.
+  - **Removals:** every package in spec §5.4 "Removed as unused", plus `@testing-library/jest-native` and the stale `overrides.react-native-router-flux` entry.
   - **Moves:** `@firebase/rules-unit-testing` (5.0.2) and the cli packages to devDependencies.
 
   Run `npm install --ignore-scripts`, then `npx patch-package`. Resolve peer conflicts by version, never with `--legacy-peer-deps`.
@@ -240,7 +242,6 @@
 - Delete:
   - `MainApplication.java`, `MainActivity.java`.
   - `android/app/src/debug/java/com/rats/ReactNativeFlipper.java`, `android/app/src/release/java/com/rats/ReactNativeFlipper.java`.
-  - `android/fix-vector-icons.gradle` (Task 5 removes its use).
 - Modify:
   - `android/build.gradle`, `android/app/build.gradle`, `android/settings.gradle`, `android/gradle.properties`.
   - The wrapper files (`gradle-wrapper.properties`, `.jar`, `gradlew`, `gradlew.bat`) from the 0.88.1 template.
@@ -270,29 +271,32 @@
 - [ ] **Step 3: Make the guards fail closed.** Add a `gradle.projectsEvaluated` block in `app/build.gradle` that throws a `GradleException` naming the problem if any of these is untrue:
   - `regroupReleaseGuard` is wired before `preReleaseBuild`;
   - every non-debug variant's `createBundle<V>JsAndAssets` depends on its bundled-env stamp (or on the release guard);
-  - the e2e Sentry-upload skip matched at least one task.
+  - the e2e Sentry-upload skip has a target: `tasks.names.any { it ==~ /createBundleE2e.*_SentryUpload_.*/ }`. Sentry registers its upload tasks lazily, so a counter inside `configureEach` would still read 0 at `projectsEvaluated`.
 - [ ] **Step 4: Permanent CI step.** In the `maestro-smoke` job, after `assembleDebug`, add a step that:
-  - runs `./gradlew :app:assembleRelease --dry-run` and asserts `regroupReleaseGuard` appears before `createBundleReleaseJsAndAssets`;
+  - runs `./gradlew :app:assembleRelease --dry-run` and asserts `regroupReleaseGuard` appears before `createBundleReleaseJsAndAssets` (realizing `preReleaseBuild` runs the `configureEach` that adds the dependency, so the meaningful failure is a missing task name: the Step 3 check covers it);
   - runs `:app:assembleE2eEmulator --dry-run` and asserts `regroupBundledEnvStampE2eEmulator` appears and `regroupReleaseGuard` does not;
   - runs `STRIPE_PUBLISHABLE_KEY=pk_test_x ./gradlew :app:regroupReleaseGuard`, expecting a non-zero exit with the guard's live-key or project message (not a `values.xml` parse error).
 
   Then run `.github/scripts/verify-workflow-hardening.*`'s test locally.
 - [ ] **Step 5:** Static check: grep for `ReactNativeFlipper`, `ReactNativeHost` and `SoLoader.init(` → zero. Commit `chore(regroup-mobile): Android project for RN 0.88.1 (Kotlin host, AGP 9, Gradle 9.4.1, no Flipper, fail-closed guards)` and `ci(regroup-mobile): assert the release and e2e guard wiring`.
 - [ ] **Step 6: Draft PR.** Push and open a **draft** PR, `chore(regroup-mobile): React Native 0.88.1 upgrade`, **without** the label. Fix every `assembleDebug` or guard-step failure with a minimal change or a patch-package patch carrying a header, each recorded in the decision record. From here on, every push gets an Android compile.
+  - **Expected temporary patches:** native packages that a later task removes may not configure on AGP 9.2.1 / Gradle 9.4.1. For example, `react-native-push-notification`'s `android/build.gradle` calls `jcenter()`, which Gradle 9 removed; `react-native-fs` 2.20 and `react-native-geolocation-service` have old unguarded buildscripts. Each gets a minimal temporary patch, and **the patch is deleted in the same commit that removes its package**, because `patch-package` fails in CI on a patch whose package is gone.
+  - **test-tamper:** without the label, this check is red on every push because of the Task 3 snapshots. After each push, read its log and confirm SNAPSHOT-CHURN for the approved files is the only violation.
 
 ### Task 5: Vector icons on @react-native-vector-icons 14
 
 **Files:**
 - Modify:
   - The 11 importers, including `src/components/rats-icon/rats-icon.tsx` (map `solid` → `iconStyle="solid"`), `src/components/rats-icon/faces.tsx`, `src/components/nav-bar/index.tsx`, `src/components/rats-picker/rats-picker.tsx`, `src/screens/StatUpdates/DayTimeWidget.tsx`, `src/components/rats-datepicker/rats-datepicker.tsx` and `src/navigation/navigators.tsx`.
-  - The `jest.setup.js` icon mocks, the 28 tests mocking `react-native-vector-icons` (from Task 2 Step 3), `package.json` and `android/app/build.gradle` (remove the `fonts.gradle` apply).
+  - The `jest.setup.js` icon mocks, the 28 tests mocking `react-native-vector-icons` (from Task 2 Step 3), `package.json` and `android/app/build.gradle` (remove the `fonts.gradle` apply **and** the `fix-vector-icons.gradle` apply).
+- Delete: `android/fix-vector-icons.gradle` (its only purpose was ordering `fonts.gradle`'s copy task).
 - Create: `src/components/__tests__/iconNames.test.ts`.
 
 - [ ] **Step 1: Install and write the failing test.** Install `@react-native-vector-icons/{fontawesome5,ionicons,material-icons}` 14.0.0 first, so the test fails for the right reason. `iconNames.test.ts` scans `src` for icon names per family and asserts each exists in that package's `glyphmaps/*.json`. Dynamic `name={…}` expressions are listed for manual review. It fails on `md-arrow-down` and `ios-calendar`.
 - [ ] **Step 2: Migrate.**
   - Run `npx @react-native-vector-icons/codemod src`.
   - Rename the retired Ionicons to the closest v14 glyphs (`arrow-down`, `calendar`, unless the glyph map shows a closer match).
-  - Update the mocks; remove `react-native-vector-icons` and its types.
+  - Update the mocks; remove `react-native-vector-icons` and `@types/react-native-vector-icons`.
 - [ ] **Step 3:** Run the suite and the ratchet; snapshots go in the same commit with the opt-in. Commit `refactor(regroup-mobile): per-family vector icon packages`. Push (CI Android).
 
 ### Task 6: Document picker, file system, html-to-pdf, geolocation
@@ -341,23 +345,30 @@
 - [ ] **Step 1:** Reimplement it with `Pressable` and material-icons `check-box` / `check-box-outline-blank`, sized and tinted like the native box (theme tint). Task 2's tests must pass unchanged.
 - [ ] **Step 2:** Remove `@react-native-community/checkbox`. Suite, ratchet, commit `refactor(regroup-mobile): JS rats-checkbox replacing the native checkbox`. Push.
 
-### Task 9: RNFirebase 26.4.1 infrastructure and the integration suite
+### Task 9: RNFirebase 25.1.0 (both APIs), infrastructure and the integration suite
 
 **Files:**
 - Modify:
-  - `package.json` (RNFirebase 26.4.1; `firebase` 12.17.1 and `firebase-admin` 13.x as devDependencies).
+  - `package.json`: RNFirebase **25.1.0** (all seven packages; crashlytics is already gone), plus `firebase` 12.17.1 and `firebase-admin` 13.x as devDependencies.
+  - The **15 type errors the 25.1.0 bump introduces** (measured 2026-10-30), fixed in this same commit:
+    - 7 × `TS2774`, real behaviour bugs: `snap.exists` is a method since RNFirebase 22, so the property check is always truthy. Becomes `.exists()` in `useWeekSummary.ts` (2), `useLiveHouseDisputes.ts`, `activity.ts`, `payments.ts` and `treasury.ts`. Re-run the probe and fix every reported site.
+    - 6 × `TS18046` / `TS2322` on callable results: type the `httpsCallable` result generically in `StripeSettingsScreen.tsx` and `meeting.ts`.
+    - `users.tsx`: `firebase.auth`.
+    - `firebase-setup.ts`: `export type` re-exports.
+    - The op-log tests stay byte-identical.
+  - `src/services/notifications/handler.ts` and `service.ts`: deleted here, not in Task 11. They are dead code with zero references, and `handler.ts` imports `FirebaseMessagingTypes`.
   - `firebase-setup.ts`, `src/config/firebase-emulator.ts`, `src/services/crud.tsx`.
   - `__mocks__/firebase-modular/*`, `__mocks__/firebase-setup.ts`.
   - `src/config/__tests__/firebase-setup.test.ts` (extend; switch its app mock to modular `getApp`; keep every e2e case).
-  - `jest.config.integration.js`, `src/integration/firebase-admin-setup.ts`.
+  - `jest.config.integration.js`, `src/integration/firebase-admin-setup.ts`, the five `src/integration/*.integration.test.ts` files, `src/services/__tests__/activity.emulator.test.ts` and `src/services/__tests__/firebase-test-utils.ts`: seeding moves to the Admin handle, and acting users sign in through the Auth emulator.
 - Create:
   - `src/integration/setup.integration.ts` (its own setup file, without the unit RNFB mocks).
   - `src/integration/rnfb-to-web.ts` (re-exports `firebase/*`, adds a `putFile` shim and RNFirebase-shaped error codes, asserts a `demo-` project and host `127.0.0.1`).
 
 **Interfaces:**
 - **`firebase-setup.ts` exports:** `auth`, `firestore`, `functions`, `messaging`, `storage`, `callHttpsFunction(name: string, payload: unknown)` and `emulatorConnection`.
-  - It also re-exports the modular types the code needs (`DocumentSnapshot`, `Timestamp`, `User`, …) under explicit names, replacing `Firebase*Types`.
-  - **Instances:** `getApp()`, `getAuth()`, `initializeFirestore(app, { ignoreUndefinedProperties: true })` (synchronous in 26.x), `getFunctions()`, `getMessaging()` and `getStorage()`.
+  - It also re-exports the modular types the code needs (`DocumentSnapshot`, `Timestamp`, `User`, messaging's `RemoteMessage`, …) under explicit names, with `export type`, replacing `Firebase*Types`.
+  - **Instances:** `getApp()`, `getAuth()`, `getFirestore()` with `ignoreUndefinedProperties: true` applied through the settings path 25.1.0 supports synchronously (`initializeFirestore` is async before 26.0, so it only becomes the constructor in Task 10f), `getFunctions()`, `getMessaging()` and `getStorage()`.
   - **Emulators:** `connectToEmulators({ host, ports, instances })` receives these same instances.
   - **Order:** construct, then connect.
 - **Integration config:**
@@ -373,10 +384,10 @@
   - All existing e2e assertion cases still pass.
 - [ ] **Step 2:** Implement, and keep the mocks dual-shape. `crud.tsx` moves to the modular API; its signature is unchanged and its op-log behaviour is pinned.
 - [ ] **Step 3: Integration.** Each suite signs in as its seeded user through the Auth emulator; data no client may write is seeded through Admin.
-  - **Expected right now:** with services still namespaced, only suites with no service calls pass.
-  - **Recorded as the per-group target:** for each Task 10 group, the integration tests of its services must return to baseline-pass once that group lands.
+  - **Expected right after this task:** about 0 passing. Every suite imports a service, and namespaced services cannot run on the JS SDK.
+  - **Per-group recovery targets** (from the Task 2 load-graph mapping): each group restores exactly the suites mapped to it. Write the expected counts per group into the record before Task 10a.
 - [ ] **Step 4:** Rules suite at 5.0.2: 27 suites, 591 tests passing.
-- [ ] **Step 5:** Suite, ratchet, commit `refactor(regroup-mobile): RNFirebase 26 modular setup, dual-shape mocks and JS-SDK integration harness`. Push.
+- [ ] **Step 5:** Suite, ratchet, commit `refactor(regroup-mobile): RNFirebase 25.1.0 with modular setup, exists() fixes, dual-shape mocks and the JS-SDK integration harness`. Push. Device builds stay runnable from here on: 25.1.0 serves both APIs at runtime.
 
 ### Task 10: Modular call sites, by domain
 
@@ -392,25 +403,29 @@ Each group is one commit, and each commit is green: unit tests, ratchet, lint, a
 | 10c people & houses | `services/house.tsx`, `services/users.tsx`, `services/admin.tsx`, `services/applications.ts`, `services/invitations.ts`, `services/organization.ts`, `services/guestImport.ts`, `services/operator-setup.ts`, `services/setup-wizard.ts`, `services/setup-wizard-photos.ts`, `state/queries/applicationQueries.ts`, `state/mutations/oxfordOnboardingMutations.ts`, `state/slices/userSlice.ts`, `util/user.ts` |
 | 10d content | `services/message.tsx`, `services/notifications.tsx`, `services/storage.tsx`, `services/documents.ts`, `services/drugTests.ts`, `services/staffNotes.ts`, `services/complaints.ts`, `services/issues.ts`, `services/feedback.ts`, `services/choreRotation.ts`, `services/phaseAdvancement.ts`, `services/reportingService.ts`, `services/oxford/index.ts`, `services/oxford/businessMeetings.ts`, `services/meeting.ts` |
 | 10e auth & UI | `components/auth/auth.tsx`, `services/EnhancedAuthService.ts`, `services/account.ts`, `screens/Login/LoginForm.tsx`, `screens/SignUp/SignUp.tsx`, `screens/NewAccount/NewAccount.tsx`, `screens/Personal/TwoFactorSetup.tsx`, `screens/Splash/Splash.tsx` |
-| Task 11 | `services/notifications/handler.ts` (deleted as dead code) |
+| Task 9 | `services/notifications/handler.ts` (deleted as dead code) |
 
 **Interfaces:** the mapping in spec §5.2. Service signatures do not change.
 
-- [ ] **Step 0:** Before 10a, re-run the inventory command and assert that the union of the groups equals its output plus `firebase-setup.ts`. Any new file is added to the right group first.
+- [ ] **Step 0:** Before 10a, re-run the inventory and assert that the union of the groups equals its output plus `firebase-setup.ts`. Any new file is added to the right group first. The inventory is the deduplicated union of:
+  - `grep -rlE "@react-native-firebase/|firebase-setup" src App.tsx index.js --include=*.ts --include=*.tsx --include=*.js`;
+  - `grep -rlE "\b\w+(Collection|Ref)\.(doc|where|get|add|onSnapshot|update|set|orderBy|limit)\(|\.collection\(|runTransaction\(|\.batch\(\)" src --include=*.ts --include=*.tsx`;
+  - both excluding `__tests__`, `.test.` and `src/integration/`.
 - [ ] **Step 1 (per group):** For services without Task 2 op-log tests (10c–10e), add op-log tests pinning one read, one write and each transaction or listener. They pass on the namespaced code.
 - [ ] **Step 2 (per group):**
   - Rewrite to the modular API.
   - Update tests that assert mock call chains, keeping their cases and expected values.
   - **10a and 10b:** their Task 2 op-log files must not change, which proves the mapping.
-- [ ] **Step 3 (per group):** `npm run typecheck` shows zero errors in the group's files: no baseline entries in migrated files. Run the integration tests mapped to the group, back to baseline-pass.
+- [ ] **Step 3 (per group):** `npm run typecheck` shows zero errors in the group's files: no baseline entries in migrated files. Both APIs are typed on 25.1.0, so the ratchet stays green. Run the integration suites mapped to the group in Task 2, back to baseline-pass.
 - [ ] **Step 4 (10a, 10b):** Line-by-line self-review of every write and transaction against the old code. Then ask an **independent reviewer** (a fresh subagent given the regroup CLAUDE.md domain rules — dispute owner and reopen rules, payment status precedence, `rentOwed` increments, Stripe cents — and the diff, but not my reasoning) to check the op-log tests and the code against the domain rules.
 - [ ] **Step 5 (per group):** Commit `refactor(regroup-mobile): modular RNFirebase API in <group> code`, then push.
-- [ ] **Step 6 (after 10e):**
+- [ ] **Step 6 (Task 10f, after 10e): RNFirebase 26.4.1.**
+  - Bump all seven packages to 26.4.1.
+  - In `firebase-setup.ts`, switch the Firestore constructor to `initializeFirestore(getApp(), { ignoreUndefinedProperties: true })` (synchronous since 26.0). The existing test pins the same-instance emulator order.
   - Remove the namespaced mock surface.
-  - Enable the ESLint ban on default `@react-native-firebase/*` imports and `Firebase*Types`.
-  - Run `grep -rnE "\bfirestore\.(collection|collectionGroup|doc|batch|runTransaction|settings)\(|FirebaseFirestore\.|\.FieldValue\.|\b(messaging|storage|functions|analytics|firestore|auth)\(\)|\.httpsCallable\(|\.useEmulator\(|\b\w+(Collection|Ref)\.(doc|where|get|add|onSnapshot|update|set)\(|\.exists\b[^(]" src App.tsx index.js firebase-setup.ts`, expecting zero hits outside comments.
+  - Run `grep -rnE "\bfirestore\.(collection|collectionGroup|doc|batch|runTransaction|settings)\(|FirebaseFirestore\.|\.FieldValue\.|\b(messaging|storage|functions|analytics|firestore|auth)\(\)|\.httpsCallable\(|\.useEmulator\(|\b\w+(Collection|Ref)\.(doc|where|get|add|onSnapshot|update|set)\(|\.exists\b[^(]|\.exists$" src App.tsx index.js firebase-setup.ts`, expecting zero hits outside comments. The ratchet enforces the rest, since 26.4.1 has no default exports or `Firebase*Types`.
   - Run the full integration suite: all 27 baseline passes, and no new failures.
-  - Commit `test(regroup-mobile): drop the namespaced Firebase mocks and ban the namespaced API`.
+  - Commit `chore(regroup-mobile): RNFirebase 26.4.1 and drop the namespaced Firebase mocks`.
 
 ### Task 11: Notifications on react-native-notify-kit
 
@@ -426,27 +441,26 @@ Each group is one commit, and each commit is green: unit tests, ratchet, lint, a
   - `src/screens/Payments/__tests__/ResidentPayment.test.tsx` (mock swap).
   - `index.js` (the startup call).
   - `jest.setup.js` (`react-native-notify-kit/jest-mock`, with real enum values including `AuthorizationStatus.PROVISIONAL` and `AlarmType`).
-  - `regroup/mobile/firebase.json` (`react-native.messaging_ios_foreground_presentation_options`).
+  - `regroup/mobile/firebase.json` **and** `regroup/mobile/firebase/firebase.json`: the same `react-native.messaging_ios_foreground_presentation_options` block in both. RNFirebase's iOS `ios_config.sh` uses the first `firebase.json` found within depth 2, which can be the emulator config.
   - `android/app/src/main/AndroidManifest.xml` (`tools:node="remove"` decisions).
   - `package.json`.
-- Delete: `src/services/notifications/handler.ts`, `service.ts`.
 
 **Interfaces:**
 - `ensureNotificationChannels(): Promise<void>`:
   - Creates `default` ("General", HIGH) and `default-channel-id` ("Reminders", HIGH).
   - Memoized: one native call per process.
   - Android-only.
-- `displayRemoteMessage(message: FirebaseMessagingRemoteMessage): Promise<void>`:
-  - Parses `data.notifee` and awaits the channels before displaying.
+- `displayRemoteMessage(message: RemoteMessage): Promise<void>` (messaging's `RemoteMessage`, re-exported by `firebase-setup`):
+  - Parses `data.notifee`, sets `ios.foregroundPresentationOptions` to banner + sound + badge + list (today's AppDelegate behaviour), and awaits the channels before displaying.
   - Malformed data is logged with a static context and nothing is displayed.
 - `scheduleRentReminder(guest)` / `cancelRentReminder(guest): Promise<void>`:
   - Same names and the same identifier, `String(guestNotificationId(guest.id))`.
-  - Schedule: `createTriggerNotification` with a `TimestampTrigger` at `nextFridayAt9am()`, `alarmManager: { allowWhileIdle: true }`, and the same title, body and data, after the channels.
+  - Schedule: `createTriggerNotification` with a `TimestampTrigger` at `nextFridayAt9am()`, `alarmManager: { allowWhileIdle: true }`, the same title, body and data, and the same `ios.foregroundPresentationOptions`, after the channels.
   - iOS: skipped unless `authorizationStatus` ≥ AUTHORIZED (or PROVISIONAL, matching the old `alert` check).
   - Cancel: `cancelTriggerNotification(id)`, verified to remove iOS pending requests by identifier (cite the notify-kit source in the record).
 - All four functions catch, call `logException(error, '<context>')` and resolve; none logs payload or guest data.
 - `GuestHome` schedules when `rentOwed > 0` and cancels when `rentOwed <= 0` (spec §5.3).
-- Splash registers `onMessage` once and unsubscribes on unmount.
+- Splash registers `onMessage` once and unsubscribes on unmount. This is a recorded behaviour fix: today it adds a listener on every render, so foreground pushes can show duplicate banners.
 
 - [ ] **Step 1: Tests first.**
   - Channels: created once, with HIGH importance on Android; nothing happens on iOS.
@@ -455,7 +469,7 @@ Each group is one commit, and each commit is green: unit tests, ratchet, lint, a
   - Splash: registers once and unsubscribes on unmount.
   - GuestHome: cancels when `rentOwed` drops to 0.
 - [ ] **Step 2: Implement.**
-  - Remove `react-native-push-notification`, `@react-native-community/push-notification-ios`, `@notifee/react-native` and `@types/react-native-push-notification`.
+  - Remove `react-native-push-notification`, `@react-native-community/push-notification-ios`, `@notifee/react-native` and `@types/react-native-push-notification`, together with any temporary Task 4 patch for them.
   - Add the notify-kit ESLint allowlist.
   - `index.js` calls `ensureNotificationChannels()` after `firebase-setup`.
   - firebase.json gets `["badge", "sound", "banner", "list"]`.
@@ -467,7 +481,7 @@ Each group is one commit, and each commit is green: unit tests, ratchet, lint, a
 **Files:** `ios/rats.xcodeproj/project.pbxproj` (the bundle phase, around line 460, and the dSYM phase, around line 513).
 
 - [ ] **Step 1:** Rebase the custom bundle phase on RN 0.88's `react-native-xcode.sh` and Sentry 8.33.0's `scripts/sentry-xcode.sh`, so it bundles with Hermes and uploads the composed Hermes source map with its debug ID. Keep the `sentry.properties` guard, the E2E skip, `--reset-cache` and `BUNDLER_ENV` unchanged; update the comments that say "RN 0.72".
-- [ ] **Step 2:** Run the pbxproj parse check (`plutil -lint` equivalent: open-step plist parse in Python). Commit `chore(regroup-mobile): Sentry 8 and Hermes in the iOS bundle phases`.
+- [ ] **Step 2:** Parse check: `node -e "require('xcode').project('ios/rats.xcodeproj/project.pbxproj').parseSync()"`, using the npm `xcode` package from a scratch directory. Python's `plistlib` can't read the old-style ASCII pbxproj. Commit `chore(regroup-mobile): Sentry 8 and Hermes in the iOS bundle phases`.
 
 ### Task 13: iOS project
 
@@ -481,13 +495,15 @@ Each group is one commit, and each commit is green: unit tests, ratchet, lint, a
 **Interfaces:**
 - **`AppDelegate : UIResponder <UIApplicationDelegate>`** (no longer a `UNUserNotificationCenterDelegate`):
   - `@property (strong, nonatomic) UIWindow *window;`.
-  - `@property RCTReactNativeFactory *reactNativeFactory;`, created once in `didFinishLaunching` with an `RCTDefaultReactNativeFactoryDelegate` subclass. That subclass sets `dependencyProvider = [RCTAppDependencyProvider new]` and implements `bundleURL` (Debug → Metro `index`, else `main.jsbundle`).
+  - `@property (strong) RCTReactNativeFactory *reactNativeFactory;` **and** `@property (strong) RatsReactNativeDelegate *reactNativeDelegate;`. `RCTReactNativeFactory.delegate` is `weak`, so AppDelegate must hold the delegate strongly.
+  - Both are created once in `didFinishLaunching`. `RatsReactNativeDelegate : RCTDefaultReactNativeFactoryDelegate` sets `dependencyProvider = [RCTAppDependencyProvider new]` and implements `bundleURL` (Debug → Metro `index`, else `main.jsbundle`).
+  - `@property BOOL reactNativeStarted;` is the once-guard.
   - It keeps `[FIRApp configure]` and the IS_E2E_TEST bridge.
 - **`SceneDelegate`:**
   - Creates the window.
   - Sets `appDelegate.window = self.window`.
   - First connection per process: `[factory startReactNativeWithModuleName:@"rats" inWindow:self.window connectionOptions:connectionOptions]`.
-  - Reconnect: re-attach the existing root view controller and forward the connection options' URLs and activities to `RCTLinkingManager`.
+  - Reconnect (process alive, `reactNativeStarted == YES`): **first** take the existing root view controller from the old `appDelegate.window` and detach it (`oldWindow.rootViewController = nil`), as today's `AppDelegate.mm` does. **Then** create the new window, set it as `appDelegate.window`, attach the root view controller, and forward the connection options' URLs and activities to `RCTLinkingManager`.
   - `openURLContexts` and `continueUserActivity` forward to `+[RCTLinkingManager scene:…]`. When phone auth is reachable, also call `[FIRAuth canHandleURL:]` first.
 
 - [ ] **Step 1: Podfile (spec §5.1).**
@@ -500,7 +516,8 @@ Each group is one commit, and each commit is green: unit tests, ratchet, lint, a
 - [ ] **Step 4: Static checks.**
   - Parse `Info.plist` and `project.pbxproj`.
   - `grep` for `RCTAppDelegate`, `RNCPushNotificationIOS` and `hermes_enabled` → zero.
-  - `grep` for `appDelegate.window = self.window` and `startReactNativeWithModuleName` → present.
+  - `grep` for `startReactNativeWithModuleName:@"rats" inWindow:` with `connectionOptions:`, `reactNativeDelegate`, `reactNativeStarted` and `RCTReactNativeFactory alloc` → present.
+  - Parse the pbxproj with the npm `xcode` package (Task 12).
 - [ ] **Step 5:** Commit `chore(regroup-mobile): iOS project for RN 0.88.1 (RCTReactNativeFactory, scene lifecycle, Hermes, permissions setup)`. Push.
 
 ### Task 14: Android edge-to-edge insets
@@ -532,11 +549,11 @@ Each group is one commit, and each commit is green: unit tests, ratchet, lint, a
   - `extraScrollHeight` / `extraHeight` map to `bottomOffset` with the same visible offset.
   - `keyboardShouldPersistTaps` and `keyboardDismissMode` carry over.
   - `resetScrollToCoords` is replaced by scrolling to the top on keyboard hide.
-- **`RatsKeyboardToolbar`:** rendered once, app-wide, on iOS, with Prev/Next/Done like IQKeyboardManager.
+- **`RatsKeyboardToolbar`:** Prev/Next/Done like IQKeyboardManager, on iOS. It is a JS view absolutely positioned in its parent, so it renders once at the app root **and** inside every native-Modal surface: `RatsModal`, `PaymentDashboard`'s `ManualPaymentModal` and `DischargeGuestModal` (the audit's "inside a Modal" column lists them all).
 
 - [ ] **Step 1: Tests.**
   - `RatsScrollView` prop mapping.
-  - The toolbar renders on iOS and not on Android.
+  - The toolbar renders on iOS and not on Android, both at the root and inside `RatsModal`, `ManualPaymentModal` and `DischargeGuestModal`.
   - The chat composer sits inside `RatsKeyboardStickyView` with the same layout props.
   - HouseSetup: `bottomOffset = normalize(100)` on iOS and its Android `setHeight(normalize(115))` path preserved.
   - A structural test per IQKeyboardManager-only screen: its `TextInput` has a `RatsScrollView` or keyboard-controller `KeyboardAvoidingView` ancestor.
@@ -547,6 +564,7 @@ Each group is one commit, and each commit is green: unit tests, ratchet, lint, a
   - Add the ESLint allowlist.
   - Fill in the audit table's "after" column for every row.
 - [ ] **Step 3:** Suite, ratchet, snapshots with the opt-in. Commit `feat(regroup-mobile): keyboard handling on react-native-keyboard-controller, with the iOS keyboard toolbar`. Push.
+- [ ] **Step 4:** In its own commit, remove `index.js`'s production `onStateChange={state => console.log('state', state)}`: navigation params can carry guest data, which breaks the no-PII-logging rule. Record it as a pre-existing fix.
 
 ### Checkpoint: Mac (owner)
 
@@ -571,7 +589,8 @@ Stop. Ask the owner to run the following on the PR branch and report.
 - **Rent reminder:** schedule on both platforms; cancel on payment.
 - **Files and reports:** document upload, including cancel; CSV guest import; PDF export (Android).
 - **UI components:** house search with location; both charts; a `rats-datepicker` modal; a `RatsModal` swipe dismiss; Android 16 back gesture on a `RatsModal` and on a screen using `BackHandler`.
-- **Keyboard on every audited screen,** especially chat, HouseSetup and ResidentPayment's amount field (Done on the numeric pad).
+- **Keyboard on every audited screen,** especially chat, HouseSetup, ResidentPayment's amount field and `ManualPaymentModal`'s amount field (Done on the numeric pad).
+- **Firebase config pickup (iOS):** the Xcode build log line `firebase.json found at …` names a file that has the `react-native` block.
 - **Layout:** edge-to-edge on Android 15+ and on API 30.
 - **Links:** cold-start universal link and URL; warm URL; scene reconnect.
 - **iOS Hermes Intl:** week start/end and `formatInTimeZone` agree with Android, including a DST-boundary date.
@@ -614,13 +633,13 @@ Fix each reported issue as its own commit, with a pinning test where possible. R
 
 ### Task 17: Whole-branch gate run, label, gate revert, finish
 
-- [ ] **Step 1: Whole-branch gate run.**
+- [ ] **Step 1: Revert the gate change.** Revert Task 1 (`git revert <sha>`). Confirm `git diff $(git merge-base origin/main HEAD) -- .claude/agent-gates/verify-diff.sh` is empty. Add a "gate opt-in reverted" checkbox to the PR description, ticked.
+- [ ] **Step 2: Whole-branch gate run, on the final tree.**
   - Run `git show origin/main:.claude/agent-gates/verify-diff.sh > "$T"`.
   - Then `bash "$T" "$(git merge-base origin/main HEAD)"`.
   - Expect exactly one violation, SNAPSHOT-CHURN, whose count equals the number of approved snapshot files.
   - Paste the output into the PR description.
   - **Only then** add the `test-change-approved` label.
-- [ ] **Step 2: Revert the gate change.** Revert Task 1 (`git revert <sha>`). Confirm `git diff $(git merge-base origin/main HEAD) -- .claude/agent-gates/verify-diff.sh` is empty. Add a "gate opt-in reverted" checkbox to the PR description, ticked.
 - [ ] **Step 3: Final verification.**
   - Full unit suite, ratchet, lint, integration (27 baseline passes, no new failures), rules (591).
   - CI green on the head.

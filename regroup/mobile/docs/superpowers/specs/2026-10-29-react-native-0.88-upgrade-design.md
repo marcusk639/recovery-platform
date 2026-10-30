@@ -140,7 +140,10 @@ Regroup mobile runs React Native **0.72.17**. React Native has not supported it 
 
 ### 5.2 RNFirebase 26.4.1, modular migration
 
-- **Packages:** `app`, `auth`, `firestore`, `functions`, `messaging`, `storage`, `analytics`, all at 26.4.1. `crashlytics` is removed (zero call sites; Sentry is the only error sink).
+- **Packages:** `app`, `auth`, `firestore`, `functions`, `messaging`, `storage`, `analytics`, ending at 26.4.1. `crashlytics` is removed (zero call sites; Sentry is the only error sink).
+- **Version path (plan re-review).** RNFirebase 26 removes the namespaced API from both its runtime and its types, so a direct 17 → 26 bump would break typecheck everywhere until the whole migration lands. The migration therefore runs on **25.1.0**, which ships both APIs with types, and bumps to 26.4.1 last.
+  - The 25.1.0 bump (probe, 2026-10-30) adds 15 type errors, fixed in the same commit.
+  - Seven of them would become silent bugs: since RNFirebase 22, `snapshot.exists` is a method, so code that is correct on today's 17.x (`if (snap.exists)`) would be always truthy after the bump. They are in `activity.ts`, `payments.ts`, `treasury.ts`, `useWeekSummary.ts` and `useLiveHouseDisputes.ts`, and become `.exists()` in the bump commit.
 - **`firebase-setup.ts`** becomes the single place that constructs instances:
   - `getApp()`, `getAuth()`, `initializeFirestore(app, { ignoreUndefinedProperties: true })` (or `getFirestore` + the documented settings path), `getFunctions()`, `getMessaging()`, `getStorage()`.
   - It keeps its exported names (`auth`, `firestore`, `functions`, `messaging`, `storage`, `callHttpsFunction`, `emulatorConnection`), so imports stay stable.
