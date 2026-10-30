@@ -835,6 +835,29 @@ the adapter maps onto exactly the chain a suite mocks.
   integration **35 / 55 (target 35)**: `guestCRUD` 6 and `meetings` 8 now pass under the rules.
   (55 total: Task 9 counted 41 while two suites failed at load.)
 
+#### 10e: auth & UI
+
+- **Step 1:** 6 op-log suites (71 tests), committed first (`fdf55b41`): EnhancedAuthService (two),
+  account deletion, Splash, LoginForm's analytics, TwoFactorSetup. Unchanged and passing.
+- **Files:** `EnhancedAuthService.ts` and `account.ts` call the modular auth functions on the
+  `firebase-setup` instance (`signInWithEmailAndPassword(auth, …)`, `updateProfile(user, …)`,
+  `reload`, `reauthenticateWithCredential`, `getIdToken`, `EmailAuthProvider`), with
+  `httpsCallable(functions, 'deleteAccount')`; the class's own `signOut`, `signInAnonymously` and
+  `sendPasswordResetEmail` statics import the SDK functions under `firebase*` aliases for clarity.
+  `Splash.tsx` and `TwoFactorSetup.tsx` use `getMessaging()` / `getAuth()` with the modular
+  messaging and auth functions, keeping every call where it was (including Splash's per-render
+  `onMessage`, and TwoFactorSetup skipping the link when nobody is signed in). `LoginForm.tsx`:
+  `logEvent(getAnalytics(), …)`. Types only: `auth.tsx` (`TokenWithClaims` is now
+  `Omit<IdTokenResult, 'claims'> & { claims }`: the modular `claims` is `ParsedToken`), and
+  `NewAccount.tsx` drops two unused imports. `SignUp.tsx` reads `auth.currentUser`: no change.
+- **Test-mock support:** global mocks gain modular messaging and analytics (and `reload`,
+  `reauthenticateWithCredential`, `updateProfile`, `signInWithPhoneNumber` on auth), delegating to
+  the instance passed. `account.test` and `Splash.test` add the modular functions over their own
+  spies; cases unchanged.
+- **Results:** unit 387 suites passing; zero type errors in the group; ratchet 125 / 125;
+  integration 35 / 55 (target 35). Repo-wide, the only namespaced reference left is
+  `FirebaseFirestore.WhereFilterOp` in `crud.tsx`, for 10f.
+
 #### Behaviours pinned as-is (10d, 10e op-logs), for follow-up
 
 Pinned exactly so the migration cannot change them; none is fixed here.

@@ -54,7 +54,14 @@ jest.mock("@react-native-firebase/auth", () => {
       return (global as any).__splashTestOnAuthStateChanged;
     },
   }));
-  return { __esModule: true, default: authFn, FirebaseAuthTypes: {} };
+  return {
+    __esModule: true,
+    default: authFn,
+    FirebaseAuthTypes: {},
+    // Modular forms over the same instance and its lazy getters.
+    getAuth: () => authFn(),
+    onAuthStateChanged: (a: any, ...args: any[]) => a.onAuthStateChanged(...args),
+  };
 });
 
 // ─── @react-native-firebase/messaging mock ────────────────────────────────────
@@ -91,11 +98,25 @@ jest.mock("@react-native-firebase/messaging", () => {
     PROVISIONAL: 2,
     EPHEMERAL: 3,
   };
-  return { __esModule: true, default: mockMessagingDefault };
+  return {
+    __esModule: true,
+    default: mockMessagingDefault,
+    AuthorizationStatus: mockMessagingDefault.AuthorizationStatus,
+    // Modular forms over the same instance, so the global spies see every call.
+    getMessaging: () => mockMessagingDefault(),
+    requestPermission: (m: any, ...args: any[]) => m.requestPermission(...args),
+    getToken: (m: any, ...args: any[]) => m.getToken(...args),
+    onMessage: (m: any, ...args: any[]) => m.onMessage(...args),
+    onNotificationOpenedApp: (m: any, ...args: any[]) => m.onNotificationOpenedApp(...args),
+    getInitialNotification: (m: any) => m.getInitialNotification(),
+    setBackgroundMessageHandler: (m: any, ...args: any[]) => m.setBackgroundMessageHandler(...args),
+    onTokenRefresh: (m: any, ...args: any[]) => m.onTokenRefresh(...args),
+  };
 });
 
 // ─── @react-native-firebase/firestore mock ────────────────────────────────────
 jest.mock("@react-native-firebase/firestore", () => ({
+  ...require("../../../../__mocks__/firebase-modular/namespaced-adapter"),
   firebase: {},
   FirebaseFirestoreTypes: {},
 }));

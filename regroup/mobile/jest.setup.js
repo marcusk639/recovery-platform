@@ -186,6 +186,10 @@ jest.mock('@react-native-firebase/auth', () => {
     getIdToken: (user, ...args) => user.getIdToken(...args),
     getIdTokenResult: (user, ...args) => user.getIdTokenResult(...args),
     linkWithCredential: (user, ...args) => user.linkWithCredential(...args),
+    reauthenticateWithCredential: (user, ...args) => user.reauthenticateWithCredential(...args),
+    reload: (user) => user.reload(),
+    updateProfile: (user, ...args) => user.updateProfile(...args),
+    signInWithPhoneNumber: (a, ...args) => a.signInWithPhoneNumber(...args),
   };
 });
 
@@ -311,7 +315,24 @@ jest.mock('@react-native-firebase/messaging', () => {
     NOT_DETERMINED: -1,
     DENIED: 0,
   };
-  return { __esModule: true, default: fn };
+  return {
+    __esModule: true,
+    default: fn,
+    AuthorizationStatus: fn.AuthorizationStatus,
+    // Modular forms over the instance passed in.
+    getMessaging: () => mockMessaging,
+    getToken: (m, ...args) => m.getToken(...args),
+    deleteToken: (m, ...args) => m.deleteToken(...args),
+    requestPermission: (m, ...args) => m.requestPermission(...args),
+    hasPermission: (m) => m.hasPermission(),
+    onMessage: (m, ...args) => m.onMessage(...args),
+    onTokenRefresh: (m, ...args) => m.onTokenRefresh(...args),
+    onNotificationOpenedApp: (m, ...args) => m.onNotificationOpenedApp(...args),
+    getInitialNotification: (m) => m.getInitialNotification(),
+    setBackgroundMessageHandler: (m, ...args) => m.setBackgroundMessageHandler(...args),
+    subscribeToTopic: (m, ...args) => m.subscribeToTopic(...args),
+    unsubscribeFromTopic: (m, ...args) => m.unsubscribeFromTopic(...args),
+  };
 });
 
 jest.mock('@react-native-firebase/storage', () => {
@@ -347,7 +368,16 @@ jest.mock('@react-native-firebase/analytics', () => {
     setUserProperty: jest.fn(() => Promise.resolve()),
     setAnalyticsCollectionEnabled: jest.fn(() => Promise.resolve()),
   };
-  return { __esModule: true, default: () => mockAnalytics };
+  return {
+    __esModule: true,
+    default: () => mockAnalytics,
+    getAnalytics: () => mockAnalytics,
+    logEvent: (a, ...args) => a.logEvent(...args),
+    logScreenView: (a, ...args) => a.logScreenView(...args),
+    setUserId: (a, ...args) => a.setUserId(...args),
+    setUserProperty: (a, ...args) => a.setUserProperty(...args),
+    setAnalyticsCollectionEnabled: (a, ...args) => a.setAnalyticsCollectionEnabled(...args),
+  };
 });
 
 // ─── notifications ───────────────────────────────────────────────────────────

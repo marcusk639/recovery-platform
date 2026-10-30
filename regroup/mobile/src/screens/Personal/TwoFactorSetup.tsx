@@ -1,6 +1,11 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, Alert, StyleSheet } from 'react-native';
-import auth from '@react-native-firebase/auth';
+import {
+  getAuth,
+  linkWithCredential,
+  PhoneAuthProvider,
+  signInWithPhoneNumber,
+} from '@react-native-firebase/auth';
 import ScreenHeader from '../../components/screen-header';
 import RatsScrollView from '../../components/rats-scroll-view';
 import RatsButton from '../../components/rats-button/rats-button';
@@ -14,7 +19,7 @@ const TwoFactorSetup: React.FC = () => {
 
   const sendCode = async () => {
     try {
-      const result = await auth().signInWithPhoneNumber(phone);
+      const result = await signInWithPhoneNumber(getAuth(), phone);
       setConfirmation(result);
       setStep('code');
     } catch (err: any) {
@@ -24,11 +29,15 @@ const TwoFactorSetup: React.FC = () => {
 
   const verifyCode = async () => {
     try {
-      const credential = auth.PhoneAuthProvider.credential(
+      const credential = PhoneAuthProvider.credential(
         confirmation.verificationId,
         code,
       );
-      await auth().currentUser?.linkWithCredential(credential);
+      // Skipped when nobody is signed in, as before (pinned in the op-log test).
+      const currentUser = getAuth().currentUser;
+      if (currentUser) {
+        await linkWithCredential(currentUser, credential);
+      }
       setStep('done');
       Alert.alert(
         '2FA Enabled',

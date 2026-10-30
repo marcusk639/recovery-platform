@@ -17,9 +17,7 @@ import { SCROLL_CONTAINER } from "../../styles/theme";
 import ScreenHeader from "../../components/screen-header";
 import HelpIcon from "../../components/help-icon";
 import { SafeAreaView } from "react-native-safe-area-context";
-import auth from "@react-native-firebase/auth";
 import { AuthScreenNavigationProp } from "../../navigation/types";
-import { ReactNativeFirebase } from "@react-native-firebase/app";
 import { useAppSelector, useAppDispatch } from "../../state/store";
 
 interface Props {
