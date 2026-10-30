@@ -22,7 +22,7 @@ Also here:
 - `scripts/`: git hooks and repo tooling.
 - `docs/`: ecosystem and go-to-market docs.
 
-Vocabulary differs per product. For example, a "meeting" is a 12-step meeting in Homegroups but a house meeting in Regroup. See [docs/ecosystem/vocabulary.md](docs/ecosystem/vocabulary.md).
+Vocabulary differs per product. A "meeting" is always a 12-step meeting, in every product; a sober-living house meeting is a separate concept, called a "house meeting" (`regroup:house-meeting`). See [docs/ecosystem/vocabulary.md](docs/ecosystem/vocabulary.md).
 
 ## Prerequisites
 
