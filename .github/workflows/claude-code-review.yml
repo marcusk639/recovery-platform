@@ -46,7 +46,7 @@ jobs:
       # PR_REVIEW_SERENA=on (config: .pr-review/serena/).
       - name: Review
         id: review
-        uses: marcusk639/pr-review-kit/actions/review@c763f84f1b1770a5b399cc94354696a8f8fcefbc
+        uses: marcusk639/pr-review-kit/actions/review@6f5b57f6c800bae395d025f19a5b9414e682ec1c
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           serena: ${{ vars.PR_REVIEW_SERENA }}
@@ -56,7 +56,7 @@ jobs:
       # this repository). It refuses to run if a Serena process survived.
       - name: Publish
         if: always()
-        uses: marcusk639/pr-review-kit/actions/publish@c763f84f1b1770a5b399cc94354696a8f8fcefbc
+        uses: marcusk639/pr-review-kit/actions/publish@6f5b57f6c800bae395d025f19a5b9414e682ec1c
         with:
           trust_sha: ${{ steps.review.outputs.trust_sha }}
           action_outcome: ${{ steps.review.outputs.outcome }}
