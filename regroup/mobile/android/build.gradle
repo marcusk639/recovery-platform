@@ -17,8 +17,6 @@ buildscript {
         // The newest 2.2.x: matches Stripe RN 0.84's StripeSdk_kotlinVersion and RN's 2.2 line
         // (the template ships 2.2.0).
         kotlinVersion = "2.2.21"
-        // Read by react-native-geolocation-service until Task 6 removes it.
-        googlePlayServicesVersion = "21.0.1"
     }
     repositories {
         google()
@@ -34,3 +32,20 @@ buildscript {
 }
 
 apply plugin: "com.facebook.react.rootproject"
+
+// AGP 9 generates BuildConfig only for modules that opt in, and fails configuration when a module
+// declares buildConfigField without doing so. The React Native plugin opts in the libraries that
+// apply com.facebook.react; RNFirebase 17.5 (until Task 9) and other older libraries do not.
+// Opt in every library module that left the feature unset, as the 0.72 build did for all modules.
+// Registered when the library plugin is applied, before AGP finalizes that module's DSL. Remove
+// once CI shows no installed library needs it (decision record, Task 4).
+subprojects { sub ->
+    sub.pluginManager.withPlugin("com.android.library") {
+        sub.extensions.getByType(com.android.build.api.variant.LibraryAndroidComponentsExtension)
+            .finalizeDsl { ext ->
+                if (ext.buildFeatures.buildConfig == null) {
+                    ext.buildFeatures.buildConfig = true
+                }
+            }
+    }
+}
