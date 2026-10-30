@@ -259,6 +259,8 @@ jobs:
           node-version: "22"
       - name: Test
         run: node --test ".claude/pr-review/checks/test/*.test.mjs"
+      - name: Project check tests (pr-review-kit)
+        run: node --test ".pr-review/checks/test/*.test.mjs"
 
   maestro-smoke:
     name: Maestro Cloud — smoke tests (regroup Android)
