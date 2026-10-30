@@ -20,7 +20,7 @@
     "maestro:suite:full": ": \"${E2E_TEST_PASSWORD:?Set E2E_TEST_PASSWORD (see e2e/SECURITY-test-credentials.md)}\" && maestro test -e E2E_TEST_PASSWORD=\"$E2E_TEST_PASSWORD\" -e APP_ID=com.rats.dev maestro/flows/run-all.yaml",
     "maestro:suite:ios": ": \"${E2E_TEST_PASSWORD:?Set E2E_TEST_PASSWORD (see e2e/SECURITY-test-credentials.md)}\" && maestro test -e E2E_TEST_PASSWORD=\"$E2E_TEST_PASSWORD\" -e APP_ID=com.rats.dev maestro/flows/run-all.yaml",
     "pod:install": "cd ios && pod install && cd ..",
-    "postinstall": "patch-package && react-native setup-ios-permissions && pod-install",
+    "postinstall": "patch-package && pod-install",
     "seed-e2e": "node e2e/setup/seedTestData.js",
     "start": "react-native start",
     "start:android": "react-native start && adb shell am start -n com.regroup.app/com.rats.dev.MainActivity",
@@ -80,7 +80,7 @@
     "react-native-keyboard-manager": "^6.5.4-5",
     "react-native-launch-arguments": "4.1.1",
     "react-native-modal": "13.0.2",
-    "react-native-permissions": "^3.8.0",
+    "react-native-permissions": "5.6.3",
     "react-native-picker-select": "9.3.1",
     "react-native-popover-view": "6.1.0",
     "react-native-push-notification": "^8.1.1",
@@ -127,16 +127,6 @@
     "react-test-renderer": "19.3.0",
     "typescript": "^6.0.3"
   },
-  "reactNativePermissionsIOS": [
-    "Camera",
-    "LocationAccuracy",
-    "LocationAlways",
-    "LocationWhenInUse",
-    "Motion",
-    "Notifications",
-    "PhotoLibrary",
-    "PhotoLibraryAddOnly"
-  ],
   "overrides": {
     "react-native-picker-select": {
       "@react-native-picker/picker": "$@react-native-picker/picker"

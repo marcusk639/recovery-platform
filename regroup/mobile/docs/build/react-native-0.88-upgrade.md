@@ -556,6 +556,29 @@ Existing cases are kept, their mocks moved to the new packages. The picker mock 
 real `errorCodes` / `isErrorWithCode`, loaded by path, because the package root loads the
 TurboModule.
 
+### Task 7: react-native-permissions 5
+
+3.10 → 5.6.3. The JS API the app uses (the default export's `check` / `request`, `PERMISSIONS`,
+`RESULTS`) is unchanged; `util/__tests__/permissions.test.ts` (31 cases) already pins every call
+per platform and passes unchanged.
+
+- **iOS permission handlers:** v5 configures them in the Podfile instead of `package.json`, so
+  `reactNativePermissionsIOS` and the `react-native setup-ios-permissions` step of `postinstall` are
+  removed. `postinstall` is now `patch-package && pod-install`.
+- **Podfile lines for Task 13**, the same eight permissions:
+
+  ```ruby
+  def node_require(script)
+    # Resolve script with node to allow for hoisting
+    require Pod::Executable.execute_command('node', ['-p',
+      "require.resolve('#{script}', {paths: [process.argv[1]]})", __dir__]).strip
+  end
+  node_require('react-native/scripts/react_native_pods.rb')
+  node_require('react-native-permissions/scripts/setup.rb')
+  setup_permissions(['Camera', 'LocationAccuracy', 'LocationAlways', 'LocationWhenInUse',
+                     'Motion', 'Notifications', 'PhotoLibrary', 'PhotoLibraryAddOnly'])
+  ```
+
 ### Task 8: rats-checkbox in JS (brought forward into the Task 4 CI loop)
 
 `@react-native-community/checkbox` 0.5.20 is removed: its Android module does not configure on
