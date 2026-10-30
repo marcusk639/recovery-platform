@@ -332,7 +332,7 @@ export const TransactionRow: React.FC<TransactionRowProps> = ({
 
 1. **Automated checks run** on every PR, from the monorepo root (`recovery-platform/.github/workflows/`). Workflows under `homegroups/.github/` do not run.
    - `ci.yml`: homegroups functions typecheck and tests, Firestore and Storage rules tests, mobile and web tests, and a Maestro Android smoke test.
-   - `claude-code-review.yml`: the advisory Claude PR review shared by every product. It posts one summary comment and inline comments. Its homegroups knowledge lives in `.claude/pr-review/` (e.g. `contract-map-homegroups.md`).
+   - `claude-code-review.yml`: the advisory Claude PR review shared by every product. It posts one summary comment and inline comments. It runs pr-review-kit; its homegroups knowledge lives in `.pr-review/` (e.g. `contract-map-homegroups.md`).
    - `claude.yml`: answers `@claude` mentions on the PR.
    - `test-tamper.yml`: blocks deleted or weakened tests.
 2. **Code review** (1-2 reviewers)
