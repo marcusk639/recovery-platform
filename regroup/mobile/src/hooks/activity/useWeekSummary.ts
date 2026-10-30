@@ -59,7 +59,7 @@ export function useWeekSummary(
       .doc(summaryId)
       .onSnapshot(
         (snapshot: FirebaseFirestoreTypes.DocumentSnapshot) => {
-          if (snapshot.exists) {
+          if (snapshot.exists()) {
             const data = snapshot.data() as WeekSummary;
 
             // Convert Firestore timestamps to Date objects if needed.
@@ -119,7 +119,7 @@ export async function getWeekSummaryOnce(
       .doc(summaryId)
       .get();
 
-    if (snapshot.exists) {
+    if (snapshot.exists()) {
       const data = snapshot.data() as WeekSummary;
 
       // Convert Firestore timestamps. WeekSummary schema uses `lastUpdated`

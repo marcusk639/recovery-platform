@@ -31,7 +31,7 @@ export async function getFinancialRecord(
 ): Promise<FinancialRecord | null> {
   try {
     const doc = await recordsRef(houseId).doc(recordId).get();
-    return doc.exists
+    return doc.exists()
       ? ({ ...doc.data(), id: doc.id } as FinancialRecord)
       : null;
   } catch (error) {

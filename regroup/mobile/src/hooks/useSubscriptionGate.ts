@@ -43,7 +43,7 @@ export function usePaywallKillSwitch(): {
     queryFn: async () => {
       try {
         const doc = await paywallConfigRef.get();
-        if (!doc.exists) {
+        if (!doc.exists()) {
           return { enabled: true };
         }
         const raw = doc.data();

@@ -12,7 +12,7 @@ export const meetingCollection = firestore.collection('meetings');
 export async function searchForMeetings(
   searchInput: MeetingSearchInput,
 ): Promise<RatsMeeting[]> {
-  const response = await callHttpsFunction('findMeetings', searchInput);
+  const response = await callHttpsFunction<RatsMeeting[]>('findMeetings', searchInput);
   return response.data;
 }
 

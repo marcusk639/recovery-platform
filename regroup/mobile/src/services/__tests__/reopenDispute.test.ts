@@ -24,7 +24,7 @@ import { logException } from '../../util/logging';
 import { ActivityStatus } from '../../entities/ActivityModel';
 
 const seed = (data: Record<string, unknown> | undefined) =>
-  mockTx.get.mockResolvedValue({ exists: data !== undefined, data: () => data });
+  mockTx.get.mockResolvedValue({ exists: () => data !== undefined, data: () => data });
 
 beforeEach(() => {
   jest.clearAllMocks();

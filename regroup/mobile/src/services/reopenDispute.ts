@@ -42,7 +42,7 @@ export async function reopenDispute(activityId: string, reopenedBy: string): Pro
   try {
     await firestore.runTransaction(async (tx: any) => {
       const snap = await tx.get(activityRef);
-      if (!snap.exists) {
+      if (!snap.exists()) {
         throw new Error('Activity not found');
       }
       const activity = (snap.data() ?? {}) as Activity;

@@ -1,28 +1,33 @@
-import FirebaseFirestore from "@react-native-firebase/firestore";
-import { firestore } from "../../firebase-setup";
-import { Guest, GuestStatus } from "../entities/Guest";
-import { Guests } from "../types/index";
-import { logException } from "../util/logging";
-import * as crud from "./crud";
-import { find, keyBy } from "lodash";
-import { House } from "../entities/House";
-import { houseCollection, getHouse, removeGuestPrivileges } from "./house";
-import { findGuestBed } from "../util/house";
-import cloneDeep from "lodash/cloneDeep";
+// Shared across Task 10 migration groups: typed for both APIs until RNFirebase 26 (Task 10f).
+import type {
+  CollectionReference,
+  FirebaseFirestoreTypes as SharedRefTypes,
+} from '@react-native-firebase/firestore';
+import FirebaseFirestore from '@react-native-firebase/firestore';
+import { firestore } from '../../firebase-setup';
+import { Guest, GuestStatus } from '../entities/Guest';
+import { Guests } from '../types/index';
+import { logException } from '../util/logging';
+import * as crud from './crud';
+import { find, keyBy } from 'lodash';
+import { House } from '../entities/House';
+import { houseCollection, getHouse, removeGuestPrivileges } from './house';
+import { findGuestBed } from '../util/house';
+import cloneDeep from 'lodash/cloneDeep';
 
-export const guestCollection = firestore.collection("guests");
-export const archiveCollection = firestore.collection("guest-archive");
+export const guestCollection = firestore.collection('guests') as CollectionReference &
+  SharedRefTypes.CollectionReference;
+export const archiveCollection = firestore.collection('guest-archive') as CollectionReference &
+  SharedRefTypes.CollectionReference;
 
 /**
  * Custom error for optimistic locking conflicts
  * FIX #2: Race condition prevention
  */
 export class OptimisticLockError extends Error {
-  constructor(
-    message: string = "Guest was modified by another update. Please retry.",
-  ) {
+  constructor(message: string = 'Guest was modified by another update. Please retry.') {
     super(message);
-    this.name = "OptimisticLockError";
+    this.name = 'OptimisticLockError';
   }
 }
 
@@ -44,26 +49,16 @@ export async function getGuests(
   attribute: string,
   value: string | number | boolean | null,
 ): Promise<Guests> {
-  const result = await crud.getByAttribute<Guest>(
-    guestCollection,
-    attribute,
-    "==",
-    value,
-  );
-  return keyBy(result, "id") as Guests;
+  const result = await crud.getByAttribute<Guest>(guestCollection, attribute, '==', value);
+  return keyBy(result, 'id') as Guests;
 }
 
 export async function getGuestsBlocking(
   attribute: string,
   value: string | number | boolean | null,
 ): Promise<Guests> {
-  const result = await crud.getByAttribute<Guest>(
-    guestCollection,
-    attribute,
-    "==",
-    value,
-  );
-  return keyBy(result, "id") as Guests;
+  const result = await crud.getByAttribute<Guest>(guestCollection, attribute, '==', value);
+  return keyBy(result, 'id') as Guests;
 }
 
 export async function updateGuest(
@@ -78,7 +73,7 @@ export async function updateGuest(
   authoritativeFields: ReadonlyArray<keyof Guest> = [],
 ): Promise<Partial<Guest>> {
   if (!updatedGuest.id) {
-    throw new Error("Guest must have an id for update");
+    throw new Error('Guest must have an id for update');
   }
 
   const guestRef = guestCollection.doc(updatedGuest.id);
@@ -89,7 +84,7 @@ export async function updateGuest(
         // Read the current state from database
         const currentDoc = await transaction.get(guestRef);
 
-        if (!currentDoc.exists) {
+        if (!currentDoc.exists()) {
           throw new Error(`Guest ${updatedGuest.id} not found`);
         }
 
@@ -97,11 +92,7 @@ export async function updateGuest(
 
         // FIX #2: Merge stats instead of overwriting
         // This prevents one device's updates from overwriting another's
-        const mergedGuest = mergeGuestStats(
-          currentGuest,
-          updatedGuest,
-          authoritativeFields,
-        );
+        const mergedGuest = mergeGuestStats(currentGuest, updatedGuest, authoritativeFields);
 
         // Increment version for optimistic locking
         mergedGuest.version = (currentGuest.version || 0) + 1;
@@ -117,15 +108,13 @@ export async function updateGuest(
     } catch (error: any) {
       // If it's a Firestore contention error, retry
       if (
-        error.code === "aborted" ||
-        error.code === "failed-precondition" ||
-        error.message?.includes("contention")
+        error.code === 'aborted' ||
+        error.code === 'failed-precondition' ||
+        error.message?.includes('contention')
       ) {
         if (attempt < retryCount - 1) {
           // Exponential backoff
-          await new Promise((resolve) =>
-            setTimeout(resolve, Math.pow(2, attempt) * 100),
-          );
+          await new Promise((resolve) => setTimeout(resolve, Math.pow(2, attempt) * 100));
           continue;
         }
       }
@@ -166,11 +155,7 @@ function mergeGuestStats(
   // These represent quantities that only grow (debt owed, fees accrued, step
   // progress). Taking the max ensures a concurrent write that already recorded
   // a higher value is never overwritten with a stale lower value.
-  const numericMaxFields: Array<keyof Guest> = [
-    "rentOwed",
-    "choreFees",
-    "step",
-  ];
+  const numericMaxFields: Array<keyof Guest> = ['rentOwed', 'choreFees', 'step'];
   for (const field of numericMaxFields) {
     const current = currentGuest[field] as number | undefined;
     const update = (updateGuest as any)[field] as number | undefined;
@@ -180,14 +165,14 @@ function mergeGuestStats(
       // balance must be able to LOWER it — to record a cash payment, a
       // write-off, or a correction. Without this, Math.max silently discarded
       // the edit while the form still reported success.
-      if (update === undefined && typeof current === "number") {
+      if (update === undefined && typeof current === 'number') {
         (merged as any)[field] = current;
       }
       continue;
     }
-    if (typeof current === "number" && typeof update === "number") {
+    if (typeof current === 'number' && typeof update === 'number') {
       (merged as any)[field] = Math.max(current, update);
-    } else if (typeof current === "number" && update === undefined) {
+    } else if (typeof current === 'number' && update === undefined) {
       // Field not in the update — keep the DB value (already set above via spread).
       (merged as any)[field] = current;
     }
@@ -197,32 +182,21 @@ function mergeGuestStats(
   // ── Boolean flag fields: OR the two values ──────────────────────────────────
   // Once a flag like isAdmin or infoEntered is set to true it should not be
   // cleared by a concurrent write that happened to still have the old false.
-  const booleanOrFields: Array<keyof Guest> = [
-    "isAdmin",
-    "infoEntered",
-    "hasJob",
-  ];
+  const booleanOrFields: Array<keyof Guest> = ['isAdmin', 'infoEntered', 'hasJob'];
   for (const field of booleanOrFields) {
     const current = currentGuest[field] as boolean | undefined;
     const update = (updateGuest as any)[field] as boolean | undefined;
-    const currentBool = typeof current === "boolean" ? current : false;
-    const updateBool = typeof update === "boolean" ? update : false;
+    const currentBool = typeof current === 'boolean' ? current : false;
+    const updateBool = typeof update === 'boolean' ? update : false;
     (merged as any)[field] = currentBool || updateBool;
   }
 
   // ── Array fields: union to avoid losing entries ─────────────────────────────
   // The supporters list can be modified by concurrent operations (e.g. adding a
   // supporter on two different devices). Unioning ensures no entry is lost.
-  if (
-    Array.isArray(currentGuest.supporters) ||
-    Array.isArray(updateGuest.supporters)
-  ) {
-    const currentSupps = Array.isArray(currentGuest.supporters)
-      ? currentGuest.supporters
-      : [];
-    const updateSupps = Array.isArray(updateGuest.supporters)
-      ? updateGuest.supporters
-      : [];
+  if (Array.isArray(currentGuest.supporters) || Array.isArray(updateGuest.supporters)) {
+    const currentSupps = Array.isArray(currentGuest.supporters) ? currentGuest.supporters : [];
+    const updateSupps = Array.isArray(updateGuest.supporters) ? updateGuest.supporters : [];
     merged.supporters = Array.from(new Set([...currentSupps, ...updateSupps]));
   }
 
@@ -298,7 +272,7 @@ export function subscribeToGuest(
         errorHandler(error);
       }
       // Always log even if caller doesn't provide a handler
-      console.warn("[subscribeToGuest] Subscription error:", error.message);
+      console.warn('[subscribeToGuest] Subscription error:', error.message);
     },
   );
 }
@@ -323,14 +297,14 @@ export async function dischargeGuest(
 ): Promise<void> {
   try {
     await guestCollection.doc(guestId).update({
-      status: "discharged" as GuestStatus,
+      status: 'discharged' as GuestStatus,
       moveOutDate,
       ...(notes ? { dischargeNotes: notes } : {}),
       updatedAt: FirebaseFirestore.FieldValue.serverTimestamp(),
     });
   } catch (error) {
     logException(error);
-    throw new Error("Failed to discharge resident. Please try again.");
+    throw new Error('Failed to discharge resident. Please try again.');
   }
 
   // The guest doc no longer reflects an active resident, but Firestore
@@ -345,7 +319,7 @@ export async function dischargeGuest(
   } catch (error) {
     logException(error);
     throw new Error(
-      "Resident was discharged, but house access could not be revoked. Please contact support.",
+      'Resident was discharged, but house access could not be revoked. Please contact support.',
     );
   }
 }

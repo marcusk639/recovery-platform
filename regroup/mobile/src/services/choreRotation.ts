@@ -17,7 +17,7 @@ export async function getRotation(
 ): Promise<ChoreRotation | null> {
   try {
     const doc = await choreRotationsCollection.doc(houseId).get();
-    if (!doc.exists) return null;
+    if (!doc.exists()) return null;
     return doc.data() as ChoreRotation;
   } catch (error) {
     logException(error);
@@ -47,7 +47,7 @@ export async function setRotationOrder(
 export async function advanceRotation(houseId: string): Promise<void> {
   try {
     const doc = await choreRotationsCollection.doc(houseId).get();
-    if (!doc.exists) throw new Error('No rotation configured for this house');
+    if (!doc.exists()) throw new Error('No rotation configured for this house');
     const rotation = doc.data() as ChoreRotation;
     const nextIndex = (rotation.currentIndex + 1) % rotation.guestIds.length;
     await choreRotationsCollection.doc(houseId).update({

@@ -20,7 +20,7 @@ module.exports = {
   default: storage,
   instance,
   getStorage: () => instance,
-  connectStorageEmulator: () => {},
+  connectStorageEmulator: jest.fn(),
   ref: (_storage, path) => storageRef(path),
   putFile: (ref, file) => ref.putFile(file),
   getDownloadURL: (ref) => ref.getDownloadURL(),

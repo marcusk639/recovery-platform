@@ -38,7 +38,7 @@ module.exports = {
   instance,
   setCurrentUser,
   getAuth: () => instance,
-  connectAuthEmulator: () => {},
+  connectAuthEmulator: jest.fn(),
   onAuthStateChanged: (_auth, cb) => instance.onAuthStateChanged(cb),
   onIdTokenChanged: (_auth, cb) => instance.onIdTokenChanged(cb),
   signInWithEmailAndPassword: (_auth, email, password) =>

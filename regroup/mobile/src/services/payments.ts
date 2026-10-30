@@ -174,7 +174,7 @@ export async function recordRentPayment(
 
   return firestore.runTransaction(async (transaction) => {
     const snap = await transaction.get(docRef);
-    const existing = snap.exists ? (snap.data() as RentPayment) : undefined;
+    const existing = snap.exists() ? (snap.data() as RentPayment) : undefined;
 
     if (existing && existing.status !== "pending") {
       // The webhook already made this record authoritative — don't

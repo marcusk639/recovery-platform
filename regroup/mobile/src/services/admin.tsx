@@ -1,16 +1,19 @@
+// Shared across Task 10 migration groups: typed for both APIs until RNFirebase 26 (Task 10f).
+import type {
+  CollectionReference,
+  FirebaseFirestoreTypes as SharedRefTypes,
+} from '@react-native-firebase/firestore';
 import { firestore } from '../../firebase-setup';
 import * as crud from './crud';
 import Admin from '../entities/Admin';
 import { House } from '../entities/House';
 import { Admins } from '../types';
-import {
-  firebase,
-  FirebaseFirestoreTypes,
-} from '@react-native-firebase/firestore';
+import { firebase, FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import map from 'lodash/map';
 import { createInvitation } from './invitations';
 
-export const adminCollection = firestore.collection('admins');
+export const adminCollection = firestore.collection('admins') as CollectionReference &
+  SharedRefTypes.CollectionReference;
 export const adminArchive = firestore.collection('admin-archive');
 
 export function createAdminId(): string {
@@ -29,10 +32,7 @@ export function createId() {
   return crud.createId(adminCollection);
 }
 
-export async function updateAdmin(
-  adminId: string,
-  updates: Partial<Admin>,
-): Promise<Admin> {
+export async function updateAdmin(adminId: string, updates: Partial<Admin>): Promise<Admin> {
   await crud.update<Admin>(adminCollection, { id: adminId, ...updates });
   return crud.get<Admin>(adminCollection, adminId);
 }
@@ -64,7 +64,7 @@ export async function sendAdminInvite(
 
 export async function getHouseAdmins(house: House): Promise<Admin[]> {
   const admins = await getAdmins('houseIds', 'array-contains', house.id);
-  return map(admins, admin => admin);
+  return map(admins, (admin) => admin);
 }
 
 /**
@@ -77,15 +77,10 @@ export async function getAdmins(
   operator: FirebaseFirestoreTypes.WhereFilterOp,
   value: string,
 ): Promise<Admins> {
-  const result = await crud.getByAttribute<Admin>(
-    adminCollection,
-    attribute,
-    operator,
-    value,
-  );
+  const result = await crud.getByAttribute<Admin>(adminCollection, attribute, operator, value);
   const admins: Admins = {};
   if (result && result.length) {
-    result.forEach(admin => {
+    result.forEach((admin) => {
       const id = admin.id!;
       admins[id] = admin;
     });

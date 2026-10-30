@@ -40,7 +40,7 @@ export function useLiveHouseDisputes(houseId: string | undefined): LiveHouseDisp
       .doc(houseId)
       .onSnapshot(
         (snapshot: FirebaseFirestoreTypes.DocumentSnapshot) => {
-          const data = snapshot.exists ? snapshot.data() : undefined;
+          const data = snapshot.exists() ? snapshot.data() : undefined;
           setDisputes((data?.disputes ?? {}) as { [key: string]: Dispute });
           setError(null);
         },

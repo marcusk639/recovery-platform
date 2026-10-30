@@ -159,6 +159,13 @@ const BENEFITS = [
   { icon: "bolt", text: "Residents pay in minutes — no cash or checks needed" },
 ];
 
+type StripeAccountStatusResponse = {
+  status?: StripeAccountStatus;
+  chargesEnabled?: boolean;
+  payoutsEnabled?: boolean;
+  requirements?: { currentlyDue: string[]; pastDue: string[] };
+};
+
 const StripeSettingsScreen: React.FC<Props> = (_props) => {
   const { house } = useSelectedHouse();
 
@@ -186,7 +193,9 @@ const StripeSettingsScreen: React.FC<Props> = (_props) => {
     }
 
     try {
-      const response = await functions.httpsCallable("getStripeAccountStatus")({
+      const response = await functions.httpsCallable<{ houseId: string }, StripeAccountStatusResponse>(
+        "getStripeAccountStatus",
+      )({
         houseId: house.id,
       });
       const data = response.data;
@@ -218,7 +227,9 @@ const StripeSettingsScreen: React.FC<Props> = (_props) => {
     setConnecting(true);
     setError(null);
     try {
-      const response = await functions.httpsCallable("connectStripeAccount")({
+      const response = await functions.httpsCallable<{ houseId: string }, { url: string }>(
+        "connectStripeAccount",
+      )({
         houseId: house.id,
       });
       await Linking.openURL(response.data.url);

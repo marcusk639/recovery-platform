@@ -33,7 +33,7 @@ jest.mock('../../../firebase-setup', () => {
       // tests that exercise the increment path override this in beforeEach.
       runTransaction: jest.fn(async (fn: any) => {
         const stubTx = {
-          get: jest.fn(async () => ({ exists: false, data: () => undefined })),
+          get: jest.fn(async () => ({ exists: () => false, data: () => undefined })),
           set: jest.fn(),
         };
         return fn(stubTx);
@@ -159,7 +159,7 @@ describe('Activity Service', () => {
         get: jest.fn(async () => {
           const activity = mockActivities.find(a => a.id === id);
           return {
-            exists: !!activity,
+            exists: () => !!activity,
             id,
             data: () => activity,
           };
@@ -234,7 +234,7 @@ describe('Activity Service', () => {
         get: jest.fn(async () => {
           const summary = mockSummaries.get(id);
           return {
-            exists: !!summary,
+            exists: () => !!summary,
             id,
             data: () => summary,
           };

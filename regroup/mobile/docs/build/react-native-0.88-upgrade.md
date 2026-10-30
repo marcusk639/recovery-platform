@@ -601,6 +601,63 @@ AGP 9, and 0.6.0's codegen points at a missing directory. `RatsCheckBox` is reim
   now pin the fixed behaviour. The mock in `rats-checkbox.test.tsx` and the ambient module
   declaration are removed.
 
+### Task 9: RNFirebase 25.1.0 (both APIs) and the modular setup
+
+Split into two commits (a deviation from the plan's one): this one, which is unit-green, and the
+JS-SDK integration harness (Step 3), which follows. The original session's in-progress Task 9 work
+was never committed and was redone from the plan.
+
+- **Versions:** all seven RNFirebase packages at exactly 25.1.0; `firebase` 12.17.1 as a
+  devDependency (the version RNFirebase 26 pins); `@firebase/rules-unit-testing` stays 5.0.2.
+  25.1.0 nests its own `firebase` 12.15.0 under `@react-native-firebase/app`; it dedupes at 26.4.1.
+- **Lockfile dedupe:** incremental installs left stale hoisted `@firebase/app`,
+  `@firebase/app-compat` and `@firebase/storage-compat` copies that `firebase` 12.17.1 does not use,
+  so compat storage registered on the wrong app and the storage rules suite failed
+  (`getApp(...).storage is not a function`). `npm dedupe` fixed it, changing only `@firebase/*`
+  packages.
+- **The 15 bump errors, as measured:**
+  - **`.exists` → `.exists()` at all 15 sites**, the 6 `TS2774` reads and the 9 silent negations.
+    `grep -rnE '\.exists\b[^(]|\.exists$' src` now hits only `src/integration/`, which moves to the
+    JS SDK in Step 3. The Task 2 op-log tests pin the not-found branches and pass unchanged.
+  - **Callables typed generically:** `getStripeAccountStatus` (a `StripeAccountStatusResponse` with
+    the optional fields the screen already defaulted), `connectStripeAccount` (`{ url }`), and
+    `callHttpsFunction<ResponseData>` (`findMeetings` → `RatsMeeting[]`).
+  - **`users.tsx`:** `EmailAuthProvider` is the package's named export; the `@react-native-firebase/app`
+    default import is gone.
+  - **`firebase-setup.ts`:** the `Firebase*Types` re-exports are `export type`.
+- **`firebase-setup.ts` on the modular API:** `getAuth()`, `getMessaging()`, `getStorage()` and
+  `getFunctions()`; `initializeFirestore(getApp(), { ignoreUndefinedProperties: true })` with a
+  `logException(e, 'firebase-setup: initializeFirestore')` catch, then `getFirestore()`. Verified in
+  25.1.0's source: `settings()` stores `ignoreUndefinedProperties` before its first `await`, and both
+  calls return the same instance. Exports are intersections (`Firestore &
+  FirebaseFirestoreTypes.Module`, …); the ratchet stays at 125.
+- **`connectToEmulators({ host, ports, instances })`** calls `connect*Emulator` on the instances
+  `firebase-setup` built, after `initializeFirestore`. The fail-closed probes are unchanged.
+- **Shared refs:** `houseCollection`, `userCollection`, `adminCollection`, `guestCollection`,
+  `archiveCollection` (`CollectionReference & FirebaseFirestoreTypes.CollectionReference`) and
+  `paywallConfigRef` (the `DocumentReference` pair). Task 10 Step 0's inventory may add more.
+- **`crud.tsx` on the modular API**, signature unchanged (callers pass namespaced-typed refs until
+  their group moves; a single cast bridges the type families). Pinned by the new
+  `crud.oplog.test.ts`, written and passing on the namespaced code first.
+- **Dead code removed:** `services/notifications/handler.ts` and `service.ts` (no references;
+  `handler.ts` imported `FirebaseMessagingTypes`) and the orphan `src/integration/setup.ts`.
+- **Mocks:**
+  - The global `@react-native-firebase/firestore` mock in `jest.setup.js` now carries the modular
+    functions too, via `__mocks__/firebase-modular/namespaced-adapter.js`: `getDoc(doc(col, id))`
+    calls `col.doc(id).get()` on whatever namespaced-shaped ref a suite passed. Suites with
+    hand-rolled refs (for example `crud.test.ts`, 32 cases) keep their assertions unchanged as their
+    services move. It goes in Task 10f.
+  - The dual-shape mocks' `connect*Emulator` and `initializeFirestore` are now `jest.fn` spies.
+- **Tests:**
+  - **Snapshot mocks:** `exists: <value>` became `exists: () => <value>` in 9 suites and the two
+    shared mocks; cases and expected values are unchanged.
+  - **Config suites:** `firebase-setup.test.ts` and `firebase-emulator.test.ts` load the dual-shape
+    modular mocks and assert `connect*Emulator(instance, …)` in place of `useEmulator(…)`, with the
+    same hosts and ports and every case kept. New cases cover the Firestore settings, the
+    same-instance emulator wiring and its order, the logged initialization failure, and
+    `callHttpsFunction`.
+  - **Results:** unit 348 suites, 5428 passed, 2 todo; ratchet 125 / 125; rules 27 suites, 591 / 591.
+
 ## 7. Verification
 
 _Final results and the Mac checkpoint (Task 16)._

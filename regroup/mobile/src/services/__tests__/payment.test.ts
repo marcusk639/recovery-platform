@@ -136,8 +136,8 @@ describe("payment service", () => {
       const transactionGet = jest.fn(() =>
         Promise.resolve(
           existingData
-            ? { exists: true, data: () => existingData }
-            : { exists: false, data: () => null }
+            ? { exists: () => true, data: () => existingData }
+            : { exists: () => false, data: () => null }
         )
       );
       mockFirestore.runTransaction.mockImplementation(

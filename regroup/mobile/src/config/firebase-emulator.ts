@@ -3,15 +3,15 @@
  *
  * Fail-closed by design. Only firebase-setup.ts calls connectToEmulators, and
  * only when the bundle was built with E2E_VARIANT=emulator (src/config/env.ts),
- * so no other build ever reaches useEmulator. In an emulator build, a port that
+ * so no other build ever reaches the connect*Emulator calls. In an emulator build, a port that
  * does not answer rejects with E2EEmulatorUnreachable. Nothing catches it and
  * nothing falls back to a real project: index.js turns it into a fatal error.
  */
 import { Platform } from 'react-native';
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
-import storage from '@react-native-firebase/storage';
-import functions from '@react-native-firebase/functions';
+import { connectAuthEmulator, type Auth } from '@react-native-firebase/auth';
+import { connectFirestoreEmulator, type Firestore } from '@react-native-firebase/firestore';
+import { connectStorageEmulator, type FirebaseStorage } from '@react-native-firebase/storage';
+import { connectFunctionsEmulator, type Functions } from '@react-native-firebase/functions';
 import type { LaunchArguments as LaunchArgumentsApi } from 'react-native-launch-arguments';
 import { E2E_PROJECT_IDS, E2EVariant, isLiveStripeKey } from './env';
 
@@ -22,7 +22,15 @@ export type EmulatorPorts = {
   functions: number;
 };
 
-export type EmulatorOptions = { host: string; ports: EmulatorPorts };
+/** The SDK instances firebase-setup built; the emulators are wired onto these same objects. */
+export type EmulatorInstances = {
+  auth: Auth;
+  firestore: Firestore;
+  storage: FirebaseStorage;
+  functions: Functions;
+};
+
+export type EmulatorOptions = { host: string; ports: EmulatorPorts; instances: EmulatorInstances };
 
 /** How long each port has to answer the startup health probe. */
 export const PROBE_TIMEOUT_MS = 5000;
@@ -166,11 +174,15 @@ const probe = (url: string): Promise<boolean> =>
  * does while the probes run can reach a real project. If a probe fails the SDKs
  * stay pointed at the dead emulators and the returned promise rejects.
  */
-export const connectToEmulators = async ({ host, ports }: EmulatorOptions): Promise<void> => {
-  auth().useEmulator(`http://${host}:${ports.auth}`);
-  firestore().useEmulator(host, ports.firestore);
-  storage().useEmulator(host, ports.storage);
-  functions().useEmulator(host, ports.functions);
+export const connectToEmulators = async ({
+  host,
+  ports,
+  instances,
+}: EmulatorOptions): Promise<void> => {
+  connectAuthEmulator(instances.auth, `http://${host}:${ports.auth}`);
+  connectFirestoreEmulator(instances.firestore, host, ports.firestore);
+  connectStorageEmulator(instances.storage, host, ports.storage);
+  connectFunctionsEmulator(instances.functions, host, ports.functions);
 
   const services = Object.keys(ports) as (keyof EmulatorPorts)[];
   const results = await Promise.all(

@@ -86,7 +86,7 @@ export async function logActivity(
 async function residentUidOf(guestId: string): Promise<string | undefined> {
   try {
     const guest = await firestore.collection('guests').doc(guestId).get();
-    const uid = guest.exists ? guest.data()?.userId : undefined;
+    const uid = guest.exists() ? guest.data()?.userId : undefined;
     return typeof uid === 'string' && uid !== '' ? uid : undefined;
   } catch {
     return undefined;
@@ -274,7 +274,7 @@ export async function getWeekSummary(
     const docId = `${guestId}_${weekStart}`;
     const doc = await firestore.collection('week-summaries').doc(docId).get();
 
-    if (!doc.exists) {
+    if (!doc.exists()) {
       return null;
     }
 
@@ -305,7 +305,7 @@ export async function updateActivity(
     const activityRef = firestore.collection('activities').doc(activityId);
     const activity = await activityRef.get();
 
-    if (!activity.exists) {
+    if (!activity.exists()) {
       throw new Error('Activity not found');
     }
 
@@ -335,7 +335,7 @@ export async function deleteActivity(activityId: string): Promise<void> {
     const activityRef = firestore.collection('activities').doc(activityId);
     const activity = await activityRef.get();
 
-    if (!activity.exists) {
+    if (!activity.exists()) {
       throw new Error('Activity not found');
     }
     // Owner rule: a disputed activity is never deleted; its dispute ends by
@@ -447,7 +447,7 @@ export async function resolveDispute(
     // rules also refuse a resolution unless the dispute is still open).
     await firestore.runTransaction(async (tx: any) => {
       const activity = await tx.get(activityRef);
-      if (!activity.exists) {
+      if (!activity.exists()) {
         throw new Error('Activity not found');
       }
       const status = (activity.data() as Activity | undefined)?.status;

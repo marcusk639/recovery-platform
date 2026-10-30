@@ -30,5 +30,5 @@ module.exports = {
   instance,
   getFunctions: () => instance,
   httpsCallable: (_functions, name) => callable(name),
-  connectFunctionsEmulator: () => {},
+  connectFunctionsEmulator: jest.fn(),
 };

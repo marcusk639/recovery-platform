@@ -46,14 +46,14 @@ afterEach(() => jest.clearAllMocks());
 
 describe('getRotation', () => {
   it('returns null when the document does not exist', async () => {
-    _doc().get.mockResolvedValueOnce({ exists: false, data: () => null });
+    _doc().get.mockResolvedValueOnce({ exists: () => false, data: () => null });
     const result = await getRotation('house1');
     expect(result).toBeNull();
   });
 
   it('returns the rotation when the document exists', async () => {
     const rotation = makeRotation();
-    _doc().get.mockResolvedValueOnce({ exists: true, data: () => rotation });
+    _doc().get.mockResolvedValueOnce({ exists: () => true, data: () => rotation });
     const result = await getRotation('house1');
     expect(result).toEqual(rotation);
   });
@@ -89,7 +89,7 @@ describe('setRotationOrder', () => {
 describe('advanceRotation', () => {
   it('increments currentIndex by 1', async () => {
     const rotation = makeRotation({ currentIndex: 0 });
-    _doc().get.mockResolvedValueOnce({ exists: true, data: () => rotation });
+    _doc().get.mockResolvedValueOnce({ exists: () => true, data: () => rotation });
     await advanceRotation('house1');
     expect(_doc().update).toHaveBeenCalledWith(
       expect.objectContaining({ currentIndex: 1 }),
@@ -101,7 +101,7 @@ describe('advanceRotation', () => {
       currentIndex: 2,
       guestIds: ['g1', 'g2', 'g3'],
     });
-    _doc().get.mockResolvedValueOnce({ exists: true, data: () => rotation });
+    _doc().get.mockResolvedValueOnce({ exists: () => true, data: () => rotation });
     await advanceRotation('house1');
     expect(_doc().update).toHaveBeenCalledWith(
       expect.objectContaining({ currentIndex: 0 }),
@@ -109,7 +109,7 @@ describe('advanceRotation', () => {
   });
 
   it('throws when no rotation document exists', async () => {
-    _doc().get.mockResolvedValueOnce({ exists: false, data: () => null });
+    _doc().get.mockResolvedValueOnce({ exists: () => false, data: () => null });
     await expect(advanceRotation('house1')).rejects.toThrow(
       'Failed to advance chore rotation',
     );
@@ -119,20 +119,20 @@ describe('advanceRotation', () => {
 describe('getCurrentAssignee', () => {
   it('returns the guestId at currentIndex', async () => {
     const rotation = makeRotation({ currentIndex: 1 });
-    _doc().get.mockResolvedValueOnce({ exists: true, data: () => rotation });
+    _doc().get.mockResolvedValueOnce({ exists: () => true, data: () => rotation });
     const result = await getCurrentAssignee('house1');
     expect(result).toBe('guest2');
   });
 
   it('returns null when no rotation document exists', async () => {
-    _doc().get.mockResolvedValueOnce({ exists: false, data: () => null });
+    _doc().get.mockResolvedValueOnce({ exists: () => false, data: () => null });
     const result = await getCurrentAssignee('house1');
     expect(result).toBeNull();
   });
 
   it('returns null when guestIds is empty', async () => {
     const rotation = makeRotation({ guestIds: [], currentIndex: 0 });
-    _doc().get.mockResolvedValueOnce({ exists: true, data: () => rotation });
+    _doc().get.mockResolvedValueOnce({ exists: () => true, data: () => rotation });
     const result = await getCurrentAssignee('house1');
     expect(result).toBeNull();
   });

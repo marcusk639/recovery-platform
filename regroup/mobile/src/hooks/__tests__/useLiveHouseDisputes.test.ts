@@ -39,7 +39,7 @@ describe('useLiveHouseDisputes', () => {
   it('subscribes to house-disputes/{houseId} and returns its disputes', () => {
     const { result, unmount } = renderHook(() => useLiveHouseDisputes('h1'));
     expect(mockDoc).toHaveBeenCalledWith('house-disputes', 'h1');
-    act(() => onNext!({ exists: true, data: () => ({ disputes: { a1: { status: 'pending' } } }) }));
+    act(() => onNext!({ exists: () => true, data: () => ({ disputes: { a1: { status: 'pending' } } }) }));
     expect(result.current).toMatchObject({ disputes: { a1: { status: 'pending' } }, error: null });
     unmount();
     expect(mockUnsubscribe).toHaveBeenCalled();
@@ -52,7 +52,7 @@ describe('useLiveHouseDisputes', () => {
     });
     expect(mockDoc).not.toHaveBeenCalled();
     const { result } = renderHook(() => useLiveHouseDisputes('h1'));
-    act(() => onNext!({ exists: false, data: () => undefined }));
+    act(() => onNext!({ exists: () => false, data: () => undefined }));
     expect(result.current).toMatchObject({ disputes: {}, error: null });
     act(() => onError!(new Error('denied')));
     expect(result.current.disputes).toEqual({});

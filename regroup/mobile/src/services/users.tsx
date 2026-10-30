@@ -1,24 +1,29 @@
-import { FirebaseAuthTypes } from "@react-native-firebase/auth";
-import { cloneDeep } from "lodash";
-import { firestore, functions } from "../../firebase-setup";
-import firebase from "@react-native-firebase/app";
-import auth from "@react-native-firebase/auth";
-import storage from "@react-native-firebase/storage";
-import * as houseService from "./house";
-import { User } from "../entities/User";
-import * as crud from "./crud";
-import { getFirebaseUserFromUserCredential } from "../util/user";
-import { Guest } from "../entities/Guest";
-import Admin from "../entities/Admin";
-import { guestCollection } from "./guest";
-import { adminCollection } from "./admin";
-import { uploadUserAvatar } from "./storage";
-import { logException } from "../util/logging";
-import { finishOperatorSetupIfNeeded, loadRecoveredUser } from "./operator-setup";
-import { SimpleValidationService } from "./SimpleValidationService";
+// Shared across Task 10 migration groups: typed for both APIs until RNFirebase 26 (Task 10f).
+import type {
+  CollectionReference,
+  FirebaseFirestoreTypes as SharedRefTypes,
+} from '@react-native-firebase/firestore';
+import { FirebaseAuthTypes } from '@react-native-firebase/auth';
+import { cloneDeep } from 'lodash';
+import { firestore, functions } from '../../firebase-setup';
+import auth, { EmailAuthProvider } from '@react-native-firebase/auth';
+import storage from '@react-native-firebase/storage';
+import * as houseService from './house';
+import { User } from '../entities/User';
+import * as crud from './crud';
+import { getFirebaseUserFromUserCredential } from '../util/user';
+import { Guest } from '../entities/Guest';
+import Admin from '../entities/Admin';
+import { guestCollection } from './guest';
+import { adminCollection } from './admin';
+import { uploadUserAvatar } from './storage';
+import { logException } from '../util/logging';
+import { finishOperatorSetupIfNeeded, loadRecoveredUser } from './operator-setup';
+import { SimpleValidationService } from './SimpleValidationService';
 // import { EmailConfirmationPayload } from '../entities/Email'; // Email verification removed
 
-export const userCollection = firestore.collection("users");
+export const userCollection = firestore.collection('users') as CollectionReference &
+  SharedRefTypes.CollectionReference;
 
 /**
  * Throws a client-side rate-limit error shaped like a Firebase auth error
@@ -31,7 +36,7 @@ export const userCollection = firestore.collection("users");
  */
 function rateLimitError(message: string): Error {
   return Object.assign(new Error(message), {
-    code: "auth/too-many-requests",
+    code: 'auth/too-many-requests',
   });
 }
 
@@ -40,7 +45,7 @@ function rateLimitError(message: string): Error {
  * the existing mapped message rather than introducing a new one.
  */
 function invalidEmailError(message: string): Error {
-  return Object.assign(new Error(message), { code: "auth/invalid-email" });
+  return Object.assign(new Error(message), { code: 'auth/invalid-email' });
 }
 
 /**
@@ -50,7 +55,7 @@ function invalidEmailError(message: string): Error {
  */
 export async function createUserWithEmail(
   email: string,
-  password: string
+  password: string,
 ): Promise<FirebaseAuthTypes.UserCredential> {
   return auth().createUserWithEmailAndPassword(email, password);
 }
@@ -81,19 +86,19 @@ export async function anonymouslyLogin(): Promise<FirebaseAuthTypes.UserCredenti
  */
 export async function signInWithEmail(
   email: string,
-  password: string
+  password: string,
 ): Promise<FirebaseAuthTypes.UserCredential> {
   if (!SimpleValidationService.checkRateLimit(`signin_${email}`, 5, 60000)) {
-    throw rateLimitError("Too many sign-in attempts. Please try again later.");
+    throw rateLimitError('Too many sign-in attempts. Please try again later.');
   }
 
   const emailValidation = SimpleValidationService.validateEmail(email);
   if (!emailValidation.isValid) {
-    throw invalidEmailError(emailValidation.error || "Invalid email address.");
+    throw invalidEmailError(emailValidation.error || 'Invalid email address.');
   }
 
   if (!password) {
-    throw new Error("Password is required.");
+    throw new Error('Password is required.');
   }
 
   const sanitizedEmail = SimpleValidationService.sanitizeString(email);
@@ -102,12 +107,9 @@ export async function signInWithEmail(
 
 export async function convertAnonymousUser(
   email: string,
-  password: string
+  password: string,
 ): Promise<FirebaseAuthTypes.UserCredential> {
-  const credential = firebase.auth.EmailAuthProvider.credential(
-    email,
-    password
-  );
+  const credential = EmailAuthProvider.credential(email, password);
   await auth().currentUser?.linkWithCredential(credential);
   return signInWithEmail(email, password);
 }
@@ -122,14 +124,12 @@ export async function signOut() {
  */
 export async function sendForgotPasswordEmail(email: string): Promise<void> {
   if (!SimpleValidationService.checkRateLimit(`reset_${email}`, 3, 300000)) {
-    throw rateLimitError(
-      "Too many password reset attempts. Please try again later."
-    );
+    throw rateLimitError('Too many password reset attempts. Please try again later.');
   }
 
   const emailValidation = SimpleValidationService.validateEmail(email);
   if (!emailValidation.isValid) {
-    throw invalidEmailError(emailValidation.error || "Invalid email address.");
+    throw invalidEmailError(emailValidation.error || 'Invalid email address.');
   }
 
   const sanitizedEmail = SimpleValidationService.sanitizeString(email);
@@ -152,7 +152,7 @@ export async function getUser(userId: string): Promise<User> {
  * setup failed, `setupRecoveryFailed` tells OrgSetup to block the wizard.
  */
 export async function getUserFinishingSetup(
-  userId: string
+  userId: string,
 ): Promise<{ user: User; setupRecoveryFailed: boolean }> {
   const user = await getUser(userId);
   // A completed operator is checked for a house whose claim grant failed. A
@@ -161,15 +161,15 @@ export async function getUserFinishingSetup(
   const claims = user.orgSetupCompleted
     ? (
         await getAuthUser().catch((error) => {
-          logException(error, "operator claims check: token read failed");
+          logException(error, 'operator claims check: token read failed');
           return undefined;
         })
       )?.claims
     : undefined;
   const outcome = await finishOperatorSetupIfNeeded(user, claims);
-  if (outcome !== "completed") {
+  if (outcome !== 'completed') {
     // Only an incomplete setup has a wizard to block.
-    const setupRecoveryFailed = outcome === "failed" && !user.orgSetupCompleted;
+    const setupRecoveryFailed = outcome === 'failed' && !user.orgSetupCompleted;
     return { user, setupRecoveryFailed };
   }
   const recovered = await loadRecoveredUser(user, {
@@ -194,10 +194,7 @@ export async function createUser(_user: Partial<User>): Promise<User> {
   return newUser;
 }
 
-export async function updateUser(
-  _user: Partial<User>,
-  values: Partial<User>
-): Promise<User> {
+export async function updateUser(_user: Partial<User>, values: Partial<User>): Promise<User> {
   // Hardened 2026-07-06: lodash's extend() MUTATES its first argument.
   // Callers regularly pass the current Redux-state user straight through
   // (e.g. Notifications.tsx's togglePref), and Redux Toolkit/Immer deep-
@@ -213,7 +210,7 @@ export async function updateUser(
 }
 
 export async function getAuthUser(
-  forceRefresh: boolean = false
+  forceRefresh: boolean = false,
 ): Promise<FirebaseAuthTypes.IdTokenResult | undefined> {
   return auth().currentUser?.getIdTokenResult(forceRefresh);
 }
@@ -227,7 +224,7 @@ export async function requestAccountVerification(
   houseCode: string,
   firstName: string,
   lastName: string,
-  userId: string
+  userId: string,
 ): Promise<void> {
   return houseService.updateHouseAwaitingVerification(houseCode, {
     firstName,
@@ -238,7 +235,7 @@ export async function requestAccountVerification(
 
 export function convertFirebaseUserToRatsUser(
   user: Partial<User>,
-  userCredential: FirebaseAuthTypes.UserCredential
+  userCredential: FirebaseAuthTypes.UserCredential,
 ): User {
   if (user) {
     user.password = undefined;
@@ -247,30 +244,24 @@ export function convertFirebaseUserToRatsUser(
   const newUser: User = {
     ...user,
     uid: firebaseUser.uid,
-    email: firebaseUser.email || user.email || "",
+    email: firebaseUser.email || user.email || '',
     emailVerified: true, // Email verification disabled
-    phoneNumber: firebaseUser.phoneNumber || user.phoneNumber || "",
+    phoneNumber: firebaseUser.phoneNumber || user.phoneNumber || '',
     isAdmin: false,
     isManager: false,
     houseAccountVerified: false,
-    houseCode: "",
+    houseCode: '',
     isAnonymous: firebaseUser.isAnonymous,
   } as User;
   return newUser;
 }
 
-export const updateOptionalInfo = async (
-  user: User,
-  guest: Guest,
-  admin: Admin
-): Promise<void> => {
+export const updateOptionalInfo = async (user: User, guest: Guest, admin: Admin): Promise<void> => {
   const batch = firestore.batch();
   if (user.avatar) {
     try {
       const avatar = await uploadUserAvatar(user.avatar, user.uid);
-      user.avatar = await storage()
-        .ref(avatar.metadata.fullPath)
-        .getDownloadURL();
+      user.avatar = await storage().ref(avatar.metadata.fullPath).getDownloadURL();
     } catch (error) {
       logException(error);
     }
@@ -292,11 +283,7 @@ export const updateOptionalInfo = async (
   return batch.commit();
 };
 
-export const getHouseOwner = async (
-  houseId: string
-): Promise<User | undefined> => {
-  const res = await userCollection
-    .where("housesOwned", "array-contains", houseId)
-    .get();
+export const getHouseOwner = async (houseId: string): Promise<User | undefined> => {
+  const res = await userCollection.where('housesOwned', 'array-contains', houseId).get();
   return res.docs[0].data() as User;
 };

@@ -128,7 +128,7 @@ jest.mock('@react-navigation/bottom-tabs', () => ({
 // imports of the RNFirebase packages.
 const mockFirestoreDocRef = () => ({
   id: 'mock-doc-id',
-  get: jest.fn(() => Promise.resolve({ exists: false, data: () => null })),
+  get: jest.fn(() => Promise.resolve({ exists: () => false, data: () => null })),
   set: jest.fn(() => Promise.resolve()),
   update: jest.fn(() => Promise.resolve()),
   delete: jest.fn(() => Promise.resolve()),
@@ -174,7 +174,7 @@ jest.mock('@react-native-firebase/auth', () => {
 jest.mock('@react-native-firebase/firestore', () => {
   const docRef = {
     id: 'mock-doc-id',
-    get: jest.fn(() => Promise.resolve({ exists: false, data: () => null })),
+    get: jest.fn(() => Promise.resolve({ exists: () => false, data: () => null })),
     set: jest.fn(() => Promise.resolve()),
     update: jest.fn(() => Promise.resolve()),
     delete: jest.fn(() => Promise.resolve()),
@@ -220,7 +220,7 @@ jest.mock('@react-native-firebase/firestore', () => {
     })),
     runTransaction: jest.fn((fn) =>
       fn({
-        get: jest.fn(() => Promise.resolve({ exists: false, data: () => null })),
+        get: jest.fn(() => Promise.resolve({ exists: () => false, data: () => null })),
         set: jest.fn(),
         update: jest.fn(),
         delete: jest.fn(),
@@ -239,6 +239,10 @@ jest.mock('@react-native-firebase/firestore', () => {
   return {
     __esModule: true,
     default: fn,
+    ...require('./__mocks__/firebase-modular/namespaced-adapter'),
+    getFirestore: () => mockFirestore,
+    initializeFirestore: jest.fn(() => Promise.resolve(mockFirestore)),
+    connectFirestoreEmulator: jest.fn(),
     Timestamp,
     FieldValue,
     FieldPath,
