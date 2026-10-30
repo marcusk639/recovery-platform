@@ -43,7 +43,7 @@ src/
   config.ts         Environment configuration
   callable/
     auth.ts         Auth callables (login helpers, token refresh)
-    meetings.ts     Meeting management
+    meetings.ts     12-step meeting search and attendance check (findMeetings, userIsAtMeeting); not house meetings
     payments.ts     Payment initiation (house/guest payments)
     subscriptions.ts  Stripe subscriptions + Connect account management;
                       sendConfirmationEmail
