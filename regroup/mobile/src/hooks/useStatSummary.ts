@@ -123,9 +123,15 @@ export const useStatSummary = (stat: Stat): StatSummaryData => {
   }, [statSum, phaseRule]);
 
   // Get disputed activities count — sourced from 'activities' Firestore collection
-  const { count: disputedActivitiesCount, loading: disputesLoading } =
-    useActivityCount({
+  // One guest's disputes: without a guest no count runs (houseId alone would
+  // count every resident's disputes in the house).
+  const {
+    count: disputedActivitiesCount,
+    loading: disputesLoading,
+    error: disputesError,
+  } = useActivityCount({
       guestId: guest?.id,
+      houseId: guest?.id ? house?.id : undefined,
       startDate,
       endDate,
       type: STAT_TO_ACTIVITY_TYPE[stat],
@@ -167,7 +173,7 @@ export const useStatSummary = (stat: Stat): StatSummaryData => {
     house,
     user,
     isLoading: summaryLoading || historyLoading || disputesLoading,
-    isError: summaryError != null || historyError != null,
+    isError: summaryError != null || historyError != null || disputesError != null,
     statSum,
     phaseRule,
     percentage,

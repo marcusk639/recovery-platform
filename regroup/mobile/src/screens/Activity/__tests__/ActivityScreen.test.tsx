@@ -604,6 +604,23 @@ describe('ActivityScreen', () => {
     });
   });
 
+  describe('activities list', () => {
+    it("says activities couldn't be loaded instead of showing an empty feed, and retries on tap", () => {
+      const refetch = jest.fn();
+      mockUseActivities.mockReturnValue({
+        activities: [],
+        loading: false,
+        error: new Error('denied'),
+        refetch,
+      });
+
+      const { getByTestId } = renderScreen();
+      expect(getByTestId('activities-load-error').props.accessibilityRole).toBe('button');
+      fireEvent.press(getByTestId('activities-load-error'));
+      expect(refetch).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('help icon', () => {
     it('calls showPopover when the help icon is pressed', () => {
       const { getByTestId } = renderScreen();

@@ -36,6 +36,9 @@ export class RatsMeeting {
   day!: string;
   verified?: boolean = false;
   addedBy?: string;
+  // The house a user-added meeting belongs to. The meetings rules let only that
+  // house's guests and admins create, read or change it.
+  houseId?: string;
   daysAndTimes?: DaysAndTimes = new DaysAndTimes();
   forced?: boolean = false;
   online?: boolean;

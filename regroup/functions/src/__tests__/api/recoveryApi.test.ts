@@ -49,35 +49,38 @@ describe("fetchDirectoryMeetings", () => {
     );
   });
 
-  it("returns [] when the directory is not configured", async () => {
+  it("rejects when the directory is not configured", async () => {
     const fetchFn = jest.fn();
-    const result = await fetchDirectoryMeetings(input, caller, {
-      baseUrl: undefined,
-      apiKey: undefined,
-      fetchFn: fetchFn as unknown as typeof fetch,
-    });
-    expect(result).toEqual([]);
+    await expect(
+      fetchDirectoryMeetings(input, caller, {
+        baseUrl: undefined,
+        apiKey: undefined,
+        fetchFn: fetchFn as unknown as typeof fetch,
+      }),
+    ).rejects.toThrow("recovery-api directory not configured");
     expect(fetchFn).not.toHaveBeenCalled();
   });
 
-  it("returns [] on a non-OK response", async () => {
+  it("rejects on a non-OK response", async () => {
     const fetchFn = jest
       .fn()
       .mockResolvedValue({ ok: false, status: 500, json: async () => ({}) });
-    const result = await fetchDirectoryMeetings(input, caller, {
-      ...deps,
-      fetchFn: fetchFn as unknown as typeof fetch,
-    });
-    expect(result).toEqual([]);
+    await expect(
+      fetchDirectoryMeetings(input, caller, {
+        ...deps,
+        fetchFn: fetchFn as unknown as typeof fetch,
+      }),
+    ).rejects.toThrow("recovery-api findMeetings returned 500");
   });
 
-  it("returns [] when the call throws", async () => {
+  it("rejects when the call throws", async () => {
     const fetchFn = jest.fn().mockRejectedValue(new Error("network down"));
-    const result = await fetchDirectoryMeetings(input, caller, {
-      ...deps,
-      fetchFn: fetchFn as unknown as typeof fetch,
-    });
-    expect(result).toEqual([]);
+    await expect(
+      fetchDirectoryMeetings(input, caller, {
+        ...deps,
+        fetchFn: fetchFn as unknown as typeof fetch,
+      }),
+    ).rejects.toThrow("network down");
   });
 
   it("defaults missing meetings in the envelope to []", async () => {

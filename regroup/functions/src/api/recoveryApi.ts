@@ -1,4 +1,3 @@
-import { logger } from "firebase-functions";
 import { Location } from "../entities/GeocodeResponse";
 import { DirectoryMeeting } from "../entities/DirectoryMeeting";
 
@@ -41,9 +40,9 @@ export interface DirectoryClientDeps {
 }
 
 /**
- * Fetch directory meetings from recovery-api. Network/availability failures are
- * swallowed to an empty list (mirroring the prior fetch-then-fallback behavior of
- * the forked external sources) so discovery degrades rather than crashing.
+ * Fetch directory meetings from recovery-api. Rejects on missing config, a
+ * non-OK response or a network failure: an outage must not look like a search
+ * with no results. The `findMeetings` callable logs it and returns `internal`.
  */
 export async function fetchDirectoryMeetings(
   input: DirectorySearchInput,
@@ -55,40 +54,30 @@ export async function fetchDirectoryMeetings(
   const apiKey = deps.apiKey ?? process.env.RECOVERY_PLATFORM_API_KEY;
 
   if (!baseUrl || !apiKey) {
-    logger.error(
+    throw new Error(
       "recovery-api directory not configured (missing RECOVERY_API_BASE_URL or RECOVERY_PLATFORM_API_KEY)",
     );
-    return [];
   }
 
   const url = `${baseUrl.replace(/\/$/, "")}/findMeetings`;
-  try {
-    const response = await fetchFn(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Service-Key": apiKey,
-        "X-App-Id": REGROUP_APP_ID,
-        "X-User-Uid": caller.uid,
-        "X-User-Email": caller.email ?? "",
-      },
-      body: JSON.stringify({ data: input }),
-    });
+  const response = await fetchFn(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Service-Key": apiKey,
+      "X-App-Id": REGROUP_APP_ID,
+      "X-User-Uid": caller.uid,
+      "X-User-Email": caller.email ?? "",
+    },
+    body: JSON.stringify({ data: input }),
+  });
 
-    if (!response.ok) {
-      logger.error(
-        "recovery-api findMeetings returned non-OK",
-        response.status,
-      );
-      return [];
-    }
-
-    const json = (await response.json()) as {
-      result?: { meetings?: DirectoryMeeting[] };
-    };
-    return json.result?.meetings ?? [];
-  } catch (error) {
-    logger.error("recovery-api findMeetings call failed", error);
-    return [];
+  if (!response.ok) {
+    throw new Error(`recovery-api findMeetings returned ${response.status}`);
   }
+
+  const json = (await response.json()) as {
+    result?: { meetings?: DirectoryMeeting[] };
+  };
+  return json.result?.meetings ?? [];
 }

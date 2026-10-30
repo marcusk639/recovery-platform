@@ -46,6 +46,7 @@ export const useMeetingSearch = (props: UseMeetingSearchProps) => {
 
   const meetings: RatsMeeting[] = (searchMeetingsMutation.data as any) ?? [];
   const searchingForMeetings = searchMeetingsMutation.isPending;
+  const searchFailed = searchMeetingsMutation.isError;
   const checkingIn = checkIntoMeetingMutation.isPending;
   const checkInSuccessful = checkIntoMeetingMutation.isSuccess;
   const checkInError = (checkIntoMeetingMutation.error as Error)?.message ?? '';
@@ -63,12 +64,20 @@ export const useMeetingSearch = (props: UseMeetingSearchProps) => {
   // Today's date for dedup checks
   const todaysDate = useMemo(() => getTodaysDate(), []);
 
-  // Fetch today's meeting activities from Activity system for dedup checks
-  // Today's meeting activities; alreadyCheckedIn applies the counting rule
-  // (a pending dispute still counts, so it still blocks a duplicate).
-  const { activities: todaysMeetingActivities } = useActivities({
-    guestId: guest?.id,
-    houseId: house?.id,
+  // Today's meeting activities of the guest who would check in (the same
+  // guest performCheckIn uses); alreadyCheckedIn applies the counting rule (a
+  // pending dispute still counts, so it still blocks a duplicate). With no
+  // guest nothing is listed: a house-wide list would match other residents.
+  const checkInGuestId = (userAsGuest || guest)?.id;
+  const {
+    activities: todaysMeetingActivities,
+    loading: todaysMeetingsLoading,
+    idle: todaysMeetingsIdle,
+    error: todaysMeetingsError,
+    refetch: refetchTodaysMeetings,
+  } = useActivities({
+    guestId: checkInGuestId,
+    houseId: checkInGuestId ? house?.id : undefined,
     startDate: todaysDate,
     endDate: todaysDate,
     type: ActivityType.MEETING,
@@ -219,6 +228,32 @@ export const useMeetingSearch = (props: UseMeetingSearchProps) => {
   // Check into meeting
   const checkInto = useCallback(
     (meeting: RatsMeeting) => {
+      // Without today's check-ins the duplicate check can't run; check-ins
+      // feed phase compliance, so fail closed rather than risk a duplicate.
+      // An unloaded list would let a duplicate through: no guest (nothing
+      // listed) and still loading are refused too.
+      if (todaysMeetingsIdle) {
+        notify('Check-in Unavailable', 'No resident is selected to check in.', []);
+        return;
+      }
+      if (todaysMeetingsLoading) {
+        notify(
+          'Check-in Unavailable',
+          "Still checking today's check-ins. Please try again in a moment.",
+          [],
+        );
+        return;
+      }
+      if (todaysMeetingsError) {
+        // Re-subscribe, so the "try again" the message asks for can work.
+        refetchTodaysMeetings();
+        notify(
+          'Check-in Unavailable',
+          "Couldn't confirm you haven't already checked in today. Please try again.",
+          [],
+        );
+        return;
+      }
       const attended = guestAttendedMeeting(meeting);
       if (attended) {
         notify(
@@ -252,7 +287,17 @@ export const useMeetingSearch = (props: UseMeetingSearchProps) => {
 
       performCheckIn(meeting);
     },
-    [guestAttendedMeeting, isMeetingDay, isMeetingTime, performCheckIn, notify],
+    [
+      todaysMeetingsIdle,
+      todaysMeetingsLoading,
+      todaysMeetingsError,
+      refetchTodaysMeetings,
+      guestAttendedMeeting,
+      isMeetingDay,
+      isMeetingTime,
+      performCheckIn,
+      notify,
+    ],
   );
 
   // Force check-in (when not right day/time) - kept for backwards compatibility
@@ -281,6 +326,7 @@ export const useMeetingSearch = (props: UseMeetingSearchProps) => {
     filters,
     meetings,
     searchingForMeetings,
+    searchFailed,
     checkingIn,
     checkInSuccessful,
     checkInError,

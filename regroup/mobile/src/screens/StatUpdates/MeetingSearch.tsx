@@ -55,10 +55,12 @@ const MeetingSearch: React.FC<Props> = ({ navigation }) => {
     meetings,
     userAsGuest,
     searchingForMeetings,
+    searchFailed,
     checkingIn,
     checkInSuccessful,
     checkInError,
     setSearchTerm,
+    executeSearch,
     setSearchFilters,
     checkInto,
     noMeetingsFound,
@@ -110,7 +112,15 @@ const MeetingSearch: React.FC<Props> = ({ navigation }) => {
           justifyContent: 'center',
           zIndex: -50,
         }}>
-        {!searchingForMeetings && noMeetingsFound() && (
+        {!searchingForMeetings && searchFailed && (
+          <EmptyScreen
+            icon="error-outline"
+            buttonTitle="TRY AGAIN"
+            onPress={executeSearch}
+            message="Couldn't load meetings. Please try again."
+          />
+        )}
+        {!searchingForMeetings && !searchFailed && noMeetingsFound() && (
           <EmptyScreen
             icon="folder-open"
             buttonTitle="CHANGE FILTERS"

@@ -347,6 +347,22 @@ describe('useStatSummary', () => {
       );
     });
 
+    it("counts the guest's disputes within the selected house (the rules require houseId)", () => {
+      renderHook(() => useStatSummary('meeting'));
+      expect(mockUseActivityCount).toHaveBeenCalledWith(
+        expect.objectContaining({ guestId: mockGuest.id, houseId: mockHouse.id }),
+      );
+    });
+
+    it('counts nothing without a selected guest (not the whole house)', () => {
+      mockUseSelectedGuest.mockReturnValue({ guest: null, guestId: null, isLoading: false });
+
+      renderHook(() => useStatSummary('meeting'));
+      expect(mockUseActivityCount).toHaveBeenCalledWith(
+        expect.objectContaining({ guestId: undefined, houseId: undefined }),
+      );
+    });
+
     it('is loading while disputes are loading', () => {
       mockUseActivityCount.mockReturnValue({ count: 0, loading: true });
 
@@ -388,6 +404,19 @@ describe('useStatSummary', () => {
         summaries: [],
         loading: false,
         error: new Error('network timeout'),
+      });
+
+      const { result } = renderHook(() => useStatSummary('meeting'));
+      expect(result.current.isError).toBe(true);
+    });
+
+    // A failed dispute count (rules denial, missing index) must not read as
+    // "0 disputes".
+    it('returns isError=true when the dispute count reports an error', () => {
+      mockUseActivityCount.mockReturnValue({
+        count: 0,
+        loading: false,
+        error: new Error('failed-precondition'),
       });
 
       const { result } = renderHook(() => useStatSummary('meeting'));

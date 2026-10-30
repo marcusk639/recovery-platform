@@ -72,8 +72,8 @@ describe('guest week transfer (integration)', () => {
       WEEK_2_DATE,
     );
 
-    const week1 = await getActivities(TEST_GUEST, ...WEEK_1_RANGE);
-    const week2 = await getActivities(TEST_GUEST, ...WEEK_2_RANGE);
+    const week1 = await getActivities(TEST_GUEST, TEST_HOUSE, ...WEEK_1_RANGE);
+    const week2 = await getActivities(TEST_GUEST, TEST_HOUSE, ...WEEK_2_RANGE);
 
     expect(week1.map((a) => a.id)).toEqual([w1.id]);
     expect(week2.map((a) => a.id)).toEqual([w2.id]);
@@ -127,7 +127,7 @@ describe('guest week transfer (integration)', () => {
       WEEK_2_DATE,
     );
 
-    const week2 = await getActivities(TEST_GUEST, ...WEEK_2_RANGE);
+    const week2 = await getActivities(TEST_GUEST, TEST_HOUSE, ...WEEK_2_RANGE);
     expect(week2.map((a) => a.id)).toEqual([w2.id]);
     expect(week2[0].type).toBe(ActivityType.CHORE);
   });

@@ -680,6 +680,24 @@ describe('Disputes', () => {
       mockLiveError.mockReturnValue(null);
     });
 
+    it("says it couldn't load disputes when a disputed-activities query fails, and retries every list", () => {
+      const refetch = jest.fn();
+      (useActivities as jest.Mock).mockImplementation(({ status }: { status: string }) => ({
+        activities: [],
+        loading: false,
+        error: status === 'resolved' ? new Error('failed-precondition') : null,
+        refetch,
+      }));
+
+      const { getByTestId, queryByTestId } = renderScreen(buildStore());
+      expect(getByTestId('disputes-load-error')).toBeTruthy();
+      expect(queryByTestId('render-activities')).toBeNull();
+
+      fireEvent.press(getByTestId('disputes-load-error'));
+      expect(refetch).toHaveBeenCalledTimes(3);
+      expect(mockLiveRetry).toHaveBeenCalledTimes(1);
+    });
+
     it('passes disputesOnly=true to RenderActivities', () => {
       // The Disputes screen always passes disputesOnly={true}
       // We verify the mock RenderActivities was called by checking the screen renders

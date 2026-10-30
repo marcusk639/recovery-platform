@@ -35,6 +35,7 @@ import * as activityService from '../../../services/activity';
 import {
   activityKeys,
   useActivities,
+  useInfiniteActivities,
   useHouseActivities,
   useWeekSummary,
   useLogNewActivity,
@@ -117,12 +118,28 @@ describe('activityQueries', () => {
       expect(activityKeys.newActivities()).toEqual(['activities', 'new-model']);
     });
 
-    it('activityList embeds guestId, startDate, endDate and optional type', () => {
-      const key = activityKeys.activityList('g1', '2026-01-05', '2026-01-11', ActivityType.CHORE);
+    it('activityList embeds guestId, houseId, startDate, endDate and optional type', () => {
+      const key = activityKeys.activityList(
+        'g1',
+        'h1',
+        '2026-01-05',
+        '2026-01-11',
+        ActivityType.CHORE,
+      );
       expect(key[0]).toBe('activities');
       const last = key[key.length - 1] as any;
       expect(last.guestId).toBe('g1');
+      expect(last.houseId).toBe('h1');
       expect(last.type).toBe(ActivityType.CHORE);
+    });
+
+    it('gives the same guest in two houses two cache entries', () => {
+      const inA = activityKeys.activityList('g1', 'house-a', '2026-01-05', '2026-01-11');
+      const inB = activityKeys.activityList('g1', 'house-b', '2026-01-05', '2026-01-11');
+      expect(inA).not.toEqual(inB);
+      expect(activityKeys.activityInfiniteList('g1', 'house-a', 's', 'e')).not.toEqual(
+        activityKeys.activityInfiniteList('g1', 'house-b', 's', 'e'),
+      );
     });
 
     it('houseActivities embeds the houseId', () => {
@@ -146,7 +163,7 @@ describe('activityQueries', () => {
       (activityService.getActivities as jest.Mock).mockResolvedValue(activities);
 
       const { result } = renderHook(
-        () => useActivities('guest1', START_DATE, END_DATE),
+        () => useActivities('guest1', 'house1', START_DATE, END_DATE),
         { wrapper },
       );
 
@@ -155,6 +172,7 @@ describe('activityQueries', () => {
       expect(result.current.data).toEqual(activities);
       expect(activityService.getActivities).toHaveBeenCalledWith(
         'guest1',
+        'house1',
         START_DATE,
         END_DATE,
         undefined,
@@ -165,7 +183,7 @@ describe('activityQueries', () => {
       (activityService.getActivities as jest.Mock).mockResolvedValue([]);
 
       const { result } = renderHook(
-        () => useActivities('guest1', START_DATE, END_DATE, ActivityType.MEETING),
+        () => useActivities('guest1', 'house1', START_DATE, END_DATE, ActivityType.MEETING),
         { wrapper },
       );
 
@@ -173,6 +191,7 @@ describe('activityQueries', () => {
 
       expect(activityService.getActivities).toHaveBeenCalledWith(
         'guest1',
+        'house1',
         START_DATE,
         END_DATE,
         ActivityType.MEETING,
@@ -181,7 +200,7 @@ describe('activityQueries', () => {
 
     it('does not fetch when enabled is false', () => {
       const { result } = renderHook(
-        () => useActivities('guest1', START_DATE, END_DATE, undefined, false),
+        () => useActivities('guest1', 'house1', START_DATE, END_DATE, undefined, false),
         { wrapper },
       );
 
@@ -189,9 +208,18 @@ describe('activityQueries', () => {
       expect(activityService.getActivities).not.toHaveBeenCalled();
     });
 
+    it('does not fetch without a houseId (the rules deny a list query not scoped to a house)', () => {
+      const { result } = renderHook(() => useActivities('guest1', '', START_DATE, END_DATE), {
+        wrapper,
+      });
+
+      expect(result.current.isLoading).toBe(false);
+      expect(activityService.getActivities).not.toHaveBeenCalled();
+    });
+
     it('does not fetch when guestId is empty', () => {
       const { result } = renderHook(
-        () => useActivities('', START_DATE, END_DATE),
+        () => useActivities('', 'house1', START_DATE, END_DATE),
         { wrapper },
       );
 
@@ -204,7 +232,7 @@ describe('activityQueries', () => {
       (activityService.getActivities as jest.Mock).mockRejectedValue(error);
 
       const { result } = renderHook(
-        () => useActivities('guest1', START_DATE, END_DATE),
+        () => useActivities('guest1', 'house1', START_DATE, END_DATE),
         { wrapper },
       );
 
@@ -218,7 +246,7 @@ describe('activityQueries', () => {
       (activityService.getActivities as jest.Mock).mockResolvedValue(activities);
 
       const { result } = renderHook(
-        () => useActivities('guest1', START_DATE, END_DATE),
+        () => useActivities('guest1', 'house1', START_DATE, END_DATE),
         { wrapper },
       );
 
@@ -227,6 +255,7 @@ describe('activityQueries', () => {
       const cached = queryClient.getQueryData(
         activityKeys.activityList(
           'guest1',
+          'house1',
           START_DATE.toISOString(),
           END_DATE.toISOString(),
         ),
@@ -236,6 +265,42 @@ describe('activityQueries', () => {
   });
 
   // ── useHouseActivities ──────────────────────────────────────────────────────
+
+  describe('useInfiniteActivities', () => {
+    it("fetches the first page of the guest's activities in the house", async () => {
+      (activityService.getActivitiesPage as jest.Mock).mockResolvedValue({
+        activities: [],
+        nextCursor: null,
+        hasMore: false,
+      });
+
+      const { result } = renderHook(
+        () => useInfiniteActivities('guest1', 'house1', START_DATE, END_DATE),
+        { wrapper },
+      );
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(activityService.getActivitiesPage).toHaveBeenCalledWith(
+        'guest1',
+        'house1',
+        START_DATE,
+        END_DATE,
+        20,
+        undefined,
+        undefined,
+      );
+    });
+
+    it('does not fetch without a houseId', () => {
+      const { result } = renderHook(
+        () => useInfiniteActivities('guest1', '', START_DATE, END_DATE),
+        { wrapper },
+      );
+
+      expect(result.current.isLoading).toBe(false);
+      expect(activityService.getActivitiesPage).not.toHaveBeenCalled();
+    });
+  });
 
   describe('useHouseActivities', () => {
     it('fetches house activities on success', async () => {
