@@ -32,8 +32,14 @@ export function useCheckIntoMeeting() {
       houseId,
       userId,
     }: CheckInInput) => {
+      // The attendance activity is what a check-in records (it feeds phase
+      // compliance), so it needs a resident and a house, and a failed write
+      // must fail the check-in instead of passing as checked in.
+      if (!guestId || !houseId) {
+        throw new Error('No resident is selected to check in.');
+      }
       const result = await meetingService.userIsAtMeeting(checkInInput);
-      logActivity(
+      await logActivity(
         guestId,
         houseId,
         ActivityType.MEETING,
@@ -47,7 +53,13 @@ export function useCheckIntoMeeting() {
             : `${meeting.city || ''}, ${meeting.state || ''}`,
         ),
         userId,
-      ).catch(err => logException(err));
+      ).catch(err => {
+        logException(err, 'useCheckIntoMeeting: logActivity');
+        throw Object.assign(
+          new Error("Your attendance couldn't be saved. Please check in again."),
+          { cause: err },
+        );
+      });
       return result;
     },
   });

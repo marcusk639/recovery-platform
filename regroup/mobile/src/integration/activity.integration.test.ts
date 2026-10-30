@@ -65,7 +65,12 @@ describe('activity service (integration)', () => {
       expect(activity.houseId).toBe(TEST_HOUSE);
 
       // Verify it is readable back via getActivities
-      const activities = await getActivities(TEST_GUEST, TEST_WEEK_START, TEST_WEEK_END);
+      const activities = await getActivities(
+        TEST_GUEST,
+        TEST_HOUSE,
+        TEST_WEEK_START,
+        TEST_WEEK_END,
+      );
       const found = activities.find(a => a.id === activity.id);
       expect(found).toBeDefined();
       expect(found?.type).toBe(ActivityType.CHORE);
@@ -85,7 +90,12 @@ describe('activity service (integration)', () => {
       expect(activity.status).toBe(ActivityStatus.ACTIVE);
       expect(activity.type).toBe(ActivityType.MEETING);
 
-      const activities = await getActivities(TEST_GUEST, TEST_WEEK_START, TEST_WEEK_END);
+      const activities = await getActivities(
+        TEST_GUEST,
+        TEST_HOUSE,
+        TEST_WEEK_START,
+        TEST_WEEK_END,
+      );
       const found = activities.find(a => a.id === activity.id);
       expect(found).toBeDefined();
       expect(found?.type).toBe(ActivityType.MEETING);
@@ -124,7 +134,12 @@ describe('activity service (integration)', () => {
       createdActivityIds.push(activity.id);
 
       // Confirm it's in the active list before dispute
-      const beforeDispute = await getActivities(TEST_GUEST, TEST_WEEK_START, TEST_WEEK_END);
+      const beforeDispute = await getActivities(
+        TEST_GUEST,
+        TEST_HOUSE,
+        TEST_WEEK_START,
+        TEST_WEEK_END,
+      );
       const foundBefore = beforeDispute.find(a => a.id === activity.id);
       expect(foundBefore).toBeDefined();
 
@@ -132,7 +147,12 @@ describe('activity service (integration)', () => {
 
       // Owner's dispute model: a pending dispute keeps counting, so it stays
       // listed until an admin approves it (incomplete) or it is deleted.
-      const afterDispute = await getActivities(TEST_GUEST, TEST_WEEK_START, TEST_WEEK_END);
+      const afterDispute = await getActivities(
+        TEST_GUEST,
+        TEST_HOUSE,
+        TEST_WEEK_START,
+        TEST_WEEK_END,
+      );
       const foundAfter = afterDispute.find(a => a.id === activity.id);
       expect(foundAfter?.status).toBe(ActivityStatus.DISPUTED);
     });

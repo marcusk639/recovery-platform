@@ -43,6 +43,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppSelector } from "../../state/store";
 import { useSelectedHouse } from "../../hooks/useSelectedHouse";
 import { useSelectedGuest } from "../../hooks/useSelectedGuest";
+import { logException } from "../../util/logging";
 import {
   useAddMeeting,
   useCheckIntoMeeting,
@@ -67,7 +68,7 @@ const NewMeeting: React.FC<Props> = ({ navigation }) => {
 
   const addMeetingMutation = useAddMeeting();
   const checkIntoMeetingMutation = useCheckIntoMeeting();
-  const { house } = useSelectedHouse();
+  const { house, houseId, isLoading: houseLoading } = useSelectedHouse();
   const user = useAppSelector((state) => state.user.user);
   const { guest } = useSelectedGuest();
   const userAsGuest = useAppSelector((state) => state.guests.userAsGuest);
@@ -109,17 +110,48 @@ const NewMeeting: React.FC<Props> = ({ navigation }) => {
     [checkIntoMeetingMutation, userAsGuest, guest, house, user]
   );
 
+  // A meeting belongs to a house (the rules require its houseId). Reaching
+  // this screen with none selected (e.g. the meetings/new deep link) is a
+  // navigation or state bug: say so up front instead of after the form.
+  // A selected house that failed to load is a different problem from none
+  // being selected, and is reported as such.
+  const noHouse = !houseLoading && !house;
+  const houseLoadFailed = noHouse && !!houseId;
+  useEffect(() => {
+    if (noHouse) {
+      logException(
+        new Error(
+          houseLoadFailed
+            ? "NewMeeting: the selected house failed to load"
+            : "NewMeeting opened without a selected house"
+        ),
+        "NewMeeting"
+      );
+    }
+  }, [noHouse, houseLoadFailed]);
+
   return (
     <View style={{ flex: 1, backgroundColor: color.light_grey }}>
       <ScreenHeader icon={<HelpIcon />} header="Create Meeting" />
-      <NewMeetingForm
-        navigation={navigation}
-        house={house!}
-        user={user!}
-        addMeeting={handleAddMeeting}
-        checkIntoMeeting={handleCheckIntoMeeting}
-        meeting={undefined as any}
-      />
+      {house ? (
+        <NewMeetingForm
+          navigation={navigation}
+          house={house}
+          user={user!}
+          addMeeting={handleAddMeeting}
+          checkIntoMeeting={handleCheckIntoMeeting}
+          meeting={undefined as any}
+        />
+      ) : noHouse ? (
+        <RatsText
+          style={{ margin: 16 }}
+          text={
+            houseLoadFailed
+              ? "Couldn't load your house. Go back and try again."
+              : "Select a house before adding a meeting."
+          }
+        />
+      ) : null}
     </View>
   );
 };
@@ -357,6 +389,52 @@ const initialValues: any = {
   daysAndTimes: { monday: "17:00" },
 };
 
+/**
+ * Creates the meeting in the selected house and, if asked, checks into it.
+ * A failed add and a failed check-in after a successful add are told apart:
+ * retrying after the latter would create a duplicate meeting.
+ */
+export async function submitNewMeeting(
+  values: RatsMeeting & { checkIn: boolean },
+  { addMeeting, checkIntoMeeting, user, house, navigation }: FormProps,
+): Promise<void> {
+  const newMeeting: any = cloneDeep(values);
+  if (newMeeting.checkIn !== undefined) {
+    delete newMeeting.checkIn;
+  }
+  // The meetings rules accept a create only for a house the user belongs to;
+  // without one the write would fail with a bare permission error.
+  if (!house?.id) {
+    Alert.alert("Select a house before adding a meeting.");
+    return;
+  }
+  newMeeting.addedBy = `${user.firstName} ${user.lastName}`;
+  newMeeting.houseId = house.id;
+  let added = false;
+  try {
+    await addMeeting(newMeeting as RatsMeeting, user.isGuest);
+    added = true;
+    if (values.checkIn) {
+      const checkInInput = getCheckinInput(newMeeting, null);
+      if (checkInInput) {
+        await checkIntoMeeting(checkInInput, newMeeting);
+      }
+    }
+    navigation.navigate(Routes.MeetingSearch);
+  } catch (error) {
+    logException(
+      error,
+      added ? "NewMeeting: check-in after add failed" : "NewMeeting: addMeeting failed"
+    );
+    if (added) {
+      Alert.alert("Meeting added, but check-in failed. Check in from the meeting list.");
+      navigation.navigate(Routes.MeetingSearch);
+    } else {
+      Alert.alert("Failed to add meeting.");
+    }
+  }
+}
+
 const NewMeetingForm = withFormik<
   FormProps,
   RatsMeeting & { checkIn: boolean }
@@ -371,26 +449,7 @@ const NewMeetingForm = withFormik<
           state: props.house?.state,
           zip: props.house?.zip,
         },
-  handleSubmit: async (values, formikBag) => {
-    const { addMeeting, checkIntoMeeting, user, navigation } = formikBag.props;
-    const newMeeting: any = cloneDeep(values);
-    if (newMeeting.checkIn !== undefined) {
-      delete newMeeting.checkIn;
-    }
-    newMeeting.addedBy = `${user.firstName} ${user.lastName}`;
-    try {
-      await addMeeting(newMeeting as RatsMeeting, user.isGuest);
-      if (values.checkIn) {
-        const checkInInput = getCheckinInput(newMeeting, null);
-        if (checkInInput) {
-          await checkIntoMeeting(checkInInput, newMeeting);
-        }
-      }
-      navigation.navigate(Routes.MeetingSearch);
-    } catch (error) {
-      Alert.alert("Failed to add meeting.");
-    }
-  },
+  handleSubmit: (values, formikBag) => submitNewMeeting(values, formikBag.props),
   validationSchema: null,
   //@ts-ignore
 })(NewMeetingFormView);

@@ -50,6 +50,8 @@ const Disputes: React.FC = () => {
   const {
     activities: disputedActivitySystemActivities,
     loading: activitiesLoading,
+    error: disputedError,
+    refetch: refetchDisputed,
   } = useActivities({
     houseId: house?.id,
     startDate: previousWeekStart, // Start from previous week
@@ -59,7 +61,11 @@ const Disputes: React.FC = () => {
   });
   // ...and the decided ones in the same window, so an admin can undo a
   // decision (UNDO DECISION reopens it; APPROVE / REJECT then show again).
-  const { activities: decidedActivities } = useActivities({
+  const {
+    activities: decidedActivities,
+    error: decidedError,
+    refetch: refetchDecided,
+  } = useActivities({
     houseId: house?.id,
     startDate: previousWeekStart,
     endDate,
@@ -69,7 +75,11 @@ const Disputes: React.FC = () => {
 
   // ...and older builds' "delete" resolutions (deleted, resolved at
   // loggedAt), which an admin can undo too.
-  const { activities: deletedActivities } = useActivities({
+  const {
+    activities: deletedActivities,
+    error: deletedError,
+    refetch: refetchDeleted,
+  } = useActivities({
     houseId: house?.id,
     startDate: previousWeekStart,
     endDate,
@@ -89,6 +99,16 @@ const Disputes: React.FC = () => {
   // The server-owned live list (house-disputes/{houseId}); house.disputes is
   // an untrusted legacy mirror.
   const { disputes, error: disputesError, retry: retryDisputes } = useLiveHouseDisputes(house?.id);
+
+  // Any list that failed to load: an incomplete dispute list must not pass for
+  // a complete one.
+  const loadError = disputesError ?? disputedError ?? decidedError ?? deletedError;
+  const retryLoad = () => {
+    retryDisputes();
+    refetchDisputed();
+    refetchDecided();
+    refetchDeleted();
+  };
 
   // All hooks must be called unconditionally (Rules of Hooks).
   // Pass safe defaults when required state is missing.
@@ -186,9 +206,12 @@ const Disputes: React.FC = () => {
         onFilter={openFilters}
         placeholder="Search disputes..."
       />
-      {disputesError ? (
+      {loadError ? (
         // Not an empty list: "no disputes" would be wrong when we could not read them.
-        <TouchableOpacity testID="disputes-load-error" accessibilityRole="button" onPress={retryDisputes}>
+        <TouchableOpacity
+          testID="disputes-load-error"
+          accessibilityRole="button"
+          onPress={retryLoad}>
           <Text style={styles.loadError}>Couldn't load disputes. Tap to try again.</Text>
         </TouchableOpacity>
       ) : (
