@@ -1,3 +1,10 @@
+# Repo-aware, advisory PR review (marcusk639/pr-review-kit). Comments only:
+# never approves, never blocks, never a required check. The engine, the
+# model's sandbox and publishing live in the kit, pinned below by full commit
+# SHA (the same in both kit `uses:` lines; move both together and run the
+# kit's `bin/pr-review.mjs validate`). This repository's project (config,
+# knowledge, contract checks, Serena config) is .pr-review/, read from each
+# PR's base commit. How it works: docs/ci/pr-review.md.
 name: PR Review
 
 on:
@@ -27,330 +34,32 @@ jobs:
       issues: read
       id-token: write
     steps:
-      # GITHUB_ENV carries these to every later step. OUT and STATE_FILE are set
-      # here, not in a job-level env: the runner context is step-level only.
-      # STATE_FILE is the trusted copy of state.json, outside the model's
-      # --add-dir. RUN_STARTED_AT is taken before anything the model can
-      # trigger: the inline guard treats only github-actions[bot] review
-      # comments created from here on (and first posted on this head) as this run's.
-      - name: Run start
-        run: |
-          {
-            echo "RUN_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            echo "OUT=$RUNNER_TEMP/pr-review"
-            echo "STATE_FILE=$RUNNER_TEMP/prstate-snapshot/state.json"
-          } >> "$GITHUB_ENV"
-
       - name: Checkout PR head
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
 
-      # The PR head could ship its own .review-base/; never reuse it.
-      - name: Clear base checkout path
-        run: rm -rf .review-base
-
-      - name: Checkout base (trusted scripts)
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.base.sha }}
-          path: .review-base
-          fetch-depth: 1
-          persist-credentials: false
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      - name: Facts
-        id: facts
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          PR: ${{ github.event.pull_request.number }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          if [ -f .review-base/.claude/pr-review/checks/facts.mjs ]; then
-            node .review-base/.claude/pr-review/checks/facts.mjs
-          else
-            # No scripts on base means no publish either: skip the model run.
-            echo "pr-review scripts not on base yet; review skipped"
-            echo "tier=none" >> "$GITHUB_OUTPUT"
-            echo "max_turns=0" >> "$GITHUB_OUTPUT"
-          fi
-
-      # The model reads REVIEW.md and the knowledge files from the working tree,
-      # so replace the PR head's copy with the base branch's: a PR must not edit
-      # the rules it is judged by. The model reviews such an edit from OUT/pr.diff;
-      # no PR copy is kept (the action's own config restore would replace it).
-      - name: Restore reviewer knowledge from base
-        run: |
-          rm -rf .claude-pr
-          if [ -d .review-base/.claude/pr-review ]; then
-            if [ -L .claude ]; then rm .claude; fi
-            mkdir -p .claude
-            rm -rf .claude/pr-review
-            cp -R .review-base/.claude/pr-review .claude/pr-review
-          fi
-
-      # Opt-in code navigation (spec 2026-10-26 §3; repo variable PR_REVIEW_SERENA=on).
-      # Serena and its language servers read PR-controlled files, so they run as
-      # serena-runner with an empty environment, no network, and a copy of the
-      # tracked source: never the workspace .git/ (the action's app token),
-      # RUNNER_TEMP (OUT, the state snapshot, runner command files) or the PR's own
-      # .serena/. Config comes from the base branch. Outputs are written only after
-      # the isolation probes pass; on any failure the review runs without Serena.
-      # astral-sh/setup-uv v10.3.2, pinned to its commit.
-      - name: Set up uv for Serena
-        if: steps.facts.outputs.tier != 'none' && vars.PR_REVIEW_SERENA == 'on'
-        continue-on-error: true
-        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
-        # Nothing from the PR head may steer the install: setup-uv otherwise reads the uv version
-        # and cache dir from uv.toml/pyproject.toml in the working directory (the PR checkout),
-        # and its cache post-step would upload a PR-chosen path.
-        with:
-          version: "0.13.6"
-          enable-cache: false
-          working-directory: .review-base
-
-      - name: Serena setup
-        id: serena
-        if: steps.facts.outputs.tier != 'none' && vars.PR_REVIEW_SERENA == 'on'
-        continue-on-error: true
-        timeout-minutes: 10
-        env:
-          SERENA_VERSION: "1.7.0"
-          SR_USER: serena-runner
-          SR_HOME: /home/serena-runner
-        run: |
-          set -euo pipefail
-          cfg=.review-base/.claude/pr-review/serena
-          # Exactly one base template must override connection_prompt: the only Serena text the
-          # reviewer receives up front. Two overrides make Serena refuse to start.
-          overrides="$({ grep -lE '^  connection_prompt:' "$cfg"/prompt_templates/*.yml 2>/dev/null || true; } | wc -l | tr -d ' ')"
-          if [ ! -f "$cfg/project.yml" ] || [ ! -f "$cfg/serena_config.yml" ] || [ "$overrides" != "1" ]; then
-            echo "::warning::Serena config not on base; reviewing without code navigation"
-            exit 0
-          fi
-          sudo useradd --create-home --shell /usr/sbin/nologin "$SR_USER"
-          sudo chmod 700 "$SR_HOME"
-          SR_PATH="$SR_HOME/.local/bin:$(dirname "$(command -v uv)"):$(dirname "$(command -v node)"):/usr/local/bin:/usr/bin:/bin"
-          # SERENA_USAGE_REPORTING: env -i drops CI/GITHUB_ACTIONS, which Serena checks to skip its
-          # startup usage report, so opt out explicitly.
-          # env -C: sudo keeps the caller's working directory (the workspace), from which relative
-          # paths reach .git/ and RUNNER_TEMP without traversing /home/runner. Start in SR_HOME.
-          run_as() { sudo -n -u "$SR_USER" -H env -i -C "$SR_HOME" "HOME=$SR_HOME" "PATH=$SR_PATH" "SERENA_HOME=$SR_HOME/serena-home" SERENA_USAGE_REPORTING=false "$@"; }
-          run_as uv tool install --python 3.13 "serena-agent==$SERENA_VERSION"
-          SERENA_BIN="$SR_HOME/.local/bin/serena"
-          sudo install -d -o "$SR_USER" -m 700 "$SR_HOME/serena-home"
-          sudo install -o "$SR_USER" -m 600 "$cfg/serena_config.yml" "$SR_HOME/serena-home/serena_config.yml"
-          # Review guidance replaces Serena's connection prompt (see prompt_templates/).
-          # Serena reads every .yml there, so install them all; the file name does not matter.
-          sudo install -d -o "$SR_USER" -m 700 "$SR_HOME/serena-home/prompt_templates"
-          sudo install -o "$SR_USER" -m 600 "$cfg"/prompt_templates/*.yml "$SR_HOME/serena-home/prompt_templates/"
-          # Network on, PR code absent: install the pinned TypeScript language server by
-          # indexing a throwaway one-file project. The PR's code is indexed only offline.
-          sudo install -d -o "$SR_USER" -m 700 "$SR_HOME/ls-warmup" "$SR_HOME/ls-warmup/.serena"
-          # One file per configured language server (project.yml language_servers), so every
-          # server is downloaded now; none can be fetched once the network is blocked.
-          echo 'export const warmup = 1;' | sudo -n -u "$SR_USER" tee "$SR_HOME/ls-warmup/warmup.ts" >/dev/null
-          printf '# Warmup\n\nText.\n' | sudo -n -u "$SR_USER" tee "$SR_HOME/ls-warmup/warmup.md" >/dev/null
-          printf 'warmup: true\n' | sudo -n -u "$SR_USER" tee "$SR_HOME/ls-warmup/warmup.yaml" >/dev/null
-          sudo install -o "$SR_USER" -m 600 "$cfg/project.yml" "$SR_HOME/ls-warmup/.serena/project.yml"
-          run_as "$SERENA_BIN" project index "$SR_HOME/ls-warmup" --log-level WARNING --timeout 60
-          # The PR source reaches Serena as a copy of tracked files only: no .git/, no
-          # PR-supplied .serena/, no build or vendor output. The copy is root-owned and
-          # read-only for serena-runner, which may write only src/.serena (its index).
-          # /home/runner is never opened up. serena-runner's processes start in SR_HOME (env -C),
-          # but sudo would otherwise keep the workspace as their working directory, so the
-          # chmod 700 below is what keeps .git/ and RUNNER_TEMP out of reach; probes check both.
-          sudo install -d -m 755 "$SR_HOME/src"
-          # .claude/pr-review/ in the working tree is already the base copy (Restore step), and
-          # the PR index may list files it does not have: copy the base tree explicitly instead.
-          # --ignore-missing-args: a tracked path absent from the working tree is skipped, not fatal.
-          git ls-files -z \
-            | grep -zvE '(^|/)(\.serena|node_modules|public|lib|dist|build|\.next|coverage|_legacy)/|^\.claude/pr-review/|^\.review-(base|publish)/' \
-            | sudo rsync -a --no-owner --no-group --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r --ignore-missing-args --from0 --files-from=- ./ "$SR_HOME/src/"
-          sudo install -d -m 755 "$SR_HOME/src/.claude"
-          sudo rsync -a --no-owner --no-group --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r --exclude='lib/' --exclude='.serena/' \
-            .review-base/.claude/pr-review/ "$SR_HOME/src/.claude/pr-review/"
-          sudo chown -R root:root "$SR_HOME/src"
-          sudo install -d -o "$SR_USER" -m 700 "$SR_HOME/src/.serena"
-          sudo install -o "$SR_USER" -m 600 "$cfg/project.yml" "$SR_HOME/src/.serena/project.yml"
-          # From here on serena-runner has no network and no view of the credentials.
-          chmod 700 "$GITHUB_WORKSPACE/.git" "$RUNNER_TEMP"
-          # Loopback too: DNS goes to systemd-resolved on 127.0.0.53, which forwards queries
-          # out, so a loopback exemption would leave DNS as an exfiltration channel. Serena
-          # talks to Claude over stdio and needs no sockets.
-          # -I OUTPUT 1: ahead of any existing ACCEPT rule. AF_UNIX sockets (systemd-resolved's
-          # D-Bus/varlink resolver API) are outside iptables; serena-runner holds no secrets.
-          sudo iptables -I OUTPUT 1 -m owner --uid-owner "$SR_USER" -j REJECT
-          sudo ip6tables -I OUTPUT 1 -m owner --uid-owner "$SR_USER" -j REJECT
-          # Isolation probes: any failure leaves the outputs unset, so Review runs without Serena.
-          if run_as curl -sS --max-time 5 -o /dev/null https://api.github.com; then
-            echo "::error::serena-runner reached the network"; exit 1
-          fi
-          if run_as getent hosts example.com >/dev/null 2>&1; then
-            echo "::error::serena-runner can resolve DNS names"; exit 1
-          fi
-          if run_as cat "$GITHUB_WORKSPACE/.git/config" >/dev/null 2>&1; then
-            echo "::error::serena-runner can read the workspace .git/config"; exit 1
-          fi
-          if run_as ls "$RUNNER_TEMP" >/dev/null 2>&1; then
-            echo "::error::serena-runner can list RUNNER_TEMP"; exit 1
-          fi
-          # Relative paths from the workspace, as a process would see them if it started there:
-          # only the chmod 700 above stands between these and the credentials.
-          rel_temp="$(realpath --relative-to="$PWD" "$RUNNER_TEMP")"
-          if sudo -n -u "$SR_USER" cat .git/config >/dev/null 2>&1; then
-            echo "::error::serena-runner can read .git/config relative to the workspace"; exit 1
-          fi
-          if sudo -n -u "$SR_USER" ls "$rel_temp" >/dev/null 2>&1; then
-            echo "::error::serena-runner can list RUNNER_TEMP relative to the workspace"; exit 1
-          fi
-          # Probe with a real source file from the copy: the repo has no root manifest to rely on.
-          probe_file="$(sudo find "$SR_HOME/src" -type f -name '*.ts' -not -path '*/.serena/*' -print -quit)"
-          if [ -z "$probe_file" ]; then
-            echo "::warning::no TypeScript files in the source copy; reviewing without code navigation"
-            exit 0
-          fi
-          if run_as touch "$probe_file" 2>/dev/null; then
-            echo "::error::serena-runner can write the source copy"; exit 1
-          fi
-          extra="$(run_as env | grep -cvE '^(HOME|PATH|SERENA_HOME|SERENA_USAGE_REPORTING)=' || true)"
-          if [ "$extra" != "0" ]; then
-            echo "::error::serena-runner environment is not empty"; exit 1
-          fi
-          if ! run_as test -r "$probe_file"; then
-            echo "::warning::serena-runner cannot read the source copy; reviewing without code navigation"
-            exit 0
-          fi
-          # PR code is indexed only now, offline.
-          run_as "$SERENA_BIN" project index "$SR_HOME/src" --log-level WARNING --timeout 30
-          # Modes (owner decision: editing). Their prompts arrive via initial_instructions, which the
-          # review does not allow; fixed_tools and read_only keep Serena to four read-only lookups.
-          python3 -c 'import json, sys; json.dump({"mcpServers": {"serena": {"command": "sudo", "args": sys.argv[2:]}}}, open(sys.argv[1], "w"))' \
-            "$RUNNER_TEMP/serena-mcp.json" \
-            -n -u "$SR_USER" -H env -i -C "$SR_HOME" "HOME=$SR_HOME" "PATH=$SR_PATH" "SERENA_HOME=$SR_HOME/serena-home" SERENA_USAGE_REPORTING=false \
-            "$SERENA_BIN" start-mcp-server --context claude-code --project "$SR_HOME/src" \
-            --mode editing --log-level WARNING
-          {
-            echo "mcp_args=--mcp-config $RUNNER_TEMP/serena-mcp.json"
-            echo "tools=mcp__serena__find_symbol,mcp__serena__find_referencing_symbols,mcp__serena__get_symbols_overview,mcp__serena__search_for_pattern,"
-            echo "prompt=Code navigation: the mcp__serena__* tools are available; their paths are relative to the repository root (see REVIEW.md)."
-          } >> "$GITHUB_OUTPUT"
-
+      # Facts, then the sandboxed model. Gets the Claude token and nothing else.
+      # Serena code navigation is opt-in through the repository variable
+      # PR_REVIEW_SERENA=on (config: .pr-review/serena/).
       - name: Review
         id: review
-        if: steps.facts.outputs.tier != 'none'
-        continue-on-error: true
-        # Room for the Serena MCP server to start its language servers on a slow runner
-        # (about 3s locally). Without Serena this only bounds MCP startup; there are no
-        # other MCP servers.
-        env:
-          MCP_TIMEOUT: "60000"
-        uses: anthropics/claude-code-action@v1
+        uses: marcusk639/pr-review-kit/actions/review@6f5b57f6c800bae395d025f19a5b9414e682ec1c
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          settings: '{"disableAllHooks": true}'
-          prompt: |
-            Follow .claude/pr-review/REVIEW.md. OUT=${{ runner.temp }}/pr-review. Base ${{ github.event.pull_request.base.sha }}, head ${{ github.event.pull_request.head.sha }}. Ignore the .review-base/ and .review-publish/ directories.
-            ${{ steps.serena.outputs.prompt }}${{ vars.PR_REVIEW_SERENA == 'on' && steps.facts.outputs.tier != 'none' && steps.serena.outputs.prompt == '' && 'Code navigation (Serena) was enabled for this run but did not start: say "code navigation unavailable" under ## Not reviewed / limits.' || '' }}
-          # The only shell is gh pr diff/view (reading) and the exact reply command (owner decision):
-          # reply.mjs, from the base checkout and with no arguments, posts at most one sanitized
-          # comment from OUT/reply.md. A gh pr comment prefix rule would also have allowed
-          # --body-file, i.e. posting any runner-readable file (.git/config holds the app token).
-          # Facts still writes the diff and commit list into OUT.
-          # Write/Edit are allowed only under OUT (absolute-path rules, "//"
-          # prefix) and denied anywhere in the workspace, so .git/, .claude/ and
-          # the publish checkout path stay out of reach. Reads of the workspace
-          # .git/ are denied (the action writes its app token into .git/config),
-          # and so are reads of //proc/** (other processes' environments hold
-          # tokens). No inline-comment tool: the model writes OUT/inline.json and
-          # publish posts it after its own checks. Writes to the runner's command
-          # files (GITHUB_ENV etc., which would reach the Publish step) and to the
-          # state snapshot are denied explicitly, though both lie outside OUT.
-          # Serena (opt-in): the serena step's outputs add the MCP config and its
-          # four read-only tools; when it is off or failed they are empty and the
-          # arguments are exactly the ones above.
-          claude_args: >-
-            --model opus
-            --max-turns ${{ steps.facts.outputs.max_turns || 10 }}
-            --strict-mcp-config
-            --add-dir ${{ runner.temp }}/pr-review
-            ${{ steps.serena.outputs.mcp_args }}
-            --allowedTools "Bash(gh pr diff:*),Bash(gh pr view:*),Bash(node .review-base/.claude/pr-review/checks/reply.mjs),${{ steps.serena.outputs.tools }}Read,Grep,Glob,Write(/${{ runner.temp }}/pr-review/**),Edit(/${{ runner.temp }}/pr-review/**)"
-            --disallowedTools "MultiEdit,Write(/${{ github.workspace }}/**),Edit(/${{ github.workspace }}/**),Read(//proc/**),Read(/${{ github.workspace }}/.git/**),Write(/${{ runner.temp }}/_runner_file_commands/**),Edit(/${{ runner.temp }}/_runner_file_commands/**),Write(/${{ runner.temp }}/prstate-snapshot/**),Edit(/${{ runner.temp }}/prstate-snapshot/**)"
+          serena: ${{ vars.PR_REVIEW_SERENA }}
 
-      # No serena-runner process may outlive the review: one could tamper with the
-      # publish checkout or /tmp before the secret-bearing Publish step. Publish is
-      # skipped if any survives.
-      - name: Stop Serena
-        id: stop-serena
-        if: always()
-        run: |
-          if ! id serena-runner >/dev/null 2>&1; then exit 0; fi
-          for _ in 1 2 3 4 5; do
-            # Re-kill each round: a process forked during the previous scan would survive one pkill.
-            sudo pkill -KILL -u serena-runner || true
-            sleep 1
-            if ! pgrep -u serena-runner >/dev/null; then
-              # Nothing serena-runner left in shared temp space survives into Publish.
-              sudo find /tmp /var/tmp /dev/shm -xdev -user serena-runner -delete 2>/dev/null || true
-              exit 0
-            fi
-          done
-          echo "::error::serena-runner processes survived; Publish is skipped"
-          exit 1
-
-      # Fresh every time: whatever exists at this path now (a planted .git, a
-      # symlink) must not be reused by the secret-bearing publish step.
-      - name: Clear publish checkout path
-        if: always()
-        run: rm -rf .review-publish
-
-      - name: Checkout base (publish scripts, untouched by the model)
-        if: always()
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.base.sha }}
-          path: .review-publish
-          fetch-depth: 1
-          persist-credentials: false
-
+      # Model-free; the only step with the ledger id key and the advisory token
+      # (fine-grained PAT, "Repository security advisories: Read and write" on
+      # this repository). It refuses to run if a Serena process survived.
       - name: Publish
-        if: always() && steps.stop-serena.outcome != 'failure'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          PR: ${{ github.event.pull_request.number }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          ACTION_OUTCOME: ${{ steps.review.outcome }}
-          EXECUTION_FILE: ${{ steps.review.outputs.execution_file }}
-          # Publish only: keys the ledger's opaque ids. Never given to facts or the model.
-          PR_REVIEW_ID_KEY: ${{ secrets.PR_REVIEW_ID_KEY }}
-          # Publish only: fine-grained PAT, "Repository security advisories: Read and write" on
-          # this repo. Used for draft advisories only; never given to the model or comments.
-          ADVISORY_TOKEN: ${{ secrets.SECURITY_ADVISORY_TOKEN }}
-          # Step env overrides GITHUB_ENV: nothing an earlier step exported can
-          # preload code into this secret-bearing node process (NODE_OPTIONS)
-          # or into the bash shell that launches it (BASH_ENV).
-          NODE_OPTIONS: ""
-          BASH_ENV: ""
-        run: |
-          if [ -f .review-publish/.claude/pr-review/checks/publish.mjs ]; then
-            node --no-warnings .review-publish/.claude/pr-review/checks/publish.mjs
-          else
-            echo "pr-review scripts not on base yet"
-          fi
-
-      - name: Cleanup
         if: always()
-        run: |
-          chmod -R u+w "${{ runner.temp }}/prstate-snapshot" 2>/dev/null || true
-          rm -rf "$OUT" "${{ runner.temp }}/prstate-snapshot"
+        uses: marcusk639/pr-review-kit/actions/publish@6f5b57f6c800bae395d025f19a5b9414e682ec1c
+        with:
+          trust_sha: ${{ steps.review.outputs.trust_sha }}
+          action_outcome: ${{ steps.review.outputs.outcome }}
+          execution_file: ${{ steps.review.outputs.execution_file }}
+          id_key: ${{ secrets.PR_REVIEW_ID_KEY }}
+          advisory_token: ${{ secrets.SECURITY_ADVISORY_TOKEN }}
