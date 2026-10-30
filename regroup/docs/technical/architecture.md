@@ -405,7 +405,7 @@ Firestore Root
 ├── houses/{houseId}                            # Physical house entities
 │   ├── /chat/{chatId}                          # House-wide chat messages
 │   ├── /officers/{officerId}                   # Oxford House officer roles
-│   ├── /business-meetings/{meetingId}          # Oxford House meetings
+│   ├── /business-meetings/{meetingId}          # Oxford House business (house) meetings
 │   ├── /votes/{voteId}                         # Oxford House governance votes (immutable)
 │   └── /guests/{guestId}/
 │       └── /paymentMethods/{pmId}              # Stripe payment methods (Cloud Functions only)
@@ -459,7 +459,7 @@ Firestore Root
     ├── chat         (messages within a house)
     ├── officers     (Oxford House officers)
     ├── votes        (governance votes - immutable)
-    ├── business-meetings (Oxford meetings)
+    ├── business-meetings (Oxford house business meetings)
     └── guests/{guestId}/paymentMethods (Stripe cards)
 ```
 

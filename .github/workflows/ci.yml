@@ -246,7 +246,7 @@ jobs:
         run: cd detox-recovery && npm test -- --forceExit
 
   pr-review-checks:
-    name: pr-review — checks tests
+    name: pr-review — project checks and kit validate
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -257,8 +257,30 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Test
-        run: node --test ".claude/pr-review/checks/test/*.test.mjs"
+      - name: Project check tests
+        run: node --test ".pr-review/checks/test/*.test.mjs"
+      # validate runs from the kit commit the review workflow pins, and checks
+      # that commit is on the kit's main branch.
+      - name: Read the kit pin
+        id: kit
+        run: |
+          sha="$(grep -oE 'marcusk639/pr-review-kit/actions/review@[0-9a-f]{40}' .github/workflows/claude-code-review.yml | head -n 1 | cut -d@ -f2)"
+          if [ -z "$sha" ]; then echo "::error::claude-code-review.yml has no full-SHA kit pin"; exit 1; fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - name: Checkout pr-review-kit
+        uses: actions/checkout@v4
+        with:
+          repository: marcusk639/pr-review-kit
+          ref: main
+          path: .pr-review-kit-ci
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate .pr-review/ and the review workflow
+        env:
+          KIT_SHA: ${{ steps.kit.outputs.sha }}
+        run: |
+          git -C .pr-review-kit-ci checkout -q --detach "$KIT_SHA"
+          node .pr-review-kit-ci/bin/pr-review.mjs validate
 
   maestro-smoke:
     name: Maestro Cloud — smoke tests (regroup Android)

@@ -80,7 +80,7 @@ follow links in priority order.
 
 | What you need to know                          | Read                                       |
 | ---------------------------------------------- | ------------------------------------------ |
-| How the PR review bot works, module by module  | [docs/ci/pr-review.md](ci/pr-review.md)    |
+| How the PR review bot works (pr-review-kit)    | [docs/ci/pr-review.md](ci/pr-review.md)    |
 
 ---
 

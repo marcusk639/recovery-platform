@@ -184,9 +184,9 @@ Features and their tests always change together. The most frequent co-changes:
 
 RATS is a **sober living house management app** with these feature domains:
 
-- **Oxford**: Oxford House governance (meetings, officers, voting, EES tracking)
+- **Oxford**: Oxford House governance (house/business meetings, officers, voting, EES tracking)
 - **Payments**: Rent payment processing via Stripe
-- **Activity**: Guest activity tracking (chores, medication, meetings, work, supporters)
+- **Activity**: Guest activity tracking (chores, medication, 12-step meetings, work, supporters)
 - **House Management**: Guest lists, bed assignments, house configuration
 - **Notifications**: Rent reminders, push notifications
 - **Subscription**: Feature gating via subscription tiers (e.g., `oxfordEnabled`)
