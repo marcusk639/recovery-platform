@@ -114,7 +114,7 @@ graph TB
   end
 
   subgraph "regroup/functions/"
-    Call[Callable<br/>auth / houses / meetings /<br/>payments / subscriptions]
+    Call[Callable<br/>auth / houses / 12-step meetings /<br/>payments / subscriptions]
     Http[HTTP<br/>stripeConnect / universal SSR]
     Hook[Webhooks<br/>stripeEvents]
     Sched[Scheduled<br/>officerTermReminder /<br/>weekly batch]
