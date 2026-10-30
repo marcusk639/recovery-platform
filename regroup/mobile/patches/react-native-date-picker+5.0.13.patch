@@ -1,0 +1,20 @@
+# react-native-date-picker 5.0.13 on AGP 9 (regroup-mobile RN 0.88 upgrade, Task 4).
+#
+# AGP 9 fails configuration on getDefaultProguardFile('proguard-android.txt') ("is no longer
+# supported. Instead, use getDefaultProguardFile('proguard-android-optimize.txt')"), whatever the
+# minify setting. 5.0.13 is the latest release. The library's release build type has
+# minifyEnabled false, so nothing changes at runtime. Drop this patch once a release switches the
+# file upstream (decision record, Task 4).
+diff --git a/node_modules/react-native-date-picker/android/build.gradle b/node_modules/react-native-date-picker/android/build.gradle
+index b2803c4..ea10692 100644
+--- a/node_modules/react-native-date-picker/android/build.gradle
++++ b/node_modules/react-native-date-picker/android/build.gradle
+@@ -51,7 +51,7 @@ android {
+     buildTypes {
+         release {
+             minifyEnabled false
+-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
++            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+         }
+     }
+ }
