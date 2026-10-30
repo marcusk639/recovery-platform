@@ -158,13 +158,13 @@ graph TB
 
 #### 4.5 Backend (`regroup/functions/`) surface
 
-| Type               | Examples                                                                                            | Notes                                            |
-| ------------------ | --------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| Callable           | `createPaymentIntent`, house CRUD, 12-step meeting creation, subscription linking, EES calculations | Invoked via `httpsCallable()` from mobile/web    |
-| HTTP               | `stripeConnect` OAuth callback, `universal` SSR proxy                                               |                                                  |
-| Webhook            | `stripeEvents` (charge succeeded/failed/refunded)                                                   | Updates payment records, sends SendGrid receipts |
-| Firestore triggers | Guest stats recalculation, 12-step meeting record updates                                           |                                                  |
-| Scheduled          | `officerTermReminder`, weekly payment/compliance batches                                            | Pub/Sub cron                                     |
+| Type               | Examples                                                                                                                                           | Notes                                            |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| Callable           | `createPaymentIntent`, house CRUD, 12-step meeting search and check-in (`findMeetings`, `userIsAtMeeting`), subscription linking, EES calculations | Invoked via `httpsCallable()` from mobile/web    |
+| HTTP               | `stripeConnect` OAuth callback, `universal` SSR proxy                                                                                              |                                                  |
+| Webhook            | `stripeEvents` (charge succeeded/failed/refunded)                                                                                                  | Updates payment records, sends SendGrid receipts |
+| Firestore triggers | Guest stats recalculation                                                                                                                          |                                                  |
+| Scheduled          | `officerTermReminder`, weekly payment/compliance batches                                                                                           | Pub/Sub cron                                     |
 
 Idempotency keys for payment intents are deterministic (`guestId + utcDay`) unless an explicit key is passed. All Stripe errors are mapped to Firebase `HttpsError` with caller-friendly messages.
 
