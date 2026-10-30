@@ -6,23 +6,6 @@ import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { RatsCheckbox } from '../index';
 
-// The native checkbox has no Jest renderer: replace it with a View. Not
-// virtual: the package is installed, and a virtual mock is keyed on the bare
-// specifier, which the RN 0.88 Jest resolver bypasses for installed packages.
-jest.mock(
-  '@react-native-community/checkbox',
-  () => {
-    const { View } = require('react-native');
-    const MockCheckBox = (props: any) => (
-      <View
-        testID={props.testID || 'checkbox'}
-        accessibilityValue={{ text: props.value ? 'checked' : 'unchecked' }}
-      />
-    );
-    return MockCheckBox;
-  },
-);
-
 jest.mock('../../../context', () => ({
   useTheme: () => ({
     theme: {

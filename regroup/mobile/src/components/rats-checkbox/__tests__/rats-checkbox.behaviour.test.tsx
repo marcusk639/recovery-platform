@@ -1,39 +1,21 @@
 /**
  * RatsCheckBox behaviour through a real Formik form.
  *
- * Characterization for the React Native 0.88 upgrade (plan Task 2): written on
- * RN 0.72 with @react-native-community/checkbox (mocked here, as a native
- * component). Task 8 replaces that package with a JS checkbox; these cases must
- * keep passing against it. The native mock below stands in for the control a
- * user taps: it renders `value` and calls `onValueChange` on press.
+ * Written on RN 0.72 against @react-native-community/checkbox (plan Task 2) and kept, case for
+ * case, against the JS checkbox that replaces it (Task 8). Two cases changed deliberately and are
+ * recorded in docs/build/react-native-0.88-upgrade.md:
+ * - a tap inside a Formik Field threw and never changed the value; the owner chose to fix it in
+ *   Task 8, so the case now pins the round-trip;
+ * - `disabled` was ignored; it is honoured now (the only screens that pass it are not reachable).
  */
 import React from 'react';
-import { Pressable, Text } from 'react-native';
+import { Text } from 'react-native';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { Field, Formik } from 'formik';
 import RatsCheckBox from '../rats-checkbox';
 
-jest.mock(
-  '@react-native-community/checkbox',
-  () => {
-    const { Pressable: MockPressable, Text: MockText } = require('react-native');
-    return (props: any) => (
-      <MockPressable
-        testID={props.testID || 'checkbox-control'}
-        accessibilityRole="checkbox"
-        accessibilityState={{ checked: !!props.value, disabled: !!props.disabled }}
-        onPress={() => !props.disabled && props.onValueChange && props.onValueChange(!props.value)}
-      >
-        <MockText>{props.value ? 'checked' : 'unchecked'}</MockText>
-      </MockPressable>
-    );
-  },
-);
-
 jest.mock('../../../context', () => ({
-  useTheme: () => ({
-    theme: { primaryColor: '#000', textColor: '#000', primaryFontFamily: 'System' },
-  }),
+  useTheme: () => ({ theme: { primaryColor: '#000', textColor: '#000', primaryFontFamily: 'System' } }),
   useTranslation: () => ({ t: (k: string) => k ?? '', i18n: { language: 'en' } }),
 }));
 
@@ -55,9 +37,7 @@ function Form({ initial, onValues }: { initial: boolean; onValues: (v: any) => v
               testID="terms-of-service-checkbox"
               label="I agree"
             />
-            <Pressable testID="noop">
-              <Text>{String(values.termsOfService)}</Text>
-            </Pressable>
+            <Text testID="value">{String(values.termsOfService)}</Text>
           </>
         );
       }}
@@ -65,25 +45,23 @@ function Form({ initial, onValues }: { initial: boolean; onValues: (v: any) => v
   );
 }
 
+const checkedOf = (el: any) => el.props.accessibilityState?.checked;
+
 describe('RatsCheckBox in a Formik Field', () => {
-  // PRE-EXISTING DEFECT, pinned as found on RN 0.72 (2026-10-30): the native
-  // checkbox calls onValueChange(boolean), and RatsCheckBox hands that to
-  // Formik's field.onChange(name), which expects a string or an event, so a
-  // tap throws inside Formik and the form value never changes. Every app use
-  // (SignUp terms, HouseConfig phase rules, GuestUpdate booleans) goes through
-  // a Field. Recorded in docs/build/react-native-0.88-upgrade.md; whether Task 8
-  // fixes it is the owner's call, and this case changes only with that call.
-  it('shows the field value, and a tap throws inside Formik without changing it (pre-existing)', async () => {
+  it('shows the field value and round-trips a tap into the form value (fixed in Task 8)', async () => {
     let values: any;
     const screen = render(<Form initial={false} onValues={(v) => (values = v)} />);
+    const control = () => screen.getByTestId('terms-of-service-checkbox');
 
-    expect(screen.getByText('unchecked')).toBeTruthy();
+    expect(checkedOf(control())).toBe(false);
 
-    expect(() => fireEvent.press(screen.getByTestId('terms-of-service-checkbox'))).toThrow(
-      TypeError,
-    );
+    fireEvent.press(control());
+    await waitFor(() => expect(values.termsOfService).toBe(true));
+    expect(checkedOf(control())).toBe(true);
+
+    fireEvent.press(control());
     await waitFor(() => expect(values.termsOfService).toBe(false));
-    expect(screen.getByText('unchecked')).toBeTruthy();
+    expect(checkedOf(control())).toBe(false);
   });
 
   it('forwards testID to the control and renders the label', () => {
@@ -91,7 +69,7 @@ describe('RatsCheckBox in a Formik Field', () => {
 
     expect(screen.getByTestId('terms-of-service-checkbox')).toBeTruthy();
     expect(screen.getByText('I agree')).toBeTruthy();
-    expect(screen.getByText('checked')).toBeTruthy();
+    expect(checkedOf(screen.getByTestId('terms-of-service-checkbox'))).toBe(true);
   });
 
   it('exposes checkbox role and checked state on the control', () => {
@@ -107,10 +85,7 @@ describe('RatsCheckBox without Formik', () => {
   it('calls onValueChange with the toggled value', () => {
     const onValueChange = jest.fn();
     const screen = render(
-      <RatsCheckBox
-        {...({ testID: 'cb', label: 'x', onValueChange } as any)}
-        field={{ name: 'x', value: false } as any}
-      />,
+      <RatsCheckBox {...({ testID: 'cb', label: 'x', onValueChange } as any)} field={{ name: 'x', value: false } as any} />,
     );
 
     fireEvent.press(screen.getByTestId('cb'));
@@ -118,7 +93,7 @@ describe('RatsCheckBox without Formik', () => {
     expect(onValueChange).toHaveBeenCalledWith(true);
   });
 
-  it('does not forward disabled to the control today (pre-existing)', () => {
+  it('honours disabled: no toggle, and the control reports it (ignored before Task 8)', () => {
     const onValueChange = jest.fn();
     const screen = render(
       <RatsCheckBox
@@ -128,9 +103,9 @@ describe('RatsCheckBox without Formik', () => {
     );
 
     expect(screen.getByTestId('cb').props.accessibilityState).toEqual(
-      expect.objectContaining({ disabled: false }),
+      expect.objectContaining({ disabled: true }),
     );
     fireEvent.press(screen.getByTestId('cb'));
-    expect(onValueChange).toHaveBeenCalledWith(true);
+    expect(onValueChange).not.toHaveBeenCalled();
   });
 });

@@ -116,7 +116,7 @@ Characterization commit: `b5092c7`. The byte-identical rule is checked with
 Found while pinning behaviour on RN 0.72. None is caused by the upgrade. Each is pinned as found, so
 fixing one is a visible, deliberate test change.
 
-1. **Checkbox taps throw inside Formik.** The native checkbox calls `onValueChange(boolean)`, and
+1. **Checkbox taps throw inside Formik.** *Fixed in Task 8 (owner decision, 2026-10-30).* The native checkbox calls `onValueChange(boolean)`, and
    `RatsCheckBox` hands it to Formik's `field.onChange(name)`, which expects a string or an event
    (`formik` 2.4.9 `executeChange` reads `target.type` of `undefined`). A tap throws and the form value
    never changes. Every use goes through a `Field`. The one reachable use is the SignUp terms of
@@ -127,7 +127,8 @@ fixing one is a visible, deliberate test change.
    (`GuestUpdateFormView.tsx:41`). **Owner decision needed** on whether Task 8 (the JS checkbox) fixes
    it, or a separate fix ships first.
 2. **`RatsCheckBox` ignores `disabled`.** The prop is declared but never passed on, so a disabled
-   form (`disabled={isSubmitting}`) still toggles.
+   form (`disabled={isSubmitting}`) still toggles. *Fixed in Task 8.* Only HouseConfig and
+   GuestUpdate pass it, and no navigator registers either, so no reachable screen changes.
 3. **`RatsScrollView` drops its container style when a caller passes one.** `{...props}` is spread
    last, so a caller's `contentContainerStyle` replaces the default (`flexGrow: 1`, centred, full
    width) instead of merging with it.
@@ -399,9 +400,26 @@ configure on Gradle 9 / AGP 9:
 - defaults its appcompat to AndroidX, its own `supportLibVersion < 20` switch. The old default,
   `com.android.support:appcompat-v7`, was what needed Jetifier.
 
-It is deleted with the package in Task 11. `react-native-date-picker` 5.0.13 (kept, and the latest
-release) also names `proguard-android.txt` with minify off; it is patched only if CI shows AGP 9
-rejects it there.
+It is deleted with the package in Task 11.
+
+**What the first CI build found.**
+
+- **Missing `BuildConfig`.** `@react-native-community/checkbox` declares `BuildConfig` fields, and
+  AGP 9 no longer generates `BuildConfig` unless a module opts in. The RN 0.88 plugin opts in only
+  the libraries that apply `com.facebook.react`. Every other library with such fields does apply
+  it, and the 0.72 root bridge had opted in every module. The checkbox was due to be replaced in
+  Task 8 anyway, so Task 8 was brought forward rather than patching a library about to be deleted.
+- **The legacy ProGuard file.** AGP 9 refuses `getDefaultProguardFile('proguard-android.txt')` at
+  configuration time, whatever the minify setting ([rnmapbox/maps#4281](https://github.com/rnmapbox/maps/issues/4281)).
+  `react-native-date-picker` 5.0.13, which is kept and is the latest release, still uses it.
+  `patches/react-native-date-picker+5.0.13.patch` switches it to the optimize file; its release
+  minify is off, so nothing changes at runtime. Drop the patch once upstream changes.
+- **Other configuration-time breakages.** A sweep of every native module found no other
+  `jcenter()`, legacy ProGuard file, Kotlin Android extensions or removed `maven` plugin.
+  `lintOptions` and `packagingOptions` still configure under `android.newDsl=false`; current
+  libraries such as screens, svg and safe-area use them.
+- **A new `debugOptimized` build type.** The RN 0.88 plugin adds it to every app (a debug build with
+  release-optimized native code). It is debuggable, so it has no bundle task and no guard applies.
 
 **Manifest.** `POST_NOTIFICATIONS` is declared (targetSdk 36: Android 13+ shows no notification
 without it) and `supportsRtl` is set (template). Cleartext stays as it was: none in release,
@@ -478,6 +496,28 @@ font loading, and its `require('…ttf')` would also bundle every font into the 
   One solid-only glyph gains `iconStyle="solid"`, which is the v9 fallback made explicit.
   Committed with the snapshot opt-in naming those three files.
 
+### Task 8: rats-checkbox in JS (brought forward into the Task 4 CI loop)
+
+`@react-native-community/checkbox` 0.5.20 is removed: its Android module does not configure on
+AGP 9, and 0.6.0's codegen points at a missing directory. `RatsCheckBox` is reimplemented with
+`Pressable` and the Material `check-box` / `check-box-outline-blank` glyphs.
+
+- **Look:** 24-point glyphs, the size of the native Android box with its touch area, plus an
+  8-point `hitSlop`. Checked uses the theme's primary colour, unchecked dark grey, disabled medium
+  grey.
+- **Accessibility:** the control reports `accessibilityRole="checkbox"` and
+  `accessibilityState={{ checked, disabled }}` on the `testID`'d element, which is what the SignUp
+  test reads.
+- **Formik fix (owner decision).** Inside a `Field`, a tap now calls `form.setFieldValue(name,
+  !value)`. The native checkbox passed a bare boolean to Formik's `field.onChange(name)`, which
+  threw. With this fix the SignUp terms of service can be accepted again. Without Formik,
+  `onValueChange(!value)` is called as before.
+- **`disabled` is honoured** (§4, item 2).
+- **Tests:** the Task 2 behaviour cases are kept one for one, now driven by role and
+  `accessibilityState` rather than the removed native mock. The Formik case and the `disabled` case
+  now pin the fixed behaviour. The mock in `rats-checkbox.test.tsx` and the ambient module
+  declaration are removed.
+
 ## 7. Verification
 
 _Final results and the Mac checkpoint (Task 16)._
@@ -539,5 +579,10 @@ unchanged.
 - `StaffNotesFeed.tsx`: TS2322 `RatsText` props, ×2.
 - `HouseActivity.tsx`: TS2322 `RatsText` `textAlign: string`, ×2.
 
-No entry was added for code this task wrote. The 26 new identities are exactly the re-wordings
+No entry was added for code this task wrote.
+
+### Task 8 (126 → 125)
+
+Fixed: `rats-checkbox.tsx` TS2769 (the native `CheckBox` overload); the component no longer
+renders it. Nothing added. The 26 new identities are exactly the re-wordings
 above, and every other new error was fixed in code (§6, Task 3).

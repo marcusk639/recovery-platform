@@ -37,7 +37,6 @@
     "@callstack/react-theme-provider": "^3.0.8",
     "@notifee/react-native": "^7.8.2",
     "@react-native-clipboard/clipboard": "^1.10.0",
-    "@react-native-community/checkbox": "^0.5.20",
     "@react-native-community/datetimepicker": "9.2.2",
     "@react-native-community/geolocation": "^3.0.5",
     "@react-native-community/push-notification-ios": "^1.10.1",

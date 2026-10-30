@@ -22,26 +22,6 @@ declare module 'firebase/storage' {
   export function deleteObject(ref: any): Promise<void>;
 }
 
-declare module '@react-native-community/checkbox' {
-  import { Component } from 'react';
-  import { StyleProp, ViewStyle } from 'react-native';
-
-  interface CheckBoxProps {
-    value?: boolean;
-    disabled?: boolean;
-    onValueChange?: (value: boolean) => void;
-    style?: StyleProp<ViewStyle>;
-    tintColors?: { true?: string; false?: string };
-    onCheckColor?: string;
-    onFillColor?: string;
-    onTintColor?: string;
-    animationDuration?: number;
-    boxType?: 'circle' | 'square';
-  }
-
-  export default class CheckBox extends Component<CheckBoxProps> {}
-}
-
 declare module 'react-native-simple-radio-button' {
   import { Component } from 'react';
   import { StyleProp, ViewStyle, TextStyle } from 'react-native';
