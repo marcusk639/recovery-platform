@@ -14,7 +14,7 @@ import { IOS } from '../../util/platform';
 
 interface Props {
   header: string;
-  rightSideContent: JSX.Element;
+  rightSideContent: React.JSX.Element;
   percentage: number;
   rightSideContainer?: ViewStyle;
 }

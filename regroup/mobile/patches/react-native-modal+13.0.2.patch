@@ -1,0 +1,70 @@
+# react-native-modal 13.0.2 on React Native 0.88 (regroup-mobile, 2026-10-30)
+#
+# RN 0.88 removed InteractionManager from core: in __DEV__ the export throws on
+# access, and in release builds it is undefined, so createInteractionHandle()
+# would throw a TypeError on every modal open and close. This patch removes the
+# import and the 2 createInteractionHandle / 3 clearInteractionHandle calls.
+# They only deferred InteractionManager.runAfterInteractions work behind the
+# animations; the app schedules none, so behaviour is otherwise unchanged.
+# 13.0.2 already uses the BackHandler subscription's remove().
+# Pinned to 13.0.2 in package.json: re-check before bumping. Tests:
+# src/components/rats-modal/__tests__/rats-modal.behaviour.test.tsx and
+# rats-loading-modal.behaviour.test.tsx (decision record Task 3).
+diff --git a/node_modules/react-native-modal/dist/modal.js b/node_modules/react-native-modal/dist/modal.js
+index 6d01fcc..fde6a80 100644
+--- a/node_modules/react-native-modal/dist/modal.js
++++ b/node_modules/react-native-modal/dist/modal.js
+@@ -1,5 +1,5 @@
+ import * as React from 'react';
+-import { Animated, BackHandler, DeviceEventEmitter, Dimensions, InteractionManager, KeyboardAvoidingView, Modal, PanResponder, Platform, TouchableWithoutFeedback, View, } from 'react-native';
++import { Animated, BackHandler, DeviceEventEmitter, Dimensions, KeyboardAvoidingView, Modal, PanResponder, Platform, TouchableWithoutFeedback, View, } from 'react-native';
+ import * as animatable from 'react-native-animatable';
+ import { buildAnimations, initializeAnimations, reversePercentage, } from './utils';
+ import styles from './modal.style';
+@@ -114,10 +114,6 @@ export class ReactNativeModal extends React.Component {
+         if (this.didUpdateDimensionsEmitter) {
+             this.didUpdateDimensionsEmitter.remove();
+         }
+-        if (this.interactionHandle) {
+-            InteractionManager.clearInteractionHandle(this.interactionHandle);
+-            this.interactionHandle = null;
+-        }
+     }
+     componentDidUpdate(prevProps) {
+         // If the animations have been changed then rebuild them to make sure we're
+@@ -392,17 +388,10 @@ export class ReactNativeModal extends React.Component {
+         }
+         if (this.contentRef) {
+             this.props.onModalWillShow && this.props.onModalWillShow();
+-            if (this.interactionHandle == null) {
+-                this.interactionHandle = InteractionManager.createInteractionHandle();
+-            }
+             this.contentRef
+                 .animate(this.animationIn, this.props.animationInTiming)
+                 .then(() => {
+                 this.isTransitioning = false;
+-                if (this.interactionHandle) {
+-                    InteractionManager.clearInteractionHandle(this.interactionHandle);
+-                    this.interactionHandle = null;
+-                }
+                 if (!this.props.isVisible) {
+                     this.close();
+                 }
+@@ -438,17 +427,10 @@ export class ReactNativeModal extends React.Component {
+         }
+         if (this.contentRef) {
+             this.props.onModalWillHide && this.props.onModalWillHide();
+-            if (this.interactionHandle == null) {
+-                this.interactionHandle = InteractionManager.createInteractionHandle();
+-            }
+             this.contentRef
+                 .animate(animationOut, this.props.animationOutTiming)
+                 .then(() => {
+                 this.isTransitioning = false;
+-                if (this.interactionHandle) {
+-                    InteractionManager.clearInteractionHandle(this.interactionHandle);
+-                    this.interactionHandle = null;
+-                }
+                 if (this.props.isVisible) {
+                     this.open();
+                 }

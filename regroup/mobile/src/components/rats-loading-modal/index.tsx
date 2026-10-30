@@ -63,7 +63,7 @@ interface Props {
   loadingMessage: string;
   success: boolean;
   error: string;
-  errorTemplate?: () => JSX.Element | JSX.Element[];
+  errorTemplate?: () => React.JSX.Element | React.JSX.Element[];
 }
 
 interface State {

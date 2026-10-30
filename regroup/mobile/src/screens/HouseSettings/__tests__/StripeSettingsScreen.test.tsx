@@ -114,8 +114,12 @@ jest.mock("../../../../firebase-setup", () => ({
 
 // Mock Linking
 jest.mock("react-native/Libraries/Linking/Linking", () => ({
-  openURL: jest.fn(() => Promise.resolve()),
-  canOpenURL: jest.fn(() => Promise.resolve(true)),
+  // RN 0.88's root export reads this module's default export.
+  __esModule: true,
+  default: {
+    openURL: jest.fn(() => Promise.resolve()),
+    canOpenURL: jest.fn(() => Promise.resolve(true)),
+  },
 }));
 
 // Mock useAppSelector to inject house state

@@ -76,7 +76,7 @@ describe('RatsModal with react-native-modal', () => {
     expect(handler).toBeDefined();
     let handled: boolean | null | undefined;
     act(() => {
-      handled = handler!();
+      handled = handler!({ type: 'hardwareBackPress', timeStamp: 0 });
     });
 
     expect(onBackButtonPress).toHaveBeenCalledTimes(1);

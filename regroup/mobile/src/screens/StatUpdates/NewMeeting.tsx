@@ -238,10 +238,8 @@ const NewMeetingFormView: React.FC<
 
   const getWeekdayContainerStyle = useCallback(
     (day: string) => {
-      let containerStyle: ViewStyle = {};
-      if ((dayStateMap as Record<string, boolean>)[day.toLowerCase()]) {
-        containerStyle.backgroundColor = color.blue;
-      }
+      const selected = (dayStateMap as Record<string, boolean>)[day.toLowerCase()];
+      const containerStyle: ViewStyle = selected ? { backgroundColor: color.blue } : {};
       return containerStyle;
     },
     [dayStateMap]
@@ -249,10 +247,8 @@ const NewMeetingFormView: React.FC<
 
   const getWeekdayTextStyle = useCallback(
     (day: string) => {
-      let textStyle: TextStyle = {};
-      if ((dayStateMap as Record<string, boolean>)[day.toLowerCase()]) {
-        textStyle.color = color.white;
-      }
+      const selected = (dayStateMap as Record<string, boolean>)[day.toLowerCase()];
+      const textStyle: TextStyle = selected ? { color: color.white } : {};
       return textStyle;
     },
     [dayStateMap]

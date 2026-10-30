@@ -83,7 +83,7 @@ const dependencySyntax = [
 ].map((plugin) => [plugin, { loose: true }]);
 
 module.exports = {
-  presets: ['module:metro-react-native-babel-preset'],
+  presets: ['module:@react-native/babel-preset'],
   // Neither group applies under Jest: it resolves @tanstack via the package
   // "main" field, which is already-built JavaScript, so dependencySyntax is
   // unnecessary there — and enabling its loose class-property semantics fails

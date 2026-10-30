@@ -107,21 +107,6 @@ jest.mock('../../../services/organization', () => ({
   createOrganization: jest.fn(() => Promise.resolve({ id: 'org-1' })),
 }));
 
-// ─── ViewPager mock (legacy — kept for any indirect imports) ──────────────────
-// The wizard no longer uses ViewPager. The new layout uses RatsWizardSlide
-// (state-based, no ref). This mock is retained as a safety net for any
-// transitive imports while the migration completes.
-jest.mock('react-native-best-viewpager', () => {
-  const React = require('react');
-  const { View } = require('react-native');
-  const ViewPager = React.forwardRef((props: any, ref: any) => {
-    React.useImperativeHandle(ref, () => ({ setPage: jest.fn() }));
-    return <View testID={props.testID || 'view-pager'}>{props.children}</View>;
-  });
-  ViewPager.displayName = 'ViewPager';
-  return { ViewPager };
-});
-
 // ─── Shared wizard primitives ─────────────────────────────────────────────────
 // The new parent uses three shared components: RatsWizardProgress (replaces
 // RatsSetupStepIndicator), RatsWizardSlide (replaces ViewPager), and

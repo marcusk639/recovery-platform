@@ -42,36 +42,6 @@ declare module '@react-native-community/checkbox' {
   export default class CheckBox extends Component<CheckBoxProps> {}
 }
 
-declare module 'redux-logger' {
-  import { Middleware } from 'redux';
-
-  interface LoggerOptions {
-    collapsed?: boolean;
-    duration?: boolean;
-    timestamp?: boolean;
-    level?: string;
-    logger?: Console;
-    logErrors?: boolean;
-    predicate?: (getState: () => any, action: any) => boolean;
-    stateTransformer?: (state: any) => any;
-    actionTransformer?: (action: any) => any;
-    errorTransformer?: (error: any) => any;
-    colors?: {
-      title?: (action: any) => string;
-      prevState?: (state: any) => string;
-      action?: (action: any) => string;
-      nextState?: (state: any) => string;
-      error?: (error: any, prevState: any) => string;
-    };
-    diff?: boolean;
-    diffPredicate?: (getState: () => any, action: any) => boolean;
-  }
-
-  export function createLogger(options?: LoggerOptions): Middleware;
-  const logger: Middleware;
-  export default logger;
-}
-
 declare module 'react-native-simple-radio-button' {
   import { Component } from 'react';
   import { StyleProp, ViewStyle, TextStyle } from 'react-native';

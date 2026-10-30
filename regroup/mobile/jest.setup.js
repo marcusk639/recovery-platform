@@ -115,11 +115,6 @@ jest.mock('@react-navigation/native', () => {
   };
 });
 
-jest.mock('@react-navigation/stack', () => ({
-  createStackNavigator: mockNavigatorFactory,
-  TransitionPresets: {},
-  CardStyleInterpolators: {},
-}));
 jest.mock('@react-navigation/native-stack', () => ({
   createNativeStackNavigator: mockNavigatorFactory,
 }));
@@ -311,17 +306,6 @@ jest.mock('@react-native-firebase/analytics', () => {
   return { __esModule: true, default: () => mockAnalytics };
 });
 
-jest.mock('@react-native-firebase/crashlytics', () => {
-  const mockCrashlytics = {
-    log: jest.fn(),
-    recordError: jest.fn(),
-    setUserId: jest.fn(() => Promise.resolve()),
-    setAttribute: jest.fn(() => Promise.resolve()),
-    setCrashlyticsCollectionEnabled: jest.fn(() => Promise.resolve()),
-  };
-  return { __esModule: true, default: () => mockCrashlytics };
-});
-
 // ─── notifications ───────────────────────────────────────────────────────────
 jest.mock('@notifee/react-native', () => ({
   __esModule: true,
@@ -368,10 +352,14 @@ jest.mock('@react-native-community/push-notification-ios', () => ({
 // RN's Settings module requires the native SettingsManager TurboModule,
 // which does not exist in the Jest environment (used by src/util/e2e.ts).
 jest.mock('react-native/Libraries/Settings/Settings', () => ({
-  get: jest.fn(() => undefined),
-  set: jest.fn(),
-  watchKeys: jest.fn(() => 0),
-  clearWatch: jest.fn(),
+  // RN 0.88's root export reads this module's default export.
+  __esModule: true,
+  default: {
+    get: jest.fn(() => undefined),
+    set: jest.fn(),
+    watchKeys: jest.fn(() => 0),
+    clearWatch: jest.fn(),
+  },
 }));
 
 // ─── misc native modules ─────────────────────────────────────────────────────
@@ -485,12 +473,6 @@ jest.mock('@react-native-clipboard/clipboard', () => ({
 }));
 
 jest.mock('@react-native-community/datetimepicker', () => {
-  const React = require('react');
-  const { View } = require('react-native');
-  return { __esModule: true, default: (props) => React.createElement(View, props) };
-});
-
-jest.mock('react-native-modal-datetime-picker', () => {
   const React = require('react');
   const { View } = require('react-native');
   return { __esModule: true, default: (props) => React.createElement(View, props) };

@@ -23,7 +23,7 @@
 process.env.TZ = process.env.TZ || 'America/Chicago';
 
 module.exports = {
-  preset: 'react-native',
+  preset: '@react-native/jest-preset',
   setupFiles: ['./jest.setup.js'],
   testMatch: [
     '**/*.integration.test.[jt]s?(x)',
@@ -37,7 +37,7 @@ module.exports = {
     '<rootDir>/.full-review-archive-2026-05-23/',
   ],
   transformIgnorePatterns: [
-    'node_modules/(?!((jest-)?react-native|@react-native|@react-navigation|@reduxjs|react-redux|@tanstack|@invertase|@notifee|@stripe|@sentry|@callstack|victory|immer|redux|uuid|ngeohash))',
+    'node_modules/(?!((jest-)?react-native|@react-native|@react-navigation|@reduxjs|react-redux|@tanstack|@invertase|@notifee|@stripe|@sentry|@callstack|victory|immer|redux|uuid|ngeohash|@dr\\.pogodin))',
   ],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',

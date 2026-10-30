@@ -31,7 +31,7 @@ const GuestUpdateFormView: React.FC<
   const scrollRef = useRef<any>(null);
 
   const getField = useCallback(
-    (fieldName: string, fieldValue: any): JSX.Element => {
+    (fieldName: string, fieldValue: any): React.JSX.Element => {
       let component: any;
       const isDate = fieldName.toLowerCase().includes('date');
 

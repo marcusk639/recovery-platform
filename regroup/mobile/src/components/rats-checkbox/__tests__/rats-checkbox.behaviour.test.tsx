@@ -28,7 +28,6 @@ jest.mock(
       </MockPressable>
     );
   },
-  { virtual: true },
 );
 
 jest.mock('../../../context', () => ({

@@ -236,7 +236,11 @@ const BaseChat: React.FC<ChatProps> = props => {
               )}
               {chatType === 'group' && (
                 <TouchableOpacity
-                  ref={ref => (setRef ? setRef(ref) : null)}
+                  ref={ref => {
+                    if (setRef) {
+                      setRef(ref);
+                    }
+                  }}
                   onPress={renderHelp}>
                   <RatsIcon
                     name="question-circle"

@@ -298,7 +298,7 @@ const HouseSearchScreen: React.FC<HouseSearchProps> = props => {
   const renderStars = useCallback((house: House) => {
     const phaseNumber = size(house.phases);
     const number = house.rating || 3;
-    const stars: JSX.Element[] = [];
+    const stars: React.JSX.Element[] = [];
     for (let i = 1; i <= number; i++) {
       stars.push(
         <RatsIcon

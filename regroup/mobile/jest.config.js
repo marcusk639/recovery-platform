@@ -15,7 +15,7 @@
 process.env.TZ = process.env.TZ || 'America/Chicago';
 
 module.exports = {
-  preset: 'react-native',
+  preset: '@react-native/jest-preset',
   // Clear call history between tests so one test cannot pass on a neighbour's
   // calls. resetMocks is NOT enabled: it wipes every jest.fn(impl) default and
   // currently breaks 444 tests across 61 suites that rely on that state.
@@ -37,7 +37,7 @@ module.exports = {
     '\\.emulator\\.test\\.tsx?$',
   ],
   transformIgnorePatterns: [
-    'node_modules/(?!((jest-)?react-native|@react-native|@react-navigation|@reduxjs|react-redux|@tanstack|@invertase|@notifee|@stripe|@sentry|@callstack|victory|immer|redux|uuid|ngeohash))',
+    'node_modules/(?!((jest-)?react-native|@react-native|@react-navigation|@reduxjs|react-redux|@tanstack|@invertase|@notifee|@stripe|@sentry|@callstack|victory|immer|redux|uuid|ngeohash|@dr\\.pogodin))',
   ],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',

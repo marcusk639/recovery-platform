@@ -18,7 +18,6 @@ import {
 import { IOS, bottomSpace } from '../util/platform';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import RatsScrollView from '../components/rats-scroll-view';
-import { ScrollView } from 'react-native-gesture-handler';
 import RatsButton from '../components/rats-button/rats-button';
 
 export interface FilterFormProps {
