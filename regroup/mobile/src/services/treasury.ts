@@ -1,12 +1,21 @@
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  limit as limitTo,
+  orderBy,
+  query,
+  setDoc,
+  updateDoc,
+  where,
+} from '@react-native-firebase/firestore';
 import { firestore } from '../../firebase-setup';
 import { FinancialRecord } from '../entities/oxford/FinancialRecord';
 import { logException } from '../util/logging';
 
 function recordsRef(houseId: string) {
-  return firestore
-    .collection('houses')
-    .doc(houseId)
-    .collection('financial-records');
+  return collection(doc(collection(firestore, 'houses'), houseId), 'financial-records');
 }
 
 export async function getFinancialRecords(
@@ -14,10 +23,9 @@ export async function getFinancialRecords(
   limit = 20,
 ): Promise<FinancialRecord[]> {
   try {
-    const snap = await recordsRef(houseId)
-      .orderBy('period', 'desc')
-      .limit(limit)
-      .get();
+    const snap = await getDocs(
+      query(recordsRef(houseId), orderBy('period', 'desc'), limitTo(limit)),
+    );
     return snap.docs.map(d => ({ ...d.data(), id: d.id } as FinancialRecord));
   } catch (error) {
     logException(error);
@@ -30,9 +38,9 @@ export async function getFinancialRecord(
   recordId: string,
 ): Promise<FinancialRecord | null> {
   try {
-    const doc = await recordsRef(houseId).doc(recordId).get();
-    return doc.exists()
-      ? ({ ...doc.data(), id: doc.id } as FinancialRecord)
+    const snapshot = await getDoc(doc(recordsRef(houseId), recordId));
+    return snapshot.exists()
+      ? ({ ...snapshot.data(), id: snapshot.id } as FinancialRecord)
       : null;
   } catch (error) {
     logException(error);
@@ -45,10 +53,10 @@ export async function createFinancialRecord(
   record: Omit<FinancialRecord, 'id'>,
 ): Promise<FinancialRecord> {
   try {
-    const ref = recordsRef(houseId).doc();
-    const doc: FinancialRecord = { ...record, id: ref.id };
-    await ref.set(doc);
-    return doc;
+    const ref = doc(recordsRef(houseId));
+    const created: FinancialRecord = { ...record, id: ref.id };
+    await setDoc(ref, created);
+    return created;
   } catch (error) {
     logException(error);
     throw new Error('Failed to create financial record');
@@ -61,7 +69,7 @@ export async function updateFinancialRecord(
   data: Partial<FinancialRecord>,
 ): Promise<void> {
   try {
-    await recordsRef(houseId).doc(recordId).update(data);
+    await updateDoc(doc(recordsRef(houseId), recordId), data);
   } catch (error) {
     logException(error);
     throw new Error('Failed to update financial record');
@@ -73,7 +81,7 @@ export async function submitForApproval(
   recordId: string,
 ): Promise<void> {
   try {
-    await recordsRef(houseId).doc(recordId).update({
+    await updateDoc(doc(recordsRef(houseId), recordId), {
       status: 'submitted',
       submittedAt: new Date().toISOString(),
     });
@@ -89,7 +97,7 @@ export async function approveRecord(
   userId: string,
 ): Promise<void> {
   try {
-    await recordsRef(houseId).doc(recordId).update({
+    await updateDoc(doc(recordsRef(houseId), recordId), {
       status: 'approved',
       approvedBy: userId,
       approvedAt: new Date().toISOString(),
@@ -106,7 +114,7 @@ export async function rejectRecord(
   reason: string,
 ): Promise<void> {
   try {
-    await recordsRef(houseId).doc(recordId).update({
+    await updateDoc(doc(recordsRef(houseId), recordId), {
       status: 'rejected',
       rejectionReason: reason,
     });
@@ -126,10 +134,9 @@ export async function getCurrentWeekRecord(
     monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
     const weekStart = monday.toISOString().slice(0, 10);
 
-    const snap = await recordsRef(houseId)
-      .where('period', '==', weekStart)
-      .limit(1)
-      .get();
+    const snap = await getDocs(
+      query(recordsRef(houseId), where('period', '==', weekStart), limitTo(1)),
+    );
     return snap.empty
       ? null
       : ({ ...snap.docs[0].data(), id: snap.docs[0].id } as FinancialRecord);
@@ -149,10 +156,9 @@ export async function getPreviousWeekRecord(
     monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1) - 7);
     const weekStart = monday.toISOString().slice(0, 10);
 
-    const snap = await recordsRef(houseId)
-      .where('period', '==', weekStart)
-      .limit(1)
-      .get();
+    const snap = await getDocs(
+      query(recordsRef(houseId), where('period', '==', weekStart), limitTo(1)),
+    );
     return snap.empty
       ? null
       : ({ ...snap.docs[0].data(), id: snap.docs[0].id } as FinancialRecord);
@@ -167,11 +173,13 @@ export async function getEESIncomeForWeek(
   weekStart: string,
 ): Promise<number> {
   try {
-    const snap = await firestore
-      .collection('ees-records')
-      .where('houseId', '==', houseId)
-      .where('weekStart', '==', weekStart)
-      .get();
+    const snap = await getDocs(
+      query(
+        collection(firestore, 'ees-records'),
+        where('houseId', '==', houseId),
+        where('weekStart', '==', weekStart),
+      ),
+    );
     return snap.docs.reduce((sum, d) => sum + (d.data().amount ?? 0), 0);
   } catch (error) {
     logException(error);

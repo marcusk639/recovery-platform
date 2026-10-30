@@ -23,6 +23,7 @@ import {
   fontSize,
   fontFamily,
 } from "../../styles/theme";
+import { httpsCallable } from "@react-native-firebase/functions";
 import { functions } from "../../../firebase-setup";
 import { StripeAccountStatus } from "../../entities/House";
 import { useSelectedHouse } from "../../hooks/useSelectedHouse";
@@ -193,7 +194,8 @@ const StripeSettingsScreen: React.FC<Props> = (_props) => {
     }
 
     try {
-      const response = await functions.httpsCallable<{ houseId: string }, StripeAccountStatusResponse>(
+      const response = await httpsCallable<{ houseId: string }, StripeAccountStatusResponse>(
+        functions,
         "getStripeAccountStatus",
       )({
         houseId: house.id,
@@ -227,7 +229,8 @@ const StripeSettingsScreen: React.FC<Props> = (_props) => {
     setConnecting(true);
     setError(null);
     try {
-      const response = await functions.httpsCallable<{ houseId: string }, { url: string }>(
+      const response = await httpsCallable<{ houseId: string }, { url: string }>(
+        functions,
         "connectStripeAccount",
       )({
         houseId: house.id,
@@ -245,7 +248,7 @@ const StripeSettingsScreen: React.FC<Props> = (_props) => {
     setConnecting(true);
     setError(null);
     try {
-      await functions.httpsCallable("disconnectStripeAccount")({
+      await httpsCallable(functions, "disconnectStripeAccount")({
         houseId: house.id,
       });
       setStatus(StripeAccountStatus.DISCONNECTED);

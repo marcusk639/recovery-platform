@@ -41,4 +41,6 @@ module.exports = {
   deleteDoc: (ref) => ref.delete(),
   addDoc: (ref, data) => ref.add(data),
   onSnapshot: (ref, ...handlers) => ref.onSnapshot(...handlers),
+  runTransaction: (db, updateFunction) => db.runTransaction(updateFunction),
+  writeBatch: (db) => db.batch(),
 };

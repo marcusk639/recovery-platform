@@ -717,6 +717,41 @@ it, and new meetings carry `houseId`. Merging main brought:
 - Results after the merge: unit 349 suites, ratchet 125 / 125, rules 28 suites 610 / 610 (591 plus
   #164's 19), integration 7 / 41 (the harness, as expected before Task 10).
 
+### Task 10: modular call sites
+
+**Step 0 (inventory):** 60 files, equal to the group table less `firebase-setup.ts` (outside `src/`,
+added to the union by hand) and `notifications/handler.ts` (deleted in Task 9). No new file.
+
+**Test-mock support (once, used by every group):** the global unit mocks gain modular forms that
+delegate to whatever namespaced-shaped mock a suite set up, so suites keep their cases and
+assertions as services move: `runTransaction(db, fn)` → `db.runTransaction(fn)` and
+`writeBatch(db)` → `db.batch()` (namespaced-adapter), the `FieldValue` helpers
+(`serverTimestamp`, `increment`, `arrayUnion`, `arrayRemove`, `deleteField`) on the same `jest.fn`s,
+and `httpsCallable(instance, ...args)` → `instance.httpsCallable(...args)`. Rewrites keep the old
+path structure (`doc(collection(firestore, 'guests'), id)`, `doc(paymentsCollection, id)`), which
+the adapter maps onto exactly the chain a suite mocks.
+
+#### 10a: money
+
+- **Files (8):** `payments.ts`, `paywall.ts`, `subscription.ts`, `treasury.ts`, `oxford/ees.ts`,
+  `useSubscriptionGate.ts`, `RentPaymentScreen.tsx` (its `firestore()` default import now uses the
+  `firebase-setup` instance, the same default instance), `StripeSettingsScreen.tsx`.
+- **Op-log files unchanged:** `payments.oplog`, `payments-callables.oplog`, `treasury.oplog`,
+  `ees.oplog`, `useSubscriptionGate.oplog` (each still at the characterization commit) pass.
+- **Test changes:** `payment.test.ts` and `autoPay.test.tsx` swap their package mocks for the
+  namespaced adapter (`autoPay` looks its collection mock up at call time: imports are hoisted above
+  it); cases and expected values unchanged. Added: `autoPay` asserts the `guests/{id}` target, and
+  three `StripeSettingsScreen` cases pin each callable's `{ houseId }` payload (review gaps).
+- **Independent review (Step 4):** a fresh verifier, given the diff and the domain rules, checked
+  every write, transaction, batch, query and callable against RNFirebase 25.1.0's source
+  (`doc()`/`collection()` delegate to the namespaced refs, `query()` applies constraints in order,
+  `doc(collectionRef)` auto-ids, `increment` is the same `FieldValue`, `httpsCallable` passes no
+  options as before). Verdict: no behaviour change; payment status precedence, the `rentOwed`
+  increment in cents, EES and financial-record shapes preserved. Its lint findings (two `doc`
+  shadows) and test gaps are fixed.
+- **Results:** unit 349 suites passing; zero type errors in the group's files and no baseline entries
+  for them; ratchet 125 / 125; integration 7 / 41 (target 7).
+
 ## 7. Verification
 
 _Final results and the Mac checkpoint (Task 16)._

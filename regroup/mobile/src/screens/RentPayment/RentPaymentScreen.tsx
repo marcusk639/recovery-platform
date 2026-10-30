@@ -38,7 +38,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import firestore from "@react-native-firebase/firestore";
+import { collection, doc, updateDoc } from "@react-native-firebase/firestore";
+import { firestore } from "../../../firebase-setup";
 import { useQueryClient } from "@tanstack/react-query";
 import { RootStackParamList } from "../../navigation/types";
 
@@ -243,7 +244,7 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
       const persistedAutoPayEnabled = guest.autoPayEnabled ?? false;
       if (saveCard !== persistedAutoPayEnabled) {
         try {
-          await firestore().collection("guests").doc(guest.id).update({
+          await updateDoc(doc(collection(firestore, "guests"), guest.id), {
             autoPayEnabled: saveCard,
           });
         } catch (e) {

@@ -240,6 +240,12 @@ jest.mock('@react-native-firebase/firestore', () => {
     __esModule: true,
     default: fn,
     ...require('./__mocks__/firebase-modular/namespaced-adapter'),
+    // Modular FieldValue helpers, backed by the same jest.fns as FieldValue.
+    serverTimestamp: (...args) => FieldValue.serverTimestamp(...args),
+    increment: (...args) => FieldValue.increment(...args),
+    arrayUnion: (...args) => FieldValue.arrayUnion(...args),
+    arrayRemove: (...args) => FieldValue.arrayRemove(...args),
+    deleteField: () => FieldValue.delete(),
     getFirestore: () => mockFirestore,
     initializeFirestore: jest.fn(() => Promise.resolve(mockFirestore)),
     connectFirestoreEmulator: jest.fn(),
@@ -255,7 +261,15 @@ jest.mock('@react-native-firebase/functions', () => {
     httpsCallable: jest.fn(() => jest.fn(() => Promise.resolve({ data: {} }))),
     useEmulator: jest.fn(),
   };
-  return { __esModule: true, default: () => mockFunctions };
+  return {
+    __esModule: true,
+    default: () => mockFunctions,
+    getFunctions: () => mockFunctions,
+    // Modular form over whatever functions instance the caller passes (often
+    // a suite's own firebase-setup mock), as namespaced-adapter does for Firestore.
+    httpsCallable: (instance, ...args) => instance.httpsCallable(...args),
+    connectFunctionsEmulator: jest.fn(),
+  };
 });
 
 jest.mock('@react-native-firebase/messaging', () => {

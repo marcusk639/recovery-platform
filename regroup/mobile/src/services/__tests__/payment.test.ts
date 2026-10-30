@@ -15,11 +15,14 @@
 
 // No jest.mock needed here — firebase-setup is auto-mocked via moduleNameMapper
 
-// recordManualPayment uses FirebaseFirestore.FieldValue.increment directly
-// (imported from @react-native-firebase/firestore, not the firebase-setup
-// instance) — mocked the same way activity.test.ts does, with a sentinel
-// object the assertions below can recognize.
+// recordManualPayment uses increment() from @react-native-firebase/firestore
+// (not the firebase-setup instance), mocked with a sentinel object the
+// assertions below can recognize. The modular functions delegate to the
+// firebase-setup mock's refs (namespaced-adapter), so the chains these tests
+// configure are the ones the service drives.
 jest.mock("@react-native-firebase/firestore", () => ({
+  ...require("../../../__mocks__/firebase-modular/namespaced-adapter"),
+  increment: (n: number) => ({ __increment: n }),
   FieldValue: {
     increment: (n: number) => ({ __increment: n }),
   },
