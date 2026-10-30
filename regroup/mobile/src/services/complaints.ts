@@ -1,18 +1,27 @@
+import {
+  collection,
+  doc,
+  writeBatch,
+  type CollectionReference,
+  type FirebaseFirestoreTypes,
+} from "@react-native-firebase/firestore";
 import * as crud from "./crud";
 import { firestore } from "../../firebase-setup";
 import { House } from "../entities/House";
 import cloneDeep from "lodash/cloneDeep";
 import { Complaint } from "../entities/Complaint";
 
-const complaintsCollection = firestore.collection("complaints");
-const houseCollection = firestore.collection("houses");
+// Typed for both APIs while crud.create still takes the namespaced type (Task 10f).
+const complaintsCollection = collection(firestore, "complaints") as CollectionReference &
+  FirebaseFirestoreTypes.CollectionReference;
+const houseCollection = collection(firestore, "houses");
 
 export const createComplaint = (complaint: Complaint) => {
   return crud.create<Complaint>(complaintsCollection, complaint, complaint.id);
 };
 
 export const removeComplaint = async (_house: House, complaint: Complaint) => {
-  const batch = firestore.batch();
+  const batch = writeBatch(firestore);
   const complaints = cloneDeep(_house.complaints);
   delete complaints[complaint.id];
   const house: House = { ..._house, complaints: { ...complaints } };
@@ -22,8 +31,8 @@ export const removeComplaint = async (_house: House, complaint: Complaint) => {
   // Also scoped the house update to just the changed field instead of
   // blind-writing the full client-side house snapshot, which risked
   // clobbering concurrent edits from other admins.
-  batch.delete(complaintsCollection.doc(complaint.id));
-  batch.update(houseCollection.doc(house.id), { complaints: house.complaints });
+  batch.delete(doc(complaintsCollection, complaint.id));
+  batch.update(doc(houseCollection, house.id), { complaints: house.complaints });
   await batch.commit();
   return house;
 };

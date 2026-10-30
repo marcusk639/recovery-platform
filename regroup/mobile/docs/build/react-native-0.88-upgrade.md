@@ -815,6 +815,45 @@ the adapter maps onto exactly the chain a suite mocks.
 - **Results:** unit 364 suites, 5608 passed; zero type errors in the group, no baseline entries;
   ratchet 125 / 125; integration 21 / 41 (target 21).
 
+#### 10d: content
+
+- **Step 1:** 17 op-log suites (180 tests), committed first (`585d3bad`) and passing on the
+  namespaced code: message (listeners, cursors), notifications, storage (paths and URLs; storage is
+  not in the op log), documents, drug tests, staff notes, complaints, issues, feedback, chore
+  rotation, phase advancement, reporting, the Oxford barrel (three suites), Oxford business meetings,
+  meetings. Unchanged through the rewrite and passing.
+- **Files (15):** every group file. Collections passed to `crud` keep the dual-API cast
+  (`notificationCollection`, the meeting, feedback, complaint and issue collections, the chat
+  subcollections via a local `CrudCollection` alias). Storage: `ref(getStorage(), path)` with
+  `putFile` (metadata unchanged), `getDownloadURL`, `deleteObject`; the unused module-level
+  `bucket`/`housesRef` kept (as `ref(getStorage())`, `ref(getStorage(), 'houses')`) so module load
+  is unchanged. `staffNotes.ts` keeps its local hand-written `FirebaseFirestoreTypes` stub (no
+  package import). Done by a delegated agent under the conventions above; diff reviewed.
+- **Test change:** `documents.test.ts`'s storage mock gains modular functions delegating to its own
+  spies; cases unchanged.
+- **Results:** unit 387 suites, 5859 passed; zero type errors in the group; ratchet 125 / 125;
+  integration **35 / 55 (target 35)**: `guestCRUD` 6 and `meetings` 8 now pass under the rules.
+  (55 total: Task 9 counted 41 while two suites failed at load.)
+
+#### Behaviours pinned as-is (10d, 10e op-logs), for follow-up
+
+Pinned exactly so the migration cannot change them; none is fixed here.
+
+- `deleteNotification` on a missing doc throws a TypeError from `checkId(undefined)`.
+- `getFeedback` / `getNotifications` key results by the stored `id` field, not the doc id.
+- `getPositiveTestCount` compares a `yyyy-MM-dd` `testDate` with a full ISO cutoff (the cutoff day
+  is excluded).
+- `getComplianceTrend` throws a generic error without `logException`.
+- The Oxford barrel's `createBusinessMeeting` adds neither `createdAt` nor `houseId`, unlike
+  `oxford/businessMeetings.ts`; its update adapters write every field given, `houseId` included.
+- `deleteStaffNote` on a missing note succeeds; `pinStaffNote` rejects.
+- `TwoFactorSetup` reports "2FA Enabled" when nobody is signed in (the link is skipped); it is phone
+  linking, not multi-factor.
+- `Splash` subscribes `onMessage` in the component body: a new listener every render, never removed
+  (Task 11 rewrites this path).
+- `EnhancedAuthService` counts rate-limit attempts before validation; `signUpWithEmail` lets an
+  empty email or password through to Firebase.
+
 ## 7. Verification
 
 _Final results and the Mac checkpoint (Task 16)._

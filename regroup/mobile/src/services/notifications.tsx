@@ -1,9 +1,20 @@
-import { firestore, FirebaseFirestoreTypes } from '../../firebase-setup';
+import {
+  arrayUnion,
+  collection,
+  doc,
+  setDoc,
+  type CollectionReference,
+  type FirebaseFirestoreTypes,
+} from '@react-native-firebase/firestore';
+import { firestore } from '../../firebase-setup';
 import * as crud from './crud';
 import { Notification } from '../entities/Notification';
-import FirebaseFirestore from '@react-native-firebase/firestore';
 
-export const notificationCollection = firestore.collection('notifications');
+// Typed for both APIs while crud still takes the namespaced type (Task 10f).
+export const notificationCollection = collection(
+  firestore,
+  'notifications',
+) as CollectionReference & FirebaseFirestoreTypes.CollectionReference;
 
 /**
  * Gets a house by id
@@ -78,16 +89,15 @@ export async function registerDeviceToken(
   userId: string,
   token: string,
 ): Promise<void> {
-  const userTokensCollection = firestore.collection('userDeviceTokens');
-  await userTokensCollection
-    .doc(userId)
-    .set(
-      {
-        tokens: FirebaseFirestore.FieldValue.arrayUnion(token),
-        updatedAt: new Date().toISOString(),
-      },
-      { merge: true },
-    );
+  const userTokensCollection = collection(firestore, 'userDeviceTokens');
+  await setDoc(
+    doc(userTokensCollection, userId),
+    {
+      tokens: arrayUnion(token),
+      updatedAt: new Date().toISOString(),
+    },
+    { merge: true },
+  );
 }
 
 /**

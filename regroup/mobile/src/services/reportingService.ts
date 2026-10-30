@@ -1,3 +1,4 @@
+import { collection, getDocs, query, where } from '@react-native-firebase/firestore';
 import { firestore, auth } from '../../firebase-setup';
 import { logException } from '../util/logging';
 import { Guest } from '../entities/Guest';
@@ -11,7 +12,7 @@ import {
   parseISO,
 } from 'date-fns';
 
-export const weekSummaryCollection = firestore.collection('week-summaries');
+export const weekSummaryCollection = collection(firestore, 'week-summaries');
 
 export interface OccupancyReport {
   activeCount: number;
@@ -104,10 +105,13 @@ export async function getComplianceTrend(
     for (let i = 0; i < guestIds.length; i += CHUNK) {
       const chunk = guestIds.slice(i, i + CHUNK);
       // Only one 'in' operator per Firestore query — filter startDate client-side
-      const snap = await weekSummaryCollection
-        .where('houseId', '==', houseId)
-        .where('guestId', 'in', chunk)
-        .get();
+      const snap = await getDocs(
+        query(
+          weekSummaryCollection,
+          where('houseId', '==', houseId),
+          where('guestId', 'in', chunk),
+        ),
+      );
       snap.docs
         .map(d => d.data() as WeekSummary)
         .filter(doc => weekStartSet.has(doc.startDate))

@@ -1,8 +1,15 @@
+import {
+  collection,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+} from '@react-native-firebase/firestore';
 import { firestore } from '../../firebase-setup';
 import { ChoreRotation } from '../entities/Chore';
 import { logException } from '../util/logging';
 
-const choreRotationsCollection = firestore.collection('choreRotations');
+const choreRotationsCollection = collection(firestore, 'choreRotations');
 
 function currentSundayISO(): string {
   const d = new Date();
@@ -16,9 +23,9 @@ export async function getRotation(
   houseId: string,
 ): Promise<ChoreRotation | null> {
   try {
-    const doc = await choreRotationsCollection.doc(houseId).get();
-    if (!doc.exists()) return null;
-    return doc.data() as ChoreRotation;
+    const rotationDoc = await getDoc(doc(choreRotationsCollection, houseId));
+    if (!rotationDoc.exists()) return null;
+    return rotationDoc.data() as ChoreRotation;
   } catch (error) {
     logException(error);
     throw new Error('Failed to fetch chore rotation');
@@ -37,7 +44,7 @@ export async function setRotationOrder(
       currentIndex: 0,
       lastRotatedAt: currentSundayISO(),
     };
-    await choreRotationsCollection.doc(houseId).set(rotation);
+    await setDoc(doc(choreRotationsCollection, houseId), rotation);
   } catch (error) {
     logException(error);
     throw new Error('Failed to set rotation order');
@@ -46,11 +53,11 @@ export async function setRotationOrder(
 
 export async function advanceRotation(houseId: string): Promise<void> {
   try {
-    const doc = await choreRotationsCollection.doc(houseId).get();
-    if (!doc.exists()) throw new Error('No rotation configured for this house');
-    const rotation = doc.data() as ChoreRotation;
+    const rotationDoc = await getDoc(doc(choreRotationsCollection, houseId));
+    if (!rotationDoc.exists()) throw new Error('No rotation configured for this house');
+    const rotation = rotationDoc.data() as ChoreRotation;
     const nextIndex = (rotation.currentIndex + 1) % rotation.guestIds.length;
-    await choreRotationsCollection.doc(houseId).update({
+    await updateDoc(doc(choreRotationsCollection, houseId), {
       currentIndex: nextIndex,
       lastRotatedAt: currentSundayISO(),
     });
