@@ -46,6 +46,7 @@ export const useMeetingSearch = (props: UseMeetingSearchProps) => {
 
   const meetings: RatsMeeting[] = (searchMeetingsMutation.data as any) ?? [];
   const searchingForMeetings = searchMeetingsMutation.isPending;
+  const searchFailed = searchMeetingsMutation.isError;
   const checkingIn = checkIntoMeetingMutation.isPending;
   const checkInSuccessful = checkIntoMeetingMutation.isSuccess;
   const checkInError = (checkIntoMeetingMutation.error as Error)?.message ?? '';
@@ -281,6 +282,7 @@ export const useMeetingSearch = (props: UseMeetingSearchProps) => {
     filters,
     meetings,
     searchingForMeetings,
+    searchFailed,
     checkingIn,
     checkInSuccessful,
     checkInError,

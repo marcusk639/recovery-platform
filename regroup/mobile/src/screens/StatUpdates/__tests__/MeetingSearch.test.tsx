@@ -560,6 +560,40 @@ describe('MeetingSearch', () => {
     });
   });
 
+  // ─── Search failure state ─────────────────────────────────────────────────────
+  describe('search failure state', () => {
+    it('renders an error message instead of "no meetings found"', () => {
+      const { getByTestId } = renderScreen(
+        { meetings: [] },
+        { searchFailed: true },
+      );
+      expect(getByTestId('empty-screen-message').props.children).toBe(
+        "Couldn't load meetings. Please try again.",
+      );
+    });
+
+    it('retries the search from the "TRY AGAIN" button', async () => {
+      const executeSearch = jest.fn();
+      const { getByText } = renderScreen(
+        { meetings: [] },
+        { searchFailed: true, executeSearch },
+      );
+      await act(async () => {
+        fireEvent.press(getByText('TRY AGAIN'));
+      });
+      expect(executeSearch).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not render the error while a retry is in flight', () => {
+      const { queryByTestId, getByTestId } = renderScreen(
+        { meetings: [], searchingForMeetings: true },
+        { searchFailed: true },
+      );
+      expect(queryByTestId('empty-screen')).toBeNull();
+      expect(getByTestId('loading-indicator')).toBeTruthy();
+    });
+  });
+
   // ─── Results render ──────────────────────────────────────────────────────────
   describe('results rendering', () => {
     it('renders meeting name when results are present', () => {
