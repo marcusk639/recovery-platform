@@ -9,7 +9,8 @@
 
 import { logActivity, getActivities, getWeekSummary } from '../services/activity';
 import { ActivityType, ActivityDataFactory } from '../entities/ActivityModel';
-import { firestore } from '../../firebase-setup';
+import { adminDb } from './firebase-admin-setup';
+import { adminOf, signInAs } from './actors';
 
 const TEST_GUEST = 'transfer-guest-1';
 const TEST_HOUSE = 'transfer-house-1';
@@ -33,6 +34,16 @@ const WEEK_2_RANGE: [Date, Date] = [
 describe('guest week transfer (integration)', () => {
   const createdActivityIds: string[] = [];
 
+  // The guest the activities are for, and 'user-1' (the logger) as a house admin.
+  beforeAll(async () => {
+    await adminDb.doc(`guests/${TEST_GUEST}`).set({ id: TEST_GUEST, houseId: TEST_HOUSE, userId: 'transfer-resident-1' });
+    await signInAs('user-1', adminOf(TEST_HOUSE));
+  });
+
+  afterAll(async () => {
+    await adminDb.doc(`guests/${TEST_GUEST}`).delete();
+  });
+
   const log = async (type: ActivityType, data: any, at: Date) => {
     const activity = await logActivity(TEST_GUEST, TEST_HOUSE, type, data, 'user-1', at);
     createdActivityIds.push(activity.id);
@@ -40,11 +51,11 @@ describe('guest week transfer (integration)', () => {
   };
 
   afterEach(async () => {
-    await firestore.collection('week-summaries').doc(`${TEST_GUEST}_${WEEK_1_START}`).delete();
-    await firestore.collection('week-summaries').doc(`${TEST_GUEST}_${WEEK_2_START}`).delete();
+    await adminDb.collection('week-summaries').doc(`${TEST_GUEST}_${WEEK_1_START}`).delete();
+    await adminDb.collection('week-summaries').doc(`${TEST_GUEST}_${WEEK_2_START}`).delete();
 
     await Promise.all(
-      createdActivityIds.map((id) => firestore.collection('activities').doc(id).delete()),
+      createdActivityIds.map((id) => adminDb.collection('activities').doc(id).delete()),
     );
     createdActivityIds.length = 0;
   });
@@ -70,7 +81,7 @@ describe('guest week transfer (integration)', () => {
 
   it('logging in week 2 does not modify the week 1 summary', async () => {
     // Week 1 summary as the server left it.
-    await firestore
+    await adminDb
       .collection('week-summaries')
       .doc(`${TEST_GUEST}_${WEEK_1_START}`)
       .set({
@@ -135,7 +146,7 @@ describe('guest week transfer (integration)', () => {
       WEEK_1_DATE,
     );
 
-    const saved = (await firestore.collection('activities').doc(chore.id).get()).data();
+    const saved = (await adminDb.collection('activities').doc(chore.id).get()).data();
     expect(saved?.guestId).toBe(TEST_GUEST);
     expect(saved?.houseId).toBe(TEST_HOUSE);
     expect(saved?.status).toBe('active');

@@ -603,8 +603,8 @@ AGP 9, and 0.6.0's codegen points at a missing directory. `RatsCheckBox` is reim
 
 ### Task 9: RNFirebase 25.1.0 (both APIs) and the modular setup
 
-Split into two commits (a deviation from the plan's one): this one, which is unit-green, and the
-JS-SDK integration harness (Step 3), which follows. The original session's in-progress Task 9 work
+Split into two commits (a deviation from the plan's one): the first, which is unit-green, and the
+JS-SDK integration harness (Step 3, "Part 2" below). The original session's in-progress Task 9 work
 was never committed and was redone from the plan.
 
 - **Versions:** all seven RNFirebase packages at exactly 25.1.0; `firebase` 12.17.1 as a
@@ -658,6 +658,49 @@ was never committed and was redone from the plan.
     `callHttpsFunction`.
   - **Results:** unit 348 suites, 5428 passed, 2 todo; ratchet 125 / 125; rules 27 suites, 591 / 591.
 
+#### Part 2: the JS-SDK integration harness
+
+- **Client:** `src/integration/rnfb-to-web.ts` is the Firebase JS SDK 12.17.1 on the emulators,
+  mapped (in `jest.config.integration.js`) over `@react-native-firebase/{app,auth,firestore,functions,storage}`
+  and `firebase-setup`. Settings, then `connect*Emulator`, as in `firebase-setup.ts`. Shims:
+  - Firestore operations reject with RNFirebase's `firestore/<code>` codes (`activity.ts` retries
+    on `firestore/permission-denied`). The SDK's rejections are not `instanceof FirestoreError`,
+    so the shim matches on the unprefixed code.
+  - `putFile(ref, path, metadata)` uploads a local file.
+  - Messaging keeps the unit mock (no JS SDK equivalent).
+- **Guards** (`emulator-env.ts`, used by the client and Admin): the project must be `demo-…` and
+  every `*_EMULATOR_HOST` must be `127.0.0.1`; Firestore and Auth must be running.
+- **Environment:** `testEnvironment: 'node'` with `node` export conditions. The preset's
+  environment selects the `react-native` condition, which loads the SDK's React Native builds.
+- **Setup:** `setup.integration.ts` loads `jest.setup.js` and releases its five RNFirebase mocks
+  with `jest.dontMock` (`unmock` is hoisted above the `require` and loses).
+- **Admin** (`firebase-admin-setup.ts`): `adminDb` and `adminAuth`, for seeding, cleanup and direct
+  checks only. Its project is now the emulator's (`demo-test`); it was `rats-v2-test`.
+- **Actors** (`actors.ts`): `signInAs(uid, claims)` mints an Admin custom token with house-role
+  claims (`{ admin: { [houseId]: true } }`) and signs the client in through the Auth emulator.
+  Every suite runs each service call as the user the call names.
+- **Suites:** seeding, cleanup and direct reads move to `adminDb`, and each suite seeds the guest
+  docs the rules dereference. Test inputs changed only where the rules require it:
+  - `activity.integration`: the two cases where `user-1` disputed its own logged activity now
+    dispute as peer resident `peer-1`. The owner rule forbids self-disputes; the case passed only
+    because Admin bypassed the rules. Assertions are unchanged.
+  - `meetings.integration`: the fixture carries `houseId` (the meetings rules require it on every
+    client write; `RatsMeeting` doesn't declare it).
+- **New `harness.integration.test.ts`** (7): the three guards, the shared Firestore instance, a
+  rules-allowed read, a rules-denied read with `firestore/permission-denied`, and
+  `ignoreUndefinedProperties`.
+- **`src/types/modules.d.ts`:** removed the stale `firebase/storage` stub (it predates the
+  installed SDK and hid its types). The storage rules suite still typechecks and passes.
+- **Results:** integration 7 suites, 41 tests: 7 pass (the harness), 34 fail as the plan expects
+  (namespaced services on the JS SDK: `firestore.collection is not a function`, `FieldValue` of
+  undefined). Unit, ratchet (125 / 125) and rules (591 / 591) unchanged.
+- **Pre-existing problems the rules expose** (not fixed here; reported to the owner):
+  - `getActivities` / `getActivitiesPage` query `activities` by `guestId` without `houseId`. The
+    read rule checks `resource.data.houseId`, so the emulator denies that list query for house
+    admins and residents alike (measured; the same query with a `houseId` filter is allowed).
+  - The app's meeting create (`NewMeeting.tsx` → `addMeeting`) sends no `houseId`, which the
+    meetings rules require.
+
 ## 7. Verification
 
 _Final results and the Mac checkpoint (Task 16)._
@@ -665,19 +708,27 @@ _Final results and the Mac checkpoint (Task 16)._
 ## Appendix A: integration baseline and recovery targets
 
 Each passing test maps to the latest Task 10 group among the modules its import graph evaluates at
-load (type-only imports excluded; computed by walking relative imports). After Task 9 about 0 pass;
-each group restores exactly its suites.
+load (type-only imports excluded; computed by walking relative imports). After Task 9 only the
+harness passes; each group restores its suites.
 
-| Suite | Passing at baseline | Load graph reaches | Restored by |
-| ----- | ------------------- | ------------------ | ----------- |
-| `activity.integration.test.ts` | 4 of 6 | 10b | 10b |
-| `guestWeekTransfer.integration.test.ts` | 5 of 5 | 10b | 10b |
-| `weekSummary.integration.test.ts` | 5 of 5 | 10b | 10b |
-| `activity.emulator.test.ts` | 1 of 18 | 10b | 10b |
-| `guestCRUD.integration.test.ts` | 6 of 6 | 10a, 10b, 10c, 10d (`guest.tsx` → `house.tsx` → `storage.tsx`, …) | 10d |
-| `meetings.integration.test.ts` | 8 of 8 | 10a–10d | 10d |
+The baseline ran the services as Admin, which bypasses the security rules. From Task 9 they run
+as signed-in users, so a baseline pass the rules deny does not come back. The last column is the
+target under the rules, checked against `firestore.rules` and, for the list query, measured.
 
-Expected passing after each group, run with `--runInBand`: 10a 0, 10b 15, 10c 15, 10d 29, 10e 29.
+| Suite | Passing at baseline (Admin) | Load graph reaches | Restored by | Target under the rules |
+| ----- | --------------------------- | ------------------ | ----------- | ---------------------- |
+| `harness.integration.test.ts` (new) | — | none | Task 9 | 7 of 7 |
+| `activity.integration.test.ts` | 4 of 6 | 10b | 10b | 3: "keeps a pending dispute" calls `getActivities` |
+| `guestWeekTransfer.integration.test.ts` | 5 of 5 | 10b | 10b | 3: the two week-query cases call `getActivities` |
+| `weekSummary.integration.test.ts` | 5 of 5 | 10b | 10b | 5 |
+| `activity.emulator.test.ts` | 1 of 18 | 10b | 10b | 0: the case sends no `loggedBy` (stale API) |
+| `guestCRUD.integration.test.ts` | 6 of 6 | 10a, 10b, 10c, 10d (`guest.tsx` → `house.tsx` → `storage.tsx`, …) | 10d | 6 |
+| `meetings.integration.test.ts` | 8 of 8 | 10a–10d | 10d | 8 |
+
+Expected passing after each group, run with `--runInBand`: Task 9 7, 10a 7, 10b 18, 10c 18, 10d 32,
+10e 32 (the 29 baseline passes less the 4 the rules deny, plus the 7 harness cases). A group that
+recovers fewer than its target is investigated before its commit; one that recovers more means a
+rule or a prediction here was wrong, and is recorded.
 
 Failing at baseline (pre-existing):
 

@@ -1,33 +1,21 @@
-// src/integration/firebase-admin-setup.ts
-// Provides firebase-admin-backed Firebase services for integration tests.
-// Uses the Firestore emulator via FIRESTORE_EMULATOR_HOST (set in setup.ts).
-
+/**
+ * The Admin SDK handle for the integration suite: seeding, cleaning up and
+ * checking data directly. It bypasses the security rules, so it never stands
+ * in for a user: services under test run on the client SDK (rnfb-to-web.ts)
+ * as a signed-in user (actors.ts). It reaches the emulators through the
+ * *_EMULATOR_HOST variables, which emulator-env.ts checks.
+ */
 import * as admin from 'firebase-admin';
+import { emulatorPort, integrationProjectId } from './emulator-env';
 
-if (!admin.apps.length) {
-  admin.initializeApp({ projectId: 'rats-v2-test' });
-}
+emulatorPort('FIRESTORE_EMULATOR_HOST');
+emulatorPort('FIREBASE_AUTH_EMULATOR_HOST');
 
-const firestoreInstance = admin.firestore();
-firestoreInstance.settings({ ignoreUndefinedProperties: true });
+const app = admin.apps.length
+  ? admin.app()
+  : admin.initializeApp({ projectId: integrationProjectId() });
 
-export const firestore = firestoreInstance;
+export const adminDb = app.firestore();
+adminDb.settings({ ignoreUndefinedProperties: true });
 
-// Stubs — integration tests only need Firestore
-export const auth = {
-  currentUser: null,
-  signInWithEmailAndPassword: () => Promise.resolve({ user: {} }),
-  signOut: () => Promise.resolve(),
-  onAuthStateChanged: () => () => {},
-} as any;
-
-export const messaging = {} as any;
-export const storage = {} as any;
-export const functions = {
-  httpsCallable: () => () => Promise.resolve({ data: {} }),
-} as any;
-export const callHttpsFunction = () => Promise.resolve({ data: {} });
-
-export const FirebaseAuthTypes = {};
-export const FirebaseFirestoreTypes = {};
-export const FirebaseStorageTypes = {};
+export const adminAuth = app.auth();

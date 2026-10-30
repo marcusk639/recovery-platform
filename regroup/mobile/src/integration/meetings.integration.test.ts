@@ -4,9 +4,15 @@
 
 import { addMeeting, updateMeeting, deleteMeeting } from '../services/meeting';
 import { RatsMeeting } from '../entities/Meeting';
-import { firestore } from '../../firebase-setup';
+import { adminDb } from './firebase-admin-setup';
+import { adminOf, signInAs } from './actors';
 
-const BASE_MEETING: RatsMeeting = {
+// The meetings rules allow a write only for a house's guests or admins, by
+// the meeting's houseId; RatsMeeting does not declare the field.
+const MEETING_HOUSE = 'meetings-house-1';
+
+const BASE_MEETING = {
+  houseId: MEETING_HOUSE,
   name: 'AA Tuesday Night',
   type: 'AA',
   day: 'tuesday',
@@ -17,15 +23,20 @@ const BASE_MEETING: RatsMeeting = {
   zip: '62701',
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
-};
+} as RatsMeeting;
 
 describe('meeting service (integration)', () => {
   const createdMeetingIds: string[] = [];
 
+  // Deleting a meeting takes a house admin.
+  beforeAll(async () => {
+    await signInAs('meetings-admin-1', adminOf(MEETING_HOUSE));
+  });
+
   afterEach(async () => {
     await Promise.all(
       createdMeetingIds.map(id =>
-        firestore.collection('meetings').doc(id).delete(),
+        adminDb.collection('meetings').doc(id).delete(),
       ),
     );
     createdMeetingIds.length = 0;
@@ -36,7 +47,7 @@ describe('meeting service (integration)', () => {
       const meeting = await addMeeting({ ...BASE_MEETING });
       createdMeetingIds.push(meeting.id!);
 
-      const doc = await firestore.collection('meetings').doc(meeting.id!).get();
+      const doc = await adminDb.collection('meetings').doc(meeting.id!).get();
       expect(doc.exists).toBe(true);
 
       const data = doc.data();
@@ -59,7 +70,7 @@ describe('meeting service (integration)', () => {
       expect(meeting.id!.length).toBeGreaterThan(0);
 
       // Document should exist in Firestore under the generated id
-      const doc = await firestore.collection('meetings').doc(meeting.id!).get();
+      const doc = await adminDb.collection('meetings').doc(meeting.id!).get();
       expect(doc.exists).toBe(true);
     });
 
@@ -70,7 +81,7 @@ describe('meeting service (integration)', () => {
 
       expect(meeting.id).toBe(customId);
 
-      const doc = await firestore.collection('meetings').doc(customId).get();
+      const doc = await adminDb.collection('meetings').doc(customId).get();
       expect(doc.exists).toBe(true);
     });
 
@@ -91,7 +102,7 @@ describe('meeting service (integration)', () => {
 
       await updateMeeting(meeting.id!, { name: 'AA Wednesday Night', day: 'wednesday' });
 
-      const doc = await firestore.collection('meetings').doc(meeting.id!).get();
+      const doc = await adminDb.collection('meetings').doc(meeting.id!).get();
       expect(doc.data()?.name).toBe('AA Wednesday Night');
       expect(doc.data()?.day).toBe('wednesday');
     });
@@ -102,7 +113,7 @@ describe('meeting service (integration)', () => {
 
       await updateMeeting(meeting.id!, { name: 'AA Thursday Night' });
 
-      const doc = await firestore.collection('meetings').doc(meeting.id!).get();
+      const doc = await adminDb.collection('meetings').doc(meeting.id!).get();
       // Updated field
       expect(doc.data()?.name).toBe('AA Thursday Night');
       // Unchanged fields
@@ -119,7 +130,7 @@ describe('meeting service (integration)', () => {
 
       await deleteMeeting(meeting);
 
-      const doc = await firestore.collection('meetings').doc(meeting.id!).get();
+      const doc = await adminDb.collection('meetings').doc(meeting.id!).get();
       expect(doc.exists).toBe(false);
     });
 
@@ -131,11 +142,11 @@ describe('meeting service (integration)', () => {
       await deleteMeeting(meetingA);
 
       // Meeting A should be gone
-      const docA = await firestore.collection('meetings').doc(meetingA.id!).get();
+      const docA = await adminDb.collection('meetings').doc(meetingA.id!).get();
       expect(docA.exists).toBe(false);
 
       // Meeting B should still exist
-      const docB = await firestore.collection('meetings').doc(meetingB.id!).get();
+      const docB = await adminDb.collection('meetings').doc(meetingB.id!).get();
       expect(docB.exists).toBe(true);
       expect(docB.data()?.name).toBe('Meeting B');
     });

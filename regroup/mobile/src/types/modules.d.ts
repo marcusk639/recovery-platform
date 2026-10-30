@@ -15,13 +15,6 @@ declare module '@firebase/rules-unit-testing' {
   export type RulesTestContext = any;
 }
 
-declare module 'firebase/storage' {
-  export function ref(storage: any, path?: string): any;
-  export function uploadBytes(ref: any, data: any, metadata?: any): Promise<any>;
-  export function getDownloadURL(ref: any): Promise<string>;
-  export function deleteObject(ref: any): Promise<void>;
-}
-
 declare module 'react-native-simple-radio-button' {
   import { Component } from 'react';
   import { StyleProp, ViewStyle, TextStyle } from 'react-native';
