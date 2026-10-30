@@ -48,7 +48,13 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockUserAsGuest = null;
   mockUseSelectedGuest.mockReturnValue({ guest: { id: 'guest-1' } });
-  mockUseActivities.mockReturnValue({ activities: [], loading: false, error: null });
+  mockUseActivities.mockReturnValue({
+    activities: [],
+    loading: false,
+    idle: false,
+    error: null,
+    refetch: jest.fn(),
+  });
 });
 
 describe("today's check-ins list", () => {
@@ -83,16 +89,45 @@ describe("today's check-ins list", () => {
 
 describe('checkInto', () => {
   it("refuses, and says why, when today's check-ins could not be loaded", () => {
+    const refetch = jest.fn();
     mockUseActivities.mockReturnValue({
       activities: [],
       loading: false,
       error: new Error('permission-denied'),
+      refetch,
     });
     const { result } = render();
 
     act(() => result.current.checkInto(meeting));
 
     expect(mockNotify).toHaveBeenCalledWith('Check-in Unavailable', expect.any(String), []);
+    expect(mockCheckInMutate).not.toHaveBeenCalled();
+    // The listener is gone after an error: "try again" must re-subscribe.
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses while today's check-ins are still loading (an empty list proves nothing)", () => {
+    mockUseActivities.mockReturnValue({ activities: [], loading: true, idle: false, error: null });
+    const { result } = render();
+
+    act(() => result.current.checkInto(meeting));
+
+    expect(mockNotify).toHaveBeenCalledWith('Check-in Unavailable', expect.any(String), []);
+    expect(mockCheckInMutate).not.toHaveBeenCalled();
+  });
+
+  it('refuses with no resident to check in', () => {
+    mockUseSelectedGuest.mockReturnValue({ guest: null });
+    mockUseActivities.mockReturnValue({ activities: [], loading: false, idle: true, error: null });
+    const { result } = render();
+
+    act(() => result.current.checkInto(meeting));
+
+    expect(mockNotify).toHaveBeenCalledWith(
+      'Check-in Unavailable',
+      'No resident is selected to check in.',
+      [],
+    );
     expect(mockCheckInMutate).not.toHaveBeenCalled();
   });
 });

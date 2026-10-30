@@ -580,6 +580,19 @@ describe("NewMeeting", () => {
       expect(logException).toHaveBeenCalledWith(expect.any(Error), "NewMeeting");
     });
 
+    it("when the selected house failed to load, says that (not 'select a house') and logs it", () => {
+      mockUseSelectedHouse.mockReturnValue({ house: null, houseId: "house-1", isLoading: false });
+
+      const { getByText, queryByText } = renderScreen();
+
+      expect(getByText("Couldn't load your house. Go back and try again.")).toBeTruthy();
+      expect(queryByText("Select a house before adding a meeting.")).toBeNull();
+      expect(logException).toHaveBeenCalledWith(
+        expect.objectContaining({ message: "NewMeeting: the selected house failed to load" }),
+        "NewMeeting"
+      );
+    });
+
     it("while the house is still loading, shows neither the form nor the message", () => {
       mockUseSelectedHouse.mockReturnValue({ house: null, houseId: "house-1", isLoading: true });
 

@@ -68,7 +68,13 @@ export const useMeetingSearch = (props: UseMeetingSearchProps) => {
   // pending dispute still counts, so it still blocks a duplicate). With no
   // guest nothing is listed: a house-wide list would match other residents.
   const checkInGuestId = (userAsGuest || guest)?.id;
-  const { activities: todaysMeetingActivities, error: todaysMeetingsError } = useActivities({
+  const {
+    activities: todaysMeetingActivities,
+    loading: todaysMeetingsLoading,
+    idle: todaysMeetingsIdle,
+    error: todaysMeetingsError,
+    refetch: refetchTodaysMeetings,
+  } = useActivities({
     guestId: checkInGuestId,
     houseId: checkInGuestId ? house?.id : undefined,
     startDate: todaysDate,
@@ -223,7 +229,23 @@ export const useMeetingSearch = (props: UseMeetingSearchProps) => {
     (meeting: RatsMeeting) => {
       // Without today's check-ins the duplicate check can't run; check-ins
       // feed phase compliance, so fail closed rather than risk a duplicate.
+      // An unloaded list would let a duplicate through: no guest (nothing
+      // listed) and still loading are refused too.
+      if (todaysMeetingsIdle) {
+        notify('Check-in Unavailable', 'No resident is selected to check in.', []);
+        return;
+      }
+      if (todaysMeetingsLoading) {
+        notify(
+          'Check-in Unavailable',
+          "Still checking today's check-ins. Please try again in a moment.",
+          [],
+        );
+        return;
+      }
       if (todaysMeetingsError) {
+        // Re-subscribe, so the "try again" the message asks for can work.
+        refetchTodaysMeetings();
         notify(
           'Check-in Unavailable',
           "Couldn't confirm you haven't already checked in today. Please try again.",
@@ -265,7 +287,10 @@ export const useMeetingSearch = (props: UseMeetingSearchProps) => {
       performCheckIn(meeting);
     },
     [
+      todaysMeetingsIdle,
+      todaysMeetingsLoading,
       todaysMeetingsError,
+      refetchTodaysMeetings,
       guestAttendedMeeting,
       isMeetingDay,
       isMeetingTime,

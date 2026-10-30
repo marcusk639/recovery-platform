@@ -8,9 +8,11 @@ import {
 } from '../meetingQueries';
 import * as meetingService from '../../../services/meeting';
 import * as activityService from '../../../services/activity';
+import { logException } from '../../../util/logging';
 
 jest.mock('../../../services/meeting');
 jest.mock('../../../services/activity');
+jest.mock('../../../util/logging', () => ({ logException: jest.fn() }));
 
 const makeMeeting = (overrides = {}) =>
   ({
@@ -131,6 +133,34 @@ describe('meetingQueries', () => {
 
       await waitFor(() => expect(result.current.isError).toBe(true));
       expect(result.current.error).toEqual(error);
+    });
+
+    // The attendance activity is the record a check-in exists for: a failed
+    // write must not pass as a successful check-in.
+    it('fails the check-in, with a message the user can act on, when the attendance write fails', async () => {
+      (meetingService.userIsAtMeeting as jest.Mock).mockResolvedValue({ data: {} });
+      const denied = new Error('permission-denied');
+      (activityService.logActivity as jest.Mock).mockRejectedValue(denied);
+
+      const { result } = renderHook(() => useCheckIntoMeeting(), { wrapper });
+      result.current.mutate(checkInParams);
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      expect((result.current.error as Error).message).toBe(
+        "Your attendance couldn't be saved. Please check in again.",
+      );
+      expect((result.current.error as Error & { cause?: unknown }).cause).toBe(denied);
+      expect(logException).toHaveBeenCalledWith(denied, 'useCheckIntoMeeting: logActivity');
+    });
+
+    it('refuses without a resident, before checking location or writing', async () => {
+      const { result } = renderHook(() => useCheckIntoMeeting(), { wrapper });
+      result.current.mutate({ ...checkInParams, guestId: '' });
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      expect((result.current.error as Error).message).toBe('No resident is selected to check in.');
+      expect(meetingService.userIsAtMeeting).not.toHaveBeenCalled();
+      expect(activityService.logActivity).not.toHaveBeenCalled();
     });
 
     it('uses online location string when meeting.online is true', async () => {

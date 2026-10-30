@@ -68,7 +68,7 @@ const NewMeeting: React.FC<Props> = ({ navigation }) => {
 
   const addMeetingMutation = useAddMeeting();
   const checkIntoMeetingMutation = useCheckIntoMeeting();
-  const { house, isLoading: houseLoading } = useSelectedHouse();
+  const { house, houseId, isLoading: houseLoading } = useSelectedHouse();
   const user = useAppSelector((state) => state.user.user);
   const { guest } = useSelectedGuest();
   const userAsGuest = useAppSelector((state) => state.guests.userAsGuest);
@@ -113,12 +113,22 @@ const NewMeeting: React.FC<Props> = ({ navigation }) => {
   // A meeting belongs to a house (the rules require its houseId). Reaching
   // this screen with none selected (e.g. the meetings/new deep link) is a
   // navigation or state bug: say so up front instead of after the form.
+  // A selected house that failed to load is a different problem from none
+  // being selected, and is reported as such.
   const noHouse = !houseLoading && !house;
+  const houseLoadFailed = noHouse && !!houseId;
   useEffect(() => {
     if (noHouse) {
-      logException(new Error("NewMeeting opened without a selected house"), "NewMeeting");
+      logException(
+        new Error(
+          houseLoadFailed
+            ? "NewMeeting: the selected house failed to load"
+            : "NewMeeting opened without a selected house"
+        ),
+        "NewMeeting"
+      );
     }
-  }, [noHouse]);
+  }, [noHouse, houseLoadFailed]);
 
   return (
     <View style={{ flex: 1, backgroundColor: color.light_grey }}>
@@ -133,7 +143,14 @@ const NewMeeting: React.FC<Props> = ({ navigation }) => {
           meeting={undefined as any}
         />
       ) : noHouse ? (
-        <RatsText style={{ margin: 16 }} text="Select a house before adding a meeting." />
+        <RatsText
+          style={{ margin: 16 }}
+          text={
+            houseLoadFailed
+              ? "Couldn't load your house. Go back and try again."
+              : "Select a house before adding a meeting."
+          }
+        />
       ) : null}
     </View>
   );
