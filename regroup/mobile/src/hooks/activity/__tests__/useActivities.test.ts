@@ -7,7 +7,7 @@
 
 import { renderHook, waitFor, act } from '@testing-library/react-native';
 import { ActivityType, ActivityStatus } from '../../../entities/ActivityModel';
-import { useActivities, useActivityCount } from '../useActivities';
+import { getActivitiesOnce, useActivities, useActivityCount } from '../useActivities';
 
 // ── Firestore mock setup ──────────────────────────────────────────────────────
 
@@ -111,7 +111,7 @@ describe('useActivities', () => {
 
     it('converts Firestore timestamps to Date objects', async () => {
       const { result } = renderHook(() =>
-        useActivities({ guestId: 'guest123' })
+        useActivities({ guestId: 'guest123', houseId: 'house456' })
       );
 
       emitSnapshot([makeActivity()]);
@@ -123,7 +123,7 @@ describe('useActivities', () => {
 
     it('returns empty array when snapshot has no docs', async () => {
       const { result } = renderHook(() =>
-        useActivities({ guestId: 'guest123' })
+        useActivities({ guestId: 'guest123', houseId: 'house456' })
       );
 
       emitSnapshot([]);
@@ -150,7 +150,7 @@ describe('useActivities', () => {
 
   describe('query building', () => {
     it('applies guestId filter when provided', async () => {
-      renderHook(() => useActivities({ guestId: 'guest123' }));
+      renderHook(() => useActivities({ guestId: 'guest123', houseId: 'house456' }));
 
       emitSnapshot([]);
       await waitFor(() => expect(mockQuery.where).toHaveBeenCalledWith('guestId', '==', 'guest123'));
@@ -164,7 +164,9 @@ describe('useActivities', () => {
     });
 
     it('applies type filter when provided', async () => {
-      renderHook(() => useActivities({ guestId: 'guest123', type: ActivityType.MEETING }));
+      renderHook(() =>
+        useActivities({ guestId: 'guest123', houseId: 'house456', type: ActivityType.MEETING }),
+      );
 
       emitSnapshot([]);
       await waitFor(() =>
@@ -174,7 +176,11 @@ describe('useActivities', () => {
 
     it('applies status filter when provided', async () => {
       renderHook(() =>
-        useActivities({ guestId: 'guest123', status: ActivityStatus.DISPUTED })
+        useActivities({
+          guestId: 'guest123',
+          houseId: 'house456',
+          status: ActivityStatus.DISPUTED,
+        }),
       );
 
       emitSnapshot([]);
@@ -184,14 +190,14 @@ describe('useActivities', () => {
     });
 
     it('applies limit to query', async () => {
-      renderHook(() => useActivities({ guestId: 'guest123', limit: 25 }));
+      renderHook(() => useActivities({ guestId: 'guest123', houseId: 'house456', limit: 25 }));
 
       emitSnapshot([]);
       await waitFor(() => expect(mockQuery.limit).toHaveBeenCalledWith(25));
     });
 
     it('uses default limit of 100 when not specified', async () => {
-      renderHook(() => useActivities({ guestId: 'guest123' }));
+      renderHook(() => useActivities({ guestId: 'guest123', houseId: 'house456' }));
 
       emitSnapshot([]);
       await waitFor(() => expect(mockQuery.limit).toHaveBeenCalledWith(100));
@@ -199,7 +205,7 @@ describe('useActivities', () => {
 
     it('applies startDate filter when provided', async () => {
       const startDate = '2024-01-15';
-      renderHook(() => useActivities({ guestId: 'guest123', startDate }));
+      renderHook(() => useActivities({ guestId: 'guest123', houseId: 'house456', startDate }));
 
       emitSnapshot([]);
       await waitFor(() =>
@@ -219,18 +225,104 @@ describe('useActivities', () => {
       expect(result.current.activities).toEqual([]);
     });
 
-    it('subscribes with no filters (returns all)', async () => {
+    // The rules let a client list activities only in a house it belongs to,
+    // so a query without a houseId filter is always denied: don't send one.
+    it('does not query with no filters (an unscoped list is denied)', async () => {
+      const { firestore } = require('../../../../firebase-setup');
       const { result } = renderHook(() => useActivities());
 
-      emitSnapshot([]);
       await waitFor(() => expect(result.current.loading).toBe(false));
+      expect(firestore.collection).not.toHaveBeenCalled();
+      expect(result.current.activities).toEqual([]);
+      expect(result.current.error).toBeNull();
+    });
+
+    it('does not query by guestId without a houseId', async () => {
+      const { firestore } = require('../../../../firebase-setup');
+      const { result } = renderHook(() => useActivities({ guestId: 'guest123' }));
+
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      expect(firestore.collection).not.toHaveBeenCalled();
+      expect(result.current.activities).toEqual([]);
+    });
+  });
+
+  describe('when the house arrives', () => {
+    // Every render is recorded: the effect that starts the query runs after
+    // the render where houseId arrives, so that render must already say
+    // loading rather than show an empty list or a 0 count.
+    it('never renders "loaded and empty" between the house arriving and the first snapshot', () => {
+      const renders: Array<{ houseId?: string; loading: boolean }> = [];
+      const { rerender } = renderHook(
+        ({ houseId }: { houseId?: string }) => {
+          const result = useActivities({ guestId: 'guest123', houseId });
+          renders.push({ houseId, loading: result.loading });
+          return result;
+        },
+        { initialProps: {} as { houseId?: string } },
+      );
+
+      rerender({ houseId: 'house456' });
+
+      const withHouse = renders.filter((r) => r.houseId === 'house456');
+      expect(withHouse.length).toBeGreaterThan(0);
+      expect(withHouse.every((r) => r.loading)).toBe(true);
+    });
+
+    it('useActivityCount never renders a loaded 0 before the first snapshot', () => {
+      const renders: Array<{ houseId?: string; loading: boolean }> = [];
+      const { rerender } = renderHook(
+        ({ houseId }: { houseId?: string }) => {
+          const result = useActivityCount({ guestId: 'guest123', houseId });
+          renders.push({ houseId, loading: result.loading });
+          return result;
+        },
+        { initialProps: {} as { houseId?: string } },
+      );
+
+      rerender({ houseId: 'house456' });
+
+      const withHouse = renders.filter((r) => r.houseId === 'house456');
+      expect(withHouse.length).toBeGreaterThan(0);
+      expect(withHouse.every((r) => r.loading)).toBe(true);
+    });
+  });
+
+  describe('getActivitiesOnce', () => {
+    it('returns no activities and sends no query without a houseId', async () => {
+      const { firestore } = require('../../../../firebase-setup');
+
+      await expect(getActivitiesOnce({ guestId: 'guest123' })).resolves.toEqual([]);
+      expect(firestore.collection).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('useActivityCount', () => {
+    it('counts within the house: guestId and houseId filters', async () => {
+      renderHook(() => useActivityCount({ guestId: 'guest123', houseId: 'house456' }));
+
+      emitSnapshot([]);
+      await waitFor(() =>
+        expect(mockQuery.where).toHaveBeenCalledWith('houseId', '==', 'house456'),
+      );
+      expect(mockQuery.where).toHaveBeenCalledWith('guestId', '==', 'guest123');
+    });
+
+    it('does not query by guestId without a houseId, and counts 0', async () => {
+      const { firestore } = require('../../../../firebase-setup');
+      const { result } = renderHook(() => useActivityCount({ guestId: 'guest123' }));
+
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      expect(firestore.collection).not.toHaveBeenCalled();
+      expect(result.current.count).toBe(0);
+      expect(result.current.error).toBeNull();
     });
   });
 
   describe('error handling', () => {
     it('sets error state when Firestore throws', async () => {
       const { result } = renderHook(() =>
-        useActivities({ guestId: 'guest123' })
+        useActivities({ guestId: 'guest123', houseId: 'house456' })
       );
 
       const testError = new Error('Firestore unavailable');
@@ -245,7 +337,7 @@ describe('useActivities', () => {
   describe('cleanup', () => {
     it('calls unsubscribe on unmount', async () => {
       const { result, unmount } = renderHook(() =>
-        useActivities({ guestId: 'guest123' })
+        useActivities({ guestId: 'guest123', houseId: 'house456' })
       );
 
       emitSnapshot([]);
@@ -259,7 +351,7 @@ describe('useActivities', () => {
   describe('refetch', () => {
     it('exposes a refetch function', async () => {
       const { result } = renderHook(() =>
-        useActivities({ guestId: 'guest123' })
+        useActivities({ guestId: 'guest123', houseId: 'house456' })
       );
 
       emitSnapshot([]);

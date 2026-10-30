@@ -126,6 +126,7 @@ export const useStatSummary = (stat: Stat): StatSummaryData => {
   const { count: disputedActivitiesCount, loading: disputesLoading } =
     useActivityCount({
       guestId: guest?.id,
+      houseId: house?.id,
       startDate,
       endDate,
       type: STAT_TO_ACTIVITY_TYPE[stat],

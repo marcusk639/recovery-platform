@@ -372,12 +372,19 @@ const NewMeetingForm = withFormik<
           zip: props.house?.zip,
         },
   handleSubmit: async (values, formikBag) => {
-    const { addMeeting, checkIntoMeeting, user, navigation } = formikBag.props;
+    const { addMeeting, checkIntoMeeting, user, house, navigation } = formikBag.props;
     const newMeeting: any = cloneDeep(values);
     if (newMeeting.checkIn !== undefined) {
       delete newMeeting.checkIn;
     }
+    // The meetings rules accept a create only for a house the user belongs to;
+    // without one the write would fail with a bare permission error.
+    if (!house?.id) {
+      Alert.alert("Select a house before adding a meeting.");
+      return;
+    }
     newMeeting.addedBy = `${user.firstName} ${user.lastName}`;
+    newMeeting.houseId = house.id;
     try {
       await addMeeting(newMeeting as RatsMeeting, user.isGuest);
       if (values.checkIn) {

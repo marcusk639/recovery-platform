@@ -146,7 +146,7 @@ describe('activityQueries', () => {
       (activityService.getActivities as jest.Mock).mockResolvedValue(activities);
 
       const { result } = renderHook(
-        () => useActivities('guest1', START_DATE, END_DATE),
+        () => useActivities('guest1', 'house1', START_DATE, END_DATE),
         { wrapper },
       );
 
@@ -155,6 +155,7 @@ describe('activityQueries', () => {
       expect(result.current.data).toEqual(activities);
       expect(activityService.getActivities).toHaveBeenCalledWith(
         'guest1',
+        'house1',
         START_DATE,
         END_DATE,
         undefined,
@@ -165,7 +166,7 @@ describe('activityQueries', () => {
       (activityService.getActivities as jest.Mock).mockResolvedValue([]);
 
       const { result } = renderHook(
-        () => useActivities('guest1', START_DATE, END_DATE, ActivityType.MEETING),
+        () => useActivities('guest1', 'house1', START_DATE, END_DATE, ActivityType.MEETING),
         { wrapper },
       );
 
@@ -173,6 +174,7 @@ describe('activityQueries', () => {
 
       expect(activityService.getActivities).toHaveBeenCalledWith(
         'guest1',
+        'house1',
         START_DATE,
         END_DATE,
         ActivityType.MEETING,
@@ -181,7 +183,7 @@ describe('activityQueries', () => {
 
     it('does not fetch when enabled is false', () => {
       const { result } = renderHook(
-        () => useActivities('guest1', START_DATE, END_DATE, undefined, false),
+        () => useActivities('guest1', 'house1', START_DATE, END_DATE, undefined, false),
         { wrapper },
       );
 
@@ -189,9 +191,18 @@ describe('activityQueries', () => {
       expect(activityService.getActivities).not.toHaveBeenCalled();
     });
 
+    it('does not fetch without a houseId (the rules deny a list query not scoped to a house)', () => {
+      const { result } = renderHook(() => useActivities('guest1', '', START_DATE, END_DATE), {
+        wrapper,
+      });
+
+      expect(result.current.isLoading).toBe(false);
+      expect(activityService.getActivities).not.toHaveBeenCalled();
+    });
+
     it('does not fetch when guestId is empty', () => {
       const { result } = renderHook(
-        () => useActivities('', START_DATE, END_DATE),
+        () => useActivities('', 'house1', START_DATE, END_DATE),
         { wrapper },
       );
 
@@ -204,7 +215,7 @@ describe('activityQueries', () => {
       (activityService.getActivities as jest.Mock).mockRejectedValue(error);
 
       const { result } = renderHook(
-        () => useActivities('guest1', START_DATE, END_DATE),
+        () => useActivities('guest1', 'house1', START_DATE, END_DATE),
         { wrapper },
       );
 
@@ -218,7 +229,7 @@ describe('activityQueries', () => {
       (activityService.getActivities as jest.Mock).mockResolvedValue(activities);
 
       const { result } = renderHook(
-        () => useActivities('guest1', START_DATE, END_DATE),
+        () => useActivities('guest1', 'house1', START_DATE, END_DATE),
         { wrapper },
       );
 

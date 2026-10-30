@@ -645,7 +645,12 @@ service cloud.firestore {
     match /meetings/{meetingId} {
       // Guests can read and log attendance; only admins can delete.
       allow read: if isGuestOrAdmin([resource.data.houseId]);
-      allow create, update: if isGuestOrAdmin([request.resource.data.houseId]);
+      allow create: if isGuestOrAdmin([request.resource.data.houseId]);
+      // Update is checked against the meeting's current house, and houseId never
+      // changes: checking only the incoming houseId let a member of any house
+      // take over another house's meeting by writing their own houseId into it.
+      allow update: if isGuestOrAdmin([resource.data.houseId]) &&
+        request.resource.data.houseId == resource.data.houseId;
       allow delete: if isAdmin([resource.data.houseId]);
     }
     

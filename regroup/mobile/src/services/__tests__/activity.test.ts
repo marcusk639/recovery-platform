@@ -493,6 +493,7 @@ describe('Activity Service', () => {
 
       const listed = await getActivities(
         'guest-status',
+        'house456',
         new Date('2024-01-15'),
         new Date('2024-01-22'),
       );
@@ -507,9 +508,32 @@ describe('Activity Service', () => {
       ]);
     });
 
+    it("lists only the guest's activities in the given house: the query filters by houseId, which the rules require", async () => {
+      await logActivity(
+        'guest123',
+        'other-house',
+        ActivityType.CHORE,
+        ActivityDataFactory.chore('daily', 'Porch'),
+        'user789',
+        new Date('2024-01-16T08:00:00Z'),
+      );
+
+      const activities = await getActivities(
+        'guest123',
+        'house456',
+        new Date('2024-01-15'),
+        new Date('2024-01-18'),
+      );
+
+      expect(mockActivityCollection.where).toHaveBeenCalledWith('houseId', '==', 'house456');
+      expect(activities).toHaveLength(3);
+      expect(activities.every(a => a.houseId === 'house456')).toBe(true);
+    });
+
     it('should get all activities for guest in date range', async () => {
       const activities = await getActivities(
         'guest123',
+        'house456',
         new Date('2024-01-15'),
         new Date('2024-01-18'),
       );
@@ -521,6 +545,7 @@ describe('Activity Service', () => {
     it('should filter by activity type', async () => {
       const activities = await getActivities(
         'guest123',
+        'house456',
         new Date('2024-01-15'),
         new Date('2024-01-18'),
         ActivityType.CHORE,
@@ -533,6 +558,7 @@ describe('Activity Service', () => {
     it('should return empty array if no activities found', async () => {
       const activities = await getActivities(
         'guest999',
+        'house456',
         new Date('2024-01-15'),
         new Date('2024-01-18'),
       );
@@ -543,6 +569,7 @@ describe('Activity Service', () => {
     it('should convert Firebase timestamps to Date objects', async () => {
       const activities = await getActivities(
         'guest123',
+        'house456',
         new Date('2024-01-15'),
         new Date('2024-01-18'),
       );

@@ -220,6 +220,15 @@ jest.mock("formik", () => {
 
 // ─── React imports (after mocks) ──────────────────────────────────────────────
 import React from "react";
+import { Alert } from "react-native";
+
+// useSelectedHouse reads selectedHouseId and the house query, not the legacy
+// selectedHouse this file's store seeds, so tests that need a house select it
+// directly. Callers restore the spy.
+const selectHouse = () =>
+  jest
+    .spyOn(require("../../../hooks/useSelectedHouse"), "useSelectedHouse")
+    .mockReturnValue({ house: BASE_HOUSE, houseId: BASE_HOUSE.id, isLoading: false });
 import { render, fireEvent, act } from "@testing-library/react-native";
 import { Provider } from "react-redux";
 import { configureStore } from "@reduxjs/toolkit";
@@ -529,15 +538,53 @@ describe("NewMeeting", () => {
     // Celebrate Recovery/Custom). Every meeting was created as "Custom"
     // regardless of selection.
     it("submits the meeting with the type selected in the form, not hardcoded to Custom", async () => {
-      const { getByTestId } = renderScreen();
-      await act(async () => {
-        fireEvent.press(getByTestId("confirm-button"));
-      });
-      expect(mockAddMeetingMutateAsync).toHaveBeenCalledWith(
-        expect.objectContaining({
-          meeting: expect.objectContaining({ type: "AA" }),
-        })
-      );
+      const selection = selectHouse();
+      try {
+        const { getByTestId } = renderScreen();
+        await act(async () => {
+          fireEvent.press(getByTestId("confirm-button"));
+        });
+        expect(mockAddMeetingMutateAsync).toHaveBeenCalledWith(
+          expect.objectContaining({
+            meeting: expect.objectContaining({ type: "AA" }),
+          })
+        );
+      } finally {
+        selection.mockRestore();
+      }
+    });
+
+    // The meetings rules accept a create only from a guest or admin of the
+    // meeting's houseId; without one every create was denied.
+    it("submits the meeting with the selected house's id", async () => {
+      const selection = selectHouse();
+      try {
+        const { getByTestId } = renderScreen();
+        await act(async () => {
+          fireEvent.press(getByTestId("confirm-button"));
+        });
+        expect(mockAddMeetingMutateAsync).toHaveBeenCalledWith(
+          expect.objectContaining({
+            meeting: expect.objectContaining({ houseId: "house-1" }),
+          })
+        );
+      } finally {
+        selection.mockRestore();
+      }
+    });
+
+    it("with no house selected, says so and writes nothing", async () => {
+      const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+      try {
+        const { getByTestId } = renderScreen();
+        await act(async () => {
+          fireEvent.press(getByTestId("confirm-button"));
+        });
+        expect(mockAddMeetingMutateAsync).not.toHaveBeenCalled();
+        expect(alert).toHaveBeenCalledWith("Select a house before adding a meeting.");
+      } finally {
+        alert.mockRestore();
+      }
     });
   });
 });

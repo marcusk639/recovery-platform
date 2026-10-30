@@ -68,6 +68,8 @@ export const activityKeys = {
  * Get activities for a guest within a date range
  *
  * @param guestId - ID of the guest
+ * @param houseId - The guest's house; no fetch without it (the rules deny an
+ *   activities list not filtered by house)
  * @param startDate - Start of date range
  * @param endDate - End of date range
  * @param type - Optional filter by activity type
@@ -75,6 +77,7 @@ export const activityKeys = {
  */
 export const useActivities = (
   guestId: string,
+  houseId: string,
   startDate: Date,
   endDate: Date,
   type?: ActivityType,
@@ -88,8 +91,8 @@ export const useActivities = (
       type,
     ),
     queryFn: () =>
-      activityService.getActivities(guestId, startDate, endDate, type),
-    enabled: enabled && !!guestId,
+      activityService.getActivities(guestId, houseId, startDate, endDate, type),
+    enabled: enabled && !!guestId && !!houseId,
     staleTime: 30000, // 30 seconds
   });
 };
@@ -104,12 +107,13 @@ export const useActivities = (
  * Usage:
  * ```tsx
  * const { data, fetchNextPage, hasNextPage, isFetchingNextPage } =
- *   useInfiniteActivities(guestId, startDate, endDate);
+ *   useInfiniteActivities(guestId, houseId, startDate, endDate);
  *
  * const activities = data?.pages.flatMap(p => p.activities) ?? [];
  * ```
  *
  * @param guestId   - ID of the guest
+ * @param houseId   - The guest's house; no fetch without it
  * @param startDate - Start of date range
  * @param endDate   - End of date range
  * @param type      - Optional filter by activity type
@@ -119,6 +123,7 @@ export const useActivities = (
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const useInfiniteActivities = (
   guestId: string,
+  houseId: string,
   startDate: Date,
   endDate: Date,
   type?: ActivityType,
@@ -136,6 +141,7 @@ export const useInfiniteActivities = (
     queryFn: ({ pageParam }: { pageParam: any }) =>
       activityService.getActivitiesPage(
         guestId,
+        houseId,
         startDate,
         endDate,
         pageSize,
@@ -147,7 +153,7 @@ export const useInfiniteActivities = (
       lastPage.hasMore && lastPage.nextCursor ? lastPage.nextCursor : undefined,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     initialPageParam: undefined as any,
-    enabled: enabled && !!guestId,
+    enabled: enabled && !!guestId && !!houseId,
     staleTime: 30000, // 30 seconds
   });
 };

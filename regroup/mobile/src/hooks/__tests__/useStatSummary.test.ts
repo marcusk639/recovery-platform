@@ -347,6 +347,13 @@ describe('useStatSummary', () => {
       );
     });
 
+    it("counts the guest's disputes within the selected house (the rules require houseId)", () => {
+      renderHook(() => useStatSummary('meeting'));
+      expect(mockUseActivityCount).toHaveBeenCalledWith(
+        expect.objectContaining({ guestId: mockGuest.id, houseId: mockHouse.id }),
+      );
+    });
+
     it('is loading while disputes are loading', () => {
       mockUseActivityCount.mockReturnValue({ count: 0, loading: true });
 

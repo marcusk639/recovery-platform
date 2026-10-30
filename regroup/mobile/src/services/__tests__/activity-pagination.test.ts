@@ -137,29 +137,35 @@ describe('getActivitiesPage', () => {
     });
 
     it('returns exactly pageSize activities', async () => {
-      const page = await getActivitiesPage(GUEST_ID, START_DATE, END_DATE, 20);
+      const page = await getActivitiesPage(GUEST_ID, HOUSE_ID, START_DATE, END_DATE, 20);
       expect(page.activities).toHaveLength(20);
     });
 
     it('sets hasMore to true when an extra doc is present', async () => {
-      const page = await getActivitiesPage(GUEST_ID, START_DATE, END_DATE, 20);
+      const page = await getActivitiesPage(GUEST_ID, HOUSE_ID, START_DATE, END_DATE, 20);
       expect(page.hasMore).toBe(true);
     });
 
     it('returns a non-null nextCursor pointing to the last returned doc', async () => {
-      const page = await getActivitiesPage(GUEST_ID, START_DATE, END_DATE, 20);
+      const page = await getActivitiesPage(GUEST_ID, HOUSE_ID, START_DATE, END_DATE, 20);
       expect(page.nextCursor).not.toBeNull();
       // The cursor should be the 20th (last kept) document stub
       expect((page.nextCursor as any).id).toBe('act_20');
     });
 
+    it("scopes the query to the guest's house: the rules allow only houseId-filtered lists", async () => {
+      await getActivitiesPage(GUEST_ID, HOUSE_ID, START_DATE, END_DATE, 20);
+      expect(mockCollection.where).toHaveBeenCalledWith('guestId', '==', GUEST_ID);
+      expect(mockCollection.where).toHaveBeenCalledWith('houseId', '==', HOUSE_ID);
+    });
+
     it('does NOT call startAfter on the first page', async () => {
-      await getActivitiesPage(GUEST_ID, START_DATE, END_DATE, 20);
+      await getActivitiesPage(GUEST_ID, HOUSE_ID, START_DATE, END_DATE, 20);
       expect(mockCollection.startAfter).not.toHaveBeenCalled();
     });
 
     it('calls .limit() with pageSize + 1', async () => {
-      await getActivitiesPage(GUEST_ID, START_DATE, END_DATE, 20);
+      await getActivitiesPage(GUEST_ID, HOUSE_ID, START_DATE, END_DATE, 20);
       expect(mockCollection.limit).toHaveBeenCalledWith(21);
     });
 
@@ -171,7 +177,7 @@ describe('getActivitiesPage', () => {
       mockCollection = buildMockCollection(sixDocs);
       (firestore.collection as jest.Mock).mockReturnValue(mockCollection);
 
-      const page = await getActivitiesPage(GUEST_ID, START_DATE, END_DATE, 5);
+      const page = await getActivitiesPage(GUEST_ID, HOUSE_ID, START_DATE, END_DATE, 5);
       expect(page.activities).toHaveLength(5);
       expect(page.hasMore).toBe(true);
       expect(mockCollection.limit).toHaveBeenCalledWith(6);
@@ -195,23 +201,51 @@ describe('getActivitiesPage', () => {
     });
 
     it('calls .startAfter() with the provided cursor', async () => {
-      await getActivitiesPage(GUEST_ID, START_DATE, END_DATE, 20, cursor as any);
+      await getActivitiesPage(
+        GUEST_ID,
+        HOUSE_ID,
+        START_DATE,
+        END_DATE,
+        20,
+        cursor as any,
+      );
       expect(mockCollection.startAfter).toHaveBeenCalledWith(cursor);
     });
 
     it('returns the correct activities from the second page', async () => {
-      const page = await getActivitiesPage(GUEST_ID, START_DATE, END_DATE, 20, cursor as any);
+      const page = await getActivitiesPage(
+        GUEST_ID,
+        HOUSE_ID,
+        START_DATE,
+        END_DATE,
+        20,
+        cursor as any,
+      );
       expect(page.activities).toHaveLength(15);
       expect(page.activities[0].id).toBe('act_21');
     });
 
     it('sets hasMore to false when fewer than pageSize docs are returned', async () => {
-      const page = await getActivitiesPage(GUEST_ID, START_DATE, END_DATE, 20, cursor as any);
+      const page = await getActivitiesPage(
+        GUEST_ID,
+        HOUSE_ID,
+        START_DATE,
+        END_DATE,
+        20,
+        cursor as any,
+      );
       expect(page.hasMore).toBe(false);
     });
 
     it('sets nextCursor to null on the last page', async () => {
-      const page = await getActivitiesPage(GUEST_ID, START_DATE, END_DATE, 20, cursor as any);
+      const page = await getActivitiesPage(
+        GUEST_ID,
+        HOUSE_ID,
+        START_DATE,
+        END_DATE,
+        20,
+        cursor as any,
+      );
       expect(page.nextCursor).toBeNull();
     });
   });
@@ -231,17 +265,17 @@ describe('getActivitiesPage', () => {
     });
 
     it('sets hasMore to false', async () => {
-      const page = await getActivitiesPage(GUEST_ID, START_DATE, END_DATE, 20);
+      const page = await getActivitiesPage(GUEST_ID, HOUSE_ID, START_DATE, END_DATE, 20);
       expect(page.hasMore).toBe(false);
     });
 
     it('sets nextCursor to null', async () => {
-      const page = await getActivitiesPage(GUEST_ID, START_DATE, END_DATE, 20);
+      const page = await getActivitiesPage(GUEST_ID, HOUSE_ID, START_DATE, END_DATE, 20);
       expect(page.nextCursor).toBeNull();
     });
 
     it('returns all 20 activities', async () => {
-      const page = await getActivitiesPage(GUEST_ID, START_DATE, END_DATE, 20);
+      const page = await getActivitiesPage(GUEST_ID, HOUSE_ID, START_DATE, END_DATE, 20);
       expect(page.activities).toHaveLength(20);
     });
   });
@@ -257,17 +291,17 @@ describe('getActivitiesPage', () => {
     });
 
     it('returns an empty activities array', async () => {
-      const page = await getActivitiesPage(GUEST_ID, START_DATE, END_DATE, 20);
+      const page = await getActivitiesPage(GUEST_ID, HOUSE_ID, START_DATE, END_DATE, 20);
       expect(page.activities).toHaveLength(0);
     });
 
     it('sets hasMore to false', async () => {
-      const page = await getActivitiesPage(GUEST_ID, START_DATE, END_DATE, 20);
+      const page = await getActivitiesPage(GUEST_ID, HOUSE_ID, START_DATE, END_DATE, 20);
       expect(page.hasMore).toBe(false);
     });
 
     it('sets nextCursor to null', async () => {
-      const page = await getActivitiesPage(GUEST_ID, START_DATE, END_DATE, 20);
+      const page = await getActivitiesPage(GUEST_ID, HOUSE_ID, START_DATE, END_DATE, 20);
       expect(page.nextCursor).toBeNull();
     });
   });
@@ -287,7 +321,15 @@ describe('getActivitiesPage', () => {
     });
 
     it('applies the type filter to the Firestore query', async () => {
-      await getActivitiesPage(GUEST_ID, START_DATE, END_DATE, 20, undefined, ActivityType.MEETING);
+      await getActivitiesPage(
+        GUEST_ID,
+        HOUSE_ID,
+        START_DATE,
+        END_DATE,
+        20,
+        undefined,
+        ActivityType.MEETING,
+      );
       // The .where() calls include type filter — verify 'type' was passed
       const whereCalls: [string, string, any][] = mockCollection.where.mock.calls;
       const typeCall = whereCalls.find(([field]) => field === 'type');
@@ -298,6 +340,7 @@ describe('getActivitiesPage', () => {
     it('returns activities with the filtered type', async () => {
       const page = await getActivitiesPage(
         GUEST_ID,
+        HOUSE_ID,
         START_DATE,
         END_DATE,
         20,
@@ -309,7 +352,7 @@ describe('getActivitiesPage', () => {
     });
 
     it('does NOT add type filter to query when type is undefined', async () => {
-      await getActivitiesPage(GUEST_ID, START_DATE, END_DATE, 20, undefined, undefined);
+      await getActivitiesPage(GUEST_ID, HOUSE_ID, START_DATE, END_DATE, 20, undefined, undefined);
       const whereCalls: [string, string, any][] = mockCollection.where.mock.calls;
       const typeCall = whereCalls.find(([field]) => field === 'type');
       expect(typeCall).toBeUndefined();
@@ -331,7 +374,7 @@ describe('getActivitiesPage', () => {
       (firestore.collection as jest.Mock).mockReturnValue(brokenCollection);
 
       await expect(
-        getActivitiesPage(GUEST_ID, START_DATE, END_DATE, 20),
+        getActivitiesPage(GUEST_ID, HOUSE_ID, START_DATE, END_DATE, 20),
       ).rejects.toThrow('Failed to get activities page');
     });
   });

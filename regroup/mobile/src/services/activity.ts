@@ -97,6 +97,9 @@ async function residentUidOf(guestId: string): Promise<string | undefined> {
  * Get activities for a guest within a date range
  *
  * @param guestId - ID of the guest
+ * @param houseId - The guest's house. Required: the rules let a client list
+ *   activities only in a house it belongs to, so a query not filtered by
+ *   houseId is denied.
  * @param startDate - Start of date range (inclusive)
  * @param endDate - End of date range (exclusive)
  * @param type - Optional: Filter by activity type
@@ -104,6 +107,7 @@ async function residentUidOf(guestId: string): Promise<string | undefined> {
  */
 export async function getActivities(
   guestId: string,
+  houseId: string,
   startDate: Date,
   endDate: Date,
   type?: ActivityType,
@@ -112,6 +116,7 @@ export async function getActivities(
     let query = firestore
       .collection('activities')
       .where('guestId', '==', guestId)
+      .where('houseId', '==', houseId)
       .where('timestamp', '>=', startDate)
       .where('timestamp', '<', endDate)
       .where('status', 'in', LISTED_ACTIVITY_STATUSES);
@@ -166,6 +171,7 @@ export interface ActivityPage {
  * `nextCursor` for the caller to pass back on the next request.
  *
  * @param guestId   - ID of the guest
+ * @param houseId   - The guest's house (required by the rules; see getActivities)
  * @param startDate - Start of date range (inclusive)
  * @param endDate   - End of date range (exclusive)
  * @param pageSize  - Number of activities per page (default 20)
@@ -175,6 +181,7 @@ export interface ActivityPage {
  */
 export async function getActivitiesPage(
   guestId: string,
+  houseId: string,
   startDate: Date,
   endDate: Date,
   pageSize: number = 20,
@@ -186,6 +193,7 @@ export async function getActivitiesPage(
     let query = firestore
       .collection('activities')
       .where('guestId', '==', guestId)
+      .where('houseId', '==', houseId)
       .where('timestamp', '>=', startDate)
       .where('timestamp', '<', endDate)
       .where('status', 'in', LISTED_ACTIVITY_STATUSES);
