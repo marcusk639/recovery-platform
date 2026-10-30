@@ -46,7 +46,7 @@ jest.mock('../../rats-hoc', () => ({
   },
 }));
 
-jest.mock('react-native-vector-icons/MaterialIcons', () => 'MaterialIcon');
+jest.mock('@react-native-vector-icons/material-icons/static', () => 'MaterialIcon');
 
 // assets
 jest.mock('../../../../assets', () => ({

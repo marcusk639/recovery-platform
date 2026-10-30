@@ -6,7 +6,7 @@ import {
   NativeStackScreenProps,
 } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import FontAwesome5 from 'react-native-vector-icons/FontAwesome5';
+import FontAwesome5 from '../components/rats-icon/font-awesome-5';
 import { useAppSelector } from '../state/hooks';
 // Phase 6.3: Removed migration-utils (migration complete)
 import ErrorBoundary from '../components/ErrorBoundary';

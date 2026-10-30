@@ -1,5 +1,5 @@
 import React from 'react';
-import FontAwesome5 from 'react-native-vector-icons/FontAwesome5';
+import FontAwesome5 from './font-awesome-5';
 import { color } from '../../styles/theme';
 import HealthConstants from '../../constants/health';
 

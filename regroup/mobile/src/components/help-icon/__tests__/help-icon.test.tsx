@@ -6,9 +6,9 @@ import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import HelpIcon from '../index';
 
-// RatsIcon uses FontAwesome5 from react-native-vector-icons
-jest.mock('react-native-vector-icons/FontAwesome5', () => 'FontAwesome5Icon');
-jest.mock('react-native-vector-icons/MaterialIcons', () => 'MaterialIcon');
+// RatsIcon uses FontAwesome5 from @react-native-vector-icons (via rats-icon/font-awesome-5)
+jest.mock('@react-native-vector-icons/fontawesome5/static', () => 'FontAwesome5Icon');
+jest.mock('@react-native-vector-icons/material-icons/static', () => 'MaterialIcon');
 
 // rats-icon imports useNavigation - mock it
 jest.mock('@react-navigation/native', () => ({

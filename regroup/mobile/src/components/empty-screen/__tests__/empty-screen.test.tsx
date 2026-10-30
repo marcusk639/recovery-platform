@@ -25,7 +25,7 @@ jest.mock('../../rats-icon/rats-icon', () => ({
     require('react').createElement('View', { testID: `icon-${name}` }),
 }));
 
-jest.mock('react-native-vector-icons/FontAwesome5', () => 'FontAwesome5Icon');
+jest.mock('@react-native-vector-icons/fontawesome5/static', () => 'FontAwesome5Icon');
 
 const defaultProps = {
   icon: 'home',

@@ -29,7 +29,7 @@ jest.mock('../../rats-icon/rats-icon', () => ({
   },
 }));
 
-jest.mock('react-native-vector-icons/FontAwesome5', () => 'FontAwesome5Icon');
+jest.mock('@react-native-vector-icons/fontawesome5/static', () => 'FontAwesome5Icon');
 
 // ── Google Places mock ────────────────────────────────────────────────────────
 jest.mock('../../google-places-autocomplete', () => {

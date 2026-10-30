@@ -363,14 +363,11 @@ jest.mock('react-native/Libraries/Settings/Settings', () => ({
 }));
 
 // ─── misc native modules ─────────────────────────────────────────────────────
-jest.mock('react-native-vector-icons/MaterialCommunityIcons', () => 'Icon');
-jest.mock('react-native-vector-icons/MaterialIcons', () => 'Icon');
-jest.mock('react-native-vector-icons/FontAwesome', () => 'Icon');
-jest.mock('react-native-vector-icons/FontAwesome5', () => 'Icon');
-jest.mock('react-native-vector-icons/Ionicons', () => 'Icon');
-jest.mock('react-native-vector-icons/AntDesign', () => 'Icon');
-jest.mock('react-native-vector-icons/Feather', () => 'Icon');
-jest.mock('react-native-vector-icons/Entypo', () => 'Icon');
+// The app imports the three icon families' static entries (no Expo dynamic font loading);
+// FontAwesome5 goes through src/components/rats-icon/font-awesome-5.
+jest.mock('@react-native-vector-icons/fontawesome5/static', () => 'Icon');
+jest.mock('@react-native-vector-icons/ionicons/static', () => 'Icon');
+jest.mock('@react-native-vector-icons/material-icons/static', () => 'Icon');
 
 jest.mock('@sentry/react-native', () => ({
   init: jest.fn(),

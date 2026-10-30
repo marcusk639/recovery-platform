@@ -21,7 +21,7 @@ jest.mock('../../../context', () => ({
   useTranslation: () => ({ t: (k: string) => k, i18n: { language: 'en' } }),
 }));
 
-jest.mock('react-native-vector-icons/Ionicons', () => {
+jest.mock('@react-native-vector-icons/ionicons/static', () => {
   const React = require('react');
   const { View } = require('react-native');
   const Ionicons = (props: any) => <View testID={`ionicon-${props.name}`} {...props} />;

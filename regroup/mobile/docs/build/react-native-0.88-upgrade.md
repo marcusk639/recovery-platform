@@ -431,6 +431,53 @@ callback, which has run by then.
 
 `verify-workflow-hardening.test.sh` passes with the change.
 
+### Task 5: vector icons on @react-native-vector-icons 14
+
+`react-native-vector-icons` 9 is replaced by the three families the app uses,
+`@react-native-vector-icons/{fontawesome5,ionicons,material-icons}` 14.0.0. They are imported
+from their `/static` entry, the one for apps without Expo. The root entry exists for Expo's dynamic
+font loading, and its `require('…ttf')` would also bundle every font into the JS assets.
+
+**FontAwesome5 keeps v9's style selection** (`src/components/rats-icon/font-awesome-5.tsx`).
+
+- **v9 behaviour:** v9 took a `solid` flag. When the glyph was missing from that style, it fell back
+  to the first style that had it (brand, regular, solid), so `<FontAwesome5 name="cog" />` drew
+  the solid cog.
+- **v14 behaviour:** v14 takes `iconStyle`, defaults to regular, and draws a blank glyph with a
+  console warning.
+- **Why a wrapper:** a straight codemod would have silently blanked every solid-only icon rendered
+  without `solid`.
+- **The wrapper:** `RatsFontAwesome5` keeps the v9 props and picks `iconStyle` with v9's rule.
+- **Enforcement:** ESLint allows the FontAwesome5 package only in that file, and bans
+  `react-native-vector-icons` outright.
+- **Glyph sets:** v9's and v14's FontAwesome5 sets are identical, apart from one brand icon the app
+  does not use (`tripadvisor`). Dynamic FontAwesome5 names therefore cannot regress.
+
+**Names.** `src/components/__tests__/iconNames.test.ts` parses the source with the TypeScript AST.
+
+- Every literal icon name (both arms of literal ternaries, and `ClickableIcon`'s `iconProps.name`)
+  must exist in its family's v14 glyph map.
+- The 23 dynamic-name sites are pinned to a reviewed list, so a new one fails the test until it is
+  reviewed.
+- Written before the migration, it failed on exactly the three expected names.
+- Ionicons 7 dropped the platform aliases. In v9, `md-arrow-down` and `ios-calendar` are the same
+  codepoints as `arrow-down` and `calendar`, so those are the new names: RatsPicker, DayTimeWidget
+  and RatsDatePicker.
+
+**Removed.**
+
+- `react-native-vector-icons`, `@types/react-native-vector-icons`.
+- On Android, `fonts.gradle` and `fix-vector-icons.gradle`: each v14 family module copies its own
+  fonts into its assets.
+- The iOS font plist and the bundled `.ttf` copies change in Task 13 (`rnvi-update-plist`).
+
+**Tests and snapshots.**
+
+- Every icon mock points at the v14 static entries: 8 global, 44 in 28 test files. No case changed.
+- Four snapshots in three files change only in the icon's props, `solid={true}` → `iconStyle="solid"`.
+  One solid-only glyph gains `iconStyle="solid"`, which is the v9 fallback made explicit.
+  Committed with the snapshot opt-in naming those three files.
+
 ## 7. Verification
 
 _Final results and the Mac checkpoint (Task 16)._

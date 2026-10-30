@@ -1,7 +1,7 @@
 import { View } from 'react-native';
 import React from 'react';
 import Picker, { Item } from 'react-native-picker-select';
-import IoniconsIcon from 'react-native-vector-icons/Ionicons';
+import IoniconsIcon from '@react-native-vector-icons/ionicons/static';
 import { pickerSelectStyles, styles } from './styles';
 import RatsLabel from '../rats-label/rats-label';
 import { normalize, color } from '../../styles/theme';
@@ -117,7 +117,7 @@ const RatsPicker = (props: Props): React.JSX.Element => {
         }}
         // A component, not an element: the library renders <Icon />, and an
         // element there throws "Element type is invalid" (React 18 and 19 alike).
-        Icon={() => <IoniconsIcon name="md-arrow-down" size={normalize(24)} color="gray" />}
+        Icon={() => <IoniconsIcon name="arrow-down" size={normalize(24)} color="gray" />}
       />
       {name && errors?.[name] && touched?.[name] && (
         <RatsLabel style={[styles.error]} label={errors[name]} />

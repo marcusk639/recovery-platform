@@ -14,7 +14,7 @@ import { useFocusEffect } from "@react-navigation/native";
 
 // Phase 3.3: Migrated from withPopover HOC to useNotification hook
 import { useNotification } from "../../context";
-import FontAwesome5 from "react-native-vector-icons/FontAwesome5";
+import FontAwesome5 from "../../components/rats-icon/font-awesome-5";
 import {
   View,
   StyleSheet,
