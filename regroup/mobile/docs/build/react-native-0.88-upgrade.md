@@ -781,6 +781,40 @@ the adapter maps onto exactly the chain a suite mocks.
   baseline failures remain), harness 7. `guestCRUD` and `meetings` still fail at load (`house.tsx`,
   `meeting.ts`: 10c, 10d).
 
+#### 10c: people & houses
+
+- **Step 1:** 14 op-log suites (130 tests) for the group, committed on their own (`ee3c9c7c`) and
+  passing on the namespaced code first: house (reads, writes, batches, callables), users (Firestore
+  writes; auth outcomes, since auth is not in the op log), admin, applications, invitations,
+  organization, guestImport, operator-setup, setup-wizard, setup-wizard-photos, applicationQueries,
+  oxfordOnboardingMutations. Unchanged through the rewrite and passing.
+- **Files (12 changed):** `house.tsx`, `users.tsx`, `admin.tsx`, `applications.ts`, `invitations.ts`,
+  `organization.ts`, `guestImport.ts`, `operator-setup.ts`, `setup-wizard.ts`,
+  `setup-wizard-photos.ts`, `oxfordOnboardingMutations.ts`, `util/user.ts` and `userSlice.ts`
+  (types only). `applicationQueries.ts` only reads `auth.currentUser`: no change.
+- **Auth:** `users.tsx` calls the modular functions on `getAuth()` (the same default instance
+  `firebase-setup` exports; the unit suites already drive the package's `auth()` object):
+  `createUserWithEmailAndPassword`, `signInAnonymously`, `signInWithEmailAndPassword`, `signOut`,
+  `sendPasswordResetEmail`, and on `currentUser`, `linkWithCredential`, `getIdTokenResult`,
+  `getIdToken`. Optional chaining on `currentUser` became an explicit check with the same result.
+  Storage: `getDownloadURL(ref(getStorage(), path))`. Types moved to the modular `UserCredential`,
+  `IdTokenResult` and `User`; `userIsAnonymous` takes any `{ email }`; the token's `claims` are cast
+  to `HouseRoleClaims` (type-only).
+- **Shared refs:** `adminCollection`, `adminArchive`, `orgCollection` keep the dual-API cast (crud
+  still takes the namespaced type). `house.tsx` drops the namespaced `firebase` export
+  (`arrayUnion` / `arrayRemove()` are modular, the empty `arrayRemove()` kept as it was);
+  `guestBatch.ts` narrows to the modular `WriteBatch` now that its one caller passes one.
+  Type-only `as DocumentData` casts where the modular `update` wants an index signature.
+- **Test-mock support:** the global auth and storage mocks gain modular functions delegating to the
+  instance, user or ref they receive (`getAuth`, the sign-in family, `getIdToken`,
+  `getIdTokenResult`, `linkWithCredential`; `getStorage`, `ref`, `putFile`, `getDownloadURL`, …),
+  and the op-log auth mock gains the three user-scoped functions. Four suites with stub package
+  mocks (`HouseConfig`, `HouseSettings`, `OperatorSetupWizard`, `userSlice.setupRecovery`) gain the
+  adapter or modular auth functions; `oxfordOnboardingMutations.test`'s modular `serverTimestamp`
+  now calls the spy it counts. Cases and expected values unchanged.
+- **Results:** unit 364 suites, 5608 passed; zero type errors in the group, no baseline entries;
+  ratchet 125 / 125; integration 21 / 41 (target 21).
+
 ## 7. Verification
 
 _Final results and the Mac checkpoint (Task 16)._

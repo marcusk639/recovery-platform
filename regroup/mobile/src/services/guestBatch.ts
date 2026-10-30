@@ -8,26 +8,16 @@
  * services/house updateHouseBatch, has no caller; the app removes and
  * discharges one guest doc at a time, so the limit does not affect it.
  */
+import type { WriteBatch } from '@react-native-firebase/firestore';
+
 export const GUEST_BATCH_SIZE = 8;
 
-/**
- * A write batch of either RNFirebase API family: house.tsx still passes the
- * namespaced firestore.batch() until Task 10c. Task 10f narrows this to the
- * modular WriteBatch.
- */
-export interface GuestWriteBatch {
-  set(ref: unknown, data: unknown, options?: unknown): unknown;
-  update(ref: unknown, data: unknown): unknown;
-  delete(ref: unknown): unknown;
-  commit(): Promise<void>;
-}
-
 /** One guest doc's writes (its archive copy included) in a batch. */
-export type GuestBatchOp = (batch: GuestWriteBatch) => void;
+export type GuestBatchOp = (batch: WriteBatch) => void;
 
 /** Commits the ops GUEST_BATCH_SIZE at a time; resolves when every batch has. */
 export async function commitGuestOps(
-  newBatch: () => GuestWriteBatch,
+  newBatch: () => WriteBatch,
   ops: GuestBatchOp[],
 ): Promise<void> {
   const commits: Promise<void>[] = [];

@@ -1,3 +1,4 @@
+import { httpsCallable } from "@react-native-firebase/functions";
 import { functions } from "../../firebase-setup";
 import { Houses } from "../types";
 import { cloneDeep, each, pick } from "lodash";
@@ -5,7 +6,6 @@ import { User } from "../entities/User";
 import { createInvitation, CreateInvitationResult } from "./invitations";
 import { allInvitesFailed, InviteFailure, sendAllInvites } from "./setup-wizard-invites";
 import Admin from "../entities/Admin";
-import "@react-native-firebase/firestore";
 import { uploadHousePhoto } from "./storage";
 import { logException } from "../util/logging";
 import { refreshClaims, getAuthUser } from "./users";
@@ -42,11 +42,11 @@ const toPayload = (house: House): HouseCreatePayload => {
 };
 
 export async function addPotentialSuperAdminPrivilege() {
-  return functions.httpsCallable("givePotentialSuperAdminPrivilege");
+  return httpsCallable(functions, "givePotentialSuperAdminPrivilege");
 }
 
 export async function addAdminAuthorization(admin: Admin) {
-  const result = await functions.httpsCallable("addAdminAuthorization")(admin);
+  const result = await httpsCallable(functions, "addAdminAuthorization")(admin);
   if (!result.data) {
     throw { message: "Something went wrong." };
   }
@@ -54,7 +54,7 @@ export async function addAdminAuthorization(admin: Admin) {
 }
 
 export async function addGuestAuthorization(guest: Guest) {
-  const result = await functions.httpsCallable("addGuestAuthorization")(guest);
+  const result = await httpsCallable(functions, "addGuestAuthorization")(guest);
   if (!result.data) {
     throw { message: "Something went wrong" };
   }

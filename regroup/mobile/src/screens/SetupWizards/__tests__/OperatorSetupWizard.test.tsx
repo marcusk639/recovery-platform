@@ -46,7 +46,10 @@ jest.mock('../../../firebase-setup', () => ({
   },
 }));
 
+// The services build their refs with the modular functions at load; the
+// namespaced adapter maps them onto the firebase-setup mock.
 jest.mock('@react-native-firebase/firestore', () => ({
+  ...require('../../../../__mocks__/firebase-modular/namespaced-adapter'),
   firebase: {},
   FirebaseFirestoreTypes: {},
 }));

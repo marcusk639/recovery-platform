@@ -1,8 +1,21 @@
 // Shared across Task 10 migration groups: typed for both APIs until RNFirebase 26 (Task 10f).
-import type {
-  CollectionReference,
-  FirebaseFirestoreTypes as SharedRefTypes,
+import {
+  arrayRemove,
+  arrayUnion,
+  collection,
+  doc,
+  getDocs,
+  query,
+  updateDoc,
+  where,
+  writeBatch,
+  type CollectionReference,
+  type DocumentData,
+  type FirebaseFirestoreTypes as SharedRefTypes,
+  type QueryDocumentSnapshot,
+  type WhereFilterOp,
 } from '@react-native-firebase/firestore';
+import { httpsCallable } from '@react-native-firebase/functions';
 import { firestore, functions } from '../../firebase-setup';
 import { logException } from '../util/logging';
 import { House, AwaitingVerification } from '../entities/House';
@@ -16,9 +29,6 @@ import { adminCollection } from './admin';
 import each from 'lodash/each';
 import filter from 'lodash/filter';
 import isEqual from 'lodash/isEqual';
-import '@react-native-firebase/firestore';
-import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
-import FirebaseFirestore from '@react-native-firebase/firestore';
 import { guestCollection, archiveCollection } from './guest';
 import { commitGuestOps, GuestBatchOp } from './guestBatch';
 import { Guest } from '../entities/Guest';
@@ -29,12 +39,11 @@ import { getFirstPhase } from '../util/house';
 import { houseIdsRemoved } from '../util/admin';
 import { geohash, getGeohashRange } from '../util/geolocation';
 import { getTimezone } from '../../google/timezone';
-import { firebase } from '@react-native-firebase/firestore';
 import { getCurrentTime } from '../util/display';
-export const houseCollection = firestore.collection('houses') as CollectionReference &
+export const houseCollection = collection(firestore, 'houses') as CollectionReference &
   SharedRefTypes.CollectionReference;
 
-export function shapeHouses(docs: FirebaseFirestoreTypes.QueryDocumentSnapshot[]): {
+export function shapeHouses(docs: QueryDocumentSnapshot[]): {
   [id: string]: House;
 } {
   const houses: { [id: string]: House } = {};
@@ -61,7 +70,7 @@ export async function createHouse(house: House) {
  */
 export async function getHouses(
   attribute: string,
-  operator: FirebaseFirestore.WhereFilterOp,
+  operator: WhereFilterOp,
   value: string,
 ): Promise<Houses> {
   const result = await crud.getByAttribute<House>(houseCollection, attribute, operator, value);
@@ -71,18 +80,17 @@ export async function getHouses(
 }
 
 export async function updateHouseAdmins(houseId: string, adminId: string) {
-  return houseCollection.doc(houseId).update({
-    adminIds: firebase.firestore.FieldValue.arrayUnion(adminId),
-    pendingAdminInvites: firebase.firestore.FieldValue.arrayRemove(),
+  return updateDoc(doc(houseCollection, houseId), {
+    adminIds: arrayUnion(adminId),
+    pendingAdminInvites: arrayRemove(),
   });
 }
 
 export async function getNearbyHouses(lat: number, lng: number, distanceInMiles: number) {
   const range = getGeohashRange(lat, lng, distanceInMiles);
-  const result = await houseCollection
-    .where('geohash', '>=', range.lower)
-    .where('geohash', '<=', range.upper)
-    .get();
+  const result = await getDocs(
+    query(houseCollection, where('geohash', '>=', range.lower), where('geohash', '<=', range.upper)),
+  );
   return shapeHouses(result.docs);
 }
 
@@ -145,14 +153,14 @@ export async function searchForHouses(searchData: HouseSearch) {
 }
 
 export async function createHouseBatch(house: House, _admins: Admin[]) {
-  const batch = firestore.batch();
+  const batch = writeBatch(firestore);
   const admins: Admin[] = [];
   _admins.forEach((admin) => {
-    const newAdminDoc = adminCollection.doc();
+    const newAdminDoc = doc(adminCollection);
     admins.push({ ...admin, id: newAdminDoc.id });
     batch.set(newAdminDoc, { ...admin, id: newAdminDoc.id });
   });
-  const newHouseDoc = houseCollection.doc();
+  const newHouseDoc = doc(houseCollection);
   const newHouse: House = {
     ...house,
     adminIds: admins.filter((a) => a.id).map((a) => a.id!),
@@ -244,14 +252,14 @@ const sendNewInvites = async (
 
 export const promoteGuestsToAdmin = async (guests: Guest[]) => {
   if (guests && guests.length) {
-    const response = await functions.httpsCallable('promoteGuestsToAdmin')(guests);
+    const response = await httpsCallable(functions, 'promoteGuestsToAdmin')(guests);
     return response.data;
   }
 };
 
 export const removeAdminPrivilegesForGuests = async (adminGuests: Guest[]) => {
   if (adminGuests && adminGuests.length) {
-    const response = await functions.httpsCallable('removePrivilegesForGuests')({
+    const response = await httpsCallable(functions, 'removePrivilegesForGuests')({
       role: 'admin',
       guests: adminGuests,
     });
@@ -268,7 +276,7 @@ export const removeAdminPrivilegesForGuests = async (adminGuests: Guest[]) => {
  */
 export const removeGuestPrivileges = async (guests: Guest[]) => {
   if (guests && guests.length) {
-    const response = await functions.httpsCallable('removePrivilegesForGuests')({
+    const response = await httpsCallable(functions, 'removePrivilegesForGuests')({
       role: 'guest',
       guests,
     });
@@ -281,7 +289,7 @@ export const removeAdminPrivileges = async (
   adminHouseIds: string[],
   superAdminHouseIds: string[],
 ) => {
-  const response = await functions.httpsCallable('deleteAdminAuthorization')({
+  const response = await httpsCallable(functions, 'deleteAdminAuthorization')({
     admin,
     adminHouseIds,
     superAdminHouseIds,
@@ -299,7 +307,7 @@ export async function updateHouseBatch(
   adminsAfter?: Admins,
   type?: HouseSettings,
 ) {
-  const batch = firestore.batch();
+  const batch = writeBatch(firestore);
 
   // Clean chores to ensure no empty field names
   if (house.chores) {
@@ -348,12 +356,12 @@ export async function updateHouseBatch(
       promises.push(removeAdminPrivileges(after, removedAdminHouses, removedSuperAdminHouses));
     }
   });
-  batch.update(houseCollection.doc(house.id), house);
+  batch.update(doc(houseCollection, house.id), house as DocumentData);
   updatedAdmins.forEach((admin) => {
-    batch.update(adminCollection.doc(admin.id), admin);
+    batch.update(doc(adminCollection, admin.id), admin as DocumentData);
   });
   deletedAdmins.forEach((admin) => {
-    batch.delete(adminCollection.doc(admin.id));
+    batch.delete(doc(adminCollection, admin.id));
   });
   promises.push(batch.commit());
   // Guest docs go in their own chunked batches (services/guestBatch: the
@@ -362,18 +370,18 @@ export async function updateHouseBatch(
     ...updatedGuests.map(
       (guest): GuestBatchOp =>
         (b) => {
-          b.update(guestCollection.doc(guest.id), guest);
+          b.update(doc(guestCollection, guest.id), guest as DocumentData);
         },
     ),
     ...deletedGuests.map(
       (guest): GuestBatchOp =>
         (b) => {
-          b.delete(guestCollection.doc(guest.id));
-          b.set(archiveCollection.doc(guest.id), guest);
+          b.delete(doc(guestCollection, guest.id));
+          b.set(doc(archiveCollection, guest.id), guest);
         },
     ),
   ];
-  promises.push(commitGuestOps(() => firestore.batch(), guestOps));
+  promises.push(commitGuestOps(() => writeBatch(firestore), guestOps));
   try {
     const result = await Promise.all(promises);
     return result;

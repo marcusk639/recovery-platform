@@ -1,13 +1,33 @@
 // Shared across Task 10 migration groups: typed for both APIs until RNFirebase 26 (Task 10f).
-import type {
-  CollectionReference,
-  FirebaseFirestoreTypes as SharedRefTypes,
+import {
+  collection,
+  doc,
+  getDocs,
+  query,
+  setDoc,
+  where,
+  writeBatch,
+  type CollectionReference,
+  type DocumentData,
+  type FirebaseFirestoreTypes as SharedRefTypes,
 } from '@react-native-firebase/firestore';
-import { FirebaseAuthTypes } from '@react-native-firebase/auth';
+import {
+  createUserWithEmailAndPassword,
+  EmailAuthProvider,
+  getAuth,
+  getIdToken,
+  getIdTokenResult,
+  linkWithCredential,
+  sendPasswordResetEmail,
+  signInAnonymously,
+  signInWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  type IdTokenResult,
+  type UserCredential,
+} from '@react-native-firebase/auth';
+import { getDownloadURL, getStorage, ref } from '@react-native-firebase/storage';
 import { cloneDeep } from 'lodash';
 import { firestore, functions } from '../../firebase-setup';
-import auth, { EmailAuthProvider } from '@react-native-firebase/auth';
-import storage from '@react-native-firebase/storage';
 import * as houseService from './house';
 import { User } from '../entities/User';
 import * as crud from './crud';
@@ -18,11 +38,15 @@ import { guestCollection } from './guest';
 import { adminCollection } from './admin';
 import { uploadUserAvatar } from './storage';
 import { logException } from '../util/logging';
-import { finishOperatorSetupIfNeeded, loadRecoveredUser } from './operator-setup';
+import {
+  finishOperatorSetupIfNeeded,
+  loadRecoveredUser,
+  type HouseRoleClaims,
+} from './operator-setup';
 import { SimpleValidationService } from './SimpleValidationService';
 // import { EmailConfirmationPayload } from '../entities/Email'; // Email verification removed
 
-export const userCollection = firestore.collection('users') as CollectionReference &
+export const userCollection = collection(firestore, 'users') as CollectionReference &
   SharedRefTypes.CollectionReference;
 
 /**
@@ -56,12 +80,12 @@ function invalidEmailError(message: string): Error {
 export async function createUserWithEmail(
   email: string,
   password: string,
-): Promise<FirebaseAuthTypes.UserCredential> {
-  return auth().createUserWithEmailAndPassword(email, password);
+): Promise<UserCredential> {
+  return createUserWithEmailAndPassword(getAuth(), email, password);
 }
 
-export async function anonymouslyLogin(): Promise<FirebaseAuthTypes.UserCredential> {
-  return auth().signInAnonymously();
+export async function anonymouslyLogin(): Promise<UserCredential> {
+  return signInAnonymously(getAuth());
 }
 
 /**
@@ -87,7 +111,7 @@ export async function anonymouslyLogin(): Promise<FirebaseAuthTypes.UserCredenti
 export async function signInWithEmail(
   email: string,
   password: string,
-): Promise<FirebaseAuthTypes.UserCredential> {
+): Promise<UserCredential> {
   if (!SimpleValidationService.checkRateLimit(`signin_${email}`, 5, 60000)) {
     throw rateLimitError('Too many sign-in attempts. Please try again later.');
   }
@@ -102,20 +126,23 @@ export async function signInWithEmail(
   }
 
   const sanitizedEmail = SimpleValidationService.sanitizeString(email);
-  return auth().signInWithEmailAndPassword(sanitizedEmail, password);
+  return signInWithEmailAndPassword(getAuth(), sanitizedEmail, password);
 }
 
 export async function convertAnonymousUser(
   email: string,
   password: string,
-): Promise<FirebaseAuthTypes.UserCredential> {
+): Promise<UserCredential> {
   const credential = EmailAuthProvider.credential(email, password);
-  await auth().currentUser?.linkWithCredential(credential);
+  const currentUser = getAuth().currentUser;
+  if (currentUser) {
+    await linkWithCredential(currentUser, credential);
+  }
   return signInWithEmail(email, password);
 }
 
 export async function signOut() {
-  return auth().signOut();
+  return firebaseSignOut(getAuth());
 }
 
 /**
@@ -133,7 +160,7 @@ export async function sendForgotPasswordEmail(email: string): Promise<void> {
   }
 
   const sanitizedEmail = SimpleValidationService.sanitizeString(email);
-  return auth().sendPasswordResetEmail(sanitizedEmail);
+  return sendPasswordResetEmail(getAuth(), sanitizedEmail);
 }
 
 // Email verification functions removed - no longer needed
@@ -159,12 +186,12 @@ export async function getUserFinishingSetup(
   // failed token read (logged) or no signed-in user skips the check; neither
   // may fail the login.
   const claims = user.orgSetupCompleted
-    ? (
+    ? ((
         await getAuthUser().catch((error) => {
           logException(error, 'operator claims check: token read failed');
           return undefined;
         })
-      )?.claims
+      )?.claims as HouseRoleClaims | undefined)
     : undefined;
   const outcome = await finishOperatorSetupIfNeeded(user, claims);
   if (outcome !== 'completed') {
@@ -190,7 +217,7 @@ export async function createUser(_user: Partial<User>): Promise<User> {
     : await createUserWithEmail(user.email!, user.password!);
   userCredential = getFirebaseUserFromUserCredential(userCredential);
   const newUser = convertFirebaseUserToRatsUser(user, userCredential);
-  await userCollection.doc(newUser.uid).set(newUser);
+  await setDoc(doc(userCollection, newUser.uid), newUser);
   return newUser;
 }
 
@@ -211,12 +238,14 @@ export async function updateUser(_user: Partial<User>, values: Partial<User>): P
 
 export async function getAuthUser(
   forceRefresh: boolean = false,
-): Promise<FirebaseAuthTypes.IdTokenResult | undefined> {
-  return auth().currentUser?.getIdTokenResult(forceRefresh);
+): Promise<IdTokenResult | undefined> {
+  const currentUser = getAuth().currentUser;
+  return currentUser ? getIdTokenResult(currentUser, forceRefresh) : undefined;
 }
 
 export async function refreshClaims(): Promise<string | undefined> {
-  return auth().currentUser?.getIdToken(true);
+  const currentUser = getAuth().currentUser;
+  return currentUser ? getIdToken(currentUser, true) : undefined;
   // auth.currentUser.reload();
 }
 
@@ -235,7 +264,7 @@ export async function requestAccountVerification(
 
 export function convertFirebaseUserToRatsUser(
   user: Partial<User>,
-  userCredential: FirebaseAuthTypes.UserCredential,
+  userCredential: UserCredential,
 ): User {
   if (user) {
     user.password = undefined;
@@ -257,11 +286,11 @@ export function convertFirebaseUserToRatsUser(
 }
 
 export const updateOptionalInfo = async (user: User, guest: Guest, admin: Admin): Promise<void> => {
-  const batch = firestore.batch();
+  const batch = writeBatch(firestore);
   if (user.avatar) {
     try {
       const avatar = await uploadUserAvatar(user.avatar, user.uid);
-      user.avatar = await storage().ref(avatar.metadata.fullPath).getDownloadURL();
+      user.avatar = await getDownloadURL(ref(getStorage(), avatar.metadata.fullPath));
     } catch (error) {
       logException(error);
     }
@@ -271,19 +300,19 @@ export const updateOptionalInfo = async (user: User, guest: Guest, admin: Admin)
   // profile save is never rejected for echoing a field this function does not
   // mean to change.
   const { subscriptionMetadata: _serverOwned, ...userWritableFields } = user;
-  batch.update(userCollection.doc(user.uid), userWritableFields);
+  batch.update(doc(userCollection, user.uid), userWritableFields as DocumentData);
   if (guest) {
     guest.avatar = user.avatar || guest.avatar;
-    batch.update(guestCollection.doc(guest.id), guest);
+    batch.update(doc(guestCollection, guest.id), guest as DocumentData);
   }
   if (admin) {
     admin.avatar = user.avatar || admin.avatar;
-    batch.update(adminCollection.doc(admin.id), admin);
+    batch.update(doc(adminCollection, admin.id), admin as DocumentData);
   }
   return batch.commit();
 };
 
 export const getHouseOwner = async (houseId: string): Promise<User | undefined> => {
-  const res = await userCollection.where('housesOwned', 'array-contains', houseId).get();
+  const res = await getDocs(query(userCollection, where('housesOwned', 'array-contains', houseId)));
   return res.docs[0].data() as User;
 };

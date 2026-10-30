@@ -168,7 +168,25 @@ jest.mock('@react-native-firebase/auth', () => {
   };
   const fn = () => mockAuth;
   fn.FirebaseAuthTypes = {};
-  return { __esModule: true, default: fn, FirebaseAuthTypes: {} };
+  return {
+    __esModule: true,
+    default: fn,
+    FirebaseAuthTypes: {},
+    // Modular forms over the instance (or user) passed in, so suites that
+    // configure auth() keep driving the same object.
+    getAuth: () => mockAuth,
+    connectAuthEmulator: jest.fn(),
+    onAuthStateChanged: (a, ...args) => a.onAuthStateChanged(...args),
+    onIdTokenChanged: (a, ...args) => a.onIdTokenChanged(...args),
+    signInWithEmailAndPassword: (a, ...args) => a.signInWithEmailAndPassword(...args),
+    createUserWithEmailAndPassword: (a, ...args) => a.createUserWithEmailAndPassword(...args),
+    signInAnonymously: (a) => a.signInAnonymously(),
+    signOut: (a) => a.signOut(),
+    sendPasswordResetEmail: (a, ...args) => a.sendPasswordResetEmail(...args),
+    getIdToken: (user, ...args) => user.getIdToken(...args),
+    getIdTokenResult: (user, ...args) => user.getIdTokenResult(...args),
+    linkWithCredential: (user, ...args) => user.linkWithCredential(...args),
+  };
 });
 
 jest.mock('@react-native-firebase/firestore', () => {
@@ -310,6 +328,14 @@ jest.mock('@react-native-firebase/storage', () => {
     __esModule: true,
     default: () => mockStorage,
     FirebaseStorageTypes: {},
+    // Modular forms over the instance or ref passed in.
+    getStorage: () => mockStorage,
+    connectStorageEmulator: jest.fn(),
+    ref: (s, ...args) => s.ref(...args),
+    putFile: (r, ...args) => r.putFile(...args),
+    putString: (r, ...args) => r.putString(...args),
+    getDownloadURL: (r) => r.getDownloadURL(),
+    deleteObject: (r) => r.delete(),
   };
 });
 

@@ -48,5 +48,9 @@ module.exports = {
   signInAnonymously: () => instance.signInAnonymously(),
   sendPasswordResetEmail: (_auth, email) => instance.sendPasswordResetEmail(email),
   signOut: () => instance.signOut(),
+  // User-scoped calls delegate to the user object a test set as currentUser.
+  getIdToken: (user, ...args) => user.getIdToken(...args),
+  getIdTokenResult: (user, ...args) => user.getIdTokenResult(...args),
+  linkWithCredential: (user, ...args) => user.linkWithCredential(...args),
   FirebaseAuthTypes: {},
 };

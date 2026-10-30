@@ -1,20 +1,22 @@
 // Shared across Task 10 migration groups: typed for both APIs until RNFirebase 26 (Task 10f).
-import type {
-  CollectionReference,
-  FirebaseFirestoreTypes as SharedRefTypes,
+import {
+  collection,
+  type CollectionReference,
+  type FirebaseFirestoreTypes as SharedRefTypes,
+  type WhereFilterOp,
 } from '@react-native-firebase/firestore';
 import { firestore } from '../../firebase-setup';
 import * as crud from './crud';
 import Admin from '../entities/Admin';
 import { House } from '../entities/House';
 import { Admins } from '../types';
-import { firebase, FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import map from 'lodash/map';
 import { createInvitation } from './invitations';
 
-export const adminCollection = firestore.collection('admins') as CollectionReference &
+export const adminCollection = collection(firestore, 'admins') as CollectionReference &
   SharedRefTypes.CollectionReference;
-export const adminArchive = firestore.collection('admin-archive');
+export const adminArchive = collection(firestore, 'admin-archive') as CollectionReference &
+  SharedRefTypes.CollectionReference;
 
 export function createAdminId(): string {
   return crud.createId(adminCollection);
@@ -74,7 +76,7 @@ export async function getHouseAdmins(house: House): Promise<Admin[]> {
  */
 export async function getAdmins(
   attribute: string,
-  operator: FirebaseFirestoreTypes.WhereFilterOp,
+  operator: WhereFilterOp,
   value: string,
 ): Promise<Admins> {
   const result = await crud.getByAttribute<Admin>(adminCollection, attribute, operator, value);
