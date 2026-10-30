@@ -1,6 +1,6 @@
 # Regroup mobile: React Native 0.72.17 → 0.88.1 upgrade, design
 
-Date: 2026-10-29. Scope: `regroup/mobile` only. Approach **B** (chosen by the owner): upgrade React Native and modernize every dependency in one PR, including the RNFirebase modular-API migration and replacing the notification stack.
+Date: 2026-10-29. Scope: `regroup/mobile` only. Approach **B** (chosen by the owner): upgrade React Native and modernize every dependency in one PR, including the RNFirebase modular-API migration and replacing the notification stack. Status: owner answered the builder-check questions and approved the §7 calls on 2026-10-30 (decisions folded in below, marked *owner*).
 
 The upgrade PR also contains a reader-facing decision record, `regroup/mobile/docs/build/react-native-0.88-upgrade.md`. That record covers what was done and why. This document is the design it is built from.
 
@@ -45,9 +45,15 @@ Regroup mobile runs React Native **0.72.17**. React Native has not supported it 
 
 - **Verification environment.** This Linux container can run Jest, `tsc` and lint. It cannot run Xcode or CocoaPods, and the Android SDK host (`dl.google.com`) is blocked by network policy. Android compile is verified by CI (`maestro-smoke`: `npm ci` + `./gradlew assembleDebug`, JDK 17). That job's Maestro step is `continue-on-error`, so it only proves the build. iOS (`pod install`, build, run) and device behavior must be verified on a Mac before merge; the decision record lists them.
 - **Repo gates.**
-  - pre-commit: secret scan, a 300-line limit for new source files, verify-diff (no deleted or renamed tests, no `.skip`/`.only`, no test-count drop, **no `.snap` change** without the `test-change-approved` label).
+  - pre-commit: secret scan, a 300-line limit for new source files, verify-diff (no deleted or renamed tests, no `.skip`/`.only`, no test-count drop, **no `.snap` change**).
   - commit-msg scope `regroup-mobile`.
-  - No force-push.
+  - No force-push; `--no-verify` is denied in `.claude/settings.json`.
+- **Gate loosening for this PR (*owner*: "only to the extent absolutely necessary").**
+  - The only gate rule this work cannot satisfy is SNAPSHOT-CHURN (react-test-renderer 19, icon packages and modal markup change snapshot output).
+  - The PR's first commit adds a single opt-in to `.claude/agent-gates/verify-diff.sh`: `VERIFY_DIFF_APPROVED_SNAPSHOTS`, a colon-separated list of exact `.snap` paths. A staged `.snap` change is excused only if its path is in that list; every other rule, and every unlisted `.snap`, still fails.
+  - The PR's last commit removes the opt-in again, so the merged diff leaves the gate unchanged. `.claude/settings.json` is not changed.
+  - CI's `test-tamper` job runs the base-branch copy of the script, so the PR carries the existing `test-change-approved` label, and its description lists each changed `.snap` with the reason.
+- **Mac checkpoint (*owner*).** The owner can build iOS at a midpoint. The plan therefore lands the native iOS work and the keyboard changes before that checkpoint, then stops for a `pod install`, a build and a device pass.
 - **Release guard and e2e variants** (`android/app/build.gradle`, `scripts/*`, `react-native.config.js`, iOS `E2E*` configurations) must keep working unchanged.
 - **Data model.** Collection names, field names and query semantics must not change during the Firebase migration. Rules tests (`firebase/__tests__`) are the oracle for rules-affecting behavior.
 
@@ -151,7 +157,11 @@ Regroup mobile runs React Native **0.72.17**. React Native has not supported it 
 - **Tests.**
   - `jest.setup.js` and `__mocks__/firebase-setup.ts` gain a modular mock surface: functions recording calls against a fake `ref` model.
   - Test assertions change from namespaced call chains to the equivalent modular calls. Test count and intent are preserved.
-  - Integration and rules suites keep using the Admin SDK and are unaffected.
+  - **Integration suite (*owner*: upgrade the SDKs rather than build an adapter).** `src/integration/setup.ts` maps the RN Firebase packages onto `firebase-admin`'s chained API. After the migration the services call modular functions (`doc`, `getDoc`, `query`…), which `firebase-admin` has never had, at any version. The SDK with that exact API is the Firebase JS SDK (`firebase`, already a dependency of RNFirebase 26, which mirrors it). So the integration config maps `@react-native-firebase/{app,auth,firestore,functions,storage}` to `firebase/*` connected to the emulators, and `firebase-admin` (latest 13.x) stays only for seeding and Admin-only helpers.
+    - The JS SDK is a client SDK, so emulator security rules apply where the Admin SDK bypassed them. Each suite signs in as the seeded user it acts for, through the Auth emulator. Where a test needs to set up data that no client may write, the setup step seeds it through Admin.
+    - Acceptance: every integration test that passes today still passes. The 24 that already fail are listed as pre-existing, and none newly fails.
+  - The rules suites (`firebase/__tests__`, `@firebase/rules-unit-testing` + `firebase`) move to the JS SDK version RNFirebase 26 pins. Their assertions don't change.
+  - Anything else that uses a Firebase SDK directly (scripts, e2e seeding, mocks) is upgraded and fixed alongside.
 - **Messaging contract corrections (v26/v27 notes) apply only to fields Regroup reads.** It reads `message.data.notifee` only, so nothing changes there.
 
 ### 5.3 Notifications
@@ -207,7 +217,7 @@ Regroup mobile runs React Native **0.72.17**. React Native has not supported it 
 | react-native-keyboard-manager | 6.5.4-alpha.2 → **removed** | Doesn't compile on 0.88 (imports the removed `RCTBaseTextInputView.h`). |
 | react-native-keyboard-aware-scroll-view | 0.9.5 → **removed** | Replaced by **react-native-keyboard-controller 1.22.9** (Fabric). Mandatory Android edge-to-edge (targetSdk 36) breaks `adjustResize`-based avoidance, which keyboard-controller handles. `KeyboardProvider` goes at the root; `rats-scroll-view` and the other APSL users switch to its `KeyboardAwareScrollView`. Adds **react-native-reanimated 4.7.1 + react-native-worklets 0.13.x** (peer requirement) and the worklets Babel plugin (placed last, test-safe). |
 | **IQKeyboardManager parity** | — | KeyboardManager auto-lifted every iOS text field. The builder audits screens with `TextInput` outside an aware scroll view and wraps each in keyboard-controller's `KeyboardAwareScrollView` (or `KeyboardAvoidingView`), so no field ends up under the keyboard. Chat had it disabled; HouseSetup set a 100-point distance → `bottomOffset`. |
-| react-native-modal | 13.0.1 → **removed** | Throws on 0.88 (`InteractionManager`). `rats-modal` and `rats-loading-modal` (the only importers, 23 consumers) are rebuilt on RN `Modal` (`transparent`, `animationType="fade"`, a `Pressable` backdrop calling `onBackdropPress`), keeping each wrapper's props. Visible difference: fade replaces zoom, recorded as a decision. |
+| react-native-modal | 13.0.1 → **13.0.2 + patch** (*owner*: keep it) | It wraps RN's own `Modal` and supplies the swipe-to-dismiss, slide/zoom animations and `onModalShow`/`onModalHide` that `BaseActivityScreen`, `PhaseCustomization`, `ModalContext` and `ChoreSetup` rely on. Its only 0.88 breakages are removed APIs: `InteractionManager.createInteractionHandle` / `clearInteractionHandle` (3 calls) and `BackHandler.removeEventListener`. A patch-package patch replaces them (keep the subscription from `addEventListener`, call `.remove()`; drop the interaction handles, which only deferred work behind animations). The patch is pinned to 13.0.2 and carries a header explaining why. `RatsModal` and `RatsLoadingModal` stay the only importers (the app's wrapper pattern): every app modal goes through them, and they keep their props and behaviour. The patched paths get characterization tests: back-button dismiss, backdrop press, swipe and show/hide callbacks firing. |
 | @react-native-community/checkbox | 0.5.20 → **removed** | 0.6.0's codegen points at a missing `js/` directory. `rats-checkbox` is reimplemented in JS (`Pressable` + icon) with the same props and testIDs. |
 | react-native-vector-icons | 9.2.0 → **@react-native-vector-icons/fontawesome5, ionicons, material-icons 14.0.0** | v10 is deprecated. Run the official codemod; `solid` → `iconStyle="solid"`. Rename the three Ionicons names that no longer exist (`md-arrow-down`, `ios-calendar` → v14 names). Remove `fonts.gradle`, `fix-vector-icons.gradle` and the bundled `.ttf` copies in `ios/`. Fonts come from the pods; `UIAppFonts` via `rnvi-update-plist`. The Quicksand app fonts stay. |
 | @react-native-clipboard/clipboard, react-native-launch-arguments, @react-native-picker/picker, react-native-collapsible, react-native-simple-radio-button, react-native-size-matters, @callstack/react-theme-provider, react-native-google-places-autocomplete (→ 2.6.5) | already latest / JS | No change beyond version. launch-arguments stays interop (e2e only). |
@@ -237,7 +247,12 @@ Regroup mobile runs React Native **0.72.17**. React Native has not supported it 
 4. **Before merge, on a Mac (listed in the decision record):**
    - `pod install`, Debug and Release builds, and the `E2EEmulator` / `E2EStaging` configurations.
    - On a device or simulator: sign-in and sign-up, a Stripe test PaymentSheet payment, a foreground push, rent reminder scheduling (Android and iOS), document upload, CSV guest import, PDF export (Android), house search with location, both charts, chat keyboard, HouseSetup keyboard, a deep link / universal link, and edge-to-edge layouts on Android 15+.
-5. **Snapshots.** Expected to change (react-test-renderer 19, icons, modal). The PR needs the `test-change-approved` label, and the description lists each `.snap` change and why it is intended.
+5. **Snapshots.** Expected to change (react-test-renderer 19, icons). Each snapshot update is its own commit, made with `VERIFY_DIFF_APPROVED_SNAPSHOTS` naming exactly its files (§3), after reading the diff to confirm it is the renderer or icon change and nothing else. The PR carries the `test-change-approved` label and lists every `.snap` change and why it is intended.
+6. **Typecheck ratchet (*owner*: recommended approach).** Every genuinely new error is fixed. `.typecheck-baseline` is then regenerated from a CI run, as `scripts/typecheck-ratchet.js` prescribes, with at most 137 entries. The decision record maps each re-worded entry to the entry it replaces.
+7. **Keyboard (*owner*: be very careful; keep or improve the experience).**
+   - Before changing anything, record the current keyboard behaviour of every screen with a text input. That covers which wrapper it uses (APSL `KeyboardAwareScrollView`, `rats-scroll-view`, `KeyboardAvoidingView`, none), whether IQKeyboardManager was active there (on unless chat disabled it; HouseSetup's 100-point distance), and the props in effect (`extraScrollHeight`, `keyboardShouldPersistTaps`, `enableOnAndroid`…).
+   - Map each one to keyboard-controller with the same visible result: the focused field lands above the keyboard with the same offset, the same tap-to-dismiss and scroll-to-dismiss behaviour, chat's composer pinned to the keyboard, and Android's `adjustResize` replaced by keyboard-controller under edge-to-edge.
+   - This table goes into the decision record, and the keyboard work lands before the Mac checkpoint so the owner can try the key screens on a device.
 
 ### 5.6 Risks and rollback
 
@@ -247,6 +262,7 @@ Regroup mobile runs React Native **0.72.17**. React Native has not supported it 
 | iOS can't be verified here | A Mac checklist gates merge; the iOS native diff stays minimal (ObjC++ kept, linkage unchanged). |
 | notify-kit maturity | Usage is isolated behind one module; the payload contract is unchanged, so swapping to another Notifee-API library or expo-notifications later is local. |
 | keyboard-controller + reanimated add a native layer | Versions pinned to the published RN 0.86–0.88 support range; worklets Babel plugin isolated from Jest. |
+| Keyboard UX regresses (owner: hard-won) | Per-screen before/after table (§5.5.7), keyboard work before the Mac checkpoint, device pass on chat, HouseSetup and every form screen. |
 | Android edge-to-edge visual regressions | safe-area-context everywhere; device check on Android 15+. |
 | AGP 9 old-DSL libraries | `android.newDsl=false` per template; CI build is the proof; a targeted patch-package only where CI fails. |
 | **Rollback** | The PR is a single squash commit. Revert it. No data migration is involved, since Firestore shapes are unchanged. |
@@ -268,7 +284,7 @@ Regroup mobile runs React Native **0.72.17**. React Native has not supported it 
 2. **react-native-notify-kit** over expo-notifications (it keeps the server contract and adds no Expo).
 3. Fix the Android channel bug as part of the swap.
 4. **react-native-keyboard-controller** (+ reanimated/worklets) replacing keyboard-manager and keyboard-aware-scroll-view.
-5. RN `Modal` replacing react-native-modal: fade replaces zoom.
+5. ~~RN `Modal` replacing react-native-modal~~. Superseded (*owner*): keep react-native-modal 13.0.2 with a minimal patch, behind `RatsModal` / `RatsLoadingModal`.
 6. JS `rats-checkbox` replacing the native checkbox.
 7. victory-native **37.3.7** (SVG line), not the Skia rewrite.
 8. Keep RNTL 13.3.3; no async test migration.
