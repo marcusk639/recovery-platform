@@ -22,11 +22,11 @@ import { IOS } from '../../util/platform';
 import RatsGooglePlacesAutocomplete from '../google-places-autocomplete';
 import { RatsIcon } from '../rats-icon/rats-icon';
 import { RatsText } from '../rats-text';
-import Geolocation from 'react-native-geolocation-service';
+import { configuredGeolocation } from '../../util/geolocation';
 
 // Declare navigator geolocation globally for this module
 declare const navigator: {
-  geolocation: typeof Geolocation;
+  geolocation: typeof configuredGeolocation;
 };
 
 export interface RatsSearchProps extends TextInputProps {
@@ -79,7 +79,9 @@ const TEXT_STYLE: TextStyle = {
   fontFamily: fontFamily.roboto,
 };
 
-navigator.geolocation = require('react-native-geolocation-service');
+// Google Places' current-location option reads navigator.geolocation: give it the configured
+// module (util/geolocation), as it got react-native-geolocation-service before.
+navigator.geolocation = configuredGeolocation;
 
 const RatsSearchBar = (props: RatsSearchProps) => {
   const [listViewDisplayed, setListViewDisplayed] = useState(false);

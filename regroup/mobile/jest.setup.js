@@ -410,45 +410,49 @@ jest.mock('react-native-permissions', () => ({
   },
 }));
 
-jest.mock('react-native-geolocation-service', () => ({
-  getCurrentPosition: jest.fn(),
-  watchPosition: jest.fn(),
-  clearWatch: jest.fn(),
-  requestAuthorization: jest.fn(() => Promise.resolve('granted')),
-}));
-
-jest.mock('@react-native-community/geolocation', () => ({
-  __esModule: true,
-  default: {
+jest.mock('@react-native-community/geolocation', () => {
+  const Geolocation = {
     getCurrentPosition: jest.fn(),
     watchPosition: jest.fn(),
     clearWatch: jest.fn(),
     requestAuthorization: jest.fn(),
-  },
-  getCurrentPosition: jest.fn(),
-  watchPosition: jest.fn(),
-  clearWatch: jest.fn(),
-}));
+    setRNConfiguration: jest.fn(),
+  };
+  return { __esModule: true, default: Geolocation, ...Geolocation };
+});
 
 jest.mock('react-native-image-picker', () => ({
   launchImageLibrary: jest.fn(() => Promise.resolve({ assets: [] })),
   launchCamera: jest.fn(() => Promise.resolve({ assets: [] })),
 }));
 
-jest.mock('react-native-document-picker', () => ({
-  __esModule: true,
-  default: {
+// The picker's errorCodes / isErrorWithCode are its real ones (pure JS); its package root loads
+// the TurboModule, so the file is required by path (its exports map hides the deep path).
+jest.mock('@react-native-documents/picker', () => {
+  const path = require('path');
+  const errors = jest.requireActual(
+    path.join(path.dirname(require.resolve('@react-native-documents/picker/package.json')), 'lib/module/errors.js'),
+  );
+  return {
     pick: jest.fn(() => Promise.resolve([])),
-    pickSingle: jest.fn(() => Promise.resolve({})),
-    types: { allFiles: 'public.item', pdf: 'com.adobe.pdf' },
-    isCancel: jest.fn(() => false),
-  },
-  pick: jest.fn(() => Promise.resolve([])),
-  types: { allFiles: 'public.item', pdf: 'com.adobe.pdf' },
-  isCancel: jest.fn(() => false),
-}));
+    keepLocalCopy: jest.fn(({ files }) =>
+      Promise.resolve(
+        files.map((f) => ({ status: 'success', sourceUri: f.uri, localUri: `file:///mock/caches/${f.fileName}` })),
+      ),
+    ),
+    types: {
+      allFiles: '*/*',
+      csv: ['text/csv', 'text/comma-separated-values'],
+      images: 'image/*',
+      pdf: 'application/pdf',
+      plainText: 'text/plain',
+    },
+    errorCodes: errors.errorCodes,
+    isErrorWithCode: errors.isErrorWithCode,
+  };
+});
 
-jest.mock('react-native-fs', () => ({
+jest.mock('@dr.pogodin/react-native-fs', () => ({
   DocumentDirectoryPath: '/mock/documents',
   TemporaryDirectoryPath: '/mock/tmp',
   readFile: jest.fn(() => Promise.resolve('')),
@@ -460,8 +464,7 @@ jest.mock('react-native-fs', () => ({
 }));
 
 jest.mock('react-native-html-to-pdf', () => ({
-  __esModule: true,
-  default: { convert: jest.fn(() => Promise.resolve({ filePath: '/mock/file.pdf' })) },
+  generatePDF: jest.fn(() => Promise.resolve({ filePath: '/mock/file.pdf' })),
 }));
 
 jest.mock('@react-native-clipboard/clipboard', () => ({

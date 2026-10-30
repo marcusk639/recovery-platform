@@ -409,6 +409,12 @@ It is deleted with the package in Task 11.
   the libraries that apply `com.facebook.react`. Every other library with such fields does apply
   it, and the 0.72 root bridge had opted in every module. The checkbox was due to be replaced in
   Task 8 anyway, so Task 8 was brought forward rather than patching a library about to be deleted.
+- **Missing `BuildConfig`, again.** The second build stopped at `react-native-firebase_analytics`
+  17.5. All seven RNFirebase 17 packages declare `BuildConfig` fields without the opt-in, and
+  Task 9 replaces them. Rather than seven temporary patches, the root `build.gradle` opts in every
+  library module that left `buildConfig` unset, the one thing the 0.72 bridge did that AGP 9
+  still needs. It registers on `com.android.library` and sets the value in `finalizeDsl`, before
+  AGP finalizes the module. It is removed once CI shows no installed library needs it.
 - **The legacy ProGuard file.** AGP 9 refuses `getDefaultProguardFile('proguard-android.txt')` at
   configuration time, whatever the minify setting ([rnmapbox/maps#4281](https://github.com/rnmapbox/maps/issues/4281)).
   `react-native-date-picker` 5.0.13, which is kept and is the latest release, still uses it.
@@ -495,6 +501,60 @@ font loading, and its `require('…ttf')` would also bundle every font into the 
 - Four snapshots in three files change only in the icon's props, `solid={true}` → `iconStyle="solid"`.
   One solid-only glyph gains `iconStyle="solid"`, which is the v9 fallback made explicit.
   Committed with the snapshot opt-in naming those three files.
+
+### Task 6: document picker, file system, html-to-pdf, geolocation
+
+**`react-native-document-picker` 9.3.1 → `@react-native-documents/picker` 12.0.3** (the same
+project, renamed).
+
+- `pickSingle` / `isCancel` become `pick` (which returns an array) and
+  `isErrorWithCode(e) && e.code === errorCodes.OPERATION_CANCELED`. A cancel still shows nothing
+  and logs nothing.
+- Each screen now copies the picked file with `keepLocalCopy({ destination: 'cachesDirectory' })`
+  before using it. The picked uri (Android `content://`, an iOS import-mode file) is only
+  guaranteed while the picker session lasts, and Documents uploads only after the user chooses a
+  category in a follow-up alert.
+- A failed copy is logged with a static context (`DocumentListScreen: keepLocalCopy`, `GuestImportScreen:
+  keepLocalCopy`), the user sees the existing error, and nothing is uploaded or parsed.
+- A file with no name is still rejected before anything is copied.
+- **Guest CSV import now accepts CSV files** (`types.csv` as well as `types.plainText`). Android
+  reports a `.csv` file as `text/csv` or `text/comma-separated-values`, which the plain-text-only
+  filter greyed out. Every file selectable before is still selectable.
+
+**`react-native-fs` 2.20 → `@dr.pogodin/react-native-fs` 2.41.0** (the maintained TurboModule
+fork). `readFile(localUri, 'utf8')` is unchanged: the fork strips `file://` and reads through the
+Android content resolver. The CSV content is never logged, and a test pins that.
+
+**`react-native-html-to-pdf` 0.12 → 1.3.0.** The named `generatePDF` takes the same `{ html,
+fileName, directory }` as 0.12's default `.convert`, and a new test pins the options. PDF export
+stays Android-only (`isPDFExportAvailable`), as before. The comment that blamed this on a
+`react-native.config.js` exclusion was stale: no such exclusion exists. Enabling iOS is a product
+decision for after the Mac checkpoint has verified it.
+
+**`react-native-geolocation-service` → `@react-native-community/geolocation` 3.4.0.**
+
+- `util/geolocation.ts` is the only entry point. It configures the library once at load, with
+  `skipPermissionRequests: true` (the app asks itself) and `locationProvider: 'playServices'` (the
+  fused provider the old library used).
+- `HouseSearchScreen`, which called community geolocation directly with its defaults, now goes
+  through it, and so does `rats-search-bar`'s `navigator.geolocation` for Google Places.
+- **Options are explicit:** `enableHighAccuracy: false` and `maximumAge: Infinity`, the old
+  library's defaults; the new library's iOS default reads no cached position.
+- **Timeout:** the one exception is `timeout`, set to the new library's 10 minutes instead of the
+  old "never". An infinite value becomes an infinite native timer on iOS, and for an interactive
+  screen ten minutes is no different.
+- The root `googlePlayServicesVersion` ext went with the old package.
+
+**Tests.** New cases:
+
+- picker cancel, a nameless file, a failed copy, a successful copy and upload;
+- CSV types, UTF-8 read of the local copy, content never logged, a failed copy on import;
+- `generatePDF` options and the iOS refusal;
+- the geolocation configuration and options.
+
+Existing cases are kept, their mocks moved to the new packages. The picker mock uses the library's
+real `errorCodes` / `isErrorWithCode`, loaded by path, because the package root loads the
+TurboModule.
 
 ### Task 8: rats-checkbox in JS (brought forward into the Task 4 CI loop)
 
