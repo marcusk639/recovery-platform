@@ -1,13 +1,14 @@
 # Recovery Platform — Shared Vocabulary
 
 > Cross-product term definitions. When a term means different things in different products,
-> always use the product-prefixed form (e.g., homegroups:meeting vs regroup:meeting).
+> always use the product-prefixed form (e.g., regroup:house-meeting).
 
 ## Terms
 
 | Term          | homegroups meaning                                           | regroup meaning                                                    | Notes                                                                   |
 | ------------- | ------------------------------------------------------------ | ------------------------------------------------------------------ | ----------------------------------------------------------------------- |
-| **meeting**   | A 12-step AA/NA meeting                                      | A house staff or resident meeting                                  | Use `homegroups:meeting` or `regroup:meeting` in cross-product contexts |
+| **meeting**   | A 12-step AA/NA meeting                                      | Same: a 12-step meeting                                            | Means a 12-step meeting in every product. House meetings are separate   |
+| **house meeting** | Not used                                                 | A house staff or resident meeting (`regroup:house-meeting`)        | In Regroup code: Oxford business meetings (`oxford/BusinessMeeting`)    |
 | **group**     | A homegroup — an autonomous 12-step unit                     | Not a primary concept                                              |                                                                         |
 | **member**    | A member of a homegroup                                      | A resident/guest in a sober living house                           |                                                                         |
 | **house**     | Not used                                                     | A sober living house (primary entity)                              |                                                                         |
