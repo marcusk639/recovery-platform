@@ -23,7 +23,7 @@
 
 **Spec:** `regroup/mobile/docs/superpowers/specs/2026-10-29-react-native-0.88-upgrade-design.md` (revised 2026-10-30 with the plan-review findings).
 
-**Review record:** `2026-10-30-react-native-0.88-upgrade.review.json`, beside this file. v1 got CHANGES_REQUESTED. The v2 re-review found 4 new blocking items and 7 partial ones; v3 resolves them. Main change: the Firebase migration runs on **RNFirebase 25.1.0**, which ships both APIs with types, and bumps to 26.4.1 only after the last group (Task 10f). A probe on 2026-10-30 measured the 25.1.0 bump at exactly 15 new type errors, all fixed in its own commit.
+**Review record:** `2026-10-30-react-native-0.88-upgrade.review.json`, beside this file. v1 got CHANGES_REQUESTED. The v2 re-review found 4 new blocking items and 7 partial ones; v3 resolves them. Main change: the Firebase migration runs on **RNFirebase 25.1.0**, which ships both APIs with types, and bumps to 26.4.1 only after the last group (Task 10f). A probe on 2026-10-30 measured the 25.1.0 bump at exactly 15 new type errors, all fixed in the bump commit. A final verification measured the transitional typing: intersection-typed exports and shared refs keep the ratchet at baseline.
 
 ## Global Constraints
 
@@ -351,12 +351,21 @@
 - Modify:
   - `package.json`: RNFirebase **25.1.0** (all seven packages; crashlytics is already gone), plus `firebase` 12.17.1 and `firebase-admin` 13.x as devDependencies.
   - The **15 type errors the 25.1.0 bump introduces** (measured 2026-10-30), fixed in this same commit:
-    - 7 × `TS2774`, real behaviour bugs: `snap.exists` is a method since RNFirebase 22, so the property check is always truthy. Becomes `.exists()` in `useWeekSummary.ts` (2), `useLiveHouseDisputes.ts`, `activity.ts`, `payments.ts` and `treasury.ts`. Re-run the probe and fix every reported site.
-    - 6 × `TS18046` / `TS2322` on callable results: type the `httpsCallable` result generically in `StripeSettingsScreen.tsx` and `meeting.ts`.
-    - `users.tsx`: `firebase.auth`.
-    - `firebase-setup.ts`: `export type` re-exports.
-    - The op-log tests stay byte-identical.
+    - **Every `.exists` property read becomes `.exists()`**, not just the ones `tsc` reports. Since RNFirebase 22, `exists` is a method, so the property is always truthy and its negation always false. `tsc` reports only the 6 positive reads as `TS2774` (`useWeekSummary.ts:62,122`, `useLiveHouseDisputes.ts:43`, `activity.ts:89`, `payments.ts:177`, `treasury.ts:34`). The 9 negated reads are silent (`guest.tsx:92`, `reopenDispute.ts:45`, `activity.ts:277,308,338,450`, `useSubscriptionGate.ts:46`, `choreRotation.ts:20,50`). Fix every hit of `grep -rnE '\.exists\b[^(]|\.exists$' src` (15 sites on 2026-10-30). The Task 2 op-log tests pin the not-found branches and stay byte-identical.
+    - 5 × `TS18046` (`StripeSettingsScreen.tsx:193-196,224`) and 1 × `TS2322` (`meeting.ts:16`) on callable results: type the `httpsCallable` result generically.
+    - `users.tsx:107`: `TS18046` on `firebase.auth.EmailAuthProvider`.
+    - `firebase-setup.ts`: `TS1448` / `TS1205`, fixed with `export type` re-exports.
   - `src/services/notifications/handler.ts` and `service.ts`: deleted here, not in Task 11. They are dead code with zero references, and `handler.ts` imports `FirebaseMessagingTypes`.
+  - **Shared ref owners (transitional dual typing).** The two 25.1.0 type families can't be assigned to each other (measured), and these refs cross group boundaries. Each is declared with an intersection type until Task 10f:
+    - `house.tsx` `houseCollection`;
+    - `users.tsx` `userCollection`;
+    - `admin.tsx` `adminCollection`;
+    - `guest.tsx` `guestCollection` and `archiveCollection`;
+    - `paywall.ts` `paywallConfigRef`;
+    - any other exported ref the Task 10 Step 0 inventory shows imported across groups.
+
+    For example: `export const houseCollection = firestore.collection('houses') as CollectionReference & FirebaseFirestoreTypes.CollectionReference`. At runtime this is the same object, and RNFirebase 25's classes serve both APIs.
+  - Delete the orphan `src/integration/setup.ts` (no config references it); `setup.integration.ts` replaces it.
   - `firebase-setup.ts`, `src/config/firebase-emulator.ts`, `src/services/crud.tsx`.
   - `__mocks__/firebase-modular/*`, `__mocks__/firebase-setup.ts`.
   - `src/config/__tests__/firebase-setup.test.ts` (extend; switch its app mock to modular `getApp`; keep every e2e case).
@@ -368,7 +377,10 @@
 **Interfaces:**
 - **`firebase-setup.ts` exports:** `auth`, `firestore`, `functions`, `messaging`, `storage`, `callHttpsFunction(name: string, payload: unknown)` and `emulatorConnection`.
   - It also re-exports the modular types the code needs (`DocumentSnapshot`, `Timestamp`, `User`, messaging's `RemoteMessage`, …) under explicit names, with `export type`, replacing `Firebase*Types`.
-  - **Instances:** `getApp()`, `getAuth()`, `getFirestore()` with `ignoreUndefinedProperties: true` applied through the settings path 25.1.0 supports synchronously (`initializeFirestore` is async before 26.0, so it only becomes the constructor in Task 10f), `getFunctions()`, `getMessaging()` and `getStorage()`.
+  - **Instances (25.1.0):** `getApp()`, `getAuth()`, `getFunctions()`, `getMessaging()` and `getStorage()`.
+  - **Firestore:** `initializeFirestore(getApp(), { ignoreUndefinedProperties: true }).catch((e) => logException(e, 'firebase-setup: initializeFirestore'))`, then `const firestore = getFirestore()`. Both return the same instance. 25.1.0's `initializeFirestore` is async, but it sets `ignoreUndefinedProperties` synchronously before its first await, and writes read the flag at serialization time. Don't call `getFirestore().settings()`: it's untyped on the modular type.
+  - **Export types (Tasks 9–10e):** intersections of the two families, for example `Firestore & FirebaseFirestoreTypes.Module` and `Auth & FirebaseAuthTypes.Module`. Measured on 2026-10-30: modular-only exports add 239 errors across 102 files; intersection exports keep the tree at baseline + the 15 bump fixes. Task 10f removes the intersections.
+  - **Order:** settings, then `connectToEmulators`.
   - **Emulators:** `connectToEmulators({ host, ports, instances })` receives these same instances.
   - **Order:** construct, then connect.
 - **Integration config:**
@@ -387,7 +399,7 @@
   - **Expected right after this task:** about 0 passing. Every suite imports a service, and namespaced services cannot run on the JS SDK.
   - **Per-group recovery targets** (from the Task 2 load-graph mapping): each group restores exactly the suites mapped to it. Write the expected counts per group into the record before Task 10a.
 - [ ] **Step 4:** Rules suite at 5.0.2: 27 suites, 591 tests passing.
-- [ ] **Step 5:** Suite, ratchet, commit `refactor(regroup-mobile): RNFirebase 25.1.0 with modular setup, exists() fixes, dual-shape mocks and the JS-SDK integration harness`. Push. Device builds stay runnable from here on: 25.1.0 serves both APIs at runtime.
+- [ ] **Step 5:** Suite, ratchet, commit `refactor(regroup-mobile): RNFirebase 25.1.0 with modular setup, exists() fixes, dual-shape mocks and the JS-SDK integration harness`. Push. Android device builds stay runnable from here on: 25.1.0 serves both APIs at runtime, and CI compiles each push. iOS is first built on 26.4.1 at the Mac checkpoint.
 
 ### Task 10: Modular call sites, by domain
 
@@ -416,12 +428,13 @@ Each group is one commit, and each commit is green: unit tests, ratchet, lint, a
   - Rewrite to the modular API.
   - Update tests that assert mock call chains, keeping their cases and expected values.
   - **10a and 10b:** their Task 2 op-log files must not change, which proves the mapping.
-- [ ] **Step 3 (per group):** `npm run typecheck` shows zero errors in the group's files: no baseline entries in migrated files. Both APIs are typed on 25.1.0, so the ratchet stays green. Run the integration suites mapped to the group in Task 2, back to baseline-pass.
+- [ ] **Step 3 (per group):** `npm run typecheck` shows zero errors in the group's files: no baseline entries in migrated files. The intersection-typed instances and shared refs from Task 9 keep migrated and unmigrated callers compiling, so the ratchet stays green. Run the integration suites mapped to the group in Task 2, back to baseline-pass.
 - [ ] **Step 4 (10a, 10b):** Line-by-line self-review of every write and transaction against the old code. Then ask an **independent reviewer** (a fresh subagent given the regroup CLAUDE.md domain rules — dispute owner and reopen rules, payment status precedence, `rentOwed` increments, Stripe cents — and the diff, but not my reasoning) to check the op-log tests and the code against the domain rules.
 - [ ] **Step 5 (per group):** Commit `refactor(regroup-mobile): modular RNFirebase API in <group> code`, then push.
 - [ ] **Step 6 (Task 10f, after 10e): RNFirebase 26.4.1.**
   - Bump all seven packages to 26.4.1.
   - In `firebase-setup.ts`, switch the Firestore constructor to `initializeFirestore(getApp(), { ignoreUndefinedProperties: true })` (synchronous since 26.0). The existing test pins the same-instance emulator order.
+  - Remove every intersection type from Task 9: on the instances and the shared refs. `tsc` forces this, because 26.4.1 has no `Firebase*Types`.
   - Remove the namespaced mock surface.
   - Run `grep -rnE "\bfirestore\.(collection|collectionGroup|doc|batch|runTransaction|settings)\(|FirebaseFirestore\.|\.FieldValue\.|\b(messaging|storage|functions|analytics|firestore|auth)\(\)|\.httpsCallable\(|\.useEmulator\(|\b\w+(Collection|Ref)\.(doc|where|get|add|onSnapshot|update|set)\(|\.exists\b[^(]|\.exists$" src App.tsx index.js firebase-setup.ts`, expecting zero hits outside comments. The ratchet enforces the rest, since 26.4.1 has no default exports or `Firebase*Types`.
   - Run the full integration suite: all 27 baseline passes, and no new failures.
