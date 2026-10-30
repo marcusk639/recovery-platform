@@ -97,7 +97,20 @@
     "severities": ["Critical", "High", "Medium"],
     "suggestions": {
       "enabled": true,
-      "blockedPaths": ["**/*.rules", "**/firestore.indexes.json"],
+      "blockedPaths": [
+        "**/*.rules",
+        "**/firestore.indexes.json",
+        ".github/**",
+        "**/.claude/**",
+        ".pr-review/**",
+        "**/package.json",
+        "**/package-lock.json",
+        "**/npm-shrinkwrap.json",
+        "**/yarn.lock",
+        "**/pnpm-lock.yaml",
+        "**/Podfile.lock",
+        "**/Gemfile.lock"
+      ],
       "blockedClasses": [1, 2, 3, 4, 5, 6, 7]
     }
   },
