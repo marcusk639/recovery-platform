@@ -53,17 +53,17 @@ reviewer model follows the kit's procedure plus `.pr-review/REVIEW.md`, not this
 **[SPEC]**
 All of these are opt-in kit capabilities (kit how-it-works §5.4); they reproduce what the in-repo reviewer did.
 
-| Setting                                               | Value                                                                                                            |
-| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `trust.contextAssociations`                           | OWNER, MEMBER, COLLABORATOR: their PR description and comments reach the model                                   |
-| `inline`                                              | Up to 15 per run; Critical, High and Medium; Critical/High placed first                                          |
-| `inline.suggestions`                                  | On; never on paths routed to classes 1–7, `*.rules`, `firestore.indexes.json` (plus the kit's built-in blocks)   |
-| `model.ghRead`, `model.reply`                         | On: `gh pr view` / `gh pr diff`, and one checked reply per run to a maintainer's question                        |
-| Serena (input `serena: ${{ vars.PR_REVIEW_SERENA }}`) | On when the repository variable `PR_REVIEW_SERENA` is `on`; excludes `lib/`, `public/`, build output, `_legacy/` |
-| `referenceFiles`                                      | `**/CLAUDE.md`, `**/AGENTS.md`, `**/.claude/rules/**`, copied from the base commit as data                       |
-| `checks.timeoutMs`                                    | 60000 (the export check greps the whole repository per export)                                                   |
-| `checks.verifyDiff`                                   | `.claude/agent-gates/verify-diff.sh`                                                                             |
-| `securityChannel`                                     | `advisory`: security findings go to draft repository security advisories                                         |
+| Setting                                               | Value                                                                                                                                                 |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `trust.contextAssociations`                           | OWNER, MEMBER, COLLABORATOR: their PR description and comments reach the model                                                                        |
+| `inline`                                              | Up to 15 per run; Critical, High and Medium; Critical/High placed first                                                                               |
+| `inline.suggestions`                                  | On; never on paths routed to classes 1–7, `*.rules`, `firestore.indexes.json`, `.github/`, any `.claude/`, `.pr-review/`, `package.json` or lockfiles |
+| `model.ghRead`, `model.reply`                         | On: `gh pr view` / `gh pr diff`, and one checked reply per run to a maintainer's question                                                             |
+| Serena (input `serena: ${{ vars.PR_REVIEW_SERENA }}`) | On when the repository variable `PR_REVIEW_SERENA` is `on`; excludes `lib/`, `public/`, build output, `_legacy/`                                      |
+| `referenceFiles`                                      | `**/CLAUDE.md`, `**/AGENTS.md`, `**/.claude/rules/**`, copied from the base commit as data                                                            |
+| `checks.timeoutMs`                                    | 60000 (the export check greps the whole repository per export)                                                                                        |
+| `checks.verifyDiff`                                   | `.claude/agent-gates/verify-diff.sh`                                                                                                                  |
+| `securityChannel`                                     | `advisory`: security findings go to draft repository security advisories                                                                              |
 
 Secrets (unchanged): `CLAUDE_CODE_OAUTH_TOKEN`, `PR_REVIEW_ID_KEY`, `SECURITY_ADVISORY_TOKEN`. Repository variable:
 `PR_REVIEW_SERENA`.
