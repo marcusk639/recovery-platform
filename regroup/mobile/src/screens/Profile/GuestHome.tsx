@@ -73,7 +73,10 @@ import { exportWeeklyReportPDF } from "../../services/reportExport";
 import DischargeGuestModal from "./DischargeGuestModal";
 
 // Notifications
-import { scheduleRentReminder } from "../../services/notifications/rentReminder";
+import {
+  cancelRentReminder,
+  scheduleRentReminder,
+} from "../../services/notifications/rentReminder";
 
 // Styles
 import styles from "./ProfileStyles";
@@ -236,13 +239,20 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
     !!currentGuest?.id && !!startDate
   );
 
-  // Schedule a rent reminder for guests with an outstanding balance.
+  // Schedule a rent reminder for guests with an outstanding balance, and
+  // cancel it once nothing is owed (rent settled outside the app must not
+  // leave a reminder pending). Both resolve and log their own failures.
   // Deps are stable primitives so we avoid a stale-closure over currentGuest.
   const _guestId = currentGuest?.id;
   const _rentOwed = currentGuest?.rentOwed ?? 0;
   React.useEffect(() => {
-    if (currentGuest && _rentOwed > 0) {
+    if (!currentGuest) {
+      return;
+    }
+    if (_rentOwed > 0) {
       scheduleRentReminder(currentGuest as Guest);
+    } else {
+      cancelRentReminder(currentGuest as Guest);
     }
   }, [_guestId, _rentOwed]); // eslint-disable-line react-hooks/exhaustive-deps
 

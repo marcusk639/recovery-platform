@@ -21,6 +21,12 @@ const RESTRICTED = [
       'Use src/components/rats-icon/font-awesome-5 (it keeps react-native-vector-icons 9 style selection).',
     allowedIn: ['src/components/rats-icon/font-awesome-5.tsx'],
   },
+  {
+    name: 'react-native-notify-kit',
+    message:
+      'Use src/services/notifications (channels, remoteMessage, rentReminder); it is the only react-native-notify-kit importer.',
+    allowedIn: ['src/services/notifications/**'],
+  },
 ];
 
 const PATTERNS = [

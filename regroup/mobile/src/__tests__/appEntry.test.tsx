@@ -12,6 +12,11 @@ jest.mock('../state/queryClient', () => ({ queryClient: {} }));
 jest.mock('../navigation/service', () => ({ navigationRef: { current: null } }));
 
 const reportFatalError = jest.fn();
+const startupOrder: string[] = [];
+const ensureNotificationChannels = jest.fn(() => {
+  startupOrder.push('notification channels');
+  return Promise.resolve();
+});
 const originalErrorUtils = (global as any).ErrorUtils;
 
 const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
@@ -20,7 +25,11 @@ const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
 const loadEntryWith = (emulatorConnection: Promise<void>) => {
   let registerComponent: jest.SpyInstance | undefined;
   jest.isolateModules(() => {
-    jest.doMock('../../firebase-setup', () => ({ emulatorConnection }));
+    jest.doMock('../../firebase-setup', () => {
+      startupOrder.push('firebase-setup');
+      return { emulatorConnection };
+    });
+    jest.doMock('../services/notifications/channels', () => ({ ensureNotificationChannels }));
     const { AppRegistry } = require('react-native');
     registerComponent = jest
       .spyOn(AppRegistry, 'registerComponent')
@@ -32,6 +41,8 @@ const loadEntryWith = (emulatorConnection: Promise<void>) => {
 
 beforeEach(() => {
   reportFatalError.mockReset();
+  ensureNotificationChannels.mockClear();
+  startupOrder.length = 0;
   (global as any).ErrorUtils = { ...originalErrorUtils, reportFatalError };
 });
 
@@ -56,6 +67,14 @@ describe('app entry (index.js)', () => {
 
     expect(reportFatalError).not.toHaveBeenCalled();
     expect(registerComponent).toHaveBeenCalledWith('rats', expect.any(Function));
+  });
+
+  it('creates the Android notification channels once, after firebase-setup', async () => {
+    loadEntryWith(Promise.resolve());
+    await flushPromises();
+
+    expect(ensureNotificationChannels).toHaveBeenCalledTimes(1);
+    expect(startupOrder).toEqual(['firebase-setup', 'notification channels']);
   });
 });
 

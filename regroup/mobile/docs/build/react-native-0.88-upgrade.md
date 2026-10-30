@@ -902,6 +902,121 @@ Pinned exactly so the migration cannot change them; none is fixed here.
 - `EnhancedAuthService` counts rate-limit attempts before validation; `signUpWithEmail` lets an
   empty email or password through to Firebase.
 
+### Task 11: notifications on react-native-notify-kit
+
+- **Packages.** Added `react-native-notify-kit` 10.10.0 (exact; `npm view` on 2026-10-30: `latest`,
+  peers `react-native >=0.73`, `expo` optional). It brings `@expo/image-utils` (its Expo config
+  plugin's dependency; JS-only, unused by this bare app). Removed `react-native-push-notification`,
+  `@react-native-community/push-notification-ios`, `@notifee/react-native`,
+  `@types/react-native-push-notification`, and the Task 4 patch
+  `patches/react-native-push-notification+8.1.1.patch` (patch-package fails on a patch whose package
+  is gone). The `@notifee` entry left `transformIgnorePatterns` in both Jest configs, and the stale
+  `gradle.properties` comment about the patch now says it is gone.
+- **Wrapper.** `src/services/notifications/` is the only importer (`.eslintrc.js` allowlist entry):
+  - `channels.ts`: `ensureNotificationChannels()` creates `default` ("General", HIGH) and
+    `default-channel-id` ("Reminders", HIGH) in one `createChannels` call, memoized per process
+    (a failed call is logged and retried by the next caller); Android only. **This fixes the
+    pre-existing bug in spec 5.3:** no live code created a channel, so Android 8+ showed neither
+    server pushes nor rent reminders. `index.js` calls it right after `firebase-setup`.
+  - `remoteMessage.ts`: `displayRemoteMessage(message)` parses `data.notifee` (the server contract
+    in `regroup/functions/src/util/notifications.ts`, unchanged), sets
+    `ios.foregroundPresentationOptions` to banner + sound + badge + list, awaits the channels and
+    displays. A payload that is not a JSON object is logged as a static `Error` (the `SyntaxError`
+    message can quote the payload, so it is never logged) and nothing is shown. `firebase-setup`
+    re-exports the `RemoteMessage` type for it.
+  - `rentReminder.ts`: same names, same identifier `String(guestNotificationId(guest.id))`, same
+    title, body, `data: { screen, guestId }` and channel. Scheduling is `createTriggerNotification`
+    with a `TimestampTrigger` at `nextFridayAt9am()` and `alarmManager: { allowWhileIdle: true }`,
+    after the channels. iOS schedules only when `getNotificationSettings().authorizationStatus` is
+    at least AUTHORIZED (PROVISIONAL included, as the old `alert` check). Cancel is
+    `cancelTriggerNotification(id)`. Both now return `Promise<void>`, never reject, and log with a
+    static context; call sites (`GuestHome`, `ResidentPayment`, `RentPaymentScreen`) stay
+    fire-and-forget. **New:** `android.pressAction: { id: 'default' }`, so tapping the reminder
+    opens the app (Notifee does nothing on tap without it; the old library opened the app). Nothing
+    routes on `data.screen` yet, as before. Server pushes keep their payload as sent, so a tap on a
+    foreground-displayed Android push still does nothing (unchanged; a server-side `pressAction`
+    would fix it).
+- **Splash (recorded behaviour fix).** `onMessage` is registered once in an effect and unsubscribed
+  on unmount; before, it ran in the render body, adding a listener every render that was never
+  removed, so one foreground push could show several banners. It calls `displayRemoteMessage`.
+- **GuestHome** schedules when `rentOwed > 0` and now cancels when `rentOwed <= 0` (spec 5.3: Android
+  reminders start firing with this task, a deliberate behaviour change, so a balance settled outside
+  the app must not leave one pending). Note, unchanged: an admin viewing a guest's GuestHome
+  schedules or cancels on the admin's own device.
+- **Existing iOS installs.** Old reminders stay pending under the same identifier. notify-kit's iOS
+  one-shot trigger uses the notification id as the `UNNotificationRequest` identifier
+  (`ios/NotifeeCore/NotifeeCore.m:1294`, `requestWithIdentifier:notification[@"id"]`), so
+  rescheduling replaces the old request. `cancelTriggerNotification(id)` goes to
+  `NotifeeApiModule.mm:262` → `NotifeeCore cancelNotification:withNotificationType:Trigger` →
+  `cancelRollingNotification` (`NotifeeCore.m:866`), which always adds the plain `notificationId`
+  to the identifiers it passes to `removePendingNotificationRequestsWithIdentifiers:`
+  (`NotifeeCore.m:902–910`, via `removeRollingPendingRequestsForIds`, `NotifeeCore.m:333–336`), so
+  a request the old library scheduled is removed too (react-native-notify-kit 10.10.0 tarball).
+- **firebase.json.** `regroup/mobile/firebase.json` and `regroup/mobile/firebase/firebase.json` both
+  get `"react-native": { "messaging_ios_foreground_presentation_options": ["badge", "sound",
+  "banner", "list"] }` (RNFirebase's iOS `ios_config.sh` reads the first `firebase.json` within
+  depth 2, which can be the emulator config). Nothing else in either file changed. The Firebase CLI
+  ignores the `react-native` key (RNFirebase documents it in the same file).
+- **Android manifest: merged from notify-kit's library manifest, decided one by one.** The app's
+  `AndroidManifest.xml` records the removals with `tools:node="remove"`.
+
+  | Item | Decision | Why | Play Console impact |
+  | ---- | -------- | --- | ------------------- |
+  | `POST_NOTIFICATIONS` | keep (the app already declares it) | Android 13+ shows nothing without it; RNFirebase `requestPermission` in Splash asks for it | runtime permission, no declaration |
+  | `SCHEDULE_EXACT_ALARM` | **remove** | `allowWhileIdle` maps to `SET_EXACT_AND_ALLOW_WHILE_IDLE`; without the permission, Android 12+ falls back to `setAndAllowWhileIdle` (`NotifeeAlarmManager.java:270–277`) and API 24–30 stay exact (no permission needed). A Friday 9am reminder does not need minute precision. `USE_EXACT_ALARM` is not added | no exact-alarm special access to justify; avoids the alarm-permission policy review (`USE_EXACT_ALARM` is restricted to alarm and calendar apps) |
+  | `AlarmPermissionBroadcastReceiver` (exported) | **remove** | only reacts to `SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED`, which cannot occur without the permission | one fewer exported component |
+  | `FOREGROUND_SERVICE` | **remove** | the app shows no foreground-service notification (`asForegroundService` / `registerForegroundService` unused) | no foreground-service declaration needed (targetSdk 34+ requires one per declared service type) |
+  | `ForegroundService` service, `ForegroundServiceRunLimitReceiver` | **remove** | only used by foreground-service notifications (the receiver is scheduled only from `ForegroundService`) | as above |
+  | `ACCESS_NOTIFICATION_POLICY` | **remove** | Do Not Disturb access, merged only for a Xiaomi heads-up workaround the app does not use | one fewer permission in the store listing |
+  | `FullScreenNotificationActivity` (shows when locked, turns the screen on) | **remove** | used only for `fullScreenAction` (`NotificationManager.java:425–436`), which the app never sets; `USE_FULL_SCREEN_INTENT` is not declared by the library or the app | no full-screen-intent declaration (required for Android 14+ apps that hold `USE_FULL_SCREEN_INTENT`) |
+  | `RECEIVE_BOOT_COMPLETED` + `RebootBroadcastReceiver` | keep | AlarmManager alarms are cleared on reboot; this reschedules a reminder set up to 7 days ahead | normal permission, no declaration |
+  | `WAKE_LOCK`, `VIBRATE`, `ACCESS_NETWORK_STATE`, `INTERNET` | keep | used by the alarm receiver and notification display; already merged by other libraries | normal permissions, no declaration |
+  | `NotificationReceiverActivity` (exported), `ReceiverService`, `NotificationAlarmReceiver`, `BlockStateBroadcastReceiver`, `NotifeeInitProvider` | keep | taps (`pressAction`), trigger delivery and channel-block events | none |
+
+  There were no push-notification receivers or services in the app manifest to drop (Task 4 had
+  already left them out), and `ShortcutBadger` went with `react-native-push-notification`. The merged
+  manifest was **not** built here: this machine has no Android SDK for compileSdk 37 (only
+  platforms 34 and 35), so CI's Android build on the push is the check
+  (`./gradlew :app:processDebugMainManifest`).
+- **iOS native.** In this commit `ios/rats/AppDelegate.mm` drops the `RNCPushNotificationIOS.h`
+  import and the four methods that only forwarded to it (`didRegisterForRemoteNotifications…`,
+  `didReceiveRemoteNotification:fetchCompletionHandler:`, `didFailToRegister…`,
+  `didReceiveNotificationResponse:`), so the iOS sources no longer reference the removed pod:
+  RNFirebase messaging's app-delegate swizzling keeps APNs registration and delivery. Left for
+  Task 13 (which rewrites the AppDelegate): the `UNUserNotificationCenter` delegate assignment and
+  protocol and `willPresentNotification`, after which notify-kit owns presentation of what it
+  displays and forwards other pushes to RNFirebase, whose delegate presents `notification` pushes
+  per firebase.json. `Podfile.lock` loses `RNCPushNotificationIOS` and `RNNotifee` and gains
+  notify-kit's pods at the next `pod install`; the `Podfile` names none of them.
+- **Tests (cases kept; counts are `it(`/`test(` lines, the gate's measure).**
+  - `rentReminder.test.ts` 14 → 23: the `react-native-push-notification` mock became the notify-kit
+    mock (plus mocks of `ensureNotificationChannels` and `logException`); every case kept, made
+    async, asserting on `createTriggerNotification` / `cancelTriggerNotification` (two titles name
+    the new calls). Added: schedules after the channels, the four iOS permission states plus
+    "Android does not check", and three native-rejection cases (logged once, resolves, logged
+    arguments contain no title, body or guest).
+  - New `channels.test.ts` (5) and `remoteMessage.test.ts` (6).
+  - `Splash.test.tsx` 27 → 29: one listener across re-renders, removed on unmount (the first fails
+    on the old code).
+  - `Splash.oplog.test.tsx` 12 → 12: the `@notifee/react-native` mock (which the 5.2 audit missed;
+    the file was written in Task 10) became a notify-kit mock recording `displayNotification`. In
+    "displays a foreground message that carries a notifee payload" the expected display gains the
+    iOS presentation options that `displayRemoteMessage` adds; the case's intent (shown with a
+    payload, not without) is unchanged. Nothing it pins depended on the per-render subscription: it
+    captures the last registered callback, which is now the only one.
+  - `GuestHome.test.tsx` 31 → 33: the push-notification mock became the notify-kit mock; added
+    "cancels the reminder when rentOwed drops to 0" (fails on the old code) and "does not cancel
+    while rent is owed".
+  - `ResidentPayment.test.tsx` 27 → 27: mock swap only.
+  - `appEntry.test.tsx` 2 → 3: `index.js` creates the channels once, after `firebase-setup`.
+  - `jest.setup.js`: the three old mocks became
+    `jest.mock('react-native-notify-kit', () => require('react-native-notify-kit/jest-mock'))`, the
+    library's own mock, whose enums are the real ones from its dist types (`AuthorizationStatus`
+    with `PROVISIONAL`, `AndroidImportance`, `TriggerType`, `AlarmType`).
+- **Results:** unit 389 suites, 5884 passed (+2 suites, +25 cases); ratchet 125 / 125; ESLint on the
+  changed files 22 → 20 errors (the two removed are Splash's unused `onMessage` and `res`; none
+  new, the new files are clean); `verify-diff.sh` (working tree vs HEAD) passes.
+
 ## 7. Verification
 
 _Final results and the Mac checkpoint (Task 16)._

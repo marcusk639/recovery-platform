@@ -381,46 +381,10 @@ jest.mock('@react-native-firebase/analytics', () => {
 });
 
 // ─── notifications ───────────────────────────────────────────────────────────
-jest.mock('@notifee/react-native', () => ({
-  __esModule: true,
-  default: {
-    requestPermission: jest.fn(() => Promise.resolve({ authorizationStatus: 1 })),
-    createChannel: jest.fn(() => Promise.resolve('channel-id')),
-    displayNotification: jest.fn(() => Promise.resolve('notification-id')),
-    cancelNotification: jest.fn(() => Promise.resolve()),
-    cancelAllNotifications: jest.fn(() => Promise.resolve()),
-    onForegroundEvent: jest.fn(() => jest.fn()),
-    onBackgroundEvent: jest.fn(),
-    createTriggerNotification: jest.fn(() => Promise.resolve('trigger-id')),
-    getTriggerNotifications: jest.fn(() => Promise.resolve([])),
-    setBadgeCount: jest.fn(() => Promise.resolve()),
-  },
-  AndroidImportance: { HIGH: 4, DEFAULT: 3, LOW: 2 },
-  AuthorizationStatus: { AUTHORIZED: 1, DENIED: 0, NOT_DETERMINED: -1 },
-  EventType: { PRESS: 1, DISMISSED: 0, DELIVERED: 3 },
-  TriggerType: { TIMESTAMP: 0, INTERVAL: 1 },
-}));
-
-jest.mock('react-native-push-notification', () => ({
-  configure: jest.fn(),
-  localNotification: jest.fn(),
-  localNotificationSchedule: jest.fn(),
-  cancelAllLocalNotifications: jest.fn(),
-  cancelLocalNotification: jest.fn(),
-  createChannel: jest.fn(),
-  requestPermissions: jest.fn(() => Promise.resolve({ alert: true })),
-  setApplicationIconBadgeNumber: jest.fn(),
-  getScheduledLocalNotifications: jest.fn((cb) => cb([])),
-}));
-
-jest.mock('@react-native-community/push-notification-ios', () => ({
-  addEventListener: jest.fn(),
-  removeEventListener: jest.fn(),
-  requestPermissions: jest.fn(() => Promise.resolve({ alert: true })),
-  getInitialNotification: jest.fn(() => Promise.resolve(null)),
-  setApplicationIconBadgeNumber: jest.fn(),
-  FetchResult: { NoData: 'noData' },
-}));
+// The library's own mock: a jest.fn() for every API, and the real enums from its
+// dist types (AuthorizationStatus incl. PROVISIONAL, AndroidImportance,
+// TriggerType, AlarmType), so code under test compares against true values.
+jest.mock('react-native-notify-kit', () => require('react-native-notify-kit/jest-mock'));
 
 // ─── react-native core modules without Jest defaults ────────────────────────
 // RN's Settings module requires the native SettingsManager TurboModule,

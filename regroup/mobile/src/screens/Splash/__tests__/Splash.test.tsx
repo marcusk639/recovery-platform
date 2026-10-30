@@ -534,6 +534,32 @@ describe("Splash (withSplash HOC)", () => {
       expect(mockOnMessage).toHaveBeenCalledTimes(1);
     });
 
+    // Regression coverage (RN 0.88 upgrade, Task 11): onMessage was called in
+    // the component body, adding a listener on every render that was never
+    // removed, so one foreground push could show several banners.
+    it("keeps a single foreground message listener across re-renders", async () => {
+      const { rerender } = renderSplash();
+      await act(async () => {});
+      rerender(<SplashHOC navigation={{} as any} />);
+      rerender(<SplashHOC navigation={{} as any} />);
+      await act(async () => {});
+      expect(mockOnMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it("removes the foreground message listener on unmount", async () => {
+      const messageUnsub = jest.fn();
+      mockOnMessage.mockReturnValueOnce(messageUnsub);
+
+      const { unmount } = renderSplash();
+      await act(async () => {});
+      expect(messageUnsub).not.toHaveBeenCalled();
+      act(() => {
+        unmount();
+      });
+
+      expect(messageUnsub).toHaveBeenCalledTimes(1);
+    });
+
     it("requests messaging permission when a user is present in state", async () => {
       renderSplash({ user: { uid: "user-123", email: "test@example.com" } });
       await act(async () => {});

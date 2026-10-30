@@ -45,7 +45,7 @@ module.exports = {
     '<rootDir>/.full-review-archive-2026-05-23/',
   ],
   transformIgnorePatterns: [
-    'node_modules/(?!((jest-)?react-native|@react-native|@react-navigation|@reduxjs|react-redux|@tanstack|@invertase|@notifee|@stripe|@sentry|@callstack|victory|immer|redux|uuid|ngeohash|@dr\\.pogodin))',
+    'node_modules/(?!((jest-)?react-native|@react-native|@react-navigation|@reduxjs|react-redux|@tanstack|@invertase|@stripe|@sentry|@callstack|victory|immer|redux|uuid|ngeohash|@dr\\.pogodin))',
   ],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',

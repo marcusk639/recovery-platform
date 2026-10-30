@@ -8,6 +8,7 @@
 // import matters: Metro's inlineRequires defers a named import to its first use.
 import './firebase-setup';
 import { emulatorConnection } from './firebase-setup';
+import { ensureNotificationChannels } from './src/services/notifications/channels';
 
 import { AppRegistry } from 'react-native';
 import React from 'react';
@@ -27,6 +28,11 @@ import { navigationRef } from './src/navigation/service';
 emulatorConnection.catch((error) => {
   global.ErrorUtils.reportFatalError(error);
 });
+
+// Android channels for server pushes and rent reminders, created once at startup
+// (after firebase-setup). Display and schedule paths await the same promise; it
+// never rejects (failures are logged inside).
+ensureNotificationChannels();
 
 // Save the original method
 // const originalCreateView = UIManager.createView;

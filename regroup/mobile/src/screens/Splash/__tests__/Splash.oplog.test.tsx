@@ -22,14 +22,19 @@ jest.mock('@react-native-firebase/auth', () =>
 jest.mock('@react-native-firebase/messaging', () =>
   require('../../../../__mocks__/firebase-modular/messaging'),
 );
-jest.mock('@notifee/react-native', () => ({
-  __esModule: true,
-  default: {
-    displayNotification: async (notification: unknown) => {
-      mockDisplayed.push(notification);
+jest.mock('react-native-notify-kit', () => {
+  const kit = jest.requireActual('react-native-notify-kit/jest-mock');
+  return {
+    ...kit,
+    __esModule: true,
+    default: {
+      ...kit.default,
+      displayNotification: async (notification: unknown) => {
+        mockDisplayed.push(notification);
+      },
     },
-  },
-}));
+  };
+});
 jest.mock('../../../services/native-deep-links', () => ({
   getInitialLink: async () => null,
   onLink: () => () => {},
@@ -254,7 +259,14 @@ describe('messaging listeners', () => {
     await onMessage!({ data: { notifee: JSON.stringify({ title: 'Chore due' }) } });
     await onMessage!({ data: {} });
 
-    expect(mockDisplayed).toEqual([{ title: 'Chore due' }]);
+    // Task 11: displayed through displayRemoteMessage, which adds the iOS
+    // foreground presentation the AppDelegate used to supply.
+    expect(mockDisplayed).toEqual([
+      {
+        title: 'Chore due',
+        ios: { foregroundPresentationOptions: { banner: true, sound: true, badge: true, list: true } },
+      },
+    ]);
   });
 
   it('registers a background message handler', async () => {

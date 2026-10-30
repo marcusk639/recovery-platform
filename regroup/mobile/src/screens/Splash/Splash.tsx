@@ -30,7 +30,7 @@ import { subscriptionStatus } from "../../util/subscription";
 import { User } from "../../entities/User";
 import { NativeDeepLink } from "../../services/native-deep-links";
 import isNil from "lodash/isNil";
-import notifee from "@notifee/react-native";
+import { displayRemoteMessage } from "../../services/notifications/remoteMessage";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../../navigation/types";
 import { DeepLinkTester } from "../../components/DeepLinkTester";
@@ -83,14 +83,6 @@ export const withSplash = <P extends object>(
     const authSubscriptionRef = useRef<(() => void) | null>(null);
     const onTokenRefreshListenerRef = useRef<(() => any) | null>(null);
     const linkSubscriptionRef = useRef<(() => void) | null>(null);
-
-    const onMessage = onFirebaseMessage(getMessaging(), async (message) => {
-      if (message?.data?.notifee) {
-        const res = await notifee.displayNotification(
-          JSON.parse(message.data.notifee as string),
-        );
-      }
-    });
 
     const initBackgroundMessageHandler = useCallback(() => {
       setBackgroundMessageHandler(getMessaging(), async (_message) => {
@@ -320,6 +312,17 @@ export const withSplash = <P extends object>(
         }
       };
     }, []); // Empty dependency array - only run once on mount
+
+    // Foreground pushes: one listener for the component's lifetime, removed on
+    // unmount. (Before RN 0.88 this ran in the render body, adding a listener
+    // on every render, so one push could show several banners.)
+    useEffect(
+      () =>
+        onFirebaseMessage(getMessaging(), (message) =>
+          displayRemoteMessage(message),
+        ),
+      [],
+    );
 
     // componentDidUpdate equivalent
     useEffect(() => {

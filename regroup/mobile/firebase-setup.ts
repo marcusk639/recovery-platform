@@ -67,6 +67,9 @@ const emulatorConnection: Promise<void> =
 export const callHttpsFunction = <ResponseData = unknown>(name: string, payload: unknown) =>
   httpsCallable<unknown, ResponseData>(functions, name)(payload);
 
+// The FCM message type, for src/services/notifications/remoteMessage.ts.
+export type { RemoteMessage } from '@react-native-firebase/messaging';
+
 export {
   emulatorConnection,
   firestore,
