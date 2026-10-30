@@ -8,7 +8,18 @@
 import { useState, useEffect } from 'react';
 import { WeekSummary } from '../../entities/WeekSummary';
 import { firestore } from '../../../firebase-setup';
-import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
+import {
+  collection,
+  doc,
+  getDoc,
+  limit as limitTo,
+  onSnapshot,
+  orderBy,
+  query,
+  where,
+  type DocumentSnapshot,
+  type QuerySnapshot,
+} from '@react-native-firebase/firestore';
 import { logException } from '../../util/logging';
 
 export interface UseWeekSummaryResult {
@@ -54,42 +65,40 @@ export function useWeekSummary(
     const summaryId = `${guestId}_${weekStart}`;
 
     // Subscribe to week summary document
-    const unsubscribe = firestore
-      .collection('week-summaries')
-      .doc(summaryId)
-      .onSnapshot(
-        (snapshot: FirebaseFirestoreTypes.DocumentSnapshot) => {
-          if (snapshot.exists()) {
-            const data = snapshot.data() as WeekSummary;
+    const unsubscribe = onSnapshot(
+      doc(collection(firestore, 'week-summaries'), summaryId),
+      (snapshot: DocumentSnapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data() as WeekSummary;
 
-            // Convert Firestore timestamps to Date objects if needed.
-            // The WeekSummary Firestore schema uses `lastUpdated` (not entity-class `updatedAt`).
-            // M1 lint exception: see docs/superpowers/specs/2026-05-23-current-roadmap.md §M1 exclusion.
-            if (data.lastUpdated && typeof data.lastUpdated !== 'string') {
-              const converted = (data.lastUpdated as any).toDate();
-              // eslint-disable-next-line no-restricted-syntax -- WeekSummary Firestore schema field
-              data.lastUpdated =
-                converted instanceof Date && !isNaN(converted.getTime())
-                  ? converted
-                  : null;
-            }
-
-            setSummary(data);
-          } else {
-            // Summary doesn't exist yet - this is normal for new weeks
-            // Set to null to indicate no data
-            setSummary(null);
+          // Convert Firestore timestamps to Date objects if needed.
+          // The WeekSummary Firestore schema uses `lastUpdated` (not entity-class `updatedAt`).
+          // M1 lint exception: see docs/superpowers/specs/2026-05-23-current-roadmap.md §M1 exclusion.
+          if (data.lastUpdated && typeof data.lastUpdated !== 'string') {
+            const converted = (data.lastUpdated as any).toDate();
+            // eslint-disable-next-line no-restricted-syntax -- WeekSummary Firestore schema field
+            data.lastUpdated =
+              converted instanceof Date && !isNaN(converted.getTime())
+                ? converted
+                : null;
           }
 
-          setLoading(false);
-          setError(null);
-        },
-        (err: Error) => {
-          logException(err);
-          setError(err);
-          setLoading(false);
-        },
-      );
+          setSummary(data);
+        } else {
+          // Summary doesn't exist yet - this is normal for new weeks
+          // Set to null to indicate no data
+          setSummary(null);
+        }
+
+        setLoading(false);
+        setError(null);
+      },
+      (err: Error) => {
+        logException(err);
+        setError(err);
+        setLoading(false);
+      },
+    );
 
     // Cleanup subscription on unmount or param change
     return () => unsubscribe();
@@ -114,10 +123,7 @@ export async function getWeekSummaryOnce(
   const summaryId = `${guestId}_${weekStart}`;
 
   try {
-    const snapshot = await firestore
-      .collection('week-summaries')
-      .doc(summaryId)
-      .get();
+    const snapshot = await getDoc(doc(collection(firestore, 'week-summaries'), summaryId));
 
     if (snapshot.exists()) {
       const data = snapshot.data() as WeekSummary;
@@ -175,45 +181,46 @@ export function useWeekSummaryHistory(
     }
 
     // Subscribe to guest's week summaries, ordered by start date descending
-    const unsubscribe = firestore
-      .collection('week-summaries')
-      .where('guestId', '==', guestId)
-      .where('houseId', '==', houseId)
-      .orderBy('startDate', 'desc')
-      .limit(limit)
-      .onSnapshot(
-        (snapshot: FirebaseFirestoreTypes.QuerySnapshot) => {
-          const data = snapshot.docs.map(doc => {
-            const summary = doc.data() as WeekSummary;
+    const unsubscribe = onSnapshot(
+      query(
+        collection(firestore, 'week-summaries'),
+        where('guestId', '==', guestId),
+        where('houseId', '==', houseId),
+        orderBy('startDate', 'desc'),
+        limitTo(limit),
+      ),
+      (snapshot: QuerySnapshot) => {
+        const data = snapshot.docs.map(summaryDoc => {
+          const summary = summaryDoc.data() as WeekSummary;
 
-            // Convert timestamps. WeekSummary schema uses `lastUpdated`
-            // (not entity-class `updatedAt`). M1 lint exception per
-            // docs/superpowers/specs/2026-05-23-current-roadmap.md §M1 exclusion.
-            if (
-              summary.lastUpdated &&
-              typeof summary.lastUpdated !== 'string'
-            ) {
-              const converted = (summary.lastUpdated as any).toDate();
-              // eslint-disable-next-line no-restricted-syntax -- WeekSummary Firestore schema field
-              summary.lastUpdated =
-                converted instanceof Date && !isNaN(converted.getTime())
-                  ? converted
-                  : null;
-            }
+          // Convert timestamps. WeekSummary schema uses `lastUpdated`
+          // (not entity-class `updatedAt`). M1 lint exception per
+          // docs/superpowers/specs/2026-05-23-current-roadmap.md §M1 exclusion.
+          if (
+            summary.lastUpdated &&
+            typeof summary.lastUpdated !== 'string'
+          ) {
+            const converted = (summary.lastUpdated as any).toDate();
+            // eslint-disable-next-line no-restricted-syntax -- WeekSummary Firestore schema field
+            summary.lastUpdated =
+              converted instanceof Date && !isNaN(converted.getTime())
+                ? converted
+                : null;
+          }
 
-            return summary;
-          });
+          return summary;
+        });
 
-          setSummaries(data);
-          setLoading(false);
-          setError(null);
-        },
-        (err: Error) => {
-          logException(err);
-          setError(err);
-          setLoading(false);
-        },
-      );
+        setSummaries(data);
+        setLoading(false);
+        setError(null);
+      },
+      (err: Error) => {
+        logException(err);
+        setError(err);
+        setLoading(false);
+      },
+    );
 
     return () => unsubscribe();
   }, [guestId, houseId, limit]);

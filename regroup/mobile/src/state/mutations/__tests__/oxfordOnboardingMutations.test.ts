@@ -65,8 +65,11 @@ jest.mock('../../../../firebase-setup', () => {
   };
 });
 
+// Modular functions delegate to the firebase-setup mock above (namespaced-adapter).
 jest.mock('@react-native-firebase/firestore', () => ({
   __esModule: true,
+  ...require('../../../../__mocks__/firebase-modular/namespaced-adapter'),
+  serverTimestamp: jest.fn(() => '__SERVER_TIMESTAMP__'),
   default: {
     FieldValue: { serverTimestamp: jest.fn(() => '__SERVER_TIMESTAMP__') },
   },

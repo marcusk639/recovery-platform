@@ -13,7 +13,11 @@ jest.mock('../../../firebase-setup', () => ({
     runTransaction: jest.fn(async (fn: any) => fn(mockTx)),
   },
 }));
+// The modular functions delegate to the firebase-setup mock above
+// (namespaced-adapter), so these cases drive the same collection/transaction.
 jest.mock('@react-native-firebase/firestore', () => ({
+  ...require('../../../__mocks__/firebase-modular/namespaced-adapter'),
+  serverTimestamp: () => '__SERVER_TIME__',
   FieldValue: { serverTimestamp: () => '__SERVER_TIME__' },
 }));
 jest.mock('../../util/logging', () => ({ logException: jest.fn() }));

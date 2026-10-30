@@ -752,6 +752,35 @@ the adapter maps onto exactly the chain a suite mocks.
 - **Results:** unit 349 suites passing; zero type errors in the group's files and no baseline entries
   for them; ratchet 125 / 125; integration 7 / 41 (target 7).
 
+#### 10b: integrity
+
+- **Files (9 changed; 12 in the group):** `activity.ts`, `dispute.tsx`, `reopenDispute.ts`,
+  `guest.tsx`, `guestBatch.ts`, `oxford/votes.ts`, `useLiveHouseDisputes.ts`,
+  `activity/useActivities.ts`, `activity/useWeekSummary.ts`. The three `Guest*Summary` screens only
+  read `auth.currentUser`, which stays a property: no change.
+- **Shapes:** conditional `.where` chains became constraint arrays passed to `query()` in the same
+  order; the three `useActivities.ts` builders share one `activityFilters` helper (guest?, house,
+  type?, status?, range) and each adds what it added before (the count query: nothing).
+  `guestBatch.ts` takes a structural `GuestWriteBatch` (either API family; `house.tsx` still passes
+  the namespaced batch until 10c; 10f narrows it). Two type-only `as DocumentData` casts in
+  `guest.tsx` (the modular `update` wants an index signature `House` lacks).
+- **Op-log files unchanged:** `activity`, `activity-disputes`, `dispute`, `guest`, `reopenDispute`,
+  `votes` and `useLiveHouseDisputes` op-logs pass. New `hooks/__tests__/activityQueries.oplog.test.tsx`
+  (9) closes the review's gaps (hook constraint order, the count query's lack of ordering and limit,
+  week-summary listeners, `subscribeToGuest`, the typed page query); it passes on HEAD's namespaced
+  files and on the rewrite.
+- **Test changes:** five suites with namespaced-only package mocks (`activity`, `activity-pagination`,
+  `activity.stamp`, `reopenDispute`, `oxfordOnboardingMutations`) spread the namespaced adapter plus
+  modular helpers returning their existing sentinels; cases and expected values unchanged.
+- **Independent review:** every operation traced through RNFirebase 25.1.0's source (constraint
+  order, `{source: 'default'}` reads, `doc(collectionRef)` auto-ids, the deprecation marker argument
+  ignored by the listener parsers, `httpsCallable` options). Verdict: no behaviour change; the
+  dispute owner, reopen, delete-refusal and optimistic-lock (`version`) rules preserved.
+- **Results:** unit passing; zero type errors in the group, no baseline entries; ratchet 125 / 125;
+  integration **21 / 41 (target 21)**: `weekSummary` 5, `guestWeekTransfer` 5, `activity` 4 (its two
+  baseline failures remain), harness 7. `guestCRUD` and `meetings` still fail at load (`house.tsx`,
+  `meeting.ts`: 10c, 10d).
+
 ## 7. Verification
 
 _Final results and the Mac checkpoint (Task 16)._

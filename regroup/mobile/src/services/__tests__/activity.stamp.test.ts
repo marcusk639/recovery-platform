@@ -13,7 +13,11 @@ jest.mock('../../../firebase-setup', () => ({
     ),
   },
 }));
+// The modular functions delegate to the firebase-setup mock's refs
+// (namespaced-adapter); the FieldValue helpers return this file's sentinels.
 jest.mock('@react-native-firebase/firestore', () => ({
+  ...require('../../../__mocks__/firebase-modular/namespaced-adapter'),
+  serverTimestamp: () => '__SERVER_TIME__',
   FieldValue: { serverTimestamp: () => '__SERVER_TIME__' },
 }));
 jest.mock('../../util/logging', () => ({ logException: jest.fn() }));

@@ -1,9 +1,16 @@
 // Shared across Task 10 migration groups: typed for both APIs until RNFirebase 26 (Task 10f).
-import type {
-  CollectionReference,
-  FirebaseFirestoreTypes as SharedRefTypes,
+import {
+  collection,
+  doc,
+  onSnapshot,
+  runTransaction,
+  serverTimestamp,
+  updateDoc,
+  writeBatch,
+  type CollectionReference,
+  type DocumentData,
+  type FirebaseFirestoreTypes as SharedRefTypes,
 } from '@react-native-firebase/firestore';
-import FirebaseFirestore from '@react-native-firebase/firestore';
 import { firestore } from '../../firebase-setup';
 import { Guest, GuestStatus } from '../entities/Guest';
 import { Guests } from '../types/index';
@@ -15,9 +22,9 @@ import { houseCollection, getHouse, removeGuestPrivileges } from './house';
 import { findGuestBed } from '../util/house';
 import cloneDeep from 'lodash/cloneDeep';
 
-export const guestCollection = firestore.collection('guests') as CollectionReference &
+export const guestCollection = collection(firestore, 'guests') as CollectionReference &
   SharedRefTypes.CollectionReference;
-export const archiveCollection = firestore.collection('guest-archive') as CollectionReference &
+export const archiveCollection = collection(firestore, 'guest-archive') as CollectionReference &
   SharedRefTypes.CollectionReference;
 
 /**
@@ -36,7 +43,7 @@ export async function getGuest(uuid: string): Promise<Guest> {
 }
 
 export function createGuestId() {
-  return guestCollection.doc().id;
+  return doc(guestCollection).id;
 }
 
 /**
@@ -76,11 +83,11 @@ export async function updateGuest(
     throw new Error('Guest must have an id for update');
   }
 
-  const guestRef = guestCollection.doc(updatedGuest.id);
+  const guestRef = doc(guestCollection, updatedGuest.id);
 
   for (let attempt = 0; attempt < retryCount; attempt++) {
     try {
-      const result = await firestore.runTransaction(async (transaction) => {
+      const result = await runTransaction(firestore, async (transaction) => {
         // Read the current state from database
         const currentDoc = await transaction.get(guestRef);
 
@@ -204,19 +211,19 @@ function mergeGuestStats(
 }
 
 export async function createGuest(newGuest: Guest): Promise<Guest> {
-  const batch = firestore.batch();
+  const batch = writeBatch(firestore);
   const house = await getHouse(newGuest.houseId);
   const newHouse = { ...house, currentCapacity: house.currentCapacity + 1 };
-  batch.update(houseCollection.doc(house.id), newHouse);
-  batch.set(guestCollection.doc(newGuest.id), newGuest);
+  batch.update(doc(houseCollection, house.id), newHouse);
+  batch.set(doc(guestCollection, newGuest.id), newGuest);
   await batch.commit();
   return newGuest;
 }
 
 export async function deleteGuest(guest: Guest, house: House) {
-  const batch = firestore.batch();
-  batch.delete(guestCollection.doc(guest.id));
-  batch.set(archiveCollection.doc(guest.id), guest);
+  const batch = writeBatch(firestore);
+  batch.delete(doc(guestCollection, guest.id));
+  batch.set(doc(archiveCollection, guest.id), guest);
   const bed = findGuestBed(guest.id, house.rooms);
   let rooms = cloneDeep(house.rooms);
   if (bed) {
@@ -246,7 +253,7 @@ export async function deleteGuest(guest: Guest, house: House) {
     rooms,
   };
   // batch.update(userCollection.doc(guest.userId), removeUserFromHouse());
-  batch.update(houseCollection.doc(house.id), updatedHouse);
+  batch.update(doc(houseCollection, house.id), updatedHouse as DocumentData);
   await batch.commit();
   return { house: updatedHouse, guest };
 }
@@ -260,7 +267,8 @@ export function subscribeToGuest(
   guestChangeHandler: (guest: Guest) => any,
   errorHandler?: (error: Error) => void,
 ) {
-  return guestCollection.doc(guest.id).onSnapshot(
+  return onSnapshot(
+    doc(guestCollection, guest.id),
     (docSnapshot) => {
       const updatedGuest = docSnapshot.data() as Guest;
       if (updatedGuest) {
@@ -278,14 +286,14 @@ export function subscribeToGuest(
 }
 
 export async function customizePhase(guest: Guest, house: House) {
-  const batch = firestore.batch();
+  const batch = writeBatch(firestore);
   // Field-level update — writing the whole guest object here silently dropped
   // any Firestore field not present in the in-memory copy (P0-5 data loss).
-  batch.update(guestCollection.doc(guest.id), {
+  batch.update(doc(guestCollection, guest.id), {
     phase: guest.phase,
     updatedAt: new Date().toISOString(),
   });
-  batch.update(houseCollection.doc(house.id), house);
+  batch.update(doc(houseCollection, house.id), house as DocumentData);
   await batch.commit();
   return { guest, house };
 }
@@ -296,11 +304,11 @@ export async function dischargeGuest(
   notes?: string,
 ): Promise<void> {
   try {
-    await guestCollection.doc(guestId).update({
+    await updateDoc(doc(guestCollection, guestId), {
       status: 'discharged' as GuestStatus,
       moveOutDate,
       ...(notes ? { dischargeNotes: notes } : {}),
-      updatedAt: FirebaseFirestore.FieldValue.serverTimestamp(),
+      updatedAt: serverTimestamp(),
     });
   } catch (error) {
     logException(error);
