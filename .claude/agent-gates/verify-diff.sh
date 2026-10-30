@@ -86,7 +86,24 @@ while IFS=$'\t' read -r status a b; do
 done < <("${DIFF[@]}" -M --diff-filter=MR --name-status 2>/dev/null)
 
 # ---------- 4. snapshot churn ----------
-SNAP=$("${DIFF[@]}" --name-only 2>/dev/null | grep -c '\.snap$')
+# TEMPORARY (RN 0.88 upgrade PR, reverted before merge): VERIFY_DIFF_APPROVED_SNAPSHOTS
+# is a colon-separated list of exact repo-relative .snap paths the owner approved for
+# one commit. Set it per command, never export it. No globs, prefixes or directories:
+# a path is excused only when it equals a list entry exactly.
+SNAP=0
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  APPROVED=0
+  IFS=':' read -r -a ENTRIES <<< "${VERIFY_DIFF_APPROVED_SNAPSHOTS:-}"
+  for e in ${ENTRIES[@]+"${ENTRIES[@]}"}; do # bash 3.2 (macOS): empty array is unbound under set -u
+    [ -n "$e" ] && [ "$e" = "$f" ] && APPROVED=1 && break
+  done
+  if [ "$APPROVED" -eq 1 ]; then
+    echo "  excused (approved): $f"
+  else
+    SNAP=$((SNAP + 1))
+  fi
+done < <("${DIFF[@]}" --name-only 2>/dev/null | grep '\.snap$')
 [ "$SNAP" -gt 0 ] && report "SNAPSHOT-CHURN" "$SNAP snapshot file(s) changed — confirm reviewed, not blessed"
 
 # ---------- 5. NEW untracked test files (git diff cannot see these) ----------
