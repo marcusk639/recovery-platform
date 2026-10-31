@@ -18,12 +18,9 @@ import { House } from '../../../entities/House';
 import { Guest } from '../../../entities/Guest';
 import Admin from '../../../entities/Admin';
 import { IOS } from '../../../util/platform';
-import KeyboardManager from 'react-native-keyboard-manager';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Routes, RootStackParamList } from '../../../navigation/types';
 import * as uuid from 'uuid';
-
-type Listener = () => void;
 
 interface UseChatLogicProps {
   navigation: NativeStackNavigationProp<RootStackParamList>;
@@ -49,8 +46,6 @@ export const useChatLogic = ({
   // Refs for listeners
   const keyboardDidShowListenerRef = useRef<EmitterSubscription | null>(null);
   const keyboardDidHideListenerRef = useRef<EmitterSubscription | null>(null);
-  const focusSubscriptionRef = useRef<Listener | null>(null);
-  const blurSubscriptionRef = useRef<Listener | null>(null);
 
   // Keyboard event handlers
   const keyboardDidShow = useCallback((e: KeyboardEvent) => {
@@ -65,17 +60,10 @@ export const useChatLogic = ({
     setShortHeight(Dimensions.get('window').height);
   }, []);
 
-  // Keyboard lifecycle management
+  // Keyboard lifecycle management. (IQKeyboardManager, which this screen
+  // turned off while focused, is gone; the composer rides on a
+  // keyboard-controller sticky view in BaseChat.)
   useEffect(() => {
-    if (IOS) {
-      focusSubscriptionRef.current = navigation.addListener('focus', () => {
-        KeyboardManager.setEnable(false);
-      });
-      blurSubscriptionRef.current = navigation.addListener('blur', () => {
-        KeyboardManager.setEnable(true);
-      });
-    }
-
     keyboardDidShowListenerRef.current = Keyboard.addListener(
       IOS ? 'keyboardWillShow' : 'keyboardDidShow',
       keyboardDidShow,
@@ -86,12 +74,6 @@ export const useChatLogic = ({
     );
 
     return () => {
-      if (focusSubscriptionRef.current) {
-        focusSubscriptionRef.current();
-      }
-      if (blurSubscriptionRef.current) {
-        blurSubscriptionRef.current();
-      }
       if (keyboardDidHideListenerRef.current) {
         keyboardDidHideListenerRef.current.remove();
       }
@@ -99,7 +81,7 @@ export const useChatLogic = ({
         keyboardDidShowListenerRef.current.remove();
       }
     };
-  }, [navigation, keyboardDidShow, keyboardDidHide]);
+  }, [keyboardDidShow, keyboardDidHide]);
 
   // Phone dialing
   const dialNumber = useCallback((phoneNumber: string) => {

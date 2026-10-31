@@ -1226,6 +1226,148 @@ height, each FAB's `marginBottom`, and the toast's. They spy on the `require`d
 `react-native-safe-area-context`: an `import * as` namespace under Babel interop is a copy that a
 spy misses.
 
+### Task 15: keyboard on react-native-keyboard-controller
+
+`react-native-keyboard-manager` (IQKeyboardManager, which no longer builds on RN 0.88) and
+`react-native-keyboard-aware-scroll-view` (APSL) are removed. The per-screen result, with the test
+that pins each one, is the **After (Task 15)** column of every table in
+`docs/build/react-native-0.88-keyboard-audit.md`.
+
+**Packages** (exact): `react-native-keyboard-controller` 1.22.9 (peers `react-native-reanimated`
+
+> = 3), `react-native-reanimated` 4.7.1 (peers RN 0.86–0.88, `react-native-worklets` 0.13.x) and
+> `react-native-worklets` 0.13.1 (the newest 0.13 patch; peers RN 0.86–0.88). They resolve against
+> RN 0.88.1 and React 19.3 with no override. `react-native-worklets/plugin` is the last Babel plugin
+> and is left out under Jest; `scripts/babel-config.test.js` asserts both.
+
+**The keyboard layer.** `src/components/rats-keyboard`, `rats-scroll-view` and `index.js` are the
+only importers of keyboard-controller (ESLint `no-restricted-imports`, with `src/**/__tests__/**`
+also allowed because tests inspect the library's mocked components).
+
+- `RatsKeyboardProvider` (in `index.js`, inside `GestureHandlerRootView`, around `App`) renders
+  `KeyboardProvider` and the app-root toolbar.
+- `RatsKeyboardToolbar`: keyboard-controller's `KeyboardToolbar` with Prev/Next and Done, iOS only.
+  It is a JS view absolutely positioned in its parent, so it is also rendered inside `RatsModal`,
+  ManualPaymentModal and DischargeGuestModal, and in every native-stack modal route.
+- `RatsKeyboardStickyView` (the chat composers), `RatsKeyboardAvoidingView`,
+  `RatsAndroidResizeView`, `RatsKeyboardScreenLayout`, `useRatsKeyboardHeight`,
+  `IQ_KEYBOARD_DISTANCE` (10) and `KEYBOARD_TOOLBAR_SPACE`.
+- **Toolbar allowance.** IQKeyboardManager's toolbar was the field's input accessory view, so the
+  keyboard frame included it and every APSL gap was measured from its top. keyboard-controller's
+  toolbar is a separate 42pt view (53pt over a keyboard with rounded corners). On iOS the scroll
+  view's `bottomOffset`, the avoiding view (added to `keyboardVerticalOffset`, which grows its padding) and the composers'
+  sticky offset add it back, so the visible gaps stay the same.
+
+**`RatsScrollView`.** Same props, rendering keyboard-controller's `KeyboardAwareScrollView`.
+
+- `bottomOffset` = `extraHeight` (APSL default 75) + `extraScrollHeight` (default 0), + 42 on iOS.
+  An explicit `bottomOffset` wins.
+- `resetScrollToCoords` is a `scrollTo` on `keyboardWillHide`, with keyboard-controller's own
+  scroll-back turned off so the two do not fight. `enableResetScrollToCoords={false}` keeps the
+  position.
+- `enableAutomaticScroll={false}` is `enabled={false}`. `keyboardShouldPersistTaps` (default
+  `'always'`), `keyboardDismissMode="on-drag"`, the hidden indicator and the pre-existing
+  contentContainerStyle replacement are unchanged.
+- It now works on Android at every call site; `enableOnAndroid` and the no-op `behavior` are
+  dropped. `innerRef` receives the scroll view.
+- `IQ_SCROLL_VIEW_PROPS` turns a former plain `ScrollView` into a `RatsScrollView` that keeps React
+  Native's defaults (`'never'`, no dismiss on drag, indicator shown) with IQKeyboardManager's 10pt
+  gap and its scroll back on hide.
+
+**Screens.**
+
+- **Chat.** `KeyboardAwareFlatList` → `FlatList`. The composer is in `RatsKeyboardStickyView` with
+  the same layout props. It is lifted by the keyboard height minus what it sat on while the keyboard
+  was down (DirectChat: the bottom safe-area inset; HouseChat: the tab bar height, read from
+  `BottomTabBarHeightContext`), plus the toolbar. While the keyboard is up, the inverted list's
+  `paddingTop` keeps the newest message above the composer. BaseChat's `translateY` and
+  `calculateInputOffset` are gone, and with them the direct/group offset mix-up (audit §5 note 4).
+  `useChatLogic` no longer touches KeyboardManager; its keyboard listeners stay for the list
+  padding.
+- **HouseSetup.** `bottomOffset={IOS ? normalize(100) : undefined}`: IQKeyboardManager's 100pt
+  distance, now for this screen only (it used to leak app-wide once the address field was
+  focused). Automatic scroll is on for both platforms (it was Android-only, with IQ on iOS). The
+  Android `setHeight(normalize(115))` path is kept.
+- **IQKeyboardManager-only screens** (audit §5 note 6):
+  - ApplyScreen, ApplicationDetailScreen, DrugTestForm (outer), OxfordOnboardingWizard (the three
+    steps with fields), IntakeFormScreen, FinancialRecordForm and the unreachable
+    BusinessMeetingDetail use `RatsScrollView` with `IQ_SCROLL_VIEW_PROPS`.
+  - The FormModal's plain-view forms and ChoreSetup's modal get `RatsModal`'s avoiding view on both
+    platforms.
+  - DischargeGuestModal pads its overlay.
+- **Pinned footers outside a `RatsModal`**: EditUserInfoFormView, GuestInvites (GuestSetupForm),
+  OperatorSetupWizard and OxfordOnboardingWizard. adjustResize kept these footers above the Android
+  keyboard; they are now in `RatsAndroidResizeView`. On iOS they stay under the keyboard as they did
+  with IQKeyboardManager.
+- **FilterForm** keeps `enableAutomaticScroll={IOS ? false : true}`: on iOS the bottom sheet's
+  avoiding view does IQ's job. The no-op `behavior` and an unused import are removed.
+  GuestUpdateFormView (unreachable) uses `RatsScrollView` with React Native's defaults in place of
+  the bare APSL view. NewAccount drops an unused APSL import.
+
+**Deviations from the plan, and why.**
+
+1. **Toolbar in native-stack modal routes.** The plan lists the root and the RN `Modal` surfaces.
+   iOS also presents the root stack's `presentation: 'modal'` routes above the app root, which
+   hides the root toolbar on all 59 of them (ResidentPayment, TwoFactorSetup, FinancialRecordForm,
+   DirectChat and the rest). `RatsKeyboardScreenLayout` is the modal group's `screenLayout`, so each of those
+   screens renders its own toolbar.
+2. **Avoiding views on Android too.** keyboard-controller sets every `Modal` window to
+   `SOFT_INPUT_ADJUST_NOTHING` (`ModalAttachedWatcher.kt`), so Modal windows stop resizing on
+   Android. `RatsModal` and ManualPaymentModal therefore pad on both platforms (they were iOS-only),
+   and DischargeGuestModal gets an avoiding view it never had.
+3. **Exports beyond the three named in the plan** (listed above). The screens need an avoiding
+   view, an Android-only resize view and a keyboard-height hook without importing
+   keyboard-controller themselves.
+4. **`react-native-iphone-x-helper` 1.3.1 is now a declared dependency.** It came in only as an APSL
+   dependency, while `src/util/platform.ts` (and BaseChat, before this task) import it directly.
+   Removing APSL removed it. It is pinned at the version that was resolved.
+5. **HouseChat now shows the toolbar.** IQKeyboardManager was switched off there, so it had none.
+   DirectChat always showed IQ's toolbar. Both composers now sit on the toolbar.
+6. **The typecheck baseline is regenerated** (`--update`, still 125). The 10 `nav-bar.test.tsx`
+   errors are unchanged, but TypeScript now prints the props type with "... 4 more ..." (the
+   reanimated types make `ViewStyle` longer), so their identity strings changed. No other line
+   differs.
+7. **Global Jest mocks.**
+   - `react-native-reanimated/mock`.
+   - keyboard-controller's own mock, with `KeyboardToolbar` replaced by a named component. The
+     library's mock _is_ React Native's `View` (with statics assigned onto it), so tests could not
+     find the toolbar.
+   - The bottom-tabs mock gains `BottomTabBarHeightContext`.
+8. **Task 2 tests.** HouseChat, OperatorSetupWizard and DirectChat lose their local keyboard-manager
+   mock, and CreateGuest's APSL mock becomes a keyboard-controller one. No case changed. The two
+   APSL cases in `rats-scroll-view.behaviour.test.tsx` now pin the keyboard-controller mapping, as
+   that file's header planned (same count, plus 7 new cases).
+
+**Tests added.** The modal, structural and pinned-footer tests were run against the HEAD versions
+of their 13 production files (none of which imports APSL or keyboard-manager): 22 fail and 6 pass,
+the 6 being negative cases such as "no toolbar on Android". The other new tests target code that
+needs the removed packages at HEAD, and the worklets Babel test fails on the HEAD config.
+
+- `rats-keyboard.test.tsx` (13): provider and toolbar per platform, the sticky view, the avoiding
+  view offset, the resize view, the screen layout and the height hook.
+- `RatsScrollView` mapping: 9 cases in the behaviour test.
+- Toolbar on iOS and not on Android inside `RatsModal`, ManualPaymentModal and DischargeGuestModal,
+  each field inside the avoiding view (`rats-modal.keyboard.test.tsx`, `PaymentDashboard.test.tsx`,
+  `DischargeGuestModal.test.tsx`).
+- Chat composers in `RatsKeyboardStickyView` with the old layout props and offsets
+  (`DirectChat.test.tsx`, `BaseChat.keyboard.test.tsx`).
+- HouseSetup's `bottomOffset` per platform and its Android `setHeight` path
+  (`HouseSetup.keyboard.test.tsx`).
+- One structural test per IQKeyboardManager-only screen: the field's nearest keyboard ancestor is
+  a `RatsScrollView` or `RatsKeyboardAvoidingView`
+  (`src/components/rats-keyboard/__tests__/keyboardAncestor.ts`). The pinned-footer screens'
+  footers sit in the resize view, and FormModal forms are inside the modal's avoiding view.
+- Two Babel config tests.
+
+**For the Mac checkpoint, beyond its list.**
+
+- The toolbar's Prev/Next on the wizards: every step stays mounted (audit §5 note 8), so Next can
+  move to a field on an off-screen step.
+- The toolbar position inside `react-native-modal` sheets with margins: it sits at the bottom of the
+  modal's content view.
+- Android modals and bottom sheets (FilterForm, the FormModal) with the new avoiding view.
+- Chat composers on a notched iPhone and on a 3-button-navigation Android device.
+
 ## 7. Verification
 
 _Final results and the Mac checkpoint (Task 16)._

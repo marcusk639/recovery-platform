@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 // Phase 3.3: Removed withRats HOC (translation/theme available globally via useTranslation and ThemeProvider)
 import { View } from "react-native";
-import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { RatsText } from "../../components/rats-text";
 import styles from "./NewAccountStyles";
 import NewAccountForm from "./NewAccountForm";

@@ -88,7 +88,15 @@ module.exports = {
   // "main" field, which is already-built JavaScript, so dependencySyntax is
   // unnecessary there — and enabling its loose class-property semantics fails
   // 28 suites.
+  //
+  // react-native-worklets/plugin (react-native-reanimated 4, needed by
+  // react-native-keyboard-controller) must be the last plugin. It stays out of
+  // Jest, where jest.setup.js mocks reanimated and keyboard-controller.
   plugins: isTest
     ? []
-    : [...dependencySyntax, ['transform-inline-environment-variables', { include: BUNDLED_ENV }]],
+    : [
+        ...dependencySyntax,
+        ['transform-inline-environment-variables', { include: BUNDLED_ENV }],
+        'react-native-worklets/plugin',
+      ],
 };

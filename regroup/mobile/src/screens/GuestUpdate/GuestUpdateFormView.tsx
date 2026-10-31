@@ -2,7 +2,7 @@ import { Field, FormikProps } from 'formik';
 import { View } from 'react-native';
 import React, { useRef, useEffect, useCallback } from 'react';
 import { format } from 'date-fns';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
+import RatsScrollView from '../../components/rats-scroll-view';
 import RatsTextInput from '../../components/rats-text-input/rats-text-input';
 import styles from './GuestUpdateStyles';
 import RatsButton from '../../components/rats-button/rats-button';
@@ -81,8 +81,13 @@ const GuestUpdateFormView: React.FC<
   }, [guest?.id]);
 
   return (
-    <KeyboardAwareScrollView
+    // Was a bare APSL KeyboardAwareScrollView: RatsScrollView with the RN
+    // defaults it had in place of RatsScrollView's own.
+    <RatsScrollView
       contentContainerStyle={styles.formContainer}
+      keyboardShouldPersistTaps="never"
+      keyboardDismissMode="none"
+      showsVerticalScrollIndicator
       resetScrollToCoords={{ x: 0, y: 0 }}
       scrollEnabled
       innerRef={ref => {
@@ -108,7 +113,7 @@ const GuestUpdateFormView: React.FC<
           disabled={isSubmitting}
         />
       </View>
-    </KeyboardAwareScrollView>
+    </RatsScrollView>
   );
 };
 

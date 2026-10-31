@@ -120,6 +120,8 @@ jest.mock('@react-navigation/native-stack', () => ({
 }));
 jest.mock('@react-navigation/bottom-tabs', () => ({
   createBottomTabNavigator: mockNavigatorFactory,
+  // BaseChat reads the tab bar height (undefined outside a tab navigator).
+  BottomTabBarHeightContext: require('react').createContext(undefined),
 }));
 
 // ─── @react-native-firebase/* ────────────────────────────────────────────────
@@ -530,28 +532,25 @@ jest.mock('@react-native-picker/picker', () => {
   return { Picker, default: Picker };
 });
 
-jest.mock('react-native-keyboard-manager', () => ({
-  setEnable: jest.fn(),
-  setEnableAutoToolbar: jest.fn(),
-  setToolbarPreviousNextButtonEnable: jest.fn(),
-  setKeyboardDistanceFromTextField: jest.fn(),
-  setShouldResignOnTouchOutside: jest.fn(),
-}));
-
-// KeyboardAwareHOC reads Platform.constants.reactNativeVersion.major, which
-// is undefined in the Jest RN environment — mock with plain ScrollView.
-jest.mock('react-native-keyboard-aware-scroll-view', () => {
+// Keyboard handling (react-native-keyboard-controller on reanimated 4). Both
+// libraries ship Jest mocks; the worklets Babel plugin is off under Jest
+// (babel.config.js). keyboard-controller's mock renders KeyboardAwareScrollView
+// as a plain ScrollView and KeyboardStickyView / KeyboardAvoidingView as View.
+//
+// Its KeyboardToolbar mock *is* react-native's View (with Prev/Next/Done
+// statics assigned onto it), so a test could not tell the toolbar from any
+// other View. The toolbar gets its own named component here.
+jest.mock('react-native-reanimated', () => require('react-native-reanimated/mock'));
+jest.mock('react-native-keyboard-controller', () => {
   const React = require('react');
-  const { ScrollView, FlatList } = require('react-native');
-  return {
-    KeyboardAwareScrollView: React.forwardRef((props, ref) =>
-      React.createElement(ScrollView, { ...props, ref }),
-    ),
-    KeyboardAwareFlatList: React.forwardRef((props, ref) =>
-      React.createElement(FlatList, { ...props, ref }),
-    ),
-    listenToKeyboardEvents: (c) => c,
+  const { View } = require('react-native');
+  const { KeyboardToolbar: _view, ...mock } = jest.requireActual(
+    'react-native-keyboard-controller/jest',
+  );
+  const KeyboardToolbar = function KeyboardToolbar(props) {
+    return React.createElement(View, props);
   };
+  return { ...mock, KeyboardToolbar };
 });
 
 jest.mock('react-native-webview', () => {

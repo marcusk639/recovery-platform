@@ -21,12 +21,16 @@ import {
 import RatsLoadingIndicator from "../../components/rats-loading-indicator/rats-loading-indicator";
 import {
   Alert,
+  FlatList,
   View,
   TouchableOpacity,
   TextInput,
   Dimensions,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import {
   color,
   normalize,
@@ -51,7 +55,11 @@ import { Guests, Admins } from "../../types";
 import Admin from "../../entities/Admin";
 import { User } from "../../entities/User";
 import { Routes } from "../../navigation/types";
-import { KeyboardAwareFlatList } from "react-native-keyboard-aware-scroll-view";
+import {
+  KEYBOARD_TOOLBAR_SPACE,
+  RatsKeyboardStickyView,
+  useRatsKeyboardHeight,
+} from "../../components/rats-keyboard";
 import { IOS } from "../../util/platform";
 import * as uuid from "uuid";
 
@@ -80,6 +88,10 @@ export interface ChatProps {
 const DirectChatInner: React.FC<ChatProps> = (props) => {
   const [loadingNewConversation, setLoadingNewConversation] = useState(false);
   const [text, setText] = useState("");
+  // The composer sits on the bottom safe-area inset (the SafeAreaView edge)
+  // while the keyboard is down.
+  const bottomGap = useSafeAreaInsets().bottom;
+  const keyboardHeight = useRatsKeyboardHeight();
 
   const receiveMessages = useCallback(
     (msgs: Message[], chatId: string, loading: boolean = false) => {
@@ -404,11 +416,17 @@ const DirectChatInner: React.FC<ChatProps> = (props) => {
     >
       {renderHeader()}
       <View style={{ flex: 1, backgroundColor: color.light_grey }}>
-        <KeyboardAwareFlatList
+        <FlatList
           style={{ marginBottom: inputViewHeight }}
+          // Inverted: paddingTop is the visual bottom. While the keyboard is up
+          // it keeps the newest message above the lifted composer (on iOS,
+          // IQKeyboardManager used to shift the whole screen instead).
           contentContainerStyle={{
             flexGrow: 1,
-            paddingTop: 0,
+            paddingTop:
+              keyboardHeight > 0
+                ? keyboardHeight - bottomGap + KEYBOARD_TOOLBAR_SPACE
+                : 0,
             paddingBottom: 0,
           }}
           data={messages}
@@ -422,11 +440,11 @@ const DirectChatInner: React.FC<ChatProps> = (props) => {
           inverted
           onEndReachedThreshold={0.25}
           onEndReached={() => loadMore(messages as Message[])}
-          extraScrollHeight={normalize(30)}
-          keyboardOpeningTime={0}
-          enableOnAndroid
         />
-        <View
+        {/* Rides on the keyboard, above the iOS toolbar. */}
+        <RatsKeyboardStickyView
+          testID="chat-composer"
+          offset={{ closed: 0, opened: bottomGap - KEYBOARD_TOOLBAR_SPACE }}
           style={{
             width: "100%",
             height: normalize(50),
@@ -482,7 +500,7 @@ const DirectChatInner: React.FC<ChatProps> = (props) => {
               />
             </View>
           </View>
-        </View>
+        </RatsKeyboardStickyView>
       </View>
     </SafeAreaView>
   );

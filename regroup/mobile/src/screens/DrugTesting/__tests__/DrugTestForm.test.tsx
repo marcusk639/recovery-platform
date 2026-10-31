@@ -1,5 +1,6 @@
 // src/screens/DrugTesting/__tests__/DrugTestForm.test.tsx
 import React from 'react';
+import { keyboardAncestor } from '../../../components/rats-keyboard/__tests__/keyboardAncestor';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import DrugTestForm from '../DrugTestForm';
@@ -157,5 +158,14 @@ describe('DrugTestForm', () => {
     fireEvent.press(getByText('Positive'));
 
     expect(queryByPlaceholderText('e.g. THC, cocaine')).toBeTruthy();
+  });
+});
+
+// ─── Keyboard (plan Task 15) ──────────────────────────────────────────────────
+describe('DrugTestForm keyboard', () => {
+  it('keeps its notes field in a RatsScrollView (IQKeyboardManager-only before)', () => {
+    (useLogDrugTest as jest.Mock).mockReturnValue({ mutateAsync: jest.fn(), isPending: false });
+    const { getByPlaceholderText } = render(<DrugTestForm />, { wrapper });
+    expect(keyboardAncestor(getByPlaceholderText('Additional notes...'))).toBe('RatsScrollView');
   });
 });

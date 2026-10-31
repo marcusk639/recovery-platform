@@ -216,11 +216,9 @@ jest.mock('../../../components/setup-buttons', () => {
   };
 });
 
-// ─── Keyboard manager mock (iOS-only native module) ───────────────────────────
-jest.mock('react-native-keyboard-manager', () => ({
-  setEnable: jest.fn(),
-  setKeyboardDistanceFromTextField: jest.fn(),
-}));
+// ─── Keyboard ──────────────────────────────────────────────────────────────────
+// react-native-keyboard-manager is gone (plan Task 15); jest.setup.js mocks
+// its replacement, react-native-keyboard-controller.
 
 // ─── Image picker mock ────────────────────────────────────────────────────────
 jest.mock('../../../components/rats-image-picker', () => {
@@ -333,6 +331,7 @@ jest.mock('../../../components/rats-scroll-view', () => {
 
 // ─── React imports ────────────────────────────────────────────────────────────
 import React from 'react';
+import { keyboardAncestor } from '../../../components/rats-keyboard/__tests__/keyboardAncestor';
 import { render, fireEvent } from '@testing-library/react-native';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
@@ -683,5 +682,14 @@ describe('OperatorSetupWizard', () => {
         renderSetupHeader({ header: 'Guests', text: undefined }),
       ).not.toThrow();
     });
+  });
+});
+
+// ─── Keyboard (plan Task 15) ──────────────────────────────────────────────────
+describe('OperatorSetupWizard keyboard', () => {
+  it('puts the steps and the pinned Back/Next row in the Android resize view', () => {
+    const { getByTestId } = renderWizard();
+    expect(keyboardAncestor(getByTestId('operator-wizard-slide'))).toBe('RatsKeyboardAvoidingView');
+    expect(keyboardAncestor(getByTestId('wizard-next-button'))).toBe('RatsKeyboardAvoidingView');
   });
 });

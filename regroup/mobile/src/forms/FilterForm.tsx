@@ -1,11 +1,6 @@
 import React from 'react';
 import { FormikProps, withFormik } from 'formik';
-import {
-  View,
-  TouchableOpacity,
-  KeyboardAvoidingView,
-  Dimensions,
-} from 'react-native';
+import { View, TouchableOpacity, Dimensions } from 'react-native';
 import ScreenHeader from '../components/screen-header';
 import { RatsText } from '../components/rats-text';
 import ConfirmationButtons from '../components/confirmation-buttons';
@@ -35,9 +30,11 @@ const FilterForm = (
 ) => {
   const FilterFormView = (props: FormikProps<any> & FilterFormProps) => {
     return (
+      // A bottom sheet in the FormModal, whose avoiding view lifts it on both
+      // platforms. On iOS that is all (IQKeyboardManager's job before); on
+      // Android the scroll view still adds normalize(150) as before.
       <RatsScrollView
         enableAutomaticScroll={IOS ? false : true}
-        behavior="padding"
         extraScrollHeight={IOS ? 0 : normalize(150)}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{

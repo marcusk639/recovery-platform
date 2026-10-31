@@ -77,7 +77,22 @@ jest.mock("../../../state/store", () => ({
   useAppSelector: (selector: any) => mockUseAppSelector(selector),
 }));
 
+// Platform for the keyboard tests below: a getter, so a test can switch it.
+// Every other test runs as iOS, the Jest default.
+let mockIOS = true;
+jest.mock("../../../util/platform", () => ({
+  ...jest.requireActual("../../../util/platform"),
+  get IOS() {
+    return mockIOS;
+  },
+  get ANDROID() {
+    return !mockIOS;
+  },
+}));
+
 import PaymentDashboard from "../PaymentDashboard";
+import { KeyboardToolbar } from "react-native-keyboard-controller";
+import { RatsKeyboardAvoidingView } from "../../../components/rats-keyboard";
 
 const mockNavigation = { navigate: jest.fn(), goBack: jest.fn() } as any;
 
@@ -348,5 +363,44 @@ describe('PaymentDashboard bottom inset (Android edge-to-edge)', () => {
     expect(InsetStyleSheet.flatten(fab.props.style)).toEqual(
       expect.objectContaining({ position: 'absolute', marginBottom: 48 }),
     );
+  });
+});
+
+describe("PaymentDashboard ManualPaymentModal keyboard (Task 15)", () => {
+  afterEach(() => {
+    mockIOS = true;
+  });
+
+  const openModal = async () => {
+    setupStore();
+    mockListHousePayments.mockResolvedValue([]);
+    const utils = renderDashboard();
+    fireEvent.press(await utils.findByTestId("manual-payment-fab"));
+    await utils.findByPlaceholderText("Amount ($)");
+    return utils;
+  };
+
+  it("renders the keyboard toolbar inside the modal on iOS (Done for the amount pad)", async () => {
+    const utils = await openModal();
+    expect(utils.UNSAFE_queryAllByType(KeyboardToolbar)).toHaveLength(1);
+  });
+
+  it("renders no keyboard toolbar on Android", async () => {
+    mockIOS = false;
+    const utils = await openModal();
+    expect(utils.UNSAFE_queryAllByType(KeyboardToolbar)).toHaveLength(0);
+  });
+
+  it("keeps the amount field inside a padding avoiding view on both platforms", async () => {
+    for (const ios of [true, false]) {
+      mockIOS = ios;
+      const utils = await openModal();
+      const kav = utils.UNSAFE_getByType(RatsKeyboardAvoidingView);
+      expect(kav.props.behavior).toBe("padding");
+      expect(
+        kav.findAll((node) => node.props.placeholder === "Amount ($)").length,
+      ).toBeGreaterThan(0);
+      utils.unmount();
+    }
   });
 });

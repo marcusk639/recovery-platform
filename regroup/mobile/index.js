@@ -21,6 +21,7 @@ import './i18n';
 import { NavigationContainer } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { navigationRef } from './src/navigation/service';
+import { RatsKeyboardProvider } from './src/components/rats-keyboard';
 
 // An e2e emulator build whose emulators do not answer must stop, not carry on.
 // reportFatalError shows the red screen in debug and crashes a release build.
@@ -57,7 +58,9 @@ const root = () => (
         ref={navigationRef}
         onStateChange={state => console.log('state', state)}>
         <GestureHandlerRootView style={{ flex: 1 }}>
-          <App />
+          <RatsKeyboardProvider>
+            <App />
+          </RatsKeyboardProvider>
         </GestureHandlerRootView>
       </NavigationContainer>
     </QueryClientProvider>

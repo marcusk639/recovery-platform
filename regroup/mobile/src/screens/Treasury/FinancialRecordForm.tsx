@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from "react";
 import {
   Alert,
-  ScrollView,
   StyleSheet,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import RatsScrollView, {
+  IQ_SCROLL_VIEW_PROPS,
+} from "../../components/rats-scroll-view";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useData } from "../../context/DataContext";
 import { logException } from "../../util/logging";
@@ -253,7 +255,7 @@ const FinancialRecordForm: React.FC = () => {
   return (
     <View style={styles.container}>
       <ScreenHeader renderBackButton header="Financial Report" />
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <RatsScrollView {...IQ_SCROLL_VIEW_PROPS} contentContainerStyle={styles.scroll}>
         {/* Period */}
         <View style={[CARD_STYLE, styles.section]}>
           <RatsText
@@ -592,7 +594,7 @@ const FinancialRecordForm: React.FC = () => {
             />
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      </RatsScrollView>
     </View>
   );
 };

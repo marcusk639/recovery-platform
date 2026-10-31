@@ -13,6 +13,7 @@ import RatsWizardProgress from '../../components/rats-wizard-progress';
 import RatsWizardSlide from '../../components/rats-wizard-slide';
 import SharedSetupButtons from '../../components/setup-buttons';
 import { useKeyboardVisible } from '../../hooks/useKeyboardVisible';
+import { RatsAndroidResizeView } from '../../components/rats-keyboard';
 import {
   ROW,
   CARD_STYLE,
@@ -210,24 +211,26 @@ const OperatorSetupWizard: React.FC<Props> = props => {
           testID="operator-wizard-progress"
         />
       )}
-      <RatsWizardSlide currentStep={currentPage} testID="operator-wizard-slide">
-        {pages}
-      </RatsWizardSlide>
-      <View
-        testID={
-          currentPage === TOTAL_STEPS - 1
-            ? 'wizard-finish-button'
-            : 'wizard-next-button'
-        }>
-        <View testID="wizard-back-button">
-          <SharedSetupButtons
-            onBackPress={goBack}
-            onNextPress={goNext}
-            hideBack={currentPage === 0}
-            nextLabel={currentPage === TOTAL_STEPS - 1 ? 'Finish' : 'Next'}
-          />
+      <RatsAndroidResizeView>
+        <RatsWizardSlide currentStep={currentPage} testID="operator-wizard-slide">
+          {pages}
+        </RatsWizardSlide>
+        <View
+          testID={
+            currentPage === TOTAL_STEPS - 1
+              ? 'wizard-finish-button'
+              : 'wizard-next-button'
+          }>
+          <View testID="wizard-back-button">
+            <SharedSetupButtons
+              onBackPress={goBack}
+              onNextPress={goNext}
+              hideBack={currentPage === 0}
+              nextLabel={currentPage === TOTAL_STEPS - 1 ? 'Finish' : 'Next'}
+            />
+          </View>
         </View>
-      </View>
+      </RatsAndroidResizeView>
     </SafeAreaView>
   );
 };

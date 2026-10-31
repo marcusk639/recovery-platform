@@ -92,6 +92,7 @@ import DocumentListScreen from '../screens/Documents/DocumentListScreen';
 import StaffNotesFeed from '../screens/StaffNotes/StaffNotesFeed';
 import { useSelectedGuest } from '../hooks/useSelectedGuest';
 import { useSelectedHouse } from '../hooks/useSelectedHouse';
+import { RatsKeyboardScreenLayout } from '../components/rats-keyboard';
 
 // Wrapper to inject Redux guest+house into RentPaymentScreen
 const RentPaymentConnector = ({ navigation }: any) => {
@@ -325,7 +326,10 @@ export const RootNavigator = ({
 
     {/* Phase 6.1: All modal screens (consolidated from nested stacks) */}
     <RootStack.Group
-      screenOptions={{ presentation: 'modal', headerShown: false }}>
+      screenOptions={{ presentation: 'modal', headerShown: false }}
+      // iOS presents these above the app root, which hides its keyboard
+      // toolbar; each modal screen gets its own.
+      screenLayout={RatsKeyboardScreenLayout}>
       {/* Existing modal screens */}
       <RootStack.Screen name={Routes.HouseList} component={HousesOverview} />
       <RootStack.Screen

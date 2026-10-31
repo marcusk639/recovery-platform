@@ -27,6 +27,18 @@ const RESTRICTED = [
       'Use src/services/notifications (channels, remoteMessage, rentReminder); it is the only react-native-notify-kit importer.',
     allowedIn: ['src/services/notifications/**'],
   },
+  {
+    name: 'react-native-keyboard-controller',
+    message:
+      'Use src/components/rats-keyboard or RatsScrollView; with index.js they are the only react-native-keyboard-controller importers.',
+    allowedIn: [
+      'src/components/rats-keyboard/**',
+      'src/components/rats-scroll-view/**',
+      'index.js',
+      // Tests inspect the library's components (its Jest mock).
+      'src/**/__tests__/**',
+    ],
+  },
 ];
 
 const PATTERNS = [
