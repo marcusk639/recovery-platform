@@ -27,10 +27,14 @@ jest.mock('../src/services/native-deep-links', () => ({
   createInvitationFromLink: jest.fn(),
 }));
 jest.mock('react-native/Libraries/Linking/Linking', () => ({
-  getInitialURL: jest.fn().mockResolvedValue(null),
-  addEventListener: jest.fn(() => ({ remove: jest.fn() })),
-  canOpenURL: jest.fn().mockResolvedValue(false),
-  openURL: jest.fn().mockResolvedValue(undefined),
+  // RN 0.88's root export reads this module's default export.
+  __esModule: true,
+  default: {
+    getInitialURL: jest.fn().mockResolvedValue(null),
+    addEventListener: jest.fn(() => ({ remove: jest.fn() })),
+    canOpenURL: jest.fn().mockResolvedValue(false),
+    openURL: jest.fn().mockResolvedValue(undefined),
+  },
 }));
 
 // App relies on the redux/react-query providers that index.js wraps around it.

@@ -1,3 +1,7 @@
+import {
+  collection,
+} from '@react-native-firebase/firestore';
+import { httpsCallable } from '@react-native-firebase/functions';
 import { functions, firestore, callHttpsFunction } from '../../firebase-setup';
 import {
   MeetingSearchInput,
@@ -7,17 +11,17 @@ import { RatsMeeting } from '../entities/Meeting';
 import * as crud from './crud';
 import { cloneDeep } from 'lodash';
 
-export const meetingCollection = firestore.collection('meetings');
+export const meetingCollection = collection(firestore, 'meetings');
 
 export async function searchForMeetings(
   searchInput: MeetingSearchInput,
 ): Promise<RatsMeeting[]> {
-  const response = await callHttpsFunction('findMeetings', searchInput);
+  const response = await callHttpsFunction<RatsMeeting[]>('findMeetings', searchInput);
   return response.data;
 }
 
 export async function userIsAtMeeting(locations: MeetingVerificationInput) {
-  const response = await functions.httpsCallable('userIsAtMeeting')(locations);
+  const response = await httpsCallable(functions, 'userIsAtMeeting')(locations);
   return response.data;
 }
 

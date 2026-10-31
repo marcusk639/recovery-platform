@@ -114,8 +114,12 @@ jest.mock("../../../../firebase-setup", () => ({
 
 // Mock Linking
 jest.mock("react-native/Libraries/Linking/Linking", () => ({
-  openURL: jest.fn(() => Promise.resolve()),
-  canOpenURL: jest.fn(() => Promise.resolve(true)),
+  // RN 0.88's root export reads this module's default export.
+  __esModule: true,
+  default: {
+    openURL: jest.fn(() => Promise.resolve()),
+    canOpenURL: jest.fn(() => Promise.resolve(true)),
+  },
 }));
 
 // Mock useAppSelector to inject house state
@@ -489,6 +493,66 @@ describe("StripeSettingsScreen", () => {
 
       // Disconnect API should NOT have been called — user must confirm via Alert
       expect(mockDisconnectAccount).not.toHaveBeenCalled();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Callable payloads: each Stripe callable is scoped to the selected house
+  // -----------------------------------------------------------------------
+  describe("callable payloads", () => {
+    const active = {
+      data: {
+        status: StripeAccountStatus.ACTIVE,
+        chargesEnabled: true,
+        payoutsEnabled: true,
+        requirements: { currentlyDue: [], pastDue: [] },
+      },
+    };
+
+    it("fetches the account status for the selected house", async () => {
+      setupHouse("acct_123");
+      mockGetStatus.mockResolvedValue(active);
+
+      renderScreen();
+
+      await waitFor(() => {
+        expect(mockGetStatus).toHaveBeenCalledWith({ houseId: "house123" });
+      });
+    });
+
+    it("connects the selected house", async () => {
+      setupHouse(undefined);
+      mockConnectAccount.mockReturnValue(new Promise(() => {}));
+
+      const { getByTestId } = renderScreen();
+      await waitFor(() => {
+        expect(getByTestId("stripe-connect-button")).toBeTruthy();
+      });
+      fireEvent.press(getByTestId("stripe-connect-button"));
+
+      await waitFor(() => {
+        expect(mockConnectAccount).toHaveBeenCalledWith({ houseId: "house123" });
+      });
+    });
+
+    it("disconnects the selected house once confirmed", async () => {
+      setupHouse("acct_123");
+      mockGetStatus.mockResolvedValue(active);
+      mockDisconnectAccount.mockResolvedValue({ data: {} });
+
+      const { getByTestId } = renderScreen();
+      await waitFor(() => {
+        expect(getByTestId("stripe-disconnect-button")).toBeTruthy();
+      });
+      fireEvent.press(getByTestId("stripe-disconnect-button"));
+
+      const buttons = (Alert.alert as jest.Mock).mock.calls[0][2];
+      const confirm = buttons.find((b: { text: string }) => b.text === "Disconnect");
+      await act(async () => {
+        await confirm.onPress();
+      });
+
+      expect(mockDisconnectAccount).toHaveBeenCalledWith({ houseId: "house123" });
     });
   });
 

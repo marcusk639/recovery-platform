@@ -95,7 +95,7 @@ function setHouse(opts: { house?: any; isLoading?: boolean } = {}) {
 beforeEach(() => {
   jest.clearAllMocks();
   // default: kill switch doc exists and is enabled=true (paywall on)
-  mockGet.mockResolvedValue({ exists: true, data: () => ({ enabled: true }) });
+  mockGet.mockResolvedValue({ exists: () => true, data: () => ({ enabled: true }) });
   setUserState({ user: null, anonymous: false });
   setHouse({ house: null, isLoading: false });
   mockSubscriptionIsActive.mockReturnValue(false);
@@ -108,7 +108,7 @@ beforeEach(() => {
 describe('usePaywallKillSwitch', () => {
   it('returns killSwitchEnabled=false when doc has enabled:false', async () => {
     mockGet.mockResolvedValue({
-      exists: true,
+      exists: () => true,
       data: () => ({ enabled: false }),
     });
 
@@ -122,7 +122,7 @@ describe('usePaywallKillSwitch', () => {
 
   it('returns killSwitchEnabled=true when doc has enabled:true', async () => {
     mockGet.mockResolvedValue({
-      exists: true,
+      exists: () => true,
       data: () => ({ enabled: true }),
     });
 
@@ -135,7 +135,7 @@ describe('usePaywallKillSwitch', () => {
   });
 
   it('defaults to enabled=true (fail closed) when the doc is missing', async () => {
-    mockGet.mockResolvedValue({ exists: false, data: () => null });
+    mockGet.mockResolvedValue({ exists: () => false, data: () => null });
 
     const { result } = renderHook(() => usePaywallKillSwitch(), {
       wrapper: makeWrapper(),
@@ -147,7 +147,7 @@ describe('usePaywallKillSwitch', () => {
 
   it('defaults to enabled=true when the enabled field is non-boolean', async () => {
     mockGet.mockResolvedValue({
-      exists: true,
+      exists: () => true,
       data: () => ({ enabled: 'yes' }),
     });
 
@@ -228,7 +228,7 @@ describe('useSubscriptionGate', () => {
 
     it('returns allowed when the kill switch is explicitly disabled', async () => {
       mockGet.mockResolvedValue({
-        exists: true,
+        exists: () => true,
         data: () => ({ enabled: false }),
       });
       // Even an admin with an inactive subscription should be allowed through

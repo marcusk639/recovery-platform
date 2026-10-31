@@ -1,6 +1,6 @@
 import { TouchableOpacity, View } from 'react-native';
 import React, { Component } from 'react';
-import Icon from 'react-native-vector-icons/Ionicons';
+import Icon from '@react-native-vector-icons/ionicons/static';
 import { format } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import settings from '../../settings/time';
@@ -90,7 +90,7 @@ class RatsDatePicker extends Component<Props & FieldProps, State> {
               form={form}
               icon={
                 <Icon
-                  name="ios-calendar"
+                  name="calendar"
                   style={{ paddingLeft: normalize(10) }}
                   size={fontSize.large}
                   color="rgb(49, 49, 49)"

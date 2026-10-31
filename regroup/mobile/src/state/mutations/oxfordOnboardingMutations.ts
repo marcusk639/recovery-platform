@@ -1,4 +1,9 @@
-import FirebaseFirestore from '@react-native-firebase/firestore';
+import {
+  collection,
+  doc,
+  serverTimestamp,
+  writeBatch,
+} from '@react-native-firebase/firestore';
 import { firestore } from '../../../firebase-setup';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { OfficerRole } from '../../entities/oxford/Officer';
@@ -20,32 +25,32 @@ async function completeOxfordOnboarding(
   payload: OxfordOnboardingPayload,
 ): Promise<void> {
   const { houseId, officers, firstMeeting, eesMonthlyAmount } = payload;
-  const batch = firestore.batch();
+  const batch = writeBatch(firestore);
 
   // All Oxford data lives under houses/{houseId}/... subcollections — the
   // Firestore security rules at firebase/firestore.rules only protect these
   // subcollection paths. Writing to flat top-level collections (the prior
   // implementation) is rejected by rules and the data is invisible to every
   // read path in src/services/oxford/. See .full-review/01-quality-architecture.md [A1].
-  const houseRef = firestore.collection('houses').doc(houseId);
+  const houseRef = doc(collection(firestore, 'houses'), houseId);
 
   officers.forEach(officer => {
     // Deterministic doc ID (the role) makes onboarding idempotent — re-running
     // overwrites the same officer doc rather than creating a duplicate. Safe
     // because each house has exactly one officer per role.
-    const ref = houseRef.collection('officers').doc(officer.role);
+    const ref = doc(collection(houseRef, 'officers'), officer.role);
     batch.set(ref, {
       role: officer.role,
       name: officer.name,
       houseId,
       isActive: true,
-      createdAt: FirebaseFirestore.FieldValue.serverTimestamp(),
+      createdAt: serverTimestamp(),
     });
   });
 
   // Deterministic ID 'onboarding' so re-running onboarding overwrites the
   // same meeting doc rather than creating duplicates.
-  const meetingRef = houseRef.collection('business-meetings').doc('onboarding');
+  const meetingRef = doc(collection(houseRef, 'business-meetings'), 'onboarding');
   batch.set(meetingRef, {
     houseId,
     scheduledDate: firstMeeting.scheduledDate,
@@ -53,7 +58,7 @@ async function completeOxfordOnboarding(
     attendees: [],
     quorumMet: false,
     createdBy: 'onboarding',
-    createdAt: FirebaseFirestore.FieldValue.serverTimestamp(),
+    createdAt: serverTimestamp(),
   });
 
   batch.update(houseRef, {

@@ -60,6 +60,7 @@ jest.mock("../../../context", () => ({
 // ─── Imports ──────────────────────────────────────────────────────────────────
 
 import React from "react";
+import { keyboardAncestor } from "../../../components/rats-keyboard/__tests__/keyboardAncestor";
 import { render, fireEvent, act } from "@testing-library/react-native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import FinancialRecordForm from "../FinancialRecordForm";
@@ -230,5 +231,14 @@ describe("FinancialRecordForm", () => {
         data: expect.objectContaining({ period: originalPeriod }),
       }),
     );
+  });
+});
+
+// ─── Keyboard (plan Task 15) ──────────────────────────────────────────────────
+describe("FinancialRecordForm keyboard", () => {
+  it("keeps its amount fields in a RatsScrollView (IQKeyboardManager-only before)", () => {
+    setupDefaults();
+    const { getByTestId } = renderScreen();
+    expect(keyboardAncestor(getByTestId("income-amount-0"))).toBe("RatsScrollView");
   });
 });

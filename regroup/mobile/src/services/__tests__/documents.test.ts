@@ -31,6 +31,14 @@ jest.mock('@react-native-firebase/storage', () => {
   };
   const storageFn = jest.fn(() => mockStorageInstance);
   (storageFn as any)._instance = mockStorageInstance;
+  // Modular forms over the instance or ref passed in (same spies).
+  Object.assign(storageFn, {
+    getStorage: () => mockStorageInstance,
+    ref: (s: any, ...args: any[]) => s.ref(...args),
+    putFile: (r: any, ...args: any[]) => r.putFile(...args),
+    getDownloadURL: (r: any) => r.getDownloadURL(),
+    deleteObject: (r: any) => r.delete(),
+  });
   return storageFn;
 });
 

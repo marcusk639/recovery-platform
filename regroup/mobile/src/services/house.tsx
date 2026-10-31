@@ -1,36 +1,47 @@
-import { firestore, functions } from "../../firebase-setup";
-import { logException } from "../util/logging";
-import { House, AwaitingVerification } from "../entities/House";
-import { Chores } from "../entities/Chore";
-import { HOUSE_CODE_INVALID } from "../constants/errors";
-import { Houses, Guests, Admins } from "../types";
-import * as crud from "./crud";
-import { HouseSearch } from "../entities/HouseSearch";
-import Admin from "../entities/Admin";
-import { adminCollection } from "./admin";
-import each from "lodash/each";
-import filter from "lodash/filter";
-import isEqual from "lodash/isEqual";
-import "@react-native-firebase/firestore";
-import { FirebaseFirestoreTypes } from "@react-native-firebase/firestore";
-import FirebaseFirestore from "@react-native-firebase/firestore";
-import { guestCollection, archiveCollection } from "./guest";
+import {
+  arrayRemove,
+  arrayUnion,
+  collection,
+  doc,
+  getDocs,
+  query,
+  updateDoc,
+  where,
+  writeBatch,
+  type DocumentData,
+  type QueryDocumentSnapshot,
+  type WhereFilterOp,
+} from '@react-native-firebase/firestore';
+import { httpsCallable } from '@react-native-firebase/functions';
+import { firestore, functions } from '../../firebase-setup';
+import { logException } from '../util/logging';
+import { House, AwaitingVerification } from '../entities/House';
+import { Chores } from '../entities/Chore';
+import { HOUSE_CODE_INVALID } from '../constants/errors';
+import { Houses, Guests, Admins } from '../types';
+import * as crud from './crud';
+import { HouseSearch } from '../entities/HouseSearch';
+import Admin from '../entities/Admin';
+import { adminCollection } from './admin';
+import each from 'lodash/each';
+import filter from 'lodash/filter';
+import isEqual from 'lodash/isEqual';
+import { guestCollection, archiveCollection } from './guest';
 import { commitGuestOps, GuestBatchOp } from './guestBatch';
-import { Guest } from "../entities/Guest";
-import { uploadHousePhoto } from "./storage";
-import { createAdminInvite, createGuestInvite } from "./setup-wizard";
-import { CreateInvitationResult } from "./invitations";
-import { getFirstPhase } from "../util/house";
-import { houseIdsRemoved } from "../util/admin";
-import { geohash, getGeohashRange } from "../util/geolocation";
-import { getTimezone } from "../../google/timezone";
-import { firebase } from "@react-native-firebase/firestore";
-import { getCurrentTime } from "../util/display";
-export const houseCollection = firestore.collection("houses");
+import { Guest } from '../entities/Guest';
+import { uploadHousePhoto } from './storage';
+import { createAdminInvite, createGuestInvite } from './setup-wizard';
+import { CreateInvitationResult } from './invitations';
+import { getFirstPhase } from '../util/house';
+import { houseIdsRemoved } from '../util/admin';
+import { geohash, getGeohashRange } from '../util/geolocation';
+import { getTimezone } from '../../google/timezone';
+import { getCurrentTime } from '../util/display';
+export const houseCollection = collection(firestore, 'houses');
 
-export function shapeHouses(
-  docs: FirebaseFirestoreTypes.QueryDocumentSnapshot[],
-): { [id: string]: House } {
+export function shapeHouses(docs: QueryDocumentSnapshot[]): {
+  [id: string]: House;
+} {
   const houses: { [id: string]: House } = {};
   docs.forEach((house) => (houses[house.id] = house.data() as House));
   return houses;
@@ -55,37 +66,27 @@ export async function createHouse(house: House) {
  */
 export async function getHouses(
   attribute: string,
-  operator: FirebaseFirestore.WhereFilterOp,
+  operator: WhereFilterOp,
   value: string,
 ): Promise<Houses> {
-  const result = await crud.getByAttribute<House>(
-    houseCollection,
-    attribute,
-    operator,
-    value,
-  );
+  const result = await crud.getByAttribute<House>(houseCollection, attribute, operator, value);
   const houses: { [id: string]: House } = {};
   result.forEach((house) => (houses[house.id] = house));
   return houses;
 }
 
 export async function updateHouseAdmins(houseId: string, adminId: string) {
-  return houseCollection.doc(houseId).update({
-    adminIds: firebase.firestore.FieldValue.arrayUnion(adminId),
-    pendingAdminInvites: firebase.firestore.FieldValue.arrayRemove(),
+  return updateDoc(doc(houseCollection, houseId), {
+    adminIds: arrayUnion(adminId),
+    pendingAdminInvites: arrayRemove(),
   });
 }
 
-export async function getNearbyHouses(
-  lat: number,
-  lng: number,
-  distanceInMiles: number,
-) {
+export async function getNearbyHouses(lat: number, lng: number, distanceInMiles: number) {
   const range = getGeohashRange(lat, lng, distanceInMiles);
-  const result = await houseCollection
-    .where("geohash", ">=", range.lower)
-    .where("geohash", "<=", range.upper)
-    .get();
+  const result = await getDocs(
+    query(houseCollection, where('geohash', '>=', range.lower), where('geohash', '<=', range.upper)),
+  );
   return shapeHouses(result.docs);
 }
 
@@ -95,10 +96,7 @@ export async function getNearbyHouses(
  * @param {*} attribute
  * @param {*} value
  */
-export async function updateHouse(
-  houseId: string,
-  values: Partial<House>,
-): Promise<void> {
+export async function updateHouse(houseId: string, values: Partial<House>): Promise<void> {
   if (!values.id) {
     values.id = houseId;
   }
@@ -108,12 +106,7 @@ export async function updateHouse(
     const cleanedChores: Chores = {};
     Object.keys(values.chores).forEach((key) => {
       const chore = values.chores![key];
-      if (
-        chore &&
-        chore.name &&
-        chore.name.trim() !== "" &&
-        key.trim() !== ""
-      ) {
+      if (chore && chore.name && chore.name.trim() !== '' && key.trim() !== '') {
         cleanedChores[chore.name] = chore;
       }
     });
@@ -127,12 +120,7 @@ export async function updateHouseAwaitingVerification(
   houseCode: string,
   awaitingVerification: AwaitingVerification,
 ) {
-  const houses = await crud.getByAttribute<House>(
-    houseCollection,
-    "code",
-    "==",
-    houseCode,
-  );
+  const houses = await crud.getByAttribute<House>(houseCollection, 'code', '==', houseCode);
   if (!houses.length) {
     throw new Error(HOUSE_CODE_INVALID);
   }
@@ -161,24 +149,21 @@ export async function searchForHouses(searchData: HouseSearch) {
 }
 
 export async function createHouseBatch(house: House, _admins: Admin[]) {
-  const batch = firestore.batch();
+  const batch = writeBatch(firestore);
   const admins: Admin[] = [];
   _admins.forEach((admin) => {
-    const newAdminDoc = adminCollection.doc();
+    const newAdminDoc = doc(adminCollection);
     admins.push({ ...admin, id: newAdminDoc.id });
     batch.set(newAdminDoc, { ...admin, id: newAdminDoc.id });
   });
-  const newHouseDoc = houseCollection.doc();
+  const newHouseDoc = doc(houseCollection);
   const newHouse: House = {
     ...house,
     adminIds: admins.filter((a) => a.id).map((a) => a.id!),
     id: newHouseDoc.id,
     createdAt: getCurrentTime(),
   };
-  newHouse.geohash =
-    newHouse.lat && newHouse.lng
-      ? geohash(newHouse.lat, newHouse.lng)
-      : "unknown";
+  newHouse.geohash = newHouse.lat && newHouse.lng ? geohash(newHouse.lat, newHouse.lng) : 'unknown';
   newHouse.timezone = await getTimezone(newHouse.lat, newHouse.lng);
   batch.set(newHouseDoc, newHouse);
   try {
@@ -186,7 +171,7 @@ export async function createHouseBatch(house: House, _admins: Admin[]) {
     return { house: newHouse, admins };
   } catch (error) {
     logException(error);
-    throw new Error("Failed to create house.");
+    throw new Error('Failed to create house.');
   }
 }
 
@@ -194,8 +179,7 @@ export function createHouseId(): string {
   return crud.createId(houseCollection);
 }
 
-export type HouseSettings =
-  "chores" | "phases" | "managers" | "guests" | "house";
+export type HouseSettings = 'chores' | 'phases' | 'managers' | 'guests' | 'house';
 
 const getUpdates = (
   membersBefore: { [key: string]: Admin | Guest },
@@ -211,18 +195,10 @@ const getUpdates = (
     if (memberAfter) {
       if (!isEqual(memberBefore, memberAfter)) {
         updatedMembers.push(memberAfter);
-        if (
-          guest &&
-          !(memberBefore as Guest).isAdmin &&
-          (memberAfter as Guest).isAdmin
-        ) {
+        if (guest && !(memberBefore as Guest).isAdmin && (memberAfter as Guest).isAdmin) {
           adminGuests.push(memberAfter as Guest);
         }
-        if (
-          guest &&
-          (memberBefore as Guest).isAdmin &&
-          !(memberAfter as Guest).isAdmin
-        ) {
+        if (guest && (memberBefore as Guest).isAdmin && !(memberAfter as Guest).isAdmin) {
           demotedGuests.push(memberAfter as Guest);
         }
       }
@@ -262,9 +238,7 @@ const sendNewInvites = async (
       ) {
         const firstPhase = getFirstPhase(house.phases!);
         if (firstPhase) {
-          calls.push(
-            createGuestInvite(updatedGuestEmail, house.id!, firstPhase.name),
-          );
+          calls.push(createGuestInvite(updatedGuestEmail, house.id!, firstPhase.name));
         }
       }
     });
@@ -274,18 +248,17 @@ const sendNewInvites = async (
 
 export const promoteGuestsToAdmin = async (guests: Guest[]) => {
   if (guests && guests.length) {
-    const response = await functions.httpsCallable("promoteGuestsToAdmin")(
-      guests,
-    );
+    const response = await httpsCallable(functions, 'promoteGuestsToAdmin')(guests);
     return response.data;
   }
 };
 
 export const removeAdminPrivilegesForGuests = async (adminGuests: Guest[]) => {
   if (adminGuests && adminGuests.length) {
-    const response = await functions.httpsCallable("removePrivilegesForGuests")(
-      { role: "admin", guests: adminGuests },
-    );
+    const response = await httpsCallable(functions, 'removePrivilegesForGuests')({
+      role: 'admin',
+      guests: adminGuests,
+    });
     return response.data;
   }
 };
@@ -299,9 +272,10 @@ export const removeAdminPrivilegesForGuests = async (adminGuests: Guest[]) => {
  */
 export const removeGuestPrivileges = async (guests: Guest[]) => {
   if (guests && guests.length) {
-    const response = await functions.httpsCallable("removePrivilegesForGuests")(
-      { role: "guest", guests },
-    );
+    const response = await httpsCallable(functions, 'removePrivilegesForGuests')({
+      role: 'guest',
+      guests,
+    });
     return response.data;
   }
 };
@@ -311,7 +285,7 @@ export const removeAdminPrivileges = async (
   adminHouseIds: string[],
   superAdminHouseIds: string[],
 ) => {
-  const response = await functions.httpsCallable("deleteAdminAuthorization")({
+  const response = await httpsCallable(functions, 'deleteAdminAuthorization')({
     admin,
     adminHouseIds,
     superAdminHouseIds,
@@ -329,19 +303,14 @@ export async function updateHouseBatch(
   adminsAfter?: Admins,
   type?: HouseSettings,
 ) {
-  const batch = firestore.batch();
+  const batch = writeBatch(firestore);
 
   // Clean chores to ensure no empty field names
   if (house.chores) {
     const cleanedChores: Chores = {};
     Object.keys(house.chores).forEach((key) => {
       const chore = house.chores![key];
-      if (
-        chore &&
-        chore.name &&
-        chore.name.trim() !== "" &&
-        key.trim() !== ""
-      ) {
+      if (chore && chore.name && chore.name.trim() !== '' && key.trim() !== '') {
         cleanedChores[chore.name] = chore;
       }
     });
@@ -378,26 +347,17 @@ export async function updateHouseBatch(
   // remove admin privileges for admins if necessary
   updatedAdmins.forEach((after) => {
     const before = adminsBefore![after.id!];
-    const [removedSuperAdminHouses, removedAdminHouses] = houseIdsRemoved(
-      before,
-      after,
-    );
+    const [removedSuperAdminHouses, removedAdminHouses] = houseIdsRemoved(before, after);
     if (removedSuperAdminHouses.length || removedAdminHouses.length) {
-      promises.push(
-        removeAdminPrivileges(
-          after,
-          removedAdminHouses,
-          removedSuperAdminHouses,
-        ),
-      );
+      promises.push(removeAdminPrivileges(after, removedAdminHouses, removedSuperAdminHouses));
     }
   });
-  batch.update(houseCollection.doc(house.id), house);
+  batch.update(doc(houseCollection, house.id), house as DocumentData);
   updatedAdmins.forEach((admin) => {
-    batch.update(adminCollection.doc(admin.id), admin);
+    batch.update(doc(adminCollection, admin.id), admin as DocumentData);
   });
   deletedAdmins.forEach((admin) => {
-    batch.delete(adminCollection.doc(admin.id));
+    batch.delete(doc(adminCollection, admin.id));
   });
   promises.push(batch.commit());
   // Guest docs go in their own chunked batches (services/guestBatch: the
@@ -406,18 +366,18 @@ export async function updateHouseBatch(
     ...updatedGuests.map(
       (guest): GuestBatchOp =>
         (b) => {
-          b.update(guestCollection.doc(guest.id), guest);
+          b.update(doc(guestCollection, guest.id), guest as DocumentData);
         },
     ),
     ...deletedGuests.map(
       (guest): GuestBatchOp =>
         (b) => {
-          b.delete(guestCollection.doc(guest.id));
-          b.set(archiveCollection.doc(guest.id), guest);
+          b.delete(doc(guestCollection, guest.id));
+          b.set(doc(archiveCollection, guest.id), guest);
         },
     ),
   ];
-  promises.push(commitGuestOps(() => firestore.batch(), guestOps));
+  promises.push(commitGuestOps(() => writeBatch(firestore), guestOps));
   try {
     const result = await Promise.all(promises);
     return result;

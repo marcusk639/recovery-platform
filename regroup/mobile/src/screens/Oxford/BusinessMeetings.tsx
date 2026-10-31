@@ -224,7 +224,9 @@ const BusinessMeetings: React.FC<Props> = ({ navigation }) => {
       refreshControl={
         <RefreshControl
           refreshing={isFetching && !isLoading}
-          onRefresh={refetch}
+          onRefresh={() => {
+            refetch();
+          }}
         />
       }>
       <ScreenHeader header="Business Meetings" />

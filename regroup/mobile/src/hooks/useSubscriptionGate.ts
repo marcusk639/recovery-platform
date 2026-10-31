@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAppSelector } from '../state/store';
 import { useSelectedHouse } from './useSelectedHouse';
 import { logException } from '../util/logging';
+import { getDoc } from '@react-native-firebase/firestore';
 import { paywallConfigRef } from '../services/paywall';
 import { toDateSafe } from '../util/firestore';
 import { User } from '../entities/User';
@@ -42,8 +43,8 @@ export function usePaywallKillSwitch(): {
     queryKey: ['paywall', 'config'],
     queryFn: async () => {
       try {
-        const doc = await paywallConfigRef.get();
-        if (!doc.exists) {
+        const doc = await getDoc(paywallConfigRef);
+        if (!doc.exists()) {
           return { enabled: true };
         }
         const raw = doc.data();

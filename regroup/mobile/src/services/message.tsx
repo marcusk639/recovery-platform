@@ -22,20 +22,35 @@ import { firestore } from '../../firebase-setup';
 import { Message } from '../entities/Message';
 import { DirectMessage } from '../entities/DirectConversation';
 import * as crud from './crud';
-import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  limit as limitTo,
+  onSnapshot,
+  orderBy,
+  query,
+  startAfter,
+  updateDoc,
+  type QueryConstraint,
+  type QuerySnapshot,
+  type Timestamp,
+} from '@react-native-firebase/firestore';
 import { logException } from '../util/logging';
 
-const houseCollection = firestore.collection('houses');
-const directMessageCollection = firestore.collection('direct-messages');
+const houseCollection = collection(firestore, 'houses');
+const directMessageCollection = collection(firestore, 'direct-messages');
+
 
 export function getMessageDate(
   createdAt:
-    | FirebaseFirestoreTypes.Timestamp
+    | Timestamp
     | { seconds?: number; _seconds?: number }
     | Date,
 ): Date | undefined {
   if (typeof (createdAt as any).toDate === 'function') {
-    return (createdAt as FirebaseFirestoreTypes.Timestamp).toDate();
+    return (createdAt as Timestamp).toDate();
   }
   const timestampLike = createdAt as { seconds?: number; _seconds?: number };
   if (timestampLike.seconds) {
@@ -68,7 +83,7 @@ export async function sendMessageToHouseChat(
 ): Promise<PromiseSettledResult<Message>[]> {
   const promises = messages.map(message =>
     crud.create<Message>(
-      houseCollection.doc(houseId).collection('chat'),
+      collection(doc(houseCollection, houseId), 'chat'),
       message,
     ),
   );
@@ -95,13 +110,13 @@ export const sortByDate = (messages: Message[]) =>
  * Handle Firestore chat snapshot changes
  */
 function onChatSnapshot(
-  querySnapshot: FirebaseFirestoreTypes.QuerySnapshot,
+  querySnapshot: QuerySnapshot,
   newMessageHandler: (messages: Message[], chatId?: string) => any,
   chatId?: string,
 ) {
   const messages: Message[] = [];
-  querySnapshot.forEach(doc => {
-    messages.push({ id: doc.id, ...doc.data() } as Message);
+  querySnapshot.forEach(messageDoc => {
+    messages.push({ id: messageDoc.id, ...messageDoc.data() } as Message);
   });
   newMessageHandler(messages, chatId);
 }
@@ -116,18 +131,18 @@ export function subscribeToHouseChat(
   houseId: string,
   newMessageHandler: (houseMessages: Message[]) => any,
 ): () => void {
-  return houseCollection
-    .doc(houseId)
-    .collection('chat')
-    .orderBy('sortKey', 'desc')
-    .limit(20)
-    .onSnapshot(
-      querySnapshot => onChatSnapshot(querySnapshot, newMessageHandler),
-      // Firestore permission / network errors would otherwise silently
-      // terminate the stream — route to Sentry so the user's stale chat
-      // does not go unexplained.
-      error => logException(error),
-    );
+  return onSnapshot(
+    query(
+      collection(doc(houseCollection, houseId), 'chat'),
+      orderBy('sortKey', 'desc'),
+      limitTo(20),
+    ),
+    querySnapshot => onChatSnapshot(querySnapshot, newMessageHandler),
+    // Firestore permission / network errors would otherwise silently
+    // terminate the stream — route to Sentry so the user's stale chat
+    // does not go unexplained.
+    error => logException(error),
+  );
 }
 
 export const CHAT_ID = (ids: string[]) => ids.sort().join('');
@@ -136,12 +151,12 @@ export const CHAT_ID = (ids: string[]) => ids.sort().join('');
  * Handle house chat snapshot (Firestore)
  */
 const onHouseChatSnapshot = (
-  snapshot: FirebaseFirestoreTypes.QuerySnapshot,
+  snapshot: QuerySnapshot,
   newMessageHandler: (houseMessages: Message[]) => any,
 ) => {
   const messages: Message[] = [];
-  snapshot.forEach(doc => {
-    messages.push({ id: doc.id, ...doc.data() } as Message);
+  snapshot.forEach(messageDoc => {
+    messages.push({ id: messageDoc.id, ...messageDoc.data() } as Message);
   });
   newMessageHandler(messages);
 };
@@ -158,22 +173,17 @@ export const loadChat = async (
   startAfterDoc?: string,
 ): Promise<void> => {
   try {
-    let query = houseCollection
-      .doc(houseId)
-      .collection('chat')
-      .orderBy('sortKey', 'desc')
-      .limit(20);
+    const chat = collection(doc(houseCollection, houseId), 'chat');
+    const constraints: QueryConstraint[] = [orderBy('sortKey', 'desc'), limitTo(20)];
 
     if (startAfterDoc) {
-      const startDoc = await houseCollection
-        .doc(houseId)
-        .collection('chat')
-        .doc(startAfterDoc)
-        .get();
-      query = query.startAfter(startDoc);
+      const startDoc = await getDoc(
+        doc(collection(doc(houseCollection, houseId), 'chat'), startAfterDoc),
+      );
+      constraints.push(startAfter(startDoc));
     }
 
-    const snapshot = await query.get();
+    const snapshot = await getDocs(query(chat, ...constraints));
     onHouseChatSnapshot(snapshot, newMessageHandler);
   } catch (error) {
     logException(error);
@@ -197,25 +207,20 @@ export const loadDirectChat = async (
   startAfterDoc?: string,
 ): Promise<Message[]> => {
   try {
-    let query = directMessageCollection
-      .doc(id)
-      .collection('chat')
-      .orderBy('sortKey', 'desc')
-      .limit(20);
+    const chat = collection(doc(directMessageCollection, id), 'chat');
+    const constraints: QueryConstraint[] = [orderBy('sortKey', 'desc'), limitTo(20)];
 
     if (startAfterDoc) {
-      const startDoc = await directMessageCollection
-        .doc(id)
-        .collection('chat')
-        .doc(startAfterDoc)
-        .get();
-      query = query.startAfter(startDoc);
+      const startDoc = await getDoc(
+        doc(collection(doc(directMessageCollection, id), 'chat'), startAfterDoc),
+      );
+      constraints.push(startAfter(startDoc));
     }
 
-    const snapshot = await query.get();
+    const snapshot = await getDocs(query(chat, ...constraints));
     const messages: Message[] = [];
-    snapshot.forEach(doc => {
-      messages.push({ id: doc.id, ...doc.data() } as Message);
+    snapshot.forEach(messageDoc => {
+      messages.push({ id: messageDoc.id, ...messageDoc.data() } as Message);
     });
 
     newMessageHandler(messages, id, !startAfterDoc);
@@ -237,15 +242,15 @@ export function subscribeToDirectChat(
   newMessageHandler: (directMessages: Message[], chatId?: string) => any,
 ): () => void {
   const id = CHAT_ID(ids);
-  return directMessageCollection
-    .doc(id)
-    .collection('chat')
-    .orderBy('sortKey', 'desc')
-    .limit(20)
-    .onSnapshot(
-      querySnapshot => onChatSnapshot(querySnapshot, newMessageHandler, id),
-      error => logException(error),
-    );
+  return onSnapshot(
+    query(
+      collection(doc(directMessageCollection, id), 'chat'),
+      orderBy('sortKey', 'desc'),
+      limitTo(20),
+    ),
+    querySnapshot => onChatSnapshot(querySnapshot, newMessageHandler, id),
+    error => logException(error),
+  );
 }
 
 /**
@@ -258,11 +263,10 @@ export async function markRead(
   messageId: string,
 ): Promise<void> {
   try {
-    await directMessageCollection
-      .doc(chatId)
-      .collection('chat')
-      .doc(messageId)
-      .update({ read: true });
+    await updateDoc(
+      doc(collection(doc(directMessageCollection, chatId), 'chat'), messageId),
+      { read: true },
+    );
   } catch (error) {
     logException(error);
     throw new Error('Failed to mark message as read');
@@ -312,7 +316,7 @@ export async function updateConversation(
   try {
     const promises = messages.map(message =>
       crud.create<DirectMessage>(
-        directMessageCollection.doc(id).collection('chat'),
+        collection(doc(directMessageCollection, id), 'chat'),
         message,
       ),
     );

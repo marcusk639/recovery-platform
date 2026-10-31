@@ -6,14 +6,20 @@
  * upcoming Friday at 9am, giving the resident the weekend to arrange payment.
  *
  * The notification ID is deterministic per guest so re-scheduling is
- * idempotent and cancellation is precise.
+ * idempotent and cancellation is precise. It is the same identifier the
+ * pre-RN-0.88 library (react-native-push-notification) used, so a reminder
+ * it left pending on iOS is replaced or cancelled by these calls.
+ *
+ * Both functions log failures (never the notification or guest fields) and
+ * resolve, so fire-and-forget callers stay safe.
  */
 
 import { Platform } from 'react-native';
-import PushNotification from 'react-native-push-notification';
+import notifee, { AuthorizationStatus, TriggerType } from 'react-native-notify-kit';
 import { Guest } from '../../entities/Guest';
-
-const CHANNEL_ID = 'default-channel-id';
+import { logException } from '../../util/logging';
+import { ensureNotificationChannels, REMINDER_CHANNEL_ID } from './channels';
+import { IOS_FOREGROUND_PRESENTATION } from './remoteMessage';
 
 /**
  * Returns a stable numeric notification ID derived from the guest ID string.
@@ -67,47 +73,63 @@ export function nextFridayAt9am(): Date {
   return friday;
 }
 
-function doSchedule(guest: Guest): void {
-  PushNotification.localNotificationSchedule({
-    // String ID keeps schedule/cancel calls consistent across iOS and Android.
-    id: String(guestNotificationId(guest.id)),
-    channelId: CHANNEL_ID,
-    title: 'Rent Reminder',
-    message: 'Your rent payment is due in 3 days. Tap to pay now.',
-    date: nextFridayAt9am(),
-    userInfo: { screen: 'residentPayment', guestId: guest.id },
-    allowWhileIdle: true,
-  });
+const reminderId = (guest: Guest) => String(guestNotificationId(guest.id));
+
+/** iOS: matches the old `checkPermissions(...).alert` gate (provisional counts). */
+async function iosAlertsAllowed(): Promise<boolean> {
+  const { authorizationStatus } = await notifee.getNotificationSettings();
+  return authorizationStatus >= AuthorizationStatus.AUTHORIZED;
 }
 
 /**
  * Schedules a "Rent Reminder" notification for the guest.
- * Safe to call on every GuestHome mount — the OS deduplicates by ID.
+ * Safe to call on every GuestHome mount: the OS replaces a pending
+ * notification with the same ID.
  *
  * Only call when guest.rentOwed > 0.
  *
- * On iOS, checks alert permission first and skips if not granted.
- * On Android, schedules directly (permission model is handled at the OS level).
+ * On iOS, checks notification permission first and skips if not granted.
+ * On Android, schedules directly (POST_NOTIFICATIONS is requested at the OS
+ * level). Without SCHEDULE_EXACT_ALARM (removed in the manifest) Android 12+
+ * delivers it as an inexact allow-while-idle alarm.
  */
-export function scheduleRentReminder(guest: Guest): void {
-  if (Platform.OS === 'ios') {
-    PushNotification.checkPermissions(permissions => {
-      if (!permissions.alert) {
-        // iOS alert permission not granted — skip scheduling
-        return;
-      }
-      doSchedule(guest);
-    });
-  } else {
-    doSchedule(guest);
+export async function scheduleRentReminder(guest: Guest): Promise<void> {
+  try {
+    if (Platform.OS === 'ios' && !(await iosAlertsAllowed())) {
+      return;
+    }
+    await ensureNotificationChannels();
+    await notifee.createTriggerNotification(
+      {
+        id: reminderId(guest),
+        title: 'Rent Reminder',
+        body: 'Your rent payment is due in 3 days. Tap to pay now.',
+        data: { screen: 'residentPayment', guestId: guest.id },
+        // pressAction opens the app on tap, as the old library did.
+        android: { channelId: REMINDER_CHANNEL_ID, pressAction: { id: 'default' } },
+        ios: { foregroundPresentationOptions: IOS_FOREGROUND_PRESENTATION },
+      },
+      {
+        type: TriggerType.TIMESTAMP,
+        timestamp: nextFridayAt9am().getTime(),
+        alarmManager: { allowWhileIdle: true },
+      },
+    );
+  } catch (error) {
+    logException(error, 'rentReminder - failed to schedule the rent reminder');
   }
 }
 
 /**
- * Cancels the rent reminder for the guest (call after successful payment).
+ * Cancels the pending rent reminder for the guest (after a successful payment,
+ * or when GuestHome sees no rent owed). On iOS this removes the pending
+ * UNNotificationRequest with this identifier, including one the old library
+ * scheduled.
  */
-export function cancelRentReminder(guest: Guest): void {
-  PushNotification.cancelLocalNotification(
-    String(guestNotificationId(guest.id)),
-  );
+export async function cancelRentReminder(guest: Guest): Promise<void> {
+  try {
+    await notifee.cancelTriggerNotification(reminderId(guest));
+  } catch (error) {
+    logException(error, 'rentReminder - failed to cancel the rent reminder');
+  }
 }

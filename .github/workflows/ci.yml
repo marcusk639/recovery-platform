@@ -328,6 +328,46 @@ jobs:
           # no-op that looks like a fix. Tune memory in gradle.properties instead.
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx4g"
 
+      # Permanent. The release guard and the e2e bundle settings are attached to Gradle tasks
+      # by name (regroup/mobile/android/app/build.gradle), so an AGP, React Native plugin or
+      # Sentry rename would drop them silently. app/build.gradle fails the configuration if a
+      # name stops matching; this proves the wiring end to end: the guard runs before the
+      # release bundle, the e2e bundle gets its own env stamp and no release guard, and the
+      # guard refuses a test Stripe key with its own message (not a values.xml parse error).
+      - name: Assert regroup Android release and e2e guard wiring
+        run: |
+          set -euo pipefail
+          cd regroup/mobile/android
+          release=$(./gradlew :app:assembleRelease --dry-run --no-daemon)
+          guard=$(grep -n '^:app:regroupReleaseGuard SKIPPED' <<<"$release" | head -1 | cut -d: -f1 || true)
+          bundle=$(grep -n '^:app:createBundleReleaseJsAndAssets SKIPPED' <<<"$release" | head -1 | cut -d: -f1 || true)
+          if [ -z "$guard" ] || [ -z "$bundle" ] || [ "$guard" -ge "$bundle" ]; then
+            echo "::error::assembleRelease must run regroupReleaseGuard before createBundleReleaseJsAndAssets (guard line '${guard}', bundle line '${bundle}')"
+            exit 1
+          fi
+          e2e=$(./gradlew :app:assembleE2eEmulator --dry-run --no-daemon)
+          if ! grep -q '^:app:regroupBundledEnvStampE2eEmulator SKIPPED' <<<"$e2e"; then
+            echo "::error::assembleE2eEmulator must run regroupBundledEnvStampE2eEmulator"
+            exit 1
+          fi
+          if grep -q '^:app:regroupReleaseGuard SKIPPED' <<<"$e2e"; then
+            echo "::error::assembleE2eEmulator must not run the release guard"
+            exit 1
+          fi
+          set +e
+          refusal=$(STRIPE_PUBLISHABLE_KEY=pk_test_x ./gradlew :app:regroupReleaseGuard --no-daemon 2>&1)
+          code=$?
+          set -e
+          tail -n 20 <<<"$refusal"
+          if [ "$code" -eq 0 ]; then
+            echo "::error::the release guard accepted a pk_test_ Stripe key"
+            exit 1
+          fi
+          if ! grep -q 'Release guard failed' <<<"$refusal" || ! grep -q 'a release build requires a pk_live_ key' <<<"$refusal"; then
+            echo "::error::the release guard failed, but not with its Stripe-key refusal"
+            exit 1
+          fi
+
       - name: Maestro smoke — regroup (login-and-view-dashboard)
         continue-on-error: true
         uses: mobile-dev-inc/action-maestro-cloud@v1

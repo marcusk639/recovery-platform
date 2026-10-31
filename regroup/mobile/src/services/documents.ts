@@ -13,7 +13,24 @@
  * Auth is enforced server-side by isHouseAdmin(houseId) in firestore.rules.
  * Client code defends in depth by reading auth.currentUser and failing fast.
  */
-import storage from '@react-native-firebase/storage';
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  orderBy,
+  query,
+  setDoc,
+  where,
+  type QueryConstraint,
+} from '@react-native-firebase/firestore';
+import {
+  deleteObject,
+  getDownloadURL,
+  getStorage,
+  putFile,
+  ref,
+} from '@react-native-firebase/storage';
 import { firestore, auth } from '../../firebase-setup';
 import {
   HouseDocument,
@@ -29,7 +46,7 @@ import { logException } from '../util/logging';
 
 /** Returns the Firestore documents collection reference. Lazy so tests can
  * configure the firestore mock before the reference is resolved. */
-export const getDocumentsCollection = () => firestore.collection('documents');
+export const getDocumentsCollection = () => collection(firestore, 'documents');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -101,23 +118,21 @@ export async function uploadDocument(
   const uid = requireUser();
 
   // Generate a Firestore id upfront so we can use it in the storage path.
-  const ref = getDocumentsCollection().doc();
-  const docId = ref.id;
+  const docRef = doc(getDocumentsCollection());
+  const docId = docRef.id;
 
   const storagePath = buildStoragePath(input.houseId, docId, input.guestId);
   const fileType = inferFileType(input.mimeType);
 
   try {
     // 1. Upload binary to Storage.
-    await storage()
-      .ref(storagePath)
-      .putFile(input.localPath, {
-        cacheControl: 'private, max-age=86400',
-        contentType: input.mimeType ?? undefined,
-      });
+    await putFile(ref(getStorage(), storagePath), input.localPath, {
+      cacheControl: 'private, max-age=86400',
+      contentType: input.mimeType ?? undefined,
+    });
 
     // 2. Fetch permanent download URL.
-    const storageUrl = await storage().ref(storagePath).getDownloadURL();
+    const storageUrl = await getDownloadURL(ref(getStorage(), storagePath));
 
     // 3. Write metadata to Firestore.
     const record: HouseDocument = {
@@ -133,7 +148,7 @@ export async function uploadDocument(
       ...(input.guestId ? { guestId: input.guestId } : {}),
       ...(input.expiresAt ? { expiresAt: input.expiresAt } : {}),
     };
-    await ref.set(record);
+    await setDoc(docRef, record);
     return record;
   } catch (err) {
     logException(err);
@@ -151,16 +166,18 @@ export async function listDocuments(
 ): Promise<HouseDocument[]> {
   if (!houseId) return [];
   try {
-    let query = getDocumentsCollection().where('houseId', '==', houseId);
+    const constraints: QueryConstraint[] = [where('houseId', '==', houseId)];
     if (guestId) {
-      query = query.where('guestId', '==', guestId);
+      constraints.push(where('guestId', '==', guestId));
     } else {
       // House-level docs have no guestId field.
       // We rely on the absence query via a workaround: fetch all house docs
       // and filter client-side when no guestId is provided.
       // (Firestore does not support "field does not exist" queries directly.)
     }
-    const snap = await query.orderBy('createdAt', 'desc').get();
+    const snap = await getDocs(
+      query(getDocumentsCollection(), ...constraints, orderBy('createdAt', 'desc')),
+    );
     const docs = snap.docs
       .map(d => docToHouseDocument(d.id, d.data()))
       .filter((d): d is HouseDocument => d !== null);
@@ -187,8 +204,8 @@ export async function deleteDocument(
   if (!storagePath) throw new Error('deleteDocument: storagePath is required.');
   try {
     await Promise.all([
-      getDocumentsCollection().doc(docId).delete(),
-      storage().ref(storagePath).delete(),
+      deleteDoc(doc(getDocumentsCollection(), docId)),
+      deleteObject(ref(getStorage(), storagePath)),
     ]);
   } catch (err) {
     logException(err);
@@ -206,9 +223,9 @@ export async function getExpiringDocuments(
 ): Promise<HouseDocument[]> {
   if (!houseId) return [];
   try {
-    const snap = await getDocumentsCollection()
-      .where('houseId', '==', houseId)
-      .get();
+    const snap = await getDocs(
+      query(getDocumentsCollection(), where('houseId', '==', houseId)),
+    );
     const docs = snap.docs
       .map(d => docToHouseDocument(d.id, d.data()))
       .filter((d): d is HouseDocument => d !== null);

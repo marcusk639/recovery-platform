@@ -9,9 +9,12 @@ import {
   TextInput,
   ScrollView,
   Share,
-  KeyboardAvoidingView,
-  Platform,
 } from "react-native";
+import {
+  RatsKeyboardAvoidingView,
+  RatsKeyboardToolbar,
+} from "../../components/rats-keyboard";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../../navigation/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -68,6 +71,7 @@ interface Props {
 }
 
 const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
   const { house } = useSelectedHouse();
   // React Query is the source of truth for guests; see .full-review [A2].
   const { data: guestsData = {} } = useGuests(house?.id ?? "");
@@ -507,7 +511,7 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
       {/* FAB for manual payment */}
       <TouchableOpacity
         testID="manual-payment-fab"
-        style={styles.fab}
+        style={[styles.fab, { marginBottom: insets.bottom }]}
         onPress={() => setShowManualModal(true)}
       >
         <RatsText
@@ -604,10 +608,9 @@ const ManualPaymentModal: React.FC<ManualPaymentModalProps> = ({
         onClose();
       }}
     >
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
+      {/* padding on Android too: keyboard-controller sets Modal windows to
+          adjust-nothing, so the sheet no longer resizes for the keyboard. */}
+      <RatsKeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <ScrollView
           contentContainerStyle={{ padding: normalize(16) }}
           keyboardShouldPersistTaps="handled"
@@ -706,7 +709,9 @@ const ManualPaymentModal: React.FC<ManualPaymentModalProps> = ({
             containerStyle={{ marginTop: normalize(8) }}
           />
         </ScrollView>
-      </KeyboardAvoidingView>
+      </RatsKeyboardAvoidingView>
+      {/* The native Modal covers the app-root toolbar (Done for the amount pad). */}
+      <RatsKeyboardToolbar />
     </Modal>
   );
 };

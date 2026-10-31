@@ -11,8 +11,8 @@ import SchemaConstants from '../../entities/SchemaConstants';
 import { User } from '../../entities/User';
 import { Routes, AuthScreenNavigationProp } from '../../navigation/types';
 import { Alert } from 'react-native';
-import { FirebaseAuthTypes } from '@react-native-firebase/auth';
-import analytics from '@react-native-firebase/analytics';
+import type { User as FirebaseUser } from '@react-native-firebase/auth';
+import { getAnalytics, logEvent } from '@react-native-firebase/analytics';
 import improvedNavigationService from '../../navigation/improved-navigation-service';
 import { CommonActions } from '@react-navigation/native';
 import { navigationRef } from '../../navigation/service';
@@ -44,7 +44,7 @@ export interface LoginFormValues {
   password: string;
 }
 
-export function determineInitialRoute(user: User & FirebaseAuthTypes.User) {
+export function determineInitialRoute(user: User & FirebaseUser) {
   if (
     (user.isSuperAdmin || user.potentialSuperAdmin) &&
     !user.orgSetupCompleted
@@ -87,7 +87,7 @@ const LoginForm = withFormik<
       // Log a non-PII role signal only — never the email. Firebase Analytics
       // retains custom params in BigQuery exports; email as a param creates
       // a persistent PII record that is not covered by Auth-side deletion.
-      analytics().logEvent('signin', {
+      logEvent(getAnalytics(), 'signin', {
         role: user?.isAdmin ? 'admin' : user?.isGuest ? 'guest' : 'unknown',
       });
 

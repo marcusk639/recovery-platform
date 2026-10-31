@@ -1,4 +1,11 @@
-import FirebaseAuth from '@react-native-firebase/auth';
+import {
+  EmailAuthProvider,
+  getIdToken,
+  reauthenticateWithCredential,
+  reload,
+  signOut,
+} from '@react-native-firebase/auth';
+import { httpsCallable } from '@react-native-firebase/functions';
 import { auth, functions } from '../../firebase-setup';
 import { logException } from '../util/logging';
 
@@ -31,7 +38,7 @@ type AccountState = 'exists' | 'gone' | 'unconfirmed';
  */
 async function checkAccount(user: CurrentUser): Promise<AccountState> {
   try {
-    await user.reload();
+    await reload(user);
     return 'exists';
   } catch (err: any) {
     if (err?.code === 'auth/user-not-found') return 'gone';
@@ -43,7 +50,7 @@ async function checkAccount(user: CurrentUser): Promise<AccountState> {
 /** Sign-out after deletion (or an unconfirmed one) must not mask the outcome. */
 async function signOutQuietly(): Promise<void> {
   try {
-    await auth.signOut();
+    await signOut(auth);
   } catch (err) {
     logException(err, 'Sign-out failed after account deletion');
   }
@@ -79,17 +86,17 @@ export async function deleteMyAccount(password: string): Promise<void> {
   if (!currentUser || !currentUser.email) {
     throw new Error('No signed-in user');
   }
-  const credential = FirebaseAuth.EmailAuthProvider.credential(currentUser.email, password);
+  const credential = EmailAuthProvider.credential(currentUser.email, password);
   try {
-    await currentUser.reauthenticateWithCredential(credential);
+    await reauthenticateWithCredential(currentUser, credential);
   } catch (err: any) {
     if (!MAYBE_GONE_REAUTH_CODES.includes(err?.code)) throw err;
     await settleFailure(currentUser, err);
     return;
   }
   try {
-    await currentUser.getIdToken(true);
-    await functions.httpsCallable('deleteAccount')();
+    await getIdToken(currentUser, true);
+    await httpsCallable(functions, 'deleteAccount')();
   } catch (err) {
     await settleFailure(currentUser, err);
     return;

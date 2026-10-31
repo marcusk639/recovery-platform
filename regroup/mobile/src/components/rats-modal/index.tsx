@@ -4,9 +4,6 @@ import {
   StyleSheet,
   ViewStyle,
   TextStyle,
-  KeyboardAvoidingView,
-  Platform,
-  Dimensions,
 } from 'react-native';
 import Modal, { ModalProps } from 'react-native-modal';
 import {
@@ -20,6 +17,7 @@ import { RatsText } from '../rats-text';
 import { IOS } from '../../util/platform';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import IOSStatusBar from '../ios-status-bar';
+import { RatsKeyboardAvoidingView, RatsKeyboardToolbar } from '../rats-keyboard';
 
 const styles = StyleSheet.create({
   modalContent: {
@@ -71,12 +69,14 @@ const RatsModal = (props: Props & ModalProps & ModalTitleProps) => {
       )}
       {/* <SafeAreaView style={modalStyle} forceInset={{ top: 'never' }}> */}
       {title && <RatsModalTitle title={title} />}
-      {IOS && useKeyboardView ? (
-        <KeyboardAvoidingView
+      {/* Both platforms: keyboard-controller sets every Modal window on
+          Android to adjust-nothing, so adjustResize no longer lifts it. */}
+      {useKeyboardView ? (
+        <RatsKeyboardAvoidingView
           behavior={behavior || 'padding'}
           style={VIEW_STYLE}>
           {children}
-        </KeyboardAvoidingView>
+        </RatsKeyboardAvoidingView>
       ) : (
         <View style={VIEW_STYLE}>{children}</View>
       )}
@@ -87,6 +87,8 @@ const RatsModal = (props: Props & ModalProps & ModalTitleProps) => {
           style={{ backgroundColor: color.white }}
         />
       )}
+      {/* A native Modal covers the app-root toolbar. */}
+      <RatsKeyboardToolbar />
     </Modal>
   );
 };

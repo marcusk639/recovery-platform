@@ -1,5 +1,10 @@
+import {
+  collection,
+  doc,
+  runTransaction,
+  serverTimestamp,
+} from '@react-native-firebase/firestore';
 import { firestore } from '../../firebase-setup';
-import FirebaseFirestore from '@react-native-firebase/firestore';
 import { Activity, ActivityStatus, isLegacyUpheld } from '../entities/ActivityModel';
 import { logException } from '../util/logging';
 
@@ -38,11 +43,11 @@ export const REOPEN_REFUSALS = [
  * @param reopenedBy - User ID of the admin undoing the decision
  */
 export async function reopenDispute(activityId: string, reopenedBy: string): Promise<void> {
-  const activityRef = firestore.collection('activities').doc(activityId);
+  const activityRef = doc(collection(firestore, 'activities'), activityId);
   try {
-    await firestore.runTransaction(async (tx: any) => {
+    await runTransaction(firestore, async (tx: any) => {
       const snap = await tx.get(activityRef);
-      if (!snap.exists) {
+      if (!snap.exists()) {
         throw new Error('Activity not found');
       }
       const activity = (snap.data() ?? {}) as Activity;
@@ -57,7 +62,7 @@ export async function reopenDispute(activityId: string, reopenedBy: string): Pro
       tx.update(activityRef, {
         status: ActivityStatus.DISPUTED,
         reopenedBy,
-        reopenedAt: FirebaseFirestore.FieldValue.serverTimestamp(),
+        reopenedAt: serverTimestamp(),
         disputed: null,
         incomplete: null,
         disputeResult: null,

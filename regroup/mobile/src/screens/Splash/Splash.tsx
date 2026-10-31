@@ -1,7 +1,15 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { View, StyleSheet } from "react-native";
-import messaging from "@react-native-firebase/messaging";
-import auth from "@react-native-firebase/auth";
+import {
+  AuthorizationStatus,
+  getMessaging,
+  getToken,
+  onMessage as onFirebaseMessage,
+  onTokenRefresh,
+  requestPermission,
+  setBackgroundMessageHandler,
+} from "@react-native-firebase/messaging";
+import { getAuth, onAuthStateChanged } from "@react-native-firebase/auth";
 import { normalize } from "../../styles/theme";
 import { RatsLogo } from "../../components/rats-logo";
 import {
@@ -22,7 +30,7 @@ import { subscriptionStatus } from "../../util/subscription";
 import { User } from "../../entities/User";
 import { NativeDeepLink } from "../../services/native-deep-links";
 import isNil from "lodash/isNil";
-import notifee from "@notifee/react-native";
+import { displayRemoteMessage } from "../../services/notifications/remoteMessage";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../../navigation/types";
 import { DeepLinkTester } from "../../components/DeepLinkTester";
@@ -76,16 +84,8 @@ export const withSplash = <P extends object>(
     const onTokenRefreshListenerRef = useRef<(() => any) | null>(null);
     const linkSubscriptionRef = useRef<(() => void) | null>(null);
 
-    const onMessage = messaging().onMessage(async (message) => {
-      if (message?.data?.notifee) {
-        const res = await notifee.displayNotification(
-          JSON.parse(message.data.notifee as string),
-        );
-      }
-    });
-
     const initBackgroundMessageHandler = useCallback(() => {
-      messaging().setBackgroundMessageHandler(async (_message) => {
+      setBackgroundMessageHandler(getMessaging(), async (_message) => {
         // Background handler runs in headless JS context — keep it a
         // no-op here. If app-level handling is needed, dispatch a
         // structured action rather than logging the full payload
@@ -95,10 +95,10 @@ export const withSplash = <P extends object>(
 
     const handleMessagingToken = useCallback(async () => {
       try {
-        const authStatus = await messaging().requestPermission();
+        const authStatus = await requestPermission(getMessaging());
         const granted =
-          authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-          authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+          authStatus === AuthorizationStatus.AUTHORIZED ||
+          authStatus === AuthorizationStatus.PROVISIONAL;
         if (!granted) {
           logException(
             new Error("FCM permission denied"),
@@ -106,7 +106,7 @@ export const withSplash = <P extends object>(
           );
           return;
         }
-        const messagingToken = await messaging().getToken();
+        const messagingToken = await getToken(getMessaging());
         updateTokenIfNecessary(messagingToken);
       } catch (error) {
         logException(error, "Splash - failed to request FCM permission");
@@ -132,7 +132,8 @@ export const withSplash = <P extends object>(
 
     const authUser = useCallback((): Promise<any> => {
       return new Promise((resolve, reject) => {
-        authSubscriptionRef.current = auth().onAuthStateChanged(
+        authSubscriptionRef.current = onAuthStateChanged(
+          getAuth(),
           async (_user) => {
             if (_user) {
               resolve(_user);
@@ -146,7 +147,8 @@ export const withSplash = <P extends object>(
 
     const registerMessageTokenListener = useCallback(() => {
       const user = userState.user;
-      onTokenRefreshListenerRef.current = messaging().onTokenRefresh(
+      onTokenRefreshListenerRef.current = onTokenRefresh(
+        getMessaging(),
         async (fcmToken) => {
           if (!user || userState.updating) {
             return;
@@ -310,6 +312,17 @@ export const withSplash = <P extends object>(
         }
       };
     }, []); // Empty dependency array - only run once on mount
+
+    // Foreground pushes: one listener for the component's lifetime, removed on
+    // unmount. (Before RN 0.88 this ran in the render body, adding a listener
+    // on every render, so one push could show several banners.)
+    useEffect(
+      () =>
+        onFirebaseMessage(getMessaging(), (message) =>
+          displayRemoteMessage(message),
+        ),
+      [],
+    );
 
     // componentDidUpdate equivalent
     useEffect(() => {

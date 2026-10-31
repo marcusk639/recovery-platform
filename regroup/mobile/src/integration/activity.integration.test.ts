@@ -13,7 +13,8 @@ import {
   ActivityStatus,
   ActivityDataFactory,
 } from '../entities/ActivityModel';
-import { firestore } from '../../firebase-setup';
+import { adminDb } from './firebase-admin-setup';
+import { adminOf, guestOf, signInAs } from './actors';
 
 const TEST_GUEST = 'integration-guest-1';
 const TEST_HOUSE = 'integration-house-1';
@@ -27,7 +28,7 @@ const TEST_WEEK_END = new Date('2026-02-22T23:59:59.000Z');
  * so DISPUTED and RESOLVED activities must be read directly.
  */
 async function getActivityById(activityId: string): Promise<Record<string, any> | null> {
-  const doc = await firestore.collection('activities').doc(activityId).get();
+  const doc = await adminDb.collection('activities').doc(activityId).get();
   if (!doc.exists) {
     return null;
   }
@@ -37,11 +38,27 @@ async function getActivityById(activityId: string): Promise<Record<string, any> 
 describe('activity service (integration)', () => {
   const createdActivityIds: string[] = [];
 
+  // Each service call runs as the user it names: 'user-1' logs (a house
+  // admin logging for the resident), a peer resident or house manager
+  // disputes, 'admin-1' resolves. The rules never let the logger dispute or
+  // decide their own activity.
+  beforeAll(async () => {
+    await adminDb.doc(`guests/${TEST_GUEST}`).set({ id: TEST_GUEST, houseId: TEST_HOUSE, userId: 'integration-resident-1' });
+  });
+
+  afterAll(async () => {
+    await adminDb.doc(`guests/${TEST_GUEST}`).delete();
+  });
+
+  beforeEach(async () => {
+    await signInAs('user-1', adminOf(TEST_HOUSE));
+  });
+
   afterEach(async () => {
     // Delete all activity documents created during the test
     await Promise.all(
       createdActivityIds.map(id =>
-        firestore.collection('activities').doc(id).delete(),
+        adminDb.collection('activities').doc(id).delete(),
       ),
     );
     createdActivityIds.length = 0;
@@ -113,7 +130,8 @@ describe('activity service (integration)', () => {
       );
       createdActivityIds.push(activity.id);
 
-      await disputeActivity(activity.id, 'Not verified', 'user-1');
+      await signInAs('peer-1', guestOf(TEST_HOUSE));
+      await disputeActivity(activity.id, 'Not verified', 'peer-1');
 
       // getActivities only returns ACTIVE, so fetch the doc directly
       const disputed = await getActivityById(activity.id);
@@ -143,6 +161,7 @@ describe('activity service (integration)', () => {
       const foundBefore = beforeDispute.find(a => a.id === activity.id);
       expect(foundBefore).toBeDefined();
 
+      await signInAs('house-manager-1', adminOf(TEST_HOUSE));
       await disputeActivity(activity.id, 'Chore not completed properly', 'house-manager-1');
 
       // Owner's dispute model: a pending dispute keeps counting, so it stays
@@ -169,12 +188,14 @@ describe('activity service (integration)', () => {
       );
       createdActivityIds.push(activity.id);
 
-      await disputeActivity(activity.id, 'Error logging', 'user-1');
+      await signInAs('peer-1', guestOf(TEST_HOUSE));
+      await disputeActivity(activity.id, 'Error logging', 'peer-1');
 
       // Verify disputed state
       const disputed = await getActivityById(activity.id);
       expect(disputed?.status).toBe(ActivityStatus.DISPUTED);
 
+      await signInAs('admin-1', adminOf(TEST_HOUSE));
       await resolveDispute(activity.id, 'admin-1', 'reject');
 
       // Check resolved state directly from Firestore
@@ -196,7 +217,9 @@ describe('activity service (integration)', () => {
       );
       createdActivityIds.push(activity.id);
 
+      await signInAs('house-manager-1', adminOf(TEST_HOUSE));
       await disputeActivity(activity.id, 'Did not attend', 'house-manager-1');
+      await signInAs('admin-1', adminOf(TEST_HOUSE));
       await resolveDispute(activity.id, 'admin-1', 'approve');
 
       const approved = await getActivityById(activity.id);

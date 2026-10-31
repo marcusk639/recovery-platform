@@ -52,6 +52,32 @@ describe('babel.config.js E2E_VARIANT handling', () => {
   });
 });
 
+/** Loads babel.config.js with the given NODE_ENV and returns its plugin list. */
+function plugins(nodeEnv) {
+  const base = { ...process.env, NODE_ENV: nodeEnv };
+  delete base.E2E_VARIANT;
+  delete base.STRIPE_PUBLISHABLE_KEY;
+  const result = spawnSync(
+    process.execPath,
+    ['-e', `console.log(JSON.stringify(require(${JSON.stringify(CONFIG)}).plugins))`],
+    { cwd: fs.mkdtempSync(path.join(os.tmpdir(), 'babel-config-')), env: base, encoding: 'utf8' },
+  );
+  expect(result.status).toBe(0);
+  return JSON.parse(result.stdout.trim());
+}
+
+describe('babel.config.js worklets plugin (react-native-reanimated 4)', () => {
+  it('puts react-native-worklets/plugin last in a bundle build', () => {
+    const list = plugins('production');
+    expect(list[list.length - 1]).toBe('react-native-worklets/plugin');
+    expect(list.filter((p) => p === 'react-native-worklets/plugin')).toHaveLength(1);
+  });
+
+  it('leaves react-native-worklets/plugin out under Jest', () => {
+    expect(JSON.stringify(plugins('test'))).not.toContain('react-native-worklets');
+  });
+});
+
 describe('babel.config.js live Stripe key in an e2e bundle', () => {
   it.each(['emulator', 'staging'])(
     'refuses an exported pk_live_ key for E2E_VARIANT=%s',

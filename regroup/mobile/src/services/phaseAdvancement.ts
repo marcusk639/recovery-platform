@@ -6,6 +6,16 @@
  * Advancement requires admin approval — this service only determines
  * eligibility, it does not auto-promote.
  */
+import {
+  collection,
+  doc,
+  getDocs,
+  limit as limitTo,
+  orderBy,
+  query,
+  updateDoc,
+  where,
+} from '@react-native-firebase/firestore';
 import { firestore } from '../../firebase-setup';
 import { Guest } from '../entities/Guest';
 import { House } from '../entities/House';
@@ -53,13 +63,15 @@ async function getRecentWeekSummaries(
   guestId: string,
   limit: number,
 ): Promise<WeekSummary[]> {
-  const snapshot = await firestore
-    .collection('week-summaries')
-    .where('guestId', '==', guestId)
-    .orderBy('startDate', 'desc')
-    .limit(limit)
-    .get();
-  return snapshot.docs.map(doc => doc.data() as WeekSummary);
+  const snapshot = await getDocs(
+    query(
+      collection(firestore, 'week-summaries'),
+      where('guestId', '==', guestId),
+      orderBy('startDate', 'desc'),
+      limitTo(limit),
+    ),
+  );
+  return snapshot.docs.map(summaryDoc => summaryDoc.data() as WeekSummary);
 }
 
 /**
@@ -139,7 +151,7 @@ export async function advanceGuestPhase(
   guestId: string,
   nextPhaseName: string,
 ): Promise<void> {
-  await firestore.collection('guests').doc(guestId).update({
+  await updateDoc(doc(collection(firestore, 'guests'), guestId), {
     phase: nextPhaseName,
     updatedAt: new Date().toISOString(),
   });

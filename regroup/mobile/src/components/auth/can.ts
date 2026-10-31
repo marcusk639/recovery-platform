@@ -28,24 +28,26 @@ const check = (rules: AuthRules, role: Role, action: Action, data: any) => {
   return false;
 };
 
-const Can = (props: {
+// Defaults in the parameter list: React 19 ignores defaultProps on function
+// components, which left `<Can>` without `yes` or `no` throwing.
+const Can = ({
+  role,
+  action,
+  data = null,
+  yes = () => null,
+  no = () => null,
+}: {
   role: Role;
   action: Action;
   data?: any;
-  yes: () => any;
-  no: () => any;
+  yes?: () => any;
+  no?: () => any;
 }) => {
-  if (check(rules, props.role, props.action, props.data)) {
-    return props.yes();
+  if (check(rules, role, action, data)) {
+    return yes();
   } else {
-    return props.no();
+    return no();
   }
-};
-
-Can.defaultProps = {
-  yes: () => null,
-  no: () => null,
-  data: null,
 };
 
 export default Can;

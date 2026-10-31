@@ -13,7 +13,11 @@ jest.mock('../../../firebase-setup', () => ({
     ),
   },
 }));
+// The modular functions delegate to the firebase-setup mock's refs
+// (namespaced-adapter); the FieldValue helpers return this file's sentinels.
 jest.mock('@react-native-firebase/firestore', () => ({
+  ...require('../../../__mocks__/firebase-modular/namespaced-adapter'),
+  serverTimestamp: () => '__SERVER_TIME__',
   FieldValue: { serverTimestamp: () => '__SERVER_TIME__' },
 }));
 jest.mock('../../util/logging', () => ({ logException: jest.fn() }));
@@ -31,13 +35,13 @@ beforeEach(() => {
 
 describe('logActivity residentUid', () => {
   it("stamps the guest doc's account", async () => {
-    mockGuestGet.mockResolvedValue({ exists: true, data: () => ({ userId: 'res1' }) });
+    mockGuestGet.mockResolvedValue({ exists: () => true, data: () => ({ userId: 'res1' }) });
     await log();
     expect(mockAdd).toHaveBeenCalledWith(expect.objectContaining({ residentUid: 'res1' }));
   });
 
   it('omits it for a guest with no account, or when the guest doc cannot be read', async () => {
-    mockGuestGet.mockResolvedValueOnce({ exists: true, data: () => ({}) });
+    mockGuestGet.mockResolvedValueOnce({ exists: () => true, data: () => ({}) });
     await log();
     expect(mockAdd.mock.calls[0][0]).not.toHaveProperty('residentUid');
     mockGuestGet.mockRejectedValueOnce(new Error('denied'));
@@ -46,7 +50,7 @@ describe('logActivity residentUid', () => {
   });
 
   it("retries without it if the rules refuse it (the guest's account changed)", async () => {
-    mockGuestGet.mockResolvedValue({ exists: true, data: () => ({ userId: 'res1' }) });
+    mockGuestGet.mockResolvedValue({ exists: () => true, data: () => ({ userId: 'res1' }) });
     mockAdd.mockRejectedValueOnce(
       Object.assign(new Error('denied'), { code: 'firestore/permission-denied' }),
     );

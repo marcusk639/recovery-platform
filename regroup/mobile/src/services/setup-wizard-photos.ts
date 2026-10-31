@@ -1,4 +1,5 @@
 import { Houses } from '../types';
+import { doc, updateDoc } from '@react-native-firebase/firestore';
 import { houseCollection } from './house';
 import { uploadHousePhoto } from './storage';
 import { logException } from '../util/logging';
@@ -43,7 +44,7 @@ export const applyHousePhotos = async (houses: Houses): Promise<number> => {
 
   const updates = await Promise.allSettled(
     uploaded.map(({ houseId, url }) =>
-      houseCollection.doc(houseId).update({ imageUrl: url, avatar: url }),
+      updateDoc(doc(houseCollection, houseId), { imageUrl: url, avatar: url }),
     ),
   );
   updates.forEach((result, i) => {

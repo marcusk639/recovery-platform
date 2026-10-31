@@ -1,11 +1,17 @@
+import {
+  collection,
+  doc,
+  updateDoc,
+  writeBatch,
+} from "@react-native-firebase/firestore";
 import * as crud from "./crud";
 import { firestore } from "../../firebase-setup";
 import { HouseIssue, IssueStatus } from "../entities/Issue";
 import { House } from "../entities/House";
 import cloneDeep from "lodash/cloneDeep";
 
-const issuesCollection = firestore.collection("issues");
-const houseCollection = firestore.collection("houses");
+const issuesCollection = collection(firestore, "issues");
+const houseCollection = collection(firestore, "houses");
 
 export const createIssue = (issue: HouseIssue) => {
   // Ensure new issues always start with an explicit OPEN status
@@ -18,7 +24,7 @@ export const createIssue = (issue: HouseIssue) => {
 };
 
 export const removeIssue = async (_house: House, issue: HouseIssue) => {
-  const batch = firestore.batch();
+  const batch = writeBatch(firestore);
   const issues = cloneDeep(_house.issues);
   delete issues[issue.id];
   const house: House = { ..._house, issues: { ...issues } };
@@ -28,8 +34,8 @@ export const removeIssue = async (_house: House, issue: HouseIssue) => {
   // Also scoped the house update to just the changed field instead of
   // blind-writing the full client-side house snapshot, which risked
   // clobbering concurrent edits from other admins.
-  batch.delete(issuesCollection.doc(issue.id));
-  batch.update(houseCollection.doc(house.id), { issues: house.issues });
+  batch.delete(doc(issuesCollection, issue.id));
+  batch.update(doc(houseCollection, house.id), { issues: house.issues });
   await batch.commit();
   return house;
 };
@@ -67,7 +73,7 @@ export const updateIssueStatus = async (
 
   issues[issueId] = updatedIssue;
   const house: House = { ..._house, issues };
-  await houseCollection.doc(house.id).update({ issues });
+  await updateDoc(doc(houseCollection, house.id), { issues });
   return house;
 };
 

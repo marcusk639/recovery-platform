@@ -27,7 +27,6 @@ import {
   AddressDetails,
 } from "../../util/address";
 import { phoneFormatter } from "../../util/formatters";
-import KeyboardManager from "react-native-keyboard-manager";
 import { IOS, ANDROID } from "../../util/platform";
 import RatsImagePicker from "../../components/rats-image-picker";
 import isEmpty from "lodash/isEmpty";
@@ -74,19 +73,16 @@ const HouseSetupFormView: React.FC<HouseSetupFormViewProps> = (props) => {
         }
       );
     }
-    if (IOS) {
-      KeyboardManager.setEnable(true);
-      KeyboardManager.setKeyboardDistanceFromTextField(normalize(100));
-    } else {
+    // iOS: the 100pt keyboard distance IQKeyboardManager took from here is
+    // the scroll view's bottomOffset below (now for this screen only).
+    if (!IOS) {
       setHeight(normalize(115));
     }
     setFocused("address");
   }, []);
 
   const resetKeyboard = useCallback(() => {
-    if (IOS) {
-      KeyboardManager.setKeyboardDistanceFromTextField(0);
-    } else {
+    if (!IOS) {
       setHeight(normalize(95));
     }
   }, []);
@@ -169,7 +165,9 @@ const HouseSetupFormView: React.FC<HouseSetupFormViewProps> = (props) => {
         innerRef={(ref) => (scrollRef.current = ref)}
         enableOnAndroid
         enableResetScrollToCoords={false}
-        enableAutomaticScroll={ANDROID}
+        // IQKeyboardManager scrolled this screen on iOS with a 100pt distance;
+        // Android keeps the 75pt default it had.
+        bottomOffset={IOS ? normalize(100) : undefined}
         scrollEnabled
         // extraScrollHeight={ANDROID && normalize(120)}
         // extraHeight={ANDROID && normalize(120)}

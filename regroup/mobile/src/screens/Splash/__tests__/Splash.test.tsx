@@ -54,7 +54,14 @@ jest.mock("@react-native-firebase/auth", () => {
       return (global as any).__splashTestOnAuthStateChanged;
     },
   }));
-  return { __esModule: true, default: authFn, FirebaseAuthTypes: {} };
+  return {
+    __esModule: true,
+    default: authFn,
+    FirebaseAuthTypes: {},
+    // Modular forms over the same instance and its lazy getters.
+    getAuth: () => authFn(),
+    onAuthStateChanged: (a: any, ...args: any[]) => a.onAuthStateChanged(...args),
+  };
 });
 
 // ─── @react-native-firebase/messaging mock ────────────────────────────────────
@@ -91,11 +98,25 @@ jest.mock("@react-native-firebase/messaging", () => {
     PROVISIONAL: 2,
     EPHEMERAL: 3,
   };
-  return { __esModule: true, default: mockMessagingDefault };
+  return {
+    __esModule: true,
+    default: mockMessagingDefault,
+    AuthorizationStatus: mockMessagingDefault.AuthorizationStatus,
+    // Modular forms over the same instance, so the global spies see every call.
+    getMessaging: () => mockMessagingDefault(),
+    requestPermission: (m: any, ...args: any[]) => m.requestPermission(...args),
+    getToken: (m: any, ...args: any[]) => m.getToken(...args),
+    onMessage: (m: any, ...args: any[]) => m.onMessage(...args),
+    onNotificationOpenedApp: (m: any, ...args: any[]) => m.onNotificationOpenedApp(...args),
+    getInitialNotification: (m: any) => m.getInitialNotification(),
+    setBackgroundMessageHandler: (m: any, ...args: any[]) => m.setBackgroundMessageHandler(...args),
+    onTokenRefresh: (m: any, ...args: any[]) => m.onTokenRefresh(...args),
+  };
 });
 
 // ─── @react-native-firebase/firestore mock ────────────────────────────────────
 jest.mock("@react-native-firebase/firestore", () => ({
+  ...require("../../../../__mocks__/firebase-modular/namespaced-adapter"),
   firebase: {},
   FirebaseFirestoreTypes: {},
 }));
@@ -118,10 +139,14 @@ jest.mock("../../../services/native-deep-links", () => ({
 
 // ─── Linking mock ─────────────────────────────────────────────────────────────
 jest.mock("react-native/Libraries/Linking/Linking", () => ({
-  getInitialURL: jest.fn().mockResolvedValue(null),
-  addEventListener: jest.fn(() => ({ remove: jest.fn() })),
-  canOpenURL: jest.fn().mockResolvedValue(false),
-  openURL: jest.fn().mockResolvedValue(undefined),
+  // RN 0.88's root export reads this module's default export.
+  __esModule: true,
+  default: {
+    getInitialURL: jest.fn().mockResolvedValue(null),
+    addEventListener: jest.fn(() => ({ remove: jest.fn() })),
+    canOpenURL: jest.fn().mockResolvedValue(false),
+    openURL: jest.fn().mockResolvedValue(undefined),
+  },
 }));
 
 // ─── Debug deep links service mock (used by DeepLinkTester) ──────────────────
@@ -507,6 +532,32 @@ describe("Splash (withSplash HOC)", () => {
       renderSplash();
       await act(async () => {});
       expect(mockOnMessage).toHaveBeenCalledTimes(1);
+    });
+
+    // Regression coverage (RN 0.88 upgrade, Task 11): onMessage was called in
+    // the component body, adding a listener on every render that was never
+    // removed, so one foreground push could show several banners.
+    it("keeps a single foreground message listener across re-renders", async () => {
+      const { rerender } = renderSplash();
+      await act(async () => {});
+      rerender(<SplashHOC navigation={{} as any} />);
+      rerender(<SplashHOC navigation={{} as any} />);
+      await act(async () => {});
+      expect(mockOnMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it("removes the foreground message listener on unmount", async () => {
+      const messageUnsub = jest.fn();
+      mockOnMessage.mockReturnValueOnce(messageUnsub);
+
+      const { unmount } = renderSplash();
+      await act(async () => {});
+      expect(messageUnsub).not.toHaveBeenCalled();
+      act(() => {
+        unmount();
+      });
+
+      expect(messageUnsub).toHaveBeenCalledTimes(1);
     });
 
     it("requests messaging permission when a user is present in state", async () => {

@@ -23,6 +23,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import ConfirmationButtons from "../../components/confirmation-buttons";
 import { bottomSpace } from "../../util/platform";
 import ScreenHeader from "../../components/screen-header";
+import { RatsAndroidResizeView } from "../../components/rats-keyboard";
 import Admin from "../../entities/Admin";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../../navigation/types";
@@ -73,60 +74,62 @@ const EditUserInfoFormView = (props: EditUserInfoProps & FormikProps<User>) => {
         style={{ flex: 1, paddingHorizontal: normalize(15) }}
         edges={["bottom"]}
       >
-        <RatsScrollView
-          contentContainerStyle={{
-            ...SCROLL_CONTAINER,
-            backgroundColor: color.white,
-          }}
-        >
-          <RatsImagePicker
-            onImageSelect={(response) => {
-              const asset = response?.assets && response.assets[0];
+        <RatsAndroidResizeView>
+          <RatsScrollView
+            contentContainerStyle={{
+              ...SCROLL_CONTAINER,
+              backgroundColor: color.white,
+            }}
+          >
+            <RatsImagePicker
+              onImageSelect={(response) => {
+                const asset = response?.assets && response.assets[0];
 
-              if (asset) {
-                const uri = asset.uri;
-                props.setFieldValue("avatar", uri);
-              }
+                if (asset) {
+                  const uri = asset.uri;
+                  props.setFieldValue("avatar", uri);
+                }
+              }}
+              label={props.values.avatar ? "Avatar" : "Upload Avatar"}
+              avatarStyle
+              onClear={() => {
+                props.setFieldValue("avatar", "");
+              }}
+              uri={props.values.avatar}
+            />
+            {renderField("dateOfBirth", "date", RatsDatePicker)}
+            {renderField("sobrietyDate", "date", RatsDatePicker)}
+            {renderField(
+              "phoneNumber",
+              "(000) 000-0000",
+              RatsTextInput,
+              undefined,
+              "phone-input",
+            )}
+            {renderPicker(
+              "maritalStatus",
+              getPickerItems(maritalStatus, undefined, false),
+              "marital.status",
+            )}
+            {renderPicker(
+              "housingStatus",
+              getPickerItems(housingStatus, undefined, false),
+              "housing.status",
+            )}
+            {/* {renderPicker('ethnicity', getPickerItems(ethnicity, undefined, false), 'ethnicity')} */}
+          </RatsScrollView>
+          <ConfirmationButtons
+            container={{
+              ...FILTER_CONFIRM_BUTTONS,
+              paddingBottom: bottomSpace > 0 ? 0 : normalize(15),
+              paddingHorizontal: 0,
             }}
-            label={props.values.avatar ? "Avatar" : "Upload Avatar"}
-            avatarStyle
-            onClear={() => {
-              props.setFieldValue("avatar", "");
-            }}
-            uri={props.values.avatar}
+            confirm={props.handleSubmit}
+            cancel={() => props.navigation.goBack()}
+            confirmButtonText="APPLY"
+            confirmTestID="save-profile-button"
           />
-          {renderField("dateOfBirth", "date", RatsDatePicker)}
-          {renderField("sobrietyDate", "date", RatsDatePicker)}
-          {renderField(
-            "phoneNumber",
-            "(000) 000-0000",
-            RatsTextInput,
-            undefined,
-            "phone-input",
-          )}
-          {renderPicker(
-            "maritalStatus",
-            getPickerItems(maritalStatus, undefined, false),
-            "marital.status",
-          )}
-          {renderPicker(
-            "housingStatus",
-            getPickerItems(housingStatus, undefined, false),
-            "housing.status",
-          )}
-          {/* {renderPicker('ethnicity', getPickerItems(ethnicity, undefined, false), 'ethnicity')} */}
-        </RatsScrollView>
-        <ConfirmationButtons
-          container={{
-            ...FILTER_CONFIRM_BUTTONS,
-            paddingBottom: bottomSpace > 0 ? 0 : normalize(15),
-            paddingHorizontal: 0,
-          }}
-          confirm={props.handleSubmit}
-          cancel={() => props.navigation.goBack()}
-          confirmButtonText="APPLY"
-          confirmTestID="save-profile-button"
-        />
+        </RatsAndroidResizeView>
       </SafeAreaView>
     </View>
   );

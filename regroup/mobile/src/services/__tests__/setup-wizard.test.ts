@@ -130,7 +130,9 @@ jest.mock("../../../google/timezone", () => ({
 
 // ─── Imports ─────────────────────────────────────────────────────────────────
 
-import { firestore, functions } from "../../../firebase-setup";
+import { firestore as setupFirestore, functions } from "../../../firebase-setup";
+// The firebase-setup mock is namespaced-shaped; the real module's types are modular.
+const firestore = setupFirestore as any;
 import * as adminService from "../admin";
 import * as subscriptionService from "../subscription";
 import * as usersService from "../users";

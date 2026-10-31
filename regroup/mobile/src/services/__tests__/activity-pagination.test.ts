@@ -20,7 +20,12 @@ jest.mock('../../../firebase-setup', () => ({
   },
 }));
 
+// The modular functions delegate to the firebase-setup mock's refs
+// (namespaced-adapter); the FieldValue helpers return this file's sentinels.
 jest.mock('@react-native-firebase/firestore', () => ({
+  ...require('../../../__mocks__/firebase-modular/namespaced-adapter'),
+  serverTimestamp: () => new Date('2024-01-15T10:00:00Z'),
+  deleteField: () => '__DELETE__',
   FieldValue: {
     serverTimestamp: () => new Date('2024-01-15T10:00:00Z'),
     delete: () => '__DELETE__',
@@ -34,7 +39,9 @@ jest.mock('../../util/logging', () => ({
   logException: jest.fn(),
 }));
 
-import { firestore } from '../../../firebase-setup';
+import { firestore as setupFirestore } from '../../../firebase-setup';
+// The firebase-setup mock is namespaced-shaped; the real module's types are modular.
+const firestore = setupFirestore as any;
 import { getActivitiesPage } from '../activity';
 
 // ---------------------------------------------------------------------------

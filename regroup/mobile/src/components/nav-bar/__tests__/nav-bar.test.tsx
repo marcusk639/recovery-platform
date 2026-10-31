@@ -8,8 +8,8 @@ import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
 
 // Vector icons mock
-jest.mock('react-native-vector-icons/FontAwesome5', () => 'FontAwesome5Icon');
-jest.mock('react-native-vector-icons/MaterialIcons', () => 'MaterialIcon');
+jest.mock('@react-native-vector-icons/fontawesome5/static', () => 'FontAwesome5Icon');
+jest.mock('@react-native-vector-icons/material-icons/static', () => 'MaterialIcon');
 
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ goBack: jest.fn(), navigate: jest.fn() }),

@@ -13,18 +13,24 @@ jest.mock('../../../firebase-setup', () => ({
     runTransaction: jest.fn(async (fn: any) => fn(mockTx)),
   },
 }));
+// The modular functions delegate to the firebase-setup mock above
+// (namespaced-adapter), so these cases drive the same collection/transaction.
 jest.mock('@react-native-firebase/firestore', () => ({
+  ...require('../../../__mocks__/firebase-modular/namespaced-adapter'),
+  serverTimestamp: () => '__SERVER_TIME__',
   FieldValue: { serverTimestamp: () => '__SERVER_TIME__' },
 }));
 jest.mock('../../util/logging', () => ({ logException: jest.fn() }));
 
-import { firestore } from '../../../firebase-setup';
+import { firestore as setupFirestore } from '../../../firebase-setup';
+// The firebase-setup mock is namespaced-shaped; the real module's types are modular.
+const firestore = setupFirestore as any;
 import { reopenDispute, REOPEN_REFUSALS } from '../reopenDispute';
 import { logException } from '../../util/logging';
 import { ActivityStatus } from '../../entities/ActivityModel';
 
 const seed = (data: Record<string, unknown> | undefined) =>
-  mockTx.get.mockResolvedValue({ exists: data !== undefined, data: () => data });
+  mockTx.get.mockResolvedValue({ exists: () => data !== undefined, data: () => data });
 
 beforeEach(() => {
   jest.clearAllMocks();

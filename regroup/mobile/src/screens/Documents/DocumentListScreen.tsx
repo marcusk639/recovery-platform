@@ -9,7 +9,14 @@ import {
   ActivityIndicator,
   Linking,
 } from 'react-native';
-import * as DocumentPicker from 'react-native-document-picker';
+import {
+  errorCodes,
+  isErrorWithCode,
+  keepLocalCopy,
+  pick,
+  types,
+  type DocumentPickerResponse,
+} from '@react-native-documents/picker';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { RatsText } from '../../components/rats-text';
 import RatsButton from '../../components/rats-button/rats-button';
@@ -171,9 +178,7 @@ const DocumentListScreen: React.FC = () => {
 
   const handleUpload = async () => {
     try {
-      const file = await DocumentPicker.pickSingle({
-        type: [DocumentPicker.types.pdf, DocumentPicker.types.images],
-      });
+      const [file] = await pick({ type: [types.pdf, types.images] });
 
       Alert.alert('Choose Category', 'What type of document is this?', [
         ...CATEGORY_OPTIONS.map(opt => ({
@@ -183,7 +188,7 @@ const DocumentListScreen: React.FC = () => {
         { text: 'Cancel', style: 'cancel' as const },
       ]);
     } catch (err) {
-      if (!DocumentPicker.isCancel(err)) {
+      if (!(isErrorWithCode(err) && err.code === errorCodes.OPERATION_CANCELED)) {
         logException(err);
         Alert.alert('Error', 'Could not open the file picker.');
       }
@@ -191,7 +196,7 @@ const DocumentListScreen: React.FC = () => {
   };
 
   const doUpload = async (
-    file: DocumentPicker.DocumentPickerResponse,
+    file: DocumentPickerResponse,
     category: DocumentCategory,
   ) => {
     if (!file.uri || !file.name) {
@@ -200,10 +205,25 @@ const DocumentListScreen: React.FC = () => {
     }
     setUploading(true);
     try {
+      // Upload from a local copy: the picked uri (Android content://, iOS import-mode file) is
+      // only guaranteed while the picker session lasts, and the upload waits for the category
+      // choice above.
+      const [copy] = await keepLocalCopy({
+        files: [{ uri: file.uri, fileName: file.name }],
+        destination: 'cachesDirectory',
+      });
+      if (copy.status === 'error') {
+        logException(new Error(copy.copyError), 'DocumentListScreen: keepLocalCopy');
+        Alert.alert(
+          'Upload Failed',
+          'Could not upload the document. Please try again.',
+        );
+        return;
+      }
       await uploadMutation.mutateAsync({
         houseId,
         guestId,
-        localPath: file.uri,
+        localPath: copy.localUri,
         fileName: file.name,
         mimeType: file.type,
         category,
