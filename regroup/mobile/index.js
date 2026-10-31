@@ -54,9 +54,7 @@ ensureNotificationChannels();
 const root = () => (
   <Provider store={store}>
     <QueryClientProvider client={queryClient}>
-      <NavigationContainer
-        ref={navigationRef}
-        onStateChange={state => console.log('state', state)}>
+      <NavigationContainer ref={navigationRef}>
         <GestureHandlerRootView style={{ flex: 1 }}>
           <RatsKeyboardProvider>
             <App />

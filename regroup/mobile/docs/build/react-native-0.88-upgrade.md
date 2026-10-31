@@ -1368,6 +1368,12 @@ needs the removed packages at HEAD, and the worklets Babel test fails on the HEA
 - Android modals and bottom sheets (FilterForm, the FormModal) with the new avoiding view.
 - Chat composers on a notched iPhone and on a 3-button-navigation Android device.
 
+#### Pre-existing fix: navigation state logging
+
+`index.js` logged the whole navigation state on every change in production
+(`onStateChange={state => console.log('state', state)}`). Route params can carry guest data, so
+this broke the no-PII-logging rule. Removed in its own commit (Task 15 Step 4); nothing else read it.
+
 ## 7. Verification
 
 _Final results and the Mac checkpoint (Task 16)._
