@@ -233,7 +233,7 @@ path, `''`, `':'`, a prefix, a glob and another path; only the exact path passes
 | `react`, `react-test-renderer` | 19.3.0 |
 | `@react-native-community/cli*` | 20.2.0 |
 | TypeScript | 6.0.3 |
-| Stripe RN | 0.84.0 |
+| Stripe RN | 0.84.0 (0.83.0 from Task 13) |
 | Sentry RN | 8.33.0 |
 | gesture-handler | 3.4.0 |
 | screens | 4.30.1 |
@@ -372,7 +372,7 @@ template ships 2.2.0). google-services is 4.5.0 (RNFirebase 26's version).
 - the root `subprojects { afterEvaluate }` block: the RN 0.88 plugin sets library namespaces and
   aligns Java/Kotlin targets;
 - the Crashlytics classpath (the package is gone);
-- the `stripeVersion` pin (wrapper 0.84.0 declares native 23.25.1);
+- the `stripeVersion` pin (wrapper 0.84.0 declares native 23.25.1; 0.83.0 from Task 13 declares 23.24.0);
 - the `androidx.activity` force and its explicit 1.7.0 dependencies, which would pin newer
   libraries down;
 - the `native_modules.gradle` applies (CLI 20 no longer ships the file;
@@ -986,7 +986,7 @@ Pinned exactly so the migration cannot change them; none is fixed here.
   Task 13 (which rewrites the AppDelegate): the `UNUserNotificationCenter` delegate assignment and
   protocol and `willPresentNotification`, after which notify-kit owns presentation of what it
   displays and forwards other pushes to RNFirebase, whose delegate presents `notification` pushes
-  per firebase.json. `Podfile.lock` loses `RNCPushNotificationIOS` and `RNNotifee` and gains
+  per firebase.json (done in Task 13). `Podfile.lock` loses `RNCPushNotificationIOS` and `RNNotifee` and gains
   notify-kit's pods at the next `pod install`; the `Podfile` names none of them.
 - **Tests (cases kept; counts are `it(`/`test(` lines, the gate's measure).**
   - `rentReminder.test.ts` 14 → 23: the `react-native-push-notification` mock became the notify-kit
@@ -1036,10 +1036,167 @@ Pinned exactly so the migration cannot change them; none is fixed here.
     `metro.config.js` "unchanged in shape"; wrapping it with `withSentryConfig` is the one-line
     change if debug-ID matching is wanted.
   - **Hermes is still off on iOS** (`:hermes_enabled => false` in the Podfile): the composed map
-    applies once Task 13 enables it; until then the phase uploads the plain JSC map.
+    applies once Task 13 enables it; until then the phase uploads the plain JSC map. (Done in Task 13: Hermes is on, and the E2EEmulator build ships Hermes bytecode.)
   - **Leftover CocoaPods phases:** `[CP-User] [RNFB] Crashlytics Configuration` and the
     FirebaseCrashlytics run phase come from the stale `Podfile.lock` (Crashlytics was removed);
-    they go at Task 13's `pod install`.
+    they went at Task 13's `pod install` (confirmed gone from the pbxproj).
+
+### Task 13: iOS project
+
+- **Deviation: `@stripe/stripe-react-native` 0.84.0 → 0.83.0 (owner decision).**
+  - **Why:** 0.84.0's podspec resolves stripe-ios 26.15.1 only through Swift Package Manager.
+    `$StripeDisableSPM = true` now raises, and 26.15.1 is not on CocoaPods trunk. Its
+    `verify_dynamic_linkage!` also fails `pod install` unless the pod is a dynamic framework, which
+    RNFirebase 26's static linkage with CocoaPods Firebase (`$RNFirebaseDisableSPM`) rules out.
+  - **Fix:** 0.83.0 still honours `$StripeDisableSPM` and installs the stripe-ios 26.15.0 pods.
+    Installed with `npm install --ignore-scripts --save-exact @stripe/stripe-react-native@0.83.0`;
+    `package.json` and `package-lock.json` change only for it.
+  - **JS API check** (published tarballs, 0.83.0 vs 0.84.0): the files the app uses are
+    byte-identical in both. Those are `StripeProvider.tsx`, `hooks/usePaymentSheet.tsx` and
+    `types/PaymentSheet.ts`, behind the app's `StripeProvider` in `App.tsx` and
+    `usePaymentSheet` / `initPaymentSheet({ merchantDisplayName, paymentIntentClientSecret })` /
+    `presentPaymentSheet` in `ResidentPayment` and `RentPaymentScreen`. The other source
+    differences are the Checkout private preview (0.84 drops its exports), Connect and
+    plugin code, none of it imported by the app. Native-side, 0.84's only Android change is
+    PaymentSheet callback handling for `intentConfiguration` (deferred intents), which the app
+    does not use.
+  - **Android:** 0.83.0 declares stripe-android 23.24.0 (was 23.25.1) with the same
+    `StripeSdk_kotlinVersion` 2.2.21, so the root `kotlinVersion` still matches. The app pins no
+    `stripeVersion` (removed in Task 4); only the comments in `android/build.gradle` change. Not
+    built here (no compileSdk 37 SDK on this machine): CI's Android build is the check.
+  - **Tests:** the jest mock is unchanged; the full suite stays green.
+- **Podfile.**
+  - The `node_require` helper loads `react_native_pods.rb` and `react-native-permissions/scripts/setup.rb`.
+  - `setup_permissions` lists the eight Task 7 permissions.
+  - `platform :ios, min_ios_version_supported`, with `$RNFirebaseAsStaticFramework`,
+    `$RNFirebaseDisableSPM` and `$StripeDisableSPM = true`.
+  - `use_react_native!` passes neither `:hermes_enabled` nor `:fabric_enabled`: Hermes and the New
+    Architecture are RN 0.88's only modes.
+  - Removed:
+    - Flipper (`FlipperConfiguration` no longer exists);
+    - `get_default_flags`;
+    - `__apply_Xcode_12_5_M1_post_install_workaround`;
+    - the Folly header paths;
+    - the Yoga `-Wno-deprecated-literal-operator` flag;
+    - `SexyTooltip`.
+  - The deployment target is 15.1.
+  - Kept:
+    - BoringSSL-GRPC;
+    - the HtmlToPdf header path (still decided at the checkpoint);
+    - `SWIFT_VERSION`;
+    - `CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES`;
+    - the E2E configuration mapping;
+    - static linkage.
+  - **New:** a header search path for `react-native-date-picker`. 5.0.13, the latest, imports React
+    headers unqualified (`"RCTConvert.h"`, `"RCTView.h"`, …). With RN 0.88's prebuilt core
+    (`RCT_USE_PREBUILT_RNCORE`, the default), those exist only inside `React.framework`, so the pod
+    gets `$(PODS_XCFRAMEWORKS_BUILD_DIR)/React-Core-prebuilt/React.framework/Headers`. Without
+    it, the pod fails with `'RCTComponent.h' file not found`.
+- **`project.pbxproj`.**
+  - The app's project-level `OTHER_CPLUSPLUSFLAGS` gain `-DFOLLY_CFG_NO_COROUTINES=1` and
+    `-DFOLLY_HAVE_CLOCK_GETTIME=1` in all four configurations, as in the RN template. The 0.72
+    flags keep `-DFOLLY_NO_CONFIG`, so without them `AppDelegate.mm` fails in
+    `folly/Expected.h` with `'folly/coro/Coroutine.h' file not found`.
+  - The icon `.ttf` references are dropped (below).
+  - `pod install` rewrote the RN user-project settings: c++20, `-DRCT_REMOVE_LEGACY_ARCH=1`,
+    `USE_HERMES`, header paths and `PODFILE_DIR`.
+  - **The stale `[CP-User] [RNFB] Crashlytics Configuration` and FirebaseCrashlytics phases are
+    gone.** The only "Crashlytics" left is the `FirebaseCrashlyticsCollectionEnabled` key inside
+    the RNFB Core Configuration script.
+- **Bundle phase fix (Task 12's phase).** RN 0.88's `with-environment.sh` runs its argument as a
+  single quoted word (`"$1"`). The Task 12 phase passed `"env -u E2E_VARIANT …/react-native-xcode.sh"`,
+  so the Debug build failed with `with-environment.sh: line 52: env -u E2E_VARIANT
+  ../node_modules/react-native/scripts/react-native-xcode.sh: No such file or directory`. The phase
+  now writes the same command line to `$DERIVED_FILE_DIR/rats-bundle-command.sh`:
+  - `exec $BUNDLER_ENV [/bin/sh …/sentry-xcode.sh] …/react-native-xcode.sh`.
+
+  `with-environment.sh` runs that script after sourcing `.xcode.env*`. The `sentry.properties`
+  guard, the E2E skip, `SENTRY_DISABLE_AUTO_UPLOAD`, `BUNDLER_ENV`, `--reset-cache` and the
+  stale-bundle removal are unchanged.
+- **AppDelegate / SceneDelegate** (`AppDelegate.h` / `.mm`, one Objective-C++ file, so no new
+  files in the Xcode project).
+  - `AppDelegate : UIResponder <UIApplicationDelegate>` has `window`, `reactNativeFactory`, a strong
+    `reactNativeDelegate` (the factory's delegate is weak) and `reactNativeStarted`.
+  - `didFinishLaunching` keeps `[FIRApp configure]` and the IS_E2E_TEST → `NSUserDefaults` bridge.
+    It creates `RatsReactNativeDelegate` (`RCTDefaultReactNativeFactoryDelegate`) with
+    `dependencyProvider = [RCTAppDependencyProvider new]`, then the factory.
+  - `bundleURL` points Debug at Metro's `index` and everything else at `main.jsbundle`.
+    `sourceURLForBridge:` returns it too.
+  - Headers come from `<React-RCTAppDelegate/…>`. With static frameworks and the prebuilt core,
+    that is the path that compiles; the `__has_include` fallbacks are gone.
+  - **Task 11 follow-up done:** the `UNUserNotificationCenterDelegate` protocol, the
+    `center.delegate` assignment and `willPresentNotification` are removed.
+  - On first connection, `SceneDelegate` creates the window, sets `appDelegate.window`, and calls
+    `startReactNativeWithModuleName:@"rats" inWindow:connectionOptions:`.
+  - On reconnect, it detaches the root view controller from the old window first. It then creates
+    and assigns the new window, attaches the controller, and forwards the connection options' URLs
+    and activities to `+[RCTLinkingManager scene:…]`.
+  - `openURLContexts` skips URLs that `[[FIRAuth auth] canHandleURL:]` claims; phone auth is
+    reachable through the `TwoFactorSetup` route.
+  - A cold-start notification tap is no longer copied into React Native's launch options. RN 0.88's
+    converter carries the first URL and activity only. Nothing in the app read it: RNFirebase takes
+    initial notifications from its own delegate.
+- **Icon fonts.**
+  - `npx rnvi-update-plist package.json ios/rats/Info.plist` found its five fonts listed and
+    changed nothing. It is not hoisted, so it runs from the nested
+    `@react-native-vector-icons/*/node_modules/.bin`.
+  - The 11 `UIAppFonts` entries no v14 pod provides were removed by hand: AntDesign … Zocial and
+    Fontisto. Quicksand, Oswald and Roboto stay.
+  - The 16 icon `.ttf` copies in `ios/` and their 32 pbxproj lines (file references and group
+    children) are deleted.
+  - The E2EEmulator app bundle carries FontAwesome5_{Brands,Regular,Solid}, Ionicons and
+    MaterialIcons from the pods.
+- **Info.plist, as `pod install` left it:** the only semantic changes are those 11 fonts and RN's
+  `RCTNewArchEnabled = true`. The keys are reordered.
+- **Static checks.**
+  - `plutil -lint` passes on `Info.plist`, and the pbxproj parses with the npm `xcode` package.
+  - In `ios/rats` and the Podfile, `RNCPushNotificationIOS`, `hermes_enabled` and
+    `willPresentNotification` have zero matches.
+  - `RCTAppDelegate` matches only the `React-RCTAppDelegate/` header path.
+  - The `startReactNativeWithModuleName:@"rats" inWindow:` call with `connectionOptions:`,
+    `reactNativeDelegate`, `reactNativeStarted` and `RCTReactNativeFactory alloc` are present.
+- **`pod install --repo-update`** (CocoaPods 1.17.0, Xcode 27.2; plain, because the Gemfile pins
+  Ruby 3.2.2 and the machine has 4.0.6): succeeds after the stale 0.72 `Podfile.lock` was deleted.
+  The old lock pinned `Firebase/Messaging (= 10.7.0)`.
+  - 155 pods: Firebase 12.19.3, Stripe 26.15.0, Hermes 260318099.0.5.
+  - Notices: FirebaseCore's CocoaPods deprecation (no releases after October 2026), and script
+    phases added by `React-Core-prebuilt`, `ReactNativeDependencies` and `hermes-engine`.
+  - The new `Podfile.lock` is kept. `ios/Pods/`, `ios/build/` and `ios/.xcode.env.local` are
+    gitignored.
+- **Builds** (`xcodebuild -workspace rats.xcworkspace -scheme <scheme> -configuration <config> -sdk
+  iphonesimulator -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO`):
+  - **`react-native-keyboard-manager` cannot build on RN 0.88.** Its `RCTBaseTextInputView.h` is
+    gone with the legacy architecture, so the full app does not link (`ld: framework
+    'ReactNativeKeyboardManager' not found`) until Task 15 removes it. Every other target compiles.
+  - To get past it, the builds below ran with a **temporary**
+    `'react-native-keyboard-manager': { platforms: { ios: null } }` in `react-native.config.js`
+    and a `pod install`. Both were then reverted, and the `Podfile.lock` after the revert is
+    identical to the one before.
+  - **Debug** (`rats`): BUILD SUCCEEDED (compile, link, bundle phase).
+  - **Release** (`rats`, `SENTRY_DISABLE_AUTO_UPLOAD=true`): compiles and links, then the **release
+    guard refuses** as designed. It wants `STRIPE_PUBLISHABLE_KEY` to be a `pk_live_` key and the
+    production Firebase config, which this machine does not have. The bundle phase runs after the
+    guard, so it did not run here.
+  - **E2EEmulator** (`rats-e2e-emulator`, a Release-mapped configuration): BUILD SUCCEEDED.
+    - The bundle phase ran its "plain RN bundle" branch, with `BUNDLER_ENV` `E2E_VARIANT=emulator`.
+    - `main.jsbundle` is Hermes bytecode (`file`: "Hermes JavaScript").
+    - The Sentry upload and debug-files phases skipped for the E2E configuration.
+    - The RNFB log names `firebase/firebase.json`, which has the `react-native` block (Task 11).
+  - Not exercised here: `sentry-xcode.sh` itself, which needs `sentry.properties`.
+- **JS and tests:** no source or test changes. Unit tests: 389 suites, 5884 passed (2 todo), 10
+  snapshots. Ratchet 125 / 125.
+- **For the Mac checkpoint, beyond its list:**
+  - A full app build needs Task 15 (keyboard-manager removal) first.
+  - A Release build with real keys runs the Sentry 8 phase with Hermes source-map composition.
+  - The HtmlToPdf header path.
+  - Device checks:
+    - cold and warm URLs and universal links, and scene reconnect;
+    - the phone-auth reCAPTCHA redirect;
+    - foreground `notification` pushes, now shown by RNFirebase per `firebase.json`;
+    - the date-picker modal;
+    - icon glyphs;
+    - Hermes Intl and DST;
+    - the Stripe PaymentSheet on stripe-ios 26.15.0 and stripe-android 23.24.0.
 
 ## 7. Verification
 

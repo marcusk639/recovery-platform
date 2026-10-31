@@ -3,8 +3,8 @@
 // React Native 0.88.1 template (docs/build/react-native-0.88-upgrade.md, Task 4). AGP comes from
 // the React Native Gradle plugin (9.2.1), Gradle from the wrapper (9.4.1). The 0.72-era
 // workarounds that lived here are gone: the RN 0.88 plugin sets library namespaces and aligns
-// Java/Kotlin targets itself, Flipper and Crashlytics are removed, and Stripe RN 0.84.0 declares
-// its own native SDK (23.25.1), so the old stripeVersion pin no longer applies.
+// Java/Kotlin targets itself, Flipper and Crashlytics are removed, and Stripe RN 0.83.0 declares
+// its own native SDK (23.24.0), so the old stripeVersion pin no longer applies.
 
 buildscript {
     ext {
@@ -14,7 +14,7 @@ buildscript {
         compileSdkVersion = 37
         targetSdkVersion = 36
         ndkVersion = "27.1.12297006"
-        // The newest 2.2.x: matches Stripe RN 0.84's StripeSdk_kotlinVersion and RN's 2.2 line
+        // The newest 2.2.x: matches Stripe RN 0.83's StripeSdk_kotlinVersion and RN's 2.2 line
         // (the template ships 2.2.0).
         kotlinVersion = "2.2.21"
     }

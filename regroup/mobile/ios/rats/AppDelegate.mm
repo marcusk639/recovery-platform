@@ -1,72 +1,31 @@
 #import "AppDelegate.h"
 #import <Firebase.h>
-#import <UserNotifications/UserNotifications.h>
-#import <React/RCTLinkingManager.h>
 #import <React/RCTBundleURLProvider.h>
+#import <React/RCTLinkingManager.h>
+#import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
 
-// Note: Detox 20+ does not require this import
-// #if DEBUG
-// #import <Detox/Detox-Swift.h>
-// #endif
+@implementation RatsReactNativeDelegate
 
-@interface AppDelegate ()
+- (NSURL *)sourceURLForBridge:(RCTBridge *)bridge
+{
+  return [self bundleURL];
+}
 
-@property (nonatomic, copy) NSDictionary *appLaunchOptions;
-/// YES once React Native has been started (bridge and root view exist). Set
-/// explicitly instead of inferring it from self.bridge, which RCTAppDelegate
-/// may populate or clear on its own schedule.
-@property (nonatomic, assign) BOOL reactNativeStarted;
+- (NSURL *)bundleURL
+{
+#if DEBUG
+  // Debug builds load the JS from Metro.
+  return [[RCTBundleURLProvider sharedSettings] jsBundleURLForBundleRoot:@"index"];
+#else
+  // Release and the E2E configurations load the bundled JS (the "Bundle React
+  // Native code and images" build phase writes main.jsbundle).
+  return [[NSBundle mainBundle] URLForResource:@"main" withExtension:@"jsbundle"];
+#endif
+}
 
 @end
 
 @implementation AppDelegate
-
-- (UIViewController *)startReactNativeIfNeededWithConnectionOptions:(UISceneConnectionOptions *)connectionOptions
-{
-  if (!self.reactNativeStarted) {
-    // Rebuild the launch options React Native reads for Linking.getInitialURL().
-    NSMutableDictionary *options = [self.appLaunchOptions mutableCopy];
-    NSURL *url = connectionOptions.URLContexts.anyObject.URL;
-    if (url) {
-      options[UIApplicationLaunchOptionsURLKey] = url;
-    }
-    NSUserActivity *activity = connectionOptions.userActivities.anyObject;
-    if (activity) {
-      options[UIApplicationLaunchOptionsUserActivityDictionaryKey] = @{
-        UIApplicationLaunchOptionsUserActivityTypeKey : activity.activityType,
-        @"UIApplicationLaunchOptionsUserActivityKey" : activity,
-      };
-    }
-    // A notification tap that cold-started the app arrives here, not in launchOptions.
-    NSDictionary *notificationUserInfo = connectionOptions.notificationResponse.notification.request.content.userInfo;
-    if (notificationUserInfo) {
-      options[UIApplicationLaunchOptionsRemoteNotificationKey] = notificationUserInfo;
-    }
-    // RCTAppDelegate creates the bridge, the root view and a scene-less window.
-    [super application:UIApplication.sharedApplication didFinishLaunchingWithOptions:options];
-    self.reactNativeStarted = YES;
-  } else {
-    // The scene was discarded and reconnected while the process (and bridge) lived.
-    // UIKit does not call scene:openURLContexts: / continueUserActivity: for
-    // connection options, so forward them to React Native's Linking here.
-    for (UIOpenURLContext *context in connectionOptions.URLContexts) {
-      [RCTLinkingManager application:UIApplication.sharedApplication openURL:context.URL options:@{}];
-    }
-    for (NSUserActivity *activity in connectionOptions.userActivities) {
-      [RCTLinkingManager application:UIApplication.sharedApplication
-                continueUserActivity:activity
-                  restorationHandler:^(NSArray<id<UIUserActivityRestoring>> *_Nullable restorableObjects){
-                  }];
-    }
-  }
-  UIViewController *rootViewController = self.window.rootViewController;
-  NSAssert(rootViewController != nil, @"React Native did not create a root view controller");
-  if (rootViewController == nil) {
-    NSLog(@"[AppDelegate] React Native produced no root view controller; the scene will show a blank window");
-  }
-  self.window.rootViewController = nil;
-  return rootViewController;
-}
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
@@ -85,44 +44,36 @@
                    [launchEnv[@"IS_E2E_TEST"] isEqualToString:@"1"];
   [[NSUserDefaults standardUserDefaults] setBool:isE2ETest forKey:@"IS_E2E_TEST"];
 
-  self.moduleName = @"rats";
-  // You can add your custom initial props in the dictionary below.
-  // They will be passed down to the ViewController used by React Native.
-  self.initialProps = @{};
-
   // React Native starts when the window scene connects (SceneDelegate): under the
   // UIScene lifecycle, which the iOS 27 SDK requires, a URL or universal link that
   // launched the app arrives in the scene's connection options, not launchOptions.
-  self.appLaunchOptions = launchOptions ?: @{};
+  self.reactNativeDelegate = [RatsReactNativeDelegate new];
+  self.reactNativeDelegate.dependencyProvider = [RCTAppDependencyProvider new];
+  self.reactNativeFactory = [[RCTReactNativeFactory alloc] initWithDelegate:self.reactNativeDelegate];
 
-  // Define UNUserNotificationCenter
-  UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
-  center.delegate = self;
-
+  // Remote-notification registration and delivery are RNFirebase messaging's
+  // (AppDelegate swizzling and its UNUserNotificationCenter delegate, which shows
+  // foreground `notification` pushes per firebase.json); notify-kit presents what
+  // it displays. The app is not the notification center's delegate.
   return YES;
 }
 
-//Called when a notification is delivered to a foreground app.
--(void)userNotificationCenter:(UNUserNotificationCenter *)center willPresentNotification:(UNNotification *)notification withCompletionHandler:(void (^)(UNNotificationPresentationOptions options))completionHandler
-{
-  completionHandler(UNNotificationPresentationOptionSound | UNNotificationPresentationOptionAlert | UNNotificationPresentationOptionBadge);
-}
-
-- (NSURL *)sourceURLForBridge:(RCTBridge *)bridge
-{
-#if DEBUG
-  // Note: Detox 20+ doesn't need special bundling configuration
-  // Always use Metro in DEBUG mode for both regular app and Detox tests
-  return [[RCTBundleURLProvider sharedSettings] jsBundleURLForBundleRoot:@"index"];
-#else
-  return [[NSBundle mainBundle] URLForResource:@"main" withExtension:@"jsbundle"];
-#endif
-}
-
-// Remote-notification registration and delivery are handled by RNFirebase
-// messaging's AppDelegate swizzling; notification display by notify-kit
-// (react-native-push-notification-ios was removed in Task 11).
 @end
+
+/// Forwards opened URLs to React Native's Linking, except the ones Firebase Auth
+/// handles itself (the phone-auth reCAPTCHA redirect).
+static void RatsForwardURLContexts(UIScene *scene, NSSet<UIOpenURLContext *> *URLContexts)
+{
+  NSMutableSet<UIOpenURLContext *> *forLinking = [NSMutableSet setWithCapacity:URLContexts.count];
+  for (UIOpenURLContext *context in URLContexts) {
+    if (![[FIRAuth auth] canHandleURL:context.URL]) {
+      [forLinking addObject:context];
+    }
+  }
+  if (forLinking.count > 0) {
+    [RCTLinkingManager scene:scene openURLContexts:forLinking];
+  }
+}
 
 // Under the UIScene lifecycle UIKit delivers URLs and universal links to the scene
 // delegate; the UIApplicationDelegate openURL/continueUserActivity methods are not called.
@@ -136,27 +87,55 @@
     return;
   }
   AppDelegate *appDelegate = (AppDelegate *)UIApplication.sharedApplication.delegate;
-  UIViewController *rootViewController = [appDelegate startReactNativeIfNeededWithConnectionOptions:connectionOptions];
+
+  if (!appDelegate.reactNativeStarted) {
+    self.window = [[UIWindow alloc] initWithWindowScene:(UIWindowScene *)scene];
+    // React Native and its libraries reach the window through the app delegate.
+    appDelegate.window = self.window;
+    // Creates the root view controller in the window and makes it key and visible;
+    // the first URL or user activity in the connection options becomes
+    // Linking.getInitialURL().
+    [appDelegate.reactNativeFactory startReactNativeWithModuleName:@"rats"
+                                                          inWindow:self.window
+                                                 connectionOptions:connectionOptions];
+    appDelegate.reactNativeStarted = YES;
+    return;
+  }
+
+  // The scene was discarded and reconnected while the process (and React Native)
+  // lived: move the existing root view controller to the new window, detaching it
+  // from the old one first.
+  UIWindow *oldWindow = appDelegate.window;
+  UIViewController *rootViewController = oldWindow.rootViewController;
+  NSAssert(rootViewController != nil, @"React Native has no root view controller to reattach");
+  if (rootViewController == nil) {
+    NSLog(@"[SceneDelegate] React Native has no root view controller; the scene will show a blank window");
+  }
+  oldWindow.rootViewController = nil;
+
   self.window = [[UIWindow alloc] initWithWindowScene:(UIWindowScene *)scene];
-  self.window.rootViewController = rootViewController;
-  // React Native and its libraries reach the window through the app delegate.
   appDelegate.window = self.window;
+  self.window.rootViewController = rootViewController;
   [self.window makeKeyAndVisible];
+
+  // UIKit does not call scene:openURLContexts: / continueUserActivity: for
+  // connection options, so forward them to React Native's Linking here.
+  if (connectionOptions.URLContexts.count > 0) {
+    RatsForwardURLContexts(scene, connectionOptions.URLContexts);
+  }
+  for (NSUserActivity *activity in connectionOptions.userActivities) {
+    [RCTLinkingManager scene:scene continueUserActivity:activity];
+  }
 }
 
 - (void)scene:(UIScene *)scene openURLContexts:(NSSet<UIOpenURLContext *> *)URLContexts
 {
-  for (UIOpenURLContext *context in URLContexts) {
-    [RCTLinkingManager application:UIApplication.sharedApplication openURL:context.URL options:@{}];
-  }
+  RatsForwardURLContexts(scene, URLContexts);
 }
 
 - (void)scene:(UIScene *)scene continueUserActivity:(NSUserActivity *)userActivity
 {
-  [RCTLinkingManager application:UIApplication.sharedApplication
-            continueUserActivity:userActivity
-              restorationHandler:^(NSArray<id<UIUserActivityRestoring>> *_Nullable restorableObjects){
-              }];
+  [RCTLinkingManager scene:scene continueUserActivity:userActivity];
 }
 
 @end

@@ -1,13 +1,29 @@
-#import <RCTAppDelegate.h>
 #import <UIKit/UIKit.h>
-#import <UserNotifications/UNUserNotificationCenter.h>
 
-@interface AppDelegate : RCTAppDelegate <UNUserNotificationCenterDelegate>
+#import <React-RCTAppDelegate/RCTDefaultReactNativeFactoryDelegate.h>
+#import <React-RCTAppDelegate/RCTReactNativeFactory.h>
 
-/// Starts React Native (once) for the app's window scene and returns its root
-/// view controller (nil only if React Native failed to create one). Called by
-/// SceneDelegate when the scene connects.
-- (UIViewController *)startReactNativeIfNeededWithConnectionOptions:(UISceneConnectionOptions *)connectionOptions;
+/// The React Native factory's delegate: the app's bundle URL (Debug: Metro's
+/// `index`, otherwise the bundled `main.jsbundle`). AppDelegate sets its
+/// dependencyProvider to the codegen'd RCTAppDependencyProvider.
+@interface RatsReactNativeDelegate : RCTDefaultReactNativeFactoryDelegate
+@end
+
+@interface AppDelegate : UIResponder <UIApplicationDelegate>
+
+/// The window of the app's scene. SceneDelegate assigns it before starting React
+/// Native: RNFirebase messaging and react-native-date-picker's modal mode reach
+/// the window through the app delegate.
+@property (strong, nonatomic) UIWindow *window;
+
+/// Created once in application:didFinishLaunchingWithOptions:.
+@property (strong) RCTReactNativeFactory *reactNativeFactory;
+/// RCTReactNativeFactory.delegate is weak, so the app delegate holds it strongly.
+@property (strong) RatsReactNativeDelegate *reactNativeDelegate;
+/// YES once React Native has been started in a window. It is started once per
+/// process; a scene that reconnects while the process lives reuses its root view
+/// controller (SceneDelegate).
+@property BOOL reactNativeStarted;
 
 @end
 
