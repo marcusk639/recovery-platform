@@ -12,6 +12,9 @@ jest.mock("@react-navigation/native", () => ({
 }));
 
 import React from "react";
+import { StyleSheet as InsetStyleSheet } from 'react-native';
+// The module object itself: an `import * as` namespace is a copy, which a spy would miss.
+const SafeArea = require('react-native-safe-area-context');
 import { render, waitFor, fireEvent } from "@testing-library/react-native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -325,5 +328,25 @@ describe("PaymentDashboard", () => {
         );
       });
     });
+  });
+});
+
+describe('PaymentDashboard bottom inset (Android edge-to-edge)', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('lifts the manual-payment FAB by the bottom safe-area inset', async () => {
+    jest
+      .spyOn(SafeArea, 'useSafeAreaInsets')
+      .mockReturnValue({ top: 0, right: 0, bottom: 48, left: 0 });
+    setupStore();
+    mockListHousePayments.mockResolvedValue([]);
+    const { findByTestId } = renderDashboard();
+
+    const fab = await findByTestId('manual-payment-fab');
+    expect(InsetStyleSheet.flatten(fab.props.style)).toEqual(
+      expect.objectContaining({ position: 'absolute', marginBottom: 48 }),
+    );
   });
 });

@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../../navigation/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -68,6 +69,7 @@ interface Props {
 }
 
 const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
   const { house } = useSelectedHouse();
   // React Query is the source of truth for guests; see .full-review [A2].
   const { data: guestsData = {} } = useGuests(house?.id ?? "");
@@ -507,7 +509,7 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
       {/* FAB for manual payment */}
       <TouchableOpacity
         testID="manual-payment-fab"
-        style={styles.fab}
+        style={[styles.fab, { marginBottom: insets.bottom }]}
         onPress={() => setShowManualModal(true)}
       >
         <RatsText

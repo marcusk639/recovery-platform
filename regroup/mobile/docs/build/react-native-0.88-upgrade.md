@@ -1198,6 +1198,34 @@ Pinned exactly so the migration cannot change them; none is fixed here.
     - Hermes Intl and DST;
     - the Stripe PaymentSheet on stripe-ios 26.15.0 and stripe-android 23.24.0.
 
+### Task 14: Android edge-to-edge insets
+
+targetSdk 36 with `edgeToEdgeEnabled` draws the app under a transparent status bar and navigation
+bar on every Android level, so `adjustResize` and the opaque bars no longer keep content clear.
+
+**Audit (pinned top and bottom elements).**
+
+| Element | Before | After |
+| ------- | ------ | ----- |
+| `IOSStatusBar` (App.tsx root, the app-wide top spacer; every navigator hides the native header) | 0 high on Android | Android reserves `useSafeAreaInsets().top`; iOS keeps `window.height / 22` |
+| Bottom tab bar (`MainNavigator`) | React Navigation's default bar | Unchanged: it pads itself by `insets.bottom` and no `tabBarStyle.height` overrides it |
+| Wizard Back/Next (`SetupButtons`) and the CTA footers (RentPayment, StripeSettings, AssignGuest, NewMeeting, NewAccount, Complaints, OrgSetup, DirectChat) | bottom-edge safe-area `SafeAreaView` | Unchanged: safe-area-context reports the Android insets |
+| DirectChat composer (`position: absolute`, `bottom: 0`) | inside an unpadded `flex: 1` view within a bottom-edge `SafeAreaView` | Unchanged (Task 15 moves it to the sticky view) |
+| HouseChat composer (BaseChat) | tab screen, above the tab bar | Unchanged |
+| FABs on root-stack screens: DrugTesting (`bottom: 30`), PaymentDashboard and Treasury (`bottom: normalize(24)`) | under a 48dp three-button navigation bar | `marginBottom: insets.bottom` |
+| App-wide toast (`NotificationContext`, `bottom: 10`) | under the navigation bar | `marginBottom: insets.bottom` |
+| `WIZARD_BUTTON_CONTAINER` (OrgSetup, ChoreSetup, PhaseConfigSetup, PhaseCustomization) | exported, never used | Not touched (dead code) |
+| Full-screen overlays (`top: 0` … `bottom: 0`: SubscriptionHandler, SignUpWebView, PaymentWebView) | cover the window | Unchanged |
+
+The FABs and the toast get the inset on iOS too, where it lifts them clear of the home indicator
+(a visible change on notched iPhones, checked at the Mac checkpoint). The parents are plain views,
+so the inset is not counted twice.
+
+Tests (written first, verified failing on the old code): the Android spacer height and the iOS
+height, each FAB's `marginBottom`, and the toast's. They spy on the `require`d
+`react-native-safe-area-context`: an `import * as` namespace under Babel interop is a copy that a
+spy misses.
+
 ## 7. Verification
 
 _Final results and the Mac checkpoint (Task 16)._

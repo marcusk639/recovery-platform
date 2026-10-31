@@ -6,6 +6,7 @@ import {
   StyleSheet,
   ListRenderItem,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList, Routes } from '../../navigation/types';
 import { useData } from '../../context/DataContext';
@@ -47,6 +48,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const TreasuryDashboard: React.FC<Props> = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
   const { currentHouse } = useData();
   const houseId = currentHouse?.id ?? '';
 
@@ -313,7 +315,7 @@ const TreasuryDashboard: React.FC<Props> = ({ navigation }) => {
       {canCreate && (
         <TouchableOpacity
           testID="treasury-fab"
-          style={styles.fab}
+          style={[styles.fab, { marginBottom: insets.bottom }]}
           onPress={() => navigateToForm()}>
           <RatsText translate={false} text="+" style={styles.fabText} />
         </TouchableOpacity>

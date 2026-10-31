@@ -2,6 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { View, FlatList, StyleSheet, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useData } from '../../context/DataContext';
 import { useHouseDrugTests } from '../../state/queries/drugTestQueries';
 import { DrugTest, DrugTestResult } from '../../entities/DrugTest';
@@ -62,6 +63,7 @@ function DrugTestRow({ test }: { test: DrugTest }) {
 
 export default function DrugTestingScreen() {
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   const { currentHouse } = useData();
   const { data: tests, isLoading } = useHouseDrugTests(currentHouse?.id ?? '');
 
@@ -110,7 +112,7 @@ export default function DrugTestingScreen() {
       />
       <TouchableOpacity
         testID="fab-log-test"
-        style={styles.fab}
+        style={[styles.fab, { marginBottom: insets.bottom }]}
         onPress={() => navigation.navigate(Routes.DrugTestForm, {})}>
         <RatsText translate={false} text="+" style={styles.fabText} />
       </TouchableOpacity>
