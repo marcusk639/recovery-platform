@@ -977,7 +977,9 @@ Pinned exactly so the migration cannot change them; none is fixed here.
   already left them out), and `ShortcutBadger` went with `react-native-push-notification`. The merged
   manifest was **not** built here: this machine has no Android SDK for compileSdk 37 (only
   platforms 34 and 35), so CI's Android build on the push is the check
-  (`./gradlew :app:processDebugMainManifest`).
+  (`./gradlew :app:processDebugMainManifest`). **Resolved** after Task 15 by a local Android
+  build: the merged debug manifest has none of the removed permissions (see "First Android
+  build and emulator run").
 - **iOS native.** In this commit `ios/rats/AppDelegate.mm` drops the `RNCPushNotificationIOS.h`
   import and the four methods that only forwarded to it (`didRegisterForRemoteNotifications…`,
   `didReceiveRemoteNotification:fetchCompletionHandler:`, `didFailToRegister…`,
@@ -1064,6 +1066,7 @@ Pinned exactly so the migration cannot change them; none is fixed here.
     `StripeSdk_kotlinVersion` 2.2.21, so the root `kotlinVersion` still matches. The app pins no
     `stripeVersion` (removed in Task 4); only the comments in `android/build.gradle` change. Not
     built here (no compileSdk 37 SDK on this machine): CI's Android build is the check.
+    **Resolved** after Task 15: the local Android build resolves `com.stripe:stripe-android:23.24.0`.
   - **Tests:** the jest mock is unchanged; the full suite stays green.
 - **Podfile.**
   - The `node_require` helper loads `react_native_pods.rb` and `react-native-permissions/scripts/setup.rb`.
@@ -1396,6 +1399,30 @@ issues; both are fixed.
   date picker on a device is part of the Mac checkpoint's `rats-datepicker` check.
 - Not fixed (pre-existing, same on `main`): `Info.plist` lists `Quicksand-SemiBold.ttf`, which is
   not in the bundle; no style uses it.
+
+### First Android build and emulator run (after Task 15)
+
+`./gradlew assembleDebug` succeeded on the first run (9m 37s) once the SDK had platform
+`android-37.0`, build-tools 37.0.0 and NDK 27.1.12297006 (now installed locally). No fixes were
+needed. It settles the two items left to CI:
+
+- **stripe-android** resolves to 23.24.0 (`debugRuntimeClasspath`), as Stripe RN 0.83.0 declares.
+- **Merged manifest** (`processDebugMainManifest`): `SCHEDULE_EXACT_ALARM`, `USE_EXACT_ALARM`,
+  `FOREGROUND_SERVICE`, `ACCESS_NOTIFICATION_POLICY` and any full-screen intent are absent;
+  `POST_NOTIFICATIONS` is present; minSdk 24, targetSdk 36; `adjustResize` kept.
+
+Warnings, none acted on: D8 "Invalid stack map table" notes on `play-services-auth` 21.5.0 (D8
+recomputes the frames); AGP deprecation notices for `android.newDsl=false` and
+`android.builtInKotlin=false` (spec choices) and the old variant APIs some libraries use.
+
+On the `regroup-e2e` emulator (API 34) the debug APK cold-starts in 1.3s under Fabric to the
+landing screen, laid out below the status bar (Task 14), with no errors. JS warnings: the unset
+`GOOGLE_MAPS_API_KEY` (no `.env` in that worktree) and `setLayoutAnimationEnabledExperimental`
+being a no-op under the New Architecture.
+
+- Not fixed (pre-existing, same on `main`): Android ships no Quicksand font (no files under
+  `android/`, no `assets` in `react-native.config.js`), so the theme's Quicksand families fall
+  back to Roboto there.
 
 ## 7. Verification
 
