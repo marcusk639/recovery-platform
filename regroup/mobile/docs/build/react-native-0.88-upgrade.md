@@ -1374,6 +1374,17 @@ needs the removed packages at HEAD, and the worklets Babel test fails on the HEA
 (`onStateChange={state => console.log('state', state)}`). Route params can carry guest data, so
 this broke the no-PII-logging rule. Removed in its own commit (Task 15 Step 4); nothing else read it.
 
+### First simulator run (after Task 15)
+
+A clean Debug build (iPhone 18 Pro simulator, Xcode 27.2) and a launch against Metro found two
+issues; both are fixed.
+
+- **App deployment target 15.0 → 15.1.** Task 13 set the pods to 15.1 (RN 0.88's
+  `min_ios_version_supported`) but left the app target's 12 build configurations at 15.0, so the
+  link warned that Hermes and every pod were "built for newer iOS-simulator version (15.1)". The
+  App Store would have offered the app to iOS 15.0, where `hermesvm` cannot load. All 12 are now
+  15.1; the relink has no such warnings.
+
 ## 7. Verification
 
 _Final results and the Mac checkpoint (Task 16)._
