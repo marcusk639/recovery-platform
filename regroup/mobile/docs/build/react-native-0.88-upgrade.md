@@ -1384,6 +1384,18 @@ issues; both are fixed.
   link warned that Hermes and every pod were "built for newer iOS-simulator version (15.1)". The
   App Store would have offered the app to iOS 15.0, where `hermesvm` cannot load. All 12 are now
   15.1; the relink has no such warnings.
+- **Launch red screen: "Module provider RNDatePickerManager does not conform to
+  RCTModuleProvider".** react-native-date-picker 5.0.13 (the latest release) declares
+  `codegenConfig.ios.modulesProvider` → `RNDatePickerManager`, a legacy `RCTViewManager` with no
+  `getTurboModule:`. RN 0.88's generated `RCTModuleProviders` logs the error (red in Debug, a log
+  line in Release) and skips the entry. On iOS the library's JS uses only
+  `NativeModules.RNDatePicker`, which the TurboModule interop layer serves when a module has no
+  provider (`RCTTurboModuleManager.mm`), so the picker worked either way. The patch
+  (`patches/react-native-date-picker+5.0.13.patch`, now two hunks with a header) drops the iOS
+  `modulesProvider` and keeps the Fabric `componentProvider`. The relaunch logs nothing. Opening a
+  date picker on a device is part of the Mac checkpoint's `rats-datepicker` check.
+- Not fixed (pre-existing, same on `main`): `Info.plist` lists `Quicksand-SemiBold.ttf`, which is
+  not in the bundle; no style uses it.
 
 ## 7. Verification
 

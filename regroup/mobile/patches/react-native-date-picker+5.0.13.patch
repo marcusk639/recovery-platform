@@ -1,10 +1,17 @@
-# react-native-date-picker 5.0.13 on AGP 9 (regroup-mobile RN 0.88 upgrade, Task 4).
+# react-native-date-picker 5.0.13 on RN 0.88 (regroup-mobile RN 0.88 upgrade). 5.0.13 is the
+# latest release; drop each hunk once a release fixes it upstream (decision record).
 #
-# AGP 9 fails configuration on getDefaultProguardFile('proguard-android.txt') ("is no longer
-# supported. Instead, use getDefaultProguardFile('proguard-android-optimize.txt')"), whatever the
-# minify setting. 5.0.13 is the latest release. The library's release build type has
-# minifyEnabled false, so nothing changes at runtime. Drop this patch once a release switches the
-# file upstream (decision record, Task 4).
+# Task 4, android/build.gradle: AGP 9 fails configuration on
+# getDefaultProguardFile('proguard-android.txt') ("is no longer supported. Instead, use
+# getDefaultProguardFile('proguard-android-optimize.txt')"), whatever the minify setting. The
+# library's release build type has minifyEnabled false, so nothing changes at runtime.
+#
+# package.json, codegenConfig.ios.modulesProvider: it names RNDatePickerManager, a legacy
+# RCTViewManager with no getTurboModule:, so RN 0.88's generated RCTModuleProviders logs
+# "Module provider RNDatePickerManager does not conform to RCTModuleProvider" at launch (a red
+# screen in Debug) and skips the entry. The library's iOS JS reaches the module only through
+# NativeModules.RNDatePicker, which the TurboModule interop layer serves when there is no
+# provider, so dropping the entry changes nothing at runtime. componentProvider (Fabric) stays.
 diff --git a/node_modules/react-native-date-picker/android/build.gradle b/node_modules/react-native-date-picker/android/build.gradle
 index b2803c4..ea10692 100644
 --- a/node_modules/react-native-date-picker/android/build.gradle
@@ -18,3 +25,17 @@ index b2803c4..ea10692 100644
          }
      }
  }
+diff --git a/node_modules/react-native-date-picker/package.json b/node_modules/react-native-date-picker/package.json
+index 469386d..36460e4 100644
+--- a/node_modules/react-native-date-picker/package.json
++++ b/node_modules/react-native-date-picker/package.json
+@@ -70,9 +70,6 @@
+     "ios": {
+       "componentProvider": {
+         "RNDatePicker": "RNDatePicker"
+-      },
+-      "modulesProvider": {
+-        "RNDatePicker": "RNDatePickerManager"
+       }
+     }
+   }
