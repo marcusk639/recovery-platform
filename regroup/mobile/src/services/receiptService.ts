@@ -25,6 +25,10 @@ function formatCurrency(cents: number): string {
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
+  // PaymentRow passes '' when a payment's createdAt is missing or unparseable.
+  if (Number.isNaN(d.getTime())) {
+    return 'Date unavailable';
+  }
   return d.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',
