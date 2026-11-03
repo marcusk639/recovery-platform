@@ -75,6 +75,10 @@ describe('paymentQueries', () => {
   const wrapper = ({ children }: { children: React.ReactNode }) =>
     React.createElement(QueryClientProvider, { client: queryClient }, children);
 
+  // A resident's history is scoped by house and their uid (the payments read
+  // rule needs both in the query); guestId scopes the cache key.
+  const HISTORY = { guestId: 'guest456', houseId: 'house123', guestUserId: 'uid456' };
+
   // ─── paymentKeys ────────────────────────────────────────────────────────────
 
   describe('paymentKeys', () => {
@@ -99,7 +103,7 @@ describe('paymentQueries', () => {
         mockPaymentHistory,
       );
 
-      const { result } = renderHook(() => usePaymentHistory('guest456'), {
+      const { result } = renderHook(() => usePaymentHistory(HISTORY), {
         wrapper,
       });
 
@@ -108,14 +112,17 @@ describe('paymentQueries', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(result.current.data).toEqual(mockPaymentHistory);
-      expect(paymentService.getPaymentHistory).toHaveBeenCalledWith('guest456');
+      expect(paymentService.getPaymentHistory).toHaveBeenCalledWith({
+        houseId: 'house123',
+        guestUserId: 'uid456',
+      });
     });
 
     it('should handle fetch error', async () => {
       const error = new Error('Failed to fetch payment history');
       (paymentService.getPaymentHistory as jest.Mock).mockRejectedValue(error);
 
-      const { result } = renderHook(() => usePaymentHistory('guest456'), {
+      const { result } = renderHook(() => usePaymentHistory(HISTORY), {
         wrapper,
       });
 
@@ -126,7 +133,7 @@ describe('paymentQueries', () => {
 
     it('should not fetch when disabled', () => {
       const { result } = renderHook(
-        () => usePaymentHistory('guest456', false),
+        () => usePaymentHistory(HISTORY, false),
         { wrapper },
       );
 
@@ -135,9 +142,33 @@ describe('paymentQueries', () => {
     });
 
     it('should not fetch when guestId is empty', () => {
-      const { result } = renderHook(() => usePaymentHistory(''), { wrapper });
+      const { result } = renderHook(() => usePaymentHistory({ ...HISTORY, guestId: '' }), {
+        wrapper,
+      });
 
       expect(result.current.isLoading).toBe(false);
+      expect(paymentService.getPaymentHistory).not.toHaveBeenCalled();
+    });
+
+    // Like useActivities: no houseId, no query. The payments read rule denies
+    // a list without houseId + guestUserId, so sending one would only fail.
+    it('stays idle until houseId is known', () => {
+      const { result } = renderHook(() => usePaymentHistory({ ...HISTORY, houseId: undefined }), {
+        wrapper,
+      });
+
+      expect(result.current.fetchStatus).toBe('idle');
+      expect(result.current.isLoading).toBe(false);
+      expect(paymentService.getPaymentHistory).not.toHaveBeenCalled();
+    });
+
+    it('stays idle until guestUserId is known', () => {
+      const { result } = renderHook(
+        () => usePaymentHistory({ ...HISTORY, guestUserId: undefined }),
+        { wrapper },
+      );
+
+      expect(result.current.fetchStatus).toBe('idle');
       expect(paymentService.getPaymentHistory).not.toHaveBeenCalled();
     });
 
@@ -148,14 +179,14 @@ describe('paymentQueries', () => {
 
       // First render
       const { result: result1 } = renderHook(
-        () => usePaymentHistory('guest456'),
+        () => usePaymentHistory(HISTORY),
         { wrapper },
       );
       await waitFor(() => expect(result1.current.isSuccess).toBe(true));
 
       // Second render shares the same queryClient wrapper — should hit cache
       const { result: result2 } = renderHook(
-        () => usePaymentHistory('guest456'),
+        () => usePaymentHistory(HISTORY),
         { wrapper },
       );
 
@@ -167,7 +198,7 @@ describe('paymentQueries', () => {
     it('should return empty array when no payments exist', async () => {
       (paymentService.getPaymentHistory as jest.Mock).mockResolvedValue([]);
 
-      const { result } = renderHook(() => usePaymentHistory('guest456'), {
+      const { result } = renderHook(() => usePaymentHistory(HISTORY), {
         wrapper,
       });
 
@@ -351,13 +382,15 @@ describe('paymentQueries', () => {
         mockPaymentHistory,
       );
 
-      const { result } = renderHook(() => usePaymentHistory('guest456'), {
+      const { result } = renderHook(() => usePaymentHistory(HISTORY), {
         wrapper,
       });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      const cached = queryClient.getQueryData(paymentKeys.history('guest456'));
+      const cached = queryClient.getQueryData(
+        paymentKeys.historyFor('guest456', 'house123', 'uid456'),
+      );
       expect(cached).toEqual(mockPaymentHistory);
     });
   });

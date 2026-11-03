@@ -185,14 +185,41 @@ describe('markPaymentResolvedOffline', () => {
 });
 
 describe('getPaymentHistory', () => {
-  it("queries the guest's payments newest first with the limit", async () => {
+  // The rules admit a resident's list query only when it is scoped to the house
+  // and to their uid (payments.guestUserId); a guestId-only query is denied.
+  it("queries the resident's payments in the house newest first with the limit", async () => {
     seedQuery('payments', [
-      { id: 'a', guestId: 'g1', createdAt: '2026-01-01T00:00:00.000Z', amount: 1 },
-      { id: 'b', guestId: 'g1', createdAt: '2026-03-01T00:00:00.000Z', amount: 2 },
-      { id: 'c', guestId: 'g2', createdAt: '2026-04-01T00:00:00.000Z', amount: 3 },
+      {
+        id: 'a',
+        houseId: 'h1',
+        guestUserId: 'u1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        amount: 1,
+      },
+      {
+        id: 'b',
+        houseId: 'h1',
+        guestUserId: 'u1',
+        createdAt: '2026-03-01T00:00:00.000Z',
+        amount: 2,
+      },
+      {
+        id: 'c',
+        houseId: 'h1',
+        guestUserId: 'u2',
+        createdAt: '2026-04-01T00:00:00.000Z',
+        amount: 3,
+      },
+      {
+        id: 'd',
+        houseId: 'h2',
+        guestUserId: 'u1',
+        createdAt: '2026-05-01T00:00:00.000Z',
+        amount: 4,
+      },
     ]);
 
-    const history = await getPaymentHistory('g1', 5);
+    const history = await getPaymentHistory({ houseId: 'h1', guestUserId: 'u1' }, 5);
 
     expect(history.map((p) => p.amount)).toEqual([2, 1]);
     expect(getOpLog()).toEqual([
@@ -200,7 +227,8 @@ describe('getPaymentHistory', () => {
         op: 'getDocs',
         path: 'payments',
         constraints: [
-          ['where', 'guestId', '==', 'g1'],
+          ['where', 'houseId', '==', 'h1'],
+          ['where', 'guestUserId', '==', 'u1'],
           ['orderBy', 'createdAt', 'desc'],
           ['limit', 5],
         ],
@@ -209,9 +237,10 @@ describe('getPaymentHistory', () => {
   });
 
   it('returns an empty list when there are none', async () => {
-    expect(await getPaymentHistory('nobody')).toEqual([]);
+    expect(await getPaymentHistory({ houseId: 'h1', guestUserId: 'nobody' })).toEqual([]);
     expect(getOpLog()[0].constraints).toEqual([
-      ['where', 'guestId', '==', 'nobody'],
+      ['where', 'houseId', '==', 'h1'],
+      ['where', 'guestUserId', '==', 'nobody'],
       ['orderBy', 'createdAt', 'desc'],
       ['limit', 100],
     ]);

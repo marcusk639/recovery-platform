@@ -148,6 +148,7 @@ const StripeAccountStatus = {
 // payment-amount assertions below reflect actual production data shapes.
 const baseGuest = {
   id: "guest-1",
+  userId: 'user-1',
   houseId: "house-1",
   rentOwed: 15000,
   choreFees: 0,
@@ -346,7 +347,8 @@ describe("RentPaymentScreen", () => {
       "house-1",
       15000,
       "Monthly Rent",
-      "pi_test123" // extracted from the clientSecret, not undefined
+      'pi_test123', // extracted from the clientSecret, not undefined
+      'user-1', // guest.userId, so the record is readable by the resident
     );
     expect(queryByTestId("payment-success-banner")).toBeTruthy();
     // Regression coverage for 2026-07-07: the Pay Now CTA used to stay
@@ -484,6 +486,16 @@ describe("RentPaymentScreen", () => {
 
     const { getByTestId } = renderScreen();
     expect(getByTestId("payment-status-badge-succeeded")).toBeTruthy();
+  });
+
+  // The payments read rule needs houseId + the resident's uid in the query.
+  it("asks for the history by guest, house and the resident's uid", () => {
+    renderScreen();
+    expect(mockUsePaymentHistory).toHaveBeenCalledWith({
+      guestId: 'guest-1',
+      houseId: 'house-1',
+      guestUserId: 'user-1',
+    });
   });
 
   it("renders the rent payment screen container", () => {

@@ -220,6 +220,24 @@ describe("payment service", () => {
       expect(mockDocFn).toHaveBeenCalledWith("pi_abc123");
     });
 
+    it('writes guestUserId on the optimistic record when given', async () => {
+      collectionMock.doc = jest.fn(() => ({ id: 'pi_uid' }));
+      const { transactionSet } = setupTransaction();
+
+      await recordRentPayment('g1', 'h1', 200, 'Rent', 'pi_uid', 'resident-uid');
+
+      expect(transactionSet.mock.calls[0][1].guestUserId).toBe('resident-uid');
+    });
+
+    it('omits the guestUserId key when not given', async () => {
+      collectionMock.doc = jest.fn(() => ({ id: 'pi_no_uid' }));
+      const { transactionSet } = setupTransaction();
+
+      await recordRentPayment('g1', 'h1', 200, 'Rent', 'pi_no_uid');
+
+      expect(transactionSet.mock.calls[0][1]).not.toHaveProperty('guestUserId');
+    });
+
     it("falls back to an auto-generated doc ID when no PaymentIntent ID is given", async () => {
       const mockDocFn = jest.fn(() => ({ id: "auto-id" }));
       collectionMock.doc = mockDocFn;
@@ -341,6 +359,30 @@ describe("payment service", () => {
         mockFirestore.collection = originalCollection;
       }
     });
+
+    // The resident reads the record only when guestUserId is their uid.
+    it('writes guestUserId on the record when given', async () => {
+      collectionMock.doc = jest.fn(() => ({ id: 'manual-2' }));
+      const { batchSet } = setupBatch();
+
+      const result = await recordManualPayment('g1', 'h1', 15000, 'Cash', '', 'resident-uid');
+
+      expect(batchSet.mock.calls[0][1]).toMatchObject({
+        guestId: 'g1',
+        houseId: 'h1',
+        guestUserId: 'resident-uid',
+      });
+      expect(result.guestUserId).toBe('resident-uid');
+    });
+
+    it('omits the guestUserId key (never undefined) when not given', async () => {
+      collectionMock.doc = jest.fn(() => ({ id: 'manual-3' }));
+      const { batchSet } = setupBatch();
+
+      await recordManualPayment('g1', 'h1', 15000, 'Check');
+
+      expect(batchSet.mock.calls[0][1]).not.toHaveProperty('guestUserId');
+    });
   });
 
   // ── getPaymentHistory ─────────────────────────────────────────────────────
@@ -351,7 +393,7 @@ describe("payment service", () => {
       collectionMock.orderBy = jest.fn(() => collectionMock);
       collectionMock.get = jest.fn(() => Promise.resolve({ docs: [] }));
 
-      const result = await getPaymentHistory("guest1");
+      const result = await getPaymentHistory({ houseId: 'house1', guestUserId: 'uid1' });
       expect(result).toEqual([]);
     });
 
@@ -385,7 +427,7 @@ describe("payment service", () => {
         })
       );
 
-      const result = await getPaymentHistory("guest1");
+      const result = await getPaymentHistory({ houseId: 'house1', guestUserId: 'uid1' });
 
       expect(result).toHaveLength(2);
       expect(result[0].id).toBe("p1");
@@ -394,17 +436,35 @@ describe("payment service", () => {
       expect(result[1].description).toBe("Chore Fee");
     });
 
-    it("queries by guestId and orders by createdAt desc", async () => {
+    // The payments read rule admits a resident only for their own uid in
+    // their own house, and a list query must be provable from its
+    // constraints. The old guestId-only query was denied for every resident.
+    it('queries by houseId + guestUserId (never guestId alone) and orders by createdAt desc', async () => {
       const whereMock = jest.fn(() => collectionMock);
       const orderByMock = jest.fn(() => collectionMock);
       collectionMock.where = whereMock;
       collectionMock.orderBy = orderByMock;
       collectionMock.get = jest.fn(() => Promise.resolve({ docs: [] }));
 
-      await getPaymentHistory("guest42");
+      await getPaymentHistory({ houseId: 'house42', guestUserId: 'uid42' });
 
-      expect(whereMock).toHaveBeenCalledWith("guestId", "==", "guest42");
+      expect(whereMock).toHaveBeenCalledWith('houseId', '==', 'house42');
+      expect(whereMock).toHaveBeenCalledWith('guestUserId', '==', 'uid42');
+      expect(whereMock).not.toHaveBeenCalledWith('guestId', expect.anything(), expect.anything());
       expect(orderByMock).toHaveBeenCalledWith("createdAt", "desc");
+    });
+
+    it('refuses to query without a houseId or guestUserId (the rules would deny it)', async () => {
+      const getMock = jest.fn(() => Promise.resolve({ docs: [] }));
+      collectionMock.get = getMock;
+
+      await expect(getPaymentHistory({ houseId: '', guestUserId: 'uid1' })).rejects.toThrow(
+        'houseId and guestUserId',
+      );
+      await expect(getPaymentHistory({ houseId: 'house1', guestUserId: '' })).rejects.toThrow(
+        'houseId and guestUserId',
+      );
+      expect(getMock).not.toHaveBeenCalled();
     });
 
     it("returns payment with correct shape including optional fields", async () => {
@@ -424,7 +484,7 @@ describe("payment service", () => {
         Promise.resolve({ docs: [{ data: () => mockPayment }] })
       );
 
-      const result = await getPaymentHistory("guest1");
+      const result = await getPaymentHistory({ houseId: 'house1', guestUserId: 'uid1' });
       expect(result[0].stripePaymentIntentId).toBe("pi_failed_123");
       expect(result[0].status).toBe("failed");
     });
@@ -444,7 +504,7 @@ describe("payment service", () => {
         Promise.resolve({ docs: [{ data: () => payment }] })
       );
 
-      const result = await getPaymentHistory("g1");
+      const result = await getPaymentHistory({ houseId: 'house1', guestUserId: 'uid1' });
       expect(result).toHaveLength(1);
       expect(result[0].amount).toBe(300);
     });
