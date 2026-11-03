@@ -23,6 +23,13 @@ export interface RentPayment {
   createdAt: string;
   stripePaymentIntentId?: string;
   description?: string; // e.g. 'Monthly Rent', 'Chore Fee'
+  /**
+   * The resident's Firebase uid (guests/{guestId}.userId). The payments read
+   * rule admits a resident only when this is their uid, and their history
+   * query filters on it. Absent on records written before it existed until
+   * functions' backfillPaymentGuestUserId runs.
+   */
+  guestUserId?: string;
 }
 
 /** Result returned by the 'createPaymentIntent' Cloud Function. */
@@ -48,6 +55,8 @@ export interface PaymentRecord {
 export interface HousePaymentRecord extends PaymentRecord {
   guestId: string | null;
   houseId: string;
+  /** See RentPayment.guestUserId. */
+  guestUserId?: string;
 }
 
 // ─── Firestore collection ─────────────────────────────────────────────────────
@@ -166,7 +175,8 @@ export async function recordRentPayment(
   houseId: string,
   amount: number,
   description: string = "Rent Payment",
-  stripePaymentIntentId?: string
+  stripePaymentIntentId?: string,
+  guestUserId?: string,
 ): Promise<RentPayment> {
   const docRef = stripePaymentIntentId
     ? paymentsCollection.doc(stripePaymentIntentId)
@@ -191,6 +201,7 @@ export async function recordRentPayment(
       createdAt: existing?.createdAt ?? new Date().toISOString(),
       description,
       stripePaymentIntentId,
+      ...(guestUserId ? { guestUserId } : {}),
     };
     transaction.set(docRef, payment, { merge: true });
     return payment;
@@ -207,16 +218,33 @@ export function paymentIntentIdFromClientSecret(clientSecret: string): string {
   return clientSecret.split("_secret_")[0];
 }
 
+export interface PaymentHistoryScope {
+  houseId: string;
+  /** The resident's Firebase uid (guests/{guestId}.userId). */
+  guestUserId: string;
+}
+
 /**
- * Fetch payment history for a guest from the 'payments' Firestore collection.
+ * Fetch a resident's payment history from the 'payments' Firestore collection.
  * Results are sorted newest-first.
+ *
+ * Rules are not filters: a list query is allowed only if every possible result
+ * is readable. payments/{id} is readable by admins of resource.data.houseId and
+ * by the guest of that house whose uid is resource.data.guestUserId, so the
+ * query must carry both constraints. Filtering by guestId alone was denied for
+ * every resident (the screen always showed "Unable to load payment history").
+ * Needs the (houseId, guestUserId, createdAt desc) index.
  */
 export async function getPaymentHistory(
-  guestId: string,
+  { houseId, guestUserId }: PaymentHistoryScope,
   limit = 100
 ): Promise<RentPayment[]> {
+  if (!houseId || !guestUserId) {
+    throw new Error('getPaymentHistory: houseId and guestUserId are required');
+  }
   const snapshot = await paymentsCollection
-    .where("guestId", "==", guestId)
+    .where('houseId', '==', houseId)
+    .where('guestUserId', '==', guestUserId)
     .orderBy("createdAt", "desc")
     .limit(limit)
     .get();
@@ -286,13 +314,16 @@ export async function listHousePayments(
  *
  * @param amountInCents - Amount in US cents (e.g., 50000 for $500.00).
  *   Callers must convert from dollars before calling this function.
+ * @param guestUserId - The resident's Firebase uid (guests/{guestId}.userId).
+ *   Without it the resident cannot read this record (see RentPayment.guestUserId).
  */
 export async function recordManualPayment(
   guestId: string,
   houseId: string,
   amountInCents: number,
   method: "Cash" | "Check" | "Venmo" | "Zelle",
-  notes: string = ""
+  notes: string = '',
+  guestUserId?: string,
 ): Promise<HousePaymentRecord> {
   if (!Number.isInteger(amountInCents) || amountInCents <= 0) {
     throw new Error(
@@ -309,6 +340,7 @@ export async function recordManualPayment(
     status: "succeeded",
     description: `Manual Payment — ${method}${notes ? `: ${notes}` : ""}`,
     createdAt: new Date().toISOString(),
+    ...(guestUserId ? { guestUserId } : {}),
   };
   // Hardened 2026-07-07: the payment doc write and the rentOwed decrement
   // used to be two separate awaits. If the second write failed, staff would

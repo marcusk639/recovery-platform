@@ -233,6 +233,8 @@ describe("PaymentDashboard", () => {
           15000, // $150.00 in cents
           "Cash",
           "",
+          // The resident's uid, so the record is readable in their history.
+          'u1',
         );
       });
     });

@@ -25,6 +25,8 @@
     "backfill:week-summaries:apply": "npm run build && node lib/scripts/backfillWeekSummaries.js --apply",
     "backfill:dispute-identity:dry-run": "npm run build && node lib/scripts/backfillDisputeIdentity.js",
     "backfill:dispute-identity:apply": "npm run build && node lib/scripts/backfillDisputeIdentity.js --apply",
+    "backfill:payment-guest-uid:dry-run": "npm run build && node lib/scripts/backfillPaymentGuestUserId.js",
+    "backfill:payment-guest-uid:apply": "npm run build && node lib/scripts/backfillPaymentGuestUserId.js --apply",
     "test": "jest --runInBand",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",

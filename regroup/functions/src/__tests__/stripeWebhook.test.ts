@@ -1464,6 +1464,24 @@ describe("payment_intent.payment_failed", () => {
     );
   });
 
+  test("failed payment doc carries createdAt so it appears in history", async () => {
+    // getPaymentHistory orders by createdAt, and Firestore drops documents that
+    // lack the ordered field. A failed PaymentIntent with no earlier doc would
+    // otherwise never show in the resident's history.
+    const pi = makeFailedPaymentIntent("card_declined");
+    mockConstructEvent.mockReturnValue(
+      makeStripeEvent("payment_intent.payment_failed", pi),
+    );
+    setupForPaymentFailed();
+
+    await stripeWebhook(makeRequest({}) as never, makeResponse() as never);
+
+    expect(mockSet).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "failed", createdAt: expect.anything() }),
+      expect.objectContaining({ merge: true }),
+    );
+  });
+
   test("card_declined: failure message includes decline reason", async () => {
     const pi = makeFailedPaymentIntent("card_declined");
     const event = makeStripeEvent("payment_intent.payment_failed", pi);

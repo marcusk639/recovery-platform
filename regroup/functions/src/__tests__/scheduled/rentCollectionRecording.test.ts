@@ -155,6 +155,30 @@ describe('rent collection: recording guarantees', () => {
     );
   });
 
+  // The webhook copies guestUserId onto payments/{id}; the resident's history
+  // query and the payments read rule key on it.
+  it("passes the resident's uid as guestUserId in metadata", async () => {
+    const base = fakeGuestDoc('guest-1', 50000);
+    guestCollection.get.mockResolvedValue({
+      empty: false,
+      size: 1,
+      docs: [{ id: base.id, data: () => ({ ...base.data(), userId: 'resident-uid' }) }],
+    });
+
+    await runRentCollection();
+
+    expect(mockCreatePaymentIntent.mock.calls[0][0].metadata).toMatchObject({
+      guestId: 'guest-1',
+      guestUserId: 'resident-uid',
+    });
+  });
+
+  it('omits guestUserId from metadata when the guest has no account', async () => {
+    await runRentCollection();
+
+    expect(mockCreatePaymentIntent.mock.calls[0][0].metadata).not.toHaveProperty('guestUserId');
+  });
+
   // Without this the job reported SUCCESS while every charge failed, which is
   // the state that let the original defect run unnoticed for days.
   it('rejects so Cloud Scheduler records a FAILURE when a charge fails', async () => {

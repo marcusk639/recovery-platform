@@ -2201,10 +2201,40 @@ describe("createPaymentIntent", () => {
       );
     });
 
-    it("includes guestId and houseId in metadata", async () => {
+    // guestUserId is the resident's Firebase uid. The webhook copies it onto
+    // payments/{id}, whose read rule (and the resident's history query) key on
+    // it; without it the resident can never see their own payments.
+    it("includes guestId, houseId and the resident's guestUserId in metadata", async () => {
       await (createPaymentIntent as unknown as Function)(
         baseData,
         authedContext(USER_UID),
+      );
+      expect(mockStripePaymentIntentsCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: {
+            guestId: GUEST_ID,
+            houseId: HOUSE_ID,
+            guestUserId: USER_UID,
+          },
+        }),
+        expect.anything(),
+      );
+    });
+
+    it("omits guestUserId from metadata when the guest doc has no account", async () => {
+      // An admin paying for an intake record not linked to an account.
+      seedHouse(HOUSE_ID, {
+        stripeAccountId: "acct_active_house",
+        stripeStatus: "active",
+        adminId: "admin-uid-1",
+      });
+      firestoreDocStore[`guests/${GUEST_ID}`] = {
+        userId: "",
+        houseId: HOUSE_ID,
+      };
+      await (createPaymentIntent as unknown as Function)(
+        baseData,
+        authedContext("admin-uid-1"),
       );
       expect(mockStripePaymentIntentsCreate).toHaveBeenCalledWith(
         expect.objectContaining({

@@ -210,7 +210,14 @@ export const createPaymentIntent = onCall(
           amount,
           currency,
           description: description || `Rent payment for ${houseId}`,
-          metadata: { guestId, houseId },
+          // guestUserId (the resident's uid) is copied onto payments/{id} by
+          // the webhook: the payments read rule and the resident's history
+          // query key on it. Omitted for a guest doc with no linked account.
+          metadata: {
+            guestId,
+            houseId,
+            ...(guestData.userId ? { guestUserId: guestData.userId } : {}),
+          },
           // An allowlist of one, by design: the client picks card or ACH
           // upstream and the Payment Sheet is expected to offer only that.
           //
