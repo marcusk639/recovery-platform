@@ -38,6 +38,13 @@ describe('seedTarget', () => {
     expect(() => seedTarget({ ...OK, [name]: host })).toThrow(/loopback/);
   });
 
+  it.each([
+    ['FIRESTORE_EMULATOR_HOST', '127.0.0.1.attacker.example:8080'],
+    ['FIREBASE_AUTH_EMULATOR_HOST', 'localhost.attacker.example:9099'],
+  ])('refuses a %s that only starts with a loopback name (%s)', (name, host) => {
+    expect(() => seedTarget({ ...OK, [name]: host })).toThrow(new RegExp(`${name}.*loopback`));
+  });
+
   it('refuses to run without the shared test password', () => {
     expect(() => seedTarget({})).toThrow(/E2E_TEST_PASSWORD/);
   });
