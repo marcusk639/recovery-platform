@@ -314,6 +314,37 @@ async function upsertPaymentDoc(
   await ref.set(toWrite, { merge: true });
 }
 
+/**
+ * `{ guestUserId }` to spread into a payments write, or `{}` when there is no
+ * uid. The payments read rule admits a resident only when
+ * resource.data.guestUserId is their uid, and their history query filters on
+ * it, so without this a resident can never see their own payment. The key is
+ * omitted rather than written as undefined, which Firestore rejects.
+ */
+function guestUserIdField(uid: unknown): { guestUserId?: string } {
+  return typeof uid === "string" && uid.length > 0 ? { guestUserId: uid } : {};
+}
+
+/**
+ * Backfill guestUserId from the guest doc for a PaymentIntent created before
+ * createPaymentIntent / scheduledRentCollection put it in metadata. Uses a
+ * guest snapshot the caller already read, so it adds no read, and it runs only
+ * after the payment record is written: a failure here (500, Stripe retries)
+ * never leaves a captured payment unrecorded, and the write is idempotent.
+ */
+async function backfillGuestUserIdFromGuest(
+  paymentIntent: Stripe.PaymentIntent,
+  guestData: GuestDoc,
+): Promise<void> {
+  if (guestUserIdField(paymentIntent.metadata?.guestUserId).guestUserId) {
+    return; // Already written from metadata.
+  }
+  const field = guestUserIdField(guestData.userId);
+  if (field.guestUserId) {
+    await upsertPaymentDoc(paymentIntent.id, field);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Event handler: payment_intent.succeeded
 // ---------------------------------------------------------------------------
@@ -340,6 +371,7 @@ async function handlePaymentIntentSucceeded(
       status: "succeeded",
       houseId: houseId ?? null,
       guestId: guestId ?? null,
+      ...guestUserIdField(paymentIntent.metadata?.guestUserId),
       // Without createdAt this document falls out of every query: getPaymentHistory
       // orders by it (mobile/src/services/payments.ts:191) and analytics filters
       // on inWindow(toDateStr(createdAt)) (callable/analytics.ts:168), and both
@@ -393,6 +425,9 @@ async function handlePaymentIntentSucceeded(
       status: "succeeded",
       houseId,
       guestId,
+      // Metadata only: this terminal path makes no guest read. A PaymentIntent
+      // from before metadata carried it is left to backfillPaymentGuestUserId.
+      ...guestUserIdField(paymentIntent.metadata?.guestUserId),
       rentApplied: false,
       needsManualReconciliation: true,
       refusedReason: "unsupported_currency",
@@ -431,6 +466,10 @@ async function handlePaymentIntentSucceeded(
     stripePaymentIntentId: paymentIntent.id,
     houseId,
     guestId,
+    // From metadata only, so this write still needs nothing that can fail. A
+    // PaymentIntent created before metadata carried it is backfilled from the
+    // guest read below.
+    ...guestUserIdField(paymentIntent.metadata?.guestUserId),
     amount: amountCents,
     currency: paymentIntent.currency,
     status: "succeeded",
@@ -526,6 +565,10 @@ async function handlePaymentIntentSucceeded(
   } else {
     const guestData = guestSnap.data() as GuestDoc;
 
+    // Before the decrement and the notifications, so if this write fails the
+    // retry repeats nothing that is not idempotent.
+    await backfillGuestUserIdFromGuest(paymentIntent, guestData);
+
     const paymentRef = db.collection("payments").doc(paymentIntent.id);
     const applied = await db.runTransaction(async (txn) => {
       const paymentSnap = await txn.get(paymentRef);
@@ -618,6 +661,7 @@ async function handlePaymentIntentFailed(
     stripePaymentIntentId: paymentIntent.id,
     houseId: houseId ?? null,
     guestId: guestId ?? null,
+    ...guestUserIdField(paymentIntent.metadata?.guestUserId),
     // Cents, like every other write to this field (#82). A failed payment is
     // excluded from the analytics window by status, but the unit must still
     // agree — the resident's history reads the same field.
@@ -647,6 +691,9 @@ async function handlePaymentIntentFailed(
 
   const guestData = guestSnap.data() as GuestDoc;
   const guestName = `${guestData.firstName} ${guestData.lastName}`;
+
+  // Before the notifications, so a failed write retries without re-sending.
+  await backfillGuestUserIdFromGuest(paymentIntent, guestData);
 
   // Build context-aware user message based on failure code
   let userMessage: string;

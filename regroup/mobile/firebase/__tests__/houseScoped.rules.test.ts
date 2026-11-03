@@ -232,3 +232,58 @@ describe('meetings update', () => {
     await assertFails(updateDoc(doc(asBothAdmin, 'meetings/m1'), { houseId: OTHER_HOUSE }));
   });
 });
+
+// payments/{id} is readable by the house's admins and by the resident whose
+// uid is resource.data.guestUserId. The resident's history query must carry
+// both constraints; a guestId-only list is unprovable and denied.
+describe('payments history list queries', () => {
+  const OTHER_RESIDENT_UID = 'otherResident';
+  const pay = (db: ReturnType<typeof asAdmin>, ...where_: ReturnType<typeof where>[]) =>
+    getDocs(query(collection(db, 'payments'), ...where_, orderBy('createdAt', 'desc')));
+  const history = (db: ReturnType<typeof asAdmin>, uid: string) =>
+    pay(db, where('houseId', '==', HOUSE_ID), where('guestUserId', '==', uid));
+
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const base = { houseId: HOUSE_ID, amount: 50000, status: 'succeeded' };
+      await setDoc(doc(ctx.firestore(), 'payments/p1'), {
+        ...base,
+        guestId: GUEST_ID,
+        guestUserId: RESIDENT_UID,
+        createdAt: '2026-10-01T00:00:00Z',
+      });
+      await setDoc(doc(ctx.firestore(), 'payments/p2'), {
+        ...base,
+        guestId: 'guest-doc-2',
+        guestUserId: OTHER_RESIDENT_UID,
+        createdAt: '2026-10-02T00:00:00Z',
+      });
+    });
+  });
+
+  it('allows the resident to list their own history by houseId + guestUserId', async () => {
+    const snapshot = await assertSucceeds(history(asResident(), RESIDENT_UID));
+    expect(snapshot.docs.map((d: { id: string }) => d.id)).toEqual(['p1']);
+  });
+
+  it('denies the resident the old guestId-only query', async () => {
+    await assertFails(pay(asResident(), where('guestId', '==', GUEST_ID)));
+  });
+
+  it("denies the resident another resident's records by guestUserId", async () => {
+    await assertFails(history(asResident(), OTHER_RESIDENT_UID));
+  });
+
+  it("allows a house admin to list a resident's history by houseId + guestUserId", async () => {
+    const snapshot = await assertSucceeds(history(asAdmin(), OTHER_RESIDENT_UID));
+    expect(snapshot.docs.map((d: { id: string }) => d.id)).toEqual(['p2']);
+  });
+
+  it('denies a resident of another house', async () => {
+    const asOutsider = testEnv
+      .authenticatedContext(RESIDENT_UID, { guest: { 'other-house': true } })
+      .firestore();
+    // Same uid as the record's guestUserId, but no guest claim for its house.
+    await assertFails(history(asOutsider, RESIDENT_UID));
+  });
+});

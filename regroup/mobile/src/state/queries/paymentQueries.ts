@@ -14,8 +14,11 @@ import { toDateSafe } from '../../util/firestore';
 
 export const paymentKeys = {
   all: ['payments'] as const,
+  /** Prefix for every history query of a guest; use it to invalidate. */
   history: (guestId: string) =>
     [...paymentKeys.all, 'history', guestId] as const,
+  historyFor: (guestId: string, houseId: string | undefined, guestUserId: string | undefined) =>
+    [...paymentKeys.history(guestId), houseId, guestUserId] as const,
   housePayments: (houseId: string) =>
     [...paymentKeys.all, 'house', houseId] as const,
   guestBalances: (houseId: string) =>
@@ -24,17 +27,36 @@ export const paymentKeys = {
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
+export interface PaymentHistoryOptions {
+  /** The guest doc id; scopes the cache key (and its invalidation). */
+  guestId: string;
+  /** Undefined while the house is still loading: the hook stays idle. */
+  houseId: string | undefined;
+  /** guests/{guestId}.userId. Undefined until known: the hook stays idle. */
+  guestUserId: string | undefined;
+}
+
 /**
- * Fetch payment history for a guest.
+ * Fetch a resident's payment history.
  *
- * @param guestId - The guest whose payment history to fetch
+ * Idle (fetchStatus 'idle', nothing queried) until houseId and guestUserId are
+ * both known, like useActivities is until houseId: the payments read rule
+ * denies a list query that lacks either, so sending one would only fail.
+ *
  * @param enabled - Whether to run the query (default: true)
  */
-export const usePaymentHistory = (guestId: string, enabled: boolean = true) => {
+export const usePaymentHistory = (
+  { guestId, houseId, guestUserId }: PaymentHistoryOptions,
+  enabled: boolean = true,
+) => {
   return useQuery({
-    queryKey: paymentKeys.history(guestId),
-    queryFn: () => paymentService.getPaymentHistory(guestId),
-    enabled: enabled && !!guestId,
+    queryKey: paymentKeys.historyFor(guestId, houseId, guestUserId),
+    queryFn: () =>
+      paymentService.getPaymentHistory({
+        houseId: houseId as string,
+        guestUserId: guestUserId as string,
+      }),
+    enabled: enabled && !!guestId && !!houseId && !!guestUserId,
     staleTime: 60000, // 1 minute
   });
 };

@@ -562,6 +562,8 @@ const ManualPaymentModal: React.FC<ManualPaymentModalProps> = ({
         amountInCents,
         method,
         notes,
+        // The resident's uid, so the record shows in their payment history.
+        guests.find((g) => g.id === selectedGuestId)?.userId,
       );
       // Refresh the parent dashboard list and any guest-balance views.
       queryClient.invalidateQueries({

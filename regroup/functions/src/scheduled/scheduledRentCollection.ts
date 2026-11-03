@@ -44,6 +44,8 @@ interface AutoPayGuest {
   stripeCustomerId: string;
   defaultPaymentMethodId: string;
   rentOwed: Cents;
+  /** The resident's Firebase uid; absent on an intake doc with no account. */
+  userId?: string;
 }
 
 export interface RentCollectionSummary {
@@ -262,6 +264,9 @@ export async function runRentCollection(): Promise<RentCollectionSummary> {
               // Lets the webhook reconcile the record this run created rather
               // than having to author one.
               rentAttemptId: attemptRef.id,
+              // Copied onto payments/{id} by the webhook; the resident's
+              // history query and the payments read rule key on it.
+              ...(guest.userId ? { guestUserId: guest.userId } : {}),
             },
             transfer_data: { destination: destination.accountId },
             application_fee_amount: computeApplicationFee({

@@ -144,7 +144,11 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
     isLoading: historyLoading,
     isError: historyError,
     refetch: refetchHistory,
-  } = usePaymentHistory(guest.id, !!guest.id);
+  } = usePaymentHistory({
+    guestId: guest.id,
+    houseId: house.id,
+    guestUserId: guest.userId,
+  });
 
   const queryClient = useQueryClient();
   const {
@@ -228,7 +232,8 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
           house.id,
           amountInCents,
           rentLabel,
-          paymentIntentId
+          paymentIntentId,
+          guest.userId,
         );
       } catch (recordError) {
         // The charge succeeded; only our optimistic record failed to write.
