@@ -670,6 +670,10 @@ async function handlePaymentIntentFailed(
     status: "failed",
     failureCode,
     failureMessage,
+    // Write-once in upsertPaymentDoc: a failure after an earlier record keeps
+    // the original date. Without it a failed attempt with no earlier doc is
+    // dropped by getPaymentHistory's orderBy("createdAt").
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
