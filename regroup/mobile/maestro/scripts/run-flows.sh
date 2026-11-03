@@ -10,8 +10,9 @@
 #
 # Prerequisites (this script checks them and tells you what's missing):
 #   1. Firebase emulators up + seeded:  ./scripts/test-prep.sh   (from repo root)
-#   2. Metro bundler running:           cd regroup/mobile && npx react-native start
-#   3. The app installed on the sim:    npx react-native run-ios --simulator="E2E-iPhone"
+#   2. The E2EEmulator build installed on the sim (it embeds its JS bundle, so no
+#      Metro). Only that build talks to the emulators; Debug and Release builds
+#      use real Firebase. Build + install: see maestro/README.md.
 #
 # Usage:
 #   maestro/scripts/run-flows.sh                 # run the full suite (all flows)
@@ -27,7 +28,8 @@
 #   -h, --help    Show this help.
 #
 # Env: E2E_TEST_PASSWORD (required; the shared e2e test account password, see
-#      e2e/SECURITY-test-credentials.md). Overrides: APP_ID (default com.rats.dev), SIM_UDID.
+#      e2e/SECURITY-test-credentials.md). Overrides: APP_ID (default
+#      com.rats.dev.e2e.emu, the E2EEmulator build), SIM_UDID.
 #
 set -uo pipefail # intentionally NOT -e: we continue through individual flow failures
 
@@ -36,9 +38,8 @@ SELF="${SCRIPT_DIR}/$(basename "${BASH_SOURCE[0]}")" # absolute — survives the
 MOBILE_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 cd "${MOBILE_DIR}"
 
-APP_ID="${APP_ID:-com.rats.dev}"
+APP_ID="${APP_ID:-com.rats.dev.e2e.emu}"
 SIM_UDID="${SIM_UDID:-809BD7B9-D9D5-45D2-AEA8-12F885F54407}" # E2E-iPhone
-METRO_STATUS="http://localhost:8081/status"
 EMU_UI="http://127.0.0.1:4000"
 FLOWS_DIR="maestro/flows"
 OUT_DIR="maestro/output"
@@ -52,12 +53,14 @@ SUITE=(
   guest-log-chore
   guest-activity-dispute
   guest-payment-history
+  guest-rent-history
   guest-rent-payment
   operator-setup-wizard
   operator-applications
   operator-manage-guests
   operator-house-settings
   operator-disputes
+  operator-manual-payment
   oxford-dashboard
   oxford-onboarding
 )
@@ -106,13 +109,10 @@ curl -fsS --max-time 3 "${EMU_UI}" >/dev/null 2>&1 || fail \
   "Firebase emulator not reachable at ${EMU_UI}" \
   "Start it from the repo root:  ./scripts/test-prep.sh"
 
-curl -fsS --max-time 3 "${METRO_STATUS}" 2>/dev/null | grep -q "packager-status:running" || fail \
-  "Metro bundler not running on :8081" \
-  "Start it:  cd regroup/mobile && npx react-native start"
 
 xcrun simctl listapps "${SIM_UDID}" 2>/dev/null | grep -q "${APP_ID}" || fail \
   "App ${APP_ID} is not installed on the simulator" \
-  "Build + install:  npx react-native run-ios --simulator=\"E2E-iPhone\"  (first build 5–10 min)"
+  "Build + install the E2EEmulator scheme: see maestro/README.md"
 
 # ── resolve the run list ───────────────────────────────────────────────────────
 declare -a RUN_LIST
@@ -146,7 +146,13 @@ run_flow() {
   local name="$1" log="${OUT_DIR}/${1}.log" rc
   : >"${log}" # truncate once; attempts are appended so a driver-drop trace survives a retry
   for attempt in 1 2; do
-    maestro test -e APP_ID="${APP_ID}" -e E2E_TEST_PASSWORD="${E2E_TEST_PASSWORD}" "${FLOWS_DIR}/${name}.yaml" 2>&1 | tee -a "${log}"
+    # The iOS Keychain keeps the Firebase session across clearState; without a
+    # reset a flow can start signed in as the previous flow's account.
+    xcrun simctl terminate "${SIM_UDID}" "${APP_ID}" >/dev/null 2>&1 || true
+    xcrun simctl keychain "${SIM_UDID}" reset >/dev/null 2>&1 || true
+    # --device: with an Android emulator also running, Maestro would otherwise
+    # pick it and run this iOS suite there.
+    maestro --device "${SIM_UDID}" test -e APP_ID="${APP_ID}" -e E2E_TEST_PASSWORD="${E2E_TEST_PASSWORD}" "${FLOWS_DIR}/${name}.yaml" 2>&1 | tee -a "${log}"
     rc=${PIPESTATUS[0]}
     [[ ${rc} -eq 0 ]] && return 0
     if [[ ${attempt} -eq 1 ]] && grep -qE "${DRIVER_ERR_RE}" "${log}"; then
