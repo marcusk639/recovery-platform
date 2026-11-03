@@ -51,16 +51,29 @@ tags:
 - tapOn:
     text: "Amount ($)"
 - inputText: "33.33"
-# The decimal pad has no return key; tapping the modal title dismisses it.
-- tapOn:
-    text: "Record Manual Payment"
+# Dismiss the keyboard so the buttons are reachable. The iOS decimal pad has
+# no return key, so tap the modal title; Android leaves that title out of the
+# accessibility tree but its number pad closes with hideKeyboard.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn:
+          text: "Record Manual Payment"
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - hideKeyboard
 - tapOn:
     text: "Zelle"
 - tapOn:
     text: "Record"
+# The modal closes once the record is saved. Wait on a pill, not the title,
+# because Android does not expose the title.
 - extendedWaitUntil:
     notVisible:
-      text: "Record Manual Payment"
+      id: "guest-pill-guest-a"
     timeout: 20000
 # Back to the tab bar (the dashboard is a pushed screen), then sign out.
 - launchApp:

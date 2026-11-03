@@ -195,8 +195,8 @@ function activity(guestId, hoursAgo, Timestamp, now, extra = {}) {
 
 /**
  * Card payments as the Stripe webhook writes them: createdAt is a Timestamp.
- * e2e-pay-a-latest is dated two hours after the seed, so a manual payment a
- * flow records afterwards must sort BELOW it. A manual record stored with a
+ * e2e-pay-a-latest is dated 30 days after the seed, so a manual payment a
+ * flow records afterwards (even with --no-seed, days later) must sort BELOW it. A manual record stored with a
  * string createdAt (the bug fixed in #168) would sort above every Timestamp.
  */
 function payments(Timestamp, now) {
@@ -212,7 +212,7 @@ function payments(Timestamp, now) {
     createdAt: Timestamp.fromMillis(now + offsetMs),
   });
   return [
-    card('e2e-pay-a-latest', 'guest-a', 2222, 2 * 3600000),
+    card('e2e-pay-a-latest', 'guest-a', 2222, 30 * 86400000),
     card('e2e-pay-a-old', 'guest-a', 1111, -5 * 86400000),
     card('e2e-pay-b', 'guest-b', 7777, -86400000),
   ];

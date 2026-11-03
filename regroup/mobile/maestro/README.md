@@ -33,16 +33,20 @@ maestro/scripts/run-flows.sh --sim "$SIM_UDID"                       # whole sui
 maestro/scripts/run-flows.sh guest-rent-history --sim "$SIM_UDID"    # one flow
 ```
 
+On Android (`run-flows.sh` is iOS-only), build `./gradlew assembleE2eEmulator` in `android/`, install `app/build/outputs/apk/e2eEmulator/app-e2eEmulator.apk` (`com.regroup.app.e2e.emu`, reaches the host emulators through `10.0.2.2`), seed with `maestro/scripts/reset-and-seed.sh`, then run a flow with `maestro --device emulator-5554 test -e APP_ID=com.regroup.app.e2e.emu -e E2E_TEST_PASSWORD="$E2E_TEST_PASSWORD" maestro/flows/<flow>.yaml`.
+
 `run-flows.sh` re-seeds once up front (`--no-seed` skips it) and resets the simulator Keychain before each flow, because iOS keeps the Firebase session across `clearState`.
 
 ## Seed data
 
 `maestro/scripts/reset-and-seed.sh` runs `maestro/scripts/seed/index.js`. It wipes the emulators and writes the accounts from `e2e/setup/testAccounts.json` (uids `e2e-<id>`), the test and Oxford houses, activities, a dispute, and payments. It refuses any project that is not `demo-` and any non-loopback emulator host (`seed/guard.js`).
 
-Payments (`seed/docs.js`): resident A has card payments of $22.22, dated after the seed, and $11.11, five days old. Resident B has $77.77. They are stored as the webhook writes them, with a Timestamp `createdAt`.
+Payments (`seed/docs.js`): resident A has card payments of $22.22, dated 30 days after the seed, and $11.11, five days old. Resident B has $77.77. They are stored as the webhook writes them, with a Timestamp `createdAt`.
 
 ## Writing flows
 
 - iOS merges a row's child labels into one accessibility label, often prefixed with an icon glyph: match text with `.*Name.*`.
 - A pushed screen covers the tab bar. To sign out from one, relaunch with `launchApp: { stopApp: true }` (the session is kept), wait for `house-tab`, then run `subflows/logout.yaml`.
 - Elements below the fold need `scrollUntilVisible` before a tap.
+- Android leaves some text out of the accessibility tree (the manual payment modal's title, for one). Wait on a testID, and branch with `runFlow: when: platform:` where the platforms need different steps.
+- The emulators bind to `127.0.0.1` only (`regroup/firebase.e2e.json`); they have no auth and the functions emulator holds the sandbox Stripe key.
