@@ -144,7 +144,9 @@ import {
   finalizeHouseSetup,
   shapeHouses,
   removeGuestPrivileges,
+  getHousesForAdmin,
 } from "../house";
+import { adminCollection } from '../admin';
 import { Guest } from "../../entities/Guest";
 import { House } from "../../entities/House";
 import { HOUSE_CODE_INVALID } from "../../constants/errors";
@@ -599,5 +601,91 @@ describe("house service", () => {
 
       expect(httpsCallableMock).not.toHaveBeenCalled();
     });
+  });
+});
+
+// An operator's houses. The rules let a member read a house by id but deny a
+// query on houses.adminIds (a list query cannot prove the per-house rule), so
+// the ids come from admins/{adminId}.houseIds, which createHouses and
+// addAdminAuthorization keep current.
+describe('getHousesForAdmin', () => {
+  const admin = { id: 'admin-1', userId: 'user-1', houseIds: ['h1', 'h2'] };
+  const houses: Record<string, House> = {
+    h1: makeHouse({ id: 'h1' }),
+    h2: makeHouse({ id: 'h2' }),
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (crud.get as jest.Mock).mockImplementation(async (collection: unknown, id: string) =>
+      collection === adminCollection ? admin : houses[id],
+    );
+  });
+
+  it('reads the admin record, then each of its houses by id', async () => {
+    const result = await getHousesForAdmin('admin-1');
+
+    expect(crud.get).toHaveBeenCalledWith(adminCollection, 'admin-1');
+    expect(crud.get).toHaveBeenCalledWith(expect.anything(), 'h1');
+    expect(crud.get).toHaveBeenCalledWith(expect.anything(), 'h2');
+    expect(Object.keys(result)).toEqual(['h1', 'h2']);
+  });
+
+  it('never queries houses by adminIds (the rules deny that list query)', async () => {
+    await getHousesForAdmin('admin-1');
+
+    expect(crud.getByAttribute).not.toHaveBeenCalled();
+  });
+
+  it('skips a house it can no longer read and returns the rest', async () => {
+    (crud.get as jest.Mock).mockImplementation(async (collection: unknown, id: string) => {
+      if (collection === adminCollection) return admin;
+      if (id === 'h1')
+        throw Object.assign(new Error('denied'), { code: 'firestore/permission-denied' });
+      return houses[id];
+    });
+
+    const result = await getHousesForAdmin('admin-1');
+
+    expect(Object.keys(result)).toEqual(['h2']);
+  });
+
+  it('fails, rather than reporting no houses, when every listed house read fails', async () => {
+    // An empty result would be cached as "this operator has no houses"; an
+    // error lets React Query retry.
+    (crud.get as jest.Mock).mockImplementation(async (collection: unknown) => {
+      if (collection === adminCollection) return admin;
+      throw Object.assign(new Error('unavailable'), { code: 'firestore/unavailable' });
+    });
+
+    await expect(getHousesForAdmin('admin-1')).rejects.toThrow('unavailable');
+  });
+
+  it('skips a listed house that no longer exists', async () => {
+    (crud.get as jest.Mock).mockImplementation(async (collection: unknown, id: string) =>
+      collection === adminCollection ? admin : id === 'h1' ? undefined : houses[id],
+    );
+
+    const result = await getHousesForAdmin('admin-1');
+
+    expect(Object.keys(result)).toEqual(['h2']);
+  });
+
+  it('returns no houses when the admin record is missing', async () => {
+    (crud.get as jest.Mock).mockResolvedValue(undefined);
+
+    await expect(getHousesForAdmin('admin-1')).resolves.toEqual({});
+  });
+
+  it('returns no houses when the admin record lists none', async () => {
+    (crud.get as jest.Mock).mockResolvedValue({ id: 'admin-1', userId: 'user-1' });
+
+    await expect(getHousesForAdmin('admin-1')).resolves.toEqual({});
+  });
+
+  it('propagates a failure to read the admin record', async () => {
+    (crud.get as jest.Mock).mockRejectedValue(new Error('unavailable'));
+
+    await expect(getHousesForAdmin('admin-1')).rejects.toThrow('unavailable');
   });
 });

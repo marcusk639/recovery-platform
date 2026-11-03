@@ -18,6 +18,8 @@ import Admin from '../../entities/Admin';
 import { placeholderUserIcon, circleLogo } from '../../../assets';
 import { User } from '../../entities/User';
 import { Routes } from '../../navigation/types';
+import { useSelectedGuest } from '../../hooks/useSelectedGuest';
+import { useSelectedHouse } from '../../hooks/useSelectedHouse';
 interface Props {
   imageStyle?: any;
   imageSource: ImageSourcePropType;
@@ -99,11 +101,19 @@ const ConnectedTitleBarButton = connect(
   },
 );
 
+// Selection is id-only (selectHouseById / selectGuestById): the entities come
+// from React Query through the selection hooks, and the legacy
+// state.houses.selectedHouse / state.guests.selectedGuest fields stay null.
+// Nothing renders until the entity has loaded.
 const HouseSelectionButton = connect(
   mapStateToProps,
   null,
-)(({ house, userEntity }: ConnectedTitleBarButtonProps) => {
+)(({ userEntity }: ConnectedTitleBarButtonProps) => {
   const navigation = useNavigation<NavigationProp<ParamListBase>>();
+  const { house } = useSelectedHouse();
+  if (!house) {
+    return null;
+  }
 
   return (
     <TitleBarRightButton
@@ -121,11 +131,12 @@ const HouseSelectionButton = connect(
   );
 });
 
-const GuestSelectionButton = connect(
-  mapStateToProps,
-  null,
-)(({ guest }: ConnectedTitleBarButtonProps) => {
+const GuestSelectionButton = () => {
   const navigation = useNavigation<NavigationProp<ParamListBase>>();
+  const { guest } = useSelectedGuest();
+  if (!guest) {
+    return null;
+  }
 
   return (
     <TitleBarRightButton
@@ -138,10 +149,10 @@ const GuestSelectionButton = connect(
         borderRadius: normalize(40 / 2),
       }}
       onPress={() => navigation.navigate(Routes.GuestList)}
-      imageSource={{ uri: guest?.avatar }}
+      imageSource={{ uri: guest.avatar }}
     />
   );
-});
+};
 
 const UserPersonalButton = connect(
   mapStateToProps,

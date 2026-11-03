@@ -84,6 +84,17 @@ jest.mock('../../rats-avatar', () => {
   );
 });
 
+// Selection is id-only in Redux; the entities come from React Query through
+// these hooks. Each defaults to the entity the legacy store fields carry below.
+const mockUseSelectedGuest = jest.fn();
+const mockUseSelectedHouse = jest.fn();
+jest.mock('../../../hooks/useSelectedGuest', () => ({
+  useSelectedGuest: () => mockUseSelectedGuest(),
+}));
+jest.mock('../../../hooks/useSelectedHouse', () => ({
+  useSelectedHouse: () => mockUseSelectedHouse(),
+}));
+
 import {
   TitleBarRightButton,
   ConnectedTitleBarButton,
@@ -114,6 +125,19 @@ const mockState = {
 };
 
 const mockReducer = (state = mockState) => state;
+
+beforeEach(() => {
+  mockUseSelectedGuest.mockReturnValue({
+    guest: mockState.guests.selectedGuest,
+    guestId: 'guest-1',
+    isLoading: false,
+  });
+  mockUseSelectedHouse.mockReturnValue({
+    house: mockState.houses.selectedHouse,
+    houseId: 'house-1',
+    isLoading: false,
+  });
+});
 const store = createStore(mockReducer);
 
 const wrap = (ui: React.ReactElement) => (
@@ -259,5 +283,39 @@ describe('UserPersonalButton', () => {
     // Falls back to Image with circleLogo
     const { Image } = require('react-native');
     expect(getByTestId).toBeTruthy(); // component renders without crashing
+  });
+});
+
+// The store a signed-in app actually has: DataContext dispatches only
+// selectGuestById / selectHouseById, so the legacy entity fields stay null.
+describe('selection buttons with id-only selection (the production store)', () => {
+  const idOnlyState = {
+    ...mockState,
+    guests: { selectedGuest: null, selectedGuestId: 'guest-1', userAsGuest: null },
+    houses: { selectedHouse: null, selectedHouseId: 'house-1' },
+  };
+  const renderIdOnly = (ui: React.ReactElement) =>
+    render(<Provider store={createStore(() => idOnlyState)}>{ui}</Provider>);
+
+  it('GuestSelectionButton shows the selected guest from useSelectedGuest', () => {
+    const { getByText } = renderIdOnly(<GuestSelectionButton />);
+    expect(getByText('Jane Doe')).toBeTruthy();
+  });
+
+  it('HouseSelectionButton shows the selected house from useSelectedHouse', () => {
+    const { getByText } = renderIdOnly(<HouseSelectionButton />);
+    expect(getByText('Clean House')).toBeTruthy();
+  });
+
+  it('GuestSelectionButton renders nothing while the guest is not loaded', () => {
+    mockUseSelectedGuest.mockReturnValue({ guest: null, guestId: 'guest-1', isLoading: true });
+    const { queryByTestId } = renderIdOnly(<GuestSelectionButton />);
+    expect(queryByTestId('rats-avatar')).toBeNull();
+  });
+
+  it('HouseSelectionButton renders nothing while the house is not loaded', () => {
+    mockUseSelectedHouse.mockReturnValue({ house: null, houseId: 'house-1', isLoading: true });
+    const { queryByTestId } = renderIdOnly(<HouseSelectionButton />);
+    expect(queryByTestId('rats-avatar')).toBeNull();
   });
 });

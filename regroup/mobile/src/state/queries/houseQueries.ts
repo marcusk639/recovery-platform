@@ -65,7 +65,14 @@ export const useHouses = (
  * @param enabled - Whether to enable the query (default: true)
  */
 export const useHousesByAdmin = (adminId: string, enabled: boolean = true) => {
-  return useHouses('adminIds', 'array-contains', adminId, enabled);
+  // Same cache entry DataContext fills. Read from admins/{adminId}.houseIds:
+  // the rules deny a query on houses.adminIds.
+  return useQuery({
+    queryKey: houseKeys.list({ attribute: 'adminIds', value: adminId }),
+    queryFn: () => houseService.getHousesForAdmin(adminId),
+    enabled: enabled && !!adminId,
+    staleTime: 60000, // 1 minute
+  });
 };
 
 /**
