@@ -16,6 +16,7 @@ import {
   orderBy,
   query,
   runTransaction,
+  Timestamp,
   updateDoc,
   where,
   writeBatch,
@@ -33,7 +34,12 @@ export interface RentPayment {
   /** Amount in US cents (e.g., 50000 = $500.00). Matches Stripe convention. */
   amount: number;
   status: "pending" | "succeeded" | "failed" | "resolved_offline";
-  createdAt: string;
+  /**
+   * A Firestore Timestamp: what the webhook writes, and what the app writes
+   * (see newPaymentCreatedAt). ISO strings remain on records written before;
+   * functions' migratePaymentCreatedAtToTimestamp converts them.
+   */
+  createdAt: Timestamp | string;
   stripePaymentIntentId?: string;
   description?: string; // e.g. 'Monthly Rent', 'Chore Fee'
   /**
@@ -160,6 +166,14 @@ export async function createRentPaymentIntent({
 }
 
 /**
+ * payments.createdAt for a record the app creates. A Timestamp, never a string:
+ * the webhook writes Timestamps, and Firestore orders values by type first, so a
+ * descending orderBy("createdAt") (getPaymentHistory) put every string-dated
+ * payment above every card payment regardless of date.
+ */
+export const newPaymentCreatedAt = (date: Date): Timestamp => Timestamp.fromDate(date);
+
+/**
  * Write an optimistic payment record to Firestore immediately after the
  * guest initiates the payment flow.  The actual status update (pending →
  * completed / failed) will arrive via a Stripe webhook handled by a Cloud
@@ -211,7 +225,7 @@ export async function recordRentPayment(
       houseId,
       amount,
       status: "pending",
-      createdAt: existing?.createdAt ?? new Date().toISOString(),
+      createdAt: existing?.createdAt ?? newPaymentCreatedAt(new Date()),
       description,
       stripePaymentIntentId,
       ...(guestUserId ? { guestUserId } : {}),
@@ -347,6 +361,7 @@ export async function recordManualPayment(
     );
   }
   const docRef = doc(paymentsCollection);
+  const now = new Date();
   const record: HousePaymentRecord = {
     id: docRef.id,
     guestId,
@@ -355,7 +370,7 @@ export async function recordManualPayment(
     currency: "usd",
     status: "succeeded",
     description: `Manual Payment — ${method}${notes ? `: ${notes}` : ""}`,
-    createdAt: new Date().toISOString(),
+    createdAt: now.toISOString(),
     ...(guestUserId ? { guestUserId } : {}),
   };
   // Hardened 2026-07-07: the payment doc write and the rentOwed decrement
@@ -365,7 +380,7 @@ export async function recordManualPayment(
   // to fix, just relocated to the failure path. A batch makes both writes
   // succeed or fail together.
   const batch = writeBatch(firestore);
-  batch.set(docRef, record);
+  batch.set(docRef, { ...record, createdAt: newPaymentCreatedAt(now) });
   batch.update(doc(collection(firestore, "guests"), guestId), {
     rentOwed: increment(-amountInCents),
   });

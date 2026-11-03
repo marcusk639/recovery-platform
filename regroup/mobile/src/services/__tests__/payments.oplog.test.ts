@@ -23,6 +23,7 @@ import {
   seedDoc,
   seedQuery,
 } from '../../../__mocks__/firebase-modular/log';
+import { Timestamp } from '@react-native-firebase/firestore';
 import {
   getPaymentHistory,
   markPaymentResolvedOffline,
@@ -31,6 +32,12 @@ import {
 } from '../payments';
 
 const ISO = expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+// payments.createdAt is written as a Timestamp, the type the webhook writes:
+// Firestore orders by type before value, so a string sorted above every
+// Timestamp in the resident history query.
+const TIMESTAMP = expect.any(Timestamp);
+// How the op log records a Timestamp.
+const LOGGED_TIMESTAMP = { __ts: expect.any(Number) };
 
 beforeEach(() => {
   resetOpLog();
@@ -65,14 +72,19 @@ describe('recordRentPayment', () => {
       houseId: 'h1',
       amount: 50000,
       status: 'pending',
-      createdAt: ISO,
+      createdAt: TIMESTAMP,
       description: 'Monthly Rent',
       stripePaymentIntentId: 'pi_2',
     };
     expect(result).toEqual(payment);
     expect(getOpLog()).toEqual([
       { op: 'tx.get', path: 'payments/pi_2' },
-      { op: 'tx.set', path: 'payments/pi_2', data: payment, options: { merge: true } },
+      {
+        op: 'tx.set',
+        path: 'payments/pi_2',
+        data: { ...payment, createdAt: LOGGED_TIMESTAMP },
+        options: { merge: true },
+      },
     ]);
   });
 
@@ -126,9 +138,11 @@ describe('recordManualPayment', () => {
       description: 'Manual Payment — Cash: paid at the house',
       createdAt: ISO,
     };
+    // The returned record is dashboard-shaped (ISO); the stored one is a Timestamp
+    // for the same instant.
     expect(result).toEqual(record);
     expect(getOpLog()).toEqual([
-      { op: 'batch.set', path: 'payments/auto-1', data: record },
+      { op: 'batch.set', path: 'payments/auto-1', data: { ...record, createdAt: LOGGED_TIMESTAMP } },
       {
         op: 'batch.update',
         path: 'guests/g1',
@@ -137,6 +151,8 @@ describe('recordManualPayment', () => {
       { op: 'batch.commit', path: '' },
     ]);
     expect(readDoc('guests/g1')).toEqual({ rentOwed: 70000 });
+    const written = getOpLog()[0].data as { createdAt: { __ts: number } };
+    expect(written.createdAt.__ts).toBe(Date.parse(result.createdAt));
   });
 
   it('omits the notes suffix when there are no notes', async () => {

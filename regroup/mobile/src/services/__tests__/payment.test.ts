@@ -26,7 +26,18 @@ jest.mock("@react-native-firebase/firestore", () => ({
   FieldValue: {
     increment: (n: number) => ({ __increment: n }),
   },
+  Timestamp: {
+    fromDate: (d: Date) => ({ __timestampMillis: d.getTime(), toDate: () => d }),
+  },
 }));
+
+// payments.createdAt must be one Firestore type: the webhook writes Timestamps,
+// and a descending orderBy puts every string before every Timestamp.
+const expectTimestampNearNow = (value: unknown) => {
+  expect(value).toEqual(expect.objectContaining({ __timestampMillis: expect.any(Number) }));
+  const millis = (value as { __timestampMillis: number }).__timestampMillis;
+  expect(Math.abs(Date.now() - millis)).toBeLessThan(60_000);
+};
 
 // ─── Imports ──────────────────────────────────────────────────────────────────
 
@@ -201,13 +212,29 @@ describe("payment service", () => {
       });
     });
 
-    it("includes a createdAt ISO timestamp", async () => {
-      collectionMock.doc = jest.fn(() => ({ id: "ts-id" }));
-      setupTransaction();
+    it('writes createdAt as a Firestore Timestamp, the type the webhook writes', async () => {
+      collectionMock.doc = jest.fn(() => ({ id: 'ts-id' }));
+      const { transactionSet } = setupTransaction();
 
-      const result = await recordRentPayment("g1", "h1", 200);
-      expect(typeof result.createdAt).toBe("string");
-      expect(() => new Date(result.createdAt)).not.toThrow();
+      const result = await recordRentPayment('g1', 'h1', 200);
+      expectTimestampNearNow(transactionSet.mock.calls[0][1].createdAt);
+      expectTimestampNearNow(result.createdAt);
+    });
+
+    it('keeps the createdAt of an existing pending record', async () => {
+      collectionMock.doc = jest.fn(() => ({ id: 'pi_keep' }));
+      const original = { __timestampMillis: 1, toDate: () => new Date(1) };
+      const { transactionSet } = setupTransaction({
+        id: 'pi_keep',
+        guestId: 'g1',
+        houseId: 'h1',
+        amount: 200,
+        status: 'pending',
+        createdAt: original,
+      } as any);
+
+      await recordRentPayment('g1', 'h1', 200, 'Rent', 'pi_keep');
+      expect(transactionSet.mock.calls[0][1].createdAt).toBe(original);
     });
 
     it("writes to payments/{stripePaymentIntentId} when a PaymentIntent ID is given, so the webhook's merge lands on this exact doc", async () => {
@@ -382,6 +409,19 @@ describe("payment service", () => {
       await recordManualPayment('g1', 'h1', 15000, 'Check');
 
       expect(batchSet.mock.calls[0][1]).not.toHaveProperty('guestUserId');
+    });
+
+    // A string here sorted above every card payment in the resident's history.
+    it('writes createdAt as a Firestore Timestamp, the type the webhook writes', async () => {
+      collectionMock.doc = jest.fn(() => ({ id: 'manual-4' }));
+      const { batchSet } = setupBatch();
+
+      const result = await recordManualPayment('g1', 'h1', 15000, 'Zelle');
+
+      const written = batchSet.mock.calls[0][1].createdAt;
+      expectTimestampNearNow(written);
+      // The returned record is dashboard-shaped (ISO string), for the same instant.
+      expect(new Date(result.createdAt).getTime()).toBe(written.__timestampMillis);
     });
   });
 
