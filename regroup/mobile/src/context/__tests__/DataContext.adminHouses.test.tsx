@@ -8,7 +8,7 @@
  * forever.
  */
 import React from 'react';
-import { render, waitFor } from '@testing-library/react-native';
+import { act, render, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const mockDispatch = jest.fn();
@@ -104,6 +104,11 @@ describe("an operator's houses", () => {
     renderProvider();
 
     await waitFor(() => expect(houseService.getHousesForAdmin).toHaveBeenCalled());
+    // Let the fetch resolve and the effect finish before asserting nothing was selected.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
     expect(mockDispatch).not.toHaveBeenCalledWith(selectHouseById('h1'));
+    expect(guestService.getGuests).not.toHaveBeenCalled();
   });
 });
