@@ -1424,6 +1424,40 @@ being a no-op under the New Architecture.
   `android/`, no `assets` in `react-native.config.js`), so the theme's Quicksand families fall
   back to Roboto there.
 
+### Signed-in checks against the Firebase emulators (after Task 15)
+
+The `E2EEmulator` (iOS) and `e2eEmulator` (Android) builds were run against local auth, Firestore,
+Storage and Functions emulators (project `demo-regroup-e2e`), seeded with the Maestro personas by
+a scratch Admin-SDK script. The repo's seeder `e2e/setup/seedTestData.js` was never committed.
+
+**Upgrade regression found and fixed here: Android crash on every sign-in.** `RatsAvatar` sized its
+initials as `viewLayout.height / 2`, and `viewLayout` starts at `{ height: 0 }`, so the first render
+used font size 0. The old architecture accepted that; RN 0.88's New Architecture Android text layer
+throws `IllegalArgumentException: FontSize should be a positive value. Current value: 0`, which is
+fatal. iOS accepts 0. The measured size now applies only once the height is above 0, pinned by
+"never 0 before the first layout".
+
+**Pre-existing bugs on `main`, fixed in separate PRs and merged in:**
+- #165: residents crashed on sign-in (`GuestSelectionButton` read the always-null
+  `state.guests.selectedGuest`), and operators spun forever (a `houses.adminIds` list query the
+  house read rule always denies).
+- #166: `useCharterCompliance` called `.filter` on the id-keyed guests map. Symbolicated from the
+  iOS build's source map to `charterComplianceQueries.ts:56`.
+
+**Results (both platforms):**
+
+| Flow | Result |
+| ---- | ------ |
+| `guest-home`, `guest-activity-dispute`, `signup` | Pass |
+| `guest-payment-history`, `operator-manage-guests`, `oxford-dashboard` | Pass with a `scrollUntilVisible` before the tap (the flows tap below the fold) |
+| `operator-house-settings`, `operator-disputes` | Every assertion passes; the logout subflow then taps `profile-tab` while a pushed screen covers the tab bar |
+| `guest-log-chore` | The chore completes; the flow taps a second "Skip" (`Index: 1`) the photo prompt does not have |
+| `operator-setup-wizard`, `operator-applications` | Not run: "Add Home" depends on a never-dispatched action; the flow never taps the native approve alert |
+
+The flow-side problems (scrolling, logout, the photo prompt, iOS's combined accessibility labels
+such as `"\uf015, Oxford House Hub, Dashboard — …"`, and the missing seeder) are on `main` too and
+are left for a separate change.
+
 ## 7. Verification
 
 _Final results and the Mac checkpoint (Task 16)._
