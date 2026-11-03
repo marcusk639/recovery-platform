@@ -51,7 +51,8 @@ export function useCharterCompliance(
   const summary = useMemo<CharterComplianceSummary | null>(() => {
     if (isLoading || isError) return null;
 
-    const guests = guestsQuery.data ?? [];
+    // useGuests resolves to an id-keyed map, not an array.
+    const guests = Object.values(guestsQuery.data ?? {});
     const inHouseGuestIds = new Set(
       guests.filter(g => g.status === 'active').map(g => g.id),
     );
