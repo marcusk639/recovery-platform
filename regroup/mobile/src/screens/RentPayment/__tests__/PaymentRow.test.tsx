@@ -1,7 +1,12 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import PaymentRow from '../PaymentRow';
 import { RentPayment } from '../../../services/payments';
+import { shareReceipt } from '../../../services/receiptService';
+
+jest.mock('../../../services/receiptService', () => ({
+  shareReceipt: jest.fn(() => Promise.resolve()),
+}));
 
 const mockPayment: RentPayment = {
   id: 'pay-1',
@@ -51,5 +56,34 @@ describe('PaymentRow', () => {
       <PaymentRow payment={{ ...mockPayment, status: 'pending' }} />,
     );
     expect(queryByTestId('share-receipt-button')).toBeNull();
+  });
+
+  // The webhook writes createdAt as a Firestore Timestamp; the receipt takes an
+  // ISO string, and new Date(timestamp) printed "Invalid Date".
+  describe('the shared receipt date', () => {
+    const at = new Date('2026-03-04T05:06:07.000Z');
+    const timestamp = { toDate: () => at, toMillis: () => at.getTime() };
+
+    it('is the ISO string of a Timestamp createdAt', async () => {
+      const { getByTestId } = render(
+        <PaymentRow payment={{ ...mockPayment, createdAt: timestamp as any }} />,
+      );
+      fireEvent.press(getByTestId('share-receipt-button'));
+      await waitFor(() =>
+        expect(shareReceipt).toHaveBeenCalledWith(
+          expect.objectContaining({ date: at.toISOString() }),
+        ),
+      );
+    });
+
+    it('is the same instant for an ISO string createdAt', async () => {
+      const { getByTestId } = render(<PaymentRow payment={mockPayment} />);
+      fireEvent.press(getByTestId('share-receipt-button'));
+      await waitFor(() =>
+        expect(shareReceipt).toHaveBeenCalledWith(
+          expect.objectContaining({ date: '2026-01-15T10:00:00.000Z' }),
+        ),
+      );
+    });
   });
 });

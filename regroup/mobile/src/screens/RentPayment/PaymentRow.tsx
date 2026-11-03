@@ -7,6 +7,7 @@ import { RentPayment } from '../../services/payments';
 import PaymentStatusBadge from './PaymentStatusBadge';
 import { formatCentsAsCurrency, formatDate } from './rentPaymentHelpers';
 import { shareReceipt, ReceiptData } from '../../services/receiptService';
+import { toDateSafe } from '../../util/firestore';
 
 export interface PaymentRowProps {
   payment: RentPayment;
@@ -28,7 +29,8 @@ const PaymentRow: React.FC<PaymentRowProps> = ({
       method: payment.description?.includes('Manual')
         ? payment.description.replace('Manual Payment — ', '').split(':')[0]
         : 'Card',
-      date: payment.createdAt,
+      // createdAt is a Timestamp on webhook records; the receipt takes ISO.
+      date: toDateSafe(payment.createdAt)?.toISOString() ?? '',
       description: payment.description,
       status: payment.status,
     };
