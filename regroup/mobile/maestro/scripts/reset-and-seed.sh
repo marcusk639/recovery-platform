@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
 #
-# Reset + seed the Firebase emulator with the canonical E2E fixtures
-# (test accounts, houses, activities, disputes) defined under e2e/setup/.
+# Reset + seed the Firebase emulators with the E2E fixtures (test accounts,
+# houses, activities, disputes, payments): maestro/scripts/seed/index.js, with
+# identities from e2e/setup/testAccounts.json.
 #
-# Prerequisite: the Firebase emulator suite must already be running. Start it
-# from the regroup/ directory in a separate terminal:
+# Prerequisite: the demo-regroup-e2e emulator suite must already be running.
+# From the repo root, in a separate terminal:
 #
-#     cd regroup && firebase emulators:start
+#     ./scripts/test-prep.sh
 #
-# Then, from regroup/mobile/:
+# Then, from regroup/mobile/ (E2E_TEST_PASSWORD set):
 #
 #     ./maestro/scripts/reset-and-seed.sh
 #
-# This intentionally re-uses e2e/setup/seedTestData.js (which targets the
-# emulator via FIRESTORE_EMULATOR_HOST / FIREBASE_AUTH_EMULATOR_HOST). It does
-# NOT call scripts/create-e2e-auth-users.js — that one writes to the real
+# The seed only writes to loopback emulators under a demo- project (see
+# maestro/scripts/seed/guard.js). It does NOT call
+# scripts/create-e2e-auth-users.js — that one writes to the real
 # phoenix-cleanhouse project.
 set -euo pipefail
 
@@ -26,13 +27,13 @@ EMULATOR_UI="http://127.0.0.1:4000"
 echo "▶ Checking Firebase emulator at ${EMULATOR_UI} ..."
 if ! curl -fsS --max-time 3 "${EMULATOR_UI}" >/dev/null 2>&1; then
   echo "✗ Emulator not reachable at ${EMULATOR_UI}." >&2
-  echo "  Start it first:  cd regroup && firebase emulators:start" >&2
+  echo "  Start it first, from the repo root:  ./scripts/test-prep.sh" >&2
   exit 1
 fi
 echo "✓ Emulator is up."
 
-echo "▶ Seeding test data (e2e/setup/seedTestData.js) ..."
+echo "▶ Seeding test data (maestro/scripts/seed/index.js) ..."
 cd "${MOBILE_DIR}"
-node e2e/setup/seedTestData.js
+node maestro/scripts/seed/index.js
 
 echo "✓ Seed complete. Test accounts + houses are in the emulator."

@@ -1,0 +1,37 @@
+# Resident: their own payment history on Pay Rent, newest first.
+#
+# Seeded (maestro/scripts/seed/docs.js payments): resident A has card payments of
+# $22.22 (dated after the seed) and $11.11 (five days ago); resident B has $77.77.
+# Covers #167 (the history query is scoped to the resident, which the rules
+# require; it used to fail for every resident) and that another resident's
+# payment never shows.
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/guest-rent-history.yaml
+appId: ${APP_ID}
+tags:
+  - guest
+  - payments
+---
+- runFlow:
+    file: ../subflows/open-rent-history.yaml
+    env:
+      EMAIL: test-guest-a@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- assertVisible:
+    text: "\\$22\\.22"
+- assertVisible:
+    text: "\\$11\\.11"
+    below:
+      text: "\\$22\\.22"
+- assertNotVisible:
+    text: "\\$77\\.77"
+# Pay Rent covers the tab bar: relaunch, keeping the session, then sign out.
+- launchApp:
+    stopApp: true
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "house-tab"
+    timeout: 30000
+- runFlow:
+    file: ../subflows/logout.yaml

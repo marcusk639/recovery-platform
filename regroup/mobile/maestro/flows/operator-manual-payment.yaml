@@ -1,0 +1,98 @@
+# Operator records a manual (Zelle) payment; the resident sees it in date order.
+#
+# The seed dates resident A's $22.22 card payment after the seed, so the $33.33
+# recorded here must list BELOW it and above the older $11.11. Covers #168: a
+# manual payment stored with a string createdAt sorted above every card payment
+# (Firestore orders by type before value).
+# Needs E2E_STRIPE_ACCOUNT_ID at seed time: the payment dashboard loads Stripe
+# charges and shows an error, with no record button, without a real account.
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/operator-manual-payment.yaml
+appId: ${APP_ID}
+tags:
+  - operator
+  - payments
+---
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-manager@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- extendedWaitUntil:
+    visible:
+      id: "main-app-screen"
+    timeout: 30000
+- tapOn:
+    id: "house-settings-button"
+- extendedWaitUntil:
+    visible:
+      id: "house-settings-screen"
+    timeout: 30000
+# iOS reads the row as one label: icon glyph, name, description.
+- scrollUntilVisible:
+    element:
+      text: ".*Payment Dashboard.*"
+    direction: DOWN
+    centerElement: true
+    timeout: 20000
+- tapOn:
+    text: ".*Payment Dashboard.*"
+- extendedWaitUntil:
+    visible:
+      id: "manual-payment-fab"
+    timeout: 60000
+- tapOn:
+    id: "manual-payment-fab"
+- extendedWaitUntil:
+    visible:
+      id: "guest-pill-guest-a"
+    timeout: 15000
+- tapOn:
+    id: "guest-pill-guest-a"
+- tapOn:
+    text: "Amount ($)"
+- inputText: "33.33"
+# The decimal pad has no return key; tapping the modal title dismisses it.
+- tapOn:
+    text: "Record Manual Payment"
+- tapOn:
+    text: "Zelle"
+- tapOn:
+    text: "Record"
+- extendedWaitUntil:
+    notVisible:
+      text: "Record Manual Payment"
+    timeout: 20000
+# Back to the tab bar (the dashboard is a pushed screen), then sign out.
+- launchApp:
+    stopApp: true
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "house-tab"
+    timeout: 30000
+- runFlow:
+    file: ../subflows/logout.yaml
+- runFlow:
+    file: ../subflows/open-rent-history.yaml
+    env:
+      EMAIL: test-guest-a@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- assertVisible:
+    text: "\\$33\\.33"
+    below:
+      text: "\\$22\\.22"
+- assertVisible:
+    text: "\\$11\\.11"
+    below:
+      text: "\\$33\\.33"
+- launchApp:
+    stopApp: true
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "house-tab"
+    timeout: 30000
+- runFlow:
+    file: ../subflows/logout.yaml
