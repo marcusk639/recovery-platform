@@ -296,8 +296,8 @@ describe('houseQueries', () => {
   // ─── useHousesByAdmin ────────────────────────────────────────────────────────
 
   describe('useHousesByAdmin', () => {
-    it('should fetch houses for a given admin using array-contains', async () => {
-      (houseService.getHouses as jest.Mock).mockResolvedValue(mockHouses);
+    it('should fetch houses for a given admin from its admin record', async () => {
+      (houseService.getHousesForAdmin as jest.Mock).mockResolvedValue(mockHouses);
 
       const { result } = renderHook(
         () => useHousesByAdmin('admin001'),
@@ -307,12 +307,10 @@ describe('houseQueries', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(result.current.data).toEqual(mockHouses);
-      // useHousesByAdmin delegates to useHouses with fixed 'adminIds'/'array-contains'
-      expect(houseService.getHouses).toHaveBeenCalledWith(
-        'adminIds',
-        'array-contains',
-        'admin001',
-      );
+      // A query on houses.adminIds is denied by the rules (houses are readable
+      // per house), so the hook reads admins/{adminId}.houseIds instead.
+      expect(houseService.getHousesForAdmin).toHaveBeenCalledWith('admin001');
+      expect(houseService.getHouses).not.toHaveBeenCalled();
     });
 
     it('should not fetch when disabled', () => {
@@ -323,6 +321,7 @@ describe('houseQueries', () => {
 
       expect(result.current.isLoading).toBe(false);
       expect(houseService.getHouses).not.toHaveBeenCalled();
+      expect(houseService.getHousesForAdmin).not.toHaveBeenCalled();
     });
   });
 
