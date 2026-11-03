@@ -129,9 +129,5 @@ src/state/queries/__tests__/applicationQueries.test.ts: TS2740: Type '{}' is mis
 src/state/queries/__tests__/applicationQueries.test.ts: TS2740: Type '{}' is missing the following properties from type 'ApplicationInput': applicantName, applicantEmail, applicantPhone, sobrietyDate, and 3 more.
 src/state/queries/__tests__/oxfordQueries.test.ts: TS2322: Type '{ id: string; houseId: string; period: string; totalIncome: number; totalExpenses: number; balance: number; breakdown: FinancialLineItem[]; submittedBy: string; submittedAt: string; ... 12 more ...; billsDue?: BillDue[] | undefined; }' is not assignable to type 'FinancialRecord'.
 src/state/queries/__tests__/oxfordQueries.test.ts: TS2740: Type '{ houseId: string; period: string; totalIncome: number; totalExpenses: number; balance: number; breakdown: { category: string; amount: number; }[]; submittedBy: string; submittedAt: string; approvedByVote: false; }' is missing the following properties from type 'Omit<FinancialRecord, "id">': status, incomeLines, expenseLines, beginningCheckingBalance, and 2 more.
-src/state/queries/charterComplianceQueries.ts: TS2322: Type 'Set<unknown>' is not assignable to type 'Set<string>'.
-src/state/queries/charterComplianceQueries.ts: TS2349: This expression is not callable.
-src/state/queries/charterComplianceQueries.ts: TS7006: Parameter 'g' implicitly has an 'any' type.
-src/state/queries/charterComplianceQueries.ts: TS7006: Parameter 'g' implicitly has an 'any' type.
 src/state/queries/paymentQueries.ts: TS2322: Type 'HousePaymentRecord[]' is not assignable to type 'RentPayment[]'.
 src/state/queries/paymentQueries.ts: TS2322: Type 'HousePaymentRecord[]' is not assignable to type 'RentPayment[]'.
