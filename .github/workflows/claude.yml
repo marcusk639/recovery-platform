@@ -80,11 +80,23 @@ jobs:
           additional_permissions: |
             actions: read
 
+          # A package's verify (install, typecheck, full test suite) outlasts
+          # Claude Code's 2-minute default Bash timeout and can near the
+          # 10-minute cap on a cold install. The action writes this to
+          # ~/.claude/settings.json, which the run loads.
+          settings: |
+            {"env": {"BASH_DEFAULT_TIMEOUT_MS": "1200000", "BASH_MAX_TIMEOUT_MS": "1800000"}}
+
           # Tag mode already allows git add/commit/rm and the action's push script.
           # These add read-only PR context and per-package verification, so a
           # commit is checked the way CI checks it before it is pushed.
+          # Permission rules match the command text, not what it runs, so each
+          # spelling of the verify command is listed; a cd/&& prefix still
+          # misses, hence the exact form in the prompt. npm/npx stay off the
+          # list on purpose: claude-verify.sh unsets the GitHub token before it
+          # runs any PR code, and a direct npm ci or npm test would not.
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           claude_args: |
-            --allowedTools "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(bash .github/scripts/claude-verify.sh:*)"
-            --append-system-prompt "Before every commit to a pull request: (1) run gh pr view and gh pr diff on the PR to see its current state and changes; (2) for every package your change touches, run bash .github/scripts/claude-verify.sh followed by the package path (run it without arguments to list the packages). If verification fails, do not commit; fix the cause and run it again, or reply explaining the failure. Never weaken, skip or delete a test to make it pass. Say in your reply which packages you verified."
+            --allowedTools "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(bash .github/scripts/claude-verify.sh:*),Bash(bash ./.github/scripts/claude-verify.sh:*),Bash(.github/scripts/claude-verify.sh:*),Bash(./.github/scripts/claude-verify.sh:*),Bash(bash ${{ github.workspace }}/.github/scripts/claude-verify.sh:*),Bash(${{ github.workspace }}/.github/scripts/claude-verify.sh:*)"
+            --append-system-prompt "Before every commit to a pull request: (1) run gh pr view and gh pr diff on the PR to see its current state and changes; (2) for every package your change touches, run bash .github/scripts/claude-verify.sh followed by the package path (run it without arguments to list the packages). Run it from the repository root as one command, exactly 'bash .github/scripts/claude-verify.sh <package>', with no cd, && or ; before it (piping its output to tail is fine). It installs dependencies itself and runs typecheck and tests the way CI does; npm, npx and jest cannot be run directly here, by design, so do not try them. It can take several minutes: let it finish. If that exact command is refused, say so in your reply and quote the command; do not commit unverified changes. If verification fails, do not commit; fix the cause and run it again, or reply explaining the failure. Never weaken, skip or delete a test to make it pass. Say in your reply which packages you verified."
 
