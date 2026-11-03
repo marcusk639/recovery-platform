@@ -5,7 +5,6 @@ import LoginFormView from './LoginFormView';
 import { useAppSelector, useAppDispatch } from '../../state/store';
 import { login } from '../../state/slices/userSlice';
 import { useQueryClient } from '@tanstack/react-query';
-import { houseKeys } from '../../state/queries/houseQueries';
 import { adminKeys } from '../../state/queries/adminQueries';
 import SchemaConstants from '../../entities/SchemaConstants';
 import { User } from '../../entities/User';
@@ -33,7 +32,6 @@ const loginSchema = yup.object().shape({
 export interface LoginProps {
   user: User;
   login: (credentials: { email: string; password: string }) => any;
-  getAdminHouses: (attribute: string, value: string) => any;
   getAdmin: (params: { adminId: string; isCurrentUser?: boolean }) => any;
   setModalVisible: () => void;
   navigation: AuthScreenNavigationProp;
@@ -167,15 +165,6 @@ const LoginFormWrapper: React.FC<any> = props => {
       loggedIn={loggedIn}
       login={(credentials: { email: string; password: string }) =>
         dispatch(login(credentials))
-      }
-      getAdminHouses={(attribute: string, value: string) =>
-        queryClient.fetchQuery({
-          queryKey: houseKeys.list({ attribute, value }),
-          queryFn: () =>
-            import('../../services/house').then(m =>
-              m.getHouses(attribute, 'array-contains', value),
-            ),
-        })
       }
       getAdmin={(params: { adminId: string; isCurrentUser?: boolean }) =>
         queryClient.fetchQuery({

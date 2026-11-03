@@ -339,6 +339,23 @@ describe("HousesOverview", () => {
     });
   });
 
+  // ─── Which houses ─────────────────────────────────────────────────────────
+  // houses.adminIds holds admin record ids (createHouses), not uids, so the
+  // list is keyed by the user's adminId.
+  describe('houses source', () => {
+    it('loads the houses of the admin record (adminId), not the uid', () => {
+      renderScreen({ user: { ...BASE_USER, adminId: 'admin-1' } });
+
+      expect(mockUseHousesByAdmin).toHaveBeenCalledWith('admin-1', true);
+    });
+
+    it('does not load houses for a user with no admin record', () => {
+      renderScreen({ user: { ...BASE_USER, adminId: undefined } });
+
+      expect(mockUseHousesByAdmin).toHaveBeenCalledWith('', false);
+    });
+  });
+
   // ─── Loading state ──────────────────────────────────────────────────────────
   describe("loading state", () => {
     it("renders loading indicator when isLoading is true", () => {

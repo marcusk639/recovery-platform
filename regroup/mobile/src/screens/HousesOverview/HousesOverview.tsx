@@ -80,7 +80,7 @@ const HousesOverview: React.FC<Props> = ({ navigation }) => {
     isLoading,
     isError,
     error,
-  } = useHousesByAdmin(user?.uid || "", !!user?.uid);
+  } = useHousesByAdmin(user?.adminId || "", !!user?.adminId);
 
   // Convert houses object to array for rendering
   const houses = housesData ? Object.values(housesData) : [];

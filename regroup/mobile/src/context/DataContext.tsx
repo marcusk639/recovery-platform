@@ -116,12 +116,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
                 attribute: 'adminIds',
                 value: currentUser.adminId,
               }),
-              queryFn: () =>
-                houseService.getHouses(
-                  'adminIds',
-                  'array-contains',
-                  currentUser.adminId!,
-                ),
+              // From the admin record: the rules deny a houses.adminIds query.
+              queryFn: () => houseService.getHousesForAdmin(currentUser.adminId!),
             }),
             queryClient.fetchQuery({
               queryKey: adminKeys.detail(currentUser.adminId),

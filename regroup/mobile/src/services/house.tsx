@@ -75,6 +75,35 @@ export async function getHouses(
   return houses;
 }
 
+/**
+ * An operator's houses, keyed by id. The rules let a member read a house by id
+ * but deny a query on houses.adminIds (a list query cannot prove the per-house
+ * rule), so the ids come from admins/{adminId}.houseIds, which createHouses and
+ * addAdminAuthorization keep current. A listed house the caller can no longer
+ * read, or that no longer exists, is skipped so the others still load. If
+ * every listed house fails to read, it throws: an empty result would be cached
+ * as "no houses" instead of being retried.
+ */
+export async function getHousesForAdmin(adminId: string): Promise<Houses> {
+  const admin = await crud.get<Admin>(adminCollection, adminId);
+  const houseIds = admin?.houseIds ?? [];
+  const results = await Promise.allSettled(houseIds.map((id) => getHouse(id)));
+  const houses: Houses = {};
+  const failures: unknown[] = [];
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      failures.push(result.reason);
+      logException(result.reason, 'getHousesForAdmin: house read failed');
+    } else if (result.value) {
+      houses[houseIds[index]] = result.value;
+    }
+  });
+  if (houseIds.length > 0 && failures.length === houseIds.length) {
+    throw failures[0];
+  }
+  return houses;
+}
+
 export async function updateHouseAdmins(houseId: string, adminId: string) {
   return updateDoc(doc(houseCollection, houseId), {
     adminIds: arrayUnion(adminId),
