@@ -1,0 +1,45 @@
+# Sign in as a resident and open the Payment History section of Pay Rent
+# (RentPaymentScreen), waiting until the history has loaded.
+#
+#   runFlow:
+#     file: ../subflows/open-rent-history.yaml
+#     env:
+#       EMAIL: test-guest-a@rats-e2e.com
+#       PASSWORD: ${E2E_TEST_PASSWORD}
+appId: ${APP_ID}
+---
+- runFlow:
+    file: login.yaml
+    env:
+      EMAIL: ${EMAIL}
+      PASSWORD: ${PASSWORD}
+- tapOn:
+    id: "guest-tab"
+- extendedWaitUntil:
+    visible:
+      id: "guest-overview-screen"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: "pay-rent-card"
+    direction: DOWN
+    centerElement: true
+    timeout: 20000
+- tapOn:
+    id: "pay-rent-card"
+- extendedWaitUntil:
+    visible:
+      id: "rent-payment-screen"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: "payment-history-section"
+    direction: DOWN
+    centerElement: true
+    timeout: 20000
+- extendedWaitUntil:
+    notVisible:
+      id: "payment-history-loading"
+    timeout: 30000
+- assertNotVisible:
+    id: "payment-history-error"

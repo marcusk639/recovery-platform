@@ -31,7 +31,7 @@ const admin = require('firebase-admin');
 process.env.FIRESTORE_EMULATOR_HOST =
   process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080';
 
-const PROJECT_ID = process.env.GCLOUD_PROJECT || 'phoenix-cleanhouse';
+const PROJECT_ID = process.env.GCLOUD_PROJECT || 'demo-regroup-e2e';
 
 function coerce(raw) {
   if (raw === 'true') return true;
