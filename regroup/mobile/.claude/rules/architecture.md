@@ -63,7 +63,7 @@ Key modal routes: OxfordDashboard, OfficerManagement, EESTracker, BusinessMeetin
 
 | Service                         | Key Operations                                            |
 | ------------------------------- | --------------------------------------------------------- |
-| `activity.ts`                   | Log, update, paginate, subscribe, offline support         |
+| `activity.ts`                   | Log, update, paginate, subscribe                          |
 | `admin.tsx`                     | Admin record management                                   |
 | `applications.ts`               | Guest/resident application CRUD, status updates           |
 | `choreRotation.ts`              | Chore rotation schedule management                        |
@@ -77,13 +77,14 @@ Key modal routes: OxfordDashboard, OfficerManagement, EESTracker, BusinessMeetin
 | `guest.tsx`                     | CRUD with optimistic locking, transactions, stat merging  |
 | `guestImport.ts`                | Bulk guest import from CSV/data                           |
 | `house.tsx`                     | CRUD, nearby search, admin management, batch create       |
-| `invites.ts`                    | Admin/guest invitation email dispatch                     |
+| `invitations.ts`                | Invitations via the `createInvitation` callable           |
 | `issues.ts`                     | House maintenance issue CRUD                              |
 | `meeting.ts`                    | Search, check-in (calls Cloud Functions)                  |
 | `message.tsx`                   | DM conversations, house chat messages                     |
 | `notifications.tsx`             | Fetch, mark read, FCM token registration                  |
-| `notifications/rentReminder.ts` | Scheduled rent reminder logic                             |
-| `offlineQueue.ts`               | Queue failed writes, retry with backoff (AsyncStorage)    |
+| `notifications/rentReminder.ts` | Rent reminder as a react-native-notify-kit trigger        |
+| `notifications/channels.ts`     | Android channels (`default`, `default-channel-id`)        |
+| `notifications/remoteMessage.ts`| FCM message handling                                      |
 | `organization.ts`               | Multi-house organization management                       |
 | `payments.ts`                   | Payment intent creation, history (calls Cloud Functions)  |
 | `paywall.ts`                    | Subscription status gate — operator vs guest grace period |
@@ -120,7 +121,7 @@ Firebase custom claims: `guest`, `admin`, `superAdmin`, `potentialSuperAdmin`.
 
 `isAdmin()` in Firestore rules returns true for both `admin` and `superAdmin` — always use it instead of checking individual roles.
 
-**`auth` is a singleton** — use `auth.currentUser` (not `auth().currentUser`).
+**`auth` is a singleton** — the modular `Auth` instance from `firebase-setup.ts`: use `auth.currentUser` and pass `auth` to modular functions (`signOut(auth)`), never `auth()`.
 
 ## Subscription & Paywall
 

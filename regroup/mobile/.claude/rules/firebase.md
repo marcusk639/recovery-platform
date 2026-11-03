@@ -5,13 +5,24 @@ paths: "src/**/*.{ts,tsx},firebase/**"
 
 # Firebase / Firestore Patterns
 
+## Modular API only
+
+RNFirebase 26 (since the RN 0.88 upgrade) has only the modular API. Import functions from the package and pass the instances exported by `firebase-setup.ts` (`firestore`, `auth`, `functions`, `storage`, `messaging`). The namespaced forms (`firestore().collection(...)`, `firestore.collection(...)`, `FirebaseFirestore.*`, default imports) no longer exist, and `tsc` rejects them.
+
+```ts
+import { collection, doc, getDoc, query, where, orderBy, limit } from '@react-native-firebase/firestore';
+import { firestore } from '../../firebase-setup';
+```
+
+`snapshot.exists()` is a method, not a property.
+
 ## Collection References
 
-Export collection refs as module-level constants from their owning service file. Never construct `firestore.collection('guests')` inline.
+Export collection refs as module-level constants from their owning service file. Never construct `collection(firestore, 'guests')` inline elsewhere.
 
 ```ts
 // src/services/guest.tsx — define once
-export const guestCollection = firestore.collection('guests');
+export const guestCollection = collection(firestore, 'guests');
 
 // elsewhere — import, don't reconstruct
 import { guestCollection } from '../services/guest';
@@ -20,12 +31,12 @@ import { guestCollection } from '../services/guest';
 Subcollections are accessed dynamically via the parent doc path:
 
 ```ts
-firestore.collection('houses').doc(houseId).collection('votes');
+collection(doc(collection(firestore, 'houses'), houseId), 'votes');
 ```
 
 ## Timestamps
 
-- **Writes** — `FirebaseFirestore.FieldValue.serverTimestamp()` for audit fields (`createdAt`, `lastUpdated`, `loggedAt`). Use `new Date().toISOString()` only for client-determined times (e.g., user-selected activity date).
+- **Writes** — `serverTimestamp()` (from `@react-native-firebase/firestore`) for audit fields (`createdAt`, `lastUpdated`, `loggedAt`). A client-chosen time that is sorted or range-queried is written as `Timestamp.fromDate(date)`, never an ISO string: Firestore orders every string above every Timestamp, so mixing the two in one field breaks `orderBy` (see #168, `payments.createdAt`). Keep ISO strings only for display-only values, and only where that field is a string everywhere.
 - **Reads** — Always use the `.toDate()` fallback: Firestore timestamps may arrive as `Timestamp`, plain `{ seconds, _seconds }`, or `Date` depending on cache state:
 
 ```ts
@@ -49,14 +60,17 @@ Never swallow Firebase errors. Never use `console.error`.
 
 ## Transactions & Batches
 
-- **Transactions** (`firestore.runTransaction`) — read-modify-write that must be atomic (vote tallying, stat merging). Include retry logic with exponential backoff for `'aborted'` / `'failed-precondition'`.
-- **Batch writes** (`firestore.batch`) — multiple atomic writes without reads (creating a house with admins, bulk EES records). Max 500 ops per batch.
+- **Transactions** (`runTransaction(firestore, async tx => …)`) — read-modify-write that must be atomic (vote tallying, stat merging). Include retry logic with exponential backoff for `'aborted'` / `'failed-precondition'`.
+- **Batch writes** (`writeBatch(firestore)`) — multiple atomic writes without reads (creating a house with admins, bulk EES records). Max 500 ops per batch.
 - Prefer transactions when the write depends on current document state.
 
 ## Cloud Functions
 
 ```ts
-const response = await functions.httpsCallable('createPaymentIntent')({
+import { httpsCallable } from '@react-native-firebase/functions';
+import { functions } from '../../firebase-setup';
+
+const response = await httpsCallable(functions, 'createPaymentIntent')({
   guestId,
   houseId,
   amount,
@@ -88,9 +102,7 @@ export const activityKeys = {
 
 ## Offline Support
 
-Detect network errors by checking `error.code` for `'unavailable'` or `'deadline-exceeded'`. Failed writes → `offlineQueue.enqueue()` from `src/services/offlineQueue.ts` (max 3 retries).
-
-Firestore SDK persistence is **disabled** (commented out in `firebase-setup.ts`).
+There is no offline write queue (`offlineQueue.ts` no longer exists). Network errors surface as `error.code` `'unavailable'` or `'deadline-exceeded'`. `firebase-setup.ts` sets no persistence option (only `ignoreUndefinedProperties`), so the native SDK's default cache applies.
 
 ## Security Rules
 
@@ -107,7 +119,7 @@ Key conventions:
 
 ## Pagination
 
-Cursor-based: `startAfter(cursor).limit(pageSize + 1)`. The `+1` detects whether more pages exist. Pair with `useInfiniteQuery` and `getNextPageParam: (lastPage) => lastPage.nextCursor`.
+Cursor-based: `query(ref, ...constraints, startAfter(cursor), limit(pageSize + 1))`. The `+1` detects whether more pages exist. Pair with `useInfiniteQuery` and `getNextPageParam: (lastPage) => lastPage.nextCursor`.
 
 ## Real-Time Listeners
 

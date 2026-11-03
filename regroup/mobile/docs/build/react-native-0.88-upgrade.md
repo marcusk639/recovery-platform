@@ -21,7 +21,33 @@ lands, so a reader can stop at any point and see what is true on the branch.
 
 ## 1. Summary
 
-_Written last (Task 16)._
+`regroup/mobile` moves from React Native 0.72.17 to **0.88.1**: React 19.3, the New Architecture
+(Fabric and TurboModules) and Hermes on both platforms. Every native dependency is on a maintained
+release that supports 0.88, and user-visible behaviour is meant to be unchanged.
+
+**What changed, in short:**
+
+- **Platform.** Android: Kotlin host, AGP 9.2.1, Gradle 9.4.1, no Flipper, edge-to-edge insets.
+  iOS: `RCTReactNativeFactory` with a UIScene `SceneDelegate`, iOS 15.1, static frameworks.
+- **Firebase.** RNFirebase 17.5 → 26.4.1, every call site on the modular API, rewritten domain by
+  domain behind an operation-log characterization suite that stayed byte-identical (§3.1, Task 10).
+- **Replaced packages.** Notifications on `react-native-notify-kit` (Task 11); keyboard on
+  `react-native-keyboard-controller` (Task 15); per-family vector icons (Task 5); maintained document
+  picker, file system, html-to-pdf and geolocation packages (Task 6); permissions 5 (Task 7); the
+  native checkbox replaced in JS (Task 8); Sentry 8 (Task 12).
+- **Held back, with reasons.** `@stripe/stripe-react-native` 0.83.0, not 0.84 (SPM-only iOS SDK needs
+  dynamic frameworks; RNFirebase needs static; Task 13). `react-native-modal` 13.0.2 with a patch
+  (RN 0.88 removed `InteractionManager`; Task 3).
+- **Regressions found and fixed on this branch:** React 19 `defaultProps` in three components
+  (Task 3); an Android crash on every sign-in (`RatsAvatar` font size 0, which the New Architecture
+  rejects); an inverted keyboard-toolbar offset (Task 15); the iOS deployment target and a false
+  date-picker TurboModule provider (first simulator run).
+- **Bugs found on `main` along the way,** fixed in separate PRs and merged in: #165, #166, #167, #168
+  (§6). Pre-existing defects that were left alone are in §4.
+
+**Measured at the end** (§7): Jest 5,998 passed in 402 suites (from 5,264 in 328); typecheck
+ratchet 121 (from 137); rules and integration as in §7. The Mac and device checks that need the owner
+are listed in §7 as unverified.
 
 ## 2. Baselines before the upgrade
 
@@ -1428,7 +1454,8 @@ being a no-op under the New Architecture.
 
 The `E2EEmulator` (iOS) and `e2eEmulator` (Android) builds were run against local auth, Firestore,
 Storage and Functions emulators (project `demo-regroup-e2e`), seeded with the Maestro personas by
-a scratch Admin-SDK script. The repo's seeder `e2e/setup/seedTestData.js` was never committed.
+a scratch Admin-SDK script. The repo's seeder `e2e/setup/seedTestData.js` was never committed (#170
+later added one, below).
 
 **Upgrade regression found and fixed here: Android crash on every sign-in.** `RatsAvatar` sized its
 initials as `viewLayout.height / 2`, and `viewLayout` starts at `{ height: 0 }`, so the first render
@@ -1458,9 +1485,111 @@ The flow-side problems (scrolling, logout, the photo prompt, iOS's combined acce
 such as `"\uf015, Oxford House Hub, Dashboard — …"`, and the missing seeder) are on `main` too and
 are left for a separate change.
 
+### Merges of main after the signed-in checks
+
+Four PRs from `main` were merged in; the upgrade-specific parts are recorded here.
+
+- **#167, residents' payment history.** `getPaymentHistory` queried by `houseId` alone, which the
+  payments read rule denies for a resident, so the history failed for every resident. It now also
+  filters on `guestUserId`. The branch-only `payments.oplog` suite was updated to pin the new query.
+- **#168, one type for `payments.createdAt`.** The webhook writes a Timestamp; the app's manual
+  payment wrote an ISO string, and Firestore orders all strings above all Timestamps, so manual
+  payments sorted above every card payment. On this branch the writer uses the modular `Timestamp`
+  export from `@react-native-firebase/firestore` (main uses `FirebaseFirestore.Timestamp`). The
+  `payments.oplog` manual-payment case now expects the logged Timestamp form (`{__ts}`), equal to
+  the returned date. A migration script for existing string values is on main
+  (`functions/src/scripts/migratePaymentCreatedAtToTimestamp.ts`), to run after the mobile release.
+- **#169, the `@claude` bot's verify step** (workflow only). Tested on #170: the bot ran
+  `claude-verify.sh regroup/mobile` and committed a verified test.
+- **#170, Maestro e2e for payment history and a committed seeder** (`maestro/scripts/seed/`, refuses
+  any project not `demo-` and any non-loopback emulator host). `guest-rent-history` and
+  `operator-manual-payment` pass on the iPhone simulator and the Android emulator against builds of
+  this branch. On an Android build from before #168 merged in, `operator-manual-payment` failed at
+  its order assertion, with the manual record's `createdAt` stored as a string. The runner now
+  targets the E2EEmulator build, and the e2e emulators bind to `127.0.0.1` only.
+
+After the last merge (17ccf77b): typecheck ratchet 121 (baseline 121), Jest 5,998 passed (402 suites).
+
 ## 7. Verification
 
-_Final results and the Mac checkpoint (Task 16)._
+### 7.1 Suites, on the final tree (17ccf77b, 2026-11-03, macOS, Node 22, Java 21)
+
+| Suite | Before (§2, RN 0.72) | After |
+| ----- | -------------------- | ----- |
+| Unit (`npx jest`) | 328 suites; 5,264 pass, 2 todo | 402 suites; 5,998 pass, 2 todo, 0 fail |
+| Typecheck ratchet | 137 | 121 (baseline 121; every entry mapped in Appendix B) |
+| Security rules | 27 suites, 591 pass | 28 suites, 615 pass (tests added on `main` came in with the merges) |
+| Integration (`--runInBand`) | 48 tests: 29 pass, 19 fail | 55 tests: 35 pass, 20 fail; equal to the final recovery target (Appendix A) |
+
+CI runs the unit suite and the ratchet on every push of the branch.
+
+### 7.2 Mac checkpoint: what was run here (simulator and emulator)
+
+- **Builds.** iOS `E2EEmulator` and `E2EStaging` (simulator) and Android `e2eEmulator` and `e2eStaging`
+  build, and `scripts/verify-ios-variants.sh` / `scripts/verify-android-variants.sh` pass every
+  assertion: bundle id and label, embedded JS bundle and its E2E marker, Firebase project, ATS or
+  cleartext policy, launch-arguments linkage, Sentry uploads skipped for e2e. iOS `Release` and
+  Android `assembleRelease` are refused by the release guard with a `pk_test_` key, as designed:
+  the store builds need the owner's live key. iOS `Debug` built and launched in the first simulator
+  run (§6). `Podfile.lock` is committed and `pod install` is clean.
+- **A simulator build made with `CODE_SIGNING_ALLOWED=NO` cannot sign in.** The verify script's
+  header uses that flag, which is fine for inspecting artifacts; the app it produces has no
+  entitlements blob, the simulator keychain rejects Firebase Auth, and every sign-in shows "Something
+  went wrong". The JS bundle was byte-identical to a signed build that signs in. Install a normally
+  signed build (as `maestro/README.md` does) for any flow.
+- **Maestro, full iOS suite** (`maestro/scripts/run-flows.sh`, E2EEmulator, emulators seeded by
+  `maestro/scripts/seed/`): 6 of 16 pass: `smoke`, `signup`, `guest-home`, `guest-activity-dispute`,
+  `guest-rent-history`, `operator-manual-payment`. The 10 failures are flow-side, as on `main`:
+  taps below the fold without a scroll (`guest-payment-history`, `guest-rent-payment`,
+  `operator-manage-guests`), logout from behind a pushed screen (`guest-log-chore`,
+  `operator-house-settings`, `operator-disputes`), iOS's merged accessibility label on "Oxford House
+  Hub" (`oxford-dashboard`, `oxford-onboarding`), and the setup-wizard and applications flows (§6).
+  The two payment flows also pass on the Android emulator.
+- **Stripe test PaymentSheet** ran on both platforms before the merges (the e2e payment work).
+- **Signed-in app checks** on both platforms: §6, "Signed-in checks against the Firebase emulators".
+
+### 7.3 Not verified yet (owner, on devices)
+
+- Upgrade in place from the current store build, on both platforms: no forced sign-out, FCM still
+  delivers, and (iOS) paying leaves no stale rent reminder.
+- Pushes: a data-only push and a `notification`-type push in the foreground, a background push on
+  Android landing in the `default` channel. The rent reminder scheduled and cancelled on a device.
+- Stripe: decline and 3DS cards on a device.
+- Store `Release` builds with the live key; a Sentry Release upload of a Hermes source map with a
+  debug ID.
+- Files and reports: document upload and cancel, CSV guest import, PDF export (Android).
+- UI: house search with location, both charts, the date-picker modal, a `RatsModal` swipe dismiss,
+  the Android 16 back gesture, the keyboard on every audited screen (§5.3).
+- Layout: edge-to-edge on Android 15+ and on API 30.
+- Links: cold-start universal link and URL, warm URL, scene reconnect.
+- iOS Hermes `Intl`: week start/end and `formatInTimeZone` against Android, including a DST
+  boundary.
+- Firebase config pickup on iOS: the Xcode log line `firebase.json found at …`.
+
+### 7.4 Risks
+
+- **Native behaviour that unit tests cannot see:** notifications (new library and channel ids),
+  keyboard avoidance, edge-to-edge insets and the New Architecture's stricter layout (the
+  `RatsAvatar` crash was one such case). §7.3 lists the device checks that cover them.
+- **Store upgrade path:** sign-in persistence and pending reminders across the version jump are
+  untested until the owner's upgrade-in-place run.
+- **Pinned-as-is behaviours** (§6, Task 10) look like bugs and are unchanged on purpose.
+
+### 7.5 Rollback
+
+Revert the merge and ship the previous version as a new build. Device state moves forward and is
+not undone by a rollback: notification channels created by `react-native-notify-kit` stay on the
+device, and the Firebase SDKs (iOS 12.x) may have migrated their local caches. Server data needs no
+rollback: #168's Timestamp `createdAt` is the type the Stripe webhook already wrote, so every app
+version reads it.
+
+### 7.6 Follow-ups
+
+- RNFirebase 27 (SPM and dynamic frameworks, Kotlin ≥ 2.4), and with it Stripe 0.84 and SwiftPM.
+- React Native Testing Library 14.
+- Retire the namespaced test-mock layer (Task 10f deviation).
+- Fix the Maestro flows in §7.2, and the behaviours pinned as-is (§6).
+- Run `migratePaymentCreatedAtToTimestamp` (#168) after the mobile release.
 
 ## Appendix A: integration baseline and recovery targets
 

@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Regroup is a React Native 0.72 sober living house management app for iOS and Android, backed by Firebase (Firestore, Auth, Functions, Messaging). Cloud Functions live in `../functions/` (sibling directory within the recovery-platform monorepo).
+Regroup is a React Native 0.88.1 (React 19.3, New Architecture, Hermes) sober living house management app for iOS and Android, backed by Firebase (Firestore, Auth, Functions, Messaging). Cloud Functions live in `../functions/` (sibling directory within the recovery-platform monorepo).
 
 > **Codename:** the app's internal name is `rats` (`app.json` `name`/`displayName`, iOS target) — a legacy identifier retained for App Store / Play Store / Firebase continuity. Canonical product name is **Regroup**; don't rename the `rats` identifier without coordinating native + store config changes.
 
@@ -47,18 +47,17 @@ JavaScript, so neither could be committed). Run them through `emulators:exec` so
 the emulators are guaranteed rather than assumed:
 
 ```bash
-# Security rules — 240 tests. Needs firestore, storage AND auth; with firestore
+# Security rules — 610 tests. Needs firestore, storage AND auth; with firestore
 # alone the storage suite fails on grpc connection errors.
 cd firebase && firebase emulators:exec --only firestore,storage,auth \
   --project demo-test \
   "cd .. && npx jest --config jest.config.rules.js --no-coverage --forceExit"
 
-# Integration — needs firestore + auth. 24 of 48 currently fail; those suites
-# had never executed before the runner was restored, so the failures are
-# pre-existing and unverified, not regressions.
+# Integration — needs firestore + auth. 35 of 55 pass (the RN 0.88 upgrade's
+# measured baseline; decision record Appendix A). Order-dependent: --runInBand.
 cd firebase && firebase emulators:exec --only firestore,auth \
   --project demo-test \
-  "cd .. && npx jest --config jest.config.integration.js --no-coverage --forceExit"
+  "cd .. && npx jest --config jest.config.integration.js --runInBand --no-coverage --forceExit"
 ```
 
 Rules, storage rules and indexes live in `mobile/firebase/` (`firestore.rules`, `storage.rules`, `firestore.indexes.json`; rules tests in `firebase/__tests__/`). The project pin is `../.firebaserc`; there is no `.firebaserc` here. `firebase/firebase.json` references `database.rules.json`, which does not exist.
@@ -66,6 +65,18 @@ Rules, storage rules and indexes live in `mobile/firebase/` (`firestore.rules`, 
 Integration tests alias `firebase-setup` to `src/integration/firebase-admin-setup.ts`;
 unit tests alias it to the mock. Getting that wrong makes every integration test
 fail on reads.
+
+## Platform libraries (since the RN 0.88 upgrade)
+
+Measured on the upgrade branch: Jest 5,998 tests in 402 suites; `typecheck:ratchet` baseline 121. Decisions and evidence: `docs/build/react-native-0.88-upgrade.md`.
+
+- **Firebase:** RNFirebase 26.4.1, modular API only (`.claude/rules/firebase.md`).
+- **Notifications:** `react-native-notify-kit` 10.10.0. Android channels `default` and `default-channel-id`; the rent reminder is a trigger notification (`src/services/notifications/rentReminder.ts`); iOS foreground presentation is set in `firebase.json`.
+- **Keyboard:** `react-native-keyboard-controller` 1.22.9 (`src/components/rats-keyboard/`). A modal or native-stack modal route renders its own `RatsKeyboardToolbar` (iOS Prev/Next/Done); the root has one too. keyboard-manager and keyboard-aware-scroll-view are gone.
+- **Modal:** `react-native-modal` 13.0.2 with `patches/react-native-modal+13.0.2.patch` (RN 0.88 removed `InteractionManager`); applied by `postinstall`.
+- **Icons:** per-family `@react-native-vector-icons/fontawesome5`, `/ionicons`, `/material-icons`.
+- **Stripe:** `@stripe/stripe-react-native` 0.83.0 (0.84 needs dynamic frameworks; RNFirebase needs static). Sentry: `@sentry/react-native` 8.
+- **Android edge-to-edge:** screens and FABs outside a tab bar or header add `useSafeAreaInsets()` themselves.
 
 ## Universal Rules
 
@@ -75,7 +86,7 @@ fail on reads.
 
 **Imports** — No `@/` path alias in source files; use relative paths. `@/` works in Jest tests only.
 
-**Firebase auth singleton** — `auth.currentUser` (not `auth().currentUser`). `auth` is a pre-initialized singleton from `firebase-setup.ts`.
+**Firebase auth singleton** — `auth.currentUser` (not `auth().currentUser`). `auth` is the modular `Auth` instance exported by `firebase-setup.ts`.
 
 ## Detailed Guidelines
 
