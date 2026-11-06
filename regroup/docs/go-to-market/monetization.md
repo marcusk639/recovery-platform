@@ -150,7 +150,7 @@ vaporware).
 - **Annual billing (P-4).** Each tier has an `annualPriceEnvVar` (~17% off, 2
   months free). `createOperatorSubscription` accepts `billingInterval:
 "month" | "year"`.
-- **Trial (P-5).** 30-day trial wired into tier checkout (`trial_period_days`).
+- **Trial (P-5).** 7-day trial (owner decision 2026-11-06; was 30) wired into tier checkout (`trial_period_days`, `TRIAL_PERIOD_DAYS` in `functions/src/api/stripe.ts`).
 
 Premium-feature handoffs: [RG-SPEC-09 compliance export](../product/specs/RG-SPEC-09-compliance-export.md)
 and the [rent-ROI dashboard tracking spec](../product/specs/RG-TRACK-rent-roi-dashboard.md).

@@ -282,13 +282,15 @@ jobs:
           git -C .pr-review-kit-ci checkout -q --detach "$KIT_SHA"
           node .pr-review-kit-ci/bin/pr-review.mjs validate
 
-  maestro-smoke:
-    name: Maestro Cloud — smoke tests (regroup Android)
+  # Build-only since 2026-11-06. It used to run a Maestro Cloud flow against this
+  # debug APK, whose google-services.json is production (phoenix-cleanhouse): every
+  # launch signs in anonymously there. Maestro may only drive .e2e.emu/.e2e.stg
+  # builds (regroup launch design §3.4, §4.3); the suite moves to CI later. The
+  # build stays because it is CI's only regroup Android compile check.
+  regroup-android-build:
+    name: regroup/mobile — Android debug build
     needs: [recovery-api, homegroups-functions, regroup-functions, detox-recovery]
     runs-on: ubuntu-latest
-    # Only run on PRs — the `secrets` context isn't available in job-level `if:`
-    # (only github/inputs/needs/vars are), so the actual Maestro-credit-saving
-    # check happens on the Maestro step itself, below.
     if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'e2e-fix/')
     steps:
       - uses: actions/checkout@v4
@@ -368,22 +370,13 @@ jobs:
             exit 1
           fi
 
-      - name: Maestro smoke — regroup (login-and-view-dashboard)
-        continue-on-error: true
-        uses: mobile-dev-inc/action-maestro-cloud@v1
-        with:
-          api-key: ${{ secrets.MAESTRO_CLOUD_API_KEY }}
-          app-file: regroup/mobile/android/app/build/outputs/apk/debug/app-debug.apk
-          flow-file: e2e-maestro/regroup/login-and-view-dashboard.yaml
-          env: |
-            E2E_TEST_PASSWORD=${{ secrets.REGROUP_E2E_TEST_PASSWORD }}
-
   homegroups-maestro-smoke:
     name: Maestro Cloud — smoke tests (homegroups Android)
     needs: [recovery-api, homegroups-functions, regroup-functions, detox-recovery]
     runs-on: ubuntu-latest
-    # Only run on PRs — see the comment on the regroup maestro-smoke job above for why
-    # this check happens at the step level via `if:`, not the job level.
+    # Only run on PRs — the `secrets` context isn't available in job-level `if:`
+    # (only github/inputs/needs/vars are), so the actual Maestro-credit-saving
+    # check happens on the Maestro step itself, below.
     if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'e2e-fix/')
     steps:
       - uses: actions/checkout@v4

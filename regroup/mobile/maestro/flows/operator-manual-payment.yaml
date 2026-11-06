@@ -12,6 +12,7 @@ tags:
   - operator
   - payments
 ---
+- runFlow: ../subflows/guard-e2e-app.yaml
 - runFlow:
     file: ../subflows/login.yaml
     env:

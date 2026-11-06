@@ -11,6 +11,7 @@ tags:
   - guest
   - payments
 ---
+- runFlow: ../subflows/guard-e2e-app.yaml
 - runFlow:
     file: ../subflows/open-rent-history.yaml
     env:

@@ -2,12 +2,13 @@
 # Persona: guest-a. Asserts the balance breakdown renders; STOPS before "Pay Now".
 # Stripe Checkout (checkout.stripe.com) is NOT emulated — do not complete payment
 # here. To test completion, run the functions emulator with Stripe test keys.
-# Run: maestro test -e APP_ID=com.rats.dev maestro/flows/guest-rent-payment.yaml
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/guest-rent-payment.yaml
 appId: ${APP_ID}
 tags:
   - guest
   - payments
 ---
+- runFlow: ../subflows/guard-e2e-app.yaml
 - runFlow:
     file: ../subflows/login.yaml
     env:

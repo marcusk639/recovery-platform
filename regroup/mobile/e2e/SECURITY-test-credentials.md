@@ -49,8 +49,10 @@ export E2E_TEST_PASSWORD="$(cat ~/.config/regroup-e2e/e2e-test-password)"
   throws if it is unset.
 - `e2e/setup/testAccounts.json` no longer carries a password field; consumers
   must take it from `E2E_TEST_PASSWORD`.
-- CI (`maestro-smoke` jobs) injects `${{ secrets.E2E_TEST_PASSWORD }}` via the
-  Maestro Cloud action `env` input.
+- CI runs no regroup Maestro flow since 2026-11-06 (the old `maestro-smoke` job
+  drove the production-config debug APK; it is now the build-only
+  `regroup-android-build`), so the `REGROUP_E2E_TEST_PASSWORD` secret is unused
+  for regroup. The homegroups Maestro Cloud job still injects its own secret.
 
 ## Rotation checklist (user)
 

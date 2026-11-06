@@ -141,7 +141,7 @@ for persistence-class coverage). npm scripts: `maestro:seed`, `maestro:ios`, `ma
 2. ~~`maestro/config.yaml`~~ **Done** — `flows: ['flows/*']`, both `disableAnimations: true`,
    `testOutputDir: maestro/output`.
 3. ~~Per-platform `appId` via env~~ **Done** — flow headers use `appId: ${APP_ID}`; npm scripts
-   pass `-e APP_ID=com.rats.dev` (iOS) / `com.regroup.app` (Android).
+   pass `-e APP_ID=com.rats.dev.e2e.emu` (iOS) / `com.regroup.app` (Android).
 4. **Spike (STILL OPEN — needs a device run):** the _wiring_ is now in place
    (`connectToEmulators()` is called from `firebase-setup.ts`; see Finding 0.3-1), so the only
    remaining unknown is whether Maestro's `launchApp: { arguments: { IS_E2E_TEST: "1" } }`

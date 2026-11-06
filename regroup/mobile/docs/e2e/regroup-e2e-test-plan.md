@@ -17,7 +17,7 @@
 | Flows dir         | `maestro/flows/` (NOT `.maestro/`)                                                                                                    |
 | Reusable subflows | `maestro/subflows/login.yaml`, `logout.yaml`                                                                                          |
 | Seed              | `npm run maestro:seed` → `maestro/scripts/reset-and-seed.sh` → starts Firebase emulators + `e2e/setup/seedTestData.js`                |
-| Run (iOS)         | `npm run maestro:ios` (`maestro test -e APP_ID=com.rats.dev maestro/flows/`)                                                          |
+| Run (iOS)         | `npm run maestro:ios` (`maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/`)                                                          |
 | Run (Android)     | `npm run maestro:android` — **blocked**: `IS_E2E_TEST` launch-arg is iOS-only (NSUserDefaults); needs a SharedPreferences path        |
 | Persistence check | `maestro/scripts/assert-firestore.js` (black-box Firestore verification)                                                              |
 | Emulator switch   | `IS_E2E_TEST=1` launch arg → `Settings.get()` → `connectToEmulators()` (Auth 9099 / Firestore 8080 / Storage 9199), `__DEV__`-guarded |

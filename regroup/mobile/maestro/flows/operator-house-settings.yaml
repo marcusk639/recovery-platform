@@ -2,12 +2,13 @@
 # Persona: manager. Asserts the settings screen + a known testID'd section.
 # Section rows (Reports / Payment Dashboard / Phases) still need entry testIDs —
 # see docs/e2e/testid-backlog.md; until then deep links into those are text-tapped.
-# Run: maestro test -e APP_ID=com.rats.dev maestro/flows/operator-house-settings.yaml
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/operator-house-settings.yaml
 appId: ${APP_ID}
 tags:
   - operator
   - settings
 ---
+- runFlow: ../subflows/guard-e2e-app.yaml
 - runFlow:
     file: ../subflows/login.yaml
     env:

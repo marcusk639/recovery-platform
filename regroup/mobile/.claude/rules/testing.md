@@ -1,6 +1,6 @@
 ---
 description: Jest setup, Firebase mocks, integration tests, Maestro E2E
-paths: "**/__tests__/**,**/*.test.*,e2e/**,jest.*"
+paths: '**/__tests__/**,**/*.test.*,e2e/**,jest.*'
 ---
 
 # Testing
@@ -59,4 +59,6 @@ npm run maestro:smoke:ios        # needs E2E_TEST_PASSWORD (e2e/SECURITY-test-cr
 
 Only the E2EEmulator build reaches the emulators; Debug and Release use real Firebase. Details, Android steps and the seed data: `maestro/README.md`.
 
-Flows live in `maestro/flows/` (shared steps in `maestro/subflows/`). The seed is `maestro/scripts/seed/` (identities from `e2e/setup/testAccounts.json`; the other JSON fixtures there are unused). The CI `maestro-smoke` job runs the repo-root `e2e-maestro/regroup/` flows on Maestro Cloud. Reports go to `docs/e2e/reports/`.
+**The production guard.** Maestro must never drive a production build: every launch or logout of `com.rats.dev` / `com.regroup.app` signs in anonymously against `phoenix-cleanhouse`. Every flow starts with `maestro/subflows/guard-e2e-app.yaml`, which refuses an `APP_ID` that doesn't end in `.e2e.emu` / `.e2e.stg` before anything launches. `run-flows.sh` and the `npm run maestro:*` scripts also run `maestro/scripts/e2e-build-guard.js`, which checks the installed bundle's E2E marker and refuses while `com.rats.dev` or `com.regroup.app` is installed on the device (a deep link could open it). Keep production builds off test simulators and emulators. A new flow must start with the guard subflow (`maestro/scripts/__tests__/flows-guarded.test.js` fails otherwise).
+
+Flows live in `maestro/flows/` (shared steps in `maestro/subflows/`). The seed is `maestro/scripts/seed/` (identities from `e2e/setup/testAccounts.json`; the other JSON fixtures there are unused). CI runs no regroup Maestro flow (the old `maestro-smoke` job drove the production-config debug APK; it is build-only since 2026-11-06, as `regroup-android-build`). Reports go to `docs/e2e/reports/`.

@@ -1,10 +1,11 @@
 # Flow 11 — Guest: home dashboard renders with stat cards
 # Persona: guest-a (resident of test-house-123).
-# Run: maestro test -e APP_ID=com.rats.dev maestro/flows/guest-home.yaml
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/guest-home.yaml
 appId: ${APP_ID}
 tags:
   - guest
 ---
+- runFlow: ../subflows/guard-e2e-app.yaml
 - runFlow:
     file: ../subflows/login.yaml
     env:

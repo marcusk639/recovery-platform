@@ -112,8 +112,8 @@ maestro/scripts/run-flows.sh all --no-reboot # don't reboot the sim first
 
 ```bash
 cd regroup/mobile
-maestro test -e APP_ID=com.rats.dev maestro/flows/smoke.yaml      # one flow
-maestro test -e APP_ID=com.rats.dev maestro/flows/run-all.yaml    # whole suite, one driver session
+maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/smoke.yaml      # one flow (the guard subflow refuses any non-e2e APP_ID)
+maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/run-all.yaml    # whole suite, one driver session
 ```
 
 ---
@@ -122,15 +122,15 @@ maestro test -e APP_ID=com.rats.dev maestro/flows/run-all.yaml    # whole suite,
 
 <!-- AUTO-GENERATED: from regroup/mobile/package.json -->
 
-| Script                          | Command                                                           |
-| ------------------------------- | ----------------------------------------------------------------- |
-| `npm run maestro:seed`          | `./maestro/scripts/reset-and-seed.sh`                             |
-| `npm run maestro:smoke:ios`     | `maestro test -e APP_ID=com.rats.dev maestro/flows/smoke.yaml`    |
-| `npm run maestro:ios`           | `maestro test -e APP_ID=com.rats.dev maestro/flows/`              |
-| `npm run maestro:suite:ios`     | `maestro test -e APP_ID=com.rats.dev maestro/flows/run-all.yaml`  |
-| `npm run maestro:smoke:android` | `maestro test -e APP_ID=com.regroup.app maestro/flows/smoke.yaml` |
-| `npm run maestro:android`       | `maestro test -e APP_ID=com.regroup.app maestro/flows/`           |
-| `npm run seed-e2e`              | `node e2e/setup/seedTestData.js`                                  |
+| Script                          | Command                                                                                                                |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `npm run maestro:seed`          | `./maestro/scripts/reset-and-seed.sh`                                                                                  |
+| `npm run maestro:smoke:ios`     | `node maestro/scripts/e2e-build-guard.js … && maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/smoke.yaml`    |
+| `npm run maestro:ios`           | `node maestro/scripts/e2e-build-guard.js … && maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/`              |
+| `npm run maestro:suite:ios`     | `node maestro/scripts/e2e-build-guard.js … && maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/run-all.yaml`  |
+| `npm run maestro:smoke:android` | `node maestro/scripts/e2e-build-guard.js … && maestro test -e APP_ID=com.regroup.app.e2e.emu maestro/flows/smoke.yaml` |
+| `npm run maestro:android`       | `node maestro/scripts/e2e-build-guard.js … && maestro test -e APP_ID=com.regroup.app.e2e.emu maestro/flows/`           |
+| `npm run seed-e2e`              | `node e2e/setup/seedTestData.js`                                                                                       |
 
 > Note: `maestro:ios` points Maestro at the whole `flows/` directory, which also
 > picks up `run-all.yaml` (itself a wrapper that re-runs every flow) — so flows
