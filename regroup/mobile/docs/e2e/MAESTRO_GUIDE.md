@@ -1,6 +1,6 @@
 # Maestro E2E Testing Guide — Regroup
 
-> **SUPERSEDED.** Current e2e guidance is in `regroup/mobile/.claude/rules/testing.md` and the e2e sections of `regroup/mobile/CLAUDE.md`. This guide's Maestro-MCP setup and `.maestro/flows/` path are out of date (flows live in `maestro/flows/`).
+> **SUPERSEDED.** Current e2e guidance is in `regroup/mobile/.claude/rules/testing.md` and the e2e sections of `regroup/mobile/CLAUDE.md`. This guide's Maestro-MCP setup and `.maestro/flows/` path are out of date (flows live in `maestro/flows/`). **Its examples hardcode the production app id `com.regroup.app`: never run them.** Flows must use `${APP_ID}` and start with `maestro/subflows/guard-e2e-app.yaml`.
 
 **Status:** Under evaluation as a replacement / complement to Detox  
 **Last updated:** 2026-06-01

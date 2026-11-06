@@ -58,10 +58,10 @@ tags:
 
 1. Create `maestro/flows/run-all.yaml` as above
 2. Add `npm run maestro:suite:ios` script to `package.json`:
-   `maestro test -e APP_ID=com.rats.dev maestro/flows/run-all.yaml`
+   `maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/run-all.yaml`
 3. Boot simulator if needed: `xcrun simctl boot 809BD7B9-D9D5-45D2-AEA8-12F885F54407`
 4. Seed: `npm run maestro:seed`
-5. Run: `MAESTRO_DRIVER_STARTUP_TIMEOUT=180000 /Users/marcusklein/.maestro/bin/maestro test -e APP_ID=com.rats.dev maestro/flows/run-all.yaml 2>&1`
+5. Run: `MAESTRO_DRIVER_STARTUP_TIMEOUT=180000 /Users/marcusklein/.maestro/bin/maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/run-all.yaml 2>&1`
 6. On first failure: check screenshot in `~/.maestro/tests/<latest>/` and fix
 7. Produce report at `docs/e2e/reports/2026-06-27-suite.md`
 

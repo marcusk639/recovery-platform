@@ -2,12 +2,13 @@
 # Persona: guest-a. Completing a chore writes an activity (CHORE) to Firestore.
 # A photo-upload Alert may appear; the "skip" path is handled optionally.
 # Verify persistence afterward with: node maestro/scripts/assert-firestore.js
-# Run: maestro test -e APP_ID=com.rats.dev maestro/flows/guest-log-chore.yaml
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/guest-log-chore.yaml
 appId: ${APP_ID}
 tags:
   - guest
   - activities
 ---
+- runFlow: ../subflows/guard-e2e-app.yaml
 - runFlow:
     file: ../subflows/login.yaml
     env:

@@ -1,6 +1,6 @@
 ---
 description: Jest setup, Firebase mocks, integration tests, Maestro E2E
-paths: "**/__tests__/**,**/*.test.*,e2e/**,jest.*"
+paths: '**/__tests__/**,**/*.test.*,e2e/**,jest.*'
 ---
 
 # Testing
@@ -50,5 +50,7 @@ curl -Ls "https://get.maestro.mobile.dev" | bash
 npm run maestro:smoke:ios        # needs E2E_TEST_PASSWORD (e2e/SECURITY-test-credentials.md)
 npm run maestro:ios              # all flows in maestro/flows/
 ```
+
+**The production guard.** Maestro must never drive a production build: every launch or logout of `com.rats.dev` / `com.regroup.app` signs in anonymously against `phoenix-cleanhouse`. Every flow starts with `maestro/subflows/guard-e2e-app.yaml`, which refuses an `APP_ID` that doesn't end in `.e2e.emu` / `.e2e.stg` before anything launches. `run-flows.sh` and the `npm run maestro:*` scripts also run `maestro/scripts/e2e-build-guard.js`, which checks the installed bundle's E2E marker. A new flow must start with the guard subflow (`maestro/scripts/__tests__/flows-guarded.test.js` fails otherwise).
 
 Flows live in `maestro/flows/` (shared steps in `maestro/subflows/`). `e2e/setup/` holds unused JSON fixtures; nothing reads them yet. The CI `maestro-smoke` job runs the repo-root `e2e-maestro/regroup/` flows on Maestro Cloud. Reports go to `docs/e2e/reports/`.

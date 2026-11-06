@@ -1,0 +1,10 @@
+# Refuses to run against anything but an e2e build. Every launch or logout of a
+# production build (com.rats.dev, com.regroup.app) signs in anonymously against
+# production phoenix-cleanhouse (launch design §3.4). This runs before any
+# launchApp, so a bare `maestro test -e APP_ID=<production id>` never starts the app.
+# Runner scripts also check the installed bundle (maestro/scripts/e2e-build-guard.js).
+appId: ${APP_ID}
+---
+- assertTrue:
+    condition: ${APP_ID.endsWith('.e2e.emu') || APP_ID.endsWith('.e2e.stg')}
+    label: APP_ID must be an e2e variant (.e2e.emu / .e2e.stg), never a production app id

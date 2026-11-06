@@ -17,12 +17,13 @@
 #     Phase A a2).
 #   - Wizard nav: setup-buttons-back / setup-buttons-next (shared SharedSetupButtons).
 #
-# Run: maestro test -e APP_ID=com.rats.dev maestro/flows/operator-setup-wizard.yaml
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/operator-setup-wizard.yaml
 appId: ${APP_ID}
 tags:
   - operator
   - setup
 ---
+- runFlow: ../subflows/guard-e2e-app.yaml
 - runFlow:
     file: ../subflows/login.yaml
     env:
