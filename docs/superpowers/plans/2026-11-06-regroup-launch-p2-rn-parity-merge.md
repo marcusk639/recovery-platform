@@ -19,7 +19,7 @@
 ## Global Constraints
 
 - See `docs/superpowers/plans/2026-11-06-regroup-launch-roadmap.md`.
-- **Gate:** P1 tasks 1–2 (the e2e-build guard) are on `main`.
+- **Gate:** P1 tasks 1–3 are on `main`: the e2e-build guard exists, and the CI Maestro Cloud smoke job no longer drives a production-config build on #160's pushes.
 - Only parity work goes into the upgrade branch (spec §6). Feature and bug fixes found here that `main` shows as well are **recorded, not fixed** (spec §4.4).
 - Parity flows: `smoke`, `signup`, `guest-home`, `guest-activity-dispute`, `guest-rent-history`, `operator-manual-payment`.
 - Simulator builds for flows must be normally signed. A `CODE_SIGNING_ALLOWED=NO` build can't sign in (decision record §7.2).

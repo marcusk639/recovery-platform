@@ -406,6 +406,13 @@ Then:
 
 Ordered for the earliest safe launch: the riskiest dependencies come first, and the irreversible steps come last. Within each step, independent items can run in parallel.
 
+**Starting early, in parallel with step 2** (added after the roadmap review, 2026-11-06): work that doesn't depend on the RN version may start once step 1's guard and CI fix are on `main`:
+
+- step 3's web and server half: the staging SSR configuration, the staging web deploy, sandbox prices, and the staging account path;
+- step 4's server-side billing fixes: functions code and its unit tests.
+
+The mobile parts of steps 3 and 4 still wait for step 2. The deploy freeze below starts when the first billing fix lands on `main`. The roadmap (`docs/superpowers/plans/2026-11-06-regroup-launch-roadmap.md`) also tracks the owner's parallel tasks and their deadlines.
+
 1. **Start-up:**
    - **The coverage matrix** (§4.3), the acceptance checklist for everything after it.
    - **Confirm the source of the October anonymous accounts** (§3.4; most likely a Maestro run against a production-pointed build), and add the suite's e2e-build guard (§4.3) before any more flows run.
@@ -435,7 +442,10 @@ Steps 8–10 are the launch runbook. Each sub-step is done in order, after its �
 **Prerequisites before step 8:**
 
 - **The owner's parallel tasks:** Stripe Connect activated in live mode (§8.1). Store-listing prerequisites done: the hosted privacy policy and terms URLs, App Privacy and Data safety answers, listing updates, and both listings limited to the US (§4.2).
-- **A production deploy freeze for regroup functions, from step 4 until step 8.** Billing fixes land on `main` from step 4, and there is no CI deploy, so any production deploy from `main` would ship them early. A real hotfix in that window deploys from a branch cut at the live commit, with the owner's yes.
+- **A production deploy freeze for every regroup deploy target, from the first billing fix on `main` until step 8:** functions, web hosting and SSR, Firestore rules, and indexes.
+  - Billing and feature work lands on `main` from step 4, and some of it starts early (see the parallel note above). That includes the web (link-out checkout, the sales-open switch, app-link files) and the rules (the resident read-only view).
+  - There is no CI deploy, so any production deploy from `main` in that window would ship the work early, against the old app.
+  - A real hotfix in that window deploys from a branch cut at the live commit, with the owner's yes.
 
 8. **Production backend.** It breaks today's store build, which is accepted (§4.1 item 2). It is run in this order:
    1. **Owner confirms the live price changes** (keep / archive / create, §4.1 item 3). **Builder** archives the duplicate sets and creates the annual prices, then updates `stripe-prices.env` (PR).
@@ -460,7 +470,7 @@ Steps 8–10 are the launch runbook. Each sub-step is done in order, after its �
 
        A mismatch stops the launch here, and the §6.1 restore applies.
 
-    5. **Owner:** releases the approved builds in both stores (phased). **Builder:** opens the sales-open switch.
+    5. **Builder:** `coverage-matrix-check.js --release` (no filter) exits 0, so every row, the production device pass included, has passed or been validly deferred. **Owner:** releases the approved builds in both stores (phased). **Builder:** opens the sales-open switch.
     6. **Builder, once the new version is downloadable in both stores:** sets the minimum version. Setting it earlier would block people from an app they can't yet get.
 
 ## 6. Constraints (from the repo, binding)

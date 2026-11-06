@@ -28,6 +28,8 @@ See `docs/superpowers/plans/2026-11-06-regroup-launch-roadmap.md`. In particular
 
 These changes land on `main` before P2 merges `main` into the upgrade branch.
 
+**Tasks 1–3 gate P2** (roadmap). Task 3 is independent of Tasks 1–2. Run it first if the owner decides quickly: it stops the CI smoke job, which otherwise runs on every PR push, #160's included, against a production-config build. Tasks 4–5 don't gate P2.
+
 - E2E app IDs end in `.e2e.emu` or `.e2e.stg`: iOS `com.rats.dev.e2e.emu` / `com.rats.dev.e2e.stg`, Android `com.regroup.app.e2e.emu` / `com.regroup.app.e2e.stg`.
 - Bundle markers are exact strings: `regroup-e2e-variant=emulator`, `regroup-e2e-variant=staging`, `regroup-e2e-variant=none` (`regroup/mobile/src/config/env.ts`, `scripts/verify-*-variants.sh`).
 - Production app IDs that must always be refused: `com.rats.dev`, `com.regroup.app`.
@@ -256,7 +258,7 @@ git -C <worktree> commit -m "fix(regroup-mobile): every Maestro entry point refu
 
   `ID | Area | Action | Role | Platform | Fixture | Kind | Covered by | Guard | Status | Deferred`
 
-  - `ID`: `AREA-NNN`, unique (e.g. `BILL-003`, `LINK-012`).
+  - `ID`: `AREA-NNN`, unique (e.g. `BILL-003`, `LINK-012`). Device-checklist rows use `DEVS-NNN` for the staging pass (checked in P7) and `DEVP-NNN` for the production pass (checked in P9), so each pass can be gated on its own.
   - `Role`: `signed-out|operator|manager|resident|oxford|any`
   - `Platform`: `ios|android|both|web`
   - `Fixture`: `clean|legacy|both|n/a`
@@ -268,8 +270,16 @@ git -C <worktree> commit -m "fix(regroup-mobile): every Maestro entry point refu
 
 - **Exports:**
   - `parseMatrix(markdown: string): Row[]`
-  - `validate(rows: Row[], { repoRoot: string, release: boolean }): string[]`, which returns error strings, empty when valid.
-- **CLI:** `node scripts/coverage-matrix-check.js [--release]`. It prints counts per status. It exits 1 on any validation error. With `--release` it also exits 1 if any row is not `pass` or validly `deferred`.
+  - `selectRows(rows: Row[], { kinds?: string[], excludeKinds?: string[], idPrefix?: string }): Row[]` returns the rows a gate covers. With no options it returns every row.
+  - `validate(rows: Row[], { repoRoot: string, release: boolean }): string[]`, which returns error strings, empty when valid. Structural checks always run on **all** rows. The release check (every row `pass` or validly `deferred`) runs on the rows passed in.
+- **CLI:** `node scripts/coverage-matrix-check.js [--release] [--kinds a,b] [--exclude-kinds a,b] [--id-prefix P]`.
+  - It prints counts per status for the selected rows.
+  - It exits 1 on any validation error. With `--release` it also exits 1 if any **selected** row is not `pass` or validly `deferred`.
+  - The phase gates (roadmap):
+    - P6: `--release --exclude-kinds device`;
+    - P7: `--release --kinds device --id-prefix DEVS-`;
+    - before launch step 10.5: `--release` with no filter.
+  - An unknown kind in `--kinds` or `--exclude-kinds` exits 1, so a typo can't empty a gate. So does a filter that selects zero rows.
 
 - [ ] **Step 1: Write the failing tests.**
 
@@ -281,7 +291,12 @@ git -C <worktree> commit -m "fix(regroup-mobile): every Maestro entry point refu
   - `deferred` with `Deferred: —` → error `needs reason and date`;
   - `Kind: maestro` with a `Covered by` path that doesn't exist and `Status` not `missing` → error `missing file`;
   - in release mode, a `missing` or `fail` row → an error naming its ID;
-  - in release mode, a valid `deferred` row with `Guard: none` → no error.
+  - in release mode, a valid `deferred` row with `Guard: none` → no error;
+  - `selectRows` with `excludeKinds: ['device']` drops `Kind: device` rows and keeps the rest;
+  - `selectRows` with `kinds: ['device'], idPrefix: 'DEVS-'` keeps only `DEVS-` device rows (not `DEVP-`);
+  - in release mode over `selectRows(rows, { excludeKinds: ['device'] })`, a `missing` device row → no error, and a `missing` maestro row → an error naming its ID;
+  - a structural error in a row the filter excludes, such as a duplicate ID, is still reported;
+  - the CLI exits 1 for `--kinds devise` (unknown kind) and for a filter selecting zero rows.
 
 - [ ] **Step 2: Run them to see them fail.**
 
@@ -303,7 +318,7 @@ git -C <worktree> commit -m "fix(regroup-mobile): every Maestro entry point refu
     - the minimum-version gate, blocking and failing open (spec §4.2);
     - every deep link: each route in `regroup/mobile/src/services/native-deep-links.ts` and `src/navigation/linking.ts`, the checkout hand-back, invitation and account-email links. Each gets the three cases signed in, signed out and not installed, plus `com.rats.dev://` rows (spec §4.2);
     - the staging round-trip scenarios (spec §4.3);
-    - the device-checklist items, both passes (spec §4.3), as `Kind: device`.
+    - the device-checklist items, both passes (spec §4.3), as `Kind: device`, with IDs `DEVS-…` (staging pass) and `DEVP-…` (production pass).
   - **Guard values:** `money` for checkout, charges, grace and lapse, paywall states and the sales switch; `data` for payment history, documents and backfill outcomes.
 
 - [ ] **Step 6: Validate.**
@@ -313,6 +328,9 @@ git -C <worktree> commit -m "fix(regroup-mobile): every Maestro entry point refu
 
   Run: `node scripts/coverage-matrix-check.js --release`
   Expected: exit 1, listing the missing rows. That is correct for now.
+
+  Run: `node scripts/coverage-matrix-check.js --kinds device --id-prefix DEVS-` and `--kinds device --id-prefix DEVP-`
+  Expected: each exits 0 and prints a non-zero count, which proves both passes have rows.
 
 - [ ] **Step 7: Commit.**
 
