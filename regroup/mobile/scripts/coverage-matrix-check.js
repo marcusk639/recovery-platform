@@ -46,11 +46,35 @@ function parseMatrix(markdown) {
     throw new Error('no "## Rows" heading');
   }
   const table = [];
-  for (const line of lines.slice(start + 1)) {
-    if (/^##\s/.test(line)) break;
-    if (line.trim().startsWith('|')) table.push(line.trim());
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i++) {
+    if (/^##\s/.test(lines[i])) {
+      end = i;
+      break;
+    }
+    if (lines[i].trim().startsWith('|')) table.push(lines[i].trim());
   }
-  // table[0] is the header, table[1] the separator.
+  // A lost header would silently turn the first row into the header, and a
+  // row outside the table would silently drop out of every gate.
+  const cellsOf = (line) =>
+    line
+      .replace(/^\||\|$/g, '')
+      .split('|')
+      .map((c) => c.trim());
+  const labels = COLUMNS.map(([, label]) => label);
+  if (!table[0] || cellsOf(table[0]).join('|') !== labels.join('|')) {
+    throw new Error(`the Rows table header must be: | ${labels.join(' | ')} |`);
+  }
+  if (!table[1] || !cellsOf(table[1]).every((c) => /^:?-{3,}:?$/.test(c))) {
+    throw new Error('the Rows table needs a separator line after its header');
+  }
+  const ROW_LINE = /^\|\s*([A-Z]+-\d{3})\s*\|/;
+  lines.forEach((l, i) => {
+    const m = l.trim().match(ROW_LINE);
+    if (m && (i < start || i >= end)) {
+      throw new Error(`${m[1]} (line ${i + 1}) is outside the Rows table`);
+    }
+  });
   return table.slice(2).map((line, i) => {
     const cells = line
       .replace(/^\||\|$/g, '')
@@ -83,6 +107,10 @@ function structuralErrors(r, repoRoot) {
   }
   const errs = [];
   if (!/^[A-Z]+-\d{3}$/.test(r.id)) errs.push(`${name}: id must look like AREA-NNN`);
+  // Device rows are gated per pass by their id prefix (P7 DEVS-, P9 DEVP-).
+  const devId = /^DEV[SP]-/.test(r.id);
+  if (r.kind === 'device' && !devId) errs.push(`${name}: device rows need a DEVS- or DEVP- id`);
+  if (devId && r.kind !== 'device') errs.push(`${name}: DEVS-/DEVP- rows must be Kind device`);
   for (const [key, label] of COLUMNS) {
     if (ENUMS[key] && !ENUMS[key].includes(r[key]))
       errs.push(`${name}: unknown ${label} "${r[key]}"`);
