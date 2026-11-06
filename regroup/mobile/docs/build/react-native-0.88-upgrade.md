@@ -16,6 +16,7 @@ lands, so a reader can stop at any point and see what is true on the branch.
 5. [Audits](#5-audits)
 6. [Decisions, by task](#6-decisions-by-task)
 7. [Verification](#7-verification)
+
 - [Appendix A: integration baseline and recovery targets](#appendix-a-integration-baseline-and-recovery-targets)
 - [Appendix B: typecheck baseline mapping](#appendix-b-typecheck-baseline-mapping)
 
@@ -53,12 +54,12 @@ are listed in §7 as unverified.
 
 Measured on 2026-10-30 at `5586d23` (RN 0.72.17, RNFirebase 17.5.0), Linux, Node 22.
 
-| Suite | Command | Result |
-| ----- | ------- | ------ |
-| Unit | `npx jest --ci` | 328 suites; 5,266 tests: 5,264 pass, 0 fail, 2 todo |
-| Typecheck ratchet | `npm run typecheck:ratchet` | 137 errors (baseline 137) |
-| Security rules | `firebase emulators:exec --only firestore,storage,auth --project demo-test "… jest.config.rules.js"` | 27 suites, 591 tests, all pass |
-| Integration | `firebase emulators:exec --only firestore,auth --project demo-test "… jest.config.integration.js --runInBand"` | 6 suites, 48 tests: **29 pass, 19 fail** in-band (two identical runs); 28 / 20 in the first, parallel run |
+| Suite             | Command                                                                                                        | Result                                                                                                    |
+| ----------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Unit              | `npx jest --ci`                                                                                                | 328 suites; 5,266 tests: 5,264 pass, 0 fail, 2 todo                                                       |
+| Typecheck ratchet | `npm run typecheck:ratchet`                                                                                    | 137 errors (baseline 137)                                                                                 |
+| Security rules    | `firebase emulators:exec --only firestore,storage,auth --project demo-test "… jest.config.rules.js"`           | 27 suites, 591 tests, all pass                                                                            |
+| Integration       | `firebase emulators:exec --only firestore,auth --project demo-test "… jest.config.integration.js --runInBand"` | 6 suites, 48 tests: **29 pass, 19 fail** in-band (two identical runs); 28 / 20 in the first, parallel run |
 
 The plan expected 27 passing integration tests and 21 failing. A parallel run measured 28 and 20, but
 the suite is order-dependent (§4, item 6): `activity.emulator.test.ts` wipes the emulator while other
@@ -124,12 +125,12 @@ contract is the callable payload (house, vote, choice, never the client's guest 
 
 ### 3.2 Wrappers
 
-| Wrapper | File | What it pins |
-| ------- | ---- | ------------ |
-| `RatsModal` with the real `react-native-modal` 13.0.1 | `rats-modal.behaviour.test.tsx` | backdrop press, hardware back (via the `BackHandler` listener), `onModalShow` / `onModalHide`, swipe props reach the library with the JS driver, unmount while visible |
-| `RatsLoadingModal` with the real library | `rats-loading-modal.behaviour.test.tsx` | loading → success → auto-hide after 1 s; error text; unmount |
-| `RatsCheckBox` in a real Formik `Field` | `rats-checkbox.behaviour.test.tsx` | value shown, testID, label, `onValueChange` without Formik, and two pre-existing defects (§4) |
-| `RatsScrollView` | `rats-scroll-view.behaviour.test.tsx` | `keyboardShouldPersistTaps` default and override, `on-drag` dismiss, indicator, `scrollEnabled`, container style; APSL-only props in a block Task 15 replaces |
+| Wrapper                                               | File                                    | What it pins                                                                                                                                                           |
+| ----------------------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RatsModal` with the real `react-native-modal` 13.0.1 | `rats-modal.behaviour.test.tsx`         | backdrop press, hardware back (via the `BackHandler` listener), `onModalShow` / `onModalHide`, swipe props reach the library with the JS driver, unmount while visible |
+| `RatsLoadingModal` with the real library              | `rats-loading-modal.behaviour.test.tsx` | loading → success → auto-hide after 1 s; error text; unmount                                                                                                           |
+| `RatsCheckBox` in a real Formik `Field`               | `rats-checkbox.behaviour.test.tsx`      | value shown, testID, label, `onValueChange` without Formik, and two pre-existing defects (§4)                                                                          |
+| `RatsScrollView`                                      | `rats-scroll-view.behaviour.test.tsx`   | `keyboardShouldPersistTaps` default and override, `on-drag` dismiss, indicator, `scrollEnabled`, container style; APSL-only props in a block Task 15 replaces          |
 
 The swipe gesture itself is the library's (PanResponder touch history is not reproducible in Jest);
 the Mac checkpoint exercises it.
@@ -142,7 +143,7 @@ Characterization commit: `b5092c7`. The byte-identical rule is checked with
 Found while pinning behaviour on RN 0.72. None is caused by the upgrade. Each is pinned as found, so
 fixing one is a visible, deliberate test change.
 
-1. **Checkbox taps throw inside Formik.** *Fixed in Task 8 (owner decision, 2026-10-30).* The native checkbox calls `onValueChange(boolean)`, and
+1. **Checkbox taps throw inside Formik.** _Fixed in Task 8 (owner decision, 2026-10-30)._ The native checkbox calls `onValueChange(boolean)`, and
    `RatsCheckBox` hands it to Formik's `field.onChange(name)`, which expects a string or an event
    (`formik` 2.4.9 `executeChange` reads `target.type` of `undefined`). A tap throws and the form value
    never changes. Every use goes through a `Field`. The one reachable use is the SignUp terms of
@@ -153,7 +154,7 @@ fixing one is a visible, deliberate test change.
    (`GuestUpdateFormView.tsx:41`). **Owner decision needed** on whether Task 8 (the JS checkbox) fixes
    it, or a separate fix ships first.
 2. **`RatsCheckBox` ignores `disabled`.** The prop is declared but never passed on, so a disabled
-   form (`disabled={isSubmitting}`) still toggles. *Fixed in Task 8.* Only HouseConfig and
+   form (`disabled={isSubmitting}`) still toggles. _Fixed in Task 8._ Only HouseConfig and
    GuestUpdate pass it, and no navigator registers either, so no reachable screen changes.
 3. **`RatsScrollView` drops its container style when a caller passes one.** `{...props}` is spread
    last, so a caller's `contentContainerStyle` replaces the default (`flexGrow: 1`, centred, full
@@ -189,23 +190,23 @@ All in tests or the Jest setup; none in app code:
 
 Each task that removes a package replaces these mocks (never the test cases).
 
-| Package | Mocked in (besides `jest.setup.js`) | Task |
-| ------- | ----------------------------------- | ---- |
-| `react-native-keyboard-manager` | `HouseChat.test.tsx`, `OperatorSetupWizard.test.tsx`, `DirectChat.test.tsx` | 15 |
-| `react-native-keyboard-aware-scroll-view` | `CreateGuest.test.tsx`; the `rats-scroll-view` tests rely on the global mock | 15 |
-| `react-native-push-notification` | `rentReminder.test.ts`, `ResidentPayment.test.tsx`, `GuestHome.test.tsx` | 11 |
-| `@react-native-community/push-notification-ios`, `@notifee/react-native` | global only | 11 |
-| `react-native-document-picker` | `DocumentListScreen.test.tsx`, `GuestImportScreen.test.tsx` | 6 |
-| `react-native-fs` | `GuestImportScreen.test.tsx` | 6 |
-| `react-native-html-to-pdf` | `GuestHome.test.tsx` | 6 |
-| `react-native-geolocation-service` | `src/integration/setup.ts` (orphan) | 6 |
-| `@react-native-community/geolocation` (kept, re-configured) | `HouseSearchScreen.test.tsx` | 6 |
-| `@react-native-community/checkbox` | `rats-checkbox.test.tsx`, `rats-checkbox.behaviour.test.tsx`, `SignUpFormView.test.tsx` | 8 |
-| `react-native-vector-icons/*` | 28 component and screen tests | 5 |
-| `@react-native-firebase/crashlytics` | `src/integration/setup.ts` (orphan) | 3 |
-| `@react-navigation/stack`, `react-native-modal-datetime-picker` | global only | 3 |
-| `react-native-best-viewpager` | `OperatorSetupWizard.test.tsx` | 3 |
-| `moment-timezone` | `Complaint.test.ts`, `Notification.test.ts`, `Room.test.ts` | 3 |
+| Package                                                                  | Mocked in (besides `jest.setup.js`)                                                     | Task |
+| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- | ---- |
+| `react-native-keyboard-manager`                                          | `HouseChat.test.tsx`, `OperatorSetupWizard.test.tsx`, `DirectChat.test.tsx`             | 15   |
+| `react-native-keyboard-aware-scroll-view`                                | `CreateGuest.test.tsx`; the `rats-scroll-view` tests rely on the global mock            | 15   |
+| `react-native-push-notification`                                         | `rentReminder.test.ts`, `ResidentPayment.test.tsx`, `GuestHome.test.tsx`                | 11   |
+| `@react-native-community/push-notification-ios`, `@notifee/react-native` | global only                                                                             | 11   |
+| `react-native-document-picker`                                           | `DocumentListScreen.test.tsx`, `GuestImportScreen.test.tsx`                             | 6    |
+| `react-native-fs`                                                        | `GuestImportScreen.test.tsx`                                                            | 6    |
+| `react-native-html-to-pdf`                                               | `GuestHome.test.tsx`                                                                    | 6    |
+| `react-native-geolocation-service`                                       | `src/integration/setup.ts` (orphan)                                                     | 6    |
+| `@react-native-community/geolocation` (kept, re-configured)              | `HouseSearchScreen.test.tsx`                                                            | 6    |
+| `@react-native-community/checkbox`                                       | `rats-checkbox.test.tsx`, `rats-checkbox.behaviour.test.tsx`, `SignUpFormView.test.tsx` | 8    |
+| `react-native-vector-icons/*`                                            | 28 component and screen tests                                                           | 5    |
+| `@react-native-firebase/crashlytics`                                     | `src/integration/setup.ts` (orphan)                                                     | 3    |
+| `@react-navigation/stack`, `react-native-modal-datetime-picker`          | global only                                                                             | 3    |
+| `react-native-best-viewpager`                                            | `OperatorSetupWizard.test.tsx`                                                          | 3    |
+| `moment-timezone`                                                        | `Complaint.test.ts`, `Notification.test.ts`, `Room.test.ts`                             | 3    |
 
 The plan named two `moment-timezone` mocks; there are three (`Room.test.ts` too).
 
@@ -253,20 +254,20 @@ path, `''`, `':'`, a prefix, a glob and another path; only the exact path passes
 
 **Installed.**
 
-| Package | Version |
-| ------- | ------- |
-| `react-native`, `@react-native/*` | 0.88.1 |
-| `react`, `react-test-renderer` | 19.3.0 |
-| `@react-native-community/cli*` | 20.2.0 |
-| TypeScript | 6.0.3 |
-| Stripe RN | 0.84.0 (0.83.0 from Task 13) |
-| Sentry RN | 8.33.0 |
-| gesture-handler | 3.4.0 |
-| screens | 4.30.1 |
-| safe-area-context | 5.11.0 |
-| react-redux / redux | 9.3.1 / 5.0.1 |
-| i18next / react-i18next | 26.5.11 / 17.1.9 |
-| `react-native-modal` | 13.0.2 (patched) |
+| Package                           | Version                      |
+| --------------------------------- | ---------------------------- |
+| `react-native`, `@react-native/*` | 0.88.1                       |
+| `react`, `react-test-renderer`    | 19.3.0                       |
+| `@react-native-community/cli*`    | 20.2.0                       |
+| TypeScript                        | 6.0.3                        |
+| Stripe RN                         | 0.84.0 (0.83.0 from Task 13) |
+| Sentry RN                         | 8.33.0                       |
+| gesture-handler                   | 3.4.0                        |
+| screens                           | 4.30.1                       |
+| safe-area-context                 | 5.11.0                       |
+| react-redux / redux               | 9.3.1 / 5.0.1                |
+| i18next / react-i18next           | 26.5.11 / 17.1.9             |
+| `react-native-modal`              | 13.0.2 (patched)             |
 
 The remaining versions are as spec §5.4. The packages later tasks replace stay at their current
 versions:
@@ -323,7 +324,7 @@ patched library.
 - **The global `JSX` namespace is gone** (React 19 types): 42 uses in 26 files become `React.JSX`.
 - **`RefreshControl`'s `onRefresh`** is typed `() => void | Promise<void>`, and react-query's
   `refetch` returns a result. RN ignores the return value (`this.props.onRefresh &&
-  this.props.onRefresh()`), so 7 screens wrap the call; runtime is unchanged.
+this.props.onRefresh()`), so 7 screens wrap the call; runtime is unchanged.
 - **Smaller type fixes:**
   - `useRef` needs an argument;
   - `AppState.currentState` may be `null`;
@@ -362,13 +363,13 @@ it, because screens show residents' names, recovery and payment details.
 
 **Verification (Task 3).**
 
-| Check | Result |
-| ----- | ------ |
-| Unit | 344 suites, 5,389 passing (2 new cases), no snapshot changes |
-| Typecheck ratchet | 126 errors, baseline regenerated (Appendix B) |
-| ESLint, changed files | no new errors (each file compared with its `HEAD` version under the new config) |
-| Rules | 591 / 591 |
-| Integration | see Appendix A (order-dependent; measured in-band) |
+| Check                  | Result                                                                                                        |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Unit                   | 344 suites, 5,389 passing (2 new cases), no snapshot changes                                                  |
+| Typecheck ratchet      | 126 errors, baseline regenerated (Appendix B)                                                                 |
+| ESLint, changed files  | no new errors (each file compared with its `HEAD` version under the new config)                               |
+| Rules                  | 591 / 591                                                                                                     |
+| Integration            | see Appendix A (order-dependent; measured in-band)                                                            |
 | Android release bundle | `react-native bundle --platform android --dev false` builds; it carries the `regroup-e2e-variant=none` marker |
 
 ### Task 4: the Android project
@@ -387,7 +388,7 @@ template ships 2.2.0). google-services is 4.5.0 (RNFirebase 26's version).
 
 - `MainApplication.kt` uses `getDefaultReactHost(…)` and `loadReactNative(this)`.
 - `MainActivity.kt` keeps the component name `rats`, uses `DefaultReactActivityDelegate(…,
-  fabricEnabled)`, and sets react-native-screens 4.x's `RNScreensFragmentFactory` before
+fabricEnabled)`, and sets react-native-screens 4.x's `RNScreensFragmentFactory` before
   `super.onCreate(savedInstanceState)`. The 0.72 code passed `null`, which dropped all saved state to
   avoid restoring screen fragments without their views; the factory does that restoration correctly.
 - Flipper (both `ReactNativeFlipper.java` and its dependencies) is gone, so the e2e `sourceSets`
@@ -477,7 +478,7 @@ callback, which has run by then.
 - `assembleE2eEmulator --dry-run` runs `regroupBundledEnvStampE2eEmulator` and not the release
   guard;
 - the guard, run with `STRIPE_PUBLISHABLE_KEY=pk_test_x`, exits non-zero with its own
-  "a release build requires a pk_live_ key" refusal.
+  "a release build requires a pk*live* key" refusal.
 
 `verify-workflow-hardening.test.sh` passes with the change.
 
@@ -541,7 +542,7 @@ project, renamed).
   guaranteed while the picker session lasts, and Documents uploads only after the user chooses a
   category in a follow-up alert.
 - A failed copy is logged with a static context (`DocumentListScreen: keepLocalCopy`, `GuestImportScreen:
-  keepLocalCopy`), the user sees the existing error, and nothing is uploaded or parsed.
+keepLocalCopy`), the user sees the existing error, and nothing is uploaded or parsed.
 - A file with no name is still rejected before anything is copied.
 - **Guest CSV import now accepts CSV files** (`types.csv` as well as `types.plainText`). Android
   reports a `.csv` file as `text/csv` or `text/comma-separated-values`, which the plain-text-only
@@ -618,7 +619,7 @@ AGP 9, and 0.6.0's codegen points at a missing directory. `RatsCheckBox` is reim
   `accessibilityState={{ checked, disabled }}` on the `testID`'d element, which is what the SignUp
   test reads.
 - **Formik fix (owner decision).** Inside a `Field`, a tap now calls `form.setFieldValue(name,
-  !value)`. The native checkbox passed a bare boolean to Formik's `field.onChange(name)`, which
+!value)`. The native checkbox passed a bare boolean to Formik's `field.onChange(name)`, which
   threw. With this fix the SignUp terms of service can be accepted again. Without Formik,
   `onValueChange(!value)` is called as before.
 - **`disabled` is honoured** (§4, item 2).
@@ -656,7 +657,7 @@ was never committed and was redone from the plan.
   `logException(e, 'firebase-setup: initializeFirestore')` catch, then `getFirestore()`. Verified in
   25.1.0's source: `settings()` stores `ignoreUndefinedProperties` before its first `await`, and both
   calls return the same instance. Exports are intersections (`Firestore &
-  FirebaseFirestoreTypes.Module`, …); the ratchet stays at 125.
+FirebaseFirestoreTypes.Module`, …); the ratchet stays at 125.
 - **`connectToEmulators({ host, ports, instances })`** calls `connect*Emulator` on the instances
   `firebase-setup` built, after `initializeFirestore`. The fail-closed probes are unchanged.
 - **Shared refs:** `houseCollection`, `userCollection`, `adminCollection`, `guestCollection`,
@@ -980,24 +981,24 @@ Pinned exactly so the migration cannot change them; none is fixed here.
   a request the old library scheduled is removed too (react-native-notify-kit 10.10.0 tarball).
 - **firebase.json.** `regroup/mobile/firebase.json` and `regroup/mobile/firebase/firebase.json` both
   get `"react-native": { "messaging_ios_foreground_presentation_options": ["badge", "sound",
-  "banner", "list"] }` (RNFirebase's iOS `ios_config.sh` reads the first `firebase.json` within
+"banner", "list"] }` (RNFirebase's iOS `ios_config.sh` reads the first `firebase.json` within
   depth 2, which can be the emulator config). Nothing else in either file changed. The Firebase CLI
   ignores the `react-native` key (RNFirebase documents it in the same file).
 - **Android manifest: merged from notify-kit's library manifest, decided one by one.** The app's
   `AndroidManifest.xml` records the removals with `tools:node="remove"`.
 
-  | Item | Decision | Why | Play Console impact |
-  | ---- | -------- | --- | ------------------- |
-  | `POST_NOTIFICATIONS` | keep (the app already declares it) | Android 13+ shows nothing without it; RNFirebase `requestPermission` in Splash asks for it | runtime permission, no declaration |
-  | `SCHEDULE_EXACT_ALARM` | **remove** | `allowWhileIdle` maps to `SET_EXACT_AND_ALLOW_WHILE_IDLE`; without the permission, Android 12+ falls back to `setAndAllowWhileIdle` (`NotifeeAlarmManager.java:270–277`) and API 24–30 stay exact (no permission needed). A Friday 9am reminder does not need minute precision. `USE_EXACT_ALARM` is not added | no exact-alarm special access to justify; avoids the alarm-permission policy review (`USE_EXACT_ALARM` is restricted to alarm and calendar apps) |
-  | `AlarmPermissionBroadcastReceiver` (exported) | **remove** | only reacts to `SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED`, which cannot occur without the permission | one fewer exported component |
-  | `FOREGROUND_SERVICE` | **remove** | the app shows no foreground-service notification (`asForegroundService` / `registerForegroundService` unused) | no foreground-service declaration needed (targetSdk 34+ requires one per declared service type) |
-  | `ForegroundService` service, `ForegroundServiceRunLimitReceiver` | **remove** | only used by foreground-service notifications (the receiver is scheduled only from `ForegroundService`) | as above |
-  | `ACCESS_NOTIFICATION_POLICY` | **remove** | Do Not Disturb access, merged only for a Xiaomi heads-up workaround the app does not use | one fewer permission in the store listing |
-  | `FullScreenNotificationActivity` (shows when locked, turns the screen on) | **remove** | used only for `fullScreenAction` (`NotificationManager.java:425–436`), which the app never sets; `USE_FULL_SCREEN_INTENT` is not declared by the library or the app | no full-screen-intent declaration (required for Android 14+ apps that hold `USE_FULL_SCREEN_INTENT`) |
-  | `RECEIVE_BOOT_COMPLETED` + `RebootBroadcastReceiver` | keep | AlarmManager alarms are cleared on reboot; this reschedules a reminder set up to 7 days ahead | normal permission, no declaration |
-  | `WAKE_LOCK`, `VIBRATE`, `ACCESS_NETWORK_STATE`, `INTERNET` | keep | used by the alarm receiver and notification display; already merged by other libraries | normal permissions, no declaration |
-  | `NotificationReceiverActivity` (exported), `ReceiverService`, `NotificationAlarmReceiver`, `BlockStateBroadcastReceiver`, `NotifeeInitProvider` | keep | taps (`pressAction`), trigger delivery and channel-block events | none |
+  | Item                                                                                                                                            | Decision                           | Why                                                                                                                                                                                                                                                                                                            | Play Console impact                                                                                                                              |
+  | ----------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+  | `POST_NOTIFICATIONS`                                                                                                                            | keep (the app already declares it) | Android 13+ shows nothing without it; RNFirebase `requestPermission` in Splash asks for it                                                                                                                                                                                                                     | runtime permission, no declaration                                                                                                               |
+  | `SCHEDULE_EXACT_ALARM`                                                                                                                          | **remove**                         | `allowWhileIdle` maps to `SET_EXACT_AND_ALLOW_WHILE_IDLE`; without the permission, Android 12+ falls back to `setAndAllowWhileIdle` (`NotifeeAlarmManager.java:270–277`) and API 24–30 stay exact (no permission needed). A Friday 9am reminder does not need minute precision. `USE_EXACT_ALARM` is not added | no exact-alarm special access to justify; avoids the alarm-permission policy review (`USE_EXACT_ALARM` is restricted to alarm and calendar apps) |
+  | `AlarmPermissionBroadcastReceiver` (exported)                                                                                                   | **remove**                         | only reacts to `SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED`, which cannot occur without the permission                                                                                                                                                                                                      | one fewer exported component                                                                                                                     |
+  | `FOREGROUND_SERVICE`                                                                                                                            | **remove**                         | the app shows no foreground-service notification (`asForegroundService` / `registerForegroundService` unused)                                                                                                                                                                                                  | no foreground-service declaration needed (targetSdk 34+ requires one per declared service type)                                                  |
+  | `ForegroundService` service, `ForegroundServiceRunLimitReceiver`                                                                                | **remove**                         | only used by foreground-service notifications (the receiver is scheduled only from `ForegroundService`)                                                                                                                                                                                                        | as above                                                                                                                                         |
+  | `ACCESS_NOTIFICATION_POLICY`                                                                                                                    | **remove**                         | Do Not Disturb access, merged only for a Xiaomi heads-up workaround the app does not use                                                                                                                                                                                                                       | one fewer permission in the store listing                                                                                                        |
+  | `FullScreenNotificationActivity` (shows when locked, turns the screen on)                                                                       | **remove**                         | used only for `fullScreenAction` (`NotificationManager.java:425–436`), which the app never sets; `USE_FULL_SCREEN_INTENT` is not declared by the library or the app                                                                                                                                            | no full-screen-intent declaration (required for Android 14+ apps that hold `USE_FULL_SCREEN_INTENT`)                                             |
+  | `RECEIVE_BOOT_COMPLETED` + `RebootBroadcastReceiver`                                                                                            | keep                               | AlarmManager alarms are cleared on reboot; this reschedules a reminder set up to 7 days ahead                                                                                                                                                                                                                  | normal permission, no declaration                                                                                                                |
+  | `WAKE_LOCK`, `VIBRATE`, `ACCESS_NETWORK_STATE`, `INTERNET`                                                                                      | keep                               | used by the alarm receiver and notification display; already merged by other libraries                                                                                                                                                                                                                         | normal permissions, no declaration                                                                                                               |
+  | `NotificationReceiverActivity` (exported), `ReceiverService`, `NotificationAlarmReceiver`, `BlockStateBroadcastReceiver`, `NotifeeInitProvider` | keep                               | taps (`pressAction`), trigger delivery and channel-block events                                                                                                                                                                                                                                                | none                                                                                                                                             |
 
   There were no push-notification receivers or services in the app manifest to drop (Task 4 had
   already left them out), and `ShortcutBadger` went with `react-native-push-notification`. The merged
@@ -1006,6 +1007,7 @@ Pinned exactly so the migration cannot change them; none is fixed here.
   (`./gradlew :app:processDebugMainManifest`). **Resolved** after Task 15 by a local Android
   build: the merged debug manifest has none of the removed permissions (see "First Android
   build and emulator run").
+
 - **iOS native.** In this commit `ios/rats/AppDelegate.mm` drops the `RNCPushNotificationIOS.h`
   import and the four methods that only forwarded to it (`didRegisterForRemoteNotifications…`,
   `didReceiveRemoteNotification:fetchCompletionHandler:`, `didFailToRegister…`,
@@ -1135,13 +1137,15 @@ Pinned exactly so the migration cannot change them; none is fixed here.
 - **Bundle phase fix (Task 12's phase).** RN 0.88's `with-environment.sh` runs its argument as a
   single quoted word (`"$1"`). The Task 12 phase passed `"env -u E2E_VARIANT …/react-native-xcode.sh"`,
   so the Debug build failed with `with-environment.sh: line 52: env -u E2E_VARIANT
-  ../node_modules/react-native/scripts/react-native-xcode.sh: No such file or directory`. The phase
+../node_modules/react-native/scripts/react-native-xcode.sh: No such file or directory`. The phase
   now writes the same command line to `$DERIVED_FILE_DIR/rats-bundle-command.sh`:
+
   - `exec $BUNDLER_ENV [/bin/sh …/sentry-xcode.sh] …/react-native-xcode.sh`.
 
   `with-environment.sh` runs that script after sourcing `.xcode.env*`. The `sentry.properties`
   guard, the E2E skip, `SENTRY_DISABLE_AUTO_UPLOAD`, `BUNDLER_ENV`, `--reset-cache` and the
   stale-bundle removal are unchanged.
+
 - **AppDelegate / SceneDelegate** (`AppDelegate.h` / `.mm`, one Objective-C++ file, so no new
   files in the Xcode project).
   - `AppDelegate : UIResponder <UIApplicationDelegate>` has `window`, `reactNativeFactory`, a strong
@@ -1173,7 +1177,7 @@ Pinned exactly so the migration cannot change them; none is fixed here.
     Fontisto. Quicksand, Oswald and Roboto stay.
   - The 16 icon `.ttf` copies in `ios/` and their 32 pbxproj lines (file references and group
     children) are deleted.
-  - The E2EEmulator app bundle carries FontAwesome5_{Brands,Regular,Solid}, Ionicons and
+  - The E2EEmulator app bundle carries FontAwesome5\_{Brands,Regular,Solid}, Ionicons and
     MaterialIcons from the pods.
 - **Info.plist, as `pod install` left it:** the only semantic changes are those 11 fonts and RN's
   `RCTNewArchEnabled = true`. The keys are reordered.
@@ -1193,10 +1197,10 @@ Pinned exactly so the migration cannot change them; none is fixed here.
   - The new `Podfile.lock` is kept. `ios/Pods/`, `ios/build/` and `ios/.xcode.env.local` are
     gitignored.
 - **Builds** (`xcodebuild -workspace rats.xcworkspace -scheme <scheme> -configuration <config> -sdk
-  iphonesimulator -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO`):
+iphonesimulator -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO`):
   - **`react-native-keyboard-manager` cannot build on RN 0.88.** Its `RCTBaseTextInputView.h` is
     gone with the legacy architecture, so the full app does not link (`ld: framework
-    'ReactNativeKeyboardManager' not found`) until Task 15 removes it. Every other target compiles.
+'ReactNativeKeyboardManager' not found`) until Task 15 removes it. Every other target compiles.
   - To get past it, the builds below ran with a **temporary**
     `'react-native-keyboard-manager': { platforms: { ios: null } }` in `react-native.config.js`
     and a `pod install`. Both were then reverted, and the `Podfile.lock` after the revert is
@@ -1234,17 +1238,17 @@ bar on every Android level, so `adjustResize` and the opaque bars no longer keep
 
 **Audit (pinned top and bottom elements).**
 
-| Element | Before | After |
-| ------- | ------ | ----- |
-| `IOSStatusBar` (App.tsx root, the app-wide top spacer; every navigator hides the native header) | 0 high on Android | Android reserves `useSafeAreaInsets().top`; iOS keeps `window.height / 22` |
-| Bottom tab bar (`MainNavigator`) | React Navigation's default bar | Unchanged: it pads itself by `insets.bottom` and no `tabBarStyle.height` overrides it |
-| Wizard Back/Next (`SetupButtons`) and the CTA footers (RentPayment, StripeSettings, AssignGuest, NewMeeting, NewAccount, Complaints, OrgSetup, DirectChat) | bottom-edge safe-area `SafeAreaView` | Unchanged: safe-area-context reports the Android insets |
-| DirectChat composer (`position: absolute`, `bottom: 0`) | inside an unpadded `flex: 1` view within a bottom-edge `SafeAreaView` | Unchanged (Task 15 moves it to the sticky view) |
-| HouseChat composer (BaseChat) | tab screen, above the tab bar | Unchanged |
-| FABs on root-stack screens: DrugTesting (`bottom: 30`), PaymentDashboard and Treasury (`bottom: normalize(24)`) | under a 48dp three-button navigation bar | `marginBottom: insets.bottom` |
-| App-wide toast (`NotificationContext`, `bottom: 10`) | under the navigation bar | `marginBottom: insets.bottom` |
-| `WIZARD_BUTTON_CONTAINER` (OrgSetup, ChoreSetup, PhaseConfigSetup, PhaseCustomization) | exported, never used | Not touched (dead code) |
-| Full-screen overlays (`top: 0` … `bottom: 0`: SubscriptionHandler, SignUpWebView, PaymentWebView) | cover the window | Unchanged |
+| Element                                                                                                                                                    | Before                                                                | After                                                                                 |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `IOSStatusBar` (App.tsx root, the app-wide top spacer; every navigator hides the native header)                                                            | 0 high on Android                                                     | Android reserves `useSafeAreaInsets().top`; iOS keeps `window.height / 22`            |
+| Bottom tab bar (`MainNavigator`)                                                                                                                           | React Navigation's default bar                                        | Unchanged: it pads itself by `insets.bottom` and no `tabBarStyle.height` overrides it |
+| Wizard Back/Next (`SetupButtons`) and the CTA footers (RentPayment, StripeSettings, AssignGuest, NewMeeting, NewAccount, Complaints, OrgSetup, DirectChat) | bottom-edge safe-area `SafeAreaView`                                  | Unchanged: safe-area-context reports the Android insets                               |
+| DirectChat composer (`position: absolute`, `bottom: 0`)                                                                                                    | inside an unpadded `flex: 1` view within a bottom-edge `SafeAreaView` | Unchanged (Task 15 moves it to the sticky view)                                       |
+| HouseChat composer (BaseChat)                                                                                                                              | tab screen, above the tab bar                                         | Unchanged                                                                             |
+| FABs on root-stack screens: DrugTesting (`bottom: 30`), PaymentDashboard and Treasury (`bottom: normalize(24)`)                                            | under a 48dp three-button navigation bar                              | `marginBottom: insets.bottom`                                                         |
+| App-wide toast (`NotificationContext`, `bottom: 10`)                                                                                                       | under the navigation bar                                              | `marginBottom: insets.bottom`                                                         |
+| `WIZARD_BUTTON_CONTAINER` (OrgSetup, ChoreSetup, PhaseConfigSetup, PhaseCustomization)                                                                     | exported, never used                                                  | Not touched (dead code)                                                               |
+| Full-screen overlays (`top: 0` … `bottom: 0`: SubscriptionHandler, SignUpWebView, PaymentWebView)                                                          | cover the window                                                      | Unchanged                                                                             |
 
 The FABs and the toast get the inset on iOS too, where it lifts them clear of the home indicator
 (a visible change on notched iPhones, checked at the Mac checkpoint). The parents are plain views,
@@ -1465,6 +1469,7 @@ fatal. iOS accepts 0. The measured size now applies only once the height is abov
 "never 0 before the first layout".
 
 **Pre-existing bugs on `main`, fixed in separate PRs and merged in:**
+
 - #165: residents crashed on sign-in (`GuestSelectionButton` read the always-null
   `state.guests.selectedGuest`), and operators spun forever (a `houses.adminIds` list query the
   house read rule always denies).
@@ -1473,13 +1478,13 @@ fatal. iOS accepts 0. The measured size now applies only once the height is abov
 
 **Results (both platforms):**
 
-| Flow | Result |
-| ---- | ------ |
-| `guest-home`, `guest-activity-dispute`, `signup` | Pass |
-| `guest-payment-history`, `operator-manage-guests`, `oxford-dashboard` | Pass with a `scrollUntilVisible` before the tap (the flows tap below the fold) |
-| `operator-house-settings`, `operator-disputes` | Every assertion passes; the logout subflow then taps `profile-tab` while a pushed screen covers the tab bar |
-| `guest-log-chore` | The chore completes; the flow taps a second "Skip" (`Index: 1`) the photo prompt does not have |
-| `operator-setup-wizard`, `operator-applications` | Not run: "Add Home" depends on a never-dispatched action; the flow never taps the native approve alert |
+| Flow                                                                  | Result                                                                                                      |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `guest-home`, `guest-activity-dispute`, `signup`                      | Pass                                                                                                        |
+| `guest-payment-history`, `operator-manage-guests`, `oxford-dashboard` | Pass with a `scrollUntilVisible` before the tap (the flows tap below the fold)                              |
+| `operator-house-settings`, `operator-disputes`                        | Every assertion passes; the logout subflow then taps `profile-tab` while a pushed screen covers the tab bar |
+| `guest-log-chore`                                                     | The chore completes; the flow taps a second "Skip" (`Index: 1`) the photo prompt does not have              |
+| `operator-setup-wizard`, `operator-applications`                      | Not run: "Add Home" depends on a never-dispatched action; the flow never taps the native approve alert      |
 
 The flow-side problems (scrolling, logout, the photo prompt, iOS's combined accessibility labels
 such as `"\uf015, Oxford House Hub, Dashboard — …"`, and the missing seeder) are on `main` too and
@@ -1514,12 +1519,12 @@ After the last merge (17ccf77b): typecheck ratchet 121 (baseline 121), Jest 5,99
 
 ### 7.1 Suites, on the final tree (17ccf77b, 2026-11-03, macOS, Node 22, Java 21)
 
-| Suite | Before (§2, RN 0.72) | After |
-| ----- | -------------------- | ----- |
-| Unit (`npx jest`) | 328 suites; 5,264 pass, 2 todo | 402 suites; 5,998 pass, 2 todo, 0 fail |
-| Typecheck ratchet | 137 | 121 (baseline 121; every entry mapped in Appendix B) |
-| Security rules | 27 suites, 591 pass | 28 suites, 615 pass (tests added on `main` came in with the merges) |
-| Integration (`--runInBand`) | 48 tests: 29 pass, 19 fail | 55 tests: 35 pass, 20 fail; equal to the final recovery target (Appendix A) |
+| Suite                       | Before (§2, RN 0.72)           | After                                                                       |
+| --------------------------- | ------------------------------ | --------------------------------------------------------------------------- |
+| Unit (`npx jest`)           | 328 suites; 5,264 pass, 2 todo | 402 suites; 5,998 pass, 2 todo, 0 fail                                      |
+| Typecheck ratchet           | 137                            | 121 (baseline 121; every entry mapped in Appendix B)                        |
+| Security rules              | 27 suites, 591 pass            | 28 suites, 615 pass (tests added on `main` came in with the merges)         |
+| Integration (`--runInBand`) | 48 tests: 29 pass, 19 fail     | 55 tests: 35 pass, 20 fail; equal to the final recovery target (Appendix A) |
 
 CI runs the unit suite and the ratchet on every push of the branch.
 
@@ -1547,6 +1552,28 @@ CI runs the unit suite and the ratchet on every push of the branch.
   The two payment flows also pass on the Android emulator.
 - **Stripe test PaymentSheet** ran on both platforms before the merges (the e2e payment work).
 - **Signed-in app checks** on both platforms: §6, "Signed-in checks against the Firebase emulators".
+
+- **Parity run after merging `main` (2026-11-06, launch plan P2 Task 2; `b9d882f9`, which includes the P1 e2e-build guard).**
+
+  - Setup: the iOS `E2EEmulator` build on the dedicated `regroup-e2e` simulator (iPhone 17, iOS 27.0), with no production build installed, so the guard passes. The emulators were seeded with the e2e sandbox's Stripe test key in `regroup/functions/.secret.local` and `E2E_STRIPE_ACCOUNT_ID` set. Without them the payment dashboard's callables fail ("Neither apiKey nor config.authenticator provided") and `operator-manual-payment` fails at `manual-payment-fab`.
+  - Results:
+
+    | Flow                      | iOS         |
+    | ------------------------- | ----------- |
+    | `smoke`                   | pass        |
+    | `signup`                  | pass (weak) |
+    | `guest-home`              | pass (weak) |
+    | `guest-activity-dispute`  | pass (weak) |
+    | `guest-rent-history`      | pass        |
+    | `operator-manual-payment` | pass        |
+
+  - "Weak" means a key step is `optional: true`:
+
+    - `guest-home`'s `week-summary-card` assert;
+    - `signup`'s landing check, either `new-account-screen` or `org-setup-screen`;
+    - `guest-activity-dispute`'s long-press.
+
+    Parity counts these flows, but their coverage-matrix rows stay `fail` until P6 strengthens them.
 
 ### 7.3 Not verified yet (owner, on devices)
 
@@ -1601,15 +1628,15 @@ The baseline ran the services as Admin, which bypasses the security rules. From 
 as signed-in users, so a baseline pass the rules deny does not come back. The last column is the
 target under the rules, checked against `firestore.rules` and, for the list query, measured.
 
-| Suite | Passing at baseline (Admin) | Load graph reaches | Restored by | Target under the rules |
-| ----- | --------------------------- | ------------------ | ----------- | ---------------------- |
-| `harness.integration.test.ts` (new) | — | none | Task 9 | 7 of 7 |
-| `activity.integration.test.ts` | 4 of 6 | 10b | 10b | 4 (since #164: `getActivities` filters by `houseId`) |
-| `guestWeekTransfer.integration.test.ts` | 5 of 5 | 10b | 10b | 5 (since #164) |
-| `weekSummary.integration.test.ts` | 5 of 5 | 10b | 10b | 5 |
-| `activity.emulator.test.ts` | 1 of 18 | 10b | 10b | 0: the case sends no `loggedBy` (stale API) |
-| `guestCRUD.integration.test.ts` | 6 of 6 | 10a, 10b, 10c, 10d (`guest.tsx` → `house.tsx` → `storage.tsx`, …) | 10d | 6 |
-| `meetings.integration.test.ts` | 8 of 8 | 10a–10d | 10d | 8 |
+| Suite                                   | Passing at baseline (Admin) | Load graph reaches                                                | Restored by | Target under the rules                               |
+| --------------------------------------- | --------------------------- | ----------------------------------------------------------------- | ----------- | ---------------------------------------------------- |
+| `harness.integration.test.ts` (new)     | —                           | none                                                              | Task 9      | 7 of 7                                               |
+| `activity.integration.test.ts`          | 4 of 6                      | 10b                                                               | 10b         | 4 (since #164: `getActivities` filters by `houseId`) |
+| `guestWeekTransfer.integration.test.ts` | 5 of 5                      | 10b                                                               | 10b         | 5 (since #164)                                       |
+| `weekSummary.integration.test.ts`       | 5 of 5                      | 10b                                                               | 10b         | 5                                                    |
+| `activity.emulator.test.ts`             | 1 of 18                     | 10b                                                               | 10b         | 0: the case sends no `loggedBy` (stale API)          |
+| `guestCRUD.integration.test.ts`         | 6 of 6                      | 10a, 10b, 10c, 10d (`guest.tsx` → `house.tsx` → `storage.tsx`, …) | 10d         | 6                                                    |
+| `meetings.integration.test.ts`          | 8 of 8                      | 10a–10d                                                           | 10d         | 8                                                    |
 
 Expected passing after each group, run with `--runInBand`: Task 9 7, 10a 7, 10b 21, 10c 21, 10d 35,
 10e 35 (the 29 baseline passes less the one the rules deny, `activity.emulator`'s stale-API case,
@@ -1640,17 +1667,17 @@ unchanged.
 
 **Re-worded (26): same code, new message from React 19 / RN 0.88 / library types.**
 
-| File | Count | Old identity → new identity |
-| ---- | ----- | --------------------------- |
-| `rats-modal/__tests__/rats-modal.test.tsx` (42, 51, 60, 74, 83, 92, 104, 116, 125) | 9 | TS2740 missing modal props: the type lists `animationIn: "bounce" \| …` → `animationIn: Animation \| CustomAnimation<…>` |
-| `nav-bar/__tests__/nav-bar.test.tsx` (61, 79, 97, 115, 133, 153, 173, 192, 211, 229) | 10 | TS2322 props not assignable: the target type lists `guest` before `children` (React 19's `children` typing) |
-| `ios-status-bar/__tests__/ios-status-bar.test.tsx` (112) | 1 | TS2322 `statusBarAnimation`: target `StatusBarProps & {backgroundColor?}` → RN 0.88's generated `Readonly<Omit<…>>` |
-| `rats-button/__tests__/rats-button.test.tsx` (64) | 1 | TS2741 `title` missing: `ButtonProps` → its expanded `Readonly<{ title: string; … }>` |
-| `hooks/__tests__/useBaseActivityScreen.test.ts` (280) | 1 | TS2322: `ActivityType \| "all"` → `"all" \| ActivityType` |
-| `screens/Profile/GuestInvites.tsx` (67) | 1 | TS2322 navigation prop → TS2769 (React 19 reports component props as an overload) |
-| `screens/StatUpdates/NewMeeting.tsx` (118) | 1 | TS2322 `Partial<User>` → TS2769, same cause |
-| `state/queries/__tests__/applicationQueries.test.ts` (286) | 1 | TS2322 `{ name; email }` → TS2353 excess property `name` |
-| `state/queries/__tests__/oxfordQueries.test.ts` (123) | 1 | TS2322 `FinancialRecord`: TypeScript truncates the printed type one field earlier (`… 12 more …` → `… 13 more …`) |
+| File                                                                                 | Count | Old identity → new identity                                                                                              |
+| ------------------------------------------------------------------------------------ | ----- | ------------------------------------------------------------------------------------------------------------------------ |
+| `rats-modal/__tests__/rats-modal.test.tsx` (42, 51, 60, 74, 83, 92, 104, 116, 125)   | 9     | TS2740 missing modal props: the type lists `animationIn: "bounce" \| …` → `animationIn: Animation \| CustomAnimation<…>` |
+| `nav-bar/__tests__/nav-bar.test.tsx` (61, 79, 97, 115, 133, 153, 173, 192, 211, 229) | 10    | TS2322 props not assignable: the target type lists `guest` before `children` (React 19's `children` typing)              |
+| `ios-status-bar/__tests__/ios-status-bar.test.tsx` (112)                             | 1     | TS2322 `statusBarAnimation`: target `StatusBarProps & {backgroundColor?}` → RN 0.88's generated `Readonly<Omit<…>>`      |
+| `rats-button/__tests__/rats-button.test.tsx` (64)                                    | 1     | TS2741 `title` missing: `ButtonProps` → its expanded `Readonly<{ title: string; … }>`                                    |
+| `hooks/__tests__/useBaseActivityScreen.test.ts` (280)                                | 1     | TS2322: `ActivityType \| "all"` → `"all" \| ActivityType`                                                                |
+| `screens/Profile/GuestInvites.tsx` (67)                                              | 1     | TS2322 navigation prop → TS2769 (React 19 reports component props as an overload)                                        |
+| `screens/StatUpdates/NewMeeting.tsx` (118)                                           | 1     | TS2322 `Partial<User>` → TS2769, same cause                                                                              |
+| `state/queries/__tests__/applicationQueries.test.ts` (286)                           | 1     | TS2322 `{ name; email }` → TS2353 excess property `name`                                                                 |
+| `state/queries/__tests__/oxfordQueries.test.ts` (123)                                | 1     | TS2322 `FinancialRecord`: TypeScript truncates the printed type one field earlier (`… 12 more …` → `… 13 more …`)        |
 
 **Fixed by upstream types (11): removed, no replacement.**
 
