@@ -27,7 +27,7 @@ npm run deploy:indexes                # indexes are NOT in deploy:rules
 
 ## Android e2e build types
 
-E2E runs on Maestro only (Detox was retired). The launch-gate design is `../../docs/superpowers/specs/2026-10-20-regroup-e2e-launch-gate-design.md` (lands with the `docs/regroup-e2e-launch-gate` branch); flows are in `maestro/flows/` and the CI `maestro-smoke` job runs `../../e2e-maestro/regroup/`.
+E2E runs on Maestro only (Detox was retired). The launch-gate design is `../../docs/superpowers/specs/2026-10-20-regroup-e2e-launch-gate-design.md` (lands with the `docs/regroup-e2e-launch-gate` branch); flows are in `maestro/flows/`. CI runs no regroup Maestro flow: the old `maestro-smoke` job drove the production-config debug APK and was made build-only on 2026-11-06 (`regroup-android-build`).
 
 ```bash
 cd android && ./gradlew assembleE2eEmulator assembleE2eStaging assembleRelease

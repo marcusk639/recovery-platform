@@ -159,10 +159,8 @@ Stripe Connect has **0 connected accounts** in live mode. In the last 90 days th
   - **Production-pointed builds have been driven by test tooling (verified 2026-11-06).** This breaks §6 ("nothing in the suite touches production"), so the guard in §4.3 comes first (§5 step 1).
     - **Locally:** `~/.maestro/tests/2026-10-26_152429` and `_152717` (20:24 and 20:27 UTC, minutes after the 246-account window) ran a `deeplink-probe` flow with `appId=com.rats.dev`. That is the iOS bundle that signs into production. Logs inside the window weren't kept, so the burst itself is attributed, not proven.
     - **The suite's own docs invite this.** `maestro/flows/smoke.yaml`'s header says to run it with `APP_ID=com.rats.dev` (iOS) or `com.regroup.app` (Android), both production builds.
-    - **In CI, on every PR:** the "Maestro Cloud — smoke tests (regroup Android)" job (`.github/workflows/ci.yml` ~286-327) builds `assembleDebug`. That APK's `google-services.json` is `phoenix-cleanhouse`.
-      - It runs `e2e-maestro/regroup/login-and-view-dashboard.yaml`, which uses `clearState: true` and logs in as `operator@example.com` with the e2e password.
-      - The flow declares `appId: com.rats.dev`, while the debug APK is `com.regroup.app`, so it may not even launch.
-      - The step is `continue-on-error`, so CI shows it green either way. Whether it has been writing to production can't be told from the repo.
+    - **In CI, on every PR (until 2026-11-06):** the "Maestro Cloud — smoke tests (regroup Android)" job built `assembleDebug`, whose `google-services.json` is `phoenix-cleanhouse`. It ran `e2e-maestro/regroup/login-and-view-dashboard.yaml` (`clearState: true`, logging in as `operator@example.com` with the e2e password). That flow declared `appId: com.rats.dev` while the APK is `com.regroup.app`, and the step was `continue-on-error`, so whether it wrote to production can't be told.
+      - **Fixed 2026-11-06 (P1 Task 3, owner decision):** the Maestro step and the flow file are removed. The job is now the build-only `regroup-android-build`, kept as CI's only regroup Android compile check.
 
 Firestore point-in-time recovery was off on both projects. **The owner had it turned on for `phoenix-cleanhouse` on 2026-11-06** (7-day retention, so the full window exists from 2026-11-13). Staging stays off, and delete protection is off on both. The settings and restore steps are in `regroup/docs/operations/data-recovery.md`.
 
