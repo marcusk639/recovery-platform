@@ -21,7 +21,7 @@
 | **P-2** | Card cost bearer      | **Resident-borne convenience fee** (~3% disclosed at payment). Operator nets full rent; Regroup adds only the 0.75% platform fee. ACH stays cheap to nudge bank payments.                                      |
 | **P-3** | Legacy 5 houses       | **Grandfather at 2% for 6 months**, then migrate (aligns with cross-product roadmap D-9). Flag via `house.legacyRentFee` or a 5-ID allow-list.                                                                 |
 | **P-4** | Annual discount       | **~17% (2 months free).** e.g. Oxford Standard $49/mo → **$490/yr**; Traditional Pro $129/mo → **$1,290/yr**.                                                                                                  |
-| **P-5** | Trial length          | **30 days**, wired into tier checkout (`trial_period_days`).                                                                                                                                                   |
+| **P-5** | Trial length          | **7 days** (owner decision 2026-11-06; was 30), wired into tier checkout (`trial_period_days`, `TRIAL_PERIOD_DAYS` in `functions/src/api/stripe.ts`).                                                          |
 | **P-6** | Bundle discounts      | **3–4 houses = 10% off, 5+ = 15% off** subscription. Set `bundle3`/`bundle5` coupon amounts accordingly in Stripe.                                                                                             |
 | **P-7** | Tier gating           | **Re-gate on capabilities** (value ladder) — only flags that map to existing features or Phase-5 stubs.                                                                                                        |
 | **P-8** | Oxford Network ($299) | **Hold** — keep tier defined, `availableForSale: false`, until a regional chapter validates it.                                                                                                                |
@@ -38,7 +38,7 @@ Each has a recommended default from the justification doc. **These are owner dec
 | **P-2** | Who bears the card fee — operator or resident (convenience fee)?      | **Resident-borne convenience fee** (property-mgmt norm), disclosed at payment                            | Phase 1 |
 | **P-3** | Existing 5 houses on legacy 2%: migrate or grandfather?               | **Grandfather** legacy fee 6 months (aligns with D-9 in cross-product roadmap)                           | Phase 1 |
 | **P-4** | Annual billing discount %                                             | **~17% (2 months free)**                                                                                 | Phase 2 |
-| **P-5** | Trial length wired into tier checkout                                 | **30 days** (matches Phase-plan Oxford trial)                                                            | Phase 2 |
+| **P-5** | Trial length wired into tier checkout                                 | **7 days** (owner decision 2026-11-06, replacing 30)                                                     | Phase 2 |
 | **P-6** | Bundle discount public values                                         | **3+ houses = 10%, 5+ = 15%** (or confirm existing `bundle3`/`bundle5` coupon amounts in Stripe)         | Phase 3 |
 | **P-7** | Tier feature-gating: re-gate on capabilities now vs keep bed-cap-only | **Re-gate on capabilities** (value ladder) — but only flags that map to _existing_ features in this plan | Phase 4 |
 | **P-8** | Oxford Network ($299) — launch now or hold for a signed chapter?      | **Hold** until a chapter validates (per justification §6c) — keep tier defined but mark "not for sale"   | Phase 4 |
@@ -92,7 +92,7 @@ Confirm these exist and capture exact locations (they were accurate as of the 20
 
 ## Phase 2 — Annual Billing + Wired Trial (P1)
 
-**Goal:** Add an annual billing option (~17% off, P-4) and wire the 30-day trial (P-5) into tier checkout.
+**Goal:** Add an annual billing option (~17% off, P-4) and wire the trial (P-5, 7 days) into tier checkout.
 
 **What to implement (extend `SUBSCRIPTION_TIERS` + `createOperatorSubscription` — copy the existing monthly pattern):**
 
