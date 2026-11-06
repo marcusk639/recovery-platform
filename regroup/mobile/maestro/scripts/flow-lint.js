@@ -17,9 +17,11 @@ function lintFlow(text, { subflow = false } = {}) {
   const errs = [];
 
   for (const l of lines) {
-    const m = l.match(/^\s*(?:-\s*)?appId:\s*(.+?)\s*$/);
-    if (m && m[1] !== '${APP_ID}') {
-      errs.push(`appId must be \${APP_ID}, got "${m[1]}"`);
+    // Block (appId: x) and flow-style ({ appId: x }) forms alike.
+    for (const m of l.matchAll(/(?:^|[\s{,-])appId:\s*(\$\{APP_ID\}|[^\s,}]+)/g)) {
+      if (m[1] !== '${APP_ID}') {
+        errs.push(`appId must be \${APP_ID}, got "${m[1]}"`);
+      }
     }
   }
   if (header.some((l) => /^onFlowStart:/.test(l))) {
