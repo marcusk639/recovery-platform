@@ -156,7 +156,13 @@ Stripe Connect has **0 connected accounts** in live mode. In the last 90 days th
   - 246 were created in one 37-minute window, 2026-10-26 19:44–20:21 UTC. That is the same hour the staging Stripe sandbox was being set up.
   - **The source is the mobile app** (verified). It signs in anonymously on every launch without a signed-in user (`mobile/src/screens/Splash/Splash.tsx:173`), and again after every logout (`state/slices/userSlice.ts:128`). The web's `anonymouslyLogin` has no callers.
   - So every fresh install, `clearState` launch and logout creates an anonymous account in whichever project the build points at. That explains the 5,725 built up over the years.
-  - 246 in 37 minutes fits a Maestro run (`clearState: true` in `maestro/subflows/login.yaml`) against a build that pointed at production. That is inferred, not proven. If true, it breaks §6 ("nothing in the suite touches production"), so the builder confirms it early and adds the guard in §4.3 (§5 step 1).
+  - **Production-pointed builds have been driven by test tooling (verified 2026-11-06).** This breaks §6 ("nothing in the suite touches production"), so the guard in §4.3 comes first (§5 step 1).
+    - **Locally:** `~/.maestro/tests/2026-10-26_152429` and `_152717` (20:24 and 20:27 UTC, minutes after the 246-account window) ran a `deeplink-probe` flow with `appId=com.rats.dev`. That is the iOS bundle that signs into production. Logs inside the window weren't kept, so the burst itself is attributed, not proven.
+    - **The suite's own docs invite this.** `maestro/flows/smoke.yaml`'s header says to run it with `APP_ID=com.rats.dev` (iOS) or `com.regroup.app` (Android), both production builds.
+    - **In CI, on every PR:** the "Maestro Cloud — smoke tests (regroup Android)" job (`.github/workflows/ci.yml` ~286-327) builds `assembleDebug`. That APK's `google-services.json` is `phoenix-cleanhouse`.
+      - It runs `e2e-maestro/regroup/login-and-view-dashboard.yaml`, which uses `clearState: true` and logs in as `operator@example.com` with the e2e password.
+      - The flow declares `appId: com.rats.dev`, while the debug APK is `com.regroup.app`, so it may not even launch.
+      - The step is `continue-on-error`, so CI shows it green either way. Whether it has been writing to production can't be told from the repo.
 
 Firestore point-in-time recovery was off on both projects. **The owner had it turned on for `phoenix-cleanhouse` on 2026-11-06** (7-day retention, so the full window exists from 2026-11-13). Staging stays off, and delete protection is off on both. The settings and restore steps are in `regroup/docs/operations/data-recovery.md`.
 
