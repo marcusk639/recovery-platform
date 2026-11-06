@@ -62,3 +62,45 @@ describe('checkBundleMarkers', () => {
     ).toBe(false);
   });
 });
+
+describe('production apps on the device', () => {
+  const { parseIosApps, parseAndroidPackages, checkNoProductionApps } = require('../e2e-build-guard');
+
+  const IOS_LISTAPPS = `{
+    "com.apple.Bridge" =     {
+        ApplicationType = System;
+        CFBundleIdentifier = "com.apple.Bridge";
+    };
+    "com.rats.dev" =     {
+        ApplicationType = User;
+        CFBundleIdentifier = "com.rats.dev";
+    };
+    "com.rats.dev.e2e.emu" =     {
+        CFBundleIdentifier = "com.rats.dev.e2e.emu";
+    };
+}`;
+
+  it('reads bundle ids from simctl listapps', () => {
+    expect(parseIosApps(IOS_LISTAPPS)).toEqual(['com.apple.Bridge', 'com.rats.dev', 'com.rats.dev.e2e.emu']);
+  });
+
+  it('reads package names from pm list packages', () => {
+    expect(parseAndroidPackages('package:com.android.chrome\r\npackage:com.regroup.app.e2e.emu\n')).toEqual([
+      'com.android.chrome',
+      'com.regroup.app.e2e.emu',
+    ]);
+  });
+
+  it.each(['com.rats.dev', 'com.regroup.app'])('refuses a device with %s installed', (id) => {
+    expect(checkNoProductionApps(['com.apple.Bridge', id, `${id}.e2e.emu`])).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(new RegExp(`${id.replace(/\./g, '\\.')} is installed`)),
+    });
+  });
+
+  it('accepts a device with only e2e builds', () => {
+    expect(checkNoProductionApps(['com.rats.dev.e2e.emu', 'com.rats.dev.e2e.stg', 'com.apple.Bridge'])).toEqual({
+      ok: true,
+    });
+  });
+});

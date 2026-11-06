@@ -51,6 +51,46 @@ function checkBundleMarkers(bundleText, expectedVariant) {
   return { ok: true };
 }
 
+// A production build on the same device can be opened by a deep link: both
+// register regroup-app:// and com.rats.dev://, so the OS may pick it (iOS) or
+// offer it (Android), and its launch signs in to production.
+const PRODUCTION_APP_IDS = ['com.rats.dev', 'com.regroup.app'];
+
+function parseIosApps(listappsText) {
+  return [...String(listappsText).matchAll(/CFBundleIdentifier = "?([^";\s]+)"?;/g)].map(
+    (m) => m[1],
+  );
+}
+
+function parseAndroidPackages(text) {
+  return String(text)
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith('package:'))
+    .map((l) => l.slice('package:'.length));
+}
+
+function checkNoProductionApps(installedIds) {
+  const found = PRODUCTION_APP_IDS.filter((id) => installedIds.includes(id));
+  if (found.length) {
+    return {
+      ok: false,
+      reason: `${found.join(', ')} is installed on the device; a deep link could open it and sign in to production. Uninstall it from the test device`,
+    };
+  }
+  return { ok: true };
+}
+
+function listInstalled(platform, device) {
+  if (platform === 'ios') {
+    return parseIosApps(
+      execFileSync('xcrun', ['simctl', 'listapps', device || 'booted'], { encoding: 'utf8' }),
+    );
+  }
+  const args = [...(device ? ['-s', device] : []), 'shell', 'pm', 'list', 'packages'];
+  return parseAndroidPackages(execFileSync('adb', args, { encoding: 'utf8' }));
+}
+
 function readIosBundle(appId, device) {
   const container = execFileSync(
     'xcrun',
@@ -106,6 +146,10 @@ function main(argv) {
   }
   let bundle;
   try {
+    const prod = checkNoProductionApps(listInstalled(platform, device));
+    if (!prod.ok) {
+      return refuse(prod.reason);
+    }
     bundle = platform === 'ios' ? readIosBundle(appId, device) : readAndroidBundle(appId, device);
   } catch (err) {
     return refuse(`could not read the installed bundle of ${appId}: ${err.message}`);
@@ -122,4 +166,12 @@ if (require.main === module) {
   process.exit(main(process.argv.slice(2)));
 }
 
-module.exports = { E2E_SUFFIXES, checkAppId, checkBundleMarkers };
+module.exports = {
+  E2E_SUFFIXES,
+  PRODUCTION_APP_IDS,
+  checkAppId,
+  checkBundleMarkers,
+  checkNoProductionApps,
+  parseAndroidPackages,
+  parseIosApps,
+};
