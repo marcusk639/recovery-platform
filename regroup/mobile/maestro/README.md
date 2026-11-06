@@ -2,6 +2,10 @@
 
 Black-box flows that drive the app on a simulator against the local Firebase emulators.
 
+## Coverage
+
+What the suite must prove is listed in [`docs/e2e/coverage-matrix.md`](../docs/e2e/coverage-matrix.md), the launch acceptance checklist. Update a row's `Status` and `Covered by` in the same PR as the flow that covers it; `node scripts/coverage-matrix-check.js` validates it.
+
 ## Which app build
 
 **The production guard.** Maestro must never drive a production build: every launch or logout of `com.rats.dev` / `com.regroup.app` signs in anonymously against `phoenix-cleanhouse`. Every flow starts with `maestro/subflows/guard-e2e-app.yaml`, which refuses an `APP_ID` that doesn't end in `.e2e.emu` / `.e2e.stg` before anything launches. `run-flows.sh` and the `npm run maestro:*` scripts also run `maestro/scripts/e2e-build-guard.js`, which checks the installed bundle's E2E marker. A new flow must start with the guard subflow (`maestro/scripts/__tests__/flows-guarded.test.js` fails otherwise).
