@@ -412,9 +412,9 @@ Ordered for the earliest safe launch: the riskiest dependencies come first, and 
 The mobile parts of steps 3 and 4 still wait for step 2. The deploy freeze below starts when the first billing fix lands on `main`. The roadmap (`docs/superpowers/plans/2026-11-06-regroup-launch-roadmap.md`) also tracks the owner's parallel tasks and their deadlines.
 
 1. **Start-up:**
-   - **The coverage matrix** (§4.3), the acceptance checklist for everything after it.
-   - **Confirm the source of the October anonymous accounts** (§3.4; most likely a Maestro run against a production-pointed build), and add the suite's e2e-build guard (§4.3) before any more flows run.
-   - ~~Turn on Firestore point-in-time recovery for `phoenix-cleanhouse`.~~ Done 2026-11-06 (§3.4). What's left: create the exports bucket before the first backfill, and record its name in `regroup/docs/operations/data-recovery.md`.
+   - ~~The coverage matrix (§4.3).~~ Done 2026-11-06: `regroup/mobile/docs/e2e/coverage-matrix.md`, validated by `scripts/coverage-matrix-check.js` (P1 Task 4).
+   - ~~Confirm the source of the October anonymous accounts, and add the suite's e2e-build guard.~~ Done 2026-11-06: the sources are in §3.4. The guard is in place (P1 Tasks 1–2), and the CI smoke job is build-only (P1 Task 3).
+   - ~~Turn on Firestore point-in-time recovery for `phoenix-cleanhouse`.~~ Done 2026-11-06 (§3.4). The exports bucket `gs://phoenix-cleanhouse-firestore-exports` was created 2026-11-06 (P1 Task 5) and is recorded in `regroup/docs/operations/data-recovery.md`.
 2. **D: merge #160 at parity** (§4.4). From here on, all work happens on `main`, on RN 0.88.
 3. **C: the staging walking skeleton** (§4.3):
    - the staging SSR configuration, then deploy staging web;

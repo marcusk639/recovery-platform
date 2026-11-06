@@ -6,11 +6,11 @@ How Regroup's production Firestore can be recovered, and what has to happen befo
 
 ## Current settings
 
-| Project                       | Point-in-time recovery (PITR)            | Delete protection | Scheduled backups |
-| ----------------------------- | ---------------------------------------- | ----------------- | ----------------- |
-| `phoenix-cleanhouse` (prod)   | **On** since 2026-11-06, 7-day retention | Off               | None              |
-| `regroup-e2e` (staging)       | Off                                      | Off               | None              |
-| `demo-regroup-e2e` (emulator) | n/a                                      | n/a               | n/a               |
+| Project                       | Point-in-time recovery (PITR)            | Delete protection | Scheduled backups                                                       |
+| ----------------------------- | ---------------------------------------- | ----------------- | ----------------------------------------------------------------------- |
+| `phoenix-cleanhouse` (prod)   | **On** since 2026-11-06, 7-day retention | Off               | None (manual exports go to `gs://phoenix-cleanhouse-firestore-exports`) |
+| `regroup-e2e` (staging)       | Off                                      | Off               | None                                                                    |
+| `demo-regroup-e2e` (emulator) | n/a                                      | n/a               | n/a                                                                     |
 
 Check the live values with:
 
@@ -25,10 +25,11 @@ PITR keeps versions of the database for 7 days. Within the last hour you can rea
 
 This covers backfills, migration scripts and bulk deletes. Run the script's dry run, then:
 
-1. Export the collections the script touches to the exports bucket. It doesn't exist yet: create `gs://phoenix-cleanhouse-firestore-exports` (or similar) before the first export, then record its name here.
+1. Export the collections the script touches to the exports bucket, `gs://phoenix-cleanhouse-firestore-exports`.
+   It was created 2026-11-06 (US multi-region, matching Firestore's `nam5`; uniform access; public access prevention enforced). Firestore's service agent `service-155667333239@gcp-sa-firestore.iam.gserviceaccount.com` has `roles/storage.admin` on it. A smoke export of `paywall` succeeded, and its folder was deleted.
 
    ```sh
-   gcloud firestore export gs://<exports-bucket>/<YYYY-MM-DD>-<script> \
+   gcloud firestore export gs://phoenix-cleanhouse-firestore-exports/<YYYY-MM-DD>-<script> \
      --collection-ids=<collection>,<collection> --project=phoenix-cleanhouse
    ```
 
@@ -50,11 +51,11 @@ The safest order: restore into a separate database, compare, then copy back only
 - **Within the PITR window, some collections:** export at the restore point, then import into a scratch database.
 
   ```sh
-  gcloud firestore export gs://<exports-bucket>/restore-<time> \
+  gcloud firestore export gs://phoenix-cleanhouse-firestore-exports/restore-<time> \
     --snapshot-time=<RFC3339 time> --collection-ids=<collection> --project=phoenix-cleanhouse
   ```
 
-- **From a pre-write export:** `gcloud firestore import gs://<exports-bucket>/<export-folder> --database=<restore-db-id>`. Import overwrites documents that have the same IDs, so import into a scratch database first.
+- **From a pre-write export:** `gcloud firestore import gs://phoenix-cleanhouse-firestore-exports/<export-folder> --database=<restore-db-id>`. Import overwrites documents that have the same IDs, so import into a scratch database first.
 - **Copying back:** write only the affected document IDs back to `(default)` with an Admin SDK script that follows the `functions/src/scripts/` pattern (dry run by default, no PII in logs).
 - **Clean up** the restore database afterwards; it is billed while it exists.
 
