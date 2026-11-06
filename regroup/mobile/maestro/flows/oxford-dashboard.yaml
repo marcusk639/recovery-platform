@@ -3,12 +3,13 @@
 # .oxfordEnabled=true). The house is seeded with houseType='oxford' and
 # oxfordOnboardingComplete=true, so OxfordDashboard renders directly.
 # The operator owns only this one house, so login lands on it (no switch needed).
-# Run: maestro test -e APP_ID=com.rats.dev maestro/flows/oxford-dashboard.yaml
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/oxford-dashboard.yaml
 appId: ${APP_ID}
 tags:
   - oxford
   - charter
 ---
+- runFlow: ../subflows/guard-e2e-app.yaml
 - runFlow:
     file: ../subflows/login.yaml
     env:

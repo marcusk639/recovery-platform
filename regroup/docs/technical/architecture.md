@@ -302,7 +302,7 @@ These are invoked from the mobile client via `functions.httpsCallable('functionN
 
 | Function                         | Purpose                                                     |
 | -------------------------------- | ----------------------------------------------------------- |
-| `createOperatorSubscription`     | Initialize subscription (30-day trial, house + guest items) |
+| `createOperatorSubscription`     | Initialize subscription (7-day trial, house + guest items)  |
 | `reactivateOperatorSubscription` | Reactivate cancelled/paused subscription                    |
 | `cancelUserSubscription`         | Mark for cancellation at period end                         |
 | `updateSubscriptionGuests`       | Adjust guest item quantity                                  |
@@ -655,7 +655,7 @@ Subscription
   └── Guest item (quantity = total residents across all houses)
 ```
 
-- 30-day free trial on creation
+- 7-day free trial on creation (`TRIAL_PERIOD_DAYS`, `functions/src/api/stripe.ts`)
 - Quantity adjustments via `updateSubscriptionGuests` / `updateSubscriptionHouses`
 - Cancellation at period end (not immediate)
 - Subscription metadata synced to `users.subscriptionMetadata`

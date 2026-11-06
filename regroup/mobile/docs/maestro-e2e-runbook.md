@@ -130,8 +130,8 @@ npm run maestro:ios              # the whole maestro/flows/ directory
 Under the hood these pass the per-platform appId:
 
 ```bash
-maestro test -e APP_ID=com.rats.dev      maestro/flows/smoke.yaml   # iOS
-maestro test -e APP_ID=com.regroup.app   maestro/flows/smoke.yaml   # Android
+maestro test -e APP_ID=com.rats.dev.e2e.emu      maestro/flows/smoke.yaml   # iOS
+maestro test -e APP_ID=com.regroup.app.e2e.emu   maestro/flows/smoke.yaml   # Android
 ```
 
 ### Run a subset by tag
@@ -139,14 +139,14 @@ maestro test -e APP_ID=com.regroup.app   maestro/flows/smoke.yaml   # Android
 Flows are tagged (`smoke`, and later `operator`/`guest`/`payment`):
 
 ```bash
-maestro test -e APP_ID=com.rats.dev --include-tags=smoke   maestro/flows/
-maestro test -e APP_ID=com.rats.dev --exclude-tags=payment maestro/flows/
+maestro test -e APP_ID=com.rats.dev.e2e.emu --include-tags=smoke   maestro/flows/
+maestro test -e APP_ID=com.rats.dev.e2e.emu --exclude-tags=payment maestro/flows/
 ```
 
 ### Run a single flow
 
 ```bash
-maestro test -e APP_ID=com.rats.dev maestro/flows/<flow>.yaml
+maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/<flow>.yaml
 ```
 
 ---
@@ -197,7 +197,7 @@ maestro record        # record a session to video (handy for flaky-flow triage)
 JUnit reports + recordings land in `maestro/output/` (gitignored). Force a format:
 
 ```bash
-maestro test -e APP_ID=com.rats.dev --format=JUNIT maestro/flows/
+maestro test -e APP_ID=com.rats.dev.e2e.emu --format=JUNIT maestro/flows/
 ```
 
 ---

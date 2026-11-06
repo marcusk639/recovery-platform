@@ -2,13 +2,14 @@
 # Persona: guest-a. Asserts the feed renders; if an activity item is present,
 # long-press -> dispute modal -> submit (creates a dispute). The submit block is
 # gated on the modal being visible so the flow stays green when the feed is empty.
-# Run: maestro test -e APP_ID=com.rats.dev maestro/flows/guest-activity-dispute.yaml
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/guest-activity-dispute.yaml
 appId: ${APP_ID}
 tags:
   - guest
   - activities
   - disputes
 ---
+- runFlow: ../subflows/guard-e2e-app.yaml
 - runFlow:
     file: ../subflows/login.yaml
     env:

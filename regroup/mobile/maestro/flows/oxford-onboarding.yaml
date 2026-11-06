@@ -10,12 +10,13 @@
 #     operator at it.
 # Until then this flow will land on oxford-dashboard-content instead of the wizard.
 #
-# Run: maestro test -e APP_ID=com.rats.dev maestro/flows/oxford-onboarding.yaml
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/oxford-onboarding.yaml
 appId: ${APP_ID}
 tags:
   - oxford
   - onboarding
 ---
+- runFlow: ../subflows/guard-e2e-app.yaml
 - runFlow:
     file: ../subflows/login.yaml
     env:

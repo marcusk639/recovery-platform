@@ -1,15 +1,17 @@
 # Smoke flow — proves the harness end-to-end:
 #  1. Maestro can launch the per-platform app (appId via -e APP_ID=...).
-#  2. The IS_E2E_TEST launch argument reaches the app (Phase 1 spike) so it
-#     connects to the local Firebase emulator instead of production.
+#  2. The E2EEmulator build (bundle-time E2E_VARIANT=emulator, not a launch
+#     argument) connects to the local Firebase emulators. Only .e2e.emu/.e2e.stg
+#     builds may run; the guard subflow refuses anything else.
 #  3. The pre-auth landing screen renders.
 #
-# Run (iOS):     maestro test -e APP_ID=com.rats.dev maestro/flows/smoke.yaml
-# Run (Android): maestro test -e APP_ID=com.regroup.app maestro/flows/smoke.yaml
+# Run (iOS):     maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/smoke.yaml
+# Run (Android): maestro test -e APP_ID=com.regroup.app.e2e.emu maestro/flows/smoke.yaml
 appId: ${APP_ID}
 tags:
   - smoke
 ---
+- runFlow: ../subflows/guard-e2e-app.yaml
 - launchApp:
     clearState: true
     arguments:

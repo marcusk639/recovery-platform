@@ -113,6 +113,12 @@ curl -fsS --max-time 3 "${EMU_UI}" >/dev/null 2>&1 || fail \
 xcrun simctl listapps "${SIM_UDID}" 2>/dev/null | grep -q "${APP_ID}" || fail \
   "App ${APP_ID} is not installed on the simulator" \
   "Build + install the E2EEmulator scheme: see maestro/README.md"
+# Never drive a production build: every launch of one writes an anonymous
+# account to production (launch design §3.4). Checks the app id and the
+# installed bundle's E2E marker.
+node "${SCRIPT_DIR}/e2e-build-guard.js" --platform ios --app-id "${APP_ID}" --device "${SIM_UDID}" || fail \
+  "Refusing to run Maestro against ${APP_ID}" \
+  "Install and target an E2EEmulator (.e2e.emu) or E2EStaging (.e2e.stg) build"
 
 # ── resolve the run list ───────────────────────────────────────────────────────
 declare -a RUN_LIST

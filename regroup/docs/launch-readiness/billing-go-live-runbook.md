@@ -53,7 +53,7 @@ No live-money cycle has been run. Do this once, end-to-end, with **live** keys b
 
 - [ ] **Operator subscribe (monthly).** New operator → pick a Traditional tier → pay with a real card → subscription shows `active`/`trialing` in Stripe live, and `users/{uid}.subscriptionMetadata` + the `subscriptions/{id}` doc are seeded (webhook resolved the sub).
 - [ ] **Operator subscribe (annual).** Repeat with `billingInterval: "year"` → confirm it resolves the `_ANNUAL` price and charges the annual amount.
-- [ ] **Trial → active.** Confirm the 30-day trial applies and the first real invoice is scheduled correctly.
+- [ ] **Trial → active.** Confirm the 7-day trial applies and the first real invoice is scheduled correctly.
 - [ ] **Connect onboarding.** Operator connects a Stripe account (Express) → `account.updated` webhook fires and syncs payout status (validates `STRIPE_CONNECT_WEBHOOK_SECRET`).
 - [ ] **Resident rent payment.** Resident pays rent via `createPaymentIntent` → charge succeeds → application fee matches `RENT_FEE` (ACH flat vs card platform rate) → funds land in the operator's connected account → `listPayments` shows it.
 - [ ] **Cancel / refund.** Cancel the subscription and refund the test charges; confirm `customer.subscription.deleted` updates Firestore status.

@@ -1,11 +1,12 @@
 # Flow 05 — Operator: house summary -> manage guests
 # Persona: manager (admin of test-house-123). Seeded: guest-a, guest-b residents.
-# Run: maestro test -e APP_ID=com.rats.dev maestro/flows/operator-manage-guests.yaml
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/operator-manage-guests.yaml
 appId: ${APP_ID}
 tags:
   - operator
   - guests
 ---
+- runFlow: ../subflows/guard-e2e-app.yaml
 - runFlow:
     file: ../subflows/login.yaml
     env:

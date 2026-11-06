@@ -18,12 +18,9 @@ brew install maestro
 # All homegroups flows
 maestro test e2e-maestro/homegroups/
 
-# All regroup/Regroup flows
-maestro test e2e-maestro/regroup/
 
 # Single flow
 maestro test e2e-maestro/homegroups/login-and-join-group.yaml
-maestro test e2e-maestro/regroup/login-and-view-dashboard.yaml
 ```
 
 ## Flows
@@ -34,11 +31,9 @@ maestro test e2e-maestro/regroup/login-and-view-dashboard.yaml
 | --------------------------- | --------------------------------------------- | -------- |
 | `login-and-join-group.yaml` | User logs in and requests to join a homegroup | scaffold |
 
-### regroup / Regroup (`com.rats.dev`)
+### regroup / Regroup
 
-| File                            | Flow                                       | Status   |
-| ------------------------------- | ------------------------------------------ | -------- |
-| `login-and-view-dashboard.yaml` | Operator logs in and views house dashboard | scaffold |
+Removed 2026-11-06. Regroup's Maestro flows live in `regroup/mobile/maestro/` and may only run against `.e2e.emu` / `.e2e.stg` builds, never `com.rats.dev` or `com.regroup.app`, which sign in to production (regroup launch design §3.4).
 
 ## Adjusting selectors
 

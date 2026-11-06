@@ -1,12 +1,13 @@
 # Flow 09 — Operator: applications review -> approve -> intake
 # Persona: manager (admin of test-house-123). Seeded: pending application
 # test-app-1 (see e2e/setup/seedTestData.js seedTestApplications()).
-# Run: maestro test -e APP_ID=com.rats.dev maestro/flows/operator-applications.yaml
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/operator-applications.yaml
 appId: ${APP_ID}
 tags:
   - operator
   - applications
 ---
+- runFlow: ../subflows/guard-e2e-app.yaml
 - runFlow:
     file: ../subflows/login.yaml
     env:

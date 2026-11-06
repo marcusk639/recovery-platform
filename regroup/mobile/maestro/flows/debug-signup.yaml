@@ -1,5 +1,6 @@
 appId: ${APP_ID}
 ---
+- runFlow: ../subflows/guard-e2e-app.yaml
 - launchApp:
     clearState: true
     arguments:

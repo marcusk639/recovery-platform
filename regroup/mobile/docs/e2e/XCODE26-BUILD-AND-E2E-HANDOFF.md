@@ -214,7 +214,7 @@ cd regroup/mobile
 export PATH="$PATH:$HOME/.maestro/bin"
 
 # 1. Smoke first — proves mount + emulator switch
-maestro test -e APP_ID=com.rats.dev maestro/flows/smoke.yaml
+maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/smoke.yaml
 #   asserts initial-landing-screen; launches with IS_E2E_TEST=1
 
 # 2. Prove the emulator switch engaged (reads a seeded doc)
@@ -222,7 +222,7 @@ GCLOUD_PROJECT=phoenix-cleanhouse FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 \
   node maestro/scripts/assert-firestore.js houses/test-house-123 id=test-house-123
 
 # 3. Full suite (14 flows)
-maestro test -e APP_ID=com.rats.dev maestro/flows/      # or npm run maestro:ios
+maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/      # or npm run maestro:ios
 ```
 
 Debug artifacts (screenshots + UI hierarchy) land in `~/.maestro/tests/<timestamp>/`.
