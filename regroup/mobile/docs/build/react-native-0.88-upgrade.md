@@ -376,7 +376,7 @@ it, because screens show residents' names, recovery and payment details.
 
 Applied from the 0.88.1 template (`@react-native-community/template@0.88.1`), keeping every Regroup
 block: the e2e build types, bundled-env stamps, release guard, Sentry, google-services, signing and
-version. CI (`maestro-smoke`) is the compile gate: this environment cannot reach `dl.google.com`, so
+version. CI (`maestro-smoke` then, `regroup-android-build` since 2026-11-06) is the compile gate: this environment cannot reach `dl.google.com`, so
 Gradle cannot resolve AGP locally.
 
 **Versions.** Gradle 9.4.1 (template wrapper files); AGP from the React Native plugin (9.2.1);
@@ -472,13 +472,13 @@ missing. A `gradle.projectsEvaluated` check in `app/build.gradle` now stops ever
 The check uses the task names, because Sentry 8 registers its upload tasks in its own `onVariants`
 callback, which has run by then.
 
-**Permanent CI step** (`maestro-smoke`, after `assembleDebug`) checks three things:
+**Permanent CI step** (in the `regroup-android-build` job, called `maestro-smoke` until 2026-11-06, after `assembleDebug`) checks three things:
 
 - `assembleRelease --dry-run` runs `regroupReleaseGuard` before `createBundleReleaseJsAndAssets`;
 - `assembleE2eEmulator --dry-run` runs `regroupBundledEnvStampE2eEmulator` and not the release
   guard;
 - the guard, run with `STRIPE_PUBLISHABLE_KEY=pk_test_x`, exits non-zero with its own
-  "a release build requires a pk*live* key" refusal.
+  `a release build requires a pk_live_ key` refusal.
 
 `verify-workflow-hardening.test.sh` passes with the change.
 
@@ -1556,37 +1556,36 @@ CI runs the unit suite and the ratchet on every push of the branch.
 - **Parity run after merging `main` (2026-11-06, launch plan P2 Task 2; `b9d882f9`, which includes the P1 e2e-build guard).**
 
   - Setup: the iOS `E2EEmulator` build on the dedicated `regroup-e2e` simulator (iPhone 17, iOS 27.0), with no production build installed, so the guard passes. The emulators were seeded with the e2e sandbox's Stripe test key in `regroup/functions/.secret.local` and `E2E_STRIPE_ACCOUNT_ID` set. Without them the payment dashboard's callables fail ("Neither apiKey nor config.authenticator provided") and `operator-manual-payment` fails at `manual-payment-fab`.
-  - Results:
+  - **Results, iOS and Android, with the RN 0.72 Android baseline.** These were corrected after the final review, which read the run logs. A green Maestro exit is not a pass when a key step never ran.
 
-    | Flow                      | iOS         |
-    | ------------------------- | ----------- |
-    | `smoke`                   | pass        |
-    | `signup`                  | pass (weak) |
-    | `guest-home`              | pass (weak) |
-    | `guest-activity-dispute`  | pass (weak) |
-    | `guest-rent-history`      | pass        |
-    | `operator-manual-payment` | pass        |
+    | Flow                      | iOS 0.88                   | Android 0.88                        | Android 0.72 (`main`)    |
+    | ------------------------- | -------------------------- | ----------------------------------- | ------------------------ |
+    | `smoke`                   | pass                       | pass                                | not run                  |
+    | `signup`                  | key step never ran         | key step never ran                  | key step never ran       |
+    | `guest-home`              | pass (key assert optional) | pass (key assert optional)          | not run                  |
+    | `guest-activity-dispute`  | key step never ran         | key step never ran                  | fails at sign-in         |
+    | `guest-rent-history`      | pass                       | pass                                | not run                  |
+    | `operator-manual-payment` | pass                       | pass 6 of 7 (one blank-screen hang) | fails at sign-in, 5 of 5 |
 
-  - "Weak" means a key step is `optional: true`:
-
-    - `guest-home`'s `week-summary-card` assert;
-    - `signup`'s landing check, either `new-account-screen` or `org-setup-screen`;
-    - `guest-activity-dispute`'s long-press.
-
-    Parity counts these flows, but their coverage-matrix rows stay `fail` until P6 strengthens them.
-
-- **Android parity on 0.88 (2026-11-06, launch plan P2 Task 3).**
-
-  - Setup: the `e2eEmulator` APK on the `regroup-e2e` AVD (API 34). The guard pulled the installed APK and found the `regroup-e2e-variant=emulator` marker in the Hermes bundle. The AVD also had the production debug build `com.regroup.app` installed; the guard refuses that, so it was uninstalled.
-  - Re-seeded before each flow. All six pass: `smoke`, `signup`, `guest-home`, `guest-activity-dispute`, `guest-rent-history`, `operator-manual-payment`. The same three are weak as on iOS.
-  - **`operator-manual-payment` is flaky on Android.** One run hung on a blank white screen when the app relaunched for the flow's second sign-in, with no crash in logcat. The retry passed.
-  - **No 0.72 baseline was taken.** It exists only to sort 0.88 failures into "the upgrade caused it" and "already broken on `main`", and there were none to sort.
+  - **`signup`:** after 60 s it reaches neither `new-account-screen` nor `org-setup-screen`. The form shows "You must agree to the Terms of Service", because the flow never taps `terms-of-service-checkbox`. The same happens on 0.72, where that checkbox could not be checked at all: it threw inside Formik (§4, fixed here). **Flow defect, not a regression.**
+  - **`guest-activity-dispute`:** the flow long-presses the `activities-list` container and then waits for `dispute-modal`, which never appears ("Run flow when id: dispute-modal is visible… SKIPPED"), so nothing is submitted.
+    - The app doesn't open disputes by long-press. Each disputable activity has a DISPUTE button (`dispute-activity-button-<id>`, `hooks/useBaseActivityScreen.ts`).
+    - A one-off probe on Android 0.88 that taps that button reached the "Dispute Activity" screen for another resident's chore, with its reason field and DISPUTE button.
+    - **Stale flow, not a regression.** Submitting a dispute on a device is in the §7.3 pass.
+  - **`guest-home`:** `week-summary-card` was visible on both platforms, but its assert is `optional: true`, so the coverage-matrix rule keeps that row `fail` until P6 makes it required.
+  - **`operator-manual-payment` on Android 0.88:** one of 7 runs hung on a blank white screen when the app relaunched for the flow's second sign-in, with no crash in logcat. The other 6 passed.
+  - **The 0.72 baseline:**
+    - Built with JDK 17, as CI does; RN 0.72's Android plugin fails `jlink` on JDK 21.
+    - The 0.72 Android `e2eEmulator` build never reaches `house-tab` after sign-in: in `guest-activity-dispute`, and in all 5 `operator-manual-payment` runs.
+    - So on Android, 0.88 is strictly better than `main`, and none of the 0.88 results above is an upgrade regression.
+  - Android setup: the `e2eEmulator` APK on the `regroup-e2e` AVD (API 34), re-seeded before each flow, built at `b9d882f9`. The guard pulled the installed APK and found the `regroup-e2e-variant=emulator` marker in the Hermes bundle. The AVD also had the production debug build `com.regroup.app` installed; the guard refuses that, so it was uninstalled.
+  - **Parity verdict:** nothing that worked on `main` broke. The four flows that really exercise their action pass on both platforms. The two stale flows (`signup`, `guest-activity-dispute`) fail the same way on both versions, and P6 rewrites them; their coverage-matrix rows are `fail`.
 
 - **Store-build guards on 0.88 after merging `main` (2026-11-06, launch plan P2 Task 4, `320df796`).**
   - The guard unit tests pass, as part of the full mobile suite: 406 suites, 6082 tests.
   - iOS `E2EEmulator` and `E2EStaging` build, and `scripts/verify-ios-variants.sh` passes all 28 assertions.
   - Android `e2eEmulator` and `e2eStaging` build, and `scripts/verify-android-variants.sh` passes all 20 assertions.
-  - iOS `Release` and Android `assembleRelease` are both **refused** by the release guard ("STRIPE*PUBLISHABLE_KEY is empty; a release build requires a pk_live* key"), as designed. Store builds with the live key move to the launch plan's production device pass (P9).
+  - iOS `Release` and Android `assembleRelease` are both **refused** by the release guard (`STRIPE_PUBLISHABLE_KEY is empty; a release build requires a pk_live_ key`), as designed. The build-level refusal was with an empty key. The `pk_test_` case is covered by `scripts/release-guard.test.js` and, on Android, by the CI step that runs `regroupReleaseGuard` with `STRIPE_PUBLISHABLE_KEY=pk_test_x`; one `stripeKeyReleaseProblem` handles both. Store builds with the live key move to the launch plan's production device pass (P9).
 
 ### 7.3 Not verified yet (owner, on devices)
 
@@ -1602,6 +1601,7 @@ CI runs the unit suite and the ratchet on every push of the branch.
   the Android 16 back gesture, the keyboard on every audited screen (§5.3).
 - Layout: edge-to-edge on Android 15+ and on API 30.
 - Links: cold-start universal link and URL, warm URL, scene reconnect.
+- Signup: tick the terms box, submit, and land on NewAccount or OrgSetup. Disputes: tap DISPUTE on another resident's activity and submit. On both platforms; the Maestro flows for these are stale (§7.2).
 - iOS Hermes `Intl`: week start/end and `formatInTimeZone` against Android, including a DST
   boundary.
 - Firebase config pickup on iOS: the Xcode log line `firebase.json found at …`.

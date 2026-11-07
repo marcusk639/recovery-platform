@@ -286,9 +286,10 @@ jobs:
   # debug APK, whose google-services.json is production (phoenix-cleanhouse): every
   # launch signs in anonymously there. Maestro may only drive .e2e.emu/.e2e.stg
   # builds (regroup launch design §3.4, §4.3); the suite moves to CI later. The
-  # build stays because it is CI's only regroup Android compile check.
+  # job stays because it is CI's only regroup Android compile check, and it carries
+  # the permanent release/e2e guard-wiring assertion below (RN 0.88 upgrade).
   regroup-android-build:
-    name: regroup/mobile — Android debug build
+    name: regroup/mobile — Android build and guard wiring
     needs: [recovery-api, homegroups-functions, regroup-functions, detox-recovery]
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'e2e-fix/')
