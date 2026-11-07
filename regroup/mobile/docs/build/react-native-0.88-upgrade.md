@@ -1581,6 +1581,11 @@ CI runs the unit suite and the ratchet on every push of the branch.
   - Android setup: the `e2eEmulator` APK on the `regroup-e2e` AVD (API 34), re-seeded before each flow, built at `b9d882f9`. The guard pulled the installed APK and found the `regroup-e2e-variant=emulator` marker in the Hermes bundle. The AVD also had the production debug build `com.regroup.app` installed; the guard refuses that, so it was uninstalled.
   - **Parity verdict:** nothing that worked on `main` broke. The four flows that really exercise their action pass on both platforms. The two stale flows (`signup`, `guest-activity-dispute`) fail the same way on both versions, and P6 rewrites them; their coverage-matrix rows are `fail`.
 
+- **Gradle wrapper integrity (2026-11-06).** This PR replaced the binary `gradle-wrapper.jar`, and CI executes it.
+
+  - Its SHA-256 (`55243ef5…1145c`) matches Gradle's published checksum for 9.4.1 (`gradle-9.4.1-wrapper.jar.sha256`). Both tracked wrapper jars, regroup's and homegroups', match official Gradle checksums.
+  - The `regroup-android-build` job now runs `gradle/actions/wrapper-validation`, pinned to commit `8da46b53` (v6.4.1), before any `./gradlew`.
+
 - **Store-build guards on 0.88 after merging `main` (2026-11-06, launch plan P2 Task 4, `320df796`).**
   - The guard unit tests pass, as part of the full mobile suite: 406 suites, 6082 tests.
   - iOS `E2EEmulator` and `E2EStaging` build, and `scripts/verify-ios-variants.sh` passes all 28 assertions.

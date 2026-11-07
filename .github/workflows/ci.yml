@@ -298,6 +298,12 @@ jobs:
         with:
           persist-credentials: false
 
+      # The RN 0.88 upgrade replaced the binary gradle-wrapper.jar, and every ./gradlew
+      # below executes it. Validate every wrapper jar in the checkout against Gradle's
+      # published checksums before running any of them (pinned by commit SHA, v6.4.1).
+      - name: Validate Gradle wrapper jars
+        uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+
       - name: Set up Node 22
         uses: actions/setup-node@v4
         with:
