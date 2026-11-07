@@ -193,6 +193,19 @@ Firestore point-in-time recovery was off on both projects. **The owner had it tu
 
 The feature inventory this coverage is measured against is Appendix A.
 
+### 3.6 Bugs found during P1 and P2 (2026-11-06)
+
+These are tracked as GitHub issues. Each is fixed in the phase shown, and its fix PR updates this list.
+
+| Issue | Bug                                                                                                                                      | Fixed in                                                                                             |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| #174  | Opening the dispute or confirm modal also opens the global "Loading…" modal, which blocks disputes on Android 0.88. Pre-existing wiring. | **Right after #160 merges**, before P3's mobile half. It blocks the dispute flow and its matrix rows |
+| #175  | Maestro's cold launch on the Android emulator intermittently shows a blank white screen. Not reproduced by hand.                         | P6, before the suite gates the release                                                               |
+| #176  | E2E tooling follow-ups: stale simulator default, guard device selection, checker argument edge cases, a stale seed script, matrix rows   | P6                                                                                                   |
+| #177  | The Firestore exports bucket has no retention rule for pre-write exports, which hold resident data                                       | Before the first production backfill (P10 step 10.3)                                                 |
+
+Fixed already: the CI wrapper-jar validation (GHSA-7495) and the workflow-hardening checker's stale job ID, both on #160; the stale `signup` and `guest-activity-dispute` flows, also on #160.
+
 ## 4. What gets built
 
 There are four workstreams, A to D. §5 gives the order they're worked in.

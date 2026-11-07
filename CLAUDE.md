@@ -49,5 +49,5 @@ Serena is a project MCP server in `.mcp.json` (`serena-agent==1.7.0` via `uvx`, 
   `B=origin/<branch>; git diff origin/main..$B -- $(git diff --name-only $(git merge-base $B origin/main)..$B) | wc -l`
   `0` means merged. Non-zero is inconclusive, because later PRs may have edited the same paths. GitHub's PR state is the authority.
 - **Skip build output and vendor bundles** (`**/public/`, `*.min.js`, `dist/`, `build/`, `.next/`, and the compiled `recovery-api/lib/` and `*/functions/lib/`) when searching or counting. `regroup/web/public/` alone is about 1.15M lines. Other `lib/` directories are hand-written source (`detox-recovery/lib`, `recovery-api/src/lib`): search them.
-- **`homegroups/mobile` and `regroup/mobile` postinstall runs `pod install`.** For JS-only work (Jest, ESLint) use `npm ci --ignore-scripts`.
+- **`homegroups/mobile` and `regroup/mobile` postinstall runs `pod install`.** For JS-only work (Jest, ESLint) use `npm ci --ignore-scripts && npx patch-package`: the postinstall also applies the packages' `patches/` (regroup/mobile's `react-native-modal` patch among them), and `--ignore-scripts` skips that, which fails the modal tests.
 - **zsh:** `$var:r`, `:h` and `:t` are path modifiers. Write `"${c}:path"` in `git show` loops.
