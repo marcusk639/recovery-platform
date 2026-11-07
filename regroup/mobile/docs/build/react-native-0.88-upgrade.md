@@ -1576,10 +1576,17 @@ CI runs the unit suite and the ratchet on every push of the branch.
     Parity counts these flows, but their coverage-matrix rows stay `fail` until P6 strengthens them.
 
 - **Android parity on 0.88 (2026-11-06, launch plan P2 Task 3).**
+
   - Setup: the `e2eEmulator` APK on the `regroup-e2e` AVD (API 34). The guard pulled the installed APK and found the `regroup-e2e-variant=emulator` marker in the Hermes bundle. The AVD also had the production debug build `com.regroup.app` installed; the guard refuses that, so it was uninstalled.
   - Re-seeded before each flow. All six pass: `smoke`, `signup`, `guest-home`, `guest-activity-dispute`, `guest-rent-history`, `operator-manual-payment`. The same three are weak as on iOS.
   - **`operator-manual-payment` is flaky on Android.** One run hung on a blank white screen when the app relaunched for the flow's second sign-in, with no crash in logcat. The retry passed.
   - **No 0.72 baseline was taken.** It exists only to sort 0.88 failures into "the upgrade caused it" and "already broken on `main`", and there were none to sort.
+
+- **Store-build guards on 0.88 after merging `main` (2026-11-06, launch plan P2 Task 4, `320df796`).**
+  - The guard unit tests pass, as part of the full mobile suite: 406 suites, 6082 tests.
+  - iOS `E2EEmulator` and `E2EStaging` build, and `scripts/verify-ios-variants.sh` passes all 28 assertions.
+  - Android `e2eEmulator` and `e2eStaging` build, and `scripts/verify-android-variants.sh` passes all 20 assertions.
+  - iOS `Release` and Android `assembleRelease` are both **refused** by the release guard ("STRIPE*PUBLISHABLE_KEY is empty; a release build requires a pk_live* key"), as designed. Store builds with the live key move to the launch plan's production device pass (P9).
 
 ### 7.3 Not verified yet (owner, on devices)
 
