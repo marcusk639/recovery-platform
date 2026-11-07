@@ -171,8 +171,8 @@ jest.mock('../../../components/title-bar-right-button', () => ({
   GuestSelectionButton: 'GuestSelectionButton',
 }));
 // Stub vector icons so the test renderer doesn't explode
-jest.mock('react-native-vector-icons/FontAwesome5', () => 'FontAwesome5Icon');
-jest.mock('react-native-vector-icons/MaterialIcons', () => 'MaterialIcon');
+jest.mock('@react-native-vector-icons/fontawesome5/static', () => 'FontAwesome5Icon');
+jest.mock('@react-native-vector-icons/material-icons/static', () => 'MaterialIcon');
 
 // ─── React imports ─────────────────────────────────────────────────────────────
 import React from 'react';

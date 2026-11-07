@@ -77,9 +77,8 @@ describe("SignUpFormView", () => {
   });
 
   it("reflects values.termsOfService in the checkbox value", () => {
-    // @react-native-community/checkbox renders `value` onto an inner native
-    // element, not the outer testID'd View — accessibilityState.checked on
-    // the outer View mirrors it and is what's actually queryable here.
+    // RatsCheckBox reports its value as accessibilityState.checked on the
+    // testID'd control (the JS checkbox since the RN 0.88 upgrade).
     const { getByTestId } = renderForm({ termsOfService: true });
     expect(
       getByTestId("terms-of-service-checkbox").props.accessibilityState.checked

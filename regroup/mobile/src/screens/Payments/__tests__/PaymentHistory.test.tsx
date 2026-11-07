@@ -3,7 +3,7 @@ import { render } from '@testing-library/react-native';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
-jest.mock('react-native-vector-icons/FontAwesome5', () => {
+jest.mock('@react-native-vector-icons/fontawesome5/static', () => {
   const { View } = require('react-native');
   return ({ testID }: { testID?: string }) => <View testID={testID} />;
 });

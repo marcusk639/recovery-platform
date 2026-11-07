@@ -105,13 +105,20 @@ jest.mock("../../../services/notifications/rentReminder", () => ({
   cancelRentReminder: jest.fn(),
 }));
 
-// Mock Firebase firestore
+// Mock Firebase firestore: the screen writes through the firebase-setup
+// instance with the modular functions, which the namespaced adapter maps onto
+// this collection -> doc -> update chain.
 const mockUpdate = jest.fn().mockResolvedValue(undefined);
 const mockDoc = jest.fn().mockReturnValue({ update: mockUpdate });
 const mockCollection = jest.fn().mockReturnValue({ doc: mockDoc });
-jest.mock("@react-native-firebase/firestore", () => {
-  return jest.fn(() => ({ collection: mockCollection }));
-});
+jest.mock("@react-native-firebase/firestore", () =>
+  require("../../../../__mocks__/firebase-modular/namespaced-adapter")
+);
+jest.mock("../../../../firebase-setup", () => ({
+  ...jest.requireActual("../../../../firebase-setup"),
+  // Looked up at call time: imports are hoisted above mockCollection.
+  firestore: { collection: (...args: unknown[]) => mockCollection(...args) },
+}));
 
 // ─── Imports ──────────────────────────────────────────────────────────────────
 
@@ -214,5 +221,8 @@ describe("RentPaymentScreen — auto-pay toggle", () => {
     await waitFor(() => {
       expect(mockUpdate).toHaveBeenCalledWith({ autoPayEnabled: false });
     });
+    // On the guest's own document.
+    expect(mockCollection).toHaveBeenCalledWith("guests");
+    expect(mockDoc).toHaveBeenCalledWith("guest_1");
   });
 });

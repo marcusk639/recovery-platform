@@ -6,6 +6,10 @@ import { RatsText } from '../../components/rats-text';
 import RatsButton from '../../components/rats-button/rats-button';
 import { color, normalize, fontSize } from '../../styles/theme';
 import { logException } from '../../util/logging';
+import {
+  RatsKeyboardAvoidingView,
+  RatsKeyboardToolbar,
+} from '../../components/rats-keyboard';
 
 interface Props {
   visible: boolean;
@@ -48,7 +52,9 @@ const DischargeGuestModal: React.FC<Props> = ({
       transparent
       animationType="fade"
       onRequestClose={onClose}>
-      <View style={styles.overlay}>
+      {/* IQKeyboardManager lifted this dialog on iOS; nothing did on Android
+          once Modal windows stopped resizing. The overlay now pads itself. */}
+      <RatsKeyboardAvoidingView behavior="padding" style={styles.overlay}>
         <View style={styles.dialog}>
           <RatsText
             translate={false}
@@ -85,7 +91,9 @@ const DischargeGuestModal: React.FC<Props> = ({
             />
           </View>
         </View>
-      </View>
+      </RatsKeyboardAvoidingView>
+      {/* The native Modal covers the app-root toolbar. */}
+      <RatsKeyboardToolbar />
     </Modal>
   );
 };

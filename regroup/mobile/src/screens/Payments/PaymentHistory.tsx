@@ -26,7 +26,7 @@ import {
   fontFamily,
 } from '../../styles/theme';
 import { RootStackParamList } from '../../navigation/types';
-import FontAwesome5 from 'react-native-vector-icons/FontAwesome5';
+import FontAwesome5 from '../../components/rats-icon/font-awesome-5';
 import { useSelectedGuest } from '../../hooks/useSelectedGuest';
 import { useSelectedHouse } from '../../hooks/useSelectedHouse';
 

@@ -14,7 +14,7 @@ interface FormModalState {
   content: ReactNode;
   title: string;
   fullScreen: boolean;
-  rightIcon?: JSX.Element;
+  rightIcon?: React.JSX.Element;
   closeOnBack: boolean;
   renderBackButton: boolean;
 }
@@ -33,7 +33,7 @@ interface ModalContextType {
     content: ReactNode,
     title?: string,
     fullScreen?: boolean,
-    rightIcon?: JSX.Element,
+    rightIcon?: React.JSX.Element,
     closeOnBack?: boolean,
     renderBackButton?: boolean,
   ) => void;
@@ -98,7 +98,7 @@ export const ModalProvider: React.FC<ModalProviderProps> = ({ children }) => {
       content: ReactNode,
       title: string = '',
       fullScreen: boolean = false,
-      rightIcon?: JSX.Element,
+      rightIcon?: React.JSX.Element,
       closeOnBack: boolean = true,
       renderBackButton: boolean = true,
     ) => {

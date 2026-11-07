@@ -23,7 +23,7 @@ jest.mock('../../../context', () => ({
 
 jest.mock('../../../util/platform', () => ({ IOS: false }));
 
-jest.mock('react-native-vector-icons/FontAwesome5', () => {
+jest.mock('@react-native-vector-icons/fontawesome5/static', () => {
   const { Text } = require('react-native');
   return (props: any) => <Text testID={`icon-${props.name}`}>{props.name}</Text>;
 });

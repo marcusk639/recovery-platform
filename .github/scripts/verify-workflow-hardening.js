@@ -46,7 +46,7 @@ for (const [id, job] of Object.entries(ci.jobs))
   for (const [perm, level] of Object.entries(job.permissions || {}))
     check(level === "read", `ci.yml: ${id}: permission ${perm}: ${level} must be read`);
 noPersist("ci.yml", ci.jobs);
-for (const id of ["maestro-smoke", "homegroups-maestro-smoke"]) {
+for (const id of ["regroup-android-build", "homegroups-maestro-smoke"]) {
   const job = ci.jobs[id];
   check(job, `ci.yml: job ${id} missing`);
   if (!job) continue;

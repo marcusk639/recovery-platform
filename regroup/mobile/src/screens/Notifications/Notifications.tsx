@@ -483,7 +483,9 @@ const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
         refreshControl={
           <RefreshControl
             refreshing={isFetching && !isLoading}
-            onRefresh={refetch}
+            onRefresh={() => {
+            refetch();
+          }}
             tintColor={color.main}
           />
         }

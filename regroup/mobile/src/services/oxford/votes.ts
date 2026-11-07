@@ -1,17 +1,25 @@
+import {
+  collection,
+  doc,
+  getDocs,
+  orderBy,
+  query,
+  setDoc,
+} from "@react-native-firebase/firestore";
+import { httpsCallable } from "@react-native-firebase/functions";
 import { firestore, functions } from "../../../firebase-setup";
 import { Vote } from "../../entities/oxford/Vote";
 import { logException } from "../../util/logging";
+
+const votesOf = (houseId: string) =>
+  collection(doc(collection(firestore, "houses"), houseId), "votes");
 
 export async function createVote(
   houseId: string,
   vote: Omit<Vote, "id">
 ): Promise<Vote> {
   try {
-    const ref = firestore
-      .collection("houses")
-      .doc(houseId)
-      .collection("votes")
-      .doc();
+    const ref = doc(votesOf(houseId));
 
     const newVote: Vote = {
       ...vote,
@@ -24,7 +32,7 @@ export async function createVote(
       createdAt: new Date().toISOString(),
     };
 
-    await ref.set(newVote);
+    await setDoc(ref, newVote);
     return newVote;
   } catch (error) {
     logException(error);
@@ -34,14 +42,9 @@ export async function createVote(
 
 export async function getVotes(houseId: string): Promise<Vote[]> {
   try {
-    const snapshot = await firestore
-      .collection("houses")
-      .doc(houseId)
-      .collection("votes")
-      .orderBy("createdAt", "desc")
-      .get();
+    const snapshot = await getDocs(query(votesOf(houseId), orderBy("createdAt", "desc")));
 
-    return snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id } as Vote));
+    return snapshot.docs.map((vote) => ({ ...vote.data(), id: vote.id } as Vote));
   } catch (error) {
     logException(error);
     throw new Error("Failed to load votes");
@@ -70,7 +73,7 @@ export async function castVote(
   choice: "yes" | "no" | "abstain"
 ): Promise<void> {
   try {
-    await functions.httpsCallable("castOxfordVote")({
+    await httpsCallable(functions, "castOxfordVote")({
       houseId,
       voteId,
       choice,

@@ -32,8 +32,9 @@ The mobile router is `homegroups/mobile/src/services/notifications/NotificationH
 
 Senders: `regroup/functions/src/util/notifications.ts` (more than one payload shape),
 `regroup/functions/src/scheduled/officerTermReminder.ts`, and the notify trigger in `regroup/functions/src/triggers/firestore/index.ts`.
-Mobile: foreground handling in `regroup/mobile/src/screens/Splash/Splash.tsx`, channels in
-`regroup/mobile/src/services/notifications/service.ts` and `regroup/mobile/src/services/notifications/rentReminder.ts`.
+Mobile: foreground handling in `regroup/mobile/src/screens/Splash/Splash.tsx` and
+`regroup/mobile/src/services/notifications/remoteMessage.ts`, channels in
+`regroup/mobile/src/services/notifications/channels.ts` (the reminder in `regroup/mobile/src/services/notifications/rentReminder.ts`).
 
 | If this changes                             | Check                                                                               | Why                                                                                              |
 | ------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |

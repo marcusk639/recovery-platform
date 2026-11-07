@@ -4,11 +4,13 @@ import {
   Text,
   TouchableOpacity,
   TextInput,
-  ScrollView,
   StyleSheet,
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import RatsScrollView, {
+  IQ_SCROLL_VIEW_PROPS,
+} from '../../components/rats-scroll-view';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { color } from '../../styles/theme';
 import {
@@ -114,7 +116,7 @@ export default function ApplicationDetailScreen() {
   const isDone = app.status === 'approved' || app.status === 'rejected';
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <RatsScrollView {...IQ_SCROLL_VIEW_PROPS} style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.name}>{app.applicantName}</Text>
       <Text style={styles.meta}>{app.applicantEmail}</Text>
       {app.applicantPhone ? (
@@ -198,7 +200,7 @@ export default function ApplicationDetailScreen() {
           ) : null}
         </View>
       )}
-    </ScrollView>
+    </RatsScrollView>
   );
 }
 

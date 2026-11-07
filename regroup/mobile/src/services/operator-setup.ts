@@ -6,6 +6,7 @@
 // add-house claim grant failed. See the finishOperatorSetup callable in
 // regroup/functions.
 import * as Sentry from '@sentry/react-native';
+import { httpsCallable } from '@react-native-firebase/functions';
 import { functions } from '../../firebase-setup';
 import { User } from '../entities/User';
 import { logException } from '../util/logging';
@@ -91,7 +92,7 @@ export const finishOperatorSetup = async (
   { repairOnly = false }: { repairOnly?: boolean } = {},
 ): Promise<SetupRecoveryOutcome> => {
   try {
-    const result = await functions.httpsCallable('finishOperatorSetup')();
+    const result = await httpsCallable(functions, 'finishOperatorSetup')();
     const data = result?.data as FinishOperatorSetupResult | undefined;
     if (data?.completed === true) {
       return repairOnly && !data.houseIds?.length ? 'not-needed' : 'completed';

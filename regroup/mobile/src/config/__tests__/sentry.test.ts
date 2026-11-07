@@ -40,6 +40,16 @@ describe('sentryOptions', () => {
     expect(options.dsn).toBeUndefined();
   });
 
+  it('never sends PII, screenshots, the view hierarchy or session replays', () => {
+    const options = loadWithVariant(undefined).sentryOptions() as Record<string, unknown>;
+    expect(options.sendDefaultPii).toBe(false);
+    expect(options.attachScreenshot).toBe(false);
+    expect(options.attachViewHierarchy).toBe(false);
+    expect(options.replaysSessionSampleRate).toBeUndefined();
+    expect(options.replaysOnErrorSampleRate).toBeUndefined();
+    expect(options.integrations).toBeUndefined();
+  });
+
   it('treats an unrecognised variant as a store build', () => {
     const options = loadWithVariant('production').sentryOptions();
     expect(options.enabled).toBe(true);

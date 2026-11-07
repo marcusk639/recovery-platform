@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import { format, parseISO } from 'date-fns';
+import { generatePDF } from 'react-native-html-to-pdf';
 
 import { RentPayment } from './payments';
 
@@ -7,10 +8,10 @@ import { Guest } from '../entities/Guest';
 import { WeekStats } from '../entities/WeekSummary';
 import { PhaseRule } from '../entities/Phase';
 
-// react-native-html-to-pdf is excluded from the iOS autolinked pod set
-// (see react-native.config.js) to unblock E2E builds. Load the JS module
-// lazily so opening this service on iOS doesn't throw on import.
-// Callers should also check isPDFExportAvailable() before invoking.
+// PDF export is offered on Android only, as before the React Native 0.88
+// upgrade. react-native-html-to-pdf 1.3.0 is a TurboModule linked on both
+// platforms; enabling iOS is a product decision, not yet verified on a device
+// (decision record, Task 6). Callers check isPDFExportAvailable() first.
 export function isPDFExportAvailable(): boolean {
   return Platform.OS !== 'ios';
 }
@@ -104,16 +105,9 @@ export async function exportWeeklyReportPDF(
     );
   }
 
-  // Lazy require so the JS module isn't loaded (and its native bridge
-  // isn't resolved) on platforms where the pod is excluded.
-  //
-  // `.convert` on the default export, not the named `generatePDF` of the 1.x
-  // line: 1.x is a Kotlin rewrite against BaseReactPackage, an API that does
-  // not exist in React Native 0.72, so it cannot compile here. 0.12.x is the
-  // last all-Java release and takes the same { html, fileName, directory }.
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const RNHTMLtoPDF = require('react-native-html-to-pdf').default;
-  const file = await RNHTMLtoPDF.convert(options);
+  // 1.x's named generatePDF takes the same { html, fileName, directory } as
+  // 0.12's default `.convert`.
+  const file = await generatePDF(options);
   return file.filePath;
 }
 

@@ -1,3 +1,4 @@
+import { httpsCallable } from '@react-native-firebase/functions';
 import { functions } from '../../firebase-setup';
 import { OperatorSubscription } from '../entities/User';
 import Admin from '../entities/Admin';
@@ -10,18 +11,16 @@ interface SubParams {
 }
 
 export const updateSubscriptionGuests = (params: SubParams) => {
-  return functions.httpsCallable('updateSubscriptionGuests')(params);
+  return httpsCallable(functions, 'updateSubscriptionGuests')(params);
 };
 
 export const updateSubscriptionHouses = async (params: SubParams) => {
-  const result = await functions.httpsCallable('updateSubscriptionHouses')(
-    params,
-  );
+  const result = await httpsCallable(functions, 'updateSubscriptionHouses')(params);
   return result.data;
 };
 
 export const applyBundleDiscount = async (userId: string): Promise<void> => {
-  await functions.httpsCallable('applyBundleDiscount')({ userId });
+  await httpsCallable(functions, 'applyBundleDiscount')({ userId });
 };
 
 // The client never sends a house id: `requestKey` is an idempotency key (the
@@ -45,6 +44,6 @@ export interface CreateHousesResult {
 export const createHouses = async (
   houses: HouseCreatePayload[],
 ): Promise<CreateHousesResult> => {
-  const result = await functions.httpsCallable('createHouses')({ houses });
+  const result = await httpsCallable(functions, 'createHouses')({ houses });
   return result.data as CreateHousesResult;
 };

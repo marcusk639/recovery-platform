@@ -1,14 +1,24 @@
+import {
+  collection,
+  doc,
+  getDocs,
+  limit as limitTo,
+  orderBy,
+  query,
+  setDoc,
+  where,
+} from '@react-native-firebase/firestore';
 import { firestore } from '../../firebase-setup';
 import { DrugTest } from '../entities/DrugTest';
 import { logException } from '../util/logging';
 
-export const drugTestCollection = firestore.collection('drug-tests');
+export const drugTestCollection = collection(firestore, 'drug-tests');
 
 export async function logDrugTest(
   test: Omit<DrugTest, 'id' | 'createdAt' | 'escalationTriggered'>,
 ): Promise<DrugTest> {
   try {
-    const ref = drugTestCollection.doc();
+    const ref = doc(drugTestCollection);
     const record: DrugTest = {
       ...test,
       id: ref.id,
@@ -16,7 +26,7 @@ export async function logDrugTest(
         test.result === 'positive' || test.result === 'refused',
       createdAt: new Date().toISOString(),
     };
-    await ref.set(record);
+    await setDoc(ref, record);
     return record;
   } catch (error) {
     logException(error);
@@ -29,12 +39,15 @@ export async function getDrugTestsForGuest(
   limit = 50,
 ): Promise<DrugTest[]> {
   try {
-    const snapshot = await drugTestCollection
-      .where('guestId', '==', guestId)
-      .orderBy('testDate', 'desc')
-      .limit(limit)
-      .get();
-    return snapshot.docs.map(doc => doc.data() as DrugTest);
+    const snapshot = await getDocs(
+      query(
+        drugTestCollection,
+        where('guestId', '==', guestId),
+        orderBy('testDate', 'desc'),
+        limitTo(limit),
+      ),
+    );
+    return snapshot.docs.map(test => test.data() as DrugTest);
   } catch (error) {
     logException(error);
     throw new Error('Failed to fetch drug test history');
@@ -46,12 +59,15 @@ export async function getDrugTestsForHouse(
   limit = 100,
 ): Promise<DrugTest[]> {
   try {
-    const snapshot = await drugTestCollection
-      .where('houseId', '==', houseId)
-      .orderBy('testDate', 'desc')
-      .limit(limit)
-      .get();
-    return snapshot.docs.map(doc => doc.data() as DrugTest);
+    const snapshot = await getDocs(
+      query(
+        drugTestCollection,
+        where('houseId', '==', houseId),
+        orderBy('testDate', 'desc'),
+        limitTo(limit),
+      ),
+    );
+    return snapshot.docs.map(test => test.data() as DrugTest);
   } catch (error) {
     logException(error);
     throw new Error('Failed to fetch house drug tests');
@@ -65,11 +81,14 @@ export async function getPositiveTestCount(
   try {
     const since = new Date();
     since.setDate(since.getDate() - sinceDays);
-    const snapshot = await drugTestCollection
-      .where('guestId', '==', guestId)
-      .where('result', 'in', ['positive', 'refused'])
-      .where('testDate', '>=', since.toISOString())
-      .get();
+    const snapshot = await getDocs(
+      query(
+        drugTestCollection,
+        where('guestId', '==', guestId),
+        where('result', 'in', ['positive', 'refused']),
+        where('testDate', '>=', since.toISOString()),
+      ),
+    );
     return snapshot.size;
   } catch (error) {
     logException(error);

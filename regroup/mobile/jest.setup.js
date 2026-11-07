@@ -115,16 +115,13 @@ jest.mock('@react-navigation/native', () => {
   };
 });
 
-jest.mock('@react-navigation/stack', () => ({
-  createStackNavigator: mockNavigatorFactory,
-  TransitionPresets: {},
-  CardStyleInterpolators: {},
-}));
 jest.mock('@react-navigation/native-stack', () => ({
   createNativeStackNavigator: mockNavigatorFactory,
 }));
 jest.mock('@react-navigation/bottom-tabs', () => ({
   createBottomTabNavigator: mockNavigatorFactory,
+  // BaseChat reads the tab bar height (undefined outside a tab navigator).
+  BottomTabBarHeightContext: require('react').createContext(undefined),
 }));
 
 // ─── @react-native-firebase/* ────────────────────────────────────────────────
@@ -133,7 +130,7 @@ jest.mock('@react-navigation/bottom-tabs', () => ({
 // imports of the RNFirebase packages.
 const mockFirestoreDocRef = () => ({
   id: 'mock-doc-id',
-  get: jest.fn(() => Promise.resolve({ exists: false, data: () => null })),
+  get: jest.fn(() => Promise.resolve({ exists: () => false, data: () => null })),
   set: jest.fn(() => Promise.resolve()),
   update: jest.fn(() => Promise.resolve()),
   delete: jest.fn(() => Promise.resolve()),
@@ -173,13 +170,35 @@ jest.mock('@react-native-firebase/auth', () => {
   };
   const fn = () => mockAuth;
   fn.FirebaseAuthTypes = {};
-  return { __esModule: true, default: fn, FirebaseAuthTypes: {} };
+  return {
+    __esModule: true,
+    default: fn,
+    FirebaseAuthTypes: {},
+    // Modular forms over the instance (or user) passed in, so suites that
+    // configure auth() keep driving the same object.
+    getAuth: () => mockAuth,
+    connectAuthEmulator: jest.fn(),
+    onAuthStateChanged: (a, ...args) => a.onAuthStateChanged(...args),
+    onIdTokenChanged: (a, ...args) => a.onIdTokenChanged(...args),
+    signInWithEmailAndPassword: (a, ...args) => a.signInWithEmailAndPassword(...args),
+    createUserWithEmailAndPassword: (a, ...args) => a.createUserWithEmailAndPassword(...args),
+    signInAnonymously: (a) => a.signInAnonymously(),
+    signOut: (a) => a.signOut(),
+    sendPasswordResetEmail: (a, ...args) => a.sendPasswordResetEmail(...args),
+    getIdToken: (user, ...args) => user.getIdToken(...args),
+    getIdTokenResult: (user, ...args) => user.getIdTokenResult(...args),
+    linkWithCredential: (user, ...args) => user.linkWithCredential(...args),
+    reauthenticateWithCredential: (user, ...args) => user.reauthenticateWithCredential(...args),
+    reload: (user) => user.reload(),
+    updateProfile: (user, ...args) => user.updateProfile(...args),
+    signInWithPhoneNumber: (a, ...args) => a.signInWithPhoneNumber(...args),
+  };
 });
 
 jest.mock('@react-native-firebase/firestore', () => {
   const docRef = {
     id: 'mock-doc-id',
-    get: jest.fn(() => Promise.resolve({ exists: false, data: () => null })),
+    get: jest.fn(() => Promise.resolve({ exists: () => false, data: () => null })),
     set: jest.fn(() => Promise.resolve()),
     update: jest.fn(() => Promise.resolve()),
     delete: jest.fn(() => Promise.resolve()),
@@ -225,7 +244,7 @@ jest.mock('@react-native-firebase/firestore', () => {
     })),
     runTransaction: jest.fn((fn) =>
       fn({
-        get: jest.fn(() => Promise.resolve({ exists: false, data: () => null })),
+        get: jest.fn(() => Promise.resolve({ exists: () => false, data: () => null })),
         set: jest.fn(),
         update: jest.fn(),
         delete: jest.fn(),
@@ -244,6 +263,16 @@ jest.mock('@react-native-firebase/firestore', () => {
   return {
     __esModule: true,
     default: fn,
+    ...require('./__mocks__/firebase-modular/namespaced-adapter'),
+    // Modular FieldValue helpers, backed by the same jest.fns as FieldValue.
+    serverTimestamp: (...args) => FieldValue.serverTimestamp(...args),
+    increment: (...args) => FieldValue.increment(...args),
+    arrayUnion: (...args) => FieldValue.arrayUnion(...args),
+    arrayRemove: (...args) => FieldValue.arrayRemove(...args),
+    deleteField: () => FieldValue.delete(),
+    getFirestore: () => mockFirestore,
+    initializeFirestore: jest.fn(() => mockFirestore),
+    connectFirestoreEmulator: jest.fn(),
     Timestamp,
     FieldValue,
     FieldPath,
@@ -256,7 +285,15 @@ jest.mock('@react-native-firebase/functions', () => {
     httpsCallable: jest.fn(() => jest.fn(() => Promise.resolve({ data: {} }))),
     useEmulator: jest.fn(),
   };
-  return { __esModule: true, default: () => mockFunctions };
+  return {
+    __esModule: true,
+    default: () => mockFunctions,
+    getFunctions: () => mockFunctions,
+    // Modular form over whatever functions instance the caller passes (often
+    // a suite's own firebase-setup mock), as namespaced-adapter does for Firestore.
+    httpsCallable: (instance, ...args) => instance.httpsCallable(...args),
+    connectFunctionsEmulator: jest.fn(),
+  };
 });
 
 jest.mock('@react-native-firebase/messaging', () => {
@@ -280,7 +317,24 @@ jest.mock('@react-native-firebase/messaging', () => {
     NOT_DETERMINED: -1,
     DENIED: 0,
   };
-  return { __esModule: true, default: fn };
+  return {
+    __esModule: true,
+    default: fn,
+    AuthorizationStatus: fn.AuthorizationStatus,
+    // Modular forms over the instance passed in.
+    getMessaging: () => mockMessaging,
+    getToken: (m, ...args) => m.getToken(...args),
+    deleteToken: (m, ...args) => m.deleteToken(...args),
+    requestPermission: (m, ...args) => m.requestPermission(...args),
+    hasPermission: (m) => m.hasPermission(),
+    onMessage: (m, ...args) => m.onMessage(...args),
+    onTokenRefresh: (m, ...args) => m.onTokenRefresh(...args),
+    onNotificationOpenedApp: (m, ...args) => m.onNotificationOpenedApp(...args),
+    getInitialNotification: (m) => m.getInitialNotification(),
+    setBackgroundMessageHandler: (m, ...args) => m.setBackgroundMessageHandler(...args),
+    subscribeToTopic: (m, ...args) => m.subscribeToTopic(...args),
+    unsubscribeFromTopic: (m, ...args) => m.unsubscribeFromTopic(...args),
+  };
 });
 
 jest.mock('@react-native-firebase/storage', () => {
@@ -297,6 +351,14 @@ jest.mock('@react-native-firebase/storage', () => {
     __esModule: true,
     default: () => mockStorage,
     FirebaseStorageTypes: {},
+    // Modular forms over the instance or ref passed in.
+    getStorage: () => mockStorage,
+    connectStorageEmulator: jest.fn(),
+    ref: (s, ...args) => s.ref(...args),
+    putFile: (r, ...args) => r.putFile(...args),
+    putString: (r, ...args) => r.putString(...args),
+    getDownloadURL: (r) => r.getDownloadURL(),
+    deleteObject: (r) => r.delete(),
   };
 });
 
@@ -308,81 +370,44 @@ jest.mock('@react-native-firebase/analytics', () => {
     setUserProperty: jest.fn(() => Promise.resolve()),
     setAnalyticsCollectionEnabled: jest.fn(() => Promise.resolve()),
   };
-  return { __esModule: true, default: () => mockAnalytics };
-});
-
-jest.mock('@react-native-firebase/crashlytics', () => {
-  const mockCrashlytics = {
-    log: jest.fn(),
-    recordError: jest.fn(),
-    setUserId: jest.fn(() => Promise.resolve()),
-    setAttribute: jest.fn(() => Promise.resolve()),
-    setCrashlyticsCollectionEnabled: jest.fn(() => Promise.resolve()),
+  return {
+    __esModule: true,
+    default: () => mockAnalytics,
+    getAnalytics: () => mockAnalytics,
+    logEvent: (a, ...args) => a.logEvent(...args),
+    logScreenView: (a, ...args) => a.logScreenView(...args),
+    setUserId: (a, ...args) => a.setUserId(...args),
+    setUserProperty: (a, ...args) => a.setUserProperty(...args),
+    setAnalyticsCollectionEnabled: (a, ...args) => a.setAnalyticsCollectionEnabled(...args),
   };
-  return { __esModule: true, default: () => mockCrashlytics };
 });
 
 // ─── notifications ───────────────────────────────────────────────────────────
-jest.mock('@notifee/react-native', () => ({
-  __esModule: true,
-  default: {
-    requestPermission: jest.fn(() => Promise.resolve({ authorizationStatus: 1 })),
-    createChannel: jest.fn(() => Promise.resolve('channel-id')),
-    displayNotification: jest.fn(() => Promise.resolve('notification-id')),
-    cancelNotification: jest.fn(() => Promise.resolve()),
-    cancelAllNotifications: jest.fn(() => Promise.resolve()),
-    onForegroundEvent: jest.fn(() => jest.fn()),
-    onBackgroundEvent: jest.fn(),
-    createTriggerNotification: jest.fn(() => Promise.resolve('trigger-id')),
-    getTriggerNotifications: jest.fn(() => Promise.resolve([])),
-    setBadgeCount: jest.fn(() => Promise.resolve()),
-  },
-  AndroidImportance: { HIGH: 4, DEFAULT: 3, LOW: 2 },
-  AuthorizationStatus: { AUTHORIZED: 1, DENIED: 0, NOT_DETERMINED: -1 },
-  EventType: { PRESS: 1, DISMISSED: 0, DELIVERED: 3 },
-  TriggerType: { TIMESTAMP: 0, INTERVAL: 1 },
-}));
-
-jest.mock('react-native-push-notification', () => ({
-  configure: jest.fn(),
-  localNotification: jest.fn(),
-  localNotificationSchedule: jest.fn(),
-  cancelAllLocalNotifications: jest.fn(),
-  cancelLocalNotification: jest.fn(),
-  createChannel: jest.fn(),
-  requestPermissions: jest.fn(() => Promise.resolve({ alert: true })),
-  setApplicationIconBadgeNumber: jest.fn(),
-  getScheduledLocalNotifications: jest.fn((cb) => cb([])),
-}));
-
-jest.mock('@react-native-community/push-notification-ios', () => ({
-  addEventListener: jest.fn(),
-  removeEventListener: jest.fn(),
-  requestPermissions: jest.fn(() => Promise.resolve({ alert: true })),
-  getInitialNotification: jest.fn(() => Promise.resolve(null)),
-  setApplicationIconBadgeNumber: jest.fn(),
-  FetchResult: { NoData: 'noData' },
-}));
+// The library's own mock: a jest.fn() for every API, and the real enums from its
+// dist types (AuthorizationStatus incl. PROVISIONAL, AndroidImportance,
+// TriggerType, AlarmType), so code under test compares against true values.
+jest.mock('react-native-notify-kit', () => require('react-native-notify-kit/jest-mock'));
 
 // ─── react-native core modules without Jest defaults ────────────────────────
 // RN's Settings module requires the native SettingsManager TurboModule,
 // which does not exist in the Jest environment (used by src/util/e2e.ts).
 jest.mock('react-native/Libraries/Settings/Settings', () => ({
-  get: jest.fn(() => undefined),
-  set: jest.fn(),
-  watchKeys: jest.fn(() => 0),
-  clearWatch: jest.fn(),
+  // RN 0.88's root export reads this module's default export.
+  __esModule: true,
+  default: {
+    get: jest.fn(() => undefined),
+    set: jest.fn(),
+    watchKeys: jest.fn(() => 0),
+    clearWatch: jest.fn(),
+  },
 }));
 
 // ─── misc native modules ─────────────────────────────────────────────────────
-jest.mock('react-native-vector-icons/MaterialCommunityIcons', () => 'Icon');
-jest.mock('react-native-vector-icons/MaterialIcons', () => 'Icon');
-jest.mock('react-native-vector-icons/FontAwesome', () => 'Icon');
-jest.mock('react-native-vector-icons/FontAwesome5', () => 'Icon');
-jest.mock('react-native-vector-icons/Ionicons', () => 'Icon');
-jest.mock('react-native-vector-icons/AntDesign', () => 'Icon');
-jest.mock('react-native-vector-icons/Feather', () => 'Icon');
-jest.mock('react-native-vector-icons/Entypo', () => 'Icon');
+// The app imports the three icon families' static entries (no Expo dynamic font loading);
+// FontAwesome5 goes through src/components/rats-icon/font-awesome-5.
+jest.mock('@react-native-vector-icons/fontawesome5/static', () => 'Icon');
+jest.mock('@react-native-vector-icons/ionicons/static', () => 'Icon');
+jest.mock('@react-native-vector-icons/material-icons/static', () => 'Icon');
 
 jest.mock('@sentry/react-native', () => ({
   init: jest.fn(),
@@ -425,45 +450,49 @@ jest.mock('react-native-permissions', () => ({
   },
 }));
 
-jest.mock('react-native-geolocation-service', () => ({
-  getCurrentPosition: jest.fn(),
-  watchPosition: jest.fn(),
-  clearWatch: jest.fn(),
-  requestAuthorization: jest.fn(() => Promise.resolve('granted')),
-}));
-
-jest.mock('@react-native-community/geolocation', () => ({
-  __esModule: true,
-  default: {
+jest.mock('@react-native-community/geolocation', () => {
+  const Geolocation = {
     getCurrentPosition: jest.fn(),
     watchPosition: jest.fn(),
     clearWatch: jest.fn(),
     requestAuthorization: jest.fn(),
-  },
-  getCurrentPosition: jest.fn(),
-  watchPosition: jest.fn(),
-  clearWatch: jest.fn(),
-}));
+    setRNConfiguration: jest.fn(),
+  };
+  return { __esModule: true, default: Geolocation, ...Geolocation };
+});
 
 jest.mock('react-native-image-picker', () => ({
   launchImageLibrary: jest.fn(() => Promise.resolve({ assets: [] })),
   launchCamera: jest.fn(() => Promise.resolve({ assets: [] })),
 }));
 
-jest.mock('react-native-document-picker', () => ({
-  __esModule: true,
-  default: {
+// The picker's errorCodes / isErrorWithCode are its real ones (pure JS); its package root loads
+// the TurboModule, so the file is required by path (its exports map hides the deep path).
+jest.mock('@react-native-documents/picker', () => {
+  const path = require('path');
+  const errors = jest.requireActual(
+    path.join(path.dirname(require.resolve('@react-native-documents/picker/package.json')), 'lib/module/errors.js'),
+  );
+  return {
     pick: jest.fn(() => Promise.resolve([])),
-    pickSingle: jest.fn(() => Promise.resolve({})),
-    types: { allFiles: 'public.item', pdf: 'com.adobe.pdf' },
-    isCancel: jest.fn(() => false),
-  },
-  pick: jest.fn(() => Promise.resolve([])),
-  types: { allFiles: 'public.item', pdf: 'com.adobe.pdf' },
-  isCancel: jest.fn(() => false),
-}));
+    keepLocalCopy: jest.fn(({ files }) =>
+      Promise.resolve(
+        files.map((f) => ({ status: 'success', sourceUri: f.uri, localUri: `file:///mock/caches/${f.fileName}` })),
+      ),
+    ),
+    types: {
+      allFiles: '*/*',
+      csv: ['text/csv', 'text/comma-separated-values'],
+      images: 'image/*',
+      pdf: 'application/pdf',
+      plainText: 'text/plain',
+    },
+    errorCodes: errors.errorCodes,
+    isErrorWithCode: errors.isErrorWithCode,
+  };
+});
 
-jest.mock('react-native-fs', () => ({
+jest.mock('@dr.pogodin/react-native-fs', () => ({
   DocumentDirectoryPath: '/mock/documents',
   TemporaryDirectoryPath: '/mock/tmp',
   readFile: jest.fn(() => Promise.resolve('')),
@@ -475,8 +504,7 @@ jest.mock('react-native-fs', () => ({
 }));
 
 jest.mock('react-native-html-to-pdf', () => ({
-  __esModule: true,
-  default: { convert: jest.fn(() => Promise.resolve({ filePath: '/mock/file.pdf' })) },
+  generatePDF: jest.fn(() => Promise.resolve({ filePath: '/mock/file.pdf' })),
 }));
 
 jest.mock('@react-native-clipboard/clipboard', () => ({
@@ -485,12 +513,6 @@ jest.mock('@react-native-clipboard/clipboard', () => ({
 }));
 
 jest.mock('@react-native-community/datetimepicker', () => {
-  const React = require('react');
-  const { View } = require('react-native');
-  return { __esModule: true, default: (props) => React.createElement(View, props) };
-});
-
-jest.mock('react-native-modal-datetime-picker', () => {
   const React = require('react');
   const { View } = require('react-native');
   return { __esModule: true, default: (props) => React.createElement(View, props) };
@@ -510,28 +532,25 @@ jest.mock('@react-native-picker/picker', () => {
   return { Picker, default: Picker };
 });
 
-jest.mock('react-native-keyboard-manager', () => ({
-  setEnable: jest.fn(),
-  setEnableAutoToolbar: jest.fn(),
-  setToolbarPreviousNextButtonEnable: jest.fn(),
-  setKeyboardDistanceFromTextField: jest.fn(),
-  setShouldResignOnTouchOutside: jest.fn(),
-}));
-
-// KeyboardAwareHOC reads Platform.constants.reactNativeVersion.major, which
-// is undefined in the Jest RN environment — mock with plain ScrollView.
-jest.mock('react-native-keyboard-aware-scroll-view', () => {
+// Keyboard handling (react-native-keyboard-controller on reanimated 4). Both
+// libraries ship Jest mocks; the worklets Babel plugin is off under Jest
+// (babel.config.js). keyboard-controller's mock renders KeyboardAwareScrollView
+// as a plain ScrollView and KeyboardStickyView / KeyboardAvoidingView as View.
+//
+// Its KeyboardToolbar mock *is* react-native's View (with Prev/Next/Done
+// statics assigned onto it), so a test could not tell the toolbar from any
+// other View. The toolbar gets its own named component here.
+jest.mock('react-native-reanimated', () => require('react-native-reanimated/mock'));
+jest.mock('react-native-keyboard-controller', () => {
   const React = require('react');
-  const { ScrollView, FlatList } = require('react-native');
-  return {
-    KeyboardAwareScrollView: React.forwardRef((props, ref) =>
-      React.createElement(ScrollView, { ...props, ref }),
-    ),
-    KeyboardAwareFlatList: React.forwardRef((props, ref) =>
-      React.createElement(FlatList, { ...props, ref }),
-    ),
-    listenToKeyboardEvents: (c) => c,
+  const { View } = require('react-native');
+  const { KeyboardToolbar: _view, ...mock } = jest.requireActual(
+    'react-native-keyboard-controller/jest',
+  );
+  const KeyboardToolbar = function KeyboardToolbar(props) {
+    return React.createElement(View, props);
   };
+  return { ...mock, KeyboardToolbar };
 });
 
 jest.mock('react-native-webview', () => {

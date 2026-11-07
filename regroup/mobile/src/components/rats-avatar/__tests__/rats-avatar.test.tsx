@@ -3,7 +3,8 @@
  */
 
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import RatsAvatar, { stringToColour } from '../index';
 
 jest.mock('../../../context', () => ({
@@ -82,6 +83,32 @@ describe('RatsAvatar', () => {
   it('uses uppercased initials', () => {
     const { getByText } = render(<RatsAvatar name="john doe" />);
     expect(getByText('JD')).toBeTruthy();
+  });
+});
+
+// The initials are sized from the measured layout. Before the first onLayout
+// the height is 0, and the New Architecture's Android text layer rejects a
+// font size of 0 ("FontSize should be a positive value"), which crashed every
+// screen showing a photo-less avatar.
+describe('RatsAvatar initials font size', () => {
+  const fontSizeOf = (ui: ReturnType<typeof render>) =>
+    StyleSheet.flatten(ui.getByText('JD').props.style).fontSize;
+
+  it('is never 0 before the first layout', () => {
+    const ui = render(<RatsAvatar name="John Doe" />);
+
+    expect(fontSizeOf(ui)).not.toBe(0);
+    expect(fontSizeOf(ui)).toBeGreaterThan(0);
+  });
+
+  it('is half the measured height once laid out', () => {
+    const ui = render(<RatsAvatar name="John Doe" />);
+
+    fireEvent(ui.getByText('JD').parent!.parent!, 'layout', {
+      nativeEvent: { layout: { height: 40, width: 40 } },
+    });
+
+    expect(fontSizeOf(ui)).toBe(20);
   });
 });
 

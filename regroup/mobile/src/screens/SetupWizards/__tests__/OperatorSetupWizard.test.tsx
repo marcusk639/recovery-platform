@@ -46,7 +46,10 @@ jest.mock('../../../firebase-setup', () => ({
   },
 }));
 
+// The services build their refs with the modular functions at load; the
+// namespaced adapter maps them onto the firebase-setup mock.
 jest.mock('@react-native-firebase/firestore', () => ({
+  ...require('../../../../__mocks__/firebase-modular/namespaced-adapter'),
   firebase: {},
   FirebaseFirestoreTypes: {},
 }));
@@ -106,21 +109,6 @@ jest.mock('../../../services/guest', () => ({
 jest.mock('../../../services/organization', () => ({
   createOrganization: jest.fn(() => Promise.resolve({ id: 'org-1' })),
 }));
-
-// ─── ViewPager mock (legacy — kept for any indirect imports) ──────────────────
-// The wizard no longer uses ViewPager. The new layout uses RatsWizardSlide
-// (state-based, no ref). This mock is retained as a safety net for any
-// transitive imports while the migration completes.
-jest.mock('react-native-best-viewpager', () => {
-  const React = require('react');
-  const { View } = require('react-native');
-  const ViewPager = React.forwardRef((props: any, ref: any) => {
-    React.useImperativeHandle(ref, () => ({ setPage: jest.fn() }));
-    return <View testID={props.testID || 'view-pager'}>{props.children}</View>;
-  });
-  ViewPager.displayName = 'ViewPager';
-  return { ViewPager };
-});
 
 // ─── Shared wizard primitives ─────────────────────────────────────────────────
 // The new parent uses three shared components: RatsWizardProgress (replaces
@@ -228,11 +216,9 @@ jest.mock('../../../components/setup-buttons', () => {
   };
 });
 
-// ─── Keyboard manager mock (iOS-only native module) ───────────────────────────
-jest.mock('react-native-keyboard-manager', () => ({
-  setEnable: jest.fn(),
-  setKeyboardDistanceFromTextField: jest.fn(),
-}));
+// ─── Keyboard ──────────────────────────────────────────────────────────────────
+// react-native-keyboard-manager is gone (plan Task 15); jest.setup.js mocks
+// its replacement, react-native-keyboard-controller.
 
 // ─── Image picker mock ────────────────────────────────────────────────────────
 jest.mock('../../../components/rats-image-picker', () => {
@@ -345,6 +331,7 @@ jest.mock('../../../components/rats-scroll-view', () => {
 
 // ─── React imports ────────────────────────────────────────────────────────────
 import React from 'react';
+import { keyboardAncestor } from '../../../components/rats-keyboard/__tests__/keyboardAncestor';
 import { render, fireEvent } from '@testing-library/react-native';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
@@ -695,5 +682,14 @@ describe('OperatorSetupWizard', () => {
         renderSetupHeader({ header: 'Guests', text: undefined }),
       ).not.toThrow();
     });
+  });
+});
+
+// ─── Keyboard (plan Task 15) ──────────────────────────────────────────────────
+describe('OperatorSetupWizard keyboard', () => {
+  it('puts the steps and the pinned Back/Next row in the Android resize view', () => {
+    const { getByTestId } = renderWizard();
+    expect(keyboardAncestor(getByTestId('operator-wizard-slide'))).toBe('RatsKeyboardAvoidingView');
+    expect(keyboardAncestor(getByTestId('wizard-next-button'))).toBe('RatsKeyboardAvoidingView');
   });
 });

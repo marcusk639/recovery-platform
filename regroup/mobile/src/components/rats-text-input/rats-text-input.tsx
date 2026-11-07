@@ -31,9 +31,9 @@ interface Props {
     contentContainer: {};
   }>;
   sideButtonPress?: () => void;
-  lowerContent?: JSX.Element;
+  lowerContent?: React.JSX.Element;
   currentLocation?: boolean;
-  renderCornerIcon?: () => JSX.Element;
+  renderCornerIcon?: () => React.JSX.Element;
   touchedValue?: boolean;
   labelColor?: string;
   disabled?: boolean;
@@ -223,7 +223,7 @@ const RatsTextInput = (props: Props & TextInputProps) => {
     capitalize = props.numberOfLines ? 'sentences' : 'words';
   }
 
-  const googlePlacesRef = useRef<GooglePlacesAutocompleteRef>();
+  const googlePlacesRef = useRef<GooglePlacesAutocompleteRef | undefined>(undefined);
 
   const setGooglePlacesRef = (ref: GooglePlacesAutocompleteRef) => {
     googlePlacesRef.current = ref;

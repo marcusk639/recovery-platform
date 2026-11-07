@@ -7,6 +7,9 @@ export type SentryOptions = {
   enabled: boolean;
   environment: string;
   tracesSampleRate: number;
+  sendDefaultPii: false;
+  attachScreenshot: false;
+  attachViewHierarchy: false;
 };
 
 /**
@@ -18,6 +21,11 @@ export type SentryOptions = {
  * an event that gets through anyway is recognisable. The DSN is withheld as
  * well, not only `enabled: false`: without one, neither the JS nor the native
  * SDK has anywhere to send.
+ *
+ * Privacy (Sentry RN 8): no default PII (IP address, user identifiers), no
+ * screenshots and no view hierarchy, since screens show residents' names,
+ * recovery and payment details. Session replay is not configured (no replay
+ * sample rates, no replay integration), so it stays off.
  */
 export const sentryOptions = (): SentryOptions => {
   const variant = e2eVariant();
@@ -26,5 +34,8 @@ export const sentryOptions = (): SentryOptions => {
     enabled: variant === null,
     environment: variant !== null ? `e2e-${variant}` : __DEV__ ? 'development' : 'production',
     tracesSampleRate: 0.2,
+    sendDefaultPii: false,
+    attachScreenshot: false,
+    attachViewHierarchy: false,
   };
 };

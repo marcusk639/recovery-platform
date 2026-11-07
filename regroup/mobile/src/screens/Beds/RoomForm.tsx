@@ -36,7 +36,7 @@ interface NotificationButton {
 interface Props {
   dismissFormModal: () => void;
   room?: Room;
-  renderBedItem: (bed: Bed, room: Room, content?: JSX.Element) => JSX.Element;
+  renderBedItem: (bed: Bed, room: Room, content?: React.JSX.Element) => React.JSX.Element;
   action: 'add' | 'edit';
   notify?: (
     header: string,

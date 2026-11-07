@@ -68,7 +68,7 @@ describe('PaymentDashboard — CSV Export', () => {
   beforeEach(() => {
     jest
       .spyOn(Share, 'share')
-      .mockResolvedValue({ action: Share.sharedAction });
+      .mockResolvedValue({ action: Share.sharedAction, activityType: undefined });
   });
 
   afterEach(() => {

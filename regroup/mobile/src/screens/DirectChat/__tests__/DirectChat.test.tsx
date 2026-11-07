@@ -88,15 +88,8 @@ jest.mock("../../../services/message", () => ({
 }));
 
 // ─── Native module mocks ──────────────────────────────────────────────────────
-jest.mock("react-native-keyboard-manager", () => ({
-  setEnable: jest.fn(),
-  setEnableAutoToolbar: jest.fn(),
-  setToolbarDoneBarButtonItemText: jest.fn(),
-  setLayoutIfNeededOnUpdate: jest.fn(),
-  setKeyboardDistanceFromTextField: jest.fn(),
-  setPreventShowingBottomBlankSpace: jest.fn(),
-  setShouldResignOnTouchOutside: jest.fn(),
-}));
+// react-native-keyboard-manager is gone (plan Task 15); jest.setup.js mocks
+// its replacement, react-native-keyboard-controller.
 
 jest.mock("react-native-iphone-x-helper", () => ({
   getBottomSpace: jest.fn(() => 0),
@@ -723,5 +716,36 @@ describe("DirectChat", () => {
 
       expect(mockUnsubscribe).toHaveBeenCalled();
     });
+  });
+});
+
+// ─── Keyboard (plan Task 15) ──────────────────────────────────────────────────
+describe("DirectChat composer keyboard", () => {
+  beforeEach(() => {
+    mockLoadDirectChat.mockResolvedValue([]);
+  });
+
+  it("puts the composer in RatsKeyboardStickyView with its old layout props, above the toolbar", async () => {
+    const { RatsKeyboardStickyView, KEYBOARD_TOOLBAR_SPACE } = require("../../../components/rats-keyboard");
+    const { normalize, color } = require("../../../styles/theme");
+    const { StyleSheet } = require("react-native");
+    const view = renderScreen();
+    const input = await view.findByPlaceholderText("Type a message");
+    let node: any = input.parent;
+    while (node && node.type !== RatsKeyboardStickyView) {
+      node = node.parent;
+    }
+    expect(node).toBeTruthy();
+    expect(StyleSheet.flatten(node.props.style)).toEqual({
+      width: "100%",
+      height: normalize(50),
+      paddingHorizontal: normalize(10),
+      backgroundColor: color.white,
+      paddingTop: normalize(5),
+      bottom: 0,
+      position: "absolute",
+    });
+    // Outside a safe-area provider the bottom inset is 0.
+    expect(node.props.offset).toEqual({ closed: 0, opened: 0 - KEYBOARD_TOOLBAR_SPACE });
   });
 });

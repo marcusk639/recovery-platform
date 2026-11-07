@@ -1,7 +1,7 @@
 import { View } from 'react-native';
 import React from 'react';
 import Picker, { Item } from 'react-native-picker-select';
-import IoniconsIcon from 'react-native-vector-icons/Ionicons';
+import IoniconsIcon from '@react-native-vector-icons/ionicons/static';
 import { pickerSelectStyles, styles } from './styles';
 import RatsLabel from '../rats-label/rats-label';
 import { normalize, color } from '../../styles/theme';
@@ -52,21 +52,31 @@ interface Props extends HOCProps {
  * Select Picker which works both with and without Formik
  * @param {*} props
  */
-const RatsPicker = (props: Props): JSX.Element => {
+const defaultGetPickerItems = (pickerItems: any, t?: (key: string) => string) =>
+  Object.keys(pickerItems).map(key => ({
+    key,
+    label: t ? t(key) : key,
+    value: pickerItems[key],
+  }));
+
+// Defaults in the destructuring: React 19 ignores defaultProps on function
+// components. These are the former defaultProps that the component reads;
+// disabled, placeholder, style and mode were defaulted but never read.
+const RatsPicker = (props: Props): React.JSX.Element => {
   const {
-    field: { name, value },
-    form: { errors, touched, setFieldValue },
-    labelDisabled,
+    field: { name, value } = { onBlur: () => {} } as Props['field'],
+    form: { errors, touched, setFieldValue } = { errors: {}, touched: {} } as Props['form'],
+    labelDisabled = false,
     pickerItems,
-    getPickerItems,
+    getPickerItems = defaultGetPickerItems,
     handleValueChange,
-    label,
+    label = 'forgot label',
     itemKey,
-    containerStyle,
+    containerStyle = {},
     items,
     labelStyle = {},
     t,
-    translate,
+    translate = true,
   } = props;
   let _ref: any;
   return (
@@ -83,7 +93,9 @@ const RatsPicker = (props: Props): JSX.Element => {
       <Picker
         value={value}
         itemKey={itemKey}
-        ref={ref => (_ref = ref)}
+        ref={ref => {
+          _ref = ref;
+        }}
         onDonePress={() => _ref.setState({ showPicker: false })}
         items={items || getPickerItems(pickerItems, translate && t ? t : undefined)}
         useNativeAndroidPickerStyle={false}
@@ -103,39 +115,15 @@ const RatsPicker = (props: Props): JSX.Element => {
             }
           }
         }}
-        Icon={
-          <IoniconsIcon name="md-arrow-down" size={normalize(24)} color="gray" />
-        }
+        // A component, not an element: the library renders <Icon />, and an
+        // element there throws "Element type is invalid" (React 18 and 19 alike).
+        Icon={() => <IoniconsIcon name="arrow-down" size={normalize(24)} color="gray" />}
       />
       {name && errors?.[name] && touched?.[name] && (
         <RatsLabel style={[styles.error]} label={errors[name]} />
       )}
     </View>
   );
-};
-
-RatsPicker.defaultProps = {
-  translate: true,
-  disabled: false,
-  placeholder: '',
-  style: {},
-  field: {
-    onBlur: () => {},
-  },
-  form: {
-    errors: {},
-    touched: {},
-  },
-  labelDisabled: false,
-  mode: 'dropdown',
-  getPickerItems: (pickerItems: any, t?: (key: string) => string) =>
-    Object.keys(pickerItems).map(key => ({
-      key,
-      label: t ? t(key) : key,
-      value: pickerItems[key],
-    })),
-  label: 'forgot label',
-  containerStyle: {},
 };
 
 export default withRats(RatsPicker);

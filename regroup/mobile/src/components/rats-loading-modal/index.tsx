@@ -1,7 +1,7 @@
 import React, { Component } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Modal from 'react-native-modal';
-import FontAwesome5 from 'react-native-vector-icons/FontAwesome5';
+import FontAwesome5 from '../rats-icon/font-awesome-5';
 import RatsLoadingIndicator from '../rats-loading-indicator/rats-loading-indicator';
 import { RatsText } from '../rats-text';
 import { color, windowHeight, normalize, fontSize } from '../../styles/theme';
@@ -63,7 +63,7 @@ interface Props {
   loadingMessage: string;
   success: boolean;
   error: string;
-  errorTemplate?: () => JSX.Element | JSX.Element[];
+  errorTemplate?: () => React.JSX.Element | React.JSX.Element[];
 }
 
 interface State {

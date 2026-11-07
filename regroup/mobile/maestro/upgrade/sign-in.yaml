@@ -1,0 +1,39 @@
+# Upgrade-in-place, step 1 (run on the OLD build): sign in as the seeded guest and
+# leave the session in place. maestro/scripts/upgrade-in-place.sh runs this,
+# installs the new build over the old one, then runs still-signed-in.yaml.
+appId: ${APP_ID}
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+# Sign-in steps of subflows/login.yaml, inlined because that subflow's hideKeyboard
+# fails on the RN 0.72 iOS build; waitForAnimationToEnd lets the keyboard settle.
+- launchApp:
+    clearState: true
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "initial-landing-screen"
+    timeout: 30000
+- tapOn:
+    id: "sign-in-button"
+- extendedWaitUntil:
+    visible:
+      id: "email-input"
+    timeout: 15000
+- tapOn:
+    id: "email-input"
+- inputText: test-guest-a@rats-e2e.com
+- waitForAnimationToEnd
+- tapOn:
+    id: "password-input"
+- waitForAnimationToEnd
+- inputText: ${E2E_TEST_PASSWORD}
+- tapOn:
+    id: "login-button"
+- tapOn:
+    text: "Not Now"
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: "house-tab"
+    timeout: 60000

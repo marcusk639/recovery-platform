@@ -6,22 +6,6 @@ import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { RatsCheckbox } from '../index';
 
-// Provide a virtual module so Jest can resolve the native checkbox
-jest.mock(
-  '@react-native-community/checkbox',
-  () => {
-    const { View } = require('react-native');
-    const MockCheckBox = (props: any) => (
-      <View
-        testID={props.testID || 'checkbox'}
-        accessibilityValue={{ text: props.value ? 'checked' : 'unchecked' }}
-      />
-    );
-    return MockCheckBox;
-  },
-  { virtual: true },
-);
-
 jest.mock('../../../context', () => ({
   useTheme: () => ({
     theme: {

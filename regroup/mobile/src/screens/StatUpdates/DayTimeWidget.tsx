@@ -1,6 +1,6 @@
 import { TouchableOpacity, View, Platform, Text } from 'react-native';
 import React, { useState, useCallback, Fragment } from 'react';
-import Icon from 'react-native-vector-icons/Ionicons';
+import Icon from '@react-native-vector-icons/ionicons/static';
 import settings from '../../settings/time';
 import { FieldProps, Field } from 'formik';
 import { DaysAndTimes } from '../../entities/Meeting';
@@ -167,7 +167,7 @@ const DayTimeWidget: React.FC<Props & FieldProps> = props => {
                   style={{ fontSize: fontSize.medium }}
                 />
                 <Icon
-                  name="md-arrow-down"
+                  name="arrow-down"
                   size={normalize(24)}
                   style={{
                     color: color.dark_grey,

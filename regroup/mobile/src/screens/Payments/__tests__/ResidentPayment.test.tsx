@@ -17,16 +17,11 @@
 // ─── Navigation mock ──────────────────────────────────────────────────────────
 jest.mock('@react-navigation/native-stack', () => ({}));
 
-// ─── Push notification mock ───────────────────────────────────────────────────
-// Required because ResidentPayment now statically imports cancelRentReminder
-// from rentReminder.ts, which in turn imports react-native-push-notification.
-// Without this mock the NativeEventEmitter instantiation inside the library's
-// iOS entry point throws in the Jest (non-native) environment.
-jest.mock('react-native-push-notification', () => ({
-  localNotificationSchedule: jest.fn(),
-  cancelLocalNotification: jest.fn(),
-  checkPermissions: jest.fn(),
-}));
+// ─── Notification library mock ────────────────────────────────────────────────
+// Required because ResidentPayment statically imports cancelRentReminder from
+// rentReminder.ts, which in turn imports react-native-notify-kit, a native
+// TurboModule that does not exist in the Jest (non-native) environment.
+jest.mock('react-native-notify-kit', () => require('react-native-notify-kit/jest-mock'));
 
 // ─── Context mock ─────────────────────────────────────────────────────────────
 jest.mock('../../../context', () => ({

@@ -18,7 +18,7 @@ export function renderField(
   labelColor?: string,
   labelStyle?: TextStyle,
   touchedValue?: boolean,
-  renderCornerIcon?: () => JSX.Element,
+  renderCornerIcon?: () => React.JSX.Element,
   style?: any,
   numberOfLines?: number,
   lowercase?: boolean,

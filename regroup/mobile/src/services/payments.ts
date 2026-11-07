@@ -7,8 +7,21 @@
  * CF-backed listing for the payments dashboard.
  */
 import { firestore, functions } from "../../firebase-setup";
-import FirebaseFirestore from "@react-native-firebase/firestore";
-import type { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
+import {
+  collection,
+  doc,
+  getDocs,
+  increment,
+  limit as limitTo,
+  orderBy,
+  query,
+  runTransaction,
+  Timestamp,
+  updateDoc,
+  where,
+  writeBatch,
+} from "@react-native-firebase/firestore";
+import { httpsCallable } from "@react-native-firebase/functions";
 import { asDollars, dollarsToCents } from "../util/money";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -26,7 +39,7 @@ export interface RentPayment {
    * (see newPaymentCreatedAt). ISO strings remain on records written before;
    * functions' migratePaymentCreatedAtToTimestamp converts them.
    */
-  createdAt: FirebaseFirestoreTypes.Timestamp | string;
+  createdAt: Timestamp | string;
   stripePaymentIntentId?: string;
   description?: string; // e.g. 'Monthly Rent', 'Chore Fee'
   /**
@@ -67,7 +80,7 @@ export interface HousePaymentRecord extends PaymentRecord {
 
 // ─── Firestore collection ─────────────────────────────────────────────────────
 
-export const paymentsCollection = firestore.collection("payments");
+export const paymentsCollection = collection(firestore, "payments");
 
 // ─── Legacy Firestore-backed service functions ────────────────────────────────
 
@@ -140,7 +153,7 @@ export async function createRentPaymentIntent({
       `Payment amount ${amountInCents} exceeds maximum (${MAX_PAYMENT_CENTS} cents / $100,000).`
     );
   }
-  const response = await functions.httpsCallable("createPaymentIntent")({
+  const response = await httpsCallable(functions, "createPaymentIntent")({
     amount: amountInCents,
     guestId,
     houseId,
@@ -158,8 +171,7 @@ export async function createRentPaymentIntent({
  * descending orderBy("createdAt") (getPaymentHistory) put every string-dated
  * payment above every card payment regardless of date.
  */
-export const newPaymentCreatedAt = (date: Date): FirebaseFirestoreTypes.Timestamp =>
-  FirebaseFirestore.Timestamp.fromDate(date);
+export const newPaymentCreatedAt = (date: Date): Timestamp => Timestamp.fromDate(date);
 
 /**
  * Write an optimistic payment record to Firestore immediately after the
@@ -194,12 +206,12 @@ export async function recordRentPayment(
   guestUserId?: string,
 ): Promise<RentPayment> {
   const docRef = stripePaymentIntentId
-    ? paymentsCollection.doc(stripePaymentIntentId)
-    : paymentsCollection.doc();
+    ? doc(paymentsCollection, stripePaymentIntentId)
+    : doc(paymentsCollection);
 
-  return firestore.runTransaction(async (transaction) => {
+  return runTransaction(firestore, async (transaction) => {
     const snap = await transaction.get(docRef);
-    const existing = snap.exists ? (snap.data() as RentPayment) : undefined;
+    const existing = snap.exists() ? (snap.data() as RentPayment) : undefined;
 
     if (existing && existing.status !== "pending") {
       // The webhook already made this record authoritative — don't
@@ -257,17 +269,20 @@ export async function getPaymentHistory(
   if (!houseId || !guestUserId) {
     throw new Error('getPaymentHistory: houseId and guestUserId are required');
   }
-  const snapshot = await paymentsCollection
-    .where('houseId', '==', houseId)
-    .where('guestUserId', '==', guestUserId)
-    .orderBy("createdAt", "desc")
-    .limit(limit)
-    .get();
+  const snapshot = await getDocs(
+    query(
+      paymentsCollection,
+      where('houseId', '==', houseId),
+      where('guestUserId', '==', guestUserId),
+      orderBy("createdAt", "desc"),
+      limitTo(limit)
+    )
+  );
 
   if (!snapshot.docs.length) {
     return [];
   }
-  return snapshot.docs.map((doc) => doc.data() as RentPayment);
+  return snapshot.docs.map((payment) => payment.data() as RentPayment);
 }
 
 // ─── CF-backed service functions ──────────────────────────────────────────────
@@ -295,7 +310,7 @@ export async function listPayments(
   houseId: string,
   limit = 20
 ): Promise<PaymentRecord[]> {
-  const result = await functions.httpsCallable("listPayments")({
+  const result = await httpsCallable(functions, "listPayments")({
     guestId,
     houseId,
     limit,
@@ -307,7 +322,7 @@ export async function listHousePayments(
   houseId: string,
   limit = 100
 ): Promise<HousePaymentRecord[]> {
-  const result = await functions.httpsCallable("listHousePayments")({
+  const result = await httpsCallable(functions, "listHousePayments")({
     houseId,
     limit,
   });
@@ -345,7 +360,7 @@ export async function recordManualPayment(
       `Invalid payment amount: ${amountInCents}. Must be a positive integer (cents).`
     );
   }
-  const docRef = paymentsCollection.doc();
+  const docRef = doc(paymentsCollection);
   const now = new Date();
   const record: HousePaymentRecord = {
     id: docRef.id,
@@ -364,10 +379,10 @@ export async function recordManualPayment(
   // exactly the "stays listed as overdue forever" bug this function exists
   // to fix, just relocated to the failure path. A batch makes both writes
   // succeed or fail together.
-  const batch = firestore.batch();
+  const batch = writeBatch(firestore);
   batch.set(docRef, { ...record, createdAt: newPaymentCreatedAt(now) });
-  batch.update(firestore.collection("guests").doc(guestId), {
-    rentOwed: FirebaseFirestore.FieldValue.increment(-amountInCents),
+  batch.update(doc(collection(firestore, "guests"), guestId), {
+    rentOwed: increment(-amountInCents),
   });
   await batch.commit();
   return record;
@@ -380,7 +395,7 @@ export async function recordManualPayment(
 export async function markPaymentResolvedOffline(
   paymentId: string
 ): Promise<void> {
-  await paymentsCollection.doc(paymentId).update({
+  await updateDoc(doc(paymentsCollection, paymentId), {
     status: "resolved_offline",
     resolvedAt: new Date().toISOString(),
   });

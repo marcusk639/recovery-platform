@@ -1,4 +1,4 @@
-import FirebaseFirestore from '@react-native-firebase/firestore';
+import { doc, serverTimestamp, writeBatch } from '@react-native-firebase/firestore';
 import { firestore } from '../../firebase-setup';
 import { guestCollection, createGuestId } from './guest';
 import { logException } from '../util/logging';
@@ -88,10 +88,10 @@ export async function importGuestsFromRows(
 
   try {
     for (let start = 0; start < rows.length; start += BATCH_LIMIT) {
-      const batch = firestore.batch();
+      const batch = writeBatch(firestore);
       const slice = rows.slice(start, start + BATCH_LIMIT);
       for (const row of slice) {
-        const docRef = guestCollection.doc(createGuestId());
+        const docRef = doc(guestCollection, createGuestId());
         batch.set(docRef, {
           ...row,
           id: docRef.id,
@@ -110,7 +110,7 @@ export async function importGuestsFromRows(
           phase: 'default',
           step: 1,
           createdAt: new Date().toISOString(),
-          updatedAt: FirebaseFirestore.FieldValue.serverTimestamp(),
+          updatedAt: serverTimestamp(),
         });
       }
       await batch.commit();
