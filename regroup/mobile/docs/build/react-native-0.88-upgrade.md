@@ -1594,6 +1594,8 @@ CI runs the unit suite and the ratchet on every push of the branch.
 
 ### 7.3 Not verified yet (owner, on devices)
 
+Step-by-step instructions, with a results table to fill in: `regroup/docs/operations/manual-tasks/2026-11-06-rn-0.88-merge-device-pass.md`.
+
 - Upgrade in place from the current store build, on both platforms: no forced sign-out, FCM still
   delivers, and (iOS) paying leaves no stale rent reminder.
 - Pushes: a data-only push and a `notification`-type push in the foreground, a background push on
