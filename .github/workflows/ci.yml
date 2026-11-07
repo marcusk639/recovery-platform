@@ -225,6 +225,11 @@ jobs:
       # imply coverage it has not got.
       - name: Typecheck
         run: cd regroup/web && npx tsc --noEmit -p tsconfig.spec.json
+      # The deploy-check scripts (scripts/*.test.js): fixtures only, no build.
+      # They guard the predeploy bundle check that keeps staging and production
+      # bundles from deploying to the wrong project.
+      - name: Deploy-check script tests
+        run: cd regroup/web && npm run test:scripts
 
   detox-recovery:
     name: detox-recovery — typecheck + test

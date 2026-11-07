@@ -9,25 +9,28 @@
  *   firebase-web-config.json         the regroup-e2e web app's Firebase config
  *   stripe-e2e-publishable-key.txt   the e2e Stripe sandbox's pk_test_ key
  * Without the key file it writes a pk_test_ placeholder and says so: the app
- * builds and renders, but Stripe checkout cannot work until the key is added.
- * Refuses a live key and any web config not for regroup-e2e.
+ * builds and renders, but Stripe checkout cannot work, and the staging deploy
+ * check (verify-ssr-target.js) refuses the bundle.
+ *
+ * It applies the guard's rules before writing anything, so a config the app
+ * would refuse at startup fails here instead: the regroup-e2e project,
+ * authDomain and bucket, no production value in any field, and a pk_test_ key.
+ * databaseURL and measurementId are dropped: the guard refuses them, and the
+ * e2e builds use neither.
  */
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
 const PROJECT = 'regroup-e2e';
+const BUCKETS = ['regroup-e2e.appspot.com', 'regroup-e2e.firebasestorage.app'];
 const PLACEHOLDER = 'pk_test_PLACEHOLDER_NO_CHECKOUT';
-const FIELDS = [
-  'apiKey',
-  'authDomain',
-  'projectId',
-  'storageBucket',
-  'messagingSenderId',
-  'appId',
-  'databaseURL',
-  'measurementId',
-];
+const FIELDS = ['apiKey', 'authDomain', 'projectId', 'storageBucket', 'messagingSenderId', 'appId'];
+
+function productionApiKey() {
+  const prod = fs.readFileSync(path.resolve(__dirname, '../src/environments/environment.prod.ts'), 'utf8');
+  return (prod.match(/apiKey:\s*["']([^"']+)["']/) || [])[1];
+}
 
 function renderConfig(web, publishableKey) {
   const firebaseConfig = {};
@@ -39,30 +42,60 @@ function renderConfig(web, publishableKey) {
   );
 }
 
-function generate({ configDir, outFile }) {
+// Mirrors assertE2eStagingConfig in src/environments/e2e-staging-guard.ts.
+function validate(web, key, prodApiKey) {
+  const markers = ['phoenix-cleanhouse', '155667333239', prodApiKey].filter(Boolean);
+  for (const f of FIELDS) {
+    const v = web[f];
+    if (typeof v === 'string' && markers.some((m) => v.includes(m))) {
+      throw new Error(`firebase-web-config.json has a production value in ${f}; it must be the ${PROJECT} web app config`);
+    }
+  }
+  if (web.projectId !== PROJECT) throw new Error(`firebase-web-config.json is for ${web.projectId}, not ${PROJECT}`);
+  if (web.authDomain !== `${PROJECT}.firebaseapp.com`) {
+    throw new Error(`firebase-web-config.json must use authDomain ${PROJECT}.firebaseapp.com`);
+  }
+  if (!BUCKETS.includes(web.storageBucket)) {
+    throw new Error(`firebase-web-config.json must use storage bucket ${BUCKETS.join(' or ')}`);
+  }
+  if (!key.startsWith('pk_test_')) throw new Error('stripe-e2e-publishable-key.txt must hold a pk_test_ key');
+}
+
+function generate({ configDir, outFile, prodApiKey = productionApiKey() }) {
   const webFile = path.join(configDir, 'firebase-web-config.json');
-  if (!fs.existsSync(webFile))
-    throw new Error(`missing ${webFile} (the regroup-e2e web app config)`);
-  const web = JSON.parse(fs.readFileSync(webFile, 'utf8'));
-  if (web.projectId !== PROJECT)
-    throw new Error(`${webFile} is for ${web.projectId}, not ${PROJECT}`);
+  if (!fs.existsSync(webFile)) throw new Error(`missing ${webFile} (the regroup-e2e web app config)`);
+  let web;
+  try {
+    web = JSON.parse(fs.readFileSync(webFile, 'utf8'));
+  } catch (err) {
+    throw new Error(`${webFile} is not valid JSON (${err.message})`);
+  }
   const keyFile = path.join(configDir, 'stripe-e2e-publishable-key.txt');
   const key = fs.existsSync(keyFile) ? fs.readFileSync(keyFile, 'utf8').trim() : PLACEHOLDER;
-  if (!key.startsWith('pk_test_')) throw new Error(`${keyFile} must hold a pk_test_ key`);
+  validate(web, key, prodApiKey);
   fs.writeFileSync(outFile, renderConfig(web, key));
   return { outFile, placeholder: key === PLACEHOLDER };
 }
 
+function parseArgs(argv) {
+  const out = { configDir: path.join(os.homedir(), '.config', 'regroup-e2e') };
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] !== '--config-dir') throw new Error(`unknown argument ${argv[i]}`);
+    const v = argv[++i];
+    if (!v || v.startsWith('--')) throw new Error('--config-dir needs a value');
+    out.configDir = v;
+  }
+  return out;
+}
+
 if (require.main === module) {
-  const i = process.argv.indexOf('--config-dir');
-  const configDir = i > 0 ? process.argv[i + 1] : path.join(os.homedir(), '.config', 'regroup-e2e');
   const outFile = path.resolve(__dirname, '..', 'src/environments/e2e-staging.generated.ts');
   try {
-    const r = generate({ configDir, outFile });
+    const r = generate({ ...parseArgs(process.argv.slice(2)), outFile });
     console.log(`wrote ${path.relative(process.cwd(), r.outFile)}`);
     if (r.placeholder) {
       console.warn(
-        'WARNING: no stripe-e2e-publishable-key.txt; used a placeholder key. Pages render, Stripe checkout will not work.',
+        'WARNING: no stripe-e2e-publishable-key.txt; used a placeholder key. Pages render, Stripe checkout will not work, and the staging deploy check will refuse this build.',
       );
     }
   } catch (err) {
@@ -71,4 +104,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { renderConfig, generate, PLACEHOLDER };
+module.exports = { renderConfig, generate, parseArgs, PLACEHOLDER };

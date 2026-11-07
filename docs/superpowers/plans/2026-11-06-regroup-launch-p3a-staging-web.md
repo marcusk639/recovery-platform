@@ -49,8 +49,7 @@
 
 **Interfaces:**
 
-- `checkTree(rootDirs: string[], { expect: string[] }): { ok: boolean, problems: string[] }`. It is ok only if every root has at least one `.js` file and every `expect` string appears in at least one file under **each** root.
-- CLI: `node scripts/verify-ssr-target.js --expect <projectId> [--root <dir> …]`. The defaults are `dist/sapp/browser` and `dist/sapp/server`. The expected strings are the project id and `apiKey` read from `src/environments/e2e-staging.generated.ts`, which must be for `<projectId>`. It exits 1 with the problems listed.
+- `checkTree(rootDirs, { expect, forbid })` and `verify({ project, roots, identical })` in `scripts/verify-ssr-target.js`, which runs after the staging build and as the hosting and functions predeploy. What each project's bundle must and must not contain, and the CLI, are in the script's header and in `regroup/web/CLAUDE.md` § Staging. Only a `regroup-e2e` check reads the generated config; a `phoenix-cleanhouse` check reads `environment.prod.ts` for the `pk_live_` key.
 - `gen-e2e-staging-config.js` writes that generated file from `~/.config/regroup-e2e/` (tests: `gen-e2e-staging-config.test.js`).
 
 - [x] **Step 1:** Write failing tests with fixture trees in `os.tmpdir()`:
@@ -66,7 +65,7 @@
 ### Task 2: Deploy to `regroup-e2e` and smoke it
 
 - [x] **Step 1:** `npm run build:copy-to-functions && npm run test:ssr`. Expected: the SSR render smoke passes locally against the staging server bundle.
-- [x] **Step 2:** `firebase deploy --project regroup-e2e --only hosting,functions:web:ssr`. Needs `functions/.env.regroup-e2e` (`SSR_MIN_INSTANCES=0`); without it Firebase refuses, because `minInstances: 1` raises the minimum bill. Expected: the deploy completes, and the hosting URL is `https://regroup-e2e.web.app`.
+- [x] **Step 2:** `firebase deploy --project regroup-e2e --only hosting,functions:web:ssr`. Needs `functions/.env.regroup-e2e` (`SSR_MIN_INSTANCES=0`). Without a value for the param, a `--non-interactive` deploy refuses and an interactive one prompts; with `minInstances: 1` it would also need `--force`, because that raises the minimum bill. Expected: the deploy completes, and the hosting URL is `https://regroup-e2e.web.app`.
 - [x] **Step 3:** Smoke the deployed site. `/`, `/pricing` and `/signup` return 200 with content inside `<app-root>`. The served main JS bundle contains `regroup-e2e` and the staging API key, and no placeholder key (production markers are expected: see the Task 1 ruling).
 - [x] **Step 4:** Record the result in spec §3.5 (staging web is deployed, with the date) and in the roadmap's P3 row.
 

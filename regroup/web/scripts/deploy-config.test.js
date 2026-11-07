@@ -32,28 +32,56 @@ test('the staging environment runs in production mode', () => {
   assert.match(read('src/environments/environment.e2e-staging.ts'), /production:\s*true/);
 });
 
-test('hosting and functions deploys both run the bundle check against the target project', () => {
+// Splits a predeploy command into tokens; double quotes group, nothing else.
+function tokens(cmd) {
+  return [...cmd.matchAll(/"([^"]*)"|(\S+)/g)].map((m) => (m[1] !== undefined ? m[1] : m[2]));
+}
+
+test('hosting and functions deploys both run the bundle check on everything they ship', () => {
   const fb = json('firebase.json');
+  const shipped = new Set([
+    `$PROJECT_DIR/${fb.hosting.public}`,
+    `$PROJECT_DIR/${fb.functions[0].source}/dist/sapp/browser`,
+    `$PROJECT_DIR/${fb.functions[0].source}/dist/sapp/server`,
+  ]);
   for (const [name, hooks] of [
     ['hosting', fb.hosting.predeploy],
     ['functions', fb.functions[0].predeploy],
   ]) {
-    const cmd = (hooks || []).join('\n');
-    assert.match(cmd, /verify-ssr-target\.js/, `${name} predeploy has no bundle check`);
-    assert.match(cmd, /--expect "\$GCLOUD_PROJECT"/, `${name} check isn't tied to the target`);
-    assert.match(cmd, /dist\/sapp\/browser/, `${name} check skips the hosting bundle`);
-    assert.match(cmd, /functions\/dist\/sapp\/server/, `${name} check skips the deployed server bundle`);
+    assert.strictEqual((hooks || []).length, 1, `${name} needs exactly one predeploy command`);
+    const cmd = hooks[0];
+    assert.doesNotMatch(cmd, /[;&|<>`]|\$\(/, `${name} predeploy must be a single plain command`);
+    const t = tokens(cmd);
+    assert.deepStrictEqual(t.slice(0, 2), ['node', '$PROJECT_DIR/scripts/verify-ssr-target.js']);
+    const values = (flag) => t.flatMap((x, i) => (x === flag ? [t[i + 1]] : []));
+    assert.deepStrictEqual(values('--expect'), ['$GCLOUD_PROJECT'], `${name} check isn't tied to the target`);
+    assert.deepStrictEqual(new Set(values('--root')), shipped, `${name} check doesn't cover what ships`);
+    const at = t.indexOf('--identical');
+    assert.deepStrictEqual(t.slice(at + 1, at + 3), [
+      `$PROJECT_DIR/${fb.hosting.public}/index.html`,
+      `$PROJECT_DIR/${fb.functions[0].source}/dist/sapp/browser/index.html`,
+    ]);
   }
 });
 
-test('every functions param has a value for every deploy project', () => {
+test('every functions param has an integer value for every deploy project', () => {
   const src = read('functions/src/index.ts');
-  const params = [...src.matchAll(/define(?:Int|String|Boolean|Float)\("([A-Z0-9_]+)"/g)].map((m) => m[1]);
-  assert.ok(params.length > 0);
-  for (const project of ['phoenix-cleanhouse', 'regroup-e2e']) {
+  const params = [...src.matchAll(/define(?:Int|String|Boolean|Float|List)\(\s*["'`]([A-Z0-9_]+)["'`]/g)].map(
+    (m) => m[1],
+  );
+  assert.deepStrictEqual(params, ['SSR_MIN_INSTANCES']);
+  const expected = { 'phoenix-cleanhouse': (n) => n >= 1, 'regroup-e2e': (n) => n === 0 };
+  for (const [project, ok] of Object.entries(expected)) {
     const file = path.join(WEB, 'functions', `.env.${project}`);
     assert.ok(fs.existsSync(file), `missing functions/.env.${project}`);
-    const keys = fs.readFileSync(file, 'utf8').split('\n').map((l) => l.split('=')[0].trim());
-    for (const p of params) assert.ok(keys.includes(p), `functions/.env.${project} has no ${p}`);
+    const vars = Object.fromEntries(
+      fs
+        .readFileSync(file, 'utf8')
+        .split('\n')
+        .filter((l) => l.trim() && !l.trim().startsWith('#'))
+        .map((l) => l.split('=').map((x) => x.trim())),
+    );
+    assert.match(vars.SSR_MIN_INSTANCES || '', /^\d+$/, `functions/.env.${project}: SSR_MIN_INSTANCES`);
+    assert.ok(ok(Number(vars.SSR_MIN_INSTANCES)), `functions/.env.${project}: SSR_MIN_INSTANCES out of range`);
   }
 });

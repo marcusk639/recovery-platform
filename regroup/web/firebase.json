@@ -31,7 +31,7 @@
       }
     ],
     "predeploy": [
-      "node \"$PROJECT_DIR/scripts/verify-ssr-target.js\" --expect \"$GCLOUD_PROJECT\" --root \"$PROJECT_DIR/dist/sapp/browser\" --root \"$PROJECT_DIR/functions/dist/sapp/server\""
+      "node \"$PROJECT_DIR/scripts/verify-ssr-target.js\" --expect \"$GCLOUD_PROJECT\" --root \"$PROJECT_DIR/dist/sapp/browser\" --root \"$PROJECT_DIR/functions/dist/sapp/browser\" --root \"$PROJECT_DIR/functions/dist/sapp/server\" --identical \"$PROJECT_DIR/dist/sapp/browser/index.html\" \"$PROJECT_DIR/functions/dist/sapp/browser/index.html\""
     ]
   },
   "functions": [
@@ -46,7 +46,7 @@
         "firebase-debug.*.log"
       ],
       "predeploy": [
-        "node \"$PROJECT_DIR/scripts/verify-ssr-target.js\" --expect \"$GCLOUD_PROJECT\" --root \"$PROJECT_DIR/dist/sapp/browser\" --root \"$PROJECT_DIR/functions/dist/sapp/server\""
+        "node \"$PROJECT_DIR/scripts/verify-ssr-target.js\" --expect \"$GCLOUD_PROJECT\" --root \"$PROJECT_DIR/dist/sapp/browser\" --root \"$PROJECT_DIR/functions/dist/sapp/browser\" --root \"$PROJECT_DIR/functions/dist/sapp/server\" --identical \"$PROJECT_DIR/dist/sapp/browser/index.html\" \"$PROJECT_DIR/functions/dist/sapp/browser/index.html\""
       ]
     }
   ]
