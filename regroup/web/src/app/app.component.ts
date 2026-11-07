@@ -2,8 +2,7 @@ import { Component, OnInit, Inject, PLATFORM_ID } from "@angular/core";
 import { isPlatformBrowser } from "@angular/common";
 import { AuthService } from "./services/auth/auth-service.service";
 import { AngularFireAnalytics } from "@angular/fire/analytics";
-
-export declare var $: any;
+import { jqueryPlugin } from "./util/jquery";
 
 @Component({
   selector: "app-root",
@@ -23,9 +22,12 @@ export class AppComponent implements OnInit {
     this.analytics.logEvent("landing-page");
     (window as any).appName = "Phoenix";
     if (isPlatformBrowser(this.platformId)) {
-      $(function () {
-        $('[data-toggle="tooltip"]').tooltip();
-      });
+      const $ = jqueryPlugin("tooltip");
+      if ($) {
+        $(function () {
+          $('[data-toggle="tooltip"]').tooltip();
+        });
+      }
       await this.authService.doAutoLogin();
       (window as any).isMobile = function () {
         let check = false;

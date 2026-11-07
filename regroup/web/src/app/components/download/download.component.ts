@@ -1,8 +1,7 @@
 import { Component, OnInit, Inject, PLATFORM_ID } from "@angular/core";
 import { BaseComponent } from "../base.component";
 import { isPlatformBrowser } from "@angular/common";
-
-declare var $: any;
+import { jqueryPlugin } from "src/app/util/jquery";
 
 @Component({
   selector: "app-download",
@@ -27,7 +26,8 @@ export class DownloadComponent extends BaseComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    if (isPlatformBrowser(this.platformId)) {
+    const $ = isPlatformBrowser(this.platformId) && jqueryPlugin("tooltip");
+    if ($) {
       $(function () {
         $('[data-toggle="tooltip"]').tooltip();
       });
