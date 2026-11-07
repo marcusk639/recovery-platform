@@ -9,7 +9,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { checkTree } = require('./verify-ssr-target');
+const { checkTree, identifiersFor } = require('./verify-ssr-target');
 
 const EXPECT = ['regroup-e2e', 'AIzaStagingKey'];
 
@@ -49,4 +49,27 @@ test('an empty or missing root fails', () => {
   const r = checkTree([browser, empty, path.join(empty, 'nope')], { expect: EXPECT });
   assert.strictEqual(r.ok, false);
   assert.strictEqual(r.problems.filter((p) => /no \.js files/.test(p)).length, 2);
+});
+
+test('a tree containing a forbidden identifier fails, naming the file', () => {
+  const browser = tree({ 'main.js': 'phoenix-cleanhouse', 'lazy/7.js': "projectId:'regroup-e2e'" });
+  const r = checkTree([browser], { expect: ['phoenix-cleanhouse'], forbid: ['regroup-e2e'] });
+  assert.strictEqual(r.ok, false);
+  assert.match(r.problems.join('\n'), /lazy\/7\.js.*contains regroup-e2e/);
+});
+
+test('staging deploys need the staging id and key; other projects need their id and refuse staging', () => {
+  const gen = 'export const e2eStaging = {"firebaseConfig":{"apiKey":"AIzaStagingKey","projectId":"regroup-e2e"}};';
+  assert.deepStrictEqual(identifiersFor('regroup-e2e', () => gen), {
+    expect: ['regroup-e2e', 'AIzaStagingKey'],
+    forbid: [],
+  });
+  assert.deepStrictEqual(
+    identifiersFor('phoenix-cleanhouse', () => {
+      throw new Error('production must not need the generated file');
+    }),
+    { expect: ['phoenix-cleanhouse'], forbid: ['regroup-e2e'] },
+  );
+  const other = 'export const e2eStaging = {"firebaseConfig":{"apiKey":"AIzaX","projectId":"someone-else"}};';
+  assert.throws(() => identifiersFor('regroup-e2e', () => other), /someone-else/);
 });

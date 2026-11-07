@@ -67,7 +67,7 @@
 
 - [x] **Step 1:** `npm run build:copy-to-functions && npm run test:ssr`. Expected: the SSR render smoke passes locally against the staging server bundle.
 - [x] **Step 2:** `firebase deploy --project regroup-e2e --only hosting,functions:web:ssr`. Needs `functions/.env.regroup-e2e` (`SSR_MIN_INSTANCES=0`); without it Firebase refuses, because `minInstances: 1` raises the minimum bill. Expected: the deploy completes, and the hosting URL is `https://regroup-e2e.web.app`.
-- [x] **Step 3:** Smoke the deployed site. `/`, `/pricing` and `/signup` return 200 with content inside `<app-root>`. The served main JS bundle contains `regroup-e2e` and none of the production markers.
+- [x] **Step 3:** Smoke the deployed site. `/`, `/pricing` and `/signup` return 200 with content inside `<app-root>`. The served main JS bundle contains `regroup-e2e` and the staging API key, and no placeholder key (production markers are expected: see the Task 1 ruling).
 - [x] **Step 4:** Record the result in spec §3.5 (staging web is deployed, with the date) and in the roadmap's P3 row.
 
 ### Task 3: Document the staging web deploy

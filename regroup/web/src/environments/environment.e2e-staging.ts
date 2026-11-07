@@ -16,7 +16,8 @@ assertE2eStagingConfig(e2eStaging);
 
 export const environment = {
   ...e2eFlags,
-  production: false,
+  // Production mode, like the release: staging is the release candidate.
+  production: true,
   appName: 'App Name',
   stripePublishableKey: e2eStaging.stripePublishableKey,
   firebaseConfig: e2eStaging.firebaseConfig,

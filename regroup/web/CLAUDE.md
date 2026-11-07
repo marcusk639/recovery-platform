@@ -31,7 +31,8 @@ npm run build:ssr                 # Production build + SSR server bundle
 npm run build                     # Full build: Angular prod + copy hosting + SSR + functions
 npm run deploy                    # firebase deploy --only hosting,functions:web:ssr
 npm run serve:ssr                 # run dist/sapp/server/main.js
-npm run test:scripts              # node --test scripts/copy-ssr-to-functions.test.js
+npm run test:scripts              # node --test scripts/*.test.js (copy, bundle check, staging
+                                  # config generator, deploy-config invariants); not in CI
 npm run test:ssr                  # render smoke test of functions/dist (after build:ssr,
                                   # functions npm ci, build:copy-to-functions); not in CI
 npm run build:deploy              # Build + deploy in one command
@@ -48,7 +49,7 @@ Inputs, outside the repo in `~/.config/regroup-e2e/` (mode 600, never committed)
 - `firebase-web-config.json`: the `regroup-e2e` web app's Firebase config (`firebase apps:sdkconfig WEB --project regroup-e2e`).
 - `stripe-e2e-publishable-key.txt`: the e2e Stripe sandbox's `pk_test_` key, the bare value on one line. Without it the generator writes a placeholder: pages render, checkout doesn't work.
 
-Committed: `functions/.env.regroup-e2e` (`SSR_MIN_INSTANCES=0`), so staging keeps no standing instance and the deploy doesn't need `--force`.
+Committed: `functions/.env.regroup-e2e` (`SSR_MIN_INSTANCES=0`), so staging keeps no standing instance and the deploy doesn't need `--force`, and `functions/.env.phoenix-cleanhouse` (`SSR_MIN_INSTANCES=1`). Every deploy project needs its file: a non-interactive deploy refuses a param with no value, whatever its default.
 
 ```bash
 npm run gen:e2e-staging           # writes src/environments/e2e-staging.generated.ts (gitignored);
@@ -56,12 +57,14 @@ npm run gen:e2e-staging           # writes src/environments/e2e-staging.generate
 npm run build:ssr:e2e-staging     # e2e-staging browser + server builds, then
                                   # scripts/verify-ssr-target.js: each half must contain the
                                   # regroup-e2e project id and staging API key, or it exits 1
+(cd functions && npm ci && npx tsc)  # the smoke test resolves the bundle's externals from here
 npm run build:copy-to-functions && npm run test:ssr   # local render smoke (/, /pricing, /signup, /login)
-(cd functions && npm ci && npx tsc)
 firebase deploy --project regroup-e2e --only hosting,functions:web:ssr --non-interactive
 ```
 
-Never deploy a staging build to `phoenix-cleanhouse`. Rebuild with `npm run build` (production) before any production deploy: `dist/` and `functions/dist/` hold whichever build ran last.
+`dist/` and `functions/dist/` hold whichever build ran last, so rebuild with `npm run build` before any production deploy. The `predeploy` hooks in `firebase.json` enforce this: every hosting or functions deploy runs `verify-ssr-target.js --expect "$GCLOUD_PROJECT"` on `dist/sapp/browser` and `functions/dist/sapp/server`. A deploy to `regroup-e2e` needs the staging id and key in both; a deploy anywhere else needs that project's id and refuses any file containing `regroup-e2e`.
+
+The staging builds use the production build settings (optimized, hashed, no source maps) and production mode; only the environment file differs. `scripts/deploy-config.test.js` holds that parity.
 
 ### Cloud Functions (`cd functions`)
 
@@ -111,8 +114,8 @@ The app runs in two modes:
 This package's `functions/src/index.ts` defines exactly one function:
 
 - **`ssr`**: HTTP function serving the Angular Universal SSR app. v2, `us-central1`,
-  512MiB, `minInstances` from the `SSR_MIN_INSTANCES` param (default 1, production;
-  `functions/.env.regroup-e2e` sets 0 for staging). The min instance replaces cold-start warming — the
+  512MiB, `minInstances` from the `SSR_MIN_INSTANCES` param, set per project in
+  `functions/.env.<projectId>` (1 for `phoenix-cleanhouse`, 0 for `regroup-e2e`). The min instance replaces cold-start warming — the
   former `warmWebsite` cron in this package only pinged a dev URL, and the
   `warmWebsite` that is actually deployed (from `../functions`) makes no HTTP
   request at all, so neither ever warmed this function.

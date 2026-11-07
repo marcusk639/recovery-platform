@@ -109,8 +109,10 @@ export const ssr = onRequest(
     // Replaces the former `warmWebsite` cron, which only logged and made no
     // request, so it never warmed anything. minInstances is the supported
     // mechanism and actually holds an instance ready. This carries a standing
-    // cost. SSR_MIN_INSTANCES trades cold starts for a lower bill per project:
-    // unset means 1 (production); .env.regroup-e2e sets 0 for staging.
+    // cost. SSR_MIN_INSTANCES trades cold starts for a lower bill per project,
+    // from functions/.env.<projectId>: 1 for phoenix-cleanhouse, 0 for
+    // regroup-e2e. Each deploy project needs that file: a non-interactive deploy
+    // refuses a param with no value, and the default only pre-fills a prompt.
     minInstances: SSR_MIN_INSTANCES,
     concurrency: 80,
     timeoutSeconds: 30,
