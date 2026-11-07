@@ -1,7 +1,7 @@
 # Flow 16 — Guest: activity feed + dispute an activity
-# Persona: guest-a. Asserts the feed renders; if an activity item is present,
-# long-press -> dispute modal -> submit (creates a dispute). The submit block is
-# gated on the modal being visible so the flow stays green when the feed is empty.
+# Persona: guest-a. Disputes guest B's seeded activity (test-activity-b1) from its
+# DISPUTE button and checks in the Firestore emulator that it is disputed with the
+# reason entered. Every step is required.
 # Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/guest-activity-dispute.yaml
 appId: ${APP_ID}
 tags:
@@ -23,23 +23,37 @@ tags:
     timeout: 30000
 - assertVisible:
     id: "activities-list"
-# Long-press the first activity (if any) to open the dispute modal.
-- longPressOn:
-    id: "activities-list"
-    index: 0
-    childOf:
-      id: "activities-list"
-    optional: true
-# Only fill + submit when the modal actually opened.
-- runFlow:
-    when:
-      visible:
-        id: "dispute-modal"
-    commands:
-      - tapOn:
-          id: "dispute-message-input"
-      - inputText: "[E2E] disputed via Maestro"
-      - tapOn:
-          id: "dispute-submit-button"
+# Dispute guest B's seeded activity from its DISPUTE button (the app has no
+# long-press path), then prove it persisted: the activity is `disputed` with the
+# reason entered. Before 2026-11-06 this long-pressed the list container, so the
+# modal never opened and nothing was submitted.
+- scrollUntilVisible:
+    element:
+      id: "dispute-activity-button-test-activity-b1"
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: "dispute-activity-button-test-activity-b1"
+- extendedWaitUntil:
+    visible:
+      id: "dispute-message-input"
+    timeout: 15000
+- tapOn:
+    id: "dispute-message-input"
+- inputText: "[E2E] disputed via Maestro"
+- hideKeyboard
+- tapOn:
+    id: "dispute-submit-button"
+- extendedWaitUntil:
+    notVisible:
+      id: "dispute-message-input"
+    timeout: 15000
+- runScript:
+    file: ../scripts/maestro-js/read-activity.js
+    env:
+      ACTIVITY_ID: test-activity-b1
+- assertTrue:
+    condition: ${output.activityStatus === 'disputed' && output.activityReason === '[E2E] disputed via Maestro'}
+    label: activities/test-activity-b1 is disputed with the entered reason
 - runFlow:
     file: ../subflows/logout.yaml

@@ -35,6 +35,7 @@ This covers backfills, migration scripts and bulk deletes. Run the script's dry 
 
 2. Note the UTC time just before the live run. That time is the PITR restore point.
 3. Keep the script's log of changed document IDs (counts and IDs only, no PII). It makes a targeted restore possible.
+4. **Delete the export when it is no longer needed.** It holds full production documents, including resident data. The retention rule is still to be decided (issue #177, before the first backfill).
 
 ## Recovering
 

@@ -3,8 +3,10 @@
 # Emulator is reset by reset-and-seed.sh before each run, so the email is free.
 # Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/signup.yaml
 #
-# NOTE: Inputs are inside KeyboardAwareScrollView which does not expose testIDs
-# to the iOS accessibility tree. Use text-label selectors for form fields.
+# Fills every field by testID (RN 0.88 + react-native-keyboard-controller expose
+# them on iOS too), ticks the terms box, and requires landing on NewAccount or
+# OrgSetup. Before 2026-11-06 the flow filled two fields by label, never ticked
+# the terms box, and made the landing optional, so it never proved signup.
 appId: ${APP_ID}
 tags:
   - auth
@@ -34,22 +36,69 @@ tags:
     visible:
       text: "Let's Get Started"
     timeout: 10000
-# Fill the signup form by label text (testIDs not accessible inside KeyboardAwareScrollView on iOS).
-# Tap the next field to dismiss the keyboard — never hideKeyboard.
+# Fill every field by testID. Wait out the keyboard-controller scroll before typing,
+# and dismiss the keyboard before the next field so taps land where they aim.
+- scrollUntilVisible:
+    element:
+      id: "signup-email-input"
+    direction: DOWN
+    timeout: 5000
 - tapOn:
-    text: "Email"
+    id: "signup-email-input"
+- waitForAnimationToEnd
 - inputText: "e2e-signup@rats-e2e.com"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "signup-password-input"
+    direction: DOWN
+    timeout: 5000
 - tapOn:
-    text: "Password"
+    id: "signup-password-input"
+- waitForAnimationToEnd
 - inputText: ${E2E_TEST_PASSWORD}
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "signup-confirm-password-input"
+    direction: DOWN
+    timeout: 5000
 - tapOn:
-    text: "SIGN UP"
-# Guest/admin signup routes to NewAccount; manager routes to OrgSetup. Accept either.
+    id: "signup-confirm-password-input"
+- waitForAnimationToEnd
+- inputText: ${E2E_TEST_PASSWORD}
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "signup-first-name-input"
+    direction: DOWN
+    timeout: 5000
+- tapOn:
+    id: "signup-first-name-input"
+- waitForAnimationToEnd
+- inputText: "Emma"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "signup-last-name-input"
+    direction: DOWN
+    timeout: 5000
+- tapOn:
+    id: "signup-last-name-input"
+- waitForAnimationToEnd
+- inputText: "Tester"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "terms-of-service-checkbox"
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: "terms-of-service-checkbox"
+- tapOn:
+    id: "signup-button"
+# Guest/admin signup routes to NewAccount; manager routes to OrgSetup. One of them must appear.
 - extendedWaitUntil:
     visible:
-      id: "new-account-screen"
+      id: "new-account-screen|org-setup-screen"
     timeout: 60000
-    optional: true
-- assertVisible:
-    id: "org-setup-screen"
-    optional: true

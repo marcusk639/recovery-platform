@@ -1567,13 +1567,19 @@ CI runs the unit suite and the ratchet on every push of the branch.
     | `guest-rent-history`      | pass                       | pass                                | not run                  |
     | `operator-manual-payment` | pass                       | pass 6 of 7 (one blank-screen hang) | fails at sign-in, 5 of 5 |
 
-  - **`signup`:** after 60 s it reaches neither `new-account-screen` nor `org-setup-screen`. The form shows "You must agree to the Terms of Service", because the flow never taps `terms-of-service-checkbox`. The same happens on 0.72, where that checkbox could not be checked at all: it threw inside Formik (§4, fixed here). **Flow defect, not a regression.**
+  - **`signup` (flow fixed 2026-11-06):** the rewritten flow fills every field by test ID, ticks the terms box, and requires landing on NewAccount or OrgSetup. It **passes on Android 0.88**. On iOS every input completed, but Maestro's XCUITest driver crashed while reading the screen for the final assert (`viewHierarchy … code: 500`), so iOS needs a clean rerun. The original run, before the fix: after 60 s it reached neither `new-account-screen` nor `org-setup-screen`. The form shows "You must agree to the Terms of Service", because the flow never taps `terms-of-service-checkbox`. The same happens on 0.72, where that checkbox could not be checked at all: it threw inside Formik (§4, fixed here). **Flow defect, not a regression.**
   - **`guest-activity-dispute`:** the flow long-presses the `activities-list` container and then waits for `dispute-modal`, which never appears ("Run flow when id: dispute-modal is visible… SKIPPED"), so nothing is submitted.
     - The app doesn't open disputes by long-press. Each disputable activity has a DISPUTE button (`dispute-activity-button-<id>`, `hooks/useBaseActivityScreen.ts`).
     - A one-off probe on Android 0.88 that taps that button reached the "Dispute Activity" screen for another resident's chore, with its reason field and DISPUTE button.
     - **Stale flow, not a regression.** Submitting a dispute on a device is in the §7.3 pass.
+  - **Dispute submission is blocked on Android 0.88 by a pre-existing bug** (found 2026-11-06 by the corrected flow; tracked in **#174**).
+    - When the dispute (or confirm) modal opens, `ActivityScreen` and `Disputes` pass `setModalShowing` to show the global **"Loading…"** modal (`screens/Activity/ActivityScreen.tsx:165`, `screens/Disputes/Disputes.tsx:189`, fired from `onModalShow` in `BaseActivityScreen.tsx:106`).
+    - On Android 0.88 that modal stacks on top of the dispute form and stays there, so the reason field and DISPUTE button can't be reached.
+    - The wiring is unchanged on `main`. iOS likely hid it, because a second native modal can't present over the first. It is pre-existing code, so per spec §4.4 it is **recorded, not fixed in #160**.
+    - The fix (show the loading modal only while a submission is in flight, with a test) is in the coverage matrix (RES-005/RES-006 stay `fail`) for right after the merge.
+    - `maestro/flows/guest-activity-dispute.yaml` now drives the real path (DISPUTE button, submit, then a Firestore check that `activities/test-activity-b1` is `disputed`) and will pass once it is fixed.
   - **`guest-home`:** `week-summary-card` was visible on both platforms, but its assert is `optional: true`, so the coverage-matrix rule keeps that row `fail` until P6 makes it required.
-  - **`operator-manual-payment` on Android 0.88:** one of 7 runs hung on a blank white screen when the app relaunched for the flow's second sign-in, with no crash in logcat. The other 6 passed.
+  - **`operator-manual-payment` on Android 0.88** (tracked in **#175**, with the later signup runs that showed the same blank cold start): one of 7 runs hung on a blank white screen when the app relaunched for the flow's second sign-in, with no crash in logcat. The other 6 passed.
   - **The 0.72 baseline:**
     - Built with JDK 17, as CI does; RN 0.72's Android plugin fails `jlink` on JDK 21.
     - The 0.72 Android `e2eEmulator` build never reaches `house-tab` after sign-in: in `guest-activity-dispute`, and in all 5 `operator-manual-payment` runs.
