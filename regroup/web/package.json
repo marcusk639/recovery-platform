@@ -14,10 +14,12 @@
     "build": "export NODE_OPTIONS=--openssl-legacy-provider; npm run build:ssr && npm run build:functions",
     "build:functions": "npm run --prefix functions build",
     "build:copy-to-functions": "node scripts/copy-ssr-to-functions.js",
-    "test:scripts": "node --test scripts/copy-ssr-to-functions.test.js",
+    "test:scripts": "node --test scripts/copy-ssr-to-functions.test.js scripts/verify-ssr-target.test.js scripts/gen-e2e-staging-config.test.js",
     "test:ssr": "node scripts/ssr-smoke.js",
     "deploy": "firebase deploy --only hosting,functions:web:ssr",
-    "build:deploy": "npm run build && npm run deploy"
+    "build:deploy": "npm run build && npm run deploy",
+    "build:ssr:e2e-staging": "export NODE_OPTIONS=--openssl-legacy-provider; ng build --configuration e2e-staging && ng run sapp:server:e2e-staging && node scripts/verify-ssr-target.js --expect regroup-e2e",
+    "gen:e2e-staging": "node scripts/gen-e2e-staging-config.js"
   },
   "private": true,
   "dependencies": {
