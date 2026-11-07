@@ -1578,6 +1578,9 @@ CI runs the unit suite and the ratchet on every push of the branch.
     - The wiring is unchanged on `main`. iOS likely hid it, because a second native modal can't present over the first. It is pre-existing code, so per spec §4.4 it is **recorded, not fixed in #160**.
     - The fix (show the loading modal only while a submission is in flight, with a test) is in the coverage matrix (RES-005/RES-006 stay `fail`) for right after the merge.
     - `maestro/flows/guest-activity-dispute.yaml` now drives the real path (DISPUTE button, submit, then a Firestore check that `activities/test-activity-b1` is `disputed`) and will pass once it is fixed.
+  - **Automated since the review (2026-11-06):**
+    - **Deep links:** `deep-link-invitation-cold.yaml` and `-warm.yaml` open a `regroup-app://` invitation link with the app stopped or backgrounded. They require the app to route to signup with the invitation shown and the email filled in. Both pass on Android 0.88; the cold one only after a #175 blank start.
+    - **Upgrade in place:** `maestro/scripts/upgrade-in-place.sh` (with `maestro/upgrade/*.yaml`) can't run from RN 0.72. The 0.72 E2EEmulator build shows "Something went wrong" at sign-in on iOS, as its Android build does, so there is no old session to carry. It stays a device item (§7.3) and is ready for the next upgrade.
   - **`guest-home`:** `week-summary-card` was visible on both platforms, but its assert is `optional: true`, so the coverage-matrix rule keeps that row `fail` until P6 makes it required.
   - **`operator-manual-payment` on Android 0.88** (tracked in **#175**, with the later signup runs that showed the same blank cold start): one of 7 runs hung on a blank white screen when the app relaunched for the flow's second sign-in, with no crash in logcat. The other 6 passed.
   - **The 0.72 baseline:**
