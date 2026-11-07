@@ -37,6 +37,32 @@ npm run test:ssr                  # render smoke test of functions/dist (after b
 npm run build:deploy              # Build + deploy in one command
 ```
 
+`.firebaserc` defaults to `phoenix-cleanhouse`, so `npm run deploy` and `npm run build:deploy` deploy to **production**. Staging deploys always name `--project regroup-e2e`.
+
+### Staging (`regroup-e2e`)
+
+Deployed at <https://regroup-e2e.web.app>. Both halves (browser and SSR server) are built against staging; production's identifiers appear in the bundle only as the values `e2e-staging-guard.ts` refuses.
+
+Inputs, outside the repo in `~/.config/regroup-e2e/` (mode 600, never committed):
+
+- `firebase-web-config.json`: the `regroup-e2e` web app's Firebase config (`firebase apps:sdkconfig WEB --project regroup-e2e`).
+- `stripe-e2e-publishable-key.txt`: the e2e Stripe sandbox's `pk_test_` key, the bare value on one line. Without it the generator writes a placeholder: pages render, checkout doesn't work.
+
+Committed: `functions/.env.regroup-e2e` (`SSR_MIN_INSTANCES=0`), so staging keeps no standing instance and the deploy doesn't need `--force`.
+
+```bash
+npm run gen:e2e-staging           # writes src/environments/e2e-staging.generated.ts (gitignored);
+                                  # refuses pk_live_ keys and configs not for regroup-e2e
+npm run build:ssr:e2e-staging     # e2e-staging browser + server builds, then
+                                  # scripts/verify-ssr-target.js: each half must contain the
+                                  # regroup-e2e project id and staging API key, or it exits 1
+npm run build:copy-to-functions && npm run test:ssr   # local render smoke (/, /pricing, /signup, /login)
+(cd functions && npm ci && npx tsc)
+firebase deploy --project regroup-e2e --only hosting,functions:web:ssr --non-interactive
+```
+
+Never deploy a staging build to `phoenix-cleanhouse`. Rebuild with `npm run build` (production) before any production deploy: `dist/` and `functions/dist/` hold whichever build ran last.
+
 ### Cloud Functions (`cd functions`)
 
 ```bash
@@ -85,7 +111,8 @@ The app runs in two modes:
 This package's `functions/src/index.ts` defines exactly one function:
 
 - **`ssr`**: HTTP function serving the Angular Universal SSR app. v2, `us-central1`,
-  512MiB, `minInstances: 1`. The min instance replaces cold-start warming — the
+  512MiB, `minInstances` from the `SSR_MIN_INSTANCES` param (default 1, production;
+  `functions/.env.regroup-e2e` sets 0 for staging). The min instance replaces cold-start warming — the
   former `warmWebsite` cron in this package only pinged a dev URL, and the
   `warmWebsite` that is actually deployed (from `../functions`) makes no HTTP
   request at all, so neither ever warmed this function.

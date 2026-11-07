@@ -184,9 +184,9 @@ Firestore point-in-time recovery was off on both projects. **The owner had it tu
   - **Missing:**
     - No staging app has ever been built on the owner's Mac: there is no `E2EStaging` product in DerivedData and no `e2eStaging` APK.
     - Staging has **no account anyone can sign in with**: 83 users, none with a password, and 0 houses. The seeder refuses every project that isn't `demo-`, by design.
-    - **No web app is deployed** to staging. The hosting site `regroup-e2e.web.app` exists, but `/`, `/pricing` and `/signup` all return 404, so web checkout has nowhere to run.
+    - **Resolved 2026-11-06 (P3a):** the web app is deployed to staging. `regroup-e2e.web.app` serves `/`, `/pricing`, `/signup` and `/login` server-rendered, and the served bundle carries the staging project id and key. Before this the site existed but all three returned 404.
     - The variants were written on RN 0.72 (#143) and have not been built on 0.88.
-    - **The web can't be deployed to staging safely yet** (verified).
+    - **Resolved 2026-11-06 (P3a), kept for the record:** the web couldn't be deployed to staging safely. `web/angular.json` now has an `e2e-staging` server configuration, `build:ssr:e2e-staging` builds both halves against staging and refuses a half missing the staging identifiers, and `ssr`'s min instances are 0 on staging (`SSR_MIN_INSTANCES`). See `web/CLAUDE.md` § Staging.
       - The browser build has an `e2e-staging` configuration, but the server-render (SSR) target in `web/angular.json` has only `production`.
       - `build:ssr` hardcodes `ng run sapp:server:production`, and hosting sends `**` to the `ssr` function (`web/firebase.json`).
       - A staging deploy would serve pages rendered from the production environment.

@@ -61,21 +61,21 @@
 - [x] **Step 3:** Implement it.
 - [x] **Step 4:** Same command. Expected: PASS.
 - [x] **Step 5:** Add the angular server configuration and the script. Run `npm run gen:e2e-staging`, then `npm run build:ssr:e2e-staging`. Expected: both builds succeed and the check passes.
-- [ ] **Step 6:** Commit: `feat(regroup-web): e2e-staging SSR build with a production-identifier bundle check`.
+- [x] **Step 6:** Commit: `feat(regroup-web): e2e-staging SSR build with a staging-target bundle check` (102fdac7).
 
 ### Task 2: Deploy to `regroup-e2e` and smoke it
 
-- [ ] **Step 1:** `npm run build:copy-to-functions && npm run test:ssr`. Expected: the SSR render smoke passes locally against the staging server bundle.
-- [ ] **Step 2:** `firebase deploy --project regroup-e2e --only hosting,functions:web:ssr`. Expected: the deploy completes, and the hosting URL is `https://regroup-e2e.web.app`.
-- [ ] **Step 3:** Smoke the deployed site. `/`, `/pricing` and `/signup` return 200 with content inside `<app-root>`. The served main JS bundle contains `regroup-e2e` and none of the production markers.
-- [ ] **Step 4:** Record the result in spec §3.5 (staging web is deployed, with the date) and in the roadmap's P3 row.
+- [x] **Step 1:** `npm run build:copy-to-functions && npm run test:ssr`. Expected: the SSR render smoke passes locally against the staging server bundle.
+- [x] **Step 2:** `firebase deploy --project regroup-e2e --only hosting,functions:web:ssr`. Needs `functions/.env.regroup-e2e` (`SSR_MIN_INSTANCES=0`); without it Firebase refuses, because `minInstances: 1` raises the minimum bill. Expected: the deploy completes, and the hosting URL is `https://regroup-e2e.web.app`.
+- [x] **Step 3:** Smoke the deployed site. `/`, `/pricing` and `/signup` return 200 with content inside `<app-root>`. The served main JS bundle contains `regroup-e2e` and none of the production markers.
+- [x] **Step 4:** Record the result in spec §3.5 (staging web is deployed, with the date) and in the roadmap's P3 row.
 
 ### Task 3: Document the staging web deploy
 
-- [ ] **Step 1:** Add a "Staging (`regroup-e2e`)" section to `regroup/web/CLAUDE.md`, or the web README if CLAUDE.md has no deploy section:
+- [x] **Step 1:** Add a "Staging (`regroup-e2e`)" section to `regroup/web/CLAUDE.md`, or the web README if CLAUDE.md has no deploy section:
   - generate the config;
   - `npm run build:ssr:e2e-staging`;
   - copy and smoke;
   - deploy with `--project regroup-e2e`;
   - never deploy a staging build to production, and the bundle check enforces the converse.
-- [ ] **Step 2:** Commit with the spec and roadmap updates: `docs(regroup): staging web deploy`.
+- [x] **Step 2:** Commit with the spec and roadmap updates: `docs(regroup): staging web deploy`.
