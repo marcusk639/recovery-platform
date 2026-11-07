@@ -10,8 +10,7 @@ import { Router } from "@angular/router";
 import AppService from "src/app/services/app-service/app.service";
 import { isPlatformBrowser, Location } from "@angular/common";
 import { AuthService } from "src/app/services/auth/auth-service.service";
-
-declare var $: any;
+import { jquery } from "src/app/util/jquery";
 
 @Component({
   selector: "app-header-two",
@@ -89,7 +88,8 @@ export class HeaderTwoComponent implements OnInit {
 
   ngOnInit() {
     this.logoFilePath = `assets/img/${this.logoFileName || "logo"}.png`;
-    if (isPlatformBrowser(this.platformId)) {
+    const $ = isPlatformBrowser(this.platformId) && jquery();
+    if ($) {
       $(document).on(
         "focus blur",
         "select, textarea, input[type=text], input[type=date], input[type=password], input[type=email], input[type=number]",
@@ -103,6 +103,8 @@ export class HeaderTwoComponent implements OnInit {
   }
 
   toggleDrawer(inMenu: boolean = false) {
+    const $ = jquery();
+    if (!$) return;
     $(".navbar").toggleClass("active");
     if (!inMenu) {
       $("body").toggleClass("canvas-open");

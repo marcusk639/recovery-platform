@@ -18,8 +18,7 @@ import { User } from "src/app/entities/User";
 import { isPlatformBrowser } from "@angular/common";
 import { CloudFunctionService } from "src/app/services/functions/cloud-function.service";
 import { Router } from "@angular/router";
-
-declare var $: any;
+import { jqueryPlugin } from "src/app/util/jquery";
 
 @Component({
   selector: "app-my-account",
@@ -164,7 +163,8 @@ export class MyAccountComponent implements OnInit {
   }
 
   toggleModal() {
-    $("#modal").modal("toggle");
+    const $ = jqueryPlugin("modal");
+    if ($) $("#modal").modal("toggle");
   }
 
   setLoading = (value: boolean = true) => {

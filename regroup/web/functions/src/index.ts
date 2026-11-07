@@ -23,6 +23,7 @@
  */
 
 import { onRequest } from "firebase-functions/v2/https";
+import { defineInt } from "firebase-functions/params";
 import { logger } from "firebase-functions";
 import * as fs from "fs";
 import * as path from "path";
@@ -97,6 +98,8 @@ function sendShell(res: ResponseLike, reason: string, url: string): void {
   res.status(200).type("html").send(getShell());
 }
 
+const SSR_MIN_INSTANCES = defineInt("SSR_MIN_INSTANCES", { default: 1 });
+
 export const ssr = onRequest(
   {
     region: "us-central1",
@@ -106,8 +109,11 @@ export const ssr = onRequest(
     // Replaces the former `warmWebsite` cron, which only logged and made no
     // request, so it never warmed anything. minInstances is the supported
     // mechanism and actually holds an instance ready. This carries a standing
-    // cost — set to 0 to trade cold starts for a lower bill.
-    minInstances: 1,
+    // cost. SSR_MIN_INSTANCES trades cold starts for a lower bill per project,
+    // from functions/.env.<projectId>: 1 for phoenix-cleanhouse, 0 for
+    // regroup-e2e. Each deploy project needs that file: a non-interactive deploy
+    // refuses a param with no value, and the default only pre-fills a prompt.
+    minInstances: SSR_MIN_INSTANCES,
     concurrency: 80,
     timeoutSeconds: 30,
   },

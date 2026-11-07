@@ -23,8 +23,9 @@
  * SSR_SMOKE_ROOT overrides the functions directory (it must contain
  * dist/sapp/server/main.js and the node_modules the bundle should resolve).
  *
- * The bundle is the production build, so rendering may make the same Firebase
- * SDK requests a real SSR request would.
+ * The bundle is whichever build ran last (production or e2e-staging), so
+ * rendering may make the same Firebase SDK requests a real SSR request would
+ * against that project.
  */
 const http = require('http');
 const path = require('path');
