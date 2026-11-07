@@ -2,10 +2,10 @@
  * The page's jQuery, or null when it isn't loaded.
  *
  * src/index.html loads jQuery, Bootstrap and the theme plugins from
- * assets/js, but those files are not in the repository (regroup/.gitignore
- * ignores **\/*.min.js), so no deployed build has them. Calling a missing $ in
- * ngOnInit throws and aborts Angular's first render pass, which leaves the
- * home page without its header and hero text. Callers skip the jQuery
+ * src/assets/js. They were missing from every build until #180 (regroup/.gitignore
+ * ignored **\/*.min.js), and a script can still fail to load. Calling a missing
+ * $ in ngOnInit throws and aborts Angular's first render pass, which leaves the
+ * home page without its header and hero text, so callers skip the jQuery
  * behaviour instead.
  */
 export function jquery(): any {

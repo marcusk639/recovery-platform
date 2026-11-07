@@ -50,7 +50,7 @@ done <<< "$STAGED"
 MAX_LINES=300
 MERGE_HEAD_SHA=$(git rev-parse -q --verify MERGE_HEAD 2>/dev/null || true)
 SRC_RE='\.(ts|tsx|js|jsx)$'
-EXCLUDE_RE='node_modules/|/public/|\.min\.js$|-es(5|2015)\.js$|/dist/|/build/|/\.next/|jest\.setup\.(js|ts)$|\.config\.(js|cjs|mjs|ts)$|\.eslintrc\.js$'
+EXCLUDE_RE='node_modules/|/public/|regroup/web/src/assets/js/|\.min\.js$|-es(5|2015)\.js$|/dist/|/build/|/\.next/|jest\.setup\.(js|ts)$|\.config\.(js|cjs|mjs|ts)$|\.eslintrc\.js$'
 
 while IFS= read -r f; do
   echo "$f" | grep -qE "$SRC_RE" || continue
