@@ -4,7 +4,7 @@ Flat monorepo of independent recovery products plus a shared API. Each product h
 
 | Directory         | Product                     | Firebase project                                              |
 | ----------------- | --------------------------- | ------------------------------------------------------------- |
-| `recovery-api/`   | Cross-app API (Functions)   | `recovery-platform`                                           |
+| `recovery-api/`   | Cross-app API (Functions)   | `recovery-platform-e6cb3`                                     |
 | `homegroups/`     | Homegroups (12-step groups) | `recovery-connect-cad4b` (e2e alias `homegroups-e2e`)         |
 | `regroup/`        | Regroup (sober living)      | `phoenix-cleanhouse`                                          |
 | `detox-recovery/` | NextStep Recovery (Next.js) | `nextsteprecovery-1d5c2` (no `.firebaserc`: pass `--project`) |
