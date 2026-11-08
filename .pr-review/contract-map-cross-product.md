@@ -26,6 +26,9 @@ Consumers:
 | regroup        | `regroup/functions/src/api/recoveryApi.ts`                 | `regroup/functions/src/callable/meetings.ts`, `regroup/functions/src/util/directoryMapping.ts`, `regroup/functions/src/entities/DirectoryMeeting.ts`, `regroup/functions/src/config.ts` |
 | detox-recovery | `detox-recovery/app/api/contact/route.ts` (referral relay) | Env and URL in `detox-recovery/apphosting.yaml`, `detox-recovery/env.example`                                                                                                           |
 
+Regroup's `RECOVERY_API_BASE_URL` for each environment (staging, production, e2e-emulator) comes from
+`regroup/e2e/launch-config.json`. The emulator value reaches regroup's functions only after `npm run e2e:gen-env`.
+
 Contract tests that pin one side: `homegroups/functions/src/__tests__/api/recoveryApi.test.ts`,
 `regroup/functions/src/__tests__/api/recoveryApi.test.ts`. There is no two-sided test.
 
