@@ -85,3 +85,23 @@ test('every functions param has an integer value for every deploy project', () =
     assert.ok(ok(Number(vars.SSR_MIN_INSTANCES)), `functions/.env.${project}: SSR_MIN_INSTANCES out of range`);
   }
 });
+
+test('every local script index.html loads is in the repo, not ignored', () => {
+  const html = read('src/index.html');
+  const srcs = [...html.matchAll(/<script[^>]*\ssrc="([^"]+)"/g)].map((m) => m[1]).filter((s) => !/^https?:/.test(s));
+  assert.ok(srcs.length > 0);
+  for (const s of srcs) {
+    const rel = path.join('src', s);
+    assert.ok(fs.existsSync(path.join(WEB, rel)), `${rel} is missing (index.html loads it)`);
+    const ignored = require('child_process').spawnSync('git', ['check-ignore', '-q', rel], { cwd: WEB }).status === 0;
+    assert.ok(!ignored, `${rel} is gitignored, so it never reaches a build`);
+  }
+});
+
+test('the theme init skips the screenshot slider ScreenshotOneComponent already set up', () => {
+  // Slick throws when initialised twice, and the throw aborts the rest of the
+  // theme's document-ready handler (sliders, counterup, fancybox).
+  const theme = read('src/assets/js/scripts.js');
+  assert.match(theme, /\$\('\.app-screenshots'\)\.not\('\.slick-initialized'\)\.slick\(/);
+  assert.match(read('src/app/components/screenshots/screenshot-one/screenshot-one.component.ts'), /\.slick\(/);
+});
