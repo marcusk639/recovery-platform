@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { expect, reseed, signInAs, test } from './helpers';
 
 test.beforeAll(() => reseed());
@@ -33,4 +34,11 @@ test('a link to a route the portal lacks fails visibly', async ({ page }) => {
   await page.click('#nav-house-summary');
   await page.getByText('Oxford House Hub').click();
   await expect(page.getByRole('alertdialog')).toContainText("isn't available on the web yet");
+});
+
+test('records the time to the sign-in form for the go/no-go report', async ({ page }) => {
+  const started = Date.now();
+  await page.goto('/');
+  await page.locator('#sign-in-form').waitFor();
+  fs.writeFileSync('dist/load-time.json', JSON.stringify({ msToSignInForm: Date.now() - started }));
 });

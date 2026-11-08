@@ -15,7 +15,7 @@ HEAD_SHA=$(git rev-parse HEAD)
 
 # Packages with healthy, fast unit suites. Mobile apps and regroup/web are
 # excluded (slow / CI-covered / legacy) — CI remains their gate.
-PACKAGES="recovery-api detox-recovery homegroups/functions regroup/functions"
+PACKAGES="recovery-api detox-recovery homegroups/functions regroup/functions regroup/portal"
 
 is_zero() { case "$1" in *[!0]*) return 1 ;; *) return 0 ;; esac; }
 

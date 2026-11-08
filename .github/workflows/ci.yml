@@ -226,6 +226,32 @@ jobs:
       - name: Typecheck
         run: cd regroup/web && npx tsc --noEmit -p tsconfig.spec.json
 
+  regroup-portal:
+    name: regroup/portal — test (non-blocking)
+    runs-on: ubuntu-latest
+    # Until launch finishes, the portal must never block a mobile PR. It runs on
+    # every PR so a mobile change that breaks the portal shows up here anyway.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: regroup/portal/package-lock.json
+      - name: Install dependencies
+        run: cd regroup/portal && npm ci
+      - name: Typecheck
+        run: cd regroup/portal && npm run typecheck
+      - name: Unit tests
+        run: cd regroup/portal && npx vitest run
+      - name: Production build
+        run: cd regroup/portal && npm run build -- --production
+      - name: Bundle checks
+        run: cd regroup/portal && node build/check-bundle.mjs --warn-versions
+
   detox-recovery:
     name: detox-recovery — typecheck + test
     runs-on: ubuntu-latest
