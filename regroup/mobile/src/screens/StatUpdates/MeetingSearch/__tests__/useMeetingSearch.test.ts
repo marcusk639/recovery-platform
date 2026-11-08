@@ -29,7 +29,7 @@ jest.mock('../../../../hooks/activity', () => ({
   useActivities: (options: unknown) => mockUseActivities(options),
 }));
 jest.mock('../../../../state/queries/meetingQueries', () => ({
-  useSearchMeetings: () => ({ mutate: jest.fn(), isPending: false, data: undefined }),
+  useSearchMeetings: jest.fn(() => ({ mutate: jest.fn(), isPending: false, data: undefined })),
   useCheckIntoMeeting: () => ({ mutate: mockCheckInMutate, isPending: false }),
 }));
 jest.mock('../../../../util/permissions', () => ({
@@ -129,5 +129,32 @@ describe('checkInto', () => {
       [],
     );
     expect(mockCheckInMutate).not.toHaveBeenCalled();
+  });
+});
+
+describe('searching by location', () => {
+  const permissions = require('../../../../util/permissions');
+  const geolocation = require('../../../../util/geolocation');
+  const queries = require('../../../../state/queries/meetingQueries');
+
+  it('reads the location once and searches once, however often the screen re-renders', async () => {
+    permissions.checkAndRequestLocationPermissions.mockResolvedValue(true);
+    geolocation.getCurrentPosition.mockImplementation((success: any) =>
+      success({ coords: { latitude: 30.2672, longitude: -97.7431 } }),
+    );
+    const mutate = jest.fn();
+    // Like a real mutation: no data yet, so the hook's meetings list is a new [] each render.
+    queries.useSearchMeetings.mockReturnValue({ mutate, data: undefined, isPending: false, isError: false });
+
+    const { rerender } = render();
+    await act(async () => {});
+    for (let i = 0; i < 5; i++) {
+      rerender({});
+      await act(async () => {});
+    }
+
+    expect(geolocation.getCurrentPosition).toHaveBeenCalledTimes(1);
+    expect(mutate).toHaveBeenCalledTimes(1);
+    expect(mutate.mock.calls[0][0].location).toEqual({ lat: 30.2672, lng: -97.7431 });
   });
 });
