@@ -9,7 +9,9 @@
     "test": "jest",
     "e2e:gen-env": "ts-node scripts/gen-env.ts",
     "e2e:stripe-setup": "ts-node scripts/stripe-sandbox-setup.ts",
-    "e2e:preflight": "ts-node src/preflight/run.ts"
+    "e2e:preflight": "ts-node src/preflight/run.ts",
+    "payments:setup": "ts-node scripts/stripe-local-setup.ts",
+    "test:payments": "bash scripts/run-payment-suite.sh"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",
@@ -20,6 +22,7 @@
     "typescript": "^5.1.6"
   },
   "dependencies": {
+    "firebase-admin": "^13.10.0",
     "stripe": "^20.4.1"
   }
 }
