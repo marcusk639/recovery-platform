@@ -534,7 +534,7 @@ Each production step has its way back prepared before the step runs. Each recove
 - ~~Production changes stay compatible with today's store build until the reboot ships.~~ Replaced after plan review; see below. The minimum-version gate stays.
 - The relaunch ships as an update to the existing store listings. The owner confirms the IDs and supplies the Play signing fingerprint.
 - Operator checkout and plan management link out to the system browser instead of using an in-app WebView.
-- Grace period: 7 days from the first failed payment, for everyone, then blocked. Aligned with Stripe's retries.
+- Grace period: 7 days from the first failed payment, for everyone, then blocked. Aligned with Stripe's retries. Measured from the failed invoice's Stripe time, not from when the webhook arrives (owner, 2026-11-08).
 - The list of paying houses comes from Stripe's live active subscriptions, cross-checked against Firestore. Done 2026-11-06; see §3.4.
 
 **The owner's, after plan review (2026-11-06; he accepted the review's recommendations):**
