@@ -1,10 +1,19 @@
-import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useId,
+  useLayoutEffect,
+  useState,
+  ReactNode,
+} from 'react';
 import { View } from 'react-native';
 import RatsModalBase from '../components/rats-modal';
 const RatsModal = RatsModalBase as any;
 import RatsLoadingModal from '../components/rats-loading-modal';
 import ScreenHeader from '../components/screen-header';
 import { color, MODAL_STYLE, MODAL_CONTAINER_STYLE } from '../styles/theme';
+import { IOS } from '../util/platform';
 
 /**
  * Modal Context Types
@@ -58,6 +67,18 @@ interface ModalContextType {
 const ModalContext = createContext<ModalContextType | undefined>(undefined);
 
 /**
+ * Which host renders the modals, for ScreenModalHost below.
+ */
+interface ModalHostContextType {
+  activeScreenHost: string | undefined;
+  addScreenHost: (id: string) => void;
+  removeScreenHost: (id: string) => void;
+  modals: ReactNode;
+}
+
+const ModalHostContext = createContext<ModalHostContextType | undefined>(undefined);
+
+/**
  * Modal Provider Props
  */
 interface ModalProviderProps {
@@ -91,6 +112,18 @@ export const ModalProvider: React.FC<ModalProviderProps> = ({ children }) => {
     error: null,
     message: '',
   });
+
+  // Modal-group screens up right now, oldest first. The last one is on top.
+  const [screenHosts, setScreenHosts] = useState<string[]>([]);
+  const activeScreenHost = screenHosts[screenHosts.length - 1];
+
+  const addScreenHost = useCallback((id: string) => {
+    setScreenHosts(prev => [...prev, id]);
+  }, []);
+
+  const removeScreenHost = useCallback((id: string) => {
+    setScreenHosts(prev => prev.filter(host => host !== id));
+  }, []);
 
   // Form Modal Actions
   const showFormModal = useCallback(
@@ -158,60 +191,94 @@ export const ModalProvider: React.FC<ModalProviderProps> = ({ children }) => {
     loadingModalVisible: loadingModal.visible,
   };
 
+  const modals = (
+    <>
+    {/* Form Modal */}
+    <RatsModal
+      modalStyle={
+        formModal.fullScreen
+          ? MODAL_STYLE
+          : {
+              padding: 0,
+              margin: 0,
+              alignItems: undefined,
+              justifyContent: 'flex-end',
+            }
+      }
+      fullScreen={formModal.fullScreen}
+      backdropColor={formModal.fullScreen ? color.white : ''}
+      onModalHide={() => {}}
+      onModalShow={() => {}}
+      onBackButtonPress={formModal.closeOnBack ? dismissFormModal : () => {}}
+      style={
+        formModal.fullScreen
+          ? MODAL_CONTAINER_STYLE
+          : { padding: 0, margin: 0, backgroundColor: color.light_grey }
+      }
+      animationIn="slideInUp"
+      animationOut="slideOutDown"
+      isVisible={formModal.visible}
+      onSwipeComplete={dismissFormModal}
+      onBackdropPress={dismissFormModal}>
+      {formModal.fullScreen && (
+        <View style={{ width: '100%' }}>
+          <ScreenHeader
+            icon={formModal.rightIcon}
+            renderBackButton={formModal.renderBackButton}
+            onBackPress={dismissFormModal}
+            header={formModal.title}
+          />
+        </View>
+      )}
+      {formModal.content}
+    </RatsModal>
+
+    {/* Loading Modal */}
+    <RatsLoadingModal
+      isVisible={loadingModal.visible}
+      loading={loadingModal.loading}
+      loadingMessage={loadingModal.message}
+      success={loadingModal.success}
+      error={loadingModal.error}
+    />
+    </>
+  );
+
   return (
     <ModalContext.Provider value={value}>
-      {children}
-
-      {/* Form Modal */}
-      <RatsModal
-        modalStyle={
-          formModal.fullScreen
-            ? MODAL_STYLE
-            : {
-                padding: 0,
-                margin: 0,
-                alignItems: undefined,
-                justifyContent: 'flex-end',
-              }
-        }
-        fullScreen={formModal.fullScreen}
-        backdropColor={formModal.fullScreen ? color.white : ''}
-        onModalHide={() => {}}
-        onModalShow={() => {}}
-        onBackButtonPress={formModal.closeOnBack ? dismissFormModal : () => {}}
-        style={
-          formModal.fullScreen
-            ? MODAL_CONTAINER_STYLE
-            : { padding: 0, margin: 0, backgroundColor: color.light_grey }
-        }
-        animationIn="slideInUp"
-        animationOut="slideOutDown"
-        isVisible={formModal.visible}
-        onSwipeComplete={dismissFormModal}
-        onBackdropPress={dismissFormModal}>
-        {formModal.fullScreen && (
-          <View style={{ width: '100%' }}>
-            <ScreenHeader
-              icon={formModal.rightIcon}
-              renderBackButton={formModal.renderBackButton}
-              onBackPress={dismissFormModal}
-              header={formModal.title}
-            />
-          </View>
-        )}
-        {formModal.content}
-      </RatsModal>
-
-      {/* Loading Modal */}
-      <RatsLoadingModal
-        isVisible={loadingModal.visible}
-        loading={loadingModal.loading}
-        loadingMessage={loadingModal.message}
-        success={loadingModal.success}
-        error={loadingModal.error}
-      />
+      <ModalHostContext.Provider
+        value={{ activeScreenHost, addScreenHost, removeScreenHost, modals }}>
+        {children}
+        {activeScreenHost === undefined && modals}
+      </ModalHostContext.Provider>
     </ModalContext.Provider>
   );
+};
+
+/**
+ * Hosts the app's modals inside a modal-group screen, on iOS.
+ *
+ * The app root presents these screens as sheets, and UIKit won't present from a
+ * view controller that is already presenting. A modal hosted at the root then
+ * never appears ("Attempt to present ... on RCTRootViewController"). Hosted here,
+ * React Native presents it from the sheet. The top sheet hosts; Android has no
+ * such limit, so it stays at the root.
+ */
+export const ScreenModalHost = () => {
+  const id = useId();
+  const hosts = useContext(ModalHostContext);
+  const addScreenHost = hosts?.addScreenHost;
+  const removeScreenHost = hosts?.removeScreenHost;
+
+  useLayoutEffect(() => {
+    if (!IOS || !addScreenHost || !removeScreenHost) {
+      return;
+    }
+    addScreenHost(id);
+    return () => removeScreenHost(id);
+  }, [id, addScreenHost, removeScreenHost]);
+
+  return hosts?.activeScreenHost === id ? <>{hosts.modals}</> : null;
 };
 
 /**

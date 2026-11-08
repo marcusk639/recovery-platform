@@ -93,6 +93,7 @@ import StaffNotesFeed from '../screens/StaffNotes/StaffNotesFeed';
 import { useSelectedGuest } from '../hooks/useSelectedGuest';
 import { useSelectedHouse } from '../hooks/useSelectedHouse';
 import { RatsKeyboardScreenLayout } from '../components/rats-keyboard';
+import { ScreenModalHost } from '../context/ModalContext';
 
 // Wrapper to inject Redux guest+house into RentPaymentScreen
 const RentPaymentConnector = ({ navigation }: any) => {
@@ -113,6 +114,13 @@ const RentPaymentConnector = ({ navigation }: any) => {
 };
 
 // Phase 6.1: Simplified navigators - removed nested stacks
+const ModalScreenLayout = ({ children }: { children: React.ReactNode }) => (
+  <RatsKeyboardScreenLayout>
+    {children}
+    <ScreenModalHost />
+  </RatsKeyboardScreenLayout>
+);
+
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const SetupStack = createNativeStackNavigator<SetupStackParamList>();
@@ -328,8 +336,9 @@ export const RootNavigator = ({
     <RootStack.Group
       screenOptions={{ presentation: 'modal', headerShown: false }}
       // iOS presents these above the app root, which hides its keyboard
-      // toolbar; each modal screen gets its own.
-      screenLayout={RatsKeyboardScreenLayout}>
+      // toolbar and can't present the app's modals over them; each modal screen
+      // gets its own.
+      screenLayout={ModalScreenLayout}>
       {/* Existing modal screens */}
       <RootStack.Screen name={Routes.HouseList} component={HousesOverview} />
       <RootStack.Screen
