@@ -430,7 +430,10 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
       </AuthConsumer>
 
       {/******************************* HEALTH SCORE ********************************/}
-      <View testID="week-summary-card">
+      {/* The container's alignItems: "flex-start" shrinks this wrapper to its
+          content, and RN 0.88 then resolves the card's width: "100%" against
+          that, collapsing it. Stretch the wrapper to the screen width. */}
+      <View testID="week-summary-card" style={{ alignSelf: "stretch" }}>
         <WeekStatSummary
           percentage={overallPercentage}
           header="HEALTH SCORE"

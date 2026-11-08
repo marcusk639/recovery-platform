@@ -23,8 +23,11 @@ tags:
     id: "meetings-card"
 - assertVisible:
     id: "chores-card"
+# Required: on RN 0.88 this card collapsed to its padding while the element
+# still existed, so the header text is what proves it rendered.
 - assertVisible:
     id: "week-summary-card"
-    optional: true
+- assertVisible:
+    text: "HEALTH SCORE"
 - runFlow:
     file: ../subflows/logout.yaml

@@ -62,7 +62,9 @@ const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
     justifyContent: "flex-start",
-    alignItems: "center",
+    // RN 0.88 sizes each list cell to its content under "center", so the
+    // header and rows (CARD_STYLE width: "100%") shrank; stretch fills the row.
+    alignItems: "stretch",
     backgroundColor: color.light_grey,
   },
   loadingContainer: {

@@ -13,8 +13,8 @@
     {
       "id": "guest-b",
       "email": "test-guest-b@rats-e2e.com",
-      "firstName": "Test",
-      "lastName": "GuestB",
+      "firstName": "Bob",
+      "lastName": "Rivera",
       "role": "guest",
       "houseId": "test-house-123",
       "phone": "555-0002"

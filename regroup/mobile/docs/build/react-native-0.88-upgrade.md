@@ -1601,6 +1601,15 @@ CI runs the unit suite and the ratchet on every push of the branch.
   - Android `e2eEmulator` and `e2eStaging` build, and `scripts/verify-android-variants.sh` passes all 20 assertions.
   - iOS `Release` and Android `assembleRelease` are both **refused** by the release guard (`STRIPE_PUBLISHABLE_KEY is empty; a release build requires a pk_live_ key`), as designed. The build-level refusal was with an empty key. The `pk_test_` case is covered by `scripts/release-guard.test.js` and, on Android, by the CI step that runs `regroupReleaseGuard` with `STRIPE_PUBLISHABLE_KEY=pk_test_x`; one `stripeKeyReleaseProblem` handles both. Store builds with the live key move to the launch plan's production device pass (P9).
 
+- **Simulator pass by hand, and the layout regression it found (2026-11-08, iOS `E2EEmulator`, emulators).**
+
+  - **Upgrade regression, fixed here:** a `width: '100%'` card inside a parent that shrinks to its content (`alignItems: 'flex-start'` or `'center'`) now takes the content's width. The old layout engine resolved it against the screen. `experimental_LayoutConformance` doesn't help: the default is already `compatibility` (`YGErrataAll`).
+    - `GuestHome`'s HEALTH SCORE card collapsed to its padding. The wrapper now has `alignSelf: 'stretch'`. A build without the fix fails the new `HEALTH SCORE` assert in `maestro/flows/guest-home.yaml`; with it, the assert passes.
+    - `GuestList`'s header and rows shrank. Its list container now uses `alignItems: 'stretch'`. Checked by screenshot with and without the fix.
+  - **Stale build warning:** an `E2EEmulator` app built before these runs threw `undefined is not an object (evaluating 'e.getItem')` on opening the guest list, which then spun forever. A fresh build of the same source doesn't. Rebuild before judging a screen.
+  - **Pre-existing bugs found, not fixed here (spec §4.4), tracked in #182 and the follow-ups it links:** email signup never writes the user document; the activity feed and Disputes drop the week's last day; Profile spins after signing out and back in; direct messages are denied by the rules and spin forever; house chat is titled "undefined undefined"; Contacts' ADMIN section is never populated.
+  - **Form modals opened from a sheet-style screen never appear on iOS.** UIKit logs `Attempt to present RCTFabricModalHostViewController on RCTRootViewController` because the root is already presenting the sheet. It affects House Settings' Details, Chores, Managers, Admin Management, Phases and Guests, and other `showFormModal` callers. RN 0.72 presents from the same root view controller, so `main` very likely has it too, but its e2e build can't sign in to prove that.
+
 ### 7.3 Not verified yet (owner, on devices)
 
 Step-by-step instructions, with a results table to fill in: `regroup/docs/operations/manual-tasks/2026-11-06-rn-0.88-merge-device-pass.md`.
