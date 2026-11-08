@@ -50,7 +50,15 @@ export const test = base.extend<{ allowPageErrors: boolean; guards: void; pageEr
         external.push(hostname);
         return route.abort();
       });
-      page.on('pageerror', (error) => pageErrors.push(`${error.name}: ${error.message}`.slice(0, 300)));
+      page.on('pageerror', (error) => {
+        pageErrors.push(`${error.name}: ${error.message}`.slice(0, 300));
+        if (process.env.PORTAL_E2E_DEBUG) console.log('[pageerror]', error.stack?.slice(0, 1200));
+      });
+      if (process.env.PORTAL_E2E_DEBUG) {
+        page.on('console', (m) => {
+          if (m.type() === 'error' || m.type() === 'warning') console.log(`[${m.type()}]`, m.text().slice(0, 500));
+        });
+      }
       await use();
       expect(external, 'browser requests outside this machine').toEqual([]);
       if (!allowPageErrors) expect(pageErrors, 'uncaught page errors').toEqual([]);

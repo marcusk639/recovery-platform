@@ -96,3 +96,13 @@ test('it appears above an open React Native Modal and takes clicks and focus', a
   await userEvent.click(button);
   expect(ok).toHaveBeenCalledTimes(1);
 });
+
+test('Escape over an open Modal closes only the alert', async () => {
+  const closeForm = vi.fn();
+  render(<Modal visible onRequestClose={closeForm}><button>inside modal</button></Modal>);
+  show('Error', 'Failed.');
+  await screen.findByRole('alertdialog');
+  await userEvent.keyboard('{Escape}');
+  expect(screen.queryByRole('alertdialog')).toBeNull();
+  expect(closeForm).not.toHaveBeenCalled();
+});
