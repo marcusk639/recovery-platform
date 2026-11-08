@@ -55,6 +55,7 @@ const WEEKS_QUERY = (limit: number) => ({
   path: 'week-summaries',
   constraints: [
     ['where', 'guestId', '==', 'g1'],
+    ['where', 'houseId', '==', 'h1'],
     ['orderBy', 'startDate', 'desc'],
     ['limit', limit],
   ],
@@ -71,8 +72,8 @@ afterEach(() => {
 describe('checkAdvancementEligibility', () => {
   it('reads the latest N week summaries and is eligible after N compliant weeks', async () => {
     seedQuery('week-summaries', [
-      { id: 'w1', guestId: 'g1', startDate: '2026-09-27', stats: stats(3) },
-      { id: 'w2', guestId: 'g1', startDate: '2026-10-04', stats: stats(4) },
+      { id: 'w1', guestId: 'g1', houseId: 'h1', startDate: '2026-09-27', stats: stats(3) },
+      { id: 'w2', guestId: 'g1', houseId: 'h1', startDate: '2026-10-04', stats: stats(4) },
       { id: 'w3', guestId: 'g2', startDate: '2026-10-04', stats: stats(0) },
     ]);
 
@@ -91,8 +92,8 @@ describe('checkAdvancementEligibility', () => {
 
   it('stops counting at the newest non-compliant week (default 4 weeks)', async () => {
     seedQuery('week-summaries', [
-      { id: 'w1', guestId: 'g1', startDate: '2026-09-27', stats: stats(3) },
-      { id: 'w2', guestId: 'g1', startDate: '2026-10-04', stats: stats(1) },
+      { id: 'w1', guestId: 'g1', houseId: 'h1', startDate: '2026-09-27', stats: stats(3) },
+      { id: 'w2', guestId: 'g1', houseId: 'h1', startDate: '2026-10-04', stats: stats(1) },
     ]);
 
     const result = await checkAdvancementEligibility(guest('one'), house);
@@ -100,6 +101,18 @@ describe('checkAdvancementEligibility', () => {
     expect(result.eligible).toBe(false);
     expect(result.compliantWeeks).toBe(0);
     expect(getOpLog()).toEqual([WEEKS_QUERY(4)]);
+  });
+
+  it('does not count weeks logged in another house', async () => {
+    seedQuery('week-summaries', [
+      { id: 'w1', guestId: 'g1', houseId: 'other', startDate: '2026-09-27', stats: stats(3) },
+      { id: 'w2', guestId: 'g1', houseId: 'other', startDate: '2026-10-04', stats: stats(3) },
+    ]);
+
+    const result = await checkAdvancementEligibility(guest('one'), house, 2);
+
+    expect(result.eligible).toBe(false);
+    expect(result.compliantWeeks).toBe(0);
   });
 
   it('makes no read for a guest on the highest phase', async () => {

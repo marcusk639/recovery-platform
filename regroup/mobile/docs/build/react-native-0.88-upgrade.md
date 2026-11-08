@@ -1615,6 +1615,8 @@ CI runs the unit suite and the ratchet on every push of the branch.
 
   - **Pre-existing bug, fixed here: an operator's guest tab read "No guests in this house" with residents in the house.** Nothing selected a guest for an operator at sign-in. `useDefaultGuestSelection` now picks a resident and keeps the selection inside the selected house, so Change home no longer leaves a resident of the previous house on screen. With a guest now selected by default, `GuestHome` schedules a rent reminder only for the signed-in person's own record, so operators aren't reminded about a resident's rent.
 
+  - **Pre-existing bug, fixed here: the phase advancement banner could never appear.** `getRecentWeekSummaries` filtered by guest but not house. The rules refuse that query and no index serves it, and the app treated the error as zero compliant weeks. It now filters by house too, which uses the existing index.
+
 ### 7.3 Not verified yet (owner, on devices)
 
 Step-by-step instructions, with a results table to fill in: `regroup/docs/operations/manual-tasks/2026-11-06-rn-0.88-merge-device-pass.md`.
