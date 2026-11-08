@@ -31,13 +31,13 @@ const ENUMS = {
   role: ['signed-out', 'operator', 'manager', 'resident', 'oxford', 'any'],
   platform: ['ios', 'android', 'both', 'web'],
   fixture: ['clean', 'legacy', 'both', 'n/a'],
-  kind: ['maestro', 'playwright', 'staging', 'device', 'unit'],
+  kind: ['maestro', 'playwright', 'staging', 'device', 'unit', 'server'],
   guard: ['money', 'data', 'none'],
   status: ['pass', 'fail', 'missing', 'deferred'],
 };
 const NONE = '—';
 const DEFERRAL = /^(checklist|post-launch): .+ \(\d{4}-\d{2}-\d{2}\)$/;
-const FILE_KINDS = ['maestro', 'playwright', 'staging', 'unit'];
+const FILE_KINDS = ['maestro', 'playwright', 'staging', 'unit', 'server'];
 
 function parseMatrix(markdown) {
   const lines = markdown.split('\n');

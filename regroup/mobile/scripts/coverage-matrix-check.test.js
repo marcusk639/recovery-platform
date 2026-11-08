@@ -89,6 +89,22 @@ describe('validate — structure', () => {
   it('does not check the file of a missing row', () => {
     expect(check(matrix(row({ coveredBy: '—', status: 'missing' })))).toEqual([]);
   });
+  it('needs a covering file for a server row that has run', () => {
+    const server = { kind: 'server', guard: 'money' };
+    expect(check(matrix(row({ ...server, coveredBy: '—' })))).toEqual([
+      expect.stringMatching(/AUTH-001: needs Covered by/),
+    ]);
+    expect(check(matrix(row({ ...server, coveredBy: 'regroup/nope.test.ts' })))).toEqual([
+      expect.stringMatching(/AUTH-001: missing file/),
+    ]);
+    expect(check(matrix(row(server)))).toEqual([]);
+  });
+  it('cannot defer a money-guarded server row', () => {
+    const errs = check(
+      matrix(row({ kind: 'server', guard: 'money', status: 'deferred', deferred: 'checklist: x (2026-11-08)' })),
+    );
+    expect(errs).toEqual([expect.stringMatching(/cannot defer a money row/)]);
+  });
 });
 
 describe('validate — release', () => {
