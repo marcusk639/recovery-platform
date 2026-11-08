@@ -4,6 +4,7 @@ import { ScrollView, View } from 'react-native-web';
 
 export { KeyboardAvoidingView } from 'react-native-web';
 
+export const KEYBOARD_HAS_ROUNDED_CORNERS = false;
 export const KeyboardProvider = ({ children }: { children: ReactNode }) => <>{children}</>;
 export const KeyboardStickyView = View;
 export const KeyboardToolbar = () => null;
