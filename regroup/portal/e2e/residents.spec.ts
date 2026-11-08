@@ -27,3 +27,10 @@ test('reloading mid-session does not leave a blank page', async ({ page }) => {
   await page.reload();
   await expect(page.locator('#nav-residents, #sign-in-form').first()).toBeVisible({ timeout: 15_000 });
 });
+
+test('a link to a route the portal lacks fails visibly', async ({ page }) => {
+  await signInAs(page, 'oxford-operator');
+  await page.click('#nav-house-summary');
+  await page.getByText('Oxford House Hub').click();
+  await expect(page.getByRole('alertdialog')).toContainText("isn't available on the web yet");
+});

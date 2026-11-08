@@ -10,6 +10,8 @@ import { navigationRef } from '@mobile/navigation/service';
 import { queryClient } from '@mobile/state/queryClient';
 import store from '@mobile/state/store';
 import { ThemeProvider } from '@mobile/styles/theme';
+import { AlertHost } from '../adapter/alert/AlertHost';
+import { Alert } from '../adapter/react-native';
 
 function Themed({ children }: { children: ReactNode }) {
   const theme = useSelector((state: any) => state.theme.theme);
@@ -21,7 +23,9 @@ function Themed({ children }: { children: ReactNode }) {
 export const Providers = ({ children }: { children: ReactNode }) => (
   <Provider store={store}>
     <QueryClientProvider client={queryClient}>
-      <NavigationContainer ref={navigationRef}>
+      <NavigationContainer
+        ref={navigationRef}
+        onUnhandledAction={() => Alert.alert("This isn't available on the web yet")}>
         <RatsKeyboardProvider>
           <SafeAreaProvider>
             <Themed>
@@ -29,6 +33,7 @@ export const Providers = ({ children }: { children: ReactNode }) => (
                 <NotificationProvider>
                   <ModalProvider>
                     <Auth>{children}</Auth>
+                    <AlertHost />
                   </ModalProvider>
                 </NotificationProvider>
               </DataProvider>
