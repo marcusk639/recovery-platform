@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "guests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "autoPayEnabled", "order": "ASCENDING" },
+        { "fieldPath": "balance", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "activities",
       "queryScope": "COLLECTION",
       "fields": [
