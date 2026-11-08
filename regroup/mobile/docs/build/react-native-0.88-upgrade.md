@@ -1613,6 +1613,8 @@ CI runs the unit suite and the ratchet on every push of the branch.
   - **Upgrade regression, fixed here: the meeting finder drew nothing.** Its results, spinner and empty and error messages sat in a view with `zIndex: -50`, which RN 0.88 draws behind the screen, so all of it was invisible. The search bar is now raised instead, so its address dropdown still opens over the results.
   - **Pre-existing bug the regression hid, fixed here because it's costly: the finder searched in a loop.** Its location effect depended on a callback that changed every render, and each new location started another search: 10,268 searches in one visit, against the emulator. It now reads the location once. Checked on the simulator: one search per visit, and results near the location.
 
+  - **Pre-existing bug, fixed here: an operator's guest tab read "No guests in this house" with residents in the house.** Nothing selected a guest for an operator at sign-in. `useDefaultGuestSelection` now picks a resident and keeps the selection inside the selected house, so Change home no longer leaves a resident of the previous house on screen. With a guest now selected by default, `GuestHome` schedules a rent reminder only for the signed-in person's own record, so operators aren't reminded about a resident's rent.
+
 ### 7.3 Not verified yet (owner, on devices)
 
 Step-by-step instructions, with a results table to fill in: `regroup/docs/operations/manual-tasks/2026-11-06-rn-0.88-merge-device-pass.md`.

@@ -11,6 +11,7 @@ import { useAppSelector } from "../../state/store";
 import { useModal } from "../../context";
 import { useSelectedHouse } from "../../hooks/useSelectedHouse";
 import { useSelectedGuest } from "../../hooks/useSelectedGuest";
+import { useDefaultGuestSelection } from "../../hooks/useDefaultGuestSelection";
 import { useCurrentWeek } from "../../hooks/activity/useCurrentWeek";
 import {
   useComplianceCheck,
@@ -219,6 +220,7 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
     useSelectedHouse();
   const house = selectedHouseRaw as House | null;
   const user = useAppSelector((state: any) => state.user.user) as User | null;
+  const { isLoading: loadingGuestList } = useDefaultGuestSelection();
 
   // Optionally fetch guest via React Query so we always have the freshest
   // server copy for read-through scenarios.
@@ -246,7 +248,8 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
   const _guestId = currentGuest?.id;
   const _rentOwed = currentGuest?.rentOwed ?? 0;
   React.useEffect(() => {
-    if (!currentGuest) {
+    // Staff also view residents here; the reminder is only for the person who owes.
+    if (!currentGuest || currentGuest.userId !== user?.id) {
       return;
     }
     if (_rentOwed > 0) {
@@ -275,7 +278,7 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
       : null;
 
   // Loading state
-  const loading = requestingGuests || requestingHouse;
+  const loading = requestingGuests || requestingHouse || loadingGuestList;
   if (loading || !house) {
     return <RatsLoadingIndicator />;
   }

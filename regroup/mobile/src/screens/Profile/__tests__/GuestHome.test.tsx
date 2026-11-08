@@ -22,6 +22,10 @@ jest.mock("../../../hooks/useSelectedHouse", () => ({
 jest.mock("../../../hooks/useSelectedGuest", () => ({
   useSelectedGuest: () => mockUseSelectedGuest(),
 }));
+let mockGuestListLoading = false;
+jest.mock("../../../hooks/useDefaultGuestSelection", () => ({
+  useDefaultGuestSelection: () => ({ isLoading: mockGuestListLoading }),
+}));
 
 // ─── Navigation mock ──────────────────────────────────────────────────────────
 jest.mock("@react-navigation/native-stack", () => ({}));
@@ -486,6 +490,14 @@ describe("GuestHome", () => {
       expect(getByTestId("loading-indicator")).toBeTruthy();
     });
 
+    it("shows loading, not the empty message, while the guest list loads", () => {
+      mockGuestListLoading = true;
+      const { getByTestId, queryByTestId } = renderScreen({ selectedGuest: null });
+      mockGuestListLoading = false;
+      expect(getByTestId("loading-indicator")).toBeTruthy();
+      expect(queryByTestId("empty-screen")).toBeNull();
+    });
+
     it("does not render the overview screen while loading", () => {
       const { queryByTestId } = renderScreen({ requestingGuests: true });
       expect(queryByTestId("guest-overview-screen")).toBeNull();
@@ -669,20 +681,29 @@ describe("GuestHome", () => {
 });
 
 describe("Rent reminder notification scheduling", () => {
+  // The store's signed-in user is "admin-1".
+  const OWN_GUEST = { ...BASE_GUEST, userId: "admin-1" };
+
   beforeEach(() => {
     mockScheduleRentReminder.mockClear();
     mockCancelRentReminder.mockClear();
   });
 
   it("schedules a rent reminder when guest has rentOwed > 0", () => {
-    renderScreen({ selectedGuest: { ...BASE_GUEST, rentOwed: 5000 } });
+    renderScreen({ selectedGuest: { ...OWN_GUEST, rentOwed: 5000 } });
     expect(mockScheduleRentReminder).toHaveBeenCalledWith(
       expect.objectContaining({ id: BASE_GUEST.id })
     );
   });
 
+  it("does not remind an operator viewing a resident who owes rent", () => {
+    renderScreen({ selectedGuest: { ...BASE_GUEST, userId: "someone-else", rentOwed: 5000 } });
+    expect(mockScheduleRentReminder).not.toHaveBeenCalled();
+    expect(mockCancelRentReminder).not.toHaveBeenCalled();
+  });
+
   it("does not schedule a reminder when rentOwed === 0", () => {
-    renderScreen({ selectedGuest: { ...BASE_GUEST, rentOwed: 0 } });
+    renderScreen({ selectedGuest: { ...OWN_GUEST, rentOwed: 0 } });
     expect(mockScheduleRentReminder).not.toHaveBeenCalled();
   });
 
@@ -690,11 +711,11 @@ describe("Rent reminder notification scheduling", () => {
   // the app must not leave a reminder pending.
   it("cancels the reminder when rentOwed drops to 0", () => {
     const { rerender } = renderScreen({
-      selectedGuest: { ...BASE_GUEST, rentOwed: 5000 },
+      selectedGuest: { ...OWN_GUEST, rentOwed: 5000 },
     });
     expect(mockCancelRentReminder).not.toHaveBeenCalled();
 
-    const store = buildStore({ selectedGuest: { ...BASE_GUEST, rentOwed: 0 } });
+    const store = buildStore({ selectedGuest: { ...OWN_GUEST, rentOwed: 0 } });
     rerender(
       <Provider store={store}>
         <QueryClientProvider client={buildQueryClient()}>
@@ -710,7 +731,7 @@ describe("Rent reminder notification scheduling", () => {
   });
 
   it("does not cancel the reminder while rent is owed", () => {
-    renderScreen({ selectedGuest: { ...BASE_GUEST, rentOwed: 5000 } });
+    renderScreen({ selectedGuest: { ...OWN_GUEST, rentOwed: 5000 } });
     expect(mockCancelRentReminder).not.toHaveBeenCalled();
   });
 });
