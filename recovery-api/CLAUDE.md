@@ -21,7 +21,7 @@ npm run migrate:na   # build + migrate NA meetings (lib/scripts/migrateNaMeeting
 
 ## Architecture
 
-Firebase Functions v2 targeting the `recovery-platform` Firebase project.
+Firebase Functions v2 targeting the `recovery-platform-e6cb3` Firebase project.
 All callable functions use `requireServiceAuth` for Phase 1 service-key auth.
 
 ```
@@ -66,5 +66,5 @@ src/
   **canonical app-id**, never a display name or alias. Resolve at the boundary with `resolveAppId()`.
 - The registry (`config/apps.ts`) is the only place to add/rename an app. `sober-living` is a
   retained legacy alias for `phoenix-cleanhouse`; do not reintroduce it as a standalone app-id.
-- Emulator ports are offset (functions 5002, firestore 8082, auth 9100, UI 4001) so recovery-api can run beside another product's emulators.
+- Emulator ports are offset (functions 5002, firestore 8082, auth 9100, UI 4001) so recovery-api can run beside another product's emulators. Its internal ports are offset too (hub 4402, logging 4502, Firestore websocket 9165, eventarc 9302, tasks 9502), or the second suite to start fails.
 - Jest coverage floor (`jest.config.cjs`: 80/75/78/80 statements/branches/functions/lines) is a ratchet — raise it, never lower it.
