@@ -86,12 +86,33 @@ class RatsLoadingModal extends Component<Props, State> {
     }
   }
 
+  private hideTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // Mounted already finished (visible, not loading): on iOS the modals move to
+  // another host when a sheet opens or closes, which remounts this component
+  // mid-way through the 1 s success/error display. Finish it here, since there
+  // is no loading -> done change left to see.
+  componentDidMount() {
+    const { isVisible, loading } = this.props;
+    if (isVisible && !loading) {
+      this.scheduleHide();
+    }
+  }
+
   componentDidUpdate(prevProps: Props) {
     const { loading } = this.props;
     if (!loading && prevProps.loading) {
-      const timeout = new Promise(resolve => setTimeout(resolve, 1000));
-      timeout.then(() => this.setState({ isVisible: false }));
+      this.scheduleHide();
     }
+  }
+
+  componentWillUnmount() {
+    clearTimeout(this.hideTimer);
+  }
+
+  scheduleHide() {
+    clearTimeout(this.hideTimer);
+    this.hideTimer = setTimeout(() => this.setState({ isVisible: false }), 1000);
   }
 
   renderSuccess() {

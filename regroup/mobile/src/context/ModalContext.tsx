@@ -14,6 +14,7 @@ import RatsLoadingModal from '../components/rats-loading-modal';
 import ScreenHeader from '../components/screen-header';
 import { color, MODAL_STYLE, MODAL_CONTAINER_STYLE } from '../styles/theme';
 import { IOS } from '../util/platform';
+import { useLoadingModalAutoHide } from './useLoadingModalAutoHide';
 
 /**
  * Modal Context Types
@@ -179,6 +180,8 @@ export const ModalProvider: React.FC<ModalProviderProps> = ({ children }) => {
     },
     [],
   );
+
+  useLoadingModalAutoHide(loadingModal.loading, loadingModal.visible, hideLoadingModal);
 
   // Context Value
   const value: ModalContextType = {
