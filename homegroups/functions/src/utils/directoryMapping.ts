@@ -48,6 +48,8 @@ export function mapDirectoryToSerialized(
     online: meeting.online,
     link: meeting.link,
     onlineNotes: meeting.onlineNotes,
+    ...(meeting.timezone ? { timezone: meeting.timezone } : {}),
     ...(meeting.dataAsOf ? { dataAsOf: meeting.dataAsOf } : {}),
+    ...(meeting.externalId ? { apiId: meeting.externalId } : {}),
   };
 }

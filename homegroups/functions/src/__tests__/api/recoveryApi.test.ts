@@ -27,6 +27,17 @@ describe("fetchDirectoryMeetings", () => {
     expect(result).toEqual(meetings);
   });
 
+  it("gives up on a slow directory, so the person still gets Homegroups' own meetings", async () => {
+    const fetchFn = jest
+      .fn()
+      .mockResolvedValue(okResponse({ result: { meetings: [] } }));
+    await fetchDirectoryMeetings(input, caller, {
+      ...deps,
+      fetchFn: fetchFn as unknown as typeof fetch,
+    });
+    expect(fetchFn.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
+  });
+
   it("POSTs the callable wire protocol with service-auth headers (X-App-Id: homegroups)", async () => {
     const fetchFn = jest
       .fn()
