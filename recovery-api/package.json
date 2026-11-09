@@ -15,7 +15,6 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "seed": "npm run build && node lib/scripts/seedDirectory.js",
-    "migrate:na": "npm run build && node lib/scripts/migrateNaMeetings.js",
     "import:snapshot": "npm run build && node lib/scripts/importMeetingSnapshot.js",
     "lint": "eslint src"
   },

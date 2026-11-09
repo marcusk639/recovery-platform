@@ -16,7 +16,6 @@ npm run test:watch   # Jest in watch mode
 npm run test:coverage # Jest with coverage
 npm run lint         # eslint src
 npm run seed         # build + seed directoryMeetings (lib/scripts/seedDirectory.js)
-npm run migrate:na   # superseded by import:snapshot; do not use
 npm run import:snapshot -- --provider AA|NA [--apply]  # dry run by default; refuses a source with billing off
 ```
 

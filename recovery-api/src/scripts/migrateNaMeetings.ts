@@ -38,8 +38,7 @@
  * operator — illustrative only:
  *   GOOGLE_APPLICATION_CREDENTIALS=... npx ts-node src/scripts/migrateNaMeetings.ts
  */
-import { FieldValue, getFirestore } from 'firebase-admin/firestore';
-import { initializeApp, getApps } from 'firebase-admin/app';
+import { FieldValue } from 'firebase-admin/firestore';
 import type { DirectoryMeeting } from '../entities/DirectoryMeeting';
 import { mapNaMeeting, type NaDatasetDoc } from '../lib/meetings/sources/naDataset';
 
@@ -202,23 +201,8 @@ export async function runMigration(deps: MigrateDeps): Promise<MigrateResult> {
  * ops-time decision, not baked in, because the script is one-off and the source
  * project varies (homegroups vs regroup).
  */
-async function main(): Promise<void> {
-  if (getApps().length === 0) {
-    initializeApp();
-  }
-  const db = getFirestore();
-
-  console.log(
-    `migrateNaMeetings: reading source '${SOURCE_COLLECTION}', writing '${DEST_COLLECTION}'.`,
-  );
-
-  const result = await runMigration({ sourceDb: db, destDb: db });
-
-  console.log(
-    `migrateNaMeetings: complete. read=${result.read} ` +
-      `upserted=${result.upserted} skippedUnmappable=${result.skippedUnmappable} ` +
-      `skippedAppOwned=${result.skippedAppOwned}`,
-  );
+export async function main(): Promise<void> {
+  throw new Error('migrateNaMeetings is superseded: use npm run import:snapshot -- --provider NA');
 }
 
 // Guard the run-entry so importing this module (e.g. in tests) does not execute
