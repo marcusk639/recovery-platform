@@ -85,7 +85,17 @@ describe("mapDirectoryToSerialized", () => {
     expect(m.updatedAt).toBe("");
   });
 
-  it("converts the integer day (0–6) to a lowercase weekday", () => {
+  it("keeps a stored day name, lowercased", () => {
+    expect(mapDirectoryToSerialized({ ...base, day: "tuesday" }).day).toBe("tuesday");
+    expect(mapDirectoryToSerialized({ ...base, day: "Tuesday" }).day).toBe("tuesday");
+  });
+
+  it("leaves out a day it does not recognize", () => {
+    expect(mapDirectoryToSerialized({ ...base, day: "someday" }).day).toBeUndefined();
+    expect(mapDirectoryToSerialized({ ...base, day: 9 }).day).toBeUndefined();
+  });
+
+  it("still converts a legacy integer day (0–6) until rows are migrated", () => {
     expect(mapDirectoryToSerialized({ ...base, day: 0 }).day).toBe("sunday");
     expect(mapDirectoryToSerialized({ ...base, day: 1 }).day).toBe("monday");
     expect(mapDirectoryToSerialized({ ...base, day: 6 }).day).toBe("saturday");
