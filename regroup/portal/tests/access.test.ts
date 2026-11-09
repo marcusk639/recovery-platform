@@ -1,4 +1,4 @@
-import { accessFor, canAccessHouse, operatorHouseIds, signInErrorMessage } from '../src/app/access';
+import { accessFor, canAccessHouse, hasFullHouseView, operatorHouseIds, signInErrorMessage } from '../src/app/access';
 
 const roles = { h1: 'admin', h2: 'guest', h3: 'superAdmin' };
 
@@ -38,4 +38,20 @@ test('sign-in messages do not say which part was wrong', () => {
 test('too many attempts and connection failures have their own messages', () => {
   expect(signInErrorMessage({ code: 'auth/too-many-requests' })).toMatch(/too many/i);
   expect(signInErrorMessage(new Error('offline'))).toMatch(/connection/);
+});
+test('owners and co-owners get the full view without waiting for a tier', () => {
+  expect(hasFullHouseView({ h1: 'superAdmin' }, undefined, 'h1')).toBe(true);
+});
+test('a manager gets the full view', () => {
+  expect(hasFullHouseView({ h1: 'admin' }, { h1: 'manager' }, 'h1')).toBe(true);
+  expect(hasFullHouseView({ h1: 'admin' }, { h1: 'owner' }, 'h1')).toBe(true);
+});
+test('a peer leader, or a tier nobody could confirm, gets the limited view', () => {
+  expect(hasFullHouseView({ h1: 'admin' }, { h1: 'peerLeader' }, 'h1')).toBe(false);
+  expect(hasFullHouseView({ h1: 'admin' }, undefined, 'h1')).toBe(false);
+  expect(hasFullHouseView({ h1: 'admin' }, { h2: 'manager' }, 'h1')).toBe(false);
+});
+test('a tier does not outrank a missing role', () => {
+  expect(hasFullHouseView({}, { h1: 'manager' }, 'h1')).toBe(false);
+  expect(hasFullHouseView({ h1: 'guest' }, { h1: 'manager' }, 'h1')).toBe(false);
 });

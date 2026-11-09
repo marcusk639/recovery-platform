@@ -17,6 +17,16 @@ export const operatorHouseIds = (roles: Roles): string[] =>
 
 export const canAccessHouse = (roles: Roles, houseId: string): boolean => isStaffRole(roles[houseId]);
 
+// Owners, co-owners and managers see a house in full; peer leaders see less
+// (owner decision, 2026-11-09). An admin claim alone can't tell a manager from a
+// peer leader, so without a confirmed tier the view is the limited one.
+export function hasFullHouseView(roles: Roles, tiers: Record<string, string> | undefined, houseId: string): boolean {
+  if (roles[houseId] === 'superAdmin') return true;
+  if (roles[houseId] !== 'admin') return false;
+  const tier = tiers?.[houseId];
+  return tier === 'owner' || tier === 'manager';
+}
+
 export function accessFor(user: AccessUser | null, roles: Roles): Access {
   if (!user) return 'none';
   const settingUp = (user.isSuperAdmin || user.potentialSuperAdmin) && !user.orgSetupCompleted;

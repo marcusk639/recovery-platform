@@ -5,6 +5,7 @@ import { useDispatch, useStore } from 'react-redux';
 import { houseKeys } from '@mobile/state/queries/houseQueries';
 import { autoLogin } from '@mobile/state/slices/userSlice';
 import { auth } from '../adapter/firebase-setup';
+import { HOUSE_TIERS_KEY } from './useHouseAccess';
 
 export const CLAIMS_REFRESH_MS = 10 * 60 * 1000;
 
@@ -27,6 +28,7 @@ export function useClaimsRefresh(): void {
         const houseId = store.getState().houses.selectedHouseId;
         if (houseId) await queryClient.invalidateQueries({ queryKey: houseKeys.detail(houseId) });
         await queryClient.invalidateQueries({ queryKey: ['paywall', 'config'] });
+        await queryClient.invalidateQueries({ queryKey: HOUSE_TIERS_KEY });
       } catch {
         // A failed refresh, as when offline, must not end the session.
       } finally {
