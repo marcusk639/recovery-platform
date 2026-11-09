@@ -1,4 +1,5 @@
 import { purgeNaMeetings, reconcileNaMeetings, runNaSync, NA_SYNC_STATE_DOC_ID } from './naSync';
+import { sweepBmlt } from './naSweep';
 import { mapBmltMeeting } from './sources/bmlt';
 import { IMPORTED, bmltRow, makeNaSyncDb, now, regionSweep } from './testing/naSyncTestDb';
 
@@ -166,7 +167,7 @@ describe('reconcileNaMeetings writes', () => {
 });
 
 describe('runNaSync', () => {
-  const regionList = () => [
+  const regionList = (numTotal: number) => [
     ...Array.from({ length: 30 }, (_v, i) => ({
       id: 100 + i,
       sourceId: 200 + i,
@@ -178,15 +179,15 @@ describe('runNaSync', () => {
       id: 1,
       sourceId: 100,
       name: 'Region 100',
-      statistics: { meetings: { numTotal: 1 } },
+      statistics: { meetings: { numTotal } },
       lastSuccessfulImport: IMPORTED,
     },
   ];
 
-  const fetchWith = (meetings: unknown[]) =>
+  const fetchWith = (meetings: unknown[], numTotal = 1) =>
     (async (input: string | URL | Request) => {
       const url = String(input);
-      if (url.endsWith('/rootservers')) return new Response(JSON.stringify(regionList()));
+      if (url.endsWith('/rootservers')) return new Response(JSON.stringify(regionList(numTotal)));
       const isRegion = new URL(url).searchParams.get('root_server_ids') === '1';
       return new Response(JSON.stringify({ meetings: isRegion ? meetings : [] }));
     }) as unknown as typeof fetch;
@@ -208,7 +209,6 @@ describe('runNaSync', () => {
       lastRunAt: '2026-11-09T02:00:00.000Z',
       scope: 'all',
       regions: 31,
-      unhealthy: [],
       result: { created: 1 },
     });
   });
@@ -248,6 +248,22 @@ describe('runNaSync', () => {
     expect(summary.perRegion).toEqual([{ name: 'Region 100', sourceId: 100, rows: 1 }]);
   });
 
+  test('a region reporting no meetings deletes nothing, even when named', async () => {
+    const { db, store } = makeNaSyncDb();
+    await reconcileNaMeetings([regionSweep(100, [bmltRow(1)])], { db, apply: true, now });
+
+    const sweeps = await sweepBmlt({ fetchFn: fetchWith([], 0), now, sleep });
+    const result = await reconcileNaMeetings(sweeps, {
+      db,
+      apply: true,
+      now,
+      allowDeletes: ['100'],
+    });
+
+    expect(result).toMatchObject({ deleted: 0, keptUnhealthy: 1 });
+    expect(store.size).toBe(1);
+  });
+
   test('reports unhealthy regions', async () => {
     const { db } = makeNaSyncDb();
     const summary = await runNaSync({
@@ -255,6 +271,7 @@ describe('runNaSync', () => {
       apply: false,
       now,
       sleep,
+      onlyRegion: 100,
       fetchFn: fetchWith([bmltRow(1), bmltRow(2)]),
     });
     expect(summary.unhealthy).toEqual([{ sourceId: 100, problem: 'count_mismatch' }]);

@@ -117,7 +117,9 @@ async function sweepRegion(region: BmltRegion, deps: NaSweepDeps): Promise<Regio
     return { region, rows: [], problem: 'fetch_failed' };
   }
 
-  if (rows.length !== region.expectedMeetings) {
+  // Zero rows is never trusted, whatever the list says: Number(null) and Number('')
+  // are both 0, and an empty 200 is also how BMLT answers a request it can't serve.
+  if (rows.length === 0 || rows.length !== region.expectedMeetings) {
     return { region, rows, problem: 'count_mismatch' };
   }
   const now = deps.now ? deps.now() : new Date();

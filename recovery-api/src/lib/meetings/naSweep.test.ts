@@ -8,7 +8,7 @@ const sleep = async () => undefined;
 interface RegionOpts {
   id: number;
   sourceId?: number;
-  numTotal?: number;
+  numTotal?: number | string | null;
   lastSuccessfulImport?: string | null;
 }
 
@@ -96,6 +96,15 @@ test('an empty 200 is a count mismatch, not an empty region', async () => {
   expect(sweep.problem).toBe('count_mismatch');
   expect(sweep.rows).toEqual([]);
 });
+
+test.each([[0], [null], ['']])(
+  'an empty answer is a problem even when the region list reports %j meetings',
+  async (numTotal) => {
+    const sweep = await sweepOne({ id: 1, numTotal }, () => json({ meetings: [], formats: [] }));
+    expect(sweep.problem).toBe('count_mismatch');
+    expect(sweep.rows).toEqual([]);
+  },
+);
 
 test('a short answer keeps its rows but is flagged', async () => {
   const sweep = await sweepOne({ id: 1 }, () => json({ meetings: [{ source_id: 1 }] }));
