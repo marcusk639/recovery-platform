@@ -1,5 +1,6 @@
 import { Routes } from '@mobile/navigation/types';
 import { navigationRef } from '@mobile/navigation/service';
+import { signOutAndReset } from './session';
 
 // A test harness only, not the portal's navigation.
 export function Nav({ houseId }: { houseId: string }) {
@@ -21,6 +22,9 @@ export function Nav({ houseId }: { houseId: string }) {
           {label}
         </button>
       ))}
+      <button id="sign-out" type="button" style={{ display: 'block', width: '100%', marginTop: 16 }} onClick={() => signOutAndReset()}>
+        Sign out
+      </button>
     </nav>
   );
 }

@@ -14,6 +14,7 @@ import { selectGuestById } from '@mobile/state/slices/guestsSlice';
 import store from '@mobile/state/store';
 import { installUnhandledFeatureAlerts } from '../adapter/unhandled';
 import { selectHouseById } from '@mobile/state/slices/housesSlice';
+import { AccessGate } from './AccessGate';
 import { Nav } from './Nav';
 import { useRestoreSession } from './session';
 import { Providers } from './Providers';
@@ -59,6 +60,7 @@ function Harness() {
   if (phase === 'checking') return <p role="status" style={{ margin: 'auto' }}>Loading...</p>;
   if (phase === 'signed-out') return <SignIn />;
   return (
+    <AccessGate>
     <WhenHouseLoaded>
     <div style={{ display: 'flex', width: '100%', height: '100%' }}>
       <Nav houseId={houseId} />
@@ -70,6 +72,7 @@ function Harness() {
       </main>
     </div>
     </WhenHouseLoaded>
+    </AccessGate>
   );
 }
 

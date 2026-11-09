@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { WEB_BASE_URL } from '@mobile/screens/Subscription/SubscriptionRequiredScreen';
-import { signInErrorMessage, useSignIn } from './session';
+import { signInErrorMessage } from './access';
+import { SIGN_OUT_REASON_KEY, useSignIn } from './session';
 
 const field = { padding: 8, font: 'inherit' };
 
@@ -10,6 +11,11 @@ export function SignIn() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [signedOutIdle] = useState(() => {
+    const idle = sessionStorage.getItem(SIGN_OUT_REASON_KEY) === 'idle';
+    sessionStorage.removeItem(SIGN_OUT_REASON_KEY);
+    return idle;
+  });
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -30,6 +36,7 @@ export function SignIn() {
       onSubmit={submit}
       style={{ margin: 'auto', display: 'grid', gap: 12, width: 320, font: '15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
       <h1 style={{ margin: 0, fontSize: 22 }}>Regroup</h1>
+      {signedOutIdle && <p role="status" style={{ margin: 0 }}>You were signed out after 15 minutes of inactivity.</p>}
       <label style={{ display: 'grid', gap: 4 }}>
         Email
         <input id="sign-in-email" type="email" autoComplete="username" required style={field} value={email} onChange={(e) => setEmail(e.target.value)} />

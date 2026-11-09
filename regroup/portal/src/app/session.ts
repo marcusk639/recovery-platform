@@ -48,10 +48,13 @@ export function useSignIn(): (email: string, password: string) => Promise<void> 
   };
 }
 
-const CREDENTIAL_ERRORS = ['auth/invalid-credential', 'auth/wrong-password', 'auth/user-not-found', 'auth/invalid-email'];
+export const SIGN_OUT_REASON_KEY = 'portal-signout-reason';
 
-export function signInErrorMessage(error: unknown): string {
-  const code = (error as { code?: unknown } | null)?.code;
-  if (typeof code === 'string' && CREDENTIAL_ERRORS.includes(code)) return "That email or password isn't right.";
-  return 'Could not sign in. Check your connection and try again.';
+// The full page load is the point: it wipes the Redux store and the query cache,
+// so nothing about residents stays in memory. Don't use the phone's logout thunk,
+// which signs in anonymously afterward.
+export async function signOutAndReset(reason?: 'idle'): Promise<void> {
+  await signOut(auth);
+  if (reason) sessionStorage.setItem(SIGN_OUT_REASON_KEY, reason);
+  location.replace('/');
 }

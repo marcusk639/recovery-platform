@@ -20,12 +20,22 @@ export function reseed(env: NodeJS.ProcessEnv = {}): void {
   execFileSync('scripts/seed.sh', { stdio: 'pipe', env: { ...process.env, ...env } });
 }
 
-export async function signInAs(page: Page, account: Account): Promise<void> {
-  const { email, house } = ACCOUNTS[account];
-  await page.goto(`/?house=${house}`);
+export async function fillSignIn(page: Page, email: string): Promise<void> {
   await page.locator('#sign-in-email').fill(email);
   await page.locator('#sign-in-password').fill(process.env.E2E_TEST_PASSWORD!);
   await page.locator('#sign-in-submit').click();
+}
+
+// Signs in without assuming the person gets into the portal.
+export async function signInAsRaw(page: Page, email: string): Promise<void> {
+  await page.goto('/');
+  await fillSignIn(page, email);
+}
+
+export async function signInAs(page: Page, account: Account): Promise<void> {
+  const { email, house } = ACCOUNTS[account];
+  await page.goto(`/?house=${house}`);
+  await fillSignIn(page, email);
   await expect(page.locator('#nav-residents')).toBeVisible({ timeout: 20_000 });
 }
 
