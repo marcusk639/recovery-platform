@@ -18,8 +18,9 @@ export interface SourceTally {
 export type SweepTally = Partial<Record<IngestSourceName, SourceTally>>;
 
 /**
- * Providers with a live source. NA and CUSTOM are deliberately absent: nothing
- * re-sees them, so they can never be judged stale.
+ * Providers this prune may judge. CUSTOM is absent because nothing re-sees it. NA is
+ * absent because `npm run sync:na` decides its own deletes (naDeletes.ts) and doesn't
+ * re-stamp unchanged rows, so a stale-based prune would wrongly remove them.
  */
 export type PrunableProvider = Extract<DirectoryProvider, 'AA' | 'CELEBRATE_RECOVERY'>;
 

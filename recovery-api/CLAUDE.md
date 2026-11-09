@@ -16,12 +16,14 @@ npm run test:watch   # Jest in watch mode
 npm run test:coverage # Jest with coverage
 npm run lint         # eslint src
 npm run seed         # build + seed directoryMeetings (lib/scripts/seedDirectory.js)
-npm run import:snapshot -- --provider AA|NA [--apply]  # dry run by default; refuses a source with billing off
+npm run import:snapshot -- --provider AA [--apply]  # dry run by default; refuses a source with billing off
+npm run sync:na      # NA meetings from BMLT, run by hand, not in GCP; dry run by default
+                     # flags: --apply, --region <sourceId>, --allow-deletes <sourceId,...>, --purge
 npm run sync:meetings [-- --apply]  # full AA sync from Meeting Guide; dry run by default; needs MEETING_GUIDE_API_KEY
 ```
 
-`lib/` is tracked and stale, and `npm run build` rewrites it. Don't commit the result. `firebase.json` has no
-build step, so build before any functions deploy or it ships the stale copy.
+`lib/` is tracked and stale, and `npm run build` rewrites it. Don't commit the result. `firebase.json` builds
+before a functions deploy (`predeploy`), so a deploy also rewrites it.
 
 **No scheduled job updates meetings** (owner decision, 2026-11-08). Meeting sync runs manually through scripts
 until further notice. `src/noScheduledJobs.test.ts` fails if a scheduled function touches meeting data. Scheduled

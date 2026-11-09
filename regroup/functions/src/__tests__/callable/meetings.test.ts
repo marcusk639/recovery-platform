@@ -72,6 +72,13 @@ describe("findMeetings", () => {
     expect(mockFetchDirectoryMeetings).toHaveBeenCalled();
   });
 
+  it("searches the directory out to 10 km, matching Homegroups' default", async () => {
+    await call(findMeetings, { filters: { type: "AA", location, day: "" } });
+    expect(mockFetchDirectoryMeetings.mock.calls[0][0]).toMatchObject({
+      radiusMeters: 10_000,
+    });
+  });
+
   it("filters directory results down to the requested provider", async () => {
     mockFetchDirectoryMeetings.mockResolvedValue([
       directoryMeeting({ provider: "AA", name: "AA One" }),

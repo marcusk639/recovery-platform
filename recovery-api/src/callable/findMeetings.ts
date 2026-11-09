@@ -109,7 +109,8 @@ export async function handleFindMeetings(
       if (seen.has(doc.id)) continue;
       seen.add(doc.id);
 
-      const meeting = doc.data() as DirectoryMeeting;
+      // Writers keep the id only as the document key, and clients need it to open a meeting.
+      const meeting = { ...doc.data(), id: doc.id } as DirectoryMeeting;
       const lat = meeting.location?.lat;
       const lng = meeting.location?.lng;
       if (typeof lat !== 'number' || typeof lng !== 'number') continue;

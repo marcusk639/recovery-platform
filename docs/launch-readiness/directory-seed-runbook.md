@@ -8,8 +8,8 @@
 > **What this does:** backfills `directoryMeetings` (the cross-app shared directory) so
 > regroup + homegroups `findMeetings` return real AA/CR/NA meetings immediately, instead
 > of waiting for a manual sync to fill it.
-> AA + Celebrate Recovery come from the **grid seed**; NA comes from a **one-off migration**
-> of each product's existing `na-meetings` Firestore collection.
+> AA + Celebrate Recovery come from the **grid seed**; NA comes from **`npm run sync:na`**
+> (see the last section).
 
 ## Corrections, 2026-11-08 (these override the sections below)
 
@@ -19,7 +19,7 @@
 - **If the key stops working, the sync tells you:** it stops, prints a `MEETING GUIDE SYNC FAILED: ACTION NEEDED` banner, exits with code 2 and writes nothing. Set a new key in `MEETING_GUIDE_API_KEY` and run it again. The banner also covers a missing key, and 50 base cells failing in a row, which may be an outage rather than the key. The apps read Firestore, not this API, so a dead key leaves listings stale but working. Nothing checks the key between runs: you only find out when you run the sync.
 - **Meeting Guide no longer works keyless.** `api.meetingguide.org/app/v2/request` returns 401 from both local machines and Cloud Functions, so the step 2 seed gets no AA rows. It has never been run on `recovery-platform-e6cb3`.
 - **Celebrate Recovery is failing too:** `locator.crgroups.info` has an expired TLS certificate. Don't disable certificate checks to get around it.
-- **The snapshot import exists but has not been run:** `npm run import:snapshot` (step 3) replaces `migrate:na`. Each row carries `dataAsOf`, which the apps show as "Listing data from Mar 2023". The owner is holding both imports as of 2026-11-08: AA until a live sync is proven, NA pending a decision on data last written in March 2023.
+- **The snapshot import exists but has not been run:** `npm run import:snapshot` (step 3) replaces `migrate:na`. Each row carries `dataAsOf`, which the apps show as "Listing data from Mar 2023". The owner is holding the AA import until a live sync is proven. NA no longer uses it: the importer refuses NA, and NA comes from `npm run sync:na`.
 - **`recovery-connect-cad4b` has billing off, and its linked billing account is closed.** Its free daily read quota is smaller than its `meetings` collection, and a full read on 2026-11-08 used it up and blocked all reads on the project until the quota reset. The script now refuses to scan a source with billing off. Check billing before any bulk read of a product's Firestore. Turning billing back on needs a different account and may restart its scheduled jobs, including the subscription reconciler and reminders.
 - **No scheduled job updates meetings (owner decision, 2026-11-08).** Meeting sync runs manually through scripts until further notice, so ignore the cron references below. `refreshDirectory` is no longer exported, and `src/noScheduledJobs.test.ts` fails if a scheduled function touches meeting data (scheduled jobs for anything else are allowed). The live function and its Scheduler job were deleted on 2026-11-09.
 - **The prune's index is deployed:** `directoryMeetings` (source, provider, lastSeenAt) went live on 2026-11-09. `pruneStale` fails without it, though it deletes nothing.
@@ -38,14 +38,14 @@
 | Maps key          | `seedDirectory` **throws at entry if `GOOGLE_MAPS_API_KEY` unset** (NA-address geocode path)                                  | `scripts/seedDirectory.ts:56-58`                        |
 | Resumable         | cursor doc `script_progress/seedDirectory` (`lastProcessedIndex`); cursor advances past failed cells                          | `scripts/seedDirectory.ts`                              |
 | Idempotent        | upsert by deterministic id/geohash (`lib/meetings/identity.ts`) — safe to re-run                                              | ingest pattern                                          |
-| NA source         | **products' `na-meetings` Firestore** (NOT recovery-platform, NOT a live API)                                                 | `scripts/migrateNaMeetings.ts` header                   |
+| NA source         | **BMLT aggregator**, through `npm run sync:na`, run by hand                                                                   | `scripts/syncNa.ts`                                     |
 | Scheduled refresh | **None.** Removed by owner decision, 2026-11-08                                                                               | `src/noScheduledJobs.test.ts`                           |
 | npm scripts       | `npm run seed` → `node lib/scripts/seedDirectory.js`; `npm run import:snapshot` → `node lib/scripts/importMeetingSnapshot.js` | `recovery-api/package.json`                             |
 
 **Two things the cron does NOT do (why the manual seed matters):**
 
 1. The cron fills AA/CR only **incrementally over ~7 days** — the manual seed gives full coverage now.
-2. The cron does **not** touch NA at all (NA is not on any schedule — Phase 1B gap). NA only enters via the one-off migration below.
+2. The cron does **not** touch NA at all (NA is not on any schedule — Phase 1B gap). NA enters only through `npm run sync:na`.
 
 ---
 
@@ -117,20 +117,18 @@ GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY" npm run seed
 
 ---
 
-## 3. Import snapshots of AA and NA
+## 3. Import a snapshot of AA
 
 Dry run first. Your Application Default Credentials need read access to the source and write access to `recovery-platform-e6cb3`.
 
 ```bash
 cd recovery-api
-npm run import:snapshot -- --provider NA           # reads phoenix-cleanhouse/na-meetings
-npm run import:snapshot -- --provider NA --apply
 npm run import:snapshot -- --provider AA           # reads recovery-connect-cad4b/meetings; needs billing on
 npm run import:snapshot -- --provider AA --apply
 # Final log: "importMeetingSnapshot: complete {...}"
 ```
 
-Check `read`, `skippedUnmappable`, `skippedLive` and the `dataAsOf` range before applying. A row with no `dataAsOf` counts as live, including one from the old `migrate:na`, so it is skipped and shows no age label; delete such rows first if you want them imported. Re-running is safe: rows a live source has confirmed and app-owned rows are never overwritten. Homegroups' own `na-meetings` is empty, so NA comes only from Regroup. Homegroups serves AA from its own Firestore, so imported AA rows reach Regroup only.
+Check `read`, `skippedUnmappable`, `skippedLive` and the `dataAsOf` range before applying. A row with no `dataAsOf` counts as live, including one from the old `migrate:na`, so it is skipped and shows no age label; delete such rows first if you want them imported. Re-running is safe: rows a live source has confirmed and app-owned rows are never overwritten. Homegroups serves AA from its own Firestore, so imported AA rows reach Regroup only.
 
 The build rewrites the tracked `recovery-api/lib/`. Don't commit that.
 
@@ -159,7 +157,7 @@ The build rewrites the tracked `recovery-api/lib/`. Don't commit that.
 ## 5. After seeding — ongoing maintenance
 
 - **Nothing refreshes meetings on a schedule.** Rows stay as of the last manual sync. `pruneStale` removes stale rows only for a provider whose source answered for a full sweep, so an outage deletes nothing. It also deletes nothing for a provider when more than 10% of its rows would go, and logs `refreshDirectory: prune blocked` as an error instead. If you see that, work out why before acting: it may be a degraded source, or imported rows a recovered source no longer lists. `refreshSlice`'s grid sweep never prunes rows outside the old grid (Alaska, Hawaii, Puerto Rico), because it can't re-see them. `sync:meetings` covers all US land, so it can prune those. It deletes a meeting only after two healthy `--apply` sweeps in a row have missed it and it hasn't been seen for 30 days, so its first healthy run deletes nothing. It never prunes a row outside US land, or at a spot holding more meetings than one response returns.
-- **NA has no live source**, so it is never pruned and stays frozen at its `dataAsOf` date until Phase 1B adds `refreshNaDirectory`.
+- **NA updates only when someone runs `npm run sync:na`.** `pruneStale` never touches it, because the sync decides its own deletes. Rows keep their `dataAsOf` date until the next run.
 - Do **not** run seeds from app clients; seeding is recovery-api-side (script/admin) only.
 
 ---
@@ -167,10 +165,38 @@ The build rewrites the tracked `recovery-api/lib/`. Don't commit that.
 ## Quick reference
 
 ```bash
-# Only once the owner approves each import (both are on hold):
+# Only once the owner approves each step (the AA import is on hold):
 cd recovery-api
 gcloud config set project recovery-platform-e6cb3
-npm run import:snapshot -- --provider NA --apply
+npm run sync:na -- --apply
 npm run import:snapshot -- --provider AA --apply   # needs billing on recovery-connect-cad4b
 # then verify (section 4)
 ```
+
+---
+
+## NA meetings now come from `npm run sync:na`
+
+This replaces everything above about migrating or importing NA. The snapshot importer refuses NA, because it would overwrite synced rows with March 2023 data. The source is the [BMLT](https://bmlt.app/) aggregator, which combines listings NA service bodies maintain themselves.
+
+The command runs by hand from a terminal. Nothing runs on a schedule or in GCP, so the data is only as current as the last run. Run it from `recovery-api/`, signed in with `gcloud auth application-default login`.
+
+```bash
+npm run sync:na                                  # dry run: report what would change
+npm run sync:na -- --region <sourceId> --apply   # one region, for a first try
+npm run sync:na -- --apply                       # everything
+```
+
+**How old is the data?** Read `refreshState/naSync` in Firestore. `lastRunAt` is the last applied run, and `scope` says whether it covered all regions. Each row's `dataAsOf` is when BMLT last imported its region.
+
+**Before the first `--apply`:**
+
+1. Confirm `refreshDirectory` is gone from GCP with `firebase functions:list --project recovery-platform-e6cb3`. Its old deployed code could delete any row not stamped in 30 days, whatever its provider. Don't run `--apply` if it still exists.
+2. Deploy `findMeetings` from a commit that includes this change: `firebase deploy --only functions:findMeetings --project recovery-platform-e6cb3`. Older versions return rows with no `id`, so people can't open or favorite them in the app.
+
+**When a region is reported:**
+
+- **`fetch_failed`, `count_mismatch` or `stale_import`:** the rows it returned are still saved, and nothing is deleted from it. Run again later. A region that returns no meetings is always treated this way, so if one has really emptied, its rows stay until it leaves BMLT.
+- **"would lose too many rows":** nothing is deleted from it. A region can lose up to 5 rows or 10%, whichever is more. Check the region's own site, and if the removal is real, rerun with `--allow-deletes <sourceId>`. Use the same flag for a region that has left BMLT.
+
+**To undo:** `npm run sync:na -- --purge` reports how many rows this sync created, and adding `--apply` deletes them. It leaves every other row alone.
