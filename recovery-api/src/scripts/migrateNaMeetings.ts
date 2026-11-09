@@ -202,7 +202,7 @@ export async function runMigration(deps: MigrateDeps): Promise<MigrateResult> {
  * project varies (homegroups vs regroup).
  */
 export async function main(): Promise<void> {
-  throw new Error('migrateNaMeetings is superseded: use npm run import:snapshot -- --provider NA');
+  throw new Error('migrateNaMeetings is superseded: use npm run sync:na');
 }
 
 // Guard the run-entry so importing this module (e.g. in tests) does not execute

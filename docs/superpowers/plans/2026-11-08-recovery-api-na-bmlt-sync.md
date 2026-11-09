@@ -67,13 +67,9 @@
   - Rewording the comments in the two mobile `formatDataAsOf` helpers, which still mention old snapshots. They need a product-scoped commit, and behaviour doesn't change.
   - Sharing code with the AA sync. Consolidate `readAll` and `contentOf` after both land.
 
-## After #199 lands
+## After #199 landed
 
-Neither branch needs the other to build, but these need doing once both are on `main`:
-
-- **The label needs #199.** The apps show "Listing data from Nov 2026" only with its app changes. Until then the date is stored and not shown.
-- **Refuse NA in `import:snapshot`.** #199 adds that command, and it overwrites any row with `dataAsOf` set, so an NA import would replace current rows with 2023 data. Add the refusal in whichever PR lands second.
-- **Correct two comments:** `SOURCE_PROVIDERS` in `sweepHealth.ts` and the `dataAsOf` wording it adds to `DirectoryMeeting.ts`. Merging will also conflict on that entity's fields, which is trivial to resolve.
+#199 merged while this branch was in review, so this branch merged main and took on the follow-ups: `import:snapshot` refuses NA, and the `SOURCE_PROVIDERS` comment and the runbook are corrected. The apps' "Listing data from Nov 2026" label is now on main.
 
 ---
 
@@ -523,6 +519,7 @@ git commit -m "feat(recovery-api): reconcile NA meetings by region with guarded 
 ### Task 4: The command
 
 **Files:**
+
 - Create: `recovery-api/src/scripts/syncNa.ts`
 - Test: `recovery-api/src/scripts/syncNa.test.ts`
 - Modify:
@@ -531,6 +528,7 @@ git commit -m "feat(recovery-api): reconcile NA meetings by region with guarded 
   - `docs/launch-readiness/directory-seed-runbook.md`
 
 **Interfaces:**
+
 - Consumes: `runNaSync`, `purgeNaMeetings` from Task 3
 - Produces:
   - `parseSyncNaArgs(argv: string[]): { apply: boolean; purge: boolean; region?: number; allowDeletes: string[] }`
@@ -550,7 +548,9 @@ test('--region takes a numeric region', () => {
 test('--allow-deletes takes a comma-separated list', () =>
   expect(parseSyncNaArgs(['--allow-deletes', '100,101']).allowDeletes).toEqual(['100', '101']));
 test('--allow-deletes must match --region when both are given', () => {
-  expect(() => parseSyncNaArgs(['--region', '100', '--allow-deletes', '101'])).toThrow(/--allow-deletes/);
+  expect(() => parseSyncNaArgs(['--region', '100', '--allow-deletes', '101'])).toThrow(
+    /--allow-deletes/,
+  );
   expect(parseSyncNaArgs(['--region', '100', '--allow-deletes', '100']).region).toBe(100);
 });
 test('--purge cannot be combined with sync options', () => {
@@ -558,7 +558,8 @@ test('--purge cannot be combined with sync options', () => {
   expect(() => parseSyncNaArgs(['--purge', '--region', '100'])).toThrow(/--purge/);
   expect(() => parseSyncNaArgs(['--purge', '--allow-deletes', '100'])).toThrow(/--purge/);
 });
-test('rejects unknown arguments', () => expect(() => parseSyncNaArgs(['--aply'])).toThrow(/--aply/));
+test('rejects unknown arguments', () =>
+  expect(() => parseSyncNaArgs(['--aply'])).toThrow(/--aply/));
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -592,16 +593,17 @@ git commit -m "feat(recovery-api): add a manual command to sync NA meetings from
 
 No code. Each marked step changes production or contacts someone, so get the owner's explicit approval first. Run from `recovery-api/`, signed in with `gcloud auth application-default login`.
 
-- [ ] **Step 1: Confirm the existing prune can't reach NA rows. Stop if it can.**
+- [ ] **Step 1: Confirm the old function is gone. Stop if it isn't.**
 
-This is about your existing `refreshDirectory`, not this sync. Its `pruneStale` on `main` deletes every external row with `lastSeenAt` over 30 days old, whatever its provider, when a sweep cycle closes. NA rows are stamped only when someone runs this command, so 30 days without a run could delete them all, with no error. This branch doesn't change that function.
+Main's code excludes NA from the prune, but the runbook's statement that the deployed `refreshDirectory` was deleted on 2026-11-09 still needs checking. The old deployed code would delete NA rows it hadn't seen in 30 days.
 
-Check the latest `directory refresh slice complete` log line and `refreshState/directory`.
-Expected, either of:
-- The cursor is still stuck near 853, because the deployed version times out before a cycle can close. That is safe only while nobody deploys a version that finishes without the guard.
-- The log line has a `sweep` field, meaning #199's guard is live and NA is never pruned.
+Run: `firebase functions:list --project recovery-platform-e6cb3`
+Expected: no `refreshDirectory`. If it exists, do not run `--apply`.
 
-Stop and ask the owner if neither is true. Until #199 is deployed, also tell the owner that deploying any other fix to `refreshDirectory`'s timeout puts these rows at risk.
+- [ ] **Step 1b (owner approves): Deploy the `findMeetings` fix**
+
+Run: `firebase deploy --only functions:findMeetings --project recovery-platform-e6cb3`
+This existing function is the only deploy here, and the sync itself still runs by hand. Without it, rows reach the apps with no `id`, so people can't open or favorite them.
 
 - [ ] **Step 2 (optional, owner): Email the BMLT project** about occasional full reads of all regions, and ask about usage terms. None were found in their docs. Manual runs add little load, so this doesn't block the rest.
 
@@ -613,7 +615,7 @@ Expected: about 35,000 `created`, 0 `deleted`, `excludedService` under about 2% 
 - [ ] **Step 4 (owner approves): Pilot one small US region**
 
 Run: `npm run sync:na -- --region <sourceId> --apply`, using NA Utah's `sourceId` from the Step 3 output (about 107 rows).
-Expected: only `created`, nothing else changes. Then call `findMeetings` near Salt Lake City with `type: 'NA'`, and check that results appear, that a meeting named for Sunday has `day: 0`, and that the Homegroups or Regroup app shows it correctly, including "Listing data from <month year>". The label needs an app build that includes #199, and older builds simply don't show it. Roll back with `--purge --apply` if anything is wrong.
+Expected: only `created`, nothing else changes. Then call `findMeetings` near Salt Lake City with `type: 'NA'`, and check that results appear, that a meeting named for Sunday has `day: 0`, that tapping a meeting opens it, and that the Homegroups or Regroup app shows it correctly, including "Listing data from <month year>". The label needs an app build that includes #199, and older builds simply don't show it. Roll back with `--purge --apply` if anything is wrong.
 
 - [ ] **Step 5 (owner approves): Seed everything**
 
