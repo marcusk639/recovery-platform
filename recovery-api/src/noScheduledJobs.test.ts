@@ -60,4 +60,10 @@ describe('recovery-api scheduled meeting refresh', () => {
       false,
     );
   });
+
+  it('builds before every functions deploy, so the stale tracked lib/ cannot ship', () => {
+    const config = JSON.parse(readFileSync(join(__dirname, '..', 'firebase.json'), 'utf8'));
+    const predeploy: string[] = config.functions[0].predeploy ?? [];
+    expect(predeploy.join(' ')).toMatch(/run build/);
+  });
 });
