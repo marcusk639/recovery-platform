@@ -250,7 +250,7 @@ jobs:
       - name: Production build
         run: cd regroup/portal && npm run build -- --production
       - name: Bundle checks
-        run: cd regroup/portal && node build/check-bundle.mjs --warn-versions
+        run: cd regroup/portal && node tools/check-bundle.mjs --warn-versions
 
   detox-recovery:
     name: detox-recovery — typecheck + test

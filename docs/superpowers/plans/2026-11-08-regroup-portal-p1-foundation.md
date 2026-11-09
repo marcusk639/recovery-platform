@@ -42,10 +42,10 @@
 regroup/firebase.portal.json          Emulator config on offset ports
 regroup/portal/
   package.json, tsconfig.json, index.html, .gitignore, playwright.config.ts, vitest.config.ts
-  build/replacements.mjs              The explicit native-import list and classify()
-  build/bundle.mjs                    esbuild build, resolution rules, build report
-  build/check-bundle.mjs              Post-build invariants
-  build/serve.mjs                     Static server for dist/
+  tools/replacements.mjs              The explicit native-import list and classify()
+  tools/bundle.mjs                    esbuild build, resolution rules, build report
+  tools/check-bundle.mjs              Post-build invariants
+  tools/serve.mjs                     Static server for dist/
   src/types/mobile-any.d.ts           Typecheck boundary for @mobile/* imports
   src/adapter/preload.ts              Browser fixes that must run before mobile code loads
   src/adapter/firebase-setup.ts       Replaces regroup/mobile/firebase-setup.ts
@@ -67,7 +67,7 @@ regroup/portal/
 
 **Files:**
 
-- Create: `regroup/portal/package.json`, `tsconfig.json`, `.gitignore`, `index.html`, `vitest.config.ts`, `build/replacements.mjs`, `build/bundle.mjs`, `build/check-bundle.mjs`, `src/types/mobile-any.d.ts`, `src/harness/main.tsx` (one line rendering "portal" for now)
+- Create: `regroup/portal/package.json`, `tsconfig.json`, `.gitignore`, `index.html`, `vitest.config.ts`, `tools/replacements.mjs`, `tools/bundle.mjs`, `tools/check-bundle.mjs`, `src/types/mobile-any.d.ts`, `src/harness/main.tsx` (one line rendering "portal" for now)
 - Test: `regroup/portal/tests/replacements.test.ts`
 
 **Interfaces:**
@@ -101,7 +101,7 @@ Typecheck boundary: `tsconfig.json` includes only `src`, `tests` and `e2e`, and 
 - [ ] **Step 3: Write the failing test**
 
 ```ts
-import { classify } from '../build/replacements.mjs';
+import { classify } from '../tools/replacements.mjs';
 
 test('native import with no entry is unknown', () => {
   expect(classify('react-native-some-new-thing').kind).toBe('unknown');
@@ -130,11 +130,11 @@ test('every inert entry has a reason', () => {
 Run: `cd regroup/portal && npx vitest run tests/replacements.test.ts`
 Expected: FAIL, module not found.
 
-- [ ] **Step 5: Implement `classify` in `build/replacements.mjs`**
+- [ ] **Step 5: Implement `classify` in `tools/replacements.mjs`**
 
 A specifier is native if it starts with `react-native`, `@react-native`, or is `@stripe/stripe-react-native` or `@sentry/react-native`. Native specifiers must match a list entry by exact name or package prefix, or they are `unknown`. Everything else is `real`, unless listed. Start with the entries the tests need, plus `victory-native` → `victory`.
 
-- [ ] **Step 6: Implement `build/bundle.mjs`**
+- [ ] **Step 6: Implement `tools/bundle.mjs`**
 
 Use esbuild's JS API with `jsx: 'automatic'`, `.web.*` extensions first, `.js` loaded as JSX, image and font loaders as data URLs, `format: 'esm'`, `minify` when `--production`, and `metafile: true`. Define `__DEV__`, `process.env.NODE_ENV` and `process.env` (as `{}`) from `--production`, and `global` as `globalThis`. An esbuild plugin must:
 
@@ -143,7 +143,7 @@ Use esbuild's JS API with `jsx: 'automatic'`, `.web.*` extensions first, `.js` l
 - Apply `classify`. Collect all `unknown` specifiers, then fail the build once listing them all.
 - Generate a module for each `deferred` and `inert` specifier. esbuild refuses missing named exports, so scan `regroup/mobile/src` for what each specifier's importers name, and generate those exports plus a default. Type-only imports are ignored.
 
-- [ ] **Step 7: Implement `build/check-bundle.mjs`**
+- [ ] **Step 7: Implement `tools/check-bundle.mjs`**
 
 Exit 1, naming the problem, if any of these is true:
 
@@ -154,7 +154,7 @@ Exit 1, naming the problem, if any of these is true:
 
 - [ ] **Step 8: Run tests and build**
 
-Run: `npx vitest run && npm run typecheck && npm run build && node build/check-bundle.mjs`
+Run: `npx vitest run && npm run typecheck && npm run build && node tools/check-bundle.mjs`
 Expected: all pass with the placeholder entry.
 
 - [ ] **Step 9: Commit**
@@ -171,7 +171,7 @@ git -C ~/dev/rp-regroup-portal commit -m "feat(regroup-portal): package, bundler
 **Files:**
 
 - Create: `src/adapter/firebase-setup.ts`, `src/adapter/firebase/{app,auth,firestore,functions,storage}.ts`, `src/adapter/{sentry.ts,deferred.tsx,preload.ts,keyboard-controller.tsx,gesture-handler.tsx,icons.tsx}`
-- Modify: `build/replacements.mjs`, `package.json` (icon packages, for their fonts and glyph maps)
+- Modify: `tools/replacements.mjs`, `package.json` (icon packages, for their fonts and glyph maps)
 - Test: `tests/firebase-adapter.test.ts`, `tests/deferred.test.tsx`, `tests/icons.test.tsx`
 
 **Interfaces:**
@@ -264,8 +264,8 @@ This is the earliest test of the biggest unknown: the phone's code on React 19 a
 
 **Files:**
 
-- Create: `regroup/firebase.portal.json`, `regroup/portal/scripts/e2e.sh`, `scripts/seed.sh`, `build/serve.mjs`, `playwright.config.ts`, `src/harness/{Providers,SignIn,Nav,routes}.tsx`, `e2e/helpers.ts`, `e2e/residents.spec.ts`
-- Modify: `src/harness/main.tsx`, `build/replacements.mjs`
+- Create: `regroup/firebase.portal.json`, `regroup/portal/scripts/e2e.sh`, `scripts/seed.sh`, `tools/serve.mjs`, `playwright.config.ts`, `src/harness/{Providers,SignIn,Nav,routes}.tsx`, `e2e/helpers.ts`, `e2e/residents.spec.ts`
+- Modify: `src/harness/main.tsx`, `tools/replacements.mjs`
 
 **Interfaces:**
 
@@ -284,7 +284,7 @@ Copy `regroup/firebase.e2e.json` to `regroup/firebase.portal.json`, with these p
 
 Expected output includes: `Seeded demo-regroup-e2e: 4 accounts, 2 houses, 3 activities`.
 
-`playwright.config.ts`: `workers: 1`, because all tests share the emulators, and `webServer` running `build/serve.mjs`. A shared fixture fails the test on any browser request to a non-loopback host, and on any `pageerror`.
+`playwright.config.ts`: `workers: 1`, because all tests share the emulators, and `webServer` running `tools/serve.mjs`. A shared fixture fails the test on any browser request to a non-loopback host, and on any `pageerror`.
 
 - [ ] **Step 3: Build the harness**
 
@@ -534,7 +534,7 @@ git -C ~/dev/rp-regroup-portal commit -m "test(regroup-portal): manual payments 
 **Files:**
 
 - Create: `src/adapter/document-picker.ts`, `tests/document-picker.test.ts`, `e2e/documents.spec.ts`
-- Modify: `build/replacements.mjs`
+- Modify: `tools/replacements.mjs`
 
 **Interfaces:**
 
@@ -601,7 +601,7 @@ Four working screens can't show whether "most screens need rebuilding", which is
 **Files:**
 
 - Create: `e2e/survey.spec.ts`
-- Modify: `src/harness/routes.tsx`, `build/replacements.mjs`
+- Modify: `src/harness/routes.tsx`, `tools/replacements.mjs`
 
 **Interfaces:**
 
@@ -648,7 +648,7 @@ git -C ~/dev/rp-regroup-portal commit -m "test(regroup-portal): survey of first-
 
 **Files:**
 
-- Modify: `build/bundle.mjs`, `build/check-bundle.mjs`, `.github/workflows/ci.yml`, `scripts/git-hooks/pre-push`
+- Modify: `tools/bundle.mjs`, `tools/check-bundle.mjs`, `.github/workflows/ci.yml`, `scripts/git-hooks/pre-push`
 
 **Interfaces:**
 
@@ -656,12 +656,12 @@ git -C ~/dev/rp-regroup-portal commit -m "test(regroup-portal): survey of first-
 
 - [ ] **Step 1: Make the production build pass all journeys**
 
-Run: `scripts/e2e.sh --production && node build/check-bundle.mjs`
+Run: `scripts/e2e.sh --production && node tools/check-bundle.mjs`
 Expected: the same results as the dev bundle. Record `sizeBytes`, gzipped size and the time to the sign-in form in the report. There is no limit yet.
 
 - [ ] **Step 2: Add the CI job**
 
-Add `regroup-portal` to `.github/workflows/ci.yml`, named `regroup/portal — test (non-blocking)`, with `continue-on-error: true`. It runs `npm ci`, `npm run typecheck`, `npx vitest run`, `npm run build -- --production` and `node build/check-bundle.mjs --warn-versions`. It runs on every PR, so mobile changes that break the portal show up. Browser journeys stay local in P1 because they need sandbox secrets.
+Add `regroup-portal` to `.github/workflows/ci.yml`, named `regroup/portal — test (non-blocking)`, with `continue-on-error: true`. It runs `npm ci`, `npm run typecheck`, `npx vitest run`, `npm run build -- --production` and `node tools/check-bundle.mjs --warn-versions`. It runs on every PR, so mobile changes that break the portal show up. Browser journeys stay local in P1 because they need sandbox secrets.
 
 - [ ] **Step 3: Add the pre-push package**
 
@@ -687,7 +687,7 @@ git -C ~/dev/rp-regroup-portal commit -m "ci(regroup-portal): production build c
 
 ```bash
 rm -rf regroup/portal/node_modules regroup/portal/dist
-cd regroup/portal && npm ci && npx vitest run && npm run typecheck && node build/check-bundle.mjs && scripts/e2e.sh --production
+cd regroup/portal && npm ci && npx vitest run && npm run typecheck && node tools/check-bundle.mjs && scripts/e2e.sh --production
 ```
 
 Expected: all pass, or each failure is a recorded finding.

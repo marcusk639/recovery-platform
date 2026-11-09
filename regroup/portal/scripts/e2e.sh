@@ -22,7 +22,7 @@ npm --prefix "${REGROUP_DIR}/functions" run --silent build
 
 cd "${PORTAL_DIR}"
 npx playwright install chromium >/dev/null
-node build/bundle.mjs ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"}
+node tools/bundle.mjs ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"}
 
 ARGS=""
 for arg in "$@"; do ARGS+=" $(printf '%q' "$arg")"; done

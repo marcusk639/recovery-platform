@@ -71,7 +71,13 @@ test('cancelling the picker shows no error', async ({ page }) => {
 test('choosing no category uploads nothing', async ({ page }) => {
   await open(page);
   await pickLease(page);
+  const uploads: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().includes(':19199/') && request.method() === 'POST') uploads.push(request.url());
+  });
   await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel' }).click();
   await page.waitForTimeout(500);
+  await expect(page.getByRole('alertdialog')).toHaveCount(0);
+  expect(uploads).toEqual([]);
   expect((await documents()).size).toBe(0);
 });

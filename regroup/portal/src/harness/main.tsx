@@ -1,17 +1,24 @@
 import '../adapter/preload';
-import { useState } from 'react';
+import '@mobile/../i18n';
+import { useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { getIdToken } from 'firebase/auth';
+import { useSelector } from 'react-redux';
 import { auth, callHttpsFunction, storage } from '../adapter/firebase-setup';
 import { getDownloadURL, putFile, ref } from '../adapter/firebase/storage';
 import { Routes } from '@mobile/navigation/types';
+import ErrorBoundary from '@mobile/components/ErrorBoundary';
+import { useSelectedHouse } from '@mobile/hooks/useSelectedHouse';
 import { navigationRef } from '@mobile/navigation/service';
 import { selectGuestById } from '@mobile/state/slices/guestsSlice';
 import store from '@mobile/state/store';
+import { installUnhandledFeatureAlerts } from '../adapter/unhandled';
 import { Nav } from './Nav';
 import { Providers } from './Providers';
 import { Screens } from './routes';
 import { SignIn } from './SignIn';
+
+installUnhandledFeatureAlerts();
 
 (window as any).__portalTest = {
   refreshToken: () => getIdToken(auth.currentUser!, true),
@@ -31,17 +38,31 @@ import { SignIn } from './SignIn';
 
 const houseId = new URLSearchParams(location.search).get('house') ?? 'test-house-123';
 
+// Disputes.tsx returns before some of its hooks when the house or user is missing,
+// so it crashes if it first renders before they load. Screens wait for both.
+function WhenHouseLoaded({ children }: { children: ReactNode }) {
+  const { house, isLoading } = useSelectedHouse();
+  const userId = useSelector((state: any) => state.user.user?.id);
+  if (house && userId) return <>{children}</>;
+  const message = isLoading ? 'Loading this house...' : 'Could not load this house.';
+  return <p role="status" style={{ margin: 'auto' }}>{message}</p>;
+}
+
 function Harness() {
   const [signedIn, setSignedIn] = useState(false);
   if (!signedIn) return <SignIn houseId={houseId} onSignedIn={() => setSignedIn(true)} />;
   return (
+    <WhenHouseLoaded>
     <div style={{ display: 'flex', width: '100%', height: '100%' }}>
       <Nav houseId={houseId} />
       {/* Screens collapse to zero height without a flex column here. */}
       <main style={{ flex: 1, minWidth: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>
-        <Screens />
+        <ErrorBoundary>
+          <Screens />
+        </ErrorBoundary>
       </main>
     </div>
+    </WhenHouseLoaded>
   );
 }
 

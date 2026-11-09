@@ -80,9 +80,9 @@ test('a batch that cannot finish writes nothing', async ({ page }) => {
 // keyboard can type what the phone's decimal pad mostly blocks.
 for (const typed of ['1,500.00', '1e3', '5OO']) {
   test(`an amount typed as ${typed} is refused, not misread`, async ({ page }) => {
-    test.fail();
     await open(page);
     await fillForm(page, 'guest-a', typed);
+    test.fail();
     await recordButton(page).click();
     await page.waitForTimeout(800);
     expect(await rentOwed('guest-a')).toBe(15000);
@@ -93,9 +93,9 @@ for (const typed of ['1,500.00', '1e3', '5OO']) {
 // double-click records two payments and lowers the balance twice. Fixing it
 // means editing mobile code or guarding the portal's form, so it stays pinned.
 test('double-clicking RECORD records one payment', async ({ page }) => {
-  test.fail();
   await open(page);
   await fillForm(page, 'guest-a', '50.00');
+  test.fail();
   await recordButton(page).dblclick();
   await expect(page.getByText('Record Manual Payment')).toHaveCount(0);
   await page.waitForTimeout(1000);
@@ -112,6 +112,10 @@ test('a refused write shows an error they can dismiss, and changes nothing', asy
   await expect(dialog).toContainText('Failed to record payment');
   await dialog.getByRole('button', { name: 'OK' }).click();
   await expect(dialog).toHaveCount(0);
+  // The form stays open with no success state, and the balance on screen is unchanged.
+  await expect(page.getByText('Record Manual Payment')).toBeVisible();
+  await page.getByText('CANCEL', { exact: true }).click();
+  await expect(page.getByTestId('overdue-residents-card')).toContainText('$150.00 owed');
   expect(await rentOwed('guest-a')).toBe(15000);
   expect(await paymentsOf('guest-a', 5000)).toBe(0);
 });
@@ -120,17 +124,17 @@ test('a refused write shows an error they can dismiss, and changes nothing', asy
 // and the history come only from Stripe charges (listHousePayments), so cash never
 // appears. These assert the behavior an operator would expect, and fail today.
 test('a manual payment appears in the dashboard', async ({ page }) => {
-  test.fail();
   await open(page);
   await fillForm(page, 'guest-a', '50.00');
   await recordButton(page).click();
   await expect(page.getByTestId('overdue-residents-card')).toContainText('$100.00 owed');
   await page.waitForTimeout(1500);
+  test.fail();
   await expect(page.getByText(/Manual Payment/).first()).toBeVisible({ timeout: 2000 });
 });
 
 test('Outstanding counts rent that is overdue', async ({ page }) => {
-  test.fail();
   await open(page);
+  test.fail();
   await expect(page.getByTestId('payment-stats-card')).toContainText('$150.00', { timeout: 2000 });
 });

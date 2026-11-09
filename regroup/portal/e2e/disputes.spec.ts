@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { admin, expect, reseed, signInAs, test } from './helpers';
+import { admin, expect, reseed, revokeClaimsAndRefresh, signInAs, test } from './helpers';
 
 const ID = 'test-activity-123';
 const data = async () => (await admin().doc(`activities/${ID}`).get()).data()!;
@@ -102,6 +102,26 @@ test('Escape writes nothing', async ({ page }) => {
   await page.keyboard.press('Escape');
   await expect(prompt(page)).toHaveCount(0);
   expect((await data()).status).toBe('disputed');
+});
+
+test('clicking outside the prompt writes nothing', async ({ page }) => {
+  await open(page);
+  await page.getByTestId(`resolve-dispute-button-${ID}`).click();
+  await page.getByTestId('alert-backdrop').click({ position: { x: 5, y: 5 } });
+  await expect(prompt(page)).toHaveCount(0);
+  expect((await data()).status).toBe('disputed');
+});
+
+test('a decision the rules refuse shows an error and changes nothing', async ({ page }) => {
+  await open(page);
+  // Access is lost while the prompt is open, since the screen hides the buttons after.
+  await page.getByTestId(`resolve-dispute-button-${ID}`).click();
+  await revokeClaimsAndRefresh(page, 'manager');
+  await prompt(page).getByRole('button', { name: 'Approve' }).click();
+  await expect(prompt(page)).toBeVisible();
+  await expect(prompt(page)).not.toContainText('Approve dispute?');
+  expect((await data()).status).toBe('disputed');
+  expect(await decisions()).toEqual([]);
 });
 
 test('double-clicking Approve in the prompt decides once', async ({ page }) => {

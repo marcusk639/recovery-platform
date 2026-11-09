@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "build": "node build/bundle.mjs",
+    "build": "node tools/bundle.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "e2e": "scripts/e2e.sh"

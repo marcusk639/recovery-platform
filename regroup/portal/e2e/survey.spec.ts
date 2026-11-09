@@ -53,12 +53,15 @@ for (const [route, params] of SCREENS) {
     });
     await signInAs(page, 'manager');
     await page.evaluate(([r, p]) => (window as any).__portalTest.open(r, p), [route, params] as const);
-    await page.waitForTimeout(2500);
+    // Long enough for query retries, so a refused read shows up as one.
+    await page.waitForTimeout(6000);
     const main = page.locator('main');
-    const mounted = (await main.count()) > 0 && (await main.innerText()).trim().length > 0;
+    const hasContent = (await main.count()) > 0 && (await main.innerText()).trim().length > 0;
+    const crashed = !hasContent || (await page.getByText('Something went wrong').count()) > 0;
+    const degraded = consoleErrors.length > 0 || (await page.getByText(/not available on the web yet/).count()) > 0;
     rows.push({
       screen: route,
-      mounted,
+      status: crashed ? 'crashed' : degraded ? 'degraded' : 'ok',
       pageErrors,
       consoleErrors: [...new Set(consoleErrors)],
       deferredShown: await page.getByText(/not available on the web yet/).allInnerTexts(),

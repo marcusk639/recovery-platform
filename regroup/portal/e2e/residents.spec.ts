@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import type { Page } from '@playwright/test';
 import { expect, reseed, signInAs, test } from './helpers';
 
 test.beforeAll(() => reseed());
@@ -40,4 +41,32 @@ test('records the time to the sign-in form for the go/no-go report', async ({ pa
   await page.goto('/');
   await page.locator('#sign-in-form').waitFor();
   fs.writeFileSync('dist/load-time.json', JSON.stringify({ msToSignInForm: Date.now() - started }));
+});
+
+const openScreen = (page: Page, route: string) =>
+  page.evaluate((r) => (window as any).__portalTest.open(r), route);
+
+test('text is translated, not raw keys', async ({ page }) => {
+  await signInAs(page, 'manager');
+  await openScreen(page, 'EditUserInfo');
+  await expect(page.getByText('Date of Birth', { exact: true })).toBeVisible();
+  await expect(page.getByText('dateOfBirth', { exact: true })).toHaveCount(0);
+});
+
+test.describe('failures', () => {
+  test.use({ allowPageErrors: true });
+
+  test('a crashing screen leaves the navigation and shows an error', async ({ page }) => {
+    await signInAs(page, 'manager');
+    await openScreen(page, 'MedicationSummary');
+    await expect(page.getByText('Something went wrong')).toBeVisible();
+    await expect(page.locator('#nav-residents')).toBeVisible();
+  });
+
+  test('a deferred feature reached from a button fails visibly', async ({ page }) => {
+    await signInAs(page, 'manager');
+    await openScreen(page, 'EditUserInfo');
+    await page.getByText('LIBRARY', { exact: true }).click();
+    await expect(page.getByRole('alertdialog')).toContainText(/not available on the web yet/i);
+  });
 });

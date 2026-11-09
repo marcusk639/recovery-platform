@@ -1,4 +1,4 @@
-import { classify, inertEntries } from '../build/replacements.mjs';
+import { classify, inertEntries } from '../tools/replacements.mjs';
 
 test('native import with no entry is unknown', () => {
   expect(classify('react-native-some-new-thing').kind).toBe('unknown');

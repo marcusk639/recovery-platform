@@ -1,4 +1,4 @@
-// Stand-ins the build generates for native features. See build/replacements.mjs.
+// Stand-ins the build generates for native features. See tools/replacements.mjs.
 import { Component, type ComponentType, type ReactNode } from 'react';
 
 export class NativeFeatureUnavailable extends Error {
