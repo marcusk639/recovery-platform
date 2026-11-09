@@ -355,12 +355,40 @@ describe("createPaymentIntent — amount against the balance", () => {
   it.each([
     ["nothing owed", { rentOwed: 0 }],
     ["no balance fields at all", {}],
+    ["null balance fields", { rentOwed: null, choreFees: null }],
     ["a credit balance", { rentOwed: -2000 }],
-  ])("refuses any payment with %s", async (_name, guest) => {
+  ])("says nothing is owed with %s", async (_name, guest) => {
     await expect(start(100, guest)).rejects.toMatchObject({
       code: "failed-precondition",
-      message: expect.stringContaining("$0.00"),
+      message: expect.stringContaining("Nothing is owed"),
     });
+  });
+
+  // A bad value must never widen the cap: amount > NaN is false, and "5000" + 0
+  // is the string "50000". Nothing guarantees these types on old documents.
+  it.each([
+    ["NaN", { rentOwed: NaN }],
+    ["Infinity", { rentOwed: Infinity }],
+    ["text", { rentOwed: "abc" }],
+    ["a number stored as text", { rentOwed: "5000" }],
+    ["an object", { rentOwed: {} }],
+    ["bad chore fees on a good balance", { rentOwed: 5000, choreFees: "1000" }],
+  ])("refuses and logs when the balance is %s", async (_name, guest) => {
+    const { logger } = require("firebase-functions");
+    await expect(start(100, guest)).rejects.toMatchObject({
+      code: "failed-precondition",
+      message: expect.stringContaining("contact your house manager"),
+    });
+    expect(logger.error).toHaveBeenCalledWith(
+      "createPaymentIntent: malformed balance",
+      { guestId: "guest-doc-1" },
+    );
+  });
+
+  it("lets a fractional legacy balance be paid in full, as the app rounds it up", async () => {
+    await expect(start(1001, { rentOwed: 1000.6 })).resolves.toEqual(
+      expect.objectContaining({ clientSecret: expect.any(String) }),
+    );
   });
 
   it("makes no Stripe call when it refuses", async () => {
