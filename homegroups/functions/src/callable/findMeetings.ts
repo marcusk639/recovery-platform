@@ -172,6 +172,8 @@ export interface SerializedMeeting {
   square?: string;
   paypal?: string;
   groupId?: string;
+  /** "YYYY-MM-DD" an imported directory listing dates from. */
+  dataAsOf?: string;
 }
 
 // Helper function to serialize Firestore data
