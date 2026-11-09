@@ -1,5 +1,6 @@
 import { useNavigation } from '@react-navigation/native';
 import { useSelectedHouse } from '@mobile/hooks/useSelectedHouse';
+import { ResidentTable } from '../residents/ResidentTable';
 import { page } from '../ui';
 import { areasFor } from './areas';
 import { HouseNumbers } from './HouseNumbers';
@@ -30,7 +31,7 @@ export function HousePage() {
           </button>
         ))}
       </div>
-      <p>The resident list arrives in the next task.</p>
+      <ResidentTable houseId={house.id} />
     </div>
   );
 }

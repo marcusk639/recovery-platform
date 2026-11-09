@@ -85,3 +85,23 @@ export async function addOxfordResident(rentOwed: number): Promise<void> {
     rentOwed,
   });
 }
+
+// Ids can't hold '_', because the rules split summary ids on it.
+export async function addResidents(houseId: string, count: number): Promise<void> {
+  const guest = (await admin().doc('guests/guest-b').get()).data()!;
+  const batch = admin().batch();
+  for (let i = 0; i < count; i++) {
+    batch.set(admin().doc(`guests/zed${i}`), {
+      ...guest,
+      id: `zed${i}`,
+      userId: '',
+      houseId,
+      firstName: 'Zed',
+      lastName: `Resident${i}`,
+      displayName: `Zed Resident${i}`,
+      phase: 'Default',
+      rentOwed: 0,
+    });
+  }
+  await batch.commit();
+}

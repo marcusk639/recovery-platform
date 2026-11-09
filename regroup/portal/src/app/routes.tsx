@@ -1,7 +1,6 @@
 import { Routes } from '@mobile/navigation/types';
 import Disputes from '@mobile/screens/Disputes/Disputes';
 import DocumentListScreen from '@mobile/screens/Documents/DocumentListScreen';
-import GuestList from '@mobile/screens/GuestList/GuestList';
 import PaymentDashboard from '@mobile/screens/HouseSettings/PaymentDashboard';
 
 import ActivityScreen from '@mobile/screens/Activity/ActivityScreen';
@@ -30,6 +29,7 @@ import StaffNotesFeed from '@mobile/screens/StaffNotes/StaffNotesFeed';
 import { Home } from './Home';
 import { isRouteReleased, SHOW_LATER_AREAS } from './houses/areas';
 import { HousePage } from './houses/HousePage';
+import { ResidentList } from './residents/ResidentList';
 import { ScreenFrame } from './ScreenFrame';
 import { createSingleScreenNavigator } from './single-screen-navigator';
 import { HOME_ROUTE, NOT_FOUND_ROUTE } from './urls';
@@ -53,7 +53,7 @@ export const Screens = () => (
   <Stack.Navigator frame={ScreenFrame}>
     <Stack.Screen name={HOME_ROUTE} component={Home} />
     <Stack.Screen name={NOT_FOUND_ROUTE} component={Home} />
-    <Stack.Screen name={Routes.GuestList} component={GuestList} />
+    <Stack.Screen name={Routes.GuestList} component={ResidentList} />
     <Stack.Screen name={Routes.HouseDisputes} component={Disputes} />
     <Stack.Screen name={Routes.PaymentDashboard} component={PaymentDashboard} />
     <Stack.Screen name={Routes.HouseSummary} component={HousePage} />
