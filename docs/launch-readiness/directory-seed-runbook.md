@@ -17,7 +17,7 @@
 - **Celebrate Recovery is failing too:** `locator.crgroups.info` has an expired TLS certificate. Don't disable certificate checks to get around it.
 - **The snapshot import exists but has not been run:** `npm run import:snapshot` (step 3) replaces `migrate:na`. Each row carries `dataAsOf`, which the apps show as "Listing data from Mar 2023". The owner is holding both imports as of 2026-11-08: AA until a live sync is proven, NA pending a decision on data last written in March 2023.
 - **`recovery-connect-cad4b` has billing off, and its linked billing account is closed.** Its free daily read quota is smaller than its `meetings` collection, and a full read on 2026-11-08 used it up and blocked all reads on the project until the quota reset. The script now refuses to scan a source with billing off. Check billing before any bulk read of a product's Firestore. Turning billing back on needs a different account and may restart its scheduled jobs, including the subscription reconciler and reminders.
-- **No scheduled job updates meetings (owner decision, 2026-11-08).** Meeting sync runs manually through scripts until further notice, so ignore the cron references below. `refreshDirectory` is no longer exported, and `src/noScheduledJobs.test.ts` fails if a scheduled function returns. Its live Scheduler job was paused on 2026-11-09. If the old function is still deployed, `firebase functions:delete refreshDirectory --region us-central1 --project recovery-platform-e6cb3` removes it and the job.
+- **No scheduled job updates meetings (owner decision, 2026-11-08).** Meeting sync runs manually through scripts until further notice, so ignore the cron references below. `refreshDirectory` is no longer exported, and `src/noScheduledJobs.test.ts` fails if a scheduled function returns. The live function and its Scheduler job were deleted on 2026-11-09.
 - **The prune's index is deployed:** `directoryMeetings` (source, provider, lastSeenAt) went live on 2026-11-09. `pruneStale` fails without it, though it deletes nothing.
 - **Build before deploying functions.** `firebase.json` has no build step and ignores `src`, so a deploy ships whatever is in `lib/`. Run `npm run build` first, or you deploy the stale tracked copy, then restore `lib/` afterwards.
 
@@ -25,18 +25,18 @@
 
 ## 0. Ground truth (verified from code, 2026-06-21)
 
-| Thing             | Value                                                                                                                                                               | Source                                                  |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| Grid bounds       | LAT 24.0→49.0, STEP 0.5° (continental US)                                                                                                                           | `recovery-api/src/lib/meetings/ingest.ts` `GRID_CONFIG` |
-| Grid size         | ~6,000 cells (≈51 lat × ≈119 lon)                                                                                                                                   | derived from `GRID_CONFIG`                              |
-| AA source         | MeetingGuide API — **keyless**                                                                                                                                      | `lib/meetings/sources/meetingGuide.ts`                  |
-| CR source         | Celebrate Recovery — **keyless**                                                                                                                                    | `lib/meetings/sources/celebrateRecovery.ts`             |
-| Maps key          | `seedDirectory` **throws at entry if `GOOGLE_MAPS_API_KEY` unset** (NA-address geocode path)                                                                        | `scripts/seedDirectory.ts:56-58`                        |
-| Resumable         | cursor doc `script_progress/seedDirectory` (`lastProcessedIndex`); cursor advances past failed cells                                                                | `scripts/seedDirectory.ts`                              |
-| Idempotent        | upsert by deterministic id/geohash (`lib/meetings/identity.ts`) — safe to re-run                                                                                    | ingest pattern                                          |
-| NA source         | **products' `na-meetings` Firestore** (NOT recovery-platform, NOT a live API)                                                                                       | `scripts/migrateNaMeetings.ts` header                   |
-| Scheduled refresh | **None.** Removed by owner decision, 2026-11-08 | `src/noScheduledJobs.test.ts` |
-| npm scripts       | `npm run seed` → `node lib/scripts/seedDirectory.js`; `npm run migrate:na` → `node lib/scripts/migrateNaMeetings.js` (added this session)                           | `recovery-api/package.json`                             |
+| Thing             | Value                                                                                                                                     | Source                                                  |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| Grid bounds       | LAT 24.0→49.0, STEP 0.5° (continental US)                                                                                                 | `recovery-api/src/lib/meetings/ingest.ts` `GRID_CONFIG` |
+| Grid size         | ~6,000 cells (≈51 lat × ≈119 lon)                                                                                                         | derived from `GRID_CONFIG`                              |
+| AA source         | MeetingGuide API — **keyless**                                                                                                            | `lib/meetings/sources/meetingGuide.ts`                  |
+| CR source         | Celebrate Recovery — **keyless**                                                                                                          | `lib/meetings/sources/celebrateRecovery.ts`             |
+| Maps key          | `seedDirectory` **throws at entry if `GOOGLE_MAPS_API_KEY` unset** (NA-address geocode path)                                              | `scripts/seedDirectory.ts:56-58`                        |
+| Resumable         | cursor doc `script_progress/seedDirectory` (`lastProcessedIndex`); cursor advances past failed cells                                      | `scripts/seedDirectory.ts`                              |
+| Idempotent        | upsert by deterministic id/geohash (`lib/meetings/identity.ts`) — safe to re-run                                                          | ingest pattern                                          |
+| NA source         | **products' `na-meetings` Firestore** (NOT recovery-platform, NOT a live API)                                                             | `scripts/migrateNaMeetings.ts` header                   |
+| Scheduled refresh | **None.** Removed by owner decision, 2026-11-08                                                                                           | `src/noScheduledJobs.test.ts`                           |
+| npm scripts       | `npm run seed` → `node lib/scripts/seedDirectory.js`; `npm run migrate:na` → `node lib/scripts/migrateNaMeetings.js` (added this session) | `recovery-api/package.json`                             |
 
 **Two things the cron does NOT do (why the manual seed matters):**
 
