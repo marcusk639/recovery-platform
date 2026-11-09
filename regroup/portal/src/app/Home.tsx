@@ -1,16 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { WEB_PORTAL_URL } from '@mobile/screens/Subscription/SubscriptionRequiredScreen';
-import { getHealthByPercentage, HEALTH_STATUS_MAP } from '@mobile/util/guest';
 import { operatorHouseIds } from './access';
+import { healthLabel } from './houses/healthLabel';
 import { HouseTable } from './houses/HouseTable';
 import type { HouseSummary } from './houses/summary';
 import { useHouseSummary } from './houses/useHouseSummary';
 import { heading, page } from './ui';
 import { useRoles } from './useRoles';
-
-const titleCase = (text: string) => text.charAt(0) + text.slice(1).toLowerCase();
-export const healthLabel = (percent: number): string =>
-  titleCase((HEALTH_STATUS_MAP as Record<string, string>)[getHealthByPercentage(percent)] ?? '');
 
 const loadingSummary = (houseId: string): HouseSummary => ({
   houseId,

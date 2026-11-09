@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import ErrorBoundary from '@mobile/components/ErrorBoundary';
-import { houseIdForState } from './current-house';
+import { Breadcrumb } from './Breadcrumb';
+import { guestIdForState, houseIdForState } from './current-house';
+import { HouseTabs } from './HouseTabs';
 import { HouseGate } from './HouseGate';
 import { SubscriptionCheck } from './SubscriptionCheck';
 import { useRoleUnknown } from './useHouseAccess';
@@ -8,15 +10,29 @@ import { useRoleUnknown } from './useHouseAccess';
 // Wraps the focused screen inside the navigator. Gates above the navigator would
 // unmount it while a house loads, which resets navigation to its first route.
 // Keying the boundary on the route means leaving a crashed screen clears the crash.
+const column = { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' } as const;
+
 export function ScreenFrame({ state, routeKey, children }: { state: any; routeKey: string; children: ReactNode }) {
   const houseId = houseIdForState(state);
-  const screen = <ErrorBoundary key={routeKey}>{children}</ErrorBoundary>;
+  const routeName: string = state.routes[state.index]?.name ?? '';
+  const screen = (
+    <div data-testid="screen-body" style={column}>
+      <ErrorBoundary key={routeKey}>{children}</ErrorBoundary>
+    </div>
+  );
+  // Breadcrumb and tabs sit outside the screen's boundary, so a crash can be left.
   const framed =
     houseId === null ? (
       screen
     ) : (
       <HouseGate houseId={houseId}>
-        <SubscriptionCheck>{screen}</SubscriptionCheck>
+        <SubscriptionCheck>
+          <div style={column}>
+            <Breadcrumb houseId={houseId} guestId={guestIdForState(state)} routeName={routeName} />
+            <HouseTabs houseId={houseId} routeName={routeName} />
+            {screen}
+          </div>
+        </SubscriptionCheck>
       </HouseGate>
     );
   return (

@@ -2,7 +2,6 @@ import { Routes } from '@mobile/navigation/types';
 import Disputes from '@mobile/screens/Disputes/Disputes';
 import DocumentListScreen from '@mobile/screens/Documents/DocumentListScreen';
 import GuestList from '@mobile/screens/GuestList/GuestList';
-import HouseSummary from '@mobile/screens/HouseOverview/HouseSummary/HouseSummary';
 import PaymentDashboard from '@mobile/screens/HouseSettings/PaymentDashboard';
 
 import ActivityScreen from '@mobile/screens/Activity/ActivityScreen';
@@ -29,11 +28,26 @@ import IntakeFormScreen from '@mobile/screens/ResidentIntake/IntakeFormScreen';
 import StaffNotesFeed from '@mobile/screens/StaffNotes/StaffNotesFeed';
 
 import { Home } from './Home';
+import { isRouteReleased, SHOW_LATER_AREAS } from './houses/areas';
+import { HousePage } from './houses/HousePage';
 import { ScreenFrame } from './ScreenFrame';
 import { createSingleScreenNavigator } from './single-screen-navigator';
 import { HOME_ROUTE, NOT_FOUND_ROUTE } from './urls';
 
 const Stack = createSingleScreenNavigator() as any;
+
+// Areas that may ship after the core. Unregistered, a reused screen linking to one
+// gets the navigator's visible "use the phone" alert (spec, section 5).
+const LATER_SCREENS: [string, any][] = [
+  [Routes.Documents, DocumentListScreen],
+  [Routes.Beds, Beds],
+  [Routes.DrugTesting, DrugTestingScreen],
+  [Routes.DrugTestForm, DrugTestForm],
+  [Routes.DrugTestHistory, DrugTestHistory],
+  [Routes.Issues, Issues],
+  [Routes.Complaints, Complaints],
+  [Routes.AdminReport, AdminReportScreen],
+];
 
 export const Screens = () => (
   <Stack.Navigator frame={ScreenFrame}>
@@ -42,11 +56,9 @@ export const Screens = () => (
     <Stack.Screen name={Routes.GuestList} component={GuestList} />
     <Stack.Screen name={Routes.HouseDisputes} component={Disputes} />
     <Stack.Screen name={Routes.PaymentDashboard} component={PaymentDashboard} />
-    <Stack.Screen name={Routes.Documents} component={DocumentListScreen} />
-    <Stack.Screen name={Routes.HouseSummary} component={HouseSummary} />
+    <Stack.Screen name={Routes.HouseSummary} component={HousePage} />
     {/* The phone's list selects a house the URL would then override. */}
     <Stack.Screen name={Routes.HouseList} component={Home} />
-    <Stack.Screen name={Routes.Beds} component={Beds} />
     <Stack.Screen name={Routes.ApplicationList} component={ApplicationListScreen} />
     <Stack.Screen name={Routes.ApplicationDetail} component={ApplicationDetailScreen} />
     <Stack.Screen name={Routes.ResidentIntake} component={IntakeFormScreen} />
@@ -62,11 +74,8 @@ export const Screens = () => (
     <Stack.Screen name={Routes.ChoreSummary} component={GuestChoreSummary} />
     <Stack.Screen name={Routes.SupporterSummary} component={GuestSupporterSummary} />
     <Stack.Screen name={Routes.MedicationSummary} component={GuestMedicationSummary} />
-    <Stack.Screen name={Routes.DrugTesting} component={DrugTestingScreen} />
-    <Stack.Screen name={Routes.DrugTestForm} component={DrugTestForm} />
-    <Stack.Screen name={Routes.DrugTestHistory} component={DrugTestHistory} />
-    <Stack.Screen name={Routes.Issues} component={Issues} />
-    <Stack.Screen name={Routes.Complaints} component={Complaints} />
-    <Stack.Screen name={Routes.AdminReport} component={AdminReportScreen} />
+    {LATER_SCREENS.filter(([route]) => isRouteReleased(route, SHOW_LATER_AREAS)).map(([route, component]) => (
+      <Stack.Screen key={route} name={route} component={component} />
+    ))}
   </Stack.Navigator>
 );

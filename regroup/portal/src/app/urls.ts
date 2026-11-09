@@ -1,28 +1,36 @@
 // The portal's URL scheme. URLs carry ids only, never a resident's details.
 import { Routes } from '@mobile/navigation/types';
 
-export type Section = 'summary' | 'residents' | 'applications' | 'payments' | 'disputes' | 'activities' | 'reports';
+export type Section =
+  | 'summary'
+  | 'residents'
+  | 'beds'
+  | 'applications'
+  | 'payments'
+  | 'disputes'
+  | 'activities'
+  | 'drugTests'
+  | 'issues'
+  | 'complaints'
+  | 'reports';
 
 export const HOME_ROUTE = 'portalHome';
 export const NOT_FOUND_ROUTE = 'portalNotFound';
 export const HOUSE_LIST_ROUTE: string = Routes.HouseList;
 
+// In tab order, from the layout the owner picked.
 export const SECTIONS: Record<Section, { route: string; path: string; label: string }> = {
-  summary: { route: Routes.HouseSummary, path: 'houses/:houseId', label: 'House' },
+  summary: { route: Routes.HouseSummary, path: 'houses/:houseId', label: 'Overview' },
   residents: { route: Routes.GuestList, path: 'houses/:houseId/residents', label: 'Residents' },
+  beds: { route: Routes.Beds, path: 'houses/:houseId/beds', label: 'Beds' },
   applications: { route: Routes.ApplicationList, path: 'houses/:houseId/applications', label: 'Applications' },
   payments: { route: Routes.PaymentDashboard, path: 'houses/:houseId/payments', label: 'Payments' },
   disputes: { route: Routes.HouseDisputes, path: 'houses/:houseId/disputes', label: 'Disputes' },
   activities: { route: Routes.Activities, path: 'houses/:houseId/activities', label: 'Activities' },
+  drugTests: { route: Routes.DrugTesting, path: 'houses/:houseId/drug-tests', label: 'Drug tests' },
+  issues: { route: Routes.Issues, path: 'houses/:houseId/issues', label: 'Issues' },
+  complaints: { route: Routes.Complaints, path: 'houses/:houseId/complaints', label: 'Complaints' },
   reports: { route: Routes.AdminReport, path: 'houses/:houseId/reports', label: 'Reports' },
-};
-
-// Screens that open with only a house, so a reload can bring them back.
-const HOUSE_SCREEN_PATHS: Record<string, string> = {
-  [Routes.Beds]: 'houses/:houseId/beds',
-  [Routes.Issues]: 'houses/:houseId/issues',
-  [Routes.Complaints]: 'houses/:houseId/complaints',
-  [Routes.DrugTesting]: 'houses/:houseId/drug-tests',
 };
 
 const RECORD_PATH = 'houses/:houseId/residents/:guestId';
@@ -46,6 +54,13 @@ export const residentPath = (houseId: string, guestId: string): string =>
 // names that way (a Documents title, a Staff Notes guestName). URLs hold ids only.
 export const stripQuery = (path: string): string => path.split('?')[0];
 
+// The tab a route belongs to. A resident's screens sit under Residents.
+export function sectionForRoute(routeName: string): Section | null {
+  if (RESIDENT_ROUTE_PATHS[routeName]) return 'residents';
+  const entry = (Object.entries(SECTIONS) as [Section, { route: string }][]).find(([, s]) => s.route === routeName);
+  return entry ? entry[0] : null;
+}
+
 export const sectionPath = (houseId: string, section: Section): string =>
   `/${SECTIONS[section].path.replace(':houseId', encodeURIComponent(houseId))}`;
 
@@ -64,7 +79,6 @@ export function linkingConfig(origin: string) {
     [HOME_ROUTE]: '',
     [NOT_FOUND_ROUTE]: '*',
     [HOUSE_LIST_ROUTE]: 'houses',
-    ...HOUSE_SCREEN_PATHS,
     ...RESIDENT_ROUTE_PATHS,
   };
   for (const { route, path } of Object.values(SECTIONS)) screens[route] = path;
