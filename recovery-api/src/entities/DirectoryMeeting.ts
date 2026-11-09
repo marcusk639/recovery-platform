@@ -52,6 +52,13 @@ export interface DirectoryMeeting {
   createdByApp?: string;
   /** uid of the creating user for an `app`-sourced meeting. */
   createdByUid?: string;
+  /** BMLT region `sourceId` that listed this row; decides whether the row may be deleted. */
+  sourceRegion?: string;
+  /**
+   * "YYYY-MM-DD" the source last confirmed this row. Clients show it so a person
+   * can tell how old a listing is.
+   */
+  dataAsOf?: string | null;
   /** Last time the refresh job re-ingested/updated this record. */
   lastRefreshedAt: Timestamp;
   /** Last time this record was seen in a source sweep (drives stale-prune). */
