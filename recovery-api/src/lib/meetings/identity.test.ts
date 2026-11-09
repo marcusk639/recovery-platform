@@ -1,3 +1,4 @@
+import { bmltMeetingId } from './identity';
 import {
   GEOHASH_PRECISION,
   normalizeDay,
@@ -165,5 +166,22 @@ describe('normalizeTime — review hardening', () => {
   it('rejects 12-hour values above 12', () => {
     expect(() => normalizeTime('13:00 AM')).toThrow();
     expect(() => normalizeTime('13:00 PM')).toThrow();
+  });
+});
+
+describe('bmltMeetingId', () => {
+  it('is a stable 24-character hex id', () => {
+    expect(bmltMeetingId(100, 12257)).toMatch(/^[0-9a-f]{24}$/);
+    expect(bmltMeetingId(100, 12257)).toBe(bmltMeetingId(100, '12257'));
+  });
+
+  it('keeps regions and meeting ids from running together', () => {
+    expect(bmltMeetingId(1, 23)).not.toBe(bmltMeetingId(12, 3));
+  });
+
+  it('cannot match an id from the content recipe', () => {
+    expect(bmltMeetingId(100, 1)).not.toBe(
+      directoryMeetingId({ name: '100', day: 1, time: '00:00' }),
+    );
   });
 });

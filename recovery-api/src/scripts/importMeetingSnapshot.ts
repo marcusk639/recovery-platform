@@ -30,11 +30,10 @@ import { FieldPath, getFirestore } from 'firebase-admin/firestore';
 import type { DirectoryMeeting } from '../entities/DirectoryMeeting';
 import { runSnapshotImport, type SnapshotDoc } from '../lib/meetings/snapshotImport';
 import { mapHomegroupsAaMeeting } from '../lib/meetings/sources/meetingSnapshot';
-import { mapNaMeeting } from '../lib/meetings/sources/naDataset';
 
 export const DEST_PROJECT = 'recovery-platform-e6cb3';
 
-type ImportProvider = 'AA' | 'NA';
+type ImportProvider = 'AA';
 
 export const IMPORT_SOURCES: Record<
   ImportProvider,
@@ -45,12 +44,10 @@ export const IMPORT_SOURCES: Record<
   }
 > = {
   AA: { project: 'recovery-connect-cad4b', collection: 'meetings', map: mapHomegroupsAaMeeting },
-  // Homegroups' own na-meetings is empty; Regroup holds the dataset.
-  NA: { project: 'phoenix-cleanhouse', collection: 'na-meetings', map: mapNaMeeting },
 };
 
 const PAGE_SIZE = 500;
-const USAGE = 'Usage: --provider AA|NA [--apply]';
+const USAGE = 'Usage: --provider AA [--apply]';
 
 export function parseImportArgs(argv: string[]): { provider: ImportProvider; apply: boolean } {
   let provider: string | undefined;
@@ -61,8 +58,12 @@ export function parseImportArgs(argv: string[]): { provider: ImportProvider; app
     else if (arg === '--provider') provider = argv[++i];
     else throw new Error(`Unknown argument ${arg}. ${USAGE}`);
   }
-  if (provider !== 'AA' && provider !== 'NA') {
-    throw new Error(`--provider must be AA or NA. ${USAGE}`);
+  if (provider === 'NA') {
+    // The import overwrites any row with a dataAsOf, and every synced NA row has one.
+    throw new Error('NA comes from BMLT now: use npm run sync:na. A snapshot would overwrite it.');
+  }
+  if (provider !== 'AA') {
+    throw new Error(`--provider must be AA. ${USAGE}`);
   }
   return { provider, apply };
 }

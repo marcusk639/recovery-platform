@@ -4,10 +4,11 @@ import { geohashForLocation } from 'geofire-common';
 /**
  * FROZEN identity scheme for the shared meeting directory.
  *
- * There must be EXACTLY ONE hash recipe and ONE geohash precision repo-wide on
- * the directory path. homegroups drifted across precision 5/8/9/10 and across
- * day/time representations, producing duplicate + orphan docs. Do not add a
- * second hashing or geohash helper.
+ * There must be EXACTLY ONE content hash recipe and ONE geohash precision repo-wide
+ * on the directory path. homegroups drifted across precision 5/8/9/10 and across
+ * day/time representations, producing duplicate + orphan docs. Do not add another
+ * hashing or geohash helper. The one exception is bmltMeetingId, for a source whose
+ * own ids are reliable enough to key on.
  *
  * Recipe ported from homegroups `scripts/cleanMeetings.ts` (generateMeetingHash):
  *   sha1(name | day | time | link | formattedAddress).slice(0, 24)
@@ -32,6 +33,17 @@ const DAYS = [
   'friday',
   'saturday',
 ] as const;
+
+/**
+ * Id for a BMLT meeting, from the region and the meeting's id on that region's server.
+ * Across 35,788 live rows this pair was unique, while the meeting id alone repeated
+ * between regions. Unlike directoryMeetingId it doesn't change when a meeting is
+ * edited, so a rename or time change updates one document instead of replacing it.
+ */
+export function bmltMeetingId(regionSourceId: number, meetingId: string | number): string {
+  const parts = ['bmlt', String(regionSourceId), String(meetingId)].join(ID_FIELD_SEP);
+  return createHash('sha1').update(parts).digest('hex').slice(0, 24);
+}
 
 /**
  * Canonicalize a day-of-week to an integer 0–6 (0 = Sunday).
@@ -111,7 +123,7 @@ export interface DirectoryMeetingIdInput {
   formattedAddress?: string;
 }
 
-// Field separator for the hash preimage. A NUL byte is used (not "|") so a
+// Field separator for the hash preimages. A NUL byte is used (not "|") so a
 // literal separator inside a free-form field (name/address from external
 // sources, e.g. "Suite 100 | Bldg B") can't shift field boundaries and collide
 // two distinct meetings onto the same id. NUL never appears in real source text.

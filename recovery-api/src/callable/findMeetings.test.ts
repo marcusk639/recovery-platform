@@ -72,7 +72,8 @@ function makeDb(seed: DirectoryMeeting[] = []) {
     // cannot read the whole collection before in-memory filtering.
     limit: jest.fn().mockReturnThis(),
     get: jest.fn().mockResolvedValue({
-      docs: seed.map((m) => ({ id: m.id, data: () => m })),
+      // The id is the document's key. Every writer strips it from the stored fields.
+      docs: seed.map(({ id, ...stored }) => ({ id, data: () => stored })),
     }),
   };
 
@@ -93,6 +94,12 @@ function makeDb(seed: DirectoryMeeting[] = []) {
 
   return { db, addedDocs, requestsCollection, directoryMeetingsQuery };
 }
+
+test('returns each meeting with its document id', async () => {
+  const { db } = makeDb([meeting({ id: 'abc123' })]);
+  const result = await handleFindMeetings({ location: CENTER }, ctx, { db });
+  expect(result.meetings[0].id).toBe('abc123');
+});
 
 describe('handleFindMeetings (auth via wrapper)', () => {
   const OLD_ENV = process.env;
@@ -133,13 +140,11 @@ describe('handleFindMeetings (auth via wrapper)', () => {
 });
 
 describe('handleFindMeetings (handler)', () => {
-it('caps each geohash bound and reports truncation when a bound fills up', async () => {
+  it('caps each geohash bound and reports truncation when a bound fills up', async () => {
     // Geohash order is not distance order, so a bound that hits the read cap can
     // omit meetings genuinely inside the radius. The caller has to be able to
     // tell, otherwise incomplete results look complete.
-    const full = Array.from({ length: 500 }, (_v, n) =>
-      meeting({ id: `m${n}` }),
-    );
+    const full = Array.from({ length: 500 }, (_v, n) => meeting({ id: `m${n}` }));
     const { db } = makeDb(full);
 
     const result = await handleFindMeetings({ location: CENTER }, ctx, { db });

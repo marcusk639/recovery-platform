@@ -16,7 +16,9 @@ npm run test:watch   # Jest in watch mode
 npm run test:coverage # Jest with coverage
 npm run lint         # eslint src
 npm run seed         # build + seed directoryMeetings (lib/scripts/seedDirectory.js)
-npm run import:snapshot -- --provider AA|NA [--apply]  # dry run by default; refuses a source with billing off
+npm run import:snapshot -- --provider AA [--apply]  # dry run by default; refuses a source with billing off
+npm run sync:na      # NA meetings from BMLT, run by hand, not in GCP; dry run by default
+                     # flags: --apply, --region <sourceId>, --allow-deletes <sourceId,...>, --purge
 ```
 
 `lib/` is tracked and stale, and `npm run build` rewrites it. Don't commit the result. `firebase.json` has no

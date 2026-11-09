@@ -14,7 +14,7 @@ jest.mock('firebase-admin/firestore', () => ({
 
 describe('parseImportArgs', () => {
   it('defaults to a dry run', () => {
-    expect(parseImportArgs(['--provider', 'NA'])).toEqual({ provider: 'NA', apply: false });
+    expect(parseImportArgs(['--provider', 'AA'])).toEqual({ provider: 'AA', apply: false });
   });
 
   it('writes only with an explicit --apply', () => {
@@ -32,7 +32,12 @@ describe('parseImportArgs', () => {
   );
 
   it('rejects an unknown flag rather than ignoring a typo of --apply', () => {
-    expect(() => parseImportArgs(['--provider', 'NA', '--aply'])).toThrow(/--aply/);
+    expect(() => parseImportArgs(['--provider', 'AA', '--aply'])).toThrow(/--aply/);
+  });
+
+  it('refuses NA, because synced rows have a date and would be overwritten', () => {
+    expect(() => parseImportArgs(['--provider', 'NA'])).toThrow(/sync:na/);
+    expect(() => parseImportArgs(['--provider', 'NA', '--apply'])).toThrow(/sync:na/);
   });
 });
 
@@ -64,10 +69,7 @@ describe('IMPORT_SOURCES', () => {
       project: 'recovery-connect-cad4b',
       collection: 'meetings',
     });
-    expect(IMPORT_SOURCES.NA).toMatchObject({
-      project: 'phoenix-cleanhouse',
-      collection: 'na-meetings',
-    });
+    expect(IMPORT_SOURCES).not.toHaveProperty('NA');
   });
 });
 
