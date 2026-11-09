@@ -3,6 +3,7 @@ import {
   DirectoryMeeting,
   DirectoryProvider,
 } from "../entities/DirectoryMeeting";
+import { SerializedMeeting } from "../callable/findMeetings";
 
 /**
  * A directory day as a lowercase name. recovery-api stores names, but rows
@@ -20,7 +21,6 @@ export function directoryDayName(day?: string | number): string | undefined {
   if (/^[0-6]$/.test(lower)) return daysOfWeek[Number(lower)];
   return undefined;
 }
-import { SerializedMeeting } from "../callable/findMeetings";
 
 /** Map recovery-api directory providers onto homegroups' client-facing meeting types. */
 const PROVIDER_TO_TYPE: Record<DirectoryProvider, string> = {
@@ -35,8 +35,8 @@ const PROVIDER_TO_TYPE: Record<DirectoryProvider, string> = {
  * contract.
  *
  * Field-for-field translation only — keeps mobile/web untouched. The directory's
- * integer `day` (0–6) becomes homegroups' lowercase weekday string; `provider`
- * becomes the client `type`. The directory exposes no timestamps, so `createdAt`
+ * `day`, stored as a name or a legacy integer, becomes homegroups' lowercase
+ * weekday string; `provider` becomes the client `type`. The directory exposes no timestamps, so `createdAt`
  * / `updatedAt` are emitted as empty strings (deterministic for tests; the
  * client treats these as informational only for directory-sourced rows).
  */
