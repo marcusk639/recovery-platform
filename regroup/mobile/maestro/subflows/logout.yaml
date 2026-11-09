@@ -2,6 +2,8 @@
 # Ends on the login screen, mirroring e2e/helpers/auth.js logout().
 appId: ${APP_ID}
 ---
+# The relaunch below starts the app, so refuse a non-e2e APP_ID first, as login.yaml does.
+- runFlow: guard-e2e-app.yaml
 # Flows can end anywhere, often on a sheet that covers the tab bar. Relaunch to reach it.
 - stopApp
 - launchApp:
