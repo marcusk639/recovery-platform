@@ -2,7 +2,7 @@ import { test as base, expect, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
-import { getFirestore } from 'firebase-admin/firestore';
+import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 
 process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:18080';
 process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:19099';
@@ -15,6 +15,38 @@ const ACCOUNTS = {
   'oxford-operator': { email: 'test-oxford-operator@rats-e2e.com', house: 'test-house-oxford' },
 };
 export type Account = keyof typeof ACCOUNTS;
+
+export const SECOND_HOUSE = 'test-house-b';
+
+// The seed's operators run one house each. This makes the manager run two, with a
+// resident in the second, the portal's main case.
+export async function addSecondHouseForManager(status: 'active' | 'canceled' = 'active'): Promise<void> {
+  const user = await getAuth().getUserByEmail(ACCOUNTS.manager.email);
+  const house = (await admin().doc('houses/test-house-123').get()).data()!;
+  await admin().doc(`houses/${SECOND_HOUSE}`).set({ ...house, id: SECOND_HOUSE, name: 'Second House' });
+  const role = (await admin().doc(`house-roles/test-house-123_${user.uid}`).get()).data()!;
+  await admin().doc(`house-roles/${SECOND_HOUSE}_${user.uid}`).set(role);
+  const guest = (await admin().doc('guests/guest-b').get()).data()!;
+  await admin().doc('guests/guest-c').set({
+    ...guest,
+    id: 'guest-c',
+    userId: '',
+    houseId: SECOND_HOUSE,
+    firstName: 'Cara',
+    lastName: 'Second',
+    displayName: 'Cara Second',
+  });
+  await admin().doc(`admins/${user.uid}`).update({ houseIds: FieldValue.arrayUnion(SECOND_HOUSE) });
+  const claims = user.customClaims as { admin: object; superAdmin: object };
+  await getAuth().setCustomUserClaims(user.uid, {
+    ...claims,
+    admin: { ...claims.admin, [SECOND_HOUSE]: true },
+    superAdmin: { ...claims.superAdmin, [SECOND_HOUSE]: true },
+  });
+  // The create trigger stamps a status, so set the wanted one after it has run.
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  await admin().doc(`houses/${SECOND_HOUSE}`).update({ subscriptionStatus: status });
+}
 
 export function reseed(env: NodeJS.ProcessEnv = {}): void {
   execFileSync('scripts/seed.sh', { stdio: 'pipe', env: { ...process.env, ...env } });

@@ -47,11 +47,12 @@ test.afterAll(() => fs.writeFileSync(OUT, JSON.stringify(rows, null, 2)));
 
 for (const [route, params] of SCREENS) {
   test(`survey ${route}`, async ({ page, pageErrors }) => {
+    await signInAs(page, 'manager');
+    // After sign-in, so a read the gate makes at sign-in isn't blamed on every screen.
     const consoleErrors: string[] = [];
     page.on('console', (m) => {
       if (m.type() === 'error' && m.text().startsWith('[portal error]')) consoleErrors.push(m.text());
     });
-    await signInAs(page, 'manager');
     await page.evaluate(([r, p]) => (window as any).__portalTest.open(r, p), [route, params] as const);
     // Long enough for query retries, so a refused read shows up as one.
     await page.waitForTimeout(6000);

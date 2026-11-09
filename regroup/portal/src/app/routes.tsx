@@ -30,13 +30,14 @@ import IntakeFormScreen from '@mobile/screens/ResidentIntake/IntakeFormScreen';
 import StaffNotesFeed from '@mobile/screens/StaffNotes/StaffNotesFeed';
 
 import { Home } from './Home';
+import { ScreenFrame } from './ScreenFrame';
 import { createSingleScreenNavigator } from './single-screen-navigator';
 import { HOME_ROUTE, NOT_FOUND_ROUTE } from './urls';
 
 const Stack = createSingleScreenNavigator() as any;
 
 export const Screens = () => (
-  <Stack.Navigator>
+  <Stack.Navigator frame={ScreenFrame}>
     <Stack.Screen name={HOME_ROUTE} component={Home} />
     <Stack.Screen name={NOT_FOUND_ROUTE} component={Home} />
     <Stack.Screen name={Routes.GuestList} component={GuestList} />

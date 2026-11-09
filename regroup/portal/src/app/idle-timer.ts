@@ -10,14 +10,17 @@ export interface IdleTimer {
 export function createIdleTimer(options: { timeoutMs: number; now: () => number; onIdle: () => void }): IdleTimer {
   let lastActivity = options.now();
   let fired = false;
+  const check = () => {
+    if (fired || options.now() - lastActivity < options.timeoutMs) return;
+    fired = true;
+    options.onIdle();
+  };
   return {
     activity() {
-      lastActivity = options.now();
+      // A waking laptop's first mouse move must not rescue an expired session.
+      check();
+      if (!fired) lastActivity = options.now();
     },
-    check() {
-      if (fired || options.now() - lastActivity < options.timeoutMs) return;
-      fired = true;
-      options.onIdle();
-    },
+    check,
   };
 }

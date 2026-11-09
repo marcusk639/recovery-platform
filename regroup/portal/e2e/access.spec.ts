@@ -1,5 +1,5 @@
 import { getAuth } from 'firebase-admin/auth';
-import { admin, expect, removeFromHouse, reseed, signInAs, signInAsRaw, test } from './helpers';
+import { admin, expect, fillSignIn, removeFromHouse, reseed, signInAs, signInAsRaw, test } from './helpers';
 
 test.beforeEach(() => reseed());
 
@@ -14,7 +14,9 @@ test('a resident is told to use the phone and can sign out', async ({ page }) =>
 test('a lapsed operator sees the subscription screen, not the portal', async ({ page }) => {
   await admin().doc('users/e2e-manager').update({ 'subscriptionMetadata.status': 'canceled' });
   await admin().doc('houses/test-house-123').update({ subscriptionStatus: 'canceled' });
-  await signInAsRaw(page, 'test-manager@rats-e2e.com');
+  // The check is per house, so Home stays open and the house shows the notice.
+  await page.goto('/houses/test-house-123/residents');
+  await fillSignIn(page, 'test-manager@rats-e2e.com');
   await expect(page.getByTestId('subscription-required-screen')).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId('guest-list-item')).toHaveCount(0);
 });
@@ -74,4 +76,22 @@ test('a failed refresh, as when offline, keeps the current screen', async ({ pag
   await page.waitForTimeout(1000);
   await expect(page.getByText('Bob Rivera')).toBeVisible();
   await context.setOffline(false);
+});
+
+test('a disabled account is signed out and its data is gone', async ({ page }) => {
+  await signInAs(page, 'manager');
+  await expect(page.getByText('Bob Rivera')).toBeVisible();
+  await getAuth().updateUser('e2e-manager', { disabled: true });
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(page.locator('#sign-in-form')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText('Bob Rivera')).toHaveCount(0);
+});
+
+test('a subscription that lapses while the tab is open is noticed', async ({ page }) => {
+  await signInAs(page, 'manager');
+  await expect(page.getByText('Bob Rivera')).toBeVisible();
+  await admin().doc('houses/test-house-123').update({ subscriptionStatus: 'canceled' });
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(page.getByTestId('subscription-required-screen')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText('Bob Rivera')).toHaveCount(0);
 });

@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import { getIdToken } from 'firebase/auth';
-import { useDispatch } from 'react-redux';
+import { useQueryClient } from '@tanstack/react-query';
+import { useDispatch, useStore } from 'react-redux';
+import { houseKeys } from '@mobile/state/queries/houseQueries';
 import { autoLogin } from '@mobile/state/slices/userSlice';
 import { auth } from '../adapter/firebase-setup';
 
@@ -10,6 +12,8 @@ export const CLAIMS_REFRESH_MS = 10 * 60 * 1000;
 // far longer than the phone's app-start refresh assumes.
 export function useClaimsRefresh(): void {
   const dispatch = useDispatch<any>();
+  const queryClient = useQueryClient();
+  const store = useStore<any>();
   useEffect(() => {
     let running = false;
     const refresh = async () => {
@@ -19,6 +23,10 @@ export function useClaimsRefresh(): void {
       try {
         await getIdToken(user, true);
         await dispatch(autoLogin(user)).unwrap();
+        // The subscription gate reads these, and nothing else refetches them.
+        const houseId = store.getState().houses.selectedHouseId;
+        if (houseId) await queryClient.invalidateQueries({ queryKey: houseKeys.detail(houseId) });
+        await queryClient.invalidateQueries({ queryKey: ['paywall', 'config'] });
       } catch {
         // A failed refresh, as when offline, must not end the session.
       } finally {
@@ -31,5 +39,5 @@ export function useClaimsRefresh(): void {
       window.removeEventListener('focus', refresh);
       clearInterval(interval);
     };
-  }, [dispatch]);
+  }, [dispatch, queryClient, store]);
 }

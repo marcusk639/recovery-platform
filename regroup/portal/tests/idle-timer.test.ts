@@ -48,3 +48,11 @@ test('activity after it fired does not fire it again', () => {
   timer.check();
   expect(onIdle).toHaveBeenCalledTimes(1);
 });
+
+// A laptop waking: the first mouse move can arrive before the overdue check runs.
+test('activity after the timeout has passed signs out rather than rescuing the session', () => {
+  const { timer, onIdle, advance } = setup();
+  advance(120 * MIN);
+  timer.activity();
+  expect(onIdle).toHaveBeenCalledTimes(1);
+});

@@ -1,5 +1,8 @@
 import '../adapter/preload';
 import '@mobile/../i18n';
+// Before anything else from mobile, as its index.js does. Its slices and queries
+// import each other, and loading a query first leaves the store missing reducers.
+import '@mobile/state/store';
 import { createRoot } from 'react-dom/client';
 import { installUnhandledFeatureAlerts } from '../adapter/unhandled';
 import { AccessGate } from './AccessGate';
