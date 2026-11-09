@@ -16,6 +16,7 @@
     "test:coverage": "jest --coverage",
     "seed": "npm run build && node lib/scripts/seedDirectory.js",
     "migrate:na": "npm run build && node lib/scripts/migrateNaMeetings.js",
+    "sync:na": "npm run build && node lib/scripts/syncNa.js",
     "lint": "eslint src"
   },
   "dependencies": {

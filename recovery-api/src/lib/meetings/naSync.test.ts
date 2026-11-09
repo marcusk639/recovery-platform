@@ -235,6 +235,19 @@ describe('runNaSync', () => {
     expect(store.size).toBe(0);
   });
 
+  test('reports each region by name with its row count', async () => {
+    const { db } = makeNaSyncDb();
+    const summary = await runNaSync({
+      db,
+      apply: false,
+      now,
+      sleep,
+      onlyRegion: 100,
+      fetchFn: fetchWith([bmltRow(1)]),
+    });
+    expect(summary.perRegion).toEqual([{ name: 'Region 100', sourceId: 100, rows: 1 }]);
+  });
+
   test('reports unhealthy regions', async () => {
     const { db } = makeNaSyncDb();
     const summary = await runNaSync({

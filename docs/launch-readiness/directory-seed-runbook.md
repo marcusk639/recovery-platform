@@ -157,3 +157,29 @@ npm run seed          # AA + CR, full US grid (resumable, long)
 npm run migrate:na    # NA, once per product source (read>0 expected)
 # then verify (section 4)
 ```
+
+---
+
+## NA meetings now come from `npm run sync:na`
+
+This replaces section 3 and everything above about migrating NA. Don't run `migrate:na`, because its rows would sit beside the synced ones. The source is the [BMLT](https://bmlt.app/) aggregator, which combines listings NA service bodies maintain themselves.
+
+The command runs by hand from a terminal. Nothing runs on a schedule or in GCP, so the data is only as current as the last run. Run it from `recovery-api/`, signed in with `gcloud auth application-default login`.
+
+```bash
+npm run sync:na                                  # dry run: report what would change
+npm run sync:na -- --region <sourceId> --apply   # one region, for a first try
+npm run sync:na -- --apply                       # everything
+```
+
+**How old is the data?** Read `refreshState/naSync` in Firestore. `lastRunAt` is the last applied run, and `scope` says whether it covered all regions. Each row's `dataAsOf` is when BMLT last imported its region.
+
+**Before the first `--apply`:** the existing `refreshDirectory` prune deletes any external row not stamped in 30 days, whatever its provider. It's held back only because that function times out before a sweep cycle closes. PR #199 adds a guard that excludes NA. Don't deploy any other fix to that timeout.
+
+**When a region is reported:**
+
+- **`fetch_failed`, `count_mismatch` or `stale_import`:** the rows it returned are still saved, and nothing is deleted from it. Run again later.
+- **"would lose too many rows":** nothing is deleted from it. A region can lose up to 5 rows or 10%, whichever is more. Check the region's own site, and if the removal is real, rerun with `--allow-deletes <sourceId>`. Use the same flag for a region that has left BMLT.
+
+**To undo:** `npm run sync:na -- --purge` reports how many rows this sync created, and adding `--apply` deletes them. It leaves every other row alone.
+

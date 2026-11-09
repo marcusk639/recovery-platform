@@ -16,7 +16,9 @@ npm run test:watch   # Jest in watch mode
 npm run test:coverage # Jest with coverage
 npm run lint         # eslint src
 npm run seed         # build + seed directoryMeetings (lib/scripts/seedDirectory.js)
-npm run migrate:na   # build + migrate NA meetings (lib/scripts/migrateNaMeetings.js)
+npm run migrate:na   # superseded by sync:na; don't run it, its rows would sit beside the synced ones
+npm run sync:na      # NA meetings from BMLT, run by hand, not in GCP; dry run by default
+                     # flags: --apply, --region <sourceId>, --allow-deletes <sourceId,...>, --purge
 ```
 
 ## Architecture

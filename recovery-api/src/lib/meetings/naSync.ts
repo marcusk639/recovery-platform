@@ -218,6 +218,7 @@ export async function reconcileNaMeetings(
 
 export interface NaSyncSummary {
   regions: number;
+  perRegion: Array<{ name: string; sourceId: number; rows: number }>;
   unhealthy: Array<{ sourceId: number; problem: RegionProblem }>;
   result: NaReconcileResult;
 }
@@ -232,7 +233,12 @@ export async function runNaSync(deps: NaReconcileDeps & NaSweepDeps): Promise<Na
   const unhealthy = sweeps.flatMap(({ region, problem }) =>
     problem ? [{ sourceId: region.sourceId, problem }] : [],
   );
-  const summary = { regions: sweeps.length, unhealthy, result };
+  const perRegion = sweeps.map(({ region, rows }) => ({
+    name: region.name,
+    sourceId: region.sourceId,
+    rows: rows.length,
+  }));
+  const summary = { regions: sweeps.length, perRegion, unhealthy, result };
 
   // Nothing runs this on a schedule, so this is how anyone can tell how old the data is.
   if (deps.apply) {
