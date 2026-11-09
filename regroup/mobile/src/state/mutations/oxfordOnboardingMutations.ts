@@ -74,6 +74,13 @@ export function useCompleteOxfordOnboarding() {
   return useMutation({
     mutationFn: completeOxfordOnboarding,
     onSuccess: (_data, variables) => {
+      // The dashboard opens as soon as this resolves, before a refetch can land,
+      // and a stale "not onboarded" house sends it straight back to the wizard.
+      queryClient.setQueryData(
+        houseKeys.detail(variables.houseId),
+        (house: object | undefined) =>
+          house && { ...house, oxfordOnboardingComplete: true },
+      );
       queryClient.invalidateQueries({ queryKey: houseKeys.details() });
       queryClient.invalidateQueries({
         queryKey: ['officers', variables.houseId],

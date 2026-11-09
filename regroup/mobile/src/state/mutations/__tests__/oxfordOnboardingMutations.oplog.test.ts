@@ -28,6 +28,7 @@ import {
   seedDoc,
 } from '../../../../__mocks__/firebase-modular/log';
 import { OxfordOnboardingPayload, useCompleteOxfordOnboarding } from '../oxfordOnboardingMutations';
+import { houseKeys } from '../../queries/houseQueries';
 
 const SERVER_TS = { __fv: 'serverTimestamp' };
 
@@ -142,5 +143,25 @@ describe('useCompleteOxfordOnboarding', () => {
 
     await expect(complete(payload)).rejects.toThrow('denied');
     expect(readDoc('houses/h1/officers/president')).toBeUndefined();
+  });
+});
+
+describe('after onboarding completes', () => {
+  // The dashboard opens as soon as this resolves. If its cached house still says
+  // "not onboarded", it redirects straight back into the wizard.
+  it('the cached house already says onboarded, before any refetch', async () => {
+    seedDoc('houses/h1', { id: 'h1' });
+    client.setQueryData(houseKeys.detail('h1'), { id: 'h1', oxfordOnboardingComplete: false });
+    await complete(payload);
+    expect(client.getQueryData<{ oxfordOnboardingComplete: boolean }>(houseKeys.detail('h1'))).toMatchObject({
+      id: 'h1',
+      oxfordOnboardingComplete: true,
+    });
+  });
+
+  it('does not invent a cached house when none was loaded', async () => {
+    seedDoc('houses/h1', { id: 'h1' });
+    await complete(payload);
+    expect(client.getQueryData(houseKeys.detail('h1'))).toBeUndefined();
   });
 });
