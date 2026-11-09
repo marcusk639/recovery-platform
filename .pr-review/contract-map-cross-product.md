@@ -37,6 +37,7 @@ Contract tests that pin one side: `homegroups/functions/src/__tests__/api/recove
 | App ids, display names, aliases or flags in `recovery-api/src/config/apps.ts` | `X-App-Id` literals in all three consumers, and detox's display-name and interest-to-app maps in `route.ts`               |
 | `findMeetings` schema (`recovery-api/src/callable/findMeetings.ts`)           | The request built in `homegroups/functions/src/callable/findMeetings.ts` and `regroup/functions/src/callable/meetings.ts` |
 | `DirectoryMeeting` fields, providers, day/time normalisation                  | `recovery-api/src/entities/DirectoryMeeting.ts` ↔ both consumer entity copies and both `directoryMapping.ts` files       |
+| `findMeetings` response (no `truncated` flag: the read pages until exhausted) | Nothing reads `truncated`. |
 | `dataAsOf` on `DirectoryMeeting` | Both consumer entity copies and both `directoryMapping.ts` files, `SerializedMeeting` in `homegroups/functions/src/callable/findMeetings.ts`, `homegroups/mobile/src/types/index.ts`, `homegroups/mobile/src/utils/formatDataAsOf.ts`, `regroup/mobile/src/entities/Meeting.tsx`, `regroup/mobile/src/util/dataAsOf.ts` |
 | Result limits, default radius, per-bound read limit                           | Both products' result handling                                                                                            |
 | `createReferral` schema limits (`recovery-api/src/callable/referrals.ts`)     | Truncation in `detox-recovery/app/api/contact/route.ts`                                                                   |

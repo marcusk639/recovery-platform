@@ -16,6 +16,7 @@
     "test:coverage": "jest --coverage",
     "seed": "npm run build && node lib/scripts/seedDirectory.js",
     "import:snapshot": "npm run build && node lib/scripts/importMeetingSnapshot.js",
+    "sync:meetings": "npm run build && node lib/scripts/syncMeetings.js",
     "sync:na": "npm run build && node lib/scripts/syncNa.js",
     "lint": "eslint src"
   },

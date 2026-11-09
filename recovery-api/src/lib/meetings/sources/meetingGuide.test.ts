@@ -1,5 +1,107 @@
-import { fetchAAMeetings } from './meetingGuide';
+import { fetchAAMeetings, mapMeetingGuideMeeting } from './meetingGuide';
 import { directoryMeetingId } from '../identity';
+
+describe('mapMeetingGuideMeeting', () => {
+  it('keeps the timezone, which day and time mean nothing without', () => {
+    const mapped = mapMeetingGuideMeeting({
+      id: 1,
+      name: 'Sunrise Group',
+      day: 2,
+      time: '07:00:00',
+      latitude: '30.2',
+      longitude: '-97.7',
+      timezone: 'America/Chicago',
+    });
+    expect(mapped?.timezone).toBe('America/Chicago');
+  });
+
+  const base = {
+    id: 1,
+    name: 'Sunrise Group',
+    day: 2,
+    time: '07:00:00',
+    latitude: '30.2',
+    longitude: '-97.7',
+  };
+
+  it('drops an online suffix from a name, so both listings hash to one document', () => {
+    const mapped = mapMeetingGuideMeeting({ ...base, name: 'Sunrise Group - Online' });
+    expect(mapped?.name).toBe('Sunrise Group');
+    expect(mapped?.id).toBe(mapMeetingGuideMeeting(base)?.id);
+  });
+
+  it.each(['Virtual', 'zoom', 'HYBRID', 'Online Meeting'])('drops the suffix " - %s"', (suffix) => {
+    const mapped = mapMeetingGuideMeeting({ ...base, name: `Sunrise Group - ${suffix}` });
+    expect(mapped?.name).toBe('Sunrise Group');
+  });
+
+  it('keeps a suffix that tells two meetings apart', () => {
+    const men = mapMeetingGuideMeeting({ ...base, name: "Sunrise Group - Men's" });
+    const women = mapMeetingGuideMeeting({ ...base, name: "Sunrise Group - Women's" });
+    expect(men?.name).toBe("Sunrise Group - Men's");
+    expect(men?.id).not.toBe(women?.id);
+  });
+
+  it('leaves a hyphenated name alone', () => {
+    const mapped = mapMeetingGuideMeeting({ ...base, name: 'Step-by-Step' });
+    expect(mapped?.name).toBe('Step-by-Step');
+  });
+
+  it('fills format, which is the field Homegroups shows', () => {
+    const mapped = mapMeetingGuideMeeting({ ...base, types: 'Open,Discussion' });
+    expect(mapped?.format).toBe('Open,Discussion');
+  });
+
+  it('treats a dial-in meeting with no link as online and keeps its notes', () => {
+    const mapped = mapMeetingGuideMeeting({
+      ...base,
+      conference_phone: '+1 555 0100',
+      conference_phone_notes: 'Passcode 1234',
+    });
+    expect(mapped?.online).toBe(true);
+    expect(mapped?.onlineNotes).toBe('Dial-in: +1 555 0100 (Passcode 1234)');
+  });
+
+  it('keeps a dial-in number that has no notes', () => {
+    const mapped = mapMeetingGuideMeeting({ ...base, conference_phone: '+1 555 0100' });
+    expect(mapped?.onlineNotes).toBe('Dial-in: +1 555 0100');
+  });
+
+  it('lists a dial-in number after the link notes', () => {
+    const mapped = mapMeetingGuideMeeting({
+      ...base,
+      conference_url_notes: 'Link notes',
+      conference_phone: '+1 555 0100',
+      conference_phone_notes: 'Passcode 1234',
+    });
+    expect(mapped?.onlineNotes).toBe('Link notes\nDial-in: +1 555 0100 (Passcode 1234)');
+  });
+
+  it('prefers the link notes when a meeting has both', () => {
+    const mapped = mapMeetingGuideMeeting({
+      ...base,
+      conference_url_notes: 'Link notes',
+      conference_phone_notes: 'Phone notes',
+    });
+    expect(mapped?.onlineNotes).toBe('Link notes');
+  });
+
+  it('never copies contact or payment fields into the directory', () => {
+    const mapped = mapMeetingGuideMeeting({
+      id: 1,
+      name: 'Sunrise Group',
+      day: 2,
+      time: '07:00:00',
+      latitude: '30.2',
+      longitude: '-97.7',
+      contacts: [{ email: 'person@example.com' }],
+      venmo: '@someone',
+      entity: { email: 'group@example.com' },
+      notes: 'Call Pat',
+    } as never);
+    expect(JSON.stringify(mapped)).not.toMatch(/example\.com|@someone|Call Pat/);
+  });
+});
 
 // Hand-built Meeting Guide payload — mirrors the AAMeetingResponse shape from
 // homegroups api.ts (day = integer 0–6, time = "HH:mm:ss", lat/lng strings).
