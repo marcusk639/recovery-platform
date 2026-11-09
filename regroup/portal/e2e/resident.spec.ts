@@ -268,3 +268,19 @@ test('signing out from a record then pressing Back shows no resident data', asyn
   await expect(page.locator('#sign-in-form')).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText('Bob Rivera')).toHaveCount(0);
 });
+
+test('a peer leader who opens Payments by URL is told it is not for their role', async ({ page }) => {
+  await makePeerLeader('manager');
+  await page.goto('/houses/test-house-123/payments');
+  await fillSignIn(page, 'test-manager@rats-e2e.com');
+  await expect(page.getByText("This page isn't available for your role.")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId('screen-body')).not.toContainText('$');
+});
+
+test('a manager who opens Payments by URL gets the page', async ({ page }) => {
+  await makeManager('manager');
+  await page.goto('/houses/test-house-123/payments');
+  await fillSignIn(page, 'test-manager@rats-e2e.com');
+  await expect(page.locator('#nav-payments')).toHaveAttribute('aria-current', 'page', { timeout: 20_000 });
+  await expect(page.getByText("This page isn't available for your role.")).toHaveCount(0);
+});

@@ -4,7 +4,7 @@ vi.mock('@mobile/navigation/types', () => ({
   Routes: new Proxy({}, { get: (_target, key) => `route-${String(key)}` }),
 }));
 
-import { areasFor, isRouteReleased, sectionsFor } from '../src/app/houses/areas';
+import { areasFor, isRouteReleased, needsFullView, sectionsFor } from '../src/app/houses/areas';
 import { sectionForRoute } from '../src/app/urls';
 
 test('the page keeps adding a resident', () => {
@@ -45,4 +45,11 @@ test('a later route is unregistered until it ships, so a reused screen linking t
     expect(isRouteReleased(`route-${later}`, true)).toBe(true);
   }
   expect(isRouteReleased('route-HouseDisputes', false)).toBe(true);
+});
+test('payments, reports and balances need the full view, even by URL', () => {
+  expect(needsFullView('route-PaymentDashboard')).toBe(true);
+  expect(needsFullView('route-AdminReport')).toBe(true);
+  expect(needsFullView('route-BalanceDashboard')).toBe(true);
+  expect(needsFullView('route-HouseDisputes')).toBe(false);
+  expect(needsFullView('route-PaymentHistory')).toBe(false);
 });

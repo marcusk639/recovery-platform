@@ -87,3 +87,40 @@ test('clicking a heading sorts, and says so to a screen reader', () => {
   expect(screen.getAllByRole('link')[0].textContent).toBe('High');
   expect(screen.getByRole('columnheader', { name: /Overdue/ }).getAttribute('aria-sort')).toBe('descending');
 });
+
+const loadingHouse = (houseId: string) =>
+  summary({
+    houseId,
+    name: null,
+    house: { state: 'loading' },
+    subscription: 'loading',
+    beds: { state: 'loading' },
+    healthPercent: { state: 'loading' },
+    rentOverdueCents: { state: 'loading' },
+    applicationsWaiting: { state: 'loading' },
+    openDisputes: { state: 'loading' },
+  });
+
+test('while every house loads, the totals say so rather than showing zero', () => {
+  render(<HouseTable summaries={[loadingHouse('h1'), loadingHouse('h2')]} />);
+  expect(screen.getByTestId('total-beds').textContent).not.toContain('0 / 0');
+  expect(screen.getByTestId('total-applications').textContent).not.toMatch(/\d/);
+  expect(screen.getByTestId('total-disputes').textContent).not.toMatch(/\d/);
+  expect(screen.queryByText('$0.00')).toBeNull();
+});
+test('no overdue card appears until a house has a known amount, so a peer leader never sees one flash', () => {
+  render(<HouseTable summaries={[loadingHouse('h1')]} />);
+  expect(screen.queryByTestId('total-overdue')).toBeNull();
+});
+test('the note gives the reason each house is left out', () => {
+  render(
+    <HouseTable
+      summaries={[summary(), summary({ houseId: 'h2', subscription: 'lapsed' }), summary({ houseId: 'h3', house: { state: 'error' } })]}
+    />,
+  );
+  const note = screen.getByRole('status').textContent ?? '';
+  expect(note).toContain('Not counting 2 of 3 houses');
+  expect(note).toContain('1 with an ended subscription');
+  expect(note).toContain("1 that couldn't be read");
+  expect(note).not.toContain('loading');
+});

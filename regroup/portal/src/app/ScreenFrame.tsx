@@ -4,6 +4,7 @@ import { Breadcrumb } from './Breadcrumb';
 import { guestIdForState, houseIdForState } from './current-house';
 import { HouseTabs } from './HouseTabs';
 import { ResidentGate } from './residents/ResidentGate';
+import { FullViewGate } from './FullViewGate';
 import { HouseGate } from './HouseGate';
 import { SubscriptionCheck } from './SubscriptionCheck';
 import { useRoleUnknown } from './useHouseAccess';
@@ -24,6 +25,10 @@ export function ScreenFrame({ state, routeKey, children }: { state: any; routeKe
         <ResidentGate houseId={houseId} guestId={guestId}>
           {boundary}
         </ResidentGate>
+      ) : houseId ? (
+        <FullViewGate houseId={houseId} routeName={routeName}>
+          {boundary}
+        </FullViewGate>
       ) : (
         boundary
       )}

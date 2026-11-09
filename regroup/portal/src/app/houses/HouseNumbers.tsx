@@ -26,7 +26,7 @@ export function HouseNumbers({ houseId }: { houseId: string }) {
       <Figure label="Beds filled">
         <CellText cell={summary.beds} render={bedsText} />
       </Figure>
-      {overdue.state !== 'hidden' && (
+      {(overdue.state === 'ready' || overdue.state === 'error') && (
         <Figure label="Rent overdue">
           <CellText cell={overdue} render={formatCents} />
           {summary.overdueFromDischargedCents > 0 && (

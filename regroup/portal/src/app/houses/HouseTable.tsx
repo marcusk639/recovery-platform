@@ -100,26 +100,56 @@ function Row({ summary, healthLabel, manageSubscriptionUrl }: Props & { summary:
   );
 }
 
+// Why each house is left out of the totals, in words an operator can act on.
+function notCountedReasons(summaries: HouseSummary[]): string[] {
+  const counts = { lapsed: 0, setup: 0, failed: 0, loading: 0 };
+  for (const summary of summaries) {
+    const state = rowStateOf(summary);
+    const cells = [summary.beds, summary.rentOverdueCents, summary.applicationsWaiting, summary.openDisputes];
+    if (state === 'lapsed') counts.lapsed += 1;
+    else if (state === 'setting-up') counts.setup += 1;
+    else if (state === 'failed' || cells.some((cell) => cell.state === 'error')) counts.failed += 1;
+    else if (state === 'loading' || cells.some((cell) => cell.state === 'loading')) counts.loading += 1;
+  }
+  return [
+    counts.lapsed && `${counts.lapsed} with an ended subscription`,
+    counts.setup && `${counts.setup} still being set up`,
+    counts.failed && `${counts.failed} that couldn't be read`,
+    counts.loading && `${counts.loading} still loading`,
+  ].filter((reason): reason is string => !!reason);
+}
+
 function Totals({ summaries }: { summaries: HouseSummary[] }) {
   const totals = totalsFor(summaries);
-  const showOverdue = summaries.some((s) => s.rentOverdueCents.state !== 'hidden');
-  const total = (label: string, value: string, testId: string) => (
+  // Shown once some house has a known amount, so a peer leader never sees it flash
+  // while their role is checked.
+  const showOverdue = summaries.some((s) => s.rentOverdueCents.state === 'ready' || s.rentOverdueCents.state === 'error');
+  const total = (label: string, value: string, missing: number, testId: string) => (
     <div style={card} data-testid={testId}>
       <div style={cardLabel}>{label}</div>
-      <div style={cardValue}>{value}</div>
+      <div style={cardValue}>
+        {missing > 0 && missing >= summaries.length ? (
+          <span aria-label="Loading" style={muted}>
+            …
+          </span>
+        ) : (
+          value
+        )}
+      </div>
     </div>
   );
   return (
     <>
       <div style={cards}>
-        {total('Beds filled', `${totals.beds.value.used} / ${totals.beds.value.max}`, 'total-beds')}
-        {showOverdue && total('Rent overdue', formatCents(totals.rentOverdueCents.value), 'total-overdue')}
-        {total('Applications waiting', String(totals.applicationsWaiting.value), 'total-applications')}
-        {total('Open disputes', String(totals.openDisputes.value), 'total-disputes')}
+        {total('Beds filled', `${totals.beds.value.used} / ${totals.beds.value.max}`, totals.beds.missing, 'total-beds')}
+        {showOverdue &&
+          total('Rent overdue', formatCents(totals.rentOverdueCents.value), totals.rentOverdueCents.missing, 'total-overdue')}
+        {total('Applications waiting', String(totals.applicationsWaiting.value), totals.applicationsWaiting.missing, 'total-applications')}
+        {total('Open disputes', String(totals.openDisputes.value), totals.openDisputes.missing, 'total-disputes')}
       </div>
       {totals.housesNotCounted > 0 && (
         <p role="status" style={{ ...warning, margin: '0 0 12px' }}>
-          Not counting {totals.housesNotCounted} of {summaries.length} houses, which are loading or couldn't be read.
+          Not counting {totals.housesNotCounted} of {summaries.length} houses: {notCountedReasons(summaries).join(', ')}.
         </p>
       )}
     </>

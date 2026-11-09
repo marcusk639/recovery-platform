@@ -31,6 +31,10 @@ const LATER_ROUTES = new Set<string>([
   Routes.AdminReport,
 ]);
 
+// Pages a peer leader doesn't get, even by URL or bookmark (owner decision, 2026-11-09).
+const FULL_VIEW_ROUTES = new Set<string>([Routes.PaymentDashboard, Routes.AdminReport, Routes.BalanceDashboard]);
+export const needsFullView = (route: string): boolean => FULL_VIEW_ROUTES.has(route);
+
 export const sectionsFor = (showLater: boolean, fullView: boolean): Section[] =>
   ORDER.filter((s) => (showLater || !LATER_SECTIONS.has(s)) && (fullView || !FULL_VIEW_SECTIONS.has(s)));
 
