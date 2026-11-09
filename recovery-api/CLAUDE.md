@@ -24,7 +24,8 @@ npm run import:snapshot -- --provider AA|NA [--apply]  # dry run by default; ref
 build step, so build before any functions deploy or it ships the stale copy.
 
 **No scheduled job updates meetings** (owner decision, 2026-11-08). Meeting sync runs manually through scripts
-until further notice. `src/noScheduledJobs.test.ts` fails if a scheduled function returns.
+until further notice. `src/noScheduledJobs.test.ts` fails if a scheduled function touches meeting data. Scheduled
+jobs for anything else are allowed.
 
 ## Architecture
 
