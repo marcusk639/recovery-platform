@@ -362,13 +362,18 @@ export const findMeetings = onCall(
         directoryPromise,
       ]);
 
+      const allowed = new Set(directoryProviders ?? []);
+      const directoryMeetings = directoryResults
+        .filter((dirMeeting) => allowed.has(dirMeeting.provider))
+        .map(mapDirectoryToSerialized);
+
       // One source failing shouldn't cost a person the meetings the other one found.
       const failedRead = firestoreResults.find(
         (result): result is PromiseRejectedResult =>
           result.status === "rejected",
       );
       if (failedRead) {
-        if (directoryResults.length === 0) throw failedRead.reason;
+        if (directoryMeetings.length === 0) throw failedRead.reason;
         logger.error("Homegroups meeting read failed; using directory only", {
           error: String(failedRead.reason),
         });
@@ -379,12 +384,9 @@ export const findMeetings = onCall(
           result.status === "fulfilled" ? result.value : [],
         )
         .map(serializeMeeting);
-      const allowed = new Set(directoryProviders ?? []);
       const serializedMeetings = mergeDirectoryMeetings(
         ownMeetings,
-        directoryResults
-          .filter((dirMeeting) => allowed.has(dirMeeting.provider))
-          .map(mapDirectoryToSerialized),
+        directoryMeetings,
       );
 
       logger.info("Meetings fetched successfully", {

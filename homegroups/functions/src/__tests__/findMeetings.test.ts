@@ -430,6 +430,27 @@ describe("findMeetings directory orchestration (B4)", () => {
     ).rejects.toMatchObject({ code: "internal" });
   });
 
+  it("fails the search when Homegroups' read fails and the directory has only other fellowships", async () => {
+    jest.resetModules();
+    const { getAlcoholicsAnonymousMeetings, fetchDirectoryMeetings } =
+      await loadMocks();
+    getAlcoholicsAnonymousMeetings.mockRejectedValueOnce(
+      new Error("quota exceeded"),
+    );
+    fetchDirectoryMeetings.mockResolvedValueOnce([
+      dirMeeting({ id: "na-1", provider: "NA" }),
+    ]);
+    const { findMeetings } = await import("../callable/findMeetings");
+
+    await expect(
+      (findMeetings as Function)(
+        authedRequest({
+          filters: { location: { lat: 30.2, lng: -97.7 }, type: "AA" },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "internal" });
+  });
+
   it.each([
     ["the default 10 km", undefined, 10_000],
     ["the distance the person chose", 25, 25_000],

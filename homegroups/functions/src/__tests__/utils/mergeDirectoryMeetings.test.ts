@@ -187,12 +187,91 @@ describe("mergeDirectoryMeetings", () => {
     expect(ids(merged)).toEqual(["b", "own"]);
   });
 
-  it("treats rows with different upstream ids as separate, even when they look alike", () => {
+  it("pairs a scraped row with an identical directory row under a new upstream id", () => {
+    const own = meeting({ id: "own", apiId: "77", addedBy: "system" });
+    const merged = mergeDirectoryMeetings(
+      [own],
+      [meeting({ id: "dir", apiId: "99", link: "https://zoom.example/new" })],
+    );
+    expect(ids(merged)).toEqual(["own"]);
+    expect(merged[0].link).toBe("https://zoom.example/new");
+  });
+
+  it("keeps a member's row separate from a look-alike with another upstream id", () => {
+    const own = meeting({ id: "own", apiId: "77", addedBy: "user-1" });
+    const merged = mergeDirectoryMeetings(
+      [own],
+      [meeting({ id: "dir", apiId: "99" })],
+    );
+    expect(ids(merged)).toEqual(["dir", "own"]);
+  });
+
+  it("gives a scraped row its upstream match even when a look-alike comes first", () => {
     const own = meeting({ id: "own", apiId: "1", addedBy: "system" });
     const merged = mergeDirectoryMeetings(
       [own],
-      [meeting({ id: "dir", apiId: "2" })],
+      [
+        meeting({ id: "b", apiId: "2", link: "https://zoom.example/b" }),
+        meeting({ id: "a", apiId: "1", link: "https://zoom.example/a" }),
+      ],
     );
-    expect(ids(merged)).toEqual(["dir", "own"]);
+    expect(ids(merged)).toEqual(["b", "own"]);
+    expect(merged.find((m) => m.id === "own")?.link).toBe(
+      "https://zoom.example/a",
+    );
+  });
+
+  it("lists a meeting once but doesn't overwrite Homegroups' row from a dated snapshot", () => {
+    const own = meeting({
+      id: "own",
+      apiId: "77",
+      addedBy: "system",
+      time: "08:00",
+    });
+    const merged = mergeDirectoryMeetings(
+      [own],
+      [
+        meeting({
+          id: "dir",
+          apiId: "77",
+          time: "07:00",
+          dataAsOf: "2023-03-01",
+        }),
+      ],
+    );
+    expect(ids(merged)).toEqual(["own"]);
+    expect(merged[0].time).toBe("08:00");
+    expect(merged[0].dataAsOf).toBeUndefined();
+  });
+
+  it("drops a saved full address when the street address changes, so it can't contradict it", () => {
+    const own = meeting({
+      id: "own",
+      apiId: "77",
+      addedBy: "system",
+      address: "1 Old St",
+      formattedAddress: "1 Old St, Austin, TX",
+    });
+    const [merged] = mergeDirectoryMeetings(
+      [own],
+      [meeting({ id: "dir", apiId: "77", address: "2 New St" })],
+    );
+    expect(merged.address).toBe("2 New St");
+    expect(merged.formattedAddress).toBeUndefined();
+  });
+
+  it("keeps a saved full address when the street address is unchanged", () => {
+    const own = meeting({
+      id: "own",
+      apiId: "77",
+      addedBy: "system",
+      address: "1 Old St",
+      formattedAddress: "1 Old St, Austin, TX",
+    });
+    const [merged] = mergeDirectoryMeetings(
+      [own],
+      [meeting({ id: "dir", apiId: "77", address: "1 Old St" })],
+    );
+    expect(merged.formattedAddress).toBe("1 Old St, Austin, TX");
   });
 });
