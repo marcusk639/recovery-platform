@@ -1,9 +1,9 @@
 import '../adapter/preload';
 import '@mobile/../i18n';
-import { useState, type ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { getIdToken } from 'firebase/auth';
-import { useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { auth, callHttpsFunction, storage } from '../adapter/firebase-setup';
 import { getDownloadURL, putFile, ref } from '../adapter/firebase/storage';
 import { Routes } from '@mobile/navigation/types';
@@ -13,7 +13,9 @@ import { navigationRef } from '@mobile/navigation/service';
 import { selectGuestById } from '@mobile/state/slices/guestsSlice';
 import store from '@mobile/state/store';
 import { installUnhandledFeatureAlerts } from '../adapter/unhandled';
+import { selectHouseById } from '@mobile/state/slices/housesSlice';
 import { Nav } from './Nav';
+import { useRestoreSession } from './session';
 import { Providers } from './Providers';
 import { Screens } from './routes';
 import { SignIn } from './SignIn';
@@ -49,8 +51,13 @@ function WhenHouseLoaded({ children }: { children: ReactNode }) {
 }
 
 function Harness() {
-  const [signedIn, setSignedIn] = useState(false);
-  if (!signedIn) return <SignIn houseId={houseId} onSignedIn={() => setSignedIn(true)} />;
+  const dispatch = useDispatch();
+  const phase = useRestoreSession();
+  useEffect(() => {
+    if (phase === 'signed-in') dispatch(selectHouseById(houseId));
+  }, [phase, dispatch]);
+  if (phase === 'checking') return <p role="status" style={{ margin: 'auto' }}>Loading...</p>;
+  if (phase === 'signed-out') return <SignIn />;
   return (
     <WhenHouseLoaded>
     <div style={{ display: 'flex', width: '100%', height: '100%' }}>

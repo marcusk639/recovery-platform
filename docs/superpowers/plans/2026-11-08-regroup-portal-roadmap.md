@@ -10,17 +10,17 @@
 
 ## Sub-plans
 
-| #   | Plan                                                                                       | Spec         | Status                                  |
-| --- | ------------------------------------------------------------------------------------------ | ------------ | --------------------------------------- |
-| P1  | Foundation and go/no-go on React Native 0.88: `2026-11-08-regroup-portal-p1-foundation.md` | §4, §7, §8.1 | Written                                 |
-| P2  | Sign-in, permissions, subscription gate, idle sign-out, desktop shell                      | §6, §7, §8.2 | After the P1 go decision                |
-| P3  | All houses, one house, resident list and record                                            | §5, §8.3     | After P2                                |
-| P4  | Resident actions, applications with intake, staff notes, activities                        | §5, §8.4     | After P3                                |
-| P5  | Payments, with the independent money review                                                | §7, §8.5     | After P4                                |
-| P6  | Disputes, against the rules tests                                                          | §7, §8.6     | After P5                                |
-| P7  | Production release of the core, after launch day                                           | §6, §8.9     | When P6 is done and launch has finished |
-| P8  | Beds, drug tests, documents, issues, complaints, reports                                   | §5, §8.7     | Before or after P7                      |
-| P9  | Desktop polish on the reused screens that need it most                                     | §8.8         | Before or after P7                      |
+| #   | Plan                                                                                                           | Spec         | Status                                  |
+| --- | -------------------------------------------------------------------------------------------------------------- | ------------ | --------------------------------------- |
+| P1  | Foundation and go/no-go on React Native 0.88: `2026-11-08-regroup-portal-p1-foundation.md`                     | §4, §7, §8.1 | Written                                 |
+| P2  | Sign-in, permissions, subscription gate, idle sign-out, desktop shell: `2026-11-09-regroup-portal-p2-shell.md` | §6, §7, §8.2 | Written; P1 go given 2026-11-09         |
+| P3  | All houses, one house, resident list and record                                                                | §5, §8.3     | After P2                                |
+| P4  | Resident actions, applications with intake, staff notes, activities                                            | §5, §8.4     | After P3                                |
+| P5  | Payments, with the independent money review                                                                    | §7, §8.5     | After P4                                |
+| P6  | Disputes, against the rules tests                                                                              | §7, §8.6     | After P5                                |
+| P7  | Production release of the core, after launch day                                                               | §6, §8.9     | When P6 is done and launch has finished |
+| P8  | Beds, drug tests, documents, issues, complaints, reports                                                       | §5, §8.7     | Before or after P7                      |
+| P9  | Desktop polish on the reused screens that need it most                                                         | §8.8         | Before or after P7                      |
 
 P7 sits before P8 and P9 so the owner's "ship the core first if running late" decision needs no replanning. If the work is on time, run P8 and P9 first and release everything together.
 
@@ -35,5 +35,5 @@ P7 sits before P8 and P9 so the owner's "ship the core first if running late" de
 - Re-verify every file and line the spec cites. They will have moved.
 - Carry forward P1's replacement list and any findings from its report.
 - Keep each plan's Global Constraints identical to P1's, plus anything P1 added.
-- **P2 must remove the harness,** including `window.__portalTest`, and make `check-bundle` refuse it in any non-emulator build. P1's `firebase-setup` has no production config, so P2 or P7 adds one.
+- **P2 must remove the harness,** including `window.__portalTest`, and make `check-bundle` refuse it in any non-emulator build. P1's `firebase-setup` has no production config, and P7 adds one.
 - **P5 starts from P1's answer on manual payments and the dashboard,** which may need a server or phone decision first.

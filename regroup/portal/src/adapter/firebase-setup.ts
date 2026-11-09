@@ -1,6 +1,6 @@
 // Replaces regroup/mobile/firebase-setup.ts, with the same export names.
 import { initializeApp } from 'firebase/app';
-import { connectAuthEmulator, getAuth } from 'firebase/auth';
+import { browserSessionPersistence, connectAuthEmulator, initializeAuth } from 'firebase/auth';
 import { connectFirestoreEmulator, initializeFirestore } from 'firebase/firestore';
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from 'firebase/functions';
 import { connectStorageEmulator, getStorage } from 'firebase/storage';
@@ -15,7 +15,9 @@ const app = initializeApp({
   storageBucket: `${EMULATOR_PROJECT}.appspot.com`,
 });
 
-const auth = getAuth(app);
+// Session storage lasts through a reload and ends with the tab, so the sign-in
+// isn't left behind on a shared computer.
+const auth = initializeAuth(app, { persistence: browserSessionPersistence });
 connectAuthEmulator(auth, `http://${EMULATOR_HOST}:${EMULATOR_PORTS.auth}`, { disableWarnings: true });
 
 // Settings first, then the emulator: the order the phone's setup uses.

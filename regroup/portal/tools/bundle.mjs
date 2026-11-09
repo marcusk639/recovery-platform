@@ -16,7 +16,7 @@ const argument = (name) => {
   return index === -1 ? undefined : process.argv[index + 1];
 };
 // Tests bundle a small fixture instead of the portal.
-const entry = argument('--entry') ?? 'src/harness/main.tsx';
+const entry = argument('--entry') ?? 'src/app/main.tsx';
 const outfile = argument('--outfile') ?? 'dist/main.js';
 
 const isBare = (p) => !p.startsWith('.') && !path.isAbsolute(p);
@@ -197,7 +197,7 @@ if (unknown.size > 0) {
   process.exit(1);
 }
 
-if (entry !== 'src/harness/main.tsx') process.exit(0);
+if (entry !== 'src/app/main.tsx') process.exit(0);
 
 fs.copyFileSync(path.join(portalRoot, 'index.html'), path.join(dist, 'index.html'));
 fs.writeFileSync(path.join(dist, 'metafile.json'), JSON.stringify(result.metafile));

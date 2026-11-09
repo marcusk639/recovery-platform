@@ -26,7 +26,7 @@ test('icons render real glyphs', async ({ page }) => {
 test('reloading mid-session does not leave a blank page', async ({ page }) => {
   await signInAs(page, 'manager');
   await page.reload();
-  await expect(page.locator('#nav-residents, #sign-in-form').first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('#nav-residents')).toBeVisible({ timeout: 15_000 });
 });
 
 test('a link to a route the portal lacks fails visibly', async ({ page }) => {
