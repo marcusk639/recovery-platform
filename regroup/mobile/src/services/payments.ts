@@ -282,7 +282,12 @@ export async function getPaymentHistory(
   if (!snapshot.docs.length) {
     return [];
   }
-  return snapshot.docs.map((payment) => payment.data() as RentPayment);
+  // The Stripe webhook writes card payments without an `id` field, so the
+  // document id stands in; app-written records keep the `id` they carry.
+  return snapshot.docs.map((payment) => {
+    const data = payment.data() as RentPayment;
+    return { ...data, id: data.id ?? payment.id };
+  });
 }
 
 // ─── CF-backed service functions ──────────────────────────────────────────────

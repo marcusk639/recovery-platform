@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import { format, parseISO } from 'date-fns';
+import { toDateSafe } from '../util/firestore';
 import { generatePDF } from 'react-native-html-to-pdf';
 
 import { RentPayment } from './payments';
@@ -121,6 +122,19 @@ function escapeCsvField(value: string): string {
 }
 
 /**
+ * A payment's `createdAt` as yyyy-MM-dd, or '' when it can't be read. Firestore
+ * records carry a Timestamp (#168); the callables return ISO strings, parsed as
+ * before so a date-only value stays on its local day.
+ */
+function paymentDate(createdAt: unknown): string {
+  if (!createdAt) {
+    return '';
+  }
+  const date = typeof createdAt === 'string' ? parseISO(createdAt) : toDateSafe(createdAt);
+  return date && !Number.isNaN(date.getTime()) ? format(date, 'yyyy-MM-dd') : '';
+}
+
+/**
  * Generates a CSV string for a payment history export.
  * guestNames maps guestId → display name for the name column.
  */
@@ -130,7 +144,7 @@ export function exportPaymentHistoryCSV(
 ): string {
   const header = ['Date', 'Guest', 'Amount ($)', 'Status', 'Description'].join(',');
   const rows = payments.map((p) => {
-    const date = p.createdAt ? format(parseISO(p.createdAt as string), 'yyyy-MM-dd') : '';
+    const date = paymentDate(p.createdAt);
     const guest = escapeCsvField(guestNames[p.guestId] ?? p.guestId);
     const amount = String(p.amount ?? '');
     const status = escapeCsvField(p.status);

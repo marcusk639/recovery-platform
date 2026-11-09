@@ -53,6 +53,19 @@ describe('exportPaymentHistoryCSV', () => {
     const csv = exportPaymentHistoryCSV([makePayment()], guestNames);
     expect(csv).toContain('"Jane ""JJ"" Smith"');
   });
+
+  // Payment History exports Firestore records, whose createdAt is a Timestamp
+  // (the webhook's serverTimestamp, the app's newPaymentCreatedAt, #168).
+  it('dates a row whose createdAt is a Firestore Timestamp', () => {
+    const timestamp = { toDate: () => new Date('2026-05-01T10:00:00.000Z') };
+    const csv = exportPaymentHistoryCSV([makePayment({ createdAt: timestamp as any })], {});
+    expect(csv.split('\n')[1]).toMatch(/^2026-05-01,/);
+  });
+
+  it('leaves the date empty when createdAt cannot be read', () => {
+    const csv = exportPaymentHistoryCSV([makePayment({ createdAt: { bogus: true } as any })], {});
+    expect(csv.split('\n')[1]).toMatch(/^,/);
+  });
 });
 
 describe('exportEESHistoryCSV', () => {

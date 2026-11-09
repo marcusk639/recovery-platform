@@ -252,6 +252,17 @@ describe('getPaymentHistory', () => {
     ]);
   });
 
+  it('gives each record its document id, which the webhook does not write into the data', async () => {
+    seedQuery('payments', [
+      { id: 'pi_b', houseId: 'h1', guestUserId: 'u1', createdAt: '2026-03-01T00:00:00.000Z', amount: 2 },
+      { id: 'pi_a', houseId: 'h1', guestUserId: 'u1', createdAt: '2026-01-01T00:00:00.000Z', amount: 1 },
+    ]);
+
+    const history = await getPaymentHistory({ houseId: 'h1', guestUserId: 'u1' });
+
+    expect(history.map((p) => p.id)).toEqual(['pi_b', 'pi_a']);
+  });
+
   it('returns an empty list when there are none', async () => {
     expect(await getPaymentHistory({ houseId: 'h1', guestUserId: 'nobody' })).toEqual([]);
     expect(getOpLog()[0].constraints).toEqual([
