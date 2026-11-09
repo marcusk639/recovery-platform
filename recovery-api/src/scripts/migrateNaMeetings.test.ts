@@ -74,7 +74,7 @@ describe('runMigration same-instance guard', () => {
 
 describe('migrateNaMeetings main', () => {
   it('refuses to run, because its rows look live and the snapshot import then skips them', async () => {
-    await expect(main()).rejects.toThrow(/import:snapshot/);
+    await expect(main()).rejects.toThrow(/sync:na/);
   });
 });
 
