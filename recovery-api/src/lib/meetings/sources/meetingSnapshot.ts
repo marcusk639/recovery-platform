@@ -56,7 +56,9 @@ export function mapSnapshotMeeting(
     if (lat === 0 && lng === 0) return null;
 
     const link = text(doc.link).trim();
-    const address = text(doc.address);
+    // Homegroups keeps the street in `street` and the formatted address in `address`.
+    // Live rows store only the street, so the city and state aren't shown twice.
+    const address = text(doc.street) || text(doc.address);
     // Same fallback as the live mapper, so a row a live sweep re-sees keeps its id.
     const formattedAddress = text(doc.formattedAddress ?? doc.address).trim();
 
@@ -71,7 +73,9 @@ export function mapSnapshotMeeting(
     } as DirectoryMeeting;
 
     if (externalId !== undefined && externalId !== null) meeting.externalId = String(externalId);
-    if (text(doc.type)) meeting.type = text(doc.type);
+    // `types` holds the meeting's types, matching live rows. `type` is only "AA" or "NA".
+    const type = text(doc.types) || text(doc.type);
+    if (type) meeting.type = type;
     if (text(doc.format)) meeting.format = text(doc.format);
     if (text(doc.timezone)) meeting.timezone = text(doc.timezone);
     if (address) meeting.location.address = address;

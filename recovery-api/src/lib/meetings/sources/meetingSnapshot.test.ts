@@ -10,9 +10,11 @@ const AA_DOC = {
   day: 'monday',
   time: '12:00',
   format: 'Open,English',
+  types: 'Open,English',
   lat: 37.6328558,
   lng: -84.7732203,
-  address: '1 Main St',
+  // Real Homegroups docs hold the full formatted address here, and the street in `street`.
+  address: '1 Main St, Danville, KY 40422, USA',
   street: '1 Main St',
   city: 'Danville',
   state: 'KY',
@@ -47,6 +49,28 @@ describe('mapHomegroupsAaMeeting', () => {
       lat: 37.6328558,
       lng: -84.7732203,
     });
+  });
+
+  it('stores the meeting types in type, as live rows do, so day and type filters agree', () => {
+    expect(mapHomegroupsAaMeeting(AA_DOC)?.type).toBe('Open,English');
+  });
+
+  it('uses the address when a doc has no street', () => {
+    const m = mapHomegroupsAaMeeting({ ...AA_DOC, street: undefined, address: '2 Oak Ave' });
+    expect(m?.location.address).toBe('2 Oak Ave');
+  });
+
+  it('still hashes the full formatted address, so an imported row keeps its live id', () => {
+    const m = mapHomegroupsAaMeeting(AA_DOC);
+    expect(m?.id).toBe(
+      directoryMeetingId({
+        name: 'Sunrise Group',
+        day: 1,
+        time: '12:00',
+        link: '',
+        formattedAddress: '1 Main St, Danville, KY 40422, USA',
+      }),
+    );
   });
 
   it('leaves out product-private fields', () => {
