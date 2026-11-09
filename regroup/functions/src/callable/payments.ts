@@ -168,6 +168,8 @@ export const createPaymentIntent = onCall(
     const guestData = guestSnap.data() as {
       userId?: string;
       houseId?: string;
+      rentOwed?: number;
+      choreFees?: number;
     };
     if (guestData.houseId !== houseId) {
       throw new HttpsError(
@@ -182,6 +184,21 @@ export const createPaymentIntent = onCall(
       throw new HttpsError(
         "permission-denied",
         "Only the resident or a house admin can initiate this payment",
+      );
+    }
+
+    // ── 3c. Amount against the balance ────────────────────────────────────────
+    // Refuse overpayment here, before any charge: the webhook subtracts whatever
+    // was paid, so it would leave a credit the ledger never asked for. Checked
+    // after authorization so only someone entitled to see the balance is told it.
+    const owedCents = Math.max(
+      (guestData.rentOwed ?? 0) + (guestData.choreFees ?? 0),
+      0,
+    );
+    if (amount > owedCents) {
+      throw new HttpsError(
+        "failed-precondition",
+        `This payment is more than the $${(owedCents / 100).toFixed(2)} owed. Please enter a smaller amount.`,
       );
     }
 

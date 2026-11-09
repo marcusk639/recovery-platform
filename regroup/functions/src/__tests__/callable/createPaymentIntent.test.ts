@@ -171,7 +171,7 @@ describe("createPaymentIntent — house admin is authorized without guest lookup
       .mockResolvedValueOnce({ exists: true, data: () => HOUSE_WITH_STRIPE })
       .mockResolvedValueOnce({
         exists: true,
-        data: () => ({ userId: "some-resident", houseId: "house-1" }),
+        data: () => ({ userId: "some-resident", houseId: "house-1", rentOwed: 100000 }),
       });
 
     const result = await run(
@@ -200,7 +200,7 @@ describe("createPaymentIntent — resident authorization", () => {
   it("succeeds when caller's uid matches guest.userId", async () => {
     mockGet.mockResolvedValueOnce(houseSnap).mockResolvedValueOnce({
       exists: true,
-      data: () => ({ userId: "resident-uid", houseId: "house-1" }),
+      data: () => ({ userId: "resident-uid", houseId: "house-1", rentOwed: 100000 }),
     });
 
     const result = await run(makeRequest());
@@ -259,7 +259,7 @@ describe("createPaymentIntent — guest must belong to the supplied house", () =
       // It is the houseId that does not match.
       .mockResolvedValueOnce({
         exists: true,
-        data: () => ({ userId: "resident-uid", houseId: "house-1" }),
+        data: () => ({ userId: "resident-uid", houseId: "house-1", rentOwed: 100000 }),
       });
 
     await expect(
@@ -300,7 +300,7 @@ describe("createPaymentIntent — happy path", () => {
       // guest belongs to the house being paid.
       .mockResolvedValueOnce({
         exists: true,
-        data: () => ({ userId: "some-resident", houseId: "house-1" }),
+        data: () => ({ userId: "some-resident", houseId: "house-1", rentOwed: 100000 }),
       });
 
     const result = await run(
@@ -308,5 +308,68 @@ describe("createPaymentIntent — happy path", () => {
     );
 
     expect(result).toEqual({ clientSecret: "pi_secret_abc" });
+  });
+});
+
+// Owner decision D3: refuse a payment above the balance when it starts, because a
+// card charge can't be undone by the ledger later.
+describe("createPaymentIntent — amount against the balance", () => {
+  const start = (amount: number, guest: Record<string, unknown>) => {
+    mockGet
+      .mockResolvedValueOnce({ exists: true, data: () => HOUSE_WITH_STRIPE })
+      .mockResolvedValueOnce({
+        exists: true,
+        data: () => ({ userId: "resident-uid", houseId: "house-1", ...guest }),
+      });
+    return (createPaymentIntent as any).run({
+      auth: { uid: "resident-uid", token: {} },
+      data: { amount, guestId: "guest-doc-1", houseId: "house-1" },
+    });
+  };
+
+  it("accepts exactly the balance", async () => {
+    await expect(start(5000, { rentOwed: 5000 })).resolves.toEqual(
+      expect.objectContaining({ clientSecret: expect.any(String) }),
+    );
+  });
+
+  it("counts chore fees as owed", async () => {
+    await expect(start(6000, { rentOwed: 5000, choreFees: 1000 })).resolves.toEqual(
+      expect.objectContaining({ clientSecret: expect.any(String) }),
+    );
+  });
+
+  it("accepts less than the balance", async () => {
+    await expect(start(100, { rentOwed: 5000 })).resolves.toEqual(
+      expect.objectContaining({ clientSecret: expect.any(String) }),
+    );
+  });
+
+  it("refuses one cent over, and says how much is owed", async () => {
+    await expect(start(5001, { rentOwed: 5000 })).rejects.toMatchObject({
+      code: "failed-precondition",
+      message: expect.stringContaining("$50.00"),
+    });
+  });
+
+  it.each([
+    ["nothing owed", { rentOwed: 0 }],
+    ["no balance fields at all", {}],
+    ["a credit balance", { rentOwed: -2000 }],
+  ])("refuses any payment with %s", async (_name, guest) => {
+    await expect(start(100, guest)).rejects.toMatchObject({
+      code: "failed-precondition",
+      message: expect.stringContaining("$0.00"),
+    });
+  });
+
+  it("makes no Stripe call when it refuses", async () => {
+    await expect(start(9999, { rentOwed: 1 })).rejects.toMatchObject({
+      code: "failed-precondition",
+    });
+    const { createStripeClient } = require("../../util/stripe");
+    for (const client of createStripeClient.mock.results) {
+      expect(client.value.paymentIntents.create).not.toHaveBeenCalled();
+    }
   });
 });
