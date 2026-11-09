@@ -34,8 +34,8 @@ const PROVIDER_TO_TYPE: Record<DirectoryProvider, MeetingType> = {
  * Map a shared-directory meeting into regroup's `RatsMeeting` client contract.
  *
  * Field-for-field translation only — keeps mobile/web untouched. The directory's
- * integer `day` (0–6) becomes regroup's lowercase weekday string; `provider`
- * becomes the client `type`.
+ * `day`, stored as a name or a legacy integer, becomes regroup's lowercase
+ * weekday string; `provider` becomes the client `type`.
  */
 export function mapDirectoryToRats(meeting: DirectoryMeeting): RatsMeeting {
   const m = new RatsMeeting();
