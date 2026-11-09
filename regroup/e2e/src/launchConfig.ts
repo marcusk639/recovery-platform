@@ -34,6 +34,10 @@ function assertSection(value: unknown, name: string): asserts value is Record<st
   }
 }
 
+/** The deployed recovery-api, which holds the real meeting directory. */
+export const REAL_MEETING_DIRECTORY_URL =
+  'https://us-central1-recovery-platform-e6cb3.cloudfunctions.net';
+
 export function loadLaunchConfig(configPath = DEFAULT_CONFIG_PATH): LaunchConfig {
   let text: string;
   try {
@@ -78,6 +82,13 @@ export function loadLaunchConfig(configPath = DEFAULT_CONFIG_PATH): LaunchConfig
         throw new Error(`launch config env "${env}" is missing key "${key}"`);
       }
     }
+  }
+
+  // Owner decision: staging always searches the real directory, never a local fake.
+  if (envs['e2e-staging'].RECOVERY_API_BASE_URL !== REAL_MEETING_DIRECTORY_URL) {
+    throw new Error(
+      'launch config perEnv.e2e-staging RECOVERY_API_BASE_URL must be the real meeting directory',
+    );
   }
 
   if (typeof raw.paywall?.enabled !== 'boolean') {

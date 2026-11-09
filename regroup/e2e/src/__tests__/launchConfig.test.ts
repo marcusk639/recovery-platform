@@ -5,6 +5,7 @@ import {
   assertSafeEnvFileName,
   functionsEnvFor,
   loadLaunchConfig,
+  REAL_MEETING_DIRECTORY_URL,
   writeFunctionsEnvFiles,
 } from '../launchConfig';
 
@@ -15,13 +16,14 @@ function writeTempConfig(config: unknown): string {
   return file;
 }
 
+const directory = { RECOVERY_API_BASE_URL: REAL_MEETING_DIRECTORY_URL };
 const valid = {
   paywall: { enabled: true },
   shared: { TIER_BILLING_ENABLED: 'true' },
   perEnv: {
-    production: { A: '1', B: '2' },
-    'e2e-emulator': { A: '1', B: '2' },
-    'e2e-staging': { A: '1', B: '2' },
+    production: { A: '1', B: '2', ...directory },
+    'e2e-emulator': { A: '1', B: '2', ...directory },
+    'e2e-staging': { A: '1', B: '2', ...directory },
   },
 };
 
@@ -45,6 +47,40 @@ describe('functionsEnvFor', () => {
 describe('loadLaunchConfig', () => {
   it('loads the committed config and derives paywallEnabled', () => {
     expect(loadLaunchConfig().paywallEnabled).toBe(true);
+  });
+  it('refuses a staging config that does not use the real meeting directory', () => {
+    const local = 'http://127.0.0.1:5002/demo-recovery-api/us-central1';
+    const bad = {
+      ...valid,
+      perEnv: {
+        ...valid.perEnv,
+        'e2e-staging': { A: '1', B: '2', RECOVERY_API_BASE_URL: local },
+      },
+    };
+    expect(() => loadLaunchConfig(writeTempConfig(bad))).toThrow(
+      /e2e-staging.*real meeting directory/,
+    );
+  });
+  it('refuses a staging config with no meeting directory', () => {
+    const none = { A: '1', B: '2' };
+    const bad = {
+      ...valid,
+      perEnv: { production: none, 'e2e-emulator': none, 'e2e-staging': none },
+    };
+    expect(() => loadLaunchConfig(writeTempConfig(bad))).toThrow(
+      /e2e-staging.*real meeting directory/,
+    );
+  });
+  it('lets the emulator use its own local directory', () => {
+    const local = 'http://127.0.0.1:5002/demo-recovery-api/us-central1';
+    const good = {
+      ...valid,
+      perEnv: {
+        ...valid.perEnv,
+        'e2e-emulator': { A: '1', B: '2', RECOVERY_API_BASE_URL: local },
+      },
+    };
+    expect(() => loadLaunchConfig(writeTempConfig(good))).not.toThrow();
   });
   it('throws when an env is missing a key another env defines', () => {
     const bad = {

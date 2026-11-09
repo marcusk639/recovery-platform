@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import Stripe from 'stripe';
-import { pinnedStripeApiVersion } from '../launchConfig';
+import { pinnedStripeApiVersion, REAL_MEETING_DIRECTORY_URL } from '../launchConfig';
 import { KEY_FILE_NAME } from '../stripeSandboxCli';
 import {
   androidSdkCheck,
@@ -18,6 +18,7 @@ import {
   type Exec,
 } from './checks';
 import { keysPresentCheck, launchConfigCheck, stripeSandboxHygieneCheck } from './configChecks';
+import { stagingDirectoryKeyCheck } from './directoryCheck';
 import { demoProjectIdCheck, simulatorsCheck, yogaPatchCheck } from './repoChecks';
 
 // Usage: npm run e2e:preflight. Read-only; exits 1 when any check fails.
@@ -65,6 +66,32 @@ const checks: Check[] = [
         timeout: 20_000,
         maxNetworkRetries: 1,
       }),
+  }),
+  stagingDirectoryKeyCheck({
+    readKey: async () => {
+      const res = await exec('firebase', [
+        'functions:secrets:access',
+        'RECOVERY_PLATFORM_API_KEY',
+        '--project',
+        'regroup-e2e',
+      ]);
+      if (res.code !== 0) throw new Error('firebase functions:secrets:access failed');
+      return res.stdout;
+    },
+    probe: async (key) => {
+      const res = await fetch(`${REAL_MEETING_DIRECTORY_URL}/findMeetings`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-service-key': key,
+          'x-app-id': 'regroup',
+          'x-user-uid': 'preflight',
+        },
+        body: JSON.stringify({ data: {} }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      return res.status;
+    },
   }),
   demoProjectIdCheck(regroupDir),
   simulatorsCheck(exec, process.env.ANDROID_AVD_HOME || path.join(os.homedir(), '.android', 'avd')),
