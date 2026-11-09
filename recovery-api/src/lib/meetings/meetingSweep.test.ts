@@ -87,7 +87,7 @@ describe('sweepMeetingGuide', () => {
     });
     expect(result.meetings).toHaveLength(2000);
     expect(result.cappedResponses).toBeGreaterThan(0);
-    expect(result.unresolvedCells).toBe(0);
+    expect(result.unresolvedSpots).toEqual([]);
   });
 
   it('queries every base cell even when a neighbor came back empty', async () => {
@@ -150,8 +150,29 @@ describe('sweepMeetingGuide', () => {
       fetchFn,
       sleep: noSleep,
     });
-    expect(result.unresolvedCells).toBeGreaterThan(0);
+    expect(result.unresolvedSpots.length).toBeGreaterThan(0);
+    const [spot] = result.unresolvedSpots;
+    expect(spot.s).toBeLessThanOrEqual(Number(CENTER_LAT));
+    expect(spot.n).toBeGreaterThanOrEqual(Number(CENTER_LAT));
+    expect(spot.w).toBeLessThanOrEqual(Number(CENTER_LNG));
+    expect(spot.e).toBeGreaterThanOrEqual(Number(CENTER_LNG));
     expect(result.meetings).toHaveLength(500);
+  });
+
+  it.each([[undefined], [''], ['  ']])('keeps a meeting whose country is %j', async (country) => {
+    const fetchFn = (async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ meetings: [{ id: 1, distance: 0, country }] }),
+    })) as unknown as typeof fetch;
+    const result = await sweepMeetingGuide({
+      key: 'k',
+      baseCells: [CELL],
+      fetchFn,
+      sleep: noSleep,
+    });
+    expect(result.meetings).toHaveLength(1);
+    expect(result.droppedNonUs).toBe(0);
   });
 
   it('retries a failed request and keeps the result', async () => {

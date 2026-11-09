@@ -25,6 +25,11 @@ const DEFAULT_MAX_REQUESTS = 60_000;
 /** Each worker rests this long between requests, to stay gentle on the API. */
 export const REQUEST_DELAY_MS = 100;
 const MAX_ATTEMPTS = 4;
+/**
+ * This many base cells failing in a row means the API isn't answering at all. Stopping
+ * here avoids hours of retries across the rest of the country before anyone finds out.
+ */
+export const MAX_CONSECUTIVE_FAILED_CELLS = 50;
 const REQUEST_TIMEOUT_MS = 45_000;
 const DEFAULT_RETRY_AFTER_SECONDS = 60;
 const MAX_RETRY_AFTER_SECONDS = 600;
@@ -64,12 +69,12 @@ export interface SweepResult {
   cappedResponses: number;
   /** Base cells with at least one request that never succeeded. */
   failedBaseCells: number;
-  /** Single spots holding more meetings than one response can return. */
-  unresolvedCells: number;
+  /** Single spots holding more meetings than one response can return, so some stay hidden. */
+  unresolvedSpots: SweepCell[];
   droppedNonUs: number;
   /** 429 responses received. Non-zero means the concurrency should come down. */
   rateLimited: number;
-  aborted?: 'unauthorized' | 'budget';
+  aborted?: 'unauthorized' | 'budget' | 'unanswered';
 }
 
 class Unauthorized extends Error {}
@@ -126,7 +131,7 @@ export async function sweepMeetingGuide(options: SweepOptions): Promise<SweepRes
     requests: 0,
     cappedResponses: 0,
     failedBaseCells: 0,
-    unresolvedCells: 0,
+    unresolvedSpots: [],
     droppedNonUs: 0,
     rateLimited: 0,
   };
@@ -169,7 +174,8 @@ export async function sweepMeetingGuide(options: SweepOptions): Promise<SweepRes
       result.requests++;
       try {
         const res = await fetchFn(url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
-        if (res.status === 401) throw new Unauthorized();
+        // A bad key was measured to get 401. 403 is here in case a revoked key differs.
+        if (res.status === 401 || res.status === 403) throw new Unauthorized();
         if (res.status === 429) {
           result.rateLimited++;
           pauseAll(retryAfterMs(res));
@@ -199,7 +205,12 @@ export async function sweepMeetingGuide(options: SweepOptions): Promise<SweepRes
     if (meetings === null) return false;
 
     for (const m of meetings) {
-      if (US_COUNTRIES.has(String(m.country ?? '').toUpperCase())) found.set(m.id, m);
+      // A blank country is kept: the search point is on US land, so it is far more likely
+      // to be a US listing with a gap than a foreign one.
+      const country = String(m.country ?? '')
+        .trim()
+        .toUpperCase();
+      if (!country || US_COUNTRIES.has(country)) found.set(m.id, m);
       else droppedIds.add(m.id);
     }
     if (meetings.length < RESPONSE_CAP) return true;
@@ -208,7 +219,7 @@ export async function sweepMeetingGuide(options: SweepOptions): Promise<SweepRes
     const reach = Math.max(...meetings.map((m) => Number(m.distance))) - DISTANCE_ROUNDING_KM;
     if (reach >= halfDiagonal) return true;
     if (halfDiagonal < MIN_HALF_DIAGONAL_KM) {
-      result.unresolvedCells++;
+      result.unresolvedSpots.push(cell);
       return true;
     }
     const parts = await Promise.all(quarters(cell).map(crawl));
@@ -217,11 +228,18 @@ export async function sweepMeetingGuide(options: SweepOptions): Promise<SweepRes
 
   let next = 0;
   let baseCellsDone = 0;
+  let failedInARow = 0;
   const workers = Array.from({ length: concurrency }, async () => {
     while (next < baseCells.length && !result.aborted) {
       const cell = baseCells[next++];
       try {
-        if (!(await crawl(cell))) result.failedBaseCells++;
+        if (await crawl(cell)) {
+          failedInARow = 0;
+        } else {
+          result.failedBaseCells++;
+          failedInARow++;
+          if (failedInARow >= MAX_CONSECUTIVE_FAILED_CELLS) result.aborted ??= 'unanswered';
+        }
       } catch (err) {
         if (!(err instanceof Unauthorized)) throw err;
         result.aborted = 'unauthorized';

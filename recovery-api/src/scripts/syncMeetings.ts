@@ -14,11 +14,17 @@
 import { applicationDefault, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { sweepMeetingGuide, type SweepProgress } from '../lib/meetings/meetingSweep';
-import { runMeetingSync, type MeetingSyncResult } from '../lib/meetings/meetingSync';
+import {
+  MeetingGuideAccessError,
+  runMeetingSync,
+  type MeetingSyncResult,
+} from '../lib/meetings/meetingSync';
 import { usBaseCells } from '../lib/meetings/usLandCells';
 
 const DEST_PROJECT = 'recovery-platform-e6cb3';
 const PROGRESS_EVERY_CELLS = 500;
+/** Separate from the general failure code, so a wrapper can tell a key problem apart. */
+export const ACCESS_EXIT_CODE = 2;
 
 export function parseSyncArgs(argv: readonly string[]): { apply: boolean } {
   const unknown = argv.filter((arg) => arg !== '--apply');
@@ -28,8 +34,33 @@ export function parseSyncArgs(argv: readonly string[]): { apply: boolean } {
 
 export function readApiKey(env: Record<string, string | undefined>): string {
   const key = env.MEETING_GUIDE_API_KEY;
-  if (!key) throw new Error('MEETING_GUIDE_API_KEY is not set');
+  if (!key) {
+    throw new MeetingGuideAccessError('MEETING_GUIDE_API_KEY is not set. Set it and run again.');
+  }
   return key;
+}
+
+/** Prints the failure and returns the exit code. The key itself is never printed. */
+export function reportFatal(err: unknown, print: (...args: unknown[]) => void): number {
+  if (!(err instanceof MeetingGuideAccessError)) {
+    print('syncMeetings: fatal', err);
+    return 1;
+  }
+  const rule = '='.repeat(72);
+  print(
+    [
+      '',
+      rule,
+      'MEETING GUIDE SYNC FAILED: ACTION NEEDED',
+      '',
+      err.message,
+      '',
+      'Nothing was written.',
+      rule,
+      '',
+    ].join('\n'),
+  );
+  return ACCESS_EXIT_CODE;
 }
 
 export function progressLine(p: SweepProgress): string {
@@ -43,9 +74,9 @@ export function progressLine(p: SweepProgress): string {
 export function describeResult(result: MeetingSyncResult): string[] {
   const { sweep, reconcile, prune } = result;
   const lines = [`syncMeetings: complete ${JSON.stringify({ sweep, reconcile, prune })}`];
-  if (sweep.unresolvedCells > 0) {
+  if (sweep.unresolvedSpots.length > 0) {
     lines.push(
-      `syncMeetings: WARNING ${sweep.unresolvedCells} spots hold more meetings than one response ` +
+      `syncMeetings: WARNING ${sweep.unresolvedSpots.length} spots hold more meetings than one response ` +
         'returns, so some meetings there may be missing',
     );
   }
@@ -58,7 +89,12 @@ export function describeResult(result: MeetingSyncResult): string[] {
   if (sweep.rateLimited > 0) {
     lines.push(`syncMeetings: WARNING rate limited ${sweep.rateLimited} times; lower concurrency`);
   }
-  if (!prune) lines.push('syncMeetings: no prune this run');
+  if (!prune) {
+    lines.push(
+      'syncMeetings: no prune this run. It needs --apply and a healthy sweep that follows ' +
+        'an earlier healthy --apply run',
+    );
+  }
   return lines;
 }
 
@@ -89,8 +125,5 @@ async function main(): Promise<void> {
 if (require.main === module) {
   main()
     .then(() => process.exit(0))
-    .catch((err) => {
-      console.error('syncMeetings: fatal', err);
-      process.exit(1);
-    });
+    .catch((err) => process.exit(reportFatal(err, console.error)));
 }

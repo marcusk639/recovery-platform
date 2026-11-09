@@ -2,7 +2,8 @@ import { FieldValue } from 'firebase-admin/firestore';
 import type { DirectoryMeeting } from '../../entities/DirectoryMeeting';
 import { BATCH_SIZE } from './ingest';
 import type { SweepResult } from './meetingSweep';
-import { pruneStale, STALE_PRUNE_DAYS, type PruneResult } from './pruneStale';
+import { DAY_MS, pruneAfterHealthySweep, RESTAMP_AFTER_DAYS } from './meetingSyncPrune';
+import { STALE_PRUNE_DAYS, type PruneResult } from './pruneStale';
 import { mapMeetingGuideMeeting, type MeetingGuideMeeting } from './sources/meetingGuide';
 import { providersSafeToPrune } from './sweepHealth';
 
@@ -15,8 +16,10 @@ import { providersSafeToPrune } from './sweepHealth';
  *    otherwise live on as a duplicate until pruned.
  */
 
-/** Well inside the prune horizon, so a late or skipped run can't cost a live meeting. */
-export const RESTAMP_AFTER_DAYS = 14;
+/** The sync can't reach Meeting Guide, most likely because the key needs replacing. */
+export class MeetingGuideAccessError extends Error {}
+
+export { RESTAMP_AFTER_DAYS };
 
 const TIMESTAMP_FIELDS = new Set(['createdAt', 'updatedAt', 'lastSeenAt', 'lastRefreshedAt']);
 const DIRECTORY = 'directoryMeetings';
@@ -144,7 +147,7 @@ export async function reconcileMeetings(
     ops = 0;
   }
 
-  const restampBefore = deps.now().getTime() - RESTAMP_AFTER_DAYS * 86_400_000;
+  const restampBefore = deps.now().getTime() - RESTAMP_AFTER_DAYS * DAY_MS;
   const stamp = FieldValue.serverTimestamp();
 
   for (const [id, meeting] of desired) {
@@ -208,7 +211,7 @@ export interface MeetingSyncDeps extends ReconcileDeps {
 export interface MeetingSyncResult {
   sweep: Omit<SweepResult, 'meetings'> & { meetings: number };
   reconcile: ReconcileResult;
-  /** Set when this run pruned. Absent means the sweep wasn't healthy enough, or a dry run. */
+  /** Set when this run pruned. Absent on a dry run, an unhealthy sweep or the first healthy one. */
   prune?: PruneResult;
   staleAfterDays: number;
 }
@@ -217,7 +220,17 @@ export async function runMeetingSync(deps: MeetingSyncDeps): Promise<MeetingSync
   const sweepStartedAt = deps.now().getTime();
   const sweep = await deps.sweep();
   if (sweep.aborted === 'unauthorized') {
-    throw new Error('Meeting Guide rejected the API key; the directory was not changed');
+    throw new MeetingGuideAccessError(
+      'Meeting Guide rejected the API key. Set a new key in MEETING_GUIDE_API_KEY and run again.',
+    );
+  }
+
+  if (sweep.aborted === 'unanswered') {
+    throw new MeetingGuideAccessError(
+      `Meeting Guide stopped answering after ${sweep.requests} requests. It may be down, or the ` +
+        'key may no longer work. If it fails the same way later, set a new key in ' +
+        'MEETING_GUIDE_API_KEY and run again.',
+    );
   }
 
   if (sweep.aborted === 'budget') {
@@ -240,7 +253,10 @@ export async function runMeetingSync(deps: MeetingSyncDeps): Promise<MeetingSync
   return {
     sweep: { ...summary, meetings: meetings.length },
     reconcile,
-    prune: deps.apply && safe ? await pruneStale(deps, ['AA'], sweepStartedAt) : undefined,
+    prune:
+      deps.apply && safe
+        ? await pruneAfterHealthySweep(deps.db, sweep.unresolvedSpots, sweepStartedAt, deps.now)
+        : undefined,
     staleAfterDays: STALE_PRUNE_DAYS,
   };
 }

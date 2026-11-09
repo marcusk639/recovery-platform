@@ -83,13 +83,14 @@ export async function fetchAAMeetings(
 }
 
 /**
- * Sites often append " - Online" or similar to a name. Homegroups strips it when it
- * stores a meeting (scripts/shared-utils.ts), so doing the same here gives a live row
- * and an imported row of one meeting the same document id.
+ * Sites often append " - Online" or similar to a name. Only that kind of suffix goes.
+ * Homegroups' scripts cut at any " - ", but here the name is part of the document id, so
+ * "Group - Men's" and "Group - Women's" at one time and place would become one meeting.
  */
+const MODE_SUFFIX = / - (?:online|virtual|zoom|hybrid)(?: meeting)?\s*$/i;
+
 function cleanMeetingName(name: string): string {
-  const dash = name.indexOf(' - ');
-  return (dash > 0 ? name.slice(0, dash) : name).trim();
+  return name.replace(MODE_SUFFIX, '').trim();
 }
 
 export function mapMeetingGuideMeeting(m: MeetingGuideMeeting): DirectoryMeeting | null {

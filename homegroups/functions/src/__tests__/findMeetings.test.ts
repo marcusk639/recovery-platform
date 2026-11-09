@@ -390,6 +390,46 @@ describe("findMeetings directory orchestration (B4)", () => {
     expect(result.map((m) => m.name)).toEqual(["New Name"]);
   });
 
+  it("returns the directory's meetings when Homegroups' own read fails", async () => {
+    jest.resetModules();
+    const { getAlcoholicsAnonymousMeetings, fetchDirectoryMeetings } =
+      await loadMocks();
+    getAlcoholicsAnonymousMeetings.mockRejectedValueOnce(
+      new Error("quota exceeded"),
+    );
+    fetchDirectoryMeetings.mockResolvedValueOnce([
+      dirMeeting({ id: "aa-1", provider: "AA", name: "Directory AA" }),
+    ]);
+    const { findMeetings } = await import("../callable/findMeetings");
+
+    const result = (await (findMeetings as Function)(
+      authedRequest({
+        filters: { location: { lat: 30.2, lng: -97.7 }, type: "AA" },
+      }),
+    )) as Array<{ id: string }>;
+
+    expect(result.map((m) => m.id)).toEqual(["aa-1"]);
+  });
+
+  it("fails the search when Homegroups' own read fails and the directory has nothing", async () => {
+    jest.resetModules();
+    const { getAlcoholicsAnonymousMeetings, fetchDirectoryMeetings } =
+      await loadMocks();
+    getAlcoholicsAnonymousMeetings.mockRejectedValueOnce(
+      new Error("quota exceeded"),
+    );
+    fetchDirectoryMeetings.mockResolvedValueOnce([]);
+    const { findMeetings } = await import("../callable/findMeetings");
+
+    await expect(
+      (findMeetings as Function)(
+        authedRequest({
+          filters: { location: { lat: 30.2, lng: -97.7 }, type: "AA" },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "internal" });
+  });
+
   it.each([
     ["the default 10 km", undefined, 10_000],
     ["the distance the person chose", 25, 25_000],

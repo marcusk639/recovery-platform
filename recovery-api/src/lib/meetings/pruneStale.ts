@@ -5,9 +5,9 @@ import { isInsideGrid } from './ingest';
 import type { PrunableProvider } from './sweepHealth';
 
 /**
- * Stale-prune horizon. External docs not re-seen within this many days are
- * considered gone-from-source and pruned, so a doc must be missing for this long,
- * across however many manual syncs run in that time, before deletion.
+ * Stale-prune horizon. External docs not re-seen within this many days are candidates
+ * for deletion. Sweeps run by hand can be further apart than this, so it doesn't by
+ * itself mean a doc was missed more than once: see runMeetingSync for that guard.
  */
 export const STALE_PRUNE_DAYS = 30;
 
@@ -35,10 +35,13 @@ export interface PruneResult {
   blocked: DirectoryProvider[];
 }
 
+export type CanJudgeRow = (location?: { lat?: number; lng?: number }) => boolean;
+
 /** Delete one provider's stale rows, page by page, keeping any a sweep can't re-see. */
 async function deleteStaleRows(
   database: FirebaseFirestore.Firestore,
   staleQuery: () => FirebaseFirestore.Query,
+  canJudge: CanJudgeRow,
 ): Promise<{ deleted: number; scanned: number }> {
   let deleted = 0;
   let scanned = 0;
@@ -55,7 +58,7 @@ async function deleteStaleRows(
       const data = doc.data() as Partial<DirectoryMeeting> | undefined;
       // HARD GUARD: never prune an app-owned doc, even if a query ever returned one.
       if (data?.source === 'app') continue;
-      if (!isInsideGrid(data?.location)) continue;
+      if (!canJudge(data?.location)) continue;
 
       batch.delete(doc.ref);
       pageDeleted++;
@@ -79,8 +82,9 @@ async function deleteStaleRows(
  * so a provider is skipped when more than MAX_PRUNE_FRACTION of its rows would go.
  * Queries only `source == 'external'`, so app-owned docs are never selected.
  *
- * A slow sweep can outlast STALE_PRUNE_DAYS, so `sweepStartedAt` also bounds the
- * cutoff: a row the closing sweep saw was seen after it began, however long ago.
+ * `latestCutoffMs` also bounds the cutoff. A slow sweep can outlast STALE_PRUNE_DAYS, so
+ * callers pass at most its start: a row it saw was seen after it began, however long ago.
+ * `canJudge` says whether a row's absence from the sweep means anything at all.
  *
  * Needs the (source, provider, lastSeenAt) composite index in
  * firestore.indexes.json.
@@ -88,12 +92,13 @@ async function deleteStaleRows(
 export async function pruneStale(
   deps: PruneDeps,
   providers: readonly PrunableProvider[],
-  sweepStartedAt: number,
+  latestCutoffMs: number,
+  canJudge: CanJudgeRow = isInsideGrid,
 ): Promise<PruneResult> {
   const { db: database } = deps;
   const now = deps.now ? deps.now() : new Date();
   const horizonMs = now.getTime() - STALE_PRUNE_DAYS * 24 * 60 * 60 * 1000;
-  const cutoff = Timestamp.fromMillis(Math.min(horizonMs, sweepStartedAt));
+  const cutoff = Timestamp.fromMillis(Math.min(horizonMs, latestCutoffMs));
 
   const result: PruneResult = { deleted: 0, scanned: 0, blocked: [] };
 
@@ -115,7 +120,7 @@ export async function pruneStale(
       continue;
     }
 
-    const { deleted, scanned } = await deleteStaleRows(database, staleQuery);
+    const { deleted, scanned } = await deleteStaleRows(database, staleQuery, canJudge);
     result.deleted += deleted;
     result.scanned += scanned;
   }

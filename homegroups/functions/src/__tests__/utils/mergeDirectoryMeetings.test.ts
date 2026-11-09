@@ -29,7 +29,7 @@ describe("mergeDirectoryMeetings", () => {
     expect(ids(merged)).toEqual(["dir", "own"]);
   });
 
-  it("replaces a scraped copy with the directory's fresher one, matched by upstream id", () => {
+  it("refreshes a scraped copy from the directory, matched by upstream id", () => {
     const own = meeting({
       id: "own",
       apiId: "77",
@@ -38,8 +38,76 @@ describe("mergeDirectoryMeetings", () => {
     });
     const fresh = meeting({ id: "dir", apiId: "77", time: "08:00" });
     const merged = mergeDirectoryMeetings([own], [fresh]);
-    expect(ids(merged)).toEqual(["dir"]);
+    expect(ids(merged)).toEqual(["own"]);
     expect(merged[0].time).toBe("08:00");
+  });
+
+  it("keeps a scraped meeting's id, so members' favourites still match it", () => {
+    const own = meeting({ id: "own", apiId: "77", addedBy: "system" });
+    const merged = mergeDirectoryMeetings(
+      [own],
+      [meeting({ id: "dir", apiId: "77" })],
+    );
+    expect(merged[0].id).toBe("own");
+  });
+
+  it("keeps fields only Homegroups has when it refreshes a scraped meeting", () => {
+    const own = meeting({
+      id: "own",
+      apiId: "77",
+      addedBy: "system",
+      locationName: "St. Mark's Hall",
+      notes: "Side door",
+      locationNotes: "Parking in back",
+      groupName: "Sunrise",
+      verified: true,
+    });
+    const [merged] = mergeDirectoryMeetings(
+      [own],
+      [meeting({ id: "dir", apiId: "77", time: "08:00" })],
+    );
+    expect(merged).toMatchObject({
+      locationName: "St. Mark's Hall",
+      notes: "Side door",
+      locationNotes: "Parking in back",
+      groupName: "Sunrise",
+      verified: true,
+      addedBy: "system",
+    });
+  });
+
+  it("does not blank a field the directory has no value for", () => {
+    const own = meeting({
+      id: "own",
+      apiId: "77",
+      addedBy: "system",
+      format: "Open",
+      city: "Austin",
+    });
+    const [merged] = mergeDirectoryMeetings(
+      [own],
+      [meeting({ id: "dir", apiId: "77", format: "", city: undefined })],
+    );
+    expect(merged.format).toBe("Open");
+    expect(merged.city).toBe("Austin");
+  });
+
+  it("clears an online link when the directory says the meeting no longer has one", () => {
+    const own = meeting({
+      id: "own",
+      apiId: "77",
+      addedBy: "system",
+      online: true,
+      link: "https://zoom.example/old",
+      onlineNotes: "Password 1234",
+    });
+    const [merged] = mergeDirectoryMeetings(
+      [own],
+      [meeting({ id: "dir", apiId: "77" })],
+    );
+    expect(merged.online).toBeUndefined();
+    expect(merged.link).toBeUndefined();
+    expect(merged.onlineNotes).toBeUndefined();
   });
 
   it("matches on name, day, time and place when upstream ids are missing", () => {
@@ -49,7 +117,7 @@ describe("mergeDirectoryMeetings", () => {
       addedBy: "system",
     });
     const dir = meeting({ id: "dir", lat: 30.2671, lng: -97.7431 });
-    expect(ids(mergeDirectoryMeetings([own], [dir]))).toEqual(["dir"]);
+    expect(ids(mergeDirectoryMeetings([own], [dir]))).toEqual(["own"]);
   });
 
   it("keeps a meeting a member added, rather than replacing it", () => {
@@ -88,6 +156,43 @@ describe("mergeDirectoryMeetings", () => {
       [own],
       [meeting({ id: "a", apiId: "77" }), meeting({ id: "b", apiId: "77" })],
     );
-    expect(ids(merged)).toEqual(["a"]);
+    expect(ids(merged)).toEqual(["own"]);
+  });
+
+  it("keeps directory meetings that look alike but are separate listings", () => {
+    const merged = mergeDirectoryMeetings(
+      [],
+      [
+        meeting({ id: "a", apiId: "1", link: "https://zoom.example/a" }),
+        meeting({ id: "b", apiId: "2", link: "https://zoom.example/b" }),
+      ],
+    );
+    expect(ids(merged)).toEqual(["a", "b"]);
+  });
+
+  it("keeps look-alike directory rows with no upstream id at all", () => {
+    const merged = mergeDirectoryMeetings(
+      [],
+      [meeting({ id: "a" }), meeting({ id: "b" })],
+    );
+    expect(ids(merged)).toEqual(["a", "b"]);
+  });
+
+  it("lets only one look-alike directory row match a Homegroups meeting", () => {
+    const own = meeting({ id: "own", addedBy: "system" });
+    const merged = mergeDirectoryMeetings(
+      [own],
+      [meeting({ id: "a", apiId: "1" }), meeting({ id: "b", apiId: "2" })],
+    );
+    expect(ids(merged)).toEqual(["b", "own"]);
+  });
+
+  it("treats rows with different upstream ids as separate, even when they look alike", () => {
+    const own = meeting({ id: "own", apiId: "1", addedBy: "system" });
+    const merged = mergeDirectoryMeetings(
+      [own],
+      [meeting({ id: "dir", apiId: "2" })],
+    );
+    expect(ids(merged)).toEqual(["dir", "own"]);
   });
 });

@@ -1,4 +1,12 @@
-import { describeResult, parseSyncArgs, progressLine, readApiKey } from './syncMeetings';
+import { MeetingGuideAccessError } from '../lib/meetings/meetingSync';
+import {
+  ACCESS_EXIT_CODE,
+  describeResult,
+  parseSyncArgs,
+  progressLine,
+  readApiKey,
+  reportFatal,
+} from './syncMeetings';
 
 jest.mock('firebase-admin/app', () => ({
   applicationDefault: jest.fn(),
@@ -9,6 +17,8 @@ jest.mock('firebase-admin/firestore', () => ({
   Timestamp: { fromMillis: jest.fn() },
   getFirestore: jest.fn(),
 }));
+
+const SPOT = { s: 34, n: 34.0001, w: -118.3001, e: -118.3 };
 
 describe('parseSyncArgs', () => {
   it('defaults to a dry run', () => {
@@ -32,6 +42,34 @@ describe('readApiKey', () => {
   it('fails clearly when the key is missing', () => {
     expect(() => readApiKey({})).toThrow(/MEETING_GUIDE_API_KEY/);
   });
+
+  it('reports a missing key the same way as a rejected one', () => {
+    expect(() => readApiKey({})).toThrow(MeetingGuideAccessError);
+  });
+});
+
+describe('reportFatal', () => {
+  it('makes a key problem impossible to miss, and exits with its own code', () => {
+    const printed: unknown[] = [];
+    const code = reportFatal(new MeetingGuideAccessError('the key was rejected'), (line) =>
+      printed.push(line),
+    );
+    expect(code).toBe(ACCESS_EXIT_CODE);
+    expect(code).not.toBe(1);
+    const output = printed.join('\n');
+    expect(output).toMatch(/MEETING GUIDE SYNC FAILED: ACTION NEEDED/);
+    expect(output).toMatch(/the key was rejected/);
+    expect(output).toMatch(/Nothing was written/);
+  });
+
+  it('keeps ordinary failures on the general exit code', () => {
+    const printed: unknown[] = [];
+    const boom = new Error('boom');
+    const code = reportFatal(boom, (...args) => printed.push(...args));
+    expect(code).toBe(1);
+    expect(printed).toContain(boom);
+    expect(printed.join('\n')).not.toMatch(/ACTION NEEDED/);
+  });
 });
 
 describe('progressLine', () => {
@@ -49,7 +87,7 @@ describe('describeResult', () => {
         requests: 12,
         cappedResponses: 2,
         failedBaseCells: 1,
-        unresolvedCells: 3,
+        unresolvedSpots: [SPOT, SPOT, SPOT],
         droppedNonUs: 0,
         rateLimited: 0,
         meetings: 5,

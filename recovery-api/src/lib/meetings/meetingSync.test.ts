@@ -7,6 +7,7 @@ import type { SweepResult } from './meetingSweep';
 const NOW = new Date('2026-11-08T12:00:00Z');
 const stamp = (iso: string) => ({ toMillis: () => new Date(iso).getTime() });
 const RECENT = stamp('2026-11-07T00:00:00Z');
+const PRIOR_SWEEP = { 'script_progress/meetingSync': { lastHealthySweepStartedAt: NOW.getTime() } };
 
 function row(over: Partial<MeetingGuideMeeting> = {}): MeetingGuideMeeting {
   return {
@@ -215,7 +216,7 @@ describe('runMeetingSync', () => {
     requests: 100,
     cappedResponses: 0,
     failedBaseCells: 0,
-    unresolvedCells: 0,
+    unresolvedSpots: [],
     droppedNonUs: 0,
     rateLimited: 0,
     ...over,
@@ -230,7 +231,7 @@ describe('runMeetingSync', () => {
     lastSeenAt: stamp('2026-01-01T00:00:00Z'),
   };
   const manyFresh = () => {
-    const rows: Record<string, MockDoc> = { [staleKey]: staleDoc };
+    const rows: Record<string, MockDoc> = { [staleKey]: staleDoc, ...PRIOR_SWEEP };
     for (let i = 0; i < 50; i++) {
       rows[`directoryMeetings/fresh-${i}`] = {
         source: 'external',
@@ -242,7 +243,6 @@ describe('runMeetingSync', () => {
     }
     return rows;
   };
-
   it('refuses to touch the directory when the API rejects the key', async () => {
     const { db, store } = makeDirectoryDb(manyFresh());
     const snapshot = new Map(store);

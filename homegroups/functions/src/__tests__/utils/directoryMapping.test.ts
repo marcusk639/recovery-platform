@@ -49,6 +49,13 @@ const base: DirectoryMeeting = {
 };
 
 describe("mapDirectoryToSerialized", () => {
+  it("carries the timezone, because meeting times mean nothing without it", () => {
+    expect(
+      mapDirectoryToSerialized({ ...base, timezone: "America/Chicago" })
+        .timezone,
+    ).toBe("America/Chicago");
+  });
+
   it("carries the upstream id, which is how a meeting is matched to Homegroups' copy", () => {
     expect(mapDirectoryToSerialized({ ...base, externalId: "77" }).apiId).toBe(
       "77",

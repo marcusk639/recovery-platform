@@ -159,7 +159,8 @@ async function writeAuditRow(
 }
 
 export const findMeetings = onCall(
-  { secrets: [RECOVERY_PLATFORM_API_KEY] },
+  // A wide search in a dense city holds tens of thousands of documents before filtering.
+  { secrets: [RECOVERY_PLATFORM_API_KEY], memory: '1GiB' },
   async (request: CallableRequest) => {
     const context = requireServiceAuth(request);
     return handleFindMeetings(request.data, context, { db: getFirestore() });

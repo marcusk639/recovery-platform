@@ -24,10 +24,22 @@ describe('mapMeetingGuideMeeting', () => {
     longitude: '-97.7',
   };
 
-  it('drops the " - suffix" from names, as Homegroups does, so both hash to one document', () => {
+  it('drops an online suffix from a name, so both listings hash to one document', () => {
     const mapped = mapMeetingGuideMeeting({ ...base, name: 'Sunrise Group - Online' });
     expect(mapped?.name).toBe('Sunrise Group');
     expect(mapped?.id).toBe(mapMeetingGuideMeeting(base)?.id);
+  });
+
+  it.each(['Virtual', 'zoom', 'HYBRID', 'Online Meeting'])('drops the suffix " - %s"', (suffix) => {
+    const mapped = mapMeetingGuideMeeting({ ...base, name: `Sunrise Group - ${suffix}` });
+    expect(mapped?.name).toBe('Sunrise Group');
+  });
+
+  it('keeps a suffix that tells two meetings apart', () => {
+    const men = mapMeetingGuideMeeting({ ...base, name: "Sunrise Group - Men's" });
+    const women = mapMeetingGuideMeeting({ ...base, name: "Sunrise Group - Women's" });
+    expect(men?.name).toBe("Sunrise Group - Men's");
+    expect(men?.id).not.toBe(women?.id);
   });
 
   it('leaves a hyphenated name alone', () => {
