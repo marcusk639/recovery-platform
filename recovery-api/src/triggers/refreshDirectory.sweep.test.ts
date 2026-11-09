@@ -32,7 +32,7 @@ const CURSOR_KEY = `${REFRESH_STATE_COLLECTION}/${REFRESH_STATE_DOC_ID}`;
 const AA_RECORD = {
   id: 99,
   name: 'Sunrise Group',
-  day: 'tuesday',
+  day: 2,
   time: '07:00:00',
   latitude: '40.0',
   longitude: '-100.0',

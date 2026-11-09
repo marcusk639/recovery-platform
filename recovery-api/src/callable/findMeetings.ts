@@ -125,9 +125,6 @@ export async function handleFindMeetings(
 
       // Writers keep the id only as the document key, and clients need it to open a meeting.
       const meeting = { ...doc.data(), id: doc.id } as DirectoryMeeting;
-      // Callers always get a name, including for a row still stored as a number.
-      const day = storedDay(meeting.day);
-      if (day) meeting.day = day;
       const lat = meeting.location?.lat;
       const lng = meeting.location?.lng;
       if (typeof lat !== 'number' || typeof lng !== 'number') continue;
@@ -135,7 +132,9 @@ export async function handleFindMeetings(
       const distanceKm = distanceBetween([lat, lng], center);
       if (distanceKm * 1000 > radiusMeters) continue;
 
-      if (dayFilter !== undefined && day !== dayFilter) continue;
+      // Compared as names, but returned as stored: deployed product code reads only
+      // an integer, and rewriting it would strip the day from unmigrated rows.
+      if (dayFilter !== undefined && storedDay(meeting.day) !== dayFilter) continue;
       if (parsed.type !== undefined && meeting.type !== parsed.type) continue;
 
       meetings.push(meeting);

@@ -198,11 +198,14 @@ describe('handleFindMeetings (handler)', () => {
     expect(result.meetings.map((m) => m.id).sort()).toEqual(['new', 'old']);
   });
 
-  it('returns every meeting with its day as a name, even one stored as a number', async () => {
+  // Deployed product code reads only an integer, so rewriting it here would strip the
+  // day from every unmigrated row until both products are redeployed.
+  it('returns each day exactly as stored, so older products keep reading integers', async () => {
     const legacy = { ...meeting({ id: 'old' }), day: 0 } as unknown as DirectoryMeeting;
-    const { db } = makeDb([legacy]);
+    const { db } = makeDb([legacy, meeting({ id: 'new', day: 'tuesday' })]);
     const result = await handleFindMeetings({ location: CENTER }, ctx, { db });
-    expect(result.meetings[0].day).toBe('sunday');
+    const days = Object.fromEntries(result.meetings.map((m) => [m.id, m.day]));
+    expect(days).toEqual({ old: 0, new: 'tuesday' });
   });
 
   it.each([['someday'], [7], [-1], ['']])('rejects day %j as invalid input', async (day) => {

@@ -61,7 +61,7 @@ function sourceMeeting(over: Partial<DirectoryMeeting> = {}): DirectoryMeeting {
 const AA_RECORD = {
   id: 99,
   name: 'Sunrise Group',
-  day: 'tuesday',
+  day: 2,
   time: '07:00:00',
   latitude: '40.0',
   longitude: '-100.0',

@@ -214,6 +214,20 @@ describe('toDayName', () => {
 });
 
 describe('directoryMeetingId and day names', () => {
+  // Computed with the identity.ts on main before day names. Every stored row's id
+  // depends on this recipe, so it must never change.
+  it.each([[2], ['tuesday'], ['Tuesday']])('still produces the pre-change id for day %j', (day) => {
+    expect(
+      directoryMeetingId({
+        name: 'Sunrise Group',
+        day,
+        time: '07:00',
+        link: '',
+        formattedAddress: '123 Main St, Austin, TX 78701, USA',
+      }),
+    ).toBe('51115716e2d8ae63ac2a9810');
+  });
+
   it('gives the same id for a day name and its number, so stored ids are unchanged', () => {
     const base = { name: 'Sunrise Group', time: '07:00', link: '', formattedAddress: '1 Main St' };
     expect(directoryMeetingId({ ...base, day: 'tuesday' })).toBe(
