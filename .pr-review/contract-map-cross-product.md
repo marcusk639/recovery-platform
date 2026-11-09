@@ -15,6 +15,7 @@ return `[]` on any error, so the failure looks like "no meetings".
 
 Surface (`recovery-api/src/index.ts`): `createReferral`, `getReferrals`, `getReferral`, `getUserProfile`,
 `updateUserProfile`, `findMeetings`, `health`, plus identity/user stubs. No scheduled functions: meeting sync is manual.
+`refreshSlice` and `pruneStale` are library code with no production caller. A new caller must pass `sweepStartedAt` if a sweep can span days, and a schedule means deliberately changing `noScheduledJobs.test.ts`. Functions deploys build first, because `firebase.json` ignores `src` and the tracked `lib/` is stale.
 Region is set in `recovery-api/src/config.ts`. Auth is `requireServiceAuth` in `recovery-api/src/middleware/auth.ts`.
 The app registry `recovery-api/src/config/apps.ts` is the source of truth for app ids.
 
@@ -36,6 +37,7 @@ Contract tests that pin one side: `homegroups/functions/src/__tests__/api/recove
 | App ids, display names, aliases or flags in `recovery-api/src/config/apps.ts` | `X-App-Id` literals in all three consumers, and detox's display-name and interest-to-app maps in `route.ts`               |
 | `findMeetings` schema (`recovery-api/src/callable/findMeetings.ts`)           | The request built in `homegroups/functions/src/callable/findMeetings.ts` and `regroup/functions/src/callable/meetings.ts` |
 | `DirectoryMeeting` fields, providers, day/time normalisation                  | `recovery-api/src/entities/DirectoryMeeting.ts` ↔ both consumer entity copies and both `directoryMapping.ts` files       |
+| `dataAsOf` on `DirectoryMeeting` | Both consumer entity copies and both `directoryMapping.ts` files, `SerializedMeeting` in `homegroups/functions/src/callable/findMeetings.ts`, `homegroups/mobile/src/types/index.ts` and `utils/formatDataAsOf.ts`, `regroup/mobile/src/entities/Meeting.tsx` and `util/dataAsOf.ts` |
 | Result limits, default radius, per-bound read limit                           | Both products' result handling                                                                                            |
 | `createReferral` schema limits (`recovery-api/src/callable/referrals.ts`)     | Truncation in `detox-recovery/app/api/contact/route.ts`                                                                   |
 | Response envelope or the `meetings` key                                       | Response parsing in both `recoveryApi.ts` files (errors become `[]`)                                                      |

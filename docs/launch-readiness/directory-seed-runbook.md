@@ -3,11 +3,11 @@
 **Status:** Operator runbook — run by a human with prod credentials. Careful/intentional by design.
 **Date:** 2026-06-21
 **Owner action:** Marcus (recovery-platform admin)
-**Prereq:** recovery-api is DEPLOYED (done — `findMeetings` + `refreshDirectory` live on `recovery-platform-e6cb3`, Node 22).
+**Prereq:** recovery-api is DEPLOYED (done — `findMeetings` live on `recovery-platform-e6cb3`, Node 22).
 
 > **What this does:** backfills `directoryMeetings` (the cross-app shared directory) so
 > regroup + homegroups `findMeetings` return real AA/CR/NA meetings immediately, instead
-> of waiting ~7 days for the scheduled `refreshDirectory` cron to fill it incrementally.
+> of waiting for a manual sync to fill it.
 > AA + Celebrate Recovery come from the **grid seed**; NA comes from a **one-off migration**
 > of each product's existing `na-meetings` Firestore collection.
 
@@ -19,7 +19,7 @@
 - **`recovery-connect-cad4b` has billing off, and its linked billing account is closed.** Its free daily read quota is smaller than its `meetings` collection, and a full read on 2026-11-08 used it up and blocked all reads on the project until the quota reset. The script now refuses to scan a source with billing off. Check billing before any bulk read of a product's Firestore. Turning billing back on needs a different account and may restart its scheduled jobs, including the subscription reconciler and reminders.
 - **No scheduled job updates meetings (owner decision, 2026-11-08).** Meeting sync runs manually through scripts until further notice, so ignore the cron references below. `refreshDirectory` is no longer exported, and `src/noScheduledJobs.test.ts` fails if a scheduled function touches meeting data (scheduled jobs for anything else are allowed). The live function and its Scheduler job were deleted on 2026-11-09.
 - **The prune's index is deployed:** `directoryMeetings` (source, provider, lastSeenAt) went live on 2026-11-09. `pruneStale` fails without it, though it deletes nothing.
-- **Build before deploying functions.** `firebase.json` has no build step and ignores `src`, so a deploy ships whatever is in `lib/`. Run `npm run build` first, or you deploy the stale tracked copy, then restore `lib/` afterwards.
+- **Functions deploys build first.** `firebase.json` now runs `npm run build` before a functions deploy, because it ignores `src` and ships whatever is in `lib/`. That rewrites the tracked `lib/`, so restore it afterwards rather than committing it.
 
 ---
 
@@ -126,7 +126,7 @@ npm run import:snapshot -- --provider AA --apply
 # Final log: "importMeetingSnapshot: complete {...}"
 ```
 
-Check `read`, `skippedUnmappable` and the `dataAsOf` range before applying. Re-running is safe: rows a live source has confirmed and app-owned rows are never overwritten. Homegroups' own `na-meetings` is empty, so NA comes only from Regroup. Homegroups serves AA from its own Firestore, so imported AA rows reach Regroup only.
+Check `read`, `skippedUnmappable`, `skippedLive` and the `dataAsOf` range before applying. A row with no `dataAsOf` counts as live, including one from the old `migrate:na`, so it is skipped and shows no age label; delete such rows first if you want them imported. Re-running is safe: rows a live source has confirmed and app-owned rows are never overwritten. Homegroups' own `na-meetings` is empty, so NA comes only from Regroup. Homegroups serves AA from its own Firestore, so imported AA rows reach Regroup only.
 
 The build rewrites the tracked `recovery-api/lib/`. Don't commit that.
 

@@ -12,6 +12,14 @@
  * The prune guard (lib/meetings/sweepHealth.ts) keeps these rows while their
  * source is down, and NA rows always, so the refresh job does not delete them.
  *
+ * Before applying, compare the dry run's `skippedLive` with what's in the directory: a
+ * row with no `dataAsOf` counts as live, including one from the old `migrate:na`, so it
+ * is skipped and shows no age label. Delete such rows first if you want them imported.
+ *
+ * Imported rows that a healthy live sweep doesn't re-see count as stale. Up to 10% of a
+ * provider's rows get pruned. Above that, pruneStale blocks that provider's prune, and
+ * keeps blocking until someone looks, so check the `prune blocked` log after a sweep.
+ *
  * Even a dry run reads the whole source collection. It refuses a source project
  * with billing off: a full scan spends that project's free daily read quota, which
  * takes down reads for the live app until the quota resets. That happened to

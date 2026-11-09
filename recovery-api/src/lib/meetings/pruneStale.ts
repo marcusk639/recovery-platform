@@ -5,8 +5,8 @@ import { isInsideGrid } from './ingest';
 
 /**
  * Stale-prune horizon. External docs not re-seen within this many days are
- * considered gone-from-source and pruned. Sized to span several full cycles
- * (cycle is ~7 days), so a doc must miss multiple sweeps before deletion.
+ * considered gone-from-source and pruned, so a doc must be missing for this long,
+ * across however many manual syncs run in that time, before deletion.
  */
 export const STALE_PRUNE_DAYS = 30;
 
