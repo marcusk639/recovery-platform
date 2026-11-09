@@ -168,6 +168,8 @@ export const createPaymentIntent = onCall(
     const guestData = guestSnap.data() as {
       userId?: string;
       houseId?: string;
+      rentOwed?: number;
+      choreFees?: number;
     };
     if (guestData.houseId !== houseId) {
       throw new HttpsError(
@@ -182,6 +184,35 @@ export const createPaymentIntent = onCall(
       throw new HttpsError(
         "permission-denied",
         "Only the resident or a house admin can initiate this payment",
+      );
+    }
+
+    // ── 3c. Amount against the balance ────────────────────────────────────────
+    // Refuse overpayment here, before any charge: the webhook subtracts whatever
+    // was paid, so it would leave a credit the ledger never asked for. Checked
+    // after authorization so only someone entitled to see the balance is told it.
+    // Nothing guarantees these types on old documents, and a bad value must not
+    // widen the cap (amount > NaN is false; "5000" + 0 is "50000"), so it refuses.
+    const owedParts = [guestData.rentOwed ?? 0, guestData.choreFees ?? 0];
+    if (!owedParts.every((part) => Number.isFinite(part) && typeof part === "number")) {
+      logger.error("createPaymentIntent: malformed balance", { guestId });
+      throw new HttpsError(
+        "failed-precondition",
+        "This balance can't be paid online right now. Please contact your house manager.",
+      );
+    }
+    // Rounded up because the app rounds a fractional legacy balance up to charge it.
+    const owedCents = Math.max(Math.ceil(owedParts[0] + owedParts[1]), 0);
+    if (owedCents === 0) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Nothing is owed right now, so there is nothing to pay.",
+      );
+    }
+    if (amount > owedCents) {
+      throw new HttpsError(
+        "failed-precondition",
+        `This payment is more than the $${(owedCents / 100).toFixed(2)} owed. Please enter a smaller amount.`,
       );
     }
 

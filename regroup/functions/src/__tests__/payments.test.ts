@@ -2114,6 +2114,7 @@ describe("createPaymentIntent", () => {
       // guests/{guestId}.userId and requires it to match request.auth.uid.
       firestoreDocStore[`guests/${GUEST_ID}`] = {
         userId: USER_UID,
+        rentOwed: 100000,
         // houseId is required on a real guest doc (entities/Guest.ts) and the
         // callable now rejects a guest that does not belong to the house being
         // paid, so a fixture without it no longer models a valid resident.
@@ -2230,6 +2231,7 @@ describe("createPaymentIntent", () => {
       });
       firestoreDocStore[`guests/${GUEST_ID}`] = {
         userId: "",
+        rentOwed: 100000,
         houseId: HOUSE_ID,
       };
       await (createPaymentIntent as unknown as Function)(
@@ -2293,6 +2295,7 @@ describe("createPaymentIntent", () => {
       // guests/{guestId}.userId and requires it to match request.auth.uid.
       firestoreDocStore[`guests/${GUEST_ID}`] = {
         userId: USER_UID,
+        rentOwed: 100000,
         // houseId is required on a real guest doc (entities/Guest.ts) and the
         // callable now rejects a guest that does not belong to the house being
         // paid, so a fixture without it no longer models a valid resident.
