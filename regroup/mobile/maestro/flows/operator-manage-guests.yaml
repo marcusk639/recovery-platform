@@ -31,8 +31,12 @@ tags:
     visible:
       id: "main-app-screen"
     timeout: 30000
-- assertVisible:
-    id: "manage-guests-button"
+# Below the fold, and a tap near the bottom edge lands on the tab bar instead.
+- scrollUntilVisible:
+    element:
+      id: "manage-guests-button"
+    direction: DOWN
+    centerElement: true
 - tapOn:
     id: "manage-guests-button"
 - extendedWaitUntil:

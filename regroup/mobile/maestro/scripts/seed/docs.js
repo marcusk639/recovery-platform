@@ -218,4 +218,23 @@ function payments(Timestamp, now) {
   ];
 }
 
-module.exports = { HOUSE, OXFORD, uidOf, iso, operator, resident, house, activity, payments };
+/** A pending application, for operator-applications.yaml. */
+function application(now) {
+  return {
+    id: 'test-app-1',
+    houseId: HOUSE,
+    applicantUid: 'e2e-test-applicant',
+    applicantName: 'Test Applicant',
+    applicantEmail: 'test-applicant@rats-e2e.invalid',
+    applicantPhone: '512-555-0199',
+    sobrietyDate: '2026-01-01',
+    programType: 'AA',
+    currentSituation: 'E2E seed data.',
+    references: 'None',
+    status: 'pending',
+    createdAt: iso(now),
+    updatedAt: iso(now),
+  };
+}
+
+module.exports = { application, HOUSE, OXFORD, uidOf, iso, operator, resident, house, activity, payments };

@@ -2,6 +2,15 @@
 # Ends on the login screen, mirroring e2e/helpers/auth.js logout().
 appId: ${APP_ID}
 ---
+# Flows can end anywhere, often on a sheet that covers the tab bar. Relaunch to reach it.
+- stopApp
+- launchApp:
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "profile-tab"
+    timeout: 30000
 - tapOn:
     id: "profile-tab"
 - assertVisible:

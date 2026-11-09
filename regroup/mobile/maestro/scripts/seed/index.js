@@ -131,6 +131,8 @@ async function main() {
     await db.doc(`payments/${p.id}`).set(p);
   }
 
+  await db.doc(`houses/${d.HOUSE}/applications/test-app-1`).set(d.application(now));
+
   // 6. After the dispute-mirror trigger runs, pin the entry the operator flow looks for.
   await sleep(4000);
   await db.doc(`house-disputes/${d.HOUSE}`).set({
