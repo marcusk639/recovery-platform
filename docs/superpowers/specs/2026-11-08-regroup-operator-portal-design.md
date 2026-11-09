@@ -102,7 +102,7 @@ The owner picked this layout from mockups: option A, "All houses at a glance". T
 
 **All houses (home), new work.** Left navigation plus a table with one row per house: beds filled, health, rent overdue, applications waiting and open disputes. Totals across all houses sit above it.
 
-**One house.** A breadcrumb back to all houses, the house's summary numbers, and tabs for its work. Opening a house dispatches `selectHouseById`, the same selection the phone uses, so reused screens work unchanged.
+**One house.** A breadcrumb back to all houses, the house's summary numbers, and tabs for its work. The tabs hold the house's sections, and the left navigation keeps only Houses and Sign out (Owner chose tabs, 2026-11-09). Opening a house dispatches `selectHouseById`, the same selection the phone uses, so reused screens work unchanged.
 
 **One resident.** A header with status, phase, room and move-in date, the actions from the table below, then this week's activities, payments, recovery and legal information, and open items. This page combines several phone screens, so expect new layout around reused parts.
 
@@ -142,7 +142,7 @@ Reuse a phone screen by default. Rebuild its layout only when the phone layout g
 
 ### Who sees what (Owner confirmed)
 
-Owners see all of their houses. Managers and peer leaders see only the houses they run. Permissions are the same as on the phone. The portal hides what a role can't do, but the security rules and callables are what enforce it.
+Owners see all of their houses. Managers and peer leaders see only the houses they run. Within a house, managers see as much as owners, which is more than the phone shows them, and peer leaders are shown less: no house money totals, no balance column, no Payments or Reports, and no legal fields (Owner, 2026-11-09). The portal hides what a role can't do, but the security rules and callables are what enforce it.
 
 ## 6. Constraints
 
