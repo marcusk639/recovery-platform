@@ -144,6 +144,30 @@ describe("findMeetings", () => {
     );
   });
 
+  it("searches 25 miles around the location, not the directory's 5 km default", async () => {
+    await call(findMeetings, {
+      filters: { type: "all", location, day: "" },
+    });
+    expect(mockFetchDirectoryMeetings).toHaveBeenCalledWith(
+      expect.objectContaining({ radiusMeters: 40234 }),
+      expect.anything(),
+    );
+  });
+
+  it("returns every meeting the directory returns for an all-types search", async () => {
+    mockFetchDirectoryMeetings.mockResolvedValue([
+      directoryMeeting({ name: "One", provider: "AA" }),
+      directoryMeeting({ name: "Two", provider: "NA" }),
+      directoryMeeting({ name: "Three", provider: "CELEBRATE_RECOVERY" }),
+    ]);
+    const result = await call(findMeetings, {
+      filters: { type: "all", location, day: "" },
+    });
+    expect(result.map((m: { name: string }) => m.name)).toEqual(
+      expect.arrayContaining(["One", "Two", "Three"]),
+    );
+  });
+
   it("filters mapped results by name criteria", async () => {
     mockFetchDirectoryMeetings.mockResolvedValue([
       directoryMeeting({ name: "Sunrise Group" }),

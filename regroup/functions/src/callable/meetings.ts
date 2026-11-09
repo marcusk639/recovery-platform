@@ -59,6 +59,9 @@ interface MeetingSearchInput {
 export type MeetingTypeFilters =
   'AA' | 'NA' | 'AL-ANON' | 'Religious' | 'Custom' | 'all' | 'Celebrate Recovery';
 
+// 25 miles, by owner decision. Without this the directory uses its 5 km default.
+const SEARCH_RADIUS_METERS = 40234;
+
 /** Map a client meeting-type filter onto a directory provider, or undefined for "all". */
 function providerForType(type: MeetingTypeFilters): DirectoryProvider | undefined {
   switch (type) {
@@ -116,7 +119,7 @@ export const findMeetings = onCall({ secrets: [RECOVERY_PLATFORM_API_KEY] }, asy
     const dayIndex = day ? daysOfWeek.indexOf(day.toLowerCase()) : -1;
 
     const directory = await fetchDirectoryMeetings(
-      { location, day: dayIndex >= 0 ? dayIndex : undefined },
+      { location, day: dayIndex >= 0 ? dayIndex : undefined, radiusMeters: SEARCH_RADIUS_METERS },
       { uid: request.auth.uid, email: request.auth.token?.email },
     );
 
