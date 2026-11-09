@@ -150,7 +150,7 @@ The build rewrites the tracked `recovery-api/lib/`. Don't commit that.
   ```
 - [ ] regroup `findMeetings` and homegroups `findMeetings` return directory meetings (not just local) for a seeded region.
 - [ ] `directoryMeetingRequests` audit rows are PII-safe (hashed uid only — no raw uid/email).
-- [ ] Spot-check a few rows: correct `provider`, `day` (0–6), `time` (HH:mm), nested `location`; no overlay fields.
+- [ ] Spot-check a few rows: correct `provider`, `day` (a lowercase name such as `tuesday`), `time` (HH:mm), nested `location`; no overlay fields.
 
 ---
 
@@ -200,3 +200,16 @@ npm run sync:na -- --apply                       # everything
 - **"would lose too many rows":** nothing is deleted from it. A region can lose up to 5 rows or 10%, whichever is more. Check the region's own site, and if the removal is real, rerun with `--allow-deletes <sourceId>`. Use the same flag for a region that has left BMLT.
 
 **To undo:** `npm run sync:na -- --purge` reports how many rows this sync created, and adding `--apply` deletes them. It leaves every other row alone.
+
+## Meeting days are stored as names
+
+`directoryMeetings.day` is a lowercase day name such as `tuesday`. Rows written before 2026-11-09 hold an integer 0–6 (0 = Sunday) until converted. `findMeetings` accepts either in a request and always returns names.
+
+Deploy and convert in this order, or the apps show directory meetings with no day:
+
+1. Deploy `recovery-api`'s `findMeetings`. It accepts a day name or an integer, so the products' current code keeps working.
+2. Deploy both products' functions. They read either form and send day names, and the old `recovery-api` would reject a name.
+3. Convert stored rows: `npm run migrate:day-names` reports what would change, and adding `--apply` changes only `day`.
+
+Don't run `sync:na --apply` or `sync:meetings --apply` before step 2. They write names, and a changed `day` counts as a change, so they would convert existing rows too.
+
