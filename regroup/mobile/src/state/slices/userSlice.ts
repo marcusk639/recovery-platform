@@ -240,6 +240,7 @@ const userSlice = createSlice({
         state.error = null;
       })
       .addCase(login.fulfilled, (state, action) => {
+        state.loggingOutSuccessful = false;
         state.user = action.payload.user;
         state.setupRecoveryFailed = action.payload.setupRecoveryFailed;
         state.token = action.payload.token;
@@ -286,6 +287,7 @@ const userSlice = createSlice({
         state.loading = false;
       })
       .addCase(autoLogin.fulfilled, (state, action) => {
+        state.loggingOutSuccessful = false;
         state.user = action.payload.user;
         state.setupRecoveryFailed = action.payload.setupRecoveryFailed;
         state.token = action.payload.token;
@@ -353,6 +355,7 @@ const userSlice = createSlice({
         state.creatingUser = true;
       })
       .addCase(createUser.fulfilled, (state, action) => {
+        state.loggingOutSuccessful = false;
         state.user = action.payload;
         state.creatingUser = false;
         state.loggedIn = true;
