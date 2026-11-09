@@ -362,28 +362,33 @@ export const findMeetings = onCall(
         directoryPromise,
       ]);
 
-      const allowed = new Set(directoryProviders ?? []);
-      const directoryMeetings = directoryResults
-        .filter((dirMeeting) => allowed.has(dirMeeting.provider))
-        .map(mapDirectoryToSerialized);
-
-      // One source failing shouldn't cost a person the meetings the other one found.
-      const failedRead = firestoreResults.find(
-        (result): result is PromiseRejectedResult =>
-          result.status === "rejected",
-      );
-      if (failedRead) {
-        if (directoryMeetings.length === 0) throw failedRead.reason;
-        logger.error("Homegroups meeting read failed; using directory only", {
-          error: String(failedRead.reason),
-        });
-      }
-
       const ownMeetings = firestoreResults
         .flatMap((result) =>
           result.status === "fulfilled" ? result.value : [],
         )
         .map(serializeMeeting);
+      // The directory call isn't filtered by type, so only these rows count as results.
+      const allowed = new Set(directoryProviders ?? []);
+      const directoryMeetings = directoryResults
+        .filter((dirMeeting) => allowed.has(dirMeeting.provider))
+        .map(mapDirectoryToSerialized);
+
+      // One source failing shouldn't cost a person the meetings another one found,
+      // but a failure with nothing to show must not look like "no meetings nearby".
+      const failedRead = firestoreResults.find(
+        (result): result is PromiseRejectedResult =>
+          result.status === "rejected",
+      );
+      if (failedRead) {
+        if (ownMeetings.length === 0 && directoryMeetings.length === 0) {
+          throw failedRead.reason;
+        }
+        logger.error(
+          "A Homegroups meeting read failed; returning what the other sources found",
+          { error: String(failedRead.reason) },
+        );
+      }
+
       const serializedMeetings = mergeDirectoryMeetings(
         ownMeetings,
         directoryMeetings,

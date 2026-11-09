@@ -430,7 +430,7 @@ describe("findMeetings directory orchestration (B4)", () => {
     ).rejects.toMatchObject({ code: "internal" });
   });
 
-  it("fails the search when Homegroups' read fails and the directory has only other fellowships", async () => {
+  it("fails an AA search when Homegroups' read fails and the directory only has other types nearby", async () => {
     jest.resetModules();
     const { getAlcoholicsAnonymousMeetings, fetchDirectoryMeetings } =
       await loadMocks();
@@ -447,6 +447,50 @@ describe("findMeetings directory orchestration (B4)", () => {
         authedRequest({
           filters: { location: { lat: 30.2, lng: -97.7 }, type: "AA" },
         }),
+      ),
+    ).rejects.toMatchObject({ code: "internal" });
+  });
+
+  it("keeps an 'all' search's other results when one read fails and the directory has nothing", async () => {
+    jest.resetModules();
+    const {
+      getAlcoholicsAnonymousMeetings,
+      getCustomMeetings,
+      fetchDirectoryMeetings,
+    } = await loadMocks();
+    getAlcoholicsAnonymousMeetings.mockRejectedValueOnce(
+      new Error("quota exceeded"),
+    );
+    getCustomMeetings.mockResolvedValueOnce([
+      { id: "custom-1", name: "Member Meeting", type: "Custom" },
+    ]);
+    fetchDirectoryMeetings.mockResolvedValueOnce([]);
+    const { findMeetings } = await import("../callable/findMeetings");
+
+    const result = (await (findMeetings as Function)(
+      authedRequest({ filters: { location: { lat: 30.2, lng: -97.7 } } }),
+    )) as Array<{ id: string }>;
+
+    expect(result.map((m) => m.id)).toEqual(["custom-1"]);
+  });
+
+  it("fails an 'all' search when every read fails and the directory has nothing", async () => {
+    jest.resetModules();
+    const {
+      getAlcoholicsAnonymousMeetings,
+      getCustomMeetings,
+      fetchDirectoryMeetings,
+    } = await loadMocks();
+    getAlcoholicsAnonymousMeetings.mockRejectedValueOnce(
+      new Error("quota exceeded"),
+    );
+    getCustomMeetings.mockRejectedValueOnce(new Error("quota exceeded"));
+    fetchDirectoryMeetings.mockResolvedValueOnce([]);
+    const { findMeetings } = await import("../callable/findMeetings");
+
+    await expect(
+      (findMeetings as Function)(
+        authedRequest({ filters: { location: { lat: 30.2, lng: -97.7 } } }),
       ),
     ).rejects.toMatchObject({ code: "internal" });
   });
