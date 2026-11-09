@@ -54,6 +54,7 @@ src/
     account.ts      deleteAccount
     houses.ts       createHouses
     finishOperatorSetup.ts, getTierCatalog.ts
+    myHouseTiers.ts  the caller's own tier per house, for the operator portal's display
   triggers/
     firestore/      Firestore document write triggers
                     (activityWeekSummary.ts: onActivityWritten owns week-summaries)
