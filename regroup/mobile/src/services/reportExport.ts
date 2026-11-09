@@ -4,6 +4,7 @@ import { toDateSafe } from '../util/firestore';
 import { generatePDF } from 'react-native-html-to-pdf';
 
 import { RentPayment } from './payments';
+import { paymentDisplayStatus } from '../util/paymentStatus';
 
 import { Guest } from '../entities/Guest';
 import { WeekStats } from '../entities/WeekSummary';
@@ -146,8 +147,8 @@ export function exportPaymentHistoryCSV(
   const rows = payments.map((p) => {
     const date = paymentDate(p.createdAt);
     const guest = escapeCsvField(guestNames[p.guestId] ?? p.guestId);
-    const amount = String(p.amount ?? '');
-    const status = escapeCsvField(p.status);
+    const amount = p.amount == null ? '' : (p.amount / 100).toFixed(2);
+    const status = escapeCsvField(paymentDisplayStatus(p).label);
     const description = escapeCsvField(p.description ?? '');
     return [date, guest, amount, status, description].join(',');
   });

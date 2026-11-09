@@ -48,6 +48,7 @@ import {
   recordManualPayment,
   paymentIntentIdFromClientSecret,
   getPaymentHistory,
+  getGuestPayments,
   RentPayment,
 } from "../payments";
 
@@ -427,7 +428,56 @@ describe("payment service", () => {
 
   // ── getPaymentHistory ─────────────────────────────────────────────────────
 
+  describe("getGuestPayments", () => {
+    const doc = (id: string, createdAt: unknown) => ({
+      id,
+      data: () => ({ guestId: "g1", houseId: "h1", amount: 100, status: "succeeded", createdAt }),
+    });
+
+    // Sorting on the server would need a composite index that isn't deployed.
+    it("filters by house and guest only, and sorts newest first itself", async () => {
+      const whereMock = jest.fn(() => collectionMock);
+      const orderByMock = jest.fn(() => collectionMock);
+      collectionMock.where = whereMock;
+      collectionMock.orderBy = orderByMock;
+      collectionMock.get = jest.fn(() =>
+        Promise.resolve({
+          docs: [
+            doc("old", "2026-01-01T00:00:00.000Z"),
+            doc("new", { toDate: () => new Date("2026-03-01T00:00:00.000Z") }),
+            doc("mid", "2026-02-01T00:00:00.000Z"),
+          ],
+        })
+      );
+
+      const result = await getGuestPayments({ houseId: "h1", guestId: "g1" });
+
+      expect(whereMock).toHaveBeenCalledWith("houseId", "==", "h1");
+      expect(whereMock).toHaveBeenCalledWith("guestId", "==", "g1");
+      expect(orderByMock).not.toHaveBeenCalled();
+      expect(result.map((p) => p.id)).toEqual(["new", "mid", "old"]);
+    });
+
+    it("refuses to query without a house or guest", async () => {
+      await expect(getGuestPayments({ houseId: "", guestId: "g1" })).rejects.toThrow();
+      await expect(getGuestPayments({ houseId: "h1", guestId: "" })).rejects.toThrow();
+    });
+  });
+
   describe("getPaymentHistory", () => {
+    // The webhook writes no id field, so a card payment's id is its document id.
+    it("uses the document id when the record has no id field", async () => {
+      collectionMock.where = jest.fn(() => collectionMock);
+      collectionMock.orderBy = jest.fn(() => collectionMock);
+      collectionMock.get = jest.fn(() =>
+        Promise.resolve({
+          docs: [{ id: "pi_1", data: () => ({ amount: 100, status: "succeeded" }) }],
+        })
+      );
+      const [payment] = await getPaymentHistory({ houseId: "h1", guestUserId: "u1" });
+      expect(payment.id).toBe("pi_1");
+    });
+
     it("returns an empty array when no payment documents exist", async () => {
       collectionMock.where = jest.fn(() => collectionMock);
       collectionMock.orderBy = jest.fn(() => collectionMock);

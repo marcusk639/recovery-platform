@@ -1,6 +1,5 @@
 # Flow 22 — Guest: payment history (read-only)
-# Persona: guest-a. No payments are seeded, so the empty state is expected;
-# the assertion is that the screen renders in E2E mode.
+# Persona: guest-a, who has seeded payments of their own. Another resident's must not show.
 # Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/guest-payment-history.yaml
 appId: ${APP_ID}
 tags:

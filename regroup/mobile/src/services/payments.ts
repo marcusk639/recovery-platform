@@ -23,6 +23,7 @@ import {
 } from "@react-native-firebase/firestore";
 import { httpsCallable } from "@react-native-firebase/functions";
 import { asDollars, dollarsToCents } from "../util/money";
+import { toDateSafe } from '../util/firestore';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -49,6 +50,10 @@ export interface RentPayment {
    * functions' backfillPaymentGuestUserId runs.
    */
   guestUserId?: string;
+  /** Cumulative cents refunded, from the webhook. `status` stays "succeeded". */
+  refundedAmountCents?: number;
+  /** Set when a dispute opens. `status` stays "succeeded". */
+  disputed?: boolean;
 }
 
 /** Result returned by the 'createPaymentIntent' Cloud Function. */
@@ -245,6 +250,13 @@ export function paymentIntentIdFromClientSecret(clientSecret: string): string {
   return clientSecret.split("_secret_")[0];
 }
 
+// The Stripe webhook writes card payments without an `id` field, so the document
+// id stands in; app-written records keep the `id` they carry.
+const toRentPayment = (payment: { id: string; data: () => unknown }): RentPayment => {
+  const data = payment.data() as RentPayment;
+  return { ...data, id: data.id ?? payment.id };
+};
+
 export interface PaymentHistoryScope {
   houseId: string;
   /** The resident's Firebase uid (guests/{guestId}.userId). */
@@ -282,12 +294,36 @@ export async function getPaymentHistory(
   if (!snapshot.docs.length) {
     return [];
   }
-  // The Stripe webhook writes card payments without an `id` field, so the
-  // document id stands in; app-written records keep the `id` they carry.
-  return snapshot.docs.map((payment) => {
-    const data = payment.data() as RentPayment;
-    return { ...data, id: data.id ?? payment.id };
-  });
+  return snapshot.docs.map(toRentPayment);
+}
+
+/**
+ * Every payment on a guest record, for house staff. It finds records a resident's
+ * uid query can't: those for a guest with no account, and those from before the
+ * account linked. The payments rule denies this to residents.
+ *
+ * Sorted here because sorting on the server needs a composite index that doesn't
+ * exist, and unlimited because a limit without that sort could drop the newest.
+ */
+export async function getGuestPayments({
+  houseId,
+  guestId,
+}: {
+  houseId: string;
+  guestId: string;
+}): Promise<RentPayment[]> {
+  if (!houseId || !guestId) {
+    throw new Error('getGuestPayments: houseId and guestId are required');
+  }
+  const snapshot = await getDocs(
+    query(
+      paymentsCollection,
+      where('houseId', '==', houseId),
+      where('guestId', '==', guestId)
+    )
+  );
+  const createdMs = (payment: RentPayment) => toDateSafe(payment.createdAt)?.getTime() ?? 0;
+  return snapshot.docs.map(toRentPayment).sort((a, b) => createdMs(b) - createdMs(a));
 }
 
 // ─── CF-backed service functions ──────────────────────────────────────────────
