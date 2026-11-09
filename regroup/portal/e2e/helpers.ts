@@ -44,6 +44,15 @@ export async function clearClaims(account: Account): Promise<void> {
   await getAuth().setCustomUserClaims(user.uid, {});
 }
 
+// Clearing claims alone isn't removal: the server re-grants them to a house's
+// primary owner when the phone's sign-in code asks it to recover missing roles.
+export async function removeFromHouse(account: Account): Promise<void> {
+  const { email, house } = ACCOUNTS[account];
+  const user = await getAuth().getUserByEmail(email);
+  await admin().doc(`house-roles/${house}_${user.uid}`).delete();
+  await clearClaims(account);
+}
+
 export async function revokeClaimsAndRefresh(page: Page, account: Account): Promise<void> {
   await clearClaims(account);
   await page.evaluate(() => (window as any).__portalTest.refreshToken());
@@ -57,7 +66,9 @@ export const test = base.extend<{ allowPageErrors: boolean; guards: void; pageEr
     async ({ page, allowPageErrors, pageErrors }, use) => {
       const external: string[] = [];
       await page.route('**/*', (route) => {
-        const { protocol, hostname } = new URL(route.request().url());
+        const { protocol, hostname, pathname } = new URL(route.request().url());
+        // The Firestore SDK's own connectivity check when offline. It carries no data.
+        if (hostname === 'www.google.com' && pathname === '/images/cleardot.gif') return route.abort();
         if (protocol === 'data:' || protocol === 'blob:' || hostname === '127.0.0.1' || hostname === 'localhost') {
           return route.continue();
         }

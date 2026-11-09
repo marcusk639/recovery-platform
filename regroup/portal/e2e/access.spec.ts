@@ -1,5 +1,5 @@
 import { getAuth } from 'firebase-admin/auth';
-import { admin, expect, reseed, signInAs, signInAsRaw, test } from './helpers';
+import { admin, expect, removeFromHouse, reseed, signInAs, signInAsRaw, test } from './helpers';
 
 test.beforeEach(() => reseed());
 
@@ -36,4 +36,42 @@ test('signing out never creates an anonymous user', async ({ page }) => {
   await page.locator('#sign-out').click();
   await expect(page.locator('#sign-in-form')).toBeVisible();
   expect((await getAuth().listUsers()).users.length).toBe(before);
+});
+
+test('losing access while the tab is open replaces the portal with a message', async ({ page }) => {
+  await signInAs(page, 'manager');
+  await expect(page.getByText('Bob Rivera')).toBeVisible();
+  await removeFromHouse('manager');
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(page.getByText(/use the Regroup app|don't have access/i)).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText('Bob Rivera')).toHaveCount(0);
+});
+
+test('claims refresh on the interval too, with the tab in the background', async ({ page }) => {
+  await page.clock.install();
+  await signInAs(page, 'manager');
+  await expect(page.getByText('Bob Rivera')).toBeVisible();
+  await removeFromHouse('manager');
+  await page.mouse.move(5, 5);
+  await page.clock.fastForward('10:01');
+  await expect(page.getByText('Bob Rivera')).toHaveCount(0, { timeout: 10_000 });
+});
+
+test('a promotion takes effect without signing in again', async ({ page }) => {
+  await signInAsRaw(page, 'test-guest-a@rats-e2e.com');
+  await expect(page.getByText(/use the Regroup app on your phone/i)).toBeVisible();
+  const user = await getAuth().getUserByEmail('test-guest-a@rats-e2e.com');
+  await getAuth().setCustomUserClaims(user.uid, { admin: { 'test-house-123': true } });
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(page.locator('#nav-home')).toBeVisible({ timeout: 10_000 });
+});
+
+test('a failed refresh, as when offline, keeps the current screen', async ({ page, context }) => {
+  await signInAs(page, 'manager');
+  await expect(page.getByText('Bob Rivera')).toBeVisible();
+  await context.setOffline(true);
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await page.waitForTimeout(1000);
+  await expect(page.getByText('Bob Rivera')).toBeVisible();
+  await context.setOffline(false);
 });
