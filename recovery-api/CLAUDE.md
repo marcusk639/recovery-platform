@@ -17,6 +17,7 @@ npm run test:coverage # Jest with coverage
 npm run lint         # eslint src
 npm run seed         # build + seed directoryMeetings (lib/scripts/seedDirectory.js)
 npm run import:snapshot -- --provider AA|NA [--apply]  # dry run by default; refuses a source with billing off
+npm run sync:meetings [-- --apply]  # full AA sync from Meeting Guide; dry run by default; needs MEETING_GUIDE_API_KEY
 ```
 
 `lib/` is tracked and stale, and `npm run build` rewrites it. Don't commit the result. `firebase.json` has no

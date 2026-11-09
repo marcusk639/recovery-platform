@@ -68,8 +68,8 @@ function makeDb(seed: DirectoryMeeting[] = []) {
     orderBy: jest.fn().mockReturnThis(),
     startAt: jest.fn().mockReturnThis(),
     endAt: jest.fn().mockReturnThis(),
-    // Each geohash bound is read with a .limit() cap so a wide-radius search
-    // cannot read the whole collection before in-memory filtering.
+    // Each geohash bound is read a page at a time. Real paging behavior is
+    // covered in findMeetings.paging.test.ts.
     limit: jest.fn().mockReturnThis(),
     get: jest.fn().mockResolvedValue({
       docs: seed.map((m) => ({ id: m.id, data: () => m })),
@@ -133,18 +133,11 @@ describe('handleFindMeetings (auth via wrapper)', () => {
 });
 
 describe('handleFindMeetings (handler)', () => {
-it('caps each geohash bound and reports truncation when a bound fills up', async () => {
-    // Geohash order is not distance order, so a bound that hits the read cap can
-    // omit meetings genuinely inside the radius. The caller has to be able to
-    // tell, otherwise incomplete results look complete.
-    const full = Array.from({ length: 500 }, (_v, n) =>
-      meeting({ id: `m${n}` }),
-    );
-    const { db } = makeDb(full);
+  it('reads each geohash bound in pages rather than one unbounded request', async () => {
+    const { db } = makeDb([meeting()]);
 
-    const result = await handleFindMeetings({ location: CENTER }, ctx, { db });
+    await handleFindMeetings({ location: CENTER }, ctx, { db });
 
-    expect(result.truncated).toBe(true);
     expect(db.collection('directoryMeetings').limit).toHaveBeenCalledWith(500);
   });
 

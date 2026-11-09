@@ -29,19 +29,11 @@ const DEFAULT_RADIUS_METERS = 5000;
 const MAX_RADIUS_METERS = 100000;
 
 /**
- * Per-geohash-bound read cap.
- *
- * Without it, a max-radius search in a dense metro reads and bills every
- * directoryMeetings doc inside the geohash ranges before any distance, day or
- * type filtering happens — all of which is done in memory below. radiusMeters is
- * caller-controlled up to MAX_RADIUS_METERS, so the read volume is too.
- *
- * Geohash order is not distance order, so a bound that hits this cap can omit
- * meetings that were genuinely within the radius. That makes truncation a
- * correctness matter, not just a cost one, so it is reported to the caller
- * rather than hidden. The cap is set well above any plausible real bound.
+ * Rows read per request while paging through a geohash bound. It isn't a cap: every
+ * bound is read to its end, because geohash order is not distance order, so stopping
+ * early would drop meetings inside the radius. The radius limit above bounds the cost.
  */
-const PER_BOUND_READ_LIMIT = 500;
+const READ_PAGE_SIZE = 500;
 
 const FindMeetingsSchema = z.object({
   location: z.object({
@@ -57,11 +49,34 @@ export interface FindMeetingsDeps {
   db: FirebaseFirestore.Firestore;
 }
 
+/**
+ * Reads one bound to its end. A page continues from the last document, not its geohash:
+ * meetings on one coordinate share a geohash, so a value cursor would skip the rest of them.
+ */
+async function readBound(
+  db: FirebaseFirestore.Firestore,
+  start: string,
+  end: string,
+): Promise<FirebaseFirestore.QueryDocumentSnapshot[]> {
+  const docs: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+  let last: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+  for (;;) {
+    const ordered = db.collection('directoryMeetings').orderBy('location.geohash');
+    const page = (last ? ordered.startAfter(last) : ordered.startAt(start))
+      .endAt(end)
+      .limit(READ_PAGE_SIZE);
+    const snap = await page.get();
+    docs.push(...snap.docs);
+    if (snap.docs.length < READ_PAGE_SIZE) return docs;
+    last = snap.docs[snap.docs.length - 1];
+  }
+}
+
 export async function handleFindMeetings(
   data: unknown,
   context: ServiceAuthContext,
   deps: FindMeetingsDeps,
-): Promise<{ meetings: DirectoryMeeting[]; truncated: boolean }> {
+): Promise<{ meetings: DirectoryMeeting[] }> {
   let parsed: z.infer<typeof FindMeetingsSchema>;
   try {
     parsed = FindMeetingsSchema.parse(data);
@@ -83,24 +98,14 @@ export async function handleFindMeetings(
   // findMeetingsByLocation.ts' >= / <= geohash range, but using the canonical
   // geofire-common bounds (precise across cell edges) rather than a single cell.
   const bounds = geohashQueryBounds(center, radiusMeters);
-  const snapshots = await Promise.all(
-    bounds.map(([start, end]) =>
-      db
-        .collection('directoryMeetings')
-        .orderBy('location.geohash')
-        .startAt(start)
-        .endAt(end)
-        .limit(PER_BOUND_READ_LIMIT)
-        .get(),
-    ),
-  );
+  const pages = await Promise.all(bounds.map(([start, end]) => readBound(db, start, end)));
 
   // Collect, dedupe by doc id, then apply the true-distance filter (the geohash
   // bounds are a superset — distanceBetween prunes false positives).
   const seen = new Set<string>();
   const meetings: DirectoryMeeting[] = [];
-  for (const snap of snapshots) {
-    for (const doc of snap.docs) {
+  for (const docs of pages) {
+    for (const doc of docs) {
       if (seen.has(doc.id)) continue;
       seen.add(doc.id);
 
@@ -127,19 +132,7 @@ export async function handleFindMeetings(
     logger.warn('findMeetings: audit write failed', err),
   );
 
-  // True when any bound returned a full page, meaning results may be incomplete.
-  const truncated = snapshots.some(
-    (snap) => snap.docs.length >= PER_BOUND_READ_LIMIT,
-  );
-  if (truncated) {
-    logger.warn('findMeetings: a geohash bound hit the read limit', {
-      radiusMeters,
-      bounds: bounds.length,
-      limit: PER_BOUND_READ_LIMIT,
-    });
-  }
-
-  return { meetings, truncated };
+  return { meetings };
 }
 
 /** Coarsen a coordinate to ~2 decimals (~1km) so the audit row isn't a precise fix. */
@@ -166,7 +159,8 @@ async function writeAuditRow(
 }
 
 export const findMeetings = onCall(
-  { secrets: [RECOVERY_PLATFORM_API_KEY] },
+  // A wide search in a dense city holds tens of thousands of documents before filtering.
+  { secrets: [RECOVERY_PLATFORM_API_KEY], memory: '1GiB' },
   async (request: CallableRequest) => {
     const context = requireServiceAuth(request);
     return handleFindMeetings(request.data, context, { db: getFirestore() });

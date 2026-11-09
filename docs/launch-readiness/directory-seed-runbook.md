@@ -13,6 +13,10 @@
 
 ## Corrections, 2026-11-08 (these override the sections below)
 
+- **Refresh AA manually:** `MEETING_GUIDE_API_KEY=... npm run sync:meetings` sweeps all US land and writes `directoryMeetings`. It is a dry run until you add `-- --apply`.
+- **Run these in order:** deploy `recovery-api`, then do a dry run, then `--apply`. The older deployed `findMeetings` stops at 500 rows per geohash bound, so it would drop meetings once the directory is full. Deploying first changes nothing while the directory is small.
+- **Read the coverage lines in a dry run before applying:** it prints meetings per state and a count near each of 23 places, mostly islands and barrier islands. A `WARNING no meetings found near` line means check that place. It may have none, or the sweep may have missed it. San Juan's count also hints at whether `language=en` is filtering out Spanish-language meetings, which hasn't been verified.
+- **If the key stops working, the sync tells you:** it stops, prints a `MEETING GUIDE SYNC FAILED: ACTION NEEDED` banner, exits with code 2 and writes nothing. Set a new key in `MEETING_GUIDE_API_KEY` and run it again. The banner also covers a missing key, and 50 base cells failing in a row, which may be an outage rather than the key. The apps read Firestore, not this API, so a dead key leaves listings stale but working. Nothing checks the key between runs: you only find out when you run the sync.
 - **Meeting Guide no longer works keyless.** `api.meetingguide.org/app/v2/request` returns 401 from both local machines and Cloud Functions, so the step 2 seed gets no AA rows. It has never been run on `recovery-platform-e6cb3`.
 - **Celebrate Recovery is failing too:** `locator.crgroups.info` has an expired TLS certificate. Don't disable certificate checks to get around it.
 - **The snapshot import exists but has not been run:** `npm run import:snapshot` (step 3) replaces `migrate:na`. Each row carries `dataAsOf`, which the apps show as "Listing data from Mar 2023". The owner is holding both imports as of 2026-11-08: AA until a live sync is proven, NA pending a decision on data last written in March 2023.
@@ -25,17 +29,17 @@
 
 ## 0. Ground truth (verified from code, 2026-06-21)
 
-| Thing             | Value                                                                                                                                     | Source                                                  |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| Grid bounds       | LAT 24.0→49.0, STEP 0.5° (continental US)                                                                                                 | `recovery-api/src/lib/meetings/ingest.ts` `GRID_CONFIG` |
-| Grid size         | ~6,000 cells (≈51 lat × ≈119 lon)                                                                                                         | derived from `GRID_CONFIG`                              |
-| AA source         | MeetingGuide API — **keyless**                                                                                                            | `lib/meetings/sources/meetingGuide.ts`                  |
-| CR source         | Celebrate Recovery — **keyless**                                                                                                          | `lib/meetings/sources/celebrateRecovery.ts`             |
-| Maps key          | `seedDirectory` **throws at entry if `GOOGLE_MAPS_API_KEY` unset** (NA-address geocode path)                                              | `scripts/seedDirectory.ts:56-58`                        |
-| Resumable         | cursor doc `script_progress/seedDirectory` (`lastProcessedIndex`); cursor advances past failed cells                                      | `scripts/seedDirectory.ts`                              |
-| Idempotent        | upsert by deterministic id/geohash (`lib/meetings/identity.ts`) — safe to re-run                                                          | ingest pattern                                          |
-| NA source         | **products' `na-meetings` Firestore** (NOT recovery-platform, NOT a live API)                                                             | `scripts/migrateNaMeetings.ts` header                   |
-| Scheduled refresh | **None.** Removed by owner decision, 2026-11-08                                                                                           | `src/noScheduledJobs.test.ts`                           |
+| Thing             | Value                                                                                                                         | Source                                                  |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| Grid bounds       | LAT 24.0→49.0, STEP 0.5° (continental US)                                                                                     | `recovery-api/src/lib/meetings/ingest.ts` `GRID_CONFIG` |
+| Grid size         | ~6,000 cells (≈51 lat × ≈119 lon)                                                                                             | derived from `GRID_CONFIG`                              |
+| AA source         | MeetingGuide API — **keyless**                                                                                                | `lib/meetings/sources/meetingGuide.ts`                  |
+| CR source         | Celebrate Recovery — **keyless**                                                                                              | `lib/meetings/sources/celebrateRecovery.ts`             |
+| Maps key          | `seedDirectory` **throws at entry if `GOOGLE_MAPS_API_KEY` unset** (NA-address geocode path)                                  | `scripts/seedDirectory.ts:56-58`                        |
+| Resumable         | cursor doc `script_progress/seedDirectory` (`lastProcessedIndex`); cursor advances past failed cells                          | `scripts/seedDirectory.ts`                              |
+| Idempotent        | upsert by deterministic id/geohash (`lib/meetings/identity.ts`) — safe to re-run                                              | ingest pattern                                          |
+| NA source         | **products' `na-meetings` Firestore** (NOT recovery-platform, NOT a live API)                                                 | `scripts/migrateNaMeetings.ts` header                   |
+| Scheduled refresh | **None.** Removed by owner decision, 2026-11-08                                                                               | `src/noScheduledJobs.test.ts`                           |
 | npm scripts       | `npm run seed` → `node lib/scripts/seedDirectory.js`; `npm run import:snapshot` → `node lib/scripts/importMeetingSnapshot.js` | `recovery-api/package.json`                             |
 
 **Two things the cron does NOT do (why the manual seed matters):**
@@ -154,7 +158,7 @@ The build rewrites the tracked `recovery-api/lib/`. Don't commit that.
 
 ## 5. After seeding — ongoing maintenance
 
-- **Nothing refreshes meetings on a schedule.** Rows stay as of the last manual sync. `pruneStale` removes stale rows only for a provider whose source answered for a full sweep, so an outage deletes nothing. It also deletes nothing for a provider when more than 10% of its rows would go, and logs `refreshDirectory: prune blocked` as an error instead. If you see that, work out why before acting: it may be a degraded source, or imported rows a recovered source no longer lists. Rows outside the sweep's grid (Alaska, Hawaii, Puerto Rico) are never pruned, because a sweep can't re-see them.
+- **Nothing refreshes meetings on a schedule.** Rows stay as of the last manual sync. `pruneStale` removes stale rows only for a provider whose source answered for a full sweep, so an outage deletes nothing. It also deletes nothing for a provider when more than 10% of its rows would go, and logs `refreshDirectory: prune blocked` as an error instead. If you see that, work out why before acting: it may be a degraded source, or imported rows a recovered source no longer lists. `refreshSlice`'s grid sweep never prunes rows outside the old grid (Alaska, Hawaii, Puerto Rico), because it can't re-see them. `sync:meetings` covers all US land, so it can prune those. It deletes a meeting only after two healthy `--apply` sweeps in a row have missed it and it hasn't been seen for 30 days, so its first healthy run deletes nothing. It never prunes a row outside US land, or at a spot holding more meetings than one response returns.
 - **NA has no live source**, so it is never pruned and stays frozen at its `dataAsOf` date until Phase 1B adds `refreshNaDirectory`.
 - Do **not** run seeds from app clients; seeding is recovery-api-side (script/admin) only.
 
