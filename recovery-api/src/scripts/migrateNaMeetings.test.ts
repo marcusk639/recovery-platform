@@ -1,3 +1,4 @@
+import { main as retiredMain } from './migrateNaMeetings';
 import { main, runMigration } from './migrateNaMeetings';
 
 /**
@@ -73,6 +74,10 @@ describe('runMigration same-instance guard', () => {
 
 describe('migrateNaMeetings main', () => {
   it('refuses to run, because its rows look live and the snapshot import then skips them', async () => {
-    await expect(main()).rejects.toThrow(/import:snapshot/);
+    await expect(main()).rejects.toThrow(/sync:na/);
   });
+});
+
+test('the retired migration points to the command that replaced it', async () => {
+  await expect(retiredMain()).rejects.toThrow(/sync:na/);
 });
