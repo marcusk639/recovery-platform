@@ -1,17 +1,24 @@
-import { onCall, CallableRequest, HttpsError } from 'firebase-functions/v2/https';
-import { defineSecret } from 'firebase-functions/params';
-import * as logger from 'firebase-functions/logger';
-import { getCustomMeetings, getAlcoholicsAnonymousMeetings } from '../utils/meetings'; // Assuming meetings utils are one level up
-import { Meeting, MeetingSearchCriteria } from '../entities/Meeting';
-import { fetchDirectoryMeetings } from '../api/recoveryApi';
-import { mergeDirectoryMeetings } from '../utils/mergeDirectoryMeetings';
-import { mapDirectoryToSerialized } from '../utils/directoryMapping';
-import { daysOfWeek } from '../utils/date';
-import { requireAuth } from '../utils/callableWrapper';
+import {
+  onCall,
+  CallableRequest,
+  HttpsError,
+} from "firebase-functions/v2/https";
+import { defineSecret } from "firebase-functions/params";
+import * as logger from "firebase-functions/logger";
+import {
+  getCustomMeetings,
+  getAlcoholicsAnonymousMeetings,
+} from "../utils/meetings"; // Assuming meetings utils are one level up
+import { Meeting, MeetingSearchCriteria } from "../entities/Meeting";
+import { fetchDirectoryMeetings } from "../api/recoveryApi";
+import { mergeDirectoryMeetings } from "../utils/mergeDirectoryMeetings";
+import { mapDirectoryToSerialized } from "../utils/directoryMapping";
+import { daysOfWeek } from "../utils/date";
+import { requireAuth } from "../utils/callableWrapper";
 
 // recovery-api service key. The non-secret base URL is read from the
 // RECOVERY_API_BASE_URL env var inside the recoveryApi client.
-const RECOVERY_PLATFORM_API_KEY = defineSecret('RECOVERY_PLATFORM_API_KEY');
+const RECOVERY_PLATFORM_API_KEY = defineSecret("RECOVERY_PLATFORM_API_KEY");
 
 // Define input type again for clarity within this file
 interface MeetingSearchInput {
@@ -29,16 +36,22 @@ interface MeetingSearchInput {
 
 // Define filter type again
 export type MeetingTypeFilters =
-  'AA' | 'NA' | 'AL-ANON' | 'Religious' | 'Custom' | 'all' | 'Celebrate Recovery';
+  | "AA"
+  | "NA"
+  | "AL-ANON"
+  | "Religious"
+  | "Custom"
+  | "all"
+  | "Celebrate Recovery";
 
 const MEETING_TYPE_FILTERS: readonly MeetingTypeFilters[] = [
-  'AA',
-  'NA',
-  'AL-ANON',
-  'Religious',
-  'Custom',
-  'all',
-  'Celebrate Recovery',
+  "AA",
+  "NA",
+  "AL-ANON",
+  "Religious",
+  "Custom",
+  "all",
+  "Celebrate Recovery",
 ];
 
 /**
@@ -48,61 +61,73 @@ const MEETING_TYPE_FILTERS: readonly MeetingTypeFilters[] = [
  * fast rather than flowing untyped into the handler.
  */
 function validateFindMeetingsInput(data: unknown): MeetingSearchInput {
-  if (typeof data !== 'object' || data === null) {
-    throw new HttpsError('invalid-argument', 'Request data must be an object.');
+  if (typeof data !== "object" || data === null) {
+    throw new HttpsError("invalid-argument", "Request data must be an object.");
   }
 
   const { filters, criteria } = data as Record<string, unknown>;
 
-  if (typeof filters !== 'object' || filters === null) {
-    throw new HttpsError('invalid-argument', 'filters are required for meeting search.');
+  if (typeof filters !== "object" || filters === null) {
+    throw new HttpsError(
+      "invalid-argument",
+      "filters are required for meeting search.",
+    );
   }
   const f = filters as Record<string, unknown>;
 
-  if (typeof f.location !== 'object' || f.location === null) {
+  if (typeof f.location !== "object" || f.location === null) {
     throw new HttpsError(
-      'invalid-argument',
-      'filters.location is required and must contain lat and lng.',
+      "invalid-argument",
+      "filters.location is required and must contain lat and lng.",
     );
   }
   const { lat, lng } = f.location as Record<string, unknown>;
   if (
-    typeof lat !== 'number' ||
+    typeof lat !== "number" ||
     !Number.isFinite(lat) ||
-    typeof lng !== 'number' ||
+    typeof lng !== "number" ||
     !Number.isFinite(lng)
   ) {
     throw new HttpsError(
-      'invalid-argument',
-      'filters.location.lat and filters.location.lng must be finite numbers.',
+      "invalid-argument",
+      "filters.location.lat and filters.location.lng must be finite numbers.",
     );
   }
 
-  let type: MeetingTypeFilters = 'all';
+  let type: MeetingTypeFilters = "all";
   if (f.type !== undefined) {
     if (
-      typeof f.type !== 'string' ||
+      typeof f.type !== "string" ||
       !MEETING_TYPE_FILTERS.includes(f.type as MeetingTypeFilters)
     ) {
       throw new HttpsError(
-        'invalid-argument',
-        `filters.type must be one of: ${MEETING_TYPE_FILTERS.join(', ')}.`,
+        "invalid-argument",
+        `filters.type must be one of: ${MEETING_TYPE_FILTERS.join(", ")}.`,
       );
     }
     type = f.type as MeetingTypeFilters;
   }
 
-  if (f.day !== undefined && typeof f.day !== 'string') {
-    throw new HttpsError('invalid-argument', 'filters.day must be a string when provided.');
+  if (f.day !== undefined && typeof f.day !== "string") {
+    throw new HttpsError(
+      "invalid-argument",
+      "filters.day must be a string when provided.",
+    );
   }
 
-  if (criteria !== undefined && (typeof criteria !== 'object' || criteria === null)) {
-    throw new HttpsError('invalid-argument', 'criteria must be an object when provided.');
+  if (
+    criteria !== undefined &&
+    (typeof criteria !== "object" || criteria === null)
+  ) {
+    throw new HttpsError(
+      "invalid-argument",
+      "criteria must be an object when provided.",
+    );
   }
 
   return {
     filters: {
-      date: typeof f.date === 'string' ? f.date : '',
+      date: typeof f.date === "string" ? f.date : "",
       location: { lat, lng },
       day: f.day as string | undefined,
       type,
@@ -155,15 +180,15 @@ export interface SerializedMeeting {
 // Helper function to serialize Firestore data
 function serializeMeeting(meeting: Meeting): SerializedMeeting {
   const serialized: SerializedMeeting = {
-    id: meeting.id || '',
-    name: meeting.name || '',
-    time: meeting.time || '',
-    format: meeting.format || '',
-    type: meeting.type || '',
+    id: meeting.id || "",
+    name: meeting.name || "",
+    time: meeting.time || "",
+    format: meeting.format || "",
+    type: meeting.type || "",
     verified: meeting.verified || false,
-    addedBy: meeting.addedBy || '',
-    createdAt: '',
-    updatedAt: '',
+    addedBy: meeting.addedBy || "",
+    createdAt: "",
+    updatedAt: "",
     address: meeting.address,
     city: meeting.city,
     state: meeting.state,
@@ -196,7 +221,7 @@ function serializeMeeting(meeting: Meeting): SerializedMeeting {
   try {
     if (meeting.createdAt instanceof Date) {
       serialized.createdAt = meeting.createdAt.toISOString();
-    } else if (meeting.createdAt && 'toDate' in meeting.createdAt) {
+    } else if (meeting.createdAt && "toDate" in meeting.createdAt) {
       serialized.createdAt = (meeting.createdAt as any).toDate().toISOString();
     } else {
       serialized.createdAt = new Date().toISOString();
@@ -204,7 +229,7 @@ function serializeMeeting(meeting: Meeting): SerializedMeeting {
 
     if (meeting.updatedAt instanceof Date) {
       serialized.updatedAt = meeting.updatedAt.toISOString();
-    } else if (meeting.updatedAt && 'toDate' in meeting.updatedAt) {
+    } else if (meeting.updatedAt && "toDate" in meeting.updatedAt) {
       serialized.updatedAt = (meeting.updatedAt as any).toDate().toISOString();
     } else {
       serialized.updatedAt = new Date().toISOString();
@@ -213,7 +238,7 @@ function serializeMeeting(meeting: Meeting): SerializedMeeting {
     if (error instanceof HttpsError) {
       throw error;
     }
-    logger.error('Error serializing timestamps:', error);
+    logger.error("Error serializing timestamps:", error);
     serialized.createdAt = new Date().toISOString();
     serialized.updatedAt = new Date().toISOString();
   }
@@ -248,18 +273,18 @@ export const findMeetings = onCall(
     const meetingInput = validateFindMeetingsInput(request.data);
 
     const startTime = Date.now();
-    logger.info('findMeetings called with request:', {
+    logger.info("findMeetings called with request:", {
       hasLocationFilter: Boolean(request.data?.filters?.location),
       criteria: request.data?.criteria,
     });
 
     try {
       const dayFilter = meetingInput.filters?.day?.toLowerCase();
-      const type = meetingInput.filters?.type ?? 'all';
+      const type = meetingInput.filters?.type ?? "all";
       const location = meetingInput.filters!.location;
       const directoryDay = resolveDirectoryDay(dayFilter);
 
-      logger.info('Processing meeting search with:', {
+      logger.info("Processing meeting search with:", {
         type,
         dayFilter,
         hasLocation: Boolean(location),
@@ -274,26 +299,36 @@ export const findMeetings = onCall(
       // Provider set requested from the directory (single call, filtered client-side).
       let directoryProviders: ReadonlyArray<string> | null = null;
 
-      if (type === 'AA') {
+      if (type === "AA") {
         firestorePromises.push(
-          getAlcoholicsAnonymousMeetings(location, meetingInput.criteria, dayFilter),
+          getAlcoholicsAnonymousMeetings(
+            location,
+            meetingInput.criteria,
+            dayFilter,
+          ),
         );
-        directoryProviders = ['AA'];
-      } else if (type === 'NA') {
-        directoryProviders = ['NA'];
-      } else if (type === 'Custom') {
-        firestorePromises.push(getCustomMeetings(location, meetingInput.criteria, dayFilter));
-      } else if (type === 'AL-ANON' || type === 'Religious') {
+        directoryProviders = ["AA"];
+      } else if (type === "NA") {
+        directoryProviders = ["NA"];
+      } else if (type === "Custom") {
+        firestorePromises.push(
+          getCustomMeetings(location, meetingInput.criteria, dayFilter),
+        );
+      } else if (type === "AL-ANON" || type === "Religious") {
         // Parity: no source — returns empty.
-      } else if (type === 'Celebrate Recovery') {
+      } else if (type === "Celebrate Recovery") {
         // Parity: standalone "Celebrate Recovery" type currently returns empty.
       } else {
         // type === "all": Firestore AA + Custom, plus directory AA + NA + CR.
         firestorePromises.push(
-          getAlcoholicsAnonymousMeetings(location, meetingInput.criteria, dayFilter),
+          getAlcoholicsAnonymousMeetings(
+            location,
+            meetingInput.criteria,
+            dayFilter,
+          ),
           getCustomMeetings(location, meetingInput.criteria, dayFilter),
         );
-        directoryProviders = ['AA', 'NA', 'CELEBRATE_RECOVERY'];
+        directoryProviders = ["AA", "NA", "CELEBRATE_RECOVERY"];
       }
 
       // Make at most ONE directory call (no type filter — filter by provider
@@ -305,7 +340,8 @@ export const findMeetings = onCall(
               ...(directoryDay !== undefined ? { day: directoryDay } : {}),
               // Without this the directory searches 5 km, narrower than Homegroups' own.
               radiusMeters: Math.min(
-                (meetingInput.criteria?.maxDistance || DEFAULT_MAX_DISTANCE_KM) * 1000,
+                (meetingInput.criteria?.maxDistance ||
+                  DEFAULT_MAX_DISTANCE_KM) * 1000,
                 DIRECTORY_MAX_RADIUS_METERS,
               ),
             },
@@ -319,7 +355,7 @@ export const findMeetings = onCall(
 
       logger.info(
         `Starting to fetch ${firestorePromises.length} Firestore meeting set(s)` +
-          `${directoryProviders ? ' + directory' : ''}`,
+          `${directoryProviders ? " + directory" : ""}`,
       );
       const [firestoreResults, directoryResults] = await Promise.all([
         Promise.allSettled(firestorePromises),
@@ -327,7 +363,9 @@ export const findMeetings = onCall(
       ]);
 
       const ownMeetings = firestoreResults
-        .flatMap((result) => (result.status === 'fulfilled' ? result.value : []))
+        .flatMap((result) =>
+          result.status === "fulfilled" ? result.value : [],
+        )
         .map(serializeMeeting);
       // The directory call isn't filtered by type, so only these rows count as results.
       const allowed = new Set(directoryProviders ?? []);
@@ -338,28 +376,35 @@ export const findMeetings = onCall(
       // One source failing shouldn't cost a person the meetings another one found,
       // but a failure with nothing to show must not look like "no meetings nearby".
       const failedRead = firestoreResults.find(
-        (result): result is PromiseRejectedResult => result.status === 'rejected',
+        (result): result is PromiseRejectedResult =>
+          result.status === "rejected",
       );
       if (failedRead) {
         if (ownMeetings.length === 0 && directoryMeetings.length === 0) {
           throw failedRead.reason;
         }
-        logger.error('A Homegroups meeting read failed; returning what the other sources found', {
-          error: String(failedRead.reason),
-        });
+        logger.error(
+          "A Homegroups meeting read failed; returning what the other sources found",
+          { error: String(failedRead.reason) },
+        );
       }
 
-      const serializedMeetings = mergeDirectoryMeetings(ownMeetings, directoryMeetings);
+      const serializedMeetings = mergeDirectoryMeetings(
+        ownMeetings,
+        directoryMeetings,
+      );
 
-      logger.info('Meetings fetched successfully', {
+      logger.info("Meetings fetched successfully", {
         totalMeetings: serializedMeetings.length,
-        meetingTypes: serializedMeetings.map((m) => m.type).filter((v, i, a) => a.indexOf(v) === i),
+        meetingTypes: serializedMeetings
+          .map((m) => m.type)
+          .filter((v, i, a) => a.indexOf(v) === i),
       });
 
       const endTime = Date.now();
       const duration = (endTime - startTime) / 1000;
 
-      logger.info('Meeting search completed', {
+      logger.info("Meeting search completed", {
         duration: `${duration} seconds`,
         totalMeetings: serializedMeetings.length,
         firstMeeting: serializedMeetings[0]
@@ -376,7 +421,7 @@ export const findMeetings = onCall(
       const errorTime = Date.now();
       const errorDuration = (errorTime - startTime) / 1000;
 
-      logger.error('Error in findMeetings:', {
+      logger.error("Error in findMeetings:", {
         error:
           error instanceof Error
             ? {
@@ -392,8 +437,8 @@ export const findMeetings = onCall(
       });
 
       throw new HttpsError(
-        'internal',
-        'Error retrieving meetings',
+        "internal",
+        "Error retrieving meetings",
         error instanceof Error ? error.message : String(error),
       );
     }

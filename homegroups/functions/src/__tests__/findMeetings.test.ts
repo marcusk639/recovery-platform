@@ -16,7 +16,7 @@ const mockHttpsError = jest.fn().mockImplementation(function (
   Object.setPrototypeOf(this, Error.prototype);
 });
 
-jest.mock('firebase-functions', () => ({
+jest.mock("firebase-functions", () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
   https: {
     onCall: jest.fn().mockImplementation((handler: Function) => handler),
@@ -24,7 +24,7 @@ jest.mock('firebase-functions', () => ({
   },
 }));
 
-jest.mock('firebase-functions/v1', () => ({
+jest.mock("firebase-functions/v1", () => ({
   pubsub: {
     schedule: jest.fn().mockReturnValue({
       timeZone: jest.fn().mockReturnValue({
@@ -39,18 +39,18 @@ jest.mock('firebase-functions/v1', () => ({
   },
 }));
 
-jest.mock('firebase-functions/v2/https', () => ({
+jest.mock("firebase-functions/v2/https", () => ({
   onCall: jest
     .fn()
     .mockImplementation((arg1: unknown, arg2?: unknown) =>
-      typeof arg1 === 'function' ? arg1 : arg2,
+      typeof arg1 === "function" ? arg1 : arg2,
     ),
   HttpsError: mockHttpsError,
 }));
 
 // logger mock comes from functions/jest.setup.ts (shared)
 
-jest.mock('firebase-admin', () => ({
+jest.mock("firebase-admin", () => ({
   apps: [],
   initializeApp: jest.fn(),
   firestore: Object.assign(jest.fn().mockReturnValue({}), {
@@ -60,85 +60,89 @@ jest.mock('firebase-admin', () => ({
   auth: jest.fn().mockReturnValue({}),
 }));
 
-jest.mock('firebase-admin/messaging', () => ({
+jest.mock("firebase-admin/messaging", () => ({
   getMessaging: jest.fn().mockReturnValue({ sendEachForMulticast: jest.fn() }),
 }));
 
-jest.mock('../utils/firebase', () => ({
+jest.mock("../utils/firebase", () => ({
   db: { collection: jest.fn() },
   messaging: { sendEachForMulticast: jest.fn() },
 }));
 
 // Mock the (kept) Firestore-backed meetings utilities. NA/CR external fetchers
 // were removed in B4 — discovery for those now routes through recovery-api.
-jest.mock('../utils/meetings', () => ({
+jest.mock("../utils/meetings", () => ({
   getCustomMeetings: jest.fn().mockResolvedValue([]),
   getAlcoholicsAnonymousMeetings: jest.fn().mockResolvedValue([]),
 }));
 
 // Mock the recovery-api directory client so tests make no real HTTP calls.
-jest.mock('../api/recoveryApi', () => ({
+jest.mock("../api/recoveryApi", () => ({
   fetchDirectoryMeetings: jest.fn().mockResolvedValue([]),
 }));
 
 // defineSecret(...).value() is called in the callable; stub the params module.
-jest.mock('firebase-functions/params', () => ({
-  defineSecret: jest.fn().mockReturnValue({ value: () => 'test-key' }),
+jest.mock("firebase-functions/params", () => ({
+  defineSecret: jest.fn().mockReturnValue({ value: () => "test-key" }),
 }));
 
 // ---- Tests ----
 
-describe('findMeetings auth check (FH-1)', () => {
-  it('throws unauthenticated error when request.auth is null', async () => {
+describe("findMeetings auth check (FH-1)", () => {
+  it("throws unauthenticated error when request.auth is null", async () => {
     jest.resetModules();
-    const { findMeetings } = await import('../callable/findMeetings');
+    const { findMeetings } = await import("../callable/findMeetings");
 
     const unauthRequest = {
       auth: null,
       data: {
         filters: {
-          date: '2026-02-22',
+          date: "2026-02-22",
           location: { lat: 40.7128, lng: -74.006 },
-          type: 'AA' as const,
+          type: "AA" as const,
         },
       },
     };
 
-    await expect((findMeetings as Function)(unauthRequest)).rejects.toMatchObject({
-      code: 'unauthenticated',
+    await expect(
+      (findMeetings as Function)(unauthRequest),
+    ).rejects.toMatchObject({
+      code: "unauthenticated",
     });
   });
 
-  it('throws unauthenticated error when request.auth is undefined', async () => {
+  it("throws unauthenticated error when request.auth is undefined", async () => {
     jest.resetModules();
-    const { findMeetings } = await import('../callable/findMeetings');
+    const { findMeetings } = await import("../callable/findMeetings");
 
     const unauthRequest = {
       auth: undefined,
       data: {
         filters: {
-          date: '2026-02-22',
+          date: "2026-02-22",
           location: { lat: 40.7128, lng: -74.006 },
         },
       },
     };
 
-    await expect((findMeetings as Function)(unauthRequest)).rejects.toMatchObject({
-      code: 'unauthenticated',
+    await expect(
+      (findMeetings as Function)(unauthRequest),
+    ).rejects.toMatchObject({
+      code: "unauthenticated",
     });
   });
 
-  it('proceeds past auth check when request.auth is present', async () => {
+  it("proceeds past auth check when request.auth is present", async () => {
     jest.resetModules();
-    const { findMeetings } = await import('../callable/findMeetings');
+    const { findMeetings } = await import("../callable/findMeetings");
 
     const authRequest = {
-      auth: { uid: 'user-123', token: {} },
+      auth: { uid: "user-123", token: {} },
       data: {
         filters: {
-          date: '2026-02-22',
+          date: "2026-02-22",
           location: { lat: 40.7128, lng: -74.006 },
-          type: 'AA' as const,
+          type: "AA" as const,
         },
       },
     };
@@ -150,57 +154,59 @@ describe('findMeetings auth check (FH-1)', () => {
   });
 });
 
-describe('findMeetings input validation (B1)', () => {
+describe("findMeetings input validation (B1)", () => {
   const authedRequest = (data: unknown) => ({
-    auth: { uid: 'user-123', token: {} },
+    auth: { uid: "user-123", token: {} },
     data,
   });
 
-  it('rejects missing filters with invalid-argument', async () => {
+  it("rejects missing filters with invalid-argument", async () => {
     jest.resetModules();
-    const { findMeetings } = await import('../callable/findMeetings');
+    const { findMeetings } = await import("../callable/findMeetings");
 
-    await expect((findMeetings as Function)(authedRequest({}))).rejects.toMatchObject({
-      code: 'invalid-argument',
+    await expect(
+      (findMeetings as Function)(authedRequest({})),
+    ).rejects.toMatchObject({
+      code: "invalid-argument",
     });
   });
 
-  it('rejects missing filters.location with invalid-argument', async () => {
+  it("rejects missing filters.location with invalid-argument", async () => {
     jest.resetModules();
-    const { findMeetings } = await import('../callable/findMeetings');
+    const { findMeetings } = await import("../callable/findMeetings");
 
     await expect(
-      (findMeetings as Function)(authedRequest({ filters: { type: 'AA' } })),
-    ).rejects.toMatchObject({ code: 'invalid-argument' });
+      (findMeetings as Function)(authedRequest({ filters: { type: "AA" } })),
+    ).rejects.toMatchObject({ code: "invalid-argument" });
   });
 
-  it('rejects non-finite location coordinates with invalid-argument', async () => {
+  it("rejects non-finite location coordinates with invalid-argument", async () => {
     jest.resetModules();
-    const { findMeetings } = await import('../callable/findMeetings');
+    const { findMeetings } = await import("../callable/findMeetings");
 
     await expect(
       (findMeetings as Function)(
         authedRequest({
-          filters: { location: { lat: '40.7', lng: -74.006 } },
+          filters: { location: { lat: "40.7", lng: -74.006 } },
         }),
       ),
-    ).rejects.toMatchObject({ code: 'invalid-argument' });
+    ).rejects.toMatchObject({ code: "invalid-argument" });
   });
 
-  it('rejects NaN location coordinates with invalid-argument', async () => {
+  it("rejects NaN location coordinates with invalid-argument", async () => {
     jest.resetModules();
-    const { findMeetings } = await import('../callable/findMeetings');
+    const { findMeetings } = await import("../callable/findMeetings");
 
     await expect(
       (findMeetings as Function)(
         authedRequest({ filters: { location: { lat: NaN, lng: -74.006 } } }),
       ),
-    ).rejects.toMatchObject({ code: 'invalid-argument' });
+    ).rejects.toMatchObject({ code: "invalid-argument" });
   });
 
-  it('rejects Infinity location coordinates with invalid-argument', async () => {
+  it("rejects Infinity location coordinates with invalid-argument", async () => {
     jest.resetModules();
-    const { findMeetings } = await import('../callable/findMeetings');
+    const { findMeetings } = await import("../callable/findMeetings");
 
     await expect(
       (findMeetings as Function)(
@@ -208,28 +214,28 @@ describe('findMeetings input validation (B1)', () => {
           filters: { location: { lat: 40.7128, lng: Infinity } },
         }),
       ),
-    ).rejects.toMatchObject({ code: 'invalid-argument' });
+    ).rejects.toMatchObject({ code: "invalid-argument" });
   });
 
-  it('rejects an unknown filters.type with invalid-argument', async () => {
+  it("rejects an unknown filters.type with invalid-argument", async () => {
     jest.resetModules();
-    const { findMeetings } = await import('../callable/findMeetings');
+    const { findMeetings } = await import("../callable/findMeetings");
 
     await expect(
       (findMeetings as Function)(
         authedRequest({
           filters: {
             location: { lat: 40.7128, lng: -74.006 },
-            type: 'BOGUS',
+            type: "BOGUS",
           },
         }),
       ),
-    ).rejects.toMatchObject({ code: 'invalid-argument' });
+    ).rejects.toMatchObject({ code: "invalid-argument" });
   });
 
-  it('rejects a non-string filters.day with invalid-argument', async () => {
+  it("rejects a non-string filters.day with invalid-argument", async () => {
     jest.resetModules();
-    const { findMeetings } = await import('../callable/findMeetings');
+    const { findMeetings } = await import("../callable/findMeetings");
 
     await expect(
       (findMeetings as Function)(
@@ -237,12 +243,12 @@ describe('findMeetings input validation (B1)', () => {
           filters: { location: { lat: 40.7128, lng: -74.006 }, day: 5 },
         }),
       ),
-    ).rejects.toMatchObject({ code: 'invalid-argument' });
+    ).rejects.toMatchObject({ code: "invalid-argument" });
   });
 
   it("defaults a missing type to 'all' and returns an array", async () => {
     jest.resetModules();
-    const { findMeetings } = await import('../callable/findMeetings');
+    const { findMeetings } = await import("../callable/findMeetings");
 
     const result = await (findMeetings as Function)(
       authedRequest({
@@ -252,68 +258,70 @@ describe('findMeetings input validation (B1)', () => {
     expect(Array.isArray(result)).toBe(true);
   });
 
-  it('passes valid input through unchanged and returns an array', async () => {
+  it("passes valid input through unchanged and returns an array", async () => {
     jest.resetModules();
-    const { findMeetings } = await import('../callable/findMeetings');
+    const { findMeetings } = await import("../callable/findMeetings");
 
     const result = await (findMeetings as Function)(
       authedRequest({
         filters: {
           location: { lat: 40.7128, lng: -74.006 },
-          day: 'monday',
-          type: 'AA',
+          day: "monday",
+          type: "AA",
         },
-        criteria: { city: 'New York' },
+        criteria: { city: "New York" },
       }),
     );
     expect(Array.isArray(result)).toBe(true);
   });
 });
 
-describe('findMeetings directory orchestration (B4)', () => {
+describe("findMeetings directory orchestration (B4)", () => {
   const authedRequest = (data: unknown) => ({
-    auth: { uid: 'user-123', token: { email: 'u@example.com' } },
+    auth: { uid: "user-123", token: { email: "u@example.com" } },
     data,
   });
 
   const loadMocks = async () => {
-    const meetings = await import('../utils/meetings');
-    const recoveryApi = await import('../api/recoveryApi');
+    const meetings = await import("../utils/meetings");
+    const recoveryApi = await import("../api/recoveryApi");
     return {
-      getAlcoholicsAnonymousMeetings: meetings.getAlcoholicsAnonymousMeetings as jest.Mock,
+      getAlcoholicsAnonymousMeetings:
+        meetings.getAlcoholicsAnonymousMeetings as jest.Mock,
       getCustomMeetings: meetings.getCustomMeetings as jest.Mock,
       fetchDirectoryMeetings: recoveryApi.fetchDirectoryMeetings as jest.Mock,
     };
   };
 
   const dirMeeting = (overrides: Record<string, unknown> = {}) => ({
-    id: 'dir-1',
-    source: 'external',
-    provider: 'NA',
-    name: 'Directory NA Group',
+    id: "dir-1",
+    source: "external",
+    provider: "NA",
+    name: "Directory NA Group",
     day: 1,
-    time: '19:30',
+    time: "19:30",
     location: {
-      address: '123 Main St',
-      city: 'Austin',
-      state: 'TX',
-      zip: '78701',
+      address: "123 Main St",
+      city: "Austin",
+      state: "TX",
+      zip: "78701",
       lat: 30.267,
       lng: -97.743,
-      geohash: 'abc',
+      geohash: "abc",
     },
     ...overrides,
   });
 
-  it('NA type calls fetchDirectoryMeetings and NOT the Firestore AA fetcher', async () => {
+  it("NA type calls fetchDirectoryMeetings and NOT the Firestore AA fetcher", async () => {
     jest.resetModules();
-    const { getAlcoholicsAnonymousMeetings, fetchDirectoryMeetings } = await loadMocks();
+    const { getAlcoholicsAnonymousMeetings, fetchDirectoryMeetings } =
+      await loadMocks();
     fetchDirectoryMeetings.mockResolvedValueOnce([]);
-    const { findMeetings } = await import('../callable/findMeetings');
+    const { findMeetings } = await import("../callable/findMeetings");
 
     await (findMeetings as Function)(
       authedRequest({
-        filters: { location: { lat: 30.2, lng: -97.7 }, type: 'NA' },
+        filters: { location: { lat: 30.2, lng: -97.7 }, type: "NA" },
       }),
     );
 
@@ -323,214 +331,243 @@ describe('findMeetings directory orchestration (B4)', () => {
 
   it("AA type reads Homegroups' own AA meetings and the directory's", async () => {
     jest.resetModules();
-    const { getAlcoholicsAnonymousMeetings, fetchDirectoryMeetings } = await loadMocks();
+    const { getAlcoholicsAnonymousMeetings, fetchDirectoryMeetings } =
+      await loadMocks();
     getAlcoholicsAnonymousMeetings.mockResolvedValueOnce([
       {
-        id: 'own-1',
-        name: 'Own Group',
-        type: 'AA',
-        day: 'monday',
-        time: '07:00',
+        id: "own-1",
+        name: "Own Group",
+        type: "AA",
+        day: "monday",
+        time: "07:00",
       },
     ]);
     fetchDirectoryMeetings.mockResolvedValueOnce([
-      dirMeeting({ id: 'aa-1', provider: 'AA', name: 'Directory AA' }),
-      dirMeeting({ id: 'na-1', provider: 'NA', name: 'Directory NA' }), // filtered OUT
+      dirMeeting({ id: "aa-1", provider: "AA", name: "Directory AA" }),
+      dirMeeting({ id: "na-1", provider: "NA", name: "Directory NA" }), // filtered OUT
     ]);
-    const { findMeetings } = await import('../callable/findMeetings');
+    const { findMeetings } = await import("../callable/findMeetings");
 
     const result = await (findMeetings as Function)(
       authedRequest({
-        filters: { location: { lat: 30.2, lng: -97.7 }, type: 'AA' },
+        filters: { location: { lat: 30.2, lng: -97.7 }, type: "AA" },
       }),
     );
 
     const ids = (result as Array<{ id: string }>).map((m) => m.id).sort();
-    expect(ids).toEqual(['aa-1', 'own-1']);
+    expect(ids).toEqual(["aa-1", "own-1"]);
   });
 
-  it('lists a meeting once when it is in both Homegroups and the directory', async () => {
+  it("lists a meeting once when it is in both Homegroups and the directory", async () => {
     jest.resetModules();
-    const { getAlcoholicsAnonymousMeetings, fetchDirectoryMeetings } = await loadMocks();
+    const { getAlcoholicsAnonymousMeetings, fetchDirectoryMeetings } =
+      await loadMocks();
     getAlcoholicsAnonymousMeetings.mockResolvedValueOnce([
       {
-        id: 'own-1',
-        name: 'Old Name',
-        type: 'AA',
-        apiId: '77',
-        addedBy: 'system',
+        id: "own-1",
+        name: "Old Name",
+        type: "AA",
+        apiId: "77",
+        addedBy: "system",
       },
     ]);
     fetchDirectoryMeetings.mockResolvedValueOnce([
       dirMeeting({
-        id: 'aa-1',
-        provider: 'AA',
-        name: 'New Name',
-        externalId: '77',
+        id: "aa-1",
+        provider: "AA",
+        name: "New Name",
+        externalId: "77",
       }),
     ]);
-    const { findMeetings } = await import('../callable/findMeetings');
+    const { findMeetings } = await import("../callable/findMeetings");
 
     const result = (await (findMeetings as Function)(
       authedRequest({
-        filters: { location: { lat: 30.2, lng: -97.7 }, type: 'AA' },
+        filters: { location: { lat: 30.2, lng: -97.7 }, type: "AA" },
       }),
     )) as Array<{ name: string }>;
 
-    expect(result.map((m) => m.name)).toEqual(['New Name']);
+    expect(result.map((m) => m.name)).toEqual(["New Name"]);
   });
 
   it("returns the directory's meetings when Homegroups' own read fails", async () => {
     jest.resetModules();
-    const { getAlcoholicsAnonymousMeetings, fetchDirectoryMeetings } = await loadMocks();
-    getAlcoholicsAnonymousMeetings.mockRejectedValueOnce(new Error('quota exceeded'));
+    const { getAlcoholicsAnonymousMeetings, fetchDirectoryMeetings } =
+      await loadMocks();
+    getAlcoholicsAnonymousMeetings.mockRejectedValueOnce(
+      new Error("quota exceeded"),
+    );
     fetchDirectoryMeetings.mockResolvedValueOnce([
-      dirMeeting({ id: 'aa-1', provider: 'AA', name: 'Directory AA' }),
+      dirMeeting({ id: "aa-1", provider: "AA", name: "Directory AA" }),
     ]);
-    const { findMeetings } = await import('../callable/findMeetings');
+    const { findMeetings } = await import("../callable/findMeetings");
 
     const result = (await (findMeetings as Function)(
       authedRequest({
-        filters: { location: { lat: 30.2, lng: -97.7 }, type: 'AA' },
+        filters: { location: { lat: 30.2, lng: -97.7 }, type: "AA" },
       }),
     )) as Array<{ id: string }>;
 
-    expect(result.map((m) => m.id)).toEqual(['aa-1']);
+    expect(result.map((m) => m.id)).toEqual(["aa-1"]);
   });
 
   it("fails the search when Homegroups' own read fails and the directory has nothing", async () => {
     jest.resetModules();
-    const { getAlcoholicsAnonymousMeetings, fetchDirectoryMeetings } = await loadMocks();
-    getAlcoholicsAnonymousMeetings.mockRejectedValueOnce(new Error('quota exceeded'));
+    const { getAlcoholicsAnonymousMeetings, fetchDirectoryMeetings } =
+      await loadMocks();
+    getAlcoholicsAnonymousMeetings.mockRejectedValueOnce(
+      new Error("quota exceeded"),
+    );
     fetchDirectoryMeetings.mockResolvedValueOnce([]);
-    const { findMeetings } = await import('../callable/findMeetings');
+    const { findMeetings } = await import("../callable/findMeetings");
 
     await expect(
       (findMeetings as Function)(
         authedRequest({
-          filters: { location: { lat: 30.2, lng: -97.7 }, type: 'AA' },
+          filters: { location: { lat: 30.2, lng: -97.7 }, type: "AA" },
         }),
       ),
-    ).rejects.toMatchObject({ code: 'internal' });
+    ).rejects.toMatchObject({ code: "internal" });
   });
 
   it("fails an AA search when Homegroups' read fails and the directory only has other types nearby", async () => {
     jest.resetModules();
-    const { getAlcoholicsAnonymousMeetings, fetchDirectoryMeetings } = await loadMocks();
-    getAlcoholicsAnonymousMeetings.mockRejectedValueOnce(new Error('quota exceeded'));
-    fetchDirectoryMeetings.mockResolvedValueOnce([dirMeeting({ id: 'na-1', provider: 'NA' })]);
-    const { findMeetings } = await import('../callable/findMeetings');
+    const { getAlcoholicsAnonymousMeetings, fetchDirectoryMeetings } =
+      await loadMocks();
+    getAlcoholicsAnonymousMeetings.mockRejectedValueOnce(
+      new Error("quota exceeded"),
+    );
+    fetchDirectoryMeetings.mockResolvedValueOnce([
+      dirMeeting({ id: "na-1", provider: "NA" }),
+    ]);
+    const { findMeetings } = await import("../callable/findMeetings");
 
     await expect(
       (findMeetings as Function)(
         authedRequest({
-          filters: { location: { lat: 30.2, lng: -97.7 }, type: 'AA' },
+          filters: { location: { lat: 30.2, lng: -97.7 }, type: "AA" },
         }),
       ),
-    ).rejects.toMatchObject({ code: 'internal' });
+    ).rejects.toMatchObject({ code: "internal" });
   });
 
   it("keeps an 'all' search's other results when one read fails and the directory has nothing", async () => {
     jest.resetModules();
-    const { getAlcoholicsAnonymousMeetings, getCustomMeetings, fetchDirectoryMeetings } =
-      await loadMocks();
-    getAlcoholicsAnonymousMeetings.mockRejectedValueOnce(new Error('quota exceeded'));
+    const {
+      getAlcoholicsAnonymousMeetings,
+      getCustomMeetings,
+      fetchDirectoryMeetings,
+    } = await loadMocks();
+    getAlcoholicsAnonymousMeetings.mockRejectedValueOnce(
+      new Error("quota exceeded"),
+    );
     getCustomMeetings.mockResolvedValueOnce([
-      { id: 'custom-1', name: 'Member Meeting', type: 'Custom' },
+      { id: "custom-1", name: "Member Meeting", type: "Custom" },
     ]);
     fetchDirectoryMeetings.mockResolvedValueOnce([]);
-    const { findMeetings } = await import('../callable/findMeetings');
+    const { findMeetings } = await import("../callable/findMeetings");
 
     const result = (await (findMeetings as Function)(
       authedRequest({ filters: { location: { lat: 30.2, lng: -97.7 } } }),
     )) as Array<{ id: string }>;
 
-    expect(result.map((m) => m.id)).toEqual(['custom-1']);
+    expect(result.map((m) => m.id)).toEqual(["custom-1"]);
   });
 
   it("fails an 'all' search when every read fails and the directory has nothing", async () => {
     jest.resetModules();
-    const { getAlcoholicsAnonymousMeetings, getCustomMeetings, fetchDirectoryMeetings } =
-      await loadMocks();
-    getAlcoholicsAnonymousMeetings.mockRejectedValueOnce(new Error('quota exceeded'));
-    getCustomMeetings.mockRejectedValueOnce(new Error('quota exceeded'));
+    const {
+      getAlcoholicsAnonymousMeetings,
+      getCustomMeetings,
+      fetchDirectoryMeetings,
+    } = await loadMocks();
+    getAlcoholicsAnonymousMeetings.mockRejectedValueOnce(
+      new Error("quota exceeded"),
+    );
+    getCustomMeetings.mockRejectedValueOnce(new Error("quota exceeded"));
     fetchDirectoryMeetings.mockResolvedValueOnce([]);
-    const { findMeetings } = await import('../callable/findMeetings');
+    const { findMeetings } = await import("../callable/findMeetings");
 
     await expect(
       (findMeetings as Function)(
         authedRequest({ filters: { location: { lat: 30.2, lng: -97.7 } } }),
       ),
-    ).rejects.toMatchObject({ code: 'internal' });
+    ).rejects.toMatchObject({ code: "internal" });
   });
 
   it.each([
-    ['the default 10 km', undefined, 10_000],
-    ['the distance the person chose', 25, 25_000],
+    ["the default 10 km", undefined, 10_000],
+    ["the distance the person chose", 25, 25_000],
     ["the directory's 100 km maximum", 500, 100_000],
-  ])('searches the directory at %s', async (_name, maxDistance, radiusMeters) => {
-    jest.resetModules();
-    const { fetchDirectoryMeetings } = await loadMocks();
-    const { findMeetings } = await import('../callable/findMeetings');
+  ])(
+    "searches the directory at %s",
+    async (_name, maxDistance, radiusMeters) => {
+      jest.resetModules();
+      const { fetchDirectoryMeetings } = await loadMocks();
+      const { findMeetings } = await import("../callable/findMeetings");
 
-    await (findMeetings as Function)(
-      authedRequest({
-        filters: { location: { lat: 30.2, lng: -97.7 }, type: 'NA' },
-        ...(maxDistance ? { criteria: { maxDistance } } : {}),
-      }),
-    );
+      await (findMeetings as Function)(
+        authedRequest({
+          filters: { location: { lat: 30.2, lng: -97.7 }, type: "NA" },
+          ...(maxDistance ? { criteria: { maxDistance } } : {}),
+        }),
+      );
 
-    expect(fetchDirectoryMeetings.mock.calls.at(-1)?.[0]).toMatchObject({
-      radiusMeters,
-    });
-  });
+      expect(fetchDirectoryMeetings.mock.calls.at(-1)?.[0]).toMatchObject({
+        radiusMeters,
+      });
+    },
+  );
 
   it("keeps only the expected providers from the directory for type 'all'", async () => {
     jest.resetModules();
-    const { getAlcoholicsAnonymousMeetings, getCustomMeetings, fetchDirectoryMeetings } =
-      await loadMocks();
+    const {
+      getAlcoholicsAnonymousMeetings,
+      getCustomMeetings,
+      fetchDirectoryMeetings,
+    } = await loadMocks();
     getAlcoholicsAnonymousMeetings.mockResolvedValueOnce([]);
     getCustomMeetings.mockResolvedValueOnce([]);
     fetchDirectoryMeetings.mockResolvedValueOnce([
-      dirMeeting({ id: 'na-1', provider: 'NA' }),
-      dirMeeting({ id: 'cr-1', provider: 'CELEBRATE_RECOVERY' }),
-      dirMeeting({ id: 'aa-1', provider: 'AA' }),
-      dirMeeting({ id: 'custom-1', provider: 'CUSTOM' }), // must be filtered OUT
+      dirMeeting({ id: "na-1", provider: "NA" }),
+      dirMeeting({ id: "cr-1", provider: "CELEBRATE_RECOVERY" }),
+      dirMeeting({ id: "aa-1", provider: "AA" }),
+      dirMeeting({ id: "custom-1", provider: "CUSTOM" }), // must be filtered OUT
     ]);
-    const { findMeetings } = await import('../callable/findMeetings');
+    const { findMeetings } = await import("../callable/findMeetings");
 
     const result = await (findMeetings as Function)(
       authedRequest({ filters: { location: { lat: 30.2, lng: -97.7 } } }),
     );
 
     const ids = (result as Array<{ id: string }>).map((m) => m.id).sort();
-    expect(ids).toEqual(['aa-1', 'cr-1', 'na-1']);
+    expect(ids).toEqual(["aa-1", "cr-1", "na-1"]);
     expect(fetchDirectoryMeetings).toHaveBeenCalledTimes(1);
   });
 
-  it('maps a directory meeting into the SerializedMeeting shape', async () => {
+  it("maps a directory meeting into the SerializedMeeting shape", async () => {
     jest.resetModules();
     const { fetchDirectoryMeetings } = await loadMocks();
     fetchDirectoryMeetings.mockResolvedValueOnce([
-      dirMeeting({ id: 'na-9', provider: 'NA', day: 1, name: 'Mapped NA' }),
+      dirMeeting({ id: "na-9", provider: "NA", day: 1, name: "Mapped NA" }),
     ]);
-    const { findMeetings } = await import('../callable/findMeetings');
+    const { findMeetings } = await import("../callable/findMeetings");
 
     const result = (await (findMeetings as Function)(
       authedRequest({
-        filters: { location: { lat: 30.2, lng: -97.7 }, type: 'NA' },
+        filters: { location: { lat: 30.2, lng: -97.7 }, type: "NA" },
       }),
     )) as Array<Record<string, unknown>>;
 
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({
-      id: 'na-9',
-      name: 'Mapped NA',
-      type: 'NA',
-      day: 'monday',
+      id: "na-9",
+      name: "Mapped NA",
+      type: "NA",
+      day: "monday",
       verified: false,
-      createdAt: '',
-      updatedAt: '',
+      createdAt: "",
+      updatedAt: "",
     });
   });
 });
