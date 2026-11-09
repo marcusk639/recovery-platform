@@ -38,13 +38,10 @@ describe('mapNaMeeting', () => {
     expect(m!.format).toBe('Open, Discussion');
   });
 
-  it('canonicalizes the weekday string to an integer day 0–6', () => {
+  it('canonicalizes the weekday to a lowercase day name', () => {
     const m = mapNaMeeting(sampleDoc);
 
-    expect(m!.day).toBe(2); // tuesday
-    expect(Number.isInteger(m!.day)).toBe(true);
-    expect(m!.day).toBeGreaterThanOrEqual(0);
-    expect(m!.day).toBeLessThanOrEqual(6);
+    expect(m!.day).toBe('tuesday');
   });
 
   it('canonicalizes time to "HH:mm"', () => {

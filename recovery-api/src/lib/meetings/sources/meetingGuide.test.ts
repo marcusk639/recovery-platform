@@ -143,12 +143,11 @@ describe('fetchAAMeetings', () => {
     expect(m.externalId).toBe('12345');
   });
 
-  it('produces a canonical integer day 0–6 and "HH:mm" time', async () => {
+  it('produces a day name and an "HH:mm" time', async () => {
     const fetchFn = makeFetch({ meetings: [sampleMeeting] });
     const [m] = await fetchAAMeetings(0, 0, { fetchFn });
 
-    expect(m.day).toBe(2);
-    expect(Number.isInteger(m.day)).toBe(true);
+    expect(m.day).toBe('tuesday');
     expect(m.time).toBe('07:00');
   });
 

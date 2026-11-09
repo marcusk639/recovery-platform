@@ -23,7 +23,7 @@ import { geohashForLocation } from 'geofire-common';
  */
 export const GEOHASH_PRECISION = 10;
 
-// 0 = Sunday .. 6 = Saturday (JS getDay convention; matches homegroups daysOfWeek).
+// 0 = Sunday .. 6 = Saturday (JS getDay convention; matches both products' daysOfWeek).
 const DAYS = [
   'sunday',
   'monday',
@@ -33,6 +33,19 @@ const DAYS = [
   'friday',
   'saturday',
 ] as const;
+
+/** How the directory stores a meeting's day: a lowercase weekday name. */
+export type DayName = (typeof DAYS)[number];
+
+export const DAY_NAMES: readonly DayName[] = DAYS;
+
+/**
+ * Canonical stored day: the lowercase weekday name. Accepts every form
+ * normalizeDay does, and throws on the same bad input.
+ */
+export function toDayName(input: number | string): DayName {
+  return DAYS[normalizeDay(input)];
+}
 
 /**
  * Id for a BMLT meeting, from the region and the meeting's id on that region's server.

@@ -5,7 +5,7 @@ import { geohashQueryBounds, distanceBetween } from 'geofire-common';
 import { z } from 'zod';
 import { requireServiceAuth, ServiceAuthContext } from '../middleware/auth';
 import { RECOVERY_PLATFORM_API_KEY } from '../config';
-import { normalizeDay } from '../lib/meetings/identity';
+import { toDayName, type DayName } from '../lib/meetings/identity';
 import { hashUid } from '../lib/hash';
 import type { DirectoryMeeting } from '../entities/DirectoryMeeting';
 
@@ -40,10 +40,24 @@ const FindMeetingsSchema = z.object({
     lat: z.number().min(-90).max(90),
     lng: z.number().min(-180).max(180),
   }),
-  day: z.number().int().min(0).max(6).optional(),
+  // A day name, or the older integer 0–6 (0 = Sunday) that deployed clients still send.
+  day: z
+    .union([z.number(), z.string()])
+    .optional()
+    .refine((day) => day === undefined || storedDay(day) !== null, 'Unrecognized day'),
   type: z.string().min(1).max(64).optional(),
   radiusMeters: z.number().positive().max(MAX_RADIUS_METERS).optional(),
 });
+
+/** A day in either stored form as a name, or null when it isn't a day at all. */
+function storedDay(day: unknown): DayName | null {
+  if (typeof day !== 'number' && typeof day !== 'string') return null;
+  try {
+    return toDayName(day);
+  } catch {
+    return null;
+  }
+}
 
 export interface FindMeetingsDeps {
   db: FirebaseFirestore.Firestore;
@@ -92,7 +106,7 @@ export async function handleFindMeetings(
   const { db } = deps;
   const center: [number, number] = [parsed.location.lat, parsed.location.lng];
   const radiusMeters = parsed.radiusMeters ?? DEFAULT_RADIUS_METERS;
-  const dayFilter = parsed.day !== undefined ? normalizeDay(parsed.day) : undefined;
+  const dayFilter = parsed.day !== undefined ? storedDay(parsed.day) : undefined;
 
   // geohashQueryBounds → one range query per bound on location.geohash. Mirrors
   // findMeetingsByLocation.ts' >= / <= geohash range, but using the canonical
@@ -111,6 +125,9 @@ export async function handleFindMeetings(
 
       // Writers keep the id only as the document key, and clients need it to open a meeting.
       const meeting = { ...doc.data(), id: doc.id } as DirectoryMeeting;
+      // Callers always get a name, including for a row still stored as a number.
+      const day = storedDay(meeting.day);
+      if (day) meeting.day = day;
       const lat = meeting.location?.lat;
       const lng = meeting.location?.lng;
       if (typeof lat !== 'number' || typeof lng !== 'number') continue;
@@ -118,7 +135,7 @@ export async function handleFindMeetings(
       const distanceKm = distanceBetween([lat, lng], center);
       if (distanceKm * 1000 > radiusMeters) continue;
 
-      if (dayFilter !== undefined && meeting.day !== dayFilter) continue;
+      if (dayFilter !== undefined && day !== dayFilter) continue;
       if (parsed.type !== undefined && meeting.type !== parsed.type) continue;
 
       meetings.push(meeting);
@@ -151,7 +168,7 @@ async function writeAuditRow(
   await db.collection('directoryMeetingRequests').add({
     appId: context.appId,
     uidHash: hashUid(context.uid),
-    day: parsed.day ?? null,
+    day: parsed.day === undefined ? null : storedDay(parsed.day),
     type: parsed.type ?? null,
     lat: coarsen(parsed.location.lat),
     lng: coarsen(parsed.location.lng),

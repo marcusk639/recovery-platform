@@ -26,7 +26,7 @@ function sourceMeeting(over: Partial<DirectoryMeeting> = {}): DirectoryMeeting {
     source: 'external',
     provider: 'AA',
     name: 'Sunrise Group',
-    day: 2,
+    day: 'tuesday',
     time: '07:00',
     location: { lat: 40, lng: -100, geohash: 'abc' },
     ...over,
@@ -97,7 +97,7 @@ function makeFetchFn(meetings: Array<Record<string, unknown>>) {
 const AA_RECORD = {
   id: 99,
   name: 'Sunrise Group',
-  day: 2,
+  day: 'tuesday',
   time: '07:00:00',
   latitude: '40.0',
   longitude: '-100.0',

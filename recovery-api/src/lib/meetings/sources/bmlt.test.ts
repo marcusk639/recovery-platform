@@ -36,9 +36,9 @@ const row = (over: Record<string, unknown> = {}) => ({
 });
 
 test('maps BMLT weekday 1-7 to directory day 0-6', () => {
-  expect(mapBmltMeeting(row({ weekday_tinyint: '1' }), REGION)!.day).toBe(0);
-  expect(mapBmltMeeting(row({ weekday_tinyint: '2' }), REGION)!.day).toBe(1);
-  expect(mapBmltMeeting(row({ weekday_tinyint: '7' }), REGION)!.day).toBe(6);
+  expect(mapBmltMeeting(row({ weekday_tinyint: '1' }), REGION)!.day).toBe('sunday');
+  expect(mapBmltMeeting(row({ weekday_tinyint: '2' }), REGION)!.day).toBe('monday');
+  expect(mapBmltMeeting(row({ weekday_tinyint: '7' }), REGION)!.day).toBe('saturday');
   expect(mapBmltMeeting(row({ weekday_tinyint: '0' }), REGION)).toBeNull();
   expect(mapBmltMeeting(row({ weekday_tinyint: '8' }), REGION)).toBeNull();
 });

@@ -1,5 +1,5 @@
 import type { DirectoryMeeting, DirectoryProvider } from '../../../entities/DirectoryMeeting';
-import { directoryGeohash, directoryMeetingId, normalizeDay, normalizeTime } from '../identity';
+import { directoryGeohash, directoryMeetingId, normalizeTime, toDayName } from '../identity';
 
 /**
  * Maps a meeting doc from a product's Firestore into the canonical directory
@@ -47,7 +47,7 @@ export function mapSnapshotMeeting(
     if (name.trim() === '' || rawTime.trim() === '') return null;
     if (typeof rawDay !== 'string' && typeof rawDay !== 'number') return null;
 
-    const day = normalizeDay(rawDay);
+    const day = toDayName(rawDay);
     const time = normalizeTime(readTime(rawTime));
 
     const lat = typeof doc.lat === 'number' ? doc.lat : NaN;

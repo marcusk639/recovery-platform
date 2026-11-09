@@ -4,7 +4,7 @@ import { handleFindMeetings } from './findMeetings';
 interface Row {
   id: string;
   provider: string;
-  day: number;
+  day: string;
   location: { lat: number; lng: number; geohash: string };
 }
 
@@ -12,7 +12,7 @@ function row(id: string, lat: number, lng: number): Row {
   return {
     id,
     provider: 'AA',
-    day: 1,
+    day: 'monday',
     location: { lat, lng, geohash: geohashForLocation([lat, lng], 10) },
   };
 }
