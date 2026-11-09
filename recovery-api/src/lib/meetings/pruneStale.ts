@@ -2,6 +2,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions/v2';
 import type { DirectoryMeeting, DirectoryProvider } from '../../entities/DirectoryMeeting';
 import { isInsideGrid } from './ingest';
+import type { PrunableProvider } from './sweepHealth';
 
 /**
  * Stale-prune horizon. External docs not re-seen within this many days are
@@ -86,13 +87,13 @@ async function deleteStaleRows(
  */
 export async function pruneStale(
   deps: PruneDeps,
-  providers: readonly DirectoryProvider[],
-  sweepStartedAt?: number,
+  providers: readonly PrunableProvider[],
+  sweepStartedAt: number,
 ): Promise<PruneResult> {
   const { db: database } = deps;
   const now = deps.now ? deps.now() : new Date();
   const horizonMs = now.getTime() - STALE_PRUNE_DAYS * 24 * 60 * 60 * 1000;
-  const cutoff = Timestamp.fromMillis(Math.min(horizonMs, sweepStartedAt ?? horizonMs));
+  const cutoff = Timestamp.fromMillis(Math.min(horizonMs, sweepStartedAt));
 
   const result: PruneResult = { deleted: 0, scanned: 0, blocked: [] };
 

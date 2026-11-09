@@ -1,9 +1,4 @@
-import {
-  addCellToTally,
-  MAX_SOURCE_FAILURE_RATE,
-  providersSafeToPrune,
-  type SweepTally,
-} from './sweepHealth';
+import { addCellToTally, providersSafeToPrune, type SweepTally } from './sweepHealth';
 
 const TOTAL_CELLS = 1000;
 
@@ -49,13 +44,12 @@ describe('providersSafeToPrune', () => {
     expect(providersSafeToPrune(failing, TOTAL_CELLS)).toEqual(['CELEBRATE_RECOVERY']);
   });
 
-  it('allows failures up to the rate limit and excludes anything above it', () => {
-    const atLimit = Math.floor(TOTAL_CELLS * MAX_SOURCE_FAILURE_RATE);
-    const allowed = tally({ AA: { attempted: TOTAL_CELLS, failed: atLimit, records: 500 } });
-    const denied = tally({ AA: { attempted: TOTAL_CELLS, failed: atLimit + 1, records: 500 } });
+  it('excludes a source with even one failed cell, because rows there went unseen', () => {
+    const clean = tally({ AA: { attempted: TOTAL_CELLS, failed: 0, records: 500 } });
+    const oneFailed = tally({ AA: { attempted: TOTAL_CELLS, failed: 1, records: 500 } });
 
-    expect(providersSafeToPrune(allowed, TOTAL_CELLS)).toContain('AA');
-    expect(providersSafeToPrune(denied, TOTAL_CELLS)).not.toContain('AA');
+    expect(providersSafeToPrune(clean, TOTAL_CELLS)).toContain('AA');
+    expect(providersSafeToPrune(oneFailed, TOTAL_CELLS)).not.toContain('AA');
   });
 
   it('excludes a source that did not observe the whole grid (cycle resumed mid-grid)', () => {

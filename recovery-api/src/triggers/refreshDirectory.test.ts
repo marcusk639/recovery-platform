@@ -243,7 +243,7 @@ describe('pruneStale', () => {
       ...freshRows('AA', 20),
     });
 
-    const result = await pruneStale({ db, now: NOW }, ['AA']);
+    const result = await pruneStale({ db, now: NOW }, ['AA'], NOW().getTime());
 
     expect(result.deleted).toBe(1);
     expect(store.has('directoryMeetings/stale-ext')).toBe(false);
@@ -269,7 +269,7 @@ describe('pruneStale', () => {
       ...freshRows('AA', 20),
     });
 
-    const result = await pruneStale({ db, now: NOW }, ['AA']);
+    const result = await pruneStale({ db, now: NOW }, ['AA'], NOW().getTime());
 
     // Only the external one is deleted.
     expect(result.deleted).toBe(1);
@@ -278,8 +278,25 @@ describe('pruneStale', () => {
     expect(store.has('directoryMeetings/stale-app')).toBe(true);
   });
 
-  it('uses the STALE_PRUNE_DAYS horizon for the cutoff', () => {
-    // Sanity-check the constant is a positive horizon (sized over multiple cycles).
-    expect(STALE_PRUNE_DAYS).toBeGreaterThanOrEqual(REFRESH_CYCLE_RUNS);
+  it('prunes a row just past the STALE_PRUNE_DAYS horizon and keeps one just inside it', async () => {
+    const seenDaysAgo = (days: number) => ({
+      toMillis: () => NOW().getTime() - days * 86_400_000,
+    });
+    const row = (days: number) => ({
+      source: 'external',
+      provider: 'AA',
+      location: IN_GRID,
+      lastSeenAt: seenDaysAgo(days),
+    });
+    const { db, store } = makeDb({
+      'directoryMeetings/past': row(STALE_PRUNE_DAYS + 1),
+      'directoryMeetings/inside': row(STALE_PRUNE_DAYS - 1),
+      ...freshRows('AA', 20),
+    });
+
+    await pruneStale({ db, now: NOW }, ['AA'], NOW().getTime());
+
+    expect(store.has('directoryMeetings/past')).toBe(false);
+    expect(store.has('directoryMeetings/inside')).toBe(true);
   });
 });

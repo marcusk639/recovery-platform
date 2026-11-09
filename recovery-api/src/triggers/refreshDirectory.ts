@@ -175,9 +175,8 @@ export async function refreshSlice(deps: RefreshDeps): Promise<RefreshSliceResul
   // cell where one source fetcher failed (ingestGridCell now returns a non-zero
   // fetchErrors but still upserts the healthy source rather than throwing). This
   // is an INTENTIONAL design choice: we do NOT retry/re-pin a partially-failed
-  // cell. A transient source outage self-heals on the NEXT full sweep, and the
-  // stale-prune horizon (STALE_PRUNE_DAYS) plus lastSeenAt re-stamping eventually
-  // reconcile any rows missed during the outage. Pinning the cursor on partial
+  // cell. Rows missed there stay as they are until someone runs another sweep, and
+  // a failed cell also blocks the prune for that sweep. Pinning the cursor on partial
   // failures would risk stalling the whole grid behind one flaky source.
   const cursorAfterRun = finished ? nextCursor : reached;
   await writeState(
@@ -199,7 +198,9 @@ export async function refreshSlice(deps: RefreshDeps): Promise<RefreshSliceResul
 
   if (closedCycle) {
     const providers = sweepStartedAt === undefined ? [] : providersSafeToPrune(sweep, totalCells);
-    result.prune = { providers, ...(await pruneStale(deps, providers, sweepStartedAt)) };
+    // With no recorded start there are no providers, so the fallback deletes nothing.
+    const prune = await pruneStale(deps, providers, sweepStartedAt ?? clock().getTime());
+    result.prune = { providers, ...prune };
   }
 
   return result;

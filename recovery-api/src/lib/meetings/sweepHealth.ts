@@ -21,13 +21,12 @@ export type SweepTally = Partial<Record<IngestSourceName, SourceTally>>;
  * Providers with a live source. NA and CUSTOM are deliberately absent: nothing
  * re-sees them, so they can never be judged stale.
  */
-const SOURCE_PROVIDERS: Record<IngestSourceName, DirectoryProvider> = {
+export type PrunableProvider = Extract<DirectoryProvider, 'AA' | 'CELEBRATE_RECOVERY'>;
+
+const SOURCE_PROVIDERS: Record<IngestSourceName, PrunableProvider> = {
   AA: 'AA',
   CelebrateRecovery: 'CELEBRATE_RECOVERY',
 };
-
-/** Tolerates scattered per-cell errors without treating an outage as healthy. */
-export const MAX_SOURCE_FAILURE_RATE = 0.05;
 
 export function addCellToTally(tally: SweepTally, results: SourceResult[]): SweepTally {
   const next: SweepTally = { ...tally };
@@ -42,14 +41,19 @@ export function addCellToTally(tally: SweepTally, results: SourceResult[]): Swee
   return next;
 }
 
-export function providersSafeToPrune(tally: SweepTally, totalCells: number): DirectoryProvider[] {
+/**
+ * Any failed cell rules a provider out. Rows in that cell went unseen, and with sweeps
+ * run by hand weeks apart they are likely already past the prune horizon, so they would
+ * be deleted while the source still lists them. Re-run the sweep to prune.
+ */
+export function providersSafeToPrune(tally: SweepTally, totalCells: number): PrunableProvider[] {
   const sources = Object.keys(SOURCE_PROVIDERS) as IngestSourceName[];
   return sources
     .filter((source) => {
       const result = tally[source];
       if (!result || result.attempted < totalCells) return false;
       if (result.records === 0) return false;
-      return result.failed / result.attempted <= MAX_SOURCE_FAILURE_RATE;
+      return result.failed === 0;
     })
     .map((source) => SOURCE_PROVIDERS[source]);
 }
