@@ -105,4 +105,17 @@ describe("mapDirectoryToSerialized", () => {
     expect(m.link).toBe("https://zoom.us/j/1");
     expect(m.onlineNotes).toBe("passcode 123");
   });
+
+  it("carries the date an imported listing dates from", () => {
+    const m = mapDirectoryToSerialized({ ...base, dataAsOf: "2023-03-19" });
+    expect(m.dataAsOf).toBe("2023-03-19");
+  });
+
+  it.each([[null], [undefined]])(
+    "leaves dataAsOf out for a live listing (%j)",
+    (dataAsOf) => {
+      const m = mapDirectoryToSerialized({ ...base, dataAsOf });
+      expect(m.dataAsOf).toBeUndefined();
+    },
+  );
 });

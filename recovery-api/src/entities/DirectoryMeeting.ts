@@ -56,7 +56,8 @@ export interface DirectoryMeeting {
   sourceRegion?: string;
   /**
    * "YYYY-MM-DD" the source last confirmed this row. Clients show it so a person
-   * can tell how old a listing is.
+   * can tell an old listing from a current one. Null once a live sweep has re-seen
+   * a snapshot row. NA rows keep a date, because they update only when run by hand.
    */
   dataAsOf?: string | null;
   /** Last time the refresh job re-ingested/updated this record. */

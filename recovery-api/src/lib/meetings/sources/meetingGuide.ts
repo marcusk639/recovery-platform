@@ -17,6 +17,9 @@ import { directoryGeohash, directoryMeetingId, normalizeDay, normalizeTime } fro
 const AA_API = (lat: number, lng: number): string =>
   `https://api.meetingguide.org/app/v2/request?latitude=${lat}&longitude=${lng}`;
 
+/** A hung request must fail its cell, or it would stall the sweep until the function dies. */
+const REQUEST_TIMEOUT_MS = 15_000;
+
 /** Minimal shape of a Meeting Guide meeting record we consume. */
 interface MeetingGuideMeeting {
   id: number;
@@ -57,14 +60,18 @@ export async function fetchAAMeetings(
 ): Promise<DirectoryMeeting[]> {
   const fetchFn = deps.fetchFn ?? fetch;
 
-  const res = await fetchFn(AA_API(lat, lng));
+  const res = await fetchFn(AA_API(lat, lng), { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
   if (!res.ok) {
     throw new Error(`Meeting Guide request failed: ${res.status}`);
   }
-  const body = (await res.json()) as MeetingGuideResponse;
-  const meetings = body?.meetings ?? [];
+  const body = (await res.json()) as MeetingGuideResponse | null;
+  // A 200 with the wrong body is a failure, not an empty cell: the prune guard
+  // relies on the difference.
+  if (!Array.isArray(body?.meetings)) {
+    throw new Error('Meeting Guide returned an unexpected response');
+  }
 
-  return meetings
+  return body.meetings
     .map((m) => mapMeetingGuideMeeting(m))
     .filter((m): m is DirectoryMeeting => m !== null);
 }
