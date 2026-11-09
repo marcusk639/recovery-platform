@@ -36,7 +36,7 @@
 | Idempotent        | upsert by deterministic id/geohash (`lib/meetings/identity.ts`) — safe to re-run                                                          | ingest pattern                                          |
 | NA source         | **products' `na-meetings` Firestore** (NOT recovery-platform, NOT a live API)                                                             | `scripts/migrateNaMeetings.ts` header                   |
 | Scheduled refresh | **None.** Removed by owner decision, 2026-11-08                                                                                           | `src/noScheduledJobs.test.ts`                           |
-| npm scripts       | `npm run seed` → `node lib/scripts/seedDirectory.js`; `npm run migrate:na` → `node lib/scripts/migrateNaMeetings.js` (added this session) | `recovery-api/package.json`                             |
+| npm scripts       | `npm run seed` → `node lib/scripts/seedDirectory.js`; `npm run import:snapshot` → `node lib/scripts/importMeetingSnapshot.js` | `recovery-api/package.json`                             |
 
 **Two things the cron does NOT do (why the manual seed matters):**
 
@@ -47,7 +47,7 @@
 
 ## Resolved blocker — NA migration source wiring
 
-Applies only to the superseded `migrate:na`. Step 3's `import:snapshot` reads the right project.
+Applies only to the superseded NA migration, whose `npm run migrate:na` script is removed and whose entry point now refuses to run. Step 3's `import:snapshot` reads the right project.
 
 `scripts/migrateNaMeetings.ts` `main()` currently calls
 `runMigration({ sourceDb: db, destDb: db })` where `db` is the **default app**
@@ -86,7 +86,7 @@ export GOOGLE_MAPS_API_KEY="<your maps key>"   # same value set in Secret Manage
 # 1c. Record the BEFORE count (expect ~0 / empty at launch)
 #     Firebase console → Firestore → directoryMeetings  (or a quick admin query)
 
-# 1d. Build once (npm run seed/migrate:na also build, but confirm clean first)
+# 1d. Build once (npm run seed also builds, but confirm clean first)
 npm run build
 ```
 
