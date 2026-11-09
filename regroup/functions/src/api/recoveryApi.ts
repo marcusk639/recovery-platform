@@ -21,8 +21,8 @@ const REGROUP_APP_ID = "phoenix-cleanhouse";
 
 export interface DirectorySearchInput {
   location: Location;
-  /** Canonical day-of-week 0–6 (0 = Sunday). Omit to search all days. */
-  day?: number;
+  /** Lowercase day name, e.g. "monday". Omit to search all days. */
+  day?: string;
   /** Free-form type filter applied by recovery-api. */
   type?: string;
   radiusMeters?: number;
