@@ -203,7 +203,7 @@ npm run sync:na -- --apply                       # everything
 
 ## Meeting days are stored as names
 
-`directoryMeetings.day` is a lowercase day name such as `tuesday`. Rows written before 2026-11-09 hold an integer 0–6 (0 = Sunday) until converted. `findMeetings` accepts either in a request and always returns names.
+`directoryMeetings.day` is a lowercase day name such as `tuesday`. Rows written before 2026-11-09 hold an integer 0–6 (0 = Sunday) until converted. `findMeetings` accepts either in a request and returns each day as stored, so a reader must handle both until the conversion in step 3.
 
 Deploy and convert in this order, or the apps show directory meetings with no day:
 
