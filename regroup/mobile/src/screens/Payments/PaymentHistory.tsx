@@ -15,7 +15,7 @@ import ScreenHeader from '../../components/screen-header';
 import { RatsText } from '../../components/rats-text';
 import RatsButton from '../../components/rats-button/rats-button';
 
-import { listPayments, PaymentRecord } from '../../services/payments';
+import { getPaymentHistory, RentPayment } from '../../services/payments';
 import { exportPaymentHistoryCSV } from '../../services/reportExport';
 import { logException } from '../../util/logging';
 import {
@@ -43,7 +43,7 @@ const PaymentHistory: React.FC<Props> = ({ navigation }) => {
   const { guest } = useSelectedGuest();
   const { house } = useSelectedHouse();
 
-  const [payments, setPayments] = useState<PaymentRecord[]>([]);
+  const [payments, setPayments] = useState<RentPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -74,7 +74,11 @@ const PaymentHistory: React.FC<Props> = ({ navigation }) => {
         return;
       }
       try {
-        const data = await listPayments(guest.id, house.id);
+        // Firestore is the history of record (owner decision D4), so this and Pay
+        // Rent's history agree. An intake record with no account has no payments.
+        const data = guest.userId
+          ? await getPaymentHistory({ houseId: house.id, guestUserId: guest.userId })
+          : [];
         setPayments(data);
       } catch (err: any) {
         logException(err);
@@ -85,10 +89,11 @@ const PaymentHistory: React.FC<Props> = ({ navigation }) => {
     };
 
     fetchPayments();
-  }, [guest?.id, house?.id]);
+  }, [guest?.id, guest?.userId, house?.id]);
 
-  const renderItem = useCallback(({ item }: { item: PaymentRecord }) => {
-    const succeeded = item.status === 'succeeded';
+  const renderItem = useCallback(({ item }: { item: RentPayment }) => {
+    // Paid outside the app is still paid; Firestore records can carry this status.
+    const succeeded = item.status === 'succeeded' || item.status === 'resolved_offline';
     const createdMs = toDateSafe(item.createdAt)?.getTime();
     const isStale =
       item.status === 'pending' &&
@@ -107,7 +112,7 @@ const PaymentHistory: React.FC<Props> = ({ navigation }) => {
           <View style={{ flex: 1 }}>
             <RatsText
               translate={false}
-              text={item.description}
+              text={item.description || 'Payment'}
               style={styles.description}
             />
             <RatsText
@@ -133,7 +138,7 @@ const PaymentHistory: React.FC<Props> = ({ navigation }) => {
                 ]}>
                 <RatsText
                   translate={false}
-                  text={item.status.toUpperCase()}
+                  text={item.status.replace('_', ' ').toUpperCase()}
                   style={styles.statusText}
                 />
               </View>

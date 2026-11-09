@@ -9,6 +9,7 @@ jest.mock('@react-native-vector-icons/fontawesome5/static', () => {
 });
 
 jest.mock('../../../services/payments', () => ({
+  getPaymentHistory: jest.fn().mockResolvedValue([]),
   listPayments: jest.fn().mockResolvedValue([]),
 }));
 
@@ -35,6 +36,7 @@ jest.mock('../../../hooks/useSelectedGuest', () => ({
   useSelectedGuest: () => ({
     guest: {
       id: 'guest-1',
+      userId: 'user-1',
       displayName: 'Alice Smith',
       firstName: 'Alice',
       lastName: 'Smith',
@@ -107,8 +109,41 @@ const _fakeNavigation: any = { goBack: jest.fn(), navigate: jest.fn() };
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe('PaymentHistory', () => {
+  it('reads Firestore payments, the history of record, not Stripe charges', async () => {
+    (paymentsService.getPaymentHistory as jest.Mock).mockResolvedValue([_succeeded]);
+    (paymentsService.listPayments as jest.Mock).mockClear();
+    const { findByTestId } = render(<PaymentHistory navigation={_fakeNavigation} />);
+    await findByTestId('payment-row-pay-001');
+    expect(paymentsService.getPaymentHistory).toHaveBeenCalledWith({
+      houseId: 'house-1',
+      guestUserId: 'user-1',
+    });
+    expect(paymentsService.listPayments).not.toHaveBeenCalled();
+  });
+
+  it('shows a payment resolved offline as such, with no description needed', async () => {
+    (paymentsService.getPaymentHistory as jest.Mock).mockResolvedValue([
+      { ..._succeeded, id: 'pay-off', status: 'resolved_offline', description: undefined },
+    ]);
+    const { findByText } = render(<PaymentHistory navigation={_fakeNavigation} />);
+    await findByText('RESOLVED OFFLINE');
+    await findByText('Payment');
+  });
+
+  it('renders a Firestore Timestamp createdAt', async () => {
+    (paymentsService.getPaymentHistory as jest.Mock).mockResolvedValue([
+      {
+        ..._succeeded,
+        id: 'pay-ts',
+        createdAt: { toDate: () => new Date('2026-11-03T12:00:00Z') },
+      },
+    ]);
+    const { findByTestId } = render(<PaymentHistory navigation={_fakeNavigation} />);
+    await findByTestId('payment-row-pay-ts');
+  });
+
   it('renders a succeeded row without a stale-clock icon', async () => {
-    (paymentsService.listPayments as jest.Mock).mockResolvedValue([_succeeded]);
+    (paymentsService.getPaymentHistory as jest.Mock).mockResolvedValue([_succeeded]);
     const { findByTestId, queryByTestId } = render(
       <PaymentHistory navigation={_fakeNavigation} />,
     );
@@ -117,7 +152,7 @@ describe('PaymentHistory', () => {
   });
 
   it('renders a recent-pending row without a stale-clock icon', async () => {
-    (paymentsService.listPayments as jest.Mock).mockResolvedValue([
+    (paymentsService.getPaymentHistory as jest.Mock).mockResolvedValue([
       _recentPending,
     ]);
     const { findByTestId, queryByTestId } = render(
@@ -128,7 +163,7 @@ describe('PaymentHistory', () => {
   });
 
   it('renders a stale-pending row WITH a stale-clock icon', async () => {
-    (paymentsService.listPayments as jest.Mock).mockResolvedValue([
+    (paymentsService.getPaymentHistory as jest.Mock).mockResolvedValue([
       _stalePending,
     ]);
     const { findByTestId } = render(
