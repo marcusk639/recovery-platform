@@ -11,11 +11,14 @@ http
   .createServer((request, response) => {
     const url = new URL(request.url, 'http://127.0.0.1');
     const file = path.join(dist, url.pathname === '/' ? 'index.html' : path.normalize(url.pathname));
-    if (!file.startsWith(dist) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
+    const isFile = file.startsWith(dist) && fs.existsSync(file) && fs.statSync(file).isFile();
+    // Portal URLs like /houses/abc/residents have no extension and load the app.
+    if (!isFile && path.extname(url.pathname)) {
       response.writeHead(404).end();
       return;
     }
-    response.writeHead(200, { 'content-type': types[path.extname(file)] ?? 'application/octet-stream' });
-    fs.createReadStream(file).pipe(response);
+    const served = isFile ? file : path.join(dist, 'index.html');
+    response.writeHead(200, { 'content-type': types[path.extname(served)] ?? 'application/octet-stream' });
+    fs.createReadStream(served).pipe(response);
   })
   .listen(5199, '127.0.0.1');

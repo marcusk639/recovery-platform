@@ -12,6 +12,8 @@ import store from '@mobile/state/store';
 import { ThemeProvider } from '@mobile/styles/theme';
 import { AlertHost } from '../adapter/alert/AlertHost';
 import { Alert } from '../adapter/react-native';
+import { trackNavigationState } from './current-house';
+import { linkingConfig } from './urls';
 
 function Themed({ children }: { children: ReactNode }) {
   const theme = useSelector((state: any) => state.theme.theme);
@@ -25,7 +27,10 @@ export const Providers = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>
       <NavigationContainer
         ref={navigationRef}
-        onUnhandledAction={() => Alert.alert("This isn't available on the web yet")}>
+        linking={linkingConfig(location.origin)}
+        documentTitle={{ enabled: false }}
+        onStateChange={trackNavigationState}
+        onUnhandledAction={() => Alert.alert("This isn't available on the web yet. Please use the Regroup app on your phone.")}>
         <RatsKeyboardProvider>
           <SafeAreaProvider>
             <Themed>

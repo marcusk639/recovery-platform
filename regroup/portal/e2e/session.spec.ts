@@ -48,7 +48,7 @@ test('the sign-in button cannot double-submit', async ({ page }) => {
     if (r.url().includes('signInWithPassword')) signIns += 1;
   });
   await page.locator('#sign-in-submit').dblclick();
-  await expect(page.locator('#nav-residents')).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('#nav-home')).toBeVisible({ timeout: 20_000 });
   expect(signIns).toBe(1);
 });
 

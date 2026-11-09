@@ -1,4 +1,3 @@
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Routes } from '@mobile/navigation/types';
 import Disputes from '@mobile/screens/Disputes/Disputes';
 import DocumentListScreen from '@mobile/screens/Documents/DocumentListScreen';
@@ -30,10 +29,16 @@ import UserInfo from '@mobile/screens/Profile/UserInfo';
 import IntakeFormScreen from '@mobile/screens/ResidentIntake/IntakeFormScreen';
 import StaffNotesFeed from '@mobile/screens/StaffNotes/StaffNotesFeed';
 
-const Stack = createNativeStackNavigator<any>();
+import { Home } from './Home';
+import { createSingleScreenNavigator } from './single-screen-navigator';
+import { HOME_ROUTE, NOT_FOUND_ROUTE } from './urls';
+
+const Stack = createSingleScreenNavigator() as any;
 
 export const Screens = () => (
-  <Stack.Navigator screenOptions={{ headerShown: false }}>
+  <Stack.Navigator>
+    <Stack.Screen name={HOME_ROUTE} component={Home} />
+    <Stack.Screen name={NOT_FOUND_ROUTE} component={Home} />
     <Stack.Screen name={Routes.GuestList} component={GuestList} />
     <Stack.Screen name={Routes.HouseDisputes} component={Disputes} />
     <Stack.Screen name={Routes.PaymentDashboard} component={PaymentDashboard} />

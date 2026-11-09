@@ -34,14 +34,18 @@ export async function signInAsRaw(page: Page, email: string): Promise<void> {
 
 export async function signInAs(page: Page, account: Account): Promise<void> {
   const { email, house } = ACCOUNTS[account];
-  await page.goto(`/?house=${house}`);
+  await page.goto(`/houses/${house}/residents`);
   await fillSignIn(page, email);
   await expect(page.locator('#nav-residents')).toBeVisible({ timeout: 20_000 });
 }
 
-export async function revokeClaimsAndRefresh(page: Page, account: Account): Promise<void> {
+export async function clearClaims(account: Account): Promise<void> {
   const user = await getAuth().getUserByEmail(ACCOUNTS[account].email);
   await getAuth().setCustomUserClaims(user.uid, {});
+}
+
+export async function revokeClaimsAndRefresh(page: Page, account: Account): Promise<void> {
+  await clearClaims(account);
   await page.evaluate(() => (window as any).__portalTest.refreshToken());
 }
 

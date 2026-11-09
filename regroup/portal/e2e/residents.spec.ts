@@ -29,11 +29,11 @@ test('reloading mid-session does not leave a blank page', async ({ page }) => {
   await expect(page.locator('#nav-residents')).toBeVisible({ timeout: 15_000 });
 });
 
-test('a link to a route the portal lacks fails visibly', async ({ page }) => {
+test('a screen missing from the portal says to use the phone', async ({ page }) => {
   await signInAs(page, 'oxford-operator');
   await page.click('#nav-house-summary');
   await page.getByText('Oxford House Hub').click();
-  await expect(page.getByRole('alertdialog')).toContainText("isn't available on the web yet");
+  await expect(page.getByRole('alertdialog')).toContainText(/use the Regroup app on your phone/i);
 });
 
 test('records the time to the sign-in form for the go/no-go report', async ({ page }) => {

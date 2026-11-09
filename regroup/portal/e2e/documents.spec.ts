@@ -7,7 +7,9 @@ test.beforeEach(() => reseed());
 
 async function open(page: Page) {
   await signInAs(page, 'manager');
-  await page.click('#nav-documents');
+  await page.evaluate(() =>
+    (window as any).__portalTest.open('Documents', { houseId: 'test-house-123', guestId: 'guest-a', title: 'Documents' }),
+  );
   await expect(page.getByTestId('upload-document-button')).toBeVisible();
 }
 
