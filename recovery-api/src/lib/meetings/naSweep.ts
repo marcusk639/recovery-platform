@@ -70,14 +70,15 @@ interface RawRegion {
 }
 
 export async function fetchBmltRegions(deps: NaSweepDeps): Promise<BmltRegion[]> {
-  let body: unknown;
-  try {
-    body = await getJson(`${AGGREGATOR_BASE}/api/v1/rootservers`, deps);
-  } catch (err) {
-    throw new Error(`Could not read the BMLT region list: ${String(err)}`, { cause: err });
-  }
+  let reason = 'it looks wrong';
+  const body = await getJson(`${AGGREGATOR_BASE}/api/v1/rootservers`, deps).catch(
+    (err: unknown) => {
+      reason = String(err);
+      return null;
+    },
+  );
   if (!Array.isArray(body) || body.length < MIN_EXPECTED_REGIONS) {
-    throw new Error('The BMLT region list looks wrong, so nothing was changed');
+    throw new Error(`Could not use the BMLT region list (${reason}), so nothing was changed`);
   }
   return (body as RawRegion[]).map((region) => ({
     id: Number(region.id),
