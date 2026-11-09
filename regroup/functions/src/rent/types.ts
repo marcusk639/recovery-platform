@@ -24,3 +24,26 @@ export interface CustomRent {
   amountCents: Cents;
   frequency: RentFrequency;
 }
+
+/** One period's charge: [from, through] inclusive, prorated over daysInPeriod. */
+export interface PlannedCharge {
+  from: string;
+  through: string;
+  daysCovered: number;
+  daysInPeriod: number;
+  amountCents: Cents;
+}
+
+/** What decides the first chargeable day of a resident. */
+export interface ChargeFromFacts {
+  /** House-local date charging turned on. */
+  startDate: string;
+  startedAtMs: number;
+  /** When this record joined the house: its createTime, or the move time. */
+  houseJoinedAtMs: number;
+  /** House-local move-in date. */
+  joinDate: string;
+  /** House-local import date, for residents added by guest import. */
+  importedOn: string | null;
+  frequency: RentFrequency;
+}
