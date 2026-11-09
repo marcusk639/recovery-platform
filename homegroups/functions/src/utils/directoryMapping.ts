@@ -49,5 +49,6 @@ export function mapDirectoryToSerialized(
     link: meeting.link,
     onlineNotes: meeting.onlineNotes,
     ...(meeting.dataAsOf ? { dataAsOf: meeting.dataAsOf } : {}),
+    ...(meeting.externalId ? { apiId: meeting.externalId } : {}),
   };
 }

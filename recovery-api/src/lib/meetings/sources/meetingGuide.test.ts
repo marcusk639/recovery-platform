@@ -1,5 +1,80 @@
-import { fetchAAMeetings } from './meetingGuide';
+import { fetchAAMeetings, mapMeetingGuideMeeting } from './meetingGuide';
 import { directoryMeetingId } from '../identity';
+
+describe('mapMeetingGuideMeeting', () => {
+  it('keeps the timezone, which day and time mean nothing without', () => {
+    const mapped = mapMeetingGuideMeeting({
+      id: 1,
+      name: 'Sunrise Group',
+      day: 2,
+      time: '07:00:00',
+      latitude: '30.2',
+      longitude: '-97.7',
+      timezone: 'America/Chicago',
+    });
+    expect(mapped?.timezone).toBe('America/Chicago');
+  });
+
+  const base = {
+    id: 1,
+    name: 'Sunrise Group',
+    day: 2,
+    time: '07:00:00',
+    latitude: '30.2',
+    longitude: '-97.7',
+  };
+
+  it('drops the " - suffix" from names, as Homegroups does, so both hash to one document', () => {
+    const mapped = mapMeetingGuideMeeting({ ...base, name: 'Sunrise Group - Online' });
+    expect(mapped?.name).toBe('Sunrise Group');
+    expect(mapped?.id).toBe(mapMeetingGuideMeeting(base)?.id);
+  });
+
+  it('leaves a hyphenated name alone', () => {
+    const mapped = mapMeetingGuideMeeting({ ...base, name: 'Step-by-Step' });
+    expect(mapped?.name).toBe('Step-by-Step');
+  });
+
+  it('fills format, which is the field Homegroups shows', () => {
+    const mapped = mapMeetingGuideMeeting({ ...base, types: 'Open,Discussion' });
+    expect(mapped?.format).toBe('Open,Discussion');
+  });
+
+  it('treats a dial-in meeting with no link as online and keeps its notes', () => {
+    const mapped = mapMeetingGuideMeeting({
+      ...base,
+      conference_phone: '+15551234567',
+      conference_phone_notes: 'Passcode 1234',
+    });
+    expect(mapped?.online).toBe(true);
+    expect(mapped?.onlineNotes).toBe('Passcode 1234');
+  });
+
+  it('prefers the link notes when a meeting has both', () => {
+    const mapped = mapMeetingGuideMeeting({
+      ...base,
+      conference_url_notes: 'Link notes',
+      conference_phone_notes: 'Phone notes',
+    });
+    expect(mapped?.onlineNotes).toBe('Link notes');
+  });
+
+  it('never copies contact or payment fields into the directory', () => {
+    const mapped = mapMeetingGuideMeeting({
+      id: 1,
+      name: 'Sunrise Group',
+      day: 2,
+      time: '07:00:00',
+      latitude: '30.2',
+      longitude: '-97.7',
+      contacts: [{ email: 'person@example.com' }],
+      venmo: '@someone',
+      entity: { email: 'group@example.com' },
+      notes: 'Call Pat',
+    } as never);
+    expect(JSON.stringify(mapped)).not.toMatch(/example\.com|@someone|Call Pat/);
+  });
+});
 
 // Hand-built Meeting Guide payload — mirrors the AAMeetingResponse shape from
 // homegroups api.ts (day = integer 0–6, time = "HH:mm:ss", lat/lng strings).

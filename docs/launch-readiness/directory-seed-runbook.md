@@ -13,6 +13,7 @@
 
 ## Corrections, 2026-11-08 (these override the sections below)
 
+- **Refresh AA manually:** `MEETING_GUIDE_API_KEY=... npm run sync:meetings` sweeps all US land and writes `directoryMeetings`. It is a dry run until you add `-- --apply`.
 - **Meeting Guide no longer works keyless.** `api.meetingguide.org/app/v2/request` returns 401 from both local machines and Cloud Functions, so the step 2 seed gets no AA rows. It has never been run on `recovery-platform-e6cb3`.
 - **Celebrate Recovery is failing too:** `locator.crgroups.info` has an expired TLS certificate. Don't disable certificate checks to get around it.
 - **The snapshot import exists but has not been run:** `npm run import:snapshot` (step 3) replaces `migrate:na`. Each row carries `dataAsOf`, which the apps show as "Listing data from Mar 2023". The owner is holding both imports as of 2026-11-08: AA until a live sync is proven, NA pending a decision on data last written in March 2023.
@@ -126,7 +127,7 @@ npm run import:snapshot -- --provider AA --apply
 # Final log: "importMeetingSnapshot: complete {...}"
 ```
 
-Check `read`, `skippedUnmappable`, `skippedLive` and the `dataAsOf` range before applying. A row with no `dataAsOf` counts as live, including one from the old `migrate:na`, so it is skipped and shows no age label; delete such rows first if you want them imported. Re-running is safe: rows a live source has confirmed and app-owned rows are never overwritten. Homegroups' own `na-meetings` is empty, so NA comes only from Regroup. Homegroups serves AA from its own Firestore, so imported AA rows reach Regroup only.
+Check `read`, `skippedUnmappable`, `skippedLive` and the `dataAsOf` range before applying. A row with no `dataAsOf` counts as live, including one from the old `migrate:na`, so it is skipped and shows no age label; delete such rows first if you want them imported. Re-running is safe: rows a live source has confirmed and app-owned rows are never overwritten. Homegroups' own `na-meetings` is empty, so NA comes only from Regroup. Homegroups serves AA from its own Firestore plus the directory, listing a meeting found in both once.
 
 The build rewrites the tracked `recovery-api/lib/`. Don't commit that.
 

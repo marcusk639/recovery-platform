@@ -21,8 +21,12 @@ const AA_API = (lat: number, lng: number): string =>
 const REQUEST_TIMEOUT_MS = 15_000;
 
 /** Minimal shape of a Meeting Guide meeting record we consume. */
-interface MeetingGuideMeeting {
+export interface MeetingGuideMeeting {
   id: number;
+  country?: string;
+  /** Kilometers from the search point. */
+  distance?: number | string;
+  timezone?: string;
   name: string;
   day: number;
   time: string;
@@ -37,6 +41,8 @@ interface MeetingGuideMeeting {
   postal_code?: string;
   conference_url?: string;
   conference_url_notes?: string;
+  conference_phone?: string;
+  conference_phone_notes?: string;
 }
 
 interface MeetingGuideResponse {
@@ -76,8 +82,19 @@ export async function fetchAAMeetings(
     .filter((m): m is DirectoryMeeting => m !== null);
 }
 
-function mapMeetingGuideMeeting(m: MeetingGuideMeeting): DirectoryMeeting | null {
+/**
+ * Sites often append " - Online" or similar to a name. Homegroups strips it when it
+ * stores a meeting (scripts/shared-utils.ts), so doing the same here gives a live row
+ * and an imported row of one meeting the same document id.
+ */
+function cleanMeetingName(name: string): string {
+  const dash = name.indexOf(' - ');
+  return (dash > 0 ? name.slice(0, dash) : name).trim();
+}
+
+export function mapMeetingGuideMeeting(m: MeetingGuideMeeting): DirectoryMeeting | null {
   try {
+    const name = cleanMeetingName(m.name);
     const day = normalizeDay(m.day);
     // Meeting Guide returns "HH:mm:ss" or "HH:mm"; normalizeTime accepts both.
     const time = normalizeTime(m.time);
@@ -90,7 +107,7 @@ function mapMeetingGuideMeeting(m: MeetingGuideMeeting): DirectoryMeeting | null
     const link = m.conference_url ?? '';
     const formattedAddress = m.formatted_address ?? m.address ?? '';
     const id = directoryMeetingId({
-      name: m.name,
+      name,
       day,
       time,
       link,
@@ -102,7 +119,7 @@ function mapMeetingGuideMeeting(m: MeetingGuideMeeting): DirectoryMeeting | null
       source: 'external',
       externalId: String(m.id),
       provider: 'AA',
-      name: m.name,
+      name,
       day,
       time,
       location: {
@@ -114,7 +131,10 @@ function mapMeetingGuideMeeting(m: MeetingGuideMeeting): DirectoryMeeting | null
       // fetcher returns the public, source-derived slice only.
     } as DirectoryMeeting;
 
-    if (m.types) meeting.type = m.types;
+    if (m.types) {
+      meeting.type = m.types;
+      meeting.format = m.types;
+    }
     if (m.address) meeting.location.address = m.address;
     if (m.city) meeting.location.city = m.city;
     if (m.state) meeting.location.state = m.state;
@@ -123,7 +143,10 @@ function mapMeetingGuideMeeting(m: MeetingGuideMeeting): DirectoryMeeting | null
       meeting.online = true;
       meeting.link = m.conference_url;
     }
-    if (m.conference_url_notes) meeting.onlineNotes = m.conference_url_notes;
+    if (m.conference_phone) meeting.online = true;
+    const onlineNotes = m.conference_url_notes || m.conference_phone_notes;
+    if (onlineNotes) meeting.onlineNotes = onlineNotes;
+    if (m.timezone) meeting.timezone = m.timezone;
 
     return meeting;
   } catch {

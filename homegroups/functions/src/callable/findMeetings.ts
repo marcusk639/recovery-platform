@@ -11,6 +11,7 @@ import {
 } from "../utils/meetings"; // Assuming meetings utils are one level up
 import { Meeting, MeetingSearchCriteria } from "../entities/Meeting";
 import { fetchDirectoryMeetings } from "../api/recoveryApi";
+import { mergeDirectoryMeetings } from "../utils/mergeDirectoryMeetings";
 import { mapDirectoryToSerialized } from "../utils/directoryMapping";
 import { daysOfWeek } from "../utils/date";
 import { requireAuth } from "../utils/callableWrapper";
@@ -259,6 +260,10 @@ function resolveDirectoryDay(dayFilter?: string): number | undefined {
   return undefined;
 }
 
+const DEFAULT_MAX_DISTANCE_KM = 10;
+/** recovery-api rejects a larger radius. */
+const DIRECTORY_MAX_RADIUS_METERS = 100_000;
+
 export const findMeetings = onCall(
   { secrets: [RECOVERY_PLATFORM_API_KEY] },
   async (request: CallableRequest) => {
@@ -286,9 +291,9 @@ export const findMeetings = onCall(
         criteria: meetingInput.criteria,
       });
 
-      // Firestore-backed (homegroups-owned) promises, keyed by source. AA and
-      // Custom remain native Firestore reads; NA and CR now route through the
-      // recovery-api shared directory.
+      // Firestore-backed (homegroups-owned) promises, keyed by source. AA reads both
+      // Homegroups' own meetings and the shared directory, and Custom stays native.
+      // NA and CR come only from the directory.
       const firestorePromises: Promise<Meeting[]>[] = [];
 
       // Provider set requested from the directory (single call, filtered client-side).
@@ -302,6 +307,7 @@ export const findMeetings = onCall(
             dayFilter,
           ),
         );
+        directoryProviders = ["AA"];
       } else if (type === "NA") {
         directoryProviders = ["NA"];
       } else if (type === "Custom") {
@@ -313,7 +319,7 @@ export const findMeetings = onCall(
       } else if (type === "Celebrate Recovery") {
         // Parity: standalone "Celebrate Recovery" type currently returns empty.
       } else {
-        // type === "all": Firestore AA + Custom, plus directory NA + CR.
+        // type === "all": Firestore AA + Custom, plus directory AA + NA + CR.
         firestorePromises.push(
           getAlcoholicsAnonymousMeetings(
             location,
@@ -322,7 +328,7 @@ export const findMeetings = onCall(
           ),
           getCustomMeetings(location, meetingInput.criteria, dayFilter),
         );
-        directoryProviders = ["NA", "CELEBRATE_RECOVERY"];
+        directoryProviders = ["AA", "NA", "CELEBRATE_RECOVERY"];
       }
 
       // Make at most ONE directory call (no type filter — filter by provider
@@ -332,6 +338,12 @@ export const findMeetings = onCall(
             {
               location: { lat: location.lat, lng: location.lng },
               ...(directoryDay !== undefined ? { day: directoryDay } : {}),
+              // Without this the directory searches 5 km, narrower than Homegroups' own.
+              radiusMeters: Math.min(
+                (meetingInput.criteria?.maxDistance ||
+                  DEFAULT_MAX_DISTANCE_KM) * 1000,
+                DIRECTORY_MAX_RADIUS_METERS,
+              ),
             },
             {
               uid,
@@ -350,20 +362,14 @@ export const findMeetings = onCall(
         directoryPromise,
       ]);
 
-      const serializedMeetings: SerializedMeeting[] = [];
-      for (const meetingSet of firestoreResults) {
-        for (const meeting of meetingSet) {
-          serializedMeetings.push(serializeMeeting(meeting));
-        }
-      }
-      if (directoryProviders) {
-        const allowed = new Set(directoryProviders);
-        for (const dirMeeting of directoryResults) {
-          if (allowed.has(dirMeeting.provider)) {
-            serializedMeetings.push(mapDirectoryToSerialized(dirMeeting));
-          }
-        }
-      }
+      const ownMeetings = firestoreResults.flat().map(serializeMeeting);
+      const allowed = new Set(directoryProviders ?? []);
+      const serializedMeetings = mergeDirectoryMeetings(
+        ownMeetings,
+        directoryResults
+          .filter((dirMeeting) => allowed.has(dirMeeting.provider))
+          .map(mapDirectoryToSerialized),
+      );
 
       logger.info("Meetings fetched successfully", {
         totalMeetings: serializedMeetings.length,
