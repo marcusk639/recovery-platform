@@ -9,7 +9,7 @@ const SCREENS: [string, object?][] = [
   ['HouseList'],
   ['HouseSummary'],
   ['GuestList'],
-  ['GuestOverview'],
+  ['GuestOverview', { houseId: HOUSE, guestId: GUEST }],
   ['GuestInfo'],
   ['EditUserInfo'],
   ['Beds'],

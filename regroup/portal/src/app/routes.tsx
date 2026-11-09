@@ -21,7 +21,6 @@ import GuestWorkSummary from '@mobile/screens/GuestWorkOverview/GuestWorkSummary
 import Issues from '@mobile/screens/Issues/Issues';
 import { PaymentHistory } from '@mobile/screens/Payments';
 import EditUserInfoForm from '@mobile/screens/Profile/EditUserInfoForm';
-import GuestHome from '@mobile/screens/Profile/GuestHome';
 import UserInfo from '@mobile/screens/Profile/UserInfo';
 import IntakeFormScreen from '@mobile/screens/ResidentIntake/IntakeFormScreen';
 import StaffNotesFeed from '@mobile/screens/StaffNotes/StaffNotesFeed';
@@ -30,6 +29,7 @@ import { Home } from './Home';
 import { isRouteReleased, SHOW_LATER_AREAS } from './houses/areas';
 import { HousePage } from './houses/HousePage';
 import { ResidentList } from './residents/ResidentList';
+import { ResidentRecord } from './residents/ResidentRecord';
 import { ScreenFrame } from './ScreenFrame';
 import { createSingleScreenNavigator } from './single-screen-navigator';
 import { HOME_ROUTE, NOT_FOUND_ROUTE } from './urls';
@@ -62,7 +62,7 @@ export const Screens = () => (
     <Stack.Screen name={Routes.ApplicationList} component={ApplicationListScreen} />
     <Stack.Screen name={Routes.ApplicationDetail} component={ApplicationDetailScreen} />
     <Stack.Screen name={Routes.ResidentIntake} component={IntakeFormScreen} />
-    <Stack.Screen name={Routes.GuestOverview} component={GuestHome} />
+    <Stack.Screen name={Routes.GuestOverview} component={ResidentRecord} />
     <Stack.Screen name={Routes.GuestInfo} component={UserInfo} />
     <Stack.Screen name={Routes.EditUserInfo} component={EditUserInfoForm} />
     <Stack.Screen name={Routes.StaffNotes} component={StaffNotesFeed} />

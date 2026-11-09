@@ -3,6 +3,7 @@ import ErrorBoundary from '@mobile/components/ErrorBoundary';
 import { Breadcrumb } from './Breadcrumb';
 import { guestIdForState, houseIdForState } from './current-house';
 import { HouseTabs } from './HouseTabs';
+import { ResidentGate } from './residents/ResidentGate';
 import { HouseGate } from './HouseGate';
 import { SubscriptionCheck } from './SubscriptionCheck';
 import { useRoleUnknown } from './useHouseAccess';
@@ -14,10 +15,18 @@ const column = { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column'
 
 export function ScreenFrame({ state, routeKey, children }: { state: any; routeKey: string; children: ReactNode }) {
   const houseId = houseIdForState(state);
+  const guestId = guestIdForState(state);
   const routeName: string = state.routes[state.index]?.name ?? '';
+  const boundary = <ErrorBoundary key={routeKey}>{children}</ErrorBoundary>;
   const screen = (
     <div data-testid="screen-body" style={column}>
-      <ErrorBoundary key={routeKey}>{children}</ErrorBoundary>
+      {houseId && guestId ? (
+        <ResidentGate houseId={houseId} guestId={guestId}>
+          {boundary}
+        </ResidentGate>
+      ) : (
+        boundary
+      )}
     </div>
   );
   // Breadcrumb and tabs sit outside the screen's boundary, so a crash can be left.
@@ -28,7 +37,7 @@ export function ScreenFrame({ state, routeKey, children }: { state: any; routeKe
       <HouseGate houseId={houseId}>
         <SubscriptionCheck>
           <div style={column}>
-            <Breadcrumb houseId={houseId} guestId={guestIdForState(state)} routeName={routeName} />
+            <Breadcrumb houseId={houseId} guestId={guestId} routeName={routeName} />
             <HouseTabs houseId={houseId} routeName={routeName} />
             {screen}
           </div>

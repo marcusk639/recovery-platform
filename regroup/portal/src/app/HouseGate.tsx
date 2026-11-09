@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useSelectedHouse } from '@mobile/hooks/useSelectedHouse';
+import { selectGuestById } from '@mobile/state/slices/guestsSlice';
 import { selectHouseById } from '@mobile/state/slices/housesSlice';
 import { canAccessHouse } from './access';
 import { useRoles } from './useRoles';
@@ -18,7 +19,11 @@ export function HouseGate({ houseId, children }: { houseId: string; children: Re
   const userId = useSelector((state: any) => state.user.user?.id);
 
   useEffect(() => {
-    if (allowed && selectedId !== houseId) dispatch(selectHouseById(houseId));
+    if (allowed && selectedId !== houseId) {
+      dispatch(selectHouseById(houseId));
+      // A resident chosen in the last house must not carry into this one.
+      dispatch(selectGuestById(null));
+    }
   }, [allowed, selectedId, houseId, dispatch]);
 
   if (!allowed) {

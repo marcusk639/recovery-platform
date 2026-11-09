@@ -1,5 +1,5 @@
-import { addResidents, makeManager, makePeerLeader, setRooms, twoBedsOneFilled } from './fixtures';
-import { admin, expect, reseed, signInAs, test } from './helpers';
+import { addResidents, makeManager, makePeerLeader, setRooms, setWeekStats, twoBedsOneFilled } from './fixtures';
+import { addSecondHouseForManager, admin, expect, fillSignIn, reseed, SECOND_HOUSE, signInAs, test } from './helpers';
 
 // From regroup/mobile/e2e/setup/testAccounts.json. Bob Rivera is guest-b.
 const guestAName = 'Test GuestA';
@@ -112,4 +112,159 @@ test('an owner needs no role check', async ({ page }) => {
   await signInAs(page, 'manager');
   await expect(page.getByTestId('house-numbers')).toContainText('$150.00');
   await expect(page.getByTestId('role-notice')).toHaveCount(0);
+});
+
+const record = (id: string) => `/houses/test-house-123/residents/${id}`;
+
+test('clicking a resident opens their record, by id', async ({ page }) => {
+  await signInAs(page, 'manager');
+  await page.getByRole('link', { name: 'Bob Rivera' }).click();
+  await expect(page).toHaveURL(/\/houses\/test-house-123\/residents\/guest-b$/);
+  await expect(page.getByRole('heading', { name: 'Bob Rivera' })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText('Bob Rivera');
+  expect(page.url()).not.toContain('Bob');
+});
+
+test('the record shows status, phase, room, move-in and money', async ({ page }) => {
+  await setRooms('test-house-123', twoBedsOneFilled);
+  await admin().doc('guests/guest-a').update({ moveInDate: '2026-03-02', choreFees: 2500, autoPayEnabled: true });
+  await page.goto(record('guest-a'));
+  await fillSignIn(page, 'test-manager@rats-e2e.com');
+  const header = page.getByTestId('record-header');
+  await expect(header).toContainText(/active/i);
+  await expect(header).toContainText('Default');
+  await expect(header).toContainText('Room 2A');
+  await expect(header).toContainText('Mar 2, 2026');
+  const money = page.getByTestId('record-payments');
+  await expect(money).toContainText('$150.00');
+  await expect(money).toContainText('$25.00');
+  await expect(money).toContainText('On');
+});
+
+test('this week matches the list', async ({ page }) => {
+  await setWeekStats('guest-b', { choresCompleted: 1 });
+  await signInAs(page, 'manager');
+  await expect(page.getByTestId('guest-list-item').filter({ hasText: 'Bob Rivera' })).toContainText('50%');
+  await page.getByRole('link', { name: 'Bob Rivera' }).click();
+  await expect(page.getByTestId('record-week')).toContainText('50%');
+});
+
+test('sensitive fields show, and a probation officer shows only as on file', async ({ page }) => {
+  await admin().doc('guests/guest-a').update({ legalStatus: 'parole', probationOfficer: 'Officer Name' });
+  await page.goto(record('guest-a'));
+  await fillSignIn(page, 'test-manager@rats-e2e.com');
+  const legal = page.getByTestId('record-recovery');
+  await expect(legal).toContainText('Jan 1, 2025');
+  await expect(legal).toContainText(/parole/i);
+  await expect(legal).toContainText('On file');
+  await expect(legal).not.toContainText('Officer Name');
+});
+
+test('a peer leader sees the balance but not the legal fields', async ({ page }) => {
+  await admin().doc('guests/guest-a').update({ legalStatus: 'parole' });
+  await makePeerLeader('manager');
+  await page.goto(record('guest-a'));
+  await fillSignIn(page, 'test-manager@rats-e2e.com');
+  await expect(page.getByTestId('record-payments')).toContainText('$150.00');
+  const recovery = page.getByTestId('record-recovery');
+  await expect(recovery).toContainText('Jan 1, 2025');
+  await expect(recovery).not.toContainText(/parole|legal status|probation/i);
+});
+
+test('a manager sees the legal fields', async ({ page }) => {
+  await admin().doc('guests/guest-a').update({ legalStatus: 'parole' });
+  await makeManager('manager');
+  await page.goto(record('guest-a'));
+  await fillSignIn(page, 'test-manager@rats-e2e.com');
+  await expect(page.getByTestId('record-recovery')).toContainText(/parole/i);
+});
+
+test('a resident with no activity this week shows 0%, not an error', async ({ page }) => {
+  await addResidents('test-house-123', 1);
+  await page.goto(record('zed0'));
+  await fillSignIn(page, 'test-manager@rats-e2e.com');
+  const week = page.getByTestId('record-week');
+  await expect(week).toContainText(/(^|\D)0%/);
+  await expect(week).toContainText('No activity logged this week.');
+  await expect(week).not.toContainText("Couldn't load");
+});
+
+test("open items count this resident's disputes", async ({ page }) => {
+  await page.goto(record('guest-a'));
+  await fillSignIn(page, 'test-manager@rats-e2e.com');
+  await expect(page.getByTestId('record-open-items')).toContainText('1 open dispute');
+});
+
+test('a resident in another house gets a message and none of their data', async ({ page }) => {
+  await addSecondHouseForManager();
+  await page.goto(`/houses/${SECOND_HOUSE}/residents/guest-a`);
+  await fillSignIn(page, 'test-manager@rats-e2e.com');
+  await expect(page.getByText("This resident isn't in this house.")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId('record-header')).toHaveCount(0);
+  await expect(page.getByText(guestAName)).toHaveCount(0);
+});
+
+test('a resident who does not exist gets a message', async ({ page }) => {
+  await page.goto(record('no-such-guest'));
+  await fillSignIn(page, 'test-manager@rats-e2e.com');
+  await expect(page.getByText("Couldn't open this resident.")).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('#nav-residents')).toBeVisible();
+});
+
+test('a resident in a house the operator does not run is refused by the gate', async ({ page }) => {
+  await page.goto(record('guest-a'));
+  await fillSignIn(page, 'test-oxford-operator@rats-e2e.com');
+  await expect(page.getByText(/don't have access to this house/i)).toBeVisible({ timeout: 20_000 });
+});
+
+test("a discharged resident's record still opens, and says so", async ({ page }) => {
+  await admin().doc('guests/guest-b').update({ status: 'discharged' });
+  await page.goto(record('guest-b'));
+  await fillSignIn(page, 'test-manager@rats-e2e.com');
+  await expect(page.getByTestId('record-header')).toContainText(/discharged/i);
+});
+
+test('a record survives a reload', async ({ page }) => {
+  await page.goto(record('guest-b'));
+  await fillSignIn(page, 'test-manager@rats-e2e.com');
+  await expect(page.getByRole('heading', { name: 'Bob Rivera' })).toBeVisible({ timeout: 20_000 });
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Bob Rivera' })).toBeVisible({ timeout: 20_000 });
+});
+
+test('links from the record open that resident in the reused screen, with no name in the URL', async ({ page }) => {
+  await signInAs(page, 'manager');
+  await page.getByRole('link', { name: 'Bob Rivera' }).click();
+  await page.getByRole('link', { name: 'Full profile' }).click();
+  await expect(page).toHaveURL(/\/residents\/guest-b\/profile$/);
+  await expect(page.getByTestId('screen-body')).toContainText('Bob');
+  await page.goBack();
+  await expect(page).toHaveURL(/\/residents\/guest-b$/);
+  await page.getByRole('button', { name: 'Documents' }).click();
+  await expect(page.getByTestId('document-list-screen')).toBeVisible();
+  expect(page.url()).not.toContain('?');
+  expect(page.url()).not.toContain('Bob');
+});
+
+test('a resident chosen in one house does not carry into the next', async ({ page }) => {
+  await addSecondHouseForManager();
+  await page.goto(record('guest-b'));
+  await fillSignIn(page, 'test-manager@rats-e2e.com');
+  await expect(page.getByRole('heading', { name: 'Bob Rivera' })).toBeVisible({ timeout: 20_000 });
+  await page.click('#nav-home');
+  await page.getByRole('link', { name: 'Second House' }).click();
+  await expect(page.locator('#nav-residents')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window as any).__portalTest.selectedGuestId())).toBeNull();
+});
+
+// Entered through the app: a page opened by URL leaves nothing to go Back to but about:blank.
+test('signing out from a record then pressing Back shows no resident data', async ({ page }) => {
+  await signInAs(page, 'manager');
+  await page.getByRole('link', { name: 'Bob Rivera' }).click();
+  await expect(page.getByRole('heading', { name: 'Bob Rivera' })).toBeVisible({ timeout: 20_000 });
+  await page.locator('#sign-out').click();
+  await expect(page.locator('#sign-in-form')).toBeVisible();
+  await page.goBack();
+  await expect(page.locator('#sign-in-form')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('Bob Rivera')).toHaveCount(0);
 });
