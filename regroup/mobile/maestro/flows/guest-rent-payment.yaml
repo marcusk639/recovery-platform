@@ -33,13 +33,11 @@ tags:
     visible:
       id: "rent-payment-screen"
     timeout: 30000
-# Either the balance breakdown (Stripe connected) or the not-connected gate renders.
+# The seeded house is connected and this resident owes rent. Was: either the balance or the not-connected gate renders.
 - assertVisible:
     id: "balance-card"
-    optional: true
-- assertVisible:
+- assertNotVisible:
     id: "stripe-not-connected"
-    optional: true
 # Boundary: do NOT tap pay-now-button (would leave the app for Stripe Checkout).
 - runFlow:
     file: ../subflows/logout.yaml

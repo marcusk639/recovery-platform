@@ -1,5 +1,5 @@
 # Flow 26 — Oxford: onboarding wizard
-# Persona: oxford operator (admin of test-house-oxford, oxfordEnabled=true).
+# Persona: oxford operator (admin of test-house-oxford-new, not onboarded yet).
 #
 # PRECONDITION (re-seed required): this flow only renders the onboarding wizard
 # when the Oxford house has oxfordOnboardingComplete===false. The default seed
@@ -20,15 +20,20 @@ tags:
 - runFlow:
     file: ../subflows/login.yaml
     env:
-      EMAIL: test-oxford-operator@rats-e2e.com
+      EMAIL: test-oxford-new@rats-e2e.com
       PASSWORD: ${E2E_TEST_PASSWORD}
 - extendedWaitUntil:
     visible:
       id: "main-app-screen"
     timeout: 30000
 # Enter the Oxford hub; with onboarding incomplete the wizard is presented.
+- scrollUntilVisible:
+    element:
+      text: ".*Oxford House Hub.*"
+    direction: DOWN
+    centerElement: true
 - tapOn:
-    text: "Oxford House Hub"
+    text: ".*Oxford House Hub.*"
 # Wizard step 1 of 5.
 - extendedWaitUntil:
     visible:
@@ -47,10 +52,29 @@ tags:
     id: "setup-buttons-next"
 - assertVisible:
     id: "wizard-step-3"
+# The first business meeting is required: Next stays disabled without a date and time.
+- tapOn:
+    id: "wizard-date-display"
+- extendedWaitUntil:
+    visible:
+      text: "Confirm"
+    timeout: 10000
+- tapOn:
+    text: "Confirm"
+- waitForAnimationToEnd
+- tapOn:
+    text: "19:00"
+- inputText: "19:00"
+- waitForAnimationToEnd
 - tapOn:
     id: "setup-buttons-next"
 - assertVisible:
     id: "wizard-step-4"
+# The weekly dues amount is required too.
+- tapOn:
+    text: "0.00"
+- inputText: "5.00"
+- waitForAnimationToEnd
 - tapOn:
     id: "setup-buttons-next"
 - assertVisible:

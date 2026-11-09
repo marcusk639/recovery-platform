@@ -61,7 +61,9 @@ async function main() {
   const oxford = d.operator('oxford-operator', d.OXFORD, true, now);
   const guestA = d.resident('guest-a', Number(process.env.E2E_RENT_CENTS || 15000));
   const guestB = d.resident('guest-b', 0);
-  const people = [manager, oxford, guestA, guestB];
+  // Not onboarded yet, for oxford-onboarding.yaml. The other Oxford house has finished.
+  const oxfordNew = d.operator('oxford-new-operator', d.OXFORD_NEW, true, now);
+  const people = [manager, oxford, oxfordNew, guestA, guestB];
 
   // 1. Accounts, claims and users docs, before houses: the subscription trigger reads them.
   for (const p of people) {
@@ -74,7 +76,7 @@ async function main() {
     await auth.setCustomUserClaims(p.uid, p.claims);
     await db.doc(`users/${p.uid}`).set(p.user);
   }
-  for (const p of [manager, oxford]) {
+  for (const p of [manager, oxford, oxfordNew]) {
     await db.doc(`admins/${p.uid}`).set(p.admin);
   }
   await sleep(1500);
@@ -103,6 +105,15 @@ async function main() {
   };
   await db.doc(`house-roles/${d.HOUSE}_${manager.uid}`).set(ownerRole);
   await db.doc(`house-roles/${d.OXFORD}_${oxford.uid}`).set(ownerRole);
+  await db.doc(`houses/${d.OXFORD_NEW}`).set(
+    d.house(d.OXFORD_NEW, 'E2E New Oxford House', oxfordNew.uid, now, {
+      houseType: 'oxford',
+      oxfordOnboardingComplete: false,
+      oxfordEnabled: true,
+      currentCapacity: 0,
+    }),
+  );
+  await db.doc(`house-roles/${d.OXFORD_NEW}_${oxfordNew.uid}`).set(ownerRole);
 
   // 3. Residents.
   for (const g of [guestA, guestB]) {

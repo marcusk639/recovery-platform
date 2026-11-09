@@ -50,6 +50,18 @@
       "subscriptionMetadata": {
         "oxfordEnabled": true
       }
+    },
+    {
+      "id": "oxford-new-operator",
+      "email": "test-oxford-new@rats-e2e.com",
+      "firstName": "Oxford",
+      "lastName": "Newcomer",
+      "role": "admin",
+      "houseId": "test-house-oxford-new",
+      "phone": "555-0500",
+      "subscriptionMetadata": {
+        "oxfordEnabled": true
+      }
     }
   ]
 }

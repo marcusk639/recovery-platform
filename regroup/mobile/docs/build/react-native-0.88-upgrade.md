@@ -1619,6 +1619,11 @@ CI runs the unit suite and the ratchet on every push of the branch.
 
   - **Pre-existing bug, fixed here: the app and server disagreed about the week.** `useCurrentWeek` worked in UTC and the server in the house's timezone, so from Sunday evening in the US the app showed a new, empty week while activities still counted toward the old one. It now uses the house's timezone and the server's default. Bare dates in activity queries now mean that whole local day, so the feed and Disputes keep the week's last day, and the check-in guard, which passes today as start and end, matches today. Days left is counted to the week's end, so Sunday reads 0. Not changed: `getTodaysDate` and the `weekdays` component still use the device's day, and a screen left open across midnight keeps its week until it remounts.
 
+  - **Pre-existing bug, fixed here: the signed-in admin was never recorded.** Nothing called `setUserAsAdmin`, so every operator's profile showed no name and no Add Home or Two-Factor Authentication, and chat, the activity feed and Disputes got no admin. `DataProvider` now records it at sign-in and clears it on logout and for non-admins. Also: a completed chore was labelled "Chore changed" in the feed, and the signup password fields now relax secure entry under E2E as login does, so Maestro can type into them.
+
+  - **Pre-existing bugs, fixed here:** the profile tab spun forever for anyone logging in after a logout without restarting the app, because `loggingOutSuccessful` was never reset. Payment History read Stripe charges rather than Firestore `payments`, the history of record (owner decision D4), so it could disagree with Pay Rent. Finishing Oxford onboarding sent the operator back into the wizard, because the dashboard opened with the stale cached house.
+  - **Known, not fixed here:** #174 still blocks submitting a dispute on Android (a Loading modal covers the form). Paying the same amount twice in one UTC day shows a generic error (`RENT-012`).
+
 ### 7.3 Not verified yet (owner, on devices)
 
 Step-by-step instructions, with a results table to fill in: `regroup/docs/operations/manual-tasks/2026-11-06-rn-0.88-merge-device-pass.md`.

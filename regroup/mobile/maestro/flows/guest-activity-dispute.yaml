@@ -41,7 +41,7 @@ tags:
 - tapOn:
     id: "dispute-message-input"
 - inputText: "[E2E] disputed via Maestro"
-- hideKeyboard
+- waitForAnimationToEnd
 - tapOn:
     id: "dispute-submit-button"
 - extendedWaitUntil:

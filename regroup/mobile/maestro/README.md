@@ -28,6 +28,7 @@ Flows that load Stripe data (the payment dashboard in `operator-manual-payment`,
 
 - `regroup/functions/.secret.local` (gitignored) with the **e2e sandbox's** `STRIPE_SECRET_KEY`, read by the functions emulator;
 - `E2E_STRIPE_ACCOUNT_ID`, a test-mode connected account in that sandbox, exported before seeding. Without it the seed uses a placeholder and says so, and those screens fail to load.
+- `STRIPE_PUBLISHABLE_KEY`, that sandbox's `pk_test_` key, exported when building the app. It is inlined into the JS bundle, and without it the PaymentSheet fails with "You did not provide an API key". For example `export STRIPE_PUBLISHABLE_KEY="$(cat ~/.config/regroup-e2e/stripe-e2e-publishable-key.txt)"`.
 
 ## Run
 

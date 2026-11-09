@@ -47,7 +47,7 @@ tags:
     id: "signup-email-input"
 - waitForAnimationToEnd
 - inputText: "e2e-signup@rats-e2e.com"
-- hideKeyboard
+- waitForAnimationToEnd
 - scrollUntilVisible:
     element:
       id: "signup-password-input"
@@ -57,7 +57,7 @@ tags:
     id: "signup-password-input"
 - waitForAnimationToEnd
 - inputText: ${E2E_TEST_PASSWORD}
-- hideKeyboard
+- waitForAnimationToEnd
 - scrollUntilVisible:
     element:
       id: "signup-confirm-password-input"
@@ -67,7 +67,7 @@ tags:
     id: "signup-confirm-password-input"
 - waitForAnimationToEnd
 - inputText: ${E2E_TEST_PASSWORD}
-- hideKeyboard
+- waitForAnimationToEnd
 - scrollUntilVisible:
     element:
       id: "signup-first-name-input"
@@ -77,7 +77,7 @@ tags:
     id: "signup-first-name-input"
 - waitForAnimationToEnd
 - inputText: "Emma"
-- hideKeyboard
+- waitForAnimationToEnd
 - scrollUntilVisible:
     element:
       id: "signup-last-name-input"
@@ -87,7 +87,7 @@ tags:
     id: "signup-last-name-input"
 - waitForAnimationToEnd
 - inputText: "Tester"
-- hideKeyboard
+- waitForAnimationToEnd
 - scrollUntilVisible:
     element:
       id: "terms-of-service-checkbox"

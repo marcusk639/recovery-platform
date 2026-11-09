@@ -32,9 +32,18 @@ tags:
     visible:
       id: "payment-history-screen"
     timeout: 30000
-# With no seeded payments, the empty state shows; a row appears once payments exist.
+# This resident's two seeded payments, and not another resident's.
 - assertVisible:
+    id: "payment-row-e2e-pay-a-latest"
+- assertVisible:
+    text: ".*22[.]22.*"
+- assertVisible:
+    id: "payment-row-e2e-pay-a-old"
+- assertVisible:
+    text: ".*11[.]11.*"
+- assertNotVisible:
+    id: "payment-row-e2e-pay-b"
+- assertNotVisible:
     id: "payment-history-empty"
-    optional: true
 - runFlow:
     file: ../subflows/logout.yaml
