@@ -9,11 +9,12 @@ import { join, relative } from 'path';
  * Scheduled jobs in general are allowed. Only one that touches meeting data fails.
  */
 
-const SCHEDULER_IMPORT = /firebase-functions\/(v2\/)?scheduler|pubsub\s*\.\s*schedule/;
+const SCHEDULER_IMPORT =
+  /firebase-functions\/(v2\/)?scheduler|\bscheduler\b[^;\n]*firebase-functions|\bonSchedule\b|pubsub\s*\.\s*schedule/;
 
 /** Anything that reads, refreshes or prunes the meeting directory. */
 const MEETING_DATA =
-  /refreshDirectory|refreshSlice|pruneStale|snapshotImport|directoryMeetings|lib\/meetings|\/sources\//;
+  /refreshDirectory|refreshSlice|pruneStale|snapshotImport|directoryMeetings|\bmeetings\/|\/sources\//;
 
 export function isScheduledMeetingRefresh(source: string): boolean {
   return SCHEDULER_IMPORT.test(source) && MEETING_DATA.test(source);
@@ -40,6 +41,32 @@ describe('recovery-api scheduled meeting refresh', () => {
     const index = readFileSync(join(__dirname, 'index.ts'), 'utf8');
 
     expect(index).not.toMatch(/triggers\/refreshDirectory/);
+  });
+
+  it.each([
+    [
+      'the scheduler namespace',
+      "import { scheduler } from 'firebase-functions/v2';\nrefreshSlice();",
+    ],
+    ['a bare onSchedule call', "onSchedule('every day', () => refreshSlice());"],
+    [
+      'a relative meetings import',
+      "import { onSchedule } from 'firebase-functions/v2/scheduler';\nimport { x } from './meetings/ingest';",
+    ],
+    [
+      'a sources import',
+      "import { onSchedule } from 'firebase-functions/v2/scheduler';\nimport { x } from './sources/meetingGuide';",
+    ],
+  ])('catches a scheduled refresh written with %s', (_name, source) => {
+    expect(isScheduledMeetingRefresh(source)).toBe(true);
+  });
+
+  it('does not flag a scheduled job that has nothing to do with meetings', () => {
+    expect(
+      isScheduledMeetingRefresh(
+        "import { scheduler } from 'firebase-functions/v2';\nexport const job = scheduler.onSchedule('every day', sweepInvites);",
+      ),
+    ).toBe(false);
   });
 
   it('flags a scheduled meeting refresh but allows other scheduled jobs', () => {
