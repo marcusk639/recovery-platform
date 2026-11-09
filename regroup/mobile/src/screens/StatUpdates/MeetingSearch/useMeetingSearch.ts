@@ -80,6 +80,7 @@ export const useMeetingSearch = (props: UseMeetingSearchProps) => {
     houseId: checkInGuestId ? house?.id : undefined,
     startDate: todaysDate,
     endDate: todaysDate,
+    timeZone: house?.timezone,
     type: ActivityType.MEETING,
   });
 

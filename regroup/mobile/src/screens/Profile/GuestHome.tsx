@@ -234,7 +234,7 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
   // listener fired alongside useComplianceCheck below (which also calls the RQ
   // useWeekSummary internally), doubling reads on every profile mount and
   // letting the two state stores diverge. See .full-review [P2].
-  const { startDate } = useCurrentWeek();
+  const { startDate } = useCurrentWeek(house?.timezone);
   const { data: summary = null } = useWeekSummary(
     currentGuest?.id ?? "",
     startDate,

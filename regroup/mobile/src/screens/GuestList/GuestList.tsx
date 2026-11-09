@@ -183,7 +183,7 @@ const GuestList: React.FC<Props> = ({ navigation }) => {
   const { house } = useSelectedHouse();
 
   // Current week start date — used to query compliance for each guest row
-  const { startDate: weekStart } = useCurrentWeek();
+  const { startDate: weekStart } = useCurrentWeek(house?.timezone);
 
   // Fetch guests using React Query
   // This automatically handles loading, error, and data states

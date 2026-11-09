@@ -1617,6 +1617,8 @@ CI runs the unit suite and the ratchet on every push of the branch.
 
   - **Pre-existing bug, fixed here: the phase advancement banner could never appear.** `getRecentWeekSummaries` filtered by guest but not house. The rules refuse that query and no index serves it, and the app treated the error as zero compliant weeks. It now filters by house too, which uses the existing index.
 
+  - **Pre-existing bug, fixed here: the app and server disagreed about the week.** `useCurrentWeek` worked in UTC and the server in the house's timezone, so from Sunday evening in the US the app showed a new, empty week while activities still counted toward the old one. It now uses the house's timezone and the server's default. Bare dates in activity queries now mean that whole local day, so the feed and Disputes keep the week's last day, and the check-in guard, which passes today as start and end, matches today. Days left is counted to the week's end, so Sunday reads 0. Not changed: `getTodaysDate` and the `weekdays` component still use the device's day, and a screen left open across midnight keeps its week until it remounts.
+
 ### 7.3 Not verified yet (owner, on devices)
 
 Step-by-step instructions, with a results table to fill in: `regroup/docs/operations/manual-tasks/2026-11-06-rn-0.88-merge-device-pass.md`.

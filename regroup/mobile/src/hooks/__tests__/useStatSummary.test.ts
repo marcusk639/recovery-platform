@@ -428,4 +428,31 @@ describe('useStatSummary', () => {
       expect(result.current.isError).toBe(false);
     });
   });
+
+  describe('the house timezone', () => {
+    const inChicago = () =>
+      mockUseSelectedHouse.mockReturnValue({
+        house: { ...mockHouse, timezone: 'America/Chicago' },
+        houseId: mockHouse.id,
+        isLoading: false,
+      });
+
+    it('asks for the current week in that zone', () => {
+      inChicago();
+      renderHook(() => useStatSummary('choreCompleted'));
+      expect(mockUseCurrentWeek).toHaveBeenCalledWith('America/Chicago');
+    });
+
+    it('shows 0 days left on the last day of the week, not 7', () => {
+      inChicago();
+      mockUseCurrentWeek.mockReturnValue({ startDate: '2026-11-02', endDate: '2026-11-08' });
+      jest.useFakeTimers().setSystemTime(new Date('2026-11-09T00:57:00Z'));
+      try {
+        const { result } = renderHook(() => useStatSummary('choreCompleted'));
+        expect(result.current.daysRemaining).toBe(0);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+  });
 });
