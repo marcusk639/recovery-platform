@@ -45,6 +45,9 @@ export interface FetchDeps {
   fetchFn?: typeof fetch;
 }
 
+/** A hung request must fail its cell, or it would stall the sweep until the function dies. */
+const REQUEST_TIMEOUT_MS = 15_000;
+
 const parseXml = (xml: string): Promise<CelebrateRecoveryMeetings> =>
   new Promise((resolve, reject) => {
     parseString(xml, (err, result: CelebrateRecoveryMeetings) => {
@@ -64,13 +67,18 @@ export async function fetchCelebrateRecoveryMeetings(
 ): Promise<DirectoryMeeting[]> {
   const fetchFn = deps.fetchFn ?? fetch;
 
-  const res = await fetchFn(CR_API(lat, lng));
+  const res = await fetchFn(CR_API(lat, lng), { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
   if (!res.ok) {
     throw new Error(`Celebrate Recovery request failed: ${res.status}`);
   }
   const xml = await res.text();
   const parsed = await parseXml(xml);
-  const markers = parsed?.markers?.marker ?? [];
+  // A 200 with the wrong body is a failure, not an empty cell: the prune guard
+  // relies on the difference. An empty <markers> parses to "" and is a real answer.
+  if (parsed?.markers === undefined) {
+    throw new Error('Celebrate Recovery returned an unexpected response');
+  }
+  const markers = parsed.markers.marker ?? [];
 
   return markers
     .map((marker) => mapCrMarker(marker))

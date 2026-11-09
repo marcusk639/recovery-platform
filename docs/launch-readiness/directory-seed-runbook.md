@@ -11,6 +11,15 @@
 > AA + Celebrate Recovery come from the **grid seed**; NA comes from a **one-off migration**
 > of each product's existing `na-meetings` Firestore collection.
 
+## Corrections, 2026-11-08 (these override the sections below)
+
+- **Meeting Guide no longer works keyless.** `api.meetingguide.org/app/v2/request` returns 401 from both local machines and Cloud Functions, so the step 2 seed gets no AA rows. It has never been run on `recovery-platform-e6cb3`.
+- **Celebrate Recovery is failing too:** `locator.crgroups.info` has an expired TLS certificate. Don't disable certificate checks to get around it.
+- **The snapshot import exists but has not been run:** `npm run import:snapshot` (step 3) replaces `migrate:na`. Each row carries `dataAsOf`, which the apps show as "Listing data from Mar 2023". The owner is holding both imports as of 2026-11-08: AA until a live sync is proven, NA pending a decision on data last written in March 2023.
+- **`recovery-connect-cad4b` has billing off, and its linked billing account is closed.** Its free daily read quota is smaller than its `meetings` collection, and a full read on 2026-11-08 used it up and blocked all reads on the project until the quota reset. The script now refuses to scan a source with billing off. Check billing before any bulk read of a product's Firestore. Turning billing back on needs a different account and may restart its scheduled jobs, including the subscription reconciler and reminders.
+- **`refreshDirectory` could not finish a run before this fix:** every run hit the 60s timeout, so the cursor stayed at 853 from June 22. The fix lets it finish and saves progress as it goes.
+- **Deploy order:** deploy the `firestore.indexes.json` index first and wait until it is READY, then the function. Pruning needs that index.
+
 ---
 
 ## 0. Ground truth (verified from code, 2026-06-21)
@@ -35,7 +44,9 @@
 
 ---
 
-## ⚠️ KNOWN BLOCKER — NA migration source wiring (read before step 3)
+## Resolved blocker — NA migration source wiring
+
+Applies only to the superseded `migrate:na`. Step 3's `import:snapshot` reads the right project.
 
 `scripts/migrateNaMeetings.ts` `main()` currently calls
 `runMigration({ sourceDb: db, destDb: db })` where `db` is the **default app**
@@ -101,19 +112,22 @@ GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY" npm run seed
 
 ---
 
-## 3. Migrate NA (once per product) — AFTER wiring the source (see blocker above)
+## 3. Import snapshots of AA and NA
+
+Dry run first. Your Application Default Credentials need read access to the source and write access to `recovery-platform-e6cb3`.
 
 ```bash
 cd recovery-api
-# Only after main() is wired to read the PRODUCT's na-meetings as sourceDb.
-# Run once with homegroups (recovery-connect-cad4b) creds as source,
-# then once with regroup (phoenix-cleanhouse) creds as source.
-npm run migrate:na
-# Final log: "migrateNaMeetings: complete. read=.. upserted=.. skippedUnmappable=.. skippedAppOwned=.."
+npm run import:snapshot -- --provider NA           # reads phoenix-cleanhouse/na-meetings
+npm run import:snapshot -- --provider NA --apply
+npm run import:snapshot -- --provider AA           # reads recovery-connect-cad4b/meetings; needs billing on
+npm run import:snapshot -- --provider AA --apply
+# Final log: "importMeetingSnapshot: complete {...}"
 ```
 
-Confirm `read > 0` and `upserted > 0`. `read=0` means the source wiring is still pointing
-at the (empty) default project — fix the wiring and re-run.
+Check `read`, `skippedUnmappable` and the `dataAsOf` range before applying. Re-running is safe: rows a live source has confirmed and app-owned rows are never overwritten. Homegroups' own `na-meetings` is empty, so NA comes only from Regroup. Homegroups serves AA from its own Firestore, so imported AA rows reach Regroup only.
+
+The build rewrites the tracked `recovery-api/lib/`. Don't commit that.
 
 ---
 
@@ -139,9 +153,8 @@ at the (empty) default project — fix the wiring and re-run.
 
 ## 5. After seeding — ongoing maintenance
 
-- `refreshDirectory` (daily 03:00) keeps **AA/CR** fresh and prunes stale `external` rows. No action.
-- **NA goes stale** until Phase 1B adds `refreshNaDirectory` (monthly, Maps-key-bound). Until then,
-  re-run the NA migration manually when the product `na-meetings` datasets change.
+- `refreshDirectory` (daily 03:00) keeps **AA/CR** fresh when their sources answer. It prunes stale rows only for a provider whose source answered for a full sweep, so an outage deletes nothing. It also deletes nothing for a provider when more than 10% of its rows would go, and logs `refreshDirectory: prune blocked` as an error instead. If you see that, work out why before acting: it may be a degraded source, or imported rows a recovered source no longer lists. Rows outside the sweep's grid (Alaska, Hawaii, Puerto Rico) are never pruned, because a sweep can't re-see them.
+- **NA has no live source**, so it is never pruned and stays frozen at its `dataAsOf` date until Phase 1B adds `refreshNaDirectory`.
 - Do **not** run seeds from app clients; seeding is recovery-api-side (script/admin) only.
 
 ---
@@ -149,11 +162,10 @@ at the (empty) default project — fix the wiring and re-run.
 ## Quick reference
 
 ```bash
-# Full sequence (after NA source wiring is done):
+# Only once the owner approves each import (both are on hold):
 cd recovery-api
 gcloud config set project recovery-platform-e6cb3
-export GOOGLE_MAPS_API_KEY="<key>"
-npm run seed          # AA + CR, full US grid (resumable, long)
-npm run migrate:na    # NA, once per product source (read>0 expected)
+npm run import:snapshot -- --provider NA --apply
+npm run import:snapshot -- --provider AA --apply   # needs billing on recovery-connect-cad4b
 # then verify (section 4)
 ```

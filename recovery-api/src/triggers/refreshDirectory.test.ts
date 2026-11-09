@@ -2,15 +2,15 @@ import {
   cellsPerRun,
   computeSlice,
   refreshSlice,
-  pruneStale,
   REFRESH_CYCLE_RUNS,
   REFRESH_STATE_COLLECTION,
   REFRESH_STATE_DOC_ID,
-  STALE_PRUNE_DAYS,
 } from './refreshDirectory';
 import { gridCells } from '../lib/meetings/ingest';
+import { pruneStale, STALE_PRUNE_DAYS } from '../lib/meetings/pruneStale';
 import { directoryMeetingId } from '../lib/meetings/identity';
 import type { DirectoryMeeting } from '../entities/DirectoryMeeting';
+import { freshRows, IN_GRID, makeDirectoryDb as makeDb } from './testing/directoryDbMock';
 
 /**
  * Zero real network / zero real Firestore: an in-memory Firestore mock + an
@@ -35,113 +35,6 @@ jest.mock('firebase-admin/firestore', () => ({
 // db is provided by deps in every test; the firebase singleton import must not
 // initialize a real app.
 jest.mock('../lib/firebase', () => ({ db: {}, auth: {} }));
-
-interface MockDoc {
-  source?: string;
-  lastSeenAt?: { toMillis: () => number };
-  [k: string]: unknown;
-}
-
-/**
- * In-memory Firestore mock covering exactly the surface the refresh path uses:
- *  - collection(name).doc(id).get()/set()      (cursor read/write)
- *  - collection(name).doc(id).get()            (per-cell ingest read)
- *  - db.batch().set/delete/commit              (ingest upsert + prune delete)
- *  - collection(name).where().where().get()    (prune query)
- */
-function makeDb(seed: Record<string, MockDoc> = {}) {
-  const store = new Map<string, MockDoc>(Object.entries(seed));
-
-  function docRef(name: string, id: string) {
-    const key = `${name}/${id}`;
-    return {
-      id,
-      ref: { __key: key },
-      get: async () => ({
-        id,
-        exists: store.has(key),
-        data: () => store.get(key),
-      }),
-      set: async (data: MockDoc, opts?: { merge?: boolean }) => {
-        const prev = opts?.merge ? (store.get(key) ?? {}) : {};
-        store.set(key, { ...prev, ...data });
-      },
-    };
-  }
-
-  function collection(name: string) {
-    const api = {
-      doc: (id: string) => docRef(name, id),
-      // Chainable where(): collects {field,op,value} filters, executed on get().
-      _filters: [] as Array<{ field: string; op: string; value: unknown }>,
-      where(field: string, op: string, value: unknown) {
-        api._filters.push({ field, op, value });
-        return api;
-      },
-      get: async () => {
-        const docs = [...store.entries()]
-          .filter(([key]) => key.startsWith(`${name}/`))
-          .filter(([, data]) =>
-            api._filters.every((f) => {
-              const v = (data as Record<string, unknown>)[f.field];
-              if (f.op === '==') return v === f.value;
-              if (f.op === '<') {
-                const lhs = (v as { toMillis?: () => number })?.toMillis?.();
-                const rhs = (f.value as { toMillis?: () => number })?.toMillis?.();
-                return lhs !== undefined && rhs !== undefined && lhs < rhs;
-              }
-              return true;
-            }),
-          )
-          .map(([key, data]) => ({
-            id: key.split('/').slice(1).join('/'),
-            data: () => data,
-            ref: { __key: key },
-          }));
-        return { docs, size: docs.length };
-      },
-    };
-    return api;
-  }
-
-  const batch = () => {
-    const ops: Array<
-      { type: 'set'; key: string; data: MockDoc; merge: boolean } | { type: 'delete'; key: string }
-    > = [];
-    return {
-      set: (ref: { id: string }, data: MockDoc, opts?: { merge?: boolean }) => {
-        // ingest writes go to directoryMeetings.
-        ops.push({
-          type: 'set',
-          key: `directoryMeetings/${ref.id}`,
-          data,
-          merge: opts?.merge ?? false,
-        });
-      },
-      delete: (ref: { __key: string }) => {
-        ops.push({ type: 'delete', key: ref.__key });
-      },
-      commit: async () => {
-        for (const op of ops) {
-          if (op.type === 'set') {
-            const prev = op.merge ? (store.get(op.key) ?? {}) : {};
-            store.set(op.key, { ...prev, ...op.data });
-          } else {
-            store.delete(op.key);
-          }
-        }
-        ops.length = 0;
-      },
-    };
-  };
-
-  const db = {
-    collection: jest.fn(collection),
-    batch: jest.fn(batch),
-  } as unknown as FirebaseFirestore.Firestore;
-
-  return { db, store };
-}
 
 /** fetchFn mock: one AA meeting from meetingguide, empty CR markers. */
 function makeFetchFn(meetings: Array<Record<string, unknown>>) {
@@ -298,13 +191,20 @@ describe('refreshSlice', () => {
   it('runs the stale prune when a slice completes the full cycle', async () => {
     const total = [...gridCells()].length;
     // Cursor near the end so this single run completes the cycle.
+    const healthy = { attempted: total - 1, failed: 0, records: 10 };
     const { db, store } = makeDb({
-      [`${REFRESH_STATE_COLLECTION}/${REFRESH_STATE_DOC_ID}`]: { cursor: total - 1 },
+      [`${REFRESH_STATE_COLLECTION}/${REFRESH_STATE_DOC_ID}`]: {
+        cursor: total - 1,
+        sweep: { AA: healthy, CelebrateRecovery: healthy },
+      },
       // A stale external doc that should be pruned at cycle end.
       'directoryMeetings/stale-ext': {
         source: 'external',
+        provider: 'AA',
+        location: IN_GRID,
         lastSeenAt: { toMillis: () => new Date('2026-01-01T00:00:00Z').getTime() },
       },
+      ...freshRows('AA', 20),
     });
 
     const result = await refreshSlice({
@@ -329,15 +229,20 @@ describe('pruneStale', () => {
     const { db, store } = makeDb({
       'directoryMeetings/stale-ext': {
         source: 'external',
+        provider: 'AA',
+        location: IN_GRID,
         lastSeenAt: { toMillis: () => staleMs },
       },
       'directoryMeetings/fresh-ext': {
         source: 'external',
+        provider: 'AA',
+        location: IN_GRID,
         lastSeenAt: { toMillis: () => freshMs },
       },
+      ...freshRows('AA', 20),
     });
 
-    const result = await pruneStale({ db, now: NOW });
+    const result = await pruneStale({ db, now: NOW }, ['AA']);
 
     expect(result.deleted).toBe(1);
     expect(store.has('directoryMeetings/stale-ext')).toBe(false);
@@ -349,17 +254,21 @@ describe('pruneStale', () => {
     const { db, store } = makeDb({
       'directoryMeetings/stale-app': {
         source: 'app',
+        provider: 'AA',
         createdByApp: 'homegroups',
         createdByUid: 'uid-1',
         lastSeenAt: { toMillis: () => staleMs },
       },
       'directoryMeetings/stale-ext': {
         source: 'external',
+        provider: 'AA',
+        location: IN_GRID,
         lastSeenAt: { toMillis: () => staleMs },
       },
+      ...freshRows('AA', 20),
     });
 
-    const result = await pruneStale({ db, now: NOW });
+    const result = await pruneStale({ db, now: NOW }, ['AA']);
 
     // Only the external one is deleted.
     expect(result.deleted).toBe(1);

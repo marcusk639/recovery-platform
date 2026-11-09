@@ -2,6 +2,9 @@
  * One-off NA dataset migration script (NOT a deployed function — deliberately
  * NOT exported from index.ts and never wired into any callable/trigger).
  *
+ * Superseded by scripts/importMeetingSnapshot.ts, which is wired to the right
+ * source project and marks each row with its data date. Do not run this one.
+ *
  * NA (Narcotics Anonymous) meetings are NOT fetched from a live API. They live
  * as a PRE-SEEDED `na-meetings` Firestore collection inside the products. This
  * script migrates that dataset into recovery-api's canonical `directoryMeetings`

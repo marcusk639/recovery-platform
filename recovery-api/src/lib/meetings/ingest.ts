@@ -61,6 +61,14 @@ export function* gridCells(): Generator<GridCell> {
   }
 }
 
+/** False for places a sweep never visits, such as Alaska, Hawaii and Puerto Rico. */
+export function isInsideGrid(location?: { lat?: number; lng?: number }): boolean {
+  const { lat, lng } = location ?? {};
+  if (typeof lat !== 'number' || typeof lng !== 'number') return false;
+  const { LAT_MIN, LAT_MAX, LON_MIN, LON_MAX } = GRID_CONFIG;
+  return lat >= LAT_MIN && lat <= LAT_MAX && lng >= LON_MIN && lng <= LON_MAX;
+}
+
 export interface IngestDeps {
   /** Firestore instance, injected for testability (mirrors callable/referrals.ts). */
   db: FirebaseFirestore.Firestore;
@@ -68,7 +76,18 @@ export interface IngestDeps {
   fetchFn?: typeof fetch;
 }
 
+export type IngestSourceName = 'AA' | 'CelebrateRecovery';
+
+/** How one source did for one cell; the sweep tally decides prune safety from these. */
+export interface SourceResult {
+  source: IngestSourceName;
+  ok: boolean;
+  records: number;
+}
+
 export interface IngestResult {
+  /** Per-source outcome for this cell. */
+  sourceResults: SourceResult[];
   /** Total source records fetched for the cell (pre-dedupe). */
   fetched: number;
   /** Records written (created or updated) in this run. */
@@ -124,7 +143,7 @@ export async function ingestGridCell(
   // Resilient fan-out: one source rejecting must NOT drop the whole cell (and
   // with it the healthy source's data). Use allSettled, keep the fulfilled
   // results, and log+count the rejected ones for observability.
-  const sources: Array<{ name: string; fetch: () => Promise<DirectoryMeeting[]> }> = [
+  const sources: Array<{ name: IngestSourceName; fetch: () => Promise<DirectoryMeeting[]> }> = [
     { name: 'AA', fetch: () => fetchAAMeetings(lat, lng, { fetchFn }) },
     {
       name: 'CelebrateRecovery',
@@ -135,11 +154,14 @@ export async function ingestGridCell(
   const settled = await Promise.allSettled(sources.map((s) => s.fetch()));
 
   const fetched: DirectoryMeeting[] = [];
+  const sourceResults: SourceResult[] = [];
   let fetchErrors = 0;
   settled.forEach((outcome, i) => {
     if (outcome.status === 'fulfilled') {
       fetched.push(...outcome.value);
+      sourceResults.push({ source: sources[i].name, ok: true, records: outcome.value.length });
     } else {
+      sourceResults.push({ source: sources[i].name, ok: false, records: 0 });
       fetchErrors++;
       logger.warn('ingestGridCell: source fetch failed', {
         source: sources[i].name,
@@ -181,6 +203,8 @@ export async function ingestGridCell(
     payload.lastRefreshedAt = FieldValue.serverTimestamp();
     payload.lastSeenAt = FieldValue.serverTimestamp();
     payload.updatedAt = FieldValue.serverTimestamp();
+    // A live source just confirmed this row, so it is no longer a frozen snapshot.
+    payload.dataAsOf = null;
     // createdAt-once: only stamp on first write so re-ingests preserve it.
     if (!snap.exists) {
       payload.createdAt = FieldValue.serverTimestamp();
@@ -201,5 +225,5 @@ export async function ingestGridCell(
     await batch.commit();
   }
 
-  return { fetched: fetched.length, upserted, skippedAppOwned, fetchErrors };
+  return { sourceResults, fetched: fetched.length, upserted, skippedAppOwned, fetchErrors };
 }

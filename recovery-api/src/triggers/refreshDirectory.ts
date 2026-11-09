@@ -1,8 +1,10 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions/v2';
-import { Timestamp } from 'firebase-admin/firestore';
+import type { DirectoryProvider } from '../entities/DirectoryMeeting';
 import { db } from '../lib/firebase';
 import { gridCells, ingestGridCell, type GridCell } from '../lib/meetings/ingest';
+import { pruneStale, type PruneResult } from '../lib/meetings/pruneStale';
+import { addCellToTally, providersSafeToPrune, type SweepTally } from '../lib/meetings/sweepHealth';
 
 /**
  * Scheduled directory refresh + stale prune for the shared meeting directory
@@ -36,16 +38,26 @@ export const REFRESH_STATE_DOC_ID = 'directory';
 export const REFRESH_CYCLE_RUNS = 7;
 
 /**
- * Stale-prune horizon. External docs not re-seen within this many days are
- * considered gone-from-source and pruned. Sized to span several full cycles
- * (cycle is ~7 days), so a doc must miss multiple sweeps before deletion.
+ * The platform default of 60s killed every run before the slice finished, so the
+ * cursor never advanced and the same cells were re-fetched nightly.
  */
-export const STALE_PRUNE_DAYS = 30;
+export const REFRESH_TIMEOUT_SECONDS = 540;
+
+/**
+ * Stop starting new cells here, leaving room to save the cursor before the
+ * timeout. A slower run covers fewer cells and the next run resumes from them.
+ */
+export const RUN_BUDGET_MS = 480_000;
+
+/** Save progress this often so a run killed mid-slice keeps most of its work. */
+export const CHECKPOINT_EVERY_CELLS = 25;
 
 /** Persisted shape of the refresh cursor doc. */
 export interface RefreshState {
   /** Index into the flattened grid where the NEXT run should begin. */
   cursor: number;
+  /** Per-source results for the sweep in progress; decides what may be pruned. */
+  sweep?: SweepTally;
 }
 
 export interface RefreshDeps {
@@ -66,6 +78,12 @@ export interface RefreshSliceResult {
   totalCells: number;
   /** True when this slice consumed the final cells of the grid (wrap occurred). */
   cycleCompleted: boolean;
+  /** True when the time budget ended the run before the slice finished. */
+  stoppedEarly: boolean;
+  /** Per-source results so far; the tally that closed the cycle if it closed. */
+  sweep: SweepTally;
+  /** Set when the cycle closed: which providers were pruned and how many rows. */
+  prune?: PruneResult & { providers: DirectoryProvider[] };
 }
 
 /**
@@ -106,49 +124,62 @@ export function computeSlice(
   return { start, end, nextCursor, cycleCompleted };
 }
 
-/** Read the persisted cursor, defaulting to 0 when the doc is absent/malformed. */
-async function readCursor(database: FirebaseFirestore.Firestore): Promise<number> {
+/** Read the persisted state, defaulting to the grid start when absent/malformed. */
+async function readState(database: FirebaseFirestore.Firestore): Promise<RefreshState> {
   const snap = await database.collection(REFRESH_STATE_COLLECTION).doc(REFRESH_STATE_DOC_ID).get();
-  if (!snap.exists) return 0;
+  if (!snap.exists) return { cursor: 0, sweep: {} };
   const data = snap.data() as Partial<RefreshState> | undefined;
   const cursor = data?.cursor;
-  return typeof cursor === 'number' && cursor >= 0 ? cursor : 0;
+  return {
+    cursor: typeof cursor === 'number' && cursor >= 0 ? cursor : 0,
+    sweep: data?.sweep ?? {},
+  };
 }
 
-/** Persist the next cursor for the following run. */
-async function writeCursor(
+/** Persist the cursor and tally together so they can never disagree. */
+async function writeState(
   database: FirebaseFirestore.Firestore,
-  nextCursor: number,
+  state: RefreshState,
 ): Promise<void> {
-  await database
-    .collection(REFRESH_STATE_COLLECTION)
-    .doc(REFRESH_STATE_DOC_ID)
-    .set({ cursor: nextCursor }, { merge: true });
+  await database.collection(REFRESH_STATE_COLLECTION).doc(REFRESH_STATE_DOC_ID).set(state);
 }
 
 /**
  * Process one bounded slice of the grid: read the cursor, ingest each cell in the
  * slice (re-stamping lastSeenAt/lastRefreshedAt via ingestGridCell), advance and
  * persist the cursor (wrapping at grid end). At the end of a FULL cycle it also
- * runs the stale prune.
+ * prunes the providers whose source answered for the whole sweep.
  *
  * Pure with respect to its deps — db, fetchFn, and the clock are all injected, so
  * tests run with zero real Firestore/network.
  */
 export async function refreshSlice(deps: RefreshDeps): Promise<RefreshSliceResult> {
   const { db: database, fetchFn } = deps;
+  const clock = deps.now ?? (() => new Date());
 
   const allCells: GridCell[] = [...gridCells()];
   const totalCells = allCells.length;
   const perRun = cellsPerRun(totalCells, REFRESH_CYCLE_RUNS);
 
-  const startCursor = await readCursor(database);
-  const { start, end, nextCursor, cycleCompleted } = computeSlice(startCursor, perRun, totalCells);
+  const saved = await readState(database);
+  const { start, end, nextCursor, cycleCompleted } = computeSlice(saved.cursor, perRun, totalCells);
 
-  for (let i = start; i < end; i++) {
-    const { lat, lng } = allCells[i];
-    await ingestGridCell(lat, lng, { db: database, fetchFn });
+  const startedAt = clock().getTime();
+  let sweep: SweepTally = start === 0 ? {} : saved.sweep ?? {};
+  let reached = start;
+
+  while (reached < end && clock().getTime() - startedAt < RUN_BUDGET_MS) {
+    const { lat, lng } = allCells[reached];
+    const { sourceResults } = await ingestGridCell(lat, lng, { db: database, fetchFn });
+    sweep = addCellToTally(sweep, sourceResults);
+    reached++;
+    if ((reached - start) % CHECKPOINT_EVERY_CELLS === 0 && reached < end) {
+      await writeState(database, { cursor: reached, sweep });
+    }
   }
+
+  const finished = reached === end;
+  const closedCycle = finished && cycleCompleted;
 
   // Cursor advances past EVERY cell in this slice unconditionally — including any
   // cell where one source fetcher failed (ingestGridCell now returns a non-zero
@@ -158,74 +189,25 @@ export async function refreshSlice(deps: RefreshDeps): Promise<RefreshSliceResul
   // stale-prune horizon (STALE_PRUNE_DAYS) plus lastSeenAt re-stamping eventually
   // reconcile any rows missed during the outage. Pinning the cursor on partial
   // failures would risk stalling the whole grid behind one flaky source.
-  await writeCursor(database, nextCursor);
+  const cursorAfterRun = finished ? nextCursor : reached;
+  await writeState(database, { cursor: cursorAfterRun, sweep: closedCycle ? {} : sweep });
 
-  // Run the stale prune at the close of each full grid cycle.
-  if (cycleCompleted) {
-    await pruneStale(deps);
-  }
-
-  return {
+  const result: RefreshSliceResult = {
     startCursor: start,
-    nextCursor,
-    cellsProcessed: end - start,
+    nextCursor: cursorAfterRun,
+    cellsProcessed: reached - start,
     totalCells,
-    cycleCompleted,
+    cycleCompleted: closedCycle,
+    stoppedEarly: !finished,
+    sweep,
   };
-}
 
-export interface PruneResult {
-  /** Number of stale external docs deleted. */
-  deleted: number;
-  /** Number of candidate docs scanned. */
-  scanned: number;
-}
-
-/**
- * Delete external directory docs that have not been re-seen within
- * STALE_PRUNE_DAYS. Queries only `source == 'external'` AND
- * `lastSeenAt < cutoff`, so app-owned docs are never selected. As belt-and-braces
- * the per-doc loop also HARD-GUARDS against deleting any `source === 'app'` doc.
- */
-export async function pruneStale(deps: RefreshDeps): Promise<PruneResult> {
-  const { db: database } = deps;
-  const now = deps.now ? deps.now() : new Date();
-  const cutoffMs = now.getTime() - STALE_PRUNE_DAYS * 24 * 60 * 60 * 1000;
-  const cutoff = Timestamp.fromMillis(cutoffMs);
-
-  const snapshot = await database
-    .collection('directoryMeetings')
-    .where('source', '==', 'external')
-    .where('lastSeenAt', '<', cutoff)
-    .get();
-
-  let deleted = 0;
-  let scanned = 0;
-  let batch = database.batch();
-  let opsInBatch = 0;
-
-  for (const doc of snapshot.docs) {
-    scanned++;
-    const data = doc.data() as { source?: string } | undefined;
-    // HARD GUARD: never prune an app-owned doc, even if a query ever returned one.
-    if (data?.source === 'app') continue;
-
-    batch.delete(doc.ref);
-    opsInBatch++;
-    deleted++;
-
-    if (opsInBatch >= 500) {
-      await batch.commit();
-      batch = database.batch();
-      opsInBatch = 0;
-    }
+  if (closedCycle) {
+    const providers = providersSafeToPrune(sweep, totalCells);
+    result.prune = { providers, ...(await pruneStale(deps, providers)) };
   }
 
-  if (opsInBatch > 0) {
-    await batch.commit();
-  }
-
-  return { deleted, scanned };
+  return result;
 }
 
 /**
@@ -233,13 +215,19 @@ export async function pruneStale(deps: RefreshDeps): Promise<PruneResult> {
  * and delegates to the pure refreshSlice. NOT bound to GOOGLE_MAPS_API_KEY — see
  * the file header (ingestGridCell uses only keyless sources).
  */
-export const refreshDirectory = onSchedule('every day 03:00', async () => {
-  const result = await refreshSlice({ db, fetchFn: fetch });
-  logger.info('directory refresh slice complete', {
-    startCursor: result.startCursor,
-    nextCursor: result.nextCursor,
-    cellsProcessed: result.cellsProcessed,
-    totalCells: result.totalCells,
-    cycleCompleted: result.cycleCompleted,
-  });
-});
+export const refreshDirectory = onSchedule(
+  { schedule: 'every day 03:00', timeoutSeconds: REFRESH_TIMEOUT_SECONDS },
+  async () => {
+    const result = await refreshSlice({ db, fetchFn: fetch });
+    logger.info('directory refresh slice complete', {
+      startCursor: result.startCursor,
+      nextCursor: result.nextCursor,
+      cellsProcessed: result.cellsProcessed,
+      totalCells: result.totalCells,
+      cycleCompleted: result.cycleCompleted,
+      stoppedEarly: result.stoppedEarly,
+      sweep: result.sweep,
+      prune: result.prune,
+    });
+  },
+);
