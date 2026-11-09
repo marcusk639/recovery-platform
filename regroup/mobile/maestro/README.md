@@ -41,6 +41,8 @@ maestro/scripts/run-flows.sh guest-rent-history --sim "$SIM_UDID"    # one flow
 
 On Android (`run-flows.sh` is iOS-only), build `./gradlew assembleE2eEmulator` in `android/`, install `app/build/outputs/apk/e2eEmulator/app-e2eEmulator.apk` (`com.regroup.app.e2e.emu`, reaches the host emulators through `10.0.2.2`), seed with `maestro/scripts/reset-and-seed.sh`, then run a flow with `maestro --device emulator-5554 test -e APP_ID=com.regroup.app.e2e.emu -e E2E_TEST_PASSWORD="$E2E_TEST_PASSWORD" maestro/flows/<flow>.yaml`.
 
+On Android, run `adb shell am force-stop com.regroup.app.e2e.emu` and wait a few seconds before each flow. Without it, a flow's clear-data restart can collide with the previous run's cleanup: Android kills the new process and the flow sees a blank screen until it times out (`Destroy timeout of remove-task` in logcat). In one set of 11 flows this happened 3 times without the pause and not at all with it.
+
 `run-flows.sh` re-seeds once up front (`--no-seed` skips it) and resets the simulator Keychain before each flow, because iOS keeps the Firebase session across `clearState`.
 
 ## Seed data

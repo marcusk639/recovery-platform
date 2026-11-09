@@ -20,6 +20,13 @@ tags:
     visible:
       id: "guest-overview-screen"
     timeout: 30000
+# Below the fold once this week's compliance breakdown shows, and a tap near the
+# bottom edge lands on the tab bar instead.
+- scrollUntilVisible:
+    element:
+      id: "pay-rent-card"
+    direction: DOWN
+    centerElement: true
 - tapOn:
     id: "pay-rent-card"
 - extendedWaitUntil:
