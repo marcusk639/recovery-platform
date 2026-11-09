@@ -72,7 +72,10 @@ jest.mock('firebase-admin', () => {
     runTransaction: jest.fn(async (fn: (txn: any) => Promise<unknown>) =>
       fn({
         get: jest.fn(() => Promise.resolve({ exists: false, get: () => undefined })),
-        set: jest.fn(),
+        set: jest.fn((ref: { path: string }, data: Record<string, unknown>) => {
+          // A failure's record is written here; a success's rentApplied marker isn't one.
+          if (ref.path.startsWith('payments/') && 'status' in data) mockLog.push('payments:record');
+        }),
         update: jest.fn((ref: { path: string }, data: Record<string, unknown>) => {
           if (ref.path.startsWith('guests/') && 'rentOwed' in data) mockLog.push('rentOwed');
         }),

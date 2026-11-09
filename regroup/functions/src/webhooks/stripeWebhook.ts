@@ -637,6 +637,8 @@ async function handlePaymentIntentSucceeded(
 // Event handler: payment_intent.payment_failed
 // ---------------------------------------------------------------------------
 
+const PAID_STATUSES: unknown[] = ["succeeded", "resolved_offline"];
+
 async function handlePaymentIntentFailed(
   paymentIntent: Stripe.PaymentIntent,
 ): Promise<void> {
@@ -656,26 +658,55 @@ async function handlePaymentIntentFailed(
     houseId,
   });
 
-  // 1. Update payment document with failure details
-  await upsertPaymentDoc(paymentIntent.id, {
-    stripePaymentIntentId: paymentIntent.id,
-    houseId: houseId ?? null,
-    guestId: guestId ?? null,
-    ...guestUserIdField(paymentIntent.metadata?.guestUserId),
-    // Cents, like every other write to this field (#82). A failed payment is
-    // excluded from the analytics window by status, but the unit must still
-    // agree — the resident's history reads the same field.
-    amount: amountCents,
-    currency: paymentIntent.currency,
-    status: "failed",
-    failureCode,
-    failureMessage,
-    // Write-once in upsertPaymentDoc: a failure after an earlier record keeps
-    // the original date. Without it a failed attempt with no earlier doc is
-    // dropped by getPaymentHistory's orderBy("createdAt").
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  const db = admin.firestore();
+
+  // 1. Update payment document with failure details. A PaymentIntent can fail and
+  // then succeed on a retry, and Stripe doesn't promise event order, so a failure
+  // can arrive after the payment is paid. That one changes nothing and tells nobody.
+  // In a transaction so a success landing now can't fall between the read and write.
+  const paymentRef = db.collection("payments").doc(paymentIntent.id);
+  const recorded = await db.runTransaction(async (txn) => {
+    const existing = await txn.get(paymentRef);
+    if (
+      existing.get("rentApplied") === true ||
+      PAID_STATUSES.includes(existing.get("status"))
+    ) {
+      return false;
+    }
+    txn.set(
+      paymentRef,
+      {
+        stripePaymentIntentId: paymentIntent.id,
+        houseId: houseId ?? null,
+        guestId: guestId ?? null,
+        ...guestUserIdField(paymentIntent.metadata?.guestUserId),
+        // Cents, like every other write to this field (#82). A failed payment is
+        // excluded from the analytics window by status, but the unit must still
+        // agree — the resident's history reads the same field.
+        amount: amountCents,
+        currency: paymentIntent.currency,
+        status: "failed",
+        failureCode,
+        failureMessage,
+        // Write-once: a failure after an earlier record keeps the original date.
+        // Without it a failed attempt with no earlier doc is dropped by
+        // getPaymentHistory's orderBy("createdAt").
+        ...(existing.get("createdAt") == null
+          ? { createdAt: admin.firestore.FieldValue.serverTimestamp() }
+          : {}),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+    return true;
   });
+
+  if (!recorded) {
+    logger.warn("payment_intent.payment_failed: payment already paid, ignoring", {
+      paymentIntentId: paymentIntent.id,
+    });
+    return;
+  }
 
   if (!guestId || !houseId) {
     logger.warn(
@@ -685,7 +716,6 @@ async function handlePaymentIntentFailed(
     return;
   }
 
-  const db = admin.firestore();
   const guestSnap = await db.collection("guests").doc(guestId).get();
 
   if (!guestSnap.exists) {
