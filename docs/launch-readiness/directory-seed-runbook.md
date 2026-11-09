@@ -19,6 +19,7 @@
 - **`recovery-connect-cad4b` has billing off, and its linked billing account is closed.** Its free daily read quota is smaller than its `meetings` collection, and a full read on 2026-11-08 used it up and blocked all reads on the project until the quota reset. The script now refuses to scan a source with billing off. Check billing before any bulk read of a product's Firestore. Turning billing back on needs a different account and may restart its scheduled jobs, including the subscription reconciler and reminders.
 - **`refreshDirectory` could not finish a run before this fix:** every run hit the 60s timeout, so the cursor stayed at 853 from June 22. The fix lets it finish and saves progress as it goes.
 - **Deploy order:** deploy the `firestore.indexes.json` index first and wait until it is READY, then the function. Pruning needs that index.
+- **Build before deploying functions.** `firebase.json` has no build step and ignores `src`, so a deploy ships whatever is in `lib/`. Run `npm run build` first, or you deploy the stale tracked copy, then restore `lib/` afterwards.
 
 ---
 

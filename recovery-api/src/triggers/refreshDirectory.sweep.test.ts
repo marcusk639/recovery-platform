@@ -76,7 +76,7 @@ function staleRows500(): Record<string, MockDoc> {
 /** A db whose cursor is on the last cell, so one run closes the cycle. */
 function closingCycleDb(sweep: unknown, rows: Record<string, MockDoc>) {
   return makeDirectoryDb({
-    [CURSOR_KEY]: { cursor: TOTAL - 1, sweep },
+    [CURSOR_KEY]: { cursor: TOTAL - 1, sweep, sweepStartedAt: NOW.getTime() - 7 * 86_400_000 },
     ...freshRows('AA', 20),
     ...freshRows('CELEBRATE_RECOVERY', 20),
     ...rows,

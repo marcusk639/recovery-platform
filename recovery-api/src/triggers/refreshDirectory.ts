@@ -58,6 +58,8 @@ export interface RefreshState {
   cursor: number;
   /** Per-source results for the sweep in progress; decides what may be pruned. */
   sweep?: SweepTally;
+  /** When the sweep in progress began at the first cell (epoch ms). */
+  sweepStartedAt?: number;
 }
 
 export interface RefreshDeps {
@@ -133,6 +135,7 @@ async function readState(database: FirebaseFirestore.Firestore): Promise<Refresh
   return {
     cursor: typeof cursor === 'number' && cursor >= 0 ? cursor : 0,
     sweep: data?.sweep ?? {},
+    ...(typeof data?.sweepStartedAt === 'number' ? { sweepStartedAt: data.sweepStartedAt } : {}),
   };
 }
 
@@ -165,7 +168,10 @@ export async function refreshSlice(deps: RefreshDeps): Promise<RefreshSliceResul
   const { start, end, nextCursor, cycleCompleted } = computeSlice(saved.cursor, perRun, totalCells);
 
   const startedAt = clock().getTime();
-  let sweep: SweepTally = start === 0 ? {} : saved.sweep ?? {};
+  let sweep: SweepTally = start === 0 ? {} : (saved.sweep ?? {});
+  // Only a sweep that began at the first cell knows when it started.
+  const sweepStartedAt = start === 0 ? startedAt : saved.sweepStartedAt;
+  const startField = sweepStartedAt === undefined ? {} : { sweepStartedAt };
   let reached = start;
 
   while (reached < end && clock().getTime() - startedAt < RUN_BUDGET_MS) {
@@ -174,7 +180,7 @@ export async function refreshSlice(deps: RefreshDeps): Promise<RefreshSliceResul
     sweep = addCellToTally(sweep, sourceResults);
     reached++;
     if ((reached - start) % CHECKPOINT_EVERY_CELLS === 0 && reached < end) {
-      await writeState(database, { cursor: reached, sweep });
+      await writeState(database, { cursor: reached, sweep, ...startField });
     }
   }
 
@@ -190,7 +196,12 @@ export async function refreshSlice(deps: RefreshDeps): Promise<RefreshSliceResul
   // reconcile any rows missed during the outage. Pinning the cursor on partial
   // failures would risk stalling the whole grid behind one flaky source.
   const cursorAfterRun = finished ? nextCursor : reached;
-  await writeState(database, { cursor: cursorAfterRun, sweep: closedCycle ? {} : sweep });
+  await writeState(
+    database,
+    closedCycle
+      ? { cursor: cursorAfterRun, sweep: {} }
+      : { cursor: cursorAfterRun, sweep, ...startField },
+  );
 
   const result: RefreshSliceResult = {
     startCursor: start,
@@ -203,8 +214,8 @@ export async function refreshSlice(deps: RefreshDeps): Promise<RefreshSliceResul
   };
 
   if (closedCycle) {
-    const providers = providersSafeToPrune(sweep, totalCells);
-    result.prune = { providers, ...(await pruneStale(deps, providers)) };
+    const providers = sweepStartedAt === undefined ? [] : providersSafeToPrune(sweep, totalCells);
+    result.prune = { providers, ...(await pruneStale(deps, providers, sweepStartedAt)) };
   }
 
   return result;

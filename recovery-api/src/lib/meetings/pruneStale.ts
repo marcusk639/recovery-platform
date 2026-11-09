@@ -78,17 +78,21 @@ async function deleteStaleRows(
  * so a provider is skipped when more than MAX_PRUNE_FRACTION of its rows would go.
  * Queries only `source == 'external'`, so app-owned docs are never selected.
  *
+ * A slow sweep can outlast STALE_PRUNE_DAYS, so `sweepStartedAt` also bounds the
+ * cutoff: a row the closing sweep saw was seen after it began, however long ago.
+ *
  * Needs the (source, provider, lastSeenAt) composite index in
  * firestore.indexes.json.
  */
 export async function pruneStale(
   deps: PruneDeps,
   providers: readonly DirectoryProvider[],
+  sweepStartedAt?: number,
 ): Promise<PruneResult> {
   const { db: database } = deps;
   const now = deps.now ? deps.now() : new Date();
-  const cutoffMs = now.getTime() - STALE_PRUNE_DAYS * 24 * 60 * 60 * 1000;
-  const cutoff = Timestamp.fromMillis(cutoffMs);
+  const horizonMs = now.getTime() - STALE_PRUNE_DAYS * 24 * 60 * 60 * 1000;
+  const cutoff = Timestamp.fromMillis(Math.min(horizonMs, sweepStartedAt ?? horizonMs));
 
   const result: PruneResult = { deleted: 0, scanned: 0, blocked: [] };
 

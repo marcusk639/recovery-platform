@@ -196,6 +196,7 @@ describe('refreshSlice', () => {
       [`${REFRESH_STATE_COLLECTION}/${REFRESH_STATE_DOC_ID}`]: {
         cursor: total - 1,
         sweep: { AA: healthy, CelebrateRecovery: healthy },
+        sweepStartedAt: new Date('2026-06-14T03:00:00Z').getTime(),
       },
       // A stale external doc that should be pruned at cycle end.
       'directoryMeetings/stale-ext': {
