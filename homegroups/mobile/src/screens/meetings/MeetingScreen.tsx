@@ -38,6 +38,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import LocationPicker from '../../components/groups/LocationPicker';
 import moment from 'moment';
 import OfflineBanner from '../../components/common/OfflineBanner';
+import {formatDataAsOf} from '../../utils/formatDataAsOf';
 
 // Types for meetings data
 import {
@@ -708,6 +709,11 @@ const MeetingsScreen: React.FC = () => {
                 <View style={styles.detailsSection}>
                   <Text style={styles.detailsLabel}>Type:</Text>
                   <Text style={styles.detailsText}>{selectedMeeting.type}</Text>
+                  {formatDataAsOf(selectedMeeting.dataAsOf) ? (
+                    <Text style={styles.detailsNotes}>
+                      {formatDataAsOf(selectedMeeting.dataAsOf)}
+                    </Text>
+                  ) : null}
                 </View>
 
                 {currentUserLocation &&

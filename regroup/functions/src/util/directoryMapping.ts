@@ -36,5 +36,6 @@ export function mapDirectoryToRats(meeting: DirectoryMeeting): RatsMeeting {
   m.online = meeting.online;
   m.link = meeting.link;
   m.onlineNotes = meeting.onlineNotes ?? "";
+  if (meeting.dataAsOf) m.dataAsOf = meeting.dataAsOf;
   return m;
 }

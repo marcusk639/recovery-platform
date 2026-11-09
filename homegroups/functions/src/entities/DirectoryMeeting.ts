@@ -39,4 +39,6 @@ export interface DirectoryMeeting {
   link?: string;
   onlineNotes?: string;
   timezone?: string;
+  /** "YYYY-MM-DD" an imported listing dates from; empty once a live source confirms it. */
+  dataAsOf?: string | null;
 }

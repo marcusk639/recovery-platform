@@ -52,6 +52,12 @@ export interface DirectoryMeeting {
   createdByApp?: string;
   /** uid of the creating user for an `app`-sourced meeting. */
   createdByUid?: string;
+  /**
+   * "YYYY-MM-DD" the source last confirmed this row, set only on rows imported
+   * from a frozen snapshot. Null once a live sweep has re-seen the row. Clients
+   * show it so a person can tell an old listing from a current one.
+   */
+  dataAsOf?: string | null;
   /** Last time the refresh job re-ingested/updated this record. */
   lastRefreshedAt: Timestamp;
   /** Last time this record was seen in a source sweep (drives stale-prune). */

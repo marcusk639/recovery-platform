@@ -53,6 +53,7 @@ import OfflineBanner from '../../components/common/OfflineBanner';
 
 import {Meeting, Location, DaysAndTimes, MeetingType} from '../../types';
 import {GroupStackParamList} from '../../types/navigation';
+import {formatDataAsOf} from '../../utils/formatDataAsOf';
 
 // Day abbreviation chips
 const DAY_CHIPS = ['Today', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -365,6 +366,10 @@ const MeetingFinderScreen: React.FC = () => {
         {/* Format badge */}
         {item.format ? (
           <Text style={styles.cardFormat}>{item.format}</Text>
+        ) : null}
+
+        {formatDataAsOf(item.dataAsOf) ? (
+          <Text style={styles.cardFormat}>{formatDataAsOf(item.dataAsOf)}</Text>
         ) : null}
 
         {/* Address / Online + Distance */}

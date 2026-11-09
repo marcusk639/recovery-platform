@@ -1,4 +1,4 @@
-import { runMigration } from './migrateNaMeetings';
+import { main, runMigration } from './migrateNaMeetings';
 
 /**
  * Pure mocks — ZERO real Firestore. Mirrors the dependency-injection style of
@@ -68,5 +68,11 @@ describe('runMigration same-instance guard', () => {
     await runMigration({ sourceDb, destDb });
 
     expect(warnSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('migrateNaMeetings main', () => {
+  it('refuses to run, because its rows look live and the snapshot import then skips them', async () => {
+    await expect(main()).rejects.toThrow(/import:snapshot/);
   });
 });

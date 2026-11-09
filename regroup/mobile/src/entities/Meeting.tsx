@@ -44,6 +44,7 @@ export class RatsMeeting {
   online?: boolean;
   link?: string;
   onlineNotes?: string;
+  dataAsOf?: string; // "YYYY-MM-DD" an imported directory listing dates from
   createdAt: string = new Date().toISOString();
   updatedAt: string = new Date().toISOString();
 }

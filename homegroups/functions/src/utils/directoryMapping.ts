@@ -48,5 +48,6 @@ export function mapDirectoryToSerialized(
     online: meeting.online,
     link: meeting.link,
     onlineNotes: meeting.onlineNotes,
+    ...(meeting.dataAsOf ? { dataAsOf: meeting.dataAsOf } : {}),
   };
 }
