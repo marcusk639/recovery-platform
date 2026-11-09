@@ -119,6 +119,11 @@ describe('describeResult coverage', () => {
     expect(describeResult(result).join('\n')).toMatch(/Marathon, FL: 3/);
   });
 
+  it('warns when the 10% limit blocked the prune, so it is not missed', () => {
+    const blocked = { ...result, prune: { deleted: 0, scanned: 0, blocked: ['AA' as const] } };
+    expect(describeResult(blocked).join('\n')).toMatch(/WARNING the prune was blocked for AA/);
+  });
+
   it('warns about a place with no meetings, so a coastal gap is not silent', () => {
     expect(describeResult(result).join('\n')).toMatch(
       /WARNING no meetings found near Nantucket, MA/,

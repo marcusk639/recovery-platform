@@ -66,6 +66,60 @@ describe('runMeetingSync coverage', () => {
 });
 
 describe('runMeetingSync prune', () => {
+  it('still records the sweep when the 10% limit blocks the prune, and deletes nothing', async () => {
+    const seed: Record<string, MockDoc> = {
+      [STATE]: { lastHealthySweepStartedAt: daysAgo(45) },
+    };
+    for (let i = 0; i < 5; i++) {
+      seed[`directoryMeetings/stale-${i}`] = {
+        source: 'external',
+        provider: 'AA',
+        externalId: String(2000 + i),
+        location: ON_LAND,
+        lastSeenAt: seenDaysAgo(300),
+      };
+    }
+    const { store, synced } = await run(seed);
+    expect(synced.prune?.blocked).toEqual(['AA']);
+    expect(synced.prune?.deleted).toBe(0);
+    expect(store.has('directoryMeetings/stale-0')).toBe(true);
+    expect(store.get(STATE)).toEqual({ lastHealthySweepStartedAt: NOW.getTime() });
+  });
+
+  it('records when the sweep began, not when it finished', async () => {
+    const { db, store } = makeDirectoryDb(
+      directory({ location: ON_LAND, lastSeenAt: seenDaysAgo(1) }, 45),
+    );
+    const startedAt = NOW.getTime();
+    const times = [new Date(startedAt)];
+    await runMeetingSync({
+      db,
+      now: () => times.shift() ?? new Date(startedAt + DAY),
+      apply: true,
+      sweep: async () => sweep(),
+    });
+    expect(store.get(STATE)).toEqual({ lastHealthySweepStartedAt: startedAt });
+  });
+
+  it('does not record the sweep when the prune fails, so it cannot count as the first miss', async () => {
+    const { db, store } = makeDirectoryDb(
+      directory({ location: ON_LAND, lastSeenAt: seenDaysAgo(300) }, 45),
+    );
+    const realBatch = db.batch.bind(db);
+    let batches = 0;
+    (db as unknown as { batch: () => unknown }).batch = () => {
+      const batch = realBatch();
+      batches++;
+      // Reconcile uses the first batch; the prune's delete batch comes after it.
+      if (batches > 1) batch.commit = async () => Promise.reject(new Error('commit failed'));
+      return batch;
+    };
+    await expect(
+      runMeetingSync({ db, now: () => NOW, apply: true, sweep: async () => sweep() }),
+    ).rejects.toThrow('commit failed');
+    expect(store.get(STATE)).toEqual({ lastHealthySweepStartedAt: daysAgo(45) });
+  });
+
   it('deletes nothing on the first healthy sweep, which only records that it ran', async () => {
     const { store, synced } = await run(
       directory({ location: ON_LAND, lastSeenAt: seenDaysAgo(300) }),

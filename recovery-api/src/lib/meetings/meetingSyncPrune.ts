@@ -4,7 +4,11 @@ import { usBaseCells } from './usLandCells';
 
 export const DAY_MS = 86_400_000;
 
-/** Well inside the prune horizon, so a late or skipped run can't cost a live meeting. */
+/**
+ * Well inside the prune horizon, so a late or skipped run can't cost a live meeting.
+ * Don't lower this without care: the guard below assumes the previous sweep re-stamped under
+ * the same value, so lowering it could delete a row that sweep saw on the next run.
+ */
 export const RESTAMP_AFTER_DAYS = 14;
 
 function cellContains(cell: SweepCell, lat: number, lng: number): boolean {

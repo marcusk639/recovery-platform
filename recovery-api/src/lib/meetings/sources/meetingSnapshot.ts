@@ -59,7 +59,9 @@ export function mapSnapshotMeeting(
     // Homegroups keeps the street in `street` and the formatted address in `address`.
     // Live rows store only the street, so the city and state aren't shown twice.
     const address = text(doc.street) || text(doc.address);
-    // Same fallback as the live mapper, so a row a live sweep re-sees keeps its id.
+    // Same fallback as the live mapper, so a row a live sweep re-sees usually keeps its id.
+    // The live mapper keeps more of a name, so one with a " - " suffix gets a new id, and the
+    // sync replaces this row through its upstream id.
     const formattedAddress = text(doc.formattedAddress ?? doc.address).trim();
 
     const meeting = {

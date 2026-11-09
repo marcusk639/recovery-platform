@@ -99,6 +99,12 @@ export function describeResult(result: MeetingSyncResult): string[] {
   if (sweep.rateLimited > 0) {
     lines.push(`syncMeetings: WARNING rate limited ${sweep.rateLimited} times; lower concurrency`);
   }
+  if (prune && prune.blocked.length > 0) {
+    lines.push(
+      `syncMeetings: WARNING the prune was blocked for ${prune.blocked.join(', ')}: more than 10% ` +
+        'of its rows look stale. Nothing was deleted. Find out why before the next run',
+    );
+  }
   if (!prune) {
     lines.push(
       'syncMeetings: no prune this run. It needs --apply and a healthy sweep that follows ' +
