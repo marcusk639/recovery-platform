@@ -74,7 +74,7 @@ export async function fetchBmltRegions(deps: NaSweepDeps): Promise<BmltRegion[]>
   try {
     body = await getJson(`${AGGREGATOR_BASE}/api/v1/rootservers`, deps);
   } catch (err) {
-    throw new Error(`Could not read the BMLT region list: ${String(err)}`);
+    throw new Error(`Could not read the BMLT region list: ${String(err)}`, { cause: err });
   }
   if (!Array.isArray(body) || body.length < MIN_EXPECTED_REGIONS) {
     throw new Error('The BMLT region list looks wrong, so nothing was changed');
