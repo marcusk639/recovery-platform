@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -15,3 +15,27 @@ test('a required deferred module fails visibly when used', () => {
   const printed = execFileSync('node', ['-e', script], { encoding: 'utf8' });
   expect(printed).toMatch(/not available on the web yet: react-native-html-to-pdf/i);
 }, 60_000);
+
+const build = (...flags: string[]) => {
+  const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'portal-bundle-')), 'out.mjs');
+  execFileSync('node', ['tools/bundle.mjs', '--production', '--entry', 'src/app/main.tsx', '--outfile', out, ...flags], { stdio: 'pipe' });
+  return fs.readFileSync(out, 'utf8');
+};
+
+test('a normal build has no test hooks', () => {
+  expect(build()).not.toContain('__portalTest');
+}, 120_000);
+
+test('an e2e build has them', () => {
+  expect(build('--e2e')).toContain('__portalTest');
+}, 120_000);
+
+test('check-bundle fails if a non-e2e report comes with test hooks in the bundle', () => {
+  const dist = fs.mkdtempSync(path.join(os.tmpdir(), 'portal-dist-'));
+  fs.writeFileSync(path.join(dist, 'main.js'), 'window.__portalTest = {};');
+  fs.writeFileSync(path.join(dist, 'metafile.json'), JSON.stringify({ inputs: {} }));
+  fs.writeFileSync(path.join(dist, 'build-report.json'), JSON.stringify({ e2e: false }));
+  const run = spawnSync('node', ['tools/check-bundle.mjs', '--warn-versions', '--dist', dist], { encoding: 'utf8' });
+  expect(run.status).toBe(1);
+  expect(run.stderr).toContain('test hooks');
+});

@@ -6,3 +6,4 @@ declare module '*.ttf' {
   const source: string;
   export default source;
 }
+declare const __E2E__: boolean;

@@ -1,5 +1,5 @@
 // Invariants on the built bundle. Exits 1 naming each problem.
-//   node tools/check-bundle.mjs [--warn-versions]
+//   node tools/check-bundle.mjs [--warn-versions] [--dist <dir>]
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,8 +8,10 @@ const portalRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '.
 const readJson = (p) => JSON.parse(fs.readFileSync(p, 'utf8'));
 const warnVersions = process.argv.includes('--warn-versions');
 const problems = [];
+const distIndex = process.argv.indexOf('--dist');
+const dist = distIndex === -1 ? path.join(portalRoot, 'dist') : process.argv[distIndex + 1];
 
-const { inputs } = readJson(path.join(portalRoot, 'dist/metafile.json'));
+const { inputs } = readJson(path.join(dist, 'metafile.json'));
 const paths = Object.keys(inputs);
 
 const mobilePackages = paths.filter((p) => p.includes('mobile/node_modules/'));
@@ -22,8 +24,10 @@ const reactCopies = new Set(
 );
 if (reactCopies.size > 1) problems.push(`More than one copy of react: ${[...reactCopies].join(', ')}`);
 
-if (fs.readFileSync(path.join(portalRoot, 'dist/main.js'), 'utf8').includes('phoenix-cleanhouse')) {
-  problems.push('The bundle contains phoenix-cleanhouse');
+const bundle = fs.readFileSync(path.join(dist, 'main.js'), 'utf8');
+if (bundle.includes('phoenix-cleanhouse')) problems.push('The bundle contains phoenix-cleanhouse');
+if (!readJson(path.join(dist, 'build-report.json')).e2e && bundle.includes('__portalTest')) {
+  problems.push('A build not made with --e2e contains test hooks');
 }
 
 const portal = readJson(path.join(portalRoot, 'package.json')).dependencies;

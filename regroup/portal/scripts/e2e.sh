@@ -6,7 +6,7 @@ set -euo pipefail
 PORTAL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REGROUP_DIR="$(cd "${PORTAL_DIR}/.." && pwd)"
 
-BUILD_ARGS=()
+BUILD_ARGS=(--e2e)
 if [ "${1:-}" = "--production" ]; then
   BUILD_ARGS+=(--production)
   shift

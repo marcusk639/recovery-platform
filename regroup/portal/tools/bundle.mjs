@@ -11,6 +11,7 @@ const mobileRoot = path.resolve(portalRoot, '../mobile');
 const mobileSrc = path.join(mobileRoot, 'src');
 const dist = path.join(portalRoot, 'dist');
 const production = process.argv.includes('--production');
+const e2e = process.argv.includes('--e2e');
 const argument = (name) => {
   const index = process.argv.indexOf(name);
   return index === -1 ? undefined : process.argv[index + 1];
@@ -161,6 +162,7 @@ try {
     conditions: ['browser'],
     define: {
       __DEV__: String(!production),
+      __E2E__: String(e2e),
       global: 'globalThis',
       'process.env.NODE_ENV': JSON.stringify(production ? 'production' : 'development'),
       'process.env': '{}',
@@ -197,7 +199,7 @@ if (unknown.size > 0) {
   process.exit(1);
 }
 
-if (entry !== 'src/app/main.tsx') process.exit(0);
+if (argument('--outfile')) process.exit(0);
 
 fs.copyFileSync(path.join(portalRoot, 'index.html'), path.join(dist, 'index.html'));
 fs.writeFileSync(path.join(dist, 'metafile.json'), JSON.stringify(result.metafile));
@@ -210,6 +212,7 @@ fs.writeFileSync(
       deferred: [...report.deferred].sort(),
       inert: [...report.inert].map(([name, reason]) => ({ name, reason })),
       sizeBytes,
+      e2e,
     },
     null,
     2,
