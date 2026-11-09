@@ -14,7 +14,7 @@ A one-sided change compiles and passes both packages' tests, then fails at runti
 return `[]` on any error, so the failure looks like "no meetings".
 
 Surface (`recovery-api/src/index.ts`): `createReferral`, `getReferrals`, `getReferral`, `getUserProfile`,
-`updateUserProfile`, `findMeetings`, `health`, plus the `refreshDirectory` schedule and identity/user stubs.
+`updateUserProfile`, `findMeetings`, `health`, plus identity/user stubs. No scheduled functions: meeting sync is manual.
 Region is set in `recovery-api/src/config.ts`. Auth is `requireServiceAuth` in `recovery-api/src/middleware/auth.ts`.
 The app registry `recovery-api/src/config/apps.ts` is the source of truth for app ids.
 

@@ -20,7 +20,11 @@ npm run migrate:na   # superseded by import:snapshot; do not use
 npm run import:snapshot -- --provider AA|NA [--apply]  # dry run by default; refuses a source with billing off
 ```
 
-`lib/` is tracked and stale, and `npm run build` rewrites it. Don't commit the result; deploys build their own.
+`lib/` is tracked and stale, and `npm run build` rewrites it. Don't commit the result. `firebase.json` has no
+build step, so build before any functions deploy or it ships the stale copy.
+
+**No scheduled job updates meetings** (owner decision, 2026-11-08). Meeting sync runs manually through scripts
+until further notice. `src/noScheduledJobs.test.ts` fails if a scheduled function returns.
 
 ## Architecture
 
@@ -42,10 +46,8 @@ src/
 │                      findMeetings — geohash-bounded search of the shared directoryMeetings collection
 │                      identity (Phase 2 scaffold — all code commented out, not deployed)
 ├── http/              health — GET /health liveness probe returning {ok: true, ts: <iso>}
-└── triggers/          refreshDirectory — LIVE onSchedule 'every day 03:00'; geohash-cell slice refresh
-                       (7-run cycle) + 30-day stale prune of directoryMeetings, only for
-                       providers whose source answered for a full sweep (lib/meetings/sweepHealth.ts)
-                       onUserWrite (Phase 2 scaffold — inactive)
+└── triggers/          onUserWrite (Phase 2 scaffold — inactive)
+                       refreshDirectory.ts — sliced grid sweep + prune, NOT scheduled and NOT exported
 ```
 
 ## Auth Model

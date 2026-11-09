@@ -6,4 +6,3 @@ export * from './callable/findMeetings';
 export * from './callable/identity';
 export * from './http/health';
 export * from './triggers/onUserWrite';
-export * from './triggers/refreshDirectory';

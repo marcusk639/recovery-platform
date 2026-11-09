@@ -6,8 +6,8 @@ import {
   REFRESH_STATE_COLLECTION,
   REFRESH_STATE_DOC_ID,
   RUN_BUDGET_MS,
-  REFRESH_TIMEOUT_SECONDS,
 } from './refreshDirectory';
+import * as refreshModule from './refreshDirectory';
 import { gridCells } from '../lib/meetings/ingest';
 import { freshRows, IN_GRID, makeDirectoryDb, type MockDoc } from './testing/directoryDbMock';
 
@@ -84,8 +84,8 @@ function closingCycleDb(sweep: unknown, rows: Record<string, MockDoc>) {
 }
 
 describe('refreshSlice time budget', () => {
-  it('leaves the budget inside the function timeout', () => {
-    expect(RUN_BUDGET_MS).toBeLessThan(REFRESH_TIMEOUT_SECONDS * 1000);
+  it('exports no scheduled function to deploy', () => {
+    expect(Object.keys(refreshModule)).not.toContain('refreshDirectory');
   });
 
   it('stops at the budget and saves the cursor where it stopped', async () => {

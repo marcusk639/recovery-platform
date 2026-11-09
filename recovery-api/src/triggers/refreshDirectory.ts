@@ -1,25 +1,18 @@
-import { onSchedule } from 'firebase-functions/v2/scheduler';
-import { logger } from 'firebase-functions/v2';
 import type { DirectoryProvider } from '../entities/DirectoryMeeting';
-import { db } from '../lib/firebase';
 import { gridCells, ingestGridCell, type GridCell } from '../lib/meetings/ingest';
 import { pruneStale, type PruneResult } from '../lib/meetings/pruneStale';
 import { addCellToTally, providersSafeToPrune, type SweepTally } from '../lib/meetings/sweepHealth';
 
 /**
- * Scheduled directory refresh + stale prune for the shared meeting directory
+ * Sliced sweep of the grid + stale prune for the shared meeting directory
  * (`directoryMeetings`).
  *
- * The refresh runs NIGHTLY but processes only a BOUNDED SLICE of the grid each
- * run, so a full continental-US sweep completes once per cadence window
- * (default: a full grid every 7 nights). A resumable cursor doc tracks where the
- * next slice begins and WRAPS to 0 at the end of the grid.
+ * NOT SCHEDULED, and not exported from index.ts. By owner decision (2026-11-08) no
+ * scheduled job updates meetings: sync runs manually through scripts until further
+ * notice, and noScheduledJobs.test.ts enforces it.
  *
- * NOTE ON SECRETS: ingestGridCell calls ONLY the keyless AA Meeting Guide +
- * Celebrate Recovery sources — it does NOT geocode and never reads
- * GOOGLE_MAPS_API_KEY. So this function is deliberately NOT bound to that secret;
- * binding an unprovisioned secret would block deploy. If geocoding is wired into
- * ingestion later, bind GOOGLE_MAPS_API_KEY here at that time.
+ * Each call processes one bounded slice of the grid. A resumable cursor doc tracks
+ * where the next slice begins and WRAPS to 0 at the end of the grid.
  *
  * Slicing + cursor patterns mirror the resumable-cursor approach already used by
  * the ingestion layer (lib/meetings/ingest.ts) — one geohash/identity recipe, no
@@ -31,21 +24,12 @@ export const REFRESH_STATE_COLLECTION = 'refreshState';
 /** Document id of the directory-refresh cursor. */
 export const REFRESH_STATE_DOC_ID = 'directory';
 
-/**
- * Cadence: how many nightly runs it takes to cover the whole grid once.
- * Default 7 → "full grid weekly, sliced nightly".
- */
+/** How many slices it takes to cover the whole grid once. */
 export const REFRESH_CYCLE_RUNS = 7;
 
 /**
- * The platform default of 60s killed every run before the slice finished, so the
- * cursor never advanced and the same cells were re-fetched nightly.
- */
-export const REFRESH_TIMEOUT_SECONDS = 540;
-
-/**
- * Stop starting new cells here, leaving room to save the cursor before the
- * timeout. A slower run covers fewer cells and the next run resumes from them.
+ * Stop starting new cells here and save the cursor. A slower run covers fewer
+ * cells and the next run resumes from them.
  */
 export const RUN_BUDGET_MS = 480_000;
 
@@ -220,25 +204,3 @@ export async function refreshSlice(deps: RefreshDeps): Promise<RefreshSliceResul
 
   return result;
 }
-
-/**
- * Nightly scheduled wrapper. Thin: resolves real deps (Firestore + global fetch)
- * and delegates to the pure refreshSlice. NOT bound to GOOGLE_MAPS_API_KEY — see
- * the file header (ingestGridCell uses only keyless sources).
- */
-export const refreshDirectory = onSchedule(
-  { schedule: 'every day 03:00', timeoutSeconds: REFRESH_TIMEOUT_SECONDS },
-  async () => {
-    const result = await refreshSlice({ db, fetchFn: fetch });
-    logger.info('directory refresh slice complete', {
-      startCursor: result.startCursor,
-      nextCursor: result.nextCursor,
-      cellsProcessed: result.cellsProcessed,
-      totalCells: result.totalCells,
-      cycleCompleted: result.cycleCompleted,
-      stoppedEarly: result.stoppedEarly,
-      sweep: result.sweep,
-      prune: result.prune,
-    });
-  },
-);

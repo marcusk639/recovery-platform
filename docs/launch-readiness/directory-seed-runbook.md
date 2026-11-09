@@ -17,8 +17,8 @@
 - **Celebrate Recovery is failing too:** `locator.crgroups.info` has an expired TLS certificate. Don't disable certificate checks to get around it.
 - **The snapshot import exists but has not been run:** `npm run import:snapshot` (step 3) replaces `migrate:na`. Each row carries `dataAsOf`, which the apps show as "Listing data from Mar 2023". The owner is holding both imports as of 2026-11-08: AA until a live sync is proven, NA pending a decision on data last written in March 2023.
 - **`recovery-connect-cad4b` has billing off, and its linked billing account is closed.** Its free daily read quota is smaller than its `meetings` collection, and a full read on 2026-11-08 used it up and blocked all reads on the project until the quota reset. The script now refuses to scan a source with billing off. Check billing before any bulk read of a product's Firestore. Turning billing back on needs a different account and may restart its scheduled jobs, including the subscription reconciler and reminders.
-- **`refreshDirectory` could not finish a run before this fix:** every run hit the 60s timeout, so the cursor stayed at 853 from June 22. The fix lets it finish and saves progress as it goes.
-- **Deploy order:** deploy the `firestore.indexes.json` index first and wait until it is READY, then the function. Pruning needs that index.
+- **No scheduled job updates meetings (owner decision, 2026-11-08).** Meeting sync runs manually through scripts until further notice, so ignore the cron references below. `refreshDirectory` is no longer exported, and `src/noScheduledJobs.test.ts` fails if a scheduled function returns. Its live Scheduler job was paused on 2026-11-09. If the old function is still deployed, `firebase functions:delete refreshDirectory --region us-central1 --project recovery-platform-e6cb3` removes it and the job.
+- **The prune's index is deployed:** `directoryMeetings` (source, provider, lastSeenAt) went live on 2026-11-09. `pruneStale` fails without it, though it deletes nothing.
 - **Build before deploying functions.** `firebase.json` has no build step and ignores `src`, so a deploy ships whatever is in `lib/`. Run `npm run build` first, or you deploy the stale tracked copy, then restore `lib/` afterwards.
 
 ---
@@ -35,7 +35,7 @@
 | Resumable         | cursor doc `script_progress/seedDirectory` (`lastProcessedIndex`); cursor advances past failed cells                                                                | `scripts/seedDirectory.ts`                              |
 | Idempotent        | upsert by deterministic id/geohash (`lib/meetings/identity.ts`) — safe to re-run                                                                                    | ingest pattern                                          |
 | NA source         | **products' `na-meetings` Firestore** (NOT recovery-platform, NOT a live API)                                                                                       | `scripts/migrateNaMeetings.ts` header                   |
-| Scheduled refresh | `refreshDirectory` daily 03:00, full grid over 7 days (`REFRESH_CYCLE_RUNS=7`), prunes only `source:'external'` >30d (`STALE_PRUNE_DAYS=30`) — **already deployed** | `triggers/refreshDirectory.ts`                          |
+| Scheduled refresh | **None.** Removed by owner decision, 2026-11-08 | `src/noScheduledJobs.test.ts` |
 | npm scripts       | `npm run seed` → `node lib/scripts/seedDirectory.js`; `npm run migrate:na` → `node lib/scripts/migrateNaMeetings.js` (added this session)                           | `recovery-api/package.json`                             |
 
 **Two things the cron does NOT do (why the manual seed matters):**
@@ -154,7 +154,7 @@ The build rewrites the tracked `recovery-api/lib/`. Don't commit that.
 
 ## 5. After seeding — ongoing maintenance
 
-- `refreshDirectory` (daily 03:00) keeps **AA/CR** fresh when their sources answer. It prunes stale rows only for a provider whose source answered for a full sweep, so an outage deletes nothing. It also deletes nothing for a provider when more than 10% of its rows would go, and logs `refreshDirectory: prune blocked` as an error instead. If you see that, work out why before acting: it may be a degraded source, or imported rows a recovered source no longer lists. Rows outside the sweep's grid (Alaska, Hawaii, Puerto Rico) are never pruned, because a sweep can't re-see them.
+- **Nothing refreshes meetings on a schedule.** Rows stay as of the last manual sync. `pruneStale` removes stale rows only for a provider whose source answered for a full sweep, so an outage deletes nothing. It also deletes nothing for a provider when more than 10% of its rows would go, and logs `refreshDirectory: prune blocked` as an error instead. If you see that, work out why before acting: it may be a degraded source, or imported rows a recovered source no longer lists. Rows outside the sweep's grid (Alaska, Hawaii, Puerto Rico) are never pruned, because a sweep can't re-see them.
 - **NA has no live source**, so it is never pruned and stays frozen at its `dataAsOf` date until Phase 1B adds `refreshNaDirectory`.
 - Do **not** run seeds from app clients; seeding is recovery-api-side (script/admin) only.
 
