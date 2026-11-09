@@ -128,7 +128,7 @@ npm run import:snapshot -- --provider AA --apply
 # Final log: "importMeetingSnapshot: complete {...}"
 ```
 
-Check `read`, `skippedUnmappable`, `skippedLive` and the `dataAsOf` range before applying. A row with no `dataAsOf` counts as live, including one from the old `migrate:na`, so it is skipped and shows no age label; delete such rows first if you want them imported. Re-running is safe: rows a live source has confirmed and app-owned rows are never overwritten. Homegroups serves AA from its own Firestore, so imported AA rows reach Regroup only.
+Check `read`, `skippedUnmappable`, `skippedLive` and the `dataAsOf` range before applying. A row with no `dataAsOf` counts as live, including one from the old `migrate:na`, so it is skipped and shows no age label; delete such rows first if you want them imported. Re-running is safe: rows a live source has confirmed and app-owned rows are never overwritten. Homegroups serves AA from its own Firestore plus the directory, listing a meeting found in both once.
 
 The build rewrites the tracked `recovery-api/lib/`. Don't commit that.
 

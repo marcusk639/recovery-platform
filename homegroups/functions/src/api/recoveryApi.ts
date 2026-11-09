@@ -40,6 +40,9 @@ export interface DirectoryClientDeps {
   apiKey?: string;
 }
 
+/** Shorter than this function's 60 s limit, so its own meetings can still be returned. */
+const DIRECTORY_TIMEOUT_MS = 45_000;
+
 /**
  * Fetch directory meetings from recovery-api. Network/availability failures are
  * swallowed to an empty list (mirroring the prior fetch-then-fallback behavior of
@@ -73,6 +76,7 @@ export async function fetchDirectoryMeetings(
         "X-User-Email": caller.email ?? "",
       },
       body: JSON.stringify({ data: input }),
+      signal: AbortSignal.timeout(DIRECTORY_TIMEOUT_MS),
     });
 
     if (!response.ok) {
