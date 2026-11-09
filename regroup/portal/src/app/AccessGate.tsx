@@ -6,6 +6,7 @@ import { WEB_PORTAL_URL } from '@mobile/screens/Subscription/SubscriptionRequire
 import { getRolesFromClaims } from '@mobile/util/roles';
 import { accessFor, type AccessUser } from './access';
 import { signOutAndReset } from './session';
+import { useIdleSignOut } from './useIdleSignOut';
 
 const page = {
   margin: 'auto',
@@ -60,6 +61,7 @@ function SubscriptionCheck({ children }: { children: ReactNode }) {
 }
 
 export function AccessGate({ children }: { children: ReactNode }) {
+  useIdleSignOut();
   const user = useSelector((state: any) => state.user.user) as AccessUser | null;
   const claims = useSelector((state: any) => state.user.token?.claims);
   const access = accessFor(user, claims ? getRolesFromClaims(claims) : {});

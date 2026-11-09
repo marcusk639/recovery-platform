@@ -56,3 +56,29 @@ test('sign-in links to password reset on the existing site', async ({ page }) =>
   await page.goto('/');
   await expect(page.getByRole('link', { name: /forgot/i })).toHaveAttribute('href', /\/reset$/);
 });
+
+test('15 idle minutes signs out and says why', async ({ page }) => {
+  await page.clock.install();
+  await signInAs(page, 'manager');
+  await page.click('#nav-residents');
+  await expect(page.getByText('Bob Rivera')).toBeVisible();
+  await page.clock.fastForward('15:01');
+  await expect(page.locator('#sign-in-form')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/signed out after 15 minutes/i)).toBeVisible();
+  await expect(page.getByText('Bob Rivera')).toHaveCount(0);
+});
+
+test('typing keeps the session', async ({ page }) => {
+  await page.clock.install();
+  await signInAs(page, 'manager');
+  await page.click('#nav-payments');
+  await page.getByTestId('manual-payment-fab').click();
+  const notes = page.getByPlaceholder('Notes (optional)');
+  for (let i = 0; i < 3; i++) {
+    await page.clock.fastForward('10:00');
+    await notes.pressSequentially('a');
+  }
+  await page.clock.fastForward('10:00');
+  await expect(page.locator('#sign-in-form')).toHaveCount(0);
+  await expect(notes).toHaveValue('aaa');
+});
