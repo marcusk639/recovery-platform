@@ -4,7 +4,7 @@ vi.mock('@mobile/navigation/types', () => ({
   Routes: new Proxy({}, { get: (_target, key) => `route-${String(key)}` }),
 }));
 
-import { houseIdForState } from '../src/app/current-house';
+import { guestIdForState, houseIdForState } from '../src/app/current-house';
 import { HOME_ROUTE } from '../src/app/urls';
 
 const state = (index: number, ...routes: { name: string; params?: { houseId?: string } }[]) => ({ index, routes });
@@ -27,4 +27,11 @@ test('Back to an earlier route uses that route, not a later house', () => {
 });
 test('no state has no house', () => {
   expect(houseIdForState(undefined)).toBeNull();
+});
+test('guestIdForState reads only the focused route', () => {
+  expect(guestIdForState({ index: 0, routes: [{ name: 'x', params: { guestId: 'g1' } }] })).toBe('g1');
+  expect(guestIdForState({ index: 1, routes: [{ name: 'x', params: { guestId: 'g1' } }, { name: 'y' }] })).toBeNull();
+});
+test('the house list belongs to no house', () => {
+  expect(houseIdForState({ index: 0, routes: [{ name: 'route-HouseList', params: { houseId: 'h1' } }] })).toBeNull();
 });

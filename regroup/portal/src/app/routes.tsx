@@ -20,7 +20,6 @@ import GuestMedicationSummary from '@mobile/screens/GuestMedicationOverview/Gues
 import GuestMeetingSummary from '@mobile/screens/GuestMeetingOverview/GuestMeetingSummary/GuestMeetingSummary';
 import GuestSupporterSummary from '@mobile/screens/GuestSupporterOverview/GuestSupporterSummary/GuestSupporterSummary';
 import GuestWorkSummary from '@mobile/screens/GuestWorkOverview/GuestWorkSummary/GuestWorkSummary';
-import HousesOverview from '@mobile/screens/HousesOverview/HousesOverview';
 import Issues from '@mobile/screens/Issues/Issues';
 import { PaymentHistory } from '@mobile/screens/Payments';
 import EditUserInfoForm from '@mobile/screens/Profile/EditUserInfoForm';
@@ -45,7 +44,8 @@ export const Screens = () => (
     <Stack.Screen name={Routes.PaymentDashboard} component={PaymentDashboard} />
     <Stack.Screen name={Routes.Documents} component={DocumentListScreen} />
     <Stack.Screen name={Routes.HouseSummary} component={HouseSummary} />
-    <Stack.Screen name={Routes.HouseList} component={HousesOverview} />
+    {/* The phone's list selects a house the URL would then override. */}
+    <Stack.Screen name={Routes.HouseList} component={Home} />
     <Stack.Screen name={Routes.Beds} component={Beds} />
     <Stack.Screen name={Routes.ApplicationList} component={ApplicationListScreen} />
     <Stack.Screen name={Routes.ApplicationDetail} component={ApplicationDetailScreen} />
