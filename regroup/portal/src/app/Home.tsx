@@ -1,33 +1,54 @@
-import { useHouse } from '@mobile/state/queries/houseQueries';
+import { useCallback, useEffect, useState } from 'react';
+import { WEB_PORTAL_URL } from '@mobile/screens/Subscription/SubscriptionRequiredScreen';
+import { getHealthByPercentage, HEALTH_STATUS_MAP } from '@mobile/util/guest';
 import { operatorHouseIds } from './access';
-import { HouseLink } from './HouseLink';
-import { SECTIONS, sectionPath } from './urls';
+import { HouseTable } from './houses/HouseTable';
+import type { HouseSummary } from './houses/summary';
+import { useHouseSummary } from './houses/useHouseSummary';
+import { heading, page } from './ui';
 import { useRoles } from './useRoles';
 
-function HouseRow({ houseId }: { houseId: string }) {
-  const { data, error } = useHouse(houseId, true);
-  return (
-    <li style={{ padding: '6px 0' }}>
-      <HouseLink href={sectionPath(houseId, 'summary')} route={SECTIONS.summary.route} params={{ houseId }}>
-        {data?.name ?? houseId}
-      </HouseLink>
-      {error && <span role="alert"> (could not load its details)</span>}
-    </li>
-  );
+const titleCase = (text: string) => text.charAt(0) + text.slice(1).toLowerCase();
+export const healthLabel = (percent: number): string =>
+  titleCase((HEALTH_STATUS_MAP as Record<string, string>)[getHealthByPercentage(percent)] ?? '');
+
+const loadingSummary = (houseId: string): HouseSummary => ({
+  houseId,
+  name: null,
+  house: { state: 'loading' },
+  subscription: 'loading',
+  graceEndsAt: null,
+  beds: { state: 'loading' },
+  healthPercent: { state: 'loading' },
+  rentOverdueCents: { state: 'loading' },
+  overdueFromDischargedCents: 0,
+  applicationsWaiting: { state: 'loading' },
+  openDisputes: { state: 'loading' },
+});
+
+// One per house, because the number of houses varies and hooks can't run in a loop.
+function HouseSummaryReporter({ houseId, report }: { houseId: string; report: (summary: HouseSummary) => void }) {
+  const summary = useHouseSummary(houseId);
+  const key = JSON.stringify(summary);
+  useEffect(() => report(summary), [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
 }
 
-// A simple list for now, from roles, so it works for staff with no admin record.
-// P3 replaces it with the all-houses table.
+// Houses come from roles, so staff with no admin record see theirs too.
 export function Home() {
   const houseIds = operatorHouseIds(useRoles());
+  const [reported, setReported] = useState<Record<string, HouseSummary>>({});
+  const report = useCallback((summary: HouseSummary) => {
+    setReported((current) => ({ ...current, [summary.houseId]: summary }));
+  }, []);
+  const summaries = houseIds.map((houseId) => reported[houseId] ?? loadingSummary(houseId));
   return (
-    <div style={{ padding: 24, font: '15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
-      <h1 style={{ margin: '0 0 12px', fontSize: 20 }}>Your houses</h1>
-      <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-        {houseIds.map((houseId) => (
-          <HouseRow key={houseId} houseId={houseId} />
-        ))}
-      </ul>
+    <div style={page}>
+      <h1 style={heading}>All houses</h1>
+      {houseIds.map((houseId) => (
+        <HouseSummaryReporter key={houseId} houseId={houseId} report={report} />
+      ))}
+      <HouseTable summaries={summaries} healthLabel={healthLabel} manageSubscriptionUrl={WEB_PORTAL_URL} />
     </div>
   );
 }

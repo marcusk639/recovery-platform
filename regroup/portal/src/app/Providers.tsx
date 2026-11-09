@@ -5,7 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Provider, useSelector } from 'react-redux';
 import Auth from '@mobile/components/auth/auth';
 import { RatsKeyboardProvider } from '@mobile/components/rats-keyboard';
-import { DataProvider, ModalProvider, NotificationProvider } from '@mobile/context';
+import { ModalProvider, NotificationProvider } from '@mobile/context';
 import { navigationRef } from '@mobile/navigation/service';
 import { queryClient } from '@mobile/state/queryClient';
 import store from '@mobile/state/store';
@@ -13,12 +13,20 @@ import { ThemeProvider } from '@mobile/styles/theme';
 import { AlertHost } from '../adapter/alert/AlertHost';
 import { Alert } from '../adapter/react-native';
 import { trackNavigationState } from './current-house';
+import { DataAfterSelection } from './DataAfterSelection';
 import { linkingConfig, stripQuery } from './urls';
 
 function Themed({ children }: { children: ReactNode }) {
   const theme = useSelector((state: any) => state.theme.theme);
   return <ThemeProvider theme={theme}>{children}</ThemeProvider>;
 }
+
+// The phone turns this off because a phone has no window focus. A desk session
+// sits in a background tab, so returning to it refreshes what's stale.
+queryClient.setDefaultOptions({
+  ...queryClient.getDefaultOptions(),
+  queries: { ...queryClient.getDefaultOptions().queries, refetchOnWindowFocus: true },
+});
 
 const linking = {
   ...linkingConfig(location.origin),
@@ -39,14 +47,14 @@ export const Providers = ({ children }: { children: ReactNode }) => (
         <RatsKeyboardProvider>
           <SafeAreaProvider>
             <Themed>
-              <DataProvider>
+              <DataAfterSelection>
                 <NotificationProvider>
                   <ModalProvider>
                     <Auth>{children}</Auth>
                     <AlertHost />
                   </ModalProvider>
                 </NotificationProvider>
-              </DataProvider>
+              </DataAfterSelection>
             </Themed>
           </SafeAreaProvider>
         </RatsKeyboardProvider>
