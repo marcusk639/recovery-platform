@@ -28,7 +28,7 @@ export interface DirectoryLocation {
 }
 
 export interface DirectoryMeeting {
-  /** Deterministic hashed id — see directoryMeetingId(). */
+  /** Deterministic hashed id — see directoryMeetingId(), or bmltMeetingId() for NA rows from BMLT. */
   id: string;
   /** Provenance: 'external' = ingested from a public source; 'app' = user-created via a product. */
   source: DirectorySource;

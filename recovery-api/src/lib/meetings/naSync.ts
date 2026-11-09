@@ -8,7 +8,12 @@ import {
   type RegionSweep,
 } from './naSweep';
 import { chooseDeletes, type NaReconcileResult } from './naDeletes';
-import { isServiceMeeting, mapBmltMeeting, type BmltRegion } from './sources/bmlt';
+import {
+  isServiceMeeting,
+  mapBmltMeeting,
+  meetingFingerprint,
+  type BmltRegion,
+} from './sources/bmlt';
 
 export type { NaReconcileResult } from './naDeletes';
 
@@ -97,6 +102,7 @@ function collectWanted(
   result: NaReconcileResult,
 ): Map<string, Wanted> {
   const wanted = new Map<string, Wanted>();
+  const seen = new Set<string>();
   const ordered = [...sweeps].sort((a, b) => a.region.sourceId - b.region.sourceId);
   for (const { region, rows } of ordered) {
     const sorted = [...rows].sort((a, b) => Number(a.source_id) - Number(b.source_id));
@@ -108,11 +114,15 @@ function collectWanted(
       const meeting = mapBmltMeeting(row, region);
       if (!meeting) {
         result.unmappable++;
-      } else if (wanted.has(meeting.id)) {
-        result.collapsedDuplicates++;
-      } else {
-        wanted.set(meeting.id, { meeting, dataAsOf: confirmedOn(region, now) });
+        continue;
       }
+      const fingerprint = meetingFingerprint(meeting);
+      if (seen.has(fingerprint)) {
+        result.collapsedDuplicates++;
+        continue;
+      }
+      seen.add(fingerprint);
+      wanted.set(meeting.id, { meeting, dataAsOf: confirmedOn(region, now) });
     }
   }
   return wanted;

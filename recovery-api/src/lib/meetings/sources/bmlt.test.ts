@@ -1,5 +1,11 @@
-import { directoryMeetingId } from '../identity';
-import { BMLT_FIELDS, isServiceMeeting, mapBmltMeeting, type BmltRegion } from './bmlt';
+import { bmltMeetingId } from '../identity';
+import {
+  BMLT_FIELDS,
+  isServiceMeeting,
+  mapBmltMeeting,
+  meetingFingerprint,
+  type BmltRegion,
+} from './bmlt';
 
 const REGION: BmltRegion = {
   id: 1,
@@ -60,20 +66,61 @@ test('maps a full in-person row', () => {
   });
 });
 
-test('id matches the frozen recipe', () => {
-  expect(mapBmltMeeting(row(), REGION)!.id).toBe(
-    directoryMeetingId({
-      name: 'Sunday Solutions',
-      day: 0,
-      time: '19:30',
-      link: '',
-      formattedAddress: '1 Main St, Dallas, TX, 75001',
-    }),
-  );
+test('id comes from the region and its own meeting id', () => {
+  expect(mapBmltMeeting(row(), REGION)!.id).toBe(bmltMeetingId(100, 12257));
+});
+
+test('editing a meeting keeps its id', () => {
+  const id = mapBmltMeeting(row(), REGION)!.id;
+  const edited = row({
+    meeting_name: 'Renamed Group',
+    weekday_tinyint: '4',
+    start_time: '08:00:00',
+    location_street: '2 Oak Ave',
+    virtual_meeting_link: 'https://zoom.us/j/9',
+  });
+  expect(mapBmltMeeting(edited, REGION)!.id).toBe(id);
+});
+
+test('the same source_id in two regions gets two ids', () => {
+  const other = { ...REGION, sourceId: 101 };
+  expect(mapBmltMeeting(row(), other)!.id).not.toBe(mapBmltMeeting(row(), REGION)!.id);
+});
+
+describe('meetingFingerprint', () => {
+  const fingerprint = (over: Record<string, unknown>) =>
+    meetingFingerprint(mapBmltMeeting(row(over), REGION)!);
+
+  test('ignores case and spacing', () => {
+    expect(fingerprint({ meeting_name: 'SUNDAY   solutions', location_street: '1 MAIN ST' })).toBe(
+      fingerprint({}),
+    );
+  });
+
+  test.each([
+    ['name', { meeting_name: 'Other Group' }],
+    ['day', { weekday_tinyint: '2' }],
+    ['time', { start_time: '20:00:00' }],
+    ['link', { virtual_meeting_link: 'https://zoom.us/j/1' }],
+    ['street', { location_street: '2 Oak Ave' }],
+    ['city', { location_municipality: 'Austin' }],
+  ])('differs when the %s differs', (_label, over) => {
+    expect(fingerprint(over)).not.toBe(fingerprint({}));
+  });
+
+  test('uses coordinates when there is no street, since a blank street proves nothing', () => {
+    const here = { location_street: '', latitude: '33.040', longitude: '-96.990' };
+    const nearby = { location_street: '', latitude: '33.0401', longitude: '-96.9901' };
+    const elsewhere = { location_street: '', latitude: '30.27', longitude: '-97.74' };
+    expect(fingerprint(nearby)).toBe(fingerprint(here));
+    expect(fingerprint(elsewhere)).not.toBe(fingerprint(here));
+  });
 });
 
 test.each([
   ['blank name', { meeting_name: '  ' }],
+  ['no source id', { source_id: undefined }],
+  ['blank source id', { source_id: '' }],
   ['bad time', { start_time: 'noon' }],
   ['missing coords', { latitude: '' }],
   ['0,0 coords', { latitude: '0', longitude: '0' }],

@@ -58,11 +58,10 @@
 - **`dataAsOf` is the region's `lastSuccessfulImport` date in UTC, not the date of the run.** That is when the source was last confirmed. If a regional server stops updating, its listings keep showing the older date, which is the case the label exists for. If the import date can't be parsed, use the run date.
 - **A row whose region returned it gets that date, even if the region failed a health check.** A row the region did not return keeps its old date.
 - **The dial-in number goes in `onlineNotes`. `virtual_meeting_additional_info` stays out.** It often holds passcodes, and the snapshot mapper already leaves passwords behind. Some Zoom links may not work without a passcode, so the owner may want to revisit this.
+- **A meeting's id is the region plus its BMLT `source_id`, by owner decision.** That pair was unique across all 35,788 live rows, and it survives edits, which name, time and address don't. The region is required, because `source_id` alone had only 14,669 distinct values.
+- **Duplicates are removed by comparing details, not ids.** Name, day, time, link and street or coordinates are compared, ignoring case. On live data this found 168 duplicate groups, 163 of them within one region, with none spanning over 2 km. The lowest region and `source_id` wins.
 - **Non-goals:**
-  - Merging case-variant duplicates (about 0.7% in the sample).
   - Filtering past one-off events such as dated conventions.
-  - Keeping a stable id when a meeting is edited. That is a property of the frozen identity recipe.
-  - Guarding against a hash collision with an AA or Celebrate Recovery row. The id hashes name, day, time, link and address but not provider, so a collision needs all five identical. Accepted as negligible.
   - Showing venue names.
   - Rewording the comments in the two mobile `formatDataAsOf` helpers, which still mention old snapshots. They need a product-scoped commit, and behaviour doesn't change.
   - Sharing code with the AA sync. Consolidate `readAll` and `contentOf` after both land.

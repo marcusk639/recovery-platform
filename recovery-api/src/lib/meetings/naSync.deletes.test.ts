@@ -148,9 +148,45 @@ test('the same meeting in two regions becomes one document and survives losing o
     [regionSweep(100, []), regionSweep(101, [{ ...shared, source_id: 77 }])],
     { db, apply: true, now },
   );
-  expect(after.deleted).toBe(0);
+  // The listing moves to the region still reporting it, so it never goes missing.
+  expect(after).toMatchObject({ created: 1, deleted: 1 });
   expect(store.size).toBe(1);
   expect([...store.values()][0]).toMatchObject({ sourceRegion: '101', externalId: '101:77' });
+});
+
+test('a duplicate within one region becomes one document, even with different capitalization', async () => {
+  const { db, store } = makeNaSyncDb();
+  const result = await reconcileNaMeetings(
+    [regionSweep(100, [bmltRow(1), bmltRow(2, { meeting_name: 'MEETING 1' })])],
+    { db, apply: true, now },
+  );
+  expect(result).toMatchObject({ created: 1, collapsedDuplicates: 1 });
+  expect([...store.values()][0]).toMatchObject({ externalId: '100:1' });
+});
+
+test('renaming a meeting or moving its time updates the same document', async () => {
+  const { db, store } = makeNaSyncDb();
+  await reconcileNaMeetings([regionSweep(100, [bmltRow(1)])], { db, apply: true, now });
+
+  const edited = bmltRow(1, { meeting_name: 'New Name', start_time: '08:00:00' });
+  const result = await reconcileNaMeetings([regionSweep(100, [edited])], { db, apply: true, now });
+
+  expect(result).toMatchObject({ updated: 1, created: 0, deleted: 0 });
+  expect(store.size).toBe(1);
+  expect([...store.values()][0]).toMatchObject({ name: 'New Name', time: '08:00' });
+});
+
+test('a legacy row with the same details is never adopted or purged', async () => {
+  const { db, store } = makeNaSyncDb({
+    [key('legacy')]: { source: 'external', provider: 'NA', name: 'Meeting 1' },
+  });
+  const result = await reconcileNaMeetings([regionSweep(100, [bmltRow(1)])], {
+    db,
+    apply: true,
+    now,
+  });
+  expect(result).toMatchObject({ created: 1, updated: 0, legacyRows: 1 });
+  expect(store.get(key('legacy'))).not.toHaveProperty('sourceRegion');
 });
 
 test('the row that wins a duplicate does not depend on response order', async () => {

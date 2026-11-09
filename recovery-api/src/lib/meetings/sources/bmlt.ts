@@ -1,5 +1,5 @@
 import type { DirectoryMeeting } from '../../../entities/DirectoryMeeting';
-import { directoryGeohash, directoryMeetingId, normalizeTime } from '../identity';
+import { bmltMeetingId, directoryGeohash, normalizeTime } from '../identity';
 
 /**
  * Maps a row from the BMLT aggregator, the directory NA service bodies maintain,
@@ -75,11 +75,37 @@ function directoryDay(value: unknown): number | null {
   return Number.isInteger(weekday) && weekday >= 1 && weekday <= 7 ? weekday - 1 : null;
 }
 
+function comparable(value: string | undefined): string {
+  return (value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+/**
+ * What makes two listings the same meeting, whichever region or row they came from.
+ * Ids can't do this: on live data 163 of 168 duplicate groups were within one region,
+ * each row with its own id. A blank street says nothing about place, so those rows
+ * compare by coordinates to about 100 m. No group on live data spanned over 2 km.
+ */
+export function meetingFingerprint(meeting: DirectoryMeeting): string {
+  const { address, city, lat, lng } = meeting.location;
+  const place = comparable(address)
+    ? `${comparable(address)}|${comparable(city)}`
+    : `${lat.toFixed(3)},${lng.toFixed(3)}`;
+  return [
+    comparable(meeting.name),
+    meeting.day,
+    meeting.time,
+    comparable(meeting.link),
+    place,
+  ].join('\u0000');
+}
+
 export function mapBmltMeeting(row: BmltRow, region: BmltRegion): DirectoryMeeting | null {
   try {
     const name = text(row.meeting_name);
     const day = directoryDay(row.weekday_tinyint);
-    if (!name || day === null || text(row.published) === '0' || isServiceMeeting(row)) return null;
+    const sourceId = String(row.source_id ?? '').trim();
+    if (!name || !sourceId || day === null) return null;
+    if (text(row.published) === '0' || isServiceMeeting(row)) return null;
 
     const lat = parseFloat(text(row.latitude));
     const lng = parseFloat(text(row.longitude));
@@ -98,13 +124,7 @@ export function mapBmltMeeting(row: BmltRow, region: BmltRegion): DirectoryMeeti
     const time = normalizeTime(text(row.start_time));
 
     const meeting = {
-      id: directoryMeetingId({
-        name,
-        day,
-        time,
-        link,
-        formattedAddress: [address, city, state, zip].filter(Boolean).join(', '),
-      }),
+      id: bmltMeetingId(region.sourceId, sourceId),
       source: 'external',
       provider: 'NA',
       type: 'NA',
@@ -112,7 +132,7 @@ export function mapBmltMeeting(row: BmltRow, region: BmltRegion): DirectoryMeeti
       day,
       time,
       online: venue === VENUE_VIRTUAL || venue === VENUE_HYBRID || (venue === '' && canJoin),
-      externalId: `${region.sourceId}:${String(row.source_id)}`,
+      externalId: `${region.sourceId}:${sourceId}`,
       sourceRegion: String(region.sourceId),
       location: { lat, lng, geohash: directoryGeohash(lat, lng) },
     } as DirectoryMeeting;
