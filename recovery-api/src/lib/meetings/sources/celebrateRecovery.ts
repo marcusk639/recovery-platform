@@ -1,6 +1,6 @@
 import { parseString } from 'xml2js';
 import type { DirectoryMeeting } from '../../../entities/DirectoryMeeting';
-import { directoryGeohash, directoryMeetingId, normalizeDay, normalizeTime } from '../identity';
+import { directoryGeohash, directoryMeetingId, normalizeTime, toDayName } from '../identity';
 
 /**
  * Celebrate Recovery source adapter.
@@ -99,7 +99,7 @@ function mapCrMarker(marker: CrMarker): DirectoryMeeting | null {
     const dayRaw = schedule.slice(0, firstSpace).trim();
     const timeRaw = schedule.slice(firstSpace + 1).trim();
 
-    const day = normalizeDay(dayRaw);
+    const day = toDayName(dayRaw);
     const time = normalizeTime(timeRaw);
 
     const lat = parseFloat(marker.lat?.[0]);

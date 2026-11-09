@@ -35,7 +35,7 @@ describe('mapHomegroupsAaMeeting', () => {
       provider: 'AA',
       externalId: '2356688',
       name: 'Sunrise Group',
-      day: 1,
+      day: 'monday',
       time: '12:00',
       format: 'Open,English',
       timezone: 'America/New_York',
@@ -137,7 +137,13 @@ describe('mapSnapshotMeeting', () => {
     const m = mapSnapshotMeeting({ ...AA_DOC, formattedAddress: '' }, 'AA');
 
     expect(m!.id).toBe(
-      directoryMeetingId({ name: AA_DOC.name, day: 1, time: '12:00', link: '', formattedAddress: '' }),
+      directoryMeetingId({
+        name: AA_DOC.name,
+        day: 1,
+        time: '12:00',
+        link: '',
+        formattedAddress: '',
+      }),
     );
   });
 

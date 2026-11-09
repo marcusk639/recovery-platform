@@ -141,12 +141,12 @@ describe("findMeetings", () => {
     expect(result[0].day).toBe("monday");
   });
 
-  it("forwards the numeric day index and caller uid to the directory query", async () => {
+  it("forwards the day name and caller uid to the directory query", async () => {
     await call(findMeetings, {
       filters: { type: "AA", location, day: "monday" },
     });
     expect(mockFetchDirectoryMeetings).toHaveBeenCalledWith(
-      expect.objectContaining({ day: 1 }),
+      expect.objectContaining({ day: "monday" }),
       expect.objectContaining({ uid: "test-user" }),
     );
   });

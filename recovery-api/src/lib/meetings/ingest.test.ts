@@ -26,7 +26,7 @@ function sourceMeeting(over: Partial<DirectoryMeeting> = {}): DirectoryMeeting {
     source: 'external',
     provider: 'AA',
     name: 'Sunrise Group',
-    day: 2,
+    day: 'tuesday',
     time: '07:00',
     location: { lat: 40, lng: -100, geohash: 'abc' },
     ...over,

@@ -45,7 +45,7 @@ function meeting(over: Partial<DirectoryMeeting> = {}): DirectoryMeeting {
     provider: 'AA',
     name: 'Sunrise Group',
     type: 'AA',
-    day: 2,
+    day: 'tuesday',
     time: '07:00',
     location: { lat: 40.001, lng: -100.001, geohash: 'aaa1' },
     lastRefreshedAt: {} as never,
@@ -174,9 +174,45 @@ describe('handleFindMeetings (handler)', () => {
   });
 
   it('respects the day filter', async () => {
-    const { db } = makeDb([meeting({ id: 'tue', day: 2 }), meeting({ id: 'wed', day: 3 })]);
+    const { db } = makeDb([
+      meeting({ id: 'tue', day: 'tuesday' }),
+      meeting({ id: 'wed', day: 'wednesday' }),
+    ]);
     const result = await handleFindMeetings({ location: CENTER, day: 2 }, ctx, { db });
     expect(result.meetings.map((m) => m.id)).toEqual(['tue']);
+  });
+
+  it('accepts a day name, in any case', async () => {
+    const { db } = makeDb([
+      meeting({ id: 'tue', day: 'tuesday' }),
+      meeting({ id: 'wed', day: 'wednesday' }),
+    ]);
+    const result = await handleFindMeetings({ location: CENTER, day: 'Tuesday' }, ctx, { db });
+    expect(result.meetings.map((m) => m.id)).toEqual(['tue']);
+  });
+
+  it('still matches rows stored with a number until they are migrated', async () => {
+    const legacy = { ...meeting({ id: 'old' }), day: 2 } as unknown as DirectoryMeeting;
+    const { db } = makeDb([legacy, meeting({ id: 'new', day: 'tuesday' })]);
+    const result = await handleFindMeetings({ location: CENTER, day: 'tuesday' }, ctx, { db });
+    expect(result.meetings.map((m) => m.id).sort()).toEqual(['new', 'old']);
+  });
+
+  // Deployed product code reads only an integer, so rewriting it here would strip the
+  // day from every unmigrated row until both products are redeployed.
+  it('returns each day exactly as stored, so older products keep reading integers', async () => {
+    const legacy = { ...meeting({ id: 'old' }), day: 0 } as unknown as DirectoryMeeting;
+    const { db } = makeDb([legacy, meeting({ id: 'new', day: 'tuesday' })]);
+    const result = await handleFindMeetings({ location: CENTER }, ctx, { db });
+    const days = Object.fromEntries(result.meetings.map((m) => [m.id, m.day]));
+    expect(days).toEqual({ old: 0, new: 'tuesday' });
+  });
+
+  it.each([['someday'], [7], [-1], ['']])('rejects day %j as invalid input', async (day) => {
+    const { db } = makeDb([]);
+    await expect(
+      handleFindMeetings({ location: CENTER, day } as never, ctx, { db }),
+    ).rejects.toMatchObject({ code: 'invalid-argument' });
   });
 
   it('respects the type filter', async () => {
@@ -201,7 +237,7 @@ describe('findMeetings audit row', () => {
 
     // Attribution-only fields.
     expect(row.appId).toBe('homegroups');
-    expect(row.day).toBe(2);
+    expect(row.day).toBe('tuesday');
     expect(row.type).toBe('AA');
     expect(row.at).toBe(SERVER_TS);
 

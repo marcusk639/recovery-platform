@@ -1,6 +1,9 @@
 const hash = require('ngeohash');
 const { CENTERS, directoryDocPath, directoryMeetings, directoryTarget } = require('../directory');
 
+// recovery-api stores days as lowercase names.
+const DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
 const distanceKm = (a, b) => {
   const toRad = (d) => (d * Math.PI) / 180;
   const dLat = toRad(b.lat - a.lat);
@@ -17,7 +20,8 @@ describe('seeded meeting directory', () => {
       for (const provider of ['AA', 'NA', 'CELEBRATE_RECOVERY']) {
         for (let day = 0; day < 7; day++) {
           const found = meetings.filter(
-            (m) => m.provider === provider && m.day === day && distanceKm(center, m.location) < 5,
+            (m) =>
+              m.provider === provider && m.day === DAYS[day] && distanceKm(center, m.location) < 5,
           );
           expect(found.length).toBeGreaterThan(0);
         }

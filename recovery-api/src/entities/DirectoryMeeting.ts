@@ -1,4 +1,5 @@
 import type { Timestamp } from 'firebase-admin/firestore';
+import type { DayName } from '../lib/meetings/identity';
 
 /**
  * Canonical shape for a meeting in the shared public directory
@@ -9,7 +10,7 @@ import type { Timestamp } from 'firebase-admin/firestore';
  * square/paypal/verified/addedBy) NEVER live here — each product attaches those
  * on its own side, keyed by `id`.
  *
- * `day` is canonicalized to an integer 0–6 (0 = Sunday) and `time` to "HH:mm".
+ * `day` is canonicalized to a lowercase weekday name and `time` to "HH:mm".
  * See `lib/meetings/identity.ts` for the frozen id/geohash/normalization scheme.
  */
 export type DirectoryProvider = 'AA' | 'NA' | 'CELEBRATE_RECOVERY' | 'CUSTOM';
@@ -38,8 +39,12 @@ export interface DirectoryMeeting {
   name: string;
   /** Free-form meeting type/category as surfaced by the source (e.g. "AA", "Open"). */
   type?: string;
-  /** Canonical day-of-week: integer 0–6 (0 = Sunday). */
-  day: number;
+  /**
+   * Day of the week as a lowercase name, e.g. "tuesday". Rows written before
+   * 2026-11-09 may still hold an integer 0–6 (0 = Sunday) until migrated, so a
+   * reader of stored data should go through toDayName().
+   */
+  day: DayName;
   /** Canonical local start time: "HH:mm" (24-hour). */
   time: string;
   format?: string;

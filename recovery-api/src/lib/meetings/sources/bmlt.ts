@@ -1,5 +1,11 @@
 import type { DirectoryMeeting } from '../../../entities/DirectoryMeeting';
-import { bmltMeetingId, directoryGeohash, normalizeTime } from '../identity';
+import {
+  bmltMeetingId,
+  DAY_NAMES,
+  directoryGeohash,
+  normalizeTime,
+  type DayName,
+} from '../identity';
 
 /**
  * Maps a row from the BMLT aggregator, the directory NA service bodies maintain,
@@ -69,10 +75,10 @@ function safeLink(value: unknown): string {
   }
 }
 
-/** BMLT numbers weekdays 1 (Sunday) to 7; the directory uses 0 (Sunday) to 6. */
-function directoryDay(value: unknown): number | null {
+/** BMLT numbers weekdays 1 (Sunday) to 7; the directory stores the day's name. */
+function directoryDay(value: unknown): DayName | null {
   const weekday = Number(text(value) || value);
-  return Number.isInteger(weekday) && weekday >= 1 && weekday <= 7 ? weekday - 1 : null;
+  return Number.isInteger(weekday) && weekday >= 1 && weekday <= 7 ? DAY_NAMES[weekday - 1] : null;
 }
 
 function comparable(value: string | undefined): string {

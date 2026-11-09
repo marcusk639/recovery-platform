@@ -1,5 +1,5 @@
 import type { DirectoryMeeting } from '../../../entities/DirectoryMeeting';
-import { directoryGeohash, directoryMeetingId, normalizeDay, normalizeTime } from '../identity';
+import { directoryGeohash, directoryMeetingId, normalizeTime, toDayName } from '../identity';
 
 /**
  * AA Meeting Guide source adapter.
@@ -104,7 +104,7 @@ function onlineNotesOf(m: MeetingGuideMeeting): string {
 export function mapMeetingGuideMeeting(m: MeetingGuideMeeting): DirectoryMeeting | null {
   try {
     const name = cleanMeetingName(m.name);
-    const day = normalizeDay(m.day);
+    const day = toDayName(m.day);
     // Meeting Guide returns "HH:mm:ss" or "HH:mm"; normalizeTime accepts both.
     const time = normalizeTime(m.time);
     const lat = parseFloat(m.latitude);

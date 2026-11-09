@@ -19,6 +19,8 @@ npm run seed         # build + seed directoryMeetings (lib/scripts/seedDirectory
 npm run import:snapshot -- --provider AA [--apply]  # dry run by default; refuses a source with billing off
 npm run sync:na      # NA meetings from BMLT, run by hand, not in GCP; dry run by default
                      # flags: --apply, --region <sourceId>, --allow-deletes <sourceId,...>, --purge
+npm run migrate:day-names [-- --apply]  # one-off: stored integer days → names; dry run by default.
+                     # Run only after both products are deployed with day-name support.
 npm run sync:meetings [-- --apply]  # full AA sync from Meeting Guide; dry run by default; needs MEETING_GUIDE_API_KEY
 ```
 

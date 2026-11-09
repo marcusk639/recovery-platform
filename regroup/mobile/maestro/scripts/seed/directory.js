@@ -13,6 +13,8 @@ const CENTERS = [
 ];
 const PROVIDERS = ['AA', 'NA', 'CELEBRATE_RECOVERY'];
 const TIMES = ['07:00', '12:00', '19:00'];
+// recovery-api stores days as lowercase names.
+const DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
 // A fixed emulator, never an env-derived host: this script can't reach anything else.
 const directoryTarget = { host: '127.0.0.1:8082', projectId: 'demo-recovery-api' };
@@ -32,7 +34,7 @@ function directoryMeetings() {
           source: 'external',
           provider,
           name: `E2E ${provider} ${center.name} Group`,
-          day,
+          day: DAYS[day],
           time: TIMES[(c + p + day) % TIMES.length],
           format: 'in-person',
           online: false,

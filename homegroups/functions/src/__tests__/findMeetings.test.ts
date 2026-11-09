@@ -358,6 +358,28 @@ describe("findMeetings directory orchestration (B4)", () => {
     expect(ids).toEqual(["aa-1", "own-1"]);
   });
 
+  it.each([
+    ["monday", "monday"],
+    ["1", "monday"],
+  ])("sends day filter %j to the directory as %j", async (day, expected) => {
+    jest.resetModules();
+    const { fetchDirectoryMeetings } = await loadMocks();
+    fetchDirectoryMeetings.mockResolvedValueOnce([]);
+    const { findMeetings } = await import("../callable/findMeetings");
+
+    await (findMeetings as Function)(
+      authedRequest({
+        filters: { location: { lat: 30.2, lng: -97.7 }, type: "NA", day },
+      }),
+    );
+
+    expect(fetchDirectoryMeetings).toHaveBeenCalledWith(
+      expect.objectContaining({ day: expected }),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
   it("lists a meeting once when it is in both Homegroups and the directory", async () => {
     jest.resetModules();
     const { getAlcoholicsAnonymousMeetings, fetchDirectoryMeetings } =

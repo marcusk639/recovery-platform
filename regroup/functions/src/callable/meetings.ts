@@ -5,11 +5,10 @@ import { parseInput } from '../validation';
 import { getDistance } from '../util/location';
 import { Location } from '../entities/GeocodeResponse';
 import { geocodeNAMeeting, getCustomMeetings } from '../util/meetings';
-import { mapDirectoryToRats } from '../util/directoryMapping';
+import { directoryDayName, mapDirectoryToRats } from '../util/directoryMapping';
 import { fetchDirectoryMeetings } from '../api/recoveryApi';
 import { MeetingSearchCriteria, RatsMeeting } from '../entities/Meeting';
 import { DirectoryProvider } from '../entities/DirectoryMeeting';
-import { daysOfWeek } from '../util/date';
 import { GOOGLE_MAPS_API_KEY, RECOVERY_PLATFORM_API_KEY } from '../config';
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
@@ -116,12 +115,12 @@ export const findMeetings = onCall({ secrets: [RECOVERY_PLATFORM_API_KEY] }, asy
     }
 
     const provider = providerForType(type);
-    const dayIndex = day ? daysOfWeek.indexOf(day.toLowerCase()) : -1;
+    const dayName = day ? directoryDayName(day) : undefined;
 
     const directory = await fetchDirectoryMeetings(
       {
         location,
-        day: dayIndex >= 0 ? dayIndex : undefined,
+        day: dayName,
         radiusMeters: DIRECTORY_RADIUS_METERS,
       },
       { uid: request.auth.uid, email: request.auth.token?.email },

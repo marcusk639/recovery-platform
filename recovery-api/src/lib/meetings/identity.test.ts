@@ -1,4 +1,4 @@
-import { bmltMeetingId } from './identity';
+import { bmltMeetingId, DAY_NAMES, toDayName } from './identity';
 import {
   GEOHASH_PRECISION,
   normalizeDay,
@@ -182,6 +182,56 @@ describe('bmltMeetingId', () => {
   it('cannot match an id from the content recipe', () => {
     expect(bmltMeetingId(100, 1)).not.toBe(
       directoryMeetingId({ name: '100', day: 1, time: '00:00' }),
+    );
+  });
+});
+
+describe('toDayName', () => {
+  it('names each day 0 (Sunday) to 6 (Saturday)', () => {
+    expect([0, 1, 2, 3, 4, 5, 6].map(toDayName)).toEqual([
+      'sunday',
+      'monday',
+      'tuesday',
+      'wednesday',
+      'thursday',
+      'friday',
+      'saturday',
+    ]);
+    expect(DAY_NAMES).toHaveLength(7);
+  });
+
+  it('accepts every form normalizeDay accepts', () => {
+    expect(toDayName('Tue')).toBe('tuesday');
+    expect(toDayName(' SATURDAY ')).toBe('saturday');
+    expect(toDayName('3')).toBe('wednesday');
+    expect(toDayName('monday')).toBe('monday');
+  });
+
+  it('throws on anything else', () => {
+    expect(() => toDayName(7)).toThrow();
+    expect(() => toDayName('someday')).toThrow();
+  });
+});
+
+describe('directoryMeetingId and day names', () => {
+  // Computed with the identity.ts on main before day names. Every stored row's id
+  // depends on this recipe, so it must never change.
+  it.each([[2], ['tuesday'], ['Tuesday']])('still produces the pre-change id for day %j', (day) => {
+    expect(
+      directoryMeetingId({
+        name: 'Sunrise Group',
+        day,
+        time: '07:00',
+        link: '',
+        formattedAddress: '123 Main St, Austin, TX 78701, USA',
+      }),
+    ).toBe('51115716e2d8ae63ac2a9810');
+  });
+
+  it('gives the same id for a day name and its number, so stored ids are unchanged', () => {
+    const base = { name: 'Sunrise Group', time: '07:00', link: '', formattedAddress: '1 Main St' };
+    expect(directoryMeetingId({ ...base, day: 'tuesday' })).toBe(
+      directoryMeetingId({ ...base, day: 2 }),
     );
   });
 });

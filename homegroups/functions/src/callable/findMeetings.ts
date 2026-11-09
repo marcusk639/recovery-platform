@@ -12,8 +12,10 @@ import {
 import { Meeting, MeetingSearchCriteria } from "../entities/Meeting";
 import { fetchDirectoryMeetings } from "../api/recoveryApi";
 import { mergeDirectoryMeetings } from "../utils/mergeDirectoryMeetings";
-import { mapDirectoryToSerialized } from "../utils/directoryMapping";
-import { daysOfWeek } from "../utils/date";
+import {
+  directoryDayName,
+  mapDirectoryToSerialized,
+} from "../utils/directoryMapping";
 import { requireAuth } from "../utils/callableWrapper";
 
 // recovery-api service key. The non-secret base URL is read from the
@@ -247,17 +249,14 @@ function serializeMeeting(meeting: Meeting): SerializedMeeting {
 }
 
 /**
- * Resolve the client-supplied `day` filter (a lowercase weekday string like
- * "monday", or a numeric "0".."6" string) to the directory's integer day index
- * (0 = Sunday). Returns undefined when the day cannot be resolved so the
- * directory request omits `day` and searches all days.
+ * Resolve the client-supplied `day` filter (a weekday name like "monday", or a
+ * numeric "0".."6" string) to the directory's day name. Returns undefined when it
+ * isn't a day, so the directory request omits `day` and searches all days.
+ * @param {string} dayFilter the client's day filter
+ * @return {string | undefined} the day name to search, if any
  */
-function resolveDirectoryDay(dayFilter?: string): number | undefined {
-  if (!dayFilter) return undefined;
-  const index = daysOfWeek.indexOf(dayFilter);
-  if (index !== -1) return index;
-  if (/^[0-6]$/.test(dayFilter)) return Number(dayFilter);
-  return undefined;
+function resolveDirectoryDay(dayFilter?: string): string | undefined {
+  return dayFilter ? directoryDayName(dayFilter) : undefined;
 }
 
 const DEFAULT_MAX_DISTANCE_KM = 10;

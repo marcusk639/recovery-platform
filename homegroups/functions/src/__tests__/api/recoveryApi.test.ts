@@ -11,7 +11,7 @@ const okResponse = (body: unknown) => ({
 });
 
 const caller = { uid: "user-1", email: "u@example.com" };
-const input = { location: { lat: 30.2, lng: -97.7 }, day: 1 };
+const input = { location: { lat: 30.2, lng: -97.7 }, day: "monday" };
 const deps = { baseUrl: "https://recovery-api.test", apiKey: "secret-key" };
 
 describe("fetchDirectoryMeetings", () => {
