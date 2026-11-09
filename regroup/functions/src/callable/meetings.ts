@@ -13,6 +13,9 @@ import { daysOfWeek } from '../util/date';
 import { GOOGLE_MAPS_API_KEY, RECOVERY_PLATFORM_API_KEY } from '../config';
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
+/** Without this the directory searches only 5 km. Raise it once phones are tested with long lists. */
+const DIRECTORY_RADIUS_METERS = 10_000;
+
 const locationSchema = z.object({ lat: z.number(), lng: z.number() });
 
 const findMeetingsSchema = z.object({
@@ -116,7 +119,11 @@ export const findMeetings = onCall({ secrets: [RECOVERY_PLATFORM_API_KEY] }, asy
     const dayIndex = day ? daysOfWeek.indexOf(day.toLowerCase()) : -1;
 
     const directory = await fetchDirectoryMeetings(
-      { location, day: dayIndex >= 0 ? dayIndex : undefined },
+      {
+        location,
+        day: dayIndex >= 0 ? dayIndex : undefined,
+        radiusMeters: DIRECTORY_RADIUS_METERS,
+      },
       { uid: request.auth.uid, email: request.auth.token?.email },
     );
 
