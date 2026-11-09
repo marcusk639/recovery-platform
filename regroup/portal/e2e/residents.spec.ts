@@ -16,11 +16,10 @@ test('icons render real glyphs', async ({ page }) => {
   await signInAs(page, 'manager');
   await page.click('#nav-residents');
   const icon = page.getByRole('img').first();
-  await expect(icon).toBeVisible();
-  const { text, family } = await icon.evaluate((el) => ({ text: el.textContent, family: getComputedStyle(el).fontFamily }));
-  expect(text).not.toBe('?');
-  expect(text!.length).toBeGreaterThan(0);
-  expect(family).toMatch(/Ionicons|MaterialIcons|FontAwesome/);
+  // Retrying assertions: the screen can re-render its icons while data loads.
+  await expect(icon).toHaveCSS('font-family', /Ionicons|MaterialIcons|FontAwesome/);
+  await expect(icon).not.toHaveText('?');
+  await expect(icon).not.toHaveText('');
 });
 
 test('reloading mid-session does not leave a blank page', async ({ page }) => {
