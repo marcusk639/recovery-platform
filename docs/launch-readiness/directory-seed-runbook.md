@@ -207,9 +207,9 @@ npm run sync:na -- --apply                       # everything
 
 Deploy and convert in this order, or the apps show directory meetings with no day:
 
-1. Deploy `recovery-api`'s `findMeetings`. It accepts a day name or an integer, so the products' current code keeps working.
+1. Deploy `recovery-api`'s `findMeetings`. It accepts a day name or an integer in a request, and returns each day as stored, so the products' current code keeps working.
 2. Deploy both products' functions. They read either form and send day names, and the old `recovery-api` would reject a name.
-3. Convert stored rows: `npm run migrate:day-names` reports what would change, and adding `--apply` changes only `day`.
+3. Convert stored rows, only after both product deploys have succeeded: `npm run migrate:day-names` reports what would change, and adding `--apply` changes only `day`. Don't run it alongside a sync, which could delete a row the migration then recreates with nothing but a day.
 
-Don't run `sync:na --apply` or `sync:meetings --apply` before step 2. They write names, and a changed `day` counts as a change, so they would convert existing rows too.
+Don't run anything that writes `directoryMeetings` before step 2, including `sync:na --apply`, `sync:meetings --apply`, `npm run seed` and `import:snapshot --apply`. They all write names, and older product code shows those rows with no day.
 
