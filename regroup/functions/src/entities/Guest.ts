@@ -1,4 +1,5 @@
 import { Cents, asCents } from "../util/money";
+import { CustomRent } from "../rent/types";
 import { BaseEntity } from "./BaseEntity";
 import { Roles } from "./Roles";
 import { getTodaysDate, getCurrentTime } from "../util/date";
@@ -124,6 +125,14 @@ export class Guest extends BaseEntity {
   version: number = 0;
   lastUpdated: string = "";
   moveInDate?: string;
+  // Manager-set rate for this resident; applies only while the house uses its frequency.
+  customRent?: CustomRent | null;
+  // Set by the app's guest import; imported residents start at the next full period.
+  importedAt?: string;
+  // First day of the oldest unpaid charged period.
+  rentDueDate?: string;
+  // Server-owned: this intake record's rent moved to the named guest record.
+  rentLinkedTo?: string;
   moveOutDate?: string;
   primarySupporterId?: string;
   primarySupporterName?: string;

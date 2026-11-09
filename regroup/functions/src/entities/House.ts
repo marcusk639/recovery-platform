@@ -61,7 +61,11 @@ export class House extends BaseEntity {
   depositsAndFees: string | number = 0;
   certified: boolean = false;
   phoneNumber: string = "";
+  // "both" (the default) means rent charging is off; see rent/rate.ts.
   rentFrequency: "weekly" | "monthly" | "both" = "both";
+  // Server-owned (houseRentSettings trigger): when charging last turned on.
+  rentChargesStartDate?: string | null;
+  rentChargesStartedAtMs?: number | null;
   pendingAdminInvites?: string[] = [];
   pendingGuestInvites?: string[] = [];
   isDemoHouse: boolean = false;

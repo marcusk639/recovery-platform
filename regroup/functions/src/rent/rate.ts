@@ -1,0 +1,52 @@
+/** A house's rent settings and a resident's rate, read defensively from raw docs. */
+import { resolveTimeZone } from '../activities/weekSummaryMath';
+import { asCents, asDollars, Cents, dollarsToCents } from '../util/money';
+import { MAX_HOUSE_PRICE_DOLLARS, RentFrequency, RentSettings } from './types';
+
+const CALENDAR_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+function isFrequency(v: unknown): v is RentFrequency {
+  return v === 'weekly' || v === 'monthly';
+}
+
+/**
+ * Null means charging is off: no weekly/monthly schedule, or that schedule's price is
+ * not a finite number in (0, MAX_HOUSE_PRICE_DOLLARS]. A string or a cents-sized value
+ * is off, never charged.
+ */
+export function rentSettingsOf(house: Record<string, unknown>): RentSettings | null {
+  const frequency = house.rentFrequency;
+  if (!isFrequency(frequency)) return null;
+  const raw = frequency === 'weekly' ? house.weeklyRent : house.monthlyRent;
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return null;
+  if (raw <= 0 || raw > MAX_HOUSE_PRICE_DOLLARS) return null;
+  const startDate = house.rentChargesStartDate;
+  const startedAtMs = house.rentChargesStartedAtMs;
+  return {
+    frequency,
+    priceCents: dollarsToCents(asDollars(raw)),
+    timeZone: resolveTimeZone(house.timezone).timeZone,
+    startDate: typeof startDate === 'string' && CALENDAR_DATE.test(startDate) ? startDate : null,
+    startedAtMs:
+      typeof startedAtMs === 'number' && Number.isFinite(startedAtMs) ? startedAtMs : null,
+  };
+}
+
+/** The resident's custom rate when it is well formed and set for the current schedule. */
+export function residentRate(
+  guest: Record<string, unknown>,
+  settings: RentSettings,
+): { rateCents: Cents; source: 'house' | 'custom' } {
+  const custom = guest.customRent as { amountCents?: unknown; frequency?: unknown } | null;
+  if (
+    custom &&
+    typeof custom === 'object' &&
+    custom.frequency === settings.frequency &&
+    typeof custom.amountCents === 'number' &&
+    Number.isInteger(custom.amountCents) &&
+    custom.amountCents >= 0
+  ) {
+    return { rateCents: asCents(custom.amountCents), source: 'custom' };
+  }
+  return { rateCents: settings.priceCents, source: 'house' };
+}
