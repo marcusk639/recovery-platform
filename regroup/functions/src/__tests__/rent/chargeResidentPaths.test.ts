@@ -71,20 +71,49 @@ describe('catch-up', () => {
 });
 
 describe('off and on, moves', () => {
-  it('turned off then on again, the gap is not charged', async () => {
+  // Owner decision 2026-11-09: a resident already charged here resumes from the day
+  // charging came back on, prorated. The time it was off is not charged.
+  it('turned off then on again, the gap is not charged and charging resumes prorated', async () => {
     house({ rentChargesStartDate: '2026-12-09', rentChargesStartedAtMs: MAX });
     guest();
     account({ joinedOn: '2026-11-18', chargeFrom: '2026-11-18', chargedThrough: '2026-11-22' });
+    await chargeResident('g1', at('2026-12-09'));
+    expect(mem.get('rentAccounts/g1')).toMatchObject({
+      anchoredTo: '2026-12-09',
+      chargeFrom: '2026-12-09',
+    });
+    expect(charges()).toEqual(['rentCharges/g1_2026-12-09']);
+    expect(mem.get('rentCharges/g1_2026-12-09')?.amountCents).toBe(12500);
+    await chargeResident('g1', at('2026-12-14'));
+    expect(mem.get('rentCharges/g1_2026-12-14')?.amountCents).toBe(17500);
+  });
+
+  it('off Oct 31 and back on Nov 2 at $800/month charges Nov 2-30, not nothing', async () => {
+    house({
+      rentFrequency: 'monthly',
+      rentChargesStartDate: '2026-11-02',
+      rentChargesStartedAtMs: MAX,
+    });
+    guest();
+    account({
+      joinedOn: '2026-09-01',
+      anchoredTo: '2026-09-01',
+      chargeFrom: '2026-09-01',
+      chargedThrough: '2026-10-31',
+    });
+    await chargeResident('g1', at('2026-11-02'));
+    expect(charges()).toEqual(['rentCharges/g1_2026-11-02']);
+    expect(mem.get('rentCharges/g1_2026-11-02')?.amountCents).toBe(77333);
+  });
+
+  it('charges that ended before the resident joined this house do not count: next full period', async () => {
+    house({ rentChargesStartDate: '2026-12-09', rentChargesStartedAtMs: MAX });
+    guest();
+    account({ joinedOn: '2026-11-25', chargeFrom: '2026-09-01', chargedThrough: '2026-11-22' });
     await expect(chargeResident('g1', at('2026-12-09'))).resolves.toMatchObject({
       reason: 'not-due',
     });
-    expect(mem.get('rentAccounts/g1')).toMatchObject({
-      anchoredTo: '2026-12-09',
-      chargeFrom: '2026-12-14',
-    });
-    await chargeResident('g1', at('2026-12-14'));
-    expect(charges()).toEqual(['rentCharges/g1_2026-12-14']);
-    expect(mem.get('rentCharges/g1_2026-12-14')?.amountCents).toBe(17500);
+    expect(mem.get('rentAccounts/g1')).toMatchObject({ chargeFrom: '2026-12-14' });
   });
 
   it('a short off and on carries on: charged through Sun Nov 22, back on Mon Nov 23', async () => {
