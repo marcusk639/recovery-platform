@@ -39,6 +39,7 @@ const PROVIDER_TO_TYPE: Record<DirectoryProvider, MeetingType> = {
  */
 export function mapDirectoryToRats(meeting: DirectoryMeeting): RatsMeeting {
   const m = new RatsMeeting();
+  m.id = meeting.id;
   m.name = meeting.name ?? "";
   m.time = meeting.time ?? "";
   m.street = meeting.location?.address ?? "";
