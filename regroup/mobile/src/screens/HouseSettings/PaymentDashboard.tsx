@@ -51,13 +51,12 @@ import RatsButton from "../../components/rats-button/rats-button";
 import { useSelectedHouse } from "../../hooks/useSelectedHouse";
 import { useGuests, guestKeys } from "../../state/queries/guestQueries";
 import {
-  listHousePayments,
+  getHousePaymentRecords,
   recordManualPayment,
   createPaymentId,
   MAX_PAYMENT_CENTS,
-  HousePaymentRecord,
 } from "../../services/payments";
-import { parseDollarsField } from "../../util/money";
+import { parseDollarsField, netPaidCents } from "../../util/money";
 import { Guest } from "../../entities/Guest";
 import {
   color,
@@ -92,7 +91,8 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
     error,
   } = useQuery({
     queryKey: paymentKeys.housePayments(house?.id ?? ""),
-    queryFn: () => listHousePayments(house!.id),
+    // Firestore records, not Stripe charges, so manual payments count (#191).
+    queryFn: () => getHousePaymentRecords(house!.id),
     enabled: !!house?.id,
     staleTime: 60_000,
   });
@@ -211,33 +211,29 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
     }
   }, [generateCSV]);
 
-  // Single-pass aggregation memoized on filteredPayments so unrelated re-renders
-  // (modal open/close, focus invalidation) don't recompute these every time.
+  // Collected is what the period's payments brought in, after refunds.
+  // Outstanding is what current residents owe now, from their balances; it used
+  // to be pending Stripe charges, so an overdue resident showed $0.00 (#183).
+  // A resident in credit adds nothing. The rate is collected over collected
+  // plus outstanding.
   const { totalCollected, totalOutstanding, collectionRate } = useMemo(() => {
-    let collected = 0;
-    let outstanding = 0;
-    let succeededCount = 0;
-    let actionableCount = 0;
-    for (const p of filteredPayments) {
-      if (p.status === "succeeded") {
-        collected += p.amount;
-        succeededCount += 1;
-        actionableCount += 1;
-      } else if (p.status === "pending") {
-        outstanding += p.amount;
-        actionableCount += 1;
-      }
-      // 'failed' is excluded from actionableCount, matching the prior logic
-    }
+    const collected = filteredPayments.reduce(
+      (sum, p) => sum + netPaidCents(p),
+      0,
+    );
+    const outstanding = guestList
+      .filter((g) => g.status !== "discharged" && g.status !== "archived")
+      .reduce(
+        (sum, g) => sum + Math.max(0, (g.rentOwed ?? 0) + (g.choreFees ?? 0)),
+        0,
+      );
+    const due = collected + outstanding;
     return {
       totalCollected: collected,
       totalOutstanding: outstanding,
-      collectionRate:
-        actionableCount > 0
-          ? Math.round((succeededCount / actionableCount) * 100)
-          : 0,
+      collectionRate: due > 0 ? Math.round((collected / due) * 100) : 0,
     };
-  }, [filteredPayments]);
+  }, [filteredPayments, guestList]);
 
   const weeklyData = useMemo(() => {
     const weeks: { week: string; total: number }[] = [];
@@ -253,7 +249,7 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
             isWithinInterval(createdAt, { start: weekStart, end: weekEnd })
           );
         })
-        .reduce((sum, p) => sum + p.amount, 0);
+        .reduce((sum, p) => sum + netPaidCents(p), 0);
       weeks.push({ week: format(weekStart, "M/d"), total: total / 100 });
     }
     return weeks;
@@ -456,6 +452,7 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
             return (
               <View
                 key={item.id}
+                testID={`payment-row-${item.id}`}
                 style={[
                   CARD_STYLE,
                   styles.paymentCard,

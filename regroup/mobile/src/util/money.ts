@@ -200,3 +200,14 @@ export function parseDollarsInput(
   const result = parseDollarsField(raw);
   return result.ok ? result.cents : fallback;
 }
+
+/** What a payment record brought in, in cents: a succeeded payment less any refund. */
+export function netPaidCents(payment: {
+  status: string;
+  amount: number;
+  refundedAmountCents?: number;
+}): number {
+  return payment.status === 'succeeded'
+    ? payment.amount - (payment.refundedAmountCents ?? 0)
+    : 0;
+}

@@ -331,6 +331,26 @@ export async function getGuestPayments({
   return snapshot.docs.map(toRentPayment).sort((a, b) => createdMs(b) - createdMs(a));
 }
 
+/**
+ * Every payment record for a house, newest first, for the Payment Dashboard and
+ * the balance views. These include manual payments, which the Stripe-backed
+ * listHousePayments callable never sees (#191). Admins only, by the rules.
+ *
+ * Sorted here because sorting on the server needs a (houseId, createdAt) index.
+ */
+export async function getHousePaymentRecords(
+  houseId: string,
+): Promise<RentPayment[]> {
+  if (!houseId) {
+    throw new Error('getHousePaymentRecords: houseId is required');
+  }
+  const snapshot = await getDocs(
+    query(paymentsCollection, where('houseId', '==', houseId)),
+  );
+  const createdMs = (payment: RentPayment) => toDateSafe(payment.createdAt)?.getTime() ?? 0;
+  return snapshot.docs.map(toRentPayment).sort((a, b) => createdMs(b) - createdMs(a));
+}
+
 // ─── CF-backed service functions ──────────────────────────────────────────────
 
 /**
