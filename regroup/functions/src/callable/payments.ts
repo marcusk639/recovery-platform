@@ -275,9 +275,42 @@ export const createPaymentIntent = onCall(
       throw mapStripeError(err);
     }
 
+    // ── 6. A replayed key whose intent is already paid (RENT-012) ─────────────
+    // On a replay Stripe returns its stored response for the original create,
+    // i.e. the intent as it was then, not as it is now. Its client secret would
+    // open a payment sheet for money that has already moved. Read the current
+    // status, and for a succeeded intent return no secret at all, so there is
+    // nothing the client can confirm.
+    if (isIdempotentReplay(paymentIntent)) {
+      let current: Stripe.PaymentIntent;
+      try {
+        current = await stripe.paymentIntents.retrieve(paymentIntent.id);
+      } catch (err) {
+        throw mapStripeError(err);
+      }
+      if (current.status === "succeeded") {
+        logger.info("createPaymentIntent: replayed key, intent already paid", {
+          paymentIntentId: current.id,
+        });
+        return { alreadyPaid: true };
+      }
+    }
+
     return { clientSecret: paymentIntent.client_secret };
   },
 );
+
+/**
+ * True when Stripe answered from its idempotency cache rather than creating a
+ * new object. Stripe marks those responses with `Idempotent-Replayed: true`
+ * (docs.stripe.com/error-low-level#idempotency), and Node lowercases header
+ * names.
+ */
+function isIdempotentReplay(response: object): boolean {
+  const headers = (response as Partial<Stripe.Response<object>>).lastResponse
+    ?.headers;
+  return headers?.["idempotent-replayed"] === "true";
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // listPayments
