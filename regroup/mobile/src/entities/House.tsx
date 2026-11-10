@@ -142,10 +142,11 @@ export const houseSchema = yup.object().shape({
     .number()
     .max(5000, SchemaConstants.numberMax(5000))
     .min(0, SchemaConstants.numberMin(0)),
+  // Matches the rules' weekly limit; above it the whole house save is refused.
   weeklyRent: yup
     .number()
     .min(0, SchemaConstants.numberMin(0))
-    .max(5000, SchemaConstants.numberMax(5000)),
+    .max(2500, SchemaConstants.numberMax(2500)),
   phoneNumber: yup
     .string()
     .required(SchemaConstants.REQUIRED)

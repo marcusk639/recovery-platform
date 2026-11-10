@@ -104,6 +104,18 @@ describe('importGuestsFromRows', () => {
     expect((firestore as any)._mockBatchCommit).toHaveBeenCalled();
   });
 
+  it('marks each record as imported, so rent charging starts it at the next full period', async () => {
+    // The server reads importedAt (rent/chargeRule.ts): an imported resident already
+    // lived there, and their balance was entered by hand, so no prorated first charge.
+    const before = Date.now();
+    await importGuestsFromRows('house-1', [
+      { firstName: 'Jane', lastName: 'Smith', email: 'jane@example.com', sobrietyDate: '2025-01-15', drugOfChoice: 'Alcohol' },
+    ]);
+    const written = ((firestore as any)._mockBatchSet as jest.Mock).mock.calls[0][1];
+    expect(typeof written.importedAt).toBe('string');
+    expect(Date.parse(written.importedAt)).toBeGreaterThanOrEqual(before - 1000);
+  });
+
   it('records the signed-in staff member as createdBy on every imported record', async () => {
     const row = {
       firstName: 'Jane',

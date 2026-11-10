@@ -2052,7 +2052,26 @@ describe("houses/{houseId} — update: sensitive fields restricted to superAdmin
       );
     });
 
-    test("DENY a regular admin updating monthlyRent/weeklyRent", async () => {
+    // Relaxed for rent charges (owner decision 2026-11-09): any house admin
+    // sets the price and schedule; see rentCharges.rules.test.ts for the limits.
+    test("ALLOW a manager updating monthlyRent/weeklyRent", async () => {
+      await seedHouse();
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await context
+          .firestore()
+          .doc(`house-roles/${HOUSE_ID}_${ADMIN_UID}`)
+          .set({ tier: "manager" });
+      });
+      const ctx = testEnv.authenticatedContext(
+        ADMIN_UID,
+        authHouseAdmin(ADMIN_UID, HOUSE_ID),
+      );
+      await assertSucceeds(
+        updateDoc(houseRef(ctx), { monthlyRent: 999, weeklyRent: 250 }),
+      );
+    });
+
+    test("DENY an admin claim with no manager record (a peer leader) updating monthlyRent/weeklyRent", async () => {
       await seedHouse();
       const ctx = testEnv.authenticatedContext(
         ADMIN_UID,
