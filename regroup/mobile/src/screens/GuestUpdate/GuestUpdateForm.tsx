@@ -1,4 +1,5 @@
 import React, { useCallback } from 'react';
+import { Alert } from 'react-native';
 import { withFormik } from 'formik';
 import { useSelectedGuest } from '../../hooks/useSelectedGuest';
 import { useGuests, useUpdateGuest } from '../../state/queries/guestQueries';
@@ -11,6 +12,7 @@ import {
   guestToFormValues,
 } from './guestFormValues';
 import { Guests } from '../../types';
+import { logException } from '../../util/logging';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
 
@@ -71,6 +73,16 @@ const GuestUpdateForm = withFormik<GuestUpdateProps, GuestFormValues>({
       setStatus({ succeeded: true });
       setSubmitting(false);
     } catch (err) {
+      // status is rendered nowhere (see validate above), so say it here. A refusal by the
+      // rules is not worth retrying: below a manager, rent and balances can't be changed.
+      logException(err, 'GuestUpdateForm: save failed');
+      const code = String((err as { code?: unknown })?.code ?? '');
+      Alert.alert(
+        'Not saved',
+        code.endsWith('permission-denied')
+          ? "You don't have permission to make this change to this resident."
+          : "Couldn't save these changes. Check your connection and try again.",
+      );
       setStatus({ failed: true });
       setSubmitting(false);
     }
