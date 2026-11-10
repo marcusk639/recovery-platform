@@ -111,6 +111,33 @@ it('a custom rate a manager set on the intake record moves to the invite record'
   expect(doc('gNew').customRent).toEqual({ amountCents: 0, frequency: 'monthly' });
 });
 
+// The due date decides overdue notices, so it follows the person only from a record a
+// known staff member made, and only as a real date.
+it('a due date moves only with a creator the rules confirm', async () => {
+  house();
+  intake({ rentOwed: 1, rentDueDate: '9999-12-31' });
+  invite();
+  await expect(linkIntakeRecord('gNew')).resolves.toBe('linked');
+  expect(doc('gNew').rentOwed).toBe(1);
+  expect(doc('gNew').rentDueDate).toBeUndefined();
+});
+
+it('a due date that is not a calendar date never moves', async () => {
+  house();
+  intake({ createdBy: 'mgr', rentOwed: 100, rentDueDate: 'later' });
+  invite();
+  await expect(linkIntakeRecord('gNew')).resolves.toBe('linked');
+  expect(doc('gNew').rentDueDate).toBeUndefined();
+});
+
+it("a manager's due date on the intake record still moves", async () => {
+  house();
+  intake({ createdBy: 'mgr', rentOwed: 100, rentDueDate: '2026-11-18' });
+  invite();
+  await expect(linkIntakeRecord('gNew')).resolves.toBe('linked');
+  expect(doc('gNew').rentDueDate).toBe('2026-11-18');
+});
+
 it('a custom rate or move-in date moves only with a creator the rules confirm', async () => {
   house();
   intake({

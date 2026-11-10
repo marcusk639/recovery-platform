@@ -175,9 +175,16 @@ async function linkRecords(
     // manager to apply by hand, so no record can lower another's balance.
     const owed = Math.max(0, num(source.rentOwed));
     const fees = Math.max(0, num(source.choreFees));
-    const due = [target.rentDueDate, source.rentDueDate]
-      .filter((d): d is string => typeof d === 'string' && d !== '')
-      .sort()[0];
+    // The due date decides overdue notices, so the intake record's moves only from a
+    // record a known staff member made (not the person), and only as a real date.
+    const isDay = (d: unknown): d is string =>
+      typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d);
+    const sourceDue = creator && isDay(source.rentDueDate) ? source.rentDueDate : null;
+    const due = sourceDue
+      ? [isDay(target.rentDueDate) ? target.rentDueDate : null, sourceDue]
+          .filter((d): d is string => d !== null)
+          .sort()[0]
+      : null;
     // A manager's custom rate (a scholarship, say) follows the person, but only when
     // a known manager, not the person, made the intake record.
     const rate = creator && source.customRent && !target.customRent ? source.customRent : null;
