@@ -27,6 +27,7 @@ ALL_FUNCTIONS=(
   createOperatorSubscription reactivateOperatorSubscription cancelUserSubscription
   updateSubscriptionGuests updateSubscriptionHouses
   createBillingPortalSession applyBundleDiscount getTierCatalog
+  getDocumentLink
   setOxfordEnabled castOxfordVote complianceExport rentRoiMetrics
   deleteAccount
   sendConfirmationEmail

@@ -1026,7 +1026,9 @@ service cloud.firestore {
       // Only house admins and super-admins can read or write documents.
       // Residents (guests) have zero access.
       allow read: if signedIn() && isAdmin([resource.data.houseId]);
-      allow create: if signedIn() && isAdmin([request.resource.data.houseId]);
+      // No permanent download link: documents open through getDocumentLink.
+      allow create: if signedIn() && isAdmin([request.resource.data.houseId])
+        && !('storageUrl' in request.resource.data);
       allow delete: if signedIn() && isAdmin([resource.data.houseId]);
       allow update: if false;
     }

@@ -7,7 +7,8 @@
  * edited expectation. Assertions are on outcomes and log entries only, never
  * on mock call chains or snapshot shapes. Auth and Storage are not part of the
  * log: the signed-in user comes from the auth mock, and the storage path is
- * pinned through the stored storageUrl (https://mock-storage/<path>). The
+ * pinned through the stored storagePath. No download link is stored: documents
+ * open through the getDocumentLink callable's short-lived link. The
  * putFile metadata (cacheControl, contentType) is not pinnable: the shared
  * storage mock ignores it.
  */
@@ -66,7 +67,6 @@ describe('uploadDocument', () => {
       id: 'auto-1',
       houseId: 'h1',
       fileName: 'lease.pdf',
-      storageUrl: 'https://mock-storage/houses/h1/documents/auto-1',
       storagePath: 'houses/h1/documents/auto-1',
       fileType: 'pdf',
       category: 'lease',
@@ -94,7 +94,6 @@ describe('uploadDocument', () => {
           houseId: 'h1',
           guestId: 'g1',
           fileName: 'lease.pdf',
-          storageUrl: 'https://mock-storage/houses/h1/guests/g1/documents/auto-1',
           storagePath: 'houses/h1/guests/g1/documents/auto-1',
           fileType: 'image',
           category: 'lease',
@@ -147,7 +146,6 @@ describe('listDocuments', () => {
       houseId: 'h1',
       guestId: undefined,
       fileName: 'c',
-      storageUrl: '',
       storagePath: '',
       fileType: 'other',
       category: 'other',

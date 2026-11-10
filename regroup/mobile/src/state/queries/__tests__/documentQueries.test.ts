@@ -26,7 +26,6 @@ const mockDoc: HouseDocument = {
   id: 'doc-1',
   houseId: 'house-1',
   fileName: 'lease.pdf',
-  storageUrl: 'https://storage.example.com/lease.pdf',
   storagePath: 'houses/house-1/documents/doc-1',
   fileType: 'pdf',
   category: 'lease',

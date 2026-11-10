@@ -26,6 +26,11 @@ jest.mock('../../../state/queries/documentQueries', () => ({
   })),
 }));
 
+const mockGetDocumentLink = jest.fn();
+jest.mock('../../../services/documents', () => ({
+  getDocumentLink: (...args: any[]) => mockGetDocumentLink(...args),
+}));
+
 jest.mock('../../../util/logging', () => ({
   logException: jest.fn(),
 }));
@@ -60,7 +65,6 @@ const mockDoc: HouseDocument = {
   houseId: 'house-1',
   guestId: 'guest-1',
   fileName: 'lease.pdf',
-  storageUrl: 'https://storage.example.com/lease.pdf',
   storagePath: 'houses/house-1/guests/guest-1/documents/doc-1',
   fileType: 'pdf',
   category: 'lease',
@@ -272,6 +276,41 @@ describe('DocumentListScreen', () => {
           expect.any(Array),
         );
       });
+    });
+  });
+
+  // ─── Opening a document: a short-lived link, not a stored one ───────────────
+  describe('opening a document', () => {
+    const { Linking } = require('react-native');
+    const showList = () => {
+      (documentQueries.useDocuments as jest.Mock).mockReturnValue({
+        data: [mockDoc],
+        isLoading: false,
+      });
+      return render(<DocumentListScreen />);
+    };
+
+    beforeEach(() => {
+      jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+      jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    });
+
+    it('opens the link the server signs for it', async () => {
+      mockGetDocumentLink.mockResolvedValue('https://signed.example/doc-1');
+      fireEvent.press(showList().getByTestId(`document-open-${mockDoc.id}`));
+      await waitFor(() =>
+        expect(Linking.openURL).toHaveBeenCalledWith('https://signed.example/doc-1'),
+      );
+      expect(mockGetDocumentLink).toHaveBeenCalledWith('doc-1');
+    });
+
+    it("says so, and opens nothing, when the link can't be fetched", async () => {
+      mockGetDocumentLink.mockRejectedValue(new Error('not-found'));
+      fireEvent.press(showList().getByTestId(`document-open-${mockDoc.id}`));
+      await waitFor(() =>
+        expect(Alert.alert).toHaveBeenCalledWith('Error', "Couldn't open the document. Try again."),
+      );
+      expect(Linking.openURL).not.toHaveBeenCalled();
     });
   });
 });
