@@ -184,9 +184,9 @@ Firestore point-in-time recovery was off on both projects. **The owner had it tu
   - **Missing:**
     - No staging app has ever been built on the owner's Mac: there is no `E2EStaging` product in DerivedData and no `e2eStaging` APK.
     - Staging has **no account anyone can sign in with**: 83 users, none with a password, and 0 houses. The seeder refuses every project that isn't `demo-`, by design.
-    - **No web app is deployed** to staging. The hosting site `regroup-e2e.web.app` exists, but `/`, `/pricing` and `/signup` all return 404, so web checkout has nowhere to run.
+    - **Resolved 2026-11-06 (P3a):** the web app is deployed to staging. `regroup-e2e.web.app` serves `/`, `/pricing`, `/signup` and `/login` server-rendered, and the served bundle carries the staging project id and key. Before this the site existed but all three returned 404.
     - The variants were written on RN 0.72 (#143) and have not been built on 0.88.
-    - **The web can't be deployed to staging safely yet** (verified).
+    - **Resolved 2026-11-06 (P3a), kept for the record:** the web couldn't be deployed to staging safely. `web/angular.json` now has an `e2e-staging` server configuration, `build:ssr:e2e-staging` builds both halves against staging and refuses a half missing the staging identifiers, and `ssr`'s min instances are 0 on staging (`SSR_MIN_INSTANCES`). See `web/CLAUDE.md` § Staging.
       - The browser build has an `e2e-staging` configuration, but the server-render (SSR) target in `web/angular.json` has only `production`.
       - `build:ssr` hardcodes `ng run sapp:server:production`, and hosting sends `**` to the `ssr` function (`web/firebase.json`).
       - A staging deploy would serve pages rendered from the production environment.
@@ -547,7 +547,7 @@ Each production step has its way back prepared before the step runs. Each recove
 - ~~Production changes stay compatible with today's store build until the reboot ships.~~ Replaced after plan review; see below. The minimum-version gate stays.
 - The relaunch ships as an update to the existing store listings. The owner confirms the IDs and supplies the Play signing fingerprint.
 - Operator checkout and plan management link out to the system browser instead of using an in-app WebView.
-- Grace period: 7 days from the first failed payment, for everyone, then blocked. Aligned with Stripe's retries.
+- Grace period: 7 days from the first failed payment, for everyone, then blocked. Aligned with Stripe's retries. Measured from the failed invoice's Stripe time, not from when the webhook arrives (owner, 2026-11-08).
 - The list of paying houses comes from Stripe's live active subscriptions, cross-checked against Firestore. Done 2026-11-06; see §3.4.
 
 **The owner's, after plan review (2026-11-06; he accepted the review's recommendations):**

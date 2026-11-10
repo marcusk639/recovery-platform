@@ -32,7 +32,10 @@ describe("mapDirectoryToRats", () => {
     expect(m.lng).toBeCloseTo(-97.743);
   });
 
-  it("converts the integer day (0–6) to a lowercase weekday", () => {
+  it("reads a stored day name, or a legacy integer (0–6) until rows are migrated", () => {
+    expect(mapDirectoryToRats({ ...base, day: "tuesday" }).day).toBe("tuesday");
+    expect(mapDirectoryToRats({ ...base, day: "Tuesday" }).day).toBe("tuesday");
+    expect(mapDirectoryToRats({ ...base, day: "someday" }).day).toBe("");
     expect(mapDirectoryToRats({ ...base, day: 0 }).day).toBe("sunday");
     expect(mapDirectoryToRats({ ...base, day: 1 }).day).toBe("monday");
     expect(mapDirectoryToRats({ ...base, day: 6 }).day).toBe("saturday");
@@ -64,4 +67,17 @@ describe("mapDirectoryToRats", () => {
     expect(m.link).toBe("https://zoom.us/j/1");
     expect(m.onlineNotes).toBe("passcode 123");
   });
+
+  it("carries the date an imported listing dates from", () => {
+    const m = mapDirectoryToRats({ ...base, dataAsOf: "2023-03-19" });
+    expect(m.dataAsOf).toBe("2023-03-19");
+  });
+
+  it.each([[null], [undefined]])(
+    "leaves dataAsOf out for a live listing (%j)",
+    (dataAsOf) => {
+      const m = mapDirectoryToRats({ ...base, dataAsOf });
+      expect(m.dataAsOf).toBeUndefined();
+    },
+  );
 });

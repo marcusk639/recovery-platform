@@ -22,8 +22,8 @@ const HOMEGROUPS_APP_ID = "homegroups";
 
 export interface DirectorySearchInput {
   location: Location;
-  /** Canonical day-of-week 0–6 (0 = Sunday). Omit to search all days. */
-  day?: number;
+  /** Lowercase day name, e.g. "monday". Omit to search all days. */
+  day?: string;
   /** Free-form type filter applied by recovery-api. */
   type?: string;
   radiusMeters?: number;
@@ -39,6 +39,9 @@ export interface DirectoryClientDeps {
   baseUrl?: string;
   apiKey?: string;
 }
+
+/** Shorter than this function's 60 s limit, so its own meetings can still be returned. */
+const DIRECTORY_TIMEOUT_MS = 45_000;
 
 /**
  * Fetch directory meetings from recovery-api. Network/availability failures are
@@ -73,6 +76,7 @@ export async function fetchDirectoryMeetings(
         "X-User-Email": caller.email ?? "",
       },
       body: JSON.stringify({ data: input }),
+      signal: AbortSignal.timeout(DIRECTORY_TIMEOUT_MS),
     });
 
     if (!response.ok) {

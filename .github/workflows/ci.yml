@@ -225,6 +225,11 @@ jobs:
       # imply coverage it has not got.
       - name: Typecheck
         run: cd regroup/web && npx tsc --noEmit -p tsconfig.spec.json
+      # The deploy-check scripts (scripts/*.test.js): fixtures only, no build.
+      # They guard the predeploy bundle check that keeps staging and production
+      # bundles from deploying to the wrong project.
+      - name: Deploy-check script tests
+        run: cd regroup/web && npm run test:scripts
 
   detox-recovery:
     name: detox-recovery — typecheck + test
@@ -323,12 +328,14 @@ jobs:
       - name: Build regroup Android debug APK
         run: cd regroup/mobile/android && ./gradlew assembleDebug --no-daemon
         env:
-          # NOTE: this does NOT override regroup/mobile/android/gradle.properties'
-          # org.gradle.jvmargs -- that project-file setting takes precedence over this
-          # env var, so this line currently does nothing beyond matching it (both 4g).
-          # Raising -Xmx here alone, without also raising gradle.properties, would be a
-          # no-op that looks like a fix. Tune memory in gradle.properties instead.
-          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx4g"
+          # NOTE: this is the heap CI actually uses. A system property in GRADLE_OPTS
+          # overrides org.gradle.jvmargs in regroup/mobile/android/gradle.properties
+          # (checked on Gradle 8.0.1), so raising -Xmx there alone changes nothing in CI.
+          # 6g because :app:mergeExtDexDebug intermittently hit `Java heap space` at 4g:
+          # R8 8.1.65 logs a warning and stack trace per class it cannot read Kotlin 2.1
+          # metadata for (about 11,000). AGP 9 in the RN 0.88 upgrade has none of these,
+          # so re-measure and consider lowering this once that lands.
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx6g"
 
 
   homegroups-maestro-smoke:

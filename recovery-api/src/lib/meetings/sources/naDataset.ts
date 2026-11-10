@@ -1,5 +1,5 @@
 import type { DirectoryMeeting } from '../../../entities/DirectoryMeeting';
-import { directoryGeohash, directoryMeetingId, normalizeDay, normalizeTime } from '../identity';
+import { mapSnapshotMeeting, type SnapshotMeetingDoc } from './meetingSnapshot';
 
 /**
  * NA (Narcotics Anonymous) dataset source mapper.
@@ -33,112 +33,17 @@ import { directoryGeohash, directoryMeetingId, normalizeDay, normalizeTime } fro
  */
 
 /**
- * Minimal shape of a persisted `na-meetings` Firestore document we consume.
- * Every field is optional/loosely-typed because the collection is externally
- * seeded — the mapper validates and skips malformed rows rather than trusting
- * the source. `day` may arrive as a weekday string ("Tuesday") or an integer;
- * `normalizeDay` handles both. `time` may be "HH:mm" / "h:mm AM/PM"; same for
- * `normalizeTime`.
+ * A persisted `na-meetings` Firestore document. Loosely typed because the
+ * collection is externally seeded: the mapper validates and skips malformed rows
+ * rather than trusting the source.
  */
-export interface NaDatasetDoc {
-  /** NA World Services id for the meeting; becomes DirectoryMeeting.externalId. */
-  id?: string | number;
-  name?: string;
-  day?: string | number;
-  time?: string;
-  lat?: number;
-  lng?: number;
-  geohash?: string;
-  address?: string;
-  city?: string;
-  state?: string;
-  zip?: string;
-  formattedAddress?: string;
-  format?: string;
-  type?: string;
-  online?: boolean;
-  link?: string;
-  onlineNotes?: string;
-}
+export type NaDatasetDoc = SnapshotMeetingDoc;
 
 /**
  * Map one pre-seeded `na-meetings` Firestore doc to the canonical
- * DirectoryMeeting shape (provider 'NA', source 'external').
- *
- * Returns `null` for malformed rows (missing name/day/time, non-finite lat/lng)
- * so a single bad source doc cannot abort the migration batch — mirrors the
- * skip-on-throw behavior in `sources/meetingGuide.ts` `mapMeetingGuideMeeting`.
- *
- * Timestamps (`lastRefreshedAt`/`lastSeenAt`/`createdAt`/`updatedAt`) are NOT
- * set here — the migration script's upsert path owns them (mirrors the other
- * source adapters, which return the public source-derived slice only).
+ * DirectoryMeeting shape (provider 'NA', source 'external'). Returns `null` for
+ * malformed rows so a single bad source doc cannot abort the import.
  */
 export function mapNaMeeting(doc: NaDatasetDoc): DirectoryMeeting | null {
-  try {
-    if (typeof doc.name !== 'string' || doc.name.trim() === '') {
-      return null;
-    }
-    if (doc.day === undefined || doc.day === null) {
-      return null;
-    }
-    if (typeof doc.time !== 'string' || doc.time.trim() === '') {
-      return null;
-    }
-
-    // Frozen helpers — these throw on bad data, caught below to skip the row.
-    const day = normalizeDay(doc.day);
-    const time = normalizeTime(doc.time);
-
-    const lat = typeof doc.lat === 'number' ? doc.lat : NaN;
-    const lng = typeof doc.lng === 'number' ? doc.lng : NaN;
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      return null;
-    }
-
-    const link = (doc.link ?? '').trim();
-    const formattedAddress = (doc.formattedAddress ?? doc.address ?? '').trim();
-
-    const id = directoryMeetingId({
-      name: doc.name,
-      day,
-      time,
-      link,
-      formattedAddress,
-    });
-
-    const meeting: DirectoryMeeting = {
-      id,
-      source: 'external',
-      provider: 'NA',
-      name: doc.name,
-      day,
-      time,
-      location: {
-        lat,
-        lng,
-        // Re-derive the geohash through the frozen helper rather than trusting
-        // the source `geohash` (the seed used ngeohash at varying precision).
-        geohash: directoryGeohash(lat, lng),
-      },
-    } as DirectoryMeeting;
-
-    if (doc.id !== undefined && doc.id !== null) {
-      meeting.externalId = String(doc.id);
-    }
-    if (doc.type) meeting.type = doc.type;
-    if (doc.format) meeting.format = doc.format;
-    if (doc.address) meeting.location.address = doc.address;
-    if (doc.city) meeting.location.city = doc.city;
-    if (doc.state) meeting.location.state = doc.state;
-    if (doc.zip) meeting.location.zip = doc.zip;
-    if (doc.online !== undefined) meeting.online = doc.online;
-    if (link) meeting.link = link;
-    if (doc.onlineNotes) meeting.onlineNotes = doc.onlineNotes;
-
-    return meeting;
-  } catch {
-    // Malformed source record (bad day/time etc.) — skip it so one bad row
-    // can't drop the whole migration batch.
-    return null;
-  }
+  return mapSnapshotMeeting(doc, 'NA');
 }

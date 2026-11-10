@@ -49,6 +49,19 @@ const base: DirectoryMeeting = {
 };
 
 describe("mapDirectoryToSerialized", () => {
+  it("carries the timezone, because meeting times mean nothing without it", () => {
+    expect(
+      mapDirectoryToSerialized({ ...base, timezone: "America/Chicago" })
+        .timezone,
+    ).toBe("America/Chicago");
+  });
+
+  it("carries the upstream id, which is how a meeting is matched to Homegroups' copy", () => {
+    expect(mapDirectoryToSerialized({ ...base, externalId: "77" }).apiId).toBe(
+      "77",
+    );
+  });
+
   it("maps core fields onto the SerializedMeeting shape", () => {
     const m = mapDirectoryToSerialized(base);
     expect(m.id).toBe("dir-1");
@@ -72,7 +85,17 @@ describe("mapDirectoryToSerialized", () => {
     expect(m.updatedAt).toBe("");
   });
 
-  it("converts the integer day (0–6) to a lowercase weekday", () => {
+  it("keeps a stored day name, lowercased", () => {
+    expect(mapDirectoryToSerialized({ ...base, day: "tuesday" }).day).toBe("tuesday");
+    expect(mapDirectoryToSerialized({ ...base, day: "Tuesday" }).day).toBe("tuesday");
+  });
+
+  it("leaves out a day it does not recognize", () => {
+    expect(mapDirectoryToSerialized({ ...base, day: "someday" }).day).toBeUndefined();
+    expect(mapDirectoryToSerialized({ ...base, day: 9 }).day).toBeUndefined();
+  });
+
+  it("still converts a legacy integer day (0–6) until rows are migrated", () => {
     expect(mapDirectoryToSerialized({ ...base, day: 0 }).day).toBe("sunday");
     expect(mapDirectoryToSerialized({ ...base, day: 1 }).day).toBe("monday");
     expect(mapDirectoryToSerialized({ ...base, day: 6 }).day).toBe("saturday");
@@ -105,4 +128,17 @@ describe("mapDirectoryToSerialized", () => {
     expect(m.link).toBe("https://zoom.us/j/1");
     expect(m.onlineNotes).toBe("passcode 123");
   });
+
+  it("carries the date an imported listing dates from", () => {
+    const m = mapDirectoryToSerialized({ ...base, dataAsOf: "2023-03-19" });
+    expect(m.dataAsOf).toBe("2023-03-19");
+  });
+
+  it.each([[null], [undefined]])(
+    "leaves dataAsOf out for a live listing (%j)",
+    (dataAsOf) => {
+      const m = mapDirectoryToSerialized({ ...base, dataAsOf });
+      expect(m.dataAsOf).toBeUndefined();
+    },
+  );
 });

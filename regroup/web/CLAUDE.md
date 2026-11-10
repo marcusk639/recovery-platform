@@ -29,13 +29,48 @@ npm run e2e                       # Protractor E2E tests
 ```bash
 npm run build:ssr                 # Production build + SSR server bundle
 npm run build                     # Full build: Angular prod + copy hosting + SSR + functions
-npm run deploy                    # firebase deploy --only hosting,functions:web:ssr
+npm run deploy                    # firebase deploy --only hosting,functions:web:ssr (see the
+                                  # firebase-tools note in Gotchas)
 npm run serve:ssr                 # run dist/sapp/server/main.js
-npm run test:scripts              # node --test scripts/copy-ssr-to-functions.test.js
+npm run test:scripts              # node --test on the four scripts/*.test.js files listed in
+                                  # package.json (copy, bundle check, staging config generator,
+                                  # deploy-config invariants); CI runs it in regroup/web — typecheck
 npm run test:ssr                  # render smoke test of functions/dist (after build:ssr,
                                   # functions npm ci, build:copy-to-functions); not in CI
 npm run build:deploy              # Build + deploy in one command
 ```
+
+`.firebaserc` defaults to `phoenix-cleanhouse`, so `npm run deploy` and `npm run build:deploy` deploy to **production**. Staging deploys always name `--project regroup-e2e`.
+
+### Staging (`regroup-e2e`)
+
+Deployed at <https://regroup-e2e.web.app>. Both halves (browser and SSR server) are built against staging. The bundle also carries production's whole environment object, including its `pk_live_` publishable key, unused: `e2e-staging-guard.ts` imports `environment.prod.ts` to refuse those values in the staging config.
+
+Inputs, outside the repo in `~/.config/regroup-e2e/` (directory mode 700, files 600, never committed):
+
+- `firebase-web-config.json`: the `regroup-e2e` web app's Firebase config (`firebase apps:sdkconfig WEB --project regroup-e2e`).
+- `stripe-e2e-publishable-key.txt`: the e2e Stripe sandbox's `pk_test_` key, the bare value on one line. Without it the generator writes a placeholder: pages render, checkout doesn't work, and the staging deploy check refuses the build.
+
+Committed: `functions/.env.regroup-e2e` (`SSR_MIN_INSTANCES=0`), so staging keeps no standing instance and the deploy doesn't need `--force`, and `functions/.env.phoenix-cleanhouse` (`SSR_MIN_INSTANCES=1`). Every deploy project needs its file: a non-interactive deploy refuses a param with no value, whatever its default. These files do not contain secrets and can be committed to git and github. They hold non-secret params only; secrets go in Secret Manager (`defineSecret`), never in these files.
+
+```bash
+npm run gen:e2e-staging           # writes src/environments/e2e-staging.generated.ts (gitignored),
+                                  # applying e2e-staging-guard.ts's rules first: regroup-e2e
+                                  # project, authDomain and bucket, no production value, pk_test_
+npm run build:ssr:e2e-staging     # e2e-staging browser + server builds, then
+                                  # scripts/verify-ssr-target.js on dist/sapp/*
+(cd functions && npm ci && npx tsc)  # the smoke test resolves the bundle's externals from here
+npm run build:copy-to-functions && npm run test:ssr   # local render smoke (/, /pricing, /signup, /login)
+firebase deploy --project regroup-e2e --only hosting,functions:web:ssr --non-interactive
+```
+
+`dist/` and `functions/dist/` hold whichever build ran last, so rebuild with `npm run build` before any production deploy. The `predeploy` hooks in `firebase.json` refuse a bundle built for another project; they don't check that the build is fresh. Every hosting or functions deploy runs `verify-ssr-target.js --expect "$GCLOUD_PROJECT"` on everything that ships (`dist/sapp/browser`, `functions/dist/sapp/browser`, `functions/dist/sapp/server`), and requires the function's SSR template to be the hosted `index.html`. What each root needs:
+
+- `regroup-e2e`: the staging id and web API key, and no placeholder Stripe key.
+- `phoenix-cleanhouse`: the production id and the `pk_live_` key from `environment.prod.ts` (so a dev-mode `ng build` is refused), and nothing containing `regroup-e2e`.
+- any other project: its id, and nothing containing `regroup-e2e`.
+
+The staging builds use the production build settings (optimized, hashed, no source maps) and production mode; only the environment file differs. `scripts/deploy-config.test.js` holds that parity, the predeploy wiring, and a param value per project.
 
 ### Cloud Functions (`cd functions`)
 
@@ -85,7 +120,8 @@ The app runs in two modes:
 This package's `functions/src/index.ts` defines exactly one function:
 
 - **`ssr`**: HTTP function serving the Angular Universal SSR app. v2, `us-central1`,
-  512MiB, `minInstances: 1`. The min instance replaces cold-start warming — the
+  512MiB, `minInstances` from the `SSR_MIN_INSTANCES` param, set per project in
+  `functions/.env.<projectId>` (1 for `phoenix-cleanhouse`, 0 for `regroup-e2e`). The min instance replaces cold-start warming — the
   former `warmWebsite` cron in this package only pinged a dev URL, and the
   `warmWebsite` that is actually deployed (from `../functions`) makes no HTTP
   request at all, so neither ever warmed this function.
@@ -138,6 +174,8 @@ Flat route structure in `app-routing.module.ts`. Default route (`/`) renders `Th
 
 ## Gotchas
 
+- **Local firebase-tools is 8.2.0**: `npm run deploy` and the other npm scripts use `node_modules/.bin/firebase` (`firebase-tools ^8.0.0`), which predates functions codebases and params. The staging deploys above used the global CLI (15.x). Unverified whether 8.2.0 can deploy this package at all: use the global `firebase` for deploys until it is upgraded or checked.
+- **Vendor scripts (`src/assets/js/`, #180)**: `src/index.html` loads them as plain `<script>` tags. They were missing from every build until #180 (`regroup/.gitignore` ignored `**/*.min.js`; it now has an exception for this folder), and `scripts/deploy-config.test.js` fails if one goes missing or ignored again. The folder is third-party code, exempt from the pre-commit 300-line limit. Sources: `jquery-3.3.1.min.js`, `popper.min.js` (popper.js 1.14.7, `dist/umd`) and `bootstrap.min.js` (4.3.1, `dist/js`) are the npm releases, unmodified. `plugins.min.js` (Waypoints, counterup, Slick, Owl Carousel, fancyBox, AOS, WOW, countdown, Font Awesome 5.11.2 JS) and `scripts.js` (the sApp theme's init) are this site's own 2022 copies, restored from the Wayback Machine snapshots of regroup-app.com (2022-06-25): `plugins.min.js` byte for byte, `scripts.js` with one change, `.app-screenshots` → `.app-screenshots.not('.slick-initialized')`, because `ScreenshotOneComponent` already starts that slider and Slick throws on a second init, aborting the rest of the theme's ready handler. Code that calls `$` still goes through `jquery()` / `jqueryPlugin(name)` in `src/app/util/jquery.ts`, so a script that fails to load can't blank the page.
 - **`--openssl-legacy-provider` required**: Every build/serve command sets `NODE_OPTIONS=--openssl-legacy-provider` because the Angular 9 toolchain uses a legacy OpenSSL hash function. Running `ng serve` directly without this flag will fail.
 - **Functions build copies Angular dist**: `functions/package.json` build is `tsc && cd .. && npm run build:copy-to-functions` (`scripts/copy-ssr-to-functions.js`), which copies the Angular build output into the functions package. The Angular app must be built before the functions.
 - **Firebase API key in source**: `src/environments/environment.ts` contains the Firebase config with API key inline. This is expected — Firebase API keys are meant to be public (security enforced via Firestore rules and Auth). Do not move them to `.env`.

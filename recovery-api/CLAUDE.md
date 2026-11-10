@@ -16,12 +16,24 @@ npm run test:watch   # Jest in watch mode
 npm run test:coverage # Jest with coverage
 npm run lint         # eslint src
 npm run seed         # build + seed directoryMeetings (lib/scripts/seedDirectory.js)
-npm run migrate:na   # build + migrate NA meetings (lib/scripts/migrateNaMeetings.js)
+npm run import:snapshot -- --provider AA [--apply]  # dry run by default; refuses a source with billing off
+npm run sync:na      # NA meetings from BMLT, run by hand, not in GCP; dry run by default
+                     # flags: --apply, --region <sourceId>, --allow-deletes <sourceId,...>, --purge
+npm run migrate:day-names [-- --apply]  # one-off: stored integer days → names; dry run by default.
+                     # Run only after both products are deployed with day-name support.
+npm run sync:meetings [-- --apply]  # full AA sync from Meeting Guide; dry run by default; needs MEETING_GUIDE_API_KEY
 ```
+
+`lib/` is tracked and stale, and `npm run build` rewrites it. Don't commit the result. `firebase.json` builds
+before a functions deploy (`predeploy`), so a deploy also rewrites it.
+
+**No scheduled job updates meetings** (owner decision, 2026-11-08). Meeting sync runs manually through scripts
+until further notice. `src/noScheduledJobs.test.ts` fails if a scheduled function touches meeting data. Scheduled
+jobs for anything else are allowed.
 
 ## Architecture
 
-Firebase Functions v2 targeting the `recovery-platform` Firebase project.
+Firebase Functions v2 targeting the `recovery-platform-e6cb3` Firebase project.
 All callable functions use `requireServiceAuth` for Phase 1 service-key auth.
 
 ```
@@ -39,9 +51,8 @@ src/
 │                      findMeetings — geohash-bounded search of the shared directoryMeetings collection
 │                      identity (Phase 2 scaffold — all code commented out, not deployed)
 ├── http/              health — GET /health liveness probe returning {ok: true, ts: <iso>}
-└── triggers/          refreshDirectory — LIVE onSchedule 'every day 03:00'; geohash-cell slice refresh
-                       (7-run cycle) + 30-day stale prune of directoryMeetings
-                       onUserWrite (Phase 2 scaffold — inactive)
+└── triggers/          onUserWrite (Phase 2 scaffold — inactive)
+                       refreshDirectory.ts — sliced grid sweep + prune, NOT scheduled and NOT exported
 ```
 
 ## Auth Model
@@ -66,5 +77,5 @@ src/
   **canonical app-id**, never a display name or alias. Resolve at the boundary with `resolveAppId()`.
 - The registry (`config/apps.ts`) is the only place to add/rename an app. `sober-living` is a
   retained legacy alias for `phoenix-cleanhouse`; do not reintroduce it as a standalone app-id.
-- Emulator ports are offset (functions 5002, firestore 8082, auth 9100, UI 4001) so recovery-api can run beside another product's emulators.
+- Emulator ports are offset (functions 5002, firestore 8082, auth 9100, UI 4001) so recovery-api can run beside another product's emulators. Its internal ports are offset too (hub 4402, logging 4502, Firestore websocket 9165, eventarc 9302, tasks 9502), or the second suite to start fails.
 - Jest coverage floor (`jest.config.cjs`: 80/75/78/80 statements/branches/functions/lines) is a ratchet — raise it, never lower it.

@@ -1,5 +1,7 @@
 # Plan: Stabilize Meeting Seeding / Refresh / Storage / Retrieval (recovery-api directory)
 
+**Superseded in part (2026-11-09):** no scheduled job updates meetings, by owner decision. `refreshDirectory` is no longer deployed, and meetings sync manually through scripts. See `directory-seed-runbook.md`.
+
 **Status:** Execution-ready phased plan
 **Date:** 2026-06-19
 **Supersedes the implementation sections of:** `docs/launch-readiness/recovery-api-meetings-discovery-plan.md`

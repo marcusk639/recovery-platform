@@ -56,3 +56,9 @@ Payments (`seed/docs.js`): resident A has card payments of $22.22, dated 30 days
 - Elements below the fold need `scrollUntilVisible` before a tap.
 - Android leaves some text out of the accessibility tree (the manual payment modal's title, for one). Wait on a testID, and branch with `runFlow: when: platform:` where the platforms need different steps.
 - The emulators bind to `127.0.0.1` only (`regroup/firebase.e2e.json`); they have no auth and the functions emulator holds the sandbox Stripe key.
+
+## Meeting directory
+
+The meeting finder searches recovery-api's directory. `scripts/test-prep.sh` starts a local recovery-api emulator (functions :5002, firestore :8082, project `demo-recovery-api`) and seeds fake meetings from `maestro/scripts/seed/directory.js`, near Austin and Cupertino, for every provider and day. Regroup's emulator reaches it through `RECOVERY_API_BASE_URL` in `regroup/e2e/launch-config.json` and a made-up shared `RECOVERY_PLATFORM_API_KEY`. Test runs never touch the real directory. Run `recovery-api`'s `npm ci` once per checkout, and set a simulator's location with `xcrun simctl location <udid> set 30.2672,-97.7431`.
+
+Staging and production read the same `RECOVERY_API_BASE_URL` setting, pointing at the deployed directory on `recovery-platform-e6cb3`, and need `RECOVERY_PLATFORM_API_KEY` in their Secret Manager.

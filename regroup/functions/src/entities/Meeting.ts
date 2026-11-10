@@ -17,6 +17,7 @@ export class RatsMeeting {
   online?: boolean;
   link?: string;
   onlineNotes: string = "";
+  dataAsOf?: string;
 }
 
 export type MeetingType =

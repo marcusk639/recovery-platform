@@ -1,0 +1,160 @@
+import type { DirectoryMeeting } from '../../../entities/DirectoryMeeting';
+import {
+  bmltMeetingId,
+  DAY_NAMES,
+  directoryGeohash,
+  normalizeTime,
+  type DayName,
+} from '../identity';
+
+/**
+ * Maps a row from the BMLT aggregator, the directory NA service bodies maintain,
+ * into the canonical directory shape. PURE: no Firestore, env or network.
+ */
+
+export interface BmltRegion {
+  /** The aggregator's id, used to filter requests. */
+  id: number;
+  /** The regional server's id, which is what gets stored on rows. */
+  sourceId: number;
+  name: string;
+  expectedMeetings: number;
+  lastSuccessfulImport: string | null;
+}
+
+export type BmltRow = Record<string, unknown>;
+
+/** Only these are requested, so private fields like contact details never arrive. */
+export const BMLT_FIELDS: readonly string[] = [
+  'source_id',
+  'root_server_id',
+  'meeting_name',
+  'weekday_tinyint',
+  'start_time',
+  'venue_type',
+  'formats',
+  'latitude',
+  'longitude',
+  'virtual_meeting_link',
+  'phone_meeting_number',
+  'location_street',
+  'location_municipality',
+  'location_province',
+  'location_postal_code_1',
+  'time_zone',
+  'published',
+];
+
+const VENUE_VIRTUAL = '2';
+const VENUE_HYBRID = '3';
+const SERVICE_NAME = /\b(sub-?committee|committee|area service)\b/i;
+
+function text(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function formatCodes(row: BmltRow): string[] {
+  return text(row.formats)
+    .split(',')
+    .map((code) => code.trim());
+}
+
+/** Service committees are listed beside recovery meetings but aren't open to someone seeking one. */
+export function isServiceMeeting(row: BmltRow): boolean {
+  return formatCodes(row).includes('ASM') || SERVICE_NAME.test(text(row.meeting_name));
+}
+
+/** Apps open this link, so anything but http(s) is dropped. */
+function safeLink(value: unknown): string {
+  const raw = text(value);
+  try {
+    const { protocol } = new URL(raw);
+    return protocol === 'http:' || protocol === 'https:' ? raw : '';
+  } catch {
+    return '';
+  }
+}
+
+/** BMLT numbers weekdays 1 (Sunday) to 7; the directory stores the day's name. */
+function directoryDay(value: unknown): DayName | null {
+  const weekday = Number(text(value) || value);
+  return Number.isInteger(weekday) && weekday >= 1 && weekday <= 7 ? DAY_NAMES[weekday - 1] : null;
+}
+
+function comparable(value: string | undefined): string {
+  return (value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+/**
+ * What makes two listings the same meeting, whichever region or row they came from.
+ * Ids can't do this: on live data 163 of 168 duplicate groups were within one region,
+ * each row with its own id. A blank street says nothing about place, so those rows
+ * compare by coordinates to about 100 m. No group on live data spanned over 2 km.
+ */
+export function meetingFingerprint(meeting: DirectoryMeeting): string {
+  const { address, city, lat, lng } = meeting.location;
+  const place = comparable(address)
+    ? `${comparable(address)}|${comparable(city)}`
+    : `${lat.toFixed(3)},${lng.toFixed(3)}`;
+  return [
+    comparable(meeting.name),
+    meeting.day,
+    meeting.time,
+    comparable(meeting.link),
+    place,
+  ].join('\u0000');
+}
+
+export function mapBmltMeeting(row: BmltRow, region: BmltRegion): DirectoryMeeting | null {
+  try {
+    const name = text(row.meeting_name);
+    const day = directoryDay(row.weekday_tinyint);
+    const sourceId = String(row.source_id ?? '').trim();
+    if (!name || !sourceId || day === null) return null;
+    if (text(row.published) === '0' || isServiceMeeting(row)) return null;
+
+    const lat = parseFloat(text(row.latitude));
+    const lng = parseFloat(text(row.longitude));
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) return null;
+
+    const link = safeLink(row.virtual_meeting_link);
+    const phone = text(row.phone_meeting_number);
+    const canJoin = Boolean(link || phone);
+    const venue = text(row.venue_type);
+    if (!canJoin && (venue === VENUE_VIRTUAL || formatCodes(row).includes('TC'))) return null;
+
+    const address = text(row.location_street);
+    const city = text(row.location_municipality);
+    const state = text(row.location_province);
+    const zip = text(row.location_postal_code_1);
+    const time = normalizeTime(text(row.start_time));
+
+    const meeting = {
+      id: bmltMeetingId(region.sourceId, sourceId),
+      source: 'external',
+      provider: 'NA',
+      type: 'NA',
+      name,
+      day,
+      time,
+      online: venue === VENUE_VIRTUAL || venue === VENUE_HYBRID || (venue === '' && canJoin),
+      externalId: `${region.sourceId}:${sourceId}`,
+      sourceRegion: String(region.sourceId),
+      location: { lat, lng, geohash: directoryGeohash(lat, lng) },
+    } as DirectoryMeeting;
+
+    if (address) meeting.location.address = address;
+    if (city) meeting.location.city = city;
+    if (state) meeting.location.state = state;
+    if (zip) meeting.location.zip = zip;
+    if (text(row.formats)) meeting.format = text(row.formats);
+    if (text(row.time_zone)) meeting.timezone = text(row.time_zone);
+    if (link) meeting.link = link;
+    if (phone) meeting.onlineNotes = `Dial-in: ${phone}`;
+
+    return meeting;
+  } catch {
+    // A bad time or out-of-range coordinate: skip the row rather than the region.
+    return null;
+  }
+}

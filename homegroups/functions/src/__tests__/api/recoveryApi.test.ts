@@ -11,7 +11,7 @@ const okResponse = (body: unknown) => ({
 });
 
 const caller = { uid: "user-1", email: "u@example.com" };
-const input = { location: { lat: 30.2, lng: -97.7 }, day: 1 };
+const input = { location: { lat: 30.2, lng: -97.7 }, day: "monday" };
 const deps = { baseUrl: "https://recovery-api.test", apiKey: "secret-key" };
 
 describe("fetchDirectoryMeetings", () => {
@@ -25,6 +25,17 @@ describe("fetchDirectoryMeetings", () => {
       fetchFn: fetchFn as unknown as typeof fetch,
     });
     expect(result).toEqual(meetings);
+  });
+
+  it("gives up on a slow directory, so the person still gets Homegroups' own meetings", async () => {
+    const fetchFn = jest
+      .fn()
+      .mockResolvedValue(okResponse({ result: { meetings: [] } }));
+    await fetchDirectoryMeetings(input, caller, {
+      ...deps,
+      fetchFn: fetchFn as unknown as typeof fetch,
+    });
+    expect(fetchFn.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
   });
 
   it("POSTs the callable wire protocol with service-auth headers (X-App-Id: homegroups)", async () => {
