@@ -30,17 +30,26 @@ export async function advance(stripe: Stripe, clockId: string, toEpoch: number):
 }
 
 export async function deleteOpenClocks(stripe: Stripe): Promise<void> {
+  const failed: string[] = [];
   for (const id of openClocks) {
-    await stripe.testHelpers.testClocks.del(id).catch(() => undefined);
+    try {
+      await stripe.testHelpers.testClocks.del(id);
+    } catch (err) {
+      // Already gone is fine; anything else leaves a clock behind for the sweep.
+      if ((err as { code?: string }).code !== 'resource_missing') failed.push(id);
+    }
     openClocks.delete(id);
   }
+  if (failed.length > 0) console.warn(`could not delete test clocks ${failed.join(', ')}; the next run sweeps them`);
 }
 
 /** Deletes clocks left by crashed runs, since Stripe limits clocks per account. */
 export async function sweepOldClocks(stripe: Stripe, olderThanS = 3600): Promise<number> {
-  const clocks = await stripe.testHelpers.testClocks.list({ limit: 100 });
   const cutoff = Math.floor(Date.now() / 1000) - olderThanS;
-  const stale = clocks.data.filter((c) => c.name?.startsWith(CLOCK_PREFIX) && c.created < cutoff);
+  const stale: Stripe.TestHelpers.TestClock[] = [];
+  for await (const c of stripe.testHelpers.testClocks.list({ limit: 100 })) {
+    if (c.name?.startsWith(CLOCK_PREFIX) && c.created < cutoff) stale.push(c);
+  }
   for (const clock of stale) await stripe.testHelpers.testClocks.del(clock.id);
   return stale.length;
 }

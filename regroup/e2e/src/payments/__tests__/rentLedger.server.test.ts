@@ -4,7 +4,6 @@ import type Stripe from 'stripe';
 import { callAs } from '../harness/callables';
 import { deliver } from '../harness/eventPump';
 import {
-  adminDb,
   seedConnectedHouse,
   seedOperator,
   seedResident,
@@ -14,6 +13,7 @@ import {
 import { deliverType, docData, eventsOfType, nowS } from '../harness/flows';
 import { assertSafeTarget, LOCAL_CONNECT_ACCOUNT_FILE, readConfigFile } from '../harness/guards';
 import { confirmWithCard, paymentIntentId } from '../harness/payWithTestCard';
+import { waitFor } from '../harness/waitFor';
 
 const SUCCEEDED = 'payment_intent.succeeded';
 const FAILED = 'payment_intent.payment_failed';
@@ -75,6 +75,19 @@ test('RENT-001: paying the full balance clears it, records it, and pays the hous
   expect(intent.transfer_data?.destination).toBe(readConfigFile(LOCAL_CONNECT_ACCOUNT_FILE));
   // By hand, for $200.00 by card: 0.75% ($1.50) + 2.9% ($5.80) + $0.30 = $7.60.
   expect(intent.application_fee_amount).toBe(760);
+  // As Stripe moved the money, not just as it was asked to: a destination charge
+  // transfers all of it to the house, then collects the fee back from the house.
+  // Both appear a moment after the charge succeeds.
+  const charge = await waitFor(
+    () => stripe.charges.retrieve(intent.latest_charge as string),
+    (c) => typeof c.transfer === 'string',
+  );
+  expect((await stripe.transfers.retrieve(charge.transfer as string)).amount).toBe(20000);
+  const fees = await waitFor(
+    async () => (await stripe.applicationFees.list({ created: { gte: since - 60 }, limit: 100 })).data.filter((f) => f.originating_transaction === charge.id),
+    (found) => found.length > 0,
+  );
+  expect(fees.map((f) => f.amount)).toEqual([760]);
 });
 
 test('RENT-002: a partial payment lowers the balance by exactly that, in integer cents', async () => {
@@ -95,6 +108,22 @@ test('RENT-010: a double tap makes one intent and one charge', async () => {
   expect(charges.data).toHaveLength(1);
 });
 
+test('RENT-010: two taps at the same moment still make one intent and one charge', async () => {
+  const r = await resident(20000);
+  const since = nowS() - 5;
+  // Stripe may refuse one of two simultaneous requests with the same key; that tap
+  // shows an error, which is safe. Charging twice is not.
+  const taps = await Promise.allSettled([startPayment(r, 7100), startPayment(r, 7100)]);
+  const secrets = taps.flatMap((t) => (t.status === 'fulfilled' ? [t.value] : []));
+  expect(secrets.length).toBeGreaterThan(0);
+  const pi = paymentIntentId(secrets[0]);
+  for (const secret of secrets) expect(paymentIntentId(secret)).toBe(pi);
+  await confirmWithCard(stripe, secrets[0], 'pm_card_visa');
+  const intents = await stripe.paymentIntents.list({ created: { gte: since }, limit: 100 });
+  expect(intents.data.filter((i) => i.metadata.guestId === r.guestId)).toHaveLength(1);
+  expect((await stripe.charges.list({ payment_intent: pi })).data).toHaveLength(1);
+});
+
 test('RENT-013: a declined card leaves the balance alone and records no successful payment', async () => {
   const r = await resident(20000);
   const since = nowS() - 5;
@@ -106,9 +135,10 @@ test('RENT-013: a declined card leaves the balance alone and records no successf
   await deliverType(stripe, { since, objectId: pi, type: FAILED });
 
   expect(await rentOwed(r)).toBe(20000);
-  const record = (await adminDb().doc(`payments/${pi}`).get()).data();
-  expect(record?.status).not.toBe('succeeded');
-  expect(record?.rentApplied).not.toBe(true);
+  const record = await docData(`payments/${pi}`);
+  expect(record.status).toBe('failed');
+  expect(record.failureCode).toEqual(expect.any(String));
+  expect(record.rentApplied).not.toBe(true);
 });
 
 test('RENT-011: after a decline the same amount can be retried, and is charged once', async () => {
@@ -156,13 +186,25 @@ test('RENT-023: a succeeded event delivered twice and at the same time lowers th
   const { pi, since } = await pay(r, 5000);
   const [event] = await eventsOfType(stripe, { since, objectId: pi, type: SUCCEEDED });
 
-  // One of the concurrent deliveries may answer 500. Stripe would redeliver it.
-  await Promise.all([deliver(event), deliver(event)]);
+  // One concurrent delivery may be told to retry (409) or answer 500, which Stripe
+  // redelivers. At least one must apply it.
+  const concurrent = await Promise.all([deliver(event), deliver(event)]);
+  for (const res of concurrent) expect([200, 409, 500]).toContain(res.status);
+  expect(concurrent.some((res) => res.status === 200)).toBe(true);
   const last = await deliver(event);
 
   expect(last.status).toBe(200);
   expect(await rentOwed(r)).toBe(15000);
   expect((await docData(`payments/${pi}`)).rentApplied).toBe(true);
+});
+
+test('RENT-023: the same payment under a new event id still lowers the balance once', async () => {
+  const r = await resident(20000);
+  const { pi, since } = await pay(r, 5000);
+  const [event] = await deliverType(stripe, { since, objectId: pi, type: SUCCEEDED });
+  // A new id gets past the per-event claim, so only the payment's rentApplied marker stops it.
+  expect((await deliver({ ...event, id: `${event.id}_again` })).status).toBe(200);
+  expect(await rentOwed(r)).toBe(15000);
 });
 
 test('RENT-030: a resident cannot start a payment for another resident or another house', async () => {
@@ -171,17 +213,9 @@ test('RENT-030: a resident cannot start a payment for another resident or anothe
   const otherOperator = await seedOperator();
   const otherHouse = await seedConnectedHouse(otherOperator);
 
-  const forOtherGuest = await callAs(r.uid, 'createPaymentIntent', {
-    guestId: other.guestId,
-    houseId: r.houseId,
-    amount: 1000,
-  });
+  const forOtherGuest = await callAs(r.uid, 'createPaymentIntent', { guestId: other.guestId, houseId: r.houseId, amount: 1000 });
   expect(forOtherGuest.errorCode).toBe('permission-denied');
-  const forOtherHouse = await callAs(r.uid, 'createPaymentIntent', {
-    guestId: r.guestId,
-    houseId: otherHouse.id,
-    amount: 1000,
-  });
+  const forOtherHouse = await callAs(r.uid, 'createPaymentIntent', { guestId: r.guestId, houseId: otherHouse.id, amount: 1000 });
   expect(forOtherHouse.errorCode).toBe('permission-denied');
 });
 

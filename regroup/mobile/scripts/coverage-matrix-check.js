@@ -53,6 +53,9 @@ function parseMatrix(markdown) {
       break;
     }
     if (lines[i].trim().startsWith('|')) table.push(lines[i].trim());
+    // Markdown renders this as a row, but it would never reach the table.
+    const bare = lines[i].trim().match(/^([A-Z]+-\d{3})\s*\|/);
+    if (bare) throw new Error(`${bare[1]} (line ${i + 1}) needs a leading | to count as a row`);
   }
   // A lost header would silently turn the first row into the header, and a
   // row outside the table would silently drop out of every gate.

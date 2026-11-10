@@ -36,7 +36,7 @@ Flows read the shared test password from `E2E_TEST_PASSWORD`; it is never commit
 
 Flows that load Stripe data (the payment dashboard in `operator-manual-payment`, the PaymentSheet in `guest-rent-payment`) also need:
 
-- `regroup/functions/.secret.local` (gitignored) with the **e2e sandbox's** `STRIPE_SECRET_KEY`, read by the functions emulator;
+- `regroup/functions/.secret.local` (gitignored) with the **e2e sandbox's** `STRIPE_SECRET_KEY`, read by the functions emulator. The payment suite below needs the **regroup-local** values in this same file, and refuses to start with anything else, so switch them back after Maestro testing;
 - `E2E_STRIPE_ACCOUNT_ID`, a test-mode connected account in that sandbox, exported before seeding. Without it the seed uses a placeholder and says so, and those screens fail to load.
 
 ## Run
@@ -81,7 +81,7 @@ Real Stripe objects against the emulators, with events delivered by the test, so
 
 1. Create a Stripe sandbox named `regroup-local` with Connect on and **no webhook endpoints**. The e2e sandbox's endpoints point at staging, so its events would write there. `assertLocalSandbox` refuses any other account and any endpoint.
 2. Save its secret key to `~/.config/regroup-e2e/stripe-local-secret-key.txt` and any long random `whsec_` value to `~/.config/regroup-e2e/stripe-local-webhook-secret.txt`, both mode 600.
-3. In the worktree's `regroup/functions/.secret.local`, set `STRIPE_SECRET_KEY` to that key, and `STRIPE_TEST_WEBHOOK_SECRET` and `STRIPE_CONNECT_TEST_WEBHOOK_SECRET` to that value. Leave out `SENDGRID_API_KEY`, so tests can't send email.
+3. In the worktree's `regroup/functions/.secret.local`, set `STRIPE_SECRET_KEY` to that key, and `STRIPE_TEST_WEBHOOK_SECRET` and `STRIPE_CONNECT_TEST_WEBHOOK_SECRET` to that value. Leave out `SENDGRID_API_KEY`, so tests can't send email. `npm run test:payments` checks all three against the files from step 2 before it starts anything: the emulator charges with this file, not the harness's.
 
 **Run:**
 

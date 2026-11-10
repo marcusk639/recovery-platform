@@ -80,7 +80,9 @@ test('a clock moves Stripe’s time, and a past deadline in Firestore is what bl
   await advance(stripe, op.clockId, before + 86400);
   expect((await stripe.testHelpers.testClocks.retrieve(op.clockId)).frozen_time).toBe(before + 86400);
 
-  const operator = await seedOperator();
+  // setHouseSubscriptionStatusOnCreate stamps the house from the operator's status after
+  // the write below, so the operator must be past due too or the stamp undoes it.
+  const operator = await seedOperator({ status: 'past_due' });
   const house = await seedConnectedHouse(operator);
   const invite = { houseId: house.id, email: 'invitee@rats-e2e.invalid', role: 'guest' };
   await adminDb().doc(`houses/${house.id}`).update({ subscriptionStatus: 'past_due', guestGraceEndsAt: new Date(Date.now() - 60000).toISOString() });

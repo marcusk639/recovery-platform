@@ -2,7 +2,7 @@ import type Stripe from 'stripe';
 import { callAs } from '../harness/callables';
 import { deleteOpenClocks } from '../harness/clock';
 import { deliverType, DAY_S, docData, eventsOfType, houseStatus, inviteInput, lifecycle, newHouseInput, nowS, operatorMeta, pastTrial } from '../harness/flows';
-import { adminDb } from '../harness/fixtures';
+import { adminDb, seedConnectedHouse, seedResident } from '../harness/fixtures';
 import { assertSafeTarget } from '../harness/guards';
 
 let stripe: Stripe;
@@ -42,7 +42,7 @@ test('SUB-021: first failure starts 7-day grace from the invoice, and a retry do
   expect(Date.parse(deadline)).toBe((finalizedAt(first) + 7 * DAY_S) * 1000);
 
   const invoice = first.data.object as Stripe.Invoice;
-  await stripe.invoices.pay(invoice.id as string).catch(() => undefined);
+  await expect(stripe.invoices.pay(invoice.id as string)).rejects.toMatchObject({ type: 'StripeCardError' });
   await deliverType(stripe, { since, objectId: op.customerId, type: FAILED, count: 2 });
   expect(await graceEndsAt(house.id)).toBe(deadline);
 });
@@ -77,6 +77,20 @@ test('SUB-024: past the deadline, data stays, the resident reads their history a
   expect((await docData(`guests/${resident.guestId}`)).rentOwed).toBe(15000);
   const history = await callAs(resident.uid, 'listPayments', { guestId: resident.guestId, houseId: house.id });
   expect(history.errorMessage).toBeUndefined();
+
+  // Paying needs a house connected to Stripe, which the lifecycle house isn't. The
+  // operator goes past due first, so the on-create status stamp agrees with expired().
+  await adminDb().doc(`users/${op.uid}`).update({ 'subscriptionMetadata.status': 'past_due' });
+  const payer = await seedResident(await seedConnectedHouse(op), { rentOwed: 15000 });
+  await expired(payer.houseId);
+  const start = await callAs(payer.uid, 'createPaymentIntent', {
+    guestId: payer.guestId,
+    houseId: payer.houseId,
+    amount: 15000,
+    idempotencyKey: `${payer.guestId}-lapsed`,
+  });
+  expect(start.errorMessage).toBeUndefined();
+  expect((start.data as { clientSecret?: string }).clientSecret).toEqual(expect.any(String));
 });
 
 test('SUB-025: dunning exhausted is blocked, and a new card unblocks with no second subscription', async () => {
@@ -85,8 +99,9 @@ test('SUB-025: dunning exhausted is blocked, and a new card unblocks with no sec
   await pastTrial(stripe, op);
   const [first] = await eventsOfType(stripe, { since, objectId: op.customerId, type: FAILED });
   const invoiceId = (first.data.object as Stripe.Invoice).id as string;
-  await stripe.invoices.pay(invoiceId).catch(() => undefined);
-  await stripe.invoices.pay(invoiceId).catch(() => undefined);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await expect(stripe.invoices.pay(invoiceId)).rejects.toMatchObject({ type: 'StripeCardError' });
+  }
   await deliverType(stripe, { since, objectId: op.customerId, type: FAILED, count: 3 });
   expect(await houseStatus(house.id)).toBe('unpaid');
 

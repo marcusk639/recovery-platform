@@ -38,7 +38,8 @@ test('SUB-040: concurrent delivery backs off instead of reporting success', asyn
   const [event] = await eventsOfType(stripe, { since, objectId: op.customerId, type: UPDATED });
   await adminDb().doc(`webhookEvents/${event.id}`).set({ status: 'processing', claimedAtMs: Date.now(), type: event.type });
   const res = await deliver(event);
-  expect(res.status).not.toBe(200);
+  expect(res.status).toBe(409);
+  expect(await marker(event.id)).toBe('processing');
   await adminDb().doc(`webhookEvents/${event.id}`).delete();
   expect((await deliver(event)).status).toBe(200);
 });
@@ -102,7 +103,8 @@ test('SUB-044: a live-mode event is not applied by a test-mode deployment', asyn
   const { op, house } = await lifecycle(stripe);
   const id = `evt_live_${Date.now()}`;
   const res = await deliver({ id, object: 'event', type: DELETED, livemode: true, created: nowS(), api_version: '2026-01-28.clover', data: { object: { id: op.subscriptionId, object: 'subscription', customer: op.customerId, metadata: { userId: op.uid }, status: 'canceled' } } });
-  expect([200, 400]).toContain(res.status);
+  expect(res.status).toBe(400);
+  expect(await marker(id)).toBeUndefined();
   expect(await houseStatus(house.id)).toBe('trialing');
 });
 
@@ -148,9 +150,14 @@ test('SUB-050: with the switch off, a lapsed operator can act', async () => {
   const { op, house } = await lifecycle(stripe);
   await adminDb().doc('paywall/config').set({ enabled: false });
   await adminDb().doc(`houses/${house.id}`).update({ subscriptionStatus: 'canceled' });
-  await new Promise((resolve) => setTimeout(resolve, 61000)); // the switch is cached for up to a minute
-  const res = await callAs(op.uid, 'createInvitation', inviteInput(house.id));
-  await adminDb().doc('paywall/config').set({ enabled: true });
-  await new Promise((resolve) => setTimeout(resolve, 61000)); // don't leave it cached off for later tests
-  expect(res.errorMessage).toBeUndefined();
+  let res: Awaited<ReturnType<typeof callAs>> | undefined;
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 61000)); // the switch is cached for up to a minute
+    res = await callAs(op.uid, 'createInvitation', inviteInput(house.id));
+  } finally {
+    await adminDb().doc('paywall/config').set({ enabled: true });
+    await new Promise((resolve) => setTimeout(resolve, 61000)); // don't leave it cached off for later tests
+  }
+  expect(res).toBeDefined();
+  expect(res?.errorMessage).toBeUndefined();
 }, 300000);

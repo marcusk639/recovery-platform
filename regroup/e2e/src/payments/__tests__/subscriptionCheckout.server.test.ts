@@ -96,13 +96,13 @@ async function runWithEnv(env: Record<string, string>, op: SeededOperator, data:
 
 test('SUB-003: billing off refuses checkout, with no silent fallback to the legacy shape', async () => {
   const op = await seedOperator({ status: '' });
-  await expect(runWithEnv({ TIER_BILLING_ENABLED: 'false' }, op, checkout(op, 'traditional', 'starter'))).rejects.toThrow(/billing|not enabled|unavailable/i);
+  await expect(runWithEnv({ TIER_BILLING_ENABLED: 'false' }, op, checkout(op, 'traditional', 'starter'))).rejects.toMatchObject({ code: 'failed-precondition' });
   expect(await subscriptionsOf(op.email)).toHaveLength(0);
 });
 
 test('SUB-004: a tier not in the catalog is refused, leaving no subscription', async () => {
   const op = await seedOperator({ status: '' });
-  expect((await callAs(op.uid, 'createOperatorSubscription', checkout(op, 'traditional', 'platinum'))).errorCode).toBeTruthy();
+  expect((await callAs(op.uid, 'createOperatorSubscription', checkout(op, 'traditional', 'platinum'))).errorCode).toBe('invalid-argument');
   expect(await subscriptionsOf(op.email)).toHaveLength(0);
 });
 

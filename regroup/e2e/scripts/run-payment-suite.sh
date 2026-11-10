@@ -19,6 +19,7 @@ refuse() {
   exit 1
 }
 
+command -v lsof >/dev/null || refuse "lsof is needed to check the emulator ports are free"
 for port in 5101 8180 9160 9399 4410 4510 9310 9510; do
   if lsof -iTCP:"${port}" -sTCP:LISTEN -n -P >/dev/null 2>&1; then
     refuse "port ${port} is in use; another payment suite run may still be going"
@@ -31,16 +32,32 @@ done
 
 SECRET_FILE="${FUNCTIONS_DIR}/.secret.local"
 [[ -f "${SECRET_FILE}" ]] || refuse "missing ${SECRET_FILE}"
-for name in STRIPE_SECRET_KEY STRIPE_TEST_WEBHOOK_SECRET STRIPE_CONNECT_TEST_WEBHOOK_SECRET; do
-  grep -q "^${name}=" "${SECRET_FILE}" || refuse "${SECRET_FILE} has no ${name}"
+# The functions emulator charges with these values, not the harness's key files, so they
+# must be the regroup-local ones. Maestro testing puts the e2e sandbox's here, whose
+# webhooks write to staging. Compared in variables only; nothing is printed.
+secret_value() {
+  local line
+  line="$(grep -m1 "^$1=" "${SECRET_FILE}" || true)"
+  [[ -n "${line}" ]] || refuse "${SECRET_FILE} has no $1"
+  line="${line#*=}"
+  line="${line%\"}"
+  line="${line#\"}"
+  printf '%s' "${line}"
+}
+config_value() { tr -d '[:space:]' <"${CONFIG_DIR}/$1"; }
+[[ "$(secret_value STRIPE_SECRET_KEY)" == "$(config_value stripe-local-secret-key.txt)" ]] ||
+  refuse "${SECRET_FILE} STRIPE_SECRET_KEY is not the regroup-local key; set it as in maestro/README.md"
+for name in STRIPE_TEST_WEBHOOK_SECRET STRIPE_CONNECT_TEST_WEBHOOK_SECRET; do
+  [[ "$(secret_value "${name}")" == "$(config_value stripe-local-webhook-secret.txt)" ]] ||
+    refuse "${SECRET_FILE} ${name} is not the regroup-local webhook secret; set it as in maestro/README.md"
 done
-if grep -q '=SG\.' "${SECRET_FILE}"; then
+if grep -Eq '=["'"'"']?SG\.' "${SECRET_FILE}"; then
   refuse "${SECRET_FILE} holds a real SendGrid key; remove it so tests can't send email"
 fi
 
 cd "${E2E_DIR}"
-[[ -f "${FUNCTIONS_DIR}/.env.demo-regroup-e2e" && -f "${CONFIG_DIR}/stripe-local-connect-account.txt" && -f "${CONFIG_DIR}/stripe-local-prices.json" ]] ||
-  npx ts-node scripts/stripe-local-setup.ts
+# Always: e2e:gen-env rewrites .env.demo-regroup-e2e without prices. Setup is idempotent.
+npx ts-node scripts/stripe-local-setup.ts
 npx ts-node scripts/stripe-local-setup.ts --sweep-clocks
 
 (cd "${FUNCTIONS_DIR}" && npm run -s build)

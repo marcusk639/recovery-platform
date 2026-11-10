@@ -23,7 +23,9 @@ export async function deliver(
 
 function relatesTo(event: Stripe.Event, objectId: string): boolean {
   const object = event.data.object as unknown as Record<string, unknown>;
-  return RELATED_FIELDS.some((field) => object[field] === objectId) || (event.account ?? '') === objectId;
+  return (
+    RELATED_FIELDS.some((field) => object[field] === objectId) || (event.account ?? '') === objectId
+  );
 }
 
 async function listSince(stripe: Stripe, since: number, types?: string[]): Promise<Stripe.Event[]> {
@@ -45,11 +47,19 @@ async function listSince(stripe: Stripe, since: number, types?: string[]): Promi
 /**
  * The object's events since `since`, oldest first, once the list has stopped
  * growing. Tests decide what to deliver and when. Throws on an event rendered in
- * another API version, so a test can't pass on a payload production wouldn't get.
+ * another API version, so a test can't pass on a payload production wouldn't get,
+ * and at the deadline if no event arrived or the list never settled. `settleMs: 0`
+ * returns what is listed now, which may be nothing.
  */
 export async function fetchEvents(
   stripe: Stripe,
-  opts: { since: number; objectId: string; types?: string[]; settleMs?: number; timeoutMs?: number },
+  opts: {
+    since: number;
+    objectId: string;
+    types?: string[];
+    settleMs?: number;
+    timeoutMs?: number;
+  },
 ): Promise<Stripe.Event[]> {
   const { since, objectId, types, settleMs = 2000, timeoutMs = 30000 } = opts;
   const pinned = pinnedStripeApiVersion();
@@ -59,12 +69,20 @@ export async function fetchEvents(
     const events = (await listSince(stripe, since, types)).filter((e) => relatesTo(e, objectId));
     for (const event of events) {
       if (event.api_version !== pinned) {
-        throw new Error(`${event.id} is rendered in API version ${event.api_version}, not the pinned ${pinned}.`);
+        throw new Error(
+          `${event.id} is rendered in API version ${event.api_version}, not the pinned ${pinned}.`,
+        );
       }
     }
-    const settled = events.length === previous && (events.length > 0 || Date.now() > deadline);
-    if (settled || settleMs === 0) {
-      return events.sort((a, b) => a.created - b.created || (a.id < b.id ? -1 : 1));
+    if (settleMs === 0 || (events.length > 0 && events.length === previous)) {
+      // Stripe lists newest first. Reversed, a stable sort keeps its order within a
+      // second; ids are random, so comparing them would shuffle same-second events.
+      return events.reverse().sort((a, b) => a.created - b.created);
+    }
+    if (Date.now() > deadline) {
+      throw new Error(
+        `${objectId}: ${events.length} events, and not settled after ${timeoutMs} ms`,
+      );
     }
     previous = events.length;
     await new Promise((resolve) => setTimeout(resolve, settleMs));
