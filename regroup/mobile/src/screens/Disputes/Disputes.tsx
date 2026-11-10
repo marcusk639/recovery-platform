@@ -126,11 +126,6 @@ const Disputes: React.FC = () => {
     admins,
   });
 
-  // Guard return AFTER all hooks
-  if (!house || !user?.id) {
-    return null;
-  }
-
   const renderHelp = useCallback(() => {
     showPopover(
       'DISPUTES',
@@ -154,6 +149,11 @@ const Disputes: React.FC = () => {
     activityScreen.setSearchFilters,
     activityScreen.filters,
   ]);
+
+  // Guard return AFTER all hooks
+  if (!house || !user?.id) {
+    return null;
+  }
 
   const filteredActivities = activityScreen.filterActivitiesByType('all', true);
 
