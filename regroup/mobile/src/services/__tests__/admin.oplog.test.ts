@@ -103,33 +103,27 @@ describe('updateAdmin', () => {
 });
 
 describe('deleteAdmin', () => {
-  it('reads the admin, archives it under admin-archive/{id}, then deletes it', async () => {
+  // No archive copy (#196): the rules refused it, which made every removal
+  // fail, and nothing reads it. Owner decision 2026-11-09.
+  it('deletes the admin without copying it anywhere', async () => {
     seedDoc('admins/a1', { id: 'a1', houseIds: ['h1'] });
 
     expect(await deleteAdmin('a1')).toBe('a1');
-    expect(getOpLog()).toEqual([
-      { op: 'get', path: 'admins/a1' },
-      { op: 'set', path: 'admin-archive/a1', data: { id: 'a1', houseIds: ['h1'] } },
-      { op: 'delete', path: 'admins/a1' },
-    ]);
+    expect(getOpLog()).toEqual([{ op: 'delete', path: 'admins/a1' }]);
     expect(readDoc('admins/a1')).toBeUndefined();
-    expect(readDoc('admin-archive/a1')).toEqual({ id: 'a1', houseIds: ['h1'] });
+    expect(readDoc('admin-archive/a1')).toBeUndefined();
   });
 
-  it('skips the archive when the admin does not exist', async () => {
+  it('resolves when the admin does not exist', async () => {
     expect(await deleteAdmin('missing')).toBe('missing');
-    expect(getOpLog()).toEqual([
-      { op: 'get', path: 'admins/missing' },
-      { op: 'delete', path: 'admins/missing' },
-    ]);
+    expect(getOpLog()).toEqual([{ op: 'delete', path: 'admins/missing' }]);
   });
 
-  it('does not delete when the archive write fails', async () => {
+  it('rejects when the delete fails', async () => {
     seedDoc('admins/a1', { id: 'a1' });
-    failNext('set', new Error('denied'), 'admin-archive/a1');
+    failNext('delete', new Error('denied'), 'admins/a1');
 
     await expect(deleteAdmin('a1')).rejects.toThrow('denied');
-    expect(getOpLog().map((e) => e.op)).toEqual(['get', 'set']);
     expect(readDoc('admins/a1')).toEqual({ id: 'a1' });
   });
 });
