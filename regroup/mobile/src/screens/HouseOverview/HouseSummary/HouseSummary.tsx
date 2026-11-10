@@ -12,13 +12,15 @@
  * - Uses React Query hooks for additional data fetching where beneficial
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { size } from 'lodash';
 import { View } from 'react-native';
 
 // Hooks
 import { useGuests } from '../../../state/queries';
 import { useHouseApplications } from '../../../state/queries/applicationQueries';
+import { useHouseWeekStats } from '../../../state/queries/activityQueries';
+import { useCurrentWeek } from '../../../hooks/activity/useCurrentWeek';
 import { useAppSelector } from '../../../state/store';
 import { useSelectedHouse } from '../../../hooks/useSelectedHouse';
 import { useLiveHouseDisputes } from '../../../hooks/useLiveHouseDisputes';
@@ -46,6 +48,7 @@ import { normalize, fontSize, color, ROW } from '../../../styles/theme';
 import { HEALTH_ICON_MAP, HEALTH_STATUS_MAP } from '../../../util/guest';
 import {
   getHousePercentage,
+  isScoredResident,
   countOpenIssues,
   countOpenDisputes,
   countBeds,
@@ -125,6 +128,18 @@ const HouseSummary: React.FC<Props> = ({ navigation }) => {
 
   const selectedGuests: Guests = queryGuests || {};
 
+  const { startDate: weekStart } = useCurrentWeek(house?.timezone);
+  const scoredGuestIds = useMemo(
+    () =>
+      house
+        ? Object.values((queryGuests ?? {}) as Guests)
+            .filter(guest => isScoredResident(guest, house))
+            .map(guest => guest.id)
+        : [],
+    [queryGuests, house],
+  );
+  const weekStats = useHouseWeekStats(scoredGuestIds, weekStart, !!house?.id);
+
   // Show popover for demo mode
   const showDemoPopover = () => {
     showPopover(
@@ -182,22 +197,33 @@ const HouseSummary: React.FC<Props> = ({ navigation }) => {
       />
 
       {/******************************* HEALTH SCORE ********************************/}
-      <WeekStatSummary
-        percentage={getHousePercentage(house, selectedGuests)}
-        header="HEALTH SCORE"
-        rightSideContainer={{
-          justifyContent: 'flex-start',
-          alignItems: 'center',
-        }}
-        rightSideContent={
-          <View style={{ flex: 1, justifyContent: 'space-between' }}>
-            <HealthDescription health="super happy" />
-            <HealthDescription health="happy" />
-            <HealthDescription health="neutral" />
-            <HealthDescription health="sad" />
-          </View>
-        }
-      />
+      {weekStats.isLoading ? (
+        <View testID="health-score-loading">
+          <RatsLoadingIndicator />
+        </View>
+      ) : weekStats.isError ? (
+        <RatsText
+          text="The health score couldn't load."
+          style={{ fontSize: fontSize.regular, color: color.dark_grey }}
+        />
+      ) : (
+        <WeekStatSummary
+          percentage={getHousePercentage(house, selectedGuests, weekStats.stats)}
+          header="HEALTH SCORE"
+          rightSideContainer={{
+            justifyContent: 'flex-start',
+            alignItems: 'center',
+          }}
+          rightSideContent={
+            <View style={{ flex: 1, justifyContent: 'space-between' }}>
+              <HealthDescription health="super happy" />
+              <HealthDescription health="happy" />
+              <HealthDescription health="neutral" />
+              <HealthDescription health="sad" />
+            </View>
+          }
+        />
+      )}
 
       {/******************************* SECTIONS *********************************/}
       <Section

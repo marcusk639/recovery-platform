@@ -3,9 +3,11 @@ import {
   useMutation,
   useQueryClient,
   useInfiniteQuery,
+  useQueries,
 } from '@tanstack/react-query';
 import type { Guest } from '../../entities/Guest';
 import type { House } from '../../entities/House';
+import type { WeekStats } from '../../entities/WeekSummary';
 
 // NEW ACTIVITY MODEL IMPORTS
 import {
@@ -205,6 +207,35 @@ export const useWeekSummary = (
     enabled: enabled && !!guestId && !!weekStart,
     staleTime: 60000, // 1 minute - summaries don't change as frequently
   });
+};
+
+/**
+ * This week's stats for each resident, keyed by guest id. Each read shares its
+ * cache entry with useWeekSummary. A resident with no summary yet maps to
+ * undefined.
+ */
+export const useHouseWeekStats = (
+  guestIds: string[],
+  weekStart: string,
+  enabled: boolean = true,
+) => {
+  const results = useQueries({
+    queries: guestIds.map(guestId => ({
+      queryKey: activityKeys.weekSummary(guestId, weekStart),
+      queryFn: () => activityService.getWeekSummary(guestId, weekStart),
+      enabled: enabled && !!weekStart,
+      staleTime: 60000,
+    })),
+  });
+  const stats: Record<string, WeekStats | undefined> = {};
+  guestIds.forEach((guestId, i) => {
+    stats[guestId] = results[i]?.data?.stats;
+  });
+  return {
+    stats,
+    isLoading: results.some(result => result.isLoading),
+    isError: results.some(result => result.isError),
+  };
 };
 
 /**

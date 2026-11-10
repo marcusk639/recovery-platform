@@ -396,28 +396,27 @@ describe('countOpenItems', () => {
 // ─── getHousePercentage ──────────────────────────────────────────────────────
 
 describe('getHousePercentage', () => {
+  // getOverallPercentage is mocked to 80; housePercentage.test.ts uses the real one.
+  const house: any = { phases: { 1: { rules: {} } } };
+
   it('returns 0 when there are no guests', () => {
-    const house: any = { phases: {} };
-    const result = getHousePercentage(house, {});
+    const result = getHousePercentage(house, {}, {});
     expect(result).toBe(0);
   });
 
   it('returns the mocked overall percentage (80) for a single guest', () => {
-    const house: any = { phases: {} };
-    const guests: any = { 'g1': { id: 'g1' } };
-    const result = getHousePercentage(house, guests);
+    const guests: any = { 'g1': { id: 'g1', phase: 1 } };
+    const result = getHousePercentage(house, guests, {});
     expect(result).toBe(80);
   });
 
   it('returns the average across multiple guests', () => {
-    // getOverallPercentage is mocked to always return 80
-    // avg of [80, 80] = 80 → ceil(80) = 80
-    const house: any = { phases: {} };
+    // avg of [80, 80] = 80
     const guests: any = {
-      'g1': { id: 'g1' },
-      'g2': { id: 'g2' },
+      'g1': { id: 'g1', phase: 1 },
+      'g2': { id: 'g2', phase: 1 },
     };
-    const result = getHousePercentage(house, guests);
+    const result = getHousePercentage(house, guests, {});
     expect(result).toBe(80);
   });
 });
