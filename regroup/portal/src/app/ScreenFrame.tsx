@@ -3,7 +3,7 @@ import ErrorBoundary from '@mobile/components/ErrorBoundary';
 import { Breadcrumb } from './Breadcrumb';
 import { guestIdForState, houseIdForState } from './current-house';
 import { HouseTabs } from './HouseTabs';
-import { useLeaveWarning } from './leave-guard';
+import { useConfirmOnRemove, useLeaveWarning } from './leave-guard';
 import { ResidentGate } from './residents/ResidentGate';
 import { FullViewGate } from './FullViewGate';
 import { HouseGate } from './HouseGate';
@@ -15,11 +15,13 @@ import { useRoleUnknown } from './useHouseAccess';
 // Keying the boundary on the route means leaving a crashed screen clears the crash.
 const column = { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' } as const;
 
-export function ScreenFrame({ state, routeKey, children }: { state: any; routeKey: string; children: ReactNode }) {
+export function ScreenFrame(props: { state: any; routeKey: string; navigation?: any; children: ReactNode }) {
+  const { state, routeKey, children } = props;
   const houseId = houseIdForState(state);
   const guestId = guestIdForState(state);
   const routeName: string = state.routes[state.index]?.name ?? '';
   useLeaveWarning(routeName);
+  useConfirmOnRemove(props.navigation, routeName);
   const boundary = <ErrorBoundary key={routeKey}>{children}</ErrorBoundary>;
   const screen = (
     <div data-testid="screen-body" style={column}>

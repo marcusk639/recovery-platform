@@ -19,9 +19,15 @@
         src: local("Helvetica Neue"), local("Segoe UI"), local("Arial");
       }
       /* Staff don't log or correct a resident's activities (spec, section 5). The
-         phone shows staff these two buttons, and the rules would allow the write. */
+         phone shows staff these buttons, and the rules would allow the write. */
       [data-testid="add-hours-button"],
-      [data-testid="update-medication-button"] { display: none !important; }
+      [data-testid="update-medication-button"],
+      /* A staff member who is also a resident sees the resident's own buttons too. */
+      [data-testid="complete-chore-button"],
+      [data-testid="meet-sponsor-button"],
+      [data-testid="add-job-button"],
+      [data-testid="log-medication-button"],
+      [data-testid="create-meeting-button"] { display: none !important; }
       html, body, #root { height: 100%; margin: 0; }
       #root { display: flex; }
     </style>

@@ -124,3 +124,34 @@ test.fail('double-submitting intake admits one resident (phone bug: no duplicate
   await page.waitForTimeout(3000);
   expect(await guestsWithEmail('twice@rats-e2e.invalid')).toBe(1);
 });
+
+test('idle sign-out on a half-filled intake form still signs out and clears it', async ({ page }) => {
+  await page.clock.install();
+  await approveIntoIntake(page);
+  await page.getByTestId('intake-first-name-input').fill('Nora');
+  await page.clock.fastForward('15:01');
+  await expect(page.locator('#sign-in-form')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('intake-form-screen')).toHaveCount(0);
+});
+
+test("the form's own back arrow asks before losing what was typed", async ({ page }) => {
+  await approveIntoIntake(page);
+  await page.getByTestId('intake-first-name-input').fill('Nora');
+  await page.getByTestId('intake-form-screen').getByTestId('back-button').click();
+  await expect(dialog(page)).toContainText('Leave the intake form?');
+  await dialog(page).getByText('Stay', { exact: true }).click();
+  await expect(page.getByTestId('intake-first-name-input')).toHaveValue('Nora');
+  await page.getByTestId('intake-form-screen').getByTestId('back-button').click();
+  await dialog(page).getByText('Leave', { exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`${APP_URL}$`));
+});
+
+test('finishing intake goes back without asking', async ({ page }) => {
+  await approveIntoIntake(page);
+  await fillIntake(page, 'finished@rats-e2e.invalid');
+  await page.getByTestId('intake-submit-button').click();
+  await expect(dialog(page)).toContainText('has been admitted.');
+  await dialog(page).getByText('OK', { exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`${APP_URL}$`));
+  await expect(dialog(page)).toHaveCount(0);
+});

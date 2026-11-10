@@ -34,7 +34,7 @@ function SingleScreenNavigator({ id, initialRouteName, children, screenOptions, 
   return (
     <NavigationContent>
       <View style={{ flex: 1 }}>
-        <Frame state={state} routeKey={focused.key}>
+        <Frame state={state} routeKey={focused.key} navigation={descriptors[focused.key].navigation}>
           {descriptors[focused.key].render()}
         </Frame>
       </View>

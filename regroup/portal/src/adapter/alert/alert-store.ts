@@ -34,8 +34,13 @@ export const currentAlert = (): QueuedAlert | undefined => queue[0];
 export const cancelButton = (buttons: AlertButton[]) =>
   buttons.find((b) => b.style === 'cancel' || b.text === 'Cancel');
 
+// The last alert closed, and when: lets a leave guard tell a finished form from an abandoned one.
+let lastClosed: { title?: string; at: number } | undefined;
+export const lastClosedAlert = () => lastClosed;
+
 export function closeAlert(id: number, button?: AlertButton): void {
   if (queue[0]?.id !== id) return;
+  lastClosed = { title: queue[0].title, at: Date.now() };
   setQueue(queue.slice(1));
   button?.onPress?.();
 }

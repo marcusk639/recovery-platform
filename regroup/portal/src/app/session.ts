@@ -3,6 +3,7 @@ import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { useDispatch, useSelector } from 'react-redux';
 import { autoLogin, login } from '@mobile/state/slices/userSlice';
 import { auth } from '../adapter/firebase-setup';
+import { releaseLeaveWarning } from './leave-guard';
 
 export type SessionPhase = 'checking' | 'signed-out' | 'signed-in';
 
@@ -23,7 +24,10 @@ export function useRestoreSession(): SessionPhase {
         if (!user) {
           // The server ended a live session, as when an account is disabled. A full
           // page load removes everything already on screen and in memory.
-          if (wasLoggedIn.current) location.replace('/');
+          if (wasLoggedIn.current) {
+            releaseLeaveWarning();
+            location.replace('/');
+          }
           setPhase('signed-out');
           return;
         }
@@ -61,6 +65,7 @@ export const SIGN_OUT_REASON_KEY = 'portal-signout-reason';
 export async function signOutAndReset(reason?: 'idle'): Promise<void> {
   // Before signing out, because the auth listener reloads the page on sign-out.
   if (reason) sessionStorage.setItem(SIGN_OUT_REASON_KEY, reason);
+  releaseLeaveWarning();
   await signOut(auth);
   location.replace('/');
 }

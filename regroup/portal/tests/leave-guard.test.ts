@@ -5,7 +5,8 @@ vi.mock('@mobile/navigation/types', () => ({
 }));
 
 import { currentAlert, resetAlerts } from '../src/adapter/alert/alert-store';
-import { confirmLeave } from '../src/app/leave-guard';
+import { renderHook } from '@testing-library/react';
+import { confirmLeave, releaseLeaveWarning, useLeaveWarning } from '../src/app/leave-guard';
 
 beforeEach(() => resetAlerts());
 
@@ -30,4 +31,21 @@ test('Stay keeps the form', () => {
   confirmLeave('route-ResidentIntake', leave);
   button('Stay').onPress?.();
   expect(leave).not.toHaveBeenCalled();
+});
+
+const unloadPrevented = () => {
+  const event = new Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+};
+test('on the intake form, leaving the page warns first', () => {
+  const { unmount } = renderHook(() => useLeaveWarning('route-ResidentIntake'));
+  expect(unloadPrevented()).toBe(true);
+  unmount();
+});
+test('a sign-out releases the warning, so the page can unload', () => {
+  const { unmount } = renderHook(() => useLeaveWarning('route-ResidentIntake'));
+  releaseLeaveWarning();
+  expect(unloadPrevented()).toBe(false);
+  unmount();
 });

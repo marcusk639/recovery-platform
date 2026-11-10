@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
-import { uidOf } from './fixtures';
-import { admin, expect, reseed, signInAs, test } from './helpers';
+import { makeResidentAManager, uidOf } from './fixtures';
+import { admin, expect, fillSignIn, reseed, signInAs, test } from './helpers';
 
 const activityCount = async () => (await admin().collection('activities').get()).size;
 
@@ -63,4 +63,19 @@ test('the summary graph fits the page', async ({ page }) => {
     return { widest, edge: body.getBoundingClientRect().right };
   });
   expect(fits.widest).toBeLessThanOrEqual(fits.edge + 1);
+});
+
+test("a staff member who is also a resident gets no resident logging on their own record", async ({ page }) => {
+  await makeResidentAManager('e2e-guest-b');
+  const before = await activityCount();
+  await page.goto('/houses/test-house-123/residents/guest-b/chores');
+  await fillSignIn(page, 'test-guest-b@rats-e2e.com');
+  await expect(page.getByText('VIEW DISPUTES')).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId('complete-chore-button')).toBeHidden();
+  for (const [path, button] of [['supporter', 'meet-sponsor-button'], ['work', 'add-job-button'], ['meetings', 'create-meeting-button']]) {
+    await page.goto(`/houses/test-house-123/residents/guest-b/${path}`);
+    await expect(page.getByText('VIEW DISPUTES')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId(button)).toBeHidden();
+  }
+  expect(await activityCount()).toBe(before);
 });
