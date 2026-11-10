@@ -13,6 +13,7 @@ import {
 } from '../api/firestore';
 import { isActiveGuestDoc } from '../util/guestMembership';
 import { chargeResident } from './chargeResident';
+import { linkIntakeRecord } from './linkIntakeRecord';
 import { ChargeOutcome } from './types';
 
 type Data = Record<string, unknown>;
@@ -56,6 +57,8 @@ export async function rentOnGuestWrite(e: GuestRentEvent): Promise<'none' | Char
   if (!isCreate && !moved && !reactivated) return 'none';
 
   if (isCreate) {
+    // Before the backfill, so a linked intake record's moveInDate wins over createTime.
+    await linkIntakeRecord(guestId, after);
     if (!after.moveInDate && typeof e.afterCreateTimeMs === 'number') {
       await backfillMoveInDate(guestId, e.afterCreateTimeMs);
     }
