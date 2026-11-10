@@ -130,4 +130,6 @@ test('SUB-010: submitted concurrently, as in two tabs, it still makes one', asyn
   const op = await seedOperator({ status: '' });
   await Promise.all([1, 2].map(() => callAs(op.uid, 'createOperatorSubscription', checkout(op, 'traditional', 'starter'))));
   expect(await subscriptionsOf(op.email)).toHaveLength(1);
+  // Two tabs are where a second customer would appear, so count them here too.
+  expect((await stripe.customers.list({ email: op.email })).data).toHaveLength(1);
 });

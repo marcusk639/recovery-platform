@@ -3,7 +3,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { callAs, readDocAs, signIn } from '../../payments/harness/callables';
 import { adminApp, adminDb, uniqueId } from '../../payments/harness/fixtures';
 import { commitAs, setDoc } from '../../payments/harness/firestoreRest';
-import { assertEmulatorEnv } from '../../payments/harness/guards';
+import { assertEmulatorEnv, MANUAL_PROJECT, PAYMENTS_PROJECT } from '../../payments/harness/guards';
 import { waitFor } from '../../payments/harness/waitFor';
 import {
   guestDoc,
@@ -24,7 +24,7 @@ describe('a new house with three residents, through the real signup path', () =>
   let made: NewHouse;
 
   beforeAll(async () => {
-    assertEmulatorEnv();
+    assertEmulatorEnv(process.env, [PAYMENTS_PROJECT, MANUAL_PROJECT]);
     made = await newHouseWithGuests({ password: PASSWORD, suffix: uniqueId('j') });
   });
 

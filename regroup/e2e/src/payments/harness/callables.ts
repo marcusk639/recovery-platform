@@ -1,8 +1,7 @@
 import { getAuth } from 'firebase-admin/auth';
 import { adminApp } from './fixtures';
 import { FUNCTIONS_BASE, PROJECT } from './guards';
-
-const tokens = new Map<string, string>();
+import { idTokens as tokens } from './idTokens';
 
 export async function idTokenFor(uid: string): Promise<string> {
   const cached = tokens.get(uid);
@@ -51,10 +50,19 @@ export async function callAs(
     headers,
     body: JSON.stringify({ data }),
   });
-  const body = (await res.json()) as { result?: unknown; error?: { status: string; message: string } };
+  const text = await res.text();
+  let body: { result?: unknown; error?: { status: string; message: string } };
+  try {
+    body = JSON.parse(text);
+  } catch {
+    throw new Error(`${name} answered ${res.status} with a body that isn't JSON (is the function deployed to the emulator?)`);
+  }
+  if (!body || typeof body !== 'object') throw new Error(`${name} answered ${res.status} with ${JSON.stringify(body)}`);
   if (body.error) {
     return { errorCode: body.error.status.toLowerCase().replace(/_/g, '-'), errorMessage: body.error.message };
   }
+  // A callable always answers {result} (null for no value), so its absence isn't a success.
+  if (!('result' in body)) throw new Error(`${name} answered ${res.status} with neither result nor error`);
   return { data: body.result };
 }
 

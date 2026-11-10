@@ -125,7 +125,8 @@ function structuralErrors(r, repoRoot) {
   }
   if (r.status !== 'missing' && FILE_KINDS.includes(r.kind)) {
     if (r.coveredBy === NONE) errs.push(`${name}: needs Covered by`);
-    else if (!fs.existsSync(path.join(repoRoot, r.coveredBy)))
+    // Markdown escapes (\_\_tests\_\_) keep Prettier from reading __tests__ as bold.
+    else if (!fs.existsSync(path.join(repoRoot, r.coveredBy.replace(/\\(.)/g, '$1'))))
       errs.push(`${name}: missing file ${r.coveredBy}`);
   }
   return errs;

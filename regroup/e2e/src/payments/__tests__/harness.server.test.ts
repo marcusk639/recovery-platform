@@ -1,7 +1,7 @@
 /**
  * Runs through `npm run test:payments`, against emulators and the local sandbox.
- * The first test is the walking skeleton: a broken Connect account or key would
- * fail every rent test, so it has to fail here first.
+ * The first test is the walking skeleton: a broken Connect account or key fails it
+ * as plainly as possible, so run this file first when a rent test fails oddly.
  */
 import type Stripe from 'stripe';
 import { callAs } from '../harness/callables';

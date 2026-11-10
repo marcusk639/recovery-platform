@@ -4,7 +4,7 @@ import type Stripe from 'stripe';
 export const PRODUCTION_SANDBOX_ACCOUNT_ID = 'acct_1RXiFg2KPgAtfsl6';
 /** The live production account (regroup-app.com). Its sk_test_ keys must be refused too. */
 export const LIVE_PRODUCTION_ACCOUNT_ID = 'acct_1GfryQKsstp3aqoP';
-/** The only account this setup may touch: the dedicated e2e sandbox behind regroup-e2e. */
+/** The dedicated e2e sandbox behind regroup-e2e. Its webhooks write to staging. */
 export const E2E_SANDBOX_ACCOUNT_ID = 'acct_1UUsyi44OQke4tKl';
 /** regroup-local: the payment suite's sandbox. It must have no webhook endpoints. */
 export const E2E_LOCAL_SANDBOX_ACCOUNT_ID = 'acct_1UZe6WKw3v6AEtjk';
@@ -54,7 +54,7 @@ const LEGACY_PRICES = [
   },
 ];
 
-/** Every price env var ensureCatalog fills: the keys of stripe-e2e-prices.json. */
+/** Every price env var ensureCatalog fills: the keys of stripe-e2e-prices.json and stripe-local-prices.json. */
 export const PRICE_ENV_VARS: readonly string[] = [
   ...TIERS.flatMap((tier) => [tier.envVar, tier.annualEnvVar]),
   ...LEGACY_PRICES.map((legacy) => legacy.envVar),
