@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Alert, View, Modal, StyleSheet, TextInput } from 'react-native';
 import { format } from 'date-fns';
-import { dischargeGuest } from '../../services/guest';
+import { dischargeGuest, DischargeErrorKind } from '../../services/guest';
 import { RatsText } from '../../components/rats-text';
 import RatsButton from '../../components/rats-button/rats-button';
 import { color, normalize, fontSize } from '../../styles/theme';
@@ -37,10 +37,20 @@ const DischargeGuestModal: React.FC<Props> = ({
       onSuccess();
     } catch (error) {
       logException(error);
-      Alert.alert(
-        'Discharge Failed',
-        'Could not discharge resident. Please try again.',
-      );
+      // The service's own messages are written for staff; never raw error text.
+      const { kind, message } = error as { kind?: DischargeErrorKind; message?: string };
+      if (kind === 'access-not-revoked') {
+        // The record did change, so the screen must reflect the discharge.
+        onSuccess();
+        Alert.alert('Resident discharged', message ?? '');
+      } else if (kind === 'refused') {
+        Alert.alert("Can't discharge", message ?? '');
+      } else {
+        Alert.alert(
+          'Discharge Failed',
+          'Could not discharge resident. Please try again.',
+        );
+      }
     } finally {
       setLoading(false);
     }

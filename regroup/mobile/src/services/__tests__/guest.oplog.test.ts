@@ -318,4 +318,23 @@ describe('dischargeGuest', () => {
 
     expect(readDoc('guests/g1')?.status).toBe('discharged');
   });
+
+  it('says a refused discharge is not worth retrying (#221)', async () => {
+    seedDoc('guests/g1', { id: 'g1' });
+    failNext('update', firestoreError('permission-denied'), 'guests/g1');
+
+    await expect(dischargeGuest('g1', '2026-10-01')).rejects.toMatchObject({
+      kind: 'refused',
+      message: "You can't discharge this resident. A manager or the owner can.",
+    });
+  });
+
+  it('marks a revocation failure as a discharge that happened (#221)', async () => {
+    seedDoc('guests/g1', { id: 'g1' });
+    failNext('call', new Error('internal'), 'removePrivilegesForGuests');
+
+    await expect(dischargeGuest('g1', '2026-10-01')).rejects.toMatchObject({
+      kind: 'access-not-revoked',
+    });
+  });
 });
