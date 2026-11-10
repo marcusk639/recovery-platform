@@ -10,6 +10,7 @@ import {
   guestToFormValues,
 } from './guestFormValues';
 import { Guests } from '../../types';
+import type { MoneyDeltas } from '../../services/guest';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
 
@@ -19,6 +20,7 @@ export interface GuestUpdateProps {
   updateGuest: (
     guest: Partial<Guest>,
     authoritativeFields?: ReadonlyArray<keyof Guest>,
+    moneyDeltas?: MoneyDeltas,
   ) => any;
   navigation: NativeStackNavigationProp<RootStackParamList>;
 }
@@ -64,7 +66,11 @@ const GuestUpdateForm = withFormik<GuestUpdateProps, GuestFormValues>({
         setSubmitting(false);
         return;
       }
-      await props.updateGuest(result.payload, result.authoritativeFields);
+      await props.updateGuest(
+        result.payload,
+        result.authoritativeFields,
+        result.moneyDeltas,
+      );
       setStatus({ succeeded: true });
       setSubmitting(false);
     } catch (err) {
@@ -97,19 +103,18 @@ const GuestUpdateFormWrapper: React.FC<any> = props => {
     async (
       updatedGuest: Partial<Guest>,
       authoritativeFields?: ReadonlyArray<keyof Guest>,
+      moneyDeltas?: MoneyDeltas,
     ) => {
       // The mutation expects a { guest, updatedGuest } pair — guest is the
       // pre-update snapshot used for rollback in onError.
       if (!guest) return;
-      // The operator editing this form is authoritative over the money fields,
-      // so they are exempted from the accumulator max-merge in mergeGuestStats.
-      // Without this an edit that LOWERS a balance (cash payment, write-off,
-      // correction, or zeroing a paid-off resident) is silently discarded while
-      // the form reports success.
+      // Balance edits travel as deltas, applied to the stored balance inside
+      // the transaction, so a payment made while the form was open stands.
       return updateGuestMutation({
         guest,
         updatedGuest,
         authoritativeFields,
+        moneyDeltas,
       });
     },
     [guest, updateGuestMutation],

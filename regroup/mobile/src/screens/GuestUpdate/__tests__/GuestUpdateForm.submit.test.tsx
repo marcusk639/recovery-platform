@@ -97,7 +97,7 @@ describe('GuestUpdateForm submit guard', () => {
     ).toBeNull();
   });
 
-  it('still submits a readable edit, in cents, marked authoritative', async () => {
+  it('still submits a readable edit, as the change in cents (#198)', async () => {
     const { getByTestId } = renderForm();
 
     fireEvent.changeText(getByTestId('guest-rentowed-input'), '400');
@@ -106,8 +106,9 @@ describe('GuestUpdateForm submit guard', () => {
     await waitFor(() => {
       expect(mockMutateAsync).toHaveBeenCalled();
     });
-    const { updatedGuest, authoritativeFields } = mockMutateAsync.mock.calls[0][0];
-    expect(updatedGuest.rentOwed).toBe(40000);
-    expect(authoritativeFields).toContain('rentOwed');
+    const { updatedGuest, moneyDeltas } = mockMutateAsync.mock.calls[0][0];
+    // The form showed $500; the operator typed $400.
+    expect(moneyDeltas).toEqual({ rentOwed: -10000 });
+    expect('rentOwed' in updatedGuest).toBe(false);
   });
 });

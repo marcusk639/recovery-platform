@@ -18,6 +18,7 @@ import { House } from '../entities/House';
 import { houseCollection, getHouse, removeGuestPrivileges } from './house';
 import { findGuestBed } from '../util/house';
 import cloneDeep from 'lodash/cloneDeep';
+import { asCents } from '../util/money';
 
 export const guestCollection = collection(firestore, 'guests');
 export const archiveCollection = collection(firestore, 'guest-archive');
@@ -63,16 +64,26 @@ export async function getGuestsBlocking(
   return keyBy(result, 'id') as Guests;
 }
 
+/** Changes to a resident's balance, in cents. */
+export type MoneyDeltas = Partial<Record<'rentOwed' | 'choreFees', number>>;
+
 export async function updateGuest(
   guest: Partial<Guest>,
   updatedGuest: Partial<Guest>,
   retryCount: number = 3,
   /**
-   * Fields the caller owns absolutely, exempt from the accumulator max-merge.
-   * Pass the money fields for operator-driven edits; leave empty for background
-   * or concurrent writers that must not clobber a higher recorded value.
+   * Fields the caller owns absolutely, exempt from the max-merge (step) or the
+   * OR-merge (isAdmin, infoEntered, hasJob). Leave empty for background or
+   * concurrent writers that must not clobber what another writer recorded.
    */
   authoritativeFields: ReadonlyArray<keyof Guest> = [],
+  /**
+   * The only way this function changes rentOwed or choreFees: each delta is
+   * added to the balance read inside the transaction. Values for those fields
+   * in updatedGuest are ignored, because an absolute value from a copy of the
+   * guest read earlier would erase a payment that landed since (#198).
+   */
+  moneyDeltas: MoneyDeltas = {},
 ): Promise<Partial<Guest>> {
   if (!updatedGuest.id) {
     throw new Error('Guest must have an id for update');
@@ -95,6 +106,13 @@ export async function updateGuest(
         // FIX #2: Merge stats instead of overwriting
         // This prevents one device's updates from overwriting another's
         const mergedGuest = mergeGuestStats(currentGuest, updatedGuest, authoritativeFields);
+        for (const [field, delta] of Object.entries(moneyDeltas) as Array<
+          [keyof MoneyDeltas, number | undefined]
+        >) {
+          if (delta) {
+            mergedGuest[field] = asCents((currentGuest[field] ?? 0) + delta);
+          }
+        }
 
         // Increment version for optimistic locking
         mergedGuest.version = (currentGuest.version || 0) + 1;
@@ -133,10 +151,13 @@ export async function updateGuest(
  * FIX #2: Smart merging of stats
  *
  * Merge strategy:
- * - Numeric accumulator fields (rentOwed, choreFees, step): take the max of
- *   current and update so that neither concurrent write loses a higher value.
+ * - Balance fields (rentOwed, choreFees): always the stored value. updateGuest
+ *   changes them only through moneyDeltas.
+ * - step: take the max of current and update, unless the caller declares it
+ *   authoritative.
  * - Boolean flag fields (isAdmin, infoEntered, hasJob): OR the two values so
- *   a flag that was set by one writer is never silently cleared by another.
+ *   a flag that was set by one writer is never silently cleared by another,
+ *   unless the caller declares the flag authoritative (removing a manager).
  * - Array fields (supporters): union the two arrays to avoid losing entries.
  * - All other fields: the incoming update wins.
  * - Fields present in currentGuest but absent from updateGuest are preserved.
@@ -153,20 +174,27 @@ function mergeGuestStats(
     ...cloneDeep(updateGuest),
   };
 
-  // ── Numeric accumulator fields: take the maximum ────────────────────────────
-  // These represent quantities that only grow (debt owed, fees accrued, step
-  // progress). Taking the max ensures a concurrent write that already recorded
-  // a higher value is never overwritten with a stale lower value.
-  const numericMaxFields: Array<keyof Guest> = ['rentOwed', 'choreFees', 'step'];
+  // ── Balance fields: the stored value, always ────────────────────────────────
+  // Callers pass whole cloned guests, so a value here is usually a stale copy:
+  // max-merging it put back debt a payment had cleared, and an operator's
+  // absolute edit overwrote a payment that landed while the form was open.
+  for (const field of ['rentOwed', 'choreFees'] as const) {
+    if (field in currentGuest) {
+      merged[field] = currentGuest[field];
+    } else {
+      delete merged[field];
+    }
+  }
+
+  // ── step: take the maximum ──────────────────────────────────────────────────
+  // Step progress only grows; the max keeps a concurrent write that recorded a
+  // higher step from being overwritten with a stale lower one.
+  const numericMaxFields: Array<keyof Guest> = ['step'];
   for (const field of numericMaxFields) {
     const current = currentGuest[field] as number | undefined;
     const update = (updateGuest as any)[field] as number | undefined;
     if (authoritativeFields.includes(field)) {
-      // The caller is the source of truth for this field, so the max-merge is
-      // skipped and the spread above stands. An operator editing a resident's
-      // balance must be able to LOWER it — to record a cash payment, a
-      // write-off, or a correction. Without this, Math.max silently discarded
-      // the edit while the form still reported success.
+      // The caller is the source of truth, so the spread above stands.
       if (update === undefined && typeof current === 'number') {
         (merged as any)[field] = current;
       }
@@ -186,6 +214,10 @@ function mergeGuestStats(
   // cleared by a concurrent write that happened to still have the old false.
   const booleanOrFields: Array<keyof Guest> = ['isAdmin', 'infoEntered', 'hasJob'];
   for (const field of booleanOrFields) {
+    if (authoritativeFields.includes(field) && field in updateGuest) {
+      // The spread above stands: ManagerSettings clears isAdmin this way (#228).
+      continue;
+    }
     const current = currentGuest[field] as boolean | undefined;
     const update = (updateGuest as any)[field] as boolean | undefined;
     const currentBool = typeof current === 'boolean' ? current : false;

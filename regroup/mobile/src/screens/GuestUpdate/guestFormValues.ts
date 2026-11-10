@@ -1,4 +1,5 @@
 import { Guest } from '../../entities/Guest';
+import type { MoneyDeltas } from '../../services/guest';
 import {
   asCents,
   centsToDollars,
@@ -44,6 +45,8 @@ export type GuestMoneyUpdate =
       ok: true;
       payload: Partial<Guest>;
       authoritativeFields: ReadonlyArray<keyof Guest>;
+      /** How much each balance changed, against what the form showed (#198). */
+      moneyDeltas: MoneyDeltas;
     }
   | { ok: false; malformedFields: ReadonlyArray<keyof Guest> };
 
@@ -70,6 +73,7 @@ export function guestMoneyUpdate(
   const seeded = guestToFormValues(guest);
   const payload = { ...guest, ...values } as unknown as Record<string, unknown>;
   const authoritativeFields: Array<keyof Guest> = [];
+  const moneyDeltas: MoneyDeltas = {};
   const malformedFields: Array<keyof Guest> = [];
 
   for (const field of CENTS_FIELDS) {
@@ -82,20 +86,22 @@ export function guestMoneyUpdate(
       continue;
     }
 
+    // Never an absolute value: the change from what the form showed is sent,
+    // so a payment that lands while the form is open still counts (#198).
+    delete payload[field];
     const stored = asCents(storedCents(guest, field));
     if (parsed.ok && parsed.cents !== stored) {
-      payload[field] = parsed.cents;
-      authoritativeFields.push(field as keyof Guest);
-    } else {
-      // Blank, unchanged, or a seeded value we cannot re-read: leave the
-      // stored figure standing rather than writing an absolute value back
-      // over a concurrent server-side decrement.
-      delete payload[field];
+      moneyDeltas[field] = parsed.cents - stored;
     }
   }
 
   if (malformedFields.length > 0) {
     return { ok: false, malformedFields };
   }
-  return { ok: true, payload: payload as Partial<Guest>, authoritativeFields };
+  return {
+    ok: true,
+    payload: payload as Partial<Guest>,
+    authoritativeFields,
+    moneyDeltas,
+  };
 }

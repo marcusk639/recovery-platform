@@ -23,6 +23,7 @@ import {
   seedDoc,
 } from '../../../__mocks__/firebase-modular/log';
 import { createGuest, customizePhase, deleteGuest, dischargeGuest, updateGuest } from '../guest';
+import { guestMoneyUpdate, guestToFormValues } from '../../screens/GuestUpdate/guestFormValues';
 
 const ISO = expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
 
@@ -75,12 +76,25 @@ describe('updateGuest', () => {
     expect(result.version).toBe(1);
   });
 
-  it('keeps the higher rentOwed unless the caller owns the field', async () => {
+  it('keeps a payment that landed while the balance form was open (#198)', async () => {
+    // The form opened at $300. A $150 payment lands, so the doc holds $150.
+    const opened = { id: 'g3', houseId: 'h1', rentOwed: 30000, choreFees: 0 } as any;
+    seedDoc('guests/g3', { ...opened, rentOwed: 15000 });
+    const edit = guestMoneyUpdate(opened, { ...guestToFormValues(opened), rentOwed: '250' });
+    if (!edit.ok) throw new Error('expected a readable edit');
+
+    await updateGuest(opened, edit.payload, 3, edit.authoritativeFields, edit.moneyDeltas);
+
+    // $300 -> $250 is -$50, taken off the $150 that is really owed.
+    expect(readDoc('guests/g3')?.rentOwed).toBe(10000);
+  });
+
+  it('ignores a rentOwed it is sent, and applies a delta to the stored balance (#198)', async () => {
     seedDoc('guests/g1', { id: 'g1', rentOwed: 500 });
-    expect((await updateGuest({}, { id: 'g1', rentOwed: 300 } as any)).rentOwed).toBe(500);
+    expect((await updateGuest({}, { id: 'g1', rentOwed: 900 } as any)).rentOwed).toBe(500);
 
     seedDoc('guests/g2', { id: 'g2', rentOwed: 500 });
-    const lowered = await updateGuest({}, { id: 'g2', rentOwed: 300 } as any, 3, ['rentOwed']);
+    const lowered = await updateGuest({}, { id: 'g2' } as any, 3, [], { rentOwed: -200 });
     expect(lowered.rentOwed).toBe(300);
     expect(readDoc('guests/g2')?.rentOwed).toBe(300);
   });

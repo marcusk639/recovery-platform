@@ -83,17 +83,20 @@ export const useUpdateGuest = () => {
       updatedGuest,
       retryCount = 3,
       authoritativeFields = [],
+      moneyDeltas = {},
     }: {
       guest: Partial<Guest>;
       updatedGuest: Partial<Guest>;
       retryCount?: number;
       authoritativeFields?: ReadonlyArray<keyof Guest>;
+      moneyDeltas?: guestService.MoneyDeltas;
     }) =>
       guestService.updateGuest(
         guest,
         updatedGuest,
         retryCount,
         authoritativeFields,
+        moneyDeltas,
       ),
 
     // Optimistic update

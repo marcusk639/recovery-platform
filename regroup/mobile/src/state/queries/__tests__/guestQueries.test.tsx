@@ -172,6 +172,7 @@ describe('guestQueries', () => {
         updatedGuest,
         3,
         [], // authoritativeFields — none for an ordinary update
+        {}, // moneyDeltas — no balance change
       );
     });
 
