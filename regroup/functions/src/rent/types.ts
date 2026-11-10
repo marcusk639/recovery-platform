@@ -98,5 +98,7 @@ export interface RentHouseState {
   /** House-local date charging last turned on; null while it is off. */
   startDate: string | null;
   startedAtMs: number | null;
+  /** When charging was last turned off, so a late 'on' event can't date the start earlier. */
+  clearedAtMs?: number | null;
   updatedAtMs: number;
 }

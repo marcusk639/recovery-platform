@@ -59,6 +59,39 @@ it('a retried event stamps the time the change happened, not the retry', async (
   expect(state()).toMatchObject({ startDate: '2026-11-09', startedAtMs: Date.parse(changedAt) });
 });
 
+// On (Nov 9 14:00, retried), off (cleared Nov 9 20:00), back on: the retry of the
+// first 'on' lands before the second 'on' is processed. Its event time is older than
+// the clear, so it must not date the start back over the time charging was off.
+it("a retried 'on' older than the last clear stamps the current time, not its own", async () => {
+  mem.seed(`houses/${H}`, on);
+  mem.seed(`rentHouseStates/${H}`, {
+    startDate: null,
+    startedAtMs: null,
+    clearedAtMs: Date.parse('2026-11-10T02:00:00.000Z'),
+  });
+  await run({ ...event(off, on), time: '2026-11-09T20:00:00.000Z' });
+  expect(state()).toMatchObject({ startDate: '2026-11-09', startedAtMs: NOW.getTime() });
+});
+
+it("an 'on' after the last clear still stamps its own time", async () => {
+  mem.seed(`houses/${H}`, on);
+  mem.seed(`rentHouseStates/${H}`, {
+    startDate: null,
+    startedAtMs: null,
+    clearedAtMs: Date.parse('2026-11-09T18:00:00.000Z'),
+  });
+  const changedAt = '2026-11-09T20:00:00.000Z';
+  await run({ ...event(off, on), time: changedAt });
+  expect(state()).toMatchObject({ startedAtMs: Date.parse(changedAt) });
+});
+
+it('turning off records when it was cleared', async () => {
+  mem.seed(`houses/${H}`, off);
+  seedStamp();
+  await run(event(on, off));
+  expect(state()).toMatchObject({ startDate: null, clearedAtMs: NOW.getTime() });
+});
+
 it('a late event that did not itself turn charging on stamps the current time', async () => {
   // A timezone edit made while charging was off, delivered after charging came on.
   mem.seed(`houses/${H}`, on);
