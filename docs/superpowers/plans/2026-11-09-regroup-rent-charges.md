@@ -1184,7 +1184,7 @@ Run on the sweep simulator `AC9BBDC3-EEF9-4C60-9C14-B847E2403920` against the em
 
 **Rulings in this plan (owner can overrule):**
 
-- **Turning charging off and on across a period start** (for example off Sunday night, back on Tuesday) skips the rest of that period for residents already charged. The owner accepted this on 2026-11-09.
+- **Turning charging back on** charges residents who were already being charged (with a `chargedThrough`) prorated from the day it comes back on, so a short break across a period start doesn't skip the period. A first turn-on still starts residents already in the house at the next full period (spec §2). This is the owner's decision of 2026-11-09, which overruled the earlier "next full period" rule.
 
 - **"Next period" means the period after the one containing the turn-on day.** That holds even when turning on on a Monday or the 1st; spec §2 is read literally.
 - **"Existing at turn-on" is decided by when the record joined the house** (its `createTime`, or the move time), compared with the stamp's `startedAtMs`. It is not decided by `moveInDate`. So a backdated move-in on a new record is still charged back to the start (spec §4.4).
