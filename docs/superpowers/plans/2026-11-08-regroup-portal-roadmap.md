@@ -15,7 +15,7 @@
 | P1  | Foundation and go/no-go on React Native 0.88: `2026-11-08-regroup-portal-p1-foundation.md`                     | §4, §7, §8.1 | Written                                 |
 | P2  | Sign-in, permissions, subscription gate, idle sign-out, desktop shell: `2026-11-09-regroup-portal-p2-shell.md` | §6, §7, §8.2 | Written; P1 go given 2026-11-09         |
 | P3  | All houses, one house, resident list and record: `2026-11-09-regroup-portal-p3-houses-residents.md`            | §5, §8.3     | Done                              |
-| P4  | Resident actions, applications with intake, staff notes, activities                                            | §5, §8.4     | Next                                    |
+| P4  | Resident actions, applications with intake, staff notes, activities: `2026-11-09-regroup-portal-p4-actions-applications-activities.md` | §5, §8.4     | Written                                     |
 | P5  | Payments, with the independent money review                                                                    | §7, §8.5     | After P4                                |
 | P6  | Disputes, against the rules tests                                                                              | §7, §8.6     | After P5                                |
 | P7  | Production release of the core, after launch day                                                               | §6, §8.9     | When P6 is done and launch has finished |
