@@ -10,7 +10,7 @@ import {
   setDoc,
   updateFields,
 } from '../payments/harness/firestoreRest';
-import { assertEmulatorEnv } from '../payments/harness/guards';
+import { assertEmulatorEnv, MANUAL_PROJECT, PAYMENTS_PROJECT } from '../payments/harness/guards';
 
 // Makes a house with residents the way the app does: createHouses, an invitation per
 // resident, redeemInvitation, then the writes SignUpForm and NewAccountForm make, as
@@ -201,7 +201,7 @@ export async function newHouseWithGuests(opts: {
   suffix: string;
   residents?: Person[];
 }): Promise<NewHouse> {
-  assertEmulatorEnv();
+  assertEmulatorEnv(process.env, [PAYMENTS_PROJECT, MANUAL_PROJECT]);
   const { password, suffix, residents = RESIDENTS } = opts;
   const email = (name: string) => `${name.toLowerCase()}-${suffix}@${EMAIL_DOMAIN}`.toLowerCase();
 

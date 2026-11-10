@@ -6,6 +6,7 @@ import {
   functionsEnvFor,
   loadLaunchConfig,
   writeFunctionsEnvFiles,
+  writePaymentSuiteEnvFile,
 } from '../launchConfig';
 
 function writeTempConfig(config: unknown): string {
@@ -195,5 +196,21 @@ describe('production return origins', () => {
     const defaults = [...block![1].matchAll(/(["'])([^"']+)\1/g)].map((m) => m[2]);
     expect(defaults.length).toBeGreaterThan(0);
     expect(functionsEnvFor('production').ALLOWED_RETURN_ORIGINS.split(',')).toEqual(defaults);
+  });
+});
+
+describe('writePaymentSuiteEnvFile', () => {
+  it("writes the payment suite's own env file and leaves the manual emulators' alone", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pay-env-'));
+    try {
+      const file = writePaymentSuiteEnvFile(dir, { STRIPE_PRICE_TRAD_STARTER: 'price_local_1' });
+      expect(path.basename(file)).toBe('.env.demo-regroup-payments');
+      const text = fs.readFileSync(file, 'utf8');
+      expect(text).toContain('STRIPE_PRICE_TRAD_STARTER=price_local_1');
+      expect(text).toContain(`TIER_BILLING_ENABLED=${functionsEnvFor('e2e-emulator').TIER_BILLING_ENABLED}`);
+      expect(fs.existsSync(path.join(dir, '.env.demo-regroup-e2e'))).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

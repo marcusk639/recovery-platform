@@ -5,9 +5,15 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type Stripe from 'stripe';
-import { writeFunctionsEnvFiles } from '../src/launchConfig';
+import { writePaymentSuiteEnvFile } from '../src/launchConfig';
 import { sweepOldClocks } from '../src/payments/harness/clock';
-import { CONFIG_DIR, LOCAL_CONNECT_ACCOUNT_FILE, LOCAL_PRICES_FILE, localStripe } from '../src/payments/harness/guards';
+import {
+  assertEmulatorSecrets,
+  CONFIG_DIR,
+  LOCAL_CONNECT_ACCOUNT_FILE,
+  LOCAL_PRICES_FILE,
+  localStripe,
+} from '../src/payments/harness/guards';
 import { assertLocalSandbox, ensureCatalog } from '../src/stripeSandbox';
 
 const connectFile = path.join(CONFIG_DIR, LOCAL_CONNECT_ACCOUNT_FILE);
@@ -40,6 +46,8 @@ async function ensureConnectAccount(stripe: Stripe): Promise<string> {
 }
 
 async function main(): Promise<void> {
+  // Before any Stripe call: the emulator must charge with the regroup-local key.
+  assertEmulatorSecrets();
   const { stripe, key } = localStripe();
   await assertLocalSandbox(stripe, key);
   if (process.argv.includes('--sweep-clocks')) {
@@ -52,9 +60,7 @@ async function main(): Promise<void> {
   const account = await stripe.accounts.retrieve(accountId);
   console.log(`connect account ${accountId}: charges ${account.charges_enabled}, payouts ${account.payouts_enabled}`);
   const functionsDir = path.resolve(__dirname, '..', '..', 'functions');
-  for (const file of writeFunctionsEnvFiles(functionsDir, { 'e2e-emulator': prices }, ['e2e-emulator'])) {
-    console.log(`wrote ${file}`);
-  }
+  console.log(`wrote ${writePaymentSuiteEnvFile(functionsDir, prices)}`);
 }
 
 main().catch((err) => {
