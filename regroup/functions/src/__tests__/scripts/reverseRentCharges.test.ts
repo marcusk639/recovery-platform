@@ -35,6 +35,7 @@ it('dry run reports and changes nothing', async () => {
   await expect(reverseRentCharges({ houseId: 'H', apply: false })).resolves.toEqual({
     charges: 2,
     totalCents: 35000,
+    unresolved: [],
   });
   expect(mem.writes.length).toBe(writes);
   expect(owed()).toBe(35000);
@@ -46,6 +47,7 @@ it('apply reverses newest first and restores chargedThrough', async () => {
   await expect(reverseRentCharges({ houseId: 'H', apply: true })).resolves.toEqual({
     charges: 2,
     totalCents: 35000,
+    unresolved: [],
   });
   expect(owed()).toBe(0);
   expect(charges()).toEqual([]);
@@ -67,6 +69,7 @@ it('apply is refused while charging runs', async () => {
   await expect(reverseRentCharges({ houseId: 'H', apply: true })).resolves.toEqual({
     charges: 0,
     totalCents: 0,
+    unresolved: [],
     refused: 'not-paused',
   });
   expect(owed()).toBe(35000);
@@ -105,6 +108,41 @@ it("a linked intake record's charges are reversed on the record the balance move
   expect(mem.get('guests/gNew')?.rentOwed).toBe(0);
   expect(mem.get('guests/gIntake')?.rentOwed).toBe(0);
   expect(mem.get('rentAccounts/gNew')?.chargedThrough).toBe('2026-11-17');
+});
+
+// Staff may delete the duplicate intake record once linked; its charges still belong
+// to the record the balance moved to.
+it('a linked intake record deleted afterwards is still reversed on the record its balance moved to', async () => {
+  house();
+  guest({ userId: '', email: 'pat@example.com', moveInDate: '2026-11-18' }, 'gIntake');
+  await chargeResident('gIntake', at('2026-11-18'));
+  invitedAs('u1', 'pat@example.com');
+  guest({ userId: 'u1', email: 'pat@example.com', rentOwed: 0 }, 'gNew');
+  const { linkIntakeRecord } = await import('../../rent/linkIntakeRecord');
+  await linkIntakeRecord('gNew');
+  const { guestCollection } = await import('../../api/firestore');
+  await guestCollection.doc('gIntake').delete();
+  pause(true);
+  await expect(reverseRentCharges({ houseId: 'H', apply: true })).resolves.toMatchObject({
+    charges: 1,
+    totalCents: 12500,
+  });
+  expect(mem.get('guests/gNew')?.rentOwed).toBe(0);
+  expect(charges()).toEqual([]);
+});
+
+it('a charge whose record is gone is left in place and reported, not counted as reversed', async () => {
+  house();
+  guest({ moveInDate: '2026-11-16' });
+  await chargeResident('g1', at('2026-11-16'));
+  const { guestCollection } = await import('../../api/firestore');
+  await guestCollection.doc('g1').delete();
+  pause(true);
+  await expect(reverseRentCharges({ houseId: 'H', apply: true })).resolves.toMatchObject({
+    totalCents: 0,
+    unresolved: ['g1_2026-11-16'],
+  });
+  expect(charges()).toEqual(['rentCharges/g1_2026-11-16']);
 });
 
 it("filtering by the invite record includes the linked intake record's charges", async () => {

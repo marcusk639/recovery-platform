@@ -96,11 +96,17 @@ export async function linkIntakeRecord(
   if (matches.length === 0) {
     // An account record with the same email but no invitation: likely the same person,
     // charged on both records. Not linked by a resident-written email; a manager decides.
-    if (!newIsInvite && candidates.some((d) => normalEmail(((d.data() ?? {}) as Data).email) === email)) {
-      logger.warn('linkIntakeRecord: an account record has this email but no invitation; not linked', {
-        guestId: newGuestId,
-        houseId,
-      });
+    if (
+      !newIsInvite &&
+      candidates.some((d) => normalEmail(((d.data() ?? {}) as Data).email) === email)
+    ) {
+      logger.warn(
+        'linkIntakeRecord: an account record has this email but no invitation; not linked',
+        {
+          guestId: newGuestId,
+          houseId,
+        },
+      );
     }
     return 'none';
   }
@@ -227,7 +233,9 @@ async function linkRecords(
   const history = await rentChargeCollection.where('guestId', '==', intakeId).get();
   if (!history.empty) {
     const batch = ratsFirestore.batch();
-    history.docs.forEach((d) => batch.update(d.ref, { guestUserId: userId }));
+    // linkedTo lets a reversal find the record the balance moved to, even after
+    // staff delete the intake record.
+    history.docs.forEach((d) => batch.update(d.ref, { guestUserId: userId, linkedTo: newGuestId }));
     await batch.commit();
   }
   logger.info('linkIntakeRecord: linked', { guestId: newGuestId, intakeId, houseId });
