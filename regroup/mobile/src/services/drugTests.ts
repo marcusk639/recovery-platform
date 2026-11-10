@@ -34,7 +34,10 @@ export async function logDrugTest(
   }
 }
 
+// houseId is required: the rules only allow a list that the filters prove the
+// house's admins can read, so a guestId-only query is refused (#197).
 export async function getDrugTestsForGuest(
+  houseId: string,
   guestId: string,
   limit = 50,
 ): Promise<DrugTest[]> {
@@ -42,6 +45,7 @@ export async function getDrugTestsForGuest(
     const snapshot = await getDocs(
       query(
         drugTestCollection,
+        where('houseId', '==', houseId),
         where('guestId', '==', guestId),
         orderBy('testDate', 'desc'),
         limitTo(limit),
@@ -75,6 +79,7 @@ export async function getDrugTestsForHouse(
 }
 
 export async function getPositiveTestCount(
+  houseId: string,
   guestId: string,
   sinceDays = 90,
 ): Promise<number> {
@@ -84,6 +89,7 @@ export async function getPositiveTestCount(
     const snapshot = await getDocs(
       query(
         drugTestCollection,
+        where('houseId', '==', houseId),
         where('guestId', '==', guestId),
         where('result', 'in', ['positive', 'refused']),
         where('testDate', '>=', since.toISOString()),

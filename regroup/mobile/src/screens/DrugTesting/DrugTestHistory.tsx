@@ -77,10 +77,14 @@ function DrugTestRow({ test }: { test: DrugTest }) {
 export default function DrugTestHistory() {
   const route = useRoute<any>();
   const guestId = route.params?.guestId ?? '';
+  const houseId = route.params?.houseId ?? '';
 
-  const { data: tests, isLoading: testsLoading } = useGuestDrugTests(guestId);
+  const { data: tests, isLoading: testsLoading } = useGuestDrugTests(
+    houseId,
+    guestId,
+  );
   const { data: positiveCount, isLoading: countLoading } =
-    usePositiveTestCount(guestId);
+    usePositiveTestCount(houseId, guestId);
 
   const isLoading = testsLoading || countLoading;
 

@@ -247,7 +247,7 @@ export type RootStackParamList = {
   // Drug Testing screens
   [Routes.DrugTesting]: undefined;
   [Routes.DrugTestForm]: { guestId?: string };
-  [Routes.DrugTestHistory]: { guestId: string };
+  [Routes.DrugTestHistory]: { guestId: string; houseId: string };
 
   // Intake screens
   [Routes.ResidentIntake]: { houseId: string; applicationId?: string };

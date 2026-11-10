@@ -61,9 +61,19 @@ jest.mock('../../../context', () => ({
 
 // ─── Auth context mock ────────────────────────────────────────────────────────
 // Default: token has "house:full-edit" role so the settings button renders
+let mockToken: any = { role: { 'house-1': 'admin' }, claims: {} };
 jest.mock('../../../context/auth', () => ({
   AuthConsumer: ({ children }: { children: (ctx: any) => any }) =>
-    children({ token: { role: { 'house-1': 'admin' }, claims: {} } }),
+    children({ token: mockToken }),
+  useRoleToken: () => mockToken,
+}));
+
+// Applications are readable by admins only, so residents mustn't query them (#197).
+const mockUseHouseApplications = jest.fn(
+  (..._args: any[]): any => ({ data: [] }),
+);
+jest.mock('../../../state/queries/applicationQueries', () => ({
+  useHouseApplications: (...args: any[]) => mockUseHouseApplications(...args),
 }));
 
 // ─── Can component mock — always render the "yes" branch by default ───────────
@@ -377,6 +387,7 @@ describe('HouseSummary', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockCanGranted = true;
+    mockToken = { role: { 'house-1': 'admin' }, claims: {} };
     // Default: React Query returns no data (falls back to Redux guests)
     mockUseGuests.mockReturnValue({
       data: null,
@@ -607,6 +618,20 @@ describe('HouseSummary', () => {
       const { queryByTestId, getByTestId } = renderScreen({ house: ruledHouse });
       expect(queryByTestId('week-stat-summary')).toBeNull();
       expect(getByTestId('health-score-loading')).toBeTruthy();
+    });
+  });
+
+  // ─── Applications query (#197) ───────────────────────────────────────────────
+  describe('applications query', () => {
+    it('runs for a house admin', () => {
+      renderScreen();
+      expect(mockUseHouseApplications).toHaveBeenCalledWith('house-1', true);
+    });
+
+    it('does not run for a resident, whom the rules refuse', () => {
+      mockToken = { role: { 'house-1': 'guest' }, claims: {} };
+      renderScreen();
+      expect(mockUseHouseApplications).not.toHaveBeenCalledWith('house-1', true);
     });
   });
 });

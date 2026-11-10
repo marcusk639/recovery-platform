@@ -1,4 +1,4 @@
-import { createContext } from 'react';
+import { createContext, useContext } from 'react';
 import { RoleToken } from '../components/auth/auth';
 
 const authContext = createContext<{ token: RoleToken }>({
@@ -11,3 +11,4 @@ const authContext = createContext<{ token: RoleToken }>({
 
 export const AuthProvider = authContext.Provider;
 export const AuthConsumer = authContext.Consumer;
+export const useRoleToken = () => useContext(authContext).token;
