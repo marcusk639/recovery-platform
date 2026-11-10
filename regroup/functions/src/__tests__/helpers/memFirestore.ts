@@ -11,8 +11,10 @@
 // Every doc carries a server createTime (fixed at first write) and updateTime
 // (every write); batch.update honours a { lastUpdateTime } precondition and
 // throws FAILED_PRECONDITION when the doc changed since it was read.
-// mem.beforeCommit runs at the start of each batch commit, to simulate a
-// concurrent write landing between a read and the commit.
+// mem.beforeCommit runs (and is awaited) at the start of each batch commit,
+// and in a transaction before its read versions are checked, to simulate a
+// concurrent write landing between a read and the commit. It may be async, so a
+// test can run a whole competing transaction there.
 
 type Data = Record<string, unknown>;
 interface Stored {
@@ -47,7 +49,7 @@ export const mem = {
     return [...store.keys()].filter((p) => p.startsWith(prefix)).sort();
   },
   writes: [] as Array<{ op: string; path: string; data?: Data }>,
-  beforeCommit: null as null | (() => void),
+  beforeCommit: null as null | (() => void | Promise<void>),
 };
 
 export const fieldValue = {
@@ -196,8 +198,8 @@ function batch() {
     delete: (r: { path: string }) => {
       pending.push(() => ops.delete(r.path));
     },
-    commit: async () => {
-      if (mem.beforeCommit) mem.beforeCommit();
+    commit: async (opts?: { skipHook?: boolean }) => {
+      if (mem.beforeCommit && !opts?.skipHook) await mem.beforeCommit();
       // Atomic, like Firestore: one failed write rolls back the whole batch.
       const backup = new Map(store);
       try {
@@ -251,12 +253,13 @@ async function runTransaction<T>(fn: (tx: any) => Promise<T>): Promise<T> {
       },
     };
     const result = await fn(tx);
+    if (mem.beforeCommit) await mem.beforeCommit();
     const conflicted = [...reads].some(([path, t]) => (store.get(path)?.updateTimeMs ?? -1) !== t);
     if (conflicted) {
       if (attempt >= 5) throw new Error('ABORTED: transaction contention');
       continue;
     }
-    await b.commit();
+    await b.commit({ skipHook: true });
     return result;
   }
 }
@@ -279,4 +282,7 @@ export const apiFirestore = {
   invitationCollection: collectionRef('invitations'),
   adminCollection: collectionRef('admins'),
   houseRolesCollection: collectionRef('house-roles'),
+  rentAccountCollection: collectionRef('rentAccounts'),
+  rentChargeCollection: collectionRef('rentCharges'),
+  rentConfigRef: () => docRef('config/rentCharges'),
 };

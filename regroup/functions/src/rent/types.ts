@@ -47,3 +47,30 @@ export interface ChargeFromFacts {
   importedOn: string | null;
   frequency: RentFrequency;
 }
+
+/** rentAccounts/{guestId}: server-only, so no client form can write an older chargedThrough back. */
+export interface RentAccount {
+  guestId: string;
+  houseId: string;
+  /** When this record joined its current house (createTime, or the move time). */
+  houseJoinedAtMs: number;
+  /** House-local date the resident joined the current house. */
+  joinedOn: string | null;
+  /** House-local date of the last re-activation after a discharge. */
+  reactivatedOn: string | null;
+  /** The house rentChargesStartDate that chargeFrom was computed against. */
+  anchoredTo: string;
+  /** First chargeable day. Frozen once anchored, so a schedule switch never skips or doubles a day. */
+  chargeFrom: string;
+  /** Last day charged for; null before the first charge. */
+  chargedThrough: string | null;
+  updatedAtMs: number;
+}
+
+export type ChargeOutcome =
+  | { status: 'charged'; totalCents: Cents; periods: number }
+  | {
+      status: 'skipped';
+      reason:
+        'paused' | 'missing' | 'inactive' | 'linked' | 'charging-off' | 'not-started' | 'not-due';
+    };

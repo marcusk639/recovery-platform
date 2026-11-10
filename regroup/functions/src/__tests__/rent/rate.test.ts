@@ -52,9 +52,9 @@ describe('residentRate', () => {
       source: 'custom',
     }));
   it('zero is a valid custom rate', () =>
-    expect(
-      residentRate({ customRent: { amountCents: 0, frequency: 'weekly' } }, s).rateCents,
-    ).toBe(0));
+    expect(residentRate({ customRent: { amountCents: 0, frequency: 'weekly' } }, s).rateCents).toBe(
+      0,
+    ));
   it('a custom rate for the other schedule is ignored', () =>
     expect(
       residentRate({ customRent: { amountCents: 60000, frequency: 'monthly' } }, s).source,

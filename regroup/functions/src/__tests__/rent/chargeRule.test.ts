@@ -143,7 +143,5 @@ describe('chargeFromFor', () => {
   it('an imported resident starts at the period after the import', () =>
     expect(chargeFromFor(facts({ importedOn: '2026-11-18' }))).toBe('2026-11-23'));
   it('existing residents of a monthly house start on the 1st of next month', () =>
-    expect(chargeFromFor(facts({ houseJoinedAtMs: 50, frequency: 'monthly' }))).toBe(
-      '2026-12-01',
-    ));
+    expect(chargeFromFor(facts({ houseJoinedAtMs: 50, frequency: 'monthly' }))).toBe('2026-12-01'));
 });
