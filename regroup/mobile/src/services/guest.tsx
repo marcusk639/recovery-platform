@@ -64,8 +64,15 @@ export async function getGuestsBlocking(
   return keyBy(result, 'id') as Guests;
 }
 
-/** Changes to a resident's balance, in cents. */
-export type MoneyDeltas = Partial<Record<'rentOwed' | 'choreFees', number>>;
+/**
+ * An edit to a resident's balance, in cents: from the figure the form showed
+ * to the figure typed. It is refused if the stored balance is no longer
+ * `from`, so a payment that landed while the form was open, or a colleague's
+ * edit, is never overwritten or applied twice (#198).
+ */
+export type MoneyEdits = Partial<
+  Record<'rentOwed' | 'choreFees', { from: number; to: number }>
+>;
 
 export async function updateGuest(
   guest: Partial<Guest>,
@@ -78,12 +85,13 @@ export async function updateGuest(
    */
   authoritativeFields: ReadonlyArray<keyof Guest> = [],
   /**
-   * The only way this function changes rentOwed or choreFees: each delta is
-   * added to the balance read inside the transaction. Values for those fields
-   * in updatedGuest are ignored, because an absolute value from a copy of the
-   * guest read earlier would erase a payment that landed since (#198).
+   * The only way this function changes rentOwed or choreFees. Values for those
+   * fields in updatedGuest are ignored, because an absolute value from a copy
+   * of the guest read earlier would erase a payment that landed since (#198).
+   * Throws an error with kind 'balance-changed' (and field, currentCents) if
+   * the stored balance isn't the edit's `from`.
    */
-  moneyDeltas: MoneyDeltas = {},
+  moneyEdits: MoneyEdits = {},
 ): Promise<Partial<Guest>> {
   if (!updatedGuest.id) {
     throw new Error('Guest must have an id for update');
@@ -106,12 +114,19 @@ export async function updateGuest(
         // FIX #2: Merge stats instead of overwriting
         // This prevents one device's updates from overwriting another's
         const mergedGuest = mergeGuestStats(currentGuest, updatedGuest, authoritativeFields);
-        for (const [field, delta] of Object.entries(moneyDeltas) as Array<
-          [keyof MoneyDeltas, number | undefined]
+        for (const [field, edit] of Object.entries(moneyEdits) as Array<
+          [keyof MoneyEdits, { from: number; to: number } | undefined]
         >) {
-          if (delta) {
-            mergedGuest[field] = asCents((currentGuest[field] ?? 0) + delta);
+          if (!edit) continue;
+          const stored = currentGuest[field] ?? 0;
+          if (stored !== edit.from) {
+            throw Object.assign(new Error(`${field} changed while it was being edited`), {
+              kind: 'balance-changed' as const,
+              field,
+              currentCents: stored,
+            });
           }
+          mergedGuest[field] = asCents(edit.to);
         }
 
         // Increment version for optimistic locking

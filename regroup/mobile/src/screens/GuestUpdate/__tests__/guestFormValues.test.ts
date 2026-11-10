@@ -30,16 +30,20 @@ describe('guest update form money boundary', () => {
     expect(values.choreFees).toBe(25);
   });
 
-  it('turns the dollars the admin typed into a change in cents (#198)', () => {
+  it('turns the dollars the admin typed into an edit from the shown balance (#198)', () => {
     const guest = makeGuest();
-    const { payload: updated, moneyDeltas } = okPayload(guest, {
+    const { payload: updated, moneyEdits } = okPayload(guest, {
       ...guestToFormValues(guest),
       rentOwed: '750.50',
       choreFees: '10',
     });
 
-    // Changes, not totals: a payment that lands while the form is open stays.
-    expect(moneyDeltas).toEqual({ rentOwed: 25050, choreFees: -1500 });
+    // From what the form showed to what was typed, so the save can be refused
+    // if a payment landed while the form was open.
+    expect(moneyEdits).toEqual({
+      rentOwed: { from: 50000, to: 75050 },
+      choreFees: { from: 2500, to: 1000 },
+    });
     expect('rentOwed' in updated).toBe(false);
     expect('choreFees' in updated).toBe(false);
   });
@@ -60,14 +64,17 @@ describe('guest update form money boundary', () => {
     const guest = makeGuest();
     const values = guestToFormValues(guest);
 
-    expect(okPayload(guest, values).moneyDeltas).toEqual({});
+    expect(okPayload(guest, values).moneyEdits).toEqual({});
     expect(
-      okPayload(guest, { ...values, rentOwed: '100' }).moneyDeltas,
-    ).toEqual({ rentOwed: -40000 });
+      okPayload(guest, { ...values, rentOwed: '100' }).moneyEdits,
+    ).toEqual({ rentOwed: { from: 50000, to: 10000 } });
     expect(
       okPayload(guest, { ...values, rentOwed: '100', choreFees: '1' })
-        .moneyDeltas,
-    ).toEqual({ rentOwed: -40000, choreFees: -2400 });
+        .moneyEdits,
+    ).toEqual({
+      rentOwed: { from: 50000, to: 10000 },
+      choreFees: { from: 2500, to: 100 },
+    });
   });
 
   it('does not treat a re-typed identical amount as a change', () => {
@@ -75,7 +82,7 @@ describe('guest update form money boundary', () => {
     // operator tabs through and retypes the same figure
     const values = { ...guestToFormValues(guest), rentOwed: '500.00' };
 
-    expect(okPayload(guest, values).moneyDeltas).toEqual({});
+    expect(okPayload(guest, values).moneyEdits).toEqual({});
   });
 
   it('keeps the stored balance when the admin clears the field', () => {
@@ -94,17 +101,17 @@ describe('guest update form money boundary', () => {
 
   // Scope note: these exercise the CONVERSION only. The test that proves a
   // delta lands on the stored balance lives in
-  // src/services/__tests__/guest.test.ts ("changes rentOwed by the delta it is
-  // given"). Do not cite the test below as evidence that zeroing a balance
+  // src/services/__tests__/guest.test.ts ("writes the typed balance when the stored
+  // one is what the form showed"). Do not cite the test below as evidence that zeroing a balance
   // works end to end.
-  it('turns an explicit zero into minus the balance the form showed', () => {
+  it('turns an explicit zero into an edit to zero cents', () => {
     const guest = makeGuest();
-    const { moneyDeltas } = okPayload(guest, {
+    const { moneyEdits } = okPayload(guest, {
       ...guestToFormValues(guest),
       rentOwed: '0',
     });
 
-    expect(moneyDeltas.rentOwed).toBe(-50000);
+    expect(moneyEdits.rentOwed).toEqual({ from: 50000, to: 0 });
   });
 
   it('leaves non-money fields untouched', () => {
@@ -161,7 +168,7 @@ describe('guestMoneyUpdate', () => {
     const r = guestMoneyUpdate(guest, { ...seeded(), rentOwed: '400' });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.moneyDeltas).toEqual({ rentOwed: 40000 - 50000 });
+    expect(r.moneyEdits).toEqual({ rentOwed: { from: 50000, to: 40000 } });
     expect('rentOwed' in r.payload).toBe(false);
   });
 
@@ -191,7 +198,7 @@ describe('guestMoneyUpdate', () => {
     const r = guestMoneyUpdate(guest, { ...seeded(), rentOwed: '0' });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.moneyDeltas.rentOwed).toBe(-50000);
+    expect(r.moneyEdits.rentOwed).toEqual({ from: 50000, to: 0 });
   });
 
   it('does not reject a seeded value the operator never touched', () => {

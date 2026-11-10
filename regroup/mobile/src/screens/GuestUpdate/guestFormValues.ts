@@ -1,5 +1,5 @@
 import { Guest } from '../../entities/Guest';
-import type { MoneyDeltas } from '../../services/guest';
+import type { MoneyEdits } from '../../services/guest';
 import {
   asCents,
   centsToDollars,
@@ -45,8 +45,8 @@ export type GuestMoneyUpdate =
       ok: true;
       payload: Partial<Guest>;
       authoritativeFields: ReadonlyArray<keyof Guest>;
-      /** How much each balance changed, against what the form showed (#198). */
-      moneyDeltas: MoneyDeltas;
+      /** Each balance edit, from what the form showed to what was typed (#198). */
+      moneyEdits: MoneyEdits;
     }
   | { ok: false; malformedFields: ReadonlyArray<keyof Guest> };
 
@@ -73,7 +73,7 @@ export function guestMoneyUpdate(
   const seeded = guestToFormValues(guest);
   const payload = { ...guest, ...values } as unknown as Record<string, unknown>;
   const authoritativeFields: Array<keyof Guest> = [];
-  const moneyDeltas: MoneyDeltas = {};
+  const moneyEdits: MoneyEdits = {};
   const malformedFields: Array<keyof Guest> = [];
 
   for (const field of CENTS_FIELDS) {
@@ -86,12 +86,12 @@ export function guestMoneyUpdate(
       continue;
     }
 
-    // Never an absolute value: the change from what the form showed is sent,
-    // so a payment that lands while the form is open still counts (#198).
+    // Never in the payload: the edit carries the figure the form showed, and
+    // the save is refused if a payment landed while the form was open (#198).
     delete payload[field];
     const stored = asCents(storedCents(guest, field));
     if (parsed.ok && parsed.cents !== stored) {
-      moneyDeltas[field] = parsed.cents - stored;
+      moneyEdits[field] = { from: stored, to: parsed.cents };
     }
   }
 
@@ -102,6 +102,6 @@ export function guestMoneyUpdate(
     ok: true,
     payload: payload as Partial<Guest>,
     authoritativeFields,
-    moneyDeltas,
+    moneyEdits,
   };
 }

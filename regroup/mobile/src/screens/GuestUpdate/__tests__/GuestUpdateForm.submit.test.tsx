@@ -97,7 +97,7 @@ describe('GuestUpdateForm submit guard', () => {
     ).toBeNull();
   });
 
-  it('still submits a readable edit, as the change in cents (#198)', async () => {
+  it('still submits a readable edit, from the shown balance to the typed one (#198)', async () => {
     const { getByTestId } = renderForm();
 
     fireEvent.changeText(getByTestId('guest-rentowed-input'), '400');
@@ -106,9 +106,32 @@ describe('GuestUpdateForm submit guard', () => {
     await waitFor(() => {
       expect(mockMutateAsync).toHaveBeenCalled();
     });
-    const { updatedGuest, moneyDeltas } = mockMutateAsync.mock.calls[0][0];
+    const { updatedGuest, moneyEdits } = mockMutateAsync.mock.calls[0][0];
     // The form showed $500; the operator typed $400.
-    expect(moneyDeltas).toEqual({ rentOwed: -10000 });
+    expect(moneyEdits).toEqual({ rentOwed: { from: 50000, to: 40000 } });
     expect('rentOwed' in updatedGuest).toBe(false);
+  });
+
+  it('says the balance changed, and by how much, when the save is refused (review)', async () => {
+    const { Alert } = require('react-native');
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    mockMutateAsync.mockRejectedValue(
+      Object.assign(new Error('changed'), {
+        kind: 'balance-changed',
+        field: 'rentOwed',
+        currentCents: 15000,
+      }),
+    );
+    const { getByTestId } = renderForm();
+
+    fireEvent.changeText(getByTestId('guest-rentowed-input'), '400');
+    fireEvent.press(getByTestId('create-guest-button'));
+
+    await waitFor(() =>
+      expect(Alert.alert).toHaveBeenCalledWith(
+        'The balance changed',
+        "Rent owed is now $150.00, probably from a payment. Check it and save again.",
+      ),
+    );
   });
 });

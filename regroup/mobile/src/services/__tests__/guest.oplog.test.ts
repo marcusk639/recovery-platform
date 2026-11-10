@@ -83,18 +83,34 @@ describe('updateGuest', () => {
     const edit = guestMoneyUpdate(opened, { ...guestToFormValues(opened), rentOwed: '250' });
     if (!edit.ok) throw new Error('expected a readable edit');
 
-    await updateGuest(opened, edit.payload, 3, edit.authoritativeFields, edit.moneyDeltas);
-
-    // $300 -> $250 is -$50, taken off the $150 that is really owed.
-    expect(readDoc('guests/g3')?.rentOwed).toBe(10000);
+    // The save is refused, so the operator sees the new balance and decides.
+    await expect(
+      updateGuest(opened, edit.payload, 3, edit.authoritativeFields, edit.moneyEdits),
+    ).rejects.toMatchObject({ kind: 'balance-changed', currentCents: 15000 });
+    expect(readDoc('guests/g3')?.rentOwed).toBe(15000);
   });
 
-  it('ignores a rentOwed it is sent, and applies a delta to the stored balance (#198)', async () => {
+  it('applies two staff corrections to the same figure once, not twice (review)', async () => {
+    const opened = { id: 'g4', houseId: 'h1', rentOwed: 30000, choreFees: 0 } as any;
+    seedDoc('guests/g4', opened);
+    const edit = guestMoneyUpdate(opened, { ...guestToFormValues(opened), rentOwed: '250' });
+    if (!edit.ok) throw new Error('expected a readable edit');
+
+    await updateGuest(opened, edit.payload, 3, [], edit.moneyEdits);
+    await expect(updateGuest(opened, edit.payload, 3, [], edit.moneyEdits)).rejects.toMatchObject({
+      kind: 'balance-changed',
+    });
+    expect(readDoc('guests/g4')?.rentOwed).toBe(25000);
+  });
+
+  it('ignores a rentOwed it is sent, and applies an edit to the stored balance (#198)', async () => {
     seedDoc('guests/g1', { id: 'g1', rentOwed: 500 });
     expect((await updateGuest({}, { id: 'g1', rentOwed: 900 } as any)).rentOwed).toBe(500);
 
     seedDoc('guests/g2', { id: 'g2', rentOwed: 500 });
-    const lowered = await updateGuest({}, { id: 'g2' } as any, 3, [], { rentOwed: -200 });
+    const lowered = await updateGuest({}, { id: 'g2' } as any, 3, [], {
+      rentOwed: { from: 500, to: 300 },
+    });
     expect(lowered.rentOwed).toBe(300);
     expect(readDoc('guests/g2')?.rentOwed).toBe(300);
   });

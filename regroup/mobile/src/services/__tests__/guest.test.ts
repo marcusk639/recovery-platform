@@ -252,9 +252,10 @@ describe("guest service", () => {
       expect((result as Partial<Guest>).version).toBe(6);
     });
 
-    // ── rentOwed and choreFees change only by a delta (#198). A value sent in
-    // the update is ignored: a stale copy of the guest would otherwise put back
-    // a debt that a payment had already lowered.
+    // ── rentOwed and choreFees change only through moneyEdits, from the balance
+    // the form showed to the one typed, and only if the stored balance is still
+    // what the form showed (#198). A value sent in the update is ignored: a
+    // stale copy of the guest would otherwise put back a debt a payment lowered.
     it("never writes the rentOwed it is sent, lower or higher (#198)", async () => {
       const current = makeGuest({ id: "g1", rentOwed: asCents(50000) });
       getTxGet().mockResolvedValue({ exists: () => true, data: () => current });
@@ -272,16 +273,27 @@ describe("guest service", () => {
       expect((stale as Partial<Guest>).rentOwed).toBe(50000);
     });
 
-    it("changes rentOwed by the delta it is given, from the stored balance (#198)", async () => {
-      // The form opened at $300; a $150 payment landed; the operator typed $250.
+    it("writes the typed balance when the stored one is what the form showed (#198)", async () => {
       const current = makeGuest({ id: "g1", rentOwed: asCents(15000) });
       getTxGet().mockResolvedValue({ exists: () => true, data: () => current });
 
       const result = await updateGuest({ id: "g1" }, { id: "g1" }, 3, [], {
-        rentOwed: -5000,
+        rentOwed: { from: 15000, to: 10000 },
       });
 
       expect((result as Partial<Guest>).rentOwed).toBe(10000);
+    });
+
+    it("refuses when the balance changed since the form opened (review)", async () => {
+      // The form opened at $300; a $150 payment landed; the operator typed $250.
+      const current = makeGuest({ id: "g1", rentOwed: asCents(15000) });
+      getTxGet().mockResolvedValue({ exists: () => true, data: () => current });
+
+      await expect(
+        updateGuest({ id: "g1" }, { id: "g1" }, 3, [], {
+          rentOwed: { from: 30000, to: 25000 },
+        }),
+      ).rejects.toMatchObject({ kind: "balance-changed", field: "rentOwed", currentCents: 15000 });
     });
 
     it("zeroes a paid-off balance when the field is authoritative", async () => {
@@ -289,13 +301,13 @@ describe("guest service", () => {
       getTxGet().mockResolvedValue({ exists: () => true, data: () => current });
 
       const result = await updateGuest({ id: "g1" }, { id: "g1" }, 3, [], {
-        rentOwed: -50000,
+        rentOwed: { from: 50000, to: 0 },
       });
 
       expect((result as Partial<Guest>).rentOwed).toBe(0);
     });
 
-    it("still max-merges step while applying a money delta", async () => {
+    it("still max-merges step while applying a balance edit", async () => {
       const current = makeGuest({ id: "g1", rentOwed: asCents(50000), step: 4 });
       getTxGet().mockResolvedValue({ exists: () => true, data: () => current });
 
@@ -304,7 +316,7 @@ describe("guest service", () => {
         { id: "g1", step: 1 },
         3,
         [],
-        { rentOwed: -40000 },
+        { rentOwed: { from: 50000, to: 10000 } },
       );
 
       expect((result as Partial<Guest>).rentOwed).toBe(10000);
