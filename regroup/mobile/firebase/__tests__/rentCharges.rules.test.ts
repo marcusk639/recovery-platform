@@ -13,7 +13,7 @@
 
 import { assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
 import { doc, getDoc, setDoc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
-import { ADMIN, HOUSE, OWNER, PEER, RESIDENT, useRentRulesEnv } from './rentRulesHarness';
+import { ADMIN, HOUSE, OTHER_RESIDENT, OWNER, PEER, RESIDENT, useRentRulesEnv } from './rentRulesHarness';
 
 const rules = useRentRulesEnv('demo-rent-charges-rules-test');
 const as = rules.as;
@@ -294,4 +294,68 @@ describe('rentAccounts and config', () => {
     await assertFails(setDoc(doc(as(OWNER), 'rentChargeReversals/r1'), { amountCents: 1 }));
     await assertFails(setDoc(doc(as(OWNER), 'config/rentCharges'), { paused: true }));
   });
+});
+
+// Peer leaders may delete resident records (owner decision 2026-11-10). Deleting one and
+// re-creating it under the same id, with no balance, would clear what the resident owes
+// while the rent account carries on charging, so below a manager that re-create is refused.
+describe('guests: a deleted resident record re-created', () => {
+  const recreate = (who: string, id: string, userId: string) =>
+    setDoc(doc(as(who), `guests/${id}`), {
+      userId,
+      houseId: HOUSE,
+      status: 'active',
+      createdBy: who,
+      rentOwed: 0,
+      choreFees: 0,
+    });
+
+  it('a peer leader can delete a resident record with a balance', () =>
+    assertSucceeds(deleteDoc(doc(as(PEER), 'guests/gResident'))));
+
+  it('a peer leader cannot re-create it while its rent account remains', async () => {
+    await assertSucceeds(deleteDoc(doc(as(PEER), 'guests/gResident')));
+    await assertFails(recreate(PEER, 'gResident', RESIDENT));
+  });
+
+  it("a peer leader cannot re-create a record its resident's account still points at", async () => {
+    await rules.env().withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `users/${OTHER_RESIDENT}`), { id: OTHER_RESIDENT, guestId: 'gOther' });
+    });
+    await assertSucceeds(deleteDoc(doc(as(PEER), 'guests/gOther')));
+    await assertFails(recreate(PEER, 'gOther', OTHER_RESIDENT));
+  });
+
+  it('a manager can re-create it', async () => {
+    await assertSucceeds(deleteDoc(doc(as(ADMIN), 'guests/gResident')));
+    await assertSucceeds(recreate(ADMIN, 'gResident', RESIDENT));
+  });
+});
+
+// ownMoneyUnchanged on its own: a manager also passes rentMoneyByManager, so only the
+// own-record guard can refuse these.
+describe('guests: a manager who is also a resident', () => {
+  beforeEach(() =>
+    rules.env().withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'guests/gManager'), {
+        userId: ADMIN,
+        houseId: HOUSE,
+        firstName: 'Test',
+        status: 'active',
+        rentOwed: 20000,
+        choreFees: 500,
+        phoneNumber: '',
+      });
+    }));
+
+  it.each([
+    ['rentOwed', 0],
+    ['choreFees', 0],
+    ['customRent', { amountCents: 0, frequency: 'weekly' }],
+    ['rentDueDate', '2030-01-01'],
+  ])('cannot change their own %s', (field, value) =>
+    assertFails(updateDoc(doc(as(ADMIN), 'guests/gManager'), { [field]: value })));
+
+  it('can still edit their own phoneNumber', () =>
+    assertSucceeds(updateDoc(doc(as(ADMIN), 'guests/gManager'), { phoneNumber: '5550100' })));
 });

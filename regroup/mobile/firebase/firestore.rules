@@ -273,6 +273,17 @@ service cloud.firestore {
            d.customRent.frequency in ['weekly', 'monthly']);
       }
 
+      // Peer leaders may delete resident records (owner decision 2026-11-10), but below a
+      // manager a record can't come back under the same id: deleting it and re-creating it
+      // with no balance would clear what the resident owes while charging carries on. A
+      // rent account outlives the record, and a joined resident's user doc names it.
+      function recreatesAResident(d) {
+        return exists(/databases/$(database)/documents/rentAccounts/$(guestId)) ||
+          (d.get('userId', '') != '' &&
+           exists(/databases/$(database)/documents/users/$(d.userId)) &&
+           get(/databases/$(database)/documents/users/$(d.userId)).data.get('guestId', '') == guestId);
+      }
+
       allow create: if createdByCaller(request.resource.data) &&
                        moveOutDateValid(request.resource.data) &&
                        customRentValid(request.resource.data) &&
@@ -281,7 +292,9 @@ service cloud.firestore {
                         (isAdmin([request.resource.data.houseId]) &&
                          request.resource.data.get('userId', '') != request.auth.uid &&
                          callerRank(request.resource.data.houseId) > targetRank(request.resource.data) &&
-                         rentMoneyOnCreateByManager(request.resource.data)));
+                         rentMoneyOnCreateByManager(request.resource.data) &&
+                         (callerRank(request.resource.data.houseId) >= 2 ||
+                          !recreatesAResident(request.resource.data))));
 
       // Update has two distinct branches:
       //
