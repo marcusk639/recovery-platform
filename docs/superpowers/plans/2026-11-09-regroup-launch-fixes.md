@@ -192,7 +192,7 @@ This also fixes a bug found while mapping #198: removing a manager leaves `isAdm
 
 ### Task 10: A refund restores the balance (#198 part 2)
 
-**Owner decision (2026-11-09):** add it back. The refunded amount goes back on `rentOwed` once, including for partial and repeated refund events, and only for payments that lowered rent (`rentApplied === true`). Disputes and chargebacks aren't covered; file them as a follow-up.
+**Owner decision (2026-11-09):** add it back. The refunded amount goes back on `rentOwed` once, including for partial and repeated refund events, and only for payments that lowered rent (`rentApplied === true`). Owner decision (2026-11-10): disputes have no effect on money or payments, so nothing here or later restores a balance on a dispute.
 
 **Files:** `regroup/functions/src/webhooks/stripeWebhook.ts` (`handleChargeRefunded` ~:822-855, using the `rentApplied` transaction pattern from ~:573-591). Test it in the existing `stripeWebhook` test file.
 
