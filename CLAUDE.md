@@ -13,7 +13,7 @@ Flat monorepo of independent recovery products plus a shared API. Each product h
 
 ## Cross-product rules
 
-- **Data isolation:** never query one product's Firestore from another. Cross-product flows (referrals, identity) go through recovery-api; see `recovery-api/CLAUDE.md`. Its app-id registry `recovery-api/src/config/apps.ts` is the source of truth.
+- **Data isolation:** never query one product's Firestore from another. Cross-product flows (referrals, identity) go through recovery-api; see `recovery-api/CLAUDE.md`. Its app-id registry `recovery-api/src/config/apps.ts` is the source of truth. The only exceptions are two recovery-api scripts run by hand, listed with their limits under class 14 in `.pr-review/checklist.md`.
 - **Vocabulary differs per product:** "meeting" always means a 12-step meeting, in every product, as in homegroups. A sober-living house meeting is a separate concept: call it "house meeting" (`regroup:house-meeting` when ambiguous), never bare "meeting". Regroup's `meetings` callable and meeting search/check-in code are 12-step meetings, correctly named; Regroup's house meetings are the Oxford business meetings (`oxford/BusinessMeeting`). Regroup's "guest" = resident. More in `docs/ecosystem/vocabulary.md`.
 - **Privacy:** never log PII (names, contact info, health or recovery status) anywhere. Log full error objects server-side; return only sanitized messages to clients.
 - **Secrets:** no `.env` or secret values in git; use env vars or Firebase Secret Manager. The one exception is committed `functions/.env.<projectId>` files holding non-secret Firebase params (e.g. `regroup/web/functions/`). Secrets never go in them: use `defineSecret`.
