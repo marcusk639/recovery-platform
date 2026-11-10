@@ -123,6 +123,10 @@ test('SUB-044: a live-mode event is not applied by a test-mode deployment', asyn
   expect(res.status).toBe(400);
   expect(await marker(id)).toBeUndefined();
   expect(await houseStatus(house.id)).toBe('trialing');
+  // The house check can't fail while #222 stands (the webhook never finds the house), so
+  // also check the records the webhook does reach.
+  expect((await docData(`subscriptions/${op.subscriptionId}`)).status).toBe('trialing');
+  expect((await docData(`users/${op.uid}`)).subscriptionMetadata.status).toBe('trialing');
 });
 
 test('SUB-045: a status change reaches every house created the normal way', async () => {
@@ -144,6 +148,7 @@ test('SUB-046: an event for an unknown subscription is done, and touches nobody'
   expect(res.status).toBe(200);
   expect(await marker(id)).toBe('done');
   expect(await houseStatus(house.id)).toBe('active');
+  expect((await docData(`users/${bystander.uid}`)).subscriptionMetadata.status).toBe('active');
 });
 
 test('SUB-048: a first failure delivered late leaves the deadline tied to the invoice', async () => {
@@ -178,5 +183,6 @@ test('SUB-050: with the switch off, a lapsed operator can act; with it on, the s
     await new Promise((resolve) => setTimeout(resolve, SWITCH_CACHE_WAIT_MS)); // don't leave it cached off for later tests
   }
   expect(off?.errorMessage).toBeUndefined();
-  expect((await callAs(op.uid, 'createInvitation', inviteInput(house.id))).errorCode).toBe('failed-precondition');
+  const on = await callAs(op.uid, 'createInvitation', inviteInput(house.id));
+  expect(on).toMatchObject({ errorCode: 'failed-precondition', errorMessage: expect.stringMatching(/active subscription/) });
 }, 300000);

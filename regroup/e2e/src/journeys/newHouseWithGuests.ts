@@ -214,7 +214,7 @@ export async function newHouseWithGuests(opts: {
   const operator = await seedOperator({
     email: operatorEmail,
     password,
-    subscriptionMetadata: { tier: 'professional', maxResidents: 20, maxProperties: 3 },
+    subscriptionMetadata: { houseType: 'traditional', tier: 'professional', maxResidents: 20, maxProperties: 3 },
   });
   await signIn(operatorEmail, password);
 

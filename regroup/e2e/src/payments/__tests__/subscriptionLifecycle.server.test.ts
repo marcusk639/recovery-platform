@@ -82,7 +82,7 @@ test('SUB-024: past the deadline, data stays, the resident reads their history a
   expect(history.errorMessage).toBeUndefined();
 
   // Paying needs a house connected to Stripe, which the lifecycle house isn't. The
-  // operator goes past due first, so the on-create status stamp agrees with expired().
+  // operator is past due too, as a lapsed operator's record would be.
   await adminDb().doc(`users/${op.uid}`).update({ 'subscriptionMetadata.status': 'past_due' });
   const payer = await seedResident(await seedConnectedHouse(op), { rentOwed: 15000 });
   await expired(payer.houseId);
@@ -113,6 +113,8 @@ test('SUB-025: dunning exhausted is blocked, and a new card unblocks with no sec
   const exhausted: object = { ...last, data: { ...last.data, object: { ...last.data.object, attempt_count: 3 } } };
   const toDeliver: object[] = [...failures.slice(0, -1), exhausted];
   for (const event of toDeliver) expect((await deliver(event)).status).toBe(200);
+  // The subscription doc proves the exhausted count was read, whatever happens to houses (#222).
+  expect((await docData(`subscriptions/${op.subscriptionId}`)).status).toBe('unpaid');
   expect(await houseStatus(house.id)).toBe('unpaid');
 
   const card = await stripe.paymentMethods.attach('pm_card_visa', { customer: op.customerId });

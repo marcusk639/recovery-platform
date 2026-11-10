@@ -2,12 +2,20 @@ import { randomUUID } from 'crypto';
 import { App, getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
-import { assertEmulatorEnv, LOCAL_CONNECT_ACCOUNT_FILE, PROJECT, readConfigFile } from './guards';
+import {
+  assertEmulatorEnv,
+  LOCAL_CONNECT_ACCOUNT_FILE,
+  MANUAL_PROJECT,
+  PAYMENTS_PROJECT,
+  PROJECT,
+  readConfigFile,
+} from './guards';
 import { forgetIdToken } from './idTokens';
 import { waitFor } from './waitFor';
 
 export function adminApp(): App {
-  assertEmulatorEnv();
+  // Either emulator project: Stripe suites are held to the payment suite's by assertSafeTarget.
+  assertEmulatorEnv(process.env, [PAYMENTS_PROJECT, MANUAL_PROJECT]);
   return getApps()[0] ?? initializeApp({ projectId: PROJECT });
 }
 export const adminDb = () => getFirestore(adminApp());

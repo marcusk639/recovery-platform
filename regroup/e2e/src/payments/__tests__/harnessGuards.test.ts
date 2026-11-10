@@ -149,6 +149,10 @@ describe('functionsBase', () => {
     expect(functionsBase({})).toBe('http://127.0.0.1:5101/demo-regroup-payments/us-central1');
   });
 
+  it("defaults to the manual-testing emulator when the run is on that project", () => {
+    expect(functionsBase({ GCLOUD_PROJECT: 'demo-regroup-e2e' })).toBe('http://127.0.0.1:5001/demo-regroup-e2e/us-central1');
+  });
+
   it('can point at the manual-testing emulator for its own project', () => {
     const base = 'http://127.0.0.1:5001/demo-regroup-e2e/us-central1';
     expect(functionsBase({ E2E_FUNCTIONS_BASE: base, GCLOUD_PROJECT: 'demo-regroup-e2e' })).toBe(base);

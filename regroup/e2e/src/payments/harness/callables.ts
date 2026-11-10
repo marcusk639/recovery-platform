@@ -57,6 +57,7 @@ export async function callAs(
   } catch {
     throw new Error(`${name} answered ${res.status} with a body that isn't JSON (is the function deployed to the emulator?)`);
   }
+  if (!body || typeof body !== 'object') throw new Error(`${name} answered ${res.status} with ${JSON.stringify(body)}`);
   if (body.error) {
     return { errorCode: body.error.status.toLowerCase().replace(/_/g, '-'), errorMessage: body.error.message };
   }
