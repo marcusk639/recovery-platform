@@ -32,6 +32,10 @@ describe("mapDirectoryToRats", () => {
     expect(m.lng).toBeCloseTo(-97.743);
   });
 
+  it("keeps the directory id, which check-in dedupe and the attendance record use", () => {
+    expect(mapDirectoryToRats(base).id).toBe("dir-1");
+  });
+
   it("reads a stored day name, or a legacy integer (0–6) until rows are migrated", () => {
     expect(mapDirectoryToRats({ ...base, day: "tuesday" }).day).toBe("tuesday");
     expect(mapDirectoryToRats({ ...base, day: "Tuesday" }).day).toBe("tuesday");

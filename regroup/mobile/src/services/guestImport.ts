@@ -1,5 +1,5 @@
 import FirebaseFirestore from '@react-native-firebase/firestore';
-import { firestore } from '../../firebase-setup';
+import { auth, firestore } from '../../firebase-setup';
 import { guestCollection, createGuestId } from './guest';
 import { logException } from '../util/logging';
 
@@ -85,6 +85,10 @@ export async function importGuestsFromRows(
 
   const BATCH_LIMIT = 499;
   let imported = 0;
+  // The rules require createdBy to be the caller. It is how the server
+  // tells a staff-made record from a self-made one when it links records
+  // for the same person.
+  const createdBy = auth.currentUser?.uid;
 
   try {
     for (let start = 0; start < rows.length; start += BATCH_LIMIT) {
@@ -114,6 +118,7 @@ export async function importGuestsFromRows(
           // already lived there, and their balance was entered by hand.
           importedAt: new Date().toISOString(),
           updatedAt: FirebaseFirestore.FieldValue.serverTimestamp(),
+          ...(createdBy ? { createdBy } : {}),
         });
       }
       await batch.commit();

@@ -1127,6 +1127,37 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Staff notes (issue #196): private notes for a house's staff. A
+    // resident_note is about one resident of the house; a shift_log is a
+    // house-wide handoff with no resident. Residents never read either.
+    // Written by services/staffNotes.ts: add, pin and delete. The author is the
+    // caller and can't be changed; only the pinned flag can.
+    function staffNoteShape(d) {
+      return d.keys().hasOnly(['houseId', 'type', 'guestId', 'content', 'authorId', 'authorName', 'createdAt', 'pinned']) &&
+        d.keys().hasAll(['houseId', 'type', 'content', 'authorId', 'authorName', 'createdAt', 'pinned']) &&
+        d.houseId is string &&
+        d.content is string && d.content.size() > 0 && d.content.size() <= 1000 &&
+        d.authorName is string && d.authorName.size() <= 200 &&
+        d.createdAt is string && d.createdAt.size() <= 40 &&
+        d.pinned == false;
+    }
+    function staffNoteSubject(d) {
+      return (d.type == 'shift_log' && !('guestId' in d)) ||
+        (d.type == 'resident_note' && d.guestId is string && d.guestId.size() > 0 &&
+          get(/databases/$(database)/documents/guests/$(d.guestId)).data.houseId == d.houseId);
+    }
+    match /staffNotes/{noteId} {
+      allow read: if isAdmin([resource.data.houseId]);
+      allow create: if isAdmin([request.resource.data.houseId]) &&
+        staffNoteShape(request.resource.data) &&
+        request.resource.data.authorId == request.auth.uid &&
+        staffNoteSubject(request.resource.data);
+      allow update: if isAdmin([resource.data.houseId]) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pinned']) &&
+        request.resource.data.pinned is bool;
+      allow delete: if isAdmin([resource.data.houseId]);
+    }
+
     match /documents/{docId} {
       // Only house admins and super-admins can read or write documents.
       // Residents (guests) have zero access.

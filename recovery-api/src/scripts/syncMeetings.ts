@@ -8,7 +8,8 @@
  *   MEETING_GUIDE_API_KEY=... npm run sync:meetings
  *   MEETING_GUIDE_API_KEY=... npm run sync:meetings -- --apply
  *
- * The key goes in exactly as the API expects it in a URL. Don't decode or re-encode it.
+ * The key can also come from ~/.config/recovery-platform/meeting-sync.env (syncEnvFile), never
+ * from recovery-api/.env. Set it as issued or already URL-encoded: readApiKey accepts either.
  * See lib/meetings/meetingSweep.ts for the API limits this is built around.
  */
 import { applicationDefault, initializeApp } from 'firebase-admin/app';
@@ -20,11 +21,23 @@ import {
   type MeetingSyncResult,
 } from '../lib/meetings/meetingSync';
 import { usBaseCells } from '../lib/meetings/usLandCells';
+import dotenv from 'dotenv';
+import os from 'os';
+import path from 'path';
 
 const DEST_PROJECT = 'recovery-platform-e6cb3';
 const PROGRESS_EVERY_CELLS = 500;
 /** Separate from the general failure code, so a wrapper can tell a key problem apart. */
 export const ACCESS_EXIT_CODE = 2;
+
+/**
+ * Where the key lives when the shell doesn't set MEETING_GUIDE_API_KEY. It must stay outside
+ * recovery-api/: a deploy sets every entry of an env file there on every function, and
+ * uploads the folder with it.
+ */
+export function syncEnvFile(home: string = os.homedir()): string {
+  return path.join(home, '.config', 'recovery-platform', 'meeting-sync.env');
+}
 
 export function parseSyncArgs(argv: readonly string[]): { apply: boolean } {
   const unknown = argv.filter((arg) => arg !== '--apply');
@@ -37,7 +50,9 @@ export function readApiKey(env: Record<string, string | undefined>): string {
   if (!key) {
     throw new MeetingGuideAccessError('MEETING_GUIDE_API_KEY is not set. Set it and run again.');
   }
-  return key;
+  // The issued key contains a literal "%3f" and must reach the URL encoded once (%253f).
+  // "%25" means it is already URL-ready and must not be encoded again.
+  return key.includes('%25') ? key : encodeURIComponent(key);
 }
 
 /** Prints the failure and returns the exit code. The key itself is never printed. */
@@ -115,6 +130,7 @@ export function describeResult(result: MeetingSyncResult): string[] {
 }
 
 async function main(): Promise<void> {
+  dotenv.config({ path: syncEnvFile(), quiet: true });
   const { apply } = parseSyncArgs(process.argv.slice(2));
   const key = readApiKey(process.env);
   const db = getFirestore(

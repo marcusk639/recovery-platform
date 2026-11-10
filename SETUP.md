@@ -44,15 +44,15 @@ The session-start check (`scripts/session-check.sh`) warns about any package who
 
 Every package with runtime configuration has a tracked example. Copy it and fill in values:
 
-| Package                | Example file           | Copy to                 | Holds                                                     |
-| ---------------------- | ---------------------- | ----------------------- | --------------------------------------------------------- |
-| `recovery-api`         | `env.example`          | `.env`                  | Admin credentials path, project ID, API key, CORS origins |
-| `homegroups/functions` | `.env.example`         | `.env.local` (emulator) | Stripe keys and price IDs, cross-app API key              |
-| `regroup/functions`    | `.env.example`         | `.env` (per its header) | Stripe, SendGrid, Maps, tier prices, rent-fee settings    |
-| `detox-recovery`       | `env.example`          | `.env.local`            | Resend, MailerLite, checkout/booking URLs, recovery-api   |
-| `homegroups/mobile`    | `.env.example`         | `.env`                  | Maps key, Stripe test publishable key                     |
-| `regroup/mobile`       | `.env.example`         | `.env`                  | Maps key                                                  |
-| `homegroups/mobile`    | `e2e/.env.e2e.example` | `e2e/.env.e2e`          | E2E test account                                          |
+| Package                | Example file           | Copy to                 | Holds                                                   |
+| ---------------------- | ---------------------- | ----------------------- | ------------------------------------------------------- |
+| `recovery-api`         | `env.example`          | `.env`                  | Admin credentials path, API key, CORS origins           |
+| `homegroups/functions` | `.env.example`         | `.env.local` (emulator) | Stripe keys and price IDs, cross-app API key            |
+| `regroup/functions`    | `.env.example`         | `.env` (per its header) | Stripe, SendGrid, Maps, tier prices, rent-fee settings  |
+| `detox-recovery`       | `env.example`          | `.env.local`            | Resend, MailerLite, checkout/booking URLs, recovery-api |
+| `homegroups/mobile`    | `.env.example`         | `.env`                  | Maps key, Stripe test publishable key                   |
+| `regroup/mobile`       | `.env.example`         | `.env`                  | Maps key                                                |
+| `homegroups/mobile`    | `e2e/.env.e2e.example` | `e2e/.env.e2e`          | E2E test account                                        |
 
 `regroup/web` and `homegroups/web` read their public Firebase client config from source (`src/environments/`, `src/lib/firebase.js`).
 
