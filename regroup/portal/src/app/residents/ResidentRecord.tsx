@@ -8,6 +8,7 @@ import { formatDay } from '../houses/summary';
 import { heading, link, muted, page } from '../ui';
 import { residentPath, sectionPath } from '../urls';
 import { useHouseAccess } from '../useHouseAccess';
+import { RecordActions } from './RecordActions';
 import { OpenItemsSection, PaymentsSection, RecoverySection, WeekSection } from './RecordSections';
 import { fullName, phaseLabel, roomOf } from './rows';
 
@@ -51,6 +52,7 @@ export function ResidentRecord() {
           </HouseLink>
         </span>
       </p>
+      <RecordActions guest={guest} house={house} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: 12 }}>
         <WeekSection guest={guest} house={house} />
         <PaymentsSection guest={guest} houseId={house.id} />

@@ -65,7 +65,8 @@ export const Screens = () => (
     <Stack.Screen name={Routes.GuestOverview} component={ResidentRecord} />
     <Stack.Screen name={Routes.GuestInfo} component={UserInfo} />
     <Stack.Screen name={Routes.EditUserInfo} component={EditUserInfoForm} />
-    <Stack.Screen name={Routes.StaffNotes} component={StaffNotesFeed} />
+    {/* A resident's notes by URL carry no type, so a reload would load nothing without this. */}
+    <Stack.Screen name={Routes.StaffNotes} component={StaffNotesFeed} initialParams={{ type: 'resident_note' }} />
     <Stack.Screen name={SHIFT_LOG_ROUTE} component={StaffNotesFeed} initialParams={{ type: 'shift_log' }} />
     {/* PhaseCustomization stays unregistered: its save swallows errors, so the
         visible "use the phone" alert is better than a silent failure. */}

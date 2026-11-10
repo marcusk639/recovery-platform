@@ -40,9 +40,8 @@ export function weekStart(timeZone = 'America/Chicago'): string {
 type Stats = { meetingsAttended: number; hoursWorked: number; choresCompleted: number; primarySupporterMet: number; medicationTaken: number };
 
 // The rules read the summary's houseId, so it carries the guest's.
-export async function setWeekStats(guestId: string, stats: Partial<Stats>): Promise<void> {
+export async function setWeekStats(guestId: string, stats: Partial<Stats>, startDate = weekStart()): Promise<void> {
   const guest = (await admin().doc(`guests/${guestId}`).get()).data()!;
-  const startDate = weekStart();
   await admin().doc(`week-summaries/${guestId}_${startDate}`).set({
     id: `${guestId}_${startDate}`,
     guestId,
@@ -107,3 +106,32 @@ export async function addResidents(houseId: string, count: number): Promise<void
 }
 
 export const uidOf = async (account: Account) => (await getAuth().getUserByEmail(EMAILS[account])).uid;
+
+// Mondays before this week's, newest first.
+export function earlierWeeks(count: number): string[] {
+  const start = new Date(`${weekStart()}T00:00:00Z`);
+  return Array.from({ length: count }, (_, i) => {
+    const d = new Date(start);
+    d.setUTCDate(d.getUTCDate() - 7 * (i + 1));
+    return d.toISOString().split('T')[0];
+  });
+}
+
+// A next phase after the seed's Default, so a compliant resident can advance.
+export async function addSecondPhase(houseId = 'test-house-123'): Promise<void> {
+  await admin().doc(`houses/${houseId}`).update({
+    'phases.Phase 2': {
+      name: 'Phase 2',
+      order: 2,
+      rules: { meetings: 0, nightsOutAllowed: 0, supporter: true, work: 0, chore: true, medications: false },
+    },
+  });
+}
+
+// Gives a resident's own account the manager tier, so staff ranked below can't discharge them.
+export async function makeResidentAManager(uid: string, houseId = 'test-house-123'): Promise<void> {
+  await admin().doc(`house-roles/${houseId}_${uid}`).set({ tier: 'manager', primary: false, houseId, grantedBy: 'test', via: 'test' });
+  const user = await getAuth().getUser(uid);
+  const claims = (user.customClaims ?? {}) as { admin?: object };
+  await getAuth().setCustomUserClaims(uid, { ...claims, admin: { ...claims.admin, [houseId]: true } });
+}

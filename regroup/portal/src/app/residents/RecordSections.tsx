@@ -128,6 +128,15 @@ export function OpenItemsSection(props: { guest: any; houseId: string; onDocumen
           </HouseLink>
         )}
       </Field>
+      <Field label="Staff notes">
+        <HouseLink
+          href={`${residentPath(houseId, guest.id)}/notes`}
+          route={Routes.StaffNotes}
+          params={{ houseId, guestId: guest.id, type: 'resident_note', guestName: `${guest.firstName ?? ''} ${guest.lastName ?? ''}`.trim() }}
+          style={link}>
+          Staff notes
+        </HouseLink>
+      </Field>
       <Field label="Emergency contact">{guest.emergencyContactName || guest.emergencyContactPhone ? 'On file' : 'Missing'}</Field>
       {props.onDocuments && (
         <p style={{ margin: '8px 0 0' }}>
