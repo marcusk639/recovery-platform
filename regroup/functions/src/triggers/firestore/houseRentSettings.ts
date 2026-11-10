@@ -22,6 +22,7 @@ const WATCHED = ['rentFrequency', 'monthlyRent', 'weeklyRent', 'timezone', 'hous
 export async function syncRentChargeStart(
   houseId: string,
   now: Date,
+  processedAt: Date = new Date(),
 ): Promise<'stamped' | 'cleared' | 'unchanged'> {
   const houseRef = houseCollection.doc(houseId);
   const stateRef = rentHouseStateCollection.doc(houseId);
@@ -33,16 +34,27 @@ export async function syncRentChargeStart(
     const state = (stateSnap.data() ?? {}) as Data;
     const stamped =
       !!state.startDate || (state.startedAtMs !== null && state.startedAtMs !== undefined);
+    const clearedAtMs = typeof state.clearedAtMs === 'number' ? state.clearedAtMs : null;
     if (settings && !state.startDate) {
+      // A retried 'on' can be delivered after charging went off and back on, carrying
+      // the older time. A start at or before the last clear would cover the time it
+      // was off, so it starts now instead: late by the retry delay, never early.
+      const at = clearedAtMs !== null && now.getTime() <= clearedAtMs ? processedAt : now;
       txn.set(stateRef, {
-        startDate: localDateString(now, settings.timeZone),
-        startedAtMs: now.getTime(),
-        updatedAtMs: now.getTime(),
+        startDate: localDateString(at, settings.timeZone),
+        startedAtMs: at.getTime(),
+        clearedAtMs,
+        updatedAtMs: processedAt.getTime(),
       });
       return 'stamped';
     }
     if (!settings && stamped) {
-      txn.set(stateRef, { startDate: null, startedAtMs: null, updatedAtMs: now.getTime() });
+      txn.set(stateRef, {
+        startDate: null,
+        startedAtMs: null,
+        clearedAtMs: processedAt.getTime(),
+        updatedAtMs: processedAt.getTime(),
+      });
       return 'cleared';
     }
     return 'unchanged';
