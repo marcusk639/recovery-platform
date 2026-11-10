@@ -17,6 +17,7 @@ import {
 let _stripe: Stripe | undefined;
 const getStripe = (): Stripe => (_stripe ??= createStripeClient());
 import { onRequest } from "firebase-functions/v2/https";
+import { restoreRefundedRent } from "./refundRestore";
 import { logger } from "firebase-functions";
 import {
   SENDGRID_API_KEY,
@@ -848,6 +849,11 @@ async function handleChargeRefunded(
     paymentIntentId,
     refundedAmountCents,
   });
+
+  // A refunded rent payment goes back on the resident's balance (#198). The
+  // restore is idempotent, so a retry of this event after a later failure is
+  // safe.
+  await restoreRefundedRent(admin.firestore(), paymentIntentId, refundedAmountCents);
 
   // A refund is paid from the platform balance; reverse the house's share of
   // the transfer so the house doesn't keep refunded rent.

@@ -62,6 +62,13 @@ const mockSubscriptionsRetrieve = jest.fn();
 // ---------------------------------------------------------------------------
 // firebase-admin mock
 // ---------------------------------------------------------------------------
+// The refund restore has its own suite (refundRestore.test.ts); here we only
+// check the handler calls it with the cumulative refunded amount (#198).
+const mockRestoreRefundedRent = jest.fn((..._args: any[]) => Promise.resolve(0));
+jest.mock("../../webhooks/refundRestore", () => ({
+  restoreRefundedRent: (...args: any[]) => mockRestoreRefundedRent(...args),
+}));
+
 jest.mock("firebase-admin", () => {
   const firestoreFn = jest.fn(() => ({
     collection: mockCollectionFn,
@@ -1075,6 +1082,12 @@ describe("stripeWebhook — charge.refunded", () => {
     expect(mockPaymentSet).toHaveBeenCalledWith(
       expect.objectContaining({ refundedAmountCents: 15000 }),
       { merge: true },
+    );
+    // ...and puts the refund back on the resident's balance (#198).
+    expect(mockRestoreRefundedRent).toHaveBeenCalledWith(
+      expect.anything(),
+      "pi_test_1",
+      15000,
     );
   });
 
