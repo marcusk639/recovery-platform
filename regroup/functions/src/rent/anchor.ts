@@ -111,9 +111,18 @@ export function anchorFor(i: AnchorInput): Anchor {
   // across a period start skip that whole period. Charges that ended before the
   // resident joined this house don't count, so a first turn-on still follows spec §2.
   // Only chargedHouseId tells: a move keeps chargedThrough from the old house, which can
-  // run past the move day.
+  // run past the move day. The charges must also reach this stay: a resident who left
+  // and came back while charging was off was not charged this stay, so they start at
+  // the next full period like anyone else there at turn-on (spec §2).
   const joinedHere = str(account?.joinedOn);
-  if (account && chargeFrom && chargedThrough && account.chargedHouseId === houseId) {
+  const stayStart = joinedHere || reactivatedOn ? maxDate(joinedHere, reactivatedOn) : null;
+  if (
+    account &&
+    chargeFrom &&
+    chargedThrough &&
+    account.chargedHouseId === houseId &&
+    (!stayStart || chargedThrough >= stayStart)
+  ) {
     return finish(
       { houseJoinedAtMs: knownJoin, joinedOn: joinedHere, chargeFrom: startDate },
       true,
