@@ -548,6 +548,21 @@ describe('Disputes', () => {
       expect(toJSON()).toBeNull();
     });
 
+    it('renders without a house, then with one, without a hooks error (#193)', () => {
+      const { rerender, getByTestId } = renderScreen(
+        buildStore({ nullHouse: true }),
+      );
+      const loaded = buildStore();
+      expect(() =>
+        rerender(
+          <Provider store={loaded}>
+            <Disputes />
+          </Provider>,
+        ),
+      ).not.toThrow();
+      expect(getByTestId('disputes-screen')).toBeTruthy();
+    });
+
     it('returns null when user is missing', () => {
       const store = buildStore({ nullUser: true });
       const { toJSON } = renderScreen(store);
