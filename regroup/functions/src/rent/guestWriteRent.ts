@@ -43,8 +43,24 @@ async function houseLocalDate(houseId: string, at: Date): Promise<string> {
   return localDateString(at, resolveTimeZone(snap.data()?.timezone).timeZone);
 }
 
+/**
+ * A discharge or move-out: noted on an existing account, so chargeResident can tell a
+ * return it hasn't been told about yet and never charge the time away.
+ */
+async function recordDeparture(guestId: string, before: Data, eventTime: string): Promise<void> {
+  const ref = rentAccountCollection.doc(guestId);
+  const houseId = typeof before.houseId === 'string' ? before.houseId : '';
+  if (!houseId || !(await ref.get()).exists) return;
+  const day = await houseLocalDate(houseId, new Date(eventTime));
+  await ref.set({ inactiveSince: day }, { merge: true });
+}
+
 export async function rentOnGuestWrite(e: GuestRentEvent): Promise<'none' | ChargeOutcome> {
   const { guestId, before, after } = e;
+  if (after && before && isActiveGuestDoc(before) && !isActiveGuestDoc(after)) {
+    await recordDeparture(guestId, before, e.eventTime);
+    return 'none';
+  }
   if (!after || !isActiveGuestDoc(after)) return 'none';
   const houseId = typeof after.houseId === 'string' ? after.houseId : '';
   const isCreate = !before;

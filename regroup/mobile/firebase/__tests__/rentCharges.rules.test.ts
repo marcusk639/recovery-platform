@@ -96,8 +96,8 @@ const as = (uid: string) => {
     uid === OWNER
       ? { superAdmin: { [HOUSE]: true } }
       : uid === ADMIN || uid === PEER
-        ? { admin: { [HOUSE]: true }, ...(uid === PEER ? { guest: { [HOUSE]: true } } : {}) }
-        : { guest: { [HOUSE]: true } };
+      ? { admin: { [HOUSE]: true }, ...(uid === PEER ? { guest: { [HOUSE]: true } } : {}) }
+      : { guest: { [HOUSE]: true } };
   return testEnv.authenticatedContext(uid, claims).firestore();
 };
 
@@ -163,6 +163,22 @@ describe('guests: rates and balances', () => {
     assertFails(
       updateDoc(doc(as(PEER), 'guests/gPeer'), {
         customRent: { amountCents: 0, frequency: 'weekly' },
+      }),
+    ));
+  it.each([
+    ['moveInDate', '2030-01-01'],
+    ['importedAt', '2030-01-01T00:00:00.000Z'],
+    ['rentDueDate', '2030-01-01'],
+  ])(
+    'a peer leader cannot change their own %s (it decides what they are charged)',
+    (field, value) => assertFails(updateDoc(doc(as(PEER), 'guests/gPeer'), { [field]: value })),
+  );
+  it("an admin can still set another resident's moveInDate", () =>
+    assertSucceeds(updateDoc(doc(as(PEER), 'guests/gResident'), { moveInDate: '2026-11-18' })));
+  it('customRent above $10,000 (1000000 cents) is refused', () =>
+    assertFails(
+      updateDoc(doc(as(ADMIN), 'guests/gResident'), {
+        customRent: { amountCents: 1000001, frequency: 'monthly' },
       }),
     ));
   it('a peer leader can still edit their own phoneNumber', () =>

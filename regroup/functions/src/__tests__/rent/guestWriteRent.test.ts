@@ -159,3 +159,32 @@ it('a deleted record does nothing', async () => {
     rentOnGuestWrite({ guestId: 'g1', before: { houseId: H }, eventTime: 'x' }),
   ).resolves.toBe('none');
 });
+
+it('a discharge records inactiveSince on an existing account', async () => {
+  house();
+  guest({ status: 'discharged' });
+  account({ chargedThrough: '2026-11-22' });
+  const now = at('2026-11-20');
+  await expect(
+    rentOnGuestWrite({
+      guestId: 'g1',
+      before: { ...g(), status: 'active' },
+      after: g(),
+      eventTime: now.toISOString(),
+      now,
+    }),
+  ).resolves.toBe('none');
+  expect(mem.get('rentAccounts/g1')?.inactiveSince).toBe('2026-11-20');
+});
+
+it('a discharge with no account writes nothing', async () => {
+  house();
+  guest({ status: 'discharged' });
+  await rentOnGuestWrite({
+    guestId: 'g1',
+    before: { ...g(), status: 'active' },
+    after: g(),
+    eventTime: at('2026-11-20').toISOString(),
+  });
+  expect(mem.paths('rentAccounts/')).toEqual([]);
+});

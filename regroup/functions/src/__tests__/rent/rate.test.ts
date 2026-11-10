@@ -52,12 +52,12 @@ describe('residentRate', () => {
       source: 'custom',
     }));
   it('zero is a valid custom rate', () =>
-    expect(residentRate({ customRent: { amountCents: 0, frequency: 'weekly' } }, s).rateCents).toBe(
+    expect(residentRate({ customRent: { amountCents: 0, frequency: 'weekly' } }, s)?.rateCents).toBe(
       0,
     ));
   it('a custom rate for the other schedule is ignored', () =>
     expect(
-      residentRate({ customRent: { amountCents: 60000, frequency: 'monthly' } }, s).source,
+      residentRate({ customRent: { amountCents: 60000, frequency: 'monthly' } }, s)?.source,
     ).toBe('house'));
   it.each([
     { amountCents: 12.5, frequency: 'weekly' },
@@ -65,6 +65,18 @@ describe('residentRate', () => {
     { amountCents: '120', frequency: 'weekly' },
     null,
   ])('a malformed custom rate %p falls back to the house price', (c) =>
-    expect(residentRate({ customRent: c }, s).source).toBe('house'),
+    expect(residentRate({ customRent: c }, s)?.source).toBe('house'),
   );
+});
+
+describe('custom rate cap', () => {
+  const s = rentSettingsOf(house())!;
+  it('a custom rate above the cap is not used: residentRate returns null', () =>
+    expect(
+      residentRate({ customRent: { amountCents: 1750000 * 10, frequency: 'weekly' } }, s),
+    ).toBeNull());
+  it('exactly the cap is used', () =>
+    expect(
+      residentRate({ customRent: { amountCents: 1000000, frequency: 'weekly' } }, s)?.rateCents,
+    ).toBe(1000000));
 });

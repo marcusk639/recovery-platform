@@ -89,6 +89,19 @@ describe('records with no account', () => {
     expect(charges()).toEqual([]);
   });
 
+  it('a resident with no account whose record changed in the last hour is left to the trigger', async () => {
+    house();
+    const spy = jest.spyOn(charge, 'chargeResident');
+    mem.seedAt(
+      'guests/g1',
+      { houseId: 'H', status: 'active', moveInDate: '2026-11-16' },
+      MONDAY.getTime() - 90 * 24 * 3600 * 1000,
+      MONDAY.getTime() - 5 * 60 * 1000,
+    );
+    await runRentCharges(MONDAY);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
   it('a resident with no account created 2 hours ago is charged', async () => {
     house();
     mem.seedAt(

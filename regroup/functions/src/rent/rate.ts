@@ -32,11 +32,18 @@ export function rentSettingsOf(house: Record<string, unknown>): RentSettings | n
   };
 }
 
-/** The resident's custom rate when it is well formed and set for the current schedule. */
+/** A custom rate above the house price limit is a unit mistake, never charged. */
+const MAX_CUSTOM_RENT_CENTS = MAX_HOUSE_PRICE_DOLLARS * 100;
+
+/**
+ * The resident's custom rate when it is well formed and set for the current schedule,
+ * else the house price. Null when the custom rate is above MAX_CUSTOM_RENT_CENTS:
+ * the caller skips the resident rather than guess.
+ */
 export function residentRate(
   guest: Record<string, unknown>,
   settings: RentSettings,
-): { rateCents: Cents; source: 'house' | 'custom' } {
+): { rateCents: Cents; source: 'house' | 'custom' } | null {
   const custom = guest.customRent as { amountCents?: unknown; frequency?: unknown } | null;
   if (
     custom &&
@@ -46,6 +53,7 @@ export function residentRate(
     Number.isInteger(custom.amountCents) &&
     custom.amountCents >= 0
   ) {
+    if (custom.amountCents > MAX_CUSTOM_RENT_CENTS) return null;
     return { rateCents: asCents(custom.amountCents), source: 'custom' };
   }
   return { rateCents: settings.priceCents, source: 'house' };

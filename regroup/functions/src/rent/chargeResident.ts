@@ -62,11 +62,32 @@ export async function chargeResident(guestId: string, now: Date): Promise<Charge
     const account = accountSnap.exists ? (accountSnap.data() as Partial<RentAccount>) : null;
 
     const createdMs = guestSnap.createTime?.toMillis() ?? now.getTime();
+    const today = localDateString(now, timeZone);
+    // The guest-write trigger records moves and returns outside this transaction, so
+    // the hourly job can get here first. A move it hasn't recorded is a join today;
+    // a return it hasn't recorded (departed after the last re-activation) starts
+    // today. Neither is ever back-charged for the time before.
+    const unrecordedMove = !!str(account?.houseId) && account?.houseId !== houseId;
+    const away = str(account?.inactiveSince);
+    const back = str(account?.reactivatedOn);
+    const reactivatedOn = away && !(back && back >= away) ? today : back;
     let houseJoinedAtMs: number;
     let joinedOn: string | null;
     let chargeFrom: string;
-    const anchor = !account || account.anchoredTo !== startDate || !str(account.chargeFrom);
-    if (anchor) {
+    const anchor =
+      !account || unrecordedMove || account.anchoredTo !== startDate || !str(account.chargeFrom);
+    if (unrecordedMove) {
+      houseJoinedAtMs = now.getTime();
+      joinedOn = today;
+      chargeFrom = chargeFromFor({
+        startDate,
+        startedAtMs,
+        houseJoinedAtMs,
+        joinDate: joinedOn,
+        importedOn: null,
+        frequency,
+      });
+    } else if (anchor) {
       houseJoinedAtMs =
         account?.houseId === houseId && typeof account.houseJoinedAtMs === 'number'
           ? account.houseJoinedAtMs
@@ -89,13 +110,18 @@ export async function chargeResident(guestId: string, now: Date): Promise<Charge
       joinedOn = str(account.joinedOn);
       chargeFrom = account.chargeFrom as string;
     }
-    chargeFrom = maxDate(chargeFrom, account?.reactivatedOn, account?.joinedOn);
+    chargeFrom = maxDate(chargeFrom, reactivatedOn, joinedOn);
 
-    const { rateCents, source } = residentRate(guest, settings);
+    const rate = residentRate(guest, settings);
+    if (!rate) {
+      logger.warn('rent: custom rate above the limit; resident not charged', { guestId, houseId });
+      return skipped('bad-rate');
+    }
+    const { rateCents, source } = rate;
     const plan = planCharges({
       chargeFrom,
       chargedThrough: str(account?.chargedThrough),
-      today: localDateString(now, timeZone),
+      today,
       frequency,
       rateCents,
     });
@@ -105,14 +131,14 @@ export async function chargeResident(guestId: string, now: Date): Promise<Charge
       houseId,
       houseJoinedAtMs,
       joinedOn,
-      reactivatedOn: str(account?.reactivatedOn),
+      reactivatedOn,
       anchoredTo: startDate,
       chargeFrom,
       chargedThrough: str(account?.chargedThrough),
       updatedAtMs: now.getTime(),
     };
     if (plan.length === 0) {
-      if (anchor) txn.set(accountRef, nextAccount, { merge: true });
+      if (anchor || reactivatedOn !== back) txn.set(accountRef, nextAccount, { merge: true });
       return skipped('not-due');
     }
 

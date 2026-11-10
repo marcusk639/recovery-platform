@@ -103,6 +103,44 @@ describe('off and on, moves', () => {
     });
   });
 
+  it('a move the trigger has not recorded yet is charged from today, not back-charged', async () => {
+    house({ rentFrequency: 'both' }, 'A');
+    house({ rentFrequency: 'monthly', rentChargesStartDate: '2026-09-01' }, 'B');
+    guest({ houseId: 'B' });
+    account({
+      houseId: 'A',
+      anchoredTo: '2026-09-01',
+      joinedOn: '2026-09-01',
+      chargeFrom: '2026-09-01',
+      chargedThrough: '2026-09-30',
+    });
+    await chargeResident('g1', at('2026-11-20'));
+    expect(charges()).toEqual(['rentCharges/g1_2026-11-20']);
+    expect(mem.get('rentCharges/g1_2026-11-20')?.amountCents).toBe(29333);
+    expect(mem.get('rentAccounts/g1')).toMatchObject({ houseId: 'B', joinedOn: '2026-11-20' });
+  });
+
+  it('a re-activation the trigger has not recorded yet is not charged for the time away', async () => {
+    house();
+    guest();
+    account({ chargedThrough: '2026-08-30', inactiveSince: '2026-09-02', reactivatedOn: null });
+    await chargeResident('g1', at('2026-11-18'));
+    expect(charges()).toEqual(['rentCharges/g1_2026-11-18']);
+    expect(owed()).toBe(12500);
+  });
+
+  it('a re-activation already recorded after the departure is used as is', async () => {
+    house();
+    guest();
+    account({
+      chargedThrough: '2026-08-30',
+      inactiveSince: '2026-09-02',
+      reactivatedOn: '2026-11-16',
+    });
+    await chargeResident('g1', at('2026-11-18'));
+    expect(charges()).toEqual(['rentCharges/g1_2026-11-16']);
+  });
+
   it('a re-activated resident is not charged for the time away', async () => {
     house();
     guest();

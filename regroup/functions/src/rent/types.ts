@@ -58,6 +58,8 @@ export interface RentAccount {
   joinedOn: string | null;
   /** House-local date of the last re-activation after a discharge. */
   reactivatedOn: string | null;
+  /** House-local date of the last discharge or move-out (guest-write trigger). */
+  inactiveSince?: string | null;
   /** The house rentChargesStartDate that chargeFrom was computed against. */
   anchoredTo: string;
   /** First chargeable day. Frozen once anchored, so a schedule switch never skips or doubles a day. */
@@ -72,5 +74,12 @@ export type ChargeOutcome =
   | {
       status: 'skipped';
       reason:
-        'paused' | 'missing' | 'inactive' | 'linked' | 'charging-off' | 'not-started' | 'not-due';
+        | 'paused'
+        | 'missing'
+        | 'inactive'
+        | 'linked'
+        | 'charging-off'
+        | 'not-started'
+        | 'not-due'
+        | 'bad-rate';
     };

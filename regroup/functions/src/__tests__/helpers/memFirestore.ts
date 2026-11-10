@@ -42,9 +42,9 @@ export const mem = {
     store.set(path, { data: clone(data), createTimeMs: clock, updateTimeMs: clock });
   },
   /** Seed with a given server createTime (epoch ms), e.g. "created 10 minutes ago". */
-  seedAt(path: string, data: Data, createTimeMs: number): void {
+  seedAt(path: string, data: Data, createTimeMs: number, updateTimeMs?: number): void {
     clock += 1000;
-    store.set(path, { data: clone(data), createTimeMs, updateTimeMs: clock });
+    store.set(path, { data: clone(data), createTimeMs, updateTimeMs: updateTimeMs ?? clock });
   },
   get(path: string): Data | undefined {
     const s = store.get(path);

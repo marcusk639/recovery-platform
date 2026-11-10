@@ -21,7 +21,12 @@ const normalEmail = (v: unknown): string => (typeof v === 'string' ? v.trim().to
 const hasNoUserId = (g: Data) => g.userId === undefined || g.userId === null || g.userId === '';
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 
-/** `newGuest` is the record's data when the caller already has it (saves a read). */
+/**
+ * Links in either order: a new invite record finds the intake record (no userId), or
+ * a new intake record, made after the person already signed up, finds the invite
+ * record (with a userId). The rent always moves onto the invite record.
+ * `newGuest` is the new record's data when the caller already has it (saves a read).
+ */
 export async function linkIntakeRecord(
   newGuestId: string,
   newGuest?: Data,
@@ -29,8 +34,9 @@ export async function linkIntakeRecord(
   const fresh = newGuest ?? ((await guestCollection.doc(newGuestId).get()).data() as Data);
   const email = normalEmail(fresh?.email);
   const houseId = typeof fresh?.houseId === 'string' ? fresh.houseId : '';
-  if (!fresh || !email || !houseId || !isPlausibleUid(fresh.userId)) return 'none';
-  const userId = fresh.userId;
+  if (!fresh || !email || !houseId || fresh.rentLinkedTo) return 'none';
+  const newIsInvite = isPlausibleUid(fresh.userId);
+  if (!newIsInvite && !hasNoUserId(fresh)) return 'none';
 
   const inHouse = await guestCollection.where('houseId', '==', houseId).get();
   const matches = inHouse.docs.filter((d) => {
@@ -38,22 +44,32 @@ export async function linkIntakeRecord(
     return (
       d.id !== newGuestId &&
       isActiveGuestDoc(g) &&
-      hasNoUserId(g) &&
+      (newIsInvite ? hasNoUserId(g) : isPlausibleUid(g.userId)) &&
       !g.rentLinkedTo &&
       normalEmail(g.email) === email
     );
   });
   if (matches.length === 0) return 'none';
   if (matches.length > 1) {
-    logger.warn('linkIntakeRecord: more than one intake record matches; none linked', {
+    logger.warn('linkIntakeRecord: more than one record matches; none linked', {
       guestId: newGuestId,
       houseId,
       matches: matches.length,
     });
     return 'ambiguous';
   }
-  const intakeId = matches[0].id;
+  const intakeId = newIsInvite ? matches[0].id : newGuestId;
+  const inviteId = newIsInvite ? newGuestId : matches[0].id;
+  const userId = (newIsInvite ? fresh : (matches[0].data() as Data)).userId as string;
+  return linkRecords(intakeId, inviteId, userId, houseId);
+}
 
+async function linkRecords(
+  intakeId: string,
+  newGuestId: string,
+  userId: string,
+  houseId: string,
+): Promise<'linked' | 'none'> {
   const linked = await ratsFirestore.runTransaction(async (txn) => {
     const newRef = guestCollection.doc(newGuestId);
     const intakeRef = guestCollection.doc(intakeId);
@@ -67,7 +83,13 @@ export async function linkIntakeRecord(
     );
     const target = (newSnap.data() ?? {}) as Data;
     const source = (intakeSnap.data() ?? {}) as Data;
-    if (!newSnap.exists || !intakeSnap.exists || source.rentLinkedTo || !hasNoUserId(source)) {
+    if (
+      !newSnap.exists ||
+      !intakeSnap.exists ||
+      source.rentLinkedTo ||
+      target.rentLinkedTo ||
+      !hasNoUserId(source)
+    ) {
       return false;
     }
     const due = [target.rentDueDate, source.rentDueDate]

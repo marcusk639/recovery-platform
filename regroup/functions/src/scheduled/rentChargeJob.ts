@@ -19,7 +19,10 @@ import { nextChargeDay } from '../rent/chargeRule';
 import { rentSettingsOf } from '../rent/rate';
 import { isActiveGuestDoc } from '../util/guestMembership';
 
-/** A record this new with no account belongs to its create trigger (it links intake first). */
+/**
+ * A record with no account created or changed this recently belongs to the guest-write
+ * trigger: it links an intake record first, and records a move-in's time.
+ */
 const NEW_RECORD_GRACE_MS = 60 * 60 * 1000;
 
 type Data = Record<string, unknown>;
@@ -62,7 +65,11 @@ export async function runRentCharges(now: Date = new Date()): Promise<Counts> {
             chargeFrom: acct.chargeFrom,
             chargedThrough: typeof acct.chargedThrough === 'string' ? acct.chargedThrough : null,
           }) <= today
-        : (guestDoc.createTime?.toMillis() ?? now.getTime()) < now.getTime() - NEW_RECORD_GRACE_MS;
+        : Math.max(
+            guestDoc.createTime?.toMillis() ?? now.getTime(),
+            guestDoc.updateTime?.toMillis() ?? 0,
+          ) <
+          now.getTime() - NEW_RECORD_GRACE_MS;
       if (!due) continue;
       try {
         const outcome = await chargeResident(guestDoc.id, now);

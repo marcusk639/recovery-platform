@@ -90,3 +90,18 @@ it('a reversed week can be charged again after un-pausing', async () => {
   expect(charges()).toEqual(['rentCharges/g1_2026-11-16', 'rentCharges/g1_2026-11-23']);
   expect(owed()).toBe(35000);
 });
+
+it("a linked intake record's charges are reversed on the record the balance moved to", async () => {
+  house();
+  guest({ userId: '', email: 'pat@example.com', moveInDate: '2026-11-18' }, 'gIntake');
+  await chargeResident('gIntake', at('2026-11-18'));
+  guest({ userId: 'u1', email: 'pat@example.com', rentOwed: 0 }, 'gNew');
+  const { linkIntakeRecord } = await import('../../rent/linkIntakeRecord');
+  await linkIntakeRecord('gNew');
+  expect(mem.get('guests/gNew')?.rentOwed).toBe(12500);
+  pause(true);
+  await reverseRentCharges({ houseId: 'H', apply: true });
+  expect(mem.get('guests/gNew')?.rentOwed).toBe(0);
+  expect(mem.get('guests/gIntake')?.rentOwed).toBe(0);
+  expect(mem.get('rentAccounts/gNew')?.chargedThrough).toBe('2026-11-17');
+});

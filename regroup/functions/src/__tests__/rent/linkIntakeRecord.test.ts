@@ -133,3 +133,43 @@ it('an account on the new record is kept and the intake one removed', async () =
   expect(mem.get('rentAccounts/gNew')?.chargedThrough).toBe('2026-11-29');
   expect(mem.get('rentAccounts/gIntake')).toBeUndefined();
 });
+
+describe('intake created after the invite record', () => {
+  it('the new intake record is linked to the existing invite record', async () => {
+    house();
+    invite({ moveInDate: '2026-11-16', rentOwed: 17500 });
+    intake({ rentOwed: 5000 });
+    await expect(linkIntakeRecord('gIntake')).resolves.toBe('linked');
+    expect(doc('gIntake')).toMatchObject({ rentLinkedTo: 'gNew', rentOwed: 0 });
+    expect(doc('gNew').rentOwed).toBe(22500);
+    expect(doc('gNew').moveInDate).toBe('2026-11-16');
+  });
+
+  it('its create event charges the invite record only', async () => {
+    house();
+    invite({ moveInDate: '2026-11-18' });
+    await chargeResident('gNew', at('2026-11-18'));
+    intake({ rentOwed: 0 });
+    const now = at('2026-11-18');
+    await expect(
+      rentOnGuestWrite({
+        guestId: 'gIntake',
+        after: doc('gIntake'),
+        afterCreateTimeMs: now.getTime(),
+        eventTime: now.toISOString(),
+        now,
+      }),
+    ).resolves.toEqual({ status: 'skipped', reason: 'linked' });
+    expect(charges()).toEqual(['rentCharges/gNew_2026-11-18']);
+    expect(doc('gNew').rentOwed).toBe(12500);
+  });
+
+  it('two invite records with the email are ambiguous', async () => {
+    house();
+    guest({ userId: 'u1', email: 'pat@example.com' }, 'a');
+    guest({ userId: 'u2', email: 'pat@example.com' }, 'b');
+    intake();
+    await expect(linkIntakeRecord('gIntake')).resolves.toBe('ambiguous');
+    expect(doc('gIntake').rentLinkedTo).toBeUndefined();
+  });
+});

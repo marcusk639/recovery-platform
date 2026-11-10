@@ -226,8 +226,9 @@ service cloud.firestore {
       // claims after their real record is discharged. A record with no
       // account, or for a plain resident, ranks 0.
       // Rent (functions src/rent/). customRent is a manager-set rate for one
-      // resident: null, or exactly an integer amountCents >= 0 and the schedule
-      // it was set for, so a weekly rate can never be read as monthly.
+      // resident: null, or exactly an integer amountCents from 0 to 1000000
+      // ($10,000, the house price limit) and the schedule it was set for, so a
+      // weekly rate can never be read as monthly.
       // rentLinkedTo is server-only (linkIntakeRecord): it stops rent charging
       // on an intake record whose balance moved to the resident's own record.
       function customRentValid(d) {
@@ -236,6 +237,7 @@ service cloud.firestore {
            d.customRent.keys().hasOnly(['amountCents', 'frequency']) &&
            d.customRent.keys().hasAll(['amountCents', 'frequency']) &&
            d.customRent.amountCents is int && d.customRent.amountCents >= 0 &&
+           d.customRent.amountCents <= 1000000 &&
            d.customRent.frequency in ['weekly', 'monthly']);
       }
 
@@ -364,11 +366,13 @@ service cloud.firestore {
 
       // No one, admin or not, changes the money fields of their own record:
       // a peer leader is an admin of the house and also a resident who owes
-      // rent. Another admin of the house sets them.
+      // rent. Another admin of the house sets them. moveInDate and importedAt
+      // decide the first chargeable day, and rentDueDate when rent is overdue,
+      // so they are money fields too.
       function ownMoneyUnchanged() {
         return !(resource.data.get('userId', '') == request.auth.uid &&
           request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['rentOwed', 'choreFees', 'customRent']));
+            .hasAny(['rentOwed', 'choreFees', 'customRent', 'moveInDate', 'importedAt', 'rentDueDate']));
       }
 
       allow update: if

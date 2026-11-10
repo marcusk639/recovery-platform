@@ -58,13 +58,19 @@ async function reverseOne(chargeId: string, nowMs: number): Promise<number> {
     const charge = await txn.get(chargeRef);
     if (!charge.exists) return 0;
     const c = (charge.data() ?? {}) as Data;
-    const guestId = String(c.guestId);
     const amount = typeof c.amountCents === 'number' ? c.amountCents : 0;
+    // A linked intake record's balance and account moved to its invite record
+    // (rent/linkIntakeRecord), so the reversal applies there.
+    const chargedId = String(c.guestId);
+    const charged = await txn.get(guestCollection.doc(chargedId));
+    const linkedTo = charged.data()?.rentLinkedTo;
+    const guestId = typeof linkedTo === 'string' && linkedTo !== '' ? linkedTo : chargedId;
     const guestRef = guestCollection.doc(guestId);
     const accountRef = rentAccountCollection.doc(guestId);
     const [guest, acct] = await txn.getAll(guestRef, accountRef);
-    if (guest.exists && amount !== 0)
+    if (guest.exists && amount !== 0) {
       txn.update(guestRef, { rentOwed: FieldValue.increment(-amount) });
+    }
     if (acct.exists && acct.data()?.chargedThrough === c.through && typeof c.from === 'string') {
       txn.update(accountRef, { chargedThrough: addDays(c.from, -1), updatedAtMs: nowMs });
     }

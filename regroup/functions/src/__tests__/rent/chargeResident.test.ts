@@ -184,6 +184,17 @@ describe('rates and the due date', () => {
     expect(notify).not.toHaveBeenCalled();
   });
 
+  it('a custom rate above the cap skips the resident with bad-rate', async () => {
+    house();
+    guest({ customRent: { amountCents: 17500000, frequency: 'weekly' } });
+    await expect(chargeResident('g1', at('2026-11-18'))).resolves.toEqual({
+      status: 'skipped',
+      reason: 'bad-rate',
+    });
+    expect(owed()).toBe(0);
+    expect(charges()).toEqual([]);
+  });
+
   it('rentDueDate stays on the oldest unpaid period', async () => {
     house();
     guest({ rentOwed: 5000, rentDueDate: '2026-11-02' });
