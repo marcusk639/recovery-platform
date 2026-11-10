@@ -1,4 +1,5 @@
 import { STAT_MAP } from '../display';
+import type { Stat } from '../../entities/Guest';
 // src/util/__tests__/display.test.ts
 //
 // Unit tests for pure date/time and string helper functions in src/util/display.tsx.
@@ -385,5 +386,21 @@ describe('STAT_MAP activity labels', () => {
 
   it('keeps the changed label for a chore change', () => {
     expect(STAT_MAP.chore_changed.activityLabel).toBe('Chore changed');
+  });
+});
+
+// A Record<Stat, true> fails the type check if a Stat is added and not listed.
+const EVERY_STAT: Record<Stat, true> = {
+  meeting: true,
+  medication: true,
+  metPrimarySupporter: true,
+  hoursWorked: true,
+  choreCompleted: true,
+};
+
+describe('STAT_MAP covers every Stat (#194)', () => {
+  it.each(Object.keys(EVERY_STAT) as Stat[])('has a label for %s', stat => {
+    expect(STAT_MAP[stat]?.label).toEqual(expect.any(String));
+    expect(STAT_MAP[stat].label.length).toBeGreaterThan(0);
   });
 });
