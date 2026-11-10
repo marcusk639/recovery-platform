@@ -81,6 +81,14 @@ jest.mock('../../../state/queries', () => ({
   useGuests: (...args: any[]) => mockUseGuests(...args),
 }));
 
+// This week's per-resident stats feed the health score (#208).
+const mockUseHouseWeekStats = jest.fn(
+  (..._args: any[]): any => ({ stats: {}, isLoading: false, isError: false }),
+);
+jest.mock('../../../state/queries/activityQueries', () => ({
+  useHouseWeekStats: (...args: any[]) => mockUseHouseWeekStats(...args),
+}));
+
 // ─── Component stubs ──────────────────────────────────────────────────────────
 jest.mock('../../../components/rats-scroll-view', () => {
   const { ScrollView } = require('react-native');
@@ -558,6 +566,47 @@ describe('HouseSummary', () => {
       mockCanGranted = false;
       const { queryByTestId } = renderScreen();
       expect(queryByTestId('manage-guests-button')).toBeNull();
+    });
+  });
+
+  // ─── Health score (#208) ─────────────────────────────────────────────────────
+  describe('health score', () => {
+    const ruledHouse = { ...BASE_HOUSE, phases: { 1: { rules: { meetings: 2 } } } };
+    const residents = {
+      g1: { id: 'g1', houseId: 'house-1', phase: 1, status: 'active' },
+      g2: { id: 'g2', houseId: 'house-1', phase: 1, status: 'discharged' },
+    };
+
+    beforeEach(() => {
+      mockUseGuests.mockReturnValue({ data: residents, isLoading: false, error: null });
+    });
+
+    it("shows the score from this week's summaries, for current residents only", () => {
+      mockUseHouseWeekStats.mockReturnValue({
+        stats: {
+          g1: {
+            meetingsAttended: 2,
+            primarySupporterMet: 1,
+            choresCompleted: 0,
+            hoursWorked: 0,
+            medicationTaken: 0,
+          },
+        },
+        isLoading: false,
+        isError: false,
+      });
+      const { getByTestId } = renderScreen({ house: ruledHouse });
+      expect(getByTestId('week-stat-summary').props.accessibilityValue).toEqual({
+        text: '100',
+      });
+      expect(mockUseHouseWeekStats.mock.calls[0][0]).toEqual(['g1']);
+    });
+
+    it('shows a loading indicator, not 0%, while the summaries load', () => {
+      mockUseHouseWeekStats.mockReturnValue({ stats: {}, isLoading: true, isError: false });
+      const { queryByTestId, getByTestId } = renderScreen({ house: ruledHouse });
+      expect(queryByTestId('week-stat-summary')).toBeNull();
+      expect(getByTestId('health-score-loading')).toBeTruthy();
     });
   });
 });
