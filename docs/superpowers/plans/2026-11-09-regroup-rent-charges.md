@@ -1091,6 +1091,8 @@ Run: `cd regroup/mobile && npx jest src/util/__tests__/rentRate.test.ts src/serv
 
 **Intake sends `createdBy`.** The server carries an intake record's custom rate and move-in date onto the resident's own record only when `createdBy` names the manager who made it (the rules bind it to the caller). `IntakeFormScreen` sets only `intakeCompletedBy` today, so it should also set `createdBy`.
 
+**The intake form takes the real move-in date** (owner decision 2026-11-09). A date field defaults to today, and the manager can set the day the resident actually moved in. It is saved as a calendar date in the house's zone. Today the form always writes the current time, so a long-time resident entered late gets a prorated first charge.
+
 **A timezone is required** before charging can be turned on. A house with none is charged on New York dates, so a Los Angeles house's Sunday-night intake would read as Monday.
 
 **Oxford houses** never show the Rent section. Their dues are the equal expense share in the Oxford tools, and the rules refuse a weekly or monthly schedule there.
@@ -1181,6 +1183,8 @@ Run on the sweep simulator `AC9BBDC3-EEF9-4C60-9C14-B847E2403920` against the em
 ## Handoff: decided here, and left out
 
 **Rulings in this plan (owner can overrule):**
+
+- **Turning charging off and on across a period start** (for example off Sunday night, back on Tuesday) skips the rest of that period for residents already charged. The owner accepted this on 2026-11-09.
 
 - **"Next period" means the period after the one containing the turn-on day.** That holds even when turning on on a Monday or the 1st; spec §2 is read literally.
 - **"Existing at turn-on" is decided by when the record joined the house** (its `createTime`, or the move time), compared with the stamp's `startedAtMs`. It is not decided by `moveInDate`. So a backdated move-in on a new record is still charged back to the start (spec §4.4).
