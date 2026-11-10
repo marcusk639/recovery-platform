@@ -8,8 +8,8 @@
  *   MEETING_GUIDE_API_KEY=... npm run sync:meetings
  *   MEETING_GUIDE_API_KEY=... npm run sync:meetings -- --apply
  *
- * The key goes in exactly as the API expects it in a URL. Don't decode or re-encode it.
- * See lib/meetings/meetingSweep.ts for the API limits this is built around.
+ * The key can also come from recovery-api/.env. Set it as issued or already URL-encoded:
+ * readApiKey accepts either. See lib/meetings/meetingSweep.ts for the API limits this is built around.
  */
 import { applicationDefault, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -20,6 +20,8 @@ import {
   type MeetingSyncResult,
 } from '../lib/meetings/meetingSync';
 import { usBaseCells } from '../lib/meetings/usLandCells';
+import dotenv from 'dotenv';
+import path from 'path';
 
 const DEST_PROJECT = 'recovery-platform-e6cb3';
 const PROGRESS_EVERY_CELLS = 500;
@@ -37,7 +39,9 @@ export function readApiKey(env: Record<string, string | undefined>): string {
   if (!key) {
     throw new MeetingGuideAccessError('MEETING_GUIDE_API_KEY is not set. Set it and run again.');
   }
-  return key;
+  // The issued key contains a literal "%3f" and must reach the URL encoded once (%253f).
+  // "%25" means it is already URL-ready and must not be encoded again.
+  return key.includes('%25') ? key : encodeURIComponent(key);
 }
 
 /** Prints the failure and returns the exit code. The key itself is never printed. */
@@ -115,6 +119,8 @@ export function describeResult(result: MeetingSyncResult): string[] {
 }
 
 async function main(): Promise<void> {
+  // Resolve from this file, not cwd: src/scripts/ and lib/scripts/ both sit two levels below recovery-api/.
+  dotenv.config({ path: path.resolve(__dirname, '../../.env'), quiet: true });
   const { apply } = parseSyncArgs(process.argv.slice(2));
   const key = readApiKey(process.env);
   const db = getFirestore(

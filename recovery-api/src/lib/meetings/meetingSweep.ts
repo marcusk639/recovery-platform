@@ -169,7 +169,7 @@ export async function sweepMeetingGuide(options: SweepOptions): Promise<SweepRes
     const { lat, lng } = searchPoint(cell);
     const url =
       `https://api.meetingguide.org/app/v2/request?latitude=${lat}&longitude=${lng}` +
-      `&radius=${radiusKm}&language=en&search=&key=${key}`;
+      `&radius=${radiusKm}&language=en&key=${key}`;
     let backoff = false;
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       if (backoff) await sleep(1000 * 2 ** (attempt - 1));
