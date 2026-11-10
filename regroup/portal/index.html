@@ -18,6 +18,10 @@
         font-family: "Quicksand-Bold";
         src: local("Helvetica Neue"), local("Segoe UI"), local("Arial");
       }
+      /* Staff don't log or correct a resident's activities (spec, section 5). The
+         phone shows staff these two buttons, and the rules would allow the write. */
+      [data-testid="add-hours-button"],
+      [data-testid="update-medication-button"] { display: none !important; }
       html, body, #root { height: 100%; margin: 0; }
       #root { display: flex; }
     </style>
