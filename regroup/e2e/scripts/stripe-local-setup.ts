@@ -19,8 +19,13 @@ import { assertLocalSandbox, ensureCatalog } from '../src/stripeSandbox';
 const connectFile = path.join(CONFIG_DIR, LOCAL_CONNECT_ACCOUNT_FILE);
 
 async function ensureConnectAccount(stripe: Stripe): Promise<string> {
-  if (fs.existsSync(connectFile)) return fs.readFileSync(connectFile, 'utf8').trim();
-  // Stripe's documented test values verify immediately. No real person or business.
+  if (fs.existsSync(connectFile)) {
+    const cached = fs.readFileSync(connectFile, 'utf8').trim();
+    if (!/^acct_[A-Za-z0-9]+$/.test(cached)) throw new Error(`${connectFile} doesn't hold an account id; delete it to make a new account`);
+    return cached;
+  }
+  // Stripe's documented test values, which usually verify at once (main prints the flags).
+  // No real person or business.
   const account = await stripe.accounts.create({
     type: 'custom',
     country: 'US',
@@ -59,11 +64,17 @@ async function main(): Promise<void> {
   const accountId = await ensureConnectAccount(stripe);
   const account = await stripe.accounts.retrieve(accountId);
   console.log(`connect account ${accountId}: charges ${account.charges_enabled}, payouts ${account.payouts_enabled}`);
+  if (!account.charges_enabled || !account.payouts_enabled) {
+    throw new Error(`connect account ${accountId} can't take payments yet; wait a few minutes and run again`);
+  }
   const functionsDir = path.resolve(__dirname, '..', '..', 'functions');
   console.log(`wrote ${writePaymentSuiteEnvFile(functionsDir, prices)}`);
 }
 
 main().catch((err) => {
-  console.error((err as Error).message);
+  // Stripe's type, code and request id help trace a failure; Stripe masks keys in its messages.
+  const { type, code, requestId } = err as { type?: string; code?: string; requestId?: string };
+  const detail = [type, code, requestId && `request ${requestId}`].filter(Boolean).join(', ');
+  console.error(`${(err as Error).message}${detail ? ` (${detail})` : ''}`);
   process.exit(1);
 });
