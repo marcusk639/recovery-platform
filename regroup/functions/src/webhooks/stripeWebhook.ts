@@ -17,7 +17,7 @@ import {
 let _stripe: Stripe | undefined;
 const getStripe = (): Stripe => (_stripe ??= createStripeClient());
 import { onRequest } from "firebase-functions/v2/https";
-import { restoreRefundedRent } from "./refundRestore";
+import { rentDecrementCents, restoreRefundedRent } from "./refundRestore";
 import { logger } from "firebase-functions";
 import {
   SENDGRID_API_KEY,
@@ -576,14 +576,22 @@ async function handlePaymentIntentSucceeded(
       if (paymentSnap.exists && paymentSnap.get("rentApplied") === true) {
         return false;
       }
-      txn.update(guestRef, {
-        rentOwed: admin.firestore.FieldValue.increment(-amountCents),
-      });
+      // Net out a refund that was handled before this payment (#198).
+      const { decrement, alreadyRestored } = rentDecrementCents(
+        amountCents,
+        paymentSnap.exists ? paymentSnap.get("refundedAmountCents") : 0,
+      );
+      if (decrement > 0) {
+        txn.update(guestRef, {
+          rentOwed: admin.firestore.FieldValue.increment(-decrement),
+        });
+      }
       txn.set(
         paymentRef,
         {
           rentApplied: true,
           rentAppliedAmountCents: amountCents,
+          ...(alreadyRestored > 0 ? { refundRestoredCents: alreadyRestored } : {}),
           ...(dueDate ? { dueDate } : {}),
         },
         { merge: true },
@@ -850,14 +858,14 @@ async function handleChargeRefunded(
     refundedAmountCents,
   });
 
-  // A refunded rent payment goes back on the resident's balance (#198). The
-  // restore is idempotent, so a retry of this event after a later failure is
-  // safe.
-  await restoreRefundedRent(admin.firestore(), paymentIntentId, refundedAmountCents);
-
   // A refund is paid from the platform balance; reverse the house's share of
   // the transfer so the house doesn't keep refunded rent.
   await reverseTransfersForRefunds(stripeClient, charge.id, ctx);
+
+  // Then put a refunded rent payment back on the resident's balance (#198).
+  // After the reversal, so a failure here can't hold it up; both are
+  // idempotent, so a retry of this event repeats neither.
+  await restoreRefundedRent(admin.firestore(), paymentIntentId, refundedAmountCents);
 }
 
 // ---------------------------------------------------------------------------

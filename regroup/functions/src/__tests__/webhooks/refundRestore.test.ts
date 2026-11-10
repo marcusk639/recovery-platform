@@ -7,7 +7,7 @@ jest.mock("firebase-functions", () => ({
   logger: { info: jest.fn(), warn: jest.fn() },
 }));
 
-import { restoreRefundedRent } from "../../webhooks/refundRestore";
+import { rentDecrementCents, restoreRefundedRent } from "../../webhooks/refundRestore";
 
 type Doc = Record<string, any>;
 
@@ -88,5 +88,32 @@ describe("restoreRefundedRent (#198)", () => {
     const docs: Record<string, Doc> = { "guests/g1": { rentOwed: 0 } };
     expect(await restoreRefundedRent(fakeDb(docs), "pi_1", 15000)).toBe(0);
     expect(docs["guests/g1"].rentOwed).toBe(0);
+  });
+});
+
+describe("restoreRefundedRent when the resident's record is gone (review)", () => {
+  it("skips it without throwing, so the event can finish", async () => {
+    const docs = rentPayment();
+    delete docs["guests/g1"];
+    expect(await restoreRefundedRent(fakeDb(docs), "pi_1", 15000)).toBe(0);
+    expect(docs["guests/g1"]).toBeUndefined();
+  });
+});
+
+describe("rentDecrementCents: a refund handled before the payment (review)", () => {
+  it("takes the whole payment off when nothing was refunded", () => {
+    expect(rentDecrementCents(15000, undefined)).toEqual({ decrement: 15000, alreadyRestored: 0 });
+  });
+
+  it("takes off only what wasn't already refunded", () => {
+    expect(rentDecrementCents(15000, 5000)).toEqual({ decrement: 10000, alreadyRestored: 5000 });
+  });
+
+  it("takes nothing off a payment refunded in full", () => {
+    expect(rentDecrementCents(15000, 20000)).toEqual({ decrement: 0, alreadyRestored: 15000 });
+  });
+
+  it("ignores a refund figure that isn't a number", () => {
+    expect(rentDecrementCents(15000, "x")).toEqual({ decrement: 15000, alreadyRestored: 0 });
   });
 });

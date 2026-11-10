@@ -22,6 +22,10 @@ export async function restoreRefundedRent(
     if (!payment.exists || payment.get("rentApplied") !== true) return 0;
     const guestId = payment.get("guestId");
     if (typeof guestId !== "string" || !guestId) return 0;
+    const guestRef = db.collection("guests").doc(guestId);
+    // A removed resident has no balance to restore. Throwing here would fail
+    // the event on every retry (review finding).
+    if (!(await txn.get(guestRef)).exists) return 0;
 
     const applied = Number(payment.get("rentAppliedAmountCents") ?? payment.get("amount") ?? 0);
     const target = Math.min(amountRefundedCents, applied);
@@ -29,7 +33,7 @@ export async function restoreRefundedRent(
     const delta = target - already;
     if (!(delta > 0)) return 0;
 
-    txn.update(db.collection("guests").doc(guestId), {
+    txn.update(guestRef, {
       rentOwed: admin.firestore.FieldValue.increment(delta),
     });
     txn.set(paymentRef, { refundRestoredCents: target }, { merge: true });
@@ -43,4 +47,21 @@ export async function restoreRefundedRent(
     });
   }
   return restored;
+}
+
+/**
+ * How much a succeeded rent payment takes off the balance. A refund handled
+ * before the payment (Stripe doesn't promise order, and a failed delivery
+ * retries later) is netted out here, and recorded as already restored, so
+ * the refund isn't lost and a later refund event adds back only the rest.
+ */
+export function rentDecrementCents(
+  amountCents: number,
+  refundedAmountCents: unknown,
+): { decrement: number; alreadyRestored: number } {
+  const refunded = Number(refundedAmountCents);
+  const alreadyRestored = Number.isFinite(refunded)
+    ? Math.min(Math.max(0, refunded), amountCents)
+    : 0;
+  return { decrement: amountCents - alreadyRestored, alreadyRestored };
 }
