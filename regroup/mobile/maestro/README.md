@@ -62,3 +62,18 @@ Payments (`seed/docs.js`): resident A has card payments of $22.22, dated 30 days
 The meeting finder searches recovery-api's directory. `scripts/test-prep.sh` starts a local recovery-api emulator (functions :5002, firestore :8082, project `demo-recovery-api`) and seeds fake meetings from `maestro/scripts/seed/directory.js`, near Austin and Cupertino, for every provider and day. Regroup's emulator reaches it through `RECOVERY_API_BASE_URL` in `regroup/e2e/launch-config.json` and a made-up shared `RECOVERY_PLATFORM_API_KEY`. Test runs never touch the real directory. Run `recovery-api`'s `npm ci` once per checkout, and set a simulator's location with `xcrun simctl location <udid> set 30.2672,-97.7431`.
 
 Staging and production read the same `RECOVERY_API_BASE_URL` setting, pointing at the deployed directory on `recovery-platform-e6cb3`, and need `RECOVERY_PLATFORM_API_KEY` in their Secret Manager.
+
+## Staging operator for manual testing
+
+For testing by hand on a phone, `regroup/e2e` makes a new operator on staging (`regroup-e2e`) and subscribes them through Stripe for real, with a test card. Stripe there is in test mode, so it's a 7-day trial and no money moves.
+
+```sh
+cd regroup/e2e && npm ci
+npm run e2e:staging-operator -- --house-type traditional --tier professional            # monthly
+npm run e2e:staging-operator -- --house-type oxford --tier plus --interval year
+```
+
+- **Plans:** `traditional` with `starter`, `professional` or `enterprise`, and `oxford` with `standard` or `plus`. Oxford `network` isn't for sale, so it's refused.
+- **What it does:** it signs up a fresh account each run, then writes its user doc the way the web's operator signup does. Then it calls `createOperatorSubscription` with `pm_card_visa`, and checks that the account can create houses. It prints the email and password, then you sign in on the **E2EStaging** build (`com.rats.dev.e2e.stg`), which lands on OrgSetup. It makes no house or residents.
+- **Config:** it needs `~/.config/regroup-e2e/firebase-web-config.json`. It refuses any project other than `regroup-e2e`, and it holds no Stripe key.
+- **Side effect:** each run makes staging email admin@regroup-app.com about a new subscription. Old accounts stay on staging.
