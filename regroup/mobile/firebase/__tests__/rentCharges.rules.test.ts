@@ -212,6 +212,22 @@ describe('guests: rates and balances', () => {
     await assertFails(updateDoc(doc(as(OWNER), 'guests/gResident'), { rentLinkedTo: 'gOther' }));
     await assertFails(updateDoc(doc(as(ADMIN), 'guests/gResident'), { rentLinkedTo: 'gOther' }));
   });
+  it('a staff-created record must name the caller as intakeCompletedBy', async () => {
+    await assertFails(
+      setDoc(doc(as(ADMIN), 'guests/gIntake2'), {
+        houseId: HOUSE,
+        status: 'active',
+        intakeCompletedBy: 'someoneElse',
+      }),
+    );
+    await assertSucceeds(
+      setDoc(doc(as(ADMIN), 'guests/gIntake3'), {
+        houseId: HOUSE,
+        status: 'active',
+        intakeCompletedBy: ADMIN,
+      }),
+    );
+  });
   it('an admin-created record may not carry rentLinkedTo', () =>
     assertFails(
       setDoc(doc(as(ADMIN), 'guests/gIntake'), {

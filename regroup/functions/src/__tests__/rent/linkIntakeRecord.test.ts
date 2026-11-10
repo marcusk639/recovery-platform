@@ -26,7 +26,7 @@ beforeEach(() => mem.reset());
 
 it('an intake record with $125 owed and the same email (different case) is linked', async () => {
   house();
-  intake({ rentDueDate: '2026-11-18', choreFees: 500 });
+  intake({ rentDueDate: '2026-11-18', choreFees: 500, createdBy: 'mgr' });
   mem.seed('rentAccounts/gIntake', {
     ...{ guestId: 'gIntake', houseId: 'H', anchoredTo: '2026-11-11' },
     chargeFrom: '2026-11-18',
@@ -101,12 +101,27 @@ it('a custom rate a manager set on the intake record moves to the invite record'
   house();
   intake({
     rentOwed: 0,
-    intakeCompletedBy: 'mgr',
+    createdBy: 'mgr',
     customRent: { amountCents: 0, frequency: 'monthly' },
   });
   invite();
   await linkIntakeRecord('gNew');
   expect(doc('gNew').customRent).toEqual({ amountCents: 0, frequency: 'monthly' });
+});
+
+it('a custom rate or move-in date moves only with a creator the rules confirm', async () => {
+  house();
+  intake({
+    rentOwed: 5000,
+    intakeCompletedBy: 'mgr',
+    moveInDate: '2026-10-01',
+    customRent: { amountCents: 0, frequency: 'monthly' },
+  });
+  invite();
+  await expect(linkIntakeRecord('gNew')).resolves.toBe('linked');
+  expect(doc('gNew').rentOwed).toBe(5000);
+  expect(doc('gNew').customRent).toBeUndefined();
+  expect(doc('gNew').moveInDate).toBeUndefined();
 });
 
 it('a custom rate is not copied when the intake record has no known creator', async () => {

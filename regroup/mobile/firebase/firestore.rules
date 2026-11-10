@@ -208,13 +208,15 @@ service cloud.firestore {
           d.get('jobs', []).size() == 0;
       }
 
-      // createdBy, when sent, is the caller (builds before this one send
-      // none; the server then treats the doc as legacy). It is how the server
+      // createdBy, updatedBy and intakeCompletedBy (written by intake), when sent,
+      // are the caller. Builds before this one send no createdBy; the server then
+      // treats the doc as legacy. createdBy is how the server
       // tells a self-created doc (createdBy == userId) from a staff-created
       // one when it binds a ticket to one doc (util/admission).
       function createdByCaller(d) {
         return d.get('createdBy', request.auth.uid) == request.auth.uid &&
-          d.get('updatedBy', request.auth.uid) == request.auth.uid;
+          d.get('updatedBy', request.auth.uid) == request.auth.uid &&
+          d.get('intakeCompletedBy', request.auth.uid) == request.auth.uid;
       }
 
       // Staff create never links the doc to the creator (no self-link: a

@@ -59,6 +59,16 @@ it('a retried event stamps the time the change happened, not the retry', async (
   expect(state()).toMatchObject({ startDate: '2026-11-09', startedAtMs: Date.parse(changedAt) });
 });
 
+it('a late event that did not itself turn charging on stamps the current time', async () => {
+  // A timezone edit made while charging was off, delivered after charging came on.
+  mem.seed(`houses/${H}`, on);
+  await run({
+    ...event(off, { ...off, timezone: 'America/Denver' }),
+    time: '2026-11-01T12:00:00.000Z',
+  });
+  expect(state()).toMatchObject({ startDate: '2026-11-09', startedAtMs: NOW.getTime() });
+});
+
 it('the trigger never writes the house doc', async () => {
   mem.seed(`houses/${H}`, on);
   await run(event(off, on));

@@ -95,9 +95,11 @@ async function linkRecords(
     ) {
       return false;
     }
-    // Who made the intake record. A record the person made for themselves (a peer
-    // leader is an admin) never links: it could carry a credit onto their own balance.
-    const creator = str(source.createdBy) ?? str(source.intakeCompletedBy);
+    // Who made the intake record: only createdBy counts, because the rules bind it to
+    // the caller. A record the person made for themselves never links. With no
+    // confirmed creator, only amounts owed move (they can only raise a balance),
+    // never a rate or a move-in date.
+    const creator = str(source.createdBy);
     if (creator === userId) {
       selfMade = true;
       return false;
@@ -115,7 +117,9 @@ async function linkRecords(
     txn.update(newRef, {
       rentOwed: FieldValue.increment(owed),
       choreFees: FieldValue.increment(fees),
-      ...(!target.moveInDate && source.moveInDate ? { moveInDate: source.moveInDate } : {}),
+      ...(creator && !target.moveInDate && source.moveInDate
+        ? { moveInDate: source.moveInDate }
+        : {}),
       ...(due && owed > 0 ? { rentDueDate: due } : {}),
       ...(rate ? { customRent: rate } : {}),
     });
