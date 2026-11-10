@@ -10,18 +10,25 @@ function isFrequency(v: unknown): v is RentFrequency {
 }
 
 /**
- * Null means charging is off: no weekly/monthly schedule, or that schedule's price is
- * not a finite number in (0, MAX_HOUSE_PRICE_DOLLARS]. A string or a cents-sized value
- * is off, never charged.
+ * Null means charging is off: an Oxford house, no weekly/monthly schedule, or that
+ * schedule's price is not a finite number in (0, MAX_HOUSE_PRICE_DOLLARS]. A string or
+ * a cents-sized value is off, never charged. The start stamp comes from the house's
+ * server-only state doc (rentHouseStates/{houseId}).
  */
-export function rentSettingsOf(house: Record<string, unknown>): RentSettings | null {
+export function rentSettingsOf(
+  house: Record<string, unknown>,
+  state?: Record<string, unknown> | null,
+): RentSettings | null {
+  // Oxford houses pay the equal expense share their members set (ees-records), never
+  // a manager's price, so price-based charging is always off there.
+  if (house.houseType === 'oxford') return null;
   const frequency = house.rentFrequency;
   if (!isFrequency(frequency)) return null;
   const raw = frequency === 'weekly' ? house.weeklyRent : house.monthlyRent;
   if (typeof raw !== 'number' || !Number.isFinite(raw)) return null;
   if (raw <= 0 || raw > MAX_HOUSE_PRICE_DOLLARS) return null;
-  const startDate = house.rentChargesStartDate;
-  const startedAtMs = house.rentChargesStartedAtMs;
+  const startDate = state?.startDate;
+  const startedAtMs = state?.startedAtMs;
   return {
     frequency,
     priceCents: dollarsToCents(asDollars(raw)),

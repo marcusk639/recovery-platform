@@ -63,9 +63,7 @@ export class House extends BaseEntity {
   phoneNumber: string = "";
   // "both" (the default) means rent charging is off; see rent/rate.ts.
   rentFrequency: "weekly" | "monthly" | "both" = "both";
-  // Server-owned (houseRentSettings trigger): when charging last turned on.
-  rentChargesStartDate?: string | null;
-  rentChargesStartedAtMs?: number | null;
+  // When charging turned on is server-only state: rentHouseStates/{houseId}.
   pendingAdminInvites?: string[] = [];
   pendingGuestInvites?: string[] = [];
   isDemoHouse: boolean = false;

@@ -6,17 +6,29 @@ export const MAX = Number.MAX_SAFE_INTEGER;
 // Noon in New York on the given date.
 export const at = (date: string) => new Date(`${date}T17:00:00Z`);
 
-export const house = (o: Record<string, unknown> = {}, id = H) =>
+// The charging-start stamp is server-only state (rentHouseStates/{houseId}); the
+// rentChargesStartDate / rentChargesStartedAtMs overrides here go there.
+export const house = (o: Record<string, unknown> = {}, id = H) => {
+  const {
+    rentChargesStartDate = '2026-11-11',
+    rentChargesStartedAtMs = 0,
+    ...rest
+  } = o as Record<string, unknown>;
   mem.seed(`houses/${id}`, {
     rentFrequency: 'weekly',
     weeklyRent: 175,
     monthlyRent: 800,
     timezone: 'America/New_York',
-    rentChargesStartDate: '2026-11-11',
-    rentChargesStartedAtMs: 0,
     stripeAccountId: 'acct_1',
-    ...o,
+    ...rest,
   });
+  mem.seed(`rentHouseStates/${id}`, {
+    startDate: rentChargesStartDate,
+    startedAtMs: rentChargesStartedAtMs,
+  });
+};
+export const restamp = (startDate: string | null, startedAtMs: number | null, id = H) =>
+  mem.seed(`rentHouseStates/${id}`, { startDate, startedAtMs });
 export const guest = (o: Record<string, unknown> = {}, id = 'g1') =>
   mem.seed(`guests/${id}`, {
     houseId: H,

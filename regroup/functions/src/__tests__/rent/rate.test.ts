@@ -32,14 +32,24 @@ describe('rentSettingsOf', () => {
     expect(rentSettingsOf(house({ weeklyRent: 10000 }))?.priceCents).toBe(1000000));
   it('an empty timezone falls back to New York', () =>
     expect(rentSettingsOf(house({ timezone: '' }))?.timeZone).toBe('America/New_York'));
-  it('carries the start stamp', () =>
+  it('carries the start stamp from the server-only state', () =>
+    expect(rentSettingsOf(house(), { startDate: '2026-11-09', startedAtMs: 5 })).toMatchObject({
+      startDate: '2026-11-09',
+      startedAtMs: 5,
+    }));
+  it('a malformed stamp is null', () =>
+    expect(rentSettingsOf(house(), { startDate: 'soon', startedAtMs: '5' })).toMatchObject({
+      startDate: null,
+      startedAtMs: null,
+    }));
+  it('stamp fields on the house doc itself are ignored', () =>
     expect(
       rentSettingsOf(house({ rentChargesStartDate: '2026-11-09', rentChargesStartedAtMs: 5 })),
-    ).toMatchObject({ startDate: '2026-11-09', startedAtMs: 5 }));
-  it('a malformed stamp is null', () =>
-    expect(
-      rentSettingsOf(house({ rentChargesStartDate: 'soon', rentChargesStartedAtMs: '5' })),
     ).toMatchObject({ startDate: null, startedAtMs: null }));
+  it('an Oxford house is off whatever its schedule and price', () =>
+    expect(
+      rentSettingsOf(house({ houseType: 'oxford' }), { startDate: '2026-11-09', startedAtMs: 5 }),
+    ).toBeNull());
 });
 
 describe('residentRate', () => {
@@ -52,9 +62,9 @@ describe('residentRate', () => {
       source: 'custom',
     }));
   it('zero is a valid custom rate', () =>
-    expect(residentRate({ customRent: { amountCents: 0, frequency: 'weekly' } }, s)?.rateCents).toBe(
-      0,
-    ));
+    expect(
+      residentRate({ customRent: { amountCents: 0, frequency: 'weekly' } }, s)?.rateCents,
+    ).toBe(0));
   it('a custom rate for the other schedule is ignored', () =>
     expect(
       residentRate({ customRent: { amountCents: 60000, frequency: 'monthly' } }, s)?.source,

@@ -40,6 +40,8 @@ export const houseRolesCollection = ratsFirestore.collection('house-roles');
 // is one charge record; config/rentCharges.paused stops the charge job.
 export const rentAccountCollection = ratsFirestore.collection('rentAccounts');
 export const rentChargeCollection = ratsFirestore.collection('rentCharges');
+// rentHouseStates/{houseId}: when charging turned on (houseRentSettings trigger).
+export const rentHouseStateCollection = ratsFirestore.collection('rentHouseStates');
 // Reversed charges, moved here by scripts/reverseRentCharges (server-only).
 export const rentChargeReversalCollection = ratsFirestore.collection('rentChargeReversals');
 export const configCollection = ratsFirestore.collection('config');

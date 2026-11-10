@@ -1084,6 +1084,12 @@ Run: `cd regroup/mobile && npx jest src/util/__tests__/rentRate.test.ts src/serv
 
 ### Task 13: Rent section in House Settings and the setup wizard
 
+**Hard requirement (domain review, 2026-11-09):** Task 13 ships in the same release as Task 12's `importedAt` marker, or after it, never before. Without the marker, the server falls back to treating anyone entered after charging began with an earlier move-in date as already resident, but an import with no move-in column still looks like a new move-in.
+
+**Write only the fields that change (domain review, I3).** The app writes whole house objects back from memory (`deleteGuest`, `customizePhase`, `updateDispute`). Once admins can set prices, a stale copy undoes a price or schedule change. This task changes those paths to field-level `update`s. It saves the schedule and the price in one write, so charging never turns off between them. The resident edit form (`guestFormValues.ts`, `mergeGuestStats`) also stops writing `rentOwed`, `choreFees`, `customRent` and `rentDueDate` back. Task 14 owns the balance edit, with the confirmation step from spec §4.6.
+
+**Oxford houses** never show the Rent section. Their dues are the equal expense share in the Oxford tools, and the rules refuse a weekly or monthly schedule there.
+
 **Files:**
 
 - Modify: the House Settings screen under `regroup/mobile/src/screens/HouseSettings/`.

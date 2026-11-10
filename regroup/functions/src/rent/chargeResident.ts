@@ -14,12 +14,13 @@ import {
   rentAccountCollection,
   rentChargeCollection,
   rentConfigRef,
+  rentHouseStateCollection,
 } from '../api/firestore';
 import { isActiveGuestDoc, isPlausibleUid } from '../util/guestMembership';
 import { addCents, asCents, Cents, formatCents } from '../util/money';
 import { sendNotification } from '../util/notifications';
-import { chargeFromFor, planCharges } from './chargeRule';
-import { maxDate, toLocalDate } from './period';
+import { anchorFor } from './anchor';
+import { planCharges } from './chargeRule';
 import { rentSettingsOf, residentRate } from './rate';
 import { ChargeOutcome, RentAccount } from './types';
 
@@ -52,7 +53,10 @@ export async function chargeResident(guestId: string, now: Date): Promise<Charge
     if (!houseId) return skipped('charging-off');
 
     const houseSnap = await txn.get(houseCollection.doc(houseId));
-    const settings = houseSnap.exists ? rentSettingsOf((houseSnap.data() ?? {}) as Data) : null;
+    const stateSnap = await txn.get(rentHouseStateCollection.doc(houseId));
+    const settings = houseSnap.exists
+      ? rentSettingsOf((houseSnap.data() ?? {}) as Data, stateSnap.data() as Data | undefined)
+      : null;
     if (!settings) return skipped('charging-off');
     const { startDate, startedAtMs, timeZone, frequency } = settings;
     if (startDate === null || startedAtMs === null) return skipped('not-started');
@@ -61,56 +65,18 @@ export async function chargeResident(guestId: string, now: Date): Promise<Charge
     const accountSnap = await txn.get(accountRef);
     const account = accountSnap.exists ? (accountSnap.data() as Partial<RentAccount>) : null;
 
-    const createdMs = guestSnap.createTime?.toMillis() ?? now.getTime();
     const today = localDateString(now, timeZone);
-    // The guest-write trigger records moves and returns outside this transaction, so
-    // the hourly job can get here first. A move it hasn't recorded is a join today;
-    // a return it hasn't recorded (departed after the last re-activation) starts
-    // today. Neither is ever back-charged for the time before.
-    const unrecordedMove = !!str(account?.houseId) && account?.houseId !== houseId;
-    const away = str(account?.inactiveSince);
-    const back = str(account?.reactivatedOn);
-    const reactivatedOn = away && !(back && back >= away) ? today : back;
-    let houseJoinedAtMs: number;
-    let joinedOn: string | null;
-    let chargeFrom: string;
-    const anchor =
-      !account || unrecordedMove || account.anchoredTo !== startDate || !str(account.chargeFrom);
-    if (unrecordedMove) {
-      houseJoinedAtMs = now.getTime();
-      joinedOn = today;
-      chargeFrom = chargeFromFor({
-        startDate,
-        startedAtMs,
-        houseJoinedAtMs,
-        joinDate: joinedOn,
-        importedOn: null,
-        frequency,
-      });
-    } else if (anchor) {
-      houseJoinedAtMs =
-        account?.houseId === houseId && typeof account.houseJoinedAtMs === 'number'
-          ? account.houseJoinedAtMs
-          : createdMs;
-      joinedOn =
-        str(account?.joinedOn) ??
-        toLocalDate(guest.moveInDate, timeZone) ??
-        localDateString(new Date(createdMs), timeZone);
-      chargeFrom = chargeFromFor({
-        startDate,
-        startedAtMs,
-        houseJoinedAtMs,
-        joinDate: joinedOn,
-        importedOn: toLocalDate(guest.importedAt, timeZone),
-        frequency,
-      });
-    } else {
-      houseJoinedAtMs =
-        typeof account.houseJoinedAtMs === 'number' ? account.houseJoinedAtMs : createdMs;
-      joinedOn = str(account.joinedOn);
-      chargeFrom = account.chargeFrom as string;
-    }
-    chargeFrom = maxDate(chargeFrom, reactivatedOn, joinedOn);
+    const { houseJoinedAtMs, joinedOn, reactivatedOn, chargeFrom, changed } = anchorFor({
+      account,
+      guest,
+      houseId,
+      createdMs: guestSnap.createTime?.toMillis() ?? now.getTime(),
+      startDate,
+      startedAtMs,
+      timeZone,
+      frequency,
+      now,
+    });
 
     const rate = residentRate(guest, settings);
     if (!rate) {
@@ -138,7 +104,7 @@ export async function chargeResident(guestId: string, now: Date): Promise<Charge
       updatedAtMs: now.getTime(),
     };
     if (plan.length === 0) {
-      if (anchor || reactivatedOn !== back) txn.set(accountRef, nextAccount, { merge: true });
+      if (changed) txn.set(accountRef, nextAccount, { merge: true });
       return skipped('not-due');
     }
 

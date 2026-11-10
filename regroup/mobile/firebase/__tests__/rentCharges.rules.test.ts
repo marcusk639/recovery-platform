@@ -213,6 +213,41 @@ describe('guests: rates and balances', () => {
     ));
 });
 
+describe('Oxford houses and the charging-start state', () => {
+  const oxford = () =>
+    testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'houses/oxford1'), {
+        id: 'oxford1',
+        houseType: 'oxford',
+        rentFrequency: 'both',
+      });
+    });
+  const oxfordAdmin = () =>
+    testEnv.authenticatedContext('ox', { superAdmin: { oxford1: true } }).firestore();
+  it('an Oxford house cannot be put on a weekly or monthly price schedule', async () => {
+    await oxford();
+    await assertFails(updateDoc(doc(oxfordAdmin(), 'houses/oxford1'), { rentFrequency: 'weekly' }));
+    await assertFails(
+      updateDoc(doc(oxfordAdmin(), 'houses/oxford1'), { rentFrequency: 'monthly' }),
+    );
+  });
+  it('a traditional house still can', () =>
+    assertSucceeds(updateDoc(doc(as(OWNER), `houses/${HOUSE}`), { rentFrequency: 'monthly' })));
+  it("a house's admins can read its charging-start state; nobody writes it", async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `rentHouseStates/${HOUSE}`), {
+        startDate: '2026-11-11',
+        startedAtMs: 1,
+      });
+    });
+    await assertSucceeds(getDoc(doc(as(ADMIN), `rentHouseStates/${HOUSE}`)));
+    await assertFails(getDoc(doc(as(RESIDENT), `rentHouseStates/${HOUSE}`)));
+    await assertFails(
+      setDoc(doc(as(OWNER), `rentHouseStates/${HOUSE}`), { startDate: '2026-01-01' }),
+    );
+  });
+});
+
 describe('rentCharges', () => {
   it('a resident reads their own rentCharges doc', () =>
     assertSucceeds(getDoc(doc(as(RESIDENT), 'rentCharges/gResident_2026-11-18'))));

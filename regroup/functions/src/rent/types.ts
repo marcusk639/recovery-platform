@@ -41,8 +41,10 @@ export interface ChargeFromFacts {
   startedAtMs: number;
   /** When this record joined the house: its createTime, or the move time. */
   houseJoinedAtMs: number;
-  /** House-local move-in date. */
-  joinDate: string;
+  /** House-local move-in date; null when the stored one can't be read (assumed earlier). */
+  joinDate: string | null;
+  /** House-local date the record joined the house (its createTime, or the move time). */
+  recordedOn: string;
   /** House-local import date, for residents added by guest import. */
   importedOn: string | null;
   frequency: RentFrequency;
@@ -60,7 +62,7 @@ export interface RentAccount {
   reactivatedOn: string | null;
   /** House-local date of the last discharge or move-out (guest-write trigger). */
   inactiveSince?: string | null;
-  /** The house rentChargesStartDate that chargeFrom was computed against. */
+  /** The house rentHouseStates startDate that chargeFrom was computed against. */
   anchoredTo: string;
   /** First chargeable day. Frozen once anchored, so a schedule switch never skips or doubles a day. */
   chargeFrom: string;
@@ -83,3 +85,11 @@ export type ChargeOutcome =
         | 'not-due'
         | 'bad-rate';
     };
+
+/** rentHouseStates/{houseId}: server-only, so the app's whole-house writes never carry it. */
+export interface RentHouseState {
+  /** House-local date charging last turned on; null while it is off. */
+  startDate: string | null;
+  startedAtMs: number | null;
+  updatedAtMs: number;
+}

@@ -1,5 +1,7 @@
 // The house trigger that records the day rent charging turned on, against an
-// in-memory store. It decides from the current house doc, not the event.
+// in-memory store. The stamp lives in server-only rentHouseStates/{houseId}, never
+// on the house doc, so the app's whole-house writes can't trip over it. It decides
+// from the current house doc, not the event.
 
 jest.mock('firebase-functions/v2', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
@@ -34,8 +36,9 @@ const off: Data = {
   timezone: 'America/Chicago',
 };
 const on: Data = { ...off, rentFrequency: 'weekly' };
-const stamp = { rentChargesStartDate: '2026-11-01', rentChargesStartedAtMs: 42 };
-const stored = () => mem.get(`houses/${H}`);
+const stamp = { startDate: '2026-11-01', startedAtMs: 42 };
+const state = () => mem.get(`rentHouseStates/${H}`);
+const seedStamp = () => mem.seed(`rentHouseStates/${H}`, stamp);
 
 beforeEach(() => {
   mem.reset();
@@ -46,37 +49,42 @@ afterEach(() => jest.useRealTimers());
 it('turning weekly on stamps today in the house zone', async () => {
   mem.seed(`houses/${H}`, on);
   await run(event(off, on));
-  expect(stored()).toMatchObject({
-    rentChargesStartDate: '2026-11-09',
-    rentChargesStartedAtMs: NOW.getTime(),
-  });
+  expect(state()).toMatchObject({ startDate: '2026-11-09', startedAtMs: NOW.getTime() });
+});
+
+it('the trigger never writes the house doc', async () => {
+  mem.seed(`houses/${H}`, on);
+  await run(event(off, on));
+  expect(mem.writes.filter((w) => w.path.startsWith('houses/'))).toEqual([]);
 });
 
 it('a house created with charging on is stamped', async () => {
   mem.seed(`houses/${H}`, on);
   await run(event(undefined, on));
-  expect(stored()?.rentChargesStartDate).toBe('2026-11-09');
+  expect(state()?.startDate).toBe('2026-11-09');
 });
 
 it('turning off clears the stamp', async () => {
-  const after = { ...off, ...stamp };
-  mem.seed(`houses/${H}`, after);
-  await run(event({ ...on, ...stamp }, after));
-  expect(stored()).toMatchObject({ rentChargesStartDate: null, rentChargesStartedAtMs: null });
+  mem.seed(`houses/${H}`, off);
+  seedStamp();
+  await run(event(on, off));
+  expect(state()).toMatchObject({ startDate: null, startedAtMs: null });
 });
 
 it('a price change while on keeps the stamp', async () => {
-  const after = { ...on, ...stamp, weeklyRent: 200 };
+  const after = { ...on, weeklyRent: 200 };
   mem.seed(`houses/${H}`, after);
-  await run(event({ ...on, ...stamp }, after));
-  expect(stored()).toMatchObject(stamp);
+  seedStamp();
+  await run(event(on, after));
+  expect(state()).toMatchObject(stamp);
 });
 
 it('a schedule switch while on keeps the stamp', async () => {
-  const after = { ...on, ...stamp, rentFrequency: 'monthly' };
+  const after = { ...on, rentFrequency: 'monthly' };
   mem.seed(`houses/${H}`, after);
-  await run(event({ ...on, ...stamp }, after));
-  expect(stored()).toMatchObject(stamp);
+  seedStamp();
+  await run(event(on, after));
+  expect(state()).toMatchObject(stamp);
 });
 
 it('a write that changes no rent field does no reads', async () => {
@@ -97,28 +105,34 @@ it('a deleted house does nothing', async () => {
 
 it('events out of order converge', async () => {
   // The house went off then back on; the "off" event is delivered last.
-  mem.seed(`houses/${H}`, { ...on, ...stamp });
-  await run(event({ ...on, ...stamp }, off));
-  expect(stored()).toMatchObject(stamp);
+  mem.seed(`houses/${H}`, on);
+  seedStamp();
+  await run(event(on, off));
+  expect(state()).toMatchObject(stamp);
 });
 
 it("'both' never stamps", async () => {
   mem.seed(`houses/${H}`, off);
   await run(event({ ...off, weeklyRent: 100 }, off));
-  expect(stored()?.rentChargesStartDate).toBeUndefined();
+  expect(state()).toBeUndefined();
 });
 
 it('a price above the limit is off and never stamps', async () => {
-  const after = { ...on, weeklyRent: 17500 };
-  mem.seed(`houses/${H}`, after);
+  mem.seed(`houses/${H}`, { ...on, weeklyRent: 17500 });
   await expect(syncRentChargeStart(H, NOW)).resolves.toBe('unchanged');
-  expect(stored()?.rentChargesStartDate).toBeUndefined();
+  expect(state()).toBeUndefined();
+});
+
+it('an Oxford house never stamps: its dues are the equal expense share', async () => {
+  mem.seed(`houses/${H}`, { ...on, houseType: 'oxford' });
+  await expect(syncRentChargeStart(H, NOW)).resolves.toBe('unchanged');
+  expect(state()).toBeUndefined();
 });
 
 it('syncRentChargeStart reports what it did', async () => {
   mem.seed(`houses/${H}`, on);
   await expect(syncRentChargeStart(H, NOW)).resolves.toBe('stamped');
   await expect(syncRentChargeStart(H, NOW)).resolves.toBe('unchanged');
-  mem.seed(`houses/${H}`, { ...off, ...stamp });
+  mem.seed(`houses/${H}`, off);
   await expect(syncRentChargeStart(H, NOW)).resolves.toBe('cleared');
 });

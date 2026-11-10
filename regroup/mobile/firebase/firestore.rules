@@ -471,9 +471,9 @@ service cloud.firestore {
       // houseType (traditional / oxford) picks the admission and voting
       // rules; only createHouses and setOxfordEnabled (Admin SDK) set it,
       // so no client, the owner included, may change it.
-      // rentChargesStartDate / rentChargesStartedAtMs record when rent
-      // charging turned on (functions houseRentSettings trigger); no resident
-      // is charged for a day before them, so no client may move them.
+      // rentChargesStartDate / rentChargesStartedAtMs: reserved. When charging
+      // turned on lives in server-only rentHouseStates/{houseId}; no client may
+      // write these names here either.
       // Rent settings: any house admin sets the schedule and price (owner
       // decision 2026-11-09), so monthlyRent and weeklyRent are no longer
       // superAdmin-only. For every role, rentFrequency is one of the three
@@ -483,8 +483,11 @@ service cloud.firestore {
       function rentSettingsValid() {
         let changed = request.resource.data.diff(resource.data).affectedKeys();
         let d = request.resource.data;
+        // Oxford houses pay the equal expense share their members set, never a
+        // price schedule, so only 'both' (charging off) is allowed there.
         return (!changed.hasAny(['rentFrequency']) ||
-            d.rentFrequency in ['weekly', 'monthly', 'both']) &&
+            (d.rentFrequency in ['weekly', 'monthly', 'both'] &&
+             !(d.get('houseType', 'traditional') == 'oxford' && d.rentFrequency != 'both'))) &&
           (!changed.hasAny(['monthlyRent']) ||
             (d.monthlyRent is number && d.monthlyRent >= 0 && d.monthlyRent <= 10000)) &&
           (!changed.hasAny(['weeklyRent']) ||
@@ -588,6 +591,14 @@ service cloud.firestore {
     match /rentCharges/{chargeId} {
       allow read: if isAdmin([resource.data.houseId]) ||
         (isGuest([resource.data.houseId]) && isSameUser(resource.data.guestUserId));
+      allow write: if false;
+    }
+
+    // When each house's charging last turned on (functions houseRentSettings).
+    // Kept off the house doc, which the app writes back whole from memory. Its
+    // admins may read it, for the setup preview; only the server writes it.
+    match /rentHouseStates/{houseId} {
+      allow read: if isAdmin([houseId]);
       allow write: if false;
     }
 

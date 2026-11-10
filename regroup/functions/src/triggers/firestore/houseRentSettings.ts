@@ -1,5 +1,5 @@
 /**
- * Records the day a house turns rent charging on (rentChargesStartDate, house-local)
+ * Records the day a house turns rent charging on (rentHouseStates/{houseId}, house-local)
  * and clears it when charging turns off, so no resident is ever charged for a day
  * before charging began or while it was off. Decides from the current house doc,
  * not the event, so redelivered or out-of-order events converge.
@@ -7,40 +7,42 @@
 import { logger } from 'firebase-functions/v2';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { localDateString } from '../../activities/weekSummaryMath';
-import { houseCollection, ratsFirestore } from '../../api/firestore';
+import { houseCollection, ratsFirestore, rentHouseStateCollection } from '../../api/firestore';
 import { rentSettingsOf } from '../../rent/rate';
 
 type Data = Record<string, unknown>;
 
-const WATCHED = [
-  'rentFrequency',
-  'monthlyRent',
-  'weeklyRent',
-  'timezone',
-  'rentChargesStartDate',
-  'rentChargesStartedAtMs',
-] as const;
+const WATCHED = ['rentFrequency', 'monthlyRent', 'weeklyRent', 'timezone', 'houseType'] as const;
 
+/**
+ * The stamp lives in rentHouseStates/{houseId}, not on the house doc: the app writes
+ * whole house objects back from memory, and a server-owned field there that changed
+ * since the app loaded it would make those writes fail the rules.
+ */
 export async function syncRentChargeStart(
   houseId: string,
   now: Date,
 ): Promise<'stamped' | 'cleared' | 'unchanged'> {
-  const ref = houseCollection.doc(houseId);
+  const houseRef = houseCollection.doc(houseId);
+  const stateRef = rentHouseStateCollection.doc(houseId);
   return ratsFirestore.runTransaction(async (txn) => {
-    const snap = await txn.get(ref);
+    const snap = await txn.get(houseRef);
+    const stateSnap = await txn.get(stateRef);
     if (!snap.exists) return 'unchanged';
-    const house = (snap.data() ?? {}) as Data;
-    const settings = rentSettingsOf(house);
-    const stamped = !!house.rentChargesStartDate;
-    if (settings && !stamped) {
-      txn.update(ref, {
-        rentChargesStartDate: localDateString(now, settings.timeZone),
-        rentChargesStartedAtMs: now.getTime(),
+    const settings = rentSettingsOf((snap.data() ?? {}) as Data);
+    const state = (stateSnap.data() ?? {}) as Data;
+    const stamped =
+      !!state.startDate || (state.startedAtMs !== null && state.startedAtMs !== undefined);
+    if (settings && !state.startDate) {
+      txn.set(stateRef, {
+        startDate: localDateString(now, settings.timeZone),
+        startedAtMs: now.getTime(),
+        updatedAtMs: now.getTime(),
       });
       return 'stamped';
     }
-    if (!settings && (stamped || house.rentChargesStartedAtMs != null)) {
-      txn.update(ref, { rentChargesStartDate: null, rentChargesStartedAtMs: null });
+    if (!settings && stamped) {
+      txn.set(stateRef, { startDate: null, startedAtMs: null, updatedAtMs: now.getTime() });
       return 'cleared';
     }
     return 'unchanged';

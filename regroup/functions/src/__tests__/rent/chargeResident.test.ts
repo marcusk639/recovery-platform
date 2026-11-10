@@ -149,6 +149,32 @@ describe('who starts when', () => {
     expect(mem.get('rentAccounts/g1')?.chargeFrom).toBe('2026-11-23');
   });
 
+  it('an import after charging began, with an earlier move-in and no marker, starts the period after it', async () => {
+    house();
+    mem.seedAt(
+      'guests/g1',
+      { houseId: 'H', status: 'active', rentOwed: 0, moveInDate: '2026-10-01' },
+      at('2026-11-20').getTime(),
+    );
+    await expect(chargeResident('g1', at('2026-11-20'))).resolves.toMatchObject({
+      reason: 'not-due',
+    });
+    expect(mem.get('rentAccounts/g1')?.chargeFrom).toBe('2026-11-23');
+  });
+
+  it('a US-format move-in date is not prorated from the day it was entered', async () => {
+    house();
+    mem.seedAt(
+      'guests/g1',
+      { houseId: 'H', status: 'active', rentOwed: 0, moveInDate: '10/1/2026' },
+      at('2026-11-18').getTime(),
+    );
+    await expect(chargeResident('g1', at('2026-11-18'))).resolves.toMatchObject({
+      reason: 'not-due',
+    });
+    expect(mem.get('rentAccounts/g1')?.chargeFrom).toBe('2026-11-23');
+  });
+
   it('a future move-in charges nothing until that day', async () => {
     house();
     guest({ moveInDate: '2026-11-25' });

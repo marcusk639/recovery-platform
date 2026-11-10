@@ -78,6 +78,45 @@ it("after linking, the next chargeResident on the intake record is 'linked'", as
   expect(charges()).toEqual(['rentCharges/gIntake_2026-11-18', 'rentCharges/gNew_2026-11-23']);
 });
 
+it('a negative balance on an intake record is not carried across', async () => {
+  house();
+  intake({ rentOwed: -80000, choreFees: -5000, createdBy: 'mgr' });
+  invite({ rentOwed: 80000 });
+  await expect(linkIntakeRecord('gNew')).resolves.toBe('linked');
+  expect(doc('gNew')).toMatchObject({ rentOwed: 80000 });
+  expect(doc('gNew').choreFees ?? 0).toBe(0);
+  expect(doc('gIntake')).toMatchObject({ rentOwed: -80000, rentLinkedTo: 'gNew' });
+});
+
+it('an intake record the person created themselves is not linked', async () => {
+  house();
+  intake({ rentOwed: 100, createdBy: 'u1' });
+  invite({ rentOwed: 80000 });
+  await expect(linkIntakeRecord('gNew')).resolves.toBe('none');
+  expect(doc('gNew').rentOwed).toBe(80000);
+  expect(doc('gIntake').rentLinkedTo).toBeUndefined();
+});
+
+it('a custom rate a manager set on the intake record moves to the invite record', async () => {
+  house();
+  intake({
+    rentOwed: 0,
+    intakeCompletedBy: 'mgr',
+    customRent: { amountCents: 0, frequency: 'monthly' },
+  });
+  invite();
+  await linkIntakeRecord('gNew');
+  expect(doc('gNew').customRent).toEqual({ amountCents: 0, frequency: 'monthly' });
+});
+
+it('a custom rate is not copied when the intake record has no known creator', async () => {
+  house();
+  intake({ rentOwed: 0, customRent: { amountCents: 0, frequency: 'monthly' } });
+  invite();
+  await linkIntakeRecord('gNew');
+  expect(doc('gNew').customRent).toBeUndefined();
+});
+
 it("two matching intake records are 'ambiguous' and nothing changes", async () => {
   house();
   intake({}, 'i1');

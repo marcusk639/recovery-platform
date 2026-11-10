@@ -87,6 +87,40 @@ describe('off and on, moves', () => {
     expect(mem.get('rentCharges/g1_2026-12-14')?.amountCents).toBe(17500);
   });
 
+  it('a short off and on carries on: charged through Sun Nov 22, back on Mon Nov 23', async () => {
+    house({ rentChargesStartDate: '2026-11-23', rentChargesStartedAtMs: MAX });
+    guest();
+    account({ chargeFrom: '2026-11-18', chargedThrough: '2026-11-22' });
+    await chargeResident('g1', at('2026-11-23'));
+    expect(charges()).toEqual(['rentCharges/g1_2026-11-23']);
+    expect(mem.get('rentCharges/g1_2026-11-23')?.amountCents).toBe(17500);
+  });
+
+  it('off and on again within a charged week carries on at the next Monday', async () => {
+    house({ rentChargesStartDate: '2026-11-19', rentChargesStartedAtMs: MAX });
+    guest();
+    account({ chargeFrom: '2026-11-18', chargedThrough: '2026-11-22' });
+    await expect(chargeResident('g1', at('2026-11-19'))).resolves.toMatchObject({
+      reason: 'not-due',
+    });
+    await chargeResident('g1', at('2026-11-23'));
+    expect(charges()).toEqual(['rentCharges/g1_2026-11-23']);
+  });
+
+  it('a schedule switch made in two steps still charges $400.00 on Nov 16', async () => {
+    // Monthly chosen while the monthly price was 0 (charging off), then $800 typed:
+    // the house is re-stamped Nov 16.
+    house({
+      rentFrequency: 'monthly',
+      rentChargesStartDate: '2026-11-16',
+      rentChargesStartedAtMs: MAX,
+    });
+    guest();
+    account({ chargedThrough: '2026-11-15' });
+    await chargeResident('g1', at('2026-11-16'));
+    expect(mem.get('rentCharges/g1_2026-11-16')?.amountCents).toBe(40000);
+  });
+
   it('a move keeps chargedThrough', async () => {
     house({}, 'A');
     house({ rentChargesStartDate: '2026-11-04' }, 'B');

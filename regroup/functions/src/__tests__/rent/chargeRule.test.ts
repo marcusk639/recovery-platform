@@ -128,14 +128,21 @@ describe('chargeFromFor', () => {
     startedAtMs: 100,
     houseJoinedAtMs: 200,
     joinDate: '2026-11-18',
+    recordedOn: '2026-11-18',
     importedOn: null,
     frequency: 'weekly',
     ...o,
   });
   it('a new resident starts on their join date', () =>
     expect(chargeFromFor(facts({}))).toBe('2026-11-18'));
-  it('a backdated move-in is charged back, but not before charging began', () =>
-    expect(chargeFromFor(facts({ joinDate: '2026-11-01' }))).toBe('2026-11-11'));
+  it('a backdated move-in after charging began is charged back to it', () =>
+    expect(chargeFromFor(facts({ joinDate: '2026-11-13' }))).toBe('2026-11-13'));
+  it('a move-in before charging began, entered after it, starts the period after entry', () =>
+    expect(chargeFromFor(facts({ joinDate: '2026-11-01', recordedOn: '2026-11-18' }))).toBe(
+      '2026-11-23',
+    ));
+  it('an unreadable move-in date counts as before charging began', () =>
+    expect(chargeFromFor(facts({ joinDate: null, recordedOn: '2026-11-18' }))).toBe('2026-11-23'));
   it('a future move-in starts that day', () =>
     expect(chargeFromFor(facts({ joinDate: '2026-12-02' }))).toBe('2026-12-02'));
   it('a resident already in the house starts at the next period', () =>

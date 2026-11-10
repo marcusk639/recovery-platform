@@ -19,6 +19,7 @@ type Data = Record<string, unknown>;
 
 const normalEmail = (v: unknown): string => (typeof v === 'string' ? v.trim().toLowerCase() : '');
 const hasNoUserId = (g: Data) => g.userId === undefined || g.userId === null || g.userId === '';
+const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 
 /**
@@ -70,7 +71,9 @@ async function linkRecords(
   userId: string,
   houseId: string,
 ): Promise<'linked' | 'none'> {
+  let selfMade = false;
   const linked = await ratsFirestore.runTransaction(async (txn) => {
+    selfMade = false;
     const newRef = guestCollection.doc(newGuestId);
     const intakeRef = guestCollection.doc(intakeId);
     const oldAccountRef = rentAccountCollection.doc(intakeId);
@@ -92,16 +95,35 @@ async function linkRecords(
     ) {
       return false;
     }
+    // Who made the intake record. A record the person made for themselves (a peer
+    // leader is an admin) never links: it could carry a credit onto their own balance.
+    const creator = str(source.createdBy) ?? str(source.intakeCompletedBy);
+    if (creator === userId) {
+      selfMade = true;
+      return false;
+    }
+    // Only amounts owed move across. A credit stays on the intake record for a
+    // manager to apply by hand, so no record can lower another's balance.
+    const owed = Math.max(0, num(source.rentOwed));
+    const fees = Math.max(0, num(source.choreFees));
     const due = [target.rentDueDate, source.rentDueDate]
       .filter((d): d is string => typeof d === 'string' && d !== '')
       .sort()[0];
+    // A manager's custom rate (a scholarship, say) follows the person, but only when
+    // a known manager, not the person, made the intake record.
+    const rate = creator && source.customRent && !target.customRent ? source.customRent : null;
     txn.update(newRef, {
-      rentOwed: FieldValue.increment(num(source.rentOwed)),
-      choreFees: FieldValue.increment(num(source.choreFees)),
+      rentOwed: FieldValue.increment(owed),
+      choreFees: FieldValue.increment(fees),
       ...(!target.moveInDate && source.moveInDate ? { moveInDate: source.moveInDate } : {}),
-      ...(due && num(source.rentOwed) > 0 ? { rentDueDate: due } : {}),
+      ...(due && owed > 0 ? { rentDueDate: due } : {}),
+      ...(rate ? { customRent: rate } : {}),
     });
-    txn.update(intakeRef, { rentOwed: 0, choreFees: 0, rentLinkedTo: newGuestId });
+    txn.update(intakeRef, {
+      rentOwed: num(source.rentOwed) - owed,
+      choreFees: num(source.choreFees) - fees,
+      rentLinkedTo: newGuestId,
+    });
     if (oldAccount.exists) {
       if (!newAccount.exists) {
         txn.set(newAccountRef, { ...(oldAccount.data() ?? {}), guestId: newGuestId });
@@ -110,7 +132,16 @@ async function linkRecords(
     }
     return true;
   });
-  if (!linked) return 'none';
+  if (!linked) {
+    if (selfMade) {
+      logger.warn('linkIntakeRecord: intake record made by the same account; not linked', {
+        guestId: newGuestId,
+        intakeId,
+        houseId,
+      });
+    }
+    return 'none';
+  }
 
   // So the resident sees the intake record's charges in their own history.
   const history = await rentChargeCollection.where('guestId', '==', intakeId).get();

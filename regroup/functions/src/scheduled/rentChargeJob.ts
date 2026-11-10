@@ -13,6 +13,7 @@ import {
   ratsFirestore,
   rentAccountCollection,
   rentConfigRef,
+  rentHouseStateCollection,
 } from '../api/firestore';
 import { chargeResident } from '../rent/chargeResident';
 import { nextChargeDay } from '../rent/chargeRule';
@@ -43,7 +44,11 @@ export async function runRentCharges(now: Date = new Date()): Promise<Counts> {
 
   const houses = await houseCollection.where('rentFrequency', 'in', ['weekly', 'monthly']).get();
   for (const houseDoc of houses.docs) {
-    const settings = rentSettingsOf((houseDoc.data() ?? {}) as Data);
+    const state = await rentHouseStateCollection.doc(houseDoc.id).get();
+    const settings = rentSettingsOf(
+      (houseDoc.data() ?? {}) as Data,
+      state.data() as Data | undefined,
+    );
     if (!settings || settings.startDate === null || settings.startedAtMs === null) continue;
     counts.houses++;
     const today = localDateString(now, settings.timeZone);
