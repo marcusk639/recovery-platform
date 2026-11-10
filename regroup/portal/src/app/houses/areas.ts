@@ -1,6 +1,6 @@
 // What a house offers beyond its tabs, and which areas have shipped.
 import { Routes } from '@mobile/navigation/types';
-import type { Section } from '../urls';
+import { SHIFT_LOG_ROUTE, type Section } from '../urls';
 
 export interface Area {
   label: string;
@@ -53,6 +53,7 @@ const OXFORD: Area[] = [
 export function areasFor(house: { houseType?: string; id?: string }): Area[] {
   const areas: Area[] = [
     { label: 'Add a resident', route: Routes.ResidentIntake, stage: 'core', params: { houseId: house.id } },
+    { label: 'Shift log', route: SHIFT_LOG_ROUTE, stage: 'core', params: { houseId: house.id } },
   ];
   return house.houseType === 'oxford' ? [...areas, ...OXFORD] : areas;
 }

@@ -6,7 +6,7 @@ vi.mock('@mobile/navigation/types', () => ({
   Routes: new Proxy({}, { get: (_target, key) => `route-${String(key)}` }),
 }));
 
-import { houseIdFromPath, HOME_ROUTE, linkingConfig, residentPath, SECTIONS, sectionPath, stripQuery } from '../src/app/urls';
+import { houseIdFromPath, HOME_ROUTE, linkingConfig, residentPath, SECTIONS, sectionForRoute, sectionPath, SHIFT_LOG_ROUTE, stripQuery } from '../src/app/urls';
 
 test('sectionPath builds the scheme', () => {
   expect(sectionPath('h1', 'residents')).toBe('/houses/h1/residents');
@@ -42,4 +42,15 @@ test('the record and its screens have linking paths', () => {
   expect(screens['route-GuestOverview']).toBe('houses/:houseId/residents/:guestId');
   expect(screens['route-GuestInfo']).toBe('houses/:houseId/residents/:guestId/profile');
   expect(screens['route-Beds']).toBe('houses/:houseId/beds');
+});
+test('applications, intake, notes and the shift log have paths', () => {
+  const { screens } = linkingConfig('http://x').config;
+  expect(screens['route-ApplicationDetail']).toBe('houses/:houseId/applications/:appId');
+  expect(screens['route-ResidentIntake']).toBe('houses/:houseId/intake');
+  expect(screens['route-StaffNotes']).toBe('houses/:houseId/residents/:guestId/notes');
+  expect(screens[SHIFT_LOG_ROUTE]).toBe('houses/:houseId/shift-log');
+});
+test('notes belong to the Residents tab, and the shift log to none', () => {
+  expect(sectionForRoute('route-StaffNotes')).toBe('residents');
+  expect(sectionForRoute(SHIFT_LOG_ROUTE)).toBeNull();
 });

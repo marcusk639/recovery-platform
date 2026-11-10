@@ -32,7 +32,7 @@ import { ResidentList } from './residents/ResidentList';
 import { ResidentRecord } from './residents/ResidentRecord';
 import { ScreenFrame } from './ScreenFrame';
 import { createSingleScreenNavigator } from './single-screen-navigator';
-import { HOME_ROUTE, NOT_FOUND_ROUTE } from './urls';
+import { HOME_ROUTE, NOT_FOUND_ROUTE, SHIFT_LOG_ROUTE } from './urls';
 
 const Stack = createSingleScreenNavigator() as any;
 
@@ -66,6 +66,9 @@ export const Screens = () => (
     <Stack.Screen name={Routes.GuestInfo} component={UserInfo} />
     <Stack.Screen name={Routes.EditUserInfo} component={EditUserInfoForm} />
     <Stack.Screen name={Routes.StaffNotes} component={StaffNotesFeed} />
+    <Stack.Screen name={SHIFT_LOG_ROUTE} component={StaffNotesFeed} initialParams={{ type: 'shift_log' }} />
+    {/* PhaseCustomization stays unregistered: its save swallows errors, so the
+        visible "use the phone" alert is better than a silent failure. */}
     <Stack.Screen name={Routes.BalanceDashboard} component={BalanceDashboard} />
     <Stack.Screen name={Routes.PaymentHistory} component={PaymentHistory} />
     <Stack.Screen name={Routes.Activities} component={ActivityScreen} />

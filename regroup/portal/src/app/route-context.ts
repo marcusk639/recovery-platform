@@ -24,10 +24,18 @@ function nearestGuestId(state: StateLike, houseId: string | null): string | null
   return null;
 }
 
-export function withRouteContext(state: StateLike, action: any, selectedGuestId: string | null): any {
-  if (action.type !== 'NAVIGATE' && action.type !== 'PUSH') return action;
+// The phone nests its house screens under Routes.House ({ screen }); the portal has them flat.
+function unnest(action: any): any {
+  const params = action.payload?.params;
+  if (action.payload?.name !== Routes.House || !params?.screen) return action;
+  return { ...action, payload: { ...action.payload, name: params.screen, params: params.params } };
+}
+
+export function withRouteContext(state: StateLike, original: any, selectedGuestId: string | null): any {
+  if (original.type !== 'NAVIGATE' && original.type !== 'PUSH') return original;
+  const action = unnest(original);
   const name: string = action.payload?.name;
-  if (!name || isOutsideAnyHouse(name)) return action;
+  if (!name || isOutsideAnyHouse(name)) return action === original ? original : action;
   const given = action.payload.params ?? {};
   const params = { ...given };
   const houseId = given.houseId ?? houseIdForState(state);
@@ -36,6 +44,7 @@ export function withRouteContext(state: StateLike, action: any, selectedGuestId:
     const guestId = nearestGuestId(state, houseId) ?? selectedGuestId;
     if (guestId) params.guestId = guestId;
   }
+  if (name === Routes.StaffNotes && params.guestId && !params.type) params.type = 'resident_note';
   return { ...action, payload: { ...action.payload, params } };
 }
 

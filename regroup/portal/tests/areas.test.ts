@@ -8,7 +8,7 @@ import { areasFor, isRouteReleased, needsFullView, sectionsFor } from '../src/ap
 import { sectionForRoute } from '../src/app/urls';
 
 test('the page keeps adding a resident', () => {
-  expect(areasFor({}).map((a) => a.label)).toEqual(['Add a resident']);
+  expect(areasFor({}).map((a) => a.label)).toContain('Add a resident');
 });
 test('governance links show only for an Oxford house, and say to use the phone', () => {
   expect(areasFor({}).map((a) => a.label)).not.toContain('Oxford House Hub');
@@ -52,4 +52,7 @@ test('payments, reports and balances need the full view, even by URL', () => {
   expect(needsFullView('route-BalanceDashboard')).toBe(true);
   expect(needsFullView('route-HouseDisputes')).toBe(false);
   expect(needsFullView('route-PaymentHistory')).toBe(false);
+});
+test('the house page offers the shift log', () => {
+  expect(areasFor({}).map((a) => a.label)).toEqual(['Add a resident', 'Shift log']);
 });

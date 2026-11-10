@@ -17,6 +17,8 @@ export type Section =
 export const HOME_ROUTE = 'portalHome';
 export const NOT_FOUND_ROUTE = 'portalNotFound';
 export const HOUSE_LIST_ROUTE: string = Routes.HouseList;
+// The phone's StaffNotesFeed with type shift_log, under a route of its own so it can have a URL.
+export const SHIFT_LOG_ROUTE = 'portalShiftLog';
 
 // In tab order, from the layout the owner picked.
 export const SECTIONS: Record<Section, { route: string; path: string; label: string }> = {
@@ -45,6 +47,7 @@ export const RESIDENT_ROUTE_PATHS: Record<string, string> = {
   [Routes.ChoreSummary]: `${RECORD_PATH}/chores`,
   [Routes.SupporterSummary]: `${RECORD_PATH}/supporter`,
   [Routes.MedicationSummary]: `${RECORD_PATH}/medication`,
+  [Routes.StaffNotes]: `${RECORD_PATH}/notes`,
 };
 
 export const residentPath = (houseId: string, guestId: string): string =>
@@ -79,6 +82,9 @@ export function linkingConfig(origin: string) {
     [HOME_ROUTE]: '',
     [NOT_FOUND_ROUTE]: '*',
     [HOUSE_LIST_ROUTE]: 'houses',
+    [Routes.ApplicationDetail]: 'houses/:houseId/applications/:appId',
+    [Routes.ResidentIntake]: 'houses/:houseId/intake',
+    [SHIFT_LOG_ROUTE]: 'houses/:houseId/shift-log',
     ...RESIDENT_ROUTE_PATHS,
   };
   for (const { route, path } of Object.values(SECTIONS)) screens[route] = path;

@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { vi } from 'vitest';
 import '../src/adapter/preload';
 import { captureException } from '../src/adapter/sentry';
+import { Dimensions } from '../src/adapter/react-native';
 import { KeyboardAwareScrollView, KeyboardEvents, useKeyboardState } from '../src/adapter/keyboard-controller';
 
 // components/rats-search-bar assigns navigator.geolocation while loading.
@@ -35,4 +36,7 @@ test('the keyboard is never reported as visible', () => {
 });
 test('keyboard event listeners can be removed', () => {
   expect(() => KeyboardEvents.addListener('keyboardWillHide', () => {}).remove()).not.toThrow();
+});
+test("Dimensions.get('screen') reads the window, not the whole monitor", () => {
+  expect(Dimensions.get('screen')).toEqual(Dimensions.get('window'));
 });

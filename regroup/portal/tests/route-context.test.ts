@@ -59,3 +59,15 @@ test('going up a level from each kind of screen', () => {
   expect(parentOf({ name: 'route-HouseSummary', params: { houseId: 'h1' } })).toEqual({ name: 'portalHome' });
   expect(parentOf({ name: 'portalHome' })).toBeNull();
 });
+test("the phone's nested House route goes straight to the screen it names", () => {
+  const action = withRouteContext(inHouse, nav('route-House', { screen: 'route-HouseDisputes' }), null);
+  expect(action.payload.name).toBe('route-HouseDisputes');
+  expect(action.payload.params).toEqual({ houseId: 'h1' });
+});
+test('resident notes get their type when a screen leaves it out', () => {
+  const onRecord = state([{ name: 'route-GuestOverview', params: { houseId: 'h1', guestId: 'g1' } }]);
+  expect(paramsOf(withRouteContext(onRecord, nav('route-StaffNotes'), null))).toMatchObject({ houseId: 'h1', guestId: 'g1', type: 'resident_note' });
+});
+test('a type the screen passed is kept', () => {
+  expect(paramsOf(withRouteContext(inHouse, nav('route-StaffNotes', { type: 'shift_log' }), null)).type).toBe('shift_log');
+});
