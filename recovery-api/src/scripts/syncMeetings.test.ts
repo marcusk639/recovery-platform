@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { MeetingGuideAccessError } from '../lib/meetings/meetingSync';
 import {
   ACCESS_EXIT_CODE,
@@ -6,6 +8,7 @@ import {
   progressLine,
   readApiKey,
   reportFatal,
+  syncEnvFile,
 } from './syncMeetings';
 
 jest.mock('firebase-admin/app', () => ({
@@ -49,6 +52,24 @@ describe('readApiKey', () => {
 
   it('reports a missing key the same way as a rejected one', () => {
     expect(() => readApiKey({})).toThrow(MeetingGuideAccessError);
+  });
+});
+
+describe('syncEnvFile', () => {
+  // A deploy sets every entry of an env file in its source folder on every function, and
+  // uploads the folder, so a key kept there would ship with recovery-api.
+  it('sits outside the folder a recovery-api deploy uploads', () => {
+    const recoveryApi = path.resolve(__dirname, '../..');
+    const firebase = JSON.parse(fs.readFileSync(path.join(recoveryApi, 'firebase.json'), 'utf8'));
+    const deployed = path.resolve(recoveryApi, firebase.functions[0].source);
+    const fromDeployed = path.relative(deployed, syncEnvFile());
+    expect(fromDeployed.startsWith('..') || path.isAbsolute(fromDeployed)).toBe(true);
+  });
+
+  it('is the same file for every checkout and worktree, under the home directory', () => {
+    expect(syncEnvFile('/home/someone')).toBe(
+      '/home/someone/.config/recovery-platform/meeting-sync.env',
+    );
   });
 });
 
