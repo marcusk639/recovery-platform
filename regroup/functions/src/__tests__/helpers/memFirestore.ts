@@ -289,5 +289,6 @@ export const apiFirestore = {
   houseRolesCollection: collectionRef('house-roles'),
   rentAccountCollection: collectionRef('rentAccounts'),
   rentChargeCollection: collectionRef('rentCharges'),
+  rentChargeReversalCollection: collectionRef('rentChargeReversals'),
   rentConfigRef: () => docRef('config/rentCharges'),
 };

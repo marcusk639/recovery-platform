@@ -40,6 +40,8 @@ export const houseRolesCollection = ratsFirestore.collection('house-roles');
 // is one charge record; config/rentCharges.paused stops the charge job.
 export const rentAccountCollection = ratsFirestore.collection('rentAccounts');
 export const rentChargeCollection = ratsFirestore.collection('rentCharges');
+// Reversed charges, moved here by scripts/reverseRentCharges (server-only).
+export const rentChargeReversalCollection = ratsFirestore.collection('rentChargeReversals');
 export const configCollection = ratsFirestore.collection('config');
 // A function, not a ref: suites that mock collection() return nothing from it at import time.
 export const rentConfigRef = () => configCollection.doc('rentCharges');

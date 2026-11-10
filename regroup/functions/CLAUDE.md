@@ -86,6 +86,10 @@ src/
 
 ## Domain Rules
 
+### Rent charges
+
+`src/rent/chargeResident.ts` is the only writer that adds rent to `rentOwed` (hourly `rentCharges` job, `onGuestWrite`, catch-up). Records live in server-only `rentAccounts` / `rentCharges`. Stop switch: set `config/rentCharges.paused = true` (stops every charge without a deploy); `npm run rent:reverse:dry-run -- --house=ID` / `rent:reverse:apply` reverses by record and refuses unless paused or the house's charging is off.
+
 ### Stripe amounts
 
 All Stripe amounts are in **US cents** (integers). `50000` = $500.00. Convert only at the UI boundary — never inside function logic.

@@ -227,6 +227,8 @@ describe('rentAccounts and config', () => {
       setDoc(doc(as(OWNER), 'rentAccounts/gResident'), { chargedThrough: '2027-01-01' }),
     );
     await assertFails(getDoc(doc(as(OWNER), 'config/rentCharges')));
+    await assertFails(getDoc(doc(as(OWNER), 'rentChargeReversals/r1')));
+    await assertFails(setDoc(doc(as(OWNER), 'rentChargeReversals/r1'), { amountCents: 1 }));
     await assertFails(setDoc(doc(as(OWNER), 'config/rentCharges'), { paused: true }));
   });
 });

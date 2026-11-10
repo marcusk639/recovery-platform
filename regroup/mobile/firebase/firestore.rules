@@ -593,6 +593,11 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Charges moved here by scripts/reverseRentCharges. Server-only.
+    match /rentChargeReversals/{reversalId} {
+      allow read, write: if false;
+    }
+
     // Server settings, e.g. config/rentCharges.paused (the charge job's stop switch).
     match /config/{configId} {
       allow read, write: if false;
