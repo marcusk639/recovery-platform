@@ -6,6 +6,8 @@ export const PRODUCTION_SANDBOX_ACCOUNT_ID = 'acct_1RXiFg2KPgAtfsl6';
 export const LIVE_PRODUCTION_ACCOUNT_ID = 'acct_1GfryQKsstp3aqoP';
 /** The only account this setup may touch: the dedicated e2e sandbox behind regroup-e2e. */
 export const E2E_SANDBOX_ACCOUNT_ID = 'acct_1UUsyi44OQke4tKl';
+/** regroup-local: the payment suite's sandbox. It must have no webhook endpoints. */
+export const E2E_LOCAL_SANDBOX_ACCOUNT_ID = 'acct_1UZe6WKw3v6AEtjk';
 
 /** Maps price env var names (regroup/functions/.env.example) to Stripe price ids. */
 export type PriceIds = Record<string, string>;
@@ -199,6 +201,28 @@ export async function assertSandboxAccount(stripe: Stripe, key: string): Promise
   if (account.id !== E2E_SANDBOX_ACCOUNT_ID) {
     throw new Error(
       `Refusing to run against ${account.id}: only the e2e sandbox ${E2E_SANDBOX_ACCOUNT_ID} is allowed.`,
+    );
+  }
+  return account.id;
+}
+
+/**
+ * The payment suite's gate. The e2e sandbox's webhook endpoints point at staging,
+ * so its test events would write quarantined records there; this sandbox has none,
+ * and the suite delivers events itself.
+ */
+export async function assertLocalSandbox(stripe: Stripe, key: string): Promise<string> {
+  assertTestKey(key);
+  const account = await stripe.accounts.retrieve();
+  if (account.id !== E2E_LOCAL_SANDBOX_ACCOUNT_ID) {
+    throw new Error(
+      `Refusing to run against ${account.id}: only the local sandbox ${E2E_LOCAL_SANDBOX_ACCOUNT_ID} is allowed.`,
+    );
+  }
+  const endpoints = await stripe.webhookEndpoints.list({ limit: 1 });
+  if (endpoints.data.length > 0) {
+    throw new Error(
+      `Refusing to run: ${account.id} has a webhook endpoint, which would receive every test event.`,
     );
   }
   return account.id;

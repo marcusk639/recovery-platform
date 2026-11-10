@@ -31,13 +31,13 @@ const ENUMS = {
   role: ['signed-out', 'operator', 'manager', 'resident', 'oxford', 'any'],
   platform: ['ios', 'android', 'both', 'web'],
   fixture: ['clean', 'legacy', 'both', 'n/a'],
-  kind: ['maestro', 'playwright', 'staging', 'device', 'unit'],
+  kind: ['maestro', 'playwright', 'staging', 'device', 'unit', 'server'],
   guard: ['money', 'data', 'none'],
   status: ['pass', 'fail', 'missing', 'deferred'],
 };
 const NONE = '—';
 const DEFERRAL = /^(checklist|post-launch): .+ \(\d{4}-\d{2}-\d{2}\)$/;
-const FILE_KINDS = ['maestro', 'playwright', 'staging', 'unit'];
+const FILE_KINDS = ['maestro', 'playwright', 'staging', 'unit', 'server'];
 
 function parseMatrix(markdown) {
   const lines = markdown.split('\n');
@@ -53,6 +53,9 @@ function parseMatrix(markdown) {
       break;
     }
     if (lines[i].trim().startsWith('|')) table.push(lines[i].trim());
+    // Markdown renders this as a row, but it would never reach the table.
+    const bare = lines[i].trim().match(/^([A-Z]+-\d{3})\s*\|/);
+    if (bare) throw new Error(`${bare[1]} (line ${i + 1}) needs a leading | to count as a row`);
   }
   // A lost header would silently turn the first row into the header, and a
   // row outside the table would silently drop out of every gate.
