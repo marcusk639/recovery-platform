@@ -110,6 +110,10 @@ export function anchorFor(i: AnchorInput): Anchor {
   const parsed = toLocalDate(moveIn, timeZone);
   const unreadable = moveIn !== undefined && moveIn !== null && moveIn !== '' && parsed === null;
   const joinedOn = str(account?.joinedOn) ?? parsed ?? (unreadable ? null : localOf(createdMs));
+  // Back after a discharge since charging began: like a move-in on the return day.
+  if (reactivatedOn && reactivatedOn >= startDate) {
+    return finish({ houseJoinedAtMs: knownJoin, joinedOn, chargeFrom: reactivatedOn }, true);
+  }
   return finish(
     {
       houseJoinedAtMs: knownJoin,

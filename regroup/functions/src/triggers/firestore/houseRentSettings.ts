@@ -61,7 +61,11 @@ export const onHouseRentSettingsWrite = onDocumentWritten(
     const before = event.data?.before?.exists ? (event.data.before.data() as Data) : undefined;
     if (!rentFieldsChanged(before, after)) return;
     const houseId = event.params.houseId;
-    const result = await syncRentChargeStart(houseId, new Date());
+    // The time of the change, not of a retry, so a resident who joined in between
+    // still counts as a new joiner.
+    const changedAt = Date.parse(event.time ?? '');
+    const at = Number.isFinite(changedAt) ? new Date(changedAt) : new Date();
+    const result = await syncRentChargeStart(houseId, at);
     if (result !== 'unchanged') logger.info('rent charging start', { houseId, result });
   },
 );

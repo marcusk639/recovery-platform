@@ -7,6 +7,8 @@ import { RentFrequency } from './types';
 
 const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
 const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T/;
+// No Z or ±hh:mm: a wall-clock time with no zone, so its date is already house-local.
+const ISO_NO_OFFSET = /^(\d{4}-\d{2}-\d{2})T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function parts(date: string): { y: number; m: number; d: number } {
@@ -70,6 +72,8 @@ export function toLocalDate(value: unknown, timeZone: string): string | null {
   let ms: number | null = null;
   if (typeof value === 'string') {
     if (isCalendarDate(value)) return value;
+    const local = ISO_NO_OFFSET.exec(value);
+    if (local) return isCalendarDate(local[1]) ? local[1] : null;
     if (ISO_TIMESTAMP.test(value)) ms = Date.parse(value);
   } else if (typeof value === 'number') {
     ms = value;

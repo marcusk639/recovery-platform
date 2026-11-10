@@ -175,6 +175,15 @@ describe('off and on, moves', () => {
     expect(charges()).toEqual(['rentCharges/g1_2026-11-16']);
   });
 
+  it('a resident returning in the period charging turned on is charged from the return', async () => {
+    house({ rentChargesStartedAtMs: MAX });
+    guest({ moveInDate: '2026-09-01' });
+    mem.seed('rentAccounts/g1', { guestId: 'g1', reactivatedOn: '2026-11-12' });
+    await chargeResident('g1', at('2026-11-12'));
+    expect(charges()).toEqual(['rentCharges/g1_2026-11-12']);
+    expect(mem.get('rentCharges/g1_2026-11-12')?.amountCents).toBe(10000);
+  });
+
   it('a re-activated resident is not charged for the time away', async () => {
     house();
     guest();

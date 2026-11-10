@@ -5,6 +5,13 @@ export type RentFrequency = 'weekly' | 'monthly';
 
 /** A house price above this is treated as a mistake (cents typed as dollars): charging is off. */
 export const MAX_HOUSE_PRICE_DOLLARS = 10000;
+/** The same guard for a weekly price, so $80/week typed as 8000 is caught too. */
+export const MAX_WEEKLY_PRICE_DOLLARS = 2500;
+
+/** The highest believable price, in dollars, for one period of `frequency`. */
+export function maxPriceDollars(frequency: RentFrequency): number {
+  return frequency === 'weekly' ? MAX_WEEKLY_PRICE_DOLLARS : MAX_HOUSE_PRICE_DOLLARS;
+}
 
 /** Most periods one call may charge, so a long outage catches up in bounded steps. */
 export const MAX_PERIODS_PER_RUN = 12;

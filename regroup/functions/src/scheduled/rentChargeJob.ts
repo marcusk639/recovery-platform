@@ -94,6 +94,10 @@ export async function runRentCharges(now: Date = new Date()): Promise<Counts> {
   return counts;
 }
 
-export const rentCharges = onSchedule({ schedule: '5 * * * *', timeZone: 'UTC' }, async () => {
-  await runRentCharges();
-});
+export const rentCharges = onSchedule(
+  // A Monday midnight or a month start charges every resident at once, one at a time.
+  { schedule: '5 * * * *', timeZone: 'UTC', timeoutSeconds: 540 },
+  async () => {
+    await runRentCharges();
+  },
+);

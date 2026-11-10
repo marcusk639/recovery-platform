@@ -105,3 +105,17 @@ it("a linked intake record's charges are reversed on the record the balance move
   expect(mem.get('guests/gIntake')?.rentOwed).toBe(0);
   expect(mem.get('rentAccounts/gNew')?.chargedThrough).toBe('2026-11-17');
 });
+
+it("filtering by the invite record includes the linked intake record's charges", async () => {
+  house();
+  guest({ userId: '', email: 'pat@example.com', moveInDate: '2026-11-18' }, 'gIntake');
+  await chargeResident('gIntake', at('2026-11-18'));
+  guest({ userId: 'u1', email: 'pat@example.com', rentOwed: 0 }, 'gNew');
+  const { linkIntakeRecord } = await import('../../rent/linkIntakeRecord');
+  await linkIntakeRecord('gNew');
+  pause(true);
+  await expect(
+    reverseRentCharges({ houseId: 'H', guestId: 'gNew', apply: true }),
+  ).resolves.toMatchObject({ charges: 1, totalCents: 12500 });
+  expect(mem.get('guests/gNew')?.rentOwed).toBe(0);
+});

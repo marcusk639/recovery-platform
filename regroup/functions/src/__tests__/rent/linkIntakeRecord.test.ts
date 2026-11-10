@@ -212,3 +212,29 @@ describe('intake created after the invite record', () => {
     expect(doc('gIntake').rentLinkedTo).toBeUndefined();
   });
 });
+
+it('a linked intake record with no account passes on when it joined the house', async () => {
+  house({ rentChargesStartedAtMs: at('2026-11-11').getTime() });
+  mem.seedAt(
+    'guests/gIntake',
+    {
+      houseId: 'H',
+      status: 'active',
+      userId: '',
+      email: 'pat@example.com',
+      moveInDate: '2026-10-01',
+      rentOwed: 5000,
+    },
+    at('2026-11-01').getTime(),
+  );
+  invite();
+  await linkIntakeRecord('gNew');
+  expect(mem.get('rentAccounts/gNew')).toMatchObject({
+    guestId: 'gNew',
+    houseId: 'H',
+    houseJoinedAtMs: at('2026-11-01').getTime(),
+  });
+  await chargeResident('gNew', at('2026-11-18'));
+  expect(charges()).toEqual(['rentCharges/gNew_2026-11-16']);
+  expect(doc('gNew').rentOwed).toBe(5000 + 17500);
+});

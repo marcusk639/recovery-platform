@@ -10,8 +10,9 @@ import {
   houseCollection,
   ratsFirestore,
   rentAccountCollection,
+  rentChargeCollection,
 } from '../api/firestore';
-import { isActiveGuestDoc } from '../util/guestMembership';
+import { isActiveGuestDoc, isPlausibleUid } from '../util/guestMembership';
 import { chargeResident } from './chargeResident';
 import { linkIntakeRecord } from './linkIntakeRecord';
 import { ChargeOutcome } from './types';
@@ -55,6 +56,15 @@ async function recordDeparture(guestId: string, before: Data, eventTime: string)
   await ref.set({ inactiveSince: day }, { merge: true });
 }
 
+/** An admin linked this record to an account: its resident can now see its charges. */
+async function showChargesTo(guestId: string, userId: string): Promise<void> {
+  const history = await rentChargeCollection.where('guestId', '==', guestId).get();
+  if (history.empty) return;
+  const batch = ratsFirestore.batch();
+  history.docs.forEach((d) => batch.update(d.ref, { guestUserId: userId }));
+  await batch.commit();
+}
+
 export async function rentOnGuestWrite(e: GuestRentEvent): Promise<'none' | ChargeOutcome> {
   const { guestId, before, after } = e;
   if (after && before && isActiveGuestDoc(before) && !isActiveGuestDoc(after)) {
@@ -62,6 +72,9 @@ export async function rentOnGuestWrite(e: GuestRentEvent): Promise<'none' | Char
     return 'none';
   }
   if (!after || !isActiveGuestDoc(after)) return 'none';
+  if (before && !isPlausibleUid(before.userId) && isPlausibleUid(after.userId)) {
+    await showChargesTo(guestId, after.userId);
+  }
   const houseId = typeof after.houseId === 'string' ? after.houseId : '';
   const isCreate = !before;
   const moved =

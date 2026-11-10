@@ -44,6 +44,7 @@
 - **Phase B, real-system proof (Task 11):** needs the `regroup/e2e/src/payments/` harness on `main`. Today it is uncommitted in `rp-pay-suites`, and committing it is an open owner task. Task 11 goes on the Phase A branch if the harness has landed by then; otherwise it's a follow-up PR.
 - **Phase C, phone (Tasks 12–16):** starts only after #160 merges. Separate worktree and branch `feat/regroup-rent-settings-ui` off `origin/main`.
 - **Deploy:** after Phase A merges, deploy rules and functions to `regroup-e2e` only. Production waits for the owner and the deploy freeze.
+- **Before the production deploy:** query production, read-only, for houses already set to `weekly` or `monthly` with a price, and for `guests.rentOwed` values that aren't numbers. A house already on a schedule gets its charging-start stamp on the next edit of a rent field, with no preview. `FieldValue.increment` replaces a string balance instead of adding to it.
 
 ## File structure
 
@@ -1087,6 +1088,8 @@ Run: `cd regroup/mobile && npx jest src/util/__tests__/rentRate.test.ts src/serv
 **Hard requirement (domain review, 2026-11-09):** Task 13 ships in the same release as Task 12's `importedAt` marker, or after it, never before. Without the marker, the server falls back to treating anyone entered after charging began with an earlier move-in date as already resident, but an import with no move-in column still looks like a new move-in.
 
 **Write only the fields that change (domain review, I3).** The app writes whole house objects back from memory (`deleteGuest`, `customizePhase`, `updateDispute`). Once admins can set prices, a stale copy undoes a price or schedule change. This task changes those paths to field-level `update`s. It saves the schedule and the price in one write, so charging never turns off between them. The resident edit form (`guestFormValues.ts`, `mergeGuestStats`) also stops writing `rentOwed`, `choreFees`, `customRent` and `rentDueDate` back. Task 14 owns the balance edit, with the confirmation step from spec §4.6.
+
+**A timezone is required** before charging can be turned on. A house with none is charged on New York dates, so a Los Angeles house's Sunday-night intake would read as Monday.
 
 **Oxford houses** never show the Rent section. Their dues are the equal expense share in the Oxford tools, and the rules refuse a weekly or monthly schedule there.
 

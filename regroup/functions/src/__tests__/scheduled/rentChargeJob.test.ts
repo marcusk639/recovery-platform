@@ -4,8 +4,12 @@
 jest.mock('firebase-functions/v2', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }));
+const mockScheduleOpts: { value?: unknown } = {};
 jest.mock('firebase-functions/v2/scheduler', () => ({
-  onSchedule: (_opts: unknown, handler: unknown) => handler,
+  onSchedule: (opts: unknown, handler: unknown) => {
+    mockScheduleOpts.value = opts;
+    return handler;
+  },
 }));
 jest.mock('firebase-admin/firestore', () => ({
   FieldValue: require('../helpers/memFirestore').fieldValue,
@@ -166,3 +170,8 @@ it("one resident's failure does not stop the others", async () => {
   await expect(runRentCharges(MONDAY)).resolves.toMatchObject({ charged: 1, failed: 1 });
   expect(charges()).toEqual(['rentCharges/g2_2026-11-16']);
 });
+
+it('the job runs hourly in UTC with time for a Monday-midnight burst', () =>
+  expect(mockScheduleOpts.value).toEqual(
+    expect.objectContaining({ schedule: '5 * * * *', timeZone: 'UTC', timeoutSeconds: 540 }),
+  ));

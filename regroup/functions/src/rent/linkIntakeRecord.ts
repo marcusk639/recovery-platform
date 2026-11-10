@@ -129,6 +129,14 @@ async function linkRecords(
         txn.set(newAccountRef, { ...(oldAccount.data() ?? {}), guestId: newGuestId });
       }
       txn.delete(oldAccountRef);
+    } else if (!newAccount.exists && intakeSnap.createTime) {
+      // Not yet charged: pass on when the person really joined the house, so they are
+      // anchored as the resident they are, not as a sign-up today.
+      txn.set(newAccountRef, {
+        guestId: newGuestId,
+        houseId,
+        houseJoinedAtMs: intakeSnap.createTime.toMillis(),
+      });
     }
     return true;
   });

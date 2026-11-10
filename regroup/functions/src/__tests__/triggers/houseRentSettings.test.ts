@@ -52,6 +52,13 @@ it('turning weekly on stamps today in the house zone', async () => {
   expect(state()).toMatchObject({ startDate: '2026-11-09', startedAtMs: NOW.getTime() });
 });
 
+it('a retried event stamps the time the change happened, not the retry', async () => {
+  mem.seed(`houses/${H}`, on);
+  const changedAt = '2026-11-09T20:00:00.000Z'; // 14:00 in Chicago
+  await run({ ...event(off, on), time: changedAt });
+  expect(state()).toMatchObject({ startDate: '2026-11-09', startedAtMs: Date.parse(changedAt) });
+});
+
 it('the trigger never writes the house doc', async () => {
   mem.seed(`houses/${H}`, on);
   await run(event(off, on));

@@ -120,6 +120,16 @@ describe('houses: rent settings', () => {
     assertFails(updateDoc(doc(as(ADMIN), `houses/${HOUSE}`), { weeklyRent: '175' })));
   it('weeklyRent 17500 is refused', () =>
     assertFails(updateDoc(doc(as(OWNER), `houses/${HOUSE}`), { weeklyRent: 17500 })));
+  it('weeklyRent above $2,500 is refused, while monthlyRent 3000 is allowed', async () => {
+    await assertFails(updateDoc(doc(as(ADMIN), `houses/${HOUSE}`), { weeklyRent: 2501 }));
+    await assertSucceeds(updateDoc(doc(as(ADMIN), `houses/${HOUSE}`), { monthlyRent: 3000 }));
+  });
+  it('a weekly customRent above $2,500 (250000 cents) is refused', () =>
+    assertFails(
+      updateDoc(doc(as(ADMIN), 'guests/gResident'), {
+        customRent: { amountCents: 250001, frequency: 'weekly' },
+      }),
+    ));
   it('a negative monthlyRent is refused', () =>
     assertFails(updateDoc(doc(as(ADMIN), `houses/${HOUSE}`), { monthlyRent: -1 })));
   it('stripeAccountId is still refused for a plain admin', () =>

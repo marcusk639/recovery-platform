@@ -1,7 +1,7 @@
 /** A house's rent settings and a resident's rate, read defensively from raw docs. */
 import { resolveTimeZone } from '../activities/weekSummaryMath';
 import { asCents, asDollars, Cents, dollarsToCents } from '../util/money';
-import { MAX_HOUSE_PRICE_DOLLARS, RentFrequency, RentSettings } from './types';
+import { maxPriceDollars, RentFrequency, RentSettings } from './types';
 
 const CALENDAR_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -11,7 +11,7 @@ function isFrequency(v: unknown): v is RentFrequency {
 
 /**
  * Null means charging is off: an Oxford house, no weekly/monthly schedule, or that
- * schedule's price is not a finite number in (0, MAX_HOUSE_PRICE_DOLLARS]. A string or
+ * schedule's price is not a finite number in (0, maxPriceDollars(frequency)]. A string or
  * a cents-sized value is off, never charged. The start stamp comes from the house's
  * server-only state doc (rentHouseStates/{houseId}).
  */
@@ -26,7 +26,7 @@ export function rentSettingsOf(
   if (!isFrequency(frequency)) return null;
   const raw = frequency === 'weekly' ? house.weeklyRent : house.monthlyRent;
   if (typeof raw !== 'number' || !Number.isFinite(raw)) return null;
-  if (raw <= 0 || raw > MAX_HOUSE_PRICE_DOLLARS) return null;
+  if (raw <= 0 || raw > maxPriceDollars(frequency)) return null;
   const startDate = state?.startDate;
   const startedAtMs = state?.startedAtMs;
   return {
@@ -39,12 +39,9 @@ export function rentSettingsOf(
   };
 }
 
-/** A custom rate above the house price limit is a unit mistake, never charged. */
-const MAX_CUSTOM_RENT_CENTS = MAX_HOUSE_PRICE_DOLLARS * 100;
-
 /**
  * The resident's custom rate when it is well formed and set for the current schedule,
- * else the house price. Null when the custom rate is above MAX_CUSTOM_RENT_CENTS:
+ * else the house price. Null when the custom rate is above that schedule's price limit:
  * the caller skips the resident rather than guess.
  */
 export function residentRate(
@@ -60,7 +57,7 @@ export function residentRate(
     Number.isInteger(custom.amountCents) &&
     custom.amountCents >= 0
   ) {
-    if (custom.amountCents > MAX_CUSTOM_RENT_CENTS) return null;
+    if (custom.amountCents > maxPriceDollars(settings.frequency) * 100) return null;
     return { rateCents: asCents(custom.amountCents), source: 'custom' };
   }
   return { rateCents: settings.priceCents, source: 'house' };

@@ -28,8 +28,14 @@ describe('rentSettingsOf', () => {
     ['negative', { weeklyRent: -5 }],
     ['cents-sized', { weeklyRent: 17500 }],
   ])('is off for %s', (_l, o) => expect(rentSettingsOf(house(o))).toBeNull());
-  it('exactly the limit is still on', () =>
-    expect(rentSettingsOf(house({ weeklyRent: 10000 }))?.priceCents).toBe(1000000));
+  it('exactly the monthly limit is still on', () =>
+    expect(
+      rentSettingsOf(house({ rentFrequency: 'monthly', monthlyRent: 10000 }))?.priceCents,
+    ).toBe(1000000));
+  it('exactly the weekly limit, $2,500, is still on', () =>
+    expect(rentSettingsOf(house({ weeklyRent: 2500 }))?.priceCents).toBe(250000));
+  it('a weekly price above $2,500 is off', () =>
+    expect(rentSettingsOf(house({ weeklyRent: 2501 }))).toBeNull());
   it('an empty timezone falls back to New York', () =>
     expect(rentSettingsOf(house({ timezone: '' }))?.timeZone).toBe('America/New_York'));
   it('carries the start stamp from the server-only state', () =>
@@ -85,8 +91,12 @@ describe('custom rate cap', () => {
     expect(
       residentRate({ customRent: { amountCents: 1750000 * 10, frequency: 'weekly' } }, s),
     ).toBeNull());
-  it('exactly the cap is used', () =>
+  it('exactly the weekly cap is used', () =>
     expect(
-      residentRate({ customRent: { amountCents: 1000000, frequency: 'weekly' } }, s)?.rateCents,
-    ).toBe(1000000));
+      residentRate({ customRent: { amountCents: 250000, frequency: 'weekly' } }, s)?.rateCents,
+    ).toBe(250000));
+  it('a weekly custom rate above $2,500 is not used', () =>
+    expect(
+      residentRate({ customRent: { amountCents: 250001, frequency: 'weekly' } }, s),
+    ).toBeNull());
 });

@@ -89,15 +89,23 @@ export async function reverseRentCharges(opts: ReverseOptions): Promise<ReverseR
     return { charges: 0, totalCents: asCents(0), refused: 'not-paused' };
   }
   const snap = await rentChargeCollection.where('houseId', '==', opts.houseId).get();
+  // A linked intake record's charges belong to the record its rent moved to.
+  const guests = await guestCollection.where('houseId', '==', opts.houseId).get();
+  const owner = new Map<string, string>();
+  guests.docs.forEach((g) => {
+    const to = g.data()?.rentLinkedTo;
+    if (typeof to === 'string' && to !== '') owner.set(g.id, to);
+  });
+  const ownerOf = (d: Data) => owner.get(String(d.guestId)) ?? String(d.guestId);
   const selected = snap.docs
     .map((d) => ({ id: d.id, data: (d.data() ?? {}) as Data }))
     .filter((d) => !opts.since || String(d.data.from) >= opts.since)
-    .filter((d) => !opts.guestId || d.data.guestId === opts.guestId)
-    // Newest first per resident: guest ascending, then first day descending.
+    .filter((d) => !opts.guestId || ownerOf(d.data) === opts.guestId)
+    // Newest first per resident (after links): resident ascending, then first day descending.
     .sort((a, b) =>
-      String(a.data.guestId) === String(b.data.guestId)
+      ownerOf(a.data) === ownerOf(b.data)
         ? String(b.data.from).localeCompare(String(a.data.from))
-        : String(a.data.guestId).localeCompare(String(b.data.guestId)),
+        : ownerOf(a.data).localeCompare(ownerOf(b.data)),
     );
   let total = asCents(0);
   for (const d of selected) {

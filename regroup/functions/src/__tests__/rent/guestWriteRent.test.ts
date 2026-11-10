@@ -12,6 +12,7 @@ jest.mock('../../util/notifications', () => ({ sendNotification: jest.fn() }));
 
 import { apiFirestore, mem, memDb } from '../helpers/memFirestore';
 import { account, at, charges, guest, H, house, owed } from '../helpers/rentFixtures';
+import { chargeResident } from '../../rent/chargeResident';
 import { rentOnGuestWrite } from '../../rent/guestWriteRent';
 
 type Data = Record<string, unknown>;
@@ -187,4 +188,20 @@ it('a discharge with no account writes nothing', async () => {
     eventTime: at('2026-11-20').toISOString(),
   });
   expect(mem.paths('rentAccounts/')).toEqual([]);
+});
+
+it('linking a record to an account lets the resident see its charges', async () => {
+  house();
+  guest({ userId: '' });
+  await chargeResident('g1', at('2026-11-18'));
+  expect(mem.get('rentCharges/g1_2026-11-18')?.guestUserId).toBeNull();
+  await expect(
+    rentOnGuestWrite({
+      guestId: 'g1',
+      before: g(),
+      after: { ...g(), userId: 'u9' },
+      eventTime: at('2026-11-19').toISOString(),
+    }),
+  ).resolves.toBe('none');
+  expect(mem.get('rentCharges/g1_2026-11-18')?.guestUserId).toBe('u9');
 });

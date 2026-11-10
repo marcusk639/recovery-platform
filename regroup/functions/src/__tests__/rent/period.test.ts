@@ -41,6 +41,8 @@ describe('toLocalDate', () => {
   it('keeps a calendar date as is', () => expect(toLocalDate('2026-11-20', NY)).toBe('2026-11-20'));
   it('reads an ISO timestamp in the house zone', () =>
     expect(toLocalDate('2026-11-21T03:00:00.000Z', NY)).toBe('2026-11-20'));
+  it('reads an ISO timestamp with no offset as a house-local wall time', () =>
+    expect(toLocalDate('2026-11-20T23:30:00', NY)).toBe('2026-11-20'));
   it('reads a Firestore Timestamp', () =>
     expect(toLocalDate({ toMillis: () => Date.parse('2026-11-21T03:00:00Z') }, NY)).toBe(
       '2026-11-20',

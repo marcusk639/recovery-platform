@@ -226,9 +226,9 @@ service cloud.firestore {
       // claims after their real record is discharged. A record with no
       // account, or for a plain resident, ranks 0.
       // Rent (functions src/rent/). customRent is a manager-set rate for one
-      // resident: null, or exactly an integer amountCents from 0 to 1000000
-      // ($10,000, the house price limit) and the schedule it was set for, so a
-      // weekly rate can never be read as monthly.
+      // resident: null, or exactly an integer amountCents up to that schedule's
+      // price limit ($2,500 a week, $10,000 a month) and the schedule it was set
+      // for, so a weekly rate can never be read as monthly.
       // rentLinkedTo is server-only (linkIntakeRecord): it stops rent charging
       // on an intake record whose balance moved to the resident's own record.
       function customRentValid(d) {
@@ -237,7 +237,8 @@ service cloud.firestore {
            d.customRent.keys().hasOnly(['amountCents', 'frequency']) &&
            d.customRent.keys().hasAll(['amountCents', 'frequency']) &&
            d.customRent.amountCents is int && d.customRent.amountCents >= 0 &&
-           d.customRent.amountCents <= 1000000 &&
+           d.customRent.amountCents <=
+             (d.customRent.get('frequency', '') == 'weekly' ? 250000 : 1000000) &&
            d.customRent.frequency in ['weekly', 'monthly']);
       }
 
@@ -478,7 +479,7 @@ service cloud.firestore {
       // decision 2026-11-09), so monthlyRent and weeklyRent are no longer
       // superAdmin-only. For every role, rentFrequency is one of the three
       // schedules ('both' means charging is off) and a price is a number of
-      // DOLLARS from 0 to 10000: a value typed in cents (17500) or as a string
+      // DOLLARS (weekly 0 to 2500, monthly 0 to 10000): a value typed in cents or as a string
       // is refused, never charged 100x.
       function rentSettingsValid() {
         let changed = request.resource.data.diff(resource.data).affectedKeys();
@@ -491,7 +492,7 @@ service cloud.firestore {
           (!changed.hasAny(['monthlyRent']) ||
             (d.monthlyRent is number && d.monthlyRent >= 0 && d.monthlyRent <= 10000)) &&
           (!changed.hasAny(['weeklyRent']) ||
-            (d.weeklyRent is number && d.weeklyRent >= 0 && d.weeklyRent <= 10000));
+            (d.weeklyRent is number && d.weeklyRent >= 0 && d.weeklyRent <= 2500));
       }
       allow update: if isDemoScopedHouses([houseId]) &&
         !request.resource.data.diff(resource.data).affectedKeys()
