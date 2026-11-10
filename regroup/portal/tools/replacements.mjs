@@ -37,6 +37,7 @@ const REPLACE = {
   '@react-native-firebase/storage': 'src/adapter/firebase/storage.ts',
   '@sentry/react-native': 'src/adapter/sentry.ts',
   'react-native-keyboard-controller': 'src/adapter/keyboard-controller.tsx',
+  'react-native-picker-select': 'src/adapter/picker-select.tsx',
   'react-native-gesture-handler': 'src/adapter/gesture-handler.ts',
   '@react-native-documents/picker': 'src/adapter/document-picker.ts',
   'react-native-iphone-x-helper': 'src/adapter/iphone-x-helper.ts',
@@ -47,7 +48,6 @@ const REPLACE = {
 };
 
 const DEFERRED = [
-  'react-native-picker-select',
   'react-native-google-places-autocomplete',
   'react-native-image-picker',
   '@stripe/stripe-react-native',
