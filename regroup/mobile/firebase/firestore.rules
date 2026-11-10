@@ -374,7 +374,9 @@ service cloud.firestore {
 
       // No one, admin or not, changes the money fields of their own record:
       // a peer leader is an admin of the house and also a resident who owes
-      // rent. Another admin of the house sets them. moveInDate and importedAt
+      // rent. Someone else sets them, and rentOwed, choreFees, customRent and
+      // rentDueDate only from a manager up (rentMoneyByManager, owner decision
+      // 2026-11-10). moveInDate and importedAt
       // decide the first chargeable day, and rentDueDate when rent is overdue,
       // so they are money fields too.
       function ownMoneyUnchanged() {
@@ -498,8 +500,8 @@ service cloud.firestore {
       // rentChargesStartDate / rentChargesStartedAtMs: reserved. When charging
       // turned on lives in server-only rentHouseStates/{houseId}; no client may
       // write these names here either.
-      // Rent settings: any house admin sets the schedule and price (owner
-      // decision 2026-11-09), so monthlyRent and weeklyRent are no longer
+      // Rent settings: a manager or above (rank >= 2) sets the schedule and price
+      // (owner decision 2026-11-10), so monthlyRent and weeklyRent are no longer
       // superAdmin-only. For every role, rentFrequency is one of the three
       // schedules ('both' means charging is off) and a price is a number of
       // DOLLARS (weekly 0 to 2500, monthly 0 to 10000): a value typed in cents or as a string
