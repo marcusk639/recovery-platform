@@ -1,6 +1,6 @@
 import { assertLocalSandbox, E2E_LOCAL_SANDBOX_ACCOUNT_ID, E2E_SANDBOX_ACCOUNT_ID, LIVE_PRODUCTION_ACCOUNT_ID } from '../../stripeSandbox';
 import { makeStripe } from '../../__tests__/helpers/mockStripe';
-import { assertEmulatorEnv } from '../harness/guards';
+import { assertEmulatorEnv, functionsBase } from '../harness/guards';
 import { fetchEvents } from '../harness/eventPump';
 
 const PINNED = '2026-01-28.clover';
@@ -61,5 +61,24 @@ describe('fetchEvents', () => {
   it('refuses an event rendered in another API version, which production would not receive', async () => {
     const stripe = stripeWith([event('e1', 1, { id: 'sub_1' }, '2020-08-27')]);
     await expect(fetchEvents(stripe, { since: 0, objectId: 'sub_1', settleMs: 0 })).rejects.toThrow(/2020-08-27/);
+  });
+});
+
+describe('functionsBase', () => {
+  it('defaults to the payment suite emulator', () => {
+    expect(functionsBase({})).toBe('http://127.0.0.1:5101/demo-regroup-e2e/us-central1');
+  });
+
+  it('can point at another local emulator', () => {
+    const base = 'http://127.0.0.1:5001/demo-regroup-e2e/us-central1';
+    expect(functionsBase({ E2E_FUNCTIONS_BASE: base })).toBe(base);
+  });
+
+  it.each([
+    'https://us-central1-phoenix-cleanhouse.cloudfunctions.net',
+    'http://127.0.0.1.example.com:5001/demo-regroup-e2e/us-central1',
+    'http://127.0.0.1:5001/phoenix-cleanhouse/us-central1',
+  ])('refuses %s', (base) => {
+    expect(() => functionsBase({ E2E_FUNCTIONS_BASE: base })).toThrow(/Refusing/);
   });
 });

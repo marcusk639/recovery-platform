@@ -20,6 +20,16 @@ xcodebuild -workspace ios/rats.xcworkspace -scheme rats-e2e-emulator -configurat
 xcrun simctl install "$SIM_UDID" build/e2e/Build/Products/E2EEmulator-iphonesimulator/rats.app
 ```
 
+## A new test house
+
+With the manual-testing emulators running (`scripts/test-prep.sh`), this creates a new house with three residents and prints their sign-in emails. Each run makes a new house, and the password is `E2E_TEST_PASSWORD`.
+
+```sh
+cd regroup/e2e && E2E_TEST_PASSWORD=<the local password> npm run e2e:new-house
+```
+
+It goes through the real signup path (`createHouses`, invitations, `redeemInvitation`, then the app's writes through the security rules). Only the operator's subscription is seeded. Its test is `npm run test:payments -- newHouseWithGuests`.
+
 ## Credentials
 
 Flows read the shared test password from `E2E_TEST_PASSWORD`; it is never committed. Export it before running, e.g. `export E2E_TEST_PASSWORD="$(cat ~/.config/regroup-e2e/e2e-test-password)"`, and pass `-e E2E_TEST_PASSWORD="$E2E_TEST_PASSWORD"` to `maestro test`.

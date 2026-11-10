@@ -6,7 +6,16 @@ import { pinnedStripeApiVersion } from '../../launchConfig';
 import { assertLocalSandbox } from '../../stripeSandbox';
 
 export const PROJECT = 'demo-regroup-e2e';
-export const FUNCTIONS_BASE = `http://127.0.0.1:5101/${PROJECT}/us-central1`;
+
+/** The payment suite's emulator, or another local one (E2E_FUNCTIONS_BASE). Never a deployed project. */
+export function functionsBase(env: NodeJS.ProcessEnv = process.env): string {
+  const base = env.E2E_FUNCTIONS_BASE ?? `http://127.0.0.1:5101/${PROJECT}/us-central1`;
+  if (!new RegExp(`^http://127\\.0\\.0\\.1:\\d+/${PROJECT}/us-central1$`).test(base)) {
+    throw new Error(`Refusing to run: ${base} is not a local ${PROJECT} emulator.`);
+  }
+  return base;
+}
+export const FUNCTIONS_BASE = functionsBase();
 export const CONFIG_DIR = path.join(os.homedir(), '.config', 'regroup-e2e');
 export const LOCAL_KEY_FILE = 'stripe-local-secret-key.txt';
 export const LOCAL_WEBHOOK_SECRET_FILE = 'stripe-local-webhook-secret.txt';

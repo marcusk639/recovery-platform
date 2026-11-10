@@ -102,6 +102,7 @@ export async function clockedOperator(
     'subscriptionMetadata.status': subscription.status,
     'subscriptionMetadata.subscriptionId': subscription.id,
     'subscriptionMetadata.customerId': customer.id,
+    'subscriptionMetadata.subscriptionItemId': subscription.items.data[0].id,
     'subscriptionMetadata.houseType': houseType,
     'subscriptionMetadata.tier': tier,
   });

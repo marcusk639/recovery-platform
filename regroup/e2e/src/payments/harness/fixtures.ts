@@ -19,20 +19,20 @@ export type SeededOperator = { uid: string; adminId: string; email: string };
 export type SeededHouse = { id: string; ownerUid: string };
 export type SeededResident = { uid: string; guestId: string; houseId: string; email: string };
 
-async function createAccount(uid: string, email: string, claims: object): Promise<void> {
+async function createAccount(uid: string, email: string, claims: object, password?: string): Promise<void> {
   const auth = getAuth(adminApp());
-  await auth.createUser({ uid, email, emailVerified: true });
+  await auth.createUser({ uid, email, emailVerified: true, ...(password && { password }) });
   await auth.setCustomUserClaims(uid, claims);
 }
 
 /** An operator with a random admin id, as createHouses creates it. The uid is never an admin id. */
 export async function seedOperator(
-  opts: { uid?: string; status?: string; subscriptionMetadata?: object } = {},
+  opts: { uid?: string; status?: string; subscriptionMetadata?: object; email?: string; password?: string } = {},
 ): Promise<SeededOperator> {
   const uid = opts.uid ?? uniqueId('op');
   const adminId = randomUUID();
-  const email = emailOf(uid);
-  await createAccount(uid, email, {});
+  const email = opts.email ?? emailOf(uid);
+  await createAccount(uid, email, {}, opts.password);
   await adminDb().doc(`users/${uid}`).set({
     id: uid,
     uid,
@@ -81,7 +81,7 @@ export async function seedHouse(operator: SeededOperator, extra: object = {}): P
     createdAt: now,
     ...extra,
   });
-  await db.doc(`house-roles/${id}_${operator.uid}`).set({ tier: 'owner', primary: true, grantedBy: 'seed', grantedAt: now, via: 'seed' });
+  await db.doc(`house-roles/${id}_${operator.uid}`).set({ houseId: id, uid: operator.uid, tier: 'owner', primary: true, grantedBy: 'seed', grantedAt: now, via: 'seed' });
   await db.doc(`admins/${operator.adminId}`).update({ houseIds: [id], superAdmin: [id] });
   await getAuth(adminApp()).setCustomUserClaims(operator.uid, { admin: { [id]: true }, superAdmin: { [id]: true } });
   return { id, ownerUid: operator.uid };
