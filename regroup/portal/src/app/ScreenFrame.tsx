@@ -3,6 +3,7 @@ import ErrorBoundary from '@mobile/components/ErrorBoundary';
 import { Breadcrumb } from './Breadcrumb';
 import { guestIdForState, houseIdForState } from './current-house';
 import { HouseTabs } from './HouseTabs';
+import { useLeaveWarning } from './leave-guard';
 import { ResidentGate } from './residents/ResidentGate';
 import { FullViewGate } from './FullViewGate';
 import { HouseGate } from './HouseGate';
@@ -18,6 +19,7 @@ export function ScreenFrame({ state, routeKey, children }: { state: any; routeKe
   const houseId = houseIdForState(state);
   const guestId = guestIdForState(state);
   const routeName: string = state.routes[state.index]?.name ?? '';
+  useLeaveWarning(routeName);
   const boundary = <ErrorBoundary key={routeKey}>{children}</ErrorBoundary>;
   const screen = (
     <div data-testid="screen-body" style={column}>

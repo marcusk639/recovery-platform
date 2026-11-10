@@ -105,3 +105,5 @@ export async function addResidents(houseId: string, count: number): Promise<void
   }
   await batch.commit();
 }
+
+export const uidOf = async (account: Account) => (await getAuth().getUserByEmail(EMAILS[account])).uid;

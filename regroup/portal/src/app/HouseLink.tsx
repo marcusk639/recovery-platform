@@ -1,5 +1,6 @@
 import type { CSSProperties, MouseEvent, ReactNode } from 'react';
 import { navigationRef } from '@mobile/navigation/service';
+import { confirmLeave } from './leave-guard';
 
 // A real link, so it can open in a new tab. A plain click navigates in place while
 // a navigator is mounted. After a crash the boundary has unmounted the navigator, so
@@ -17,7 +18,7 @@ export function HouseLink(props: {
     const navigation = navigationRef.current;
     if (event.metaKey || event.ctrlKey || event.shiftKey || !navigation?.isReady?.()) return;
     event.preventDefault();
-    navigation.navigate(props.route, props.params);
+    confirmLeave(navigation.getCurrentRoute?.()?.name ?? '', () => navigation.navigate(props.route, props.params));
   };
   return (
     <a id={props.id} href={props.href} aria-current={props.current ? 'page' : undefined} style={props.style} onClick={onClick}>

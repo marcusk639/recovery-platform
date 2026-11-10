@@ -12,6 +12,12 @@ const webFirestore = vi.hoisted(() => ({
   runTransaction: vi.fn(),
   writeBatch: vi.fn(),
   onSnapshot: vi.fn(),
+  // plain-data keeps instances of these as they are.
+  FieldValue: class {},
+  Timestamp: class {},
+  GeoPoint: class {},
+  Bytes: class {},
+  DocumentReference: class {},
 }));
 const webAuth = vi.hoisted(() => ({
   signInWithEmailAndPassword: vi.fn(),
@@ -25,7 +31,7 @@ vi.mock('firebase/firestore', () => webFirestore);
 vi.mock('firebase/auth', () => webAuth);
 vi.mock('firebase/storage', () => webStorage);
 
-import { getDoc, onSnapshot, writeBatch } from '../src/adapter/firebase/firestore';
+import { getDoc, onSnapshot, setDoc, writeBatch } from '../src/adapter/firebase/firestore';
 import { signInWithEmailAndPassword } from '../src/adapter/firebase/auth';
 import { putFile } from '../src/adapter/firebase/storage';
 import { assertEmulatorProject } from '../src/adapter/firebase/emulator-config';
@@ -86,4 +92,19 @@ test('setup refuses any project but demo-regroup-e2e', () => {
   expect(() => assertEmulatorProject('phoenix-cleanhouse')).toThrow(/phoenix-cleanhouse/);
   expect(() => assertEmulatorProject('regroup-e2e')).toThrow();
   expect(() => assertEmulatorProject('demo-regroup-e2e')).not.toThrow();
+});
+
+class Guest {
+  id = 'g1';
+}
+test('setDoc and a batch write a class instance as a plain object, as RN Firebase does', async () => {
+  const set = vi.fn();
+  webFirestore.writeBatch.mockReturnValue({ set, update: vi.fn(), commit: vi.fn().mockResolvedValue(undefined) });
+  webFirestore.setDoc.mockResolvedValue(undefined);
+  writeBatch({} as never).set({} as never, new Guest() as never);
+  await setDoc({} as never, new Guest() as never);
+  for (const written of [set.mock.calls[0][1], webFirestore.setDoc.mock.calls[0][1]]) {
+    expect(Object.getPrototypeOf(written)).toBe(Object.prototype);
+    expect(written).toEqual({ id: 'g1' });
+  }
 });
