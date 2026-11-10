@@ -110,14 +110,10 @@ export function anchorFor(i: AnchorInput): Anchor {
   // off (owner decision 2026-11-09). Starting at the next full period let a short off
   // across a period start skip that whole period. Charges that ended before the
   // resident joined this house don't count, so a first turn-on still follows spec §2.
+  // Only chargedHouseId tells: a move keeps chargedThrough from the old house, which can
+  // run past the move day.
   const joinedHere = str(account?.joinedOn);
-  if (
-    account &&
-    chargeFrom &&
-    chargedThrough &&
-    account.houseId === houseId &&
-    (!joinedHere || chargedThrough >= joinedHere)
-  ) {
+  if (account && chargeFrom && chargedThrough && account.chargedHouseId === houseId) {
     return finish(
       { houseJoinedAtMs: knownJoin, joinedOn: joinedHere, chargeFrom: startDate },
       true,

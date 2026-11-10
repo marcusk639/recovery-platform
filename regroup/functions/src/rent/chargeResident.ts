@@ -138,7 +138,7 @@ export async function chargeResident(guestId: string, now: Date): Promise<Charge
     }
     txn.set(
       accountRef,
-      { ...nextAccount, chargedThrough: plan[plan.length - 1].through },
+      { ...nextAccount, chargedThrough: plan[plan.length - 1].through, chargedHouseId: houseId },
       { merge: true },
     );
 

@@ -38,6 +38,8 @@ export const guest = (o: Record<string, unknown> = {}, id = 'g1') =>
     moveInDate: '2026-11-18',
     ...o,
   });
+// chargeResident writes chargedHouseId with every charge; a seeded chargedThrough was
+// charged by the account's own house unless the test names another.
 export const account = (o: Record<string, unknown> = {}) =>
   mem.seed('rentAccounts/g1', {
     guestId: 'g1',
@@ -49,6 +51,7 @@ export const account = (o: Record<string, unknown> = {}) =>
     chargeFrom: '2026-11-11',
     chargedThrough: null,
     updatedAtMs: 1,
+    ...(o.chargedThrough ? { chargedHouseId: o.houseId ?? H } : {}),
     ...o,
   });
 // The invitation behind an account's admission to a house. Its invitedEmail is what

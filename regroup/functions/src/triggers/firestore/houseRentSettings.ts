@@ -23,6 +23,8 @@ export async function syncRentChargeStart(
   houseId: string,
   now: Date,
   processedAt: Date = new Date(),
+  /** This event turned charging off: record the clear even if nothing was stamped yet. */
+  turnedOff = false,
 ): Promise<'stamped' | 'cleared' | 'unchanged'> {
   const houseRef = houseCollection.doc(houseId);
   const stateRef = rentHouseStateCollection.doc(houseId);
@@ -48,7 +50,9 @@ export async function syncRentChargeStart(
       });
       return 'stamped';
     }
-    if (!settings && stamped) {
+    // A clear is recorded even when an earlier 'on' is still retrying, so its older time
+    // can't be stamped over the time charging was off.
+    if (!settings && (stamped || turnedOff)) {
       txn.set(stateRef, {
         startDate: null,
         startedAtMs: null,
@@ -78,8 +82,9 @@ export const onHouseRentSettingsWrite = onDocumentWritten(
     // on: a late, unrelated event must not move the start back.
     const changedAt = Date.parse(event.time ?? '');
     const turnedOn = !!rentSettingsOf(after) && !(before && rentSettingsOf(before));
+    const turnedOff = !!before && !!rentSettingsOf(before) && !rentSettingsOf(after);
     const at = turnedOn && Number.isFinite(changedAt) ? new Date(changedAt) : new Date();
-    const result = await syncRentChargeStart(houseId, at);
+    const result = await syncRentChargeStart(houseId, at, new Date(), turnedOff);
     if (result !== 'unchanged') logger.info('rent charging start', { houseId, result });
   },
 );

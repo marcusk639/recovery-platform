@@ -22,6 +22,9 @@ const normalEmail = (v: unknown): string => (typeof v === 'string' ? v.trim().to
 const hasNoUserId = (g: Data) => g.userId === undefined || g.userId === null || g.userId === '';
 const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+/** Present but not a number: moving it would erase it (num() reads it as 0). */
+const malformed = (v: unknown): boolean =>
+  v !== undefined && v !== null && !(typeof v === 'number' && Number.isFinite(v));
 
 /**
  * The email the account was invited to this house with, from its admission ticket's
@@ -58,7 +61,15 @@ export async function linkIntakeRecord(
   if (!newIsInvite && !hasNoUserId(fresh)) return 'none';
   // A new invite record matches by the email its account was invited with.
   const invited = newIsInvite ? await invitedEmailOf(fresh.userId as string, houseId) : '';
-  if (newIsInvite && !invited) return 'none';
+  if (newIsInvite && !invited) {
+    // Signed up before admission tickets, or a staff-made linked record: it can't be
+    // matched safely, so a duplicate intake record would be charged too.
+    logger.warn('linkIntakeRecord: account record has no invitation in the house; not linked', {
+      guestId: newGuestId,
+      houseId,
+    });
+    return 'none';
+  }
 
   const inHouse = await guestCollection.where('houseId', '==', houseId).get();
   const candidates = inHouse.docs.filter((d) => {
@@ -82,7 +93,17 @@ export async function linkIntakeRecord(
           ),
         )
       ).filter((d): d is (typeof candidates)[number] => d !== null);
-  if (matches.length === 0) return 'none';
+  if (matches.length === 0) {
+    // An account record with the same email but no invitation: likely the same person,
+    // charged on both records. Not linked by a resident-written email; a manager decides.
+    if (!newIsInvite && candidates.some((d) => normalEmail(((d.data() ?? {}) as Data).email) === email)) {
+      logger.warn('linkIntakeRecord: an account record has this email but no invitation; not linked', {
+        guestId: newGuestId,
+        houseId,
+      });
+    }
+    return 'none';
+  }
   if (matches.length > 1) {
     logger.warn('linkIntakeRecord: more than one record matches; none linked', {
       guestId: newGuestId,
@@ -104,8 +125,10 @@ async function linkRecords(
   houseId: string,
 ): Promise<'linked' | 'none'> {
   let selfMade = false;
+  let badBalance = false;
   const linked = await ratsFirestore.runTransaction(async (txn) => {
     selfMade = false;
+    badBalance = false;
     const newRef = guestCollection.doc(newGuestId);
     const intakeRef = guestCollection.doc(intakeId);
     const oldAccountRef = rentAccountCollection.doc(intakeId);
@@ -134,6 +157,12 @@ async function linkRecords(
     const creator = str(source.createdBy);
     if (creator === userId) {
       selfMade = true;
+      return false;
+    }
+    // increment replaces a field that isn't a number, so a balance such as "350" on
+    // either record would be lost. A manager fixes it; the next write links them.
+    if ([source.rentOwed, source.choreFees, target.rentOwed, target.choreFees].some(malformed)) {
+      badBalance = true;
       return false;
     }
     // Only amounts owed move across. A credit stays on the intake record for a
@@ -177,6 +206,13 @@ async function linkRecords(
     return true;
   });
   if (!linked) {
+    if (badBalance) {
+      logger.error('linkIntakeRecord: a balance is not a number; not linked', {
+        guestId: newGuestId,
+        intakeId,
+        houseId,
+      });
+    }
     if (selfMade) {
       logger.warn('linkIntakeRecord: intake record made by the same account; not linked', {
         guestId: newGuestId,

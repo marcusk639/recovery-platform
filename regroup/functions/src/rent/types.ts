@@ -75,6 +75,8 @@ export interface RentAccount {
   chargeFrom: string;
   /** Last day charged for; null before the first charge. */
   chargedThrough: string | null;
+  /** The house that made the last charge. A move keeps chargedThrough but not this. */
+  chargedHouseId?: string | null;
   updatedAtMs: number;
 }
 

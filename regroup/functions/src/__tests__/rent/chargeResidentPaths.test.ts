@@ -109,7 +109,8 @@ describe('off and on, moves', () => {
   it('charges that ended before the resident joined this house do not count: next full period', async () => {
     house({ rentChargesStartDate: '2026-12-09', rentChargesStartedAtMs: MAX });
     guest();
-    account({ joinedOn: '2026-11-25', chargeFrom: '2026-09-01', chargedThrough: '2026-11-22' });
+    // Charged at the house they lived in before.
+    account({ joinedOn: '2026-11-25', chargeFrom: '2026-09-01', chargedThrough: '2026-11-22', chargedHouseId: 'A' });
     await expect(chargeResident('g1', at('2026-12-09'))).resolves.toMatchObject({
       reason: 'not-due',
     });

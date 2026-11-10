@@ -85,6 +85,15 @@ it("an 'on' after the last clear still stamps its own time", async () => {
   expect(state()).toMatchObject({ startedAtMs: Date.parse(changedAt) });
 });
 
+// The 'on' that would have stamped failed and is still retrying when 'off' arrives, so
+// nothing is stamped yet. The clear must still be recorded, or the retried 'on' could
+// stamp its older time over the time charging was off.
+it('turning off records the clear even before anything was stamped', async () => {
+  mem.seed(`houses/${H}`, off);
+  await run(event(on, off));
+  expect(state()).toMatchObject({ startDate: null, startedAtMs: null, clearedAtMs: NOW.getTime() });
+});
+
 it('turning off records when it was cleared', async () => {
   mem.seed(`houses/${H}`, off);
   seedStamp();
