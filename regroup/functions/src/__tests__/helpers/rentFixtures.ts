@@ -51,5 +51,12 @@ export const account = (o: Record<string, unknown> = {}) =>
     updatedAtMs: 1,
     ...o,
   });
+// The invitation behind an account's admission to a house. Its invitedEmail is what
+// staff typed when inviting; linkIntakeRecord matches on it, not on the email the
+// account's own guest record carries.
+export const invitedAs = (uid: string, invitedEmail: string, houseId = H) => {
+  mem.seed(`admission-tickets/${uid}_${houseId}`, { invitationId: `inv_${uid}`, used: true });
+  mem.seed(`invitations/inv_${uid}`, { invitedEmail, houseId });
+};
 export const owed = () => mem.get('guests/g1')?.rentOwed;
 export const charges = () => mem.paths('rentCharges/');

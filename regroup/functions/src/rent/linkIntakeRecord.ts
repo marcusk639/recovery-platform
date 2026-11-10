@@ -9,6 +9,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions/v2';
 import {
   guestCollection,
+  invitationCollection,
   ratsFirestore,
   rentAccountCollection,
   rentChargeCollection,
@@ -21,6 +22,23 @@ const normalEmail = (v: unknown): string => (typeof v === 'string' ? v.trim().to
 const hasNoUserId = (g: Data) => g.userId === undefined || g.userId === null || g.userId === '';
 const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+
+/**
+ * The email the account was invited to this house with, from its admission ticket's
+ * invitation; '' when there is none. A resident writes their own record (the
+ * self-create rule lets it carry any email) and can edit its email later, so only this
+ * value, typed by staff, ties an account to an intake record. Staff make intake
+ * records (no userId), so their email is staff-entered.
+ */
+async function invitedEmailOf(userId: string, houseId: string): Promise<string> {
+  const ticket = await ratsFirestore
+    .collection('admission-tickets')
+    .doc(`${userId}_${houseId}`)
+    .get();
+  const invitationId = str(ticket.data()?.invitationId);
+  if (!invitationId) return '';
+  return normalEmail((await invitationCollection.doc(invitationId).get()).data()?.invitedEmail);
+}
 
 /**
  * Links in either order: a new invite record finds the intake record (no userId), or
@@ -38,18 +56,32 @@ export async function linkIntakeRecord(
   if (!fresh || !email || !houseId || fresh.rentLinkedTo) return 'none';
   const newIsInvite = isPlausibleUid(fresh.userId);
   if (!newIsInvite && !hasNoUserId(fresh)) return 'none';
+  // A new invite record matches by the email its account was invited with.
+  const invited = newIsInvite ? await invitedEmailOf(fresh.userId as string, houseId) : '';
+  if (newIsInvite && !invited) return 'none';
 
   const inHouse = await guestCollection.where('houseId', '==', houseId).get();
-  const matches = inHouse.docs.filter((d) => {
+  const candidates = inHouse.docs.filter((d) => {
     const g = (d.data() ?? {}) as Data;
     return (
       d.id !== newGuestId &&
       isActiveGuestDoc(g) &&
       (newIsInvite ? hasNoUserId(g) : isPlausibleUid(g.userId)) &&
       !g.rentLinkedTo &&
-      normalEmail(g.email) === email
+      (!newIsInvite || normalEmail(g.email) === invited)
     );
   });
+  // A new intake record matches an account record by that account's invited email,
+  // never by the email the resident wrote on their own record.
+  const matches = newIsInvite
+    ? candidates
+    : (
+        await Promise.all(
+          candidates.map(async (d) =>
+            (await invitedEmailOf(d.data().userId as string, houseId)) === email ? d : null,
+          ),
+        )
+      ).filter((d): d is (typeof candidates)[number] => d !== null);
   if (matches.length === 0) return 'none';
   if (matches.length > 1) {
     logger.warn('linkIntakeRecord: more than one record matches; none linked', {

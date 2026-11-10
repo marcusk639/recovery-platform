@@ -11,15 +11,17 @@ jest.mock('../../api/firestore', () => require('../helpers/memFirestore').apiFir
 jest.mock('../../util/notifications', () => ({ sendNotification: jest.fn() }));
 
 import { apiFirestore, mem } from '../helpers/memFirestore';
-import { account, at, charges, guest, house } from '../helpers/rentFixtures';
+import { account, at, charges, guest, house, invitedAs } from '../helpers/rentFixtures';
 import { chargeResident } from '../../rent/chargeResident';
 import { rentOnGuestWrite } from '../../rent/guestWriteRent';
 import { linkIntakeRecord } from '../../rent/linkIntakeRecord';
 
 const intake = (o: Record<string, unknown> = {}, id = 'gIntake') =>
   guest({ userId: '', email: 'Pat@Example.com ', rentOwed: 12500, ...o }, id);
-const invite = (o: Record<string, unknown> = {}) =>
-  guest({ userId: 'u1', email: 'pat@example.com', moveInDate: undefined, ...o }, 'gNew');
+const invite = (o: Record<string, unknown> = {}, invitedEmail = 'pat@example.com') => {
+  invitedAs(typeof o.userId === 'string' ? o.userId : 'u1', invitedEmail);
+  return guest({ userId: 'u1', email: 'pat@example.com', moveInDate: undefined, ...o }, 'gNew');
+};
 const doc = (id: string) => mem.get(`guests/${id}`) ?? {};
 
 beforeEach(() => mem.reset());
@@ -220,10 +222,50 @@ describe('intake created after the invite record', () => {
 
   it('two invite records with the email are ambiguous', async () => {
     house();
+    invitedAs('u1', 'pat@example.com');
+    invitedAs('u2', 'pat@example.com');
     guest({ userId: 'u1', email: 'pat@example.com' }, 'a');
     guest({ userId: 'u2', email: 'pat@example.com' }, 'b');
     intake();
     await expect(linkIntakeRecord('gIntake')).resolves.toBe('ambiguous');
+    expect(doc('gIntake').rentLinkedTo).toBeUndefined();
+  });
+});
+
+// The resident writes their own record (any email, see the self-create rule), so the
+// match uses the email the invitation was sent to, which staff typed.
+describe('only the invited email links an account to an intake record', () => {
+  it("an invited resident who writes someone else's email on their record claims nothing", async () => {
+    house();
+    intake({ createdBy: 'mgr', customRent: { amountCents: 0, frequency: 'monthly' } });
+    invite({ userId: 'u2' }, 'sam@example.com');
+    await expect(linkIntakeRecord('gNew')).resolves.toBe('none');
+    expect(doc('gIntake')).toMatchObject({ rentOwed: 12500 });
+    expect(doc('gIntake').rentLinkedTo).toBeUndefined();
+    expect(doc('gNew').customRent).toBeUndefined();
+  });
+
+  it('a later intake record is not linked to a resident who edited their email to match', async () => {
+    house();
+    invite({ userId: 'u2' }, 'sam@example.com');
+    intake({ createdBy: 'mgr' });
+    await expect(linkIntakeRecord('gIntake')).resolves.toBe('none');
+    expect(doc('gIntake').rentLinkedTo).toBeUndefined();
+  });
+
+  it('the invited email links even when the record carries a different one', async () => {
+    house();
+    intake({ createdBy: 'mgr' });
+    invite({ email: 'pat.new@example.com' });
+    await expect(linkIntakeRecord('gNew')).resolves.toBe('linked');
+    expect(doc('gNew').rentOwed).toBe(12500);
+  });
+
+  it('an account with no admission ticket in the house is never linked', async () => {
+    house();
+    intake({ createdBy: 'mgr' });
+    guest({ userId: 'u3', email: 'pat@example.com', moveInDate: undefined }, 'gNew');
+    await expect(linkIntakeRecord('gNew')).resolves.toBe('none');
     expect(doc('gIntake').rentLinkedTo).toBeUndefined();
   });
 });
