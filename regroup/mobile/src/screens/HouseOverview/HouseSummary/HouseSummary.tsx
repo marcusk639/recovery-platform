@@ -60,7 +60,8 @@ import { Routes, RootStackParamList } from '../../../navigation/types';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 // Context
-import { AuthConsumer } from '../../../context/auth';
+import { AuthConsumer, useRoleToken } from '../../../context/auth';
+import { isAdmin } from '../../../util/roles';
 
 // Styles
 import styles from '../../Profile/ProfileStyles';
@@ -121,7 +122,12 @@ const HouseSummary: React.FC<Props> = ({ navigation }) => {
   const { data: queryGuests } = useGuests(house?.id || '', !!house?.id);
 
   // Fetch pending application count for operator badge
-  const { data: appList } = useHouseApplications(house?.id || '', !!house?.id);
+  // Only admins may read applications; a resident's query is refused (#197).
+  const token = useRoleToken();
+  const { data: appList } = useHouseApplications(
+    house?.id || '',
+    !!house?.id && isAdmin(token, house.id),
+  );
   const pendingCount = (appList ?? []).filter(
     (a: { status: string }) => a.status === 'pending',
   ).length;

@@ -160,6 +160,25 @@
       ]
     },
     {
+      "collectionGroup": "drug-tests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "houseId", "order": "ASCENDING" },
+        { "fieldPath": "guestId", "order": "ASCENDING" },
+        { "fieldPath": "testDate", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "drug-tests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "houseId", "order": "ASCENDING" },
+        { "fieldPath": "guestId", "order": "ASCENDING" },
+        { "fieldPath": "result", "order": "ASCENDING" },
+        { "fieldPath": "testDate", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "guests",
       "queryScope": "COLLECTION",
       "fields": [
