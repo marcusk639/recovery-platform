@@ -35,7 +35,7 @@ ALL_FUNCTIONS=(
   sendContactEmail sendSubscriptionUpdateEmail
   reportBug submitFeedback
   onGuestWrite onHouseDeleted setHouseSubscriptionStatusOnCreate
-  onActivityWritten onGuestLinkedRestamp
+  onActivityWritten onGuestLinkedRestamp onHouseRentSettingsWrite
   updateDisputes warmWebsite officerTermReminder weeklyTransfers
   overdueRentNotification scheduledRentCollection
 )
