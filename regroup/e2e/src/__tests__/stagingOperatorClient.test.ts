@@ -71,6 +71,17 @@ describe('createStagingClient', () => {
     expect(headersOf(calls[0]).get('Authorization')).toBeNull();
   });
 
+  it("looks up the API key's project", async () => {
+    const { calls, fetchFn } = fakeFetch(200, { projectId: '706803426891', authorizedDomains: [] });
+    const project = await createStagingClient(config, fetchFn).keyProject();
+
+    expect(project).toBe('706803426891');
+    expect(calls[0].url).toBe(
+      'https://www.googleapis.com/identitytoolkit/v3/relyingparty/getProjectConfig?key=AIza-test',
+    );
+    expect(calls[0].init.method).toBe('GET');
+  });
+
   it('creates the user doc as the user', async () => {
     const { calls, fetchFn } = fakeFetch(200, { name: 'x' });
     await createStagingClient(config, fetchFn).createUserDoc('tok', 'u1', {

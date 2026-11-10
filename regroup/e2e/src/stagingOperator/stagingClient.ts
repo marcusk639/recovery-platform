@@ -3,6 +3,8 @@ import { StagingConfig } from './staging';
 export type FetchFn = typeof fetch;
 
 export interface StagingClient {
+  /** The project number the API key belongs to. */
+  keyProject(): Promise<string>;
   signUp(email: string, password: string): Promise<{ uid: string; idToken: string }>;
   createUserDoc(idToken: string, uid: string, doc: Record<string, unknown>): Promise<void>;
   readUserDoc(idToken: string, uid: string): Promise<Record<string, unknown>>;
@@ -93,6 +95,15 @@ export function createStagingClient(config: StagingConfig, fetchFn: FetchFn): St
   });
 
   return {
+    async keyProject() {
+      const body = (await request(
+        'Identity Toolkit getProjectConfig',
+        `https://www.googleapis.com/identitytoolkit/v3/relyingparty/getProjectConfig?key=${config.apiKey}`,
+        { method: 'GET' },
+      )) as { projectId?: unknown };
+      return String(body.projectId ?? '');
+    },
+
     async signUp(email, password) {
       const body = (await request(
         'Auth signUp',

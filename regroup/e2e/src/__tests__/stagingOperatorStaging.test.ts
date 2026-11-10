@@ -4,6 +4,8 @@ import {
   newOperatorCredentials,
   readStagingConfig,
   STAGING_PROJECT_ID,
+  STAGING_PROJECT_NUMBER,
+  tokenAudience,
 } from '../stagingOperator/staging';
 
 const configFile = '/home/me/.config/regroup-e2e/firebase-web-config.json';
@@ -95,5 +97,22 @@ describe('newOperatorCredentials', () => {
     expect(creds.email).toBe('operator-20261109-220507-abab@rats-e2e.com');
     expect(creds.password.length).toBeGreaterThanOrEqual(20);
     expect(creds.password).toMatch(/^[A-Za-z0-9_-]+$/);
+  });
+});
+
+describe('tokenAudience', () => {
+  const jwt = (payload: object) =>
+    ['{"alg":"RS256"}', JSON.stringify(payload), 'sig'].map((p) => Buffer.from(p).toString('base64url')).join('.');
+
+  it("reads the project an ID token was issued for", () => {
+    expect(tokenAudience(jwt({ aud: 'regroup-e2e', sub: 'u1' }))).toBe('regroup-e2e');
+  });
+
+  it.each(['not-a-token', jwt({ sub: 'u1' })])('returns undefined for %s', (token) => {
+    expect(tokenAudience(token)).toBeUndefined();
+  });
+
+  it('pins the staging project number', () => {
+    expect(STAGING_PROJECT_NUMBER).toBe('706803426891');
   });
 });

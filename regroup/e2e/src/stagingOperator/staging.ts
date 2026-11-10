@@ -3,6 +3,22 @@ import * as fs from 'fs';
 /** The only project this command may touch. Nothing overrides it. */
 export const STAGING_PROJECT_ID = 'regroup-e2e';
 
+/**
+ * regroup-e2e's project number. The config file names a project, but the API key decides
+ * where signUp creates the account, so the key's own project is checked against this.
+ */
+export const STAGING_PROJECT_NUMBER = '706803426891';
+
+/** The project a Firebase ID token was issued for (its `aud`), or undefined if unreadable. */
+export function tokenAudience(idToken: string): string | undefined {
+  try {
+    const payload = JSON.parse(Buffer.from(idToken.split('.')[1] ?? '', 'base64url').toString('utf8'));
+    return typeof payload?.aud === 'string' ? payload.aud : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export interface StagingConfig {
   apiKey: string;
   projectId: typeof STAGING_PROJECT_ID;

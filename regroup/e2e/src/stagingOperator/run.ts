@@ -4,7 +4,10 @@ import {
   canCreateHouses,
   newOperatorCredentials,
   readStagingConfig,
+  STAGING_PROJECT_ID,
+  STAGING_PROJECT_NUMBER,
   StagingConfig,
+  tokenAudience,
 } from './staging';
 import { StagingClient } from './stagingClient';
 
@@ -36,7 +39,20 @@ export async function runStagingOperator(deps: RunDeps): Promise<RunResult> {
   const client = deps.makeClient(config);
   const { email, password } = newOperatorCredentials(deps.now(), deps.random);
 
+  const keyProject = await client.keyProject();
+  if (keyProject !== STAGING_PROJECT_NUMBER) {
+    throw new Error(
+      `The API key in ${deps.configFile} belongs to project ${keyProject || '(unknown)'}, not ${STAGING_PROJECT_ID} (${STAGING_PROJECT_NUMBER}). Nothing was created.`,
+    );
+  }
+
   const { uid, idToken } = await client.signUp(email, password);
+  const audience = tokenAudience(idToken);
+  if (audience !== STAGING_PROJECT_ID) {
+    throw new Error(
+      `The new account ${email} (uid ${uid}) was created in project ${audience ?? '(unknown)'}, not ${STAGING_PROJECT_ID}. Stopping before anything else is written; delete that account by hand.`,
+    );
+  }
 
   // From here on an account exists, so every failure says which one was left behind.
   const step = async <T>(name: string, work: () => Promise<T>): Promise<T> => {
