@@ -2,6 +2,7 @@ import React, { useCallback } from 'react';
 import { withFormik } from 'formik';
 import { useSelectedGuest } from '../../hooks/useSelectedGuest';
 import { useGuests, useUpdateGuest } from '../../state/queries/guestQueries';
+import { useMayEditRentMoney } from '../../state/queries/houseTierQueries';
 import GuestUpdateFormView from './GuestUpdateFormView';
 import { Guest } from '../../entities/Guest';
 import {
@@ -21,6 +22,8 @@ export interface GuestUpdateProps {
     authoritativeFields?: ReadonlyArray<keyof Guest>,
   ) => any;
   navigation: NativeStackNavigationProp<RootStackParamList>;
+  /** Manager or above: the rules refuse anyone else's rentOwed/choreFees change. */
+  canEditMoney?: boolean;
 }
 
 const GuestUpdateForm = withFormik<GuestUpdateProps, GuestFormValues>({
@@ -92,6 +95,7 @@ const GuestUpdateFormWrapper: React.FC<any> = props => {
   // available in this wrapper.
   const { data: guests = {} } = useGuests(guest?.houseId ?? '');
   const { mutateAsync: updateGuestMutation } = useUpdateGuest();
+  const canEditMoney = useMayEditRentMoney(guest?.houseId ?? '');
 
   const updateGuest = useCallback(
     async (
@@ -121,6 +125,7 @@ const GuestUpdateFormWrapper: React.FC<any> = props => {
       guest={guest}
       guests={guests}
       updateGuest={updateGuest}
+      canEditMoney={canEditMoney}
     />
   );
 };

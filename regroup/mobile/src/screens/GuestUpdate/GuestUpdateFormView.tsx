@@ -26,7 +26,7 @@ const MONEY_FIELD_PLACEHOLDERS: Record<string, string> = {
 const GuestUpdateFormView: React.FC<
   GuestUpdateProps & FormikProps<any>
 > = props => {
-  const { handleSubmit, isSubmitting, status, guest } = props;
+  const { handleSubmit, isSubmitting, status, guest, canEditMoney } = props;
 
   const scrollRef = useRef<any>(null);
 
@@ -96,8 +96,9 @@ const GuestUpdateFormView: React.FC<
         {getField('sobrietyDate', guest.sobrietyDate)}
         {getField('drugOfChoice', guest.drugOfChoice)}
         {getField('dailyHabit', guest.dailyHabit)}
-        {getField('rentOwed', guest.rentOwed)}
-        {getField('choreFees', guest.choreFees)}
+        {/* A hidden field keeps its seeded value, so guestMoneyUpdate leaves it out of the write. */}
+        {canEditMoney && getField('rentOwed', guest.rentOwed)}
+        {canEditMoney && getField('choreFees', guest.choreFees)}
         {getField('phase', guest.phase)}
       </View>
       <View style={{ alignSelf: 'center', marginBottom: normalize(50) }}>

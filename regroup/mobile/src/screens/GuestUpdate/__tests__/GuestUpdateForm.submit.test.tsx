@@ -39,6 +39,11 @@ jest.mock('../../../state/queries/guestQueries', () => ({
   useGuests: () => ({ data: {} }),
   useUpdateGuest: () => ({ mutateAsync: mockMutateAsync }),
 }));
+// The money fields are shown only to a manager or above
+// (GuestUpdateForm.money.test.tsx); these tests edit them as one.
+jest.mock('../../../state/queries/houseTierQueries', () => ({
+  useMayEditRentMoney: () => true,
+}));
 
 const mockGuestRef: { current: Guest | undefined } = { current: guest };
 
