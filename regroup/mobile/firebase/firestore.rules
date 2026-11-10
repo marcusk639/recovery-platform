@@ -136,8 +136,10 @@ service cloud.firestore {
       //  - update: the doc's own user or an admin of its houses; the user
       //    stays the same and houses can only be removed (profile edits,
       //    house settings removing an admin), never added.
-      //  - delete: unchanged (request.resource is null on delete, so this
-      //    has always denied; the app's AdminManagement delete fails today).
+      //  - delete: an owner or manager of the doc's one house removing a
+      //    manager. Never the owner's own doc, and never a doc for several
+      //    houses (the app deletes the whole doc). The old rule read
+      //    request.resource, which is null on a delete, so it refused all (#196).
       function staffRecord(houseId) {
         let snap = get(/databases/$(database)/documents/house-roles/$(houseId + '_' + request.auth.uid));
         return snap != null && snap.data.get('tier', '') in ['owner', 'manager'];
@@ -151,7 +153,10 @@ service cloud.firestore {
         request.resource.data.userId == resource.data.userId &&
         resource.data.get('houseIds', []).hasAll(request.resource.data.get('houseIds', [])) &&
         resource.data.get('superAdmin', []).hasAll(request.resource.data.get('superAdmin', []));
-      allow delete: if isAdmin(request.resource.data.houseIds);
+      allow delete: if resource.data.get('houseIds', []).size() == 1 &&
+        isAdmin(resource.data.houseIds) &&
+        staffRecord(resource.data.houseIds[0]) &&
+        resource.data.get('superAdmin', []).size() == 0;
     }
     
     match /guests/{guestId} {
