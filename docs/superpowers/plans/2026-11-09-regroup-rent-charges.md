@@ -1106,7 +1106,7 @@ Run: `cd regroup/mobile && npx jest src/util/__tests__/rentRate.test.ts src/serv
 **Behavior:**
 
 - The section has a schedule picker (Weekly / Monthly) and one price field in dollars, parsed with `parseDollarsField`. A malformed or blank value shows an error and is never saved as 0.
-- Any house admin can edit it, per the rules from Task 4.
+- Managers and above (rank 2 or more) can edit it; peer leaders and residents see it read-only. The rules enforce the same.
 - **When charging is off:** a prompt says rent isn't being charged yet, with a button into the section.
 - **Turning charging on:** a confirmation lists each active resident with `previewFirstCharges`: "first charge $175.00 on Mon Nov 16". It saves only on confirm.
 - **Switching schedule:** it lists the residents whose custom rate no longer applies, with a link to each profile.
@@ -1130,7 +1130,7 @@ Commit `feat(regroup-mobile): set a house's rent schedule and price`.
 
 **Behavior:**
 
-- **Custom rate:** a field in dollars for the house's current schedule. It's stored as `customRent: { amountCents, frequency }`, and clearing it writes `null`. The field is hidden when the profile is the signed-in user's own, because the rules deny it (Task 4).
+- **Custom rate:** a field in dollars for the house's current schedule. It's stored as `customRent: { amountCents, frequency }`, and clearing it writes `null`. The field is hidden when the profile is the signed-in user's own, and for anyone below manager (rank 2), because the rules deny both.
 - **Balance:** before saving a changed `rentOwed`, re-read the guest. If `rentOwed` differs from the value when the form opened, show both figures and ask to confirm the new one (spec §4.6).
 
 **Tests:**
@@ -1138,6 +1138,7 @@ Commit `feat(regroup-mobile): set a house's rent schedule and price`.
 - `a custom rate of $120 saves 12000 cents with the house's frequency`;
 - `clearing it saves null`;
 - `the field is absent on your own profile`;
+- `the field is absent for a peer leader`;
 - `a balance changed since opening asks for confirmation and saves only after it`.
 
 Commit `feat(regroup-mobile): custom rent rate and safer balance edits`.
@@ -1183,6 +1184,8 @@ Run on the sweep simulator `AC9BBDC3-EEF9-4C60-9C14-B847E2403920` against the em
 ## Handoff: decided here, and left out
 
 **Rulings in this plan (owner can overrule):**
+
+- **Who may change money** (owner decisions 2026-11-10): only managers and above set the house price and schedule, custom rates and balances, and record payments. Peer leaders can't, on anyone's record. Task 14's custom-rate and balance fields are hidden below manager.
 
 - **Turning charging back on** charges residents who were already being charged (with a `chargedThrough`) prorated from the day it comes back on, so a short break across a period start doesn't skip the period. A first turn-on still starts residents already in the house at the next full period (spec §2). This is the owner's decision of 2026-11-09, which overruled the earlier "next full period" rule.
 
