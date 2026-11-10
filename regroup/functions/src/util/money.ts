@@ -44,7 +44,7 @@
  * The rent-accrual job now exists: `rent/chargeResident.ts` (run by the
  * `rentCharges` hourly job and the guest-write trigger) raises `rentOwed` from the
  * house price with `dollarsToCents`, and `rent/rate.ts` treats a price that is not
- * a number of dollars in (0, 10000] as charging off. Managers still edit balances
+ * a number of dollars in (0, 2500] weekly or (0, 10000] monthly as charging off. Managers still edit balances
  * by hand to correct a charge or give a credit.
  */
 

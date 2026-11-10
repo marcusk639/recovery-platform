@@ -46,6 +46,19 @@ it('a create with no moveInDate gets one from its createTime', async () => {
   expect(charges()).toEqual(['rentCharges/g1_2026-11-18']);
 });
 
+it('an imported resident with no moveInDate is not charged until the next full period', async () => {
+  // Charging on since Wed Nov 11 at $175/week; imported Thu Nov 12 (spec §2: $0 until Mon Nov 16).
+  house();
+  const now = at('2026-11-12');
+  guest({ moveInDate: undefined, importedAt: now.toISOString() });
+  await expect(rentOnGuestWrite(created(now))).resolves.toMatchObject({ reason: 'not-due' });
+  expect(charges()).toEqual([]);
+  expect(owed()).toBe(0);
+  await chargeResident('g1', at('2026-11-16'));
+  expect(charges()).toEqual(['rentCharges/g1_2026-11-16']);
+  expect(mem.get('rentCharges/g1_2026-11-16')?.amountCents).toBe(17500);
+});
+
 it('a create keeps a moveInDate the record already has', async () => {
   house();
   guest({ moveInDate: '2026-11-19' });

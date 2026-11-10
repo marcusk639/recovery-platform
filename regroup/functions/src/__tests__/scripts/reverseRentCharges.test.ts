@@ -10,6 +10,15 @@ jest.mock('firebase-admin/firestore', () => ({
 }));
 jest.mock('../../api/firestore', () => require('../helpers/memFirestore').apiFirestore);
 jest.mock('../../util/notifications', () => ({ sendNotification: jest.fn() }));
+// Linking matches on the account's Auth email; u1 is Pat.
+jest.mock('firebase-admin', () => ({
+  auth: () => ({
+    getUsers: jest.fn(async (ids: { uid: string }[]) => ({
+      users: ids.filter(({ uid }) => uid === 'u1').map(({ uid }) => ({ uid, email: 'pat@example.com' })),
+      notFound: [],
+    })),
+  }),
+}));
 
 import { mem } from '../helpers/memFirestore';
 import { account, at, charges, guest, house, owed } from '../helpers/rentFixtures';

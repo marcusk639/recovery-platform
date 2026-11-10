@@ -90,7 +90,8 @@ export type ChargeOutcome =
         | 'charging-off'
         | 'not-started'
         | 'not-due'
-        | 'bad-rate';
+        | 'bad-rate'
+        | 'bad-balance';
     };
 
 /** rentHouseStates/{houseId}: server-only, so the app's whole-house writes never carry it. */

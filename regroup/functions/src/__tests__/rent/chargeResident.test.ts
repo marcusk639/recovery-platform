@@ -95,6 +95,20 @@ describe('skips write nothing', () => {
     house();
     await skipped('missing');
   });
+  // Firestore's increment replaces a non-number field, so a legacy "350" would vanish.
+  // NaN is guarded too, but the in-memory store copies documents as JSON (NaN becomes null).
+  it.each([['350'], [{ amount: 350 }]])('a balance that is not a number (%p) is left alone', async (bad) => {
+    house();
+    guest({ rentOwed: bad });
+    await skipped('bad-balance');
+    expect(owed()).toEqual(bad);
+  });
+  it('a null balance counts as nothing owed and is charged', async () => {
+    house();
+    guest({ rentOwed: null });
+    await expect(chargeResident('g1', at('2026-11-18'))).resolves.toMatchObject({ status: 'charged', totalCents: 12500 });
+    expect(owed()).toBe(12500);
+  });
   it('inactive: discharged', async () => {
     house();
     guest({ status: 'discharged' });

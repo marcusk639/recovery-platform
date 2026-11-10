@@ -17,7 +17,8 @@ jest.mock('firebase-admin/firestore', () => ({
 jest.mock('../../api/firestore', () => require('../helpers/memFirestore').apiFirestore);
 jest.mock('../../util/notifications', () => ({ sendNotification: jest.fn() }));
 
-import { mem } from '../helpers/memFirestore';
+import { apiFirestore, mem } from '../helpers/memFirestore';
+import { logger } from 'firebase-functions/v2';
 import { account, charges, guest, house } from '../helpers/rentFixtures';
 import * as charge from '../../rent/chargeResident';
 import { runRentCharges } from '../../scheduled/rentChargeJob';
@@ -169,6 +170,60 @@ it("one resident's failure does not stop the others", async () => {
     );
   await expect(runRentCharges(MONDAY)).resolves.toMatchObject({ charged: 1, failed: 1 });
   expect(charges()).toEqual(['rentCharges/g2_2026-11-16']);
+});
+
+it("one house's failure does not stop the others, and is logged with the error", async () => {
+  house({}, 'A');
+  house({}, 'B');
+  guest({ houseId: 'A', moveInDate: '2026-11-16' }, 'a1');
+  guest({ houseId: 'B', moveInDate: '2026-11-16' }, 'b1');
+  const states = apiFirestore.rentHouseStateCollection;
+  const realDoc = states.doc.bind(states);
+  const boom = new Error('boom');
+  jest
+    .spyOn(states, 'doc')
+    .mockImplementation(((id: string) =>
+      id === 'A' ? { get: () => Promise.reject(boom) } : realDoc(id)) as never);
+  await expect(runRentCharges(MONDAY)).resolves.toMatchObject({ charged: 1, failed: 1 });
+  expect(charges()).toEqual(['rentCharges/b1_2026-11-16']);
+  expect(logger.error).toHaveBeenCalledWith(
+    'rentCharges: house failed',
+    expect.objectContaining({ houseId: 'A', error: boom }),
+  );
+});
+
+it('a resident failure is logged with the full error, not only its message', async () => {
+  house();
+  guest({ moveInDate: '2026-11-16' }, 'g1');
+  const boom = new Error('boom');
+  jest.spyOn(charge, 'chargeResident').mockRejectedValue(boom);
+  await runRentCharges(MONDAY);
+  expect(logger.error).toHaveBeenCalledWith(
+    'rentCharges: resident failed',
+    expect.objectContaining({ guestId: 'g1', error: boom }),
+  );
+});
+
+it('a linked intake record is not sent to chargeResident at all', async () => {
+  house();
+  guest({ moveInDate: '2026-11-16', rentLinkedTo: 'g2' }, 'g1');
+  const spy = jest.spyOn(charge, 'chargeResident');
+  await runRentCharges(MONDAY);
+  expect(spy).not.toHaveBeenCalledWith('g1', expect.anything());
+});
+
+it('stops at its time budget and says so, leaving the rest to the next hour', async () => {
+  house();
+  guest({ moveInDate: '2026-11-16' }, 'g1');
+  guest({ moveInDate: '2026-11-16' }, 'g2');
+  // Start at 0; the first resident is in budget, the second is past it.
+  const clock = jest.fn().mockReturnValueOnce(0).mockReturnValueOnce(0).mockReturnValue(10);
+  await expect(runRentCharges(MONDAY, { budgetMs: 5, clock })).resolves.toMatchObject({ charged: 1 });
+  expect(charges()).toEqual(['rentCharges/g1_2026-11-16']);
+  expect(logger.warn).toHaveBeenCalledWith(
+    'rentCharges: stopped at the time budget; the next run carries on',
+    expect.objectContaining({ charged: 1 }),
+  );
 });
 
 it('the job runs hourly in UTC with time for a Monday-midnight burst', () =>

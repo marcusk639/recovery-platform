@@ -9,6 +9,18 @@ jest.mock('firebase-admin/firestore', () => ({
 }));
 jest.mock('../../api/firestore', () => require('../helpers/memFirestore').apiFirestore);
 jest.mock('../../util/notifications', () => ({ sendNotification: jest.fn() }));
+// The account's email as Firebase Auth has it; a guest doc's email is client-written.
+const mockAuthEmails: Record<string, string> = {};
+jest.mock('firebase-admin', () => ({
+  auth: () => ({
+    getUsers: jest.fn(async (ids: { uid: string }[]) => ({
+      users: ids
+        .filter(({ uid }) => mockAuthEmails[uid])
+        .map(({ uid }) => ({ uid, email: mockAuthEmails[uid] })),
+      notFound: [],
+    })),
+  }),
+}));
 
 import { apiFirestore, mem } from '../helpers/memFirestore';
 import { account, at, charges, guest, house } from '../helpers/rentFixtures';
@@ -22,7 +34,33 @@ const invite = (o: Record<string, unknown> = {}) =>
   guest({ userId: 'u1', email: 'pat@example.com', moveInDate: undefined, ...o }, 'gNew');
 const doc = (id: string) => mem.get(`guests/${id}`) ?? {};
 
-beforeEach(() => mem.reset());
+beforeEach(() => {
+  mem.reset();
+  for (const k of Object.keys(mockAuthEmails)) delete mockAuthEmails[k];
+  mockAuthEmails.u1 = 'Pat@example.com';
+});
+
+it('an invite record that writes a housemate\'s email on itself is not linked to their intake record', async () => {
+  // u2 signed in as sam@example.com but put Pat's email on the guest doc.
+  house();
+  intake();
+  guest({ userId: 'u2', email: 'pat@example.com', moveInDate: undefined }, 'gNew');
+  mockAuthEmails.u2 = 'sam@example.com';
+  await expect(linkIntakeRecord('gNew')).resolves.toBe('none');
+  expect(doc('gIntake').rentLinkedTo).toBeUndefined();
+  expect(doc('gIntake').rentOwed).toBe(12500);
+});
+
+it('a new intake record links only to the account whose real email matches', async () => {
+  house();
+  guest({ userId: 'u2', email: 'pat@example.com' }, 'gImpostor');
+  mockAuthEmails.u2 = 'sam@example.com';
+  invite();
+  intake({ createdBy: 'mgr' });
+  await expect(linkIntakeRecord('gIntake')).resolves.toBe('linked');
+  expect(doc('gIntake').rentLinkedTo).toBe('gNew');
+  expect(doc('gImpostor').rentOwed).toBe(0);
+});
 
 it('an intake record with $125 owed and the same email (different case) is linked', async () => {
   house();
@@ -218,10 +256,11 @@ describe('intake created after the invite record', () => {
     expect(doc('gNew').rentOwed).toBe(12500);
   });
 
-  it('two invite records with the email are ambiguous', async () => {
+  it('two invite records for the account with the email are ambiguous', async () => {
+    // Auth allows one account per email, so the real case is one account on two records.
     house();
     guest({ userId: 'u1', email: 'pat@example.com' }, 'a');
-    guest({ userId: 'u2', email: 'pat@example.com' }, 'b');
+    guest({ userId: 'u1', email: 'pat@example.com' }, 'b');
     intake();
     await expect(linkIntakeRecord('gIntake')).resolves.toBe('ambiguous');
     expect(doc('gIntake').rentLinkedTo).toBeUndefined();

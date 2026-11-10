@@ -93,8 +93,20 @@ export function anchorFor(i: AnchorInput): Anchor {
   }
 
   // Charging was re-stamped (turned off and on, or a schedule switched in two steps)
-  // before this resident's charged days ran out: carry on, never skipping a day.
-  if (account && chargeFrom && chargedThrough && addDays(chargedThrough, 1) >= startDate) {
+  // for a resident already charged in this house. Before their charged days ran out,
+  // carry on without skipping a day; after, resume on the new start, so only the gap
+  // goes uncharged (spec §4.3, §5; owner decision 2026-11-10). A resident charged only
+  // at another house falls through: they are new here.
+  const chargedHere =
+    account?.houseId === houseId &&
+    !!chargedThrough &&
+    chargedThrough >= (str(account.joinedOn) ?? localOf(knownJoin));
+  if (
+    account &&
+    chargeFrom &&
+    chargedThrough &&
+    (addDays(chargedThrough, 1) >= startDate || chargedHere)
+  ) {
     return finish(
       {
         houseJoinedAtMs: knownJoin,

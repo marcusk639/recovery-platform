@@ -2,110 +2,35 @@
  * Firestore Security Rules Tests — rent settings, rent charges and own-balance edits.
  *
  * The server charges rent from the house's price (functions src/rent/). These rules
- * keep its records server-only, let any house admin set the price and schedule and
- * other residents' rates and balances, and stop anyone editing their own.
+ * keep its records server-only, let a manager or above set the price and schedule (a
+ * peer leader also owes rent there, owner decision 2026-11-10), let staff set other
+ * residents' rates and balances, and stop anyone editing their own.
  *
  *   cd firebase && firebase emulators:exec --only firestore --project demo-test \
  *     "npm --prefix .. run test:rules -- rentCharges"
  */
 
-import {
-  initializeTestEnvironment,
-  assertSucceeds,
-  assertFails,
-  RulesTestEnvironment,
-} from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
-import * as fs from 'fs';
-import * as path from 'path';
+import { assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
+import { ADMIN, HOUSE, OWNER, PEER, RESIDENT, useRentRulesEnv } from './rentRulesHarness';
 
-const PROJECT_ID = 'demo-rent-charges-rules-test';
-const RULES_PATH = path.resolve(__dirname, '../firestore.rules');
-
-const HOUSE = 'house123';
-const OWNER = 'operator';
-const ADMIN = 'houseAdmin';
-const PEER = 'peerLeader';
-const RESIDENT = 'resident';
-const OTHER_RESIDENT = 'otherResident';
-
-let testEnv: RulesTestEnvironment;
-
-beforeAll(async () => {
-  testEnv = await initializeTestEnvironment({
-    projectId: PROJECT_ID,
-    firestore: {
-      rules: fs.readFileSync(RULES_PATH, 'utf8'),
-      host: '127.0.0.1',
-      port: 8080,
-    },
-  });
-});
-
-afterAll(async () => {
-  await testEnv.cleanup();
-});
-
-const guest = (userId: string) => ({
-  userId,
-  houseId: HOUSE,
-  firstName: 'Test',
-  status: 'active',
-  rentOwed: 20000,
-  choreFees: 0,
-  phoneNumber: '',
-});
-
-beforeEach(async () => {
-  await testEnv.withSecurityRulesDisabled(async (ctx) => {
-    const db = ctx.firestore();
-    await setDoc(doc(db, `houses/${HOUSE}`), {
-      id: HOUSE,
-      name: 'Test House',
-      rentFrequency: 'both',
-      weeklyRent: 0,
-      monthlyRent: 0,
-    });
-    await setDoc(doc(db, `house-roles/${HOUSE}_${PEER}`), { tier: 'peerLeader' });
-    await setDoc(doc(db, 'guests/gPeer'), guest(PEER));
-    await setDoc(doc(db, 'guests/gResident'), guest(RESIDENT));
-    await setDoc(doc(db, 'guests/gOther'), guest(OTHER_RESIDENT));
-    await setDoc(doc(db, 'rentCharges/gResident_2026-11-18'), {
-      guestId: 'gResident',
-      houseId: HOUSE,
-      guestUserId: RESIDENT,
-      amountCents: 12500,
-    });
-    await setDoc(doc(db, 'rentCharges/gOther_2026-11-18'), {
-      guestId: 'gOther',
-      houseId: HOUSE,
-      guestUserId: OTHER_RESIDENT,
-      amountCents: 12500,
-    });
-    await setDoc(doc(db, 'rentAccounts/gResident'), { guestId: 'gResident', houseId: HOUSE });
-    await setDoc(doc(db, 'config/rentCharges'), { paused: false });
-  });
-});
-
-afterEach(async () => {
-  await testEnv.clearFirestore();
-});
-
-const as = (uid: string) => {
-  const claims: Record<string, unknown> =
-    uid === OWNER
-      ? { superAdmin: { [HOUSE]: true } }
-      : uid === ADMIN || uid === PEER
-      ? { admin: { [HOUSE]: true }, ...(uid === PEER ? { guest: { [HOUSE]: true } } : {}) }
-      : { guest: { [HOUSE]: true } };
-  return testEnv.authenticatedContext(uid, claims).firestore();
-};
+const rules = useRentRulesEnv('demo-rent-charges-rules-test');
+const as = rules.as;
 
 describe('houses: rent settings', () => {
   it('an admin sets the weekly price and schedule', () =>
     assertSucceeds(
       updateDoc(doc(as(ADMIN), `houses/${HOUSE}`), { rentFrequency: 'weekly', weeklyRent: 175 }),
     ));
+  // A peer leader holds the admin claim but also owes rent here (owner decision 2026-11-10).
+  it('a peer leader can still edit a house field that is not rent', () =>
+    assertSucceeds(updateDoc(doc(as(PEER), `houses/${HOUSE}`), { name: 'Renamed' })));
+  it.each([
+    ['rentFrequency', 'weekly'],
+    ['weeklyRent', 175],
+    ['monthlyRent', 800],
+  ])('a peer leader cannot set %s', (field, value) =>
+    assertFails(updateDoc(doc(as(PEER), `houses/${HOUSE}`), { [field]: value })));
   it('a super admin cannot write rentChargesStartDate', () =>
     assertFails(
       updateDoc(doc(as(OWNER), `houses/${HOUSE}`), { rentChargesStartDate: '2026-11-01' }),
@@ -134,6 +59,45 @@ describe('houses: rent settings', () => {
     assertFails(updateDoc(doc(as(ADMIN), `houses/${HOUSE}`), { monthlyRent: -1 })));
   it('stripeAccountId is still refused for a plain admin', () =>
     assertFails(updateDoc(doc(as(ADMIN), `houses/${HOUSE}`), { stripeAccountId: 'acct_x' })));
+});
+
+describe('Oxford houses and the charging-start state', () => {
+  const oxford = () =>
+    rules.env().withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'houses/oxford1'), {
+        id: 'oxford1',
+        houseType: 'oxford',
+        rentFrequency: 'both',
+      });
+    });
+  const oxfordAdmin = () =>
+    rules.env().authenticatedContext('ox', { superAdmin: { oxford1: true } }).firestore();
+  it('an Oxford house admin can still edit the house', async () => {
+    await oxford();
+    await assertSucceeds(updateDoc(doc(oxfordAdmin(), 'houses/oxford1'), { name: 'Oxford One' }));
+  });
+  it('an Oxford house cannot be put on a weekly or monthly price schedule', async () => {
+    await oxford();
+    await assertFails(updateDoc(doc(oxfordAdmin(), 'houses/oxford1'), { rentFrequency: 'weekly' }));
+    await assertFails(
+      updateDoc(doc(oxfordAdmin(), 'houses/oxford1'), { rentFrequency: 'monthly' }),
+    );
+  });
+  it('a traditional house still can', () =>
+    assertSucceeds(updateDoc(doc(as(OWNER), `houses/${HOUSE}`), { rentFrequency: 'monthly' })));
+  it("a house's admins can read its charging-start state; nobody writes it", async () => {
+    await rules.env().withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `rentHouseStates/${HOUSE}`), {
+        startDate: '2026-11-11',
+        startedAtMs: 1,
+      });
+    });
+    await assertSucceeds(getDoc(doc(as(ADMIN), `rentHouseStates/${HOUSE}`)));
+    await assertFails(getDoc(doc(as(RESIDENT), `rentHouseStates/${HOUSE}`)));
+    await assertFails(
+      setDoc(doc(as(OWNER), `rentHouseStates/${HOUSE}`), { startDate: '2026-01-01' }),
+    );
+  });
 });
 
 describe('guests: rates and balances', () => {
@@ -199,15 +163,28 @@ describe('guests: rates and balances', () => {
         customRent: { amountCents: 0, frequency: 'weekly' },
       }),
     ));
-  it('a self-created resident record may not carry customRent', () =>
-    assertFails(
-      setDoc(doc(as('newcomer'), 'guests/gNew'), {
-        userId: 'newcomer',
-        houseId: HOUSE,
-        status: 'active',
-        customRent: { amountCents: 0, frequency: 'weekly' },
-      }),
-    ));
+  describe('a self-created resident record', () => {
+    // A valid invitation, so customRent is the only thing that can refuse the create.
+    beforeEach(() =>
+      rules.env().withSecurityRulesDisabled(async (ctx) => {
+        await setDoc(doc(ctx.firestore(), `admission-tickets/newcomer_${HOUSE}`), {
+          role: 'guest',
+          initialPhase: '',
+          used: false,
+          expiresAt: Timestamp.fromMillis(Date.now() + 86400000),
+        });
+      }));
+    const record = { userId: 'newcomer', houseId: HOUSE, status: 'active' };
+    it('is allowed with a valid invitation', () =>
+      assertSucceeds(setDoc(doc(as('newcomer'), 'guests/gNew'), record)));
+    it('may not carry customRent', () =>
+      assertFails(
+        setDoc(doc(as('newcomer'), 'guests/gNew'), {
+          ...record,
+          customRent: { amountCents: 0, frequency: 'weekly' },
+        }),
+      ));
+  });
   it('no client may change rentLinkedTo', async () => {
     await assertFails(updateDoc(doc(as(OWNER), 'guests/gResident'), { rentLinkedTo: 'gOther' }));
     await assertFails(updateDoc(doc(as(ADMIN), 'guests/gResident'), { rentLinkedTo: 'gOther' }));
@@ -237,41 +214,6 @@ describe('guests: rates and balances', () => {
         rentLinkedTo: 'gResident',
       }),
     ));
-});
-
-describe('Oxford houses and the charging-start state', () => {
-  const oxford = () =>
-    testEnv.withSecurityRulesDisabled(async (ctx) => {
-      await setDoc(doc(ctx.firestore(), 'houses/oxford1'), {
-        id: 'oxford1',
-        houseType: 'oxford',
-        rentFrequency: 'both',
-      });
-    });
-  const oxfordAdmin = () =>
-    testEnv.authenticatedContext('ox', { superAdmin: { oxford1: true } }).firestore();
-  it('an Oxford house cannot be put on a weekly or monthly price schedule', async () => {
-    await oxford();
-    await assertFails(updateDoc(doc(oxfordAdmin(), 'houses/oxford1'), { rentFrequency: 'weekly' }));
-    await assertFails(
-      updateDoc(doc(oxfordAdmin(), 'houses/oxford1'), { rentFrequency: 'monthly' }),
-    );
-  });
-  it('a traditional house still can', () =>
-    assertSucceeds(updateDoc(doc(as(OWNER), `houses/${HOUSE}`), { rentFrequency: 'monthly' })));
-  it("a house's admins can read its charging-start state; nobody writes it", async () => {
-    await testEnv.withSecurityRulesDisabled(async (ctx) => {
-      await setDoc(doc(ctx.firestore(), `rentHouseStates/${HOUSE}`), {
-        startDate: '2026-11-11',
-        startedAtMs: 1,
-      });
-    });
-    await assertSucceeds(getDoc(doc(as(ADMIN), `rentHouseStates/${HOUSE}`)));
-    await assertFails(getDoc(doc(as(RESIDENT), `rentHouseStates/${HOUSE}`)));
-    await assertFails(
-      setDoc(doc(as(OWNER), `rentHouseStates/${HOUSE}`), { startDate: '2026-01-01' }),
-    );
-  });
 });
 
 describe('rentCharges', () => {

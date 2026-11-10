@@ -49,6 +49,17 @@ export async function chargeResident(guestId: string, now: Date): Promise<Charge
     const guest = (guestSnap.data() ?? {}) as Data;
     if (!isActiveGuestDoc(guest)) return skipped('inactive');
     if (str(guest.rentLinkedTo)) return skipped('linked');
+    // increment replaces a field that isn't a number, which would erase a legacy
+    // balance such as "350". createPaymentIntent refuses these too; a manager fixes it.
+    const owedNow = guest.rentOwed;
+    if (owedNow !== undefined && owedNow !== null && !(typeof owedNow === 'number' && Number.isFinite(owedNow))) {
+      logger.error('chargeResident: rentOwed is not a number; not charged', {
+        guestId,
+        houseId: str(guest.houseId),
+        type: typeof owedNow,
+      });
+      return skipped('bad-balance');
+    }
     const houseId = str(guest.houseId);
     if (!houseId) return skipped('charging-off');
 

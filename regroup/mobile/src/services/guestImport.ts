@@ -110,6 +110,9 @@ export async function importGuestsFromRows(
           phase: 'default',
           step: 1,
           createdAt: new Date().toISOString(),
+          // Rent charging starts an imported resident at the next full period: they
+          // already lived there, and their balance was entered by hand.
+          importedAt: new Date().toISOString(),
           updatedAt: FirebaseFirestore.FieldValue.serverTimestamp(),
         });
       }

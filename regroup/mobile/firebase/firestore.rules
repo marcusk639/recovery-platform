@@ -43,6 +43,35 @@ service cloud.firestore {
       return hasHouseRole() && 'superAdmin' in request.auth.token && request.auth.token.superAdmin.keys().hasAny(houseIds);
     }
 
+    // House ranks from the server-only house-roles record, as the server's
+    // tierAndRank computes them (see the guests rules for the full ladder).
+    // Used by the guests rules and by the houses rent-pricing rule.
+    function roleData(houseId, uid) {
+      let snap = get(/databases/$(database)/documents/house-roles/$(houseId + '_' + uid));
+      return snap == null ? {} : snap.data;
+    }
+    function rankOf(d) {
+      let tier = d.get('tier', '');
+      return d.get('primary', false) == true ? 4 :
+        tier == 'owner' ? 3 : tier == 'manager' ? 2 : tier == 'peerLeader' ? 1 : 0;
+    }
+    function recordRank(houseId, uid) {
+      return rankOf(roleData(houseId, uid));
+    }
+    function callerRank(houseId) {
+      let d = roleData(houseId, request.auth.uid);
+      let tier = d.get('tier', '');
+      let sa = hasSuperAdminRoleInHouse([houseId]);
+      let ad = hasAdminRoleInHouse([houseId]);
+      // Same as the server's tierAndRank (functions util/houseRoles).
+      let r = d.get('primary', false) == true ? 4 :
+        tier == 'owner' && sa ? 3 :
+        (tier == 'owner' || tier == 'manager') && ad ? 2 :
+        tier == 'peerLeader' && ad ? 1 : 0;
+      let c = sa ? 3 : ad ? 1 : 0;
+      return r > c ? r : c;
+    }
+
     function hasGuestRoleInHouse(houseIds) {
       return hasHouseRole() && 'guest' in request.auth.token && request.auth.token.guest.keys().hasAny(houseIds);
     }
@@ -314,31 +343,6 @@ service cloud.firestore {
       // carries at most 19 account-linked removals or discharges, or 9 moves
       // between two houses (the 20-read limit). The app removes and
       // discharges one guest doc at a time, so the limit does not affect it.
-      function roleData(houseId, uid) {
-        let snap = get(/databases/$(database)/documents/house-roles/$(houseId + '_' + uid));
-        return snap == null ? {} : snap.data;
-      }
-      function rankOf(d) {
-        let tier = d.get('tier', '');
-        return d.get('primary', false) == true ? 4 :
-          tier == 'owner' ? 3 : tier == 'manager' ? 2 : tier == 'peerLeader' ? 1 : 0;
-      }
-      function recordRank(houseId, uid) {
-        return rankOf(roleData(houseId, uid));
-      }
-      function callerRank(houseId) {
-        let d = roleData(houseId, request.auth.uid);
-        let tier = d.get('tier', '');
-        let sa = hasSuperAdminRoleInHouse([houseId]);
-        let ad = hasAdminRoleInHouse([houseId]);
-        // Same as the server's tierAndRank (functions util/houseRoles).
-        let r = d.get('primary', false) == true ? 4 :
-          tier == 'owner' && sa ? 3 :
-          (tier == 'owner' || tier == 'manager') && ad ? 2 :
-          tier == 'peerLeader' && ad ? 1 : 0;
-        let c = sa ? 3 : ad ? 1 : 0;
-        return r > c ? r : c;
-      }
       function targetRank(d) {
         let uid = d.get('userId', '');
         return uid is string && uid != '' ? recordRank(d.houseId, uid) : 0;
@@ -483,6 +487,13 @@ service cloud.firestore {
       // schedules ('both' means charging is off) and a price is a number of
       // DOLLARS (weekly 0 to 2500, monthly 0 to 10000): a value typed in cents or as a string
       // is refused, never charged 100x.
+      // Only a manager or above sets what the house charges, or turns charging off
+      // and on: a peer leader also owes rent here (owner decision 2026-11-10).
+      function rentPricingAllowed() {
+        return !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['rentFrequency', 'monthlyRent', 'weeklyRent']) ||
+          callerRank(houseId) >= 2;
+      }
       function rentSettingsValid() {
         let changed = request.resource.data.diff(resource.data).affectedKeys();
         let d = request.resource.data;
@@ -501,6 +512,7 @@ service cloud.firestore {
           .hasAny(['subscriptionStatus', 'guestGraceEndsAt', 'stripeAccountApi', 'superAdminId', 'houseType', 'ownerId',
                    'rentChargesStartDate', 'rentChargesStartedAtMs']) &&
         rentSettingsValid() &&
+        rentPricingAllowed() &&
         (hasSuperAdminRoleInHouse([houseId]) ||
           (hasAdminRoleInHouse([houseId]) && !request.resource.data.diff(resource.data).affectedKeys()
             .hasAny(['stripeAccountId', 'stripeStatus', 'adminIds', 'ownerId', 'superAdminIds', 'adminId'])) ||
