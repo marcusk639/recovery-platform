@@ -37,7 +37,7 @@ ALL_FUNCTIONS=(
   onGuestWrite onHouseDeleted setHouseSubscriptionStatusOnCreate
   onActivityWritten onGuestLinkedRestamp onHouseRentSettingsWrite
   updateDisputes warmWebsite officerTermReminder weeklyTransfers
-  overdueRentNotification scheduledRentCollection
+  overdueRentNotification scheduledRentCollection rentCharges
 )
 
 BATCH_SIZE=5
