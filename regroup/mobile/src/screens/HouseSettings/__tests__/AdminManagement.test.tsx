@@ -58,7 +58,7 @@ jest.mock('../../../services/admin', () => ({
   createAdmin: jest.fn(),
   getHouseAdmins: jest.fn(() => Promise.resolve([])),
   updateAdmin: mockUpdateAdmin,
-  deleteAdmin: mockDeleteAdminService,
+  deleteAdmin: (...args: any[]) => mockDeleteAdminService(...args),
   sendAdminInvite: mockSendAdminInvite,
   createAdminId: jest.fn(() => 'new-admin-id'),
   createId: jest.fn(() => 'new-admin-id'),
@@ -66,9 +66,11 @@ jest.mock('../../../services/admin', () => ({
 }));
 
 // ─── House service stub ───────────────────────────────────────────────────────
+const mockRemoveAdminPrivileges = jest.fn((..._args: any[]) => Promise.resolve());
 jest.mock('../../../services/house', () => ({
   getHouse: jest.fn(),
   houseCollection: {},
+  removeAdminPrivileges: (...args: any[]) => mockRemoveAdminPrivileges(...args),
 }));
 
 // ─── Display util mock ────────────────────────────────────────────────────────
@@ -672,5 +674,53 @@ describe('AdminManagement', () => {
 
       expect(getByTestId('admin-loading')).toBeTruthy();
     });
+  });
+
+});
+
+// ─── Removing a manager revokes their access (review) ─────────────────────────
+describe('removing a manager revokes their access', () => {
+  const pressRemoveAndConfirm = async (utils: ReturnType<typeof renderScreen>) => {
+    fireEvent.press(utils.getAllByText('REMOVE')[0]);
+    const [, , options] = (Alert.alert as jest.Mock).mock.calls[0];
+    const remove = options.find((o: any) => o.text === 'Remove');
+    await act(async () => {
+      await remove.onPress();
+    });
+  };
+
+  beforeEach(() => {
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    mockRemoveAdminPrivileges.mockReset().mockResolvedValue(undefined);
+    mockDeleteAdminService.mockReset().mockResolvedValue('admin-2');
+  });
+
+  it('revokes their staff access for this house, then deletes their record', async () => {
+    const utils = renderScreen(buildStore({ 'admin-2': ADMIN_2 }, 'user-1'));
+    await pressRemoveAndConfirm(utils);
+
+    expect(mockRemoveAdminPrivileges).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'admin-2', userId: 'user-99' }),
+      [mockUseSelectedHouse().house.id],
+      [],
+    );
+    await waitFor(() => expect(mockDeleteAdminService).toHaveBeenCalledWith('admin-2'));
+    expect(mockRemoveAdminPrivileges.mock.invocationCallOrder[0]).toBeLessThan(
+      mockDeleteAdminService.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('keeps the record and says why when the server refuses the removal', async () => {
+    mockRemoveAdminPrivileges.mockRejectedValue(
+      Object.assign(new Error('denied'), { code: 'functions/permission-denied' }),
+    );
+    const utils = renderScreen(buildStore({ 'admin-2': ADMIN_2 }, 'user-1'));
+    await pressRemoveAndConfirm(utils);
+
+    expect(mockDeleteAdminService).not.toHaveBeenCalled();
+    expect(Alert.alert).toHaveBeenCalledWith(
+      "Can't remove manager",
+      'Only someone above them in this house can remove them.',
+    );
   });
 });

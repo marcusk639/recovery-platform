@@ -1,5 +1,6 @@
 import { HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
+import { logger } from "firebase-functions";
 
 /** Minimal house fields needed for admin/member authorization checks. */
 export interface HouseAdminFields {
@@ -78,5 +79,34 @@ export function assertHouseMemberFromClaims(
       "permission-denied",
       "Caller is not a member of this house"
     );
+  }
+}
+
+/**
+ * Takes a removed staff member out of the house docs' adminIds (admin houses)
+ * and superAdminIds (super-admin houses). isHouseAdmin reads those fields, so
+ * without this a removed manager stayed staff to every callable that uses it.
+ * A house that no longer exists is skipped.
+ */
+export async function removeStaffFromHouses(
+  uid: string,
+  adminHouseIds: string[],
+  superAdminHouseIds: string[],
+): Promise<void> {
+  const { arrayRemove } = admin.firestore.FieldValue;
+  for (const houseId of new Set([...adminHouseIds, ...superAdminHouseIds])) {
+    const update: Record<string, unknown> = {};
+    if (adminHouseIds.includes(houseId)) update.adminIds = arrayRemove(uid);
+    if (superAdminHouseIds.includes(houseId)) update.superAdminIds = arrayRemove(uid);
+    try {
+      await admin.firestore().collection("houses").doc(houseId).update(update);
+    } catch (err) {
+      const code = (err as { code?: unknown }).code;
+      if (code === 5 || code === "not-found") {
+        logger.warn("removeStaffFromHouses: house not found", { houseId });
+        continue;
+      }
+      throw err;
+    }
   }
 }

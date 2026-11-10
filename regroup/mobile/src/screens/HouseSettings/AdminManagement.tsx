@@ -27,6 +27,9 @@ import {
   useInviteAdmin,
 } from "../../state/queries/adminQueries";
 import { isSuperAdmin } from "../../util/admin";
+import { removeAdminPrivileges } from "../../services/house";
+import { logException } from "../../util/logging";
+import Admin from "../../entities/Admin";
 import { formatName } from "../../util/display";
 import { validateEmail } from "../../util/form";
 
@@ -110,7 +113,7 @@ const AdminManagement: React.FC<Props> = ({ navigation }) => {
   }, [inviteEmail]);
 
   const handleRemoveAdmin = useCallback(
-    (adminId: string, adminName: string) => {
+    (admin: Admin, adminName: string) => {
       if (!house) return;
       Alert.alert(
         "Remove Manager",
@@ -121,12 +124,36 @@ const AdminManagement: React.FC<Props> = ({ navigation }) => {
             text: "Remove",
             style: "destructive",
             onPress: async () => {
+              // Revoke their staff access first: deleting the record alone
+              // left their claims, role record and adminIds in place, so a
+              // removed manager kept access to the house. The server also
+              // checks the caller ranks above them.
               try {
-                await deleteAdminMutation({ adminId, houseId: house.id });
-              } catch {
+                await removeAdminPrivileges(admin, [house.id], []);
+              } catch (error) {
+                logException(error);
+                const code = String((error as { code?: unknown })?.code ?? "");
+                if (code.endsWith("permission-denied")) {
+                  Alert.alert(
+                    "Can't remove manager",
+                    "Only someone above them in this house can remove them."
+                  );
+                } else {
+                  Alert.alert(
+                    "Error",
+                    "Failed to remove manager. Please try again."
+                  );
+                }
+                return;
+              }
+              try {
+                await deleteAdminMutation({ adminId: admin.id, houseId: house.id });
+              } catch (error) {
+                // Their access is already gone; only the profile record stayed.
+                logException(error);
                 Alert.alert(
                   "Error",
-                  "Failed to remove manager. Please try again."
+                  "Their access was removed, but their record couldn't be deleted. Please try again."
                 );
               }
             },
@@ -222,7 +249,7 @@ const AdminManagement: React.FC<Props> = ({ navigation }) => {
                 <View key={admin.id} testID={`admin-row-${admin.id}`}>
                   <ActivityItemWithButtons
                     leftButtonTitle="Remove"
-                    leftButtonAction={() => handleRemoveAdmin(admin.id, name)}
+                    leftButtonAction={() => handleRemoveAdmin(admin as Admin, name)}
                     leftButtonContainerStyle={RED_BUTTON}
                     leftButtonTextStyle={RED_BUTTON_TEXT}
                     disableButtons={!canRemove}
