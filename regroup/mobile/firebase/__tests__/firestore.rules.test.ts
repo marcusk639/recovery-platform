@@ -2052,13 +2052,15 @@ describe("houses/{houseId} — update: sensitive fields restricted to superAdmin
       );
     });
 
-    test("DENY a regular admin updating monthlyRent/weeklyRent", async () => {
+    // Relaxed for rent charges (owner decision 2026-11-09): any house admin
+    // sets the price and schedule; see rentCharges.rules.test.ts for the limits.
+    test("ALLOW a regular admin updating monthlyRent/weeklyRent", async () => {
       await seedHouse();
       const ctx = testEnv.authenticatedContext(
         ADMIN_UID,
         authHouseAdmin(ADMIN_UID, HOUSE_ID),
       );
-      await assertFails(
+      await assertSucceeds(
         updateDoc(houseRef(ctx), { monthlyRent: 999, weeklyRent: 250 }),
       );
     });

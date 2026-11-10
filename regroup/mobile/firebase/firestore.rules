@@ -225,8 +225,24 @@ service cloud.firestore {
       // give another peer leader a "shadow" active record that keeps their
       // claims after their real record is discharged. A record with no
       // account, or for a plain resident, ranks 0.
+      // Rent (functions src/rent/). customRent is a manager-set rate for one
+      // resident: null, or exactly an integer amountCents >= 0 and the schedule
+      // it was set for, so a weekly rate can never be read as monthly.
+      // rentLinkedTo is server-only (linkIntakeRecord): it stops rent charging
+      // on an intake record whose balance moved to the resident's own record.
+      function customRentValid(d) {
+        return !('customRent' in d) || d.customRent == null ||
+          (d.customRent is map &&
+           d.customRent.keys().hasOnly(['amountCents', 'frequency']) &&
+           d.customRent.keys().hasAll(['amountCents', 'frequency']) &&
+           d.customRent.amountCents is int && d.customRent.amountCents >= 0 &&
+           d.customRent.frequency in ['weekly', 'monthly']);
+      }
+
       allow create: if createdByCaller(request.resource.data) &&
                        moveOutDateValid(request.resource.data) &&
+                       customRentValid(request.resource.data) &&
+                       !('rentLinkedTo' in request.resource.data) &&
                        (isInvitedSelfCreate(request.resource.data) ||
                         (isAdmin([request.resource.data.houseId]) &&
                          request.resource.data.get('userId', '') != request.auth.uid &&
@@ -346,13 +362,25 @@ service cloud.firestore {
            moveOutDateValid(request.resource.data));
       }
 
+      // No one, admin or not, changes the money fields of their own record:
+      // a peer leader is an admin of the house and also a resident who owes
+      // rent. Another admin of the house sets them.
+      function ownMoneyUnchanged() {
+        return !(resource.data.get('userId', '') == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['rentOwed', 'choreFees', 'customRent']));
+      }
+
       allow update: if
         userIdUnchangedOrLinked() &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['rentLinkedTo']) &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['customRent']) ||
+         customRentValid(request.resource.data)) &&
         request.resource.data.get('createdBy', null) == resource.data.get('createdBy', null) &&
         (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['updatedBy']) ||
          request.resource.data.updatedBy == request.auth.uid) && (
         (isAdmin([resource.data.houseId]) && isAdmin([request.resource.data.houseId]) &&
-         staffDepartureAllowed()) ||
+         staffDepartureAllowed() && ownMoneyUnchanged()) ||
         (isSameUser(request.resource.data.userId) &&
          request.resource.data.userId == resource.data.userId &&
          request.resource.data.houseId == resource.data.houseId &&
@@ -439,12 +467,33 @@ service cloud.firestore {
       // houseType (traditional / oxford) picks the admission and voting
       // rules; only createHouses and setOxfordEnabled (Admin SDK) set it,
       // so no client, the owner included, may change it.
+      // rentChargesStartDate / rentChargesStartedAtMs record when rent
+      // charging turned on (functions houseRentSettings trigger); no resident
+      // is charged for a day before them, so no client may move them.
+      // Rent settings: any house admin sets the schedule and price (owner
+      // decision 2026-11-09), so monthlyRent and weeklyRent are no longer
+      // superAdmin-only. For every role, rentFrequency is one of the three
+      // schedules ('both' means charging is off) and a price is a number of
+      // DOLLARS from 0 to 10000: a value typed in cents (17500) or as a string
+      // is refused, never charged 100x.
+      function rentSettingsValid() {
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
+        let d = request.resource.data;
+        return (!changed.hasAny(['rentFrequency']) ||
+            d.rentFrequency in ['weekly', 'monthly', 'both']) &&
+          (!changed.hasAny(['monthlyRent']) ||
+            (d.monthlyRent is number && d.monthlyRent >= 0 && d.monthlyRent <= 10000)) &&
+          (!changed.hasAny(['weeklyRent']) ||
+            (d.weeklyRent is number && d.weeklyRent >= 0 && d.weeklyRent <= 10000));
+      }
       allow update: if isDemoScopedHouses([houseId]) &&
         !request.resource.data.diff(resource.data).affectedKeys()
-          .hasAny(['subscriptionStatus', 'guestGraceEndsAt', 'stripeAccountApi', 'superAdminId', 'houseType', 'ownerId']) &&
+          .hasAny(['subscriptionStatus', 'guestGraceEndsAt', 'stripeAccountApi', 'superAdminId', 'houseType', 'ownerId',
+                   'rentChargesStartDate', 'rentChargesStartedAtMs']) &&
+        rentSettingsValid() &&
         (hasSuperAdminRoleInHouse([houseId]) ||
           (hasAdminRoleInHouse([houseId]) && !request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['stripeAccountId', 'stripeStatus', 'monthlyRent', 'weeklyRent', 'adminIds', 'ownerId', 'superAdminIds', 'adminId'])) ||
+            .hasAny(['stripeAccountId', 'stripeStatus', 'adminIds', 'ownerId', 'superAdminIds', 'adminId'])) ||
           // Residents (guest role, not admin) may write ONLY the fields their
           // own app flows write (audited for PR #141): complaints and issues
           // (Personal screen) and currentCapacity (sign-up createGuest).
@@ -526,6 +575,27 @@ service cloud.firestore {
         (isGuest([resource.data.houseId]) && isSameUser(resource.data.guestUserId));
       allow create: if isAdmin([request.resource.data.houseId]);
       allow update, delete: if false; // Only Cloud Functions should modify payments
+    }
+
+    // Rent charges (functions src/rent/chargeResident): one record per resident
+    // and period, written only by the server in the same transaction as the
+    // rentOwed increment. Read like payments: the house's admins, or the
+    // resident the charge is for.
+    match /rentCharges/{chargeId} {
+      allow read: if isAdmin([resource.data.houseId]) ||
+        (isGuest([resource.data.houseId]) && isSameUser(resource.data.guestUserId));
+      allow write: if false;
+    }
+
+    // Each resident's chargedThrough / chargeFrom. Server-only: a client that
+    // wrote an older chargedThrough back would be charged those days again.
+    match /rentAccounts/{guestId} {
+      allow read, write: if false;
+    }
+
+    // Server settings, e.g. config/rentCharges.paused (the charge job's stop switch).
+    match /config/{configId} {
+      allow read, write: if false;
     }
 
     match /complaints/{complaintId} {
