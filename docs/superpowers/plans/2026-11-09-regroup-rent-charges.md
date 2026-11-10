@@ -1091,6 +1091,8 @@ Run: `cd regroup/mobile && npx jest src/util/__tests__/rentRate.test.ts src/serv
 
 **Intake sends `createdBy`.** The server carries an intake record's custom rate and move-in date onto the resident's own record only when `createdBy` names the manager who made it (the rules bind it to the caller). `IntakeFormScreen` sets only `intakeCompletedBy` today, so it should also set `createdBy`.
 
+**The intake form takes the real move-in date** (owner decision 2026-11-09). A date field defaults to today, and the manager can set the day the resident actually moved in. It is saved as a calendar date in the house's zone. Today the form always writes the current time, so a long-time resident entered late gets a prorated first charge.
+
 **A timezone is required** before charging can be turned on. A house with none is charged on New York dates, so a Los Angeles house's Sunday-night intake would read as Monday.
 
 **Oxford houses** never show the Rent section. Their dues are the equal expense share in the Oxford tools, and the rules refuse a weekly or monthly schedule there.
@@ -1182,13 +1184,15 @@ Run on the sweep simulator `AC9BBDC3-EEF9-4C60-9C14-B847E2403920` against the em
 
 **Rulings in this plan (owner can overrule):**
 
+- **Turning charging back on** charges residents who were already being charged (with a `chargedThrough`) prorated from the day it comes back on, so a short break across a period start doesn't skip the period. A first turn-on still starts residents already in the house at the next full period (spec §2). This is the owner's decision of 2026-11-09, which overruled the earlier "next full period" rule.
+
 - **"Next period" means the period after the one containing the turn-on day.** That holds even when turning on on a Monday or the 1st; spec §2 is read literally.
 - **"Existing at turn-on" is decided by when the record joined the house** (its `createTime`, or the move time), compared with the stamp's `startedAtMs`. It is not decided by `moveInDate`. So a backdated move-in on a new record is still charged back to the start (spec §4.4).
 - **Imported residents are marked with `importedAt`,** written by the app's import from Task 12. Until that ships, an import is treated like intake. That's harmless, because no screen can turn charging on before Phase C.
 - **The job runs hourly,** not daily. That covers every timezone without a list.
 - **A $0 custom rate still writes a $0 charge record,** for the history, but sends no notification.
 - **The preview is computed in the app** from a mirrored helper, not by a callable. The server stays the authority on every charge.
-- **Prices above $10,000 count as charging off,** and the rules refuse them. This guards against cents typed as dollars.
+- **Prices above $2,500 a week or $10,000 a month count as charging off,** for a house price or a custom rate, and the rules refuse them. This guards against cents typed as dollars. The owner accepted these limits on 2026-11-09.
 - **Linking two records moves only the rent:** the balance, the account dates and the history. The intake record stays listed. A full merge is a separate change.
 - **A brand-new record with no account is left to its create trigger for an hour** before the job will charge it. That way an intake record is linked first.
 

@@ -5,11 +5,11 @@
  * charge history) onto the invite record, the one the resident's app uses, and marks
  * the intake record rentLinkedTo so it is never charged again. Nothing else merges.
  */
-import { auth } from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions/v2';
 import {
   guestCollection,
+  invitationCollection,
   ratsFirestore,
   rentAccountCollection,
   rentChargeCollection,
@@ -24,18 +24,20 @@ const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? 
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 
 /**
- * Each account's email as Firebase Auth has it, lower-cased. A guest doc's email is
- * written by the client (the invited self-create rule doesn't bind it), so an invite
- * record is matched by its account's email, never by its own. A missing account is
- * left out; any other Auth error throws, so the trigger retries.
+ * The email the account was invited to this house with, from its admission ticket's
+ * invitation; '' when there is none. A resident writes their own record (the
+ * self-create rule lets it carry any email) and can edit its email later, so only this
+ * value, typed by staff, ties an account to an intake record. Staff make intake
+ * records (no userId), so their email is staff-entered.
  */
-async function accountEmails(uids: string[]): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
-  for (let i = 0; i < uids.length; i += 100) {
-    const { users } = await auth().getUsers(uids.slice(i, i + 100).map((uid) => ({ uid })));
-    for (const u of users) if (u.email) out.set(u.uid, normalEmail(u.email));
-  }
-  return out;
+async function invitedEmailOf(userId: string, houseId: string): Promise<string> {
+  const ticket = await ratsFirestore
+    .collection('admission-tickets')
+    .doc(`${userId}_${houseId}`)
+    .get();
+  const invitationId = str(ticket.data()?.invitationId);
+  if (!invitationId) return '';
+  return normalEmail((await invitationCollection.doc(invitationId).get()).data()?.invitedEmail);
 }
 
 /**
@@ -54,6 +56,9 @@ export async function linkIntakeRecord(
   if (!fresh || !email || !houseId || fresh.rentLinkedTo) return 'none';
   const newIsInvite = isPlausibleUid(fresh.userId);
   if (!newIsInvite && !hasNoUserId(fresh)) return 'none';
+  // A new invite record matches by the email its account was invited with.
+  const invited = newIsInvite ? await invitedEmailOf(fresh.userId as string, houseId) : '';
+  if (newIsInvite && !invited) return 'none';
 
   const inHouse = await guestCollection.where('houseId', '==', houseId).get();
   const candidates = inHouse.docs.filter((d) => {
@@ -62,18 +67,21 @@ export async function linkIntakeRecord(
       d.id !== newGuestId &&
       isActiveGuestDoc(g) &&
       (newIsInvite ? hasNoUserId(g) : isPlausibleUid(g.userId)) &&
-      !g.rentLinkedTo
+      !g.rentLinkedTo &&
+      (!newIsInvite || normalEmail(g.email) === invited)
     );
   });
-  if (candidates.length === 0) return 'none';
-  const uidOf = (d: { data: () => unknown }) => ((d.data() ?? {}) as Data).userId as string;
-  const emails = await accountEmails(newIsInvite ? [fresh.userId as string] : candidates.map(uidOf));
-  const inviteEmail = newIsInvite ? emails.get(fresh.userId as string) : undefined;
-  const matches = candidates.filter((d) =>
-    newIsInvite
-      ? !!inviteEmail && normalEmail(((d.data() ?? {}) as Data).email) === inviteEmail
-      : emails.get(uidOf(d)) === email,
-  );
+  // A new intake record matches an account record by that account's invited email,
+  // never by the email the resident wrote on their own record.
+  const matches = newIsInvite
+    ? candidates
+    : (
+        await Promise.all(
+          candidates.map(async (d) =>
+            (await invitedEmailOf(d.data().userId as string, houseId)) === email ? d : null,
+          ),
+        )
+      ).filter((d): d is (typeof candidates)[number] => d !== null);
   if (matches.length === 0) return 'none';
   if (matches.length > 1) {
     logger.warn('linkIntakeRecord: more than one record matches; none linked', {

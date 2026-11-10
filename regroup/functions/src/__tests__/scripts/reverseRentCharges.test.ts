@@ -10,18 +10,9 @@ jest.mock('firebase-admin/firestore', () => ({
 }));
 jest.mock('../../api/firestore', () => require('../helpers/memFirestore').apiFirestore);
 jest.mock('../../util/notifications', () => ({ sendNotification: jest.fn() }));
-// Linking matches on the account's Auth email; u1 is Pat.
-jest.mock('firebase-admin', () => ({
-  auth: () => ({
-    getUsers: jest.fn(async (ids: { uid: string }[]) => ({
-      users: ids.filter(({ uid }) => uid === 'u1').map(({ uid }) => ({ uid, email: 'pat@example.com' })),
-      notFound: [],
-    })),
-  }),
-}));
 
 import { mem } from '../helpers/memFirestore';
-import { account, at, charges, guest, house, owed } from '../helpers/rentFixtures';
+import { account, at, charges, guest, house, invitedAs, owed } from '../helpers/rentFixtures';
 import { chargeResident } from '../../rent/chargeResident';
 import { reverseRentCharges } from '../../scripts/reverseRentCharges';
 
@@ -104,6 +95,7 @@ it("a linked intake record's charges are reversed on the record the balance move
   house();
   guest({ userId: '', email: 'pat@example.com', moveInDate: '2026-11-18' }, 'gIntake');
   await chargeResident('gIntake', at('2026-11-18'));
+  invitedAs('u1', 'pat@example.com');
   guest({ userId: 'u1', email: 'pat@example.com', rentOwed: 0 }, 'gNew');
   const { linkIntakeRecord } = await import('../../rent/linkIntakeRecord');
   await linkIntakeRecord('gNew');
@@ -119,6 +111,7 @@ it("filtering by the invite record includes the linked intake record's charges",
   house();
   guest({ userId: '', email: 'pat@example.com', moveInDate: '2026-11-18' }, 'gIntake');
   await chargeResident('gIntake', at('2026-11-18'));
+  invitedAs('u1', 'pat@example.com');
   guest({ userId: 'u1', email: 'pat@example.com', rentOwed: 0 }, 'gNew');
   const { linkIntakeRecord } = await import('../../rent/linkIntakeRecord');
   await linkIntakeRecord('gNew');

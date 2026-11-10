@@ -93,20 +93,8 @@ export function anchorFor(i: AnchorInput): Anchor {
   }
 
   // Charging was re-stamped (turned off and on, or a schedule switched in two steps)
-  // for a resident already charged in this house. Before their charged days ran out,
-  // carry on without skipping a day; after, resume on the new start, so only the gap
-  // goes uncharged (spec §4.3, §5; owner decision 2026-11-10). A resident charged only
-  // at another house falls through: they are new here.
-  const chargedHere =
-    account?.houseId === houseId &&
-    !!chargedThrough &&
-    chargedThrough >= (str(account.joinedOn) ?? localOf(knownJoin));
-  if (
-    account &&
-    chargeFrom &&
-    chargedThrough &&
-    (addDays(chargedThrough, 1) >= startDate || chargedHere)
-  ) {
+  // before this resident's charged days ran out: carry on, never skipping a day.
+  if (account && chargeFrom && chargedThrough && addDays(chargedThrough, 1) >= startDate) {
     return finish(
       {
         houseJoinedAtMs: knownJoin,
@@ -117,7 +105,26 @@ export function anchorFor(i: AnchorInput): Anchor {
     );
   }
 
-  // First anchor, or a restart after uncharged days: decide afresh from the facts.
+  // Charging came back on after a gap for a resident already charged in this house:
+  // resume on the day it came back, prorated, and charge nothing for the time it was
+  // off (owner decision 2026-11-09). Starting at the next full period let a short off
+  // across a period start skip that whole period. Charges that ended before the
+  // resident joined this house don't count, so a first turn-on still follows spec §2.
+  const joinedHere = str(account?.joinedOn);
+  if (
+    account &&
+    chargeFrom &&
+    chargedThrough &&
+    account.houseId === houseId &&
+    (!joinedHere || chargedThrough >= joinedHere)
+  ) {
+    return finish(
+      { houseJoinedAtMs: knownJoin, joinedOn: joinedHere, chargeFrom: startDate },
+      true,
+    );
+  }
+
+  // First anchor, or a restart for a resident never charged here: decide afresh.
   const moveIn = guest.moveInDate;
   const parsed = toLocalDate(moveIn, timeZone);
   const unreadable = moveIn !== undefined && moveIn !== null && moveIn !== '' && parsed === null;
