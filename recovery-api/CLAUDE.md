@@ -22,6 +22,7 @@ npm run sync:na      # NA meetings from BMLT, run by hand, not in GCP; dry run b
 npm run migrate:day-names [-- --apply]  # one-off: stored integer days → names; dry run by default.
                      # Run only after both products are deployed with day-name support.
 npm run sync:meetings [-- --apply]  # full AA sync from Meeting Guide; dry run by default; needs MEETING_GUIDE_API_KEY
+                     # in the shell or ~/.config/recovery-platform/meeting-sync.env, never in .env (deploys ship it)
 ```
 
 `lib/` is tracked and stale, and `npm run build` rewrites it. Don't commit the result. `firebase.json` builds
