@@ -1192,7 +1192,7 @@ Run on the sweep simulator `AC9BBDC3-EEF9-4C60-9C14-B847E2403920` against the em
 - **The job runs hourly,** not daily. That covers every timezone without a list.
 - **A $0 custom rate still writes a $0 charge record,** for the history, but sends no notification.
 - **The preview is computed in the app** from a mirrored helper, not by a callable. The server stays the authority on every charge.
-- **Prices above $10,000 count as charging off,** and the rules refuse them. This guards against cents typed as dollars.
+- **Prices above $2,500 a week or $10,000 a month count as charging off,** for a house price or a custom rate, and the rules refuse them. This guards against cents typed as dollars. The owner accepted these limits on 2026-11-09.
 - **Linking two records moves only the rent:** the balance, the account dates and the history. The intake record stays listed. A full merge is a separate change.
 - **A brand-new record with no account is left to its create trigger for an hour** before the job will charge it. That way an intake record is linked first.
 
