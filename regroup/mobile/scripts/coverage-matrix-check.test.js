@@ -86,6 +86,11 @@ describe('validate — structure', () => {
     const errs = check(matrix(row({ coveredBy: 'regroup/mobile/maestro/flows/nope.yaml' })));
     expect(errs).toEqual([expect.stringMatching(/AUTH-001: missing file/)]);
   });
+  it('reads a covering path with Markdown-escaped underscores, which Prettier keeps', () => {
+    // Prettier rewrites a bare __tests__ in a table cell as **tests**; escaped, it stays.
+    const escaped = 'regroup/e2e/src/payments/\\_\\_tests\\_\\_/rentLedger.server.test.ts';
+    expect(check(matrix(row({ kind: 'server', guard: 'money', coveredBy: escaped })))).toEqual([]);
+  });
   it('does not check the file of a missing row', () => {
     expect(check(matrix(row({ coveredBy: '—', status: 'missing' })))).toEqual([]);
   });
