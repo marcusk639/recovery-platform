@@ -57,7 +57,7 @@ jest.mock('../../../services/admin', () => ({
   getAdmin: jest.fn(),
   createAdmin: jest.fn(),
   getHouseAdmins: jest.fn(() => Promise.resolve([])),
-  updateAdmin: mockUpdateAdmin,
+  updateAdmin: (...args: any[]) => mockUpdateAdmin(...args),
   deleteAdmin: (...args: any[]) => mockDeleteAdminService(...args),
   sendAdminInvite: mockSendAdminInvite,
   createAdminId: jest.fn(() => 'new-admin-id'),
@@ -722,5 +722,16 @@ describe('removing a manager revokes their access', () => {
       "Can't remove manager",
       'Only someone above them in this house can remove them.',
     );
+  });
+
+  it('takes this house off a multi-house manager instead of deleting their record', async () => {
+    const multi = { ...ADMIN_2, houseIds: [mockUseSelectedHouse().house.id, 'house-other'] };
+    const utils = renderScreen(buildStore({ 'admin-2': multi }, 'user-1'));
+    await pressRemoveAndConfirm(utils);
+
+    await waitFor(() =>
+      expect(mockUpdateAdmin).toHaveBeenCalledWith('admin-2', { houseIds: ['house-other'] }),
+    );
+    expect(mockDeleteAdminService).not.toHaveBeenCalled();
   });
 });

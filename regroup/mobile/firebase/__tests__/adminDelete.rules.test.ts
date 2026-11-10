@@ -14,7 +14,7 @@ import {
   assertFails,
   RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { deleteDoc, doc, setDoc } from 'firebase/firestore';
+import { deleteDoc, doc, setDoc, updateDoc } from 'firebase/firestore';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -52,6 +52,8 @@ beforeEach(async () => {
       superAdmin: [HOUSE],
     });
     await setDoc(doc(db, 'admins/multi'), { userId: 'multi', houseIds: [HOUSE, 'other'] });
+    await setDoc(doc(db, `house-roles/${HOUSE}_peer2`), { tier: 'manager' });
+    await setDoc(doc(db, 'admins/peer2'), { userId: 'peer2', houseIds: [HOUSE] });
   });
 });
 
@@ -73,6 +75,23 @@ describe('admins delete (#196)', () => {
 
   test("another house's admin cannot", async () => {
     await assertFails(deleteDoc(doc(db('manager', 'elsewhere'), 'admins/target')));
+  });
+
+  test("a manager cannot delete another manager's doc (security review)", async () => {
+    await assertFails(deleteDoc(doc(db('manager'), 'admins/peer2')));
+  });
+
+  test("the owner can delete a manager's doc", async () => {
+    await assertSucceeds(deleteDoc(doc(db('owner'), 'admins/peer2')));
+  });
+
+  test("stripping the owner's superAdmin field is refused, so it can't then be deleted (security review)", async () => {
+    await assertFails(updateDoc(doc(db('manager'), 'admins/owner'), { superAdmin: [] }));
+    await assertFails(deleteDoc(doc(db('manager'), 'admins/owner')));
+  });
+
+  test("instead, this house can be taken off a multi-house manager's record", async () => {
+    await assertSucceeds(updateDoc(doc(db('owner'), 'admins/multi'), { houseIds: ['other'] }));
   });
 
   test('a doc for several houses cannot be deleted from one of them', async () => {

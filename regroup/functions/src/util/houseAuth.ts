@@ -84,9 +84,9 @@ export function assertHouseMemberFromClaims(
 
 /**
  * Takes a removed staff member out of the house docs' adminIds (admin houses)
- * and superAdminIds (super-admin houses). isHouseAdmin reads those fields, so
- * without this a removed manager stayed staff to every callable that uses it.
- * A house that no longer exists is skipped.
+ * and superAdminIds (super-admin houses). Those hold admins doc ids, not uids,
+ * so the user's own doc ids are looked up here by uid; ids from the client are
+ * never trusted. A house that no longer exists is skipped.
  */
 export async function removeStaffFromHouses(
   uid: string,
@@ -94,10 +94,13 @@ export async function removeStaffFromHouses(
   superAdminHouseIds: string[],
 ): Promise<void> {
   const { arrayRemove } = admin.firestore.FieldValue;
+  const adminDocs = await admin.firestore().collection("admins").where("userId", "==", uid).get();
+  const docIds = adminDocs.docs.map((d) => d.id);
+  if (docIds.length === 0) return;
   for (const houseId of new Set([...adminHouseIds, ...superAdminHouseIds])) {
     const update: Record<string, unknown> = {};
-    if (adminHouseIds.includes(houseId)) update.adminIds = arrayRemove(uid);
-    if (superAdminHouseIds.includes(houseId)) update.superAdminIds = arrayRemove(uid);
+    if (adminHouseIds.includes(houseId)) update.adminIds = arrayRemove(...docIds);
+    if (superAdminHouseIds.includes(houseId)) update.superAdminIds = arrayRemove(...docIds);
     try {
       await admin.firestore().collection("houses").doc(houseId).update(update);
     } catch (err) {

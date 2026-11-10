@@ -28,6 +28,7 @@ import {
 } from "../../state/queries/adminQueries";
 import { isSuperAdmin } from "../../util/admin";
 import { removeAdminPrivileges } from "../../services/house";
+import { updateAdmin } from "../../services/admin";
 import { logException } from "../../util/logging";
 import Admin from "../../entities/Admin";
 import { formatName } from "../../util/display";
@@ -147,7 +148,13 @@ const AdminManagement: React.FC<Props> = ({ navigation }) => {
                 return;
               }
               try {
-                await deleteAdminMutation({ adminId: admin.id, houseId: house.id });
+                const otherHouses = (admin.houseIds ?? []).filter((id) => id !== house.id);
+                if (otherHouses.length > 0) {
+                  // Staff of other houses too: take this house off their record.
+                  await updateAdmin(admin.id, { houseIds: otherHouses });
+                } else {
+                  await deleteAdminMutation({ adminId: admin.id, houseId: house.id });
+                }
               } catch (error) {
                 // Their access is already gone; only the profile record stayed.
                 logException(error);
