@@ -13,11 +13,12 @@
 
 ## Corrections, 2026-11-08 (these override the sections below)
 
-- **Refresh AA manually:** `MEETING_GUIDE_API_KEY=... npm run sync:meetings` sweeps all US land and writes `directoryMeetings`. It is a dry run until you add `-- --apply`.
+- **Refresh AA manually:** `MEETING_GUIDE_API_KEY=... npm run sync:meetings` sweeps all US land and writes `directoryMeetings`. It is a dry run until you add `-- --apply`. The key can instead go in `recovery-api/.env`, which git ignores, either as issued (with `%3f`) or already URL-encoded (with `%253f`). Never log the request URL: it contains the key.
+- **First full AA sync, 2026-11-09:** two `--apply` runs wrote 133,893 AA rows, 25,329 of them online, with 0 failed cells and 0 rate limits. It ran from code older than the day-name change, so these rows hold integer days. More than 500 meetings share one point in downtown Los Angeles (34.0547, -118.2427), so some there are missing. The prune never deletes rows at that spot.
 - **Run these in order:** deploy `recovery-api`, then do a dry run, then `--apply`. The older deployed `findMeetings` stops at 500 rows per geohash bound, so it would drop meetings once the directory is full. Deploying first changes nothing while the directory is small.
 - **Read the coverage lines in a dry run before applying:** it prints meetings per state and a count near each of 23 places, mostly islands and barrier islands. A `WARNING no meetings found near` line means check that place. It may have none, or the sweep may have missed it. San Juan's count also hints at whether `language=en` is filtering out Spanish-language meetings, which hasn't been verified.
 - **If the key stops working, the sync tells you:** it stops, prints a `MEETING GUIDE SYNC FAILED: ACTION NEEDED` banner, exits with code 2 and writes nothing. Set a new key in `MEETING_GUIDE_API_KEY` and run it again. The banner also covers a missing key, and 50 base cells failing in a row, which may be an outage rather than the key. The apps read Firestore, not this API, so a dead key leaves listings stale but working. Nothing checks the key between runs: you only find out when you run the sync.
-- **Meeting Guide no longer works keyless.** `api.meetingguide.org/app/v2/request` returns 401 from both local machines and Cloud Functions, so the step 2 seed gets no AA rows. It has never been run on `recovery-platform-e6cb3`.
+- **Meeting Guide no longer works keyless.** `api.meetingguide.org/app/v2/request` returns 401 from both local machines and Cloud Functions, so the step 2 seed gets no AA rows. It has never been run on `recovery-platform-e6cb3`; AA rows come from `sync:meetings` instead.
 - **Celebrate Recovery is failing too:** `locator.crgroups.info` has an expired TLS certificate. Don't disable certificate checks to get around it.
 - **The snapshot import exists but has not been run:** `npm run import:snapshot` (step 3) replaces `migrate:na`. Each row carries `dataAsOf`, which the apps show as "Listing data from Mar 2023". The owner is holding the AA import until a live sync is proven. NA no longer uses it: the importer refuses NA, and NA comes from `npm run sync:na`.
 - **`recovery-connect-cad4b` has billing off, and its linked billing account is closed.** Its free daily read quota is smaller than its `meetings` collection, and a full read on 2026-11-08 used it up and blocked all reads on the project until the quota reset. The script now refuses to scan a source with billing off. Check billing before any bulk read of a product's Firestore. Turning billing back on needs a different account and may restart its scheduled jobs, including the subscription reconciler and reminders.
@@ -203,7 +204,7 @@ npm run sync:na -- --apply                       # everything
 
 ## Meeting days are stored as names
 
-`directoryMeetings.day` is a lowercase day name such as `tuesday`. Rows written before 2026-11-09 hold an integer 0–6 (0 = Sunday) until converted. `findMeetings` accepts either in a request and returns each day as stored, so a reader must handle both until the conversion in step 3.
+`directoryMeetings.day` is a lowercase day name such as `tuesday`. Rows written by code older than that change, including the first AA sync's 133,893 rows, hold an integer 0–6 (0 = Sunday) until converted. `findMeetings` accepts either in a request and returns each day as stored, so a reader must handle both until the conversion in step 3.
 
 Deploy and convert in this order, or the apps show directory meetings with no day:
 
@@ -212,4 +213,3 @@ Deploy and convert in this order, or the apps show directory meetings with no da
 3. Convert stored rows, only after both product deploys have succeeded: `npm run migrate:day-names` reports what would change, and adding `--apply` changes only `day`. Don't run it alongside a sync, which could delete a row the migration then recreates with nothing but a day.
 
 Don't run anything that writes `directoryMeetings` before step 2, including `sync:na --apply`, `sync:meetings --apply`, `npm run seed` and `import:snapshot --apply`. They all write names, and older product code shows those rows with no day.
-

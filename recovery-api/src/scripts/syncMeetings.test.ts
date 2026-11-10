@@ -35,8 +35,12 @@ describe('parseSyncArgs', () => {
 });
 
 describe('readApiKey', () => {
-  it('returns the key exactly as set', () => {
+  it('returns a key that is already URL-encoded exactly as set', () => {
     expect(readApiKey({ MEETING_GUIDE_API_KEY: 'abc%253fdef' })).toBe('abc%253fdef');
+  });
+
+  it('encodes a key set in its issued form, so %3f reaches the API as %3f and not ?', () => {
+    expect(readApiKey({ MEETING_GUIDE_API_KEY: 'abc%3fdef%3fg' })).toBe('abc%253fdef%253fg');
   });
 
   it('fails clearly when the key is missing', () => {
