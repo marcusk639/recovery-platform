@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   View,
   ActivityIndicator,
@@ -53,8 +53,11 @@ import { useGuests, guestKeys } from "../../state/queries/guestQueries";
 import {
   listHousePayments,
   recordManualPayment,
+  createPaymentId,
+  MAX_PAYMENT_CENTS,
   HousePaymentRecord,
 } from "../../services/payments";
+import { parseDollarsField } from "../../util/money";
 import { Guest } from "../../entities/Guest";
 import {
   color,
@@ -552,13 +555,43 @@ const ManualPaymentModal: React.FC<ManualPaymentModalProps> = ({
   );
   const [notes, setNotes] = useState("");
   const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
+  const [amountError, setAmountError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  // A ref as well as state: a second tap can land before the re-render that
+  // disables the button, and each save lowers the balance (#190).
+  const submittingRef = useRef(false);
+  // One payment id per opening, so retrying after an error can't record twice.
+  const paymentIdRef = useRef<string | undefined>(undefined);
   const queryClient = useQueryClient();
 
+  useEffect(() => {
+    if (visible) paymentIdRef.current = createPaymentId();
+  }, [visible]);
+
   const handleRecord = async () => {
-    if (!selectedGuestId || !houseId || !amount) return;
-    const parsed = parseFloat(amount);
-    if (isNaN(parsed) || parsed <= 0) return;
-    const amountInCents = Math.round(parsed * 100);
+    if (submittingRef.current || !selectedGuestId || !houseId) return;
+    // parseFloat read "1,500.00" as 1 and "1e3" as 1000 (#189).
+    const parsed = parseDollarsField(amount);
+    if (!parsed.ok) {
+      setAmountError(
+        parsed.reason === "blank"
+          ? "Enter an amount."
+          : "Enter the amount in dollars, like 150 or 1,500.00.",
+      );
+      return;
+    }
+    if (parsed.cents <= 0) {
+      setAmountError("Enter an amount more than $0.");
+      return;
+    }
+    if (parsed.cents > MAX_PAYMENT_CENTS) {
+      setAmountError("That's more than $100,000. Check the amount.");
+      return;
+    }
+    setAmountError(null);
+    const amountInCents = parsed.cents;
+    submittingRef.current = true;
+    setSubmitting(true);
     try {
       await recordManualPayment(
         selectedGuestId,
@@ -568,6 +601,7 @@ const ManualPaymentModal: React.FC<ManualPaymentModalProps> = ({
         notes,
         // The resident's uid, so the record shows in their payment history.
         guests.find((g) => g.id === selectedGuestId)?.userId,
+        paymentIdRef.current,
       );
       // Refresh the parent dashboard list and any guest-balance views.
       queryClient.invalidateQueries({
@@ -594,6 +628,9 @@ const ManualPaymentModal: React.FC<ManualPaymentModalProps> = ({
     } catch (err) {
       logException(err);
       Alert.alert("Error", "Failed to record payment. Please try again.");
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
     }
   };
 
@@ -663,9 +700,21 @@ const ManualPaymentModal: React.FC<ManualPaymentModalProps> = ({
             placeholder="Amount ($)"
             keyboardType="decimal-pad"
             value={amount}
-            onChangeText={setAmount}
+            onChangeText={(text) => {
+              setAmount(text);
+              setAmountError(null);
+            }}
             style={styles.input}
           />
+          {amountError && (
+            <View testID="manual-payment-amount-error">
+              <RatsText
+                translate={false}
+                text={amountError}
+                style={{ color: color.red, fontSize: fontSize.small }}
+              />
+            </View>
+          )}
           <View style={styles.methodRow}>
             {(["Cash", "Check", "Venmo", "Zelle"] as const).map((m) => (
               <TouchableOpacity
@@ -696,6 +745,7 @@ const ManualPaymentModal: React.FC<ManualPaymentModalProps> = ({
           <RatsButton
             title="Record"
             onPress={handleRecord}
+            disabled={submitting}
             containerStyle={{ marginTop: normalize(16) }}
           />
           <RatsButton

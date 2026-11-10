@@ -70,7 +70,10 @@ const mockRecordManualPayment = jest.fn();
 jest.mock("../../../services/payments", () => ({
   listHousePayments: (...args: any[]) => mockListHousePayments(...args),
   recordManualPayment: (...args: any[]) => mockRecordManualPayment(...args),
+  createPaymentId: () => `pay-${++mockPaymentIds}`,
+  MAX_PAYMENT_CENTS: 10000000,
 }));
+let mockPaymentIds = 0;
 
 const mockUseAppSelector = jest.fn();
 jest.mock("../../../state/store", () => ({
@@ -253,6 +256,8 @@ describe("PaymentDashboard", () => {
           "",
           // The resident's uid, so the record is readable in their history.
           'u1',
+          // One payment id per modal open, so a retry can't record twice.
+          expect.any(String),
         );
       });
     });
@@ -404,5 +409,62 @@ describe("PaymentDashboard ManualPaymentModal keyboard (Task 15)", () => {
       ).toBeGreaterThan(0);
       utils.unmount();
     }
+  });
+});
+
+// ─── #189 and #190: what's typed is what's recorded, once ─────────────────────
+describe('ManualPaymentModal amount and submit', () => {
+  const guests = { g1: { id: 'g1', userId: 'u1', firstName: 'Alice', lastName: 'Smith' } };
+
+  const fillIn = async (amount: string) => {
+    setupStore(guests);
+    mockListHousePayments.mockResolvedValue([]);
+    const utils = renderDashboard();
+    fireEvent.press(await utils.findByTestId('manual-payment-fab'));
+    fireEvent.press(await utils.findByTestId('guest-pill-g1'));
+    fireEvent.changeText(utils.getByPlaceholderText('Amount ($)'), amount);
+    return utils;
+  };
+
+  beforeEach(() => mockRecordManualPayment.mockReset());
+
+  it('records "1,500.00" as $1,500.00, not $1.00 (#189)', async () => {
+    mockRecordManualPayment.mockResolvedValue({});
+    const utils = await fillIn('1,500.00');
+    fireEvent.press(utils.getByText('Record'));
+    await waitFor(() => expect(mockRecordManualPayment).toHaveBeenCalled());
+    expect(mockRecordManualPayment.mock.calls[0][2]).toBe(150000);
+  });
+
+  it.each(['1e3', '5OO', '12abc', '12,34'])(
+    'refuses %s and says why, instead of recording a guess (#189)',
+    async (typed) => {
+      const utils = await fillIn(typed);
+      fireEvent.press(utils.getByText('Record'));
+      expect(await utils.findByTestId('manual-payment-amount-error')).toBeTruthy();
+      expect(mockRecordManualPayment).not.toHaveBeenCalled();
+    },
+  );
+
+  it('records once when Record is pressed twice before the first save finishes (#190)', async () => {
+    let finish: (value: unknown) => void = () => {};
+    mockRecordManualPayment.mockReturnValue(new Promise(resolve => (finish = resolve)));
+    const utils = await fillIn('150');
+    fireEvent.press(utils.getByText('Record'));
+    fireEvent.press(utils.getByText('Record'));
+    finish({});
+    await waitFor(() => expect(mockRecordManualPayment).toHaveBeenCalledTimes(1));
+  });
+
+  it('lets a failed save be retried, with the same payment id (#190)', async () => {
+    mockRecordManualPayment.mockRejectedValueOnce(new Error('offline')).mockResolvedValue({});
+    const utils = await fillIn('150');
+    fireEvent.press(utils.getByText('Record'));
+    await waitFor(() => expect(mockRecordManualPayment).toHaveBeenCalledTimes(1));
+    fireEvent.press(utils.getByText('Record'));
+    await waitFor(() => expect(mockRecordManualPayment).toHaveBeenCalledTimes(2));
+    const [first, second] = mockRecordManualPayment.mock.calls;
+    expect(first[6]).toEqual(expect.stringMatching(/^pay-/));
+    expect(second[6]).toBe(first[6]);
   });
 });

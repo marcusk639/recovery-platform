@@ -87,6 +87,11 @@ export interface HousePaymentRecord extends PaymentRecord {
 
 export const paymentsCollection = collection(firestore, "payments");
 
+/** A new payment doc id, made before the write so a retry can reuse it. */
+export function createPaymentId(): string {
+  return doc(paymentsCollection).id;
+}
+
 // ─── Legacy Firestore-backed service functions ────────────────────────────────
 
 /**
@@ -387,6 +392,9 @@ export async function listHousePayments(
  *   Callers must convert from dollars before calling this function.
  * @param guestUserId - The resident's Firebase uid (guests/{guestId}.userId).
  *   Without it the resident cannot read this record (see RentPayment.guestUserId).
+ * @param paymentId - The doc id to write, from createPaymentId. A retry with the
+ *   same id can't record the payment twice: the rules refuse updating a
+ *   payment doc, so a second write to an id that already exists fails.
  */
 export async function recordManualPayment(
   guestId: string,
@@ -395,13 +403,21 @@ export async function recordManualPayment(
   method: "Cash" | "Check" | "Venmo" | "Zelle",
   notes: string = '',
   guestUserId?: string,
+  paymentId?: string,
 ): Promise<HousePaymentRecord> {
   if (!Number.isInteger(amountInCents) || amountInCents <= 0) {
     throw new Error(
       `Invalid payment amount: ${amountInCents}. Must be a positive integer (cents).`
     );
   }
-  const docRef = doc(paymentsCollection);
+  if (amountInCents > MAX_PAYMENT_CENTS) {
+    throw new Error(
+      `Payment amount ${amountInCents} exceeds maximum (${MAX_PAYMENT_CENTS} cents / $100,000).`
+    );
+  }
+  const docRef = paymentId
+    ? doc(paymentsCollection, paymentId)
+    : doc(paymentsCollection);
   const now = new Date();
   const record: HousePaymentRecord = {
     id: docRef.id,
