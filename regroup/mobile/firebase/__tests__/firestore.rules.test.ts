@@ -689,6 +689,13 @@ describe("guests/{guestId} — admins can't move another house's guest", () => {
 
   test("ALLOW an admin of the guest's own house editing the guest's rent", async () => {
     await seedGuestDoc();
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      // Only a manager or above changes a balance (owner decision 2026-11-10).
+      await context
+        .firestore()
+        .doc(`house-roles/${HOUSE_ID}_${ADMIN_UID}`)
+        .set({ tier: "manager" });
+    });
     const ctx = testEnv.authenticatedContext(ADMIN_UID, authHouseAdmin(ADMIN_UID, HOUSE_ID));
     await assertSucceeds(updateDoc(guestDocRef(ctx), { rentOwed: 200 }));
   });
@@ -877,6 +884,13 @@ describe("guests/{guestId} — self-edit field guard (S1)", () => {
   describe("admin branch still has full authority", () => {
     test("ALLOW house admin to set rentOwed on a guest", async () => {
       await seedGuestDoc();
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        // Only a manager or above changes a balance (owner decision 2026-11-10).
+        await context
+          .firestore()
+          .doc(`house-roles/${HOUSE_ID}_${ADMIN_UID}`)
+          .set({ tier: "manager" });
+      });
       const ctx = testEnv.authenticatedContext(
         ADMIN_UID,
         authHouseAdmin(ADMIN_UID, HOUSE_ID),

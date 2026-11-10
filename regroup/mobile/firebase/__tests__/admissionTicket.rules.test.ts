@@ -199,7 +199,8 @@ describe('admin and peer-leader create are unchanged', () => {
         houseId: H,
         firstName: 'A',
         status: 'active',
-        rentOwed: 50000,
+        // No balance: a peer leader may not set one (rentCharges.rules.test.ts).
+        rentOwed: 0,
       }),
     );
   });

@@ -280,7 +280,8 @@ service cloud.firestore {
                        (isInvitedSelfCreate(request.resource.data) ||
                         (isAdmin([request.resource.data.houseId]) &&
                          request.resource.data.get('userId', '') != request.auth.uid &&
-                         callerRank(request.resource.data.houseId) > targetRank(request.resource.data)));
+                         callerRank(request.resource.data.houseId) > targetRank(request.resource.data) &&
+                         rentMoneyOnCreateByManager(request.resource.data)));
 
       // Update has two distinct branches:
       //
@@ -382,6 +383,22 @@ service cloud.firestore {
             .hasAny(['rentOwed', 'choreFees', 'customRent', 'moveInDate', 'importedAt', 'rentDueDate']));
       }
 
+      // Only a manager or above changes anyone's rent rate, balance or due date: a
+      // peer leader also owes rent here (owner decision 2026-11-10), so peer leaders
+      // can't move each other's money either. The server's charges use the Admin SDK.
+      function rentMoneyByManager() {
+        return !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['rentOwed', 'choreFees', 'customRent', 'rentDueDate']) ||
+          callerRank(resource.data.houseId) >= 2;
+      }
+      // The same on create: a peer leader admits a resident with no balance, rate or
+      // due date, which is what the app sends.
+      function rentMoneyOnCreateByManager(d) {
+        return callerRank(d.houseId) >= 2 || (
+          d.get('rentOwed', 0) == 0 && d.get('choreFees', 0) == 0 &&
+          d.get('customRent', null) == null && d.get('rentDueDate', null) == null);
+      }
+
       allow update: if
         userIdUnchangedOrLinked() &&
         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['rentLinkedTo']) &&
@@ -391,7 +408,7 @@ service cloud.firestore {
         (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['updatedBy']) ||
          request.resource.data.updatedBy == request.auth.uid) && (
         (isAdmin([resource.data.houseId]) && isAdmin([request.resource.data.houseId]) &&
-         staffDepartureAllowed() && ownMoneyUnchanged()) ||
+         staffDepartureAllowed() && ownMoneyUnchanged() && rentMoneyByManager()) ||
         (isSameUser(request.resource.data.userId) &&
          request.resource.data.userId == resource.data.userId &&
          request.resource.data.houseId == resource.data.houseId &&

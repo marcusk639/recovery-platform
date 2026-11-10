@@ -4,7 +4,8 @@
  * The server charges rent from the house's price (functions src/rent/). These rules
  * keep its records server-only, let a manager or above set the price and schedule (a
  * peer leader also owes rent there, owner decision 2026-11-10), let staff set other
- * residents' rates and balances, and stop anyone editing their own.
+ * residents' rates and balances only from a manager up (a peer leader changes nobody's,
+ * owner decision 2026-11-10), and stop anyone editing their own.
  *
  *   cd firebase && firebase emulators:exec --only firestore --project demo-test \
  *     "npm --prefix .. run test:rules -- rentCharges"
@@ -109,8 +110,51 @@ describe('guests: rates and balances', () => {
     ));
   it("an admin clears another resident's customRent", () =>
     assertSucceeds(updateDoc(doc(as(ADMIN), 'guests/gResident'), { customRent: null })));
-  it("an admin sets another resident's rentOwed", () =>
-    assertSucceeds(updateDoc(doc(as(PEER), 'guests/gResident'), { rentOwed: 5000 })));
+  it("a manager sets another resident's rentOwed", () =>
+    assertSucceeds(updateDoc(doc(as(ADMIN), 'guests/gResident'), { rentOwed: 5000 })));
+  // A peer leader also owes rent here, so they change nobody's rate or balance
+  // (owner decision 2026-11-10), not only their own.
+  it.each([
+    ['rentOwed', 5000],
+    ['choreFees', 500],
+    ['customRent', { amountCents: 0, frequency: 'weekly' }],
+    ['rentDueDate', '2030-01-01'],
+  ])("a peer leader cannot change another resident's %s", (field, value) =>
+    assertFails(updateDoc(doc(as(PEER), 'guests/gResident'), { [field]: value })));
+  it('a peer leader can still admit a resident with no balance, rate or due date', () =>
+    assertSucceeds(
+      setDoc(doc(as(PEER), 'guests/gIntakeByPeer'), {
+        houseId: HOUSE,
+        status: 'active',
+        createdBy: PEER,
+        rentOwed: 0,
+        choreFees: 0,
+      }),
+    ));
+  it.each([
+    ['rentOwed', 5000],
+    ['choreFees', 500],
+    ['customRent', { amountCents: 0, frequency: 'weekly' }],
+    ['rentDueDate', '2030-01-01'],
+  ])('a peer leader cannot create a resident record carrying %s', (field, value) =>
+    assertFails(
+      setDoc(doc(as(PEER), 'guests/gIntakeByPeer'), {
+        houseId: HOUSE,
+        status: 'active',
+        createdBy: PEER,
+        [field]: value,
+      }),
+    ));
+  it('a manager can create a resident record with a balance and a rate', () =>
+    assertSucceeds(
+      setDoc(doc(as(ADMIN), 'guests/gIntakeByManager'), {
+        houseId: HOUSE,
+        status: 'active',
+        createdBy: ADMIN,
+        rentOwed: 5000,
+        customRent: { amountCents: 12000, frequency: 'weekly' },
+      }),
+    ));
   it('customRent {amountCents: 12.5, ...} is refused', () =>
     assertFails(
       updateDoc(doc(as(ADMIN), 'guests/gResident'), {
