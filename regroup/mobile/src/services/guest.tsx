@@ -340,6 +340,17 @@ export async function customizePhase(guest: Guest, house: House) {
   return { guest, house };
 }
 
+/**
+ * Why a discharge failed, so the screen can say something true (#221):
+ * 'refused' (the rules said no; retrying won't help), 'failed' (may pass on a
+ * retry), or 'access-not-revoked' (the discharge happened; only revoking the
+ * resident's house access failed).
+ */
+export type DischargeErrorKind = 'refused' | 'failed' | 'access-not-revoked';
+
+const dischargeError = (message: string, kind: DischargeErrorKind) =>
+  Object.assign(new Error(message), { kind });
+
 export async function dischargeGuest(
   guestId: string,
   moveOutDate: string,
@@ -354,7 +365,14 @@ export async function dischargeGuest(
     });
   } catch (error) {
     logException(error);
-    throw new Error('Failed to discharge resident. Please try again.');
+    // 'firestore/permission-denied' on the phone, 'permission-denied' on web.
+    if (String((error as { code?: unknown })?.code ?? '').endsWith('permission-denied')) {
+      throw dischargeError(
+        "You can't discharge this resident. A manager or the owner can.",
+        'refused',
+      );
+    }
+    throw dischargeError('Failed to discharge resident. Please try again.', 'failed');
   }
 
   // The guest doc no longer reflects an active resident, but Firestore
@@ -368,8 +386,9 @@ export async function dischargeGuest(
     await removeGuestPrivileges([guest]);
   } catch (error) {
     logException(error);
-    throw new Error(
+    throw dischargeError(
       'Resident was discharged, but house access could not be revoked. Please contact support.',
+      'access-not-revoked',
     );
   }
 }

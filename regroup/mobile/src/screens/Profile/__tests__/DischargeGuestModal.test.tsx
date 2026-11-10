@@ -117,6 +117,57 @@ it('does not call onSuccess when dischargeGuest fails', async () => {
   expect(mockOnSuccess).not.toHaveBeenCalled();
 });
 
+describe('what a failed discharge says (#221)', () => {
+  const { Alert } = require('react-native');
+  const pressConfirm = () => {
+    const { getByTestId } = render(
+      <DischargeGuestModal
+        visible
+        guestId="guest-1"
+        guestName="Jane Smith"
+        onClose={mockOnClose}
+        onSuccess={mockOnSuccess}
+      />,
+    );
+    fireEvent.press(getByTestId('confirm-discharge-button'));
+  };
+
+  beforeEach(() => {
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    mockOnSuccess.mockClear();
+  });
+
+  it('says why when the discharge is refused, and does not report success', async () => {
+    const message = "You can't discharge this resident. A manager or the owner can.";
+    mockedDischarge.mockRejectedValue(Object.assign(new Error(message), { kind: 'refused' }));
+    pressConfirm();
+    await waitFor(() => expect(Alert.alert).toHaveBeenCalledWith("Can't discharge", message));
+    expect(mockOnSuccess).not.toHaveBeenCalled();
+  });
+
+  it('reports the discharge when only revoking access failed', async () => {
+    const message =
+      'Resident was discharged, but house access could not be revoked. Please contact support.';
+    mockedDischarge.mockRejectedValue(
+      Object.assign(new Error(message), { kind: 'access-not-revoked' }),
+    );
+    pressConfirm();
+    await waitFor(() => expect(Alert.alert).toHaveBeenCalledWith('Resident discharged', message));
+    expect(mockOnSuccess).toHaveBeenCalled();
+  });
+
+  it('still asks for a retry when the failure may be passing', async () => {
+    mockedDischarge.mockRejectedValue(new Error('unavailable'));
+    pressConfirm();
+    await waitFor(() =>
+      expect(Alert.alert).toHaveBeenCalledWith(
+        'Discharge Failed',
+        'Could not discharge resident. Please try again.',
+      ),
+    );
+  });
+});
+
 describe('keyboard (Task 15)', () => {
   afterEach(() => {
     mockIOS = true;
