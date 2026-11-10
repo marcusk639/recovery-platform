@@ -1,10 +1,11 @@
-import type Stripe from 'stripe';
+import Stripe from 'stripe';
+import { pinnedStripeApiVersion } from '../../launchConfig';
 import { callAs, readDocAs } from '../harness/callables';
-import { deleteOpenClocks } from '../harness/clock';
+import { advance, deleteOpenClocks } from '../harness/clock';
 import { deliver } from '../harness/eventPump';
-import { DAY_S, docData, eventsOfType, houseStatus, inviteInput, lifecycle, nowS, pastTrial } from '../harness/flows';
+import { DAY_S, docData, eventsOfType, houseStatus, inviteInput, latestInvoiceId, lifecycle, nowS, pastTrial } from '../harness/flows';
 import { adminDb, seedConnectedHouse, seedHouse, seedOperator, seedResident } from '../harness/fixtures';
-import { assertSafeTarget, FUNCTIONS_BASE } from '../harness/guards';
+import { assertSafeTarget, FUNCTIONS_BASE, LOCAL_WEBHOOK_SECRET_FILE, readConfigFile } from '../harness/guards';
 
 let stripe: Stripe;
 beforeAll(async () => {
@@ -17,6 +18,8 @@ const DELETED = 'customer.subscription.deleted';
 const FAILED = 'invoice.payment_failed';
 const SUCCEEDED = 'invoice.payment_succeeded';
 const marker = async (id: string) => (await docData(`webhookEvents/${id}`)).status;
+// The kill switch is cached for KILL_SWITCH_TTL_MS (functions/src/util/entitlement.ts, 60 s), plus margin.
+const SWITCH_CACHE_WAIT_MS = 65000;
 
 test('SUB-040: the same event twice is applied once', async () => {
   const { op } = await lifecycle(stripe);
@@ -61,15 +64,22 @@ test('SUB-042: a failure for an older invoice after a later success leaves it ac
   const { op, house } = await lifecycle(stripe, { failingCard: true });
   const since = nowS() - 5;
   await pastTrial(stripe, op);
-  const [failed] = await eventsOfType(stripe, { since, objectId: op.customerId, type: FAILED });
+  const older = await latestInvoiceId(stripe, op);
+  const [failed] = await eventsOfType(stripe, { since, objectId: older, type: FAILED });
   const card = await stripe.paymentMethods.attach('pm_card_visa', { customer: op.customerId });
-  await stripe.invoices.pay((failed.data.object as Stripe.Invoice).id as string, { payment_method: card.id });
-  const [succeeded] = await eventsOfType(stripe, { since, objectId: op.customerId, type: SUCCEEDED });
+  await stripe.customers.update(op.customerId, { invoice_settings: { default_payment_method: card.id } });
+  await stripe.invoices.pay(older, { payment_method: card.id });
+  // The next period's invoice is the later one, and with the new card it succeeds.
+  const periodEnd = (await stripe.subscriptions.retrieve(op.subscriptionId)).items.data[0].current_period_end;
+  await advance(stripe, op.clockId, periodEnd + 2 * 3600);
+  const later = await latestInvoiceId(stripe, op);
+  expect(later).not.toBe(older);
+  const [succeeded] = await eventsOfType(stripe, { since, objectId: later, type: SUCCEEDED });
   expect((await deliver(succeeded)).status).toBe(200);
   expect((await deliver(failed)).status).toBe(200);
   expect(await houseStatus(house.id)).toBe('active');
   expect((await docData(`houses/${house.id}`)).guestGraceEndsAt).toBeUndefined();
-});
+}, 400000);
 
 test('SUB-043: a handler failure answers 500, releases the claim, and redelivery applies', async () => {
   const operator = await seedOperator();
@@ -80,7 +90,7 @@ test('SUB-043: a handler failure answers 500, releases the claim, and redelivery
   const paid = await stripe.paymentIntents.confirm(piId, { payment_method: 'pm_card_visa' });
 
   const eventId = `evt_retry_${Date.now()}`;
-  const event = (charge: string) => ({ id: eventId, object: 'event', type: 'charge.dispute.created', livemode: false, created: nowS(), api_version: '2026-01-28.clover', data: { object: { id: `dp_${eventId}`, object: 'dispute', charge, status: 'needs_response', reason: 'fraudulent', amount: 1000, currency: 'usd' } } });
+  const event = (charge: string) => ({ id: eventId, object: 'event', type: 'charge.dispute.created', livemode: false, created: nowS(), api_version: pinnedStripeApiVersion(), data: { object: { id: `dp_${eventId}`, object: 'dispute', charge, status: 'needs_response', reason: 'fraudulent', amount: 1000, currency: 'usd' } } });
   expect((await deliver(event('ch_does_not_exist'))).status).toBe(500);
   expect(await marker(eventId)).toBe('failed');
   expect((await deliver(event(paid.latest_charge as string))).status).toBe(200);
@@ -93,16 +103,23 @@ test('SUB-044: a missing signature is refused and writes nothing', async () => {
   expect(await marker('evt_nosig')).toBeUndefined();
 });
 
-test('SUB-044: a tampered payload is refused', async () => {
-  const stripeHeaderFor = 't=1,v1=deadbeef';
-  const res = await fetch(`${FUNCTIONS_BASE}/stripeEvents`, { method: 'POST', headers: { 'content-type': 'application/json', 'stripe-signature': stripeHeaderFor }, body: '{"id":"evt_tampered"}' });
-  expect(res.status).toBe(400);
+test('SUB-044: a tampered payload is refused and writes nothing, though its signature was real', async () => {
+  const id = `evt_tampered_${Date.now()}`;
+  const signed = JSON.stringify({ id, object: 'event', type: DELETED, livemode: false, created: nowS(), api_version: pinnedStripeApiVersion(), data: { object: { id: 'sub_nobody', object: 'subscription', customer: 'cus_nobody', metadata: {}, status: 'canceled' } } });
+  const header = Stripe.webhooks.generateTestHeaderString({ payload: signed, secret: readConfigFile(LOCAL_WEBHOOK_SECRET_FILE) });
+  const post = (body: string) => fetch(`${FUNCTIONS_BASE}/stripeEvents`, { method: 'POST', headers: { 'content-type': 'application/json', 'stripe-signature': header }, body });
+  const tampered = signed.replace('"status":"canceled"', '"status":"active"');
+  expect(tampered).not.toBe(signed);
+  expect((await post(tampered)).status).toBe(400);
+  expect(await marker(id)).toBeUndefined();
+  // The same header over the body it signed is accepted, so the refusal was the tampering.
+  expect((await post(signed)).status).toBe(200);
 });
 
 test('SUB-044: a live-mode event is not applied by a test-mode deployment', async () => {
   const { op, house } = await lifecycle(stripe);
   const id = `evt_live_${Date.now()}`;
-  const res = await deliver({ id, object: 'event', type: DELETED, livemode: true, created: nowS(), api_version: '2026-01-28.clover', data: { object: { id: op.subscriptionId, object: 'subscription', customer: op.customerId, metadata: { userId: op.uid }, status: 'canceled' } } });
+  const res = await deliver({ id, object: 'event', type: DELETED, livemode: true, created: nowS(), api_version: pinnedStripeApiVersion(), data: { object: { id: op.subscriptionId, object: 'subscription', customer: op.customerId, metadata: { userId: op.uid }, status: 'canceled' } } });
   expect(res.status).toBe(400);
   expect(await marker(id)).toBeUndefined();
   expect(await houseStatus(house.id)).toBe('trialing');
@@ -123,7 +140,7 @@ test('SUB-046: an event for an unknown subscription is done, and touches nobody'
   const bystander = await seedOperator();
   const house = await seedHouse(bystander);
   const id = `evt_unknown_${Date.now()}`;
-  const res = await deliver({ id, object: 'event', type: DELETED, livemode: false, created: nowS(), api_version: '2026-01-28.clover', data: { object: { id: 'sub_nobody', object: 'subscription', customer: 'cus_nobody', metadata: {}, status: 'canceled' } } });
+  const res = await deliver({ id, object: 'event', type: DELETED, livemode: false, created: nowS(), api_version: pinnedStripeApiVersion(), data: { object: { id: 'sub_nobody', object: 'subscription', customer: 'cus_nobody', metadata: {}, status: 'canceled' } } });
   expect(res.status).toBe(200);
   expect(await marker(id)).toBe('done');
   expect(await houseStatus(house.id)).toBe('active');
@@ -146,18 +163,20 @@ test('SUB-050: signed-in users can read the paywall switch', async () => {
   expect(await readDocAs(operator.uid, 'paywall/config')).toBe(200);
 });
 
-test('SUB-050: with the switch off, a lapsed operator can act', async () => {
+test('SUB-050: with the switch off, a lapsed operator can act; with it on, the same call is refused', async () => {
   const { op, house } = await lifecycle(stripe);
+  await adminDb().doc(`users/${op.uid}`).update({ 'subscriptionMetadata.status': 'canceled' });
   await adminDb().doc('paywall/config').set({ enabled: false });
   await adminDb().doc(`houses/${house.id}`).update({ subscriptionStatus: 'canceled' });
-  let res: Awaited<ReturnType<typeof callAs>> | undefined;
+  let off: Awaited<ReturnType<typeof callAs>> | undefined;
   try {
-    await new Promise((resolve) => setTimeout(resolve, 61000)); // the switch is cached for up to a minute
-    res = await callAs(op.uid, 'createInvitation', inviteInput(house.id));
+    await new Promise((resolve) => setTimeout(resolve, SWITCH_CACHE_WAIT_MS));
+    expect(await houseStatus(house.id)).toBe('canceled');
+    off = await callAs(op.uid, 'createInvitation', inviteInput(house.id));
   } finally {
     await adminDb().doc('paywall/config').set({ enabled: true });
-    await new Promise((resolve) => setTimeout(resolve, 61000)); // don't leave it cached off for later tests
+    await new Promise((resolve) => setTimeout(resolve, SWITCH_CACHE_WAIT_MS)); // don't leave it cached off for later tests
   }
-  expect(res).toBeDefined();
-  expect(res?.errorMessage).toBeUndefined();
+  expect(off?.errorMessage).toBeUndefined();
+  expect((await callAs(op.uid, 'createInvitation', inviteInput(house.id))).errorCode).toBe('failed-precondition');
 }, 300000);

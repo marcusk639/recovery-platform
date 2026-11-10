@@ -15,7 +15,8 @@ import { assertEmulatorEnv, MANUAL_PROJECT, PAYMENTS_PROJECT } from '../payments
 // Makes a house with residents the way the app does: createHouses, an invitation per
 // resident, redeemInvitation, then the writes SignUpForm and NewAccountForm make, as
 // the resident and through the security rules. A broken step fails here as it would
-// for a real invitee. Only the operator's subscription is seeded, to avoid Stripe.
+// for a real invitee. The operator is seeded instead (account, user and admin docs, and
+// an active subscription), so there is no Stripe checkout.
 
 export const PHASE = 'Default';
 const EMAIL_DOMAIN = 'rats-e2e.invalid';
@@ -95,7 +96,9 @@ export async function inviteResident(
     role: 'guest',
     initialPhase: PHASE,
   });
-  return (data as { token: string }).token;
+  const token = (data as { token?: unknown } | null)?.token;
+  if (typeof token !== 'string' || !token) throw new Error(`createInvitation returned no token for ${email}`);
+  return token;
 }
 
 /** The Guest entity's defaults, as buildSelfCreateGuest sends them. */
@@ -174,9 +177,11 @@ async function joinHouse(opts: {
   const guestId = randomUUID();
   const guestPath = `guests/${guestId}`;
   const house = await getFieldsAs(uid, `houses/${houseId}`);
-  const capacity = Number(
-    (house.currentCapacity as { integerValue?: string } | undefined)?.integerValue ?? 0,
-  );
+  // The app writes currentCapacity + 1, so a missing or non-integer value is a bug to report,
+  // not something to default: the app would write NaN.
+  const stored = (house.currentCapacity as { integerValue?: string } | undefined)?.integerValue;
+  if (stored === undefined) throw new Error(`houses/${houseId} has no integer currentCapacity`);
+  const capacity = Number(stored);
   await mustCommit('creating the guest', uid, [
     updateFields(`houses/${houseId}`, {
       ...house,
@@ -219,7 +224,8 @@ export async function newHouseWithGuests(opts: {
   })) as {
     houseIds: string[];
   };
-  const houseId = created.houseIds[0];
+  const houseId = created?.houseIds?.[0];
+  if (typeof houseId !== 'string' || !houseId) throw new Error('createHouses returned no house id');
   await signIn(operatorEmail, password);
 
   const joined: JoinedResident[] = [];

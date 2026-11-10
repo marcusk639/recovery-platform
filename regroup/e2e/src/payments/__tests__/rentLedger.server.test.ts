@@ -137,7 +137,8 @@ test('RENT-013: a declined card leaves the balance alone and records no successf
   expect(await rentOwed(r)).toBe(20000);
   const record = await docData(`payments/${pi}`);
   expect(record.status).toBe('failed');
-  expect(record.failureCode).toEqual(expect.any(String));
+  // handlePaymentIntentFailed stores last_payment_error.code, and falls back to 'unknown'.
+  expect(record.failureCode).toBe('card_declined');
   expect(record.rentApplied).not.toBe(true);
 });
 

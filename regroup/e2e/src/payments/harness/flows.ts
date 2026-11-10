@@ -11,7 +11,19 @@ export const docData = async (path: string) => (await adminDb().doc(path).get())
 export const houseStatus = async (id: string) => (await docData(`houses/${id}`)).subscriptionStatus;
 export const operatorMeta = async (uid: string) => (await docData(`users/${uid}`)).subscriptionMetadata ?? {};
 
-/** The next `count` events of this type for the object, without delivering them. */
+/** The subscription's newest invoice: the one the last clock advance billed. */
+export async function latestInvoiceId(stripe: Stripe, op: ClockedOperator): Promise<string> {
+  const { latest_invoice: invoice } = await stripe.subscriptions.retrieve(op.subscriptionId);
+  const id = typeof invoice === 'string' ? invoice : invoice?.id;
+  if (!id) throw new Error(`subscription ${op.subscriptionId} has no invoice`);
+  return id;
+}
+
+/**
+ * Every event of this type for the object since `since`, oldest first, once there are at
+ * least `count`. Pass an invoice or intent id, not a customer, when only one object's events
+ * should count: a customer's include the $0 trial invoice's.
+ */
 export async function eventsOfType(
   stripe: Stripe,
   opts: { since: number; objectId: string; type: string; count?: number },
@@ -24,7 +36,7 @@ export async function eventsOfType(
   );
 }
 
-/** Fetches and delivers one type of event, and requires each delivery to succeed. */
+/** Fetches and delivers those events (see eventsOfType), and requires each delivery to succeed. */
 export async function deliverType(
   stripe: Stripe,
   opts: { since: number; objectId: string; type: string; count?: number },

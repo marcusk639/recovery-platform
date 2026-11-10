@@ -1,8 +1,10 @@
 import { randomUUID } from 'crypto';
 import { App, getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
-import { getFirestore } from 'firebase-admin/firestore';
+import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { assertEmulatorEnv, LOCAL_CONNECT_ACCOUNT_FILE, PROJECT, readConfigFile } from './guards';
+import { forgetIdToken } from './idTokens';
+import { waitFor } from './waitFor';
 
 export function adminApp(): App {
   assertEmulatorEnv();
@@ -61,11 +63,21 @@ export async function seedOperator(
   return { uid, adminId, email };
 }
 
-/** A house written the way createHouses writes it: admin arrays hold the admin id, not the uid. */
+// setHouseSubscriptionStatusOnCreate stamps every new house with a status derived from its
+// operator's, some time after the write. operatorStatusToHouseStatus never returns this, so
+// seedHouse waits for it to go, then sets the status the test asked for. Otherwise a late
+// stamp can undo a status a test sets right after seeding, and the test passes vacuously.
+const AWAITING_STAMP = 'awaiting-stamp';
+
+/**
+ * A house written the way createHouses writes it: admin arrays hold the admin id, not the uid.
+ * A second house is added to the operator's admin doc and claims, as createHouses adds it.
+ */
 export async function seedHouse(operator: SeededOperator, extra: object = {}): Promise<SeededHouse> {
   const id = uniqueId('house');
   const now = new Date().toISOString();
   const db = adminDb();
+  const { subscriptionStatus = 'active', ...rest } = extra as { subscriptionStatus?: string };
   await db.doc(`houses/${id}`).set({
     id,
     name: `House ${id}`,
@@ -73,17 +85,32 @@ export async function seedHouse(operator: SeededOperator, extra: object = {}): P
     superAdminId: operator.uid,
     adminIds: [operator.adminId],
     superAdminIds: [operator.adminId],
-    subscriptionStatus: 'active',
     houseType: 'traditional',
     isDemoHouse: false,
     stripeStatus: 'not_connected',
     currentCapacity: 0,
     createdAt: now,
-    ...extra,
+    ...rest,
+    subscriptionStatus: AWAITING_STAMP,
   });
+  await waitFor(
+    async () => (await db.doc(`houses/${id}`).get()).get('subscriptionStatus'),
+    (status) => status !== AWAITING_STAMP,
+    30000,
+  );
+  await db.doc(`houses/${id}`).update({ subscriptionStatus });
   await db.doc(`house-roles/${id}_${operator.uid}`).set({ houseId: id, uid: operator.uid, tier: 'owner', primary: true, grantedBy: 'seed', grantedAt: now, via: 'seed' });
-  await db.doc(`admins/${operator.adminId}`).update({ houseIds: [id], superAdmin: [id] });
-  await getAuth(adminApp()).setCustomUserClaims(operator.uid, { admin: { [id]: true }, superAdmin: { [id]: true } });
+  await db
+    .doc(`admins/${operator.adminId}`)
+    .update({ houseIds: FieldValue.arrayUnion(id), superAdmin: FieldValue.arrayUnion(id) });
+  const auth = getAuth(adminApp());
+  const claims = (await auth.getUser(operator.uid)).customClaims ?? {};
+  await auth.setCustomUserClaims(operator.uid, {
+    ...claims,
+    admin: { ...(claims.admin as object | undefined), [id]: true },
+    superAdmin: { ...(claims.superAdmin as object | undefined), [id]: true },
+  });
+  forgetIdToken(operator.uid);
   return { id, ownerUid: operator.uid };
 }
 

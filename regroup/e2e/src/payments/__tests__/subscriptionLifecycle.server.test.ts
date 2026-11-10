@@ -1,7 +1,8 @@
 import type Stripe from 'stripe';
 import { callAs } from '../harness/callables';
 import { deleteOpenClocks } from '../harness/clock';
-import { deliverType, DAY_S, docData, eventsOfType, houseStatus, inviteInput, lifecycle, newHouseInput, nowS, operatorMeta, pastTrial } from '../harness/flows';
+import { deliver } from '../harness/eventPump';
+import { deliverType, DAY_S, docData, eventsOfType, houseStatus, inviteInput, latestInvoiceId, lifecycle, newHouseInput, nowS, operatorMeta, pastTrial } from '../harness/flows';
 import { adminDb, seedConnectedHouse, seedResident } from '../harness/fixtures';
 import { assertSafeTarget } from '../harness/guards';
 
@@ -24,7 +25,8 @@ test('SUB-020: the trial converts to paid at day 7, and the house follows', asyn
   const { op, house } = await lifecycle(stripe);
   const since = nowS() - 5;
   await pastTrial(stripe, op);
-  await deliverType(stripe, { since, objectId: op.customerId, type: SUCCEEDED });
+  const converted = await latestInvoiceId(stripe, op);
+  await deliverType(stripe, { since, objectId: converted, type: SUCCEEDED });
   await deliverType(stripe, { since, objectId: op.customerId, type: UPDATED });
   expect((await stripe.subscriptions.retrieve(op.subscriptionId)).status).toBe('active');
   expect((await docData(`subscriptions/${op.subscriptionId}`)).status).toBe('active');
@@ -55,8 +57,9 @@ test('SUB-022: payment recovered during grace clears it', async () => {
 
   const card = await stripe.paymentMethods.attach('pm_card_visa', { customer: op.customerId });
   await stripe.customers.update(op.customerId, { invoice_settings: { default_payment_method: card.id } });
-  await stripe.invoices.pay((failed.data.object as Stripe.Invoice).id as string, { payment_method: card.id });
-  await deliverType(stripe, { since, objectId: op.customerId, type: SUCCEEDED });
+  const invoiceId = (failed.data.object as Stripe.Invoice).id as string;
+  await stripe.invoices.pay(invoiceId, { payment_method: card.id });
+  await deliverType(stripe, { since, objectId: invoiceId, type: SUCCEEDED });
 
   expect(await houseStatus(house.id)).toBe('active');
   expect(await graceEndsAt(house.id)).toBeUndefined();
@@ -97,17 +100,24 @@ test('SUB-025: dunning exhausted is blocked, and a new card unblocks with no sec
   const { op, house } = await lifecycle(stripe, { failingCard: true });
   const since = nowS() - 5;
   await pastTrial(stripe, op);
-  const [first] = await eventsOfType(stripe, { since, objectId: op.customerId, type: FAILED });
-  const invoiceId = (first.data.object as Stripe.Invoice).id as string;
+  const invoiceId = await latestInvoiceId(stripe, op);
   for (let attempt = 0; attempt < 2; attempt++) {
     await expect(stripe.invoices.pay(invoiceId)).rejects.toMatchObject({ type: 'StripeCardError' });
   }
-  await deliverType(stripe, { since, objectId: op.customerId, type: FAILED, count: 3 });
+  // Stripe raises attempt_count only on its own retry schedule, never for a manual pay, and
+  // the sandbox's schedule can't be driven to its end here. So the third real failure is
+  // delivered as the schedule's last retry carries it, attempt_count 3, the count
+  // handleInvoicePaymentFailed treats as exhausted.
+  const failures = await eventsOfType(stripe, { since, objectId: invoiceId, type: FAILED, count: 3 });
+  const last = failures[failures.length - 1] as unknown as { data: { object: object } };
+  const exhausted: object = { ...last, data: { ...last.data, object: { ...last.data.object, attempt_count: 3 } } };
+  const toDeliver: object[] = [...failures.slice(0, -1), exhausted];
+  for (const event of toDeliver) expect((await deliver(event)).status).toBe(200);
   expect(await houseStatus(house.id)).toBe('unpaid');
 
   const card = await stripe.paymentMethods.attach('pm_card_visa', { customer: op.customerId });
   await stripe.invoices.pay(invoiceId, { payment_method: card.id });
-  await deliverType(stripe, { since, objectId: op.customerId, type: SUCCEEDED });
+  await deliverType(stripe, { since, objectId: invoiceId, type: SUCCEEDED });
   expect(await houseStatus(house.id)).toBe('active');
   expect((await operatorMeta(op.uid)).subscriptionId).toBe(op.subscriptionId);
   expect((await stripe.subscriptions.list({ customer: op.customerId, status: 'all' })).data).toHaveLength(1);
