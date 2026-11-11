@@ -30,7 +30,12 @@ jest.mock('../../util/house', () => ({
   calculateWeeklyHealth: jest.fn(),
 }));
 
-import { advanceGuestWeek, getFailedTransfers, transferStats } from '../../util/guest';
+import {
+  advanceGuestWeek,
+  getFailedHouses,
+  getFailedTransfers,
+  transferStats,
+} from '../../util/guest';
 import { getCurrentWeekStart } from '../../util/week';
 
 beforeEach(() => {
@@ -149,7 +154,7 @@ describe('advanceGuestWeek', () => {
     });
 
     await expect(advanceGuestWeek(guestRef, guest)).rejects.toThrow(
-      `Guest ${guest.id} no longer exists`
+      `Guest ${guest.id} no longer exists`,
     );
   });
 
@@ -375,5 +380,29 @@ describe('transferStats', () => {
       expect(logger.error).toHaveBeenCalled();
       expect(loggedText()).not.toContain(HOUSE_NAME);
     });
+  });
+
+  // The house error is caught so the other houses still roll over; the scheduled
+  // run reads getFailedHouses to fail the run (scheduled/weeklyTransfers).
+  it('records a house that fails to process, and clears it at the next run', async () => {
+    const { houseCollection, guestCollection } = require('../../api/firestore');
+    houseCollection.get.mockResolvedValue({
+      size: 1,
+      docs: [{ data: () => ({ id: 'house-7' }), ref: { update: jest.fn() } }],
+    });
+    const originalWhere = guestCollection.where;
+    guestCollection.where = jest.fn(() => {
+      throw new Error('query failed');
+    });
+    try {
+      await transferStats(null);
+    } finally {
+      guestCollection.where = originalWhere;
+    }
+    expect(getFailedHouses()).toEqual(['house-7']);
+
+    houseCollection.get.mockResolvedValue({ docs: [], size: 0 });
+    await transferStats(null);
+    expect(getFailedHouses()).toEqual([]);
   });
 });

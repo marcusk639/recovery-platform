@@ -17,6 +17,8 @@ jest.mock('firebase-functions/v2/scheduler', () => ({
 // Mock transferStats so we can assert invocation counts.
 jest.mock('../../util/guest', () => ({
   transferStats: jest.fn(async () => ({})),
+  getFailedTransfers: jest.fn(() => []),
+  getFailedHouses: jest.fn(() => []),
 }));
 
 // Mock firebase-admin (imported transitively via api/firestore).
@@ -65,16 +67,17 @@ describe('weeklyTransfers (consolidated scheduled handler)', () => {
     expect(transferStats).toHaveBeenCalledWith(null, null);
   });
 
-  it('continues processing remaining timezones if one fails', async () => {
+  it('continues processing remaining timezones if one fails, then fails the run', async () => {
     (transferStats as jest.Mock)
       .mockRejectedValueOnce(new Error('NY failed'))
       .mockResolvedValue({});
 
+    // The scheduled function rejects, so Cloud Scheduler records the missed payouts.
     await expect(
       (weeklyTransfers as unknown as (e: unknown) => Promise<void>)({
         scheduleTime: '2026-04-19T05:00:00Z',
       }),
-    ).resolves.toBeUndefined();
+    ).rejects.toThrow('passes failed: America/New_York');
 
     // All 5 calls attempted despite the first one throwing.
     expect(transferStats).toHaveBeenCalledTimes(WEEKLY_TRANSFER_TIMEZONES.length + 1);

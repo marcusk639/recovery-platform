@@ -42,6 +42,8 @@ jest.mock('../../util/disputes', () => ({
 
 jest.mock('../../util/guest', () => ({
   transferStats: mockTransferStats,
+  getFailedTransfers: jest.fn(() => []),
+  getFailedHouses: jest.fn(() => []),
 }));
 
 // ---------------------------------------------------------------------------

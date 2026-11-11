@@ -78,6 +78,53 @@ describe('runDisputeUpdates', () => {
   });
 });
 
+describe('runDisputeUpdates failures', () => {
+  beforeEach(() => {
+    mockHouseGet.mockReset();
+    mockRunDisputeTransaction.mockReset().mockResolvedValue(undefined);
+  });
+
+  it('keeps going past a house that fails, then rejects naming it', async () => {
+    mockHouseGet.mockResolvedValue({
+      docs: [
+        houseDoc('h1', { d1: { id: 'd1' } }),
+        houseDoc('h2', { bad: { id: 'bad' } }),
+        houseDoc('h3', { d3: { id: 'd3' } }),
+      ],
+    });
+    mockRunDisputeTransaction.mockImplementation((_house: unknown, dispute: { id: string }) => {
+      if (dispute.id === 'bad') {
+        throw new Error('malformed dispute');
+      }
+      return Promise.resolve();
+    });
+
+    await expect(runDisputeUpdates()).rejects.toThrow('updateDisputes: 1 house(s) failed: h2');
+    expect(mockRunDisputeTransaction).toHaveBeenCalledWith(expect.anything(), { id: 'd3' });
+  });
+
+  it('lets every transaction finish when one rejects, then rejects', async () => {
+    let done = false;
+    mockHouseGet.mockResolvedValue({
+      docs: [houseDoc('h1', { d1: { id: 'd1' }, d2: { id: 'd2' } })],
+    });
+    mockRunDisputeTransaction.mockRejectedValueOnce(new Error('contention')).mockImplementationOnce(
+      () =>
+        new Promise<void>((res) =>
+          setTimeout(() => {
+            done = true;
+            res();
+          }, 5),
+        ),
+    );
+
+    await expect(runDisputeUpdates()).rejects.toThrow(
+      'updateDisputes: 1 of 2 dispute transactions failed',
+    );
+    expect(done).toBe(true);
+  });
+});
+
 describe('updateDisputes wrapper', () => {
   it('keeps its schedule config', () => {
     expect(mockScheduleOpts).toContainEqual({ schedule: '0 2 * * *' });

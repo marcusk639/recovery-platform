@@ -30,6 +30,8 @@ interface TransferFailure {
 }
 
 const failedTransfers: TransferFailure[] = [];
+// Ids of houses whose processing threw during the last transferStats run.
+const failedHouses: string[] = [];
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -189,6 +191,7 @@ export const transferStats = async (
   logger.info('Starting weekly transfer...', { timezone, houseId });
 
   failedTransfers.length = 0;
+  failedHouses.length = 0;
 
   let houseQuery: FirebaseFirestore.QuerySnapshot;
   const guests: Guests = {};
@@ -251,6 +254,7 @@ export const transferStats = async (
         }
       } catch (houseError) {
         logger.error(`Error processing house ${house.id}`, houseError);
+        failedHouses.push(house.id);
       }
     }
   } catch (error) {
@@ -269,4 +273,8 @@ export const transferStats = async (
 
 export const getFailedTransfers = (): TransferFailure[] => {
   return [...failedTransfers];
+};
+
+export const getFailedHouses = (): string[] => {
+  return [...failedHouses];
 };
