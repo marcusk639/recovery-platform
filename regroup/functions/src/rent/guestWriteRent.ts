@@ -4,6 +4,7 @@
  * pay their balance that day. Every other write returns 'none' without reads; that
  * matters because the charge's own rentOwed write re-fires the trigger.
  */
+import { logger } from 'firebase-functions/v2';
 import { localDateString, resolveTimeZone } from '../activities/weekSummaryMath';
 import {
   guestCollection,
@@ -14,7 +15,7 @@ import {
 } from '../api/firestore';
 import { isActiveGuestDoc, isPlausibleUid } from '../util/guestMembership';
 import { chargeResident } from './chargeResident';
-import { linkIntakeRecord } from './linkIntakeRecord';
+import { linkHeld, linkIntakeRecord } from './linkIntakeRecord';
 import { ChargeOutcome } from './types';
 
 type Data = Record<string, unknown>;
@@ -87,9 +88,17 @@ export async function rentOnGuestWrite(e: GuestRentEvent): Promise<'none' | Char
 
   if (isCreate) {
     // Before the backfill, so a linked intake record's moveInDate wins over createTime.
-    await linkIntakeRecord(guestId, after);
+    const link = await linkIntakeRecord(guestId, after);
     if (!after.moveInDate && typeof e.afterCreateTimeMs === 'number') {
       await backfillMoveInDate(guestId, e.afterCreateTimeMs);
+    }
+    if (linkHeld(link)) {
+      logger.error('rentOnGuestWrite: matches a record it could not link; not charged until a manager resolves it', {
+        guestId,
+        houseId,
+        link,
+      });
+      return 'none';
     }
   } else if (houseId) {
     const at = new Date(e.eventTime);

@@ -94,7 +94,7 @@ it('an intake record the person created themselves is not linked', async () => {
   house();
   intake({ rentOwed: 100, createdBy: 'u1' });
   invite({ rentOwed: 80000 });
-  await expect(linkIntakeRecord('gNew')).resolves.toBe('none');
+  await expect(linkIntakeRecord('gNew')).resolves.toBe('refused');
   expect(doc('gNew').rentOwed).toBe(80000);
   expect(doc('gIntake').rentLinkedTo).toBeUndefined();
 });

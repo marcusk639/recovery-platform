@@ -44,6 +44,16 @@ async function invitedEmailOf(userId: string, houseId: string): Promise<string> 
 }
 
 /**
+ * 'refused': a matching record was found but must not be linked (the person made it,
+ * or a balance isn't a number). 'ambiguous': more than one matches. Either way the two
+ * records are the same person, so callers must not charge the new one from scratch.
+ */
+export type LinkOutcome = 'linked' | 'none' | 'ambiguous' | 'refused';
+
+/** True when charging the new record would bill days a matching record is already charged for. */
+export const linkHeld = (outcome: LinkOutcome) => outcome === 'ambiguous' || outcome === 'refused';
+
+/**
  * Links in either order: a new invite record finds the intake record (no userId), or
  * a new intake record, made after the person already signed up, finds the invite
  * record (with a userId). The rent always moves onto the invite record.
@@ -52,7 +62,7 @@ async function invitedEmailOf(userId: string, houseId: string): Promise<string> 
 export async function linkIntakeRecord(
   newGuestId: string,
   newGuest?: Data,
-): Promise<'linked' | 'none' | 'ambiguous'> {
+): Promise<LinkOutcome> {
   const fresh = newGuest ?? ((await guestCollection.doc(newGuestId).get()).data() as Data);
   const email = normalEmail(fresh?.email);
   const houseId = typeof fresh?.houseId === 'string' ? fresh.houseId : '';
@@ -129,7 +139,7 @@ async function linkRecords(
   newGuestId: string,
   userId: string,
   houseId: string,
-): Promise<'linked' | 'none'> {
+): Promise<'linked' | 'none' | 'refused'> {
   let selfMade = false;
   let badBalance = false;
   const linked = await ratsFirestore.runTransaction(async (txn) => {
@@ -233,7 +243,7 @@ async function linkRecords(
         houseId,
       });
     }
-    return 'none';
+    return badBalance || selfMade ? 'refused' : 'none';
   }
 
   // So the resident sees the intake record's charges in their own history.

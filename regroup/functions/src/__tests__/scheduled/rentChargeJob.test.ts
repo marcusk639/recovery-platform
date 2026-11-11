@@ -147,6 +147,47 @@ describe('records with no account', () => {
     expect(charges()).toEqual([]);
   });
 
+  // A pair the link finds but won't join: charging the invite record from scratch while
+  // the intake record keeps being charged bills the same days twice. Held instead, and
+  // logged for a manager; charging catches up the missed periods once it's resolved.
+  it.each([
+    ['matches two intake records', [{ createdBy: 'mgr' }, { createdBy: 'mgr2' }]],
+    ['matches an intake record the person made themselves', [{ createdBy: 'u1' }]],
+  ])('an invite record that %s is not charged until a manager resolves it', async (_case, intakes) => {
+    house();
+    invitedAs('u1', 'pat@example.com');
+    const twoHoursAgo = MONDAY.getTime() - 2 * 3600 * 1000;
+    intakes.forEach((extra, i) => {
+      mem.seedAt(
+        `guests/gIntake${i}`,
+        { houseId: 'H', status: 'active', userId: '', email: 'pat@example.com', rentOwed: 17500, ...extra },
+        twoHoursAgo,
+      );
+      mem.seed(`rentAccounts/gIntake${i}`, {
+        guestId: `gIntake${i}`,
+        houseId: 'H',
+        chargedHouseId: 'H',
+        houseJoinedAtMs: 1,
+        joinedOn: '2026-11-11',
+        anchoredTo: '2026-11-11',
+        chargeFrom: '2026-11-16',
+        chargedThrough: '2026-11-22',
+      });
+    });
+    mem.seedAt(
+      'guests/gNew',
+      { houseId: 'H', status: 'active', userId: 'u1', email: 'pat@example.com', rentOwed: 0, moveInDate: '2026-11-16' },
+      twoHoursAgo,
+    );
+    await runRentCharges(MONDAY);
+    expect(charges().filter((c) => c.startsWith('rentCharges/gNew'))).toEqual([]);
+    expect(mem.get('guests/gNew')?.rentOwed).toBe(0);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringMatching(/not charged/),
+      expect.objectContaining({ guestId: 'gNew' }),
+    );
+  });
+
   it('a resident with no account created 2 hours ago is charged', async () => {
     house();
     mem.seedAt(
