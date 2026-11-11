@@ -214,6 +214,8 @@ describe('deleting guest docs', () => {
   });
 
   it('ALLOWS a house admin to delete a guest doc', async () => {
+    // A manager: below that, a record that owes rent can't be deleted (rentCharges.rules.test.ts).
+    await seed(`house-roles/${H}_staff`, { tier: 'manager' });
     const db = testEnv.authenticatedContext('staff', { admin: { [H]: true } }).firestore();
     await assertSucceeds(deleteDoc(doc(db, 'guests/g1')));
   });

@@ -13,7 +13,7 @@
 
 import { assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
 import { doc, getDoc, setDoc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
-import { ADMIN, HOUSE, OTHER_RESIDENT, OWNER, PEER, RESIDENT, useRentRulesEnv } from './rentRulesHarness';
+import { ADMIN, HOUSE, OWNER, PEER, RESIDENT, useRentRulesEnv } from './rentRulesHarness';
 
 const rules = useRentRulesEnv('demo-rent-charges-rules-test');
 const as = rules.as;
@@ -296,13 +296,24 @@ describe('rentAccounts and config', () => {
   });
 });
 
-// Peer leaders may delete resident records (owner decision 2026-11-10). Deleting one and
-// re-creating it under the same id, with no balance, would clear what the resident owes
-// while the rent account carries on charging, so below a manager that re-create is refused.
-describe('guests: a deleted resident record re-created', () => {
-  const recreate = (who: string, id: string, userId: string) =>
+// Below a manager, a resident record can be deleted only when it owes nothing (owner
+// decision 2026-11-10): deleting one that owes rent or chore fees, then re-creating the
+// resident without it, would clear what they owe. A manager deletes the rest.
+describe('guests: deleting a resident record', () => {
+  const owing = (o: Record<string, unknown>) =>
+    rules.env().withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'guests/gResident'), {
+        userId: RESIDENT,
+        houseId: HOUSE,
+        status: 'active',
+        rentOwed: 0,
+        choreFees: 0,
+        ...o,
+      });
+    });
+  const recreate = (who: string, id: string) =>
     setDoc(doc(as(who), `guests/${id}`), {
-      userId,
+      userId: RESIDENT,
       houseId: HOUSE,
       status: 'active',
       createdBy: who,
@@ -310,25 +321,48 @@ describe('guests: a deleted resident record re-created', () => {
       choreFees: 0,
     });
 
-  it('a peer leader can delete a resident record with a balance', () =>
-    assertSucceeds(deleteDoc(doc(as(PEER), 'guests/gResident'))));
+  it('a peer leader cannot delete a resident record that owes rent', async () => {
+    await owing({ rentOwed: 20000 });
+    await assertFails(deleteDoc(doc(as(PEER), 'guests/gResident')));
+  });
 
-  it('a peer leader cannot re-create it while its rent account remains', async () => {
+  it('a peer leader cannot delete a resident record that owes chore fees', async () => {
+    await owing({ choreFees: 500 });
+    await assertFails(deleteDoc(doc(as(PEER), 'guests/gResident')));
+  });
+
+  it('a peer leader cannot delete a resident record whose balance is not a number', async () => {
+    await owing({ rentOwed: '350' });
+    await assertFails(deleteDoc(doc(as(PEER), 'guests/gResident')));
+  });
+
+  it('a peer leader can delete a resident record that owes nothing', async () => {
+    await owing({});
     await assertSucceeds(deleteDoc(doc(as(PEER), 'guests/gResident')));
-    await assertFails(recreate(PEER, 'gResident', RESIDENT));
   });
 
-  it("a peer leader cannot re-create a record its resident's account still points at", async () => {
-    await rules.env().withSecurityRulesDisabled(async (ctx) => {
-      await setDoc(doc(ctx.firestore(), `users/${OTHER_RESIDENT}`), { id: OTHER_RESIDENT, guestId: 'gOther' });
-    });
-    await assertSucceeds(deleteDoc(doc(as(PEER), 'guests/gOther')));
-    await assertFails(recreate(PEER, 'gOther', OTHER_RESIDENT));
+  it('a peer leader cannot clear a balance by re-creating the record under its id', async () => {
+    await owing({ rentOwed: 20000 });
+    await assertFails(deleteDoc(doc(as(PEER), 'guests/gResident')));
+    await assertFails(recreate(PEER, 'gResident'));
   });
 
-  it('a manager can re-create it', async () => {
+  it('a peer leader cannot clear a balance by making a new record and deleting the old one', async () => {
+    await owing({ rentOwed: 20000 });
+    // A new intake record is an ordinary admission; it's removing the old one that's refused.
+    await assertSucceeds(recreate(PEER, 'gResidentAgain'));
+    await assertFails(deleteDoc(doc(as(PEER), 'guests/gResident')));
+  });
+
+  it('a manager can delete a resident record that owes rent', async () => {
+    await owing({ rentOwed: 20000 });
     await assertSucceeds(deleteDoc(doc(as(ADMIN), 'guests/gResident')));
-    await assertSucceeds(recreate(ADMIN, 'gResident', RESIDENT));
+  });
+
+  it('a manager can delete and re-create a resident record', async () => {
+    await owing({ rentOwed: 20000 });
+    await assertSucceeds(deleteDoc(doc(as(ADMIN), 'guests/gResident')));
+    await assertSucceeds(recreate(ADMIN, 'gResident'));
   });
 });
 
