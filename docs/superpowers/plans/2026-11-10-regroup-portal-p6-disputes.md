@@ -24,7 +24,6 @@ Portal code changes are limited to the test hook and the e2e fixtures.
 - No rules change, and no edit to `regroup/mobile/src` or `regroup/functions`. If a journey exposes a phone or server defect, stop and bring it to the owner. Until a fix lands, the test is marked `test.fail` with the issue link.
 - No deploys. Don't touch phoenix-cleanhouse or regroup-e2e. Use only the offset emulator ports, and never kill or reuse the default ones.
 - New files must be 300 lines or fewer. Commit scope is `regroup-portal`. Use `git -C`, never `cd && git`. Never `--no-verify`. Commit and push only when the owner asks; commits are local to this plan.
-- The payments-read weakness stays private (draft advisory). It goes in no file, commit or PR text from this plan.
 - No resident names, contact details or recovery information in logs or test output beyond the seed's fixed test names.
 
 ## Review Focus
