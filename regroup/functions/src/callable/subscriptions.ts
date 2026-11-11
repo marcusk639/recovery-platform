@@ -254,7 +254,10 @@ export const createOperatorSubscription = onCall(
         stripeCustomerId: tierMetadata.customerId,
         stripeSubscriptionId: tierMetadata.subscriptionId,
         status: tierResolvedStatus as SubscriptionDoc["status"],
-        currentPeriodEnd: "",
+        // Never throw here: the Stripe subscription already exists.
+        currentPeriodEnd: tierMetadata.currentPeriodEnd
+          ? new Date(tierMetadata.currentPeriodEnd).toISOString()
+          : "",
         planId: priceId,
         guestCount: 0,
         userId: data.user.id,

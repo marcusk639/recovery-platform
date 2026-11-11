@@ -21,7 +21,8 @@ const emails = z.array(z.string().max(320)).max(200);
  * Client-supplied house fields for createHouses. This is a WHITELIST: unknown
  * keys are stripped (zod default, made explicit with .strip()), so server-owned
  * fields (ownerId, adminIds, superAdminIds, subscriptionStatus, guestGraceEndsAt,
- * stripe*, isDemoHouse, oxfordEnabled, ...) can never come from the client.
+ * stripe*, isDemoHouse, oxfordEnabled, houseType, ...) can never come from
+ * the client. houseType comes from the operator's plan (#225).
  * `certified` is client-supplied: the wizard asks the operator, and the
  * operator (superAdmin) can already set it via a house update. Nested wizard
  * structures are intentionally permissive. The house id is never client input
@@ -58,7 +59,6 @@ export const createHouseInputSchema = z
     managerSetupType: z
       .enum(['senior-peer', 'operator-only', 'external-managers', 'democratic'])
       .optional(),
-    houseType: z.enum(['traditional', 'oxford']).optional(),
     phases: looseRecord.optional(),
     chores: looseRecord.optional(),
     rooms: looseRecord.optional(),
@@ -76,6 +76,8 @@ export interface BuildHouseContext {
   ownerUid: string;
   adminId: string;
   subscriptionStatus: 'active' | 'trialing';
+  /** The operator's plan sets the house type (owner decision, #225). */
+  houseType: 'traditional' | 'oxford';
   now: string;
 }
 
@@ -111,6 +113,7 @@ export function buildHouseDoc(
     adminIds: [ctx.adminId],
     superAdminIds: [ctx.adminId],
     subscriptionStatus: ctx.subscriptionStatus,
+    houseType: ctx.houseType,
     currentCapacity: 0,
     stripeStatus: 'not_connected',
     isDemoHouse: false,

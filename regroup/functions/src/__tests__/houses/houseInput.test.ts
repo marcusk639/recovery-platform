@@ -6,6 +6,7 @@ const ctx = {
   ownerUid: 'owner-uid',
   adminId: 'admin-id',
   subscriptionStatus: 'trialing' as const,
+  houseType: 'traditional' as const,
   now: '2026-10-20T00:00:00.000Z',
 };
 const base = {
@@ -87,6 +88,14 @@ describe('houseInput', () => {
     // Server callables and triggers resolve the house's operator through
     // superAdminId, so it is always the operator's uid, never client input.
     expect(build({ superAdminId: 'evil' }).superAdminId).toBe(ctx.ownerUid);
+  });
+
+  it('takes houseType from the server context, ignoring client input', () => {
+    // The plan chosen at checkout sets the house type (#225).
+    expect(build({ houseType: 'oxford' }).houseType).toBe('traditional');
+    expect(
+      buildHouseDoc(createHouseInputSchema.parse(base), { ...ctx, houseType: 'oxford' }).houseType,
+    ).toBe('oxford');
   });
 
   it('computes geohash on the server', () => {
