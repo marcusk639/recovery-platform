@@ -31,10 +31,11 @@ const makeDispute = (overrides: any = {}) => ({
   ...overrides,
 });
 
-const makeActivity = (underDispute = 0) => ({
-  id: 'activity-1',
-  underDispute,
-} as any);
+const makeActivity = (underDispute = 0) =>
+  ({
+    id: 'activity-1',
+    underDispute,
+  }) as any;
 
 describe('disputeResult', () => {
   it('returns "success" when dispute is old with no challenges', () => {
@@ -75,12 +76,20 @@ describe('disputeResult', () => {
   });
 
   it('supports status "pending" as fallback for active field', () => {
-    const dispute = { ...makeDispute({ active: undefined }), status: 'pending', initiatedDate: '2020-01-01' };
+    const dispute = {
+      ...makeDispute({ active: undefined }),
+      status: 'pending',
+      initiatedDate: '2020-01-01',
+    };
     expect(disputeResult(dispute as any, makeActivity(0))).toBe('success');
   });
 
   it('returns "none" when status is not "pending" and active is undefined', () => {
-    const dispute = { ...makeDispute({ active: undefined }), status: 'resolved', initiatedDate: '2020-01-01' };
+    const dispute = {
+      ...makeDispute({ active: undefined }),
+      status: 'resolved',
+      initiatedDate: '2020-01-01',
+    };
     expect(disputeResult(dispute as any, makeActivity(0))).toBe('none');
   });
 });
@@ -105,12 +114,13 @@ describe('runDisputeTransaction', () => {
 });
 
 describe('determineDisputeResult', () => {
-  const makeTransaction = (guestData: any) => ({
-    get: jest.fn().mockResolvedValue({
-      empty: !guestData,
-      docs: guestData ? [{ data: () => guestData }] : [],
-    }),
-  } as any);
+  const makeTransaction = (guestData: any) =>
+    ({
+      get: jest.fn().mockResolvedValue({
+        empty: !guestData,
+        docs: guestData ? [{ data: () => guestData }] : [],
+      }),
+    }) as any;
 
   const makeGuest = (overrides: any = {}) => ({
     id: 'guest-1',

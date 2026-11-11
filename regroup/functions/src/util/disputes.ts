@@ -1,16 +1,12 @@
-import { Dispute } from "../entities/Dispute";
-import _ from "lodash";
-import { getTodaysDate, dateIsInWeek, dayDiff } from "./date";
-import { Guest, Activity } from "../entities/Guest";
-import Week from "../entities/Week";
-import { Day } from "../entities/Day";
-import {
-  updateDispute,
-  guestCollection,
-  ratsFirestore,
-} from "../api/firestore";
-import { House } from "../entities/House";
-import { logger } from "firebase-functions";
+import { Dispute } from '../entities/Dispute';
+import _ from 'lodash';
+import { getTodaysDate, dateIsInWeek, dayDiff } from './date';
+import { Guest, Activity } from '../entities/Guest';
+import Week from '../entities/Week';
+import { Day } from '../entities/Day';
+import { updateDispute, guestCollection, ratsFirestore } from '../api/firestore';
+import { House } from '../entities/House';
+import { logger } from 'firebase-functions';
 
 // ---------------------------------------------------------------------------
 // Legacy guest shape — the normalized model stores week data in a separate
@@ -66,26 +62,24 @@ const getSafeDay = (week: Week | undefined, date: string): Day => {
 export const disputeResult = function (
   dispute: Dispute,
   activity: Activity,
-): "success" | "fail" | "none" {
+): 'success' | 'fail' | 'none' {
   const disputeDate = dispute.initiatedDate || (dispute as any).createdDate;
   const dateDifference = dayDiff(disputeDate, getTodaysDate());
-  logger.info("Dispute date diff", { disputeId: dispute.id, dateDifference });
+  logger.info('Dispute date diff', { disputeId: dispute.id, dateDifference });
 
   const isActive =
-    dispute.active !== undefined
-      ? dispute.active
-      : (dispute as any).status === "pending";
+    dispute.active !== undefined ? dispute.active : (dispute as any).status === 'pending';
 
-  let result: "success" | "fail" | "none" = "none";
+  let result: 'success' | 'fail' | 'none' = 'none';
   if (dateDifference >= 2 && isActive) {
     if (
       dispute.challenges &&
       dispute.challenges.length &&
       dispute.challenges.length >= activity.underDispute
     ) {
-      result = "fail";
+      result = 'fail';
     } else {
-      result = "success";
+      result = 'success';
     }
   }
   return result;
@@ -98,9 +92,9 @@ export const disputeResult = function (
 const updateHouseDisputes = function (
   house: House,
   dispute: Dispute,
-  resolution: "overturned" | "allowed",
+  resolution: 'overturned' | 'allowed',
 ) {
-  logger.info("Updating house disputes", {
+  logger.info('Updating house disputes', {
     houseId: house.id,
     disputeId: dispute.id,
     resolution,
@@ -116,18 +110,12 @@ const updateHouseDisputes = function (
  * Decrements the underDispute counter on the matching activity and records
  * the final dispute result. Returns a new activities array (immutable update).
  */
-const updateActivity = function (
-  week: Week,
-  dispute: Dispute,
-  result: "success" | "fail",
-) {
-  logger.info("Updating guest activity", {
+const updateActivity = function (week: Week, dispute: Dispute, result: 'success' | 'fail') {
+  logger.info('Updating guest activity', {
     disputeId: dispute.id,
     activityId: dispute.activityId,
   });
-  const index = week.activities.findIndex(
-    (activity) => activity.id === dispute.activityId,
-  );
+  const index = week.activities.findIndex((activity) => activity.id === dispute.activityId);
   const activities = _.cloneDeep(week.activities);
   if (index > -1) {
     activities[index].underDispute = activities[index].underDispute - 1;
@@ -153,7 +141,7 @@ const reverseGuestStat = function (
   value: unknown,
   dispute: Dispute,
 ): Guest {
-  logger.info("Reversing guest stat", { guestId: guest.id, stat });
+  logger.info('Reversing guest stat', { guestId: guest.id, stat });
 
   const legacyGuest = guest as LegacyGuest;
   const guestWeek = legacyGuest[week] as Week | undefined;
@@ -194,7 +182,7 @@ export const determineDisputeResult = async (
   dispute: Dispute,
   transaction: FirebaseFirestore.Transaction,
 ) => {
-  logger.info("Determining dispute result", {
+  logger.info('Determining dispute result', {
     houseId: house.id,
     disputeId: dispute.id,
   });
@@ -202,13 +190,11 @@ export const determineDisputeResult = async (
   // Support both old (victimId) and new (guestId) field names.
   const guestId = dispute.victimId || (dispute as any).guestId;
   if (!guestId) {
-    logger.error("No guest ID found on dispute", { disputeId: dispute.id });
+    logger.error('No guest ID found on dispute', { disputeId: dispute.id });
     return;
   }
 
-  const guestQuery = await transaction.get(
-    guestCollection.where("id", "==", guestId),
-  );
+  const guestQuery = await transaction.get(guestCollection.where('id', '==', guestId));
 
   if (guestQuery.empty || !guestQuery.docs[0]) {
     logger.error(`Guest ${guestId} not found for dispute ${dispute.id}`);
@@ -216,7 +202,7 @@ export const determineDisputeResult = async (
   }
 
   const guest = guestQuery.docs[0].data() as Guest;
-  logger.info("Retrieved disputed guest", {
+  logger.info('Retrieved disputed guest', {
     guestId: guest.id,
     disputeId: dispute.id,
   });
@@ -234,8 +220,8 @@ export const determineDisputeResult = async (
     legacyGuest.currentWeek.startDate,
     legacyGuest.currentWeek.endDate,
   )
-    ? "currentWeek"
-    : "previousWeek";
+    ? 'currentWeek'
+    : 'previousWeek';
 
   const guestWeek = legacyGuest[week] as Week | undefined;
   if (!guestWeek) {
@@ -247,59 +233,47 @@ export const determineDisputeResult = async (
   const activity = activities.find((a) => a.id === dispute.activityId);
 
   if (!activity) {
-    logger.warn(
-      `Activity ${dispute.activityId} not found in guest ${guestId}'s ${week}`,
-    );
+    logger.warn(`Activity ${dispute.activityId} not found in guest ${guestId}'s ${week}`);
     return;
   }
 
-  logger.info("Disputed activity", { activityId: activity.id });
+  logger.info('Disputed activity', { activityId: activity.id });
   const result = disputeResult(dispute, activity);
   let victim: Guest = guest;
 
-  if (result === "success") {
+  if (result === 'success') {
     const disputeType = dispute.type;
     const safeDay = getSafeDay(guestWeek, dispute.disputeDate);
 
-    if (disputeType === "chore_completed" || disputeType === "choreCompleted") {
+    if (disputeType === 'chore_completed' || disputeType === 'choreCompleted') {
       // Normalize legacy "chore_completed" snake_case to camelCase field name.
-      const statKey =
-        disputeType === "chore_completed" ? "choreCompleted" : disputeType;
+      const statKey = disputeType === 'chore_completed' ? 'choreCompleted' : disputeType;
       victim = reverseGuestStat(guest, week, statKey, false, dispute);
     }
 
-    if (disputeType === "meeting_attended" || disputeType === "meeting") {
+    if (disputeType === 'meeting_attended' || disputeType === 'meeting') {
       const meetings = _.cloneDeep(safeDay.meeting || []);
       const index = meetings.findIndex((m) => m.name === dispute.meetingName);
       if (index > -1) {
         meetings.splice(index, 1);
       }
-      victim = reverseGuestStat(guest, week, "meeting", meetings, dispute);
+      victim = reverseGuestStat(guest, week, 'meeting', meetings, dispute);
     }
 
-    if (disputeType === "medication_taken" || disputeType === "medication") {
-      victim = reverseGuestStat(guest, week, "medication", false, dispute);
+    if (disputeType === 'medication_taken' || disputeType === 'medication') {
+      victim = reverseGuestStat(guest, week, 'medication', false, dispute);
     }
 
-    if (
-      disputeType === "supporter_met" ||
-      disputeType === "metPrimarySupporter"
-    ) {
-      victim = reverseGuestStat(
-        guest,
-        week,
-        "metPrimarySupporter",
-        false,
-        dispute,
-      );
+    if (disputeType === 'supporter_met' || disputeType === 'metPrimarySupporter') {
+      victim = reverseGuestStat(guest, week, 'metPrimarySupporter', false, dispute);
     }
 
-    if (disputeType === "hours_worked" || disputeType === "hoursWorked") {
-      victim = reverseGuestStat(guest, week, "hoursWorked", {}, dispute);
+    if (disputeType === 'hours_worked' || disputeType === 'hoursWorked') {
+      victim = reverseGuestStat(guest, week, 'hoursWorked', {}, dispute);
     }
   }
 
-  if (result !== "none") {
+  if (result !== 'none') {
     const victimLegacy = victim as LegacyGuest;
     const victimWeek = victimLegacy[week] as Week | undefined;
     if (victimWeek) {
@@ -309,9 +283,9 @@ export const determineDisputeResult = async (
     const { disputes, resolvedDispute } = updateHouseDisputes(
       house,
       dispute,
-      result === "fail" ? "overturned" : "allowed",
+      result === 'fail' ? 'overturned' : 'allowed',
     );
-    logger.info("Committing updated disputes", {
+    logger.info('Committing updated disputes', {
       houseId: disputes.id,
       guestId: victim.id,
     });
@@ -324,11 +298,11 @@ export const determineDisputeResult = async (
  */
 export const runDisputeTransaction = (house: House, dispute: Dispute) => {
   return ratsFirestore.runTransaction(async (transaction) => {
-    logger.info("Beginning dispute updates", { houseId: house.id });
+    logger.info('Beginning dispute updates', { houseId: house.id });
     try {
       return determineDisputeResult(house, dispute, transaction);
     } catch (error) {
-      logger.error("Transaction failed for dispute", {
+      logger.error('Transaction failed for dispute', {
         disputeId: dispute.id,
         error: (error as Error)?.message,
       });
