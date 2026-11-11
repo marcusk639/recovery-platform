@@ -10,6 +10,7 @@ import { getDownloadURL, putFile, ref } from '../adapter/firebase/storage';
 
 (window as any).__portalTest = {
   refreshToken: () => getIdToken(auth.currentUser!, true),
+  uid: () => auth.currentUser?.uid ?? null,
   callable: (name: string, payload: unknown) => callHttpsFunction(name, payload),
   goBack: () => navigationRef.current?.goBack(),
   selectedGuestId: () => store.getState().guests.selectedGuestId ?? null,
@@ -21,6 +22,8 @@ import { getDownloadURL, putFile, ref } from '../adapter/firebase/storage';
     store.dispatch(selectGuestById('guest-a'));
     navigationRef.current?.navigate(Routes[routeKey], params);
   },
+  // Opens the e2e-only screen that throws, for the crash-recovery journeys.
+  openCrash: () => navigationRef.current?.navigate('portalTestCrash' as never),
   // The rules have no document path yet, so tests prove uploads through temp/.
   uploadToTemp: async (localUri: string) => {
     const reference = ref(storage, `temp/${auth.currentUser!.uid}/probe.pdf`);

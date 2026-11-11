@@ -78,7 +78,7 @@ test.describe('after a crash', () => {
   test.use({ allowPageErrors: true });
   test('clicking a sidebar link leaves a crashed screen', async ({ page }) => {
     await signInAs(page, 'manager');
-    await page.evaluate(() => (window as any).__portalTest.open('MedicationSummary'));
+    await page.evaluate(() => (window as any).__portalTest.openCrash());
     await expect(page.getByText('Something went wrong')).toBeVisible();
     await page.click('#nav-residents');
     await expect(page.getByText('Bob Rivera')).toBeVisible({ timeout: 15_000 });

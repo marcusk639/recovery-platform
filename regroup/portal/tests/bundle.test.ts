@@ -22,8 +22,10 @@ const build = (...flags: string[]) => {
   return fs.readFileSync(out, 'utf8');
 };
 
-test('a normal build has no test hooks', () => {
-  expect(build()).not.toContain('__portalTest');
+test('a normal build has no test hooks, and no test crash screen', () => {
+  const bundle = build();
+  expect(bundle).not.toContain('__portalTest');
+  expect(bundle).not.toContain('portal test crash');
 }, 120_000);
 
 test('an e2e build has them', () => {

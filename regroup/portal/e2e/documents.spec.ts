@@ -19,11 +19,25 @@ async function pickLease(page: Page) {
   await (await chooser).setFiles({ name: 'lease.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 test') });
 }
 
-// Finding, reported to the owner: storage.rules has no match for the document
-// paths, so every upload is refused, on the phone too. Pinned as a visible error.
-test('an upload the storage rules refuse shows an error and creates no record', async ({ page }) => {
+// #195: storage.rules had no match for the document paths, so every upload was
+// refused. A house admin's upload now lands, with no permanent link stored.
+test("a house admin's upload is stored and recorded", async ({ page }) => {
   await open(page);
   await pickLease(page);
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Lease Agreement' }).click();
+  await expect.poll(async () => (await documents()).size, { timeout: 15_000 }).toBe(1);
+  const record = (await documents()).docs[0].data();
+  expect(record.storagePath).toMatch(/^houses\/test-house-123\/guests\/guest-a\/documents\//);
+  expect('storageUrl' in record).toBe(false);
+  await expect(page.getByText('lease.pdf')).toBeVisible();
+});
+
+test('an upload the storage rules refuse shows an error and creates no record', async ({ page }) => {
+  await open(page);
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByTestId('upload-document-button').click();
+  // Documents are PDFs and images only; the rules refuse anything else.
+  await (await chooser).setFiles({ name: 'lease.zip', mimeType: 'application/zip', buffer: Buffer.from('PK test') });
   await page.getByRole('alertdialog').getByRole('button', { name: 'Lease Agreement' }).click();
   await expect(page.getByRole('alertdialog')).toContainText('Upload Failed', { timeout: 15_000 });
   expect((await documents()).size).toBe(0);
@@ -40,12 +54,14 @@ test('a file reaches Storage intact through the real rules on an allowed path', 
   expect(text).toBe(body);
 });
 
-test('an existing document is listed and opens', async ({ page, context }) => {
+// Documents open through getDocumentLink's short-lived signed link. The
+// functions emulator has no service account, so signing fails here with a
+// SigningError and the screen must say so; real signing is checked on staging.
+test('an existing document is listed, and opening it asks the server for a link', async ({ page }) => {
   await admin().doc('documents/doc-1').set({
     houseId: 'test-house-123',
     guestId: 'guest-a',
     fileName: 'lease.pdf',
-    storageUrl: 'http://127.0.0.1:19199/v0/b/x/o/lease.pdf',
     storagePath: 'houses/test-house-123/guests/guest-a/documents/doc-1',
     fileType: 'pdf',
     category: 'lease',
@@ -54,9 +70,10 @@ test('an existing document is listed and opens', async ({ page, context }) => {
   });
   await open(page);
   await expect(page.getByText('lease.pdf')).toBeVisible();
-  const popup = context.waitForEvent('page');
+  const asked = page.waitForRequest((r) => r.url().includes('/getDocumentLink'));
   await page.getByTestId('document-open-doc-1').click();
-  expect((await popup).url()).toContain('127.0.0.1:19199');
+  expect(JSON.parse((await asked).postData() ?? '{}').data).toEqual({ documentId: 'doc-1' });
+  await expect(page.getByRole('alertdialog')).toContainText("Couldn't open the document. Try again.");
 });
 
 test('cancelling the picker shows no error', async ({ page }) => {

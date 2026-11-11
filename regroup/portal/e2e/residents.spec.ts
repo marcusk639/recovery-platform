@@ -58,7 +58,7 @@ test.describe('failures', () => {
 
   test('a crashing screen leaves the navigation and shows an error', async ({ page }) => {
     await signInAs(page, 'manager');
-    await openScreen(page, 'MedicationSummary');
+    await page.evaluate(() => (window as any).__portalTest.openCrash());
     await expect(page.getByText('Something went wrong')).toBeVisible();
     await expect(page.locator('#nav-residents')).toBeVisible();
   });

@@ -26,7 +26,7 @@ if (reactCopies.size > 1) problems.push(`More than one copy of react: ${[...reac
 
 const bundle = fs.readFileSync(path.join(dist, 'main.js'), 'utf8');
 if (bundle.includes('phoenix-cleanhouse')) problems.push('The bundle contains phoenix-cleanhouse');
-if (!readJson(path.join(dist, 'build-report.json')).e2e && bundle.includes('__portalTest')) {
+if (!readJson(path.join(dist, 'build-report.json')).e2e && (bundle.includes('__portalTest') || bundle.includes('portal test crash'))) {
   problems.push('A build not made with --e2e contains test hooks');
 }
 

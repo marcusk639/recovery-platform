@@ -49,6 +49,13 @@ const LATER_SCREENS: [string, any][] = [
   [Routes.AdminReport, AdminReportScreen],
 ];
 
+// Only in --e2e builds: a screen that throws, for the crash-recovery journeys.
+// They used the medication summary, which no longer crashes (#194).
+export const TEST_CRASH_ROUTE = 'portalTestCrash';
+const TestCrash = () => {
+  throw new Error('portal test crash');
+};
+
 export const Screens = () => (
   <Stack.Navigator frame={ScreenFrame}>
     <Stack.Screen name={HOME_ROUTE} component={Home} />
@@ -81,5 +88,6 @@ export const Screens = () => (
     {LATER_SCREENS.filter(([route]) => isRouteReleased(route, SHOW_LATER_AREAS)).map(([route, component]) => (
       <Stack.Screen key={route} name={route} component={component} />
     ))}
+    {__E2E__ && <Stack.Screen name={TEST_CRASH_ROUTE} component={TestCrash} />}
   </Stack.Navigator>
 );
