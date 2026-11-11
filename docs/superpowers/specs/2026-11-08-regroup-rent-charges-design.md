@@ -1,7 +1,7 @@
 # Regroup rent charges: design
 
 **Date:** 2026-11-08
-**Status:** owner decisions recorded 2026-11-09; awaiting approval of the whole document
+**Status:** owner decisions recorded 2026-11-09 and 2026-11-10
 **Product:** Regroup (`regroup/`). Firebase project `phoenix-cleanhouse`; staging `regroup-e2e`.
 
 ## 1. Why
@@ -32,7 +32,7 @@ The owner also approved these, which were proposed in conversation:
 Decided by the owner after review (2026-11-09):
 
 - **Residents already in a house when charging turns on, and residents imported later, start at the next full period, with no prorated first charge.** Their `chargeFrom` is the first day of the next period. Only residents who move in after charging is on get a prorated first charge. This avoids charging twice for days a manager already entered by hand or a resident already paid in cash.
-- **Any house manager can set the house's price and schedule, a resident's custom rate, and a resident's balance. Nobody can change their own rate or balance.** That includes staff who are also residents in peer-led houses.
+- **Managers and above (manager, owner, operator) set the house's price and schedule, a resident's custom rate and a resident's balance, and record payments. Peer leaders can do none of these. Nobody can change their own rate or balance.** That includes staff who are also residents in peer-led houses. (Narrowed from "any house manager" on 2026-11-10: peer leaders also owe rent.)
 
 ## 3. Goals, non-goals, anti-goals
 
@@ -131,8 +131,8 @@ Each charge sets `rentDueDate` to the first day covered, but only when the resid
 
 - `rentAccounts` and `rentCharges` are written only by the server.
 - Residents can't write the custom rate: add it to the sensitive fields in `firestore.rules`, next to `rentOwed` and `choreFees`, and to the self-create check.
-- Any house admin may write another resident's custom rate, `rentOwed` and `choreFees`. No one may write those on their own resident record, admin or not. Today the rules let any admin edit any field of their own record except `status`, `moveOutDate` and `houseId`, so this is new. Rules tests cover a peer leader trying to lower their own balance and rate.
-- Any house admin may change `monthlyRent`, `weeklyRent` and `rentFrequency`. Today the rules reserve the two prices for the super admin, so this relaxes them for those three fields only; `stripeAccountId`, `adminIds`, `ownerId` and the other financial fields stay as they are. A resident who isn't an admin still can't change any of them.
+- Only managers and above (house rank 2 or more: manager, owner, operator) may write a resident's custom rate, `rentOwed`, `choreFees` or `rentDueDate`, or record a payment. Peer leaders may not, on anyone's record; the one exception is a peer leader's own pending card-payment record. No one may write those fields on their own resident record, whatever their rank. Rules tests cover a peer leader trying to change their own and another resident's balance and rate.
+- Only managers and above may change `monthlyRent`, `weeklyRent` and `rentFrequency`. Today the rules reserve the two prices for the super admin, so this relaxes them for those three fields only; `stripeAccountId`, `adminIds`, `ownerId` and the other financial fields stay as they are. Peer leaders and residents can't change any of them.
 - Charges are written only by the server.
 
 ## 5. Calls made by the author of this document

@@ -29,6 +29,8 @@ const DEST_PROJECT = 'recovery-platform-e6cb3';
 const PROGRESS_EVERY_CELLS = 500;
 /** Separate from the general failure code, so a wrapper can tell a key problem apart. */
 export const ACCESS_EXIT_CODE = 2;
+/** The run stopped before it finished, so its result is unknown. */
+export const UNFINISHED_EXIT_CODE = 3;
 
 /**
  * Where the key lives when the shell doesn't set MEETING_GUIDE_API_KEY. It must stay outside
@@ -76,6 +78,48 @@ export function reportFatal(err: unknown, print: (...args: unknown[]) => void): 
     ].join('\n'),
   );
   return ACCESS_EXIT_CODE;
+}
+
+interface ExitHooks {
+  once(event: 'beforeExit', listener: () => void): unknown;
+  exitCode?: number;
+}
+
+/**
+ * Node exits with code 0 once nothing is left to wait on, even if the run never finished. A run
+ * cut off while a Mac slept ended that way, with no summary. This turns that exit into a loud
+ * failure. Call the returned function when the run has finished.
+ */
+export function failIfUnfinished(
+  proc: ExitHooks,
+  print: (...args: unknown[]) => void,
+  apply: boolean,
+): () => void {
+  let finished = false;
+  proc.once('beforeExit', () => {
+    if (finished) return;
+    const rule = '='.repeat(72);
+    print(
+      [
+        '',
+        rule,
+        'MEETING GUIDE SYNC DID NOT FINISH',
+        '',
+        'The run stopped before it finished, so there is no result. This has happened when the',
+        'computer slept during a run.',
+        '',
+        apply
+          ? 'It may have written some of its changes. Run it again: a rerun finishes the job.'
+          : 'Nothing was written.',
+        rule,
+        '',
+      ].join('\n'),
+    );
+    proc.exitCode = UNFINISHED_EXIT_CODE;
+  });
+  return () => {
+    finished = true;
+  };
 }
 
 export function progressLine(p: SweepProgress): string {
@@ -132,6 +176,7 @@ export function describeResult(result: MeetingSyncResult): string[] {
 async function main(): Promise<void> {
   dotenv.config({ path: syncEnvFile(), quiet: true });
   const { apply } = parseSyncArgs(process.argv.slice(2));
+  const finished = failIfUnfinished(process, console.error, apply);
   const key = readApiKey(process.env);
   const db = getFirestore(
     initializeApp({ credential: applicationDefault(), projectId: DEST_PROJECT }),
@@ -152,6 +197,7 @@ async function main(): Promise<void> {
       }),
   });
   for (const line of describeResult(result)) console.log(line);
+  finished();
 }
 
 if (require.main === module) {

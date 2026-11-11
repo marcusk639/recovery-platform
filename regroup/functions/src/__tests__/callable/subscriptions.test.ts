@@ -1334,6 +1334,43 @@ describe("createOperatorSubscription — tier-billing flag branch", () => {
     );
   });
 
+  it("stores the tier subscription's period end on the subscriptions doc", async () => {
+    process.env.TIER_BILLING_ENABLED = "true";
+    process.env.STRIPE_PRICE_TRAD_STARTER = "price_starter";
+    const periodEnd = Date.now() + 7 * 86400000;
+    mockGetUser.mockResolvedValue(fakeUser);
+    mockInitializeTierCustomer.mockResolvedValue({
+      customerId: "cus_tier",
+      subscriptionId: "sub_tier",
+      subscriptionItemId: "si_tier",
+      status: "trialing",
+      houseType: "traditional",
+      tier: "starter",
+      currentPeriodEnd: periodEnd,
+    });
+    mockUpdateUser.mockResolvedValue(undefined);
+
+    await call(createOperatorSubscription, {
+      user: fakeUser,
+      paymentMethod: "pm_test",
+      houseType: "traditional",
+      tier: "starter",
+    });
+
+    expect(mockUpdateUser).toHaveBeenCalledWith(
+      fakeUser.id,
+      expect.objectContaining({
+        subscriptionMetadata: expect.objectContaining({ currentPeriodEnd: periodEnd }),
+      }),
+    );
+    expect(mockUpsertSubscriptionDoc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stripeSubscriptionId: "sub_tier",
+        currentPeriodEnd: new Date(periodEnd).toISOString(),
+      }),
+    );
+  });
+
   it("forwards an annual billingInterval to initializeTierCustomer", async () => {
     process.env.TIER_BILLING_ENABLED = "true";
     process.env.STRIPE_PRICE_TRAD_STARTER = "price_starter";

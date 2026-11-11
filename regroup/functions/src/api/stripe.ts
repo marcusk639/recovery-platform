@@ -6,6 +6,7 @@ import { User } from "../entities/User";
 import { HouseType, TierKey } from "../config";
 import { resolveTierPriceId, BillingInterval } from "../util/tierPricing";
 import { assertPaymentMethodUsable } from "./cardValidation";
+import { periodEndSeconds } from "../util/subscriptionPeriod";
 
 /**
  * Trial length for all new subscriptions. Stripe applies trial_period_days
@@ -465,11 +466,15 @@ export const initializeTierCustomer = async (
     // not a retry of the old one.
     `tiersub-${userId}-${houseType}-${tier}-${billingInterval}-${day}`,
   );
+  const item = subscription.items.data[0];
+  const periodEnd = periodEndSeconds(subscription, item.id);
   return {
     customerId: customer.id,
     subscriptionId: subscription.id,
-    subscriptionItemId: subscription.items.data[0].id,
+    subscriptionItemId: item.id,
     status: subscription.status,
+    // 0, as on a new OperatorSubscription, if Stripe sent no period end.
+    currentPeriodEnd: periodEnd != null ? periodEnd * 1000 : 0,
     houseType,
     tier,
     billingInterval,

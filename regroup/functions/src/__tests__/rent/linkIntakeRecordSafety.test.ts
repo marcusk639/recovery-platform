@@ -34,7 +34,8 @@ it.each([
   intake({ createdBy: 'mgr' });
   invite();
   mem.seed(`guests/${id}`, { ...doc(id), rentOwed: '350' });
-  await expect(linkIntakeRecord('gNew')).resolves.toBe('none');
+  // 'refused', not 'none': the two records still match, so neither caller charges the new one.
+  await expect(linkIntakeRecord('gNew')).resolves.toBe('refused');
   expect(doc(id).rentOwed).toBe('350');
   expect(doc('gIntake').rentLinkedTo).toBeUndefined();
 });

@@ -56,6 +56,22 @@ it('an intake record with $125 owed and the same email (different case) is linke
   expect(mem.get('rentCharges/gIntake_2026-11-18')?.guestUserId).toBe('u1');
 });
 
+// The stamps let a reversal find where the balance went after staff delete the intake
+// record. Written in a second write after the link, a failure there left the link done
+// and the charges unstamped for good: a retried trigger finds nothing left to link.
+it('the moved charges are stamped in the same commit as the link', async () => {
+  house();
+  intake({ createdBy: 'mgr' });
+  mem.seed('rentCharges/gIntake_2026-11-18', { guestId: 'gIntake', houseId: 'H', guestUserId: null });
+  invite();
+  jest.spyOn(apiFirestore.ratsFirestore, 'batch').mockImplementation(() => {
+    throw new Error('a second write after the link');
+  });
+  await expect(linkIntakeRecord('gNew')).resolves.toBe('linked');
+  expect(mem.get('rentCharges/gIntake_2026-11-18')).toMatchObject({ guestUserId: 'u1', linkedTo: 'gNew' });
+  jest.restoreAllMocks();
+});
+
 it("after linking, the next chargeResident on the intake record is 'linked'", async () => {
   house();
   intake({ rentOwed: 0 });
@@ -94,7 +110,7 @@ it('an intake record the person created themselves is not linked', async () => {
   house();
   intake({ rentOwed: 100, createdBy: 'u1' });
   invite({ rentOwed: 80000 });
-  await expect(linkIntakeRecord('gNew')).resolves.toBe('none');
+  await expect(linkIntakeRecord('gNew')).resolves.toBe('refused');
   expect(doc('gNew').rentOwed).toBe(80000);
   expect(doc('gIntake').rentLinkedTo).toBeUndefined();
 });
@@ -109,6 +125,33 @@ it('a custom rate a manager set on the intake record moves to the invite record'
   invite();
   await linkIntakeRecord('gNew');
   expect(doc('gNew').customRent).toEqual({ amountCents: 0, frequency: 'monthly' });
+});
+
+// The due date decides overdue notices, so it follows the person only from a record a
+// known staff member made, and only as a real date.
+it('a due date moves only with a creator the rules confirm', async () => {
+  house();
+  intake({ rentOwed: 1, rentDueDate: '9999-12-31' });
+  invite();
+  await expect(linkIntakeRecord('gNew')).resolves.toBe('linked');
+  expect(doc('gNew').rentOwed).toBe(1);
+  expect(doc('gNew').rentDueDate).toBeUndefined();
+});
+
+it('a due date that is not a calendar date never moves', async () => {
+  house();
+  intake({ createdBy: 'mgr', rentOwed: 100, rentDueDate: 'later' });
+  invite();
+  await expect(linkIntakeRecord('gNew')).resolves.toBe('linked');
+  expect(doc('gNew').rentDueDate).toBeUndefined();
+});
+
+it("a manager's due date on the intake record still moves", async () => {
+  house();
+  intake({ createdBy: 'mgr', rentOwed: 100, rentDueDate: '2026-11-18' });
+  invite();
+  await expect(linkIntakeRecord('gNew')).resolves.toBe('linked');
+  expect(doc('gNew').rentDueDate).toBe('2026-11-18');
 });
 
 it('a custom rate or move-in date moves only with a creator the rules confirm', async () => {

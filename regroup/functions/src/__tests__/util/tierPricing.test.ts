@@ -4,6 +4,8 @@ import {
   resolveTierPriceId,
   tierAllows,
   isTierAvailableForSale,
+  tierForPriceId,
+  tierInCatalog,
 } from "../../util/tierPricing";
 
 describe("tierPricing", () => {
@@ -104,5 +106,65 @@ describe("tierPricing", () => {
       expect(isTierAvailableForSale("oxford", "standard")).toBe(true);
       expect(isTierAvailableForSale("oxford", "plus")).toBe(true);
     });
+  });
+});
+
+describe("tierForPriceId", () => {
+  beforeEach(() => {
+    process.env.STRIPE_PRICE_TRAD_PROFESSIONAL = "price_pro_month";
+    process.env.STRIPE_PRICE_TRAD_PROFESSIONAL_ANNUAL = "price_pro_year";
+    process.env.STRIPE_PRICE_OXFORD_PLUS = "price_plus_month";
+  });
+  afterEach(() => {
+    delete process.env.STRIPE_PRICE_TRAD_PROFESSIONAL;
+    delete process.env.STRIPE_PRICE_TRAD_PROFESSIONAL_ANNUAL;
+    delete process.env.STRIPE_PRICE_OXFORD_PLUS;
+  });
+
+  it("finds the house type, tier and interval a monthly price belongs to", () => {
+    expect(tierForPriceId("price_pro_month")).toEqual({
+      houseType: "traditional",
+      tier: "professional",
+      billingInterval: "month",
+    });
+    expect(tierForPriceId("price_plus_month")).toEqual({
+      houseType: "oxford",
+      tier: "plus",
+      billingInterval: "month",
+    });
+  });
+
+  it("finds an annual price as the year interval", () => {
+    expect(tierForPriceId("price_pro_year")).toEqual({
+      houseType: "traditional",
+      tier: "professional",
+      billingInterval: "year",
+    });
+  });
+
+  it("is null for a price that is no tier's, such as a legacy item", () => {
+    expect(tierForPriceId("price_legacy_house")).toBeNull();
+  });
+
+  it("never matches an empty price id to an unset env var", () => {
+    expect(tierForPriceId("")).toBeNull();
+  });
+});
+
+describe("tierInCatalog", () => {
+  it("knows each catalog's own tiers", () => {
+    expect(tierInCatalog("traditional", "starter")).toBe(true);
+    expect(tierInCatalog("oxford", "plus")).toBe(true);
+  });
+
+  // The two catalogs share no tier key, so a tier can't carry across an Oxford
+  // switch until a mapping is decided (#225).
+  it("finds no traditional tier in the Oxford catalog, nor the reverse", () => {
+    for (const tier of ["starter", "professional", "enterprise"]) {
+      expect(tierInCatalog("oxford", tier as never)).toBe(false);
+    }
+    for (const tier of ["standard", "plus", "network"]) {
+      expect(tierInCatalog("traditional", tier as never)).toBe(false);
+    }
   });
 });

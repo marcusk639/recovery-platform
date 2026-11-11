@@ -69,7 +69,11 @@ import {
 
 // ─── Helpers & Sub-components (extracted) ─────────────────────────────────────
 
-import { formatCurrency, formatCentsAsCurrency } from "./rentPaymentHelpers";
+import {
+  ALREADY_PAID_MESSAGE,
+  formatCurrency,
+  formatCentsAsCurrency,
+} from "./rentPaymentHelpers";
 import PaymentRow from "./PaymentRow";
 export { formatCurrency };
 
@@ -111,6 +115,9 @@ interface Props {
 const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
+  // Set with paymentSuccess when the server reports the payment already went
+  // through, so the banner says that instead of announcing a new payment.
+  const [alreadyPaid, setAlreadyPaid] = useState(false);
   const [isPaying, setIsPaying] = useState(false);
   const [saveCard, setSaveCard] = useState(guest.autoPayEnabled ?? false);
   const paymentInProgress = useRef(false);
@@ -163,6 +170,7 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
     setIsPaying(true);
     setPaymentError(null);
     setPaymentSuccess(false);
+    setAlreadyPaid(false);
 
     try {
       const amountInCents = Math.round(totalDue);
@@ -175,6 +183,19 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
           houseId: house.id,
           amountInCents,
         });
+        if (intentResult.alreadyPaid) {
+          // RENT-012: this amount was already paid today. No sheet, nothing
+          // new to record; refresh so the balance catches up with the webhook.
+          setAlreadyPaid(true);
+          setPaymentSuccess(true);
+          queryClient.invalidateQueries({
+            queryKey: paymentKeys.history(guest.id),
+          });
+          queryClient.invalidateQueries({
+            queryKey: paymentKeys.guestBalances(house.id),
+          });
+          return;
+        }
         clientSecret = intentResult.clientSecret;
       } catch (err: any) {
         const raw: string = err?.message ?? "";
@@ -433,7 +454,11 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
             />
             <RatsText
               translate={false}
-              text="Payment successful! Your balance will update shortly."
+              text={
+                alreadyPaid
+                  ? ALREADY_PAID_MESSAGE
+                  : "Payment successful! Your balance will update shortly."
+              }
               style={styles.successText}
             />
           </View>

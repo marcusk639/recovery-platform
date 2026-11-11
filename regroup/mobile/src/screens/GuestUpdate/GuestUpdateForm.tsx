@@ -1,7 +1,9 @@
 import React, { useCallback } from 'react';
+import { Alert } from 'react-native';
 import { withFormik } from 'formik';
 import { useSelectedGuest } from '../../hooks/useSelectedGuest';
 import { useGuests, useUpdateGuest } from '../../state/queries/guestQueries';
+import { useMayEditRentMoney } from '../../state/queries/houseTierQueries';
 import GuestUpdateFormView from './GuestUpdateFormView';
 import { Guest } from '../../entities/Guest';
 import {
@@ -10,6 +12,7 @@ import {
   guestToFormValues,
 } from './guestFormValues';
 import { Guests } from '../../types';
+import { logException } from '../../util/logging';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
 
@@ -21,6 +24,8 @@ export interface GuestUpdateProps {
     authoritativeFields?: ReadonlyArray<keyof Guest>,
   ) => any;
   navigation: NativeStackNavigationProp<RootStackParamList>;
+  /** Manager or above: the rules refuse anyone else's rentOwed/choreFees change. */
+  canEditMoney?: boolean;
 }
 
 const GuestUpdateForm = withFormik<GuestUpdateProps, GuestFormValues>({
@@ -68,6 +73,16 @@ const GuestUpdateForm = withFormik<GuestUpdateProps, GuestFormValues>({
       setStatus({ succeeded: true });
       setSubmitting(false);
     } catch (err) {
+      // status is rendered nowhere (see validate above), so say it here. A refusal by the
+      // rules is not worth retrying: below a manager, rent and balances can't be changed.
+      logException(err, 'GuestUpdateForm: save failed');
+      const code = String((err as { code?: unknown })?.code ?? '');
+      Alert.alert(
+        'Not saved',
+        code.endsWith('permission-denied')
+          ? "You don't have permission to make this change to this resident."
+          : "Couldn't save these changes. Check your connection and try again.",
+      );
       setStatus({ failed: true });
       setSubmitting(false);
     }
@@ -92,6 +107,7 @@ const GuestUpdateFormWrapper: React.FC<any> = props => {
   // available in this wrapper.
   const { data: guests = {} } = useGuests(guest?.houseId ?? '');
   const { mutateAsync: updateGuestMutation } = useUpdateGuest();
+  const canEditMoney = useMayEditRentMoney(guest?.houseId ?? '');
 
   const updateGuest = useCallback(
     async (
@@ -121,6 +137,7 @@ const GuestUpdateFormWrapper: React.FC<any> = props => {
       guest={guest}
       guests={guests}
       updateGuest={updateGuest}
+      canEditMoney={canEditMoney}
     />
   );
 };

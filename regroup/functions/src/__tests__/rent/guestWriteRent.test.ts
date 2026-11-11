@@ -11,7 +11,7 @@ jest.mock('../../api/firestore', () => require('../helpers/memFirestore').apiFir
 jest.mock('../../util/notifications', () => ({ sendNotification: jest.fn() }));
 
 import { apiFirestore, mem, memDb } from '../helpers/memFirestore';
-import { account, at, charges, guest, H, house, owed } from '../helpers/rentFixtures';
+import { account, at, charges, guest, H, house, invitedAs, owed } from '../helpers/rentFixtures';
 import { chargeResident } from '../../rent/chargeResident';
 import { rentOnGuestWrite } from '../../rent/guestWriteRent';
 
@@ -217,4 +217,32 @@ it('linking a record to an account lets the resident see its charges', async () 
     }),
   ).resolves.toBe('none');
   expect(mem.get('rentCharges/g1_2026-11-18')?.guestUserId).toBe('u9');
+});
+
+// The same hold as the hourly job: a pair the link finds but won't join is not charged.
+it.each([
+    ['matches two intake records', [{ createdBy: 'mgr' }, { createdBy: 'mgr2' }]],
+    ['matches an intake record the person made themselves', [{ createdBy: 'u1' }]],
+  ])('a new invite record that %s is not charged until a manager resolves it', async (_case, intakes) => {
+  house();
+  invitedAs('u1', 'pat@example.com');
+  intakes.forEach((extra, i) =>
+    mem.seed(`guests/gIntake${i}`, { houseId: H, status: 'active', userId: '', email: 'pat@example.com', rentOwed: 17500, ...extra }),
+  );
+  guest({ email: 'pat@example.com' });
+  await expect(rentOnGuestWrite(created(at('2026-11-18')))).resolves.toBe('none');
+  expect(charges()).toEqual([]);
+  expect(owed()).toBe(0);
+});
+
+// Before the backfill: once a held pair is linked, the intake record's moveInDate carries
+// across only if the new record has none, and a backfilled one would anchor the resident
+// at the invite record's creation day, so the days between were never billed.
+it('a held new record is left without a backfilled moveInDate', async () => {
+  house();
+  invitedAs('u1', 'pat@example.com');
+  mem.seed('guests/gIntake0', { houseId: H, status: 'active', userId: '', email: 'pat@example.com', createdBy: 'u1' });
+  guest({ email: 'pat@example.com', moveInDate: undefined });
+  await expect(rentOnGuestWrite(created(at('2026-11-18')))).resolves.toBe('none');
+  expect(g().moveInDate).toBeUndefined();
 });

@@ -108,3 +108,33 @@ The first run provisions prices and a test Connect account in the sandbox (`scri
 **Time:** a Stripe test clock moves Stripe's time only. Functions and the app keep reading `Date.now()`, so test expiry by writing a past deadline to Firestore. The kill-switch test waits out the switch's 60-second cache twice.
 
 **`admin.firestore.FieldValue` under the emulator:** firebase-tools hands out `admin.firestore` through `.bind()`, which drops its properties, so webhook handlers and `getStripeAccountStatus` throw there. Production has no such wrapper. `regroup/e2e/emulator/preserve-admin-statics.js` restores them through `NODE_OPTIONS`.
+
+## Staging operator for manual testing
+
+For testing by hand on a phone, `regroup/e2e` makes a new operator on staging (`regroup-e2e`) and subscribes them through Stripe for real, with a test card. Stripe there is in test mode, so it's a 7-day trial and no money moves.
+
+```sh
+cd regroup/e2e && npm ci
+npm run e2e:staging-operator -- --house-type traditional --tier professional            # monthly
+npm run e2e:staging-operator -- --house-type oxford --tier plus --interval year
+```
+
+- **Plans:** `traditional` with `starter`, `professional` or `enterprise`, and `oxford` with `standard` or `plus`. Oxford `network` isn't for sale, so it's refused.
+- **What it does:** it signs up a fresh account each run, then writes its user doc the way the web's operator signup does. Then it calls `createOperatorSubscription` with `pm_card_visa`, and checks that the account can create houses. It prints the email and password, then you sign in on the **E2EStaging** build (`com.rats.dev.e2e.stg`), which lands on OrgSetup. It makes no house or residents.
+- **Config:** it needs `~/.config/regroup-e2e/firebase-web-config.json`. It refuses any project other than `regroup-e2e`, and it holds no Stripe key.
+- **Side effect:** each run makes staging email admin@regroup-app.com about a new subscription. Old accounts stay on staging.
+
+### Checking the sign-in
+
+`maestro/scripts/staging-operator-signin.sh` makes an operator the same way and signs it in on a simulator with `maestro/staging/operator-signin.yaml`. It passes when the app lands on OrgSetup with the house wizard, and fails if the plan-required panel shows. The flow is kept out of `maestro/flows/`, so the emulator suite never runs it. It needs the E2EStaging build, which reads its Firebase config from `~/.config/regroup-e2e/GoogleService-Info.e2e-staging.plist`:
+
+```sh
+cd regroup/mobile
+xcodebuild -workspace ios/rats.xcworkspace -scheme rats-e2e-staging -configuration E2EStaging \
+  -sdk iphonesimulator -destination "platform=iOS Simulator,id=$SIM_UDID" -derivedDataPath build/e2e build
+xcrun simctl install "$SIM_UDID" build/e2e/Build/Products/E2EStaging-iphonesimulator/rats.app
+maestro/scripts/staging-operator-signin.sh --sim "$SIM_UDID"                                  # traditional starter
+maestro/scripts/staging-operator-signin.sh --sim "$SIM_UDID" -- --house-type oxford --tier plus
+```
+
+It prints the operator's credentials as `e2e:staging-operator` does, so the account can be used by hand afterwards.

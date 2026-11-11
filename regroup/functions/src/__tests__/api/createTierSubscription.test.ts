@@ -169,6 +169,61 @@ describe("initializeTierCustomer — oxfordEnabled", () => {
   });
 });
 
+describe("initializeTierCustomer — currentPeriodEnd", () => {
+  const trialEnd = 1_900_000_000;
+  const itemPeriodEnd = 1_900_500_000;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    process.env.STRIPE_SECRET_KEY = "sk_test";
+    process.env.STRIPE_API_VERSION = "2026-01-28.clover";
+    process.env.STRIPE_PRICE_TRAD_STARTER = "price_starter";
+    mockCustomersCreate.mockResolvedValue({ id: "cus_1" });
+    mockSetupIntentsCreate.mockResolvedValue({ status: "succeeded" });
+  });
+
+  afterEach(() => {
+    delete process.env.STRIPE_PRICE_TRAD_STARTER;
+  });
+
+  const init = () =>
+    initializeTierCustomer("op@example.com", "pm_123", "traditional", "starter", "user_1", "month");
+
+  it("is the trial end, in ms, while the subscription is trialing", async () => {
+    mockSubscriptionsCreate.mockResolvedValue({
+      id: "sub_1",
+      status: "trialing",
+      trial_end: trialEnd,
+      items: { data: [{ id: "si_1", current_period_end: itemPeriodEnd }] },
+    });
+
+    expect((await init()).currentPeriodEnd).toBe(trialEnd * 1000);
+  });
+
+  it("is the item's period end, in ms, once it is not trialing", async () => {
+    // In API 2026-01-28.clover the period lives on the item, not the subscription.
+    mockSubscriptionsCreate.mockResolvedValue({
+      id: "sub_1",
+      status: "active",
+      trial_end: null,
+      items: { data: [{ id: "si_1", current_period_end: itemPeriodEnd }] },
+    });
+
+    expect((await init()).currentPeriodEnd).toBe(itemPeriodEnd * 1000);
+  });
+
+  it("is 0 when Stripe sends no period end, rather than NaN", async () => {
+    mockSubscriptionsCreate.mockResolvedValue({
+      id: "sub_1",
+      status: "active",
+      trial_end: null,
+      items: { data: [{ id: "si_1" }] },
+    });
+
+    expect((await init()).currentPeriodEnd).toBe(0);
+  });
+});
+
 describe("createSubscription (legacy two-item path)", () => {
   beforeEach(() => {
     jest.clearAllMocks();

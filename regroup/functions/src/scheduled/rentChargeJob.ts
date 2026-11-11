@@ -17,6 +17,7 @@ import {
 } from '../api/firestore';
 import { chargeResident } from '../rent/chargeResident';
 import { nextChargeDay } from '../rent/chargeRule';
+import { linkHeld, linkIntakeRecord } from '../rent/linkIntakeRecord';
 import { rentSettingsOf } from '../rent/rate';
 import { isActiveGuestDoc } from '../util/guestMembership';
 
@@ -54,7 +55,9 @@ export async function runRentCharges(
     try {
       if (!(await chargeHouse(houseDoc, now, counts, () => clock() - startedAt > budgetMs))) {
         // Charging is idempotent, so the next hourly run picks up where this stopped.
-        logger.warn('rentCharges: stopped at the time budget; the next run carries on', { ...counts });
+        logger.warn('rentCharges: stopped at the time budget; the next run carries on', {
+          ...counts,
+        });
         return counts;
       }
     } catch (err) {
@@ -111,6 +114,19 @@ async function chargeHouse(
     if (!due) continue;
     if (outOfTime()) return false;
     try {
+      // A record with no account may be half of a pair its own trigger never linked
+      // (the trigger failed or came late). Link first, as the trigger does, so days an
+      // intake record was already charged for are never charged again on this one.
+      const link = acct ? 'none' : await linkIntakeRecord(guestDoc.id, (guestDoc.data() ?? {}) as Data);
+      if (linkHeld(link)) {
+        counts.skipped++;
+        logger.error('rentCharges: matches a record it could not link; not charged until a manager resolves it', {
+          guestId: guestDoc.id,
+          houseId: houseDoc.id,
+          link,
+        });
+        continue;
+      }
       const outcome = await chargeResident(guestDoc.id, now);
       if (outcome.status === 'charged') counts.charged++;
       else counts.skipped++;

@@ -155,8 +155,10 @@ async function finishCheckout<U extends { id: string }, M>(
 // ─────────────────────────────────────────────────────────────────────────────
 // createOperatorSubscription
 // ─────────────────────────────────────────────────────────────────────────────
+// The new-subscriber notice (util/email) reads SENDGRID_API_KEY from
+// process.env, which a v2 function gets only for a secret it binds.
 export const createOperatorSubscription = onCall(
-  { secrets: [STRIPE_SECRET_KEY] },
+  { secrets: [STRIPE_SECRET_KEY, SENDGRID_API_KEY] },
   async (request) => {
     if (!request.auth)
       throw new HttpsError("unauthenticated", "Login required");
@@ -252,7 +254,10 @@ export const createOperatorSubscription = onCall(
         stripeCustomerId: tierMetadata.customerId,
         stripeSubscriptionId: tierMetadata.subscriptionId,
         status: tierResolvedStatus as SubscriptionDoc["status"],
-        currentPeriodEnd: "",
+        // Never throw here: the Stripe subscription already exists.
+        currentPeriodEnd: tierMetadata.currentPeriodEnd
+          ? new Date(tierMetadata.currentPeriodEnd).toISOString()
+          : "",
         planId: priceId,
         guestCount: 0,
         userId: data.user.id,

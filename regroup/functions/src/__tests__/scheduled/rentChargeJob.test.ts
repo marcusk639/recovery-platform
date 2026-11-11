@@ -19,7 +19,7 @@ jest.mock('../../util/notifications', () => ({ sendNotification: jest.fn() }));
 
 import { apiFirestore, mem } from '../helpers/memFirestore';
 import { logger } from 'firebase-functions/v2';
-import { account, charges, guest, house } from '../helpers/rentFixtures';
+import { account, charges, guest, house, invitedAs } from '../helpers/rentFixtures';
 import * as charge from '../../rent/chargeResident';
 import { runRentCharges } from '../../scheduled/rentChargeJob';
 
@@ -105,6 +105,87 @@ describe('records with no account', () => {
     );
     await runRentCharges(MONDAY);
     expect(spy).not.toHaveBeenCalled();
+  });
+
+  // The invite record's trigger failed or came late, so it has no account. The job
+  // must link it to the already-charged intake record before charging it, or the
+  // days both records cover are charged twice.
+  it('an invite record whose trigger never ran is linked before it is charged', async () => {
+    house();
+    invitedAs('u1', 'pat@example.com');
+    const twoHoursAgo = MONDAY.getTime() - 2 * 3600 * 1000;
+    mem.seedAt(
+      'guests/gIntake',
+      {
+        houseId: 'H',
+        status: 'active',
+        userId: '',
+        email: 'pat@example.com',
+        createdBy: 'mgr',
+        rentOwed: 17500,
+      },
+      twoHoursAgo,
+    );
+    mem.seed('rentAccounts/gIntake', {
+      guestId: 'gIntake',
+      houseId: 'H',
+      chargedHouseId: 'H',
+      houseJoinedAtMs: 1,
+      joinedOn: '2026-11-11',
+      anchoredTo: '2026-11-11',
+      chargeFrom: '2026-11-16',
+      chargedThrough: '2026-11-22',
+    });
+    mem.seedAt(
+      'guests/gNew',
+      { houseId: 'H', status: 'active', userId: 'u1', email: 'pat@example.com', rentOwed: 0 },
+      twoHoursAgo,
+    );
+    await runRentCharges(MONDAY);
+    expect(mem.get('guests/gIntake')?.rentLinkedTo).toBe('gNew');
+    expect(mem.get('guests/gNew')?.rentOwed).toBe(17500);
+    expect(charges()).toEqual([]);
+  });
+
+  // A pair the link finds but won't join: charging the invite record from scratch while
+  // the intake record keeps being charged bills the same days twice. Held instead, and
+  // logged for a manager; charging catches up the missed periods once it's resolved.
+  it.each([
+    ['matches two intake records', [{ createdBy: 'mgr' }, { createdBy: 'mgr2' }]],
+    ['matches an intake record the person made themselves', [{ createdBy: 'u1' }]],
+  ])('an invite record that %s is not charged until a manager resolves it', async (_case, intakes) => {
+    house();
+    invitedAs('u1', 'pat@example.com');
+    const twoHoursAgo = MONDAY.getTime() - 2 * 3600 * 1000;
+    intakes.forEach((extra, i) => {
+      mem.seedAt(
+        `guests/gIntake${i}`,
+        { houseId: 'H', status: 'active', userId: '', email: 'pat@example.com', rentOwed: 17500, ...extra },
+        twoHoursAgo,
+      );
+      mem.seed(`rentAccounts/gIntake${i}`, {
+        guestId: `gIntake${i}`,
+        houseId: 'H',
+        chargedHouseId: 'H',
+        houseJoinedAtMs: 1,
+        joinedOn: '2026-11-11',
+        anchoredTo: '2026-11-11',
+        chargeFrom: '2026-11-16',
+        chargedThrough: '2026-11-22',
+      });
+    });
+    mem.seedAt(
+      'guests/gNew',
+      { houseId: 'H', status: 'active', userId: 'u1', email: 'pat@example.com', rentOwed: 0, moveInDate: '2026-11-16' },
+      twoHoursAgo,
+    );
+    await runRentCharges(MONDAY);
+    expect(charges().filter((c) => c.startsWith('rentCharges/gNew'))).toEqual([]);
+    expect(mem.get('guests/gNew')?.rentOwed).toBe(0);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringMatching(/not charged/),
+      expect.objectContaining({ guestId: 'gNew' }),
+    );
   });
 
   it('a resident with no account created 2 hours ago is charged', async () => {
@@ -218,7 +299,9 @@ it('stops at its time budget and says so, leaving the rest to the next hour', as
   guest({ moveInDate: '2026-11-16' }, 'g2');
   // Start at 0; the first resident is in budget, the second is past it.
   const clock = jest.fn().mockReturnValueOnce(0).mockReturnValueOnce(0).mockReturnValue(10);
-  await expect(runRentCharges(MONDAY, { budgetMs: 5, clock })).resolves.toMatchObject({ charged: 1 });
+  await expect(runRentCharges(MONDAY, { budgetMs: 5, clock })).resolves.toMatchObject({
+    charged: 1,
+  });
   expect(charges()).toEqual(['rentCharges/g1_2026-11-16']);
   expect(logger.warn).toHaveBeenCalledWith(
     'rentCharges: stopped at the time budget; the next run carries on',
