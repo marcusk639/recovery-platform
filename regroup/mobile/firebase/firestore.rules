@@ -43,6 +43,35 @@ service cloud.firestore {
       return hasHouseRole() && 'superAdmin' in request.auth.token && request.auth.token.superAdmin.keys().hasAny(houseIds);
     }
 
+    // House ranks from the server-only house-roles record, as the server's
+    // tierAndRank computes them (see the guests rules for the full ladder).
+    // Used by the guests rules and by the houses rent-pricing rule.
+    function roleData(houseId, uid) {
+      let snap = get(/databases/$(database)/documents/house-roles/$(houseId + '_' + uid));
+      return snap == null ? {} : snap.data;
+    }
+    function rankOf(d) {
+      let tier = d.get('tier', '');
+      return d.get('primary', false) == true ? 4 :
+        tier == 'owner' ? 3 : tier == 'manager' ? 2 : tier == 'peerLeader' ? 1 : 0;
+    }
+    function recordRank(houseId, uid) {
+      return rankOf(roleData(houseId, uid));
+    }
+    function callerRank(houseId) {
+      let d = roleData(houseId, request.auth.uid);
+      let tier = d.get('tier', '');
+      let sa = hasSuperAdminRoleInHouse([houseId]);
+      let ad = hasAdminRoleInHouse([houseId]);
+      // Same as the server's tierAndRank (functions util/houseRoles).
+      let r = d.get('primary', false) == true ? 4 :
+        tier == 'owner' && sa ? 3 :
+        (tier == 'owner' || tier == 'manager') && ad ? 2 :
+        tier == 'peerLeader' && ad ? 1 : 0;
+      let c = sa ? 3 : ad ? 1 : 0;
+      return r > c ? r : c;
+    }
+
     function hasGuestRoleInHouse(houseIds) {
       return hasHouseRole() && 'guest' in request.auth.token && request.auth.token.guest.keys().hasAny(houseIds);
     }
@@ -208,13 +237,15 @@ service cloud.firestore {
           d.get('jobs', []).size() == 0;
       }
 
-      // createdBy, when sent, is the caller (builds before this one send
-      // none; the server then treats the doc as legacy). It is how the server
+      // createdBy, updatedBy and intakeCompletedBy (written by intake), when sent,
+      // are the caller. Builds before this one send no createdBy; the server then
+      // treats the doc as legacy. createdBy is how the server
       // tells a self-created doc (createdBy == userId) from a staff-created
       // one when it binds a ticket to one doc (util/admission).
       function createdByCaller(d) {
         return d.get('createdBy', request.auth.uid) == request.auth.uid &&
-          d.get('updatedBy', request.auth.uid) == request.auth.uid;
+          d.get('updatedBy', request.auth.uid) == request.auth.uid &&
+          d.get('intakeCompletedBy', request.auth.uid) == request.auth.uid;
       }
 
       // Staff create never links the doc to the creator (no self-link: a
@@ -225,12 +256,32 @@ service cloud.firestore {
       // give another peer leader a "shadow" active record that keeps their
       // claims after their real record is discharged. A record with no
       // account, or for a plain resident, ranks 0.
+      // Rent (functions src/rent/). customRent is a manager-set rate for one
+      // resident: null, or exactly an integer amountCents up to that schedule's
+      // price limit ($2,500 a week, $10,000 a month) and the schedule it was set
+      // for, so a weekly rate can never be read as monthly.
+      // rentLinkedTo is server-only (linkIntakeRecord): it stops rent charging
+      // on an intake record whose balance moved to the resident's own record.
+      function customRentValid(d) {
+        return !('customRent' in d) || d.customRent == null ||
+          (d.customRent is map &&
+           d.customRent.keys().hasOnly(['amountCents', 'frequency']) &&
+           d.customRent.keys().hasAll(['amountCents', 'frequency']) &&
+           d.customRent.amountCents is int && d.customRent.amountCents >= 0 &&
+           d.customRent.amountCents <=
+             (d.customRent.get('frequency', '') == 'weekly' ? 250000 : 1000000) &&
+           d.customRent.frequency in ['weekly', 'monthly']);
+      }
+
       allow create: if createdByCaller(request.resource.data) &&
                        moveOutDateValid(request.resource.data) &&
+                       customRentValid(request.resource.data) &&
+                       !('rentLinkedTo' in request.resource.data) &&
                        (isInvitedSelfCreate(request.resource.data) ||
                         (isAdmin([request.resource.data.houseId]) &&
                          request.resource.data.get('userId', '') != request.auth.uid &&
-                         callerRank(request.resource.data.houseId) > targetRank(request.resource.data)));
+                         callerRank(request.resource.data.houseId) > targetRank(request.resource.data) &&
+                         rentMoneyOnCreateByManager(request.resource.data)));
 
       // Update has two distinct branches:
       //
@@ -293,31 +344,6 @@ service cloud.firestore {
       // carries at most 19 account-linked removals or discharges, or 9 moves
       // between two houses (the 20-read limit). The app removes and
       // discharges one guest doc at a time, so the limit does not affect it.
-      function roleData(houseId, uid) {
-        let snap = get(/databases/$(database)/documents/house-roles/$(houseId + '_' + uid));
-        return snap == null ? {} : snap.data;
-      }
-      function rankOf(d) {
-        let tier = d.get('tier', '');
-        return d.get('primary', false) == true ? 4 :
-          tier == 'owner' ? 3 : tier == 'manager' ? 2 : tier == 'peerLeader' ? 1 : 0;
-      }
-      function recordRank(houseId, uid) {
-        return rankOf(roleData(houseId, uid));
-      }
-      function callerRank(houseId) {
-        let d = roleData(houseId, request.auth.uid);
-        let tier = d.get('tier', '');
-        let sa = hasSuperAdminRoleInHouse([houseId]);
-        let ad = hasAdminRoleInHouse([houseId]);
-        // Same as the server's tierAndRank (functions util/houseRoles).
-        let r = d.get('primary', false) == true ? 4 :
-          tier == 'owner' && sa ? 3 :
-          (tier == 'owner' || tier == 'manager') && ad ? 2 :
-          tier == 'peerLeader' && ad ? 1 : 0;
-        let c = sa ? 3 : ad ? 1 : 0;
-        return r > c ? r : c;
-      }
       function targetRank(d) {
         let uid = d.get('userId', '');
         return uid is string && uid != '' ? recordRank(d.houseId, uid) : 0;
@@ -335,6 +361,23 @@ service cloud.firestore {
       // and house may change in the same write); a record ranked 0 (a
       // resident, or no record) any staff may change. Staff never change
       // these on their own record.
+      // Owes nothing and has no rate a manager set. Below a manager, only such a record can
+      // be deleted or moved to another house (owner decision 2026-11-10): either, then a
+      // re-create or a change made where the caller ranks higher, would clear a balance or
+      // a rate. Paying in full comes off rentOwed only, so rent -$50 with chore fees $50
+      // owes nothing; a credit is the house's to settle. A non-number balance counts as owed.
+      function settled(d) {
+        let rent = d.get('rentOwed', 0);
+        let fees = d.get('choreFees', 0);
+        return rent is number && fees is number && rent + fees == 0 && rent <= 0 &&
+          d.get('customRent', null) == null;
+      }
+
+      function houseMoveAllowed() {
+        return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['houseId']) ||
+          callerRank(resource.data.houseId) >= 2 || settled(resource.data);
+      }
+
       function staffDepartureAllowed() {
         let own = resource.data.get('userId', '') == request.auth.uid;
         let changed = request.resource.data.diff(resource.data).affectedKeys()
@@ -346,13 +389,45 @@ service cloud.firestore {
            moveOutDateValid(request.resource.data));
       }
 
+      // No one, admin or not, changes the money fields of their own record:
+      // a peer leader is an admin of the house and also a resident who owes
+      // rent. Someone else sets them, and rentOwed, choreFees, customRent and
+      // rentDueDate only from a manager up (rentMoneyByManager, owner decision
+      // 2026-11-10). moveInDate and importedAt
+      // decide the first chargeable day, and rentDueDate when rent is overdue,
+      // so they are money fields too.
+      function ownMoneyUnchanged() {
+        return !(resource.data.get('userId', '') == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['rentOwed', 'choreFees', 'customRent', 'moveInDate', 'importedAt', 'rentDueDate']));
+      }
+
+      // Only a manager or above changes anyone's rent rate, balance or due date: a
+      // peer leader also owes rent here (owner decision 2026-11-10), so peer leaders
+      // can't move each other's money either. The server's charges use the Admin SDK.
+      function rentMoneyByManager() {
+        return !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['rentOwed', 'choreFees', 'customRent', 'rentDueDate']) ||
+          callerRank(resource.data.houseId) >= 2;
+      }
+      // The same on create: a peer leader admits a resident with no balance, rate or
+      // due date, which is what the app sends.
+      function rentMoneyOnCreateByManager(d) {
+        return callerRank(d.houseId) >= 2 || (
+          d.get('rentOwed', 0) == 0 && d.get('choreFees', 0) == 0 &&
+          d.get('customRent', null) == null && d.get('rentDueDate', null) == null);
+      }
+
       allow update: if
         userIdUnchangedOrLinked() &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['rentLinkedTo']) &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['customRent']) ||
+         customRentValid(request.resource.data)) &&
         request.resource.data.get('createdBy', null) == resource.data.get('createdBy', null) &&
         (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['updatedBy']) ||
          request.resource.data.updatedBy == request.auth.uid) && (
         (isAdmin([resource.data.houseId]) && isAdmin([request.resource.data.houseId]) &&
-         staffDepartureAllowed()) ||
+         staffDepartureAllowed() && houseMoveAllowed() && ownMoneyUnchanged() && rentMoneyByManager()) ||
         (isSameUser(request.resource.data.userId) &&
          request.resource.data.userId == resource.data.userId &&
          request.resource.data.houseId == resource.data.houseId &&
@@ -372,9 +447,12 @@ service cloud.firestore {
       // runs server-side with the Admin SDK.
       // Staff delete follows rank (staffDepartureAllowed above), never of
       // their own record.
+      // Below a manager, only a settled record (above): deleting one that owes rent or chore
+      // fees, then re-creating the resident without it, would clear what they owe.
       allow delete: if isAdmin([resource.data.houseId]) &&
         resource.data.get('userId', '') != request.auth.uid &&
-        callerRank(resource.data.houseId) > targetRank(resource.data);
+        callerRank(resource.data.houseId) > targetRank(resource.data) &&
+        (callerRank(resource.data.houseId) >= 2 || settled(resource.data));
     }
     
     match /guest-reports/{reportId} {
@@ -439,12 +517,44 @@ service cloud.firestore {
       // houseType (traditional / oxford) picks the admission and voting
       // rules; only createHouses and setOxfordEnabled (Admin SDK) set it,
       // so no client, the owner included, may change it.
+      // rentChargesStartDate / rentChargesStartedAtMs: reserved. When charging
+      // turned on lives in server-only rentHouseStates/{houseId}; no client may
+      // write these names here either.
+      // Rent settings: a manager or above (rank >= 2) sets the schedule and price
+      // (owner decision 2026-11-10), so monthlyRent and weeklyRent are no longer
+      // superAdmin-only. For every role, rentFrequency is one of the three
+      // schedules ('both' means charging is off) and a price is a number of
+      // DOLLARS (weekly 0 to 2500, monthly 0 to 10000): a value typed in cents or as a string
+      // is refused, never charged 100x.
+      // Only a manager or above sets what the house charges, or turns charging off
+      // and on: a peer leader also owes rent here (owner decision 2026-11-10).
+      function rentPricingAllowed() {
+        return !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['rentFrequency', 'monthlyRent', 'weeklyRent']) ||
+          callerRank(houseId) >= 2;
+      }
+      function rentSettingsValid() {
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
+        let d = request.resource.data;
+        // Oxford houses pay the equal expense share their members set, never a
+        // price schedule, so only 'both' (charging off) is allowed there.
+        return (!changed.hasAny(['rentFrequency']) ||
+            (d.rentFrequency in ['weekly', 'monthly', 'both'] &&
+             !(d.get('houseType', 'traditional') == 'oxford' && d.rentFrequency != 'both'))) &&
+          (!changed.hasAny(['monthlyRent']) ||
+            (d.monthlyRent is number && d.monthlyRent >= 0 && d.monthlyRent <= 10000)) &&
+          (!changed.hasAny(['weeklyRent']) ||
+            (d.weeklyRent is number && d.weeklyRent >= 0 && d.weeklyRent <= 2500));
+      }
       allow update: if isDemoScopedHouses([houseId]) &&
         !request.resource.data.diff(resource.data).affectedKeys()
-          .hasAny(['subscriptionStatus', 'guestGraceEndsAt', 'stripeAccountApi', 'superAdminId', 'houseType', 'ownerId']) &&
+          .hasAny(['subscriptionStatus', 'guestGraceEndsAt', 'stripeAccountApi', 'superAdminId', 'houseType', 'ownerId',
+                   'rentChargesStartDate', 'rentChargesStartedAtMs']) &&
+        rentSettingsValid() &&
+        rentPricingAllowed() &&
         (hasSuperAdminRoleInHouse([houseId]) ||
           (hasAdminRoleInHouse([houseId]) && !request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['stripeAccountId', 'stripeStatus', 'monthlyRent', 'weeklyRent', 'adminIds', 'ownerId', 'superAdminIds', 'adminId'])) ||
+            .hasAny(['stripeAccountId', 'stripeStatus', 'adminIds', 'ownerId', 'superAdminIds', 'adminId'])) ||
           // Residents (guest role, not admin) may write ONLY the fields their
           // own app flows write (audited for PR #141): complaints and issues
           // (Personal screen) and currentCapacity (sign-up createGuest).
@@ -519,13 +629,53 @@ service cloud.firestore {
     }
     
     // Payments: only admins can read all house payments; guests read their own.
-    // Manual payment recording restricted to admins.
+    // Recording a payment (cash, check, Venmo, Zelle) takes a manager or above:
+    // peer leaders do not record payments at launch (owner decision 2026-11-10).
+    // A peer leader may still write the pending record the app keeps for their
+    // own card payment (recordRentPayment); the Stripe webhook writes the real one.
     // Cloud Functions handle Stripe-originated writes via Admin SDK.
     match /payments/{paymentId} {
       allow read: if isAdmin([resource.data.houseId]) ||
         (isGuest([resource.data.houseId]) && isSameUser(resource.data.guestUserId));
-      allow create: if isAdmin([request.resource.data.houseId]);
+      allow create: if isAdmin([request.resource.data.houseId]) && (
+        callerRank(request.resource.data.houseId) >= 2 || (
+          request.resource.data.get('status', '') == 'pending' &&
+          request.resource.data.get('guestUserId', '') == request.auth.uid));
       allow update, delete: if false; // Only Cloud Functions should modify payments
+    }
+
+    // Rent charges (functions src/rent/chargeResident): one record per resident
+    // and period, written only by the server in the same transaction as the
+    // rentOwed increment. Read like payments: the house's admins, or the
+    // resident the charge is for.
+    match /rentCharges/{chargeId} {
+      allow read: if isAdmin([resource.data.houseId]) ||
+        (isGuest([resource.data.houseId]) && isSameUser(resource.data.guestUserId));
+      allow write: if false;
+    }
+
+    // When each house's charging last turned on (functions houseRentSettings).
+    // Kept off the house doc, which the app writes back whole from memory. Its
+    // admins may read it, for the setup preview; only the server writes it.
+    match /rentHouseStates/{houseId} {
+      allow read: if isAdmin([houseId]);
+      allow write: if false;
+    }
+
+    // Each resident's chargedThrough / chargeFrom. Server-only: a client that
+    // wrote an older chargedThrough back would be charged those days again.
+    match /rentAccounts/{guestId} {
+      allow read, write: if false;
+    }
+
+    // Charges moved here by scripts/reverseRentCharges. Server-only.
+    match /rentChargeReversals/{reversalId} {
+      allow read, write: if false;
+    }
+
+    // Server settings, e.g. config/rentCharges.paused (the charge job's stop switch).
+    match /config/{configId} {
+      allow read, write: if false;
     }
 
     match /complaints/{complaintId} {

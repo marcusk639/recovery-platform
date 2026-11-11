@@ -32,9 +32,10 @@
  * So the protection is on the write side. It does not validate that stored data
  * is really in the unit it claims — see `asCents`.
  *
- * There is no rent-accrual job in regroup today; `rentOwed` is raised by a
- * human. When that job is written it will need `dollarsToCents(house.monthlyRent)`,
- * and the type system will now insist on it.
+ * The server now adds rent: `regroup/functions/src/rent/chargeResident.ts` raises
+ * `rentOwed` from the house price (dollars, via `dollarsToCents`) each period,
+ * prorated in the first. Managers still edit balances by hand to correct a charge
+ * or give a credit.
  */
 
 declare const centsBrand: unique symbol;

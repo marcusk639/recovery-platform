@@ -69,6 +69,13 @@ jest.mock("../../../services/payments", () => ({
   recordManualPayment: (...args: any[]) => mockRecordManualPayment(...args),
 }));
 
+// Only a manager or above records payments (owner decision 2026-11-10).
+// The tests that record one run as a manager.
+const mockMayEditRentMoney = jest.fn();
+jest.mock("../../../state/queries/houseTierQueries", () => ({
+  useMayEditRentMoney: (houseId: string) => mockMayEditRentMoney(houseId),
+}));
+
 const mockUseAppSelector = jest.fn();
 jest.mock("../../../state/store", () => ({
   useAppSelector: (selector: any) => mockUseAppSelector(selector),
@@ -116,6 +123,7 @@ const renderDashboard = () =>
 describe("PaymentDashboard", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockMayEditRentMoney.mockReturnValue(true);
   });
 
   it("shows loading state initially", () => {
@@ -166,6 +174,16 @@ describe("PaymentDashboard", () => {
     mockListHousePayments.mockResolvedValue([]);
     const { findByTestId } = renderDashboard();
     await findByTestId("manual-payment-fab");
+    expect(mockMayEditRentMoney).toHaveBeenCalledWith(PAYMENT_TEST_HOUSE.id);
+  });
+
+  it("hides the record-payment button from anyone below manager", async () => {
+    setupStore();
+    mockMayEditRentMoney.mockReturnValue(false);
+    mockListHousePayments.mockResolvedValue([]);
+    const { findByTestId, queryByTestId } = renderDashboard();
+    await findByTestId("payment-empty-state");
+    expect(queryByTestId("manual-payment-fab")).toBeNull();
   });
 
   it("renders StalePendingBanner when there are stale pending payments", async () => {

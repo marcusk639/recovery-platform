@@ -121,6 +121,26 @@ describe('guest update form money boundary', () => {
   });
 });
 
+describe('guestMoneyUpdate payload', () => {
+  // updateGuest merges the payload over the server's copy, and the payload wins. A
+  // cached field the operator never touched would overwrite a newer server value: the
+  // hourly charge moves rentDueDate on, and below a manager the rules refuse any write
+  // that changes rentDueDate or customRent, so a stale copy failed every save.
+  it('sends only the fields the operator changed, with the record ids', () => {
+    const guest = makeGuest({
+      rentDueDate: '2026-10-01',
+      customRent: { amountCents: 12000, frequency: 'weekly' },
+      moveInDate: '2026-09-01',
+      importedAt: '2026-09-01T00:00:00.000Z',
+      phase: 'Phase 1',
+    } as unknown as Partial<Guest>);
+    const { payload } = okPayload(guest, { ...guestToFormValues(guest), phase: 'Phase 2' });
+
+    expect(Object.keys(payload).sort()).toEqual(['houseId', 'id', 'phase']);
+    expect(payload.phase).toBe('Phase 2');
+  });
+});
+
 describe('guestMoneyUpdate malformed input', () => {
   const guest = { id: 'g1', rentOwed: 50000, choreFees: 0 } as never as Guest;
 

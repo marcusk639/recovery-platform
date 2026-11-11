@@ -689,12 +689,27 @@ describe("guests/{guestId} — admins can't move another house's guest", () => {
 
   test("ALLOW an admin of the guest's own house editing the guest's rent", async () => {
     await seedGuestDoc();
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      // Only a manager or above changes a balance (owner decision 2026-11-10).
+      await context
+        .firestore()
+        .doc(`house-roles/${HOUSE_ID}_${ADMIN_UID}`)
+        .set({ tier: "manager" });
+    });
     const ctx = testEnv.authenticatedContext(ADMIN_UID, authHouseAdmin(ADMIN_UID, HOUSE_ID));
     await assertSucceeds(updateDoc(guestDocRef(ctx), { rentOwed: 200 }));
   });
 
   test("ALLOW an operator who admins both houses moving the guest between them", async () => {
     await seedGuestDoc();
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      // An operator manages the house: below a manager, a resident who owes rent can't be
+      // moved (owner decision 2026-11-10), and an admin claim alone ranks as a peer leader.
+      await context
+        .firestore()
+        .doc(`house-roles/${HOUSE_ID}_${ADMIN_UID}`)
+        .set({ tier: "manager" });
+    });
     const ctx = testEnv.authenticatedContext(ADMIN_UID, {
       admin: { [HOUSE_ID]: true, [ATTACKER_HOUSE_ID]: true },
     });
@@ -877,6 +892,13 @@ describe("guests/{guestId} — self-edit field guard (S1)", () => {
   describe("admin branch still has full authority", () => {
     test("ALLOW house admin to set rentOwed on a guest", async () => {
       await seedGuestDoc();
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        // Only a manager or above changes a balance (owner decision 2026-11-10).
+        await context
+          .firestore()
+          .doc(`house-roles/${HOUSE_ID}_${ADMIN_UID}`)
+          .set({ tier: "manager" });
+      });
       const ctx = testEnv.authenticatedContext(
         ADMIN_UID,
         authHouseAdmin(ADMIN_UID, HOUSE_ID),
@@ -2052,7 +2074,26 @@ describe("houses/{houseId} — update: sensitive fields restricted to superAdmin
       );
     });
 
-    test("DENY a regular admin updating monthlyRent/weeklyRent", async () => {
+    // Relaxed for rent charges (owner decision 2026-11-09): any house admin
+    // sets the price and schedule; see rentCharges.rules.test.ts for the limits.
+    test("ALLOW a manager updating monthlyRent/weeklyRent", async () => {
+      await seedHouse();
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await context
+          .firestore()
+          .doc(`house-roles/${HOUSE_ID}_${ADMIN_UID}`)
+          .set({ tier: "manager" });
+      });
+      const ctx = testEnv.authenticatedContext(
+        ADMIN_UID,
+        authHouseAdmin(ADMIN_UID, HOUSE_ID),
+      );
+      await assertSucceeds(
+        updateDoc(houseRef(ctx), { monthlyRent: 999, weeklyRent: 250 }),
+      );
+    });
+
+    test("DENY an admin claim with no manager record (a peer leader) updating monthlyRent/weeklyRent", async () => {
       await seedHouse();
       const ctx = testEnv.authenticatedContext(
         ADMIN_UID,

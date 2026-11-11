@@ -58,6 +58,7 @@ import { isDemo } from '../../util/user';
 // Navigation
 import { Routes, RootStackParamList } from '../../navigation/types';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { removalRefusalMessage } from '../../util/guestRemoval';
 
 interface Props {
   navigation: NativeStackNavigationProp<RootStackParamList>;
@@ -139,8 +140,14 @@ const UserInfo: React.FC<Props> = ({ navigation }) => {
               navigation.goBack();
             } catch (error) {
               setDeleting(false);
-              setDeletingFailed(true);
               setDeletingSuccessful(false);
+              const refusal = removalRefusalMessage(error);
+              if (refusal) {
+                setDeletingFailed(false);
+                Alert.alert('Not removed', refusal);
+              } else {
+                setDeletingFailed(true);
+              }
             }
           },
         },

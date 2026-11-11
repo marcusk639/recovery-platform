@@ -10,6 +10,9 @@
     "e2e:gen-env": "ts-node scripts/gen-env.ts",
     "e2e:stripe-setup": "ts-node scripts/stripe-sandbox-setup.ts",
     "e2e:preflight": "ts-node src/preflight/run.ts",
+    "payments:setup": "ts-node scripts/stripe-local-setup.ts",
+    "test:payments": "bash scripts/run-payment-suite.sh",
+    "e2e:new-house": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 GCLOUD_PROJECT=demo-regroup-e2e E2E_FUNCTIONS_BASE=http://127.0.0.1:5001/demo-regroup-e2e/us-central1 ts-node scripts/new-house.ts",
     "e2e:staging-operator": "ts-node scripts/staging-operator.ts"
   },
   "devDependencies": {
@@ -21,6 +24,7 @@
     "typescript": "^5.1.6"
   },
   "dependencies": {
+    "firebase-admin": "^13.10.0",
     "stripe": "^20.4.1"
   }
 }

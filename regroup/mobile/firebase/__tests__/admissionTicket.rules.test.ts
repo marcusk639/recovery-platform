@@ -199,7 +199,8 @@ describe('admin and peer-leader create are unchanged', () => {
         houseId: H,
         firstName: 'A',
         status: 'active',
-        rentOwed: 50000,
+        // No balance: a peer leader may not set one (rentCharges.rules.test.ts).
+        rentOwed: 0,
       }),
     );
   });
@@ -213,6 +214,8 @@ describe('deleting guest docs', () => {
   });
 
   it('ALLOWS a house admin to delete a guest doc', async () => {
+    // A manager: below that, a record that owes rent can't be deleted (rentCharges.rules.test.ts).
+    await seed(`house-roles/${H}_staff`, { tier: 'manager' });
     const db = testEnv.authenticatedContext('staff', { admin: { [H]: true } }).firestore();
     await assertSucceeds(deleteDoc(doc(db, 'guests/g1')));
   });

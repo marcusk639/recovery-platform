@@ -1,0 +1,315 @@
+// The hourly rent job against an in-memory store: which houses and residents it
+// charges, on whose local date, and that one failure or a stop switch is contained.
+
+jest.mock('firebase-functions/v2', () => ({
+  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+}));
+const mockScheduleOpts: { value?: unknown } = {};
+jest.mock('firebase-functions/v2/scheduler', () => ({
+  onSchedule: (opts: unknown, handler: unknown) => {
+    mockScheduleOpts.value = opts;
+    return handler;
+  },
+}));
+jest.mock('firebase-admin/firestore', () => ({
+  FieldValue: require('../helpers/memFirestore').fieldValue,
+}));
+jest.mock('../../api/firestore', () => require('../helpers/memFirestore').apiFirestore);
+jest.mock('../../util/notifications', () => ({ sendNotification: jest.fn() }));
+
+import { apiFirestore, mem } from '../helpers/memFirestore';
+import { logger } from 'firebase-functions/v2';
+import { account, charges, guest, house, invitedAs } from '../helpers/rentFixtures';
+import * as charge from '../../rent/chargeResident';
+import { runRentCharges } from '../../scheduled/rentChargeJob';
+
+const MONDAY = new Date('2026-11-16T17:00:00Z');
+
+beforeEach(() => {
+  mem.reset();
+  jest.restoreAllMocks();
+});
+
+it('charges a due resident in each stamped house', async () => {
+  house({}, 'A');
+  house({ rentFrequency: 'monthly' }, 'B');
+  guest({ houseId: 'A', moveInDate: '2026-11-16' }, 'a1');
+  guest({ houseId: 'B', moveInDate: '2026-11-16' }, 'b1');
+  await expect(runRentCharges(MONDAY)).resolves.toEqual({
+    houses: 2,
+    charged: 2,
+    skipped: 0,
+    failed: 0,
+  });
+  expect(charges()).toEqual(['rentCharges/a1_2026-11-16', 'rentCharges/b1_2026-11-16']);
+});
+
+it("skips a house whose rentFrequency is 'both'", async () => {
+  house({ rentFrequency: 'both' }, 'A');
+  guest({ houseId: 'A' }, 'a1');
+  await expect(runRentCharges(MONDAY)).resolves.toMatchObject({ houses: 0, charged: 0 });
+  expect(charges()).toEqual([]);
+});
+
+it('skips a house on a schedule that was never stamped', async () => {
+  house({ rentChargesStartDate: null, rentChargesStartedAtMs: null }, 'A');
+  guest({ houseId: 'A' }, 'a1');
+  await expect(runRentCharges(MONDAY)).resolves.toMatchObject({ houses: 0 });
+});
+
+describe('local dates', () => {
+  const weekly = () => account({ chargeFrom: '2026-11-11', chargedThrough: '2026-11-15' });
+  it("a house with timezone '' is charged on New York dates", async () => {
+    house({ timezone: '' });
+    guest();
+    weekly();
+    await runRentCharges(new Date('2026-11-16T04:30:00Z')); // Sun 23:30 in New York
+    expect(charges()).toEqual([]);
+    await runRentCharges(new Date('2026-11-16T05:30:00Z')); // Mon 00:30
+    expect(charges()).toEqual(['rentCharges/g1_2026-11-16']);
+  });
+
+  it("a house in 'Pacific/Honolulu' is charged after its own midnight", async () => {
+    house({ timezone: 'Pacific/Honolulu' });
+    guest();
+    weekly();
+    await runRentCharges(new Date('2026-11-16T09:30:00Z')); // Sun 23:30 in Honolulu
+    expect(charges()).toEqual([]);
+    await runRentCharges(new Date('2026-11-16T10:30:00Z')); // Mon 00:30
+    expect(charges()).toEqual(['rentCharges/g1_2026-11-16']);
+  });
+});
+
+describe('records with no account', () => {
+  it('a resident created 10 minutes ago without an account is left to the trigger', async () => {
+    house();
+    const spy = jest.spyOn(charge, 'chargeResident');
+    mem.seedAt(
+      'guests/g1',
+      { houseId: 'H', status: 'active', moveInDate: '2026-11-16' },
+      MONDAY.getTime() - 10 * 60 * 1000,
+    );
+    await runRentCharges(MONDAY);
+    expect(spy).not.toHaveBeenCalled();
+    expect(charges()).toEqual([]);
+  });
+
+  it('a resident with no account whose record changed in the last hour is left to the trigger', async () => {
+    house();
+    const spy = jest.spyOn(charge, 'chargeResident');
+    mem.seedAt(
+      'guests/g1',
+      { houseId: 'H', status: 'active', moveInDate: '2026-11-16' },
+      MONDAY.getTime() - 90 * 24 * 3600 * 1000,
+      MONDAY.getTime() - 5 * 60 * 1000,
+    );
+    await runRentCharges(MONDAY);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  // The invite record's trigger failed or came late, so it has no account. The job
+  // must link it to the already-charged intake record before charging it, or the
+  // days both records cover are charged twice.
+  it('an invite record whose trigger never ran is linked before it is charged', async () => {
+    house();
+    invitedAs('u1', 'pat@example.com');
+    const twoHoursAgo = MONDAY.getTime() - 2 * 3600 * 1000;
+    mem.seedAt(
+      'guests/gIntake',
+      {
+        houseId: 'H',
+        status: 'active',
+        userId: '',
+        email: 'pat@example.com',
+        createdBy: 'mgr',
+        rentOwed: 17500,
+      },
+      twoHoursAgo,
+    );
+    mem.seed('rentAccounts/gIntake', {
+      guestId: 'gIntake',
+      houseId: 'H',
+      chargedHouseId: 'H',
+      houseJoinedAtMs: 1,
+      joinedOn: '2026-11-11',
+      anchoredTo: '2026-11-11',
+      chargeFrom: '2026-11-16',
+      chargedThrough: '2026-11-22',
+    });
+    mem.seedAt(
+      'guests/gNew',
+      { houseId: 'H', status: 'active', userId: 'u1', email: 'pat@example.com', rentOwed: 0 },
+      twoHoursAgo,
+    );
+    await runRentCharges(MONDAY);
+    expect(mem.get('guests/gIntake')?.rentLinkedTo).toBe('gNew');
+    expect(mem.get('guests/gNew')?.rentOwed).toBe(17500);
+    expect(charges()).toEqual([]);
+  });
+
+  // A pair the link finds but won't join: charging the invite record from scratch while
+  // the intake record keeps being charged bills the same days twice. Held instead, and
+  // logged for a manager; charging catches up the missed periods once it's resolved.
+  it.each([
+    ['matches two intake records', [{ createdBy: 'mgr' }, { createdBy: 'mgr2' }]],
+    ['matches an intake record the person made themselves', [{ createdBy: 'u1' }]],
+  ])('an invite record that %s is not charged until a manager resolves it', async (_case, intakes) => {
+    house();
+    invitedAs('u1', 'pat@example.com');
+    const twoHoursAgo = MONDAY.getTime() - 2 * 3600 * 1000;
+    intakes.forEach((extra, i) => {
+      mem.seedAt(
+        `guests/gIntake${i}`,
+        { houseId: 'H', status: 'active', userId: '', email: 'pat@example.com', rentOwed: 17500, ...extra },
+        twoHoursAgo,
+      );
+      mem.seed(`rentAccounts/gIntake${i}`, {
+        guestId: `gIntake${i}`,
+        houseId: 'H',
+        chargedHouseId: 'H',
+        houseJoinedAtMs: 1,
+        joinedOn: '2026-11-11',
+        anchoredTo: '2026-11-11',
+        chargeFrom: '2026-11-16',
+        chargedThrough: '2026-11-22',
+      });
+    });
+    mem.seedAt(
+      'guests/gNew',
+      { houseId: 'H', status: 'active', userId: 'u1', email: 'pat@example.com', rentOwed: 0, moveInDate: '2026-11-16' },
+      twoHoursAgo,
+    );
+    await runRentCharges(MONDAY);
+    expect(charges().filter((c) => c.startsWith('rentCharges/gNew'))).toEqual([]);
+    expect(mem.get('guests/gNew')?.rentOwed).toBe(0);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringMatching(/not charged/),
+      expect.objectContaining({ guestId: 'gNew' }),
+    );
+  });
+
+  it('a resident with no account created 2 hours ago is charged', async () => {
+    house();
+    mem.seedAt(
+      'guests/g1',
+      { houseId: 'H', status: 'active', moveInDate: '2026-11-16' },
+      MONDAY.getTime() - 2 * 3600 * 1000,
+    );
+    await runRentCharges(MONDAY);
+    expect(charges()).toEqual(['rentCharges/g1_2026-11-16']);
+  });
+});
+
+it('not-due accounts make no transaction', async () => {
+  house();
+  guest();
+  account({ chargeFrom: '2026-11-11', chargedThrough: '2026-11-22' });
+  const spy = jest.spyOn(charge, 'chargeResident');
+  await expect(runRentCharges(MONDAY)).resolves.toMatchObject({ houses: 1, charged: 0 });
+  expect(spy).not.toHaveBeenCalled();
+});
+
+it('an account anchored to an older start is re-checked even when not due', async () => {
+  house({ rentChargesStartDate: '2026-11-14' });
+  guest();
+  account({ anchoredTo: '2026-11-01', chargedThrough: '2026-11-22' });
+  const spy = jest.spyOn(charge, 'chargeResident');
+  await runRentCharges(MONDAY);
+  expect(spy).toHaveBeenCalledWith('g1', MONDAY);
+});
+
+it('discharged residents are not visited', async () => {
+  house();
+  guest({ status: 'discharged' });
+  const spy = jest.spyOn(charge, 'chargeResident');
+  await runRentCharges(MONDAY);
+  expect(spy).not.toHaveBeenCalled();
+});
+
+it('the stop switch stops the run', async () => {
+  house();
+  guest();
+  mem.seed('config/rentCharges', { paused: true });
+  await expect(runRentCharges(MONDAY)).resolves.toEqual({
+    houses: 0,
+    charged: 0,
+    skipped: 0,
+    failed: 0,
+  });
+  expect(charges()).toEqual([]);
+});
+
+it("one resident's failure does not stop the others", async () => {
+  house();
+  guest({ moveInDate: '2026-11-16' }, 'g1');
+  guest({ moveInDate: '2026-11-16' }, 'g2');
+  const real = charge.chargeResident;
+  jest
+    .spyOn(charge, 'chargeResident')
+    .mockImplementation((id, now) =>
+      id === 'g1' ? Promise.reject(new Error('boom')) : real(id, now),
+    );
+  await expect(runRentCharges(MONDAY)).resolves.toMatchObject({ charged: 1, failed: 1 });
+  expect(charges()).toEqual(['rentCharges/g2_2026-11-16']);
+});
+
+it("one house's failure does not stop the others, and is logged with the error", async () => {
+  house({}, 'A');
+  house({}, 'B');
+  guest({ houseId: 'A', moveInDate: '2026-11-16' }, 'a1');
+  guest({ houseId: 'B', moveInDate: '2026-11-16' }, 'b1');
+  const states = apiFirestore.rentHouseStateCollection;
+  const realDoc = states.doc.bind(states);
+  const boom = new Error('boom');
+  jest
+    .spyOn(states, 'doc')
+    .mockImplementation(((id: string) =>
+      id === 'A' ? { get: () => Promise.reject(boom) } : realDoc(id)) as never);
+  await expect(runRentCharges(MONDAY)).resolves.toMatchObject({ charged: 1, failed: 1 });
+  expect(charges()).toEqual(['rentCharges/b1_2026-11-16']);
+  expect(logger.error).toHaveBeenCalledWith(
+    'rentCharges: house failed',
+    expect.objectContaining({ houseId: 'A', error: boom }),
+  );
+});
+
+it('a resident failure is logged with the full error, not only its message', async () => {
+  house();
+  guest({ moveInDate: '2026-11-16' }, 'g1');
+  const boom = new Error('boom');
+  jest.spyOn(charge, 'chargeResident').mockRejectedValue(boom);
+  await runRentCharges(MONDAY);
+  expect(logger.error).toHaveBeenCalledWith(
+    'rentCharges: resident failed',
+    expect.objectContaining({ guestId: 'g1', error: boom }),
+  );
+});
+
+it('a linked intake record is not sent to chargeResident at all', async () => {
+  house();
+  guest({ moveInDate: '2026-11-16', rentLinkedTo: 'g2' }, 'g1');
+  const spy = jest.spyOn(charge, 'chargeResident');
+  await runRentCharges(MONDAY);
+  expect(spy).not.toHaveBeenCalledWith('g1', expect.anything());
+});
+
+it('stops at its time budget and says so, leaving the rest to the next hour', async () => {
+  house();
+  guest({ moveInDate: '2026-11-16' }, 'g1');
+  guest({ moveInDate: '2026-11-16' }, 'g2');
+  // Start at 0; the first resident is in budget, the second is past it.
+  const clock = jest.fn().mockReturnValueOnce(0).mockReturnValueOnce(0).mockReturnValue(10);
+  await expect(runRentCharges(MONDAY, { budgetMs: 5, clock })).resolves.toMatchObject({
+    charged: 1,
+  });
+  expect(charges()).toEqual(['rentCharges/g1_2026-11-16']);
+  expect(logger.warn).toHaveBeenCalledWith(
+    'rentCharges: stopped at the time budget; the next run carries on',
+    expect.objectContaining({ charged: 1 }),
+  );
+});
+
+it('the job runs hourly in UTC with time for a Monday-midnight burst', () =>
+  expect(mockScheduleOpts.value).toEqual(
+    expect.objectContaining({ schedule: '5 * * * *', timeZone: 'UTC', timeoutSeconds: 540 }),
+  ));
