@@ -6,6 +6,7 @@ import { User } from "../entities/User";
 import { HouseType, TierKey } from "../config";
 import { resolveTierPriceId, BillingInterval } from "../util/tierPricing";
 import { assertPaymentMethodUsable } from "./cardValidation";
+import { periodEndSeconds } from "../util/subscriptionPeriod";
 
 /**
  * Trial length for all new subscriptions. Stripe applies trial_period_days
@@ -466,12 +467,7 @@ export const initializeTierCustomer = async (
     `tiersub-${userId}-${houseType}-${tier}-${billingInterval}-${day}`,
   );
   const item = subscription.items.data[0];
-  // While trialing, the period the operator has is the trial. Otherwise it's the
-  // item's: API 2026-01-28.clover has no current_period_end on the subscription.
-  const periodEnd =
-    subscription.status === "trialing" && subscription.trial_end != null
-      ? subscription.trial_end
-      : item.current_period_end;
+  const periodEnd = periodEndSeconds(subscription, item.id);
   return {
     customerId: customer.id,
     subscriptionId: subscription.id,

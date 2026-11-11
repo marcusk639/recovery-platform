@@ -504,6 +504,27 @@ describe("stripeWebhook — customer.subscription.updated", () => {
     },
   });
 
+  // The subscriptions collection returns the test doc; everything else is empty.
+  const wireSubscriptionDoc = (subDocRef: { update: jest.Mock; set: jest.Mock }) =>
+    mockCollectionFn.mockImplementation((col: string) => ({
+      where: jest.fn().mockReturnValue({
+        limit: jest.fn().mockReturnValue({
+          get: jest.fn().mockResolvedValue(
+            col === "subscriptions"
+              ? { empty: false, docs: [{ id: firestoreSubDoc.id, data: () => firestoreSubDoc.data, ref: subDocRef }] }
+              : { empty: true, docs: [] },
+          ),
+        }),
+        where: jest.fn().mockReturnValue({ get: jest.fn().mockResolvedValue({ empty: true, docs: [] }) }),
+        get: jest.fn().mockResolvedValue({ empty: true, docs: [] }),
+      }),
+      doc: jest.fn().mockReturnValue({
+        get: jest.fn().mockResolvedValue({ exists: false }),
+        update: jest.fn(),
+        set: jest.fn(),
+      }),
+    }));
+
   it("updates subscription status in Firestore on customer.subscription.updated", async () => {
     const mockUpdate = jest.fn().mockResolvedValue(undefined);
     const subDocRef = { update: mockUpdate, set: jest.fn() };
@@ -653,6 +674,39 @@ describe("stripeWebhook — customer.subscription.updated", () => {
     await (stripeWebhook as any)(req, res);
 
     expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it("stores the item's period end as currentPeriodEnd, not the cycle's start", async () => {
+    const mockUpdate = jest.fn().mockResolvedValue(undefined);
+    const subDocRef = { update: mockUpdate, set: jest.fn() };
+    const periodEnd = Math.floor(Date.now() / 1000) + 2592000;
+
+    mockConstructEvent.mockReturnValue(
+      makeSubscriptionEvent({
+        billing_cycle_anchor: Math.floor(Date.now() / 1000),
+        items: { data: [{ id: "si_1", price: { id: "price_new" }, current_period_end: periodEnd }] },
+      }),
+    );
+    wireSubscriptionDoc(subDocRef);
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ currentPeriodEnd: new Date(periodEnd * 1000).toISOString() }),
+    );
+  });
+
+  it("leaves currentPeriodEnd alone when the event carries no period end", async () => {
+    const mockUpdate = jest.fn().mockResolvedValue(undefined);
+    const subDocRef = { update: mockUpdate, set: jest.fn() };
+
+    mockConstructEvent.mockReturnValue(makeSubscriptionEvent());
+    wireSubscriptionDoc(subDocRef);
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({ status: "active" }));
+    expect(mockUpdate.mock.calls[0][0]).not.toHaveProperty("currentPeriodEnd");
   });
 
   it("handles a single-item tier subscription (no houseItemId/guestItemId) without throwing", async () => {

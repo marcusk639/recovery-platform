@@ -40,6 +40,7 @@ import {
 } from "./transferReversals";
 import { sendFcmToHouseAdmins } from "../util/notifications";
 import { syncOperatorTier } from "./syncOperatorTier";
+import { periodEndSeconds } from "../util/subscriptionPeriod";
 import { sendEmail, regroupEmail } from "../util/email";
 import type { SubscriptionDoc } from "../api/firestore";
 import { Cents } from "../util/money";
@@ -1114,9 +1115,8 @@ async function handleSubscriptionDeleted(
 // ---------------------------------------------------------------------------
 // Event handler: customer.subscription.updated
 //
-// Note: In Stripe API 2026-01-28.clover, Subscription.current_period_end was
-// removed. We store the billing_cycle_anchor as a proxy for period info,
-// or fall back to ISO date derived from the existing value in Firestore.
+// In Stripe API 2026-01-28.clover the period end is on the subscription item
+// (periodEndSeconds); billing_cycle_anchor is the cycle's start, not its end.
 // ---------------------------------------------------------------------------
 
 async function handleSubscriptionUpdated(
@@ -1142,11 +1142,7 @@ async function handleSubscriptionUpdated(
 
   const newStatus = subscription.status as SubscriptionDoc["status"];
 
-  // billing_cycle_anchor is the best available date reference in the new API
-  // for when the next billing cycle starts.
-  const currentPeriodEnd = new Date(
-    subscription.billing_cycle_anchor * 1000,
-  ).toISOString();
+  const periodEnd = periodEndSeconds(subscription);
   const planId = subscription.items.data[0]?.price?.id ?? previousData.planId;
   const guestCount = parseInt(
     (subscription.metadata?.guestCount as string | undefined) ??
@@ -1156,7 +1152,10 @@ async function handleSubscriptionUpdated(
 
   await doc.ref.update({
     status: newStatus,
-    currentPeriodEnd,
+    // Left as stored when the event carries no period end.
+    ...(periodEnd != null
+      ? { currentPeriodEnd: new Date(periodEnd * 1000).toISOString() }
+      : {}),
     planId,
     guestCount: isNaN(guestCount) ? previousData.guestCount : guestCount,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
