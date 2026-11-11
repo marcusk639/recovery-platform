@@ -45,13 +45,14 @@ const REPLACE = {
   '@react-native-vector-icons/ionicons/static': 'src/adapter/icons/ionicons.tsx',
   '@react-native-vector-icons/material-icons/static': 'src/adapter/icons/material-icons.tsx',
   '@react-native-vector-icons/fontawesome5/static': 'src/adapter/icons/fontawesome5.tsx',
+  // The browser's print dialog saves the phone's own HTML as a PDF.
+  'react-native-html-to-pdf': 'src/adapter/html-to-pdf.ts',
 };
 
 const DEFERRED = [
   'react-native-google-places-autocomplete',
   'react-native-image-picker',
   '@stripe/stripe-react-native',
-  'react-native-html-to-pdf',
   'react-native-date-picker',
 ];
 

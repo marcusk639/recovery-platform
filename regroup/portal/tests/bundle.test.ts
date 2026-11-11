@@ -13,7 +13,7 @@ test('a required deferred module fails visibly when used', () => {
     try { feature(); console.log('no error'); } catch (error) { console.log(error.message); }
   });`;
   const printed = execFileSync('node', ['-e', script], { encoding: 'utf8' });
-  expect(printed).toMatch(/not available on the web yet: react-native-html-to-pdf/i);
+  expect(printed).toMatch(/not available on the web yet: @stripe\/stripe-react-native/i);
 }, 60_000);
 
 const build = (...flags: string[]) => {
