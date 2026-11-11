@@ -402,6 +402,27 @@ describe("RentPaymentScreen", () => {
     expect(queryByTestId("payment-success-banner")).toBeNull();
   });
 
+  it("says the payment already went through, with no payment sheet, when the server reports it paid", async () => {
+    // RENT-012: the same amount again the same day replays the first payment's
+    // idempotency key. The server answers { alreadyPaid: true } with no client
+    // secret, so there is nothing to confirm and nothing new to record.
+    mockCreateRentPaymentIntent.mockResolvedValueOnce({ alreadyPaid: true });
+
+    const { getByTestId, getByText, queryByTestId } = renderScreen();
+    await act(async () => {
+      fireEvent.press(getByTestId("pay-now-button"));
+    });
+
+    expect(mockInitPaymentSheet).not.toHaveBeenCalled();
+    expect(mockPresentPaymentSheet).not.toHaveBeenCalled();
+    expect(mockRecordRentPayment).not.toHaveBeenCalled();
+    expect(queryByTestId("payment-error-banner")).toBeNull();
+    expect(getByTestId("payment-success-banner")).toBeTruthy();
+    expect(getByText(/already went through/i)).toBeTruthy();
+    expect(queryByTestId("pay-now-button")).toBeNull();
+    expect(mockInvalidateQueries).toHaveBeenCalled();
+  });
+
   // ── Payment history ────────────────────────────────────────────────────────
 
   it("shows loading indicator while payment history loads", () => {

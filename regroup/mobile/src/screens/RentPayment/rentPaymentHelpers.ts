@@ -27,3 +27,11 @@ export function formatDate(value: unknown): string {
     year: 'numeric',
   });
 }
+
+/**
+ * What the resident sees when createPaymentIntent answers `alreadyPaid`: the
+ * same amount was already paid today, so no new payment was started. Lives here,
+ * not in services/payments, because screen tests mock that module wholesale.
+ */
+export const ALREADY_PAID_MESSAGE =
+  'This payment already went through. Your balance will update shortly.';
