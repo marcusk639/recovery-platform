@@ -54,3 +54,11 @@ test('notes belong to the Residents tab, and the shift log to none', () => {
   expect(sectionForRoute('route-StaffNotes')).toBe('residents');
   expect(sectionForRoute(SHIFT_LOG_ROUTE)).toBeNull();
 });
+
+// Balance Details has no link in the phone; the portal gives it a tab (owner, 2026-11-10).
+test('Balances is a tab right after Payments, under the payments path', () => {
+  expect(sectionForRoute('route-BalanceDashboard')).toBe('balances');
+  expect(sectionPath('h1', 'balances')).toBe('/houses/h1/payments/balances');
+  const order = Object.keys(SECTIONS);
+  expect(order[order.indexOf('payments') + 1]).toBe('balances');
+});

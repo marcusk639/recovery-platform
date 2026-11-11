@@ -1,7 +1,8 @@
 // Test data the seed doesn't set up, added by the specs that need it.
 import { getAuth } from 'firebase-admin/auth';
 import { formatInTimeZone } from 'date-fns-tz';
-import { admin, SECOND_HOUSE, type Account } from './helpers';
+import type { Browser, Page } from '@playwright/test';
+import { admin, SECOND_HOUSE, signInAs, signInAsRaw, type Account } from './helpers';
 
 const EMAILS: Record<Account, string> = {
   manager: 'test-manager@rats-e2e.com',
@@ -134,4 +135,44 @@ export async function makeResidentAManager(uid: string, houseId = 'test-house-12
   const user = await getAuth().getUser(uid);
   const claims = (user.customClaims ?? {}) as { admin?: object };
   await getAuth().setCustomUserClaims(uid, { ...claims, admin: { ...claims.admin, [houseId]: true } });
+}
+
+// A manager made the way the app makes one: the owner's createInvitation, then
+// redeemInvitation as the invited account (claims and house-roles, server-side),
+// then the users and admins docs SignUpForm writes. Unlike the seeded operator,
+// their uid is in neither ownerId nor adminIds, and their admins doc id is random.
+export async function addInvitedManager(
+  browser: Browser,
+  houseId = 'test-house-123',
+): Promise<{ email: string; uid: string; adminId: string }> {
+  const email = `invited-manager-${Date.now()}@rats-e2e.com`;
+  const user = await getAuth().createUser({ email, password: process.env.E2E_TEST_PASSWORD!, emailVerified: true });
+  const call = async (signIn: (page: Page) => Promise<void>, name: string, data: object) => {
+    const context = await browser.newContext();
+    try {
+      const page = await context.newPage();
+      await signIn(page);
+      await page.waitForFunction(() => (window as any).__portalTest?.uid?.());
+      return await page.evaluate(({ name, data }) => (window as any).__portalTest.callable(name, data), { name, data });
+    } finally {
+      await context.close();
+    }
+  };
+  const { data } = await call((page) => signInAs(page, 'manager'), 'createInvitation', { email, houseId, role: 'admin' });
+  const adminId = admin().collection('admins').doc().id;
+  const profile = { email, firstName: 'Ivy', lastName: 'Invited' };
+  await admin().doc(`users/${user.uid}`).set({
+    id: user.uid, uid: user.uid, ...profile,
+    isAdmin: true, isSuperAdmin: false, isGuest: false, isAnonymous: false,
+    adminId, infoEntered: true, orgSetupCompleted: true,
+  });
+  await admin().doc(`admins/${adminId}`).set({ id: adminId, userId: user.uid, ...profile, houseIds: [houseId], superAdmin: [] });
+  await call((page) => signInAsRaw(page, email), 'redeemInvitation', { token: data.token });
+  return { email, uid: user.uid, adminId };
+}
+
+// The seed writes three Stripe-style records; money tests start from none.
+export async function clearPayments(houseId = 'test-house-123'): Promise<void> {
+  const snap = await admin().collection('payments').where('houseId', '==', houseId).get();
+  await Promise.all(snap.docs.map((d) => d.ref.delete()));
 }

@@ -7,6 +7,7 @@ export type Section =
   | 'beds'
   | 'applications'
   | 'payments'
+  | 'balances'
   | 'disputes'
   | 'activities'
   | 'drugTests'
@@ -27,6 +28,8 @@ export const SECTIONS: Record<Section, { route: string; path: string; label: str
   beds: { route: Routes.Beds, path: 'houses/:houseId/beds', label: 'Beds' },
   applications: { route: Routes.ApplicationList, path: 'houses/:houseId/applications', label: 'Applications' },
   payments: { route: Routes.PaymentDashboard, path: 'houses/:houseId/payments', label: 'Payments' },
+  // The phone has no link to Balance Details; here it's a tab (owner, 2026-11-10).
+  balances: { route: Routes.BalanceDashboard, path: 'houses/:houseId/payments/balances', label: 'Balances' },
   disputes: { route: Routes.HouseDisputes, path: 'houses/:houseId/disputes', label: 'Disputes' },
   activities: { route: Routes.Activities, path: 'houses/:houseId/activities', label: 'Activities' },
   drugTests: { route: Routes.DrugTesting, path: 'houses/:houseId/drug-tests', label: 'Drug tests' },

@@ -27,9 +27,9 @@ test('a limited view gets no payments or reports', () => {
   expect(sectionsFor(true, false)).toContain('residents');
   expect(sectionsFor(true, true)).toContain('payments');
 });
-test('tabs keep the mockup order', () => {
+test('tabs keep the mockup order, with Balances after Payments (owner, 2026-11-10)', () => {
   expect(sectionsFor(true, true)).toEqual([
-    'summary', 'residents', 'beds', 'applications', 'payments', 'disputes',
+    'summary', 'residents', 'beds', 'applications', 'payments', 'balances', 'disputes',
     'activities', 'drugTests', 'issues', 'complaints', 'reports',
   ]);
 });
@@ -55,4 +55,11 @@ test('payments, reports and balances need the full view, even by URL', () => {
 });
 test('the house page offers the shift log', () => {
   expect(areasFor({}).map((a) => a.label)).toEqual(['Add a resident', 'Shift log']);
+});
+
+test('a peer leader gets neither Payments nor Balances (owner, 2026-11-09)', () => {
+  expect(sectionsFor(true, false)).not.toContain('balances');
+  expect(sectionsFor(true, true)).toContain('balances');
+  const full = sectionsFor(true, true);
+  expect(full[full.indexOf('payments') + 1]).toBe('balances');
 });

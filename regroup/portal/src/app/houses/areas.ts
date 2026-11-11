@@ -13,12 +13,12 @@ export interface Area {
 export const SHOW_LATER_AREAS = true;
 
 const ORDER: Section[] = [
-  'summary', 'residents', 'beds', 'applications', 'payments', 'disputes',
+  'summary', 'residents', 'beds', 'applications', 'payments', 'balances', 'disputes',
   'activities', 'drugTests', 'issues', 'complaints', 'reports',
 ];
 const LATER_SECTIONS = new Set<Section>(['beds', 'drugTests', 'issues', 'complaints', 'reports']);
 // Peer leaders see less (owner decision, 2026-11-09).
-const FULL_VIEW_SECTIONS = new Set<Section>(['payments', 'reports']);
+const FULL_VIEW_SECTIONS = new Set<Section>(['payments', 'balances', 'reports']);
 
 const LATER_ROUTES = new Set<string>([
   Routes.Beds,

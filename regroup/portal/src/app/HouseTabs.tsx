@@ -10,6 +10,7 @@ const ID: Record<Section, string> = {
   beds: 'nav-beds',
   applications: 'nav-applications',
   payments: 'nav-payments',
+  balances: 'nav-balances',
   disputes: 'nav-disputes',
   activities: 'nav-activities',
   drugTests: 'nav-drug-tests',
