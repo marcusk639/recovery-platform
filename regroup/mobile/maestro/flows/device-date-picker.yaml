@@ -1,0 +1,65 @@
+# Device pass (#160) row 5: the date-picker modal (react-native-date-picker in
+# modal mode) opens from a form field, confirms a date and closes, and opens again.
+# Persona: guest-a. My Profile shows Date of Birth and Sobriety Date pickers; with
+# no value each shows today's date (yyyy-MM-dd) as its placeholder; iOS reads label,
+# icon and date as one element, so the selectors match either. Nothing is saved.
+# Run: maestro/scripts/run-flows.sh device-date-picker
+appId: ${APP_ID}
+tags:
+  - device
+  - ui
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-guest-a@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- tapOn:
+    id: "profile-tab"
+- extendedWaitUntil:
+    visible:
+      id: "profile-screen"
+    timeout: 20000
+- tapOn: ".*My Profile.*"
+- extendedWaitUntil:
+    visible: ".*Date of Birth.*"
+    timeout: 20000
+# Open the Date of Birth picker and confirm today's date.
+- tapOn:
+    text: ".*\\d{4}-\\d{2}-\\d{2}.*"
+    index: 0
+- extendedWaitUntil:
+    visible: "Confirm"
+    timeout: 10000
+- tapOn: "Confirm"
+- extendedWaitUntil:
+    notVisible: "Confirm"
+    timeout: 10000
+- assertVisible: ".*Date of Birth.*"
+# The second picker opens too, and confirming it leaves the form in place.
+# iOS reads each field as one "label, icon, date" element, Android as separate
+# nodes: tap the second picker by its label on iOS and by its date on Android.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn: ".*Sobriety Date.*"
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - tapOn:
+          text: ".*\\d{4}-\\d{2}-\\d{2}.*"
+          index: 1
+- extendedWaitUntil:
+    visible: "Confirm"
+    timeout: 10000
+- tapOn: "Confirm"
+- extendedWaitUntil:
+    notVisible: "Confirm"
+    timeout: 10000
+- assertVisible:
+    id: "save-profile-button"
+- runFlow:
+    file: ../subflows/logout.yaml

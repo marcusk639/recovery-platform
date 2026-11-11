@@ -1625,9 +1625,24 @@ CI runs the unit suite and the ratchet on every push of the branch.
   - **Payment history, after independent review:** staff now see a resident's full history by guest record, including cash for a resident with no account and payments from before the account linked. Refunded and disputed payments no longer show as paid, on either history screen, and get no receipt. CSV export no longer crashes on a Firestore date, and its dollar column holds dollars. Card payments get their document id as their row id, since the webhook writes none.
   - **Known, not fixed here:** #174 still blocks submitting a dispute on Android (a Loading modal covers the form). Paying the same amount twice in one UTC day shows a generic error (`RENT-012`). The review also found, unfixed: a late `payment_failed` event can overwrite a paid record as failed; "Mark resolved" is denied by the rules for every client; a card payment has no description and no row until the webhook lands; a won dispute still reads "Disputed", because the webhook doesn't record the outcome.
 
-### 7.3 Not verified yet (owner, on devices)
+### 7.3 Device pass: automated part (2026-11-11), and what is left for devices
 
-Step-by-step instructions, with a results table to fill in: `regroup/docs/operations/manual-tasks/2026-11-06-rn-0.88-merge-device-pass.md`.
+Run against `71a8c2c6` on the iOS 27 simulator (E2EEmulator) and Android emulators at API 30, 34 and 36 (e2eEmulator), with the e2e emulators seeded. The flows and drivers are listed in `maestro/README.md` ("Device-pass suites") and as rows `EMU-001`–`EMU-014` in `docs/e2e/coverage-matrix.md`.
+
+| Pass row | Result |
+| --- | --- |
+| 1 | Pass. The iOS build logs `firebase.json found at …/regroup/mobile/firebase/firebase.json` (a build phase line, not a runtime one). Smoke passes on both. |
+| 3 | Rent reminder passes (Android): scheduled for Friday 09:00 through notify-kit's alarm receiver, fires as "Rent Reminder" on `default-channel-id`, cancelled when the balance is 0. It uses `allowWhileIdle`, so Android may deliver it up to an hour late. FCM pushes stay manual. |
+| 4 | Document upload and a cancelled picker pass on both, but only with #232's `storage.rules`: on this branch alone every upload fails (#195). **Android category alert:** Android shows at most three alert buttons, so Drug Test Result, Compliance Certificate, Other and Cancel never appear (same on `main`). **PDF export:** Android opens an empty share sheet, because the PDF is passed only as `Share.share`'s `url`, which React Native sends on iOS alone (same on `main`); iOS export is off by design. **CSV import:** no screen links to it, so it can't be reached (same on `main`). There is no cancel for an upload in progress. |
+| 5 | Date picker, stat charts, house search with location, Android back (API 36) and modal swipe (iOS) pass. Swipe and the dispute form fail on Android under #174's "Loading…" overlay. House search lists no houses: the rules let only a house's own members read it, so a signed-out visitor's search is refused (same on `main`). Keyboard: every audited field stays above the keyboard on iOS (9/9) and Android (8/9; the ninth is the #174 dispute form). |
+| 6 | **Fail, caused by the upgrade.** `edgeToEdgeEnabled=true` turns edge-to-edge on at every API level, so the House Settings DONE footer (`HouseSettings.tsx`, a plain View with no bottom inset) sits under the navigation bar: 126px under the three-button bar on API 30, 54px under the gesture bar on API 34 and 36. The fullscreen dispute modal's header also draws under the status bar on Android (seen on API 34). Every other checked screen is clear. |
+| 7 | Custom-scheme invitation links, cold and warm, pass on both. Resume from the background passes on both. Universal links stay manual: the repo's AASA files list only `com.rats.dev` (with two different team ids), so the e2e bundle can't open them. Links other than invitations only bring the app forward: the React Navigation linking config is never passed to `NavigationContainer`. |
+| 8 | Activity times pass on both: the feed shows exactly the host-computed `EEEE, MMMM do yyyy hh:mm a`. The resident home shows no week start or end dates, so there is nothing to compare there. A DST boundary stays manual. |
+| 9 | Signup passes on both. The new account's password must meet the app's rules, or SIGN UP stays disabled. Dispute submit passes on iOS and fails on Android (#174). |
+
+What still needs a device or production: upgrade in place (row 2); FCM pushes, foreground, background and data-only (row 3); universal links (row 7); Stripe decline and 3DS (P7); store Release builds and the Sentry upload (P9). Step-by-step instructions: `regroup/docs/operations/manual-tasks/2026-11-06-rn-0.88-merge-device-pass.md`.
+
+The original list of device checks:
 
 - Upgrade in place from the current store build, on both platforms: no forced sign-out, FCM still
   delivers, and (iOS) paying leaves no stale rent reminder.
