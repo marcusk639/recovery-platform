@@ -1,15 +1,15 @@
-import { logger } from "firebase-functions";
+import { logger } from 'firebase-functions';
 import {
   guestCollection,
   houseCollection,
   weekSummariesCollection,
   reportCollection,
   ratsFirestore,
-} from "../api/firestore";
-import { Guest, Guests } from "../entities/Guest";
-import { House } from "../entities/House";
-import { calculateWeeklyHealth } from "./house";
-import { buildWeekId, getCurrentWeekStart, getNextWeekStart } from "./week";
+} from '../api/firestore';
+import { Guest, Guests } from '../entities/Guest';
+import { House } from '../entities/House';
+import { calculateWeeklyHealth } from './house';
+import { buildWeekId, getCurrentWeekStart, getNextWeekStart } from './week';
 
 // ---------------------------------------------------------------------------
 // Retry configuration
@@ -49,14 +49,14 @@ const getBackoffDelay = (attempt: number): number => {
  */
 export async function advanceGuestWeek(
   guestRef: FirebaseFirestore.DocumentReference,
-  guest: Guest
+  guest: Guest,
 ): Promise<Guest> {
   const currentWeekStart = guest.currentWeekStartDate ?? getCurrentWeekStart();
   const nextWeekStart = getNextWeekStart(currentWeekStart);
   const nextWeekId = buildWeekId(guest.id, nextWeekStart);
-  const nextWeekEndDate = new Date(nextWeekStart + "T00:00:00Z");
+  const nextWeekEndDate = new Date(nextWeekStart + 'T00:00:00Z');
   nextWeekEndDate.setUTCDate(nextWeekEndDate.getUTCDate() + 6);
-  const nextWeekEnd = nextWeekEndDate.toISOString().split("T")[0];
+  const nextWeekEnd = nextWeekEndDate.toISOString().split('T')[0];
   const currentMonday = getCurrentWeekStart();
 
   const summaryRef = weekSummariesCollection.doc(nextWeekId);
@@ -89,9 +89,8 @@ export async function advanceGuestWeek(
     // does not exist. This used to be set(..., { merge: true }) with zeroed
     // stats, which wiped the numbers the onActivityWritten trigger had already
     // recorded for an in-progress week. The trigger owns the counts.
-    if (!summarySnap.exists) transaction.set(
-      summaryRef,
-      {
+    if (!summarySnap.exists)
+      transaction.set(summaryRef, {
         id: nextWeekId,
         guestId: guest.id,
         houseId: guest.houseId,
@@ -107,10 +106,9 @@ export async function advanceGuestWeek(
         dailyStats: {},
         lastUpdated: new Date().toISOString(),
         activityCount: 0,
-      }
-    );
+      });
 
-    logger.info("Advanced guest week", {
+    logger.info('Advanced guest week', {
       guestId: guest.id,
       from: currentWeekStart,
       to: nextWeekStart,
@@ -130,7 +128,7 @@ export async function advanceGuestWeek(
 
 const transferGuestWeekWithRetry = async (
   guestDoc: FirebaseFirestore.QueryDocumentSnapshot,
-  house: House
+  house: House,
 ): Promise<{ success: boolean; guest?: Guest; error?: string }> => {
   const guest = guestDoc.data() as Guest;
 
@@ -140,11 +138,11 @@ const transferGuestWeekWithRetry = async (
       return { success: true, guest: updatedGuest };
     } catch (error: any) {
       const isRetryable =
-        error.code === "aborted" ||
-        error.code === "unavailable" ||
-        error.code === "deadline-exceeded" ||
-        error.message?.includes("contention") ||
-        error.message?.includes("UNAVAILABLE");
+        error.code === 'aborted' ||
+        error.code === 'unavailable' ||
+        error.code === 'deadline-exceeded' ||
+        error.message?.includes('contention') ||
+        error.message?.includes('UNAVAILABLE');
 
       if (isRetryable && attempt < RETRY_CONFIG.maxRetries - 1) {
         const delay = getBackoffDelay(attempt);
@@ -152,7 +150,7 @@ const transferGuestWeekWithRetry = async (
           `Retrying transfer for guest ${guest.id} after ${delay}ms (attempt ${
             attempt + 1
           }/${RETRY_CONFIG.maxRetries})`,
-          error.message
+          error.message,
         );
         await sleep(delay);
         continue;
@@ -161,24 +159,22 @@ const transferGuestWeekWithRetry = async (
       const failure: TransferFailure = {
         guestId: guest.id,
         houseId: house.id,
-        error: error.message || "Unknown error",
+        error: error.message || 'Unknown error',
         timestamp: new Date().toISOString(),
         attempts: attempt + 1,
       };
       failedTransfers.push(failure);
 
       logger.error(
-        `Failed to transfer week for guest ${guest.id} after ${
-          attempt + 1
-        } attempts`,
-        error
+        `Failed to transfer week for guest ${guest.id} after ${attempt + 1} attempts`,
+        error,
       );
 
       return { success: false, error: error.message };
     }
   }
 
-  return { success: false, error: "Max retries exceeded" };
+  return { success: false, error: 'Max retries exceeded' };
 };
 
 // ---------------------------------------------------------------------------
@@ -188,9 +184,9 @@ const transferGuestWeekWithRetry = async (
 export const transferStats = async (
   context: unknown,
   timezone?: string | null,
-  houseId?: string
+  houseId?: string,
 ): Promise<Guests> => {
-  logger.info("Starting weekly transfer...", { timezone, houseId });
+  logger.info('Starting weekly transfer...', { timezone, houseId });
 
   failedTransfers.length = 0;
 
@@ -205,11 +201,9 @@ export const transferStats = async (
 
   try {
     if (houseId) {
-      houseQuery = await houseCollection.where("id", "==", houseId).get();
+      houseQuery = await houseCollection.where('id', '==', houseId).get();
     } else if (timezone) {
-      houseQuery = await houseCollection
-        .where("timezone", "==", timezone)
-        .get();
+      houseQuery = await houseCollection.where('timezone', '==', timezone).get();
     } else {
       houseQuery = await houseCollection.get();
     }
@@ -227,24 +221,19 @@ export const transferStats = async (
 
       try {
         const guestQuery = await guestCollection
-          .where("houseId", "==", house.id)
-          .where("status", "==", "active")
+          .where('houseId', '==', house.id)
+          .where('status', '==', 'active')
           .get();
 
         results.totalGuests += guestQuery.size;
-        logger.info(
-          `Found ${guestQuery.size} active guests in house ${house.id}`
-        );
+        logger.info(`Found ${guestQuery.size} active guests in house ${house.id}`);
 
         // Update house health
         try {
           await calculateWeeklyHealth(guestQuery, house);
           await houseDoc.ref.update(JSON.parse(JSON.stringify(house)));
         } catch (healthError) {
-          logger.warn(
-            `Failed to update house health for ${house.id}`,
-            healthError
-          );
+          logger.warn(`Failed to update house health for ${house.id}`, healthError);
         }
 
         // Advance each guest's week reference
@@ -265,17 +254,14 @@ export const transferStats = async (
       }
     }
   } catch (error) {
-    logger.error("Critical error in transferStats", error);
+    logger.error('Critical error in transferStats', error);
     throw error;
   }
 
-  logger.info("Weekly transfer completed", results);
+  logger.info('Weekly transfer completed', results);
 
   if (failedTransfers.length > 0) {
-    logger.error(
-      `${failedTransfers.length} guest transfers failed`,
-      failedTransfers
-    );
+    logger.error(`${failedTransfers.length} guest transfers failed`, failedTransfers);
   }
 
   return guests;
