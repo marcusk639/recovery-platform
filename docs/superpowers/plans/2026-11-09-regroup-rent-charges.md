@@ -1089,7 +1089,7 @@ Run: `cd regroup/mobile && npx jest src/util/__tests__/rentRate.test.ts src/serv
 
 **Write only the fields that change (domain review, I3).** The app writes whole house objects back from memory (`deleteGuest`, `customizePhase`, `updateDispute`). Once admins can set prices, a stale copy undoes a price or schedule change. This task changes those paths to field-level `update`s. It saves the schedule and the price in one write, so charging never turns off between them. The resident edit form (`guestFormValues.ts`, `mergeGuestStats`) also stops writing `rentOwed`, `choreFees`, `customRent` and `rentDueDate` back. Task 14 owns the balance edit, with the confirmation step from spec §4.6.
 
-**Intake sends `createdBy`.** The server carries an intake record's custom rate and move-in date onto the resident's own record only when `createdBy` names the manager who made it (the rules bind it to the caller). `IntakeFormScreen` sets only `intakeCompletedBy` today, so it should also set `createdBy`.
+**Intake sends `createdBy`.** The server carries an intake record's custom rate and move-in date onto the resident's own record only when `createdBy` names the manager who made it (the rules bind it to the caller). `IntakeFormScreen` has set it since #220, and its test checks it. When this task adds the move-in date field to that form, keep `createdBy` in the write.
 
 **The intake form takes the real move-in date** (owner decision 2026-11-09). A date field defaults to today, and the manager can set the day the resident actually moved in. It is saved as a calendar date in the house's zone. Today the form always writes the current time, so a long-time resident entered late gets a prorated first charge.
 
