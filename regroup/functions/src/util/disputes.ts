@@ -141,7 +141,8 @@ const reverseGuestStat = function (
   value: unknown,
   dispute: Dispute,
 ): Guest {
-  logger.info('Reversing guest stat', { guestId: guest.id, stat });
+  // Not the stat: a medication reversal tied to a resident id is health information.
+  logger.info('Reversing guest stat', { guestId: guest.id, disputeId: dispute.id });
 
   const legacyGuest = guest as LegacyGuest;
   const guestWeek = legacyGuest[week] as Week | undefined;
@@ -294,19 +295,13 @@ export const determineDisputeResult = async (
 };
 
 /**
- * Wraps determineDisputeResult in a Firestore transaction with error logging.
+ * Runs determineDisputeResult in a Firestore transaction. A failure rejects, and
+ * updateDisputes (scheduled/disputeUpdates) logs it and fails the run; catching it
+ * here would commit any writes already queued and report the dispute as done.
  */
 export const runDisputeTransaction = (house: House, dispute: Dispute) => {
   return ratsFirestore.runTransaction(async (transaction) => {
     logger.info('Beginning dispute updates', { houseId: house.id });
-    try {
-      return determineDisputeResult(house, dispute, transaction);
-    } catch (error) {
-      logger.error('Transaction failed for dispute', {
-        disputeId: dispute.id,
-        error: (error as Error)?.message,
-      });
-      return;
-    }
+    return determineDisputeResult(house, dispute, transaction);
   });
 };

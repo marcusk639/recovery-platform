@@ -76,7 +76,7 @@ describe('advanceGuestWeek', () => {
     expect(result.currentWeekStartDate).not.toBe('2020-01-06');
   });
 
-  it('sets the next week start date correctly when advancing', async () => {
+  it('catches a resident who missed weeks up to the current week', async () => {
     const guestRef = {} as any;
     const pastMonday = '2020-01-06'; // a past Monday
     const guest = {
@@ -101,8 +101,33 @@ describe('advanceGuestWeek', () => {
 
     const result = await advanceGuestWeek(guestRef, guest);
 
-    // Next week after 2020-01-06 (Monday) is 2020-01-13
-    expect(result.currentWeekStartDate).toBe('2020-01-13');
+    // A resident whose week didn't advance (a failed run, which isn't retried) is
+    // caught up to the current week, not moved one week and left behind for good.
+    expect(result.currentWeekStartDate).toBe(getCurrentWeekStart());
+    expect(mockTxUpdate).toHaveBeenCalledWith(
+      guestRef,
+      expect.objectContaining({
+        currentWeekStartDate: getCurrentWeekStart(),
+        currentWeekId: `guest-2_${getCurrentWeekStart()}`,
+      }),
+    );
+  });
+
+  it('moves a resident with no week date to the current week, not the next one', async () => {
+    const guestRef = {} as any;
+    const guest = { id: 'guest-5', houseId: 'house-1' } as any;
+    const mockTxUpdate = jest.fn();
+    mockRunTransaction.mockImplementation(async (fn: Function) =>
+      fn({
+        get: jest.fn().mockResolvedValue({ exists: true, data: () => ({ ...guest }) }),
+        update: mockTxUpdate,
+        set: jest.fn(),
+      }),
+    );
+
+    const result = await advanceGuestWeek(guestRef, guest);
+
+    expect(result.currentWeekStartDate).toBe(getCurrentWeekStart());
   });
 
   it('skips advance when guest week is already current', async () => {
@@ -404,5 +429,86 @@ describe('transferStats', () => {
     houseCollection.get.mockResolvedValue({ docs: [], size: 0 });
     await transferStats(null);
     expect(getFailedHouses()).toEqual([]);
+  });
+
+  describe('with residents', () => {
+    const { guestCollection } = require('../../api/firestore');
+    const originalWhere = guestCollection.where;
+    const resident = (id: string) => ({
+      ref: { id },
+      data: () => ({ id, houseId: 'house-1', currentWeekStartDate: '2020-01-06' }),
+    });
+    const withResidents = (docs: unknown[]) => {
+      guestCollection.where = jest.fn(() => ({
+        where: jest.fn(() => ({ get: jest.fn().mockResolvedValue({ docs, size: docs.length }) })),
+      }));
+    };
+    const house = (data: Record<string, unknown>) => ({
+      data: () => data,
+      ref: { update: jest.fn().mockResolvedValue(undefined) },
+    });
+    // Each resident's transaction reads their own doc, so it sees that resident.
+    const advanceAll = (failFor?: string) =>
+      mockRunTransaction.mockImplementation(async (fn: Function) => {
+        let current: any;
+        return fn({
+          get: jest.fn(async (ref: { id?: string }) => {
+            if (ref?.id) {
+              if (ref.id === failFor) {
+                throw Object.assign(new Error('denied'), { code: 'permission-denied' });
+              }
+              current = { id: ref.id, houseId: 'house-1', currentWeekStartDate: '2020-01-06' };
+              return { exists: true, data: () => current };
+            }
+            return { exists: false };
+          }),
+          update: jest.fn(),
+          set: jest.fn(),
+        });
+      });
+
+    afterEach(() => {
+      guestCollection.where = originalWhere;
+    });
+
+    // The scheduled run reads getFailedTransfers after each pass to fail the run.
+    it('records a resident whose week fails to advance, keeps going, and clears it next run', async () => {
+      const { houseCollection } = require('../../api/firestore');
+      houseCollection.get.mockResolvedValue({ size: 1, docs: [house({ id: 'house-1' })] });
+      withResidents([resident('g-bad'), resident('g-ok')]);
+      advanceAll('g-bad');
+
+      const moved = await transferStats(null);
+
+      expect(getFailedTransfers()).toEqual([
+        expect.objectContaining({ guestId: 'g-bad', houseId: 'house-1' }),
+      ]);
+      expect(Object.keys(moved)).toEqual(['g-ok']);
+
+      advanceAll();
+      await transferStats(null);
+      expect(getFailedTransfers()).toEqual([]);
+    });
+
+    // A house whose timezone has no pass of its own would otherwise match no pass and
+    // never roll over: the timezone passes skip it, and so did the fallback pass.
+    it('rolls over a house in an unlisted timezone in the fallback pass', async () => {
+      const { houseCollection } = require('../../api/firestore');
+      houseCollection.get.mockResolvedValue({
+        size: 3,
+        docs: [
+          house({ id: 'house-phx', timezone: 'America/Phoenix' }),
+          house({ id: 'house-nyc', timezone: 'America/New_York' }),
+          house({ id: 'house-none' }),
+        ],
+      });
+      withResidents([resident('g1')]);
+      advanceAll();
+
+      await transferStats(null, null);
+
+      const houseIds = (guestCollection.where as jest.Mock).mock.calls.map((c) => c[2]);
+      expect(houseIds).toEqual(['house-phx', 'house-none']);
+    });
   });
 });

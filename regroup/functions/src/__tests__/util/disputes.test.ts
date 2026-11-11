@@ -111,6 +111,18 @@ describe('runDisputeTransaction', () => {
     const result = runDisputeTransaction(house, dispute);
     expect(result).toBe(expectedResult);
   });
+
+  // updateDisputes counts a rejection as a failed run (scheduled/disputeUpdates); a
+  // catch that swallowed it would report a dispute that never resolved as done.
+  it('rejects when the dispute update fails', async () => {
+    mockGuestWhere.mockReturnValue({});
+    mockRunTransaction.mockImplementation(async (fn: Function) =>
+      fn({ get: jest.fn().mockRejectedValue(new Error('read failed')) }),
+    );
+    const house = { id: 'h1', disputes: {} } as any;
+
+    await expect(runDisputeTransaction(house, makeDispute())).rejects.toThrow('read failed');
+  });
 });
 
 describe('determineDisputeResult', () => {
@@ -151,6 +163,20 @@ describe('determineDisputeResult', () => {
 
     await determineDisputeResult(house, dispute, transaction);
     expect(mockUpdateDispute).not.toHaveBeenCalled();
+  });
+
+  // A medication reversal tied to a resident id is health information.
+  it('does not log which stat it reverses', async () => {
+    const { logger } = require('firebase-functions');
+    const transaction = makeTransaction(makeGuest());
+    mockGuestWhere.mockReturnValue({});
+    const house = { id: 'h1', disputes: {} } as any;
+
+    await determineDisputeResult(house, makeDispute({ type: 'medication_taken' }), transaction);
+
+    const reversal = logger.info.mock.calls.find((c: unknown[]) => c[0] === 'Reversing guest stat');
+    expect(reversal).toBeDefined();
+    expect(JSON.stringify(reversal)).not.toContain('medication');
   });
 
   it('returns early when dispute has no victimId or guestId', async () => {

@@ -9,7 +9,8 @@ import {
 import { Guest, Guests } from '../entities/Guest';
 import { House } from '../entities/House';
 import { calculateWeeklyHealth } from './house';
-import { buildWeekId, getCurrentWeekStart, getNextWeekStart } from './week';
+import { buildWeekId, getCurrentWeekStart } from './week';
+import { WEEKLY_TRANSFER_TIMEZONES } from './timezones';
 
 // ---------------------------------------------------------------------------
 // Retry configuration
@@ -40,26 +41,32 @@ const getBackoffDelay = (attempt: number): number => {
   return Math.min(delay, RETRY_CONFIG.maxDelayMs);
 };
 
+const isScheduledTimezone = (tz: unknown): boolean =>
+  (WEEKLY_TRANSFER_TIMEZONES as readonly unknown[]).includes(tz);
+
 // ---------------------------------------------------------------------------
 // New normalized transfer — advances currentWeekId + currentWeekStartDate
 // ---------------------------------------------------------------------------
 
 /**
  * Advance a guest's week reference in a Firestore transaction.
- * Updates currentWeekId and currentWeekStartDate to point at the next week.
+ * Updates currentWeekId and currentWeekStartDate to point at the current week
+ * (getCurrentWeekStart). A guest more than one week behind, because a weekly run
+ * failed for them and isn't retried, or with no week date, lands on the current
+ * week rather than one week on from where they were.
  * Pre-creates an empty week-summary document for the new week.
  */
 export async function advanceGuestWeek(
   guestRef: FirebaseFirestore.DocumentReference,
   guest: Guest,
 ): Promise<Guest> {
-  const currentWeekStart = guest.currentWeekStartDate ?? getCurrentWeekStart();
-  const nextWeekStart = getNextWeekStart(currentWeekStart);
+  const currentWeekStart = guest.currentWeekStartDate;
+  const currentMonday = getCurrentWeekStart();
+  const nextWeekStart = currentMonday;
   const nextWeekId = buildWeekId(guest.id, nextWeekStart);
   const nextWeekEndDate = new Date(nextWeekStart + 'T00:00:00Z');
   nextWeekEndDate.setUTCDate(nextWeekEndDate.getUTCDate() + 6);
   const nextWeekEnd = nextWeekEndDate.toISOString().split('T')[0];
-  const currentMonday = getCurrentWeekStart();
 
   const summaryRef = weekSummariesCollection.doc(nextWeekId);
 
@@ -216,7 +223,10 @@ export const transferStats = async (
     for (const houseDoc of houseQuery.docs) {
       const house = houseDoc.data() as House;
 
-      if (!houseId && !timezone && house.timezone) {
+      // The fallback pass (no houseId, no timezone) takes every house no timezone
+      // pass covers: those with no timezone, and those whose timezone has no pass of
+      // its own, which would otherwise never roll over.
+      if (!houseId && !timezone && isScheduledTimezone(house.timezone)) {
         continue;
       }
 

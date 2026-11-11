@@ -38,7 +38,7 @@ export async function runWeeklyTransfers(now: Date = new Date()): Promise<{ tran
         timezone: tz ?? '<fallback>',
         error: error instanceof Error ? (error.stack ?? error.message) : String(error),
       });
-      // One failing timezone must not block payouts for the others.
+      // One failing timezone must not block the week rollover for the others.
       failed.push(tz ?? '<fallback>');
     }
   }
